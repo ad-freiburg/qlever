@@ -1,0 +1,140 @@
+// Copyright 2011, University of Freiburg, Chair of Algorithms and Data
+// Structures.
+// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+
+#include <gtest/gtest.h>
+#include <string>
+#include <vector>
+#include <algorithm>
+#include "../src/util/StringUtils.h"
+
+using std::string;
+using std::vector;
+
+namespace ad_utility {
+TEST(StringUtilsTest, startWith) {
+  string patternAsString = "ab";
+  const char* patternAsCharP = patternAsString.c_str();
+  size_t patternSize = 2;
+
+  string matchingText1 = "abc";
+  string matchingText2 = "ab";
+  string mismatchText1 = "";
+  string mismatchText2 = "bcd";
+  string mismatchText3 = "aa";
+
+  ASSERT_TRUE(startsWith(matchingText1, patternAsString));
+  ASSERT_TRUE(startsWith(matchingText1, patternAsCharP, patternSize));
+  ASSERT_TRUE(startsWith(matchingText1, patternAsCharP));
+
+  ASSERT_TRUE(startsWith(matchingText2, patternAsString));
+  ASSERT_TRUE(startsWith(matchingText2, patternAsCharP, patternSize));
+  ASSERT_TRUE(startsWith(matchingText2, patternAsCharP));
+
+  ASSERT_FALSE(startsWith(mismatchText1, patternAsString));
+  ASSERT_FALSE(startsWith(mismatchText1, patternAsCharP, patternSize));
+  ASSERT_FALSE(startsWith(mismatchText1, patternAsCharP));
+
+  ASSERT_FALSE(startsWith(mismatchText2, patternAsString));
+  ASSERT_FALSE(startsWith(mismatchText2, patternAsCharP, patternSize));
+  ASSERT_FALSE(startsWith(mismatchText2, patternAsCharP));
+
+  ASSERT_FALSE(startsWith(mismatchText3, patternAsString));
+  ASSERT_FALSE(startsWith(mismatchText3, patternAsCharP, patternSize));
+  ASSERT_FALSE(startsWith(mismatchText3, patternAsCharP));
+}
+
+TEST(StringUtilsTest, endsWith) {
+  string patternAsString = "ba";
+  const char* patternAsCharP = patternAsString.c_str();
+  size_t patternSize = 2;
+
+  string matchingText1 = "cba";
+  string matchingText2 = "ba";
+  string mismatchText1 = "";
+  string mismatchText2 = "dcb";
+  string mismatchText3 = "aa";
+
+  ASSERT_TRUE(endsWith(matchingText1, patternAsString));
+  ASSERT_TRUE(endsWith(matchingText1, patternAsCharP, patternSize));
+  ASSERT_TRUE(endsWith(matchingText1, patternAsCharP));
+
+  ASSERT_TRUE(endsWith(matchingText2, patternAsString));
+  ASSERT_TRUE(endsWith(matchingText2, patternAsCharP, patternSize));
+  ASSERT_TRUE(endsWith(matchingText2, patternAsCharP));
+
+  ASSERT_FALSE(endsWith(mismatchText1, patternAsString));
+  ASSERT_FALSE(endsWith(mismatchText1, patternAsCharP, patternSize));
+  ASSERT_FALSE(endsWith(mismatchText1, patternAsCharP));
+
+  ASSERT_FALSE(endsWith(mismatchText2, patternAsString));
+  ASSERT_FALSE(endsWith(mismatchText2, patternAsCharP, patternSize));
+  ASSERT_FALSE(endsWith(mismatchText2, patternAsCharP));
+
+  ASSERT_FALSE(endsWith(mismatchText3, patternAsString));
+  ASSERT_FALSE(endsWith(mismatchText3, patternAsCharP, patternSize));
+  ASSERT_FALSE(endsWith(mismatchText3, patternAsCharP));
+}
+
+TEST(StringUtilsTest, getLowercaseUtf8) {
+  setlocale(LC_CTYPE, "en_US.utf8");
+  ASSERT_EQ("schindler's list", getLowercaseUtf8("Schindler's List"));
+  ASSERT_EQ("#+-_foo__bar++", getLowercaseUtf8("#+-_foo__Bar++"));
+  ASSERT_EQ("fôéßaéé", getLowercaseUtf8("FÔÉßaéÉ"));
+}
+
+TEST(StringUtilsTest, firstCharToUpperUtf8) {
+  setlocale(LC_CTYPE, "en_US.utf8");
+  ASSERT_EQ("Foo", firstCharToUpperUtf8("foo"));
+  ASSERT_EQ("Foo", firstCharToUpperUtf8("Foo"));
+  ASSERT_EQ("#foo", firstCharToUpperUtf8("#foo"));
+  // The next test has to be deactivated due to different versions of libs
+  // that use different specifications for unicode chars.
+  // In one, the capital ß exists, in others it doesn't.
+  //  ASSERT_EQ("ẞfoo", firstCharToUpperUtf8("ßfoo"));
+  ASSERT_EQ("Éfoo", firstCharToUpperUtf8("éfoo"));
+  ASSERT_EQ("Éfoo", firstCharToUpperUtf8("Éfoo"));
+}
+
+TEST(StringUtilsTest, split) {
+  string s1 = "this\tis\tit";
+  string s2 = "thisisit";
+  string s3 = "this is it";
+
+  auto v1 = split(s1, '\t');
+  ASSERT_EQ(size_t(3), v1.size());
+  ASSERT_EQ("this", v1[0]);
+  ASSERT_EQ("is", v1[1]);
+  ASSERT_EQ("it", v1[2]);
+  auto v2 = split(s2, '\t');
+  ASSERT_EQ(size_t(1), v2.size());
+  auto v3 = split(s3, '\t');
+  ASSERT_EQ(size_t(1), v3.size());
+  auto v4 = split(s3, ' ');
+  ASSERT_EQ(size_t(3), v4.size());
+}
+
+TEST(StringUtilsTest, strip) {
+  string s1("   abc  ");
+  string s2("abc");
+  string s3("abc  ");
+  string s4("   abc");
+  string s5("xxabcxx");
+
+  ASSERT_EQ("abc", strip(s1, ' '));
+  ASSERT_EQ("abc", strip(s2, ' '));
+  ASSERT_NE("abc", lstrip(s3, ' '));
+  ASSERT_EQ("abc", rstrip(s3, ' '));
+  ASSERT_NE("abc", rstrip(s4, ' '));
+  ASSERT_NE("abc", strip(s5, ' '));
+  ASSERT_EQ("abc", strip(s5, 'x'));
+
+  ASSERT_EQ("bc", strip("xxaxaxaxabcaaaxxx", "xa"));
+}
+}  // namespace
+
+
+int main(int argc, char** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
+}
