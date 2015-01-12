@@ -5,8 +5,10 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <unordered_map>
 
 #include "ParsedQuery.h"
+#include "../util/StringUtils.h"
 
 using std::string;
 using std::vector;
@@ -54,4 +56,32 @@ string SparqlTriple::asString() const {
   std::ostringstream os;
   os << "{s: " << _s << ",\tp: " << _p << ",\to: " << _o << "}";
   return os.str();
+}
+
+// _____________________________________________________________________________
+void ParsedQuery::expandPrefixes() {
+  std::unordered_map<string, string> prefixMap;
+  for (const auto& p: _prefixes) {
+    prefixMap[p._prefix] = p._uri;
+  }
+
+  for (auto& trip: _whereClauseTriples) {
+    expandPrefix(trip._s, prefixMap);
+    expandPrefix(trip._p, prefixMap);
+    expandPrefix(trip._o, prefixMap);
+  }
+}
+
+// _____________________________________________________________________________
+void ParsedQuery::expandPrefix(string& item, 
+    const std::unordered_map<string, string>& prefixMap) {
+  if (!ad_utility::startsWith(item, "?") &&
+      !ad_utility::startsWith(item, "<")) {
+    size_t i = item.find(':');
+    if (i != string::npos && prefixMap.count(item.substr(0, i)) > 0) {
+      string prefixUri = prefixMap.find(item.substr(0, i))->second;
+      item = prefixUri.substr(0, prefixUri.size() - 1)
+          + item.substr(i + 1) + '>';
+    }
+  }
 }

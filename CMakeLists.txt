@@ -61,13 +61,16 @@ add_dependencies(${GTEST_LIBRARY} googletest)
 ###############################################################################
 
 add_subdirectory(src/parser)
+add_subdirectory(src/engine)
 add_subdirectory(src/util)
 add_subdirectory(test)
 
-set(SOURCE_FILES src/SparqlParserMain.cpp)
+set(SOURCE_FILES src/SparqlEngineMain.cpp)
 add_executable(SparqlParserMain ${SOURCE_FILES})
-target_link_libraries (SparqlParserMain parser util)
+target_link_libraries (SparqlParserMain parser util engine)
 
 enable_testing()
-add_test(SparqlParserTest test/ParserTest)
+add_test(SparqlParserTest test/SparqlParserTest)
 add_test(StringUtilsTest test/StringUtilsTest)
+add_test(LRUCacheTest test/LRUCacheTest)
+add_test(QueryGraphTest test/QueryGraphTest)

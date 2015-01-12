@@ -9,6 +9,9 @@
 #include <iostream>
 
 #include "parser/SparqlParser.h"
+#include "engine/IndexMock.h"
+#include "engine/Planner.h"
+#include "engine/QueryExecutionTree.h"
 
 using std::string;
 using std::cout;
@@ -28,7 +31,7 @@ struct option options[] = {
 // Main function.
 int main(int argc, char **argv) {
   std::cout << std::endl << EMPH_ON
-      << "SparqlParsersMain, version " << __DATE__
+      << "SparqlEngineMain, version " << __DATE__
       << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
 
   string query;
@@ -56,6 +59,14 @@ int main(int argc, char **argv) {
     SparqlParser sp;
     ParsedQuery pq = sp.parse(query);
     cout << "Parsed format:\n" << pq.asString() << endl;
+
+    IndexMock index;
+
+    cout << "Creating an execution plan..." << endl;
+    Planner p(index);
+    QueryExecutionTree qet = p.createQueryExecutionTree(pq);
+    cout << qet.asString();
+
   } catch (const std::exception& e) {
     cout << string("Caught exceptions: ") + e.what();
     return 1;

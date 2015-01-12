@@ -59,8 +59,11 @@ void SparqlParser::addPrefix(const string& str, ParsedQuery& query) {
   if (parts.size() != 3) {
     throw ParseException(string("Invalid PREFIX statement: ") + str);
   }
-  SparqlPrefix p{ad_utility::strip(parts[1], " :\t\n"),
-      ad_utility::strip(parts[2], " \t\n")};
+  string uri = ad_utility::strip(parts[2], " \t\n");
+  if (uri.size() == 0 || uri[0] != '<' || uri[uri.size() - 1] != '>') {
+    throw ParseException(string("Invalid URI in PREFIX: ") + uri);
+  }
+  SparqlPrefix p{ad_utility::strip(parts[1], " :\t\n"), uri};
   query._prefixes.emplace_back(p);
 };
 

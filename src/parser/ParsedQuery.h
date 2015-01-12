@@ -5,6 +5,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 using std::string;
 using std::vector;
@@ -26,8 +27,8 @@ public:
 // Data container for parsed triples from the where clause
 class SparqlTriple {
 public:
-  SparqlTriple(const string& s, const string& p, const string& o) : _s(s), _p(p)
-      , _o(o) {
+  SparqlTriple(const string& s, const string& p, const string& o)
+      : _s(s), _p(p), _o(o) {
   }
 
   string _s, _p, _o;
@@ -42,5 +43,11 @@ public:
   vector<string> _selectedVariables;
   vector<SparqlTriple> _whereClauseTriples;
 
+  void expandPrefixes();
+
   string asString() const;
+
+private:
+  static void expandPrefix(string& item,
+      const std::unordered_map<string, string>& prefixMap);
 };
