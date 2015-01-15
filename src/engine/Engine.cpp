@@ -1,5 +1,10 @@
+// Copyright 2014, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+
 #include <algorithm>
 #include "./Engine.h"
+#include "../util/Exception.h"
 
 // _____________________________________________________________________________
 template<typename E, size_t N>
@@ -29,9 +34,9 @@ vector<array<E, N>> Engine::filterRelationWithSingleId(
       return doFilterRelationWithSingleId<E, N, 9>(relation, entityId);
     case 10:
       return doFilterRelationWithSingleId<E, N, 10>(relation, entityId);
-//    default:
-//      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-//          "Not supporting a filter column with index > 10 at the moment");
+    default:
+      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+          "Not supporting a filter column with index > 10 at the moment");
   }
 }
 
@@ -126,8 +131,8 @@ vector<array<E, (N + M - 1)>> Engine::join(
       return doJoin<E, N, 4, M, 4>(a, b);
     }
   }
-//  AD_THROW(Exception::NOT_YET_IMPLEMENTED,
-//      "Currently only join column indexes for 0 to 4 are supported");
+  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+      "Currently only join column indexes for 0 to 4 are supported");
 }
 
 template vector<array<Id, 2>> Engine::filterRelationWithSingleId(

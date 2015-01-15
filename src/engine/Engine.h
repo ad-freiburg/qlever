@@ -5,6 +5,7 @@
 
 #include <array>
 #include <vector>
+#include <algorithm>
 
 #include "IndexSequence.h"
 #include "Id.h"

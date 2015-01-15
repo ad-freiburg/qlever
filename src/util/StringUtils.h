@@ -193,11 +193,11 @@ string getLowercaseUtf8(const string& orig) {
       // However, this usually means that the locale is not utf8.
       // Note that the default locale is always C. Main classes need to set them
       // To utf8, even if the system's default is utf8 already.
-      assert(len > 0 && len <= static_cast<int>(MB_CUR_MAX));
+      assert(len > 0 && len <= static_cast<size_t>(MB_CUR_MAX));
       i += len - 1;
       size_t ret = wcrtomb(buf, static_cast<wchar_t>(towlower
           (static_cast<wint_t>(wChar))), &state);
-      assert(ret > 0 && ret <= static_cast<int>(MB_CUR_MAX));
+      assert(ret > 0 && ret <= static_cast<size_t>(MB_CUR_MAX));
       buf[ret] = 0;
       retVal += buf;
     }

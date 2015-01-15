@@ -9,7 +9,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3 -Wall")
 
 
 ###############################################################################
@@ -27,7 +27,7 @@ set_directory_properties(PROPERTIES EP_PREFIX ${CMAKE_BINARY_DIR}/third_party)
 ExternalProject_Add(
     googletest
     SVN_REPOSITORY http://googletest.googlecode.com/svn/trunk/
-    SVN_REVISION -r head
+    SVN_REVISION -r 703
     TIMEOUT 10
     # PATCH_COMMAND svn patch ${CMAKE_SOURCE_DIR}/gtest.patch ${CMAKE_BINARY_DIR}/ThirdParty/src/googletest
     # Force separate output paths for debug and release builds to allow easy
@@ -66,8 +66,8 @@ add_subdirectory(src/util)
 add_subdirectory(test)
 
 set(SOURCE_FILES src/SparqlEngineMain.cpp)
-add_executable(SparqlParserMain ${SOURCE_FILES})
-target_link_libraries (SparqlParserMain parser util engine)
+add_executable(SparqlEngineMain ${SOURCE_FILES})
+target_link_libraries (SparqlEngineMain parser util engine)
 
 enable_testing()
 add_test(SparqlParserTest test/SparqlParserTest)

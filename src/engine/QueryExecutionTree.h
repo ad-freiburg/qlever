@@ -4,6 +4,11 @@
 #pragma once
 
 #include <string>
+#include "./QueryExecutionContext.h"
+#include "./Operation.h"
+#include "./Join.h"
+#include "./IndexScan.h"
+
 
 using std::string;
 
@@ -13,7 +18,79 @@ using std::string;
 class QueryExecutionTree {
 
 public:
-  const string& asString();
+  explicit QueryExecutionTree(QueryExecutionContext* qec) :
+      _qec(qec),
+      _variableColumnMap(),
+      _rootOperation(nullptr),
+      _type(OperationType::UNDEFINED) {
+  }
+
+  // Copy constructor
+  explicit QueryExecutionTree(const QueryExecutionTree& other) :
+      _qec(other._qec),
+      _variableColumnMap(other._variableColumnMap),
+      _type(other._type) {
+    switch (other._type) {
+      case OperationType::SCAN:
+        _rootOperation = new IndexScan(
+            *reinterpret_cast<IndexScan*>(other._rootOperation));
+        break;
+      case OperationType::JOIN:
+        _rootOperation = new Join(
+            *reinterpret_cast<Join*>(other._rootOperation));
+        break;
+      default:
+        _rootOperation = nullptr;
+    }
+  }
+
+  // Assignment operator
+  QueryExecutionTree& operator=(const QueryExecutionTree& other) {
+    _qec = other._qec;
+    _variableColumnMap = other._variableColumnMap;
+    setOperation(other._type, other._rootOperation);
+    return *this;
+  }
+
+  virtual ~QueryExecutionTree() {
+    delete _rootOperation;
+  }
+
+  enum OperationType {
+    UNDEFINED = 0,
+    SCAN = 1,
+    JOIN = 2
+  };
+
+  void setOperation(OperationType type, Operation* op);
+
+  string asString() const;
+
+  QueryExecutionContext* getQec() const {
+    return _qec;
+  }
+
+  const unordered_map<string, size_t>& getVariableColumnMap() const {
+    return _variableColumnMap;
+  }
+
+  Operation* getRootOperation() const {
+    return _rootOperation;
+  }
+
+  const OperationType& getType() const {
+    return _type;
+  }
+
+  bool isEmpty() const {
+    return _type == OperationType::UNDEFINED || !_rootOperation;
+  }
+
+private:
+  QueryExecutionContext* _qec;   // No ownership
+  unordered_map<string, size_t> _variableColumnMap;
+  Operation* _rootOperation;  // Owned child. Will be deleted at deconstruction.
+  OperationType _type;
 };
 
 

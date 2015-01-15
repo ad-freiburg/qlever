@@ -6,16 +6,19 @@
 #include <sstream>
 #include <vector>
 #include <iostream>
+#include <limits>
 #include "./QueryGraph.h"
+#include "../util/StringUtils.h"
 
 using std::ostringstream;
 using std::vector;
+
 
 // _____________________________________________________________________________
 void QueryGraph::addNode(const string& label) {
   if (_nodeIds.count(label) == 0) {
     _adjLists.push_back(vector<QueryGraph::Edge>{});
-    _nodePayloads.emplace_back(Node(label));
+    _nodePayloads.push_back(Node(_qec, label));
     _nodeMap[_adjLists.size() - 1] = &_nodePayloads.back();
     _nodeIds[label] = _adjLists.size() - 1;
   }
@@ -57,7 +60,7 @@ QueryGraph::Node* QueryGraph::getNode(const string& label) {
 // _____________________________________________________________________________
 vector<size_t> QueryGraph::getNodesWithDegreeOne() const {
   vector<size_t> ret;
-  for (int i = 0; i < _adjLists.size(); ++i) {
+  for (size_t i = 0; i < _adjLists.size(); ++i) {
     if (_adjLists[i].size() == 1) {
       ret.push_back(i);
     }
@@ -96,7 +99,7 @@ string QueryGraph::Node::asString() const {
 // _____________________________________________________________________________
 string QueryGraph::Edge::asString() const {
   ostringstream os;
-  os << '{' << _targetNodeId << ',' << _label  << (_reversed ? "_r}" : "}");
+  os << '{' << _targetNodeId << ',' << _label << (_reversed ? "_r}" : "}");
   return os.str();
 }
 
@@ -116,7 +119,30 @@ string QueryGraph::asString() {
 
 // _____________________________________________________________________________
 void QueryGraph::Node::consume(QueryGraph::Node* other) {
+  _expectedCardinality *= other->expectedCardinality();
 
+  if (other->getConsumedOperations().isEmpty()) {
+    if (!other->isVariableNode()) {
+      // Case: Other has no subtree result and a fixed obj (or subj).
+    } else {
+      // Case: Other has no subtree result but a variable
+    }
+  } else {
+    // Case: Other has a subtree result, must be a variable then
+  }
+}
+
+// _____________________________________________________________________________
+size_t QueryGraph::Node::expectedCardinality() {
+  if (_expectedCardinality == std::numeric_limits<size_t>::max()) {
+    // TODO: Retrieve it properly.
+    if (ad_utility::startsWith(_label, "?")) {
+      _expectedCardinality = 5;
+    } else {
+      _expectedCardinality = 2;
+    }
+  }
+  return _expectedCardinality;
 }
 
 // _____________________________________________________________________________
@@ -131,6 +157,56 @@ void QueryGraph::createFromParsedQuery(const ParsedQuery& pq) {
 }
 
 // _____________________________________________________________________________
-QueryExecutionTree QueryGraph::collapseAndCreateExecutionTree() {
+QueryGraph::Node* QueryGraph::collapseAndCreateExecutionTree() {
+  auto deg1Nodes = getNodesWithDegreeOne();
+  size_t lastUpdatedNode = std::numeric_limits<size_t>::max();
+  while (deg1Nodes.size() > 0) {
+    // Find the one with the minimum expected cardinality
+    size_t minEC = getNode(deg1Nodes[0])->expectedCardinality();
+    size_t minECIndex = 0;
+    for (size_t i = 1; i < deg1Nodes.size(); ++i) {
+      size_t ec = getNode(deg1Nodes[i])->expectedCardinality();
+      if (ec < minEC) {
+        minEC = ec;
+        minECIndex = deg1Nodes[i];
+      }
+    }
+    // Collapse this node
+    lastUpdatedNode = _adjLists[minECIndex][0]._targetNodeId;
+    collapseNode(minECIndex);
+    deg1Nodes = getNodesWithDegreeOne();
+  }
+  assert(lastUpdatedNode != std::numeric_limits<size_t>::max());
+  return (getNode(lastUpdatedNode));
+}
 
+// _____________________________________________________________________________
+QueryGraph::Node::Node(QueryExecutionContext* qec, const string& label) :
+    _label(label),
+    _qec(qec),
+    _expectedCardinality(std::numeric_limits<size_t>::max()),
+    _consumedOperations(QueryExecutionTree(qec)) {
+}
+
+// _____________________________________________________________________________
+QueryGraph::Node::~Node() {
+
+}
+
+// _____________________________________________________________________________
+QueryGraph::Node::Node(const QueryGraph::Node& other) :
+    _label(other._label),
+    _qec(other._qec),
+    _expectedCardinality(other._expectedCardinality),
+    _consumedOperations(other._consumedOperations) {
+
+}
+
+// _____________________________________________________________________________
+QueryGraph::Node& QueryGraph::Node::operator=(QueryGraph::Node const& other) {
+  _label = other._label;
+  _qec = other._qec;
+  _expectedCardinality = other._expectedCardinality;
+  _consumedOperations = other._consumedOperations;
+  return *this;
 }

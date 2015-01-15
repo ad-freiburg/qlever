@@ -10,8 +10,8 @@
 
 #include "parser/SparqlParser.h"
 #include "engine/IndexMock.h"
-#include "engine/Planner.h"
-#include "engine/QueryExecutionTree.h"
+#include "engine/QueryGraph.h"
+#include "engine/QueryExecutionContext.h"
 
 using std::string;
 using std::cout;
@@ -61,11 +61,17 @@ int main(int argc, char **argv) {
     cout << "Parsed format:\n" << pq.asString() << endl;
 
     IndexMock index;
+    Engine engine;
 
     cout << "Creating an execution plan..." << endl;
-    Planner p(index);
-    QueryExecutionTree qet = p.createQueryExecutionTree(pq);
-    cout << qet.asString();
+    pq.expandPrefixes();
+
+    QueryExecutionContext qec(index, engine);
+    QueryGraph qg(&qec);
+    qg.createFromParsedQuery(pq);
+
+    QueryGraph::Node* root = qg.collapseAndCreateExecutionTree();
+    cout << root->asString() << endl;
 
   } catch (const std::exception& e) {
     cout << string("Caught exceptions: ") + e.what();
