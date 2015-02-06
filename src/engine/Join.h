@@ -4,38 +4,36 @@
 #pragma once
 
 #include <list>
+#include <unordered_map>
+#include <grp.h>
 #include "./Operation.h"
 #include "./IndexScan.h"
 
 using std::list;
+using std::unordered_map;
 
 // Forward declare QueryExecutionTree, the type of subtrees iunder a join.
 class QueryExecutionTree;
 
 class Join : public Operation {
 public:
+  virtual size_t getResultWidth() const;
 
-  Join(QueryExecutionContext* qec, const QueryExecutionTree& left,
-      const QueryExecutionTree& right, bool keepJoinColumn = true);
+public:
+
+  Join(QueryExecutionContext* qec, const QueryExecutionTree& t1,
+      const QueryExecutionTree& t2, size_t t1JoinCol, size_t t2JoinCol,
+      bool keepJoinColumn = true);
 
   Join(const Join& other);
+
   Join& operator=(const Join& other);
 
   virtual ~Join();
 
-//  void setLeftOperand(const QueryExecutionTree& op, size_t joinColumn) {
-//    delete _left;
-//    _left = new QueryExecutionTree(op);
-//    _leftJoinCol = joinColumn;
-//  }
-//
-//  void setRightOperand(const QueryExecutionTree& op, size_t joinColumn) {
-//    delete _right;
-//    _right = new QueryExecutionTree(op);
-//    _rightJoinCol = joinColumn;
-//  }
-
   virtual string asString() const;
+
+  unordered_map<string, size_t> getVariableColumns() const;
 
 private:
   QueryExecutionTree* _left;

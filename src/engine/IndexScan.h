@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+#include <grp.h>
 #include "./Operation.h"
 
 using std::string;
@@ -36,6 +37,8 @@ public:
   void setObject(const string& object) {
     _object = object;
   }
+
+  virtual size_t getResultWidth() const;
 
 private:
   ScanType _type;

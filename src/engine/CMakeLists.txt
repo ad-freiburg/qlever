@@ -11,4 +11,5 @@ add_library(engine
               QueryExecutionContext.h
               IndexScan.h IndexScan.cpp
               Join.h Join.cpp
+              Sort.h Sort.cpp
             )

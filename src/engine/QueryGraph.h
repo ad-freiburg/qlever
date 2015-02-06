@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <list>
 #include <limits>
 #include "../parser/ParsedQuery.h"
@@ -14,6 +15,7 @@
 using std::string;
 using std::vector;
 using std::unordered_map;
+using std::unordered_set;
 using std::list;
 
 // -------------------------------------
@@ -85,6 +87,19 @@ using std::list;
 class QueryGraph {
 public:
 
+  struct Edge {
+  public:
+    Edge(size_t targetNode, const string& label, bool reversed = false) :
+        _targetNodeId(targetNode), _label(label), _reversed(reversed) {
+    }
+
+    size_t _targetNodeId;
+    string _label;
+    bool _reversed;
+
+    string asString() const;
+  };
+
   struct Node {
   public:
     Node(QueryExecutionContext* qec, const string& label);
@@ -100,7 +115,7 @@ public:
     // accessed during every consumption.
     // Updates the expected cardinality and the list of subtree results that
     // have to be joined on the columns that represent the node's label.
-    void consume(Node* other);
+    void consume(Node* other, const QueryGraph::Edge& edge);
 
     string asString() const;
 
@@ -120,19 +135,6 @@ public:
     QueryExecutionContext* _qec;
     size_t _expectedCardinality;
     QueryExecutionTree _consumedOperations;
-  };
-
-  struct Edge {
-  public:
-    Edge(size_t targetNode, const string& label, bool reversed = false) :
-        _targetNodeId(targetNode), _label(label), _reversed(reversed) {
-    }
-
-    size_t _targetNodeId;
-    string _label;
-    bool _reversed;
-
-    string asString() const;
   };
 
   QueryGraph() :
@@ -167,4 +169,5 @@ private:
   unordered_map<string, size_t> _nodeIds;
   vector<vector<Edge>> _adjLists;
   list<Node> _nodePayloads;
+  unordered_set<string> _selectVariables;
 };

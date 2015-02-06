@@ -2,18 +2,33 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <string>
+#include <sstream>
+#include <unordered_map>
 #include "./QueryExecutionTree.h"
 
 using std::string;
+using std::unordered_map;
 
 // _____________________________________________________________________________
-Join::Join(QueryExecutionContext* qec, const QueryExecutionTree& left,
-    const QueryExecutionTree& right, bool keepJoinColumn) :
-    Operation(qec),
-    _left(new QueryExecutionTree(left)),
-    _right(new QueryExecutionTree(right)),
-    _keepJoinColumn(keepJoinColumn) {
+Join::Join(QueryExecutionContext* qec,
+    const QueryExecutionTree& t1,
+    const QueryExecutionTree& t2,
+    size_t t1JoinCol,
+    size_t t2JoinCol,
+    bool keepJoinColumn) : Operation(qec) {
+  // Make sure subtrees are ordered so that identical queries can be identified.
+  if (t1.asString() < t2.asString()) {
+    _left = new QueryExecutionTree(t1);
+    _leftJoinCol = t1JoinCol;
+    _right = new QueryExecutionTree(t2);
+    _rightJoinCol = t2JoinCol;
+  } else {
+    _left = new QueryExecutionTree(t2);
+    _leftJoinCol = t2JoinCol;
+    _right = new QueryExecutionTree(t1);
+    _rightJoinCol = t1JoinCol;
+  }
+  _keepJoinColumn = keepJoinColumn;
 }
 
 // _____________________________________________________________________________
@@ -28,6 +43,8 @@ Join::Join(const Join& other) :
     Operation(other._executionContext),
     _left(new QueryExecutionTree(*other._left)),
     _right(new QueryExecutionTree(*other._right)),
+    _leftJoinCol(other._leftJoinCol),
+    _rightJoinCol(other._rightJoinCol),
     _keepJoinColumn(other._keepJoinColumn) {
 }
 
@@ -38,15 +55,44 @@ Join& Join::operator=(const Join& other) {
   _left = new QueryExecutionTree(*other._left);
   delete _right;
   _right = new QueryExecutionTree(*other._right);
+  _leftJoinCol = other._rightJoinCol;
+  _rightJoinCol = other._rightJoinCol;
   _keepJoinColumn = other._keepJoinColumn;
   return *this;
 }
 
 // _____________________________________________________________________________
 string Join::asString() const {
-  return "";
+  std::ostringstream os;
+  os << "JOIN(\n\t" << _left->asString() << " [" << _leftJoinCol <<
+      "]\n\t|X|\n\t" << _right->asString() << " [" << _rightJoinCol << "]\n)";
+  return os.str();
 }
 
 // _____________________________________________________________________________
 void Join::computeResult(ResultTable* result) const {
+}
+
+// _____________________________________________________________________________
+unordered_map<string, size_t> Join::getVariableColumns() const {
+  unordered_map<string, size_t> retVal(_left->getVariableColumnMap());
+  size_t leftSize = _left->getResultWidth();
+  for (auto it = _right->getVariableColumnMap().begin(); it !=
+      _right->getVariableColumnMap().end(); ++it) {
+    if (it->second < _rightJoinCol) {
+      retVal[it->first] = leftSize + it->second;
+    }
+    if (it->second > _rightJoinCol) {
+      retVal[it->first] = leftSize + it->second - 1;
+    }
+  }
+  return retVal;
+}
+
+// _____________________________________________________________________________
+size_t Join::getResultWidth() const {
+  size_t res =  _left->getResultWidth() + _right->getResultWidth() -
+      (_keepJoinColumn ? 1 : 2);
+  AD_CHECK(res > 0);
+  return res;
 }

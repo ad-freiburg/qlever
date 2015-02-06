@@ -8,7 +8,6 @@
 #include <iostream>
 #include <limits>
 #include "./QueryGraph.h"
-#include "../util/StringUtils.h"
 
 using std::ostringstream;
 using std::vector;
@@ -84,7 +83,7 @@ void QueryGraph::collapseNode(size_t u) {
   }
   _adjLists[v] = newList;
   // Add the according operation / do the merging.
-  getNode(v)->consume(getNode(u));
+  getNode(v)->consume(getNode(u), _adjLists[u][0]);
   // Remove edges from this
   _adjLists[u].clear();
 };
@@ -118,17 +117,94 @@ string QueryGraph::asString() {
 }
 
 // _____________________________________________________________________________
-void QueryGraph::Node::consume(QueryGraph::Node* other) {
+void QueryGraph::Node::consume(QueryGraph::Node* other,
+    const QueryGraph::Edge& edge) {
   _expectedCardinality *= other->expectedCardinality();
 
+  QueryExecutionTree addedSubtree(_qec);
+  bool subtreeOrderedByLocalVariable = true;
   if (other->getConsumedOperations().isEmpty()) {
     if (!other->isVariableNode()) {
       // Case: Other has no subtree result and a fixed obj (or subj).
+      if (edge._reversed) {
+        IndexScan is(_qec, IndexScan::POS_BOUND_O);
+        is.setObject(other->_label);
+        is.setPredicate(edge._label);
+        addedSubtree.setOperation(QueryExecutionTree::SCAN, &is);
+        addedSubtree.setVariableColumn(_label, 0);
+      } else {
+        IndexScan is(_qec, IndexScan::PSO_BOUND_S);
+        is.setSubject(other->_label);
+        is.setPredicate(edge._label);
+        addedSubtree.setOperation(QueryExecutionTree::SCAN, &is);
+        addedSubtree.setVariableColumn(_label, 0);
+      }
     } else {
       // Case: Other has no subtree result but a variable
+      if (edge._reversed) {
+        IndexScan is(_qec, IndexScan::PSO_FREE_S);  // Ordered by S over O
+        is.setPredicate(edge._label);
+        addedSubtree.setOperation(QueryExecutionTree::SCAN, &is);
+        addedSubtree.setVariableColumn(_label, 0);
+      } else {
+        IndexScan is(_qec, IndexScan::POS_FREE_O);  // Ordered by O over S
+        is.setPredicate(edge._label);
+        addedSubtree.setOperation(QueryExecutionTree::SCAN, &is);
+        addedSubtree.setVariableColumn(_label, 0);
+      }
     }
   } else {
     // Case: Other has a subtree result, must be a variable then
+    if (edge._reversed) {
+      QueryExecutionTree nestedTree(_qec);
+      IndexScan is(_qec, IndexScan::POS_FREE_O);  // Ordered by O (join)
+      is.setPredicate(edge._label);
+      nestedTree.setOperation(QueryExecutionTree::SCAN, &is);
+      nestedTree.setVariableColumn(other->_label, 0);
+      nestedTree.setVariableColumn(_label, 1);
+      Join join(_qec, nestedTree, other->getConsumedOperations(), 0,
+          other->_consumedOperations.getVariableColumn(other->_label));
+      addedSubtree.setOperation(QueryExecutionTree::JOIN, &join);
+      addedSubtree.setVariableColumns(join.getVariableColumns());
+      subtreeOrderedByLocalVariable = false;
+    } else {
+      QueryExecutionTree nestedTree(_qec);
+      IndexScan is(_qec, IndexScan::PSO_FREE_S);  // Ordered by S
+      is.setPredicate(edge._label);
+      nestedTree.setOperation(QueryExecutionTree::SCAN, &is);
+      nestedTree.setVariableColumn(other->_label, 1);
+      nestedTree.setVariableColumn(_label, 2);
+      nestedTree.setOperation(QueryExecutionTree::SCAN, &is);
+      Join join(_qec, nestedTree, other->getConsumedOperations(), 1,
+          other->_consumedOperations.getVariableColumn(other->_label));
+      addedSubtree.setOperation(QueryExecutionTree::JOIN, &join);
+      addedSubtree.setVariableColumns(join.getVariableColumns());
+      subtreeOrderedByLocalVariable = false;
+    }
+  }
+
+  if (_consumedOperations.isEmpty()) {
+    _consumedOperations = addedSubtree;
+  } else {
+    if (subtreeOrderedByLocalVariable) {
+      Join join(_qec, _consumedOperations,
+          addedSubtree,
+          _consumedOperations.getVariableColumn(_label),
+          addedSubtree.getVariableColumn(_label));
+      _consumedOperations.setOperation(QueryExecutionTree::JOIN, &join);
+      _consumedOperations.setVariableColumns(join.getVariableColumns());
+    } else {
+      QueryExecutionTree sortedSubtree(_qec);
+      Sort sort(_qec, addedSubtree, addedSubtree.getVariableColumn(_label));
+      sortedSubtree.setOperation(QueryExecutionTree::SORT, &sort);
+      sortedSubtree.setVariableColumns(addedSubtree.getVariableColumnMap());
+      Join join(_qec, _consumedOperations,
+          sortedSubtree,
+          _consumedOperations.getVariableColumn(_label),
+          sortedSubtree.getVariableColumn(_label));
+      _consumedOperations.setOperation(QueryExecutionTree::JOIN, &join);
+      _consumedOperations.setVariableColumns(join.getVariableColumns());
+    }
   }
 }
 
@@ -154,6 +230,9 @@ void QueryGraph::createFromParsedQuery(const ParsedQuery& pq) {
         getNodeId(pq._whereClauseTriples[i]._o),
         pq._whereClauseTriples[i]._p);
   }
+  for (size_t i = 0; i < pq._selectedVariables.size(); ++i) {
+    _selectVariables.insert(pq._selectedVariables[i]);
+  }
 }
 
 // _____________________________________________________________________________
@@ -163,10 +242,12 @@ QueryGraph::Node* QueryGraph::collapseAndCreateExecutionTree() {
   while (deg1Nodes.size() > 0) {
     // Find the one with the minimum expected cardinality
     size_t minEC = getNode(deg1Nodes[0])->expectedCardinality();
-    size_t minECIndex = 0;
+    size_t minECIndex = deg1Nodes[0];
     for (size_t i = 1; i < deg1Nodes.size(); ++i) {
       size_t ec = getNode(deg1Nodes[i])->expectedCardinality();
-      if (ec < minEC) {
+      if (ec < minEC ||
+          (ec == minEC &&
+              _selectVariables.count(getNode(deg1Nodes[i])->_label) == 0)) {
         minEC = ec;
         minECIndex = deg1Nodes[i];
       }

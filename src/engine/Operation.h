@@ -62,6 +62,8 @@ public:
   // This should possible act like an ID for each subtree.
   virtual string asString() const = 0;
 
+  virtual size_t getResultWidth() const = 0;
+
 protected:
 
   QueryExecutionContext* getExecutionContext() const {

@@ -4,10 +4,12 @@
 #pragma once
 
 #include <string>
+#include <grp.h>
 #include "./QueryExecutionContext.h"
 #include "./Operation.h"
 #include "./Join.h"
 #include "./IndexScan.h"
+#include "./Sort.h"
 
 
 using std::string;
@@ -39,6 +41,11 @@ public:
         _rootOperation = new Join(
             *reinterpret_cast<Join*>(other._rootOperation));
         break;
+      case OperationType::SORT:
+        _rootOperation = new Sort(
+            *reinterpret_cast<Sort*>(other._rootOperation));
+        break;
+      case UNDEFINED:
       default:
         _rootOperation = nullptr;
     }
@@ -59,7 +66,8 @@ public:
   enum OperationType {
     UNDEFINED = 0,
     SCAN = 1,
-    JOIN = 2
+    JOIN = 2,
+    SORT = 3
   };
 
   void setOperation(OperationType type, Operation* op);
@@ -84,6 +92,16 @@ public:
 
   bool isEmpty() const {
     return _type == OperationType::UNDEFINED || !_rootOperation;
+  }
+
+  void setVariableColumn(const string& var, int i);
+
+  size_t getVariableColumn(const string& var) const;
+
+  void setVariableColumns(const unordered_map<string, size_t>& map);
+
+  size_t getResultWidth() const {
+    return _rootOperation->getResultWidth();
   }
 
 private:

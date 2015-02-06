@@ -14,9 +14,14 @@ add_executable(QueryGraphTest QueryGraphTest.cpp)
 add_dependencies(QueryGraphTest googletest)
 target_link_libraries(QueryGraphTest ${GTEST_LIBRARY} parser engine -pthread)
 
+add_executable(QueryExecutionTreeTest QueryExecutionTreeTest.cpp)
+add_dependencies(QueryExecutionTreeTest googletest)
+target_link_libraries(QueryExecutionTreeTest ${GTEST_LIBRARY} parser engine -pthread)
+
 add_library(tests
             SparqlParserTest
             StringUtilsTest
             LRUCacheTest
             QueryGraphTest
+            QueryExecutionTreeTest
             )
