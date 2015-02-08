@@ -88,7 +88,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
   if (i == string::npos) {
     throw ParseException("Need curly braces in where clause.");
   }
-  string inner = str.substr(i + 1, j - i - 1);
+  string inner = ad_utility::strip(str.substr(i + 1, j - i - 1), "\n\t ");
 
   // Split where clauses. Cannot simply split at dots, because they may occur
   // in URIs.
