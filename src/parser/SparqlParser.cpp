@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include <bits/algorithmfwd.h>
 #include "./SparqlParser.h"
 #include "./ParseException.h"
 #include "../util/StringUtils.h"
@@ -127,5 +128,9 @@ void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
     throw ParseException(string("Invalid triple, expected format: \"s p o\". "
         "Triple was: ") + str);
   }
-  query._whereClauseTriples.emplace_back(SparqlTriple{spo[0], spo[1], spo[2]});
+  query._whereClauseTriples.emplace_back(SparqlTriple{
+      ad_utility::strip(spo[0], "\n\t "),
+      ad_utility::strip(spo[1], "\n\t "),
+      ad_utility::strip(spo[2], "\n\t ")
+  });
 }
