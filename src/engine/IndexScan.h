@@ -47,5 +47,10 @@ private:
   string _object;
 
   virtual void computeResult(ResultTable* result) const;
+
+  void computePSOboundS(ResultTable* result) const;
+  void computePSOfreeS(ResultTable* result) const;
+  void computePOSboundO(ResultTable* result) const;
+  void computePOSfreeO(ResultTable* result) const;
 };
 

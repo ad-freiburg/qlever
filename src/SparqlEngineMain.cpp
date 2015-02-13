@@ -7,6 +7,7 @@
 #include <string>
 #include <iomanip>
 #include <iostream>
+#include <libgen.h>
 
 #include "parser/SparqlParser.h"
 #include "engine/IndexMock.h"
@@ -26,10 +27,11 @@ using std::cerr;
 struct option options[] = {
     {"query", required_argument, NULL, 'q'},
     {"interactive", no_argument, NULL, 'i'},
+    {"index-basename", required_argument, NULL, 'b'},
     {NULL, 0, NULL, 0}
 };
 
-void processQuery(const string &query);
+void processQuery(QueryExecutionContext& qec, const string &query);
 
 // Main function.
 int main(int argc, char **argv) {
@@ -38,12 +40,13 @@ int main(int argc, char **argv) {
       << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
 
   string query;
+  string basename;
   bool interactive = false;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "q:i", options, NULL);
+    int c = getopt_long(argc, argv, "q:ib:", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'q':
@@ -51,6 +54,9 @@ int main(int argc, char **argv) {
         break;
       case 'i':
         interactive = true;
+        break;
+      case 'b':
+        basename = optarg;
         break;
       default:
         cout << endl
@@ -61,7 +67,21 @@ int main(int argc, char **argv) {
     }
   }
 
+  if (basename.size() == 0) {
+    cout << "Missing required argument --index-basename (-b)..." << endl;
+    exit(1);
+  }
+
   try {
+    Engine engine;
+    IndexMock index(basename);
+    QueryExecutionContext qec(index, engine);
+
+    if (query == "") {
+      cout << "No query provided, switching to interactive mode.." << endl;
+      interactive = true;
+    }
+
     if (interactive) {
       cout << "Interactive mode... ingnoring query." << endl << endl;
       while (true) {
@@ -76,10 +96,10 @@ int main(int argc, char **argv) {
           os << line << '\n';
         }
         if (os.str() == "") { return 0; }
-        processQuery(os.str());
+        processQuery(qec, os.str());
       }
     } else {
-      processQuery(query);
+      processQuery(qec, query);
     }
   } catch (const std::exception &e) {
     cout << string("Caught exceptions: ") + e.what();
@@ -91,19 +111,15 @@ int main(int argc, char **argv) {
   return 0;
 }
 
-void processQuery(const string &query) {
+void processQuery(QueryExecutionContext& qec, const string &query) {
   cout << "Query is: \"" << query << "\"" << endl << endl << endl;
   SparqlParser sp;
   ParsedQuery pq = sp.parse(query);
   cout << "Parsed format:\n" << pq.asString() << endl;
 
-  IndexMock index;
-  Engine engine;
-
   cout << "Creating an execution plan..." << endl;
   pq.expandPrefixes();
 
-  QueryExecutionContext qec(index, engine);
   QueryGraph qg(&qec);
   qg.createFromParsedQuery(pq);
 
@@ -111,4 +127,9 @@ void processQuery(const string &query) {
   cout << "Root node of execution tree: " << root->asString() << endl;
   cout << "Execution tree:\n" << root->getConsumedOperations().asString()
       << endl;
+
+  auto res = root->getConsumedOperations().getRootOperation()->getResult();
+  cout << "Result Width: " << res._nofColumns << endl;
+  cout << "As string: " << res.asString() << endl;
+
 }

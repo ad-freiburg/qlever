@@ -67,11 +67,12 @@ public:
       E entityId, size_t checkColumn);
 
   template<typename E, size_t N, size_t M>
-  static vector<array<E, (N + M - 1)>> join(
+  static void join(
       const vector<array<E, N>>& a,
       size_t joinColumn1,
       const vector<array<E, M>>& b,
-      size_t joinColumn2);
+      size_t joinColumn2,
+      vector<array<E, (N + M - 1)>>* result);
 
   template<typename E, size_t N>
   static void sort(vector<array<E, N>>& tab, size_t keyColumn) {
@@ -104,22 +105,20 @@ private:
   }
 
   template<typename E, size_t N, size_t I, size_t M, size_t J>
-  static vector<array<E, (N + M - 1)>> doJoin(
-      const vector<array<E, N>>& a, const vector<array<E, M>>& b) {
+  static void doJoin(
+      const vector<array<E, N>>& a, const vector<array<E, M>>& b,
+      vector<array<E, (N + M - 1)>>* result) {
 
     // Typedefs can hopefully prevent insanity. Read as:
     // "Tuple 1", "Tuple 2", "Tuple for Result", etc.
     typedef array <E, N> T1;
     typedef array <E, M> T2;
-    typedef array <E, (N + M - 1)> TR;
     typedef vector <T1> V1;
     typedef vector <T2> V2;
-    typedef vector <TR> VR;
 
-    VR res;
 
     // Check trivial case.
-    if (a.size() == 0 || b.size() == 0) {return res;}
+    if (a.size() == 0 || b.size() == 0) { return; }
 
     // Cast away constness so we can add sentinels that will be removed
     // in the end and create and add those sentinels.
@@ -146,7 +145,7 @@ private:
         // Fix l2, go through l1
         size_t keepI = i;
         while (l1[i][I] == l2[j][J]) {
-          res.emplace_back(joinTuples(
+          result->emplace_back(joinTuples(
               l1[i], l2[j], GenSeq<N>(), GenSeqLo<M, (J < M ? J : M - 1)>()));
           ++i;
         }
@@ -155,7 +154,7 @@ private:
         // Fix l1, go through l2
         ++j; // The first one has already been done.
         while (l1[i][I] == l2[j][J]) {
-          res.emplace_back(joinTuples(
+          result->emplace_back(joinTuples(
               l1[i], l2[j], GenSeq<N>(), GenSeqLo<M, (J < M ? J : M - 1)>()));
           ++j;
         }
@@ -170,7 +169,5 @@ private:
     // Remove sentinels
     l1.resize(l1.size() - 1);
     l2.resize(l2.size() - 1);
-
-    return res;
   }
 };

@@ -21,29 +21,30 @@ typedef ad_utility::LRUCache<string, ResultTable> SubtreeCache;
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
 class QueryExecutionContext {
-  public:
+public:
 
-    QueryExecutionContext(const IndexMock& index, const Engine& engine) :
-        _subtreeCache(NOF_SUBTREES_TO_CACHE),
-        _index(index), _engine(engine) { }
+  QueryExecutionContext(const IndexMock& index, const Engine& engine) :
+      _subtreeCache(NOF_SUBTREES_TO_CACHE),
+      _index(index), _engine(engine) {
+  }
 
-    ResultTable* getCachedResultForQueryTree(
-        const string& queryAsString) {
-      return &_subtreeCache[queryAsString];
-    }
+  ResultTable* getCachedResultForQueryTree(
+      const string& queryAsString) {
+    return &_subtreeCache[queryAsString];
+  }
 
-    const Engine& getEngine() const {
-      return _engine;
-    }
+  const Engine& getEngine() const {
+    return _engine;
+  }
 
-    const IndexMock& getIndex() const {
-      return _index;
-    }
+  const IndexMock& getIndex() const {
+    return _index;
+  }
 
+private:
 
-  private:
-
-    SubtreeCache _subtreeCache;
-    const IndexMock& _index;
-    const Engine& _engine;
+  SubtreeCache _subtreeCache;
+  const IndexMock& _index;
+  const Engine& _engine;
 };
+

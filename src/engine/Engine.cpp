@@ -41,98 +41,76 @@ vector<array<E, N>> Engine::filterRelationWithSingleId(
 }
 
 template<typename E, size_t N, size_t M>
-vector<array<E, (N + M - 1)>> Engine::join(
+void Engine::join(
     const vector<array<E, N>>& a,
     size_t joinColumn1,
     const vector<array<E, M>>& b,
-    size_t joinColumn2) {
+    size_t joinColumn2,
+    vector<array<E, (N + M - 1)>>* result) {
   if (joinColumn1 == 0) {
     if (joinColumn2 == 0) {
-      return doJoin<E, N, 0, M, 0>(a, b);
+      doJoin<E, N, 0, M, 0>(a, b, result);
+    } else if (joinColumn2 == 1) {
+      doJoin<E, N, 0, M, 1>(a, b, result);
+    } else if (M >= 3 && joinColumn2 == 2) {
+      doJoin<E, N, 0, M, 2>(a, b, result);
+    } else if (M >= 4 && joinColumn2 == 3) {
+      doJoin<E, N, 0, M, 3>(a, b, result);
+    } else if (M >= 5 && joinColumn2 == 4) {
+      doJoin<E, N, 0, M, 4>(a, b, result);
     }
-    if (joinColumn2 == 1) {
-      return doJoin<E, N, 0, M, 1>(a, b);
-    }
-    if (M >= 3 && joinColumn2 == 2) {
-      return doJoin<E, N, 0, M, 2>(a, b);
-    }
-    if (M >= 4 && joinColumn2 == 3) {
-      return doJoin<E, N, 0, M, 3>(a, b);
-    }
-    if (M >= 5 && joinColumn2 == 4) {
-      return doJoin<E, N, 0, M, 4>(a, b);
-    }
-  }
-  if (joinColumn1 == 1) {
+  } else if (joinColumn1 == 1) {
     if (joinColumn2 == 0) {
-      return doJoin<E, N, 1, M, 0>(a, b);
+      doJoin<E, N, 1, M, 0>(a, b, result);
+    } else if (joinColumn2 == 1) {
+      doJoin<E, N, 1, M, 1>(a, b, result);
+    } else if (joinColumn2 == 2) {
+      doJoin<E, N, 1, M, 2>(a, b, result);
+    } else if (joinColumn2 == 3) {
+      doJoin<E, N, 1, M, 3>(a, b, result);
+    } else if (joinColumn2 == 4) {
+      doJoin<E, N, 1, M, 4>(a, b, result);
     }
-    if (joinColumn2 == 1) {
-      return doJoin<E, N, 1, M, 1>(a, b);
-    }
-    if (joinColumn2 == 2) {
-      return doJoin<E, N, 1, M, 2>(a, b);
-    }
-    if (joinColumn2 == 3) {
-      return doJoin<E, N, 1, M, 3>(a, b);
-    }
-    if (joinColumn2 == 4) {
-      return doJoin<E, N, 1, M, 4>(a, b);
-    }
-  }
-  if (joinColumn1 == 2) {
+  } else if (joinColumn1 == 2) {
     if (joinColumn2 == 0) {
-      return doJoin<E, N, 2, M, 0>(a, b);
+      doJoin<E, N, 2, M, 0>(a, b, result);
+    } else if (joinColumn2 == 1) {
+      doJoin<E, N, 2, M, 1>(a, b, result);
+    } else if (joinColumn2 == 2) {
+      doJoin<E, N, 2, M, 2>(a, b, result);
+    } else if (joinColumn2 == 3) {
+      doJoin<E, N, 2, M, 3>(a, b, result);
+    } else if (joinColumn2 == 4) {
+      doJoin<E, N, 2, M, 4>(a, b, result);
     }
-    if (joinColumn2 == 1) {
-      return doJoin<E, N, 2, M, 1>(a, b);
-    }
-    if (joinColumn2 == 2) {
-      return doJoin<E, N, 2, M, 2>(a, b);
-    }
-    if (joinColumn2 == 3) {
-      return doJoin<E, N, 2, M, 3>(a, b);
-    }
-    if (joinColumn2 == 4) {
-      return doJoin<E, N, 2, M, 4>(a, b);
-    }
-  }
-  if (joinColumn1 == 3) {
+  } else if (joinColumn1 == 3) {
     if (joinColumn2 == 0) {
-      return doJoin<E, N, 3, M, 0>(a, b);
+      doJoin<E, N, 3, M, 0>(a, b, result);
+    } else if (joinColumn2 == 1) {
+      doJoin<E, N, 3, M, 1>(a, b, result);
+    } else if (joinColumn2 == 2) {
+      doJoin<E, N, 3, M, 2>(a, b, result);
+    } else if (joinColumn2 == 3) {
+      doJoin<E, N, 3, M, 3>(a, b, result);
+    } else if (joinColumn2 == 4) {
+      doJoin<E, N, 3, M, 4>(a, b, result);
     }
-    if (joinColumn2 == 1) {
-      return doJoin<E, N, 3, M, 1>(a, b);
-    }
-    if (joinColumn2 == 2) {
-      return doJoin<E, N, 3, M, 2>(a, b);
-    }
-    if (joinColumn2 == 3) {
-      return doJoin<E, N, 3, M, 3>(a, b);
-    }
-    if (joinColumn2 == 4) {
-      return doJoin<E, N, 3, M, 4>(a, b);
-    }
-  }
-  if (joinColumn1 == 4) {
+  } else if (joinColumn1 == 4) {
     if (joinColumn2 == 0) {
-      return doJoin<E, N, 4, M, 0>(a, b);
+      doJoin<E, N, 4, M, 0>(a, b, result);
+    } else if (joinColumn2 == 1) {
+      doJoin<E, N, 4, M, 1>(a, b, result);
+    } else if (joinColumn2 == 2) {
+      doJoin<E, N, 4, M, 2>(a, b, result);
+    } else if (joinColumn2 == 3) {
+      doJoin<E, N, 4, M, 3>(a, b, result);
+    } else if (joinColumn2 == 4) {
+      doJoin<E, N, 4, M, 4>(a, b, result);
     }
-    if (joinColumn2 == 1) {
-      return doJoin<E, N, 4, M, 1>(a, b);
-    }
-    if (joinColumn2 == 2) {
-      return doJoin<E, N, 4, M, 2>(a, b);
-    }
-    if (joinColumn2 == 3) {
-      return doJoin<E, N, 4, M, 3>(a, b);
-    }
-    if (joinColumn2 == 4) {
-      return doJoin<E, N, 4, M, 4>(a, b);
-    }
+  } else {
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+        "Currently only join column indexes for 0 to 4 are supported");
   }
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-      "Currently only join column indexes for 0 to 4 are supported");
 }
 
 template vector<array<Id, 2>> Engine::filterRelationWithSingleId(
@@ -162,93 +140,107 @@ template vector<array<Id, 9>> Engine::filterRelationWithSingleId(
 template vector<array<Id, 10>> Engine::filterRelationWithSingleId(
     const vector<array<Id, 10>>& relation, Id entityId, size_t checkColumn);
 
-template vector<array<Id, 2>> Engine::join(
+template void Engine::join(
+    const vector<array<Id, 1>>& a,
+    size_t joinColumn1,
+    const vector<array<Id, 1>>& b,
+    size_t joinColumn2,
+    vector<array<Id, 1>>* result);
+
+template void Engine::join(
     const vector<array<Id, 2>>& a,
     size_t joinColumn1,
     const vector<array<Id, 1>>& b,
-    size_t joinColumn2);
+    size_t joinColumn2,
+    vector<array<Id, 2>>* result);
 
-template vector<array<Id, 2>> Engine::join(
+template void Engine::join(
     const vector<array<Id, 1>>& a,
     size_t joinColumn1,
     const vector<array<Id, 2>>& b,
-    size_t joinColumn2);
+    size_t joinColumn2,
+    vector<array<Id, 2>>* result);
 
-template vector<array<Id, 3>> Engine::join(
+template void Engine::join(
+    const vector<array<Id, 1>>& a,
+    size_t joinColumn1,
+    const vector<array<Id, 3>>& b,
+    size_t joinColumn2,
+    vector<array<Id, 3>>* result);
+
+template void Engine::join(
+    const vector<array<Id, 3>>& a,
+    size_t joinColumn1,
+    const vector<array<Id, 1>>& b,
+    size_t joinColumn2,
+    vector<array<Id, 3>>* result);
+
+template void Engine::join(
     const vector<array<Id, 2>>& a,
     size_t joinColumn1,
     const vector<array<Id, 2>>& b,
-    size_t joinColumn2);
+    size_t joinColumn2,
+    vector<array<Id, 3>>* result);
 
-template vector<array<Id, 4>> Engine::join(
-    const vector<array<Id, 3>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 2>>& b,
-    size_t joinColumn2);
-
-template vector<array<Id, 4>> Engine::join(
-    const vector<array<Id, 2>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 3>>& b,
-    size_t joinColumn2);
-
-template vector<array<Id, 5>> Engine::join(
-    const vector<array<Id, 3>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 3>>& b,
-    size_t joinColumn2);
-
-template vector<array<Id, 5>> Engine::join(
-    const vector<array<Id, 2>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 4>>& b,
-    size_t joinColumn2);
-
-template vector<array<Id, 5>> Engine::join(
+template void Engine::join(
     const vector<array<Id, 4>>& a,
     size_t joinColumn1,
-    const vector<array<Id, 2>>& b,
-    size_t joinColumn2);
+    const vector<array<Id, 1>>& b,
+    size_t joinColumn2,
+    vector<array<Id, 4>>* result);
 
-template vector<array<Id, 6>> Engine::join(
-    const vector<array<Id, 3>>& a,
+template void Engine::join(
+    const vector<array<Id, 1>>& a,
     size_t joinColumn1,
     const vector<array<Id, 4>>& b,
-    size_t joinColumn2);
+    size_t joinColumn2,
+    vector<array<Id, 4>>* result);
 
-template vector<array<Id, 6>> Engine::join(
-    const vector<array<Id, 4>>& a,
+template void Engine::join(
+    const vector<array<Id, 3>>& a,
     size_t joinColumn1,
-    const vector<array<Id, 3>>& b,
-    size_t joinColumn2);
+    const vector<array<Id, 2>>& b,
+    size_t joinColumn2,
+    vector<array<Id, 4>>* result);
 
-template vector<array<Id, 6>> Engine::join(
+template void Engine::join(
     const vector<array<Id, 2>>& a,
     size_t joinColumn1,
-    const vector<array<Id, 5>>& b,
-    size_t joinColumn2);
+    const vector<array<Id, 3>>& b,
+    size_t joinColumn2,
+    vector<array<Id, 4>>* result);
 
-template vector<array<Id, 6>> Engine::join(
+template void Engine::join(
+    const vector<array<Id, 3>>& a,
+    size_t joinColumn1,
+    const vector<array<Id, 3>>& b,
+    size_t joinColumn2,
+    vector<array<Id, 5>>* result);
+
+template void Engine::join(
     const vector<array<Id, 5>>& a,
     size_t joinColumn1,
-    const vector<array<Id, 2>>& b,
-    size_t joinColumn2);
+    const vector<array<Id, 1>>& b,
+    size_t joinColumn2,
+    vector<array<Id, 5>>* result);
 
-template vector<array<Id, 7>> Engine::join(
-    const vector<array<Id, 4>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 4>>& b,
-    size_t joinColumn2);
-
-template vector<array<Id, 7>> Engine::join(
-    const vector<array<Id, 5>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 3>>& b,
-    size_t joinColumn2);
-
-template vector<array<Id, 7>> Engine::join(
-    const vector<array<Id, 3>>& a,
+template void Engine::join(
+    const vector<array<Id, 1>>& a,
     size_t joinColumn1,
     const vector<array<Id, 5>>& b,
-    size_t joinColumn2);
+    size_t joinColumn2,
+    vector<array<Id, 5>>* result);
 
+template void Engine::join(
+    const vector<array<Id, 2>>& a,
+    size_t joinColumn1,
+    const vector<array<Id, 4>>& b,
+    size_t joinColumn2,
+    vector<array<Id, 5>>* result);
+
+template void Engine::join(
+    const vector<array<Id, 4>>& a,
+    size_t joinColumn1,
+    const vector<array<Id, 2>>& b,
+    size_t joinColumn2,
+    vector<array<Id, 5>>* result);

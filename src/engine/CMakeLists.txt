@@ -1,7 +1,7 @@
 add_library(engine
               Engine.h Engine.cpp
               IndexSequence.h
-              IndexMock.h
+              IndexMock.h IndexMock.cpp
               QueryExecutionTree.h QueryExecutionTree.cpp
               QueryGraph.h QueryGraph.cpp
               Operation.h

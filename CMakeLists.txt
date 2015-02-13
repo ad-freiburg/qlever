@@ -9,7 +9,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3 -Wall")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3 -Wall -DLOGLEVEL=4")
 
 
 ###############################################################################
@@ -63,11 +63,12 @@ add_dependencies(${GTEST_LIBRARY} googletest)
 add_subdirectory(src/parser)
 add_subdirectory(src/engine)
 add_subdirectory(src/util)
+add_subdirectory(src/broccoli-server)
 add_subdirectory(test)
 
 set(SOURCE_FILES src/SparqlEngineMain.cpp)
 add_executable(SparqlEngineMain ${SOURCE_FILES})
-target_link_libraries (SparqlEngineMain parser util engine)
+target_link_libraries (SparqlEngineMain parser util engine broccoli-server)
 
 enable_testing()
 add_test(SparqlParserTest test/SparqlParserTest)
@@ -75,3 +76,5 @@ add_test(StringUtilsTest test/StringUtilsTest)
 add_test(LRUCacheTest test/LRUCacheTest)
 add_test(QueryGraphTest test/QueryGraphTest)
 add_test(QueryExecutionTreeTest test/QueryExecutionTreeTest)
+add_test(FileTest test/FileTest)
+add_test(Simple8bTest test/Simple8bTest)
