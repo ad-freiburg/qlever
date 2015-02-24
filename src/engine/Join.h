@@ -6,6 +6,8 @@
 #include <list>
 #include <unordered_map>
 #include <grp.h>
+#include <dirent.h>
+#include <ev.h>
 #include "./Operation.h"
 #include "./IndexScan.h"
 
@@ -17,21 +19,17 @@ class QueryExecutionTree;
 
 class Join : public Operation {
 public:
-  virtual size_t getResultWidth() const;
-
-public:
 
   Join(QueryExecutionContext* qec, const QueryExecutionTree& t1,
       const QueryExecutionTree& t2, size_t t1JoinCol, size_t t2JoinCol,
       bool keepJoinColumn = true);
-
   Join(const Join& other);
-
   Join& operator=(const Join& other);
-
   virtual ~Join();
 
   virtual string asString() const;
+  virtual size_t getResultWidth() const;
+  virtual size_t resultSortedOn() const;
 
   unordered_map<string, size_t> getVariableColumns() const;
 

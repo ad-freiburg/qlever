@@ -137,37 +137,42 @@ public:
     QueryExecutionTree _consumedOperations;
   };
 
-  QueryGraph() :
-      _qec(nullptr), _nodeMap(), _nodeIds(), _adjLists(), _nodePayloads() { }
-
-  QueryGraph(QueryExecutionContext* qec) :
-      _qec(qec), _nodeMap(), _nodeIds(), _adjLists(), _nodePayloads() { }
+  QueryGraph();
+  explicit QueryGraph(QueryExecutionContext* qec);
+  ~QueryGraph();
+  QueryGraph(const QueryGraph& other);
+  QueryGraph& operator=(const QueryGraph& other);
 
   void createFromParsedQuery(const ParsedQuery& pq);
-
-  void addNode(const string& label);
-
-  void addEdge(size_t u, size_t v, const string& label);
-
   string asString();
-
-  size_t getNodeId(const string& label) const;
-
-  Node* getNode(size_t nodeId);
-
-  Node* getNode(const string& label);
-
-  vector<size_t> getNodesWithDegreeOne() const;
-
-  void collapseNode(size_t u);
-
-  Node* collapseAndCreateExecutionTree();
+  const QueryExecutionTree& getExecutionTree();
 
 private:
-  QueryExecutionContext* _qec;
+  QueryExecutionContext* _qec;  // No ownership, don't delete.
   unordered_map<size_t, Node*> _nodeMap;
   unordered_map<string, size_t> _nodeIds;
   vector<vector<Edge>> _adjLists;
   list<Node> _nodePayloads;
   unordered_set<string> _selectVariables;
+  ParsedQuery _query;
+  QueryExecutionTree* _executionTree;  // Ownership, new when created. Delete!
+
+  void collapseNode(size_t u);
+  Node* collapseAndCreateExecutionTree();
+  void addNode(const string& label);
+  void addEdge(size_t u, size_t v, const string& label);
+  size_t getNodeId(const string& label) const;
+  Node* getNode(size_t nodeId);
+  Node* getNode(const string& label);
+  vector<size_t> getNodesWithDegreeOne() const;
+  void applySolutionModifiers(const QueryExecutionTree& treeSoFar,
+      QueryExecutionTree* finalTree) const;
+
+
+  friend class QueryGraphTest_testAddNode_Test;
+  friend class QueryGraphTest_testAddEdge_Test;
+  friend class QueryGraphTest_testCollapseNode_Test;
+  friend class QueryGraphTest_testCreate_Test;
+  friend class QueryGraphTest_testCollapseByHand_Test;
+  friend class QueryGraphTest_testCollapseAndCreateExecutionTree_Test;
 };

@@ -39,6 +39,7 @@ public:
   }
 
   virtual size_t getResultWidth() const;
+  virtual size_t resultSortedOn() const { return 0; }
 
 private:
   ScanType _type;

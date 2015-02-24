@@ -29,19 +29,22 @@ ParsedQuery SparqlParser::parse(const string& query) {
         "found after keyword \"SELECT\". Invalid query.");
   }
 
+  size_t k = query.find("}", j);
+  if (k == string::npos) {
+    throw ParseException("Missing \"}\" symbol after \"WHERE\".");
+  }
+
   parsePrologue(ad_utility::strip(query.substr(0, i), " \n\t"), result);
   parseSelect(ad_utility::strip(query.substr(i, j - (i + 1)), " \n\t"), result);
-  parseWhere(ad_utility::strip(query.substr(j), " \n\t"), result);
+  parseWhere(ad_utility::strip(query.substr(j, k - j), " \n\t"), result);
 
+  parseSolutionModifiers(ad_utility::strip(query.substr(k + 1), " \n\t"),
+      result);
   return result;
 }
 
 // _____________________________________________________________________________
 void SparqlParser::parsePrologue(string str, ParsedQuery& query) {
-  if (str.find("BASE") != string::npos) {
-    throw ParseException("Bases are not supported, yet.");
-  }
-
   if (str.find("BASE") != string::npos) {
     throw ParseException("Bases are not supported, yet.");
   }
@@ -72,7 +75,16 @@ void SparqlParser::addPrefix(const string& str, ParsedQuery& query) {
 void SparqlParser::parseSelect(const string& str, ParsedQuery& query) {
   assert(ad_utility::startsWith(str, "SELECT"));
   auto vars = ad_utility::split(str, ' ');
-  for (size_t i = 1; i < vars.size(); ++i) {
+  size_t i = 1;
+  if (vars.size() > i && vars[i] == "DISTINCT") {
+    ++i;
+    query._distinct = true;
+  }
+  if (vars.size() > i && vars[i] == "REDUCED") {
+    ++i;
+    query._reduced = true;
+  }
+  for (; i < vars.size(); ++i) {
     if (ad_utility::startsWith(vars[i], "?")) {
       query._selectedVariables.push_back(vars[i]);
     } else {
@@ -133,4 +145,31 @@ void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
       ad_utility::strip(spo[1], "\n\t "),
       ad_utility::strip(spo[2], "\n\t ")
   });
+}
+
+// _____________________________________________________________________________
+void SparqlParser::parseSolutionModifiers(const string& str,
+    ParsedQuery& query) {
+  auto tokens = ad_utility::splitAny(str, " \n\t");
+  for (size_t i = 0; i < tokens.size(); ++i) {
+    if (tokens[i] == "ORDER"
+        && i < tokens.size() - 2
+        && tokens[i + 1] == "BY") {
+      i += 1;
+      while (i + 1 < tokens.size()
+          && tokens[i + 1] != "LIMIT"
+          && tokens[i + 1] != "OFFSET") {
+        query._orderBy.emplace_back(OrderKey(tokens[i + 1]));
+        ++i;
+      }
+    }
+    if (tokens[i] == "LIMIT" && i < tokens.size() - 1) {
+      query._limit = tokens[i + 1];
+      ++i;
+    }
+    if (tokens[i] == "OFFSET" && i < tokens.size() - 1) {
+      query._offset = tokens[i + 1];
+      ++i;
+    }
+  }
 }

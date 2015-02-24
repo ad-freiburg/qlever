@@ -10,6 +10,7 @@
 #include "./Join.h"
 #include "./IndexScan.h"
 #include "./Sort.h"
+#include "./OrderBy.h"
 
 
 using std::string;
@@ -20,54 +21,22 @@ using std::string;
 class QueryExecutionTree {
 
 public:
-  explicit QueryExecutionTree(QueryExecutionContext* qec) :
-      _qec(qec),
-      _variableColumnMap(),
-      _rootOperation(nullptr),
-      _type(OperationType::UNDEFINED) {
-  }
+  explicit QueryExecutionTree(QueryExecutionContext* qec);
 
   // Copy constructor
-  explicit QueryExecutionTree(const QueryExecutionTree& other) :
-      _qec(other._qec),
-      _variableColumnMap(other._variableColumnMap),
-      _type(other._type) {
-    switch (other._type) {
-      case OperationType::SCAN:
-        _rootOperation = new IndexScan(
-            *reinterpret_cast<IndexScan*>(other._rootOperation));
-        break;
-      case OperationType::JOIN:
-        _rootOperation = new Join(
-            *reinterpret_cast<Join*>(other._rootOperation));
-        break;
-      case OperationType::SORT:
-        _rootOperation = new Sort(
-            *reinterpret_cast<Sort*>(other._rootOperation));
-        break;
-      case UNDEFINED:
-      default:
-        _rootOperation = nullptr;
-    }
-  }
+  explicit QueryExecutionTree(const QueryExecutionTree& other);
 
   // Assignment operator
-  QueryExecutionTree& operator=(const QueryExecutionTree& other) {
-    _qec = other._qec;
-    _variableColumnMap = other._variableColumnMap;
-    setOperation(other._type, other._rootOperation);
-    return *this;
-  }
+  QueryExecutionTree& operator=(const QueryExecutionTree& other);
 
-  virtual ~QueryExecutionTree() {
-    delete _rootOperation;
-  }
+  virtual ~QueryExecutionTree();
 
   enum OperationType {
     UNDEFINED = 0,
     SCAN = 1,
     JOIN = 2,
-    SORT = 3
+    SORT = 3,
+    ORDER_BY = 4
   };
 
   void setOperation(OperationType type, Operation* op);
@@ -103,6 +72,21 @@ public:
   size_t getResultWidth() const {
     return _rootOperation->getResultWidth();
   }
+
+  const ResultTable& getResult() const {
+    return _rootOperation->getResult();
+  }
+
+  void writeResultToStream(std::ostream& out,
+      size_t limit = MAX_NOF_ROWS_IN_RESULT,
+      size_t offset = 0) const;
+
+  void writeResultToStream(std::ostream& out,
+      const vector<string>& selectVars,
+      size_t limit = MAX_NOF_ROWS_IN_RESULT,
+      size_t offset = 0) const;
+
+  size_t resultSortedOn() const { return _rootOperation->resultSortedOn(); }
 
 private:
   QueryExecutionContext* _qec;   // No ownership

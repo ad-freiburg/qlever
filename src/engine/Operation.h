@@ -3,6 +3,8 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <dirent.h>
+#include <ev.h>
 #include "../util/Log.h"
 #include "../util/Exception.h"
 #include "./ResultTable.h"
@@ -63,6 +65,8 @@ public:
   virtual string asString() const = 0;
 
   virtual size_t getResultWidth() const = 0;
+
+  virtual size_t resultSortedOn() const = 0;
 
 protected:
 

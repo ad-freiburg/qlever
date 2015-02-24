@@ -7,8 +7,9 @@
 #include <vector>
 #include <algorithm>
 
-#include "IndexSequence.h"
-#include "Id.h"
+#include "../util/Log.h"
+#include "./IndexSequence.h"
+#include "./Id.h"
 
 using std::vector;
 using std::array;
@@ -82,6 +83,24 @@ public:
         });
   }
 
+  template<typename E>
+  static void sort(vector<vector<E>>& tab, size_t keyColumn) {
+    std::sort(tab.begin(), tab.end(),
+        [&keyColumn](const vector<E>& a, const vector<E>& b) {
+          return a[keyColumn] < b[keyColumn];
+        });
+  }
+
+  template<typename E, size_t N, typename C>
+  static void sort(vector<array<E, N>>& tab, C comp) {
+    std::sort(tab.begin(), tab.end(), comp);
+  }
+
+  template<typename E, typename C>
+  static void sort(vector<vector<E>>& tab, C comp) {
+    std::sort(tab.begin(), tab.end(), comp);
+  }
+
 private:
 
   template<typename E, size_t N, size_t I>
@@ -108,6 +127,11 @@ private:
   static void doJoin(
       const vector<array<E, N>>& a, const vector<array<E, M>>& b,
       vector<array<E, (N + M - 1)>>* result) {
+
+    LOG(DEBUG) << "Performing join between two fixed width tables.\n";
+    LOG(DEBUG) << "A: witdth = " << N << ", size = " << a.size() << "\n";
+    LOG(DEBUG) << "B: witdth = " << M << ", size = " << b.size() << "\n";
+
 
     // Typedefs can hopefully prevent insanity. Read as:
     // "Tuple 1", "Tuple 2", "Tuple for Result", etc.
@@ -169,5 +193,9 @@ private:
     // Remove sentinels
     l1.resize(l1.size() - 1);
     l2.resize(l2.size() - 1);
+
+    LOG(DEBUG) << "Join done.\n";
+    LOG(DEBUG) << "Result: width = " << (N + M -1) << ", size = " <<
+        result->size() << "\n";
   }
 };

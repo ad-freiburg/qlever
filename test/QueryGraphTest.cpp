@@ -153,51 +153,51 @@ TEST(QueryGraphTest, testCollapseByHand) {
 };
 
 TEST(QueryGraphTest, testCollapseAndCreateExecutionTree) {
-//  {
-//    ParsedQuery pq = SparqlParser::parse(
-//        "PREFIX : <http://rdf.myprefix.com/>\n"
-//            "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
-//            "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
-//            "SELECT ?x ?z \n "
-//            "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y xxx:rel2 <http://abc.de>}");
-//    pq.expandPrefixes();
-//    QueryGraph qg;
-//    qg.createFromParsedQuery(pq);
-//    QueryGraph::Node* root = qg.collapseAndCreateExecutionTree();
-//    ASSERT_NE(root, nullptr);
-//    ASSERT_EQ("(?y)", root->asString());
-//  }
-//
-//  {
-//    ParsedQuery pq = SparqlParser::parse(
-//        "PREFIX : <http://rdf.myprefix.com/>\n"
-//            "SELECT ?x \n "
-//            "WHERE \t {?x :myrel ?y");
-//    pq.expandPrefixes();
-//    QueryGraph qg;
-//    qg.createFromParsedQuery(pq);
-//    QueryGraph::Node* root = qg.collapseAndCreateExecutionTree();
-//    ASSERT_NE(root, nullptr);
-//    ASSERT_EQ("(?x)", root->asString());
-//  }
-//
-//  {
-//    ParsedQuery pq = SparqlParser::parse(
-//        "PREFIX : <http://rdf.myprefix.com/>\n"
-//            "SELECT ?x \n "
-//            "WHERE \t {?y :myrel ?x");
-//    pq.expandPrefixes();
-//    QueryGraph qg;
-//    qg.createFromParsedQuery(pq);
-//    QueryGraph::Node* root = qg.collapseAndCreateExecutionTree();
-//    ASSERT_NE(root, nullptr);
-//    ASSERT_EQ("(?x)", root->asString());
-//  }
+  {
+    ParsedQuery pq = SparqlParser::parse(
+        "PREFIX : <http://rdf.myprefix.com/>\n"
+            "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
+            "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
+            "SELECT ?x ?z \n "
+            "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y xxx:rel2 <http://abc.de>}");
+    pq.expandPrefixes();
+    QueryGraph qg;
+    qg.createFromParsedQuery(pq);
+    QueryGraph::Node* root = qg.collapseAndCreateExecutionTree();
+    ASSERT_NE(root, nullptr);
+    ASSERT_EQ("(?y)", root->asString());
+  }
+
+  {
+    ParsedQuery pq = SparqlParser::parse(
+        "PREFIX : <http://rdf.myprefix.com/>\n"
+            "SELECT ?x \n "
+            "WHERE \t {?x :myrel ?y}");
+    pq.expandPrefixes();
+    QueryGraph qg;
+    qg.createFromParsedQuery(pq);
+    QueryGraph::Node* root = qg.collapseAndCreateExecutionTree();
+    ASSERT_NE(root, nullptr);
+    ASSERT_EQ("(?x)", root->asString());
+  }
+
+  {
+    ParsedQuery pq = SparqlParser::parse(
+        "PREFIX : <http://rdf.myprefix.com/>\n"
+            "SELECT ?x \n "
+            "WHERE \t {?y :myrel ?x}");
+    pq.expandPrefixes();
+    QueryGraph qg;
+    qg.createFromParsedQuery(pq);
+    QueryGraph::Node* root = qg.collapseAndCreateExecutionTree();
+    ASSERT_NE(root, nullptr);
+    ASSERT_EQ("(?x)", root->asString());
+  }
   {
     ParsedQuery pq = SparqlParser::parse(
         "PREFIX : <pre/>\n"
             "SELECT ?a \n "
-            "WHERE \t {?a :profession :Actor. ?a :born-in ?c. ?c in :Europe");
+            "WHERE \t {?a :profession :Actor. ?a :born-in ?c. ?c in :Europe}");
     pq.expandPrefixes();
     QueryGraph qg;
     qg.createFromParsedQuery(pq);

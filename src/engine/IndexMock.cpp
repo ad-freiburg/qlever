@@ -40,6 +40,7 @@ result) const {
   auto rmd = _broccoliIndex.getRelationMetaData(relId);
   ad_semsearch::Relation rel;
   _broccoliIndex.readFullRelation(rmd, &rel);
+  result->reserve(rel.size());
   for (size_t i = 0; i < rel.size(); ++i) {
     result->emplace_back(array<Id, 2>{rel[i]._lhs, rel[i]._rhs});
   }
@@ -81,4 +82,9 @@ void IndexMock::getRelationRhsBySingleLhs(
   LOG(DEBUG)
     << "Done accessing relation. Matching right-hand-side EntityList now has "
         << result->size() << " elements." << "\n";
+}
+
+// _____________________________________________________________________________
+const string& IndexMock::idToString(Id id) const {
+  return _broccoliIndex.getOntologyWordById(id);
 }

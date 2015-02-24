@@ -4,38 +4,46 @@
 #pragma once
 
 #include <list>
+#include <utility>
+#include <vector>
 #include <unordered_map>
 #include <grp.h>
 #include "./Operation.h"
 #include "./IndexScan.h"
+#include "QueryExecutionTree.h"
 
 using std::list;
 using std::unordered_map;
+using std::pair;
+using std::vector;
 
 // Forward declare QueryExecutionTree, the type of the subtree.
 class QueryExecutionTree;
 
-class Sort : public Operation {
+class OrderBy : public Operation {
 public:
   virtual size_t getResultWidth() const;
 
 public:
 
-  Sort(QueryExecutionContext* qec, const QueryExecutionTree& subtree,
-      size_t sortCol);
+  OrderBy(QueryExecutionContext* qec, const QueryExecutionTree& subtree,
+      const vector<pair<size_t, bool>>& sortIndices);
 
-  Sort(const Sort& other);
+  OrderBy(const OrderBy& other);
 
-  Sort& operator=(const Sort& other);
+  OrderBy& operator=(const OrderBy& other);
 
-  virtual ~Sort();
+  virtual ~OrderBy();
 
   virtual string asString() const;
-  virtual size_t resultSortedOn() const { return _sortCol; }
+
+  virtual size_t resultSortedOn() const {
+    return std::numeric_limits<size_t>::max();
+  }
 
 private:
   QueryExecutionTree* _subtree;
-  size_t _sortCol;
+  vector<pair<size_t, bool>> _sortIndices;
 
   virtual void computeResult(ResultTable* result) const;
 };

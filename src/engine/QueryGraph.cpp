@@ -122,7 +122,6 @@ void QueryGraph::Node::consume(QueryGraph::Node* other,
   _expectedCardinality *= other->expectedCardinality();
 
   QueryExecutionTree addedSubtree(_qec);
-  bool subtreeOrderedByLocalVariable = true;
   if (other->getConsumedOperations().isEmpty()) {
     if (!other->isVariableNode()) {
       // Case: Other has no subtree result and a fixed obj (or subj).
@@ -146,11 +145,13 @@ void QueryGraph::Node::consume(QueryGraph::Node* other,
         is.setPredicate(edge._label);
         addedSubtree.setOperation(QueryExecutionTree::SCAN, &is);
         addedSubtree.setVariableColumn(_label, 0);
+        addedSubtree.setVariableColumn(other->_label, 1);
       } else {
         IndexScan is(_qec, IndexScan::POS_FREE_O);  // Ordered by O over S
         is.setPredicate(edge._label);
         addedSubtree.setOperation(QueryExecutionTree::SCAN, &is);
         addedSubtree.setVariableColumn(_label, 0);
+        addedSubtree.setVariableColumn(other->_label, 1);
       }
     }
   } else {
@@ -166,27 +167,26 @@ void QueryGraph::Node::consume(QueryGraph::Node* other,
           other->_consumedOperations.getVariableColumn(other->_label));
       addedSubtree.setOperation(QueryExecutionTree::JOIN, &join);
       addedSubtree.setVariableColumns(join.getVariableColumns());
-      subtreeOrderedByLocalVariable = false;
     } else {
       QueryExecutionTree nestedTree(_qec);
       IndexScan is(_qec, IndexScan::PSO_FREE_S);  // Ordered by S
       is.setPredicate(edge._label);
       nestedTree.setOperation(QueryExecutionTree::SCAN, &is);
-      nestedTree.setVariableColumn(other->_label, 1);
-      nestedTree.setVariableColumn(_label, 2);
+      nestedTree.setVariableColumn(other->_label, 0);
+      nestedTree.setVariableColumn(_label, 1);
       nestedTree.setOperation(QueryExecutionTree::SCAN, &is);
-      Join join(_qec, nestedTree, other->getConsumedOperations(), 1,
+      Join join(_qec, nestedTree, other->getConsumedOperations(), 0,
           other->_consumedOperations.getVariableColumn(other->_label));
       addedSubtree.setOperation(QueryExecutionTree::JOIN, &join);
       addedSubtree.setVariableColumns(join.getVariableColumns());
-      subtreeOrderedByLocalVariable = false;
     }
   }
 
   if (_consumedOperations.isEmpty()) {
     _consumedOperations = addedSubtree;
   } else {
-    if (subtreeOrderedByLocalVariable) {
+    if (addedSubtree.getVariableColumn(_label)
+        == addedSubtree.resultSortedOn()) {
       Join join(_qec, _consumedOperations,
           addedSubtree,
           _consumedOperations.getVariableColumn(_label),
@@ -233,6 +233,7 @@ void QueryGraph::createFromParsedQuery(const ParsedQuery& pq) {
   for (size_t i = 0; i < pq._selectedVariables.size(); ++i) {
     _selectVariables.insert(pq._selectedVariables[i]);
   }
+  _query = pq;
 }
 
 // _____________________________________________________________________________
@@ -289,5 +290,96 @@ QueryGraph::Node& QueryGraph::Node::operator=(QueryGraph::Node const& other) {
   _qec = other._qec;
   _expectedCardinality = other._expectedCardinality;
   _consumedOperations = other._consumedOperations;
+  return *this;
+}
+
+// _____________________________________________________________________________
+const QueryExecutionTree& QueryGraph::getExecutionTree() {
+  if (!_executionTree) {
+    _executionTree = new QueryExecutionTree(_qec);
+    Node* root = collapseAndCreateExecutionTree();
+    applySolutionModifiers(root->getConsumedOperations(), _executionTree);
+  }
+  return *_executionTree;
+}
+
+// _____________________________________________________________________________
+void QueryGraph::applySolutionModifiers(const QueryExecutionTree& treeSoFar,
+    QueryExecutionTree* finalTree) const {
+  if (_query._orderBy.size() > 0) {
+    if (_query._orderBy.size() == 1 && !_query._orderBy[0]._desc) {
+      size_t orderCol = treeSoFar.getVariableColumn(_query._orderBy[0]._key);
+      if (orderCol == treeSoFar.resultSortedOn()) {
+        // Already sorted perfectly
+        *finalTree = treeSoFar;
+      } else {
+        finalTree->setVariableColumns(treeSoFar.getVariableColumnMap());
+        Sort sort(_qec, treeSoFar, orderCol);
+        finalTree->setOperation(QueryExecutionTree::SORT, &sort);
+      }
+    } else {
+      finalTree->setVariableColumns(treeSoFar.getVariableColumnMap());
+      vector<pair<size_t, bool>> sortIndices;
+      for (auto ord : _query._orderBy) {
+        sortIndices.emplace_back(
+            pair<size_t, bool>{treeSoFar.getVariableColumn(ord._key), ord._desc});
+      }
+      OrderBy ob(_qec, treeSoFar, sortIndices);
+      finalTree->setOperation(QueryExecutionTree::ORDER_BY, &ob);
+    }
+  } else {
+    *finalTree = treeSoFar;
+  }
+  // TODO: Keyword REDUCED is ignored. Which is legit but not optimal.
+  if (_query._distinct) {
+    // TODO: Add support!
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "DISTINCT not "
+        "supported, yet!");
+  }
+}
+
+// _____________________________________________________________________________
+QueryGraph::QueryGraph() :
+    _qec(nullptr), _nodeMap(), _nodeIds(), _adjLists(), _nodePayloads(),
+    _selectVariables(), _query(), _executionTree(nullptr) {
+}
+
+// _____________________________________________________________________________
+QueryGraph::QueryGraph(QueryExecutionContext* qec) :
+    _qec(qec), _nodeMap(), _nodeIds(), _adjLists(), _nodePayloads(),
+    _selectVariables(), _query(), _executionTree(nullptr) {
+}
+
+// _____________________________________________________________________________
+QueryGraph::~QueryGraph() {
+  delete _executionTree;
+}
+
+// _____________________________________________________________________________
+QueryGraph::QueryGraph(const QueryGraph& other) :
+    _qec(other._qec), _nodeMap(other._nodeMap), _nodeIds(other._nodeIds),
+    _adjLists(other._adjLists),
+    _nodePayloads(other._nodePayloads),
+    _selectVariables(other._selectVariables),
+    _query(other._query) {
+  if (other._executionTree) {
+    _executionTree = new QueryExecutionTree(*other._executionTree);
+  } else {
+    _executionTree = nullptr;
+  }
+}
+
+// _____________________________________________________________________________
+QueryGraph& QueryGraph::operator=(const QueryGraph& other) {
+  _qec = other._qec;
+  _adjLists = other._adjLists;
+  _nodePayloads = other._nodePayloads;
+  _selectVariables = other._selectVariables;
+  _query = other._query;
+  if (other._executionTree) {
+    _executionTree = new QueryExecutionTree(*other._executionTree);
+  } else {
+    _executionTree = nullptr;
+  }
   return *this;
 }

@@ -99,6 +99,10 @@ inline string rstrip(const string& text, const char* s);
 //! Splits a string at the separator, kinda like python.
 inline vector<string> split(const string& orig, const char sep);
 
+//! Splits a string a any character inside the seps string.
+inline vector<string> splitAny(const string& orig, const char* seps);
+inline vector<string> splitAny(const string& orig, const string& seps);
+
 //! URL Decode a string.
 //! IMPORTANT NOTE:
 //! currently does not do full url decoding but only the recognizes
@@ -350,6 +354,38 @@ vector<string> split(const string& orig, const char sep) {
   }
   return result;
 }
+
+// _____________________________________________________________________________
+vector<string> splitAny(const string& orig, const char* seps) {
+  return splitAny(orig, string(seps));
+}
+
+// _____________________________________________________________________________
+vector<string> splitAny(const string& orig, const string& seps) {
+  std::unordered_set<char> chars;
+  for (size_t i = 0; i < seps.size(); ++i) {
+    chars.insert(seps[i]);
+  }
+  vector<string> result;
+  if (orig.size() > 0) {
+    size_t from = 0;
+    size_t i = 0;
+    while (i < orig.size()) {
+      if (chars.count(orig[i]) > 0) {
+        if (from < i) {
+          result.emplace_back(orig.substr(from, i - from));
+        }
+        from = i + 1;
+      }
+      ++i;
+    }
+    if (from < orig.size()) {
+      result.emplace_back(orig.substr(from));
+    }
+  }
+  return result;
+}
+
 
 // _____________________________________________________________________________
 inline string lstrip(const string& text, char c) {

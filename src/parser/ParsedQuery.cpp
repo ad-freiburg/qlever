@@ -18,7 +18,7 @@ string ParsedQuery::asString() const {
   std::ostringstream os;
 
   // PREFIX
-  os << "prefix: {";
+  os << "PREFIX: {";
   for (size_t i = 0; i < _prefixes.size(); ++i) {
     os << "\n\t" << _prefixes[i].asString();
     if (i + 1 < _prefixes.size()) { os << ','; }
@@ -26,7 +26,7 @@ string ParsedQuery::asString() const {
   os << "\n}";
 
   // SELECT
-  os << "\nselect: {\n\t";
+  os << "\nSELECT: {\n\t";
   for (size_t i = 0; i < _selectedVariables.size(); ++i) {
     os << _selectedVariables[i];
     if (i + 1 < _selectedVariables.size()) { os << ", "; }
@@ -34,13 +34,26 @@ string ParsedQuery::asString() const {
   os << "\n}";
 
   // WHERE
-  os << "\nwhere: {";
+  os << "\nWHERE: {";
   for (size_t i = 0; i < _whereClauseTriples.size(); ++i) {
     os << "\n\t" << _whereClauseTriples[i].asString();
     if (i + 1 < _whereClauseTriples.size()) { os << ','; }
   }
   os << "\n}";
 
+  os << "\nLIMIT: " << (_limit.size() > 0 ? _limit : "no limit specified");
+  os << "\nOFFSET: " << (_offset.size() > 0 ? _offset : "no offset specified");
+  os << "\nDISTINCT modifier is " << (_distinct ? "" : "not ") << "present.";
+  os << "\nREDUCED modifier is " << (_reduced ? "" : "not ") << "present.";
+  os << "\nORDER BY: ";
+  if (_orderBy.size() == 0) {
+    os << "not specified";
+  } else {
+    for (auto key : _orderBy) {
+      os << key._key << (key._desc ? " (DESC)" : " (ASC)") << "\t";
+    }
+  }
+  os << "\n";
   return os.str();
 }
 

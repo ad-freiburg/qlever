@@ -4,6 +4,8 @@
 
 #include <sstream>
 #include <unordered_map>
+#include <dirent.h>
+#include <ev.h>
 #include "./QueryExecutionTree.h"
 
 using std::string;
@@ -71,6 +73,7 @@ string Join::asString() const {
 
 // _____________________________________________________________________________
 void Join::computeResult(ResultTable* result) const {
+  LOG(DEBUG) << "Join result computation..." << endl;
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
   const ResultTable& leftRes = _left->getRootOperation()->getResult();
@@ -224,6 +227,7 @@ void Join::computeResult(ResultTable* result) const {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "left width > 4");
   }
   result->_status = ResultTable::FINISHED;
+  LOG(DEBUG) << "Join result computation done." << endl;
 }
 
 // _____________________________________________________________________________
@@ -248,4 +252,9 @@ size_t Join::getResultWidth() const {
       (_keepJoinColumn ? 1 : 2);
   AD_CHECK(res > 0);
   return res;
+}
+
+// _____________________________________________________________________________
+size_t Join::resultSortedOn() const {
+  return _leftJoinCol;
 }

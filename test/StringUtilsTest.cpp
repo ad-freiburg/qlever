@@ -114,6 +114,46 @@ TEST(StringUtilsTest, split) {
   ASSERT_EQ(size_t(3), v4.size());
 }
 
+TEST(StringUtilsTest, splitAny) {
+  string s1 = "this\tis\tit";
+  string s2 = "thisisit";
+  string s3 = "this is it";
+
+  auto v1 = splitAny(s1, "\t");
+  ASSERT_EQ(size_t(3), v1.size());
+  ASSERT_EQ("this", v1[0]);
+  ASSERT_EQ("is", v1[1]);
+  ASSERT_EQ("it", v1[2]);
+  auto v2 = splitAny(s2, "\t");
+  ASSERT_EQ(size_t(1), v2.size());
+  auto v3 = splitAny(s3, "\t");
+  ASSERT_EQ(size_t(1), v3.size());
+  auto v4 = splitAny(s3, " ");
+  ASSERT_EQ(size_t(3), v4.size());
+
+  auto v5 = splitAny(s1, "i\t");
+  ASSERT_EQ(size_t(4), v5.size());
+  ASSERT_EQ("th", v5[0]);
+  ASSERT_EQ("s", v5[1]);
+  ASSERT_EQ("s", v5[2]);
+  ASSERT_EQ("t", v5[3]);
+
+  auto v6 = splitAny(s1, "ih\t");
+  ASSERT_EQ(size_t(4), v6.size());
+  ASSERT_EQ("t", v6[0]);
+  ASSERT_EQ("s", v6[1]);
+  ASSERT_EQ("s", v6[2]);
+  ASSERT_EQ("t", v6[3]);
+
+  auto v7 = splitAny(s1, "sih\t");
+  ASSERT_EQ(size_t(2), v7.size());
+  ASSERT_EQ("t", v6[0]);
+  ASSERT_EQ("t", v6[3]);
+
+  auto v8 = splitAny(s1, "sih\tt");
+  ASSERT_EQ(size_t(0), v8.size());
+}
+
 TEST(StringUtilsTest, strip) {
   string s1("   abc  ");
   string s2("abc");

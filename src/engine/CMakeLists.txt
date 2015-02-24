@@ -7,9 +7,11 @@ add_library(engine
               Operation.h
               Id.h
               Constants.h
-              ResultTable.h
+              Comparators.h
+              ResultTable.h ResultTable.cpp
               QueryExecutionContext.h
               IndexScan.h IndexScan.cpp
               Join.h Join.cpp
               Sort.h Sort.cpp
+              OrderBy.h OrderBy.cpp
             )

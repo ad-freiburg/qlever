@@ -12,7 +12,6 @@
 #include "parser/SparqlParser.h"
 #include "engine/IndexMock.h"
 #include "engine/QueryGraph.h"
-#include "engine/QueryExecutionContext.h"
 
 using std::string;
 using std::cout;
@@ -112,24 +111,36 @@ int main(int argc, char **argv) {
 }
 
 void processQuery(QueryExecutionContext& qec, const string &query) {
-  cout << "Query is: \"" << query << "\"" << endl << endl << endl;
+  LOG(INFO) << "Query is: \"" << query << "\"" << endl << endl << endl;
   SparqlParser sp;
   ParsedQuery pq = sp.parse(query);
-  cout << "Parsed format:\n" << pq.asString() << endl;
+  LOG(INFO) << "Parsed format:\n" << pq.asString() << endl;
 
-  cout << "Creating an execution plan..." << endl;
+  LOG(INFO) << "Creating an execution plan..." << endl;
   pq.expandPrefixes();
 
   QueryGraph qg(&qec);
   qg.createFromParsedQuery(pq);
 
-  QueryGraph::Node *root = qg.collapseAndCreateExecutionTree();
-  cout << "Root node of execution tree: " << root->asString() << endl;
-  cout << "Execution tree:\n" << root->getConsumedOperations().asString()
-      << endl;
 
-  auto res = root->getConsumedOperations().getRootOperation()->getResult();
-  cout << "Result Width: " << res._nofColumns << endl;
-  cout << "As string: " << res.asString() << endl;
+  const QueryExecutionTree& qet = qg.getExecutionTree();
+  LOG(INFO) << "Execution tree:\n" << qet.asString() << endl;
 
+  const ResultTable& res = qet.getResult();
+  LOG(INFO) << "Result Width: " << res._nofColumns << endl;
+  LOG(INFO) << "As debug string: " << res.asDebugString() << endl;
+  LOG(INFO)<< endl;
+
+
+  LOG(INFO) << "Readable Result is: " << endl;
+  size_t limit = MAX_NOF_ROWS_IN_RESULT;
+  size_t offset = 0;
+  if (pq._limit.size() > 0) {
+     limit = static_cast<size_t>(atol(pq._limit.c_str()));
+  }
+  if (pq._offset.size() > 0) {
+    offset = static_cast<size_t>(atol(pq._offset.c_str()));
+  }
+  qet.writeResultToStream(cout, pq._selectedVariables, limit, offset);
+  LOG(INFO) << endl;
 }

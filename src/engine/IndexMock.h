@@ -33,6 +33,8 @@ public:
   void scanPOS(const string& predicate, const string& object, WidthOneList*
   result) const;
 
+  const string& idToString(Id id) const;
+
 private:
   ad_semsearch::Index _broccoliIndex;
 
