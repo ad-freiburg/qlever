@@ -4,40 +4,41 @@
 
 #include <iostream>
 #include <string>
+#include <fstream>
 
 #include "../util/File.h"
 #include "./Vocabulary.h"
 
 using std::string;
 
-namespace ad_semsearch {
 // _____________________________________________________________________________
 Vocabulary::Vocabulary() {
 }
 // _____________________________________________________________________________
 Vocabulary::~Vocabulary() {
 }
+
+
 // _____________________________________________________________________________
 void Vocabulary::readFromFile(const string& fileName) {
   _words.clear();
-  ad_utility::File file(fileName.c_str(), "r");
-  char buf[BUFFER_SIZE_WORD];
-  file.readIntoVector(&_words, buf, BUFFER_SIZE_WORD);
+  std::fstream in(fileName.c_str(), std::ios_base::in);
+  string line;
+  while (std::getline(in, line)) {
+    _words.push_back(line);
+  }
+  in.close();
 }
+
 // _____________________________________________________________________________
-string Vocabulary::asString(void) const {
-  std::ostringstream os;
-  os << "Vocabulary with size: " << size();
-  if (size() == 1) {
-    os << "; Word: " << _words[0];
+void Vocabulary::writeToFile(const string& fileName) const {
+  std::fstream out(fileName.c_str(), std::ios_base::out);
+  for (size_t i = 0; i + 1 < _words.size(); ++i) {
+    out << _words[i] << '\n';
   }
-  if (size() > 1) {
-    os << "; Words: " << _words[0];
-    if (size() > 2) {
-      os << ", ...";
-    }
-    os << ", " << _words[size() - 1];
+  if (_words.size() > 0) {
+    out << _words[_words.size() - 1];
   }
-  return os.str();
+  out.close();
 }
-}
+

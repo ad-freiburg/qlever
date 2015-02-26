@@ -4,11 +4,15 @@
 #pragma once
 
 #include <vector>
+#include <string>
 #include <array>
-#include "../broccoli-server/Index.h"
+
+#include "../engine/Id.h"
 
 using std::vector;
 using std::array;
+using std::string;
+
 
 // Mock for basic index functionality.
 // To be used in tests an very early prototypes.
@@ -18,9 +22,12 @@ public:
 
   IndexMock() {}
 
-  explicit IndexMock(const string& basename) : _broccoliIndex() {
-    _broccoliIndex.registerOntologyIndex(basename, false);
-    _broccoliIndex.initInMemoryRelations();
+//  explicit IndexMock(const string& basename) : _broccoliIndex() {
+//    _broccoliIndex.registerOntologyIndex(basename, false);
+//    _broccoliIndex.initInMemoryRelations();
+//  }
+
+  explicit IndexMock(const string& basename)  {
   }
 
   typedef vector<array<Id, 1>> WidthOneList;
@@ -36,7 +43,9 @@ public:
   const string& idToString(Id id) const;
 
 private:
-  ad_semsearch::Index _broccoliIndex;
+  string _dummy;
+//  ad_semsearch::Index _broccoliIndex;
 
-  void getRelationRhsBySingleLhs(ad_semsearch::Relation const& relation, Id key, WidthOneList* result) const;
+//  void getRelationRhsBySingleLhs(ad_semsearch::Relation const& relation, Id
+//  key, WidthOneList* result) const;
 };

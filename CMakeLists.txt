@@ -29,14 +29,13 @@ ExternalProject_Add(
     SVN_REPOSITORY http://googletest.googlecode.com/svn/trunk/
     SVN_REVISION -r 703
     TIMEOUT 10
-    # PATCH_COMMAND svn patch ${CMAKE_SOURCE_DIR}/gtest.patch
-      # ${CMAKE_BINARY_DIR}/third_party/src/googletest
+    # PATCH_COMMAND svn patch ${CMAKE_SOURCE_DIR}/gtest.patch ${CMAKE_BINARY_DIR}/ThirdParty/src/googletest
     # Force separate output paths for debug and release builds to allow easy
     # identification of correct lib in subsequent TARGET_LINK_LIBRARIES commands
-    CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
-               -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG:PATH=DebugLibs
-               -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE:PATH=ReleaseLibs
-               -Dgtest_force_shared_crt=ON
+    # CMAKE_ARGS -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}
+    #           -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_DEBUG:PATH=DebugLibs
+    #           -DCMAKE_ARCHIVE_OUTPUT_DIRECTORY_RELEASE:PATH=ReleaseLibs
+    #           -Dgtest_force_shared_crt=ON
     # Disable install step
     INSTALL_COMMAND ""
     # Wrap download, configure and build steps in a script to log output
@@ -64,12 +63,12 @@ add_dependencies(${GTEST_LIBRARY} googletest)
 add_subdirectory(src/parser)
 add_subdirectory(src/engine)
 add_subdirectory(src/util)
-add_subdirectory(src/broccoli-server)
+add_subdirectory(src/index)
 add_subdirectory(test)
 
 set(SOURCE_FILES src/SparqlEngineMain.cpp)
 add_executable(SparqlEngineMain ${SOURCE_FILES})
-target_link_libraries (SparqlEngineMain parser util engine broccoli-server)
+target_link_libraries (SparqlEngineMain parser util engine index)
 
 enable_testing()
 add_test(SparqlParserTest test/SparqlParserTest)
@@ -79,3 +78,5 @@ add_test(QueryGraphTest test/QueryGraphTest)
 add_test(QueryExecutionTreeTest test/QueryExecutionTreeTest)
 add_test(FileTest test/FileTest)
 add_test(Simple8bTest test/Simple8bTest)
+add_test(TsvParserTest test/TsvParserTest)
+add_test(VocabularyTest test/VocabularyTest)
