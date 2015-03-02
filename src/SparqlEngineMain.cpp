@@ -12,6 +12,7 @@
 #include "parser/SparqlParser.h"
 #include "engine/IndexMock.h"
 #include "engine/QueryGraph.h"
+#include "parser/TsvParser.h"
 
 using std::string;
 using std::cout;

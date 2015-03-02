@@ -22,12 +22,11 @@ include(ExternalProject)
 # Set default ExternalProject root directory
 set_directory_properties(PROPERTIES EP_PREFIX ${CMAKE_BINARY_DIR}/third_party)
 
-
 # Add gtest
 ExternalProject_Add(
     googletest
     SVN_REPOSITORY http://googletest.googlecode.com/svn/trunk/
-    SVN_REVISION -r 703
+    SVN_REVISION -r head
     TIMEOUT 10
     # PATCH_COMMAND svn patch ${CMAKE_SOURCE_DIR}/gtest.patch ${CMAKE_BINARY_DIR}/ThirdParty/src/googletest
     # Force separate output paths for debug and release builds to allow easy
@@ -56,6 +55,7 @@ set_property(TARGET ${GTEST_LIBRARY} PROPERTY IMPORTED_LOCATION
                 ${GTEST_LIBRARY_PATH} )
 add_dependencies(${GTEST_LIBRARY} googletest)
 
+
 ###############################################################################
 ##### Actual project configuration #####
 ###############################################################################
@@ -66,9 +66,10 @@ add_subdirectory(src/util)
 add_subdirectory(src/index)
 add_subdirectory(test)
 
-set(SOURCE_FILES src/SparqlEngineMain.cpp)
-add_executable(SparqlEngineMain ${SOURCE_FILES})
-target_link_libraries (SparqlEngineMain parser util engine index)
+add_executable(SparqlEngineMain src/SparqlEngineMain.cpp)
+target_link_libraries (SparqlEngineMain engine index parser)
+
+
 
 enable_testing()
 add_test(SparqlParserTest test/SparqlParserTest)
@@ -78,5 +79,5 @@ add_test(QueryGraphTest test/QueryGraphTest)
 add_test(QueryExecutionTreeTest test/QueryExecutionTreeTest)
 add_test(FileTest test/FileTest)
 add_test(Simple8bTest test/Simple8bTest)
-add_test(TsvParserTest test/TsvParserTest)
 add_test(VocabularyTest test/VocabularyTest)
+add_test(TsvParserTest test/TsvParserTest)

@@ -2,7 +2,7 @@
 // Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "gtest/gtest.h"
+#include <gtest/gtest.h>
 
 #include "../src/engine/QueryGraph.h"
 #include "../src/parser/SparqlParser.h"

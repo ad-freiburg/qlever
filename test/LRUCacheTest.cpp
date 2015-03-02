@@ -3,7 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <string>
-#include "gtest/gtest.h"
+#include <gtest/gtest.h>
 #include "../src/util/LRUCache.h"
 
 using std::string;

@@ -28,24 +28,22 @@ add_executable(Simple8bTest Simple8bTest.cpp)
 add_dependencies(Simple8bTest googletest)
 target_link_libraries(Simple8bTest ${GTEST_LIBRARY} -pthread)
 
-add_executable(TsvParserTest TsvParserTest.cpp)
-add_dependencies(TsvParserTest ${GTEST_LIBRARY} parser)
-target_link_libraries(TsvParserTest ${GTEST_LIBRARY} parser -pthread)
-
 add_executable(VocabularyTest VocabularyTest.cpp)
 add_dependencies(VocabularyTest googletest index)
 target_link_libraries(VocabularyTest ${GTEST_LIBRARY} index -pthread)
 
-configure_file(data/test_tsv_file_1.tsv data/test_tsv_file_1.tsv COPYONLY)
+add_executable(TsvParserTest TsvParserTest.cpp)
+add_dependencies(TsvParserTest googletest parser)
+target_link_libraries(TsvParserTest ${GTEST_LIBRARY} parser -pthread)
 
 add_library(tests
-            SparqlParserTest
-            StringUtilsTest
+						SparqlParserTest
+						StringUtilsTest
             LRUCacheTest
             QueryGraphTest
             QueryExecutionTreeTest
             Simple8bTest
             FileTest
-            TsvParserTest
             VocabularyTest
+            TsvParserTest
             )

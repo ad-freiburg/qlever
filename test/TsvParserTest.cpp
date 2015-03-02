@@ -1,33 +1,34 @@
-// Copyright 2014, University of Freiburg, Chair of Algorithms and Data
-// Structures.
+// Copyright 2015, University of Freiburg,
+// Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <vector>
+#include <cstdio>
+#include <fstream>
 #include "../src/parser/TsvParser.h"
 #include "gtest/gtest.h"
 
-using std::vector;
-
-TEST(TsvParserTest, testGetLine) {
-  TsvParser p("data/test_tsv_file_1.tsv");
+TEST(TsvParserTest, getLineTest) {
+  std::fstream f("_testtmp.tsv", std::ios_base::out);
+  f << "a\tb\tc\t.\n"
+      "a2\tb2\tc2\t.";
+  f.close();
+  TsvParser p("_testtmp.tsv");
   array<string, 3> a;
-  vector<array<string, 3>> v;
-  while (p.getLine(a)) {
-    v.push_back(a);
-  }
-  ASSERT_EQ(3, v.size());
-  ASSERT_EQ("l0c0", v[0][0]);
-  ASSERT_EQ("l0c1", v[0][1]);
-  ASSERT_EQ("l0c2", v[0][2]);
-  ASSERT_EQ("l1c0", v[1][0]);
-  ASSERT_EQ("l1c1", v[1][1]);
-  ASSERT_EQ("l1c2", v[1][2]);
-  ASSERT_EQ("l2c0", v[2][0]);
-  ASSERT_EQ("l2c1", v[2][1]);
-  ASSERT_EQ("l2c2", v[2][2]);
-}
+  ASSERT_TRUE(p.getLine(a));
+  ASSERT_EQ( "a", a[0]);
+  ASSERT_EQ( "b", a[1]);
+  ASSERT_EQ( "c", a[2]);
+  ASSERT_TRUE(p.getLine(a));
+  ASSERT_EQ( "a2", a[0]);
+  ASSERT_EQ( "b2", a[1]);
+  ASSERT_EQ( "c2", a[2]);
+  ASSERT_FALSE(p.getLine(a));
+  remove("_testtmp.tsv");
+};
+
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
+

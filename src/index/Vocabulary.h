@@ -4,7 +4,8 @@
 
 #pragma once
 
-#include <assert.h>
+#include <cassert>
+#include <unordered_map>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -117,6 +118,10 @@ public:
     return success;
   }
 
+
+  void createFromSet(const std::unordered_set<string>& set);
+
+  std::unordered_map<string, Id> asMap();
 
 private:
 

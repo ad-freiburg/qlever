@@ -3,7 +3,6 @@
 // Author: Björn Buchhold <buchholb>
 
 #include <iostream>
-#include <string>
 #include <fstream>
 
 #include "../util/File.h"
@@ -21,6 +20,7 @@ Vocabulary::~Vocabulary() {
 
 // _____________________________________________________________________________
 void Vocabulary::readFromFile(const string& fileName) {
+  LOG(INFO) << "Reading vocabulary from file " << fileName << "\n";
   _words.clear();
   std::fstream in(fileName.c_str(), std::ios_base::in);
   string line;
@@ -28,10 +28,12 @@ void Vocabulary::readFromFile(const string& fileName) {
     _words.push_back(line);
   }
   in.close();
+  LOG(INFO) << "Done reading vocabulary from file.\n";
 }
 
 // _____________________________________________________________________________
 void Vocabulary::writeToFile(const string& fileName) const {
+  LOG(INFO) << "Writing vocabulary to file " << fileName << "\n";
   std::fstream out(fileName.c_str(), std::ios_base::out);
   for (size_t i = 0; i + 1 < _words.size(); ++i) {
     out << _words[i] << '\n';
@@ -40,5 +42,25 @@ void Vocabulary::writeToFile(const string& fileName) const {
     out << _words[_words.size() - 1];
   }
   out.close();
+  LOG(INFO) << "Done writing vocabulary to file.\n";
 }
 
+// _____________________________________________________________________________
+void Vocabulary::createFromSet(const std::unordered_set<string>& set) {
+  LOG(INFO) << "Creating vocabulary from set (sorting)...\n";
+  _words.clear();
+  _words.reserve(set.size());
+  _words.insert(begin(_words), begin(set), end(set));
+  std::sort(begin(_words), end(_words));
+  LOG(INFO) << "Done creating vocabulary.\n";
+}
+
+// _____________________________________________________________________________
+std::unordered_map<string, Id> Vocabulary::asMap() {
+  std::unordered_map<string, Id> map;
+  map.reserve(_words.size());
+  for (size_t i = 0; i < _words.size(); ++i) {
+    map[_words[i]] = i;
+  }
+  return map;
+}

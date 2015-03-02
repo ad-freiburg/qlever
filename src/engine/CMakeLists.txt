@@ -15,3 +15,5 @@ add_library(engine
               Sort.h Sort.cpp
               OrderBy.h OrderBy.cpp
             )
+
+target_link_libraries(engine index parser)
