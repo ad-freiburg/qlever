@@ -12,6 +12,7 @@
 #include "./Engine.h"
 #include "./IndexMock.h"
 #include "./Constants.h"
+#include "../index/Index.h"
 
 using std::string;
 using std::vector;
@@ -23,9 +24,9 @@ typedef ad_utility::LRUCache<string, ResultTable> SubtreeCache;
 class QueryExecutionContext {
 public:
 
-  QueryExecutionContext(const IndexMock& index, const Engine& engine) :
+  QueryExecutionContext(const Index& index, const Engine& engine) :
       _subtreeCache(NOF_SUBTREES_TO_CACHE),
-      _index(index), _engine(engine) {
+      _index(&index), _engine(&engine) {
   }
 
   ResultTable* getCachedResultForQueryTree(
@@ -34,17 +35,18 @@ public:
   }
 
   const Engine& getEngine() const {
-    return _engine;
+    return *_engine;
   }
 
-  const IndexMock& getIndex() const {
-    return _index;
+  const Index& getIndex() const {
+    return *_index;
   }
+
 
 private:
 
   SubtreeCache _subtreeCache;
-  const IndexMock& _index;
-  const Engine& _engine;
+  const Index* _index;
+  const Engine* _engine;
 };
 

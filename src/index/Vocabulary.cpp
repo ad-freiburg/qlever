@@ -34,7 +34,7 @@ void Vocabulary::readFromFile(const string& fileName) {
 // _____________________________________________________________________________
 void Vocabulary::writeToFile(const string& fileName) const {
   LOG(INFO) << "Writing vocabulary to file " << fileName << "\n";
-  std::fstream out(fileName.c_str(), std::ios_base::out);
+  std::ofstream out(fileName.c_str(), std::ios_base::out);
   for (size_t i = 0; i + 1 < _words.size(); ++i) {
     out << _words[i] << '\n';
   }

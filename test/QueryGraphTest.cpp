@@ -10,7 +10,7 @@
 
 TEST(QueryGraphTest, testAddNode) {
   try {
-    IndexMock index;
+    Index index;
     Engine engine;
     QueryExecutionContext qec(index, engine);
     QueryGraph qg(&qec);

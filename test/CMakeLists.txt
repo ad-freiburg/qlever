@@ -1,3 +1,12 @@
+################################
+# STXXL
+################################
+
+# apply STXXL CXXFLAGS
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
+# add STXXL includes path
+include_directories(${STXXL_INCLUDE_DIRS})
+
 add_executable(SparqlParserTest SparqlParserTest.cpp)
 add_dependencies(SparqlParserTest googletest parser)
 target_link_libraries(SparqlParserTest ${GTEST_LIBRARY} parser -pthread)
@@ -36,6 +45,18 @@ add_executable(TsvParserTest TsvParserTest.cpp)
 add_dependencies(TsvParserTest googletest parser)
 target_link_libraries(TsvParserTest ${GTEST_LIBRARY} parser -pthread)
 
+add_executable(ContextFileParserTest ContextFileParserTest.cpp)
+add_dependencies(ContextFileParserTest googletest parser)
+target_link_libraries(ContextFileParserTest ${GTEST_LIBRARY} parser -pthread)
+
+add_executable(IndexMetaDataTest IndexMetaDataTest.cpp)
+add_dependencies(IndexMetaDataTest googletest index)
+target_link_libraries(IndexMetaDataTest ${GTEST_LIBRARY} index -pthread)
+
+add_executable(IndexTest IndexTest.cpp)
+add_dependencies(IndexTest googletest index)
+target_link_libraries(IndexTest ${GTEST_LIBRARY} index parser -pthread)
+
 add_library(tests
 						SparqlParserTest
 						StringUtilsTest
@@ -46,4 +67,7 @@ add_library(tests
             FileTest
             VocabularyTest
             TsvParserTest
+            ContextFileParserTest
+            IndexMetaDataTest
+            IndexTest
             )

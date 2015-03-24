@@ -77,28 +77,36 @@ public:
 
   template<typename E, size_t N>
   static void sort(vector<array<E, N>>& tab, size_t keyColumn) {
+    LOG(DEBUG) << "Sorting " << tab.size() << " elements.\n";
     std::sort(tab.begin(), tab.end(),
         [&keyColumn](const array <E, N>& a, const array <E, N>& b) {
           return a[keyColumn] < b[keyColumn];
         });
+    LOG(DEBUG) << "Sort done.\n";
   }
 
   template<typename E>
   static void sort(vector<vector<E>>& tab, size_t keyColumn) {
+    LOG(DEBUG) << "Sorting " << tab.size() << " elements.\n";
     std::sort(tab.begin(), tab.end(),
         [&keyColumn](const vector<E>& a, const vector<E>& b) {
           return a[keyColumn] < b[keyColumn];
         });
+    LOG(DEBUG) << "Sort done.\n";
   }
 
   template<typename E, size_t N, typename C>
   static void sort(vector<array<E, N>>& tab, C comp) {
+    LOG(DEBUG) << "Sorting " << tab.size() << " elements.\n";
     std::sort(tab.begin(), tab.end(), comp);
+    LOG(DEBUG) << "Sort done.\n";
   }
 
   template<typename E, typename C>
   static void sort(vector<vector<E>>& tab, C comp) {
+    LOG(DEBUG) << "Sorting " << tab.size() << " elements.\n";
     std::sort(tab.begin(), tab.end(), comp);
+    LOG(DEBUG) << "Sort done.\n";
   }
 
 private:

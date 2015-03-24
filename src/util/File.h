@@ -150,7 +150,7 @@ class File {
 
     bool isAtEof() {
       assert(_file);
-      return feof(_file) == 0 ? false : true;
+      return feof(_file) != 0;
     }
 
     //! Read an ASCII file into a vector of strings.

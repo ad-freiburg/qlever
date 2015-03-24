@@ -70,7 +70,7 @@ vector<size_t> QueryGraph::getNodesWithDegreeOne() const {
 // _____________________________________________________________________________
 void QueryGraph::collapseNode(size_t u) {
   assert(u < _adjLists.size());
-  // Ensure there is exactly one connected node, collapse is only allow for
+  // Ensure there is exactly one connected node, collapse is only allowed for
   // nodes with degree 1.
   assert(_adjLists[u].size() == 1);
   size_t v = _adjLists[u][0]._targetNodeId;
@@ -119,7 +119,6 @@ string QueryGraph::asString() {
 // _____________________________________________________________________________
 void QueryGraph::Node::consume(QueryGraph::Node* other,
     const QueryGraph::Edge& edge) {
-  _expectedCardinality *= other->expectedCardinality();
 
   QueryExecutionTree addedSubtree(_qec);
   if (other->getConsumedOperations().isEmpty()) {
@@ -209,13 +208,22 @@ void QueryGraph::Node::consume(QueryGraph::Node* other,
 }
 
 // _____________________________________________________________________________
-size_t QueryGraph::Node::expectedCardinality() {
+size_t QueryGraph::Node::expectedCardinality(
+    size_t remainingRelationCardinality) {
   if (_expectedCardinality == std::numeric_limits<size_t>::max()) {
-    // TODO: Retrieve it properly.
     if (ad_utility::startsWith(_label, "?")) {
-      _expectedCardinality = 5;
+      if (_consumedOperations.getType() != QueryExecutionTree::UNDEFINED) {
+        if (_qec) {
+          _expectedCardinality = _consumedOperations.getResult().size()
+              * remainingRelationCardinality;
+        } else {
+          _expectedCardinality = remainingRelationCardinality * 2;
+        };
+      } else {
+        _expectedCardinality = remainingRelationCardinality;
+      }
     } else {
-      _expectedCardinality = 2;
+      _expectedCardinality = 1 + remainingRelationCardinality / 4;
     }
   }
   return _expectedCardinality;
@@ -242,10 +250,14 @@ QueryGraph::Node* QueryGraph::collapseAndCreateExecutionTree() {
   size_t lastUpdatedNode = std::numeric_limits<size_t>::max();
   while (deg1Nodes.size() > 0) {
     // Find the one with the minimum expected cardinality
-    size_t minEC = getNode(deg1Nodes[0])->expectedCardinality();
+    size_t relSize = _qec ? _qec->getIndex().relationCardinality(
+        _adjLists[deg1Nodes[0]][0]._label) : 10;
+    size_t minEC = getNode(deg1Nodes[0])->expectedCardinality(relSize);
     size_t minECIndex = deg1Nodes[0];
     for (size_t i = 1; i < deg1Nodes.size(); ++i) {
-      size_t ec = getNode(deg1Nodes[i])->expectedCardinality();
+      relSize = _qec ? _qec->getIndex().relationCardinality(
+          _adjLists[deg1Nodes[i]][0]._label) : 10;
+      size_t ec = getNode(deg1Nodes[i])->expectedCardinality(relSize);
       if (ec < minEC ||
           (ec == minEC &&
               _selectVariables.count(getNode(deg1Nodes[i])->_label) == 0)) {
@@ -263,7 +275,8 @@ QueryGraph::Node* QueryGraph::collapseAndCreateExecutionTree() {
 }
 
 // _____________________________________________________________________________
-QueryGraph::Node::Node(QueryExecutionContext* qec, const string& label) :
+QueryGraph::Node::Node(QueryExecutionContext* qec,
+    const string& label) :
     _label(label),
     _qec(qec),
     _expectedCardinality(std::numeric_limits<size_t>::max()),
@@ -322,7 +335,8 @@ void QueryGraph::applySolutionModifiers(const QueryExecutionTree& treeSoFar,
       vector<pair<size_t, bool>> sortIndices;
       for (auto ord : _query._orderBy) {
         sortIndices.emplace_back(
-            pair<size_t, bool>{treeSoFar.getVariableColumn(ord._key), ord._desc});
+            pair<size_t, bool>{treeSoFar.getVariableColumn(ord._key), ord
+                ._desc});
       }
       OrderBy ob(_qec, treeSoFar, sortIndices);
       finalTree->setOperation(QueryExecutionTree::ORDER_BY, &ob);

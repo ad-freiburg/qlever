@@ -187,6 +187,12 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_FALSE(pq._orderBy[1]._desc);
     ASSERT_FALSE(pq._distinct);
     ASSERT_TRUE(pq._reduced);
+
+  pq = SparqlParser::parse(
+      "SELECT ?x ?y WHERE {?x is-a Actor} LIMIT 10");
+  pq.expandPrefixes();
+  ASSERT_EQ("10", pq._limit);
+
 }
 
 int main(int argc, char **argv) {

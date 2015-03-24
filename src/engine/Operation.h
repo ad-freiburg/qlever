@@ -52,7 +52,7 @@ public:
     _executionContext = executionContext;
   }
 
-  const IndexMock& getIndex() const {
+  const Index& getIndex() const {
     return _executionContext->getIndex();
   }
 

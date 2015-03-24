@@ -9,7 +9,8 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3 -Wall -DLOGLEVEL=4")
+set(LOG_LEVEL 4)
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3 -Wall -DLOGLEVEL=${LOG_LEVEL}")
 
 
 ###############################################################################
@@ -66,9 +67,17 @@ add_subdirectory(src/util)
 add_subdirectory(src/index)
 add_subdirectory(test)
 
+################################
+# STXXL
+################################
+
+# apply STXXL CXXFLAGS
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
+# add STXXL includes path
+include_directories(${STXXL_INCLUDE_DIRS})
+
 add_executable(SparqlEngineMain src/SparqlEngineMain.cpp)
 target_link_libraries (SparqlEngineMain engine index parser)
-
 
 
 enable_testing()
@@ -81,3 +90,6 @@ add_test(FileTest test/FileTest)
 add_test(Simple8bTest test/Simple8bTest)
 add_test(VocabularyTest test/VocabularyTest)
 add_test(TsvParserTest test/TsvParserTest)
+add_test(ContextFileParserTest test/ContextFileParserTest)
+add_test(IndexMetaDataTest test/IndexMetaDataTest)
+add_test(IndexTest test/IndexTest)

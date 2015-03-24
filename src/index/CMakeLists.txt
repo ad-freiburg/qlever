@@ -22,6 +22,5 @@ add_library(index
 
 
 add_executable(IndexBuilderMain IndexBuilderMain.cpp)
-target_link_libraries(IndexBuilderMain engine index parser ${STXXL_LIBRARIES})
-
 target_link_libraries(index parser ${STXXL_LIBRARIES})
+target_link_libraries(IndexBuilderMain engine index parser ${STXXL_LIBRARIES})

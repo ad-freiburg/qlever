@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <cassert>
+#include <glob.h>
 #include "./ResultTable.h"
 
 // _____________________________________________________________________________
@@ -181,4 +182,29 @@ string ResultTable::asDebugString() const {
     }
   }
   return os.str();
+}
+
+// _____________________________________________________________________________
+size_t ResultTable::size() const {
+  size_t rv = 0;
+  if (_fixedSizeData) {
+    if (_nofColumns == 1) {
+      rv = static_cast<vector<array<Id, 1>>*>(_fixedSizeData)->size();
+    }
+    if (_nofColumns == 2) {
+      rv =static_cast<vector<array<Id, 2>>*>(_fixedSizeData)->size();
+    }
+    if (_nofColumns == 3) {
+      rv =static_cast<vector<array<Id, 3>>*>(_fixedSizeData)->size();
+    }
+    if (_nofColumns == 4) {
+      rv =static_cast<vector<array<Id, 4>>*>(_fixedSizeData)->size();
+    }
+    if (_nofColumns == 5) {
+      rv =static_cast<vector<array<Id, 5>>*>(_fixedSizeData)->size();
+    }
+  } else {
+    rv =_varSizeData.size();
+  }
+  return rv;
 }

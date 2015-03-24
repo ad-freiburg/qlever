@@ -178,7 +178,9 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out, size_t limit,
 // _____________________________________________________________________________
 void QueryExecutionTree::writeResultToStream(std::ostream& out,
     const vector<string>& selectVars, size_t limit, size_t offset) const {
+  // They may trigger computation (but does not have to).
   const ResultTable& res = getResult();
+  LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   vector<size_t> validIndices;
   for (const auto& var : selectVars) {
     if (getVariableColumnMap().find(var) != getVariableColumnMap().end()) {
@@ -188,8 +190,14 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
   if (validIndices.size() == 0) {return;}
   if (res._nofColumns == 1) {
     auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
-    for (auto row : *data) {
-      out << _qec->getIndex().idToString(row[0]) << '\n';
+    size_t upperBound = std::min<size_t>(offset + limit, data->size());
+    for (size_t i = offset; i < upperBound; ++i) {
+      auto row = (*data)[i];
+      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
+        out << _qec->getIndex().idToString(row[validIndices[j]]) << '\t';
+      }
+      out << _qec->getIndex().idToString(
+          row[validIndices[validIndices.size() - 1]]) << '\n';
     }
   } else if (res._nofColumns == 2) {
     auto data = static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
@@ -247,4 +255,5 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
           row[validIndices[validIndices.size() - 1]]) << '\n';
     }
   }
+  LOG(DEBUG) << "Done creating readable result.\n";
 }

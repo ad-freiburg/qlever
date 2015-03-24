@@ -9,6 +9,7 @@
 #include <iostream>
 #include <libgen.h>
 
+#include "util/ReadableNumberFact.h"
 #include "parser/SparqlParser.h"
 #include "engine/IndexMock.h"
 #include "engine/QueryGraph.h"
@@ -35,9 +36,19 @@ void processQuery(QueryExecutionContext& qec, const string &query);
 
 // Main function.
 int main(int argc, char **argv) {
+  cout.sync_with_stdio(false);
   std::cout << std::endl << EMPH_ON
       << "SparqlEngineMain, version " << __DATE__
       << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
+
+  char* locale = setlocale(LC_CTYPE, "en_US.utf8");
+  cout << "Set locale LC_CTYPE to: " << locale << endl;
+
+
+  std::locale loc;
+  ad_utility::ReadableNumberFacet facet(1);
+  std::locale locWithNumberGrouping(loc, &facet);
+  ad_utility::Log::imbue(locWithNumberGrouping);
 
   string query;
   string basename;
@@ -74,7 +85,8 @@ int main(int argc, char **argv) {
 
   try {
     Engine engine;
-    IndexMock index(basename);
+    Index index;
+    index.createFromOnDiskIndex(basename);
     QueryExecutionContext qec(index, engine);
 
     if (query == "") {
@@ -112,26 +124,21 @@ int main(int argc, char **argv) {
 }
 
 void processQuery(QueryExecutionContext& qec, const string &query) {
-  LOG(INFO) << "Query is: \"" << query << "\"" << endl << endl << endl;
+  // LOG(INFO) << "Query is: \"" << query << "\"" << endl;
   SparqlParser sp;
   ParsedQuery pq = sp.parse(query);
-  LOG(INFO) << "Parsed format:\n" << pq.asString() << endl;
+  // LOG(INFO) << "Parsed format:\n" << pq.asString() << endl;
 
-  LOG(INFO) << "Creating an execution plan..." << endl;
   pq.expandPrefixes();
-
   QueryGraph qg(&qec);
   qg.createFromParsedQuery(pq);
 
-
   const QueryExecutionTree& qet = qg.getExecutionTree();
-  LOG(INFO) << "Execution tree:\n" << qet.asString() << endl;
 
-  const ResultTable& res = qet.getResult();
-  LOG(INFO) << "Result Width: " << res._nofColumns << endl;
-  LOG(INFO) << "As debug string: " << res.asDebugString() << endl;
-  LOG(INFO)<< endl;
-
+  // const ResultTable& res = qet.getResult();
+  // LOG(INFO) << "Result Width: " << res._nofColumns << endl;
+  // LOG(INFO) << "As debug string: " << res.asDebugString() << endl;
+  // LOG(INFO)<< endl;
 
   LOG(INFO) << "Readable Result is: " << endl;
   size_t limit = MAX_NOF_ROWS_IN_RESULT;
@@ -144,4 +151,5 @@ void processQuery(QueryExecutionContext& qec, const string &query) {
   }
   qet.writeResultToStream(cout, pq._selectedVariables, limit, offset);
   LOG(INFO) << endl;
+  LOG(INFO) << "Order of execution was:\n" << qet.asString() << endl;
 }

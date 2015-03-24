@@ -8,10 +8,14 @@
 #include <string>
 #include <iomanip>
 #include <iostream>
+#include <sstream>
 
-#include "./Index.h"
-#include "../util/ReadableNumberFact.h"
 #include "../util/File.h"
+#include "../engine/Constants.h"
+#include "../util/ReadableNumberFact.h"
+#include "./Index.h"
+
+
 
 using std::string;
 using std::cout;
@@ -24,7 +28,7 @@ using std::cerr;
 
 // Available options.
 struct option options[] = {
-    {"tsv-file", no_argument, NULL, 't'},
+    {"tsv-file", required_argument, NULL, 't'},
     {"index-basename", required_argument, NULL, 'b'},
     {NULL, 0, NULL, 0}
 };
@@ -55,8 +59,11 @@ int main(int argc, char **argv) {
       << "IndexBuilderMain, version " << __DATE__
       << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
 
+  char* locale = setlocale(LC_CTYPE, "en_US.utf8");
+  cout << "Set locale LC_CTYPE to: " << locale << endl;
+
   std::locale loc;
-  ad_utility::ReadableNumberFacet facet;
+  ad_utility::ReadableNumberFacet facet(1);
   std::locale locWithNumberGrouping(loc, &facet);
   ad_utility::Log::imbue(locWithNumberGrouping);
 
@@ -65,7 +72,7 @@ int main(int argc, char **argv) {
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "b:t:", options, NULL);
+    int c = getopt_long(argc, argv, "t:b:", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 't':
@@ -93,6 +100,7 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
+  LOG(DEBUG) << "Configuring STXXL..." << std::endl;
   string stxxlFileName;
   if (baseName.size() > 0) {
     size_t posOfLastSlash = baseName.rfind('/');
@@ -101,6 +109,7 @@ int main(int argc, char **argv) {
     writeStxxlConfigFile(location, tail);
     stxxlFileName = getStxxlDiskFileName(location, tail);
   }
+  LOG(DEBUG) << "done." << std::endl;
 
   Index index;
   index.createFromTsvFile(tsvFile,  baseName);

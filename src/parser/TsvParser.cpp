@@ -5,10 +5,11 @@
 #include <cassert>
 #include <iostream>
 #include "./TsvParser.h"
+#include "../util/Log.h"
 
 // _____________________________________________________________________________
-TsvParser::TsvParser(const string& tsvFile) :
-    _in(tsvFile.c_str(), std::ios_base::in) { }
+TsvParser::TsvParser(const string& tsvFile) : _in(tsvFile) {
+}
 
 // _____________________________________________________________________________
 TsvParser::~TsvParser() {

@@ -24,5 +24,5 @@ public:
 
 
 private:
-  std::fstream _in;
+  std::ifstream _in;
 };

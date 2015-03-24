@@ -13,6 +13,7 @@ using std::array;
 
 class ResultTable {
 public:
+
   enum Status {
     FINISHED = 0,
     OTHER = 1
@@ -30,6 +31,7 @@ public:
   ResultTable(const ResultTable&);
   ResultTable& operator=(const ResultTable&);
   virtual ~ResultTable();
+  size_t size() const;
 
   void clear();
   string asDebugString() const;

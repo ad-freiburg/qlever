@@ -121,7 +121,7 @@ public:
 
     // Get the expectedCardinality.
     // Lazily computes the value once.
-    size_t expectedCardinality();
+    size_t expectedCardinality(size_t remainingRelationCardinality);
 
     const QueryExecutionTree& getConsumedOperations() const {
       return _consumedOperations;
