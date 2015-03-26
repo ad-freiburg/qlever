@@ -10,6 +10,7 @@
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parse(const string& query) {
   ParsedQuery result;
+  result._originalString = query;
 
   // Split prologue
   size_t i = query.find("SELECT");

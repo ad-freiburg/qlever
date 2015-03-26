@@ -66,6 +66,7 @@ public:
   string _offset;
   bool _reduced;
   bool _distinct;
+  string _originalString;
 
   void expandPrefixes();
 

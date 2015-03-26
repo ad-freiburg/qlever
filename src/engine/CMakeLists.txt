@@ -23,6 +23,7 @@ add_library(engine
               Join.h Join.cpp
               Sort.h Sort.cpp
               OrderBy.h OrderBy.cpp
+              Server.h Server.cpp
             )
 
 target_link_libraries(engine index parser)

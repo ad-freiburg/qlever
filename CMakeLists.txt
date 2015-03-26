@@ -79,6 +79,9 @@ include_directories(${STXXL_INCLUDE_DIRS})
 add_executable(SparqlEngineMain src/SparqlEngineMain.cpp)
 target_link_libraries (SparqlEngineMain engine index parser)
 
+add_executable(ServerMain src/ServerMain.cpp)
+target_link_libraries (ServerMain engine index parser)
+
 
 enable_testing()
 add_test(SparqlParserTest test/SparqlParserTest)

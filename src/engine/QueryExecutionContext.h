@@ -42,6 +42,9 @@ public:
     return *_index;
   }
 
+  void clearCache() {
+    _subtreeCache.clear();
+  }
 
 private:
 
