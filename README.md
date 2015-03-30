@@ -22,7 +22,7 @@ Don't do this directly in SparqlEngineDraft
 
 d) Build the project
 
-    cmake /path/to/SparqlEngineDraft; make -j
+    cmake ../SparqlEngineDraft/ -DCMAKE_BUILD_TYPE=Release; make -j
 
 e) Run ctest. All tests should pass:
 
