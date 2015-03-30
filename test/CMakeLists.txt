@@ -45,6 +45,10 @@ add_executable(TsvParserTest TsvParserTest.cpp)
 add_dependencies(TsvParserTest googletest parser)
 target_link_libraries(TsvParserTest ${GTEST_LIBRARY} parser -pthread)
 
+add_executable(NTriplesParserTest NTriplesParserTest.cpp)
+add_dependencies(NTriplesParserTest googletest parser)
+target_link_libraries(NTriplesParserTest ${GTEST_LIBRARY} parser -pthread)
+
 add_executable(ContextFileParserTest ContextFileParserTest.cpp)
 add_dependencies(ContextFileParserTest googletest parser)
 target_link_libraries(ContextFileParserTest ${GTEST_LIBRARY} parser -pthread)

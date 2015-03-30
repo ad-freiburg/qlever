@@ -26,10 +26,15 @@ public:
 
   typedef stxxl::VECTOR_GENERATOR<array<Id, 3>>::result ExtVec;
 
-  // Creates an index form a TSV file.
+  // Creates an index from a TSV file.
   // Will write vocabulary and on-disk index data.
   // Also ends up with fully functional in-memory metadata.
   void createFromTsvFile(const string& tsvFile, const string& onDiskBase);
+
+  // Creates an index from a file in NTriples format.
+  // Will write vocabulary and on-disk index data.
+  // Also ends up with fully functional in-memory metadata.
+  void createFromNTriplesFile(const string& ntFile, const string& onDiskBase);
 
   // Creates an index object from an on disk index
   // that has previously been constructed.
@@ -62,8 +67,10 @@ private:
   mutable ad_utility::File _posFile;
 
   size_t passTsvFileForVocabulary(const string& tsvFile);
-
   void passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data);
+
+  size_t passNTriplesFileForVocabulary(const string& tsvFile);
+  void passNTriplesFileIntoIdVector(const string& tsvFile, ExtVec& data);
 
   static void createPermutation(const string& fileName,
       const ExtVec& vec,

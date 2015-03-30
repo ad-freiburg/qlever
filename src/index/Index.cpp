@@ -9,6 +9,7 @@
 #include <glob.h>
 #include "../parser/TsvParser.h"
 #include "./Index.h"
+#include "../parser/NTriplesParser.h"
 
 using std::array;
 
@@ -25,6 +26,26 @@ void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase) {
   _vocab.writeToFile(onDiskBase + ".vocabulary");
   ExtVec v(nofLines);
   passTsvFileIntoIdVector(tsvFile, v);
+  LOG(INFO) << "Sorting for PSO permutation..." << std::endl;
+  stxxl::sort(begin(v), end(v), SortByPSO(), STXXL_MEMORY_TO_USE);
+  LOG(INFO) << "Sort done." << std::endl;
+  createPermutation(indexFilename + ".pso", v, _psoMeta, 0, 2);
+  LOG(INFO) << "Sorting for POS permutation..." << std::endl;;
+  stxxl::sort(begin(v), end(v), SortByPOS(), STXXL_MEMORY_TO_USE);
+  LOG(INFO) << "Sort done." << std::endl;;
+  createPermutation(indexFilename + ".pos", v, _posMeta, 2, 0);
+  openFileHandles();
+}
+
+// _____________________________________________________________________________
+void Index::createFromNTriplesFile(const string& ntFile,
+                                   const string& onDiskBase) {
+  _onDiskBase = onDiskBase;
+  string indexFilename = _onDiskBase + ".index";
+  size_t nofLines = passNTriplesFileForVocabulary(ntFile);
+  _vocab.writeToFile(onDiskBase + ".vocabulary");
+  ExtVec v(nofLines);
+  passNTriplesFileIntoIdVector(ntFile, v);
   LOG(INFO) << "Sorting for PSO permutation..." << std::endl;
   stxxl::sort(begin(v), end(v), SortByPSO(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
@@ -83,6 +104,52 @@ void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data) {
   LOG(INFO) << "Pass done.\n";
 }
 
+// _____________________________________________________________________________
+size_t Index::passNTriplesFileForVocabulary(const string& ntFile) {
+  LOG(INFO) << "Making pass over NTriples " << ntFile << " for vocabulary."
+            << std::endl;
+  array<string, 3> spo;
+  NTriplesParser p(ntFile);
+  std::unordered_set<string> items;
+  size_t i = 0;
+  while (p.getLine(spo)) {
+    items.insert(spo[0]);
+    items.insert(spo[1]);
+    items.insert(spo[2]);
+    ++i;
+    if (i % 10000000 == 0) {
+      LOG(INFO) << "Lines processed: " << i << '\n';
+    }
+  }
+  LOG(INFO) << "Pass done.\n";
+  _vocab.createFromSet(items);
+  return i;
+}
+
+// _____________________________________________________________________________
+void Index::passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data) {
+  LOG(INFO) << "Making pass over NTriples " << ntFile
+            << " and creating stxxl vector.\n";
+  array<string, 3> spo;
+  NTriplesParser p(ntFile);
+  std::unordered_map<string, Id> vocabMap = _vocab.asMap();
+  size_t i = 0;
+  // write using vector_bufwriter
+  ExtVec::bufwriter_type writer(data);
+  while (p.getLine(spo)) {
+    writer << array<Id, 3>{{
+                               vocabMap.find(spo[0])->second,
+                               vocabMap.find(spo[1])->second,
+                               vocabMap.find(spo[2])->second
+                           }};
+    ++i;
+    if (i % 10000000 == 0) {
+      LOG(INFO) << "Lines processed: " << i << '\n';
+    }
+  }
+  writer.finish();
+  LOG(INFO) << "Pass done.\n";
+}
 // _____________________________________________________________________________
 void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
     IndexMetaData& metaData, size_t c1, size_t c2) {

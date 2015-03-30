@@ -76,9 +76,11 @@ class Exception {
       VOCABULARY_MISS = 16 * 1 + 1,
       UNKNOWN_RELATION_ID = 16 * 1 + 2,
 
-      // query formatting errors
+      // formatting errors
+      BAD_INPUT = 16 * 2 + 5,
       BAD_REQUEST = 16 * 2 + 6,
       BAD_QUERY = 16 * 2 + 7,
+
       // memory allocation errors
       REALLOC_FAILED = 16 * 3 + 1,
       NEW_FAILED = 16 * 3 + 2,
@@ -113,6 +115,8 @@ class Exception {
       case UNKNOWN_RELATION_ID:
         return "UNKNOWN_RELATION_ID: "
             "Trying to access a relation that is not present.";
+      case BAD_INPUT:
+        return "BAD INPUT STRING";
       case BAD_REQUEST:
         return "BAD REQUEST STRING";
       case BAD_QUERY:

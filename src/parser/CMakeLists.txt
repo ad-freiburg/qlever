@@ -3,4 +3,5 @@ add_library(parser
               ParsedQuery.h ParsedQuery.cpp
               ParseException.h
               TsvParser.h TsvParser.cpp
+              NTriplesParser.h NTriplesParser.cpp
             	ContextFileParser.cpp ContextFileParser.h)

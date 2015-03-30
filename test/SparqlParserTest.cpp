@@ -67,6 +67,10 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ("<http://abc.de>", pq._whereClauseTriples[2]._o);
     ASSERT_EQ("", pq._limit);
     ASSERT_EQ("", pq._offset);
+
+    pq = SparqlParser::parse(
+          "SELECT ?x ?z \n "
+          "WHERE \t {\n?x <Directed by> ?y. ?y ns:myrel ?z.\n?y nsx:rel2 <http://abc.de>\n}");
 };
 
 TEST(ParserTest, testExpandPrefixes) {
