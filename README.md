@@ -18,11 +18,11 @@ b) navigate to SparqlEngineDraft/src/index and checkout stxxl:
 c) Go to a folder where you want to build the binaries.
 Don't do this directly in SparqlEngineDraft
 
-    cd YOUR_FOLDER
+    cd /path/to/YOUR_FOLDER
 
 d) Build the project
 
-    cmake ../SparqlEngineDraft/ -DCMAKE_BUILD_TYPE=Release; make -j
+    cmake /path/to/SparqlEngineDraft/ -DCMAKE_BUILD_TYPE=Release; make -j
 
 e) Run ctest. All tests should pass:
 
