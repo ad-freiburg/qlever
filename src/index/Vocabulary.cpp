@@ -47,10 +47,11 @@ void Vocabulary::writeToFile(const string& fileName) const {
 
 // _____________________________________________________________________________
 void Vocabulary::createFromSet(const std::unordered_set<string>& set) {
-  LOG(INFO) << "Creating vocabulary from set (sorting)...\n";
+  LOG(INFO) << "Creating vocabulary from set ...\n";
   _words.clear();
   _words.reserve(set.size());
   _words.insert(begin(_words), begin(set), end(set));
+  LOG(INFO) << "... sorting ...\n";
   std::sort(begin(_words), end(_words));
   LOG(INFO) << "Done creating vocabulary.\n";
 }

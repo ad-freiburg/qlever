@@ -76,6 +76,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       qec->clearCache();
     }
     query = createQueryFromHttpParams(params);
+    LOG(INFO) << "Query: " << query << '\n';
     ParsedQuery pq = SparqlParser::parse(query);
     pq.expandPrefixes();
     QueryGraph qg(qec);

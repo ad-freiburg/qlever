@@ -6,6 +6,7 @@
 #include "./SparqlParser.h"
 #include "./ParseException.h"
 #include "../util/StringUtils.h"
+#include "../util/Exception.h"
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parse(const string& query) {
@@ -16,18 +17,18 @@ ParsedQuery SparqlParser::parse(const string& query) {
   size_t i = query.find("SELECT");
   if (i == string::npos) {
     throw ParseException("Missing keyword \"SELECT\", "
-        "currently only select queries are supported.");
+                             "currently only select queries are supported.");
   }
 
   size_t j = query.find("WHERE");
   if (j == string::npos) {
     throw ParseException("Missing keyword \"WHERE\", "
-        "currently only select queries are supported.");
+                             "currently only select queries are supported.");
   }
 
   if (i >= j) {
     throw ParseException("Keyword \"WHERE\" "
-        "found after keyword \"SELECT\". Invalid query.");
+                             "found after keyword \"SELECT\". Invalid query.");
   }
 
   size_t k = query.find("}", j);
@@ -40,7 +41,7 @@ ParsedQuery SparqlParser::parse(const string& query) {
   parseWhere(ad_utility::strip(query.substr(j, k - j), " \n\t"), result);
 
   parseSolutionModifiers(ad_utility::strip(query.substr(k + 1), " \n\t"),
-      result);
+                         result);
   return result;
 }
 
@@ -90,7 +91,7 @@ void SparqlParser::parseSelect(const string& str, ParsedQuery& query) {
       query._selectedVariables.push_back(vars[i]);
     } else {
       throw ParseException(string("Invalid variable in select clause: \"") +
-          vars[i] + "\"");
+                           vars[i] + "\"");
     }
   }
 }
@@ -105,25 +106,32 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
   string inner = ad_utility::strip(str.substr(i + 1, j - i - 1), "\n\t ");
 
   // Split where clauses. Cannot simply split at dots, because they may occur
-  // in URIs.
+  // in URIs, stuff with namespaces or literals.
   vector<string> clauses;
   size_t start = 0;
   bool insideUri = false;
+  bool insideNsThing = false;
+  bool insideLiteral = false;
   while (start < inner.size()) {
     size_t k = start;
     while (k < inner.size()) {
-      if (!insideUri) {
+      if (!insideUri && !insideLiteral && !insideNsThing) {
         if (inner[k] == '.') {
           clauses.emplace_back(inner.substr(start, k - start));
           break;
         }
-        if (inner[k] == '<') {insideUri = true;}
+        if (inner[k] == '<') { insideUri = true; }
+        if (inner[k] == '\"') { insideLiteral = true; }
+        if (inner[k] == ':') { insideNsThing = true; }
       } else {
-        if (inner[k] == '>') {insideUri = false;}
+        if (insideUri && inner[k] == '>') { insideUri = false; }
+        if (insideLiteral && inner[k] == '\"') { insideUri = false; }
+        if (insideNsThing &&
+            (inner[k] == ' ' || inner[k] == '\t')) { insideNsThing = false; }
       }
       ++k;
     }
-    if (k == inner.size()) {clauses.emplace_back(inner.substr(start));}
+    if (k == inner.size()) { clauses.emplace_back(inner.substr(start)); }
     start = k + 1;
   }
   for (const string& clause: clauses) {
@@ -136,21 +144,66 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
 
 // _____________________________________________________________________________
 void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
-  auto spo = ad_utility::split(str, ' ');
-  if (spo.size() != 3) {
-    throw ParseException(string("Invalid triple, expected format: \"s p o\". "
-        "Triple was: ") + str);
+  size_t i = 0;
+  while (i < str.size() &&
+         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
+  if (i == str.size()) {
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
   }
-  query._whereClauseTriples.emplace_back(SparqlTriple{
-      ad_utility::strip(spo[0], "\n\t "),
-      ad_utility::strip(spo[1], "\n\t "),
-      ad_utility::strip(spo[2], "\n\t ")
-  });
+  size_t j = i + 1;
+  while (j < str.size() && str[j] != '\t' && str[j] != ' ' &&
+         str[j] != '\n') { ++j; }
+  if (j == str.size()) {
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
+  }
+
+  string s = str.substr(i, j - i);
+  i = j;
+  while (i < str.size() &&
+         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
+  if (i == str.size()) {
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
+  }
+  j = i + 1;
+  while (j < str.size() && str[j] != '\t' && str[j] != ' ' &&
+         str[j] != '\n') { ++j; }
+  string p = str.substr(i, j - i);
+  i = j;
+  while (i < str.size() &&
+         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
+  if (i == str.size()) {
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
+  }
+  if (str[i] == '<') {
+    // URI
+    j = str.find('>', i + 1);
+    if (j == string::npos) {
+      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+               "Illegal object in : " + str);
+    }
+    ++j;
+  } else {
+    if (str[i] == '\"') {
+      // Literal
+      j = str.find('\"', i + 1);
+      if (j == string::npos) {
+        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                 "Illegal literal in : " + str);
+      }
+      ++j;
+    } else {
+      j = i + 1;
+    }
+    while (j < str.size() && str[j] != ' ' && str[j] != '\t' &&
+           str[j] != '\n') { ++j; }
+  }
+  string o = str.substr(i, j - i);
+  query._whereClauseTriples.push_back(SparqlTriple(s, p, o));
 }
 
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(const string& str,
-    ParsedQuery& query) {
+                                          ParsedQuery& query) {
   auto tokens = ad_utility::splitAny(str, " \n\t");
   for (size_t i = 0; i < tokens.size(); ++i) {
     if (tokens[i] == "ORDER"
@@ -158,8 +211,8 @@ void SparqlParser::parseSolutionModifiers(const string& str,
         && tokens[i + 1] == "BY") {
       i += 1;
       while (i + 1 < tokens.size()
-          && tokens[i + 1] != "LIMIT"
-          && tokens[i + 1] != "OFFSET") {
+             && tokens[i + 1] != "LIMIT"
+             && tokens[i + 1] != "OFFSET") {
         query._orderBy.emplace_back(OrderKey(tokens[i + 1]));
         ++i;
       }

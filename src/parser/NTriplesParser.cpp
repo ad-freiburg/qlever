@@ -39,7 +39,6 @@ bool NTriplesParser::getLine(array<string, 3>& res) {
     j = i + 1;
     while (j < line.size() && line[j] != '\t' && line[j] != ' ') {++j;}
     if (!(line[i] == '<' && line[j - 1] == '>')) {
-      std::cout << "li and lj: " << line[i] << " - " << line[j - 1] << '\n';
       AD_THROW(ad_semsearch::Exception::BAD_INPUT, "Illegal URI in : " + line);
     }
     res[1] = line.substr(i, j - i);
