@@ -5,8 +5,9 @@
 #include <cstdio>
 #include <fstream>
 #include <iostream>
+#include <gtest/gtest.h>
+
 #include "../src/parser/NTriplesParser.h"
-#include "gtest/gtest.h"
 #include "../src/util/Exception.h"
 
 

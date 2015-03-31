@@ -8,8 +8,8 @@ $(document).ready(function () {
 });
 
 function processQuery(query) {
-    console.log(query);
-    $.getJSON("/?query=" + query, function (result) {
+    console.log(encodeURIComponent(query));
+    $.getJSON("/?query=" + encodeURIComponent(query), function (result) {
         res = "<ul>";
         for (i = 0; i < result.res.length; i++) {
             res += "<li>" + result.res[i] + "</li>";

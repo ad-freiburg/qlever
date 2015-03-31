@@ -2,9 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
+#include <gtest/gtest.h>
 #include <cstdio>
 #include "../src/index/Vocabulary.h"
-#include "gtest/gtest.h"
+
 
 TEST(VocabularyTest, getIdForWordTest) {
   Vocabulary v;

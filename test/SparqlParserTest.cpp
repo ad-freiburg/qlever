@@ -2,8 +2,8 @@
 // Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include <gtest/gtest.h>
 #include "../src/parser/SparqlParser.h"
-#include "gtest/gtest.h"
 #include "../src/util/Exception.h"
 
 TEST(ParserTest, testParse) {

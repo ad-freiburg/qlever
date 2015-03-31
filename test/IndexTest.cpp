@@ -4,9 +4,9 @@
 
 #include <cstdio>
 #include <fstream>
-#include <jerror.h>
+#include <gtest/gtest.h>
 #include "../src/index/Index.h"
-#include "gtest/gtest.h"
+
 
 string getStxxlDiskFileName(const string& location, const string& tail) {
   std::ostringstream os;

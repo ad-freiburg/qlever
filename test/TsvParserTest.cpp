@@ -2,10 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include <gtest/gtest.h>
 #include <cstdio>
 #include <fstream>
 #include "../src/parser/TsvParser.h"
-#include "gtest/gtest.h"
+
 
 TEST(TsvParserTest, getLineTest) {
   // Without trailing newline
