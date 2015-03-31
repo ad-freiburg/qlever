@@ -14,8 +14,8 @@
 #include "../util/Exception.h"
 #include "../util/StringUtils.h"
 #include "../util/Log.h"
-#include "../engine/Id.h"
-#include "../engine/Constants.h"
+#include "../global/Id.h"
+#include "../global/Constants.h"
 
 
 using std::string;

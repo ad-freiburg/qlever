@@ -75,7 +75,6 @@ add_dependencies(${GTEST_LIBRARY} googletest)
 
 add_subdirectory(src/parser)
 add_subdirectory(src/engine)
-add_subdirectory(src/util)
 add_subdirectory(src/index)
 add_subdirectory(test)
 
@@ -92,11 +91,14 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
 # add STXXL includes path
 include_directories(${STXXL_INCLUDE_DIRS})
 
+add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
+target_link_libraries(IndexBuilderMain index parser ${STXXL_LIBRARIES})
+
 add_executable(SparqlEngineMain src/SparqlEngineMain.cpp)
-target_link_libraries (SparqlEngineMain engine index parser)
+target_link_libraries (SparqlEngineMain engine index parser ${STXXL_LIBRARIES})
 
 add_executable(ServerMain src/ServerMain.cpp)
-target_link_libraries (ServerMain engine index parser)
+target_link_libraries (ServerMain engine index parser ${STXXL_LIBRARIES})
 
 
 enable_testing()

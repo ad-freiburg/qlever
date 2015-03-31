@@ -162,7 +162,7 @@ TEST(QueryExecutionTreeTest, testActorsBornInEurope) {
     ParsedQuery pq = SparqlParser::parse(
         "PREFIX : <pre/>\n"
             "SELECT ?a \n "
-            "WHERE \t {?a :profession :Actor. ?a :born-in ?c. ?c :in :Europe}");
+            "WHERE \t {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}");
     pq.expandPrefixes();
     QueryGraph qg;
     qg.createFromParsedQuery(pq);

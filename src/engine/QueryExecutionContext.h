@@ -11,7 +11,7 @@
 #include "./ResultTable.h"
 #include "./Engine.h"
 #include "./IndexMock.h"
-#include "./Constants.h"
+#include "../global/Constants.h"
 #include "../index/Index.h"
 
 using std::string;

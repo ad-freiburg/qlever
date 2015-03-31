@@ -14,8 +14,8 @@ add_library(engine
               QueryExecutionTree.h QueryExecutionTree.cpp
               QueryGraph.h QueryGraph.cpp
               Operation.h
-              Id.h
-              Constants.h
+              ../global/Id.h
+              ../global/Constants.h
               Comparators.h
               ResultTable.h ResultTable.cpp
               QueryExecutionContext.h
@@ -26,4 +26,4 @@ add_library(engine
               Server.h Server.cpp
             )
 
-target_link_libraries(engine index parser)
+target_link_libraries(engine index parser ${STXXL_LIBRARIES})

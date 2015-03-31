@@ -9,7 +9,7 @@
 
 #include "../util/Log.h"
 #include "./IndexSequence.h"
-#include "./Id.h"
+#include "../global/Id.h"
 
 using std::vector;
 using std::array;
