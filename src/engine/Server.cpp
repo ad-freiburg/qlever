@@ -22,7 +22,7 @@ void Server::initialize(const string& ontologyBaseName) {
 
   // Init the server socket.
   bool ret = _serverSocket.create() && _serverSocket.bind(_port)
-      && _serverSocket.listen();
+             && _serverSocket.listen();
   if (!ret) {
     LOG(ERROR)
       << "Failed to create socket on port " << _port << "." << std::endl;
@@ -50,7 +50,7 @@ void Server::run() {
     // Wait for new query
     LOG(INFO)
       << "---------- WAITING FOR QUERY AT PORT \"" << _port << "\" ... "
-          << std::endl;
+      << std::endl;
 
     ad_utility::Socket client;
     bool success = _serverSocket.acceptClient(&client);
@@ -69,29 +69,48 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
   string request;
   string response;
   string query;
+  string contentType;
   client->recieve(&request);
-  try {
-    ParamValueMap params = parseHttpRequest(request);
-    if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
-      qec->clearCache();
-    }
-    query = createQueryFromHttpParams(params);
-    LOG(INFO) << "Query: " << query << '\n';
-    ParsedQuery pq = SparqlParser::parse(query);
-    pq.expandPrefixes();
-    QueryGraph qg(qec);
-    qg.createFromParsedQuery(pq);
-    const QueryExecutionTree& qet = qg.getExecutionTree();
-    response = composeResponseJson(pq, qet);
-  } catch (const ad_semsearch::Exception& e) {
-    response = composeResponseJson(query, e);
-  } catch (const ParseException& e) {
-      response = composeResponseJson(query, e);
-  }
+  if (request.find("?") == string::npos) {
+    size_t indexOfGET = request.find("GET");
+    size_t indexOfHTTP = request.find("HTTP");
 
-  string contentType = "application/json";
-  string httpResponse = createHttpResponse(response, contentType);
-  client->send(httpResponse);
+    if (indexOfGET != request.npos && indexOfHTTP != request.npos) {
+      string file = request.substr(indexOfGET + 5,
+                                   indexOfHTTP - (indexOfGET + 5) - 1);
+      // Use hardcoded white-listing for index.html and style.css
+      // can be changed if more should ever be needed, for now keep it simple.
+      if (file == "index.html"
+          || file == "style.css"
+          || file == "script.js") {
+        serveFile(client, file);
+      } else {
+        LOG(INFO) << "Ignoring request for file " << file << '\n';
+      }
+    }
+  } else {
+    try {
+      ParamValueMap params = parseHttpRequest(request);
+      if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
+        qec->clearCache();
+      }
+      query = createQueryFromHttpParams(params);
+      LOG(INFO) << "Query: " << query << '\n';
+      ParsedQuery pq = SparqlParser::parse(query);
+      pq.expandPrefixes();
+      QueryGraph qg(qec);
+      qg.createFromParsedQuery(pq);
+      const QueryExecutionTree& qet = qg.getExecutionTree();
+      response = composeResponseJson(pq, qet);
+      contentType = "application/json";
+    } catch (const ad_semsearch::Exception& e) {
+      response = composeResponseJson(query, e);
+    } catch (const ParseException& e) {
+      response = composeResponseJson(query, e);
+    }
+    string httpResponse = createHttpResponse(response, contentType);
+    client->send(httpResponse);
+  }
 }
 
 // _____________________________________________________________________________
@@ -107,23 +126,24 @@ Server::ParamValueMap Server::parseHttpRequest(
 
   if (indexOfGET == httpRequest.npos || indexOfHTTP == httpRequest.npos) {
     AD_THROW(ad_semsearch::Exception::BAD_REQUEST, "Invalid request. "
-        "Only supporting proper HTTP GET requests!");
+        "Only supporting proper HTTP GET requests!\n" + httpRequest);
   }
 
   string request = httpRequest.substr(indexOfGET + 3,
-      indexOfHTTP - (indexOfGET + 3));
+                                      indexOfHTTP - (indexOfGET + 3));
 
   size_t index = request.find("?");
   if (index == request.npos) {
     AD_THROW(ad_semsearch::Exception::BAD_REQUEST, "Invalid request. "
-        "At least one parameters is required for meaningful queries!");
+        "At least one parameters is required for meaningful queries!\n"
+                                                   + httpRequest);
   }
   size_t next = request.find('&', index + 1);
   while (next != request.npos) {
     size_t posOfEq = request.find('=', index + 1);
     if (posOfEq == request.npos) {
       AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-          "Parameter without \"=\" in HTTP Request.");
+               "Parameter without \"=\" in HTTP Request.\n" + httpRequest);
     }
     string param = ad_utility::getLowercaseUtf8(
         request.substr(index + 1, posOfEq - (index + 1)));
@@ -131,7 +151,7 @@ Server::ParamValueMap Server::parseHttpRequest(
         request.substr(posOfEq + 1, next - (posOfEq + 1)));
     if (params.count(param) > 0) {
       AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-          "Duplicate HTTP parameter: " + param);
+               "Duplicate HTTP parameter: " + param);
     }
     params[param] = value;
     index = next;
@@ -140,12 +160,13 @@ Server::ParamValueMap Server::parseHttpRequest(
   size_t posOfEq = request.find('=', index + 1);
   if (posOfEq == request.npos) {
     AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-        "Parameter without \"=\" in HTTP Request.");
+             "Parameter without \"=\" in HTTP Request.");
   }
   string param = ad_utility::getLowercaseUtf8(
       request.substr(index + 1, posOfEq - (index + 1)));
   string value = ad_utility::decodeUrl(request.substr(posOfEq + 1,
-      request.size() - 1 - (posOfEq + 1)));
+                                                      request.size() - 1 -
+                                                      (posOfEq + 1)));
   if (params.count(param) > 0) {
     AD_THROW(ad_semsearch::Exception::BAD_REQUEST, "Duplicate HTTP parameter.");
   }
@@ -162,24 +183,24 @@ string Server::createQueryFromHttpParams(const ParamValueMap& params) const {
   auto it = params.find("query");
   if (it == params.end() || it->second == "") {
     AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-        "Expected at least one non-empty attribute \"query\".");
+             "Expected at least one non-empty attribute \"query\".");
   }
   return it->second;
 }
 
 // _____________________________________________________________________________
 string Server::createHttpResponse(const string& content,
-    const string& contentType) const {
+                                  const string& contentType) const {
   std::ostringstream os;
   os << "HTTP/1.0 200 OK\r\n" << "Content-Length: " << content.size() << "\r\n"
-      << "Connection: close\r\n" << "Content-Type: " << contentType
-      << "; charset=" << "UTF-8" << "\r\n" << "\r\n" << content;
+  << "Connection: close\r\n" << "Content-Type: " << contentType
+  << "; charset=" << "UTF-8" << "\r\n" << "\r\n" << content;
   return os.str();
 }
 
 // _____________________________________________________________________________
 string Server::composeResponseJson(const ParsedQuery& query,
-    const QueryExecutionTree& qet) const {
+                                   const QueryExecutionTree& qet) const {
 
   ResultTable rt = qet.getResult();
   _requestProcessingTimer.stop();
@@ -189,14 +210,13 @@ string Server::composeResponseJson(const ParsedQuery& query,
 
   std::ostringstream os;
   os << "{\r\n"
-      << "\"result\": {\r\n"
-      << "\"query\": \""
-      << ad_utility::escapeForJson(query._originalString)
-      << "\",\r\n"
-      << "\"status\": \"OK\",\r\n"
-      << "\"result-size\": \"" << resultSize << "\",\r\n";
+  << "\"query\": \""
+  << ad_utility::escapeForJson(query._originalString)
+  << "\",\r\n"
+  << "\"status\": \"OK\",\r\n"
+  << "\"result-size\": \"" << resultSize << "\",\r\n";
 
-  os << "\"res\": \"";
+  os << "\"res\": ";
   size_t limit = MAX_NOF_ROWS_IN_RESULT;
   size_t offset = 0;
   if (query._limit.size() > 0) {
@@ -206,78 +226,112 @@ string Server::composeResponseJson(const ParsedQuery& query,
     offset = static_cast<size_t>(atol(query._offset.c_str()));
   }
   _requestProcessingTimer.cont();
-  qet.writeResultToStream(os, query._selectedVariables, limit, offset);
+  qet.writeResultToStreamAsJson(os, query._selectedVariables, limit, offset);
   _requestProcessingTimer.stop();
-  os << "\",\r\n";
+  os << ",\r\n";
 
   os << "\"time\": {\r\n"
-      << "\"total\": \"" << _requestProcessingTimer.msecs()
-      << "ms\",\r\n"
-      << "\"computeResult\": \"" << compResultMsecs
-      << "ms\"\r\n"
-      << "}\r\n"
-      << "}\r\n"
-      << "}\r\n";
+  << "\"total\": \"" << _requestProcessingTimer.msecs()
+  << "ms\",\r\n"
+  << "\"computeResult\": \"" << compResultMsecs
+  << "ms\"\r\n"
+  << "}\r\n"
+  << "}\r\n";
 
   return os.str();
 }
 
 // _____________________________________________________________________________
 string Server::composeResponseJson(const string& query,
-    const ad_semsearch::Exception& exception) const {
+                                   const ad_semsearch::Exception& exception) const {
   std::ostringstream os;
   _requestProcessingTimer.stop();
 
   os << "{\r\n"
-      << "\"result\": {\r\n"
-      << "\"query\": \""
-      << ad_utility::escapeForJson(query)
-      << "\",\r\n"
-      << "\"status\": \"ERROR\",\r\n"
-      << "\"result-size\": \"0\",\r\n"
-      << "\"time\": {\r\n"
-      << "\"total\": \"" << _requestProcessingTimer.msecs()
-      << "ms\",\r\n"
-      << "\"computeResult\": \"" << _requestProcessingTimer.msecs()
-      << "ms\"\r\n"
-      << "},\r\n";
+  << "\"query\": \""
+  << ad_utility::escapeForJson(query)
+  << "\",\r\n"
+  << "\"status\": \"ERROR\",\r\n"
+  << "\"result-size\": \"0\",\r\n"
+  << "\"time\": {\r\n"
+  << "\"total\": \"" << _requestProcessingTimer.msecs()
+  << "ms\",\r\n"
+  << "\"computeResult\": \"" << _requestProcessingTimer.msecs()
+  << "ms\"\r\n"
+  << "},\r\n";
 
 
   string msg = ad_utility::escapeForJson(exception.getFullErrorMessage());
 
   os << "\"Exception-Error-Message\": \"" << msg << "\"\r\n"
-      << "}\r\n"
-      << "}\r\n";
+  << "}\r\n";
 
   return os.str();
 }
 
 // _____________________________________________________________________________
 string Server::composeResponseJson(const string& query,
-    const ParseException& exception) const {
+                                   const ParseException& exception) const {
   std::ostringstream os;
   _requestProcessingTimer.stop();
 
   os << "{\r\n"
-      << "\"result\": {\r\n"
-      << "\"query\": \""
-      << ad_utility::escapeForJson(query)
-      << "\",\r\n"
-      << "\"status\": \"ERROR\",\r\n"
-      << "\"result-size\": \"0\",\r\n"
-      << "\"time\": {\r\n"
-      << "\"total\": \"" << _requestProcessingTimer.msecs()
-      << "ms\",\r\n"
-      << "\"computeResult\": \"" << _requestProcessingTimer.msecs()
-      << "ms\"\r\n"
-      << "},\r\n";
+  << "\"query\": \""
+  << ad_utility::escapeForJson(query)
+  << "\",\r\n"
+  << "\"status\": \"ERROR\",\r\n"
+  << "\"result-size\": \"0\",\r\n"
+  << "\"time\": {\r\n"
+  << "\"total\": \"" << _requestProcessingTimer.msecs()
+  << "ms\",\r\n"
+  << "\"computeResult\": \"" << _requestProcessingTimer.msecs()
+  << "ms\"\r\n"
+  << "},\r\n";
 
 
   string msg = ad_utility::escapeForJson(exception.what());
 
   os << "\"Exception-Error-Message\": \"" << msg << "\"\r\n"
-      << "}\r\n"
-      << "}\r\n";
+  << "}\r\n";
 
   return os.str();
+}
+
+// _____________________________________________________________________________
+void Server::serveFile(Socket* client, const string& requestedFile) const {
+  string contentString;
+  string contentType = "text/plain";
+  string statusString = "HTTP/1.0 200 OK";
+
+  // CASE: file.
+  LOG(DEBUG) << "Looking for file: \"" << requestedFile << "\" ... \n";
+  std::ifstream in(requestedFile.c_str());
+  if (!in) {
+    statusString = "HTTP/1.0 404 NOT FOUND";
+    contentString = "404 NOT FOUND";
+  } else {
+    // File into string
+    contentString = string((std::istreambuf_iterator<char>(in)),
+                           std::istreambuf_iterator<char>());
+    // Set content type
+    if (ad_utility::endsWith(requestedFile, ".html")) {
+      contentType = "text/html";
+    } else if (ad_utility::endsWith(requestedFile, ".css")) {
+      contentType = "text/css";
+    } else if (ad_utility::endsWith(requestedFile, ".js")) {
+      contentType = "application/javascript";
+    }
+  }
+
+  size_t contentLength = contentString.size();
+  std::ostringstream headerStream;
+  headerStream << statusString << "\r\n"
+  << "Content-Length: " << contentLength << "\r\n"
+  << "Content-Type: " << contentType << "\r\n"
+  << "Connection: close\r\n"
+  << "\r\n";
+
+  string data = headerStream.str();
+  data += contentString;
+  client->send(data);
 }

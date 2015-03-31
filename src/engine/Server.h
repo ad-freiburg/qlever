@@ -47,6 +47,7 @@ private:
   bool _initialized;
 
   void process(Socket* client, QueryExecutionContext* qec) const;
+  void serveFile(Socket* client, const string& requestedFile) const;
 
   ParamValueMap parseHttpRequest(const string& request) const;
 

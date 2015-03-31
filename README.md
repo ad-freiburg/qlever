@@ -13,7 +13,7 @@ a) Checkout this project:
 
 b) navigate to SparqlEngineDraft/src/index and checkout stxxl:
 
-    git clone git clone https://github.com/stxxl/stxxl.git
+    git clone https://github.com/stxxl/stxxl.git
 
 c) Go to a folder where you want to build the binaries.
 Don't do this directly in SparqlEngineDraft

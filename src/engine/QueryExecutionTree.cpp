@@ -66,13 +66,13 @@ QueryExecutionTree::~QueryExecutionTree() {
 string QueryExecutionTree::asString() const {
   std::ostringstream os;
   os << "{" << _rootOperation->asString() << " | width: " << getResultWidth()
-      << "}";
+  << "}";
   return os.str();
 }
 
 // _____________________________________________________________________________
 void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
-    Operation* op) {
+                                      Operation* op) {
   _type = type;
   switch (type) {
     case OperationType::SCAN:
@@ -115,7 +115,7 @@ void QueryExecutionTree::setVariableColumns(
 
 // _____________________________________________________________________________
 void QueryExecutionTree::writeResultToStream(std::ostream& out, size_t limit,
-    size_t offset) const {
+                                             size_t offset) const {
   const ResultTable& res = getResult();
   if (res._nofColumns == 1) {
     auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
@@ -128,7 +128,7 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out, size_t limit,
     for (size_t i = offset; i < upperBound; ++i) {
       auto row = (*data)[i];
       out << _qec->getIndex().idToString(row[0]) << '\t'
-          << _qec->getIndex().idToString(row[1]) << '\n';
+      << _qec->getIndex().idToString(row[1]) << '\n';
     }
   } else if (res._nofColumns == 3) {
     auto data = static_cast<vector<array<Id, 3>>*>(res._fixedSizeData);
@@ -136,8 +136,8 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out, size_t limit,
     for (size_t i = offset; i < upperBound; ++i) {
       auto row = (*data)[i];
       out << _qec->getIndex().idToString(row[0]) << '\t'
-          << _qec->getIndex().idToString(row[1]) << '\t'
-          << _qec->getIndex().idToString(row[2]) << '\n';
+      << _qec->getIndex().idToString(row[1]) << '\t'
+      << _qec->getIndex().idToString(row[2]) << '\n';
     }
   } else if (res._nofColumns == 4) {
     auto data = static_cast<vector<array<Id, 4>>*>(res._fixedSizeData);
@@ -145,9 +145,9 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out, size_t limit,
     for (size_t i = offset; i < upperBound; ++i) {
       auto row = (*data)[i];
       out << _qec->getIndex().idToString(row[0]) << '\t'
-          << _qec->getIndex().idToString(row[1]) << '\t'
-          << _qec->getIndex().idToString(row[2]) << '\t'
-          << _qec->getIndex().idToString(row[2]) << '\n';
+      << _qec->getIndex().idToString(row[1]) << '\t'
+      << _qec->getIndex().idToString(row[2]) << '\t'
+      << _qec->getIndex().idToString(row[2]) << '\n';
     }
   } else if (res._nofColumns == 5) {
     auto data = static_cast<vector<array<Id, 5>>*>(res._fixedSizeData);
@@ -155,14 +155,14 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out, size_t limit,
     for (size_t i = offset; i < upperBound; ++i) {
       auto row = (*data)[i];
       out << _qec->getIndex().idToString(row[0]) << '\t'
-          << _qec->getIndex().idToString(row[1]) << '\t'
-          << _qec->getIndex().idToString(row[2]) << '\t'
-          << _qec->getIndex().idToString(row[3]) << '\t'
-          << _qec->getIndex().idToString(row[4]) << '\n';
+      << _qec->getIndex().idToString(row[1]) << '\t'
+      << _qec->getIndex().idToString(row[2]) << '\t'
+      << _qec->getIndex().idToString(row[3]) << '\t'
+      << _qec->getIndex().idToString(row[4]) << '\n';
     }
   } else {
     size_t upperBound = std::min<size_t>(offset + limit,
-        res._varSizeData.size());
+                                         res._varSizeData.size());
     for (size_t i = offset; i < upperBound; ++i) {
       auto row = res._varSizeData[i];
       for (size_t i = 0; i + 1 < row.size(); ++i) {
@@ -177,7 +177,9 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out, size_t limit,
 
 // _____________________________________________________________________________
 void QueryExecutionTree::writeResultToStream(std::ostream& out,
-    const vector<string>& selectVars, size_t limit, size_t offset) const {
+                                             const vector<string>& selectVars,
+                                             size_t limit,
+                                             size_t offset) const {
   // They may trigger computation (but does not have to).
   const ResultTable& res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
@@ -187,7 +189,7 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
       validIndices.push_back(getVariableColumnMap().find(var)->second);
     }
   }
-  if (validIndices.size() == 0) {return;}
+  if (validIndices.size() == 0) { return; }
   if (res._nofColumns == 1) {
     auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
@@ -245,7 +247,7 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
     }
   } else {
     size_t upperBound = std::min<size_t>(offset + limit,
-        res._varSizeData.size());
+                                         res._varSizeData.size());
     for (size_t i = offset; i < upperBound; ++i) {
       auto row = res._varSizeData[i];
       for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
@@ -255,5 +257,123 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
           row[validIndices[validIndices.size() - 1]]) << '\n';
     }
   }
+  LOG(DEBUG) << "Done creating readable result.\n";
+}
+
+// _____________________________________________________________________________
+void QueryExecutionTree::writeResultToStreamAsJson(
+    std::ostream& out,
+    const vector<string>& selectVars,
+    size_t limit,
+    size_t offset) const {
+  out << "[\r\n";
+  // They may trigger computation (but does not have to).
+  const ResultTable& res = getResult();
+  LOG(DEBUG) << "Resolving strings for finished binary result...\n";
+  vector<size_t> validIndices;
+  for (const auto& var : selectVars) {
+    if (getVariableColumnMap().find(var) != getVariableColumnMap().end()) {
+      validIndices.push_back(getVariableColumnMap().find(var)->second);
+    }
+  }
+  if (validIndices.size() == 0) { return; }
+  if (res._nofColumns == 1) {
+    auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
+    size_t upperBound = std::min<size_t>(offset + limit, data->size());
+    for (size_t i = offset; i < upperBound; ++i) {
+      auto row = (*data)[i];
+      out << "\"";
+      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
+        out << ad_utility::escapeForJson(
+            _qec->getIndex().idToString(row[validIndices[j]]))
+        << ad_utility::escapeForJson("\t");
+      }
+      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
+          row[validIndices[validIndices.size() - 1]])) << "\"";
+      if (i + 1 < upperBound) { out << ','; }
+      out << "\r\n";
+    }
+  } else if (res._nofColumns == 2) {
+    auto data = static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
+    size_t upperBound = std::min<size_t>(offset + limit, data->size());
+    for (size_t i = offset; i < upperBound; ++i) {
+      auto row = (*data)[i];
+      out << "\"";
+      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
+        out << ad_utility::escapeForJson(
+            _qec->getIndex().idToString(row[validIndices[j]]))
+        << ad_utility::escapeForJson("\t");
+      }
+      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
+          row[validIndices[validIndices.size() - 1]])) << "\"";
+      if (i + 1 < upperBound) { out << ','; }
+      out << "\r\n";
+    }
+  } else if (res._nofColumns == 3) {
+    auto data = static_cast<vector<array<Id, 3>>*>(res._fixedSizeData);
+    size_t upperBound = std::min<size_t>(offset + limit, data->size());
+    for (size_t i = offset; i < upperBound; ++i) {
+      auto row = (*data)[i];
+      out << "\"";
+      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
+        out << ad_utility::escapeForJson(
+            _qec->getIndex().idToString(row[validIndices[j]]))
+        << ad_utility::escapeForJson("\t");
+      }
+      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
+          row[validIndices[validIndices.size() - 1]])) << "\"";
+      if (i + 1 < upperBound) { out << ','; }
+      out << "\r\n";
+    }
+  } else if (res._nofColumns == 4) {
+    auto data = static_cast<vector<array<Id, 4>>*>(res._fixedSizeData);
+    size_t upperBound = std::min<size_t>(offset + limit, data->size());
+    for (size_t i = offset; i < upperBound; ++i) {
+      auto row = (*data)[i];
+      out << "\"";
+      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
+        out << ad_utility::escapeForJson(
+            _qec->getIndex().idToString(row[validIndices[j]]))
+        << ad_utility::escapeForJson("\t");
+      }
+      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
+          row[validIndices[validIndices.size() - 1]])) << "\"";
+      if (i + 1 < upperBound) { out << ','; }
+      out << "\r\n";
+    }
+  } else if (res._nofColumns == 5) {
+    auto data = static_cast<vector<array<Id, 5>>*>(res._fixedSizeData);
+    size_t upperBound = std::min<size_t>(offset + limit, data->size());
+    for (size_t i = offset; i < upperBound; ++i) {
+      auto row = (*data)[i];
+      out << "\"";
+      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
+        out << ad_utility::escapeForJson(
+            _qec->getIndex().idToString(row[validIndices[j]]))
+        << ad_utility::escapeForJson("\t");
+      }
+      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
+          row[validIndices[validIndices.size() - 1]])) << "\"";
+      if (i + 1 < upperBound) { out << ','; }
+      out << "\r\n";
+    }
+  } else {
+    size_t upperBound = std::min<size_t>(offset + limit,
+                                         res._varSizeData.size());
+    for (size_t i = offset; i < upperBound; ++i) {
+      auto row = res._varSizeData[i];
+      out << "\"";
+      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
+        out << ad_utility::escapeForJson(
+            _qec->getIndex().idToString(row[validIndices[j]]))
+        << ad_utility::escapeForJson("\t");
+      }
+      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
+          row[validIndices[validIndices.size() - 1]])) << "\"";
+      if (i + 1 < upperBound) { out << ','; }
+      out << "\r\n";
+    }
+  }
+  out << "]";
   LOG(DEBUG) << "Done creating readable result.\n";
 }

@@ -86,6 +86,11 @@ public:
       size_t limit = MAX_NOF_ROWS_IN_RESULT,
       size_t offset = 0) const;
 
+  void writeResultToStreamAsJson(std::ostream& out,
+                           const vector<string>& selectVars,
+                           size_t limit = MAX_NOF_ROWS_IN_RESULT,
+                           size_t offset = 0) const;
+
   size_t resultSortedOn() const { return _rootOperation->resultSortedOn(); }
 
 private:

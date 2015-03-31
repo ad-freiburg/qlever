@@ -1,6 +1,18 @@
 cmake_minimum_required(VERSION 2.8.4)
 project(SparqlEngineDraft)
 
+
+
+# Check compiler versions:
+if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+  # Check version. If empty, warn. If too old, error out:
+  if ("${CMAKE_CXX_COMPILER_VERSION}" STREQUAL "")
+    message(WARNING "GCC Compiler version is unknown, proceed at your own risk!")
+  elseif (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
+    message(FATAL_ERROR "GCC compiler version must be at least 4.8!")
+  endif()
+endif()
+
 ###############################################################################
 ##### Essential settings #####
 ###############################################################################
@@ -66,6 +78,10 @@ add_subdirectory(src/engine)
 add_subdirectory(src/util)
 add_subdirectory(src/index)
 add_subdirectory(test)
+
+configure_file(src/index.html index.html)
+configure_file(src/style.css style.css)
+configure_file(src/script.js script.js)
 
 ################################
 # STXXL
