@@ -7,8 +7,9 @@
 #include <vector>
 #include <unordered_map>
 
-#include "ParsedQuery.h"
 #include "../util/StringUtils.h"
+#include "ParsedQuery.h"
+
 
 using std::string;
 using std::vector;

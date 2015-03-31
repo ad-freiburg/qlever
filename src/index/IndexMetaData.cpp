@@ -4,7 +4,6 @@
 
 #include <stdio.h>
 #include <algorithm>
-#include <unistd.h>
 #include "./IndexMetaData.h"
 #include "../util/ReadableNumberFact.h"
 

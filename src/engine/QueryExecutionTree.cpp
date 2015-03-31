@@ -5,9 +5,6 @@
 #include <string>
 #include <sstream>
 #include <algorithm>
-#include <dirent.h>
-#include <ev.h>
-#include <fcntl.h>
 #include "./QueryExecutionTree.h"
 
 using std::string;

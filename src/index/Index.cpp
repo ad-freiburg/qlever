@@ -5,8 +5,6 @@
 #include <algorithm>
 #include <unordered_set>
 #include <stxxl/algorithm>
-#include <stdio.h>
-#include <glob.h>
 #include "../parser/TsvParser.h"
 #include "./Index.h"
 #include "../parser/NTriplesParser.h"

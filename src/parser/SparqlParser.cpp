@@ -2,10 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <bits/algorithmfwd.h>
+
+#include "../util/StringUtils.h"
 #include "./SparqlParser.h"
 #include "./ParseException.h"
-#include "../util/StringUtils.h"
 #include "../util/Exception.h"
 
 // _____________________________________________________________________________

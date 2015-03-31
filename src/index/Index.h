@@ -8,8 +8,6 @@
 #include <fstream>
 #include <vector>
 #include <stxxl/vector>
-#include <stdio.h>
-#include <unistd.h>
 #include "./Vocabulary.h"
 #include "./IndexMetaData.h"
 #include "./StxxlSortFunctors.h"

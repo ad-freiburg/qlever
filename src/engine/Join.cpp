@@ -4,8 +4,6 @@
 
 #include <sstream>
 #include <unordered_map>
-#include <dirent.h>
-#include <ev.h>
 #include "./QueryExecutionTree.h"
 
 using std::string;

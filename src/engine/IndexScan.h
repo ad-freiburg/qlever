@@ -4,7 +4,6 @@
 #pragma once
 
 #include <string>
-#include <grp.h>
 #include "./Operation.h"
 
 using std::string;

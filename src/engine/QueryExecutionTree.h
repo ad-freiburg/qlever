@@ -4,7 +4,6 @@
 #pragma once
 
 #include <string>
-#include <grp.h>
 #include "./QueryExecutionContext.h"
 #include "./Operation.h"
 #include "./Join.h"

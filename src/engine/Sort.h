@@ -5,7 +5,6 @@
 
 #include <list>
 #include <unordered_map>
-#include <grp.h>
 #include "./Operation.h"
 #include "./IndexScan.h"
 

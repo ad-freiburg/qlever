@@ -58,8 +58,8 @@ add_dependencies(IndexMetaDataTest googletest index)
 target_link_libraries(IndexMetaDataTest ${GTEST_LIBRARY} index -pthread)
 
 add_executable(IndexTest IndexTest.cpp)
-add_dependencies(IndexTest googletest index)
-target_link_libraries(IndexTest ${GTEST_LIBRARY} index parser -pthread)
+add_dependencies(IndexTest googletest index ${STXXL_LIBRARIES})
+target_link_libraries(IndexTest ${GTEST_LIBRARY} index parser ${STXXL_LIBRARIES} -pthread)
 
 add_library(tests
 						SparqlParserTest

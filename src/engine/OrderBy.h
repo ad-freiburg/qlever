@@ -7,7 +7,6 @@
 #include <utility>
 #include <vector>
 #include <unordered_map>
-#include <grp.h>
 #include "./Operation.h"
 #include "./IndexScan.h"
 #include "QueryExecutionTree.h"

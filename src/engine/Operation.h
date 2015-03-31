@@ -3,8 +3,6 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <dirent.h>
-#include <ev.h>
 #include "../util/Log.h"
 #include "../util/Exception.h"
 #include "./ResultTable.h"

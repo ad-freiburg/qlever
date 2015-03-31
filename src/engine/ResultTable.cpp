@@ -3,7 +3,6 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <cassert>
-#include <glob.h>
 #include "./ResultTable.h"
 
 // _____________________________________________________________________________
