@@ -17,12 +17,10 @@ add_executable(LRUCacheTest LRUCacheTest.cpp)
 target_link_libraries(LRUCacheTest ${GTEST_LIBRARY} -pthread)
 
 add_executable(QueryGraphTest QueryGraphTest.cpp)
-target_link_libraries(QueryGraphTest ${GTEST_LIBRARY} parser engine
-                      index -pthread)
+target_link_libraries(QueryGraphTest ${GTEST_LIBRARY} engine -pthread)
 
 add_executable(QueryExecutionTreeTest QueryExecutionTreeTest.cpp)
-target_link_libraries(QueryExecutionTreeTest ${GTEST_LIBRARY} engine
-                      index parser ${STXXL_LIBRARIES} -pthread)
+target_link_libraries(QueryExecutionTreeTest ${GTEST_LIBRARY} engine -pthread)
 
 add_executable(FileTest FileTest.cpp)
 target_link_libraries(FileTest ${GTEST_LIBRARY} -pthread)
@@ -46,7 +44,7 @@ add_executable(IndexMetaDataTest IndexMetaDataTest.cpp)
 target_link_libraries(IndexMetaDataTest ${GTEST_LIBRARY} index -pthread)
 
 add_executable(IndexTest IndexTest.cpp)
-target_link_libraries(IndexTest ${GTEST_LIBRARY} index parser ${STXXL_LIBRARIES} -pthread)
+target_link_libraries(IndexTest ${GTEST_LIBRARY} index -pthread)
 
 add_library(tests
 						SparqlParserTest

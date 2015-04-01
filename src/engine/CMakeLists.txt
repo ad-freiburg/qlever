@@ -2,11 +2,6 @@
 # STXXL
 ################################
 
-# apply STXXL CXXFLAGS
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
-# add STXXL includes path
-include_directories(${STXXL_INCLUDE_DIRS})
-
 add_library(engine
               Engine.h Engine.cpp
               IndexSequence.h
@@ -26,4 +21,4 @@ add_library(engine
               Server.h Server.cpp
             )
 
-target_link_libraries(engine index parser ${STXXL_LIBRARIES})
+target_link_libraries(engine index)
