@@ -94,7 +94,6 @@ configure_file(src/style.css style.css)
 configure_file(src/script.js script.js)
 
 
-
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 target_link_libraries(IndexBuilderMain index)
 
