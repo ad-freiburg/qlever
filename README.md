@@ -4,12 +4,34 @@ SparqlEngineDraft
 How to use
 ==========
 
+0. Requirements
+---------------
+
+Make sure you use a 64bit Linux with:
+
+* git
+* g++ 4.8 or higher
+* CMake 2.8.4 or higher
+
+Other compilers (and OS) are not supported, yet. 
+So far no major problems are known. 
+Support for more plattforms would be a highly appreciated contribution.
+
 1. Build:
 ---------
 
 a) Checkout this project:
 
+    git clone https://github.com/Buchhold/SparqlEngineDraft.git --recursive
+
+Don't forget --recursive so that submodules will be updated. 
+For old versions of git, that do not support this parameter, you can do:
+
     git clone https://github.com/Buchhold/SparqlEngineDraft.git
+    cd SparqlEngineDraft
+    git submodule init
+    git subodule update
+    
 
 b) Go to a folder where you want to build the binaries.
 Don't do this directly in SparqlEngineDraft
