@@ -11,20 +11,16 @@ a) Checkout this project:
 
     git clone https://github.com/Buchhold/SparqlEngineDraft.git
 
-b) navigate to SparqlEngineDraft/src/index and checkout stxxl:
-
-    git clone https://github.com/stxxl/stxxl.git
-
-c) Go to a folder where you want to build the binaries.
+b) Go to a folder where you want to build the binaries.
 Don't do this directly in SparqlEngineDraft
 
     cd /path/to/YOUR_FOLDER
 
-d) Build the project
+c) Build the project
 
     cmake /path/to/SparqlEngineDraft/ -DCMAKE_BUILD_TYPE=Release; make -j
 
-e) Run ctest. All tests should pass:
+d) Run ctest. All tests should pass:
 
     ctest
 
