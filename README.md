@@ -71,4 +71,4 @@ b) from a TSV File (no spaces / tabs in spo):
 4. Running queries:
 -------------------
 
-    curl 'http://localhost:<PORT>/&query="SELECT ?x WHERE {?x <rel> ?y}"'
+    curl 'http://localhost:<PORT>/&query=SELECT ?x WHERE {?x <rel> ?y}'

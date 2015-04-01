@@ -1,3 +1,6 @@
 [submodule "third_party/stxxl"]
 	path = third_party/stxxl
 	url = https://github.com/stxxl/stxxl.git
+[submodule "third_party/googletest"]
+	path = third_party/googletest
+	url = http://git.chromium.org/external/googletest.git

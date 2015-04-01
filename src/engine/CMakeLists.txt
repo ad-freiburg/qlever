@@ -1,7 +1,3 @@
-################################
-# STXXL
-################################
-
 add_library(engine
               Engine.h Engine.cpp
               IndexSequence.h

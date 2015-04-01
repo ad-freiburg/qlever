@@ -1,50 +1,41 @@
-################################
-# STXXL
-################################
-
-# apply STXXL CXXFLAGS
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
-# add STXXL includes path
-include_directories(${STXXL_INCLUDE_DIRS})
-
 add_executable(SparqlParserTest SparqlParserTest.cpp)
-target_link_libraries(SparqlParserTest ${GTEST_LIBRARY} parser -pthread)
+target_link_libraries(SparqlParserTest gtest_main parser -pthread)
 
 add_executable(StringUtilsTest StringUtilsTest.cpp)
-target_link_libraries(StringUtilsTest ${GTEST_LIBRARY} -pthread)
+target_link_libraries(StringUtilsTest gtest_main -pthread)
 
 add_executable(LRUCacheTest LRUCacheTest.cpp)
-target_link_libraries(LRUCacheTest ${GTEST_LIBRARY} -pthread)
+target_link_libraries(LRUCacheTest gtest_main -pthread)
 
 add_executable(QueryGraphTest QueryGraphTest.cpp)
-target_link_libraries(QueryGraphTest ${GTEST_LIBRARY} engine -pthread)
+target_link_libraries(QueryGraphTest gtest_main engine -pthread)
 
 add_executable(QueryExecutionTreeTest QueryExecutionTreeTest.cpp)
-target_link_libraries(QueryExecutionTreeTest ${GTEST_LIBRARY} engine -pthread)
+target_link_libraries(QueryExecutionTreeTest gtest_main engine -pthread)
 
 add_executable(FileTest FileTest.cpp)
-target_link_libraries(FileTest ${GTEST_LIBRARY} -pthread)
+target_link_libraries(FileTest gtest_main -pthread)
 
 add_executable(Simple8bTest Simple8bTest.cpp)
-target_link_libraries(Simple8bTest ${GTEST_LIBRARY} -pthread)
+target_link_libraries(Simple8bTest gtest_main -pthread)
 
 add_executable(VocabularyTest VocabularyTest.cpp)
-target_link_libraries(VocabularyTest ${GTEST_LIBRARY} index -pthread)
+target_link_libraries(VocabularyTest gtest_main index -pthread)
 
 add_executable(TsvParserTest TsvParserTest.cpp)
-target_link_libraries(TsvParserTest ${GTEST_LIBRARY} parser -pthread)
+target_link_libraries(TsvParserTest gtest_main parser -pthread)
 
 add_executable(NTriplesParserTest NTriplesParserTest.cpp)
-target_link_libraries(NTriplesParserTest ${GTEST_LIBRARY} parser -pthread)
+target_link_libraries(NTriplesParserTest gtest_main parser -pthread)
 
 add_executable(ContextFileParserTest ContextFileParserTest.cpp)
-target_link_libraries(ContextFileParserTest ${GTEST_LIBRARY} parser -pthread)
+target_link_libraries(ContextFileParserTest gtest_main parser -pthread)
 
 add_executable(IndexMetaDataTest IndexMetaDataTest.cpp)
-target_link_libraries(IndexMetaDataTest ${GTEST_LIBRARY} index -pthread)
+target_link_libraries(IndexMetaDataTest gtest_main index -pthread)
 
 add_executable(IndexTest IndexTest.cpp)
-target_link_libraries(IndexTest ${GTEST_LIBRARY} index -pthread)
+target_link_libraries(IndexTest gtest_main index -pthread)
 
 add_library(tests
 						SparqlParserTest
