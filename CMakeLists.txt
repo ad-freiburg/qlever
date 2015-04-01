@@ -50,9 +50,10 @@ add_subdirectory(src/index)
 add_subdirectory(test)
 
 
-configure_file(src/index.html index.html)
-configure_file(src/style.css style.css)
-configure_file(src/script.js script.js)
+
+configure_file(src/web/index.html index.html)
+configure_file(src/web/style.css style.css)
+configure_file(src/web/script.js script.js)
 
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)

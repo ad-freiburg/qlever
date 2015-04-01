@@ -77,18 +77,14 @@ public:
   }
 
   void writeResultToStream(std::ostream& out,
-      size_t limit = MAX_NOF_ROWS_IN_RESULT,
-      size_t offset = 0) const;
-
-  void writeResultToStream(std::ostream& out,
-      const vector<string>& selectVars,
-      size_t limit = MAX_NOF_ROWS_IN_RESULT,
-      size_t offset = 0) const;
-
-  void writeResultToStreamAsJson(std::ostream& out,
                            const vector<string>& selectVars,
                            size_t limit = MAX_NOF_ROWS_IN_RESULT,
                            size_t offset = 0) const;
+
+  void writeResultToStreamAsJson(std::ostream& out,
+                                 const vector<string>& selectVars,
+                                 size_t limit = MAX_NOF_ROWS_IN_RESULT,
+                                 size_t offset = 0) const;
 
   size_t resultSortedOn() const { return _rootOperation->resultSortedOn(); }
 
@@ -97,6 +93,44 @@ private:
   unordered_map<string, size_t> _variableColumnMap;
   Operation* _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
+
+  template<typename Row>
+  void writeJsonTable(const vector<Row>& data, size_t from,
+                      size_t upperBound,
+                      const vector<size_t>& validIndices,
+                      std::ostream& out) const {
+    for (size_t i = from; i < upperBound; ++i) {
+      auto row = data[i];
+      out << "[\"";
+      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
+        out << ad_utility::escapeForJson(
+            _qec->getIndex().idToString(row[validIndices[j]]))
+        << "\",\"";
+      }
+      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
+          row[validIndices[validIndices.size() - 1]])) << "\"]";
+      if (i + 1 < upperBound) { out << ", "; }
+      out << "\r\n";
+    }
+  }
+
+  template<typename Row>
+  void writeTsvTable(const vector<Row>& data, size_t from,
+                     size_t upperBound,
+                     const vector<size_t>& validIndices,
+                     std::ostream& out) const {
+    for (size_t i = from; i < upperBound; ++i) {
+      auto row = data[i];
+      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
+        out << ad_utility::escapeForJson(
+            _qec->getIndex().idToString(row[validIndices[j]]))
+        << ad_utility::escapeForJson("\t");
+      }
+      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
+          row[validIndices[validIndices.size() - 1]]));
+      out << "\n";
+    }
+  }
 };
 
 

@@ -110,67 +110,6 @@ void QueryExecutionTree::setVariableColumns(
   _variableColumnMap = map;
 }
 
-// _____________________________________________________________________________
-void QueryExecutionTree::writeResultToStream(std::ostream& out, size_t limit,
-                                             size_t offset) const {
-  const ResultTable& res = getResult();
-  if (res._nofColumns == 1) {
-    auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
-    for (auto row : *data) {
-      out << _qec->getIndex().idToString(row[0]) << '\n';
-    }
-  } else if (res._nofColumns == 2) {
-    auto data = static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
-    size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = (*data)[i];
-      out << _qec->getIndex().idToString(row[0]) << '\t'
-      << _qec->getIndex().idToString(row[1]) << '\n';
-    }
-  } else if (res._nofColumns == 3) {
-    auto data = static_cast<vector<array<Id, 3>>*>(res._fixedSizeData);
-    size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = (*data)[i];
-      out << _qec->getIndex().idToString(row[0]) << '\t'
-      << _qec->getIndex().idToString(row[1]) << '\t'
-      << _qec->getIndex().idToString(row[2]) << '\n';
-    }
-  } else if (res._nofColumns == 4) {
-    auto data = static_cast<vector<array<Id, 4>>*>(res._fixedSizeData);
-    size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = (*data)[i];
-      out << _qec->getIndex().idToString(row[0]) << '\t'
-      << _qec->getIndex().idToString(row[1]) << '\t'
-      << _qec->getIndex().idToString(row[2]) << '\t'
-      << _qec->getIndex().idToString(row[2]) << '\n';
-    }
-  } else if (res._nofColumns == 5) {
-    auto data = static_cast<vector<array<Id, 5>>*>(res._fixedSizeData);
-    size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = (*data)[i];
-      out << _qec->getIndex().idToString(row[0]) << '\t'
-      << _qec->getIndex().idToString(row[1]) << '\t'
-      << _qec->getIndex().idToString(row[2]) << '\t'
-      << _qec->getIndex().idToString(row[3]) << '\t'
-      << _qec->getIndex().idToString(row[4]) << '\n';
-    }
-  } else {
-    size_t upperBound = std::min<size_t>(offset + limit,
-                                         res._varSizeData.size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = res._varSizeData[i];
-      for (size_t i = 0; i + 1 < row.size(); ++i) {
-        out << _qec->getIndex().idToString(row[i]) << '\t';
-      }
-      if (row.size() > 0) {
-        out << _qec->getIndex().idToString(row[row.size() - 1]) << '\n';
-      }
-    }
-  }
-}
 
 // _____________________________________________________________________________
 void QueryExecutionTree::writeResultToStream(std::ostream& out,
@@ -190,69 +129,27 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
   if (res._nofColumns == 1) {
     auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = (*data)[i];
-      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
-        out << _qec->getIndex().idToString(row[validIndices[j]]) << '\t';
-      }
-      out << _qec->getIndex().idToString(
-          row[validIndices[validIndices.size() - 1]]) << '\n';
-    }
+    writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 2) {
     auto data = static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = (*data)[i];
-      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
-        out << _qec->getIndex().idToString(row[validIndices[j]]) << '\t';
-      }
-      out << _qec->getIndex().idToString(
-          row[validIndices[validIndices.size() - 1]]) << '\n';
-    }
+    writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 3) {
     auto data = static_cast<vector<array<Id, 3>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = (*data)[i];
-      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
-        out << _qec->getIndex().idToString(row[validIndices[j]]) << '\t';
-      }
-      out << _qec->getIndex().idToString(
-          row[validIndices[validIndices.size() - 1]]) << '\n';
-    }
+    writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 4) {
     auto data = static_cast<vector<array<Id, 4>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = (*data)[i];
-      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
-        out << _qec->getIndex().idToString(row[validIndices[j]]) << '\t';
-      }
-      out << _qec->getIndex().idToString(
-          row[validIndices[validIndices.size() - 1]]) << '\n';
-    }
+    writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 5) {
     auto data = static_cast<vector<array<Id, 5>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = (*data)[i];
-      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
-        out << _qec->getIndex().idToString(row[validIndices[j]]) << '\t';
-      }
-      out << _qec->getIndex().idToString(
-          row[validIndices[validIndices.size() - 1]]) << '\n';;
-    }
+    writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else {
     size_t upperBound = std::min<size_t>(offset + limit,
                                          res._varSizeData.size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = res._varSizeData[i];
-      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
-        out << _qec->getIndex().idToString(row[validIndices[j]]) << '\t';
-      }
-      out << _qec->getIndex().idToString(
-          row[validIndices[validIndices.size() - 1]]) << '\n';
-    }
+    writeTsvTable(res._varSizeData, offset, upperBound, validIndices, out);
   }
   LOG(DEBUG) << "Done creating readable result.\n";
 }
@@ -277,99 +174,27 @@ void QueryExecutionTree::writeResultToStreamAsJson(
   if (res._nofColumns == 1) {
     auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = (*data)[i];
-      out << "\"";
-      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
-        out << ad_utility::escapeForJson(
-            _qec->getIndex().idToString(row[validIndices[j]]))
-        << ad_utility::escapeForJson("\t");
-      }
-      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
-          row[validIndices[validIndices.size() - 1]])) << "\"";
-      if (i + 1 < upperBound) { out << ','; }
-      out << "\r\n";
-    }
+    writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 2) {
     auto data = static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = (*data)[i];
-      out << "\"";
-      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
-        out << ad_utility::escapeForJson(
-            _qec->getIndex().idToString(row[validIndices[j]]))
-        << ad_utility::escapeForJson("\t");
-      }
-      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
-          row[validIndices[validIndices.size() - 1]])) << "\"";
-      if (i + 1 < upperBound) { out << ','; }
-      out << "\r\n";
-    }
+    writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 3) {
     auto data = static_cast<vector<array<Id, 3>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = (*data)[i];
-      out << "\"";
-      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
-        out << ad_utility::escapeForJson(
-            _qec->getIndex().idToString(row[validIndices[j]]))
-        << ad_utility::escapeForJson("\t");
-      }
-      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
-          row[validIndices[validIndices.size() - 1]])) << "\"";
-      if (i + 1 < upperBound) { out << ','; }
-      out << "\r\n";
-    }
+    writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 4) {
     auto data = static_cast<vector<array<Id, 4>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = (*data)[i];
-      out << "\"";
-      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
-        out << ad_utility::escapeForJson(
-            _qec->getIndex().idToString(row[validIndices[j]]))
-        << ad_utility::escapeForJson("\t");
-      }
-      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
-          row[validIndices[validIndices.size() - 1]])) << "\"";
-      if (i + 1 < upperBound) { out << ','; }
-      out << "\r\n";
-    }
+    writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 5) {
     auto data = static_cast<vector<array<Id, 5>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = (*data)[i];
-      out << "\"";
-      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
-        out << ad_utility::escapeForJson(
-            _qec->getIndex().idToString(row[validIndices[j]]))
-        << ad_utility::escapeForJson("\t");
-      }
-      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
-          row[validIndices[validIndices.size() - 1]])) << "\"";
-      if (i + 1 < upperBound) { out << ','; }
-      out << "\r\n";
-    }
+    writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else {
     size_t upperBound = std::min<size_t>(offset + limit,
                                          res._varSizeData.size());
-    for (size_t i = offset; i < upperBound; ++i) {
-      auto row = res._varSizeData[i];
-      out << "\"";
-      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
-        out << ad_utility::escapeForJson(
-            _qec->getIndex().idToString(row[validIndices[j]]))
-        << ad_utility::escapeForJson("\t");
-      }
-      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
-          row[validIndices[validIndices.size() - 1]])) << "\"";
-      if (i + 1 < upperBound) { out << ','; }
-      out << "\r\n";
-    }
+    writeJsonTable(res._varSizeData, offset, upperBound, validIndices, out);
   }
   out << "]";
   LOG(DEBUG) << "Done creating readable result.\n";

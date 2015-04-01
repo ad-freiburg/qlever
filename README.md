@@ -55,11 +55,11 @@ THERE HAS TO BE SUFFICIENT DISK SPACE IN UNDER THE PATH USE CHOOSE FOR YOUR INDE
 
 a) from an NTriples file (currently no blank nodes allowed):
 
-    src/index/IndexBuilderMain -n /path/to/input.nt -b /path/to/myindex
+    ./IndexBuilderMain -n /path/to/input.nt -b /path/to/myindex
 
 b) from a TSV File (no spaces / tabs in spo):
 
-    src/index/IndexBuilderMain -t /path/to/input.tsv -b /path/to/myindex
+    ./IndexBuilderMain -t /path/to/input.tsv -b /path/to/myindex
 
 
 3. Starting a Sever:
@@ -72,3 +72,9 @@ b) from a TSV File (no spaces / tabs in spo):
 -------------------
 
     curl 'http://localhost:<PORT>/&query=SELECT ?x WHERE {?x <rel> ?y}'
+
+or visit:
+
+    http://localhost:<PORT>/index.html
+    
+   

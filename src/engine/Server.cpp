@@ -160,7 +160,7 @@ Server::ParamValueMap Server::parseHttpRequest(
   size_t posOfEq = request.find('=', index + 1);
   if (posOfEq == request.npos) {
     AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-             "Parameter without \"=\" in HTTP Request.");
+             "Parameter without \"=\" in HTTP Request." + httpRequest);
   }
   string param = ad_utility::getLowercaseUtf8(
       request.substr(index + 1, posOfEq - (index + 1)));
