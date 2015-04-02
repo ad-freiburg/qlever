@@ -7,6 +7,39 @@ $(document).ready(function () {
     });
 });
 
+function htmlEscape(str) {
+//    return str.replace(/&/g, "&amp;")
+//        .replace(/</g, "&lt;")
+//        .replace(/>/g, "&gt;");
+    return $("<div/>").text(str).html();
+}
+
+function getShortStr(str, maxLength) {
+    var pos;
+    var cpy = str;
+    if (cpy.charAt(0) == '<') {
+        pos = cpy.lastIndexOf('/');
+        if (pos < 0) { pos += 1; }
+        cpy = cpy.substring(pos + 1, cpy.length - 1);
+        if (cpy.length > maxLength) {
+            return cpy.substring(0, maxLength - 1) + "[...]"
+        } else {
+            return cpy;
+        }
+    }
+    if (cpy.charAt(0) == '\"') {
+        pos = cpy.lastIndexOf('\"');
+        if (pos !== 0) {
+            cpy = cpy.substring(0, pos + 1);
+        }
+        if (cpy.length > maxLength) {
+            return cpy.substring(0, maxLength - 1) + "[...]\""
+        } else {
+            return cpy;
+        }
+    }
+}
+
 function processQuery(query) {
     console.log(encodeURIComponent(query));
     var queryString = "/?query=" + encodeURIComponent(query);
@@ -33,11 +66,9 @@ function processQuery(query) {
         for (var i = 0; i < result.res.length; i++) {
             res += "<tr>"
             for (var j = 0; j < result.res[i].length; ++j) {
-                res += "<td>"
-                + result.res[i][j].replace(/&/g, "&amp;")
-                    .replace(/</g, "&lt;")
-                    .replace(/>/g, "&gt;")
-                + "</td>"
+                res += "<td title=\"" + htmlEscape(result.res[i][j]).replace(/\"/g, "&quot;") + "\">"
+                    + htmlEscape(getShortStr(result.res[i][j], 26))
+                    +"</td>";
             }
             res += "</tr>";
         }

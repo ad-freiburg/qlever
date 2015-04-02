@@ -1,0 +1,9 @@
+PREFIX ns: <http://rdf.freebase.com/ns/>
+SELECT ?x ?aname ?mov ?mname WHERE {
+?x ns:type.object.type ns:film.actor .
+?x ns:type.object.name ?aname .
+?x ns:film.actor.film ?m .
+?m ns:film.performance.film ?mov .
+?mov ns:type.object.name ?mname .
+}
+LIMIT 100

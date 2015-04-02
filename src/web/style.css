@@ -31,7 +31,7 @@ body {
     border-radius: 7px
 }
 
-#area {
+.area {
     min-width: 810px;
     max-width: 1080px;
     margin: 30px auto;
