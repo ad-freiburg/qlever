@@ -14,13 +14,24 @@ using std::vector;
 
 
 // _____________________________________________________________________________
-void QueryGraph::addNode(const string& label) {
-  if (_nodeIds.count(label) == 0) {
-    _adjLists.push_back(vector<QueryGraph::Edge>{});
-    _nodePayloads.push_back(Node(_qec, label));
-    _nodeMap[_adjLists.size() - 1] = &_nodePayloads.back();
-    _nodeIds[label] = _adjLists.size() - 1;
+string QueryGraph::addNode(const string& label) {
+  string internalLabel = label;
+  if (label.size() == 0) {
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+             "Not supporting blank nodes.");
   }
+  if (label[0] != '?') {
+    std::ostringstream os;
+    os << label << "_" << _nofTerminals++;
+    internalLabel = os.str();
+  }
+  if (_nodeIds.count(internalLabel) == 0) {
+    _adjLists.push_back(vector<QueryGraph::Edge>{});
+    _nodePayloads.push_back(Node(_qec, internalLabel));
+    _nodeMap[_adjLists.size() - 1] = &_nodePayloads.back();
+    _nodeIds[internalLabel] = _adjLists.size() - 1;
+  }
+  return internalLabel;
 }
 
 // _____________________________________________________________________________
@@ -232,11 +243,9 @@ size_t QueryGraph::Node::expectedCardinality(
 // _____________________________________________________________________________
 void QueryGraph::createFromParsedQuery(const ParsedQuery& pq) {
   for (size_t i = 0; i < pq._whereClauseTriples.size(); ++i) {
-    addNode(pq._whereClauseTriples[i]._s);
-    addNode(pq._whereClauseTriples[i]._o);
-    addEdge(getNodeId(pq._whereClauseTriples[i]._s),
-        getNodeId(pq._whereClauseTriples[i]._o),
-        pq._whereClauseTriples[i]._p);
+    string s = addNode(pq._whereClauseTriples[i]._s);
+    string o = addNode(pq._whereClauseTriples[i]._o);
+    addEdge(getNodeId(s), getNodeId(o), pq._whereClauseTriples[i]._p);
   }
   for (size_t i = 0; i < pq._selectedVariables.size(); ++i) {
     _selectVariables.insert(pq._selectedVariables[i]);
@@ -247,6 +256,10 @@ void QueryGraph::createFromParsedQuery(const ParsedQuery& pq) {
 // _____________________________________________________________________________
 QueryGraph::Node* QueryGraph::collapseAndCreateExecutionTree() {
   auto deg1Nodes = getNodesWithDegreeOne();
+  if (deg1Nodes.size() == 0) {
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+    "No support for non-tree queries, yet.")
+  }
   size_t lastUpdatedNode = std::numeric_limits<size_t>::max();
   while (deg1Nodes.size() > 0) {
     // Find the one with the minimum expected cardinality
@@ -355,13 +368,13 @@ void QueryGraph::applySolutionModifiers(const QueryExecutionTree& treeSoFar,
 // _____________________________________________________________________________
 QueryGraph::QueryGraph() :
     _qec(nullptr), _nodeMap(), _nodeIds(), _adjLists(), _nodePayloads(),
-    _selectVariables(), _query(), _executionTree(nullptr) {
+    _selectVariables(), _query(), _executionTree(nullptr), _nofTerminals(0) {
 }
 
 // _____________________________________________________________________________
 QueryGraph::QueryGraph(QueryExecutionContext* qec) :
     _qec(qec), _nodeMap(), _nodeIds(), _adjLists(), _nodePayloads(),
-    _selectVariables(), _query(), _executionTree(nullptr) {
+    _selectVariables(), _query(), _executionTree(nullptr), _nofTerminals(0) {
 }
 
 // _____________________________________________________________________________
@@ -375,7 +388,8 @@ QueryGraph::QueryGraph(const QueryGraph& other) :
     _adjLists(other._adjLists),
     _nodePayloads(other._nodePayloads),
     _selectVariables(other._selectVariables),
-    _query(other._query) {
+    _query(other._query),
+    _nofTerminals(other._nofTerminals) {
   if (other._executionTree) {
     _executionTree = new QueryExecutionTree(*other._executionTree);
   } else {
@@ -395,5 +409,6 @@ QueryGraph& QueryGraph::operator=(const QueryGraph& other) {
   } else {
     _executionTree = nullptr;
   }
+  _nofTerminals = other._nofTerminals;
   return *this;
 }

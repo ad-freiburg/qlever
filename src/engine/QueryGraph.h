@@ -156,10 +156,11 @@ private:
   unordered_set<string> _selectVariables;
   ParsedQuery _query;
   QueryExecutionTree* _executionTree;  // Ownership, new when created. Delete!
+  size_t _nofTerminals;
 
   void collapseNode(size_t u);
   Node* collapseAndCreateExecutionTree();
-  void addNode(const string& label);
+  string addNode(const string& label);
   void addEdge(size_t u, size_t v, const string& label);
   size_t getNodeId(const string& label) const;
   Node* getNode(size_t nodeId);

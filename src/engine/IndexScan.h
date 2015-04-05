@@ -26,7 +26,12 @@ public:
   virtual ~IndexScan() { }
 
   void setSubject(const string& subject) {
-    _subject = subject;
+    size_t posUs = subject.rfind('_');
+    if (posUs != string::npos) {
+      _subject = subject.substr(0, posUs);
+    } else {
+      _subject = subject;
+    }
   }
 
   void setPredicate(const string& predicate) {
@@ -34,10 +39,16 @@ public:
   }
 
   void setObject(const string& object) {
-    _object = object;
+    size_t posUs = object.rfind('_');
+    if (posUs != string::npos) {
+      _object = object.substr(0, posUs);
+    } else {
+      _object = object;
+    }
   }
 
   virtual size_t getResultWidth() const;
+
   virtual size_t resultSortedOn() const { return 0; }
 
 private:
@@ -49,8 +60,11 @@ private:
   virtual void computeResult(ResultTable* result) const;
 
   void computePSOboundS(ResultTable* result) const;
+
   void computePSOfreeS(ResultTable* result) const;
+
   void computePOSboundO(ResultTable* result) const;
+
   void computePOSfreeO(ResultTable* result) const;
 };
 

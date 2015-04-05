@@ -15,10 +15,10 @@ TEST(QueryGraphTest, testAddNode) {
     QueryExecutionContext qec(index, engine);
     QueryGraph qg(&qec);
     ASSERT_EQ("", qg.asString());
-    qg.addNode("one");
-    ASSERT_EQ("(one):", qg.asString());
-    qg.addNode("two");
-    ASSERT_EQ("(one):\n(two):", qg.asString());
+    qg.addNode("?one");
+    ASSERT_EQ("(?one):", qg.asString());
+    qg.addNode("?two");
+    ASSERT_EQ("(?one):\n(?two):", qg.asString());
   } catch (const std::exception& e) {
     std::cout << e.what() << std::endl;
   }
@@ -28,59 +28,59 @@ TEST(QueryGraphTest, testAddEdge) {
   QueryGraph qg;
   ASSERT_EQ("", qg.asString());
 
-  qg.addNode("0");
-  qg.addNode("1");
-  qg.addNode("2");
-  qg.addNode("3");
-  ASSERT_EQ("(0):\n(1):\n(2):\n(3):", qg.asString());
+  qg.addNode("?0");
+  qg.addNode("?1");
+  qg.addNode("?2");
+  qg.addNode("?3");
+  ASSERT_EQ("(?0):\n(?1):\n(?2):\n(?3):", qg.asString());
 
   qg.addEdge(1, 2, "rel1");
-  ASSERT_EQ("(0):\n(1):{2,rel1}\n(2):{1,rel1_r}\n(3):", qg.asString());
+  ASSERT_EQ("(?0):\n(?1):{2,rel1}\n(?2):{1,rel1_r}\n(?3):", qg.asString());
 
   qg.addEdge(1, 3, "rel2");
-  ASSERT_EQ("(0):\n(1):{2,rel1},{3,rel2}\n(2):{1,rel1_r}\n(3):{1,rel2_r}",
+  ASSERT_EQ("(?0):\n(?1):{2,rel1},{3,rel2}\n(?2):{1,rel1_r}\n(?3):{1,rel2_r}",
       qg.asString());
 
   qg.addEdge(3, 2, "rel1");
-  ASSERT_EQ("(0):\n(1):{2,rel1},{3,rel2}\n(2):{1,rel1_r},{3,rel1_r}\n"
-      "(3):{1,rel2_r},{2,rel1}", qg.asString());
+  ASSERT_EQ("(?0):\n(?1):{2,rel1},{3,rel2}\n(?2):{1,rel1_r},{3,rel1_r}\n"
+      "(?3):{1,rel2_r},{2,rel1}", qg.asString());
 }
 
 TEST(QueryGraphTest, testCollapseNode) {
   QueryGraph qg;
-  qg.addNode("0");
-  qg.addNode("1");
-  qg.addNode("2");
-  qg.addNode("3");
+  qg.addNode("?0");
+  qg.addNode("?1");
+  qg.addNode("?2");
+  qg.addNode("?3");
   qg.addEdge(1, 2, "rel1");
   qg.addEdge(1, 3, "rel2");
   qg.addEdge(2, 1, "rel1");
 
-  ASSERT_EQ("(0):\n"
-      "(1):{2,rel1},{3,rel2},{2,rel1_r}\n"
-      "(2):{1,rel1_r},{1,rel1}\n"
-      "(3):{1,rel2_r}", qg.asString());
+  ASSERT_EQ("(?0):\n"
+      "(?1):{2,rel1},{3,rel2},{2,rel1_r}\n"
+      "(?2):{1,rel1_r},{1,rel1}\n"
+      "(?3):{1,rel2_r}", qg.asString());
 
   qg.collapseNode(3);
-  ASSERT_EQ("(0):\n"
-      "(1):{2,rel1},{2,rel1_r}\n"
-      "(2):{1,rel1_r},{1,rel1}\n"
-      "(3):", qg.asString());
+  ASSERT_EQ("(?0):\n"
+      "(?1):{2,rel1},{2,rel1_r}\n"
+      "(?2):{1,rel1_r},{1,rel1}\n"
+      "(?3):", qg.asString());
 
   qg.addNode("X");
   qg.addEdge(2, 4, "relX");
-  ASSERT_EQ("(0):\n"
-      "(1):{2,rel1},{2,rel1_r}\n"
-      "(2):{1,rel1_r},{1,rel1},{4,relX}\n"
-      "(3):\n"
-      "(X):{2,relX_r}", qg.asString());
+  ASSERT_EQ("(?0):\n"
+      "(?1):{2,rel1},{2,rel1_r}\n"
+      "(?2):{1,rel1_r},{1,rel1},{4,relX}\n"
+      "(?3):\n"
+      "(X_0):{2,relX_r}", qg.asString());
 
   qg.collapseNode(4);
-  ASSERT_EQ("(0):\n"
-      "(1):{2,rel1},{2,rel1_r}\n"
-      "(2):{1,rel1_r},{1,rel1}\n"
-      "(3):\n"
-      "(X):", qg.asString());
+  ASSERT_EQ("(?0):\n"
+      "(?1):{2,rel1},{2,rel1_r}\n"
+      "(?2):{1,rel1_r},{1,rel1}\n"
+      "(?3):\n"
+      "(X_0):", qg.asString());
 }
 
 TEST(QueryGraphTest, testCreate) {
@@ -89,7 +89,8 @@ TEST(QueryGraphTest, testCreate) {
           "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
           "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
           "SELECT ?x ?z \n "
-          "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y xxx:rel2 <http://abc.de>}");
+          "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y xxx:rel2 <http://abc.de>"
+          ".?z xxx:rel2 <http://abc.de>}");
   pq.expandPrefixes();
   QueryGraph qg;
   qg.createFromParsedQuery(pq);
@@ -99,8 +100,10 @@ TEST(QueryGraphTest, testCreate) {
           "(?y):{0,<http://rdf.myprefix.com/myrel>_r},"
           "{2,<http://rdf.myprefix.com/ns/myrel>},"
           "{3,<http://rdf.myprefix.com/xxx/rel2>}\n"
-          "(?z):{1,<http://rdf.myprefix.com/ns/myrel>_r}\n"
-          "(<http://abc.de>):{1,<http://rdf.myprefix.com/xxx/rel2>_r}",
+          "(?z):{1,<http://rdf.myprefix.com/ns/myrel>_r},"
+          "{4,<http://rdf.myprefix.com/xxx/rel2>}\n"
+          "(<http://abc.de>_0):{1,<http://rdf.myprefix.com/xxx/rel2>_r}\n"
+          "(<http://abc.de>_1):{2,<http://rdf.myprefix.com/xxx/rel2>_r}",
       qg.asString());
 };
 
@@ -122,7 +125,7 @@ TEST(QueryGraphTest, testCollapseByHand) {
           "{2,<http://rdf.myprefix.com/ns/myrel>},"
           "{3,<http://rdf.myprefix.com/xxx/rel2>}\n"
           "(?z):{1,<http://rdf.myprefix.com/ns/myrel>_r}\n"
-          "(<http://abc.de>):{1,<http://rdf.myprefix.com/xxx/rel2>_r}",
+          "(<http://abc.de>_0):{1,<http://rdf.myprefix.com/xxx/rel2>_r}",
       qg.asString());
 
   qg.collapseNode(3);
@@ -132,7 +135,7 @@ TEST(QueryGraphTest, testCollapseByHand) {
           "(?y):{0,<http://rdf.myprefix.com/myrel>_r},"
           "{2,<http://rdf.myprefix.com/ns/myrel>}\n"
           "(?z):{1,<http://rdf.myprefix.com/ns/myrel>_r}\n"
-          "(<http://abc.de>):",
+          "(<http://abc.de>_0):",
       qg.asString());
 
   qg.collapseNode(0);
@@ -140,7 +143,7 @@ TEST(QueryGraphTest, testCollapseByHand) {
       "(?x):\n"
           "(?y):{2,<http://rdf.myprefix.com/ns/myrel>}\n"
           "(?z):{1,<http://rdf.myprefix.com/ns/myrel>_r}\n"
-          "(<http://abc.de>):",
+          "(<http://abc.de>_0):",
       qg.asString());
 
   qg.collapseNode(2);
@@ -148,7 +151,7 @@ TEST(QueryGraphTest, testCollapseByHand) {
       "(?x):\n"
           "(?y):\n"
           "(?z):\n"
-          "(<http://abc.de>):",
+          "(<http://abc.de>_0):",
       qg.asString());
 };
 

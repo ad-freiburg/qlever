@@ -352,7 +352,8 @@ void Index::scanPSO(const string& predicate, WidthTwoList* result) const {
 // _____________________________________________________________________________
 void Index::scanPSO(const string& predicate, const string& subject,
     WidthOneList* result) const {
-  LOG(DEBUG) << "Performing PSO scan with fixed subject...\n";
+  LOG(DEBUG) << "Performing PSO scan of relation" << predicate
+             << "with fixed subject: " << subject << "...\n";
   Id relId;
   Id subjId;
   if (_vocab.getId(predicate, &relId) && _vocab.getId(subject, &subjId)) {
@@ -368,7 +369,11 @@ void Index::scanPSO(const string& predicate, const string& subject,
         scanNonFunctionalRelation(blockOff, block2, subjId, _psoFile,
             rmd._offsetAfter, result);
       }
+    } else {
+      LOG(DEBUG) << "So such relation.\n";
     }
+  } else {
+    LOG(DEBUG) << "So such subject.\n";
   }
   LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
 }
@@ -393,7 +398,8 @@ void Index::scanPOS(const string& predicate, WidthTwoList* result) const {
 // _____________________________________________________________________________
 void Index::scanPOS(const string& predicate, const string& object,
     WidthOneList* result) const {
-  LOG(DEBUG) << "Performing POS scan with fixed object...\n";
+  LOG(DEBUG) << "Performing POS scan of relation" << predicate
+             << "with fixed object: " << object << "...\n";
   Id relId;
   Id objId;
   if (_vocab.getId(predicate, &relId) && _vocab.getId(object, &objId)) {
@@ -409,7 +415,11 @@ void Index::scanPOS(const string& predicate, const string& object,
         scanNonFunctionalRelation(blockOff, block2, objId, _posFile,
             rmd._offsetAfter, result);
       }
+    } else {
+      LOG(DEBUG) << "No such relation.\n";
     }
+  } else {
+    LOG(DEBUG) << "No such object.\n";
   }
   LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
 }
