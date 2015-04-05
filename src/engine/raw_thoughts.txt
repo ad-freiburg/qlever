@@ -1,0 +1,14 @@
+Thoughts on open TODOS:
+
+1. Evaluate filters as early as possible.
+- A filter with one variable is essentially another realtion on that var.
+- A filter with two variables will be applied as soon as both nodes are collapsed
+
+2. DISTINCT makes sense to be applied before ODER BY
+
+3. Non-tree queries are solved by identifying circles and then removing an edge.
+Open: the smallest or largest relation? Probably the largest to keep the small-first pattern for joins.
+
+The re-write from array to vector can actually only happen during join. Hence it could be responsibility of a join operation.
+Ideally, there would be join methods for array x array -> vector and then
+array x vector -> vector and finally vector x vector -> vector.
