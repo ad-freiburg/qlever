@@ -108,6 +108,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
   // Split where clauses. Cannot simply split at dots, because they may occur
   // in URIs, stuff with namespaces or literals.
   vector<string> clauses;
+  vector<string> filters;
   size_t start = 0;
   bool insideUri = false;
   bool insideNsThing = false;
@@ -120,14 +121,26 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
           clauses.emplace_back(inner.substr(start, k - start));
           break;
         }
+        if (inner[k] == 'F') {
+          if (inner.substr(k, 6) == "FILTER") {
+            size_t end = inner.find(')');
+            if (end == string::npos) {
+              AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                       "Filter without closing paramthesis.");
+            }
+            filters.push_back(inner.substr(k, end - k + 1));
+            k = end;
+          }
+        }
         if (inner[k] == '<') { insideUri = true; }
         if (inner[k] == '\"') { insideLiteral = true; }
         if (inner[k] == ':') { insideNsThing = true; }
       } else {
         if (insideUri && inner[k] == '>') { insideUri = false; }
         if (insideLiteral && inner[k] == '\"') { insideUri = false; }
-        if (insideNsThing &&
-            (inner[k] == ' ' || inner[k] == '\t')) { insideNsThing = false; }
+        if (insideNsThing && (inner[k] == ' ' || inner[k] == '\t')) {
+          insideNsThing = false;
+        }
       }
       ++k;
     }
@@ -139,6 +152,9 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
     if (c.size() > 0) {
       addWhereTriple(c, query);
     }
+  }
+  for (const string& filter: filters) {
+    addFilter(filter, query);
   }
 }
 
@@ -226,4 +242,44 @@ void SparqlParser::parseSolutionModifiers(const string& str,
       ++i;
     }
   }
+}
+
+// _____________________________________________________________________________
+void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
+  size_t i = str.find('(');
+  AD_CHECK(i != string::npos);
+  size_t j = str.find(')', i + 1);
+  AD_CHECK(j != string::npos);
+  string filter = str.substr(i + 1, j - i - 1);
+  auto tokens = ad_utility::split(filter, ' ');
+  if (tokens.size() != 3) {
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+             "Unknown syntax for filter: " + filter);
+  }
+  if (tokens[0].size() == 0 || tokens[0][0] != '?' || tokens[2].size() == 0 ||
+      tokens[2][0] != '?') {
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+             "Filter not supported yet: " + filter);
+  }
+  Filter f;
+  f._lhs = filter[0];
+  f._rhs = filter[2];
+
+  if (tokens[1] == "=" || tokens[1] == "==" ) {
+    f._type = Filter::EQ;
+  } else if (tokens[1] == "!=") {
+    f._type = Filter::NE;
+  } else if (tokens[1] == "<") {
+    f._type = Filter::LT;
+  } else if (tokens[1] == "<=") {
+    f._type = Filter::LE;
+  } else if (tokens[1] == "<") {
+    f._type = Filter::GT;
+  } else if (tokens[1] == ">=") {
+    f._type = Filter::GE;
+  } else {
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+             "Filter not supported yet: " + filter);
+  }
+  query._filters.emplace_back(f);
 }

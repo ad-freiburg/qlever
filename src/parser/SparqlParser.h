@@ -21,4 +21,5 @@ private:
   static void parseSolutionModifiers(const string& str, ParsedQuery& query);
   static void addPrefix(const string& str, ParsedQuery& query);
   static void addWhereTriple(const string& str, ParsedQuery& query);
+  static void addFilter(const string& str, ParsedQuery& query);
 };

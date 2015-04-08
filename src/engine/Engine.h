@@ -172,25 +172,20 @@ private:
     size_t j = 0;
 
     while (l1[i][I] < sent1) {
-      // In case of match, create cross-product
-      if (l1[i][I] == l2[j][J]) {
-        // Fix l2, go through l1
-        size_t keepI = i;
-        while (l1[i][I] == l2[j][J]) {
-          result->emplace_back(joinTuples(
-              l1[i], l2[j], GenSeq<N>(), GenSeqLo<M, (J < M ? J : M - 1)>()));
-          ++i;
-        }
-        size_t nextI = i;
-        i = keepI;
-        // Fix l1, go through l2
-        ++j; // The first one has already been done.
+      while (l1[i][I] == l2[j][J]) {
+        // In case of match, create cross-product
+        // Always fix l1 and go through l2.
+        size_t keepJ = j;
         while (l1[i][I] == l2[j][J]) {
           result->emplace_back(joinTuples(
               l1[i], l2[j], GenSeq<N>(), GenSeqLo<M, (J < M ? J : M - 1)>()));
           ++j;
         }
-        i = nextI;
+        ++i;
+        // If the next i is still the same, reset j.
+        if (l1[i][I] == l2[keepJ][J]) {
+          j = keepJ;
+        }
       }
       while (l1[i][I] < l2[j][J])
         ++i;

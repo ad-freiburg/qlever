@@ -52,6 +52,22 @@ public:
   bool _desc;
 };
 
+class Filter {
+public:
+  enum FilterType {
+    EQ = 0,
+    NE = 1,
+    LT = 2,
+    LE = 3,
+    GT = 5,
+    GE = 6
+  };
+
+  FilterType _type;
+  string _lhs;
+  string _rhs;
+};
+
 // A parsed SPARQL query. To be extended.
 class ParsedQuery {
 public:
@@ -61,6 +77,7 @@ public:
   vector<SparqlPrefix> _prefixes;
   vector<string> _selectedVariables;
   vector<SparqlTriple> _whereClauseTriples;
+  vector<Filter> _filters;
   vector<OrderKey> _orderBy;
   string _limit;
   string _offset;

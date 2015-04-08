@@ -225,6 +225,18 @@ TEST(ParserTest, testSolutionModifiers) {
   pq.expandPrefixes();
   ASSERT_EQ("10", pq._limit);
 
+
+  pq = SparqlParser::parse(
+      "SELECT ?x ?y WHERE {?x is-a Actor .  FILTER(?x != ?y)."
+          "?y is-a Actor . FILTER(?y < ?x)} LIMIT 10");
+  pq.expandPrefixes();
+  ASSERT_EQ(2, pq._filters.size());
+  ASSERT_EQ("?x", pq._filters[0]._lhs);
+  ASSERT_EQ("?y", pq._filters[0]._rhs);
+  ASSERT_EQ(Filter::FilterType::NE, pq._filters[0]._type);
+  ASSERT_EQ("?y", pq._filters[1]._lhs);
+  ASSERT_EQ("?x", pq._filters[1]._rhs);
+  ASSERT_EQ(Filter::FilterType::LT, pq._filters[1]._type);
 }
 
 int main(int argc, char** argv) {

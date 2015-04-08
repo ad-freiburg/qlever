@@ -204,7 +204,7 @@ string Server::composeResponseJson(const ParsedQuery& query,
 
   ResultTable rt = qet.getResult();
   _requestProcessingTimer.stop();
-  off_t compResultMsecs = _requestProcessingTimer.msecs();
+  off_t compResultUsecs = _requestProcessingTimer.usecs();
   size_t resultSize = rt.size();
 
 
@@ -231,10 +231,8 @@ string Server::composeResponseJson(const ParsedQuery& query,
   os << ",\r\n";
 
   os << "\"time\": {\r\n"
-  << "\"total\": \"" << _requestProcessingTimer.msecs()
-  << "ms\",\r\n"
-  << "\"computeResult\": \"" << compResultMsecs
-  << "ms\"\r\n"
+  << "\"total\": \"" << _requestProcessingTimer.usecs() / 1000.0 << "ms\",\r\n"
+  << "\"computeResult\": \"" << compResultUsecs / 1000.0 << "ms\"\r\n"
   << "}\r\n"
   << "}\r\n";
 
@@ -254,9 +252,9 @@ string Server::composeResponseJson(const string& query,
   << "\"status\": \"ERROR\",\r\n"
   << "\"result-size\": \"0\",\r\n"
   << "\"time\": {\r\n"
-  << "\"total\": \"" << _requestProcessingTimer.msecs()
+  << "\"total\": \"" << _requestProcessingTimer.msecs() / 1000.0
   << "ms\",\r\n"
-  << "\"computeResult\": \"" << _requestProcessingTimer.msecs()
+  << "\"computeResult\": \"" << _requestProcessingTimer.msecs() / 1000.0
   << "ms\"\r\n"
   << "},\r\n";
 
