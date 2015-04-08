@@ -115,22 +115,25 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
   bool insideLiteral = false;
   while (start < inner.size()) {
     size_t k = start;
+    while (inner[k] == ' ' || inner[k] == '\t') { ++k; }
+    if (inner[k] == 'F') {
+      if (inner.substr(k, 6) == "FILTER") {
+        size_t end = inner.find(')', k);
+        if (end == string::npos) {
+          AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                   "Filter without closing paramthesis.");
+        }
+        filters.push_back(inner.substr(k, end - k + 1));
+        size_t posOfDot = inner.find('.', end);
+        start = (posOfDot == string::npos ? end + 1 : posOfDot + 1);
+        continue;
+      }
+    }
     while (k < inner.size()) {
       if (!insideUri && !insideLiteral && !insideNsThing) {
         if (inner[k] == '.') {
           clauses.emplace_back(inner.substr(start, k - start));
           break;
-        }
-        if (inner[k] == 'F') {
-          if (inner.substr(k, 6) == "FILTER") {
-            size_t end = inner.find(')');
-            if (end == string::npos) {
-              AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                       "Filter without closing paramthesis.");
-            }
-            filters.push_back(inner.substr(k, end - k + 1));
-            k = end;
-          }
         }
         if (inner[k] == '<') { insideUri = true; }
         if (inner[k] == '\"') { insideLiteral = true; }
@@ -262,8 +265,8 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
              "Filter not supported yet: " + filter);
   }
   Filter f;
-  f._lhs = filter[0];
-  f._rhs = filter[2];
+  f._lhs = tokens[0];
+  f._rhs = tokens[2];
 
   if (tokens[1] == "=" || tokens[1] == "==" ) {
     f._type = Filter::EQ;
