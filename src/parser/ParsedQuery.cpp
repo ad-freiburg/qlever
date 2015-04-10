@@ -50,7 +50,7 @@ string ParsedQuery::asString() const {
   if (_orderBy.size() == 0) {
     os << "not specified";
   } else {
-    for (auto key : _orderBy) {
+    for (auto& key : _orderBy) {
       os << key._key << (key._desc ? " (DESC)" : " (ASC)") << "\t";
     }
   }

@@ -8,10 +8,59 @@
 #include <iostream>
 #include <limits>
 #include "./QueryGraph.h"
+#include "Filter.h"
 
 using std::ostringstream;
 using std::vector;
 
+
+// _____________________________________________________________________________
+QueryGraph::QueryGraph() :
+    _qec(nullptr), _nodeMap(), _nodeIds(), _adjLists(), _nodePayloads(),
+    _selectVariables(), _query(), _executionTree(nullptr), _nofTerminals(0) {
+}
+
+// _____________________________________________________________________________
+QueryGraph::QueryGraph(QueryExecutionContext* qec) :
+    _qec(qec), _nodeMap(), _nodeIds(), _adjLists(), _nodePayloads(),
+    _selectVariables(), _query(), _executionTree(nullptr), _nofTerminals(0) {
+}
+
+// _____________________________________________________________________________
+QueryGraph::~QueryGraph() {
+  delete _executionTree;
+}
+
+// _____________________________________________________________________________
+QueryGraph::QueryGraph(const QueryGraph& other) :
+    _qec(other._qec), _nodeMap(other._nodeMap), _nodeIds(other._nodeIds),
+    _adjLists(other._adjLists),
+    _nodePayloads(other._nodePayloads),
+    _selectVariables(other._selectVariables),
+    _query(other._query),
+    _nofTerminals(other._nofTerminals) {
+  if (other._executionTree) {
+    _executionTree = new QueryExecutionTree(*other._executionTree);
+  } else {
+    _executionTree = nullptr;
+  }
+}
+
+// _____________________________________________________________________________
+QueryGraph& QueryGraph::operator=(const QueryGraph& other) {
+  _qec = other._qec;
+  _adjLists = other._adjLists;
+  _nodePayloads = other._nodePayloads;
+  _selectVariables = other._selectVariables;
+  _query = other._query;
+  if (other._executionTree) {
+    _executionTree = new QueryExecutionTree(*other._executionTree);
+  } else {
+    _executionTree = nullptr;
+  }
+  _nofTerminals = other._nofTerminals;
+  return *this;
+}
 
 // _____________________________________________________________________________
 string QueryGraph::addNode(const string& label) {
@@ -120,16 +169,16 @@ string QueryGraph::asString() {
     os << getNode(i)->asString() << ':';
     for (size_t j = 0; j < _adjLists[i].size(); ++j) {
       os << _adjLists[i][j].asString();
-      if (j < _adjLists[i].size() - 1) {os << ",";}
+      if (j < _adjLists[i].size() - 1) { os << ","; }
     }
-    if (i < _adjLists.size() - 1) {os << '\n';}
+    if (i < _adjLists.size() - 1) { os << '\n'; }
   }
   return os.str();
 }
 
 // _____________________________________________________________________________
 void QueryGraph::Node::consume(QueryGraph::Node* other,
-    const QueryGraph::Edge& edge) {
+                               const QueryGraph::Edge& edge) {
 
   QueryExecutionTree addedSubtree(_qec);
   if (other->getConsumedOperations().isEmpty()) {
@@ -174,7 +223,7 @@ void QueryGraph::Node::consume(QueryGraph::Node* other,
       nestedTree.setVariableColumn(other->_label, 0);
       nestedTree.setVariableColumn(_label, 1);
       Join join(_qec, nestedTree, other->getConsumedOperations(), 0,
-          other->_consumedOperations.getVariableColumn(other->_label));
+                other->_consumedOperations.getVariableColumn(other->_label));
       addedSubtree.setOperation(QueryExecutionTree::JOIN, &join);
       addedSubtree.setVariableColumns(join.getVariableColumns());
     } else {
@@ -186,7 +235,7 @@ void QueryGraph::Node::consume(QueryGraph::Node* other,
       nestedTree.setVariableColumn(_label, 1);
       nestedTree.setOperation(QueryExecutionTree::SCAN, &is);
       Join join(_qec, nestedTree, other->getConsumedOperations(), 0,
-          other->_consumedOperations.getVariableColumn(other->_label));
+                other->_consumedOperations.getVariableColumn(other->_label));
       addedSubtree.setOperation(QueryExecutionTree::JOIN, &join);
       addedSubtree.setVariableColumns(join.getVariableColumns());
     }
@@ -198,9 +247,9 @@ void QueryGraph::Node::consume(QueryGraph::Node* other,
     if (addedSubtree.getVariableColumn(_label)
         == addedSubtree.resultSortedOn()) {
       Join join(_qec, _consumedOperations,
-          addedSubtree,
-          _consumedOperations.getVariableColumn(_label),
-          addedSubtree.getVariableColumn(_label));
+                addedSubtree,
+                _consumedOperations.getVariableColumn(_label),
+                addedSubtree.getVariableColumn(_label));
       _consumedOperations.setOperation(QueryExecutionTree::JOIN, &join);
       _consumedOperations.setVariableColumns(join.getVariableColumns());
     } else {
@@ -209,9 +258,9 @@ void QueryGraph::Node::consume(QueryGraph::Node* other,
       sortedSubtree.setOperation(QueryExecutionTree::SORT, &sort);
       sortedSubtree.setVariableColumns(addedSubtree.getVariableColumnMap());
       Join join(_qec, _consumedOperations,
-          sortedSubtree,
-          _consumedOperations.getVariableColumn(_label),
-          sortedSubtree.getVariableColumn(_label));
+                sortedSubtree,
+                _consumedOperations.getVariableColumn(_label),
+                sortedSubtree.getVariableColumn(_label));
       _consumedOperations.setOperation(QueryExecutionTree::JOIN, &join);
       _consumedOperations.setVariableColumns(join.getVariableColumns());
     }
@@ -226,7 +275,7 @@ size_t QueryGraph::Node::expectedCardinality(
       if (_consumedOperations.getType() != QueryExecutionTree::UNDEFINED) {
         if (_qec) {
           _expectedCardinality = _consumedOperations.getResult().size()
-              * remainingRelationCardinality;
+                                 * remainingRelationCardinality;
         } else {
           _expectedCardinality = remainingRelationCardinality * 2;
         };
@@ -258,7 +307,7 @@ QueryGraph::Node* QueryGraph::collapseAndCreateExecutionTree() {
   auto deg1Nodes = getNodesWithDegreeOne();
   if (deg1Nodes.size() == 0) {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-    "No support for non-tree queries, yet.")
+             "No support for non-tree queries, yet.")
   }
   size_t lastUpdatedNode = std::numeric_limits<size_t>::max();
   while (deg1Nodes.size() > 0) {
@@ -273,7 +322,7 @@ QueryGraph::Node* QueryGraph::collapseAndCreateExecutionTree() {
       size_t ec = getNode(deg1Nodes[i])->expectedCardinality(relSize);
       if (ec < minEC ||
           (ec == minEC &&
-              _selectVariables.count(getNode(deg1Nodes[i])->_label) == 0)) {
+           _selectVariables.count(getNode(deg1Nodes[i])->_label) == 0)) {
         minEC = ec;
         minECIndex = deg1Nodes[i];
       }
@@ -289,7 +338,7 @@ QueryGraph::Node* QueryGraph::collapseAndCreateExecutionTree() {
 
 // _____________________________________________________________________________
 QueryGraph::Node::Node(QueryExecutionContext* qec,
-    const string& label) :
+                       const string& label) :
     _label(label),
     _qec(qec),
     _expectedCardinality(std::numeric_limits<size_t>::max()),
@@ -324,14 +373,17 @@ const QueryExecutionTree& QueryGraph::getExecutionTree() {
   if (!_executionTree) {
     _executionTree = new QueryExecutionTree(_qec);
     Node* root = collapseAndCreateExecutionTree();
-    applySolutionModifiers(root->getConsumedOperations(), _executionTree);
+    QueryExecutionTree interm(_qec);
+    applySolutionModifiers(root->getConsumedOperations(), &interm);
+    applyFilters(interm, _executionTree);
   }
+  LOG(TRACE) << "Final execution tree: " << _executionTree->asString() << '\n';
   return *_executionTree;
 }
 
 // _____________________________________________________________________________
 void QueryGraph::applySolutionModifiers(const QueryExecutionTree& treeSoFar,
-    QueryExecutionTree* finalTree) const {
+                                        QueryExecutionTree* finalTree) const {
   if (_query._orderBy.size() > 0) {
     if (_query._orderBy.size() == 1 && !_query._orderBy[0]._desc) {
       size_t orderCol = treeSoFar.getVariableColumn(_query._orderBy[0]._key);
@@ -346,7 +398,7 @@ void QueryGraph::applySolutionModifiers(const QueryExecutionTree& treeSoFar,
     } else {
       finalTree->setVariableColumns(treeSoFar.getVariableColumnMap());
       vector<pair<size_t, bool>> sortIndices;
-      for (auto ord : _query._orderBy) {
+      for (auto& ord : _query._orderBy) {
         sortIndices.emplace_back(
             pair<size_t, bool>{treeSoFar.getVariableColumn(ord._key), ord
                 ._desc});
@@ -366,49 +418,13 @@ void QueryGraph::applySolutionModifiers(const QueryExecutionTree& treeSoFar,
 }
 
 // _____________________________________________________________________________
-QueryGraph::QueryGraph() :
-    _qec(nullptr), _nodeMap(), _nodeIds(), _adjLists(), _nodePayloads(),
-    _selectVariables(), _query(), _executionTree(nullptr), _nofTerminals(0) {
-}
-
-// _____________________________________________________________________________
-QueryGraph::QueryGraph(QueryExecutionContext* qec) :
-    _qec(qec), _nodeMap(), _nodeIds(), _adjLists(), _nodePayloads(),
-    _selectVariables(), _query(), _executionTree(nullptr), _nofTerminals(0) {
-}
-
-// _____________________________________________________________________________
-QueryGraph::~QueryGraph() {
-  delete _executionTree;
-}
-
-// _____________________________________________________________________________
-QueryGraph::QueryGraph(const QueryGraph& other) :
-    _qec(other._qec), _nodeMap(other._nodeMap), _nodeIds(other._nodeIds),
-    _adjLists(other._adjLists),
-    _nodePayloads(other._nodePayloads),
-    _selectVariables(other._selectVariables),
-    _query(other._query),
-    _nofTerminals(other._nofTerminals) {
-  if (other._executionTree) {
-    _executionTree = new QueryExecutionTree(*other._executionTree);
-  } else {
-    _executionTree = nullptr;
+void QueryGraph::applyFilters(const QueryExecutionTree& treeSoFar,
+                              QueryExecutionTree* treeAfter) {
+  *treeAfter = treeSoFar;
+  for (auto& f : _query._filters) {
+    QueryExecutionTree lastTree(*treeAfter);
+    Filter filter(_qec, lastTree, f._type, treeSoFar.getVariableColumn(f._lhs),
+                  treeSoFar.getVariableColumn(f._rhs));
+    treeAfter->setOperation(QueryExecutionTree::FILTER, &filter);
   }
-}
-
-// _____________________________________________________________________________
-QueryGraph& QueryGraph::operator=(const QueryGraph& other) {
-  _qec = other._qec;
-  _adjLists = other._adjLists;
-  _nodePayloads = other._nodePayloads;
-  _selectVariables = other._selectVariables;
-  _query = other._query;
-  if (other._executionTree) {
-    _executionTree = new QueryExecutionTree(*other._executionTree);
-  } else {
-    _executionTree = nullptr;
-  }
-  _nofTerminals = other._nofTerminals;
-  return *this;
 }

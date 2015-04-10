@@ -54,6 +54,7 @@ function processQuery(query) {
         var res = "<div id=\"res\">";
         // Time
         res += "<div id=\"time\">";
+        res += "Number of rows: " + result.resultsize + "<br/><br/>";
         res += "Time elapsed:<br>";
         res += "Total: " + result.time.total + "<br/>";
         res += "&nbsp;- Computation: " + result.time.computeResult + "<br/>";

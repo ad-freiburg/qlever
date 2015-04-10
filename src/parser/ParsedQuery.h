@@ -52,7 +52,7 @@ public:
   bool _desc;
 };
 
-class Filter {
+class SparqlFilter {
 public:
   enum FilterType {
     EQ = 0,
@@ -77,7 +77,7 @@ public:
   vector<SparqlPrefix> _prefixes;
   vector<string> _selectedVariables;
   vector<SparqlTriple> _whereClauseTriples;
-  vector<Filter> _filters;
+  vector<SparqlFilter> _filters;
   vector<OrderKey> _orderBy;
   string _limit;
   string _offset;

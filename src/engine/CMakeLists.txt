@@ -14,6 +14,7 @@ add_library(engine
               Join.h Join.cpp
               Sort.h Sort.cpp
               OrderBy.h OrderBy.cpp
+              Filter.h Filter.cpp
               Server.h Server.cpp
             )
 

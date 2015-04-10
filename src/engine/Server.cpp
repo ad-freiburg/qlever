@@ -214,7 +214,7 @@ string Server::composeResponseJson(const ParsedQuery& query,
   << ad_utility::escapeForJson(query._originalString)
   << "\",\r\n"
   << "\"status\": \"OK\",\r\n"
-  << "\"result-size\": \"" << resultSize << "\",\r\n";
+  << "\"resultsize\": \"" << resultSize << "\",\r\n";
 
   os << "\"res\": ";
   size_t limit = MAX_NOF_ROWS_IN_RESULT;
@@ -250,7 +250,7 @@ string Server::composeResponseJson(const string& query,
   << ad_utility::escapeForJson(query)
   << "\",\r\n"
   << "\"status\": \"ERROR\",\r\n"
-  << "\"result-size\": \"0\",\r\n"
+  << "\"resultsize\": \"0\",\r\n"
   << "\"time\": {\r\n"
   << "\"total\": \"" << _requestProcessingTimer.msecs() / 1000.0
   << "ms\",\r\n"
@@ -278,7 +278,7 @@ string Server::composeResponseJson(const string& query,
   << ad_utility::escapeForJson(query)
   << "\",\r\n"
   << "\"status\": \"ERROR\",\r\n"
-  << "\"result-size\": \"0\",\r\n"
+  << "\"resultsize\": \"0\",\r\n"
   << "\"time\": {\r\n"
   << "\"total\": \"" << _requestProcessingTimer.msecs()
   << "ms\",\r\n"

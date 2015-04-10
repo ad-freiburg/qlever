@@ -103,10 +103,10 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(2, pq._filters.size());
     ASSERT_EQ("?x", pq._filters[0]._lhs);
     ASSERT_EQ("?y", pq._filters[0]._rhs);
-    ASSERT_EQ(Filter::FilterType::NE, pq._filters[0]._type);
+    ASSERT_EQ(SparqlFilter::FilterType::NE, pq._filters[0]._type);
     ASSERT_EQ("?y", pq._filters[1]._lhs);
     ASSERT_EQ("?x", pq._filters[1]._rhs);
-    ASSERT_EQ(Filter::FilterType::LT, pq._filters[1]._type);
+    ASSERT_EQ(SparqlFilter::FilterType::LT, pq._filters[1]._type);
     ASSERT_EQ(2, pq._whereClauseTriples.size());
 
     pq = SparqlParser::parse(
@@ -116,7 +116,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(1, pq._filters.size());
     ASSERT_EQ("?x", pq._filters[0]._lhs);
     ASSERT_EQ("?y", pq._filters[0]._rhs);
-    ASSERT_EQ(Filter::FilterType::NE, pq._filters[0]._type);
+    ASSERT_EQ(SparqlFilter::FilterType::NE, pq._filters[0]._type);
     ASSERT_EQ(2, pq._whereClauseTriples.size());
   }
   catch (const ad_semsearch::Exception& e) {

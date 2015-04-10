@@ -35,7 +35,8 @@ public:
     SCAN = 1,
     JOIN = 2,
     SORT = 3,
-    ORDER_BY = 4
+    ORDER_BY = 4,
+    FILTER = 5
   };
 
   void setOperation(OperationType type, Operation* op);

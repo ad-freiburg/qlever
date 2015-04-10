@@ -10,6 +10,7 @@
 #include "../util/Log.h"
 #include "./IndexSequence.h"
 #include "../global/Id.h"
+#include "../util/Exception.h"
 
 using std::vector;
 using std::array;
@@ -74,6 +75,38 @@ public:
       const vector<array<E, M>>& b,
       size_t joinColumn2,
       vector<array<E, (N + M - 1)>>* result);
+
+  template<typename E, size_t N, typename Comp>
+  static void filter(
+      const vector<array<E, N>>& v,
+      const Comp& comp,
+      vector<array<E, N>>* result) {
+    AD_CHECK(result);
+    AD_CHECK(result->size() == 0);
+    LOG(DEBUG) << "Filtering " << v.size() << " elements.\n";
+    for (const auto& e: v) {
+      if (comp(e)) {
+        result->push_back(e);
+      }
+    }
+    LOG(DEBUG) << "Filter done, size now: "<< result->size() <<  " elements.\n";
+  }
+
+  template<typename E, typename Comp>
+  static void filter(
+      const vector<vector<E>>& v,
+      const Comp& comp,
+      vector<vector<E>>* result) {
+    AD_CHECK(result);
+    AD_CHECK(result->size() == 0);
+    LOG(DEBUG) << "Filtering " << v.size() << " elements.\n";
+    for (const auto& e: v) {
+      if (comp(e)) {
+        result->push_back(e);
+      }
+    }
+    LOG(DEBUG) << "Filter done, size now: "<< result->size() <<  " elements.\n";
+  }
 
   template<typename E, size_t N>
   static void sort(vector<array<E, N>>& tab, size_t keyColumn) {

@@ -6,6 +6,7 @@
 #include <sstream>
 #include <algorithm>
 #include "./QueryExecutionTree.h"
+#include "Filter.h"
 
 using std::string;
 
@@ -38,6 +39,10 @@ QueryExecutionTree::QueryExecutionTree(const QueryExecutionTree& other) :
     case OperationType::ORDER_BY:
       _rootOperation = new OrderBy(
           *static_cast<OrderBy*>(other._rootOperation));
+      break;
+    case OperationType::FILTER:
+      _rootOperation = new Filter(
+          *static_cast<Filter*>(other._rootOperation));
       break;
     case UNDEFINED:
     default:
@@ -87,6 +92,10 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
     case OperationType::ORDER_BY:
       delete _rootOperation;
       _rootOperation = new OrderBy(*static_cast<OrderBy*>(op));
+      break;
+    case OperationType::FILTER:
+      delete _rootOperation;
+      _rootOperation = new Filter(*static_cast<Filter*>(op));
       break;
     default: AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, "Cannot set "
         "an operation with undefined type.");

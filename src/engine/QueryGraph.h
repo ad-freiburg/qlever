@@ -166,6 +166,8 @@ private:
   Node* getNode(size_t nodeId);
   Node* getNode(const string& label);
   vector<size_t> getNodesWithDegreeOne() const;
+  void applyFilters(const QueryExecutionTree& treeSoFar,
+                    QueryExecutionTree* treeAfter);
   void applySolutionModifiers(const QueryExecutionTree& treeSoFar,
       QueryExecutionTree* finalTree) const;
 

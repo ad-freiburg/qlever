@@ -264,22 +264,22 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
              "Filter not supported yet: " + filter);
   }
-  Filter f;
+  SparqlFilter f;
   f._lhs = tokens[0];
   f._rhs = tokens[2];
 
   if (tokens[1] == "=" || tokens[1] == "==" ) {
-    f._type = Filter::EQ;
+    f._type = SparqlFilter::EQ;
   } else if (tokens[1] == "!=") {
-    f._type = Filter::NE;
+    f._type = SparqlFilter::NE;
   } else if (tokens[1] == "<") {
-    f._type = Filter::LT;
+    f._type = SparqlFilter::LT;
   } else if (tokens[1] == "<=") {
-    f._type = Filter::LE;
+    f._type = SparqlFilter::LE;
   } else if (tokens[1] == "<") {
-    f._type = Filter::GT;
+    f._type = SparqlFilter::GT;
   } else if (tokens[1] == ">=") {
-    f._type = Filter::GE;
+    f._type = SparqlFilter::GE;
   } else {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
              "Filter not supported yet: " + filter);
