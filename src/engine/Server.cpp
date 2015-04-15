@@ -202,7 +202,7 @@ string Server::createHttpResponse(const string& content,
 string Server::composeResponseJson(const ParsedQuery& query,
                                    const QueryExecutionTree& qet) const {
 
-  ResultTable rt = qet.getResult();
+  const ResultTable& rt = qet.getResult();
   _requestProcessingTimer.stop();
   off_t compResultUsecs = _requestProcessingTimer.usecs();
   size_t resultSize = rt.size();

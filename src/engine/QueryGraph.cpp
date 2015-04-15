@@ -8,7 +8,12 @@
 #include <iostream>
 #include <limits>
 #include "./QueryGraph.h"
-#include "Filter.h"
+#include "./IndexScan.h"
+#include "./Join.h"
+#include "./Sort.h"
+#include "./OrderBy.h"
+#include "./Distinct.h"
+#include "./Filter.h"
 
 using std::ostringstream;
 using std::vector;
@@ -242,7 +247,15 @@ void QueryGraph::Node::consume(QueryGraph::Node* other,
   }
 
   if (_consumedOperations.isEmpty()) {
-    _consumedOperations = addedSubtree;
+    if (addedSubtree.resultSortedOn() ==
+        addedSubtree.getVariableColumn(_label)) {
+      _consumedOperations = addedSubtree;
+    } else {
+      Sort sort(_qec, addedSubtree, addedSubtree.getVariableColumn(_label));
+      _consumedOperations.setOperation(QueryExecutionTree::SORT, &sort);
+      _consumedOperations
+          .setVariableColumns(addedSubtree.getVariableColumnMap());
+    }
   } else {
     if (addedSubtree.getVariableColumn(_label)
         == addedSubtree.resultSortedOn()) {
@@ -384,37 +397,45 @@ const QueryExecutionTree& QueryGraph::getExecutionTree() {
 // _____________________________________________________________________________
 void QueryGraph::applySolutionModifiers(const QueryExecutionTree& treeSoFar,
                                         QueryExecutionTree* finalTree) const {
+  QueryExecutionTree distinctTree(treeSoFar);
+  if (_query._distinct) {
+    vector<size_t> keepIndices;
+    for (const auto& var : _query._selectedVariables) {
+      if (treeSoFar.getVariableColumnMap().find(var) !=
+          treeSoFar.getVariableColumnMap().end()) {
+        keepIndices
+            .push_back(treeSoFar.getVariableColumnMap().find(var)->second);
+      }
+    }
+    Distinct distinct(_qec, treeSoFar, keepIndices);
+    distinctTree.setOperation(QueryExecutionTree::DISTINCT, &distinct);
+  }
   if (_query._orderBy.size() > 0) {
     if (_query._orderBy.size() == 1 && !_query._orderBy[0]._desc) {
-      size_t orderCol = treeSoFar.getVariableColumn(_query._orderBy[0]._key);
-      if (orderCol == treeSoFar.resultSortedOn()) {
+      size_t orderCol = distinctTree.getVariableColumn(_query._orderBy[0]._key);
+      if (orderCol == distinctTree.resultSortedOn()) {
         // Already sorted perfectly
-        *finalTree = treeSoFar;
+        *finalTree = distinctTree;
       } else {
-        finalTree->setVariableColumns(treeSoFar.getVariableColumnMap());
-        Sort sort(_qec, treeSoFar, orderCol);
+        finalTree->setVariableColumns(distinctTree.getVariableColumnMap());
+        Sort sort(_qec, distinctTree, orderCol);
         finalTree->setOperation(QueryExecutionTree::SORT, &sort);
       }
     } else {
-      finalTree->setVariableColumns(treeSoFar.getVariableColumnMap());
+      finalTree->setVariableColumns(distinctTree.getVariableColumnMap());
       vector<pair<size_t, bool>> sortIndices;
       for (auto& ord : _query._orderBy) {
         sortIndices.emplace_back(
-            pair<size_t, bool>{treeSoFar.getVariableColumn(ord._key), ord
+            pair<size_t, bool>{distinctTree.getVariableColumn(ord._key), ord
                 ._desc});
       }
-      OrderBy ob(_qec, treeSoFar, sortIndices);
+      OrderBy ob(_qec, distinctTree, sortIndices);
       finalTree->setOperation(QueryExecutionTree::ORDER_BY, &ob);
     }
   } else {
-    *finalTree = treeSoFar;
+    *finalTree = distinctTree;
   }
   // TODO: Keyword REDUCED is ignored. Which is legit but not optimal.
-  if (_query._distinct) {
-    // TODO: Add support!
-    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "DISTINCT not "
-        "supported, yet!");
-  }
 }
 
 // _____________________________________________________________________________

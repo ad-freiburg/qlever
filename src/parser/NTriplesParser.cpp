@@ -56,10 +56,14 @@ bool NTriplesParser::getLine(array<string, 3>& res) {
     } else {
       // Literal
       j = line.find('\"', i + 1);
+      while (j != string::npos && line[j - 1] == '\\') {
+        j = line.find('\"', j + 1);
+      }
       if (j == string::npos) {
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
             "Illegal literal in : " + line);
       }
+
       ++j;
       while (j < line.size() && line[j] != ' ' && line[j] != '\t') {++j;}
     }

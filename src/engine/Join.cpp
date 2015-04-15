@@ -5,17 +5,18 @@
 #include <sstream>
 #include <unordered_map>
 #include "./QueryExecutionTree.h"
+#include "./Join.h"
 
 using std::string;
 using std::unordered_map;
 
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext* qec,
-    const QueryExecutionTree& t1,
-    const QueryExecutionTree& t2,
-    size_t t1JoinCol,
-    size_t t2JoinCol,
-    bool keepJoinColumn) : Operation(qec) {
+           const QueryExecutionTree& t1,
+           const QueryExecutionTree& t2,
+           size_t t1JoinCol,
+           size_t t2JoinCol,
+           bool keepJoinColumn) : Operation(qec) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   if (t1.asString() < t2.asString()) {
     _left = new QueryExecutionTree(t1);
@@ -65,7 +66,7 @@ Join& Join::operator=(const Join& other) {
 string Join::asString() const {
   std::ostringstream os;
   os << "JOIN(\n\t" << _left->asString() << " [" << _leftJoinCol <<
-      "]\n\t|X|\n\t" << _right->asString() << " [" << _rightJoinCol << "]\n)";
+  "]\n\t|X|\n\t" << _right->asString() << " [" << _rightJoinCol << "]\n)";
   return os.str();
 }
 
@@ -76,6 +77,9 @@ void Join::computeResult(ResultTable* result) const {
   size_t rightWidth = _right->getResultWidth();
   const ResultTable& leftRes = _left->getRootOperation()->getResult();
   const ResultTable& rightRes = _right->getRootOperation()->getResult();
+
+  AD_CHECK(result);
+  AD_CHECK(!result->_fixedSizeData);
 
   result->_nofColumns = leftWidth + rightWidth - 1;
   result->_sortedBy = _leftJoinCol;
@@ -122,7 +126,12 @@ void Join::computeResult(ResultTable* result) const {
           _rightJoinCol,
           static_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
     } else {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "right width > 5");
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 1>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          rightRes._varSizeData,
+          _rightJoinCol,
+          &result->_varSizeData);
     }
   } else if (leftWidth == 2) {
     if (rightWidth == 1) {
@@ -157,8 +166,20 @@ void Join::computeResult(ResultTable* result) const {
           *static_cast<const vector<array<Id, 4>>*>(rightRes._fixedSizeData),
           _rightJoinCol,
           static_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
+    } else if (rightWidth == 5) {
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 2>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          *static_cast<const vector<array<Id, 5>>*>(rightRes._fixedSizeData),
+          _rightJoinCol,
+          &result->_varSizeData);
     } else {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "right width > 4");
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 1>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          rightRes._varSizeData,
+          _rightJoinCol,
+          &result->_varSizeData);
     }
   } else if (leftWidth == 3) {
     if (rightWidth == 1) {
@@ -185,8 +206,27 @@ void Join::computeResult(ResultTable* result) const {
           *static_cast<const vector<array<Id, 3>>*>(rightRes._fixedSizeData),
           _rightJoinCol,
           static_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
+    } else if (rightWidth == 4) {
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 3>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          *static_cast<const vector<array<Id, 4>>*>(rightRes._fixedSizeData),
+          _rightJoinCol,
+          &result->_varSizeData);
+    } else if (rightWidth == 5) {
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 3>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          *static_cast<const vector<array<Id, 5>>*>(rightRes._fixedSizeData),
+          _rightJoinCol,
+          &result->_varSizeData);
     } else {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "comb with > 5");
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 3>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          rightRes._varSizeData,
+          _rightJoinCol,
+          &result->_varSizeData);
     }
   } else if (leftWidth == 4) {
     if (rightWidth == 1) {
@@ -205,8 +245,34 @@ void Join::computeResult(ResultTable* result) const {
           *static_cast<const vector<array<Id, 2>>*>(rightRes._fixedSizeData),
           _rightJoinCol,
           static_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
+    } else if (rightWidth == 3) {
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 4>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          *static_cast<const vector<array<Id, 3>>*>(rightRes._fixedSizeData),
+          _rightJoinCol,
+          &result->_varSizeData);
+    } else if (rightWidth == 4) {
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 4>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          *static_cast<const vector<array<Id, 4>>*>(rightRes._fixedSizeData),
+          _rightJoinCol,
+          &result->_varSizeData);
+    } else if (rightWidth == 5) {
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 4>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          *static_cast<const vector<array<Id, 5>>*>(rightRes._fixedSizeData),
+          _rightJoinCol,
+          &result->_varSizeData);
     } else {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "comb with > 5");
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 4>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          rightRes._varSizeData,
+          _rightJoinCol,
+          &result->_varSizeData);
     }
   } else if (leftWidth == 5) {
     if (rightWidth == 1) {
@@ -217,12 +283,49 @@ void Join::computeResult(ResultTable* result) const {
           *static_cast<const vector<array<Id, 1>>*>(rightRes._fixedSizeData),
           _rightJoinCol,
           static_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
+    } else if (rightWidth == 2) {
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 5>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          *static_cast<const vector<array<Id, 2>>*>(rightRes._fixedSizeData),
+          _rightJoinCol,
+          &result->_varSizeData);
+    } else if (rightWidth == 3) {
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 5>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          *static_cast<const vector<array<Id, 3>>*>(rightRes._fixedSizeData),
+          _rightJoinCol,
+          &result->_varSizeData);
+    } else if (rightWidth == 4) {
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 5>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          *static_cast<const vector<array<Id, 4>>*>(rightRes._fixedSizeData),
+          _rightJoinCol,
+          &result->_varSizeData);
+    } else if (rightWidth == 5) {
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 5>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          *static_cast<const vector<array<Id, 5>>*>(rightRes._fixedSizeData),
+          _rightJoinCol,
+          &result->_varSizeData);
     } else {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "comb with > 5");
+      _executionContext->getEngine().join(
+          *static_cast<const vector<array<Id, 5>>*>(leftRes._fixedSizeData),
+          _leftJoinCol,
+          rightRes._varSizeData,
+          _rightJoinCol,
+          &result->_varSizeData);
     }
-  }
-  else {
-    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "left width > 4");
+  } else {
+    _executionContext->getEngine().join(
+        leftRes._varSizeData,
+        _leftJoinCol,
+        rightRes._varSizeData,
+        _rightJoinCol,
+        &result->_varSizeData);
   }
   result->_status = ResultTable::FINISHED;
   LOG(DEBUG) << "Join result computation done." << endl;
@@ -232,8 +335,8 @@ void Join::computeResult(ResultTable* result) const {
 unordered_map<string, size_t> Join::getVariableColumns() const {
   unordered_map<string, size_t> retVal(_left->getVariableColumnMap());
   size_t leftSize = _left->getResultWidth();
-  for (auto it = _right->getVariableColumnMap().begin(); it !=
-      _right->getVariableColumnMap().end(); ++it) {
+  for (auto it = _right->getVariableColumnMap().begin();
+        it != _right->getVariableColumnMap().end(); ++it) {
     if (it->second < _rightJoinCol) {
       retVal[it->first] = leftSize + it->second;
     }
@@ -247,7 +350,7 @@ unordered_map<string, size_t> Join::getVariableColumns() const {
 // _____________________________________________________________________________
 size_t Join::getResultWidth() const {
   size_t res = _left->getResultWidth() + _right->getResultWidth() -
-      (_keepJoinColumn ? 1 : 2);
+               (_keepJoinColumn ? 1 : 2);
   AD_CHECK(res > 0);
   return res;
 }

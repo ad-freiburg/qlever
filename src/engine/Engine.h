@@ -25,16 +25,30 @@ public:
     array<Id, N + M - 1> res;
     std::copy(a.begin(), a.end(), res.begin());
     std::copy(b.begin(), b.begin() + LEAVE_OUT_IN_B, res.begin() + N);
-    std::copy(b.begin() + LEAVE_OUT_IN_B + 1, b.end(), res.begin() + N);
+    std::copy(b.begin() + LEAVE_OUT_IN_B + 1, b.end(), res.begin() + N
+                                                       + LEAVE_OUT_IN_B);
     return res;
   }
 
   template<typename E, size_t N, size_t... I, size_t M, size_t... J>
   static inline array<E, sizeof...(I) + sizeof...(J)> joinTuples(
-      const array <E, N>& a, const array <E, M>& b,
+      const array<E, N>& a, const array<E, M>& b,
       IndexSequence<I...>, IndexSequence<J...>) {
-    return array < E, sizeof...(I) + sizeof...(J) > {{a[I]..., b[J]...}};
+    return array<E, sizeof...(I) + sizeof...(J)> {{a[I]..., b[J]...}};
   };
+
+  template<typename E, typename A, typename B>
+  static inline vector<E> joinTuplesInVec(
+      const A& a, const B& b, size_t leaveOutInB) {
+    vector<E> res;
+    res.resize(a.size() + b.size() - 1);
+    std::copy(a.begin(), a.end(), res.begin());
+    std::copy(b.begin(), b.begin() + leaveOutInB, res.begin() + a.size());
+    std::copy(b.begin() + leaveOutInB + 1, b.end(),
+              res.begin() + a.size() + leaveOutInB);
+    return res;
+  };
+
 
   template<typename E, size_t N, size_t... I>
   static vector<array<E, sizeof...(I)>> project(
@@ -42,18 +56,18 @@ public:
     vector<array<E, sizeof...(I)>> res;
     res.reserve(tab.size());
     for (const auto& e: tab) {
-      res.emplace_back(array < E, sizeof...(I) > {{e[I]...}});
+      res.emplace_back(array<E, sizeof...(I)> {{e[I]...}});
     }
     return res;
   }
 
   template<typename E>
   static vector<vector<E>> project(
-      const vector <vector<E>>& tab, const vector <size_t> indexSeq) {
-    vector <vector<E>> res;
+      const vector<vector<E>>& tab, const vector<size_t> indexSeq) {
+    vector<vector<E>> res;
     res.reserve(tab.size());
     for (const auto& e: tab) {
-      vector <E> newEle;
+      vector<E> newEle;
       newEle.reserve(indexSeq.size());
       for (auto i: indexSeq) {
         newEle.push_back(e[i]);
@@ -76,6 +90,14 @@ public:
       size_t joinColumn2,
       vector<array<E, (N + M - 1)>>* result);
 
+  template<typename E, typename A, typename B>
+  static void join(const A& a, size_t jc1, const B& b, size_t jc2,
+                   vector<vector<E>>* result);
+
+  template<typename E, typename A>
+  static void selfJoin(const A& a, size_t jc,
+                   vector<vector<E>>* result);
+
   template<typename E, size_t N, typename Comp>
   static void filter(
       const vector<array<E, N>>& v,
@@ -89,7 +111,7 @@ public:
         result->push_back(e);
       }
     }
-    LOG(DEBUG) << "Filter done, size now: "<< result->size() <<  " elements.\n";
+    LOG(DEBUG) << "Filter done, size now: " << result->size() << " elements.\n";
   }
 
   template<typename E, typename Comp>
@@ -105,16 +127,16 @@ public:
         result->push_back(e);
       }
     }
-    LOG(DEBUG) << "Filter done, size now: "<< result->size() <<  " elements.\n";
+    LOG(DEBUG) << "Filter done, size now: " << result->size() << " elements.\n";
   }
 
   template<typename E, size_t N>
   static void sort(vector<array<E, N>>& tab, size_t keyColumn) {
     LOG(DEBUG) << "Sorting " << tab.size() << " elements.\n";
     std::sort(tab.begin(), tab.end(),
-        [&keyColumn](const array <E, N>& a, const array <E, N>& b) {
-          return a[keyColumn] < b[keyColumn];
-        });
+              [&keyColumn](const array<E, N>& a, const array<E, N>& b) {
+                return a[keyColumn] < b[keyColumn];
+              });
     LOG(DEBUG) << "Sort done.\n";
   }
 
@@ -122,9 +144,9 @@ public:
   static void sort(vector<vector<E>>& tab, size_t keyColumn) {
     LOG(DEBUG) << "Sorting " << tab.size() << " elements.\n";
     std::sort(tab.begin(), tab.end(),
-        [&keyColumn](const vector<E>& a, const vector<E>& b) {
-          return a[keyColumn] < b[keyColumn];
-        });
+              [&keyColumn](const vector<E>& a, const vector<E>& b) {
+                return a[keyColumn] < b[keyColumn];
+              });
     LOG(DEBUG) << "Sort done.\n";
   }
 
@@ -142,6 +164,116 @@ public:
     LOG(DEBUG) << "Sort done.\n";
   }
 
+  template<typename E, size_t N>
+  static void distinct(const vector<array<E, N>>& v,
+                       const vector<size_t>& keepIndices,
+                       vector<array<E, N>>* result) {
+    LOG(DEBUG) << "Distinct on " << v.size() << " elements.\n";
+    AD_CHECK_LE(keepIndices.size(), N);
+    *result = v;
+    switch (keepIndices.size()) {
+      case 1: {
+        size_t keyCol = keepIndices[0];
+        auto last = std::unique(result->begin(), result->end(),
+                                [&keyCol](const array<E, N>& a,
+                                          const array<E, N>& b) {
+                                  return a[keyCol] == b[keyCol];
+                                });
+        result->erase(last, result->end());
+        break;
+      }
+      case 2: {
+        size_t keyCol = keepIndices[0];
+        size_t keyCol2 = keepIndices[1];
+        auto last = std::unique(result->begin(), result->end(),
+                                [&keyCol, &keyCol2](const array<E, N>& a,
+                                                    const array<E, N>& b) {
+                                  return a[keyCol] == b[keyCol]
+                                         && a[keyCol2] == b[keyCol2];
+                                });
+        result->erase(last, result->end());
+        break;
+      }
+      case 3: {
+        size_t keyCol = keepIndices[0];
+        size_t keyCol2 = keepIndices[1];
+        size_t keyCol3 = keepIndices[2];
+        auto last = std::unique(result->begin(), result->end(),
+                                [&keyCol, &keyCol2, &keyCol3](
+                                    const array<E, N>& a,
+                                    const array<E, N>& b) {
+                                  return a[keyCol] == b[keyCol]
+                                         && a[keyCol2] == b[keyCol2]
+                                         && a[keyCol3] == b[keyCol3];
+                                });
+        result->erase(last, result->end());
+        break;
+      }
+      case 4: {
+        size_t keyCol = keepIndices[0];
+        size_t keyCol2 = keepIndices[1];
+        size_t keyCol3 = keepIndices[2];
+        size_t keyCol4 = keepIndices[3];
+        auto last = std::unique(result->begin(), result->end(),
+                                [&keyCol, &keyCol2, &keyCol3, &keyCol4](
+                                    const array<E, N>& a,
+                                    const array<E, N>& b) {
+                                  return a[keyCol] == b[keyCol]
+                                         && a[keyCol2] == b[keyCol2]
+                                         && a[keyCol3] == b[keyCol3]
+                                         && a[keyCol4] == b[keyCol4];
+                                });
+        result->erase(last, result->end());
+        break;
+      }
+      case 5: {
+        size_t keyCol = keepIndices[0];
+        size_t keyCol2 = keepIndices[1];
+        size_t keyCol3 = keepIndices[2];
+        size_t keyCol4 = keepIndices[3];
+        size_t keyCol5 = keepIndices[4];
+        auto last = std::unique(result->begin(), result->end(),
+                                [&keyCol, &keyCol2, &keyCol3,
+                                    &keyCol4, &keyCol5](
+                                    const array<E, N>& a,
+                                    const array<E, N>& b) {
+                                  return a[keyCol] == b[keyCol]
+                                         && a[keyCol2] == b[keyCol2]
+                                         && a[keyCol3] == b[keyCol3]
+                                         && a[keyCol4] == b[keyCol4]
+                                         && a[keyCol5] == b[keyCol5];
+
+                                });
+        result->erase(last, result->end());
+        break;
+      }
+    }
+    LOG(DEBUG) << "Distinct done.\n";
+  }
+
+  template<typename E>
+  static void distinct(const vector<vector<E>>& v,
+                       const vector<size_t>& keepIndices,
+                       vector<vector<E>>* result) {
+    LOG(DEBUG) << "Distinct on " << v.size() << " elements.\n";
+    AD_CHECK_LE(keepIndices.size(), v.size());
+    *result = v;
+
+    auto last = std::unique(result->begin(), result->end(),
+                            [&keepIndices](const vector<E>& a,
+                                           const vector<E>& b) {
+                              for (auto& i : keepIndices) {
+                                if (a[i] != b[i]) {
+                                  return false;
+                                }
+                              }
+                              return true;
+                            });
+    result->erase(last, result->end());
+
+    LOG(DEBUG) << "Distinct done.\n";
+  }
+
 private:
 
   template<typename E, size_t N, size_t I>
@@ -154,7 +286,9 @@ private:
 
     // Binary search for start.
     auto itt = std::lower_bound(relation.begin(), relation.end(), key,
-        [](const array <E, N>& a, const array <E, N>& b) {return a[I] < b[I];});
+                                [](const array<E, N>& a, const array<E, N>& b) {
+                                  return a[I] < b[I];
+                                });
 
     while (itt != relation.end() && (*itt)[I] == entityId) {
       result.push_back(*itt);
@@ -176,28 +310,45 @@ private:
 
     // Typedefs can hopefully prevent insanity. Read as:
     // "Tuple 1", "Tuple 2", "Tuple for Result", etc.
-    typedef array <E, N> T1;
-    typedef array <E, M> T2;
-    typedef vector <T1> V1;
-    typedef vector <T2> V2;
+    typedef array<E, N> T1;
+    typedef array<E, M> T2;
+    typedef vector<T1> V1;
+    typedef vector<T2> V2;
 
 
     // Check trivial case.
     if (a.size() == 0 || b.size() == 0) { return; }
+    // Check for possible self join (dangerous with sentinels).
+    if (N == M) {
+      if (reinterpret_cast<uintptr_t>(&a) == reinterpret_cast<uintptr_t>(&b)) {
+        AD_CHECK_EQ(I, J);
+        doSelfJoin<E, N, I>(a, reinterpret_cast<vector<
+            array<E, (N + N - 1)>>*>(result));
+        return;
+      }
+    }
 
     // Cast away constness so we can add sentinels that will be removed
     // in the end and create and add those sentinels.
     V1& l1 = const_cast<V1&>(a);
     V2& l2 = const_cast<V2&>(b);
+
     E sent1 = std::numeric_limits<E>::max();
-    E sent2 = sent1 - 1;
+    E sent2 = std::numeric_limits<E>::max() - 1;
+    E sentMatch = std::numeric_limits<E>::max() - 2;
     auto elem1 = l1[0];
     auto elem2 = l2[0];
+    auto match1 = l1[0];
+    auto match2 = l2[0];
+
+    match1[I] = sentMatch;
+    match2[J] = sentMatch;
     elem1[I] = sent1;
     elem2[J] = sent2;
+    l1.push_back(match1);
+    l2.push_back(match2);
     l1.push_back(elem1);
     l2.push_back(elem2);
-
     // Intersect both lists.
     // TODO: Improve the start by a binary search in the bigger list.
     // This could set the index in the smaller list to >= 0.
@@ -205,13 +356,17 @@ private:
     size_t j = 0;
 
     while (l1[i][I] < sent1) {
+      while (l1[i][I] < l2[j][J]) { ++i; }
+      while (l2[j][J] < l1[i][I]) { ++j; }
+
       while (l1[i][I] == l2[j][J]) {
         // In case of match, create cross-product
         // Always fix l1 and go through l2.
         size_t keepJ = j;
         while (l1[i][I] == l2[j][J]) {
-          result->emplace_back(joinTuples(
-              l1[i], l2[j], GenSeq<N>(), GenSeqLo<M, (J < M ? J : M - 1)>()));
+          result->emplace_back(joinTuples(l1[i], l2[j],
+                                          GenSeq < N > (), GenSeqLo < M,
+                                          (J < M ? J : M - 1) > ()));
           ++j;
         }
         ++i;
@@ -220,18 +375,143 @@ private:
           j = keepJ;
         }
       }
-      while (l1[i][I] < l2[j][J])
-        ++i;
-      while (l2[j][J] < l1[i][I] && l2[j][J] < sent2)
-        ++j;
     }
 
     // Remove sentinels
-    l1.resize(l1.size() - 1);
-    l2.resize(l2.size() - 1);
+    l1.resize(l1.size() - 2);
+    l2.resize(l2.size() - 2);
+    result->pop_back();
 
     LOG(DEBUG) << "Join done.\n";
-    LOG(DEBUG) << "Result: width = " << (N + M -1) << ", size = " <<
-        result->size() << "\n";
+    LOG(DEBUG) << "Result: width = " << (N + M - 1) << ", size = " <<
+               result->size() << "\n";
+  }
+
+  template<typename E, size_t N, size_t I>
+  static void doSelfJoin(const vector<array<E, N>>& v,
+                         vector<array<E, N + N - 1>>* result) {
+
+    LOG(DEBUG) << "Performing self join on fixed width tables.\n";
+    LOG(DEBUG) << "TAB: witdth = " << N << ", size = " << v.size() << "\n";
+
+    // Always detect ranges of equal join col values and then
+    // build a cross product for each range.
+    size_t i = 0;
+    while (i < v.size()) {
+      const auto& val = v[i][I];
+      size_t from = i++;
+      while (v[i][I] == val) { ++i; }
+      // Range detected, now build cross product
+      // v[i][I] is now != val and read to be the next one.
+      for (size_t j = from; j < i; ++j) {
+        for (size_t k = from; k < i; ++k) {
+          result->emplace_back(joinTuples(v[j], v[k],
+                                          GenSeq<N>(),
+                                          GenSeqLo<N, (I < N ? I : N - 1)>()));
+        }
+      }
+    }
+
+
+    LOG(DEBUG) << "Join done.\n";
+    LOG(DEBUG) << "Result: width = " << (N + N - 1) << ", size = " <<
+               result->size() << "\n";
   }
 };
+
+template<typename E, typename A, typename B>
+void Engine::join(const A& a, size_t jc1, const B& b, size_t jc2,
+                 vector<vector<E>>* result) {
+
+  LOG(DEBUG) << "Performing join that leads to var size rows.\n";
+  LOG(DEBUG) << "A: size = " << a.size() << "\n";
+  LOG(DEBUG) << "B: size = " << b.size() << "\n";
+
+  // Check trivial case.
+  if (a.size() == 0 || b.size() == 0) { return; }
+  // Check for possible self join (dangerous with sentinels).
+  if (reinterpret_cast<uintptr_t>(&a) == reinterpret_cast<uintptr_t>(&b)) {
+    AD_CHECK_EQ(jc1, jc2)
+    selfJoin(a, jc1, result);
+    return;
+  }
+
+  // Cast away constness so we can add sentinels that will be removed
+  // in the end and create and add those sentinels.
+  A& l1 = const_cast<A&>(a);
+  B& l2 = const_cast<B&>(b);
+  E sent1 = std::numeric_limits<E>::max();
+  E sent2 = std::numeric_limits<E>::max() - 1;
+  E sentMatch = std::numeric_limits<E>::max() - 2;
+  auto elem1 = l1[0];
+  auto elem2 = l2[0];
+  auto match1 = l1[0];
+  auto match2 = l2[0];
+
+  match1[jc1] = sentMatch;
+  match2[jc2] = sentMatch;
+  elem1[jc1] = sent1;
+  elem2[jc2] = sent2;
+  l1.push_back(match1);
+  l2.push_back(match2);
+  l1.push_back(elem1);
+  l2.push_back(elem2);
+
+  // Intersect both lists.
+  // TODO: Improve the start by a binary search in the bigger list.
+  // This could set the index in the smaller list to >= 0.
+  size_t i = 0;
+  size_t j = 0;
+
+  while (l1[i][jc1] < sent1) {
+    while (l2[j][jc2] < l1[i][jc1]) { ++j; }
+    while (l1[i][jc1] < l2[j][jc2]) { ++i; }
+    while (l1[i][jc1] == l2[j][jc2]) {
+      // In case of match, create cross-product
+      // Always fix l1 and go through l2.
+      size_t keepJ = j;
+      while (l1[i][jc1] == l2[j][jc2]) {
+        result->emplace_back(joinTuplesInVec<Id>(l1[i], l2[j], jc2));
+        ++j;
+      }
+      ++i;
+      // If the next i is still the same, reset j.
+      if (l1[i][jc1] == l2[keepJ][jc2]) {
+        j = keepJ;
+      }
+    }
+  }
+
+  // Remove sentinels
+  l1.resize(l1.size() - 2);
+  l2.resize(l2.size() - 2);
+  result->resize(result->size() - 1);
+
+  LOG(DEBUG) << "Join done.\n";
+  LOG(DEBUG) << "Result: size = " << result->size() << "\n";
+}
+
+template<typename E, typename A>
+void Engine::selfJoin(const A& v, size_t jc, vector<vector<E>>* result) {
+  LOG(DEBUG) << "Performing self join on var width table.\n";
+  LOG(DEBUG) << "TAB: size = " << v.size() << "\n";
+
+  // Always detect ranges of equal join col values and then
+  // build a cross product for each range.
+  size_t i = 0;
+  while (i < v.size()) {
+    const auto& val = v[i][jc];
+    size_t from = i++;
+    while (v[i][jc] == val) { ++i; }
+    // Range detected, now build cross product
+    // v[i][I] is now != val and read to be the next one.
+    for (size_t j = from; j < i; ++j) {
+      for (size_t k = from; k < i; ++k) {
+        result->emplace_back(joinTuplesInVec<E>(v[j], v[k], jc));
+      }
+    }
+  }
+
+  LOG(DEBUG) << "Join done.\n";
+  LOG(DEBUG) << "Result:  size = " << result->size() << "\n";
+}

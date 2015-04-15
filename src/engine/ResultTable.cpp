@@ -20,6 +20,9 @@ ResultTable::ResultTable(const ResultTable& other) :
     _sortedBy(other._sortedBy),
     _varSizeData(other._varSizeData) {
   if (other._nofColumns <= 5) {
+    if (other._nofColumns == 0) {
+      _fixedSizeData = nullptr;
+    }
     if (other._nofColumns == 1)  {
       auto newptr = new vector<array<Id, 1>>;
       _fixedSizeData = newptr;
@@ -47,6 +50,7 @@ ResultTable::ResultTable(const ResultTable& other) :
     }
   } else {
     assert(!other._fixedSizeData);
+    _fixedSizeData = nullptr;
   }
 }
 
@@ -58,6 +62,9 @@ ResultTable& ResultTable::operator=(const ResultTable& other) {
   _nofColumns = other._nofColumns;
   _sortedBy = other._sortedBy;
   if (_nofColumns <= 5) {
+    if (_nofColumns == 0) {
+      _fixedSizeData = nullptr;
+    }
     if (_nofColumns == 1)  {
       auto newptr = new vector<array<Id, 1>>;
       _fixedSizeData = newptr;
@@ -85,6 +92,7 @@ ResultTable& ResultTable::operator=(const ResultTable& other) {
     }
   } else {
     assert(!other._fixedSizeData);
+    _fixedSizeData = nullptr;
   }
   return *this;
 }

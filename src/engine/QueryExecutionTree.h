@@ -6,10 +6,6 @@
 #include <string>
 #include "./QueryExecutionContext.h"
 #include "./Operation.h"
-#include "./Join.h"
-#include "./IndexScan.h"
-#include "./Sort.h"
-#include "./OrderBy.h"
 
 
 using std::string;
@@ -36,7 +32,8 @@ public:
     JOIN = 2,
     SORT = 3,
     ORDER_BY = 4,
-    FILTER = 5
+    FILTER = 5,
+    DISTINCT = 6
   };
 
   void setOperation(OperationType type, Operation* op);
@@ -51,7 +48,7 @@ public:
     return _variableColumnMap;
   }
 
-  Operation* getRootOperation() const {
+  const Operation* getRootOperation() const {
     return _rootOperation;
   }
 
@@ -101,7 +98,7 @@ private:
                       const vector<size_t>& validIndices,
                       std::ostream& out) const {
     for (size_t i = from; i < upperBound; ++i) {
-      auto row = data[i];
+      const auto& row = data[i];
       out << "[\"";
       for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
         out << ad_utility::escapeForJson(
@@ -121,7 +118,7 @@ private:
                      const vector<size_t>& validIndices,
                      std::ostream& out) const {
     for (size_t i = from; i < upperBound; ++i) {
-      auto row = data[i];
+      const auto& row = data[i];
       for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
         out << ad_utility::escapeForJson(
             _qec->getIndex().idToString(row[validIndices[j]]))

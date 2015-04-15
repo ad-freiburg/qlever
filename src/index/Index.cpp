@@ -341,6 +341,7 @@ void Index::scanPSO(const string& predicate, WidthTwoList* result) const {
     if (_psoMeta.relationExists(relId)) {
       LOG(TRACE) << "Relation exists.\n";
       const RelationMetaData& rmd = _psoMeta.getRmd(relId);
+      result->reserve(rmd._nofElements + 2);
       result->resize(rmd._nofElements);
       _psoFile.read(result->data(), rmd._nofElements * 2 * sizeof(Id),
           rmd._startFullIndex);
@@ -387,6 +388,7 @@ void Index::scanPOS(const string& predicate, WidthTwoList* result) const {
     if (_posMeta.relationExists(relId)) {
       LOG(TRACE) << "Relation exists.\n";
       const RelationMetaData& rmd = _posMeta.getRmd(relId);
+      result->reserve(rmd._nofElements + 2);
       result->resize(rmd._nofElements);
       _posFile.read(result->data(), rmd._nofElements * 2 * sizeof(Id),
           rmd._startFullIndex);
@@ -476,6 +478,7 @@ void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
         nofBytes = static_cast<size_t>(follower.second - it->second);
       }
     }
+    result->reserve((nofBytes / sizeof(Id)) + 2);
     result->resize(nofBytes / sizeof(Id));
     indexFile.read(result->data(), nofBytes, it->second);
   } else {

@@ -6,7 +6,6 @@
 #include <list>
 #include <unordered_map>
 #include "./Operation.h"
-#include "./IndexScan.h"
 
 using std::list;
 using std::unordered_map;

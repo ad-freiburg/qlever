@@ -4,7 +4,8 @@ Thoughts on open TODOS:
 - A filter with one variable is essentially another realtion on that var.
 - A filter with two variables will be applied as soon as both nodes are collapsed
 
-2. DISTINCT makes sense to be applied before ODER BY
+2. DISTINCT makes sense to be applied before ODER BY but has to be "after" projection.
+Easy solution: only look at projection vars but do it before order by.
 
 3. Non-tree queries are solved by identifying circles and then removing an edge.
 Open: the smallest or largest relation? Probably the largest to keep the small-first pattern for joins.

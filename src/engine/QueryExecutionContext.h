@@ -10,7 +10,6 @@
 #include "../util/Log.h"
 #include "./ResultTable.h"
 #include "./Engine.h"
-#include "./IndexMock.h"
 #include "../global/Constants.h"
 #include "../index/Index.h"
 

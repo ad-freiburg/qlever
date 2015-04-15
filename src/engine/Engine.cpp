@@ -3,8 +3,9 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <algorithm>
-#include "./Engine.h"
 #include "../util/Exception.h"
+#include "./Engine.h"
+
 
 // _____________________________________________________________________________
 template<typename E, size_t N>
