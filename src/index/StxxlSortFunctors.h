@@ -4,9 +4,11 @@
 #pragma once
 
 #include <array>
+#include <tuple>
 #include "../global/Id.h"
 
 using std::array;
+using std::tuple;
 
 struct SortByPSO {
   // comparison function
@@ -57,5 +59,26 @@ struct SortByPOS {
   {
     Id max = std::numeric_limits<Id>::max();
     return array<Id, 3>{{max, max, max}};
+  }
+};
+
+struct SortText {
+  // comparison function
+  bool operator()(const tuple<Id, Id, Score, bool>& a,
+                  const tuple<Id, Id, Score, bool>& b) const {
+    return false;
+  }
+
+  // min sentinel = value which is strictly smaller that any input element
+  static tuple<Id, Id, Score, bool> min_value()
+  {
+    return tuple<Id, Id, Score, bool>{0 , 0, 0, false};
+  }
+
+  // max sentinel = value which is strictly larger that any input element
+  static tuple<Id, Id, Score, bool> max_value() {
+    Id max = std::numeric_limits<Id>::max();
+    Score maxScore = std::numeric_limits<Score>::max();
+    return tuple<Id, Id, Score, bool>{max, max, maxScore, true};
   }
 };

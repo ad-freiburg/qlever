@@ -12,17 +12,20 @@
 #include "./IndexMetaData.h"
 #include "./StxxlSortFunctors.h"
 #include "../util/File.h"
+#include "TextMetaData.h"
 
 
 using std::string;
 using std::array;
 using std::vector;
+using std::tuple;
 
 class Index {
 public:
   Index();
 
   typedef stxxl::VECTOR_GENERATOR<array<Id, 3>>::result ExtVec;
+  typedef stxxl::VECTOR_GENERATOR<tuple<Id, Id, Score, bool>>::result TextVec;
 
   // Creates an index from a TSV file.
   // Will write vocabulary and on-disk index data.
@@ -36,8 +39,16 @@ public:
 
   // Creates an index object from an on disk index
   // that has previously been constructed.
-  // Read necessary meta data into memory and opens file handels.
+  // Read necessary meta data into memory and opens file handles.
   void createFromOnDiskIndex(const string& onDiskBase);
+
+  // Adds a text index to a fully initialized KB index.
+  // Reads a context file and builds the index for the first time.
+  void addTextFromContextFile(const string& contextFile);
+
+  // Adds text index from on disk index that has previously been constructed.
+  // Read necessary meta data into memory and opens file handles.
+  void addTextFromOnDiskIndex();
 
   // Checks if the index is ready for use, i.e. it is properly intitialized.
   bool ready() const;
@@ -61,6 +72,7 @@ private:
   Vocabulary _vocab;
   IndexMetaData _psoMeta;
   IndexMetaData _posMeta;
+  TextMetaData _textMeta;
   mutable ad_utility::File _psoFile;
   mutable ad_utility::File _posFile;
 
@@ -70,18 +82,19 @@ private:
   size_t passNTriplesFileForVocabulary(const string& tsvFile);
   void passNTriplesFileIntoIdVector(const string& tsvFile, ExtVec& data);
 
+  size_t passContextFileForVocabulary(const string& contextFile);
+  void passContextFileIntoVector(const string& contextFile, TextVec& vec);
+
   static void createPermutation(const string& fileName,
       const ExtVec& vec,
       IndexMetaData& meta,
       size_t c1, size_t c2);
 
+  void createTextIndex(const string& filename, const TextVec& vec,
+                       TextMetaData& meta);
+
   static RelationMetaData writeRel(ad_utility::File& out, off_t currentOffset,
       Id relId, const vector<array<Id, 2>>& data, bool functional);
-
-
-  // FRIEND TESTS
-  friend class IndexTest_createFromTsvTest_Test;
-  friend class IndexTest_createFromOnDiskIndexTest_Test;
 
   static RelationMetaData& writeFunctionalRelation(
       const vector<array<Id, 2>>& data, RelationMetaData& rmd);
@@ -98,4 +111,9 @@ private:
       const pair<off_t, size_t>& followBlock,
       Id lhsId, ad_utility::File& indexFile, off_t upperBound,
       WidthOneList* result) const;
+
+  // FRIEND TESTS
+  friend class IndexTest_createFromTsvTest_Test;
+  friend class IndexTest_createFromOnDiskIndexTest_Test;
+
 };

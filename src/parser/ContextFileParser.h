@@ -18,6 +18,7 @@ public:
     string _word;
     bool _isEntity;
     Id _contextId;
+    Score _score;
   };
 
   explicit ContextFileParser(const string& contextFile);

@@ -25,10 +25,13 @@ bool ContextFileParser::getLine(ContextFileParser::Line& line) {
     assert(i != string::npos);
     size_t j = i + 2;
     assert(j + 3 < l.size() && l[j + 2] == '\t');
+    size_t k = l.find('\t', j + 2);
+    assert(k != string::npos);
     line._isEntity = (l[i + 1] == '1');
     line._word = (line._isEntity ?
         l.substr(0, i) : ad_utility::getLowercaseUtf8(l.substr(0, i)));
-    line._contextId = static_cast<Id>(atol(l.substr(j + 1).c_str()));
+    line._contextId = static_cast<Id>(atol(l.substr(j + 1, k - j - 1).c_str()));
+    line._score = static_cast<Score>(atol(l.substr(k + 1).c_str()));
     return true;
   }
   return false;
