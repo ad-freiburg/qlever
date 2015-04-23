@@ -13,3 +13,16 @@ Open: the smallest or largest relation? Probably the largest to keep the small-f
 The re-write from array to vector can actually only happen during join. Hence it could be responsibility of a join operation.
 Ideally, there would be join methods for array x array -> vector and then
 array x vector -> vector and finally vector x vector -> vector.
+
+
+---
+
+On OCCURS_WITH:
+
+?x occurs-with word1 word2 ?y is not so easy:
+
+cannot easily be transformed into an edge
+ 	subject --predicate-> object
+like other relations could.
+
+Especially

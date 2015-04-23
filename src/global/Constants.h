@@ -14,3 +14,7 @@ static const char PREFIX_CHAR = '*';
 
 static const size_t BUFFER_SIZE_RELATION_SIZE = 1000 * 1000 * 1000;
 static const size_t DISTINCT_LHS_PER_BLOCK = 10 * 1000;
+
+static const size_t OCCURS_WITH_CARDINALITY_ESTIMATE = 100 * 1000;
+
+static const char OCCURS_WITH_RELATION[] = "<occurs-with>";

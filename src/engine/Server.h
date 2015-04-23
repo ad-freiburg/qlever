@@ -33,7 +33,7 @@ public:
   typedef unordered_map<string, string> ParamValueMap;
 
   // Initialize the server.
-  void initialize(const string& ontologyBaseName);
+  void initialize(const string& ontologyBaseName, bool useText);
 
   //! Loop, wait for requests and trigger processing.
   void run();

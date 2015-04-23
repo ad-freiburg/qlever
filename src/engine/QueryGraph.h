@@ -116,6 +116,13 @@ public:
     // Updates the expected cardinality and the list of subtree results that
     // have to be joined on the columns that represent the node's label.
     void consume(Node* other, const QueryGraph::Edge& edge);
+    // Does the actual consumption. Does not handle joiningg with previously
+    // consumed subtrees, yet.
+    QueryExecutionTree consumeIntoSubtree(Node* other,
+                                          const QueryGraph::Edge& edge);
+    // Special case: realtion is occurs-with
+    QueryExecutionTree consumeOwIntoSubtree(Node* other,
+                                           const QueryGraph::Edge& edge);
 
     string asString() const;
 

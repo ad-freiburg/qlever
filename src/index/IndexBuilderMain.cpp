@@ -27,10 +27,11 @@ using std::cerr;
 
 // Available options.
 struct option options[] = {
-    {"tsv-file",       required_argument, NULL, 't'},
-    {"ntriples-file",  required_argument, NULL, 'n'},
-    {"index-basename", required_argument, NULL, 'b'},
-    {NULL, 0,                             NULL, 0}
+    {"tsv-file",          required_argument, NULL, 't'},
+    {"ntriples-file",     required_argument, NULL, 'n'},
+    {"index-basename",    required_argument, NULL, 'b'},
+    {"words-by-contexts", required_argument, NULL, 'w'},
+    {NULL, 0,                                NULL, 0}
 };
 
 string getStxxlDiskFileName(const string& location, const string& tail) {
@@ -70,10 +71,11 @@ int main(int argc, char** argv) {
   string tsvFile;
   string ntFile;
   string baseName;
+  string wordsfile;
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "t:b:n:", options, NULL);
+    int c = getopt_long(argc, argv, "t:n:b:w:", options, NULL);
     if (c == -1) { break; }
     switch (c) {
       case 't':
@@ -84,6 +86,9 @@ int main(int argc, char** argv) {
         break;
       case 'b':
         baseName = optarg;
+        break;
+      case 'w':
+        wordsfile = optarg;
         break;
       default:
         cout << endl
@@ -99,9 +104,9 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  if (tsvFile.size() == 0 && ntFile.size() == 0) {
+  if (tsvFile.size() == 0 && ntFile.size() == 0 && wordsfile.size() == 0) {
     cout << "Missing required argument --tsv-file (-t) or "
-        "--ntriples-file (-n) ..." << endl;
+        "--ntriples-file (-n) or --words-by-contexts (-w) ..." << endl;
     exit(1);
   }
 
@@ -114,13 +119,22 @@ int main(int argc, char** argv) {
   stxxlFileName = getStxxlDiskFileName(location, tail);
   LOG(DEBUG) << "done." << std::endl;
 
-  Index index;
-  if (ntFile.size() > 0) {
-    index.createFromNTriplesFile(ntFile, baseName);
-  } else {
-    index.createFromTsvFile(tsvFile, baseName);
-  }
+  try {
+    Index index;
+    if (ntFile.size() > 0) {
+      index.createFromNTriplesFile(ntFile, baseName);
+    } else if (tsvFile.size() > 0) {
+      index.createFromTsvFile(tsvFile, baseName);
+    } else {
+      index.createFromOnDiskIndex(baseName);
+    }
 
+    if (wordsfile.size() > 0) {
+      index.addTextFromContextFile(wordsfile);
+    }
+  } catch (ad_semsearch::Exception& e) {
+    LOG(ERROR) << e.getFullErrorMessage() << std::endl;
+  }
   std::remove(stxxlFileName.c_str());
   return 0;
 }

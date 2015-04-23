@@ -22,10 +22,10 @@ using std::tuple;
 
 class Index {
 public:
-  Index();
-
   typedef stxxl::VECTOR_GENERATOR<array<Id, 3>>::result ExtVec;
-  typedef stxxl::VECTOR_GENERATOR<tuple<Id, Id, Score, bool>>::result TextVec;
+  // Block Id, Context Id, Word Id, Score, entity
+  typedef stxxl::VECTOR_GENERATOR<tuple<Id, Id, Id, Score, bool>>::result TextVec;
+  typedef std::tuple<Id, Id, Score> Posting;
 
   // Creates an index from a TSV file.
   // Will write vocabulary and on-disk index data.
@@ -57,9 +57,12 @@ public:
   typedef vector<array<Id, 2>> WidthTwoList;
 
   void scanPSO(const string& predicate, WidthTwoList* result) const;
+
   void scanPSO(const string& predicate, const string& subject, WidthOneList*
   result) const;
+
   void scanPOS(const string& predicate, WidthTwoList* result) const;
+
   void scanPOS(const string& predicate, const string& object, WidthOneList*
   result) const;
 
@@ -70,50 +73,93 @@ public:
 private:
   string _onDiskBase;
   Vocabulary _vocab;
+  Vocabulary _textVocab;
   IndexMetaData _psoMeta;
   IndexMetaData _posMeta;
   TextMetaData _textMeta;
+  vector<Id> _blockBoundaries;
+  off_t _currentoff_t;
   mutable ad_utility::File _psoFile;
   mutable ad_utility::File _posFile;
+  mutable ad_utility::File _textIndexFile;
 
   size_t passTsvFileForVocabulary(const string& tsvFile);
+
   void passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data);
 
   size_t passNTriplesFileForVocabulary(const string& tsvFile);
+
   void passNTriplesFileIntoIdVector(const string& tsvFile, ExtVec& data);
 
   size_t passContextFileForVocabulary(const string& contextFile);
+
   void passContextFileIntoVector(const string& contextFile, TextVec& vec);
 
   static void createPermutation(const string& fileName,
-      const ExtVec& vec,
-      IndexMetaData& meta,
-      size_t c1, size_t c2);
+                                const ExtVec& vec,
+                                IndexMetaData& meta,
+                                size_t c1, size_t c2);
 
-  void createTextIndex(const string& filename, const TextVec& vec,
-                       TextMetaData& meta);
+  void createTextIndex(const string& filename, const TextVec& vec);
+
+  ContextListMetaData writePostings(ad_utility::File& out,
+                                    const vector<Posting>& postings,
+                                    bool skipWordlistIfAllTheSame);
 
   static RelationMetaData writeRel(ad_utility::File& out, off_t currentOffset,
-      Id relId, const vector<array<Id, 2>>& data, bool functional);
+                                   Id relId, const vector<array<Id, 2>>& data,
+                                   bool functional);
 
   static RelationMetaData& writeFunctionalRelation(
       const vector<array<Id, 2>>& data, RelationMetaData& rmd);
 
   static RelationMetaData& writeNonFunctionalRelation(ad_utility::File& out,
-      const vector<array<Id, 2>>& data, RelationMetaData& rmd);
+                                                      const vector<array<Id, 2>>& data,
+                                                      RelationMetaData& rmd);
 
   void openFileHandles();
+  void openTextFileHandle();
 
   void scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
-      Id lhsId, ad_utility::File& indexFile, WidthOneList* result) const;
+                              Id lhsId, ad_utility::File& indexFile,
+                              WidthOneList* result) const;
 
   void scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
-      const pair<off_t, size_t>& followBlock,
-      Id lhsId, ad_utility::File& indexFile, off_t upperBound,
-      WidthOneList* result) const;
+                                 const pair<off_t, size_t>& followBlock,
+                                 Id lhsId, ad_utility::File& indexFile,
+                                 off_t upperBound,
+                                 WidthOneList* result) const;
+
+  void addContextToVector(TextVec::bufwriter_type& writer, Id context,
+                          const unordered_map<Id, Score>& words,
+                          const unordered_map<Id, Score>& entities);
+
+  void calculateBlockBoundaries();
+  Id getWordBlockId(Id wordId) const;
+  Id getEntityBlockId(Id entityId) const;
+
+  //! Writes a list of elements (have to be able to be cast to unit64_t)
+  //! to file.
+  //! Returns the number of bytes written.
+  template<class Numeric>
+  size_t writeList(Numeric* data, size_t nofElements,
+                   ad_utility::File& file) const;
+
+  typedef unordered_map<Id, Id> IdCodeMap;
+  typedef unordered_map<Score, Score> ScoreCodeMap;
+  typedef vector<Id> IdCodebook;
+  typedef vector<Score> ScoreCodebook;
+
+  //! Creates codebooks for lists that are supposed to be entropy encoded.
+  void createCodebooks(const vector<Posting>& postings, IdCodeMap& wordCodemap,
+                       IdCodebook& wordCodebook, ScoreCodeMap& scoreCodemap,
+                       ScoreCodebook& scoreCodebook) const;
+
+  template <class T>
+  size_t writeCodebook(const vector<T>& codebook,
+                              ad_utility::File& file) const;
 
   // FRIEND TESTS
   friend class IndexTest_createFromTsvTest_Test;
   friend class IndexTest_createFromOnDiskIndexTest_Test;
-
 };

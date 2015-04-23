@@ -7,6 +7,7 @@
 #include "./SparqlParser.h"
 #include "./ParseException.h"
 #include "../util/Exception.h"
+#include "../global/Constants.h"
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parse(const string& query) {
@@ -187,37 +188,42 @@ void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
   while (j < str.size() && str[j] != '\t' && str[j] != ' ' &&
          str[j] != '\n') { ++j; }
   string p = str.substr(i, j - i);
-  i = j;
-  while (i < str.size() &&
-         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
-  if (i == str.size()) {
-    AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
-  }
-  if (str[i] == '<') {
-    // URI
-    j = str.find('>', i + 1);
-    if (j == string::npos) {
-      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-               "Illegal object in : " + str);
-    }
-    ++j;
+  if (p == OCCURS_WITH_RELATION) {
+    string o = ad_utility::strip(str.substr(j), " \t\n");
+    query._owTriples.push_back(SparqlTriple(s, p, o));
   } else {
-    if (str[i] == '\"') {
-      // Literal
-      j = str.find('\"', i + 1);
+    i = j;
+    while (i < str.size() &&
+           (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
+    if (i == str.size()) {
+      AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
+    }
+    if (str[i] == '<') {
+      // URI
+      j = str.find('>', i + 1);
       if (j == string::npos) {
         AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                 "Illegal literal in : " + str);
+                 "Illegal object in : " + str);
       }
       ++j;
     } else {
-      j = i + 1;
+      if (str[i] == '\"') {
+        // Literal
+        j = str.find('\"', i + 1);
+        if (j == string::npos) {
+          AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                   "Illegal literal in : " + str);
+        }
+        ++j;
+      } else {
+        j = i + 1;
+      }
+      while (j < str.size() && str[j] != ' ' && str[j] != '\t' &&
+                                                str[j] != '\n') { ++j; }
     }
-    while (j < str.size() && str[j] != ' ' && str[j] != '\t' &&
-           str[j] != '\n') { ++j; }
+    string o = str.substr(i, j - i);
+    query._whereClauseTriples.push_back(SparqlTriple(s, p, o));
   }
-  string o = str.substr(i, j - i);
-  query._whereClauseTriples.push_back(SparqlTriple(s, p, o));
 }
 
 // _____________________________________________________________________________

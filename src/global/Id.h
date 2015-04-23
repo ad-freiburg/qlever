@@ -3,5 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <cstdint>
+
 typedef uint64_t Id;
 typedef uint16_t Score;

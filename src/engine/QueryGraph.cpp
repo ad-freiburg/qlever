@@ -182,9 +182,12 @@ string QueryGraph::asString() {
 }
 
 // _____________________________________________________________________________
-void QueryGraph::Node::consume(QueryGraph::Node* other,
-                               const QueryGraph::Edge& edge) {
-
+QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
+    QueryGraph::Node* other,
+    const QueryGraph::Edge& edge) {
+  if (edge._label == OCCURS_WITH_RELATION) {
+    return consumeOwIntoSubtree(other, edge);
+  }
   QueryExecutionTree addedSubtree(_qec);
   if (other->getConsumedOperations().isEmpty()) {
     if (!other->isVariableNode()) {
@@ -245,7 +248,21 @@ void QueryGraph::Node::consume(QueryGraph::Node* other,
       addedSubtree.setVariableColumns(join.getVariableColumns());
     }
   }
+  return addedSubtree;
+}
 
+// _____________________________________________________________________________
+QueryExecutionTree QueryGraph::Node::consumeOwIntoSubtree(
+    QueryGraph::Node* other,
+    const QueryGraph::Edge& edge) {
+  QueryExecutionTree addedSubtree(_qec);
+  auto elems = ad_utility::splitAny(other->_label, " \t\n");
+
+}
+// _____________________________________________________________________________
+void QueryGraph::Node::consume(QueryGraph::Node* other,
+                               const QueryGraph::Edge& edge) {
+  QueryExecutionTree addedSubtree = consumeIntoSubtree(other, edge);
   if (_consumedOperations.isEmpty()) {
     if (addedSubtree.resultSortedOn() ==
         addedSubtree.getVariableColumn(_label)) {
@@ -284,7 +301,8 @@ void QueryGraph::Node::consume(QueryGraph::Node* other,
 size_t QueryGraph::Node::expectedCardinality(
     size_t remainingRelationCardinality) {
   if (_expectedCardinality == std::numeric_limits<size_t>::max()) {
-    if (ad_utility::startsWith(_label, "?")) {
+    if (ad_utility::startsWith(_label, "?")
+        && _label.find(' ') == string::npos) {
       if (_consumedOperations.getType() != QueryExecutionTree::UNDEFINED) {
         if (_qec) {
           _expectedCardinality = _consumedOperations.getResult().size()
@@ -308,6 +326,31 @@ void QueryGraph::createFromParsedQuery(const ParsedQuery& pq) {
     string s = addNode(pq._whereClauseTriples[i]._s);
     string o = addNode(pq._whereClauseTriples[i]._o);
     addEdge(getNodeId(s), getNodeId(o), pq._whereClauseTriples[i]._p);
+  }
+  for (size_t i = 0; i < pq._owTriples.size(); ++i) {
+    string s = addNode(pq._owTriples[i]._s);
+    auto elems = ad_utility::splitAny(pq._owTriples[i]._o, " \t\n");
+    std::ostringstream os;
+    vector<string> targetVars;
+    for (const auto& e: elems) {
+      AD_CHECK(e.size() > 0);
+      if(e[0] == '?') {
+        addNode(e);
+        targetVars.push_back(e);
+      } else {
+        os << e << " ";
+      }
+    }
+    string nonVariable = ad_utility::strip(os.str(), ' ');
+    if (nonVariable.size() == 0) {
+      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+      "Occurs-with need at least one non-varibale vor now.");
+    }
+    string intName = addNode(nonVariable);
+    addEdge(getNodeId(s), getNodeId(intName), pq._whereClauseTriples[i]._p);
+    for (const auto& v : targetVars) {
+      addEdge(getNodeId(intName), getNodeId(v), pq._whereClauseTriples[i]._p);
+    }
   }
   for (size_t i = 0; i < pq._selectedVariables.size(); ++i) {
     _selectVariables.insert(pq._selectedVariables[i]);
@@ -369,7 +412,6 @@ QueryGraph::Node::Node(const QueryGraph::Node& other) :
     _qec(other._qec),
     _expectedCardinality(other._expectedCardinality),
     _consumedOperations(other._consumedOperations) {
-
 }
 
 // _____________________________________________________________________________

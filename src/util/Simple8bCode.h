@@ -43,7 +43,7 @@ static const struct {
 //! Changed the following:
 //! Selectors 0 and 1 are used to encode long streaks of the most frequent
 //! elements. In the original paper, this is 1 since doclists are encoded.
-//! or contexts benefit less from this.
+//! our contexts benefit less from this.
 //! Especially, our frequency encoding benefits from 0's much more (esp. scores)
 //! hence we use those selectors to encode 0's instead of 1's
 class Simple8bCode {

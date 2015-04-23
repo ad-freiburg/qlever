@@ -33,5 +33,6 @@ public:
 
 private:
   std::ifstream _in;
+  Id _lastCId;
 };
 

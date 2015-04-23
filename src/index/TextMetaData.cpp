@@ -2,4 +2,186 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include <unordered_map>
 #include "./TextMetaData.h"
+#include "../util/ReadableNumberFact.h"
+
+using std::unordered_map;
+
+// _____________________________________________________________________________
+const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(const Id lower,
+                                                               const Id upper) const {
+  AD_CHECK_GE(upper, lower);
+  AD_CHECK_GT(_blocks.size(), 0);
+  AD_CHECK_EQ(_blocks.size(), _blockUpperBoundWordIds.size());
+
+
+  // Binary search in the sorted _blockUpperBoundWordIds vector.
+  vector<Id>::const_iterator it = std::lower_bound(
+      _blockUpperBoundWordIds.begin(), _blockUpperBoundWordIds.end(),
+      lower);
+
+  // If the word would be behind all that, return the last block
+  if (it == _blockUpperBoundWordIds.end()) {
+    --it;
+  }
+
+  // Use the info to retrieve an index.
+  size_t index = static_cast<size_t>(it - _blockUpperBoundWordIds.begin());
+  return _blocks[index];
+}
+
+// _____________________________________________________________________________
+size_t TextMetaData::getBlockCount() const {
+  return _blocks.size();
+}
+
+// _____________________________________________________________________________
+ad_utility::File& operator<<(ad_utility::File& f,
+                             const TextMetaData& md) {
+  auto buf = md.getBlockCount();
+  f.write(&buf, sizeof(md.getBlockCount()));
+  for (const auto& b : md._blocks) {
+    f << b;
+  }
+  return f;
+}
+
+// _____________________________________________________________________________
+TextMetaData& TextMetaData::createFromByteBuffer(unsigned char* buffer) {
+  size_t nofBlocks = *reinterpret_cast<size_t*>(buffer);
+  off_t offset = sizeof(size_t);
+  for (size_t i = 0; i < nofBlocks; ++i) {
+    TextBlockMetaData tbmd;
+    tbmd.createFromByteBuffer(buffer + offset);
+    offset += TextBlockMetaData::sizeOnDisk();
+    _blockUpperBoundWordIds.push_back(tbmd._lastWordId);
+    _blocks.emplace_back(tbmd);
+  }
+  return *this;
+}
+
+// _____________________________________________________________________________
+ad_utility::File& operator<<(ad_utility::File& f,
+                             const TextBlockMetaData& md) {
+  f.write(&md._firstWordId, sizeof(md._firstWordId));
+  f.write(&md._lastWordId, sizeof(md._lastWordId));
+  f << md._cl << md._entityCl;
+  return f;
+}
+
+// _____________________________________________________________________________
+TextBlockMetaData& TextBlockMetaData::createFromByteBuffer(
+    unsigned char* buffer) {
+  off_t offset = 0;
+  _firstWordId = *reinterpret_cast<Id*>(buffer + offset);
+  offset += sizeof(_firstWordId);
+  _lastWordId = *reinterpret_cast<Id*>(buffer + offset);
+  offset += sizeof(_lastWordId);
+  _cl.createFromByteBuffer(buffer + offset);
+  offset += ContextListMetaData::sizeOnDisk();
+  _entityCl.createFromByteBuffer(buffer + offset);
+  return *this;
+}
+
+// _____________________________________________________________________________
+ad_utility::File& operator<<(ad_utility::File& f,
+                             const ContextListMetaData& md) {
+  f.write(&md._nofElements, sizeof(md._nofElements));
+  f.write(&md._startContextlist, sizeof(md._startContextlist));
+  f.write(&md._startWordlist, sizeof(md._startWordlist));
+  f.write(&md._startScorelist, sizeof(md._startScorelist));
+  f.write(&md._lastByte, sizeof(md._lastByte));
+  return f;
+}
+
+// _____________________________________________________________________________
+ContextListMetaData& ContextListMetaData::createFromByteBuffer(
+    unsigned char* buffer) {
+  off_t offset = 0;
+  _nofElements = *reinterpret_cast<size_t*>(buffer + offset);
+  offset += sizeof(_nofElements);
+  _startContextlist = *reinterpret_cast<off_t*>(buffer + offset);
+  offset += sizeof(_startContextlist);
+  _startWordlist = *reinterpret_cast<off_t*>(buffer + offset);
+  offset += sizeof(_startWordlist);
+  _startScorelist = *reinterpret_cast<off_t*>(buffer + offset);
+  offset += sizeof(_startScorelist);
+  _lastByte = *reinterpret_cast<off_t*>(buffer + offset);
+  return *this;
+}
+
+// _____________________________________________________________________________
+string TextMetaData::statistics() const {
+  std::ostringstream os;
+  std::locale loc;
+  ad_utility::ReadableNumberFacet facet(1);
+  std::locale locWithNumberGrouping(loc, &facet);
+  os.imbue(locWithNumberGrouping);
+  os << '\n';
+  os << "-------------------------------------------------------------------\n";
+  os << "----------------------------------\n";
+  os << "Text Index Statistics:\n";
+  os << "----------------------------------\n\n";
+  os << "# Blocks: " << _blocks.size() << '\n';
+  size_t totalElementsClassicLists = 0;
+  size_t totalElementsEntityLists = 0;
+  size_t totalBytesClassicLists = 0;
+  size_t totalBytesEntityLists = 0;
+  size_t totalBytesCls = 0;
+  size_t totalBytesWls = 0;
+  size_t totalBytesSls = 0;
+  for (size_t i = 0; i < _blocks.size(); ++i) {
+    const ContextListMetaData& wcl = _blocks[i]._cl;
+    const ContextListMetaData& ecl = _blocks[i]._entityCl;
+
+    totalElementsClassicLists += wcl._nofElements;
+    totalElementsEntityLists += ecl._nofElements;
+
+    totalBytesClassicLists += 1 + wcl._lastByte - wcl._startContextlist;
+    totalBytesEntityLists += 1 + ecl._lastByte - ecl._startContextlist;
+
+    totalBytesCls += wcl._startWordlist - wcl._startContextlist;
+    totalBytesCls += ecl._startWordlist - ecl._startContextlist;
+    totalBytesWls += wcl._startScorelist - wcl._startWordlist;
+    totalBytesWls += ecl._startScorelist - ecl._startWordlist;
+    totalBytesSls += 1 + wcl._lastByte - wcl._startScorelist;
+    totalBytesSls += 1 + ecl._lastByte - ecl._startScorelist;
+  }
+  os << "-------------------------------------------------------------------\n";
+  os << "# Elements: " <<
+  totalElementsClassicLists + totalElementsEntityLists << '\n';
+  os << "  thereof:\n";
+  os << "    Elements in classic lists: " << totalElementsClassicLists << '\n';
+  os << "    Elements in entity lists:  " << totalElementsEntityLists << '\n';
+  os << "-------------------------------------------------------------------\n";
+  os << "# Bytes: " <<
+  totalBytesClassicLists + totalBytesEntityLists << '\n';
+  os << "  thereof:\n";
+  os << "    Bytes in classic lists: " << totalBytesClassicLists << '\n';
+  os << "    Bytes in entity lists:  " << totalBytesEntityLists << '\n';
+  os << "-------------------------------------------------------------------\n";
+  os << "Breakdown:\n";
+  os << "    Bytes in context / doc lists: " << totalBytesCls << '\n';
+  os << "    Bytes in word lists:          " << totalBytesWls << '\n';
+  os << "    Bytes in score lists:         " << totalBytesSls << '\n';
+  os << "-------------------------------------------------------------------\n";
+  os << "\n";
+  os << "-------------------------------------------------------------------\n";
+  os << "Theoretical (naiive) size: " <<
+  (totalElementsClassicLists + totalElementsEntityLists) *
+  (2 * sizeof(Id) + sizeof(Score)) << '\n';
+  os << "-------------------------------------------------------------------\n";
+  return os.str();
+}
+
+// _____________________________________________________________________________
+void TextMetaData::addBlock(const TextBlockMetaData& md) {
+  _blocks.push_back(md);
+  _blockUpperBoundWordIds.push_back(md._lastWordId);
+}
+
+// _____________________________________________________________________________
+off_t TextMetaData::getOffsetAfter() {
+  return _blocks.back()._entityCl._lastByte + 1;
+}

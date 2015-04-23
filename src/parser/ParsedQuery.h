@@ -77,6 +77,7 @@ public:
   vector<SparqlPrefix> _prefixes;
   vector<string> _selectedVariables;
   vector<SparqlTriple> _whereClauseTriples;
+  vector<SparqlTriple> _owTriples;
   vector<SparqlFilter> _filters;
   vector<OrderKey> _orderBy;
   string _limit;

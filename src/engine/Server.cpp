@@ -14,11 +14,14 @@
 
 
 // _____________________________________________________________________________
-void Server::initialize(const string& ontologyBaseName) {
+void Server::initialize(const string& ontologyBaseName, bool useText) {
   LOG(INFO) << "Initializing server..." << std::endl;
 
   // Init the index.
   _index.createFromOnDiskIndex(ontologyBaseName);
+  if (useText) {
+    _index.addTextFromOnDiskIndex();
+  }
 
   // Init the server socket.
   bool ret = _serverSocket.create() && _serverSocket.bind(_port)

@@ -118,6 +118,26 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ("?y", pq._filters[0]._rhs);
     ASSERT_EQ(SparqlFilter::FilterType::NE, pq._filters[0]._type);
     ASSERT_EQ(2, pq._whereClauseTriples.size());
+    ASSERT_EQ(0, pq._owTriples.size());
+
+
+    pq = SparqlParser::parse(
+        "SELECT ?x ?y WHERE {?x is-a Actor .  FILTER(?x != ?y)."
+            "?y is-a Actor. ?x <occurs-with> friend ?y."
+            "?y <occurs-with> coca* abuse} LIMIT 10");
+    pq.expandPrefixes();
+    ASSERT_EQ(1, pq._filters.size());
+    ASSERT_EQ("?x", pq._filters[0]._lhs);
+    ASSERT_EQ("?y", pq._filters[0]._rhs);
+    ASSERT_EQ(SparqlFilter::FilterType::NE, pq._filters[0]._type);
+    ASSERT_EQ(2, pq._whereClauseTriples.size());
+    ASSERT_EQ(2, pq._owTriples.size());
+    ASSERT_EQ("?x", pq._owTriples[0]._s);
+    ASSERT_EQ("<occurs-with>", pq._owTriples[0]._p);
+    ASSERT_EQ("friend ?y", pq._owTriples[0]._o);
+    ASSERT_EQ("?y", pq._owTriples[1]._s);
+    ASSERT_EQ("<occurs-with>", pq._owTriples[1]._p);
+    ASSERT_EQ("coca* abuse", pq._owTriples[1]._o);
   }
   catch (const ad_semsearch::Exception& e) {
     FAIL() << e.getFullErrorMessage();

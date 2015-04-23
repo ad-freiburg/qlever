@@ -3,8 +3,104 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <cstdio>
+#include <vector>
+#include "../global/Id.h"
+#include "../util/Exception.h"
+#include "../util/File.h"
 
-class TextMetaData {
+using std::vector;
 
+class ContextListMetaData {
+public:
+  ContextListMetaData() : _nofElements(), _startContextlist(0),
+                          _startWordlist(0), _startScorelist(0), _lastByte(0) {
+  }
+
+  ContextListMetaData(size_t nofElements, off_t startCl,
+                      off_t startWl, off_t startSl, off_t lastByte) :
+      _nofElements(nofElements), _startContextlist(startCl),
+      _startWordlist(startWl), _startScorelist(startSl), _lastByte(lastByte) { }
+
+  size_t _nofElements;
+  off_t _startContextlist;
+  off_t _startWordlist;
+  off_t _startScorelist;
+  off_t _lastByte;
+
+  bool hasMultipleWords() {
+    return _startScorelist > _startWordlist;
+  }
+
+  // Restores meta data from raw memory.
+  // Needed when registering an index on startup.
+  ContextListMetaData& createFromByteBuffer(unsigned char* buffer);
+
+  static constexpr size_t sizeOnDisk() {
+    return sizeof(size_t) + 4 * sizeof(off_t);
+  }
+
+  friend ad_utility::File& operator<<(ad_utility::File& f,
+                                      const ContextListMetaData& md);
 };
 
+ad_utility::File& operator<<(ad_utility::File& f,
+                             const ContextListMetaData& md);
+
+class TextBlockMetaData {
+public:
+  TextBlockMetaData() : _firstWordId(), _lastWordId(), _cl(), _entityCl() { }
+
+  TextBlockMetaData(Id firstWordId, Id lastWordId,
+                    const ContextListMetaData& cl,
+                    const ContextListMetaData& entityCl) :
+      _firstWordId(firstWordId), _lastWordId(lastWordId),
+      _cl(cl), _entityCl(entityCl) { }
+
+  Id _firstWordId;
+  Id _lastWordId;
+  ContextListMetaData _cl;
+  ContextListMetaData _entityCl;
+
+  static constexpr size_t sizeOnDisk() {
+    return 2 * sizeof(Id) + 2 * ContextListMetaData::sizeOnDisk();
+  }
+
+  // Restores meta data from raw memory.
+  // Needed when registering an index on startup.
+  TextBlockMetaData& createFromByteBuffer(unsigned char* buffer);
+
+  friend ad_utility::File& operator<<(ad_utility::File& f,
+                                      const TextBlockMetaData& md);
+};
+
+ad_utility::File& operator<<(ad_utility::File& f, const TextBlockMetaData& md);
+
+class TextMetaData {
+public:
+  //! Get the corresponding block meta data for some word or entity Id range.
+  //! Currently assumes that the range lies in a single block.
+  const TextBlockMetaData& getBlockInfoByWordRange(const Id lower,
+                                                   const Id upper) const;
+
+  size_t getBlockCount() const;
+
+  // Restores meta data from raw memory.
+  // Needed when registering an index on startup.
+  TextMetaData& createFromByteBuffer(unsigned char* buffer);
+
+  string statistics() const;
+
+  void addBlock(const TextBlockMetaData& md);
+
+  off_t getOffsetAfter();
+
+private:
+  vector<Id> _blockUpperBoundWordIds;
+  vector<TextBlockMetaData> _blocks;
+
+  friend ad_utility::File& operator<<(ad_utility::File& f,
+                                      const TextMetaData& md);
+};
+
+ad_utility::File& operator<<(ad_utility::File& f, const TextMetaData& md);

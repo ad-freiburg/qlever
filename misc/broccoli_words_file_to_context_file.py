@@ -18,7 +18,7 @@ def writeContextFileToStdout(wordsfile):
 				entityFlag = '1'
 			else:
 				entityFlag = '0'
-			print '\t'.join([entityFlag, cols[0], cols[1], cols[3]])
+			print '\t'.join([cols[0], entityFlag, cols[1], cols[3]])
 
 
 def main():

@@ -27,11 +27,12 @@ using std::cerr;
 struct option options[] = {
   {"ontology-basename", required_argument, NULL, 'o'},
   {"port", required_argument, NULL, 'p'},
+  {"text", no_argument, NULL, 't'},
   {NULL, 0, NULL, 0}
 };
 
 void printUsage() {
-  cout << "Usage: ./ServerMain -p <PORT> -o <ontology-basename>" << endl;
+  cout << "Usage: ./ServerMain -p <PORT> -o <ontology-basename> (-t)" << endl;
 }
 
 // Main function.
@@ -51,12 +52,13 @@ int main(int argc, char** argv) {
   // Init variables that may or may not be
   // filled / set depending on the options.
   string ontologyBase = "";
+  bool text = false;
   int port = -1;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "o:p:", options, NULL);
+    int c = getopt_long(argc, argv, "o:p:t", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'o':
@@ -64,6 +66,9 @@ int main(int argc, char** argv) {
         break;
       case 'p':
         port = atoi(optarg);
+        break;
+      case 't':
+        text = true;
         break;
       default:
         cout << endl
@@ -81,7 +86,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port);
-    server.initialize(ontologyBase);
+    server.initialize(ontologyBase, text);
     server.run();
   } catch(const ad_semsearch::Exception& e) {
     LOG(ERROR) << e.getFullErrorMessage() << '\n';
