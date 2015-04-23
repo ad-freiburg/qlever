@@ -19,10 +19,78 @@ array x vector -> vector and finally vector x vector -> vector.
 
 On OCCURS_WITH:
 
-?x occurs-with word1 word2 ?y is not so easy:
+?x occurs-with word1 word2 ?y ?z is not so easy:
 
 cannot easily be transformed into an edge
- 	subject --predicate-> object
+ 	subject --predicate-- object
 like other relations could.
 
-Especially
+Especially, because
+?x occurs-with word
+is also a thing.
+
+Solution:
+                  ?y
+                 /
+?x -- [word1 word2]
+                 \
+                  ?z
+
+Problem #1:
+This is not really reflected in a syntax like occurs-with (words vars).
+The graphical representation (and syntax variations like "text-occurrence")
+do not reflect the fact that ?x ?y ?z have to occur in the same context, though.
+
+
+
+ALTERNATIVE:
+
+      ?y
+       |
+?x -- ?c -- "word1 word2"
+       |
+       ?z
+
+BENEFIT: Works very well with SELECT EXCERPT(?c)
+NEXT BENEFIT:
+Would have other relations to CIDs
+DRAWBACK 1: Possible many c-ids carried through query. Solution: Limit them.
+DRAWBACK: very weird semantics. When collapsing tree, words should be first,
+but actually two of the three variables have to be computed first and then
+words are used as entry point for co-occurring entities.
+
+ALTERNATIVE2:
+
+      ?y
+       |
+?x -- ?c [word1 word2]
+       |
+       ?z
+
+FOR THE SIMPLE CASE
+
+?x -- ?c [word]
+
+SOLUTION: no longer as weired semantics.
+need to collapse the smallest subtrees behind the variable first,
+then use the words as extra info during the final consume.
+
+PROBLEM:
+Unclear if ?c will get consumed by the last variable
+or the other way round. Broccoli-Style it should never be all vars into ?c...
+but the first 2 vars HAVE to go into c.
+
+SOLUTION?????:
+Make it so context nodes get cosumed as early as possible.
+
+
+General Problem with o/w:
+
+In Broccoli, matches were only so many. Here, for matching contexts,
+a cross-product has to be built.
+HARD: This might add the same tuple multiple times
+(for multiple matching contexts)
+
+BIG BENEFIT:
+Can add stuff like FILTER(?x != ?y) and FINALLY answer ?x friend* ?y queries
+properly!!!
