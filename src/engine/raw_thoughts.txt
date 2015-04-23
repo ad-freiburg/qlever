@@ -1,18 +1,23 @@
 Thoughts on open TODOS:
 
-1. Evaluate filters as early as possible.
-- A filter with one variable is essentially another realtion on that var.
+TODO: Evaluate filters as early as possible.
+- A filter with one variable is essentially another relation on that var.
 - A filter with two variables will be applied as soon as both nodes are collapsed
+Right now Filters with two varibales are implemented but they are processed in the end.
+This is possibly not optimal. Think of:
 
-2. DISTINCT makes sense to be applied before ODER BY but has to be "after" projection.
-Easy solution: only look at projection vars but do it before order by.
+?x mother ?m
+?y mother ?m
+?x super-large-name-relation ?name1
+?y super-large-name-relation ?name2
+FILTER(?x != ?y)
 
-3. Non-tree queries are solved by identifying circles and then removing an edge.
+with the name relation having multiple names for each entity.
+processing the filter earlier would be much, much better.
+
+
+Non-tree queries are solved by identifying circles and then removing an edge.
 Open: the smallest or largest relation? Probably the largest to keep the small-first pattern for joins.
-
-The re-write from array to vector can actually only happen during join. Hence it could be responsibility of a join operation.
-Ideally, there would be join methods for array x array -> vector and then
-array x vector -> vector and finally vector x vector -> vector.
 
 
 ---
@@ -24,6 +29,8 @@ On OCCURS_WITH:
 cannot easily be transformed into an edge
  	subject --predicate-- object
 like other relations could.
+
+I THINK: it can be reversed. At least we do something like that in Broccoli.
 
 Especially, because
 ?x occurs-with word
@@ -81,7 +88,7 @@ or the other way round. Broccoli-Style it should never be all vars into ?c...
 but the first 2 vars HAVE to go into c.
 
 SOLUTION?????:
-Make it so context nodes get cosumed as early as possible.
+Make it so context nodes get consumed as early as possible.
 
 
 General Problem with o/w:
