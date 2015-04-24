@@ -13,6 +13,7 @@ add_library(engine
               IndexScan.h IndexScan.cpp
               Join.h Join.cpp
               Sort.h Sort.cpp
+              TextOperation.h TextOperation.cpp
               Distinct.h Distinct.cpp
               OrderBy.h OrderBy.cpp
               Filter.h Filter.cpp

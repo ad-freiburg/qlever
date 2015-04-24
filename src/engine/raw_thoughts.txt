@@ -89,7 +89,8 @@ but the first 2 vars HAVE to go into c.
 
 SOLUTION?????:
 Make it so context nodes get consumed as early as possible.
-
+Does not help in o/w is the last edge and the question is in which direction
+to collapse. Better to look at nodes then and identify context nodes.
 
 General Problem with o/w:
 

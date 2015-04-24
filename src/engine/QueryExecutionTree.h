@@ -19,7 +19,7 @@ public:
   explicit QueryExecutionTree(QueryExecutionContext* qec);
 
   // Copy constructor
-  explicit QueryExecutionTree(const QueryExecutionTree& other);
+  QueryExecutionTree(const QueryExecutionTree& other);
 
   // Assignment operator
   QueryExecutionTree& operator=(const QueryExecutionTree& other);
@@ -33,7 +33,8 @@ public:
     SORT = 3,
     ORDER_BY = 4,
     FILTER = 5,
-    DISTINCT = 6
+    DISTINCT = 6,
+    TEXT = 7
   };
 
   void setOperation(OperationType type, Operation* op);

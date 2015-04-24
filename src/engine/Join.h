@@ -6,12 +6,11 @@
 #include <list>
 #include <unordered_map>
 #include "./Operation.h"
+#include "./QueryExecutionTree.h"
 
 using std::list;
 using std::unordered_map;
 
-// Forward declare QueryExecutionTree, the type of subtrees iunder a join.
-class QueryExecutionTree;
 
 class Join : public Operation {
 public:

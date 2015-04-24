@@ -103,11 +103,15 @@ public:
   struct Node {
   public:
     Node(QueryExecutionContext* qec, const string& label);
+
     virtual ~Node();
+
     explicit Node(const Node& other);
+
     Node& operator=(const Node& other);
 
     string _label;
+    bool _isContextNode;
 
     // Consumes another node. i.e. it includes the calculations made for that
     // other node to the calculations made for this node.
@@ -116,13 +120,15 @@ public:
     // Updates the expected cardinality and the list of subtree results that
     // have to be joined on the columns that represent the node's label.
     void consume(Node* other, const QueryGraph::Edge& edge);
+
     // Does the actual consumption. Does not handle joiningg with previously
     // consumed subtrees, yet.
     QueryExecutionTree consumeIntoSubtree(Node* other,
                                           const QueryGraph::Edge& edge);
-    // Special case: realtion is occurs-with
-    QueryExecutionTree consumeOwIntoSubtree(Node* other,
-                                           const QueryGraph::Edge& edge);
+
+    // Special case: relation is in-context
+    QueryExecutionTree consumeIcIntoSubtree(Node* other,
+                                            const QueryGraph::Edge& edge);
 
     string asString() const;
 
@@ -142,17 +148,28 @@ public:
     QueryExecutionContext* _qec;
     size_t _expectedCardinality;
     QueryExecutionTree _consumedOperations;
+    vector<QueryExecutionTree> _storedOperations;
+    string _storedWords;
   };
 
   QueryGraph();
+
   explicit QueryGraph(QueryExecutionContext* qec);
+
   ~QueryGraph();
+
   QueryGraph(const QueryGraph& other);
+
   QueryGraph& operator=(const QueryGraph& other);
 
   void createFromParsedQuery(const ParsedQuery& pq);
+
   string asString();
+
   const QueryExecutionTree& getExecutionTree();
+
+  static unordered_map<string, size_t> createVariableColumnsMapForTextOperation(
+      const string& contextVar, const vector<QueryExecutionTree>& subtrees);
 
 private:
   QueryExecutionContext* _qec;  // No ownership, don't delete.
@@ -166,23 +183,37 @@ private:
   size_t _nofTerminals;
 
   void collapseNode(size_t u);
+
   Node* collapseAndCreateExecutionTree();
+
   string addNode(const string& label);
+
   void addEdge(size_t u, size_t v, const string& label);
+
   size_t getNodeId(const string& label) const;
+
   Node* getNode(size_t nodeId);
+
   Node* getNode(const string& label);
+
   vector<size_t> getNodesWithDegreeOne() const;
+
   void applyFilters(const QueryExecutionTree& treeSoFar,
                     QueryExecutionTree* treeAfter);
+
   void applySolutionModifiers(const QueryExecutionTree& treeSoFar,
-      QueryExecutionTree* finalTree) const;
+                              QueryExecutionTree* finalTree) const;
 
 
   friend class QueryGraphTest_testAddNode_Test;
+
   friend class QueryGraphTest_testAddEdge_Test;
+
   friend class QueryGraphTest_testCollapseNode_Test;
+
   friend class QueryGraphTest_testCreate_Test;
+
   friend class QueryGraphTest_testCollapseByHand_Test;
+
   friend class QueryGraphTest_testCollapseAndCreateExecutionTree_Test;
 };

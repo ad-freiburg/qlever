@@ -9,15 +9,12 @@
 #include <unordered_map>
 #include "./Operation.h"
 #include "./IndexScan.h"
-#include "QueryExecutionTree.h"
+#include "./QueryExecutionTree.h"
 
 using std::list;
 using std::unordered_map;
 using std::pair;
 using std::vector;
-
-// Forward declare QueryExecutionTree, the type of the subtree.
-class QueryExecutionTree;
 
 class OrderBy : public Operation {
 public:

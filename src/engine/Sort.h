@@ -6,13 +6,12 @@
 #include <list>
 #include <unordered_map>
 #include "./Operation.h"
-#include "./IndexScan.h"
+#include "./QueryExecutionTree.h"
+
 
 using std::list;
 using std::unordered_map;
 
-// Forward declare QueryExecutionTree, the type of the subtree.
-class QueryExecutionTree;
 
 class Sort : public Operation {
 public:

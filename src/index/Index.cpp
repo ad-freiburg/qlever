@@ -483,8 +483,8 @@ void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
 
 // _____________________________________________________________________________
 size_t Index::relationCardinality(const string& relationName) const {
-  if (relationName == OCCURS_WITH_RELATION) {
-    return OCCURS_WITH_CARDINALITY_ESTIMATE;
+  if (relationName == IN_CONTEXT_RELATION) {
+    return IN_CONTEXT_CARDINALITY_ESTIMATE;
   }
   Id relId;
   if (_vocab.getId(relationName, &relId)) {

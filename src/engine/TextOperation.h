@@ -9,39 +9,30 @@
 #include <unordered_map>
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
-#include "../parser/ParsedQuery.h"
 
 using std::list;
 using std::unordered_map;
 using std::pair;
 using std::vector;
 
-class Filter : public Operation {
+class TextOperation : public Operation {
 public:
   virtual size_t getResultWidth() const;
 
 public:
 
-  Filter(QueryExecutionContext* qec, const QueryExecutionTree& subtree,
-      SparqlFilter::FilterType type, size_t var1Column, size_t var2Column);
-
-  Filter(const Filter& other);
-
-  Filter& operator=(const Filter& other);
-
-  virtual ~Filter();
+  TextOperation(QueryExecutionContext* qec, const string& words,
+                const vector<QueryExecutionTree>& subtrees);
 
   virtual string asString() const;
 
   virtual size_t resultSortedOn() const {
-    return _subtree->resultSortedOn();
+    return 0;
   }
 
 private:
-  QueryExecutionTree* _subtree;
-  SparqlFilter::FilterType _type;
-  size_t _lhsInd;
-  size_t _rhsInd;
+  string _words;
+  vector<QueryExecutionTree> _subtrees;
 
   virtual void computeResult(ResultTable* result) const;
 };

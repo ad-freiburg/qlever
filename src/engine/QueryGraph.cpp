@@ -7,6 +7,7 @@
 #include <vector>
 #include <iostream>
 #include <limits>
+#include "./QueryExecutionTree.h"
 #include "./QueryGraph.h"
 #include "./IndexScan.h"
 #include "./Join.h"
@@ -14,6 +15,7 @@
 #include "./OrderBy.h"
 #include "./Distinct.h"
 #include "./Filter.h"
+#include "./TextOperation.h"
 
 using std::ostringstream;
 using std::vector;
@@ -185,8 +187,25 @@ string QueryGraph::asString() {
 QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
     QueryGraph::Node* other,
     const QueryGraph::Edge& edge) {
-  if (edge._label == OCCURS_WITH_RELATION) {
-    return consumeOwIntoSubtree(other, edge);
+  if (edge._label == IN_CONTEXT_RELATION) {
+    if (other->_isContextNode) {
+      // Do the pendent to the Broccoli occurs-with operation.
+      return consumeIcIntoSubtree(other, edge);
+    } else {
+      // Case: *this is the context node.
+      // We ensure that it is consumed later on by consumeIcIntoSubtree.
+      // Since consumeIcIntoSubtree is an operation that unites multiple
+      // subtrees at once, we can just save the subtree here and do not
+      // instantiate an Operation like in all other cases.
+      if (other->getConsumedOperations().isEmpty()) {
+        this->_storedWords += other->_label;
+      } else {
+        this->_storedOperations.push_back(other->getConsumedOperations());
+      }
+      // TODO: Take care of the special case: select ?c... word in ?c
+      // Return a dummy tree that will do unused.
+      return QueryExecutionTree(_qec);
+    }
   }
   QueryExecutionTree addedSubtree(_qec);
   if (other->getConsumedOperations().isEmpty()) {
@@ -252,17 +271,29 @@ QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
 }
 
 // _____________________________________________________________________________
-QueryExecutionTree QueryGraph::Node::consumeOwIntoSubtree(
+QueryExecutionTree QueryGraph::Node::consumeIcIntoSubtree(
     QueryGraph::Node* other,
     const QueryGraph::Edge& edge) {
-  QueryExecutionTree addedSubtree(_qec);
-  auto elems = ad_utility::splitAny(other->_label, " \t\n");
+  // When called a few things have to hold:
+  AD_CHECK(other->_isContextNode);
+  if (other->_storedWords.size() == 0) {
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+             "Contexts have to be connected to at least one word or entity for now.");
+  }
 
+  QueryExecutionTree addedSubtree(_qec);
+  TextOperation textOp(_qec, other->_storedWords, other->_storedOperations);
+  addedSubtree.setOperation(QueryExecutionTree::TEXT, &textOp);
+  addedSubtree.setVariableColumns(
+      QueryGraph::createVariableColumnsMapForTextOperation(_label,
+                                                           _storedOperations));
+  return addedSubtree;
 }
+
 // _____________________________________________________________________________
 void QueryGraph::Node::consume(QueryGraph::Node* other,
                                const QueryGraph::Edge& edge) {
-  QueryExecutionTree addedSubtree = consumeIntoSubtree(other, edge);
+  QueryExecutionTree addedSubtree(consumeIntoSubtree(other, edge));
   if (_consumedOperations.isEmpty()) {
     if (addedSubtree.resultSortedOn() ==
         addedSubtree.getVariableColumn(_label)) {
@@ -326,30 +357,13 @@ void QueryGraph::createFromParsedQuery(const ParsedQuery& pq) {
     string s = addNode(pq._whereClauseTriples[i]._s);
     string o = addNode(pq._whereClauseTriples[i]._o);
     addEdge(getNodeId(s), getNodeId(o), pq._whereClauseTriples[i]._p);
-  }
-  for (size_t i = 0; i < pq._owTriples.size(); ++i) {
-    string s = addNode(pq._owTriples[i]._s);
-    auto elems = ad_utility::splitAny(pq._owTriples[i]._o, " \t\n");
-    std::ostringstream os;
-    vector<string> targetVars;
-    for (const auto& e: elems) {
-      AD_CHECK(e.size() > 0);
-      if(e[0] == '?') {
-        addNode(e);
-        targetVars.push_back(e);
-      } else {
-        os << e << " ";
+    if (pq._whereClauseTriples[i]._p == IN_CONTEXT_RELATION) {
+      if (s[0] != '?') {
+        getNode(getNodeId(o))->_isContextNode = true;
       }
-    }
-    string nonVariable = ad_utility::strip(os.str(), ' ');
-    if (nonVariable.size() == 0) {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-      "Occurs-with need at least one non-varibale vor now.");
-    }
-    string intName = addNode(nonVariable);
-    addEdge(getNodeId(s), getNodeId(intName), pq._whereClauseTriples[i]._p);
-    for (const auto& v : targetVars) {
-      addEdge(getNodeId(intName), getNodeId(v), pq._whereClauseTriples[i]._p);
+      if (o[0] != '?') {
+        getNode(getNodeId(s))->_isContextNode = true;
+      }
     }
   }
   for (size_t i = 0; i < pq._selectedVariables.size(); ++i) {
@@ -396,9 +410,12 @@ QueryGraph::Node* QueryGraph::collapseAndCreateExecutionTree() {
 QueryGraph::Node::Node(QueryExecutionContext* qec,
                        const string& label) :
     _label(label),
+    _isContextNode(false),
     _qec(qec),
     _expectedCardinality(std::numeric_limits<size_t>::max()),
-    _consumedOperations(QueryExecutionTree(qec)) {
+    _consumedOperations(QueryExecutionTree(qec)),
+    _storedOperations(),
+    _storedWords() {
 }
 
 // _____________________________________________________________________________
@@ -409,17 +426,23 @@ QueryGraph::Node::~Node() {
 // _____________________________________________________________________________
 QueryGraph::Node::Node(const QueryGraph::Node& other) :
     _label(other._label),
+    _isContextNode(other._isContextNode),
     _qec(other._qec),
     _expectedCardinality(other._expectedCardinality),
-    _consumedOperations(other._consumedOperations) {
+    _consumedOperations(other._consumedOperations),
+    _storedOperations(other._storedOperations),
+    _storedWords(other._storedWords) {
 }
 
 // _____________________________________________________________________________
 QueryGraph::Node& QueryGraph::Node::operator=(QueryGraph::Node const& other) {
   _label = other._label;
+  _isContextNode = other._isContextNode;
   _qec = other._qec;
   _expectedCardinality = other._expectedCardinality;
   _consumedOperations = other._consumedOperations;
+  _storedOperations = other._storedOperations;
+  _storedWords = other._storedWords;
   return *this;
 }
 
@@ -490,4 +513,23 @@ void QueryGraph::applyFilters(const QueryExecutionTree& treeSoFar,
                   treeSoFar.getVariableColumn(f._rhs));
     treeAfter->setOperation(QueryExecutionTree::FILTER, &filter);
   }
+}
+
+// _____________________________________________________________________________
+unordered_map<string, size_t>
+QueryGraph::createVariableColumnsMapForTextOperation(
+    const string& contextVar,
+    const vector<QueryExecutionTree>& subtrees) {
+  unordered_map<string, size_t> map;
+  size_t n = 0;
+  map[contextVar] = n++;
+  for (size_t i = 0; i < subtrees.size(); ++i) {
+    size_t offset = n;
+    for (auto it = subtrees[i].getVariableColumnMap().begin();
+         it != subtrees[i].getVariableColumnMap().end(); ++it) {
+      map[it->first] = offset + it->second;
+      ++n;
+    }
+  }
+  return map;
 }

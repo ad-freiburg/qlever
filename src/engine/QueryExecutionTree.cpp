@@ -12,6 +12,7 @@
 #include "./OrderBy.h"
 #include "./Filter.h"
 #include "./Distinct.h"
+#include "TextOperation.h"
 
 using std::string;
 
@@ -52,6 +53,10 @@ QueryExecutionTree::QueryExecutionTree(const QueryExecutionTree& other) :
     case OperationType::DISTINCT:
       _rootOperation = new Distinct(
           *static_cast<Distinct*>(other._rootOperation));
+      break;
+    case OperationType::TEXT:
+      _rootOperation = new TextOperation(
+          *static_cast<TextOperation*>(other._rootOperation));
       break;
     case UNDEFINED:
     default:
@@ -109,6 +114,10 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
     case OperationType::DISTINCT:
       delete _rootOperation;
       _rootOperation = new Distinct(*static_cast<Distinct*>(op));
+      break;
+    case OperationType::TEXT:
+      delete _rootOperation;
+      _rootOperation = new TextOperation(*static_cast<TextOperation*>(op));
       break;
     default: AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, "Cannot set "
         "an operation with undefined type.");
