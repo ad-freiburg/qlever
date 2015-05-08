@@ -113,9 +113,9 @@ private:
   IndexMetaData _psoMeta;
   IndexMetaData _posMeta;
   TextMetaData _textMeta;
+  DocsDB _docsDB;
   vector<Id> _blockBoundaries;
   off_t _currentoff_t;
-  DocsDB _docsDB;
   mutable ad_utility::File _psoFile;
   mutable ad_utility::File _posFile;
   mutable ad_utility::File _textIndexFile;

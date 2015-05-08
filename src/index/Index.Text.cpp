@@ -30,7 +30,7 @@ void Index::buildDocsDB(const string& docsFileName) {
   ad_utility::File docsFile(docsFileName.c_str(), "r");
   ad_utility::File out(string(_onDiskBase + ".text.docsDB").c_str(), "w");
   off_t currentOffset = 0;
-  char* buf = new char[BUFFER_SIZE_DOCSFILE_LINE];
+  char *buf = new char[BUFFER_SIZE_DOCSFILE_LINE];
   string line;
   while (docsFile.readLine(&line, buf, BUFFER_SIZE_DOCSFILE_LINE)) {
     out.writeLine(line);
@@ -56,7 +56,7 @@ void Index::addTextFromOnDiskIndex() {
   AD_CHECK(_textIndexFile.isOpen());
   off_t metaFrom;
   off_t metaTo = _textIndexFile.getLastOffset(&metaFrom);
-  unsigned char* buf = new unsigned char[metaTo - metaFrom];
+  unsigned char *buf = new unsigned char[metaTo - metaFrom];
   _textIndexFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
   _textMeta.createFromByteBuffer(buf);
   delete[] buf;
@@ -65,7 +65,7 @@ void Index::addTextFromOnDiskIndex() {
   if (f.good()) {
     f.close();
     LOG(INFO) << "Docs DB exists. Reading excerpt offsets...\n";
-    //_docsDB.init(string(_onDiskBase + ".text.docsDB"));
+    _docsDB.init(string(_onDiskBase + ".text.docsDB"));
     LOG(INFO) << "Done reading excerpt offsets." << endl;
   } else {
     LOG(INFO) << "No Docs DB found.\n";
@@ -266,9 +266,9 @@ ContextListMetaData Index::writePostings(ad_utility::File& out,
 
   // Collect the individual lists
   // Context lists are gap encoded, word and score lists frequency encoded.
-  Id* contextList = new Id[meta._nofElements];
-  Id* wordList = new Id[meta._nofElements];
-  Score* scoreList = new Score[meta._nofElements];
+  Id *contextList = new Id[meta._nofElements];
+  Id *wordList = new Id[meta._nofElements];
+  Score *scoreList = new Score[meta._nofElements];
 
   size_t n = 0;
 
@@ -369,10 +369,10 @@ Id Index::getEntityBlockId(Id entityId) const {
 
 // _____________________________________________________________________________
 template<typename Numeric>
-size_t Index::writeList(Numeric* data, size_t nofElements,
+size_t Index::writeList(Numeric *data, size_t nofElements,
                         ad_utility::File& file) const {
   if (nofElements > 0) {
-    uint64_t* encoded = new uint64_t[nofElements];
+    uint64_t *encoded = new uint64_t[nofElements];
     size_t size = ad_utility::Simple8bCode::encode(data, nofElements,
                                                    encoded);
     size_t ret = file.write(encoded, size);
@@ -459,20 +459,31 @@ const string& Index::wordIdToString(Id id) const {
 
 // _____________________________________________________________________________
 void Index::getContextListForWords(const string& words,
-                                   Index::WidthTwoList* result) const {
+                                   Index::WidthTwoList *result) const {
   LOG(DEBUG) << "In getContextListForWords...\n";
   auto terms = ad_utility::split(words, ' ');
   AD_CHECK(terms.size() > 0);
 
-  if (terms.size() > 1) {
-    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-             "No multi word queries, yet.")
-  }
-
-  string term = terms[0];
   vector<Id> cids;
   vector<Score> scores;
-  getWordPostingsForTerm(term, cids, scores);
+  if (terms.size() > 1) {
+    vector<vector<Id>> cidVecs;
+    vector<vector<Score>> scoreVecs;
+    for (auto& term: terms) {
+      cidVecs.push_back(vector<Id>());
+      scoreVecs.push_back(vector<Score>());
+      getWordPostingsForTerm(term, cidVecs.back(), scoreVecs.back());
+    }
+    if (cidVecs.size() == 2) {
+      intersectTwoPostingLists(cidVecs[0], scoreVecs[1], cidVecs[1],
+                               scoreVecs[1], cids, scores);
+    } else {
+      intersectKWay(cidVecs, scoreVecs, cids, scores);
+    }
+  } else {
+    getWordPostingsForTerm(terms[0], cids, scores);
+  }
+
 
   LOG(DEBUG) << "Packing lists into a ResultTable\n...";
   result->reserve(cids.size() + 2);
@@ -542,21 +553,54 @@ void Index::getWordPostingsForTerm(const string& term, vector<Id>& cids,
 
 // _____________________________________________________________________________
 void Index::getECListForWords(const string& words,
-                              Index::WidthThreeList* result) const {
+                              Index::WidthThreeList *result) const {
   LOG(DEBUG) << "In getECListForWords...\n";
   auto terms = ad_utility::split(words, ' ');
   AD_CHECK(terms.size() > 0);
 
-  if (terms.size() > 1) {
-    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-             "No multi word queries, yet.")
-  }
-
-  string term = terms[0];
   vector<Id> cids;
   vector<Id> eids;
   vector<Score> scores;
-  getEntityPostingsForTerm(term, cids, eids, scores);
+  if (terms.size() > 1) {
+    // Find the term with the smallest block and/or one where no filtering
+    // via wordlists is necessary. Onyl take entity postings form this one.
+    // This is valid because the set of co-occuring entities depends on
+    // the context and not on the word/block used as entry point.
+    // Take all other words and get word posting lists for them.
+    // Intersect all and keep the entity word ids.
+    size_t useElFromTerm = getIndexOfBestSuitedElTerm(terms);
+    vector<Id> eCids;
+    vector<Id> eWids;
+    vector<Score> eScores;
+    if (terms.size() == 2) {
+      // Special case of two terms: no k-way intersect needed.
+      vector<Id> wCids;
+      vector<Score> wScores;
+      size_t onlyWordsFrom = 1 - useElFromTerm;
+      getWordPostingsForTerm(terms[onlyWordsFrom], wCids, wScores);
+      getEntityPostingsForTerm(terms[useElFromTerm], eCids, eWids, eScores);
+      intersectKeepLastWids(wCids, wScores, eCids, eScores, eWids, cids, eids,
+                            scores);
+    } else {
+      // Generic case: Use a k-way intersect whereas the entity postings
+      // play a special role.
+      vector<vector<Id>> cidVecs;
+      vector<vector<Score>> scoreVecs;
+      for (size_t i = 0; i < terms.size(); ++i) {
+        if (i != useElFromTerm) {
+          cidVecs.push_back(vector<Id>());
+          scoreVecs.push_back(vector<Score>());
+          getWordPostingsForTerm(terms[i], cidVecs.back(), scoreVecs.back());
+        }
+      }
+      getEntityPostingsForTerm(terms[useElFromTerm], eCids, eWids, eScores);
+      intersectKWayKeepLastWids(cidsVec, scoresVec, eCids, eScores, eWids, cids,
+                                eids, scores);
+    }
+  } else {
+    // Special case: Just one word to deal with.
+    getEntityPostingsForTerm(terms[0], cids, eids, scores);
+  }
 
   // TODO: Make n variable.
   aggScoresAndTakeTopKContexts(cids, eids, scores, 1, result);
@@ -644,7 +688,7 @@ void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from <<
              ", nofBytes: " << nofBytes << '\n';
   result.resize(nofElements + 250);
-  uint64_t* encoded = new uint64_t[nofBytes / 8];
+  uint64_t *encoded = new uint64_t[nofBytes / 8];
   _textIndexFile.read(encoded, nofBytes, from);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
   ad_utility::Simple8bCode::decode(encoded, nofElements, result.data());
@@ -668,14 +712,14 @@ void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from <<
              ", nofBytes: " << nofBytes << '\n';
   size_t nofCodebookBytes;
-  uint64_t* encoded = new uint64_t[nofElements];
+  uint64_t *encoded = new uint64_t[nofElements];
   result.resize(nofElements + 250);
   off_t current = from;
   size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t), current);
   LOG(TRACE) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
   AD_CHECK_EQ(sizeof(off_t), ret);
   current += ret;
-  T* codebook = new T[nofCodebookBytes / sizeof(T)];
+  T *codebook = new T[nofCodebookBytes / sizeof(T)];
   ret = _textIndexFile.read(codebook, nofCodebookBytes);
   current += ret;
   AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
@@ -728,7 +772,7 @@ void Index::filterByRange(const IdRange& idRange, const vector<Id>& blockCids,
 
 // _____________________________________________________________________________
 void Index::getTopKByScores(const vector<Id>& cids, const vector<Score>& scores,
-                            size_t k, Index::WidthOneList* result) const {
+                            size_t k, Index::WidthOneList *result) const {
   AD_CHECK_EQ(cids.size(), scores.size());
   k = std::min(k, cids.size());
   LOG(DEBUG) << "Call getTopKByScores (partial sort of " << cids.size()
@@ -757,7 +801,7 @@ void Index::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
                                          const vector<Id>& eids,
                                          const vector<Score>& scores,
                                          size_t k,
-                                         Index::WidthThreeList* result) const {
+                                         Index::WidthThreeList *result) const {
   AD_CHECK_EQ(cids.size(), eids.size());
   AD_CHECK_EQ(cids.size(), scores.size());
   LOG(DEBUG) << "Going from an entity, context and score list of size: "
@@ -788,7 +832,7 @@ void Index::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
 void Index::aggScoresAndTakeTopContext(const vector<Id>& cids,
                                        const vector<Id>& eids,
                                        const vector<Score>& scores,
-                                       Index::WidthThreeList* result) const {
+                                       Index::WidthThreeList *result) const {
   LOG(DEBUG) << "Special case with 1 contexts per entity...\n";
   typedef unordered_map<Id, pair<Score, pair<Id, Score>>> AggMap;
   AggMap map;

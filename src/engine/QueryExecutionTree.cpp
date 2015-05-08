@@ -212,13 +212,14 @@ void QueryExecutionTree::writeResultToStreamAsJson(
   const ResultTable& res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   vector<pair<size_t, OutputType>> validIndices;
-  for (const auto& var : selectVars) {
+  for (auto var : selectVars) {
     OutputType outputType = OutputType::KB;
     if (ad_utility::startsWith(var, "SCORE(") || isContextvar(var)) {
       outputType = OutputType::VERBATIM;
     }
     if (ad_utility::startsWith(var, "TEXT(")) {
       outputType = OutputType::TEXT;
+      var = var.substr(5, var.rfind(')') - 5);
     }
 
     if (getVariableColumnMap().find(var) != getVariableColumnMap().end()) {
