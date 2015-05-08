@@ -13,8 +13,10 @@ static const size_t MIN_WORD_PREFIX_SIZE = 4;
 static const char PREFIX_CHAR = '*';
 
 static const size_t BUFFER_SIZE_RELATION_SIZE = 1000 * 1000 * 1000;
+static const size_t BUFFER_SIZE_DOCSFILE_LINE = 1024 * 1024 * 100;
 static const size_t DISTINCT_LHS_PER_BLOCK = 10 * 1000;
 
 static const size_t IN_CONTEXT_CARDINALITY_ESTIMATE = 1000 * 1000 * 1000;
 
 static const char IN_CONTEXT_RELATION[] = "<in-context>";
+static const char HAS_CONTEXT_RELATION[] = "<contains-context>";

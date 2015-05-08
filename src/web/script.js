@@ -38,6 +38,7 @@ function getShortStr(str, maxLength) {
             return cpy;
         }
     }
+    return str;
 }
 
 function processQuery(query) {

@@ -11,7 +11,7 @@
 
 // This already exists in C++14 (index_sequence and make_index_sequence).
 // The original is faster (and this can be made) by using 
-// a diven and conquer strategy to concat two lists of half the length in each
+// a divide and conquer strategy to concat two lists of half the length in each
 // step.
 template<size_t...>
 struct IndexSequence {
@@ -41,7 +41,7 @@ struct ConcatSeq;
 // Concats two index lists but uses an offset for the second list.
 // Using sizeof...(Is1) would lead to a "normal" concat, but the
 // offset allows skipping values in the sequence.
-template<size_t ... Is1, size_t Offset, std::size_t ... Is2>
+template<size_t ... Is1, size_t Offset, size_t ... Is2>
 struct ConcatSeq<IndexSequence<Is1...>, Offset, IndexSequence<Is2...>> {
   using type = IndexSequence<Is1..., (Offset + Is2)...>;
 };

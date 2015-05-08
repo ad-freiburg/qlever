@@ -325,6 +325,8 @@ void Index::openFileHandles() {
   AD_CHECK(_onDiskBase.size() > 0);
   _psoFile.open(string(_onDiskBase + ".index.pso").c_str(), "r");
   _posFile.open(string(_onDiskBase + ".index.pos").c_str(), "r");
+  AD_CHECK(_psoFile.isOpen());
+  AD_CHECK(_posFile.isOpen());
 }
 
 // _____________________________________________________________________________
@@ -494,4 +496,3 @@ size_t Index::relationCardinality(const string& relationName) const {
   }
   return 0;
 }
-

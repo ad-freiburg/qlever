@@ -102,3 +102,47 @@ HARD: This might add the same tuple multiple times
 BIG BENEFIT:
 Can add stuff like FILTER(?x != ?y) and FINALLY answer ?x friend* ?y queries
 properly!!!
+
+
+
+Ultimately I would like to solve all of the queries below:
+
+SELECT ?x WHERE {?x <is-a> <Plant>. ?x <in-context> ?c. ?c <in-context> edible leaves}
+SELECT ?x ?y WHERE {?x <in-context> ?c. ?y <in-context> ?c. ?c <in-context> friend*. FILTER(?x != ?y)}
+SELECT ?x TEXT(?c) WHERE {?x <description> ?d. ?d <has-context> ?c. ?c <in-context> coca* addict*}
+
+IT IS NOT EASY TO CREATE A QueryExecutionTree.
+
+Current idea:
+
+TEXT OPERATION with two modes (forEntity and forContext).
+Both add a column with contextId, the former ADDITIONALLY adds a column with entity Id for the co-occurring entity.
+They are sorted on cId, if needed for another join (Plant edible leaves), a SORT operation is added.
+It should not be split into two operations, because of the way the tetx index works
+E.g., "?x <in-context> ?c. ?c <in-context> war" can be answered by simply reading the contextList for war,
+or the entityList part: wordlist + contextlist(longer) for that block)
+
+A QET is built by collapsing nodes in the query graph.
+PROBLEM1: No operation for word node alone (the choice of lists/intersect depends on the full TEXT OPERATION)
+PROBLEM2: The normal idiom (collect all subtrees in a node for pairwise joins (and possible sort operations))
+				  cannot be applied, here! All lists are needed in one big TEXT OP to determine if a context matches.
+PROBLEM3: Two different results. With co-occurring entity and without depending on tree ABOVE the node.
+
+I WANT:
+Due to problem3, I do NOT create execution trees for context nodes (easy to detect).
+Depending on the rest of the query graph / tree, there cannot be one optimal operation to compute the context node's result.
+When consuming a context node, into a higher up, I create a TEXT OEPRATION forEntity.
+This will be a consumption of an <in-context> edge with target context-node.
+I will later add <has-context> relations that can also consume context nodes.
+Those will create a TEXT OPERATION forContexts and a context->document mapping (easy Broccoli style with ranges).
+The simple query which only selects a context has to be identified separately and also create a TEXT OPERATION forContexts.
+
+Either way, there will be a result with context Ids that can be used in SELECT in conjunction with EXCERPT.
+By default I will only use 1 contextId per matching row, but i can be increase as a parameter.
+I don't see a problem why it couldn't also be a parameter per context variable.
+
+
+
+HARDER THAN BROCCOLI:
+cross product with contexts
+cross product (not full) with co-occurring n-tuples of entities (?x ?y ?z - see graphs above).

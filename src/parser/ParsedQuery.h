@@ -43,9 +43,13 @@ public:
   OrderKey(const string& key, bool desc): _key(key), _desc(desc) {}
   explicit OrderKey(const string& textual) {
     _desc = ad_utility::startsWith(textual, "DESC");
+    bool scoreModifier = textual.find("SCORE") != string::npos;
     size_t i = textual.find('?');
     if (i != string::npos) {
       _key = ad_utility::rstrip(textual.substr(i), ')');
+      if (scoreModifier) {
+        _key = string("SCORE(") + _key + ")";
+      }
     }
   }
   string _key;

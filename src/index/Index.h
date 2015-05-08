@@ -12,7 +12,8 @@
 #include "./IndexMetaData.h"
 #include "./StxxlSortFunctors.h"
 #include "../util/File.h"
-#include "TextMetaData.h"
+#include "./TextMetaData.h"
+#include "./DocsDB.h"
 
 
 using std::string;
@@ -26,6 +27,12 @@ public:
   // Block Id, Context Id, Word Id, Score, entity
   typedef stxxl::VECTOR_GENERATOR<tuple<Id, Id, Id, Score, bool>>::result TextVec;
   typedef std::tuple<Id, Id, Score> Posting;
+
+
+  // Forbid copy and assignment
+  Index & operator=(const Index&) = delete;
+  Index(const Index&) = delete;
+  Index() = default;
 
   // Creates an index from a TSV file.
   // Will write vocabulary and on-disk index data.
@@ -46,6 +53,8 @@ public:
   // Reads a context file and builds the index for the first time.
   void addTextFromContextFile(const string& contextFile);
 
+  void buildDocsDB(const string& docsFile);
+
   // Adds text index from on disk index that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
   void addTextFromOnDiskIndex();
@@ -53,8 +62,20 @@ public:
   // Checks if the index is ready for use, i.e. it is properly intitialized.
   bool ready() const;
 
+  // --------------------------------------------------------------------------
+  //  -- RETRIEVAL ---
+  // --------------------------------------------------------------------------
   typedef vector<array<Id, 1>> WidthOneList;
   typedef vector<array<Id, 2>> WidthTwoList;
+  typedef vector<array<Id, 3>> WidthThreeList;
+
+
+  // --------------------------------------------------------------------------
+  // RDF RETRIEVAL
+  // --------------------------------------------------------------------------
+  size_t relationCardinality(const string& relationName) const;
+
+  const string& idToString(Id id) const;
 
   void scanPSO(const string& predicate, WidthTwoList* result) const;
 
@@ -66,9 +87,24 @@ public:
   void scanPOS(const string& predicate, const string& object, WidthOneList*
   result) const;
 
-  const string& idToString(Id id) const;
+  // --------------------------------------------------------------------------
+  // TEXT RETRIEVAL
+  // --------------------------------------------------------------------------
+  const string& wordIdToString(Id id) const;
 
-  size_t relationCardinality(const string& relationName) const;
+  void getContextListForWords(const string& words, WidthTwoList* result) const;
+
+  void getECListForWords(const string& words, WidthThreeList* result) const;
+
+  void getWordPostingsForTerm(const string& term, vector<Id>& cids,
+                              vector<Score>& scores) const;
+
+  void getEntityPostingsForTerm(const string& term, vector<Id>& cids,
+                                vector<Id>& eids, vector<Score>& scores) const;
+
+  string getTextExcerpt(Id cid) const {
+    return _docsDB.getTextExcerpt(cid);
+  }
 
 private:
   string _onDiskBase;
@@ -79,6 +115,7 @@ private:
   TextMetaData _textMeta;
   vector<Id> _blockBoundaries;
   off_t _currentoff_t;
+  DocsDB _docsDB;
   mutable ad_utility::File _psoFile;
   mutable ad_utility::File _posFile;
   mutable ad_utility::File _textIndexFile;
@@ -113,11 +150,13 @@ private:
   static RelationMetaData& writeFunctionalRelation(
       const vector<array<Id, 2>>& data, RelationMetaData& rmd);
 
-  static RelationMetaData& writeNonFunctionalRelation(ad_utility::File& out,
-                                                      const vector<array<Id, 2>>& data,
-                                                      RelationMetaData& rmd);
+  static RelationMetaData& writeNonFunctionalRelation(
+      ad_utility::File& out,
+      const vector<array<Id, 2>>& data,
+      RelationMetaData& rmd);
 
   void openFileHandles();
+
   void openTextFileHandle();
 
   void scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
@@ -134,8 +173,45 @@ private:
                           const unordered_map<Id, Score>& words,
                           const unordered_map<Id, Score>& entities);
 
+  template<typename T>
+  void readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
+                        vector<T>& result) const;
+
+  template<typename T>
+  void readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
+                         vector<T>& result) const;
+
+  void filterByRange(const IdRange& idRange, const vector<Id>& blockCids,
+                     const vector<Id>& blockWids,
+                     const vector<Score>& blockScores,
+                     vector<Id>& resultCids,
+                     vector<Score>& resultScores) const;
+
+  void intersect(const vector<Id>& matchingContexts,
+                 const vector<Score>& matchingContextScores,
+                 const vector<Id>& eBlockCids, const vector<Id>& eBlockWids,
+                 const vector<Score>& eBlockScores, vector<Id>& resultCids,
+                 vector<Id>& resultEids, vector<Score>& resultScores) const;
+
+  void getTopKByScores(const vector<Id>& cids, const vector<Score>& scores,
+                       size_t k, WidthOneList* result) const;
+
+  void aggScoresAndTakeTopKContexts(const vector<Id>& cids,
+                                    const vector<Id>& eids,
+                                    const vector<Score>& scores,
+                                    size_t k,
+                                    WidthThreeList* result) const;
+
+  // Special case where k == 1.
+  void aggScoresAndTakeTopContext(const vector<Id>& cids,
+                                  const vector<Id>& eids,
+                                  const vector<Score>& scores,
+                                  WidthThreeList* result) const;
+
   void calculateBlockBoundaries();
+
   Id getWordBlockId(Id wordId) const;
+
   Id getEntityBlockId(Id entityId) const;
 
   //! Writes a list of elements (have to be able to be cast to unit64_t)
@@ -155,11 +231,12 @@ private:
                        IdCodebook& wordCodebook, ScoreCodeMap& scoreCodemap,
                        ScoreCodebook& scoreCodebook) const;
 
-  template <class T>
+  template<class T>
   size_t writeCodebook(const vector<T>& codebook,
-                              ad_utility::File& file) const;
+                       ad_utility::File& file) const;
 
   // FRIEND TESTS
   friend class IndexTest_createFromTsvTest_Test;
+
   friend class IndexTest_createFromOnDiskIndexTest_Test;
 };

@@ -31,6 +31,7 @@ struct option options[] = {
     {"ntriples-file",     required_argument, NULL, 'n'},
     {"index-basename",    required_argument, NULL, 'b'},
     {"words-by-contexts", required_argument, NULL, 'w'},
+    {"docs-by-contexts",  required_argument, NULL, 'd'},
     {NULL, 0,                                NULL, 0}
 };
 
@@ -72,10 +73,11 @@ int main(int argc, char** argv) {
   string ntFile;
   string baseName;
   string wordsfile;
+  string docsfile;
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "t:n:b:w:", options, NULL);
+    int c = getopt_long(argc, argv, "t:n:b:w:d:", options, NULL);
     if (c == -1) { break; }
     switch (c) {
       case 't':
@@ -89,6 +91,9 @@ int main(int argc, char** argv) {
         break;
       case 'w':
         wordsfile = optarg;
+        break;
+      case 'd':
+        docsfile = optarg;
         break;
       default:
         cout << endl
@@ -131,6 +136,10 @@ int main(int argc, char** argv) {
 
     if (wordsfile.size() > 0) {
       index.addTextFromContextFile(wordsfile);
+    }
+
+    if (docsfile.size() > 0) {
+      index.buildDocsDB(docsfile);
     }
   } catch (ad_semsearch::Exception& e) {
     LOG(ERROR) << e.getFullErrorMessage() << std::endl;

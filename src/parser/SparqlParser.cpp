@@ -88,7 +88,9 @@ void SparqlParser::parseSelect(const string& str, ParsedQuery& query) {
     query._reduced = true;
   }
   for (; i < vars.size(); ++i) {
-    if (ad_utility::startsWith(vars[i], "?")) {
+    if (ad_utility::startsWith(vars[i], "?") ||
+        ad_utility::startsWith(vars[i], "SCORE(") ||
+        ad_utility::startsWith(vars[i], "TEXT(")) {
       query._selectedVariables.push_back(vars[i]);
     } else {
       throw ParseException(string("Invalid variable in select clause: \"") +
@@ -219,7 +221,7 @@ void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
         j = i + 1;
       }
       while (j < str.size() && str[j] != ' ' && str[j] != '\t' &&
-                                                str[j] != '\n') { ++j; }
+             str[j] != '\n') { ++j; }
     }
     string o = str.substr(i, j - i);
     query._whereClauseTriples.push_back(SparqlTriple(s, p, o));
@@ -274,7 +276,7 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
   f._lhs = tokens[0];
   f._rhs = tokens[2];
 
-  if (tokens[1] == "=" || tokens[1] == "==" ) {
+  if (tokens[1] == "=" || tokens[1] == "==") {
     f._type = SparqlFilter::EQ;
   } else if (tokens[1] == "!=") {
     f._type = SparqlFilter::NE;

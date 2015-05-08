@@ -4,11 +4,15 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include "./QueryExecutionContext.h"
 #include "./Operation.h"
 
 
 using std::string;
+using std::unordered_map;
+using std::unordered_set;
 
 // A query execution tree.
 // Processed bottom up, this gives an ordering to the operations
@@ -34,7 +38,14 @@ public:
     ORDER_BY = 4,
     FILTER = 5,
     DISTINCT = 6,
-    TEXT = 7
+    TEXT_FOR_CONTEXTS = 7,
+    TEXT_FOR_ENTITIES = 8
+  };
+
+  enum OutputType {
+    KB = 0,
+    VERBATIM = 1,
+    TEXT = 2
   };
 
   void setOperation(OperationType type, Operation* op);
@@ -67,6 +78,14 @@ public:
 
   void setVariableColumns(const unordered_map<string, size_t>& map);
 
+  void setContextVars(const unordered_set<string>& set) {
+    _contextVars = set;
+  }
+
+  const unordered_set<string>& getContextVars() const {
+    return _contextVars;
+  }
+
   size_t getResultWidth() const {
     return _rootOperation->getResultWidth();
   }
@@ -87,27 +106,67 @@ public:
 
   size_t resultSortedOn() const { return _rootOperation->resultSortedOn(); }
 
+  bool isContextvar(const string& var) const {
+    return _contextVars.count(var) > 0;
+  }
+
+  void addContextVar(const string& var) {
+    _contextVars.insert(var);
+  }
+
 private:
   QueryExecutionContext* _qec;   // No ownership
   unordered_map<string, size_t> _variableColumnMap;
   Operation* _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
+  unordered_set<string> _contextVars;
 
   template<typename Row>
   void writeJsonTable(const vector<Row>& data, size_t from,
                       size_t upperBound,
-                      const vector<size_t>& validIndices,
+                      const vector<pair<size_t, OutputType>>& validIndices,
                       std::ostream& out) const {
     for (size_t i = from; i < upperBound; ++i) {
       const auto& row = data[i];
       out << "[\"";
       for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
-        out << ad_utility::escapeForJson(
-            _qec->getIndex().idToString(row[validIndices[j]]))
-        << "\",\"";
+        switch (validIndices[j].second) {
+          case KB:
+            out << ad_utility::escapeForJson(
+                _qec->getIndex().idToString(row[validIndices[j].first]))
+            << "\",\"";
+            break;
+          case VERBATIM:
+            out << row[validIndices[j].first] << "\",\"";
+            break;
+          case TEXT:
+            out << ad_utility::escapeForJson(
+                _qec->getIndex().getTextExcerpt(row[validIndices[j].first]))
+            << "\",\"";
+            break;
+          default: AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+                            "Cannot deduce output type.");
+        }
       }
-      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
-          row[validIndices[validIndices.size() - 1]])) << "\"]";
+      switch (validIndices[validIndices.size() - 1].second) {
+        case KB:
+          out << ad_utility::escapeForJson(
+              _qec->getIndex()
+                  .idToString(row[validIndices[validIndices.size() - 1].first]))
+          << "\"]";
+          break;
+        case VERBATIM:
+          out << row[validIndices[validIndices.size() - 1].first] << "\"]";
+          break;
+        case TEXT:
+          out << ad_utility::escapeForJson(
+              _qec->getIndex().getTextExcerpt(
+                  row[validIndices[validIndices.size() - 1].first]))
+          << "\"]";
+          break;
+        default: AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+                          "Cannot deduce output type.");
+      }
       if (i + 1 < upperBound) { out << ", "; }
       out << "\r\n";
     }

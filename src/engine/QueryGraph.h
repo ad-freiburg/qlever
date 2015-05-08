@@ -8,6 +8,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <list>
+#include <utility>
 #include <limits>
 #include "../parser/ParsedQuery.h"
 #include "./QueryExecutionTree.h"
@@ -17,6 +18,7 @@ using std::vector;
 using std::unordered_map;
 using std::unordered_set;
 using std::list;
+using std::pair;
 
 // -------------------------------------
 // Thoughts on planning query execution:
@@ -129,6 +131,9 @@ public:
     // Special case: relation is in-context
     QueryExecutionTree consumeIcIntoSubtree(Node* other,
                                             const QueryGraph::Edge& edge);
+    // Special case: relation is has-contexts
+    QueryExecutionTree consumeHcIntoSubtree(Node* other,
+                                            const QueryGraph::Edge& edge);
 
     string asString() const;
 
@@ -144,11 +149,13 @@ public:
       return ad_utility::startsWith(_label, "?");
     }
 
+    void useContextRootOperation();
+
   private:
     QueryExecutionContext* _qec;
     size_t _expectedCardinality;
     QueryExecutionTree _consumedOperations;
-    vector<QueryExecutionTree> _storedOperations;
+    vector<pair<QueryExecutionTree, size_t>> _storedOperations;
     string _storedWords;
   };
 
@@ -169,7 +176,9 @@ public:
   const QueryExecutionTree& getExecutionTree();
 
   static unordered_map<string, size_t> createVariableColumnsMapForTextOperation(
-      const string& contextVar, const vector<QueryExecutionTree>& subtrees);
+      const string& contextVar,
+      const string& entityVar,
+      const vector<pair<QueryExecutionTree, size_t>>& subtrees);
 
 private:
   QueryExecutionContext* _qec;  // No ownership, don't delete.

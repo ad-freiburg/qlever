@@ -15,24 +15,21 @@ using std::unordered_map;
 using std::pair;
 using std::vector;
 
-class TextOperation : public Operation {
-public:
-  virtual size_t getResultWidth() const;
-
+class TextOperationForContexts : public Operation {
 public:
 
-  TextOperation(QueryExecutionContext* qec, const string& words,
-                const vector<QueryExecutionTree>& subtrees);
+  TextOperationForContexts(QueryExecutionContext* qec, const string& words,
+                const vector<pair<QueryExecutionTree, size_t>>& subtrees);
 
   virtual string asString() const;
-
+  virtual size_t getResultWidth() const;
   virtual size_t resultSortedOn() const {
-    return 0;
+    return std::numeric_limits<size_t>::max();
   }
 
 private:
   string _words;
-  vector<QueryExecutionTree> _subtrees;
+  vector<pair<QueryExecutionTree, size_t>> _subtrees;
 
   virtual void computeResult(ResultTable* result) const;
 };

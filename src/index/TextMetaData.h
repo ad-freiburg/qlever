@@ -28,7 +28,7 @@ public:
   off_t _startScorelist;
   off_t _lastByte;
 
-  bool hasMultipleWords() {
+  bool hasMultipleWords() const {
     return _startScorelist > _startWordlist;
   }
 

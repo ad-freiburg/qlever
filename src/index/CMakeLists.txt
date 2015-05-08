@@ -4,6 +4,7 @@ add_library(index
               Vocabulary.h Vocabulary.cpp
               IndexMetaData.h IndexMetaData.cpp
               StxxlSortFunctors.h
-            	TextMetaData.cpp TextMetaData.h)
+            	TextMetaData.cpp TextMetaData.h
+            	DocsDB.cpp DocsDB.h)
 
 target_link_libraries(index parser ${STXXL_LIBRARIES})

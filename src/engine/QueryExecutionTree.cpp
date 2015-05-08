@@ -12,7 +12,8 @@
 #include "./OrderBy.h"
 #include "./Filter.h"
 #include "./Distinct.h"
-#include "TextOperation.h"
+#include "TextOperationForEntities.h"
+#include "TextOperationForContexts.h"
 
 using std::string;
 
@@ -21,14 +22,16 @@ QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* qec) :
     _qec(qec),
     _variableColumnMap(),
     _rootOperation(nullptr),
-    _type(OperationType::UNDEFINED) {
+    _type(OperationType::UNDEFINED),
+    _contextVars() {
 }
 
 // _____________________________________________________________________________
 QueryExecutionTree::QueryExecutionTree(const QueryExecutionTree& other) :
     _qec(other._qec),
     _variableColumnMap(other._variableColumnMap),
-    _type(other._type) {
+    _type(other._type),
+    _contextVars(other._contextVars) {
   switch (other._type) {
     case OperationType::SCAN:
       _rootOperation = new IndexScan(
@@ -54,9 +57,13 @@ QueryExecutionTree::QueryExecutionTree(const QueryExecutionTree& other) :
       _rootOperation = new Distinct(
           *static_cast<Distinct*>(other._rootOperation));
       break;
-    case OperationType::TEXT:
-      _rootOperation = new TextOperation(
-          *static_cast<TextOperation*>(other._rootOperation));
+    case OperationType::TEXT_FOR_ENTITIES:
+      _rootOperation = new TextOperationForEntities(
+          *static_cast<TextOperationForEntities*>(other._rootOperation));
+      break;
+    case OperationType::TEXT_FOR_CONTEXTS:
+      _rootOperation = new TextOperationForContexts(
+          *static_cast<TextOperationForContexts*>(other._rootOperation));
       break;
     case UNDEFINED:
     default:
@@ -69,7 +76,10 @@ QueryExecutionTree& QueryExecutionTree::operator=(
     const QueryExecutionTree& other) {
   _qec = other._qec;
   _variableColumnMap = other._variableColumnMap;
-  setOperation(other._type, other._rootOperation);
+  _contextVars = other._contextVars;
+  if (other._type != UNDEFINED) {
+    setOperation(other._type, other._rootOperation);
+  }
   return *this;
 }
 
@@ -115,9 +125,15 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
       delete _rootOperation;
       _rootOperation = new Distinct(*static_cast<Distinct*>(op));
       break;
-    case OperationType::TEXT:
+    case OperationType::TEXT_FOR_ENTITIES:
       delete _rootOperation;
-      _rootOperation = new TextOperation(*static_cast<TextOperation*>(op));
+      _rootOperation = new TextOperationForEntities(
+          *static_cast<TextOperationForEntities*>(op));
+      break;
+    case OperationType::TEXT_FOR_CONTEXTS:
+      delete _rootOperation;
+      _rootOperation = new TextOperationForContexts(
+          *static_cast<TextOperationForContexts*>(op));
       break;
     default: AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, "Cannot set "
         "an operation with undefined type.");
@@ -195,10 +211,20 @@ void QueryExecutionTree::writeResultToStreamAsJson(
   // They may trigger computation (but does not have to).
   const ResultTable& res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  vector<size_t> validIndices;
+  vector<pair<size_t, OutputType>> validIndices;
   for (const auto& var : selectVars) {
+    OutputType outputType = OutputType::KB;
+    if (ad_utility::startsWith(var, "SCORE(") || isContextvar(var)) {
+      outputType = OutputType::VERBATIM;
+    }
+    if (ad_utility::startsWith(var, "TEXT(")) {
+      outputType = OutputType::TEXT;
+    }
+
     if (getVariableColumnMap().find(var) != getVariableColumnMap().end()) {
-      validIndices.push_back(getVariableColumnMap().find(var)->second);
+      validIndices.push_back(
+          pair<size_t, OutputType>(getVariableColumnMap().find(var)->second,
+                             outputType));
     }
   }
   if (validIndices.size() == 0) { return; }

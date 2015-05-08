@@ -7,6 +7,7 @@
 #include <vector>
 #include <iostream>
 #include <limits>
+#include <utility>
 #include "./QueryExecutionTree.h"
 #include "./QueryGraph.h"
 #include "./IndexScan.h"
@@ -15,10 +16,12 @@
 #include "./OrderBy.h"
 #include "./Distinct.h"
 #include "./Filter.h"
-#include "./TextOperation.h"
+#include "TextOperationForEntities.h"
+#include "TextOperationForContexts.h"
 
 using std::ostringstream;
 using std::vector;
+using std::pair;
 
 
 // _____________________________________________________________________________
@@ -197,15 +200,29 @@ QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
       // Since consumeIcIntoSubtree is an operation that unites multiple
       // subtrees at once, we can just save the subtree here and do not
       // instantiate an Operation like in all other cases.
+      AD_CHECK(_isContextNode);
       if (other->getConsumedOperations().isEmpty()) {
-        this->_storedWords += other->_label;
+        // Remove the suffix that makes non-variable terminals unique.
+        size_t posLastUs = other->_label.rfind('_');
+        if (posLastUs == string::npos) {
+          AD_CHECK(posLastUs != string::npos);
+        }
+        AD_CHECK(posLastUs != string::npos);
+        this->_storedWords += other->_label.substr(0, posLastUs);
       } else {
-        this->_storedOperations.push_back(other->getConsumedOperations());
+        this->_storedOperations.push_back(
+            pair<QueryExecutionTree, size_t>(
+                other->getConsumedOperations(),
+                other->_consumedOperations.getVariableColumn(other->_label)));
       }
       // TODO: Take care of the special case: select ?c... word in ?c
       // Return a dummy tree that will do unused.
       return QueryExecutionTree(_qec);
     }
+  }
+  if (edge._label == HAS_CONTEXT_RELATION) {
+    AD_CHECK(other->_isContextNode);
+    return consumeHcIntoSubtree(other, edge);
   }
   QueryExecutionTree addedSubtree(_qec);
   if (other->getConsumedOperations().isEmpty()) {
@@ -253,6 +270,7 @@ QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
                 other->_consumedOperations.getVariableColumn(other->_label));
       addedSubtree.setOperation(QueryExecutionTree::JOIN, &join);
       addedSubtree.setVariableColumns(join.getVariableColumns());
+      addedSubtree.setContextVars(nestedTree.getContextVars());
     } else {
       QueryExecutionTree nestedTree(_qec);
       IndexScan is(_qec, IndexScan::PSO_FREE_S);  // Ordered by S
@@ -265,6 +283,7 @@ QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
                 other->_consumedOperations.getVariableColumn(other->_label));
       addedSubtree.setOperation(QueryExecutionTree::JOIN, &join);
       addedSubtree.setVariableColumns(join.getVariableColumns());
+      addedSubtree.setContextVars(nestedTree.getContextVars());
     }
   }
   return addedSubtree;
@@ -274,26 +293,95 @@ QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
 QueryExecutionTree QueryGraph::Node::consumeIcIntoSubtree(
     QueryGraph::Node* other,
     const QueryGraph::Edge& edge) {
-  // When called a few things have to hold:
   AD_CHECK(other->_isContextNode);
+  QueryExecutionTree addedSubtree(_qec);
   if (other->_storedWords.size() == 0) {
+    // No entity x entity list queries (yet).
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-             "Contexts have to be connected to at least one word or entity for now.");
+             "For now, always need words or fixed entity for a contexts.");
   }
 
-  QueryExecutionTree addedSubtree(_qec);
-  TextOperation textOp(_qec, other->_storedWords, other->_storedOperations);
-  addedSubtree.setOperation(QueryExecutionTree::TEXT, &textOp);
+  TextOperationForEntities textOp(_qec, other->_storedWords,
+                                  other->_storedOperations);
+  addedSubtree.setOperation(QueryExecutionTree::TEXT_FOR_ENTITIES, &textOp);
   addedSubtree.setVariableColumns(
-      QueryGraph::createVariableColumnsMapForTextOperation(_label,
+      QueryGraph::createVariableColumnsMapForTextOperation(other->_label,
+                                                           _label,
                                                            _storedOperations));
+  for (auto& tree : _storedOperations) {
+    for (auto& var : tree.first.getContextVars()) {
+      addedSubtree.addContextVar(var);
+    }
+  }
+  addedSubtree.addContextVar(other->_label);
   return addedSubtree;
+}
+
+// _____________________________________________________________________________
+QueryExecutionTree QueryGraph::Node::consumeHcIntoSubtree(
+    QueryGraph::Node* other,
+    const QueryGraph::Edge& edge) {
+  AD_CHECK(other->_isContextNode);
+  QueryExecutionTree addedSubtree(_qec);
+  if (other->_storedWords.size() == 0) {
+    // No entity x entity list queries (yet).
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+             "For now, always need words or fixed entity for a contexts.");
+  }
+
+  TextOperationForContexts textOp(_qec, other->_storedWords,
+                                  other->_storedOperations);
+  addedSubtree.setOperation(QueryExecutionTree::TEXT_FOR_CONTEXTS, &textOp);
+  addedSubtree.setVariableColumns(
+      QueryGraph::createVariableColumnsMapForTextOperation(other->_label,
+                                                           _label,
+                                                           _storedOperations));
+  for (auto& tree : _storedOperations) {
+    for (auto& var : tree.first.getContextVars()) {
+      addedSubtree.addContextVar(var);
+    }
+  }
+
+  // TODO: Add another Operation for Context->Document mapping.
+  return addedSubtree;
+}
+
+// _____________________________________________________________________________
+void QueryGraph::Node::useContextRootOperation() {
+  AD_CHECK(_isContextNode);
+  _consumedOperations = QueryExecutionTree(_qec);
+  if (_storedWords.size() == 0) {
+    // No entity x entity list queries (yet).
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+             "For now, always need words or fixed entity for a contexts.");
+  }
+  TextOperationForContexts textOp(_qec, _storedWords,
+                                  _storedOperations);
+  _consumedOperations.setOperation(QueryExecutionTree::TEXT_FOR_CONTEXTS,
+                                   &textOp);
+  _consumedOperations.setVariableColumns(
+      QueryGraph::createVariableColumnsMapForTextOperation(_label,
+                                                           "",
+                                                           _storedOperations));
+  for (auto& tree : _storedOperations) {
+    for (auto& var : tree.first.getContextVars()) {
+      _consumedOperations.addContextVar(var);
+    }
+  }
+  _consumedOperations.addContextVar(_label);
 }
 
 // _____________________________________________________________________________
 void QueryGraph::Node::consume(QueryGraph::Node* other,
                                const QueryGraph::Edge& edge) {
   QueryExecutionTree addedSubtree(consumeIntoSubtree(other, edge));
+  if (!addedSubtree.getRootOperation()) {
+    // Case: "this" is a context node.
+    // Words and maybe stored operations have been set.
+    // No reason to create a proper root for this yet.
+    AD_CHECK(_storedWords.size() > 0);
+    return;
+  }
   if (_consumedOperations.isEmpty()) {
     if (addedSubtree.resultSortedOn() ==
         addedSubtree.getVariableColumn(_label)) {
@@ -303,6 +391,7 @@ void QueryGraph::Node::consume(QueryGraph::Node* other,
       _consumedOperations.setOperation(QueryExecutionTree::SORT, &sort);
       _consumedOperations
           .setVariableColumns(addedSubtree.getVariableColumnMap());
+      _consumedOperations.setContextVars(addedSubtree.getContextVars());
     }
   } else {
     if (addedSubtree.getVariableColumn(_label)
@@ -313,17 +402,20 @@ void QueryGraph::Node::consume(QueryGraph::Node* other,
                 addedSubtree.getVariableColumn(_label));
       _consumedOperations.setOperation(QueryExecutionTree::JOIN, &join);
       _consumedOperations.setVariableColumns(join.getVariableColumns());
+      _consumedOperations.setContextVars(addedSubtree.getContextVars());
     } else {
       QueryExecutionTree sortedSubtree(_qec);
       Sort sort(_qec, addedSubtree, addedSubtree.getVariableColumn(_label));
       sortedSubtree.setOperation(QueryExecutionTree::SORT, &sort);
       sortedSubtree.setVariableColumns(addedSubtree.getVariableColumnMap());
+      sortedSubtree.setContextVars(addedSubtree.getContextVars());
       Join join(_qec, _consumedOperations,
                 sortedSubtree,
                 _consumedOperations.getVariableColumn(_label),
                 sortedSubtree.getVariableColumn(_label));
       _consumedOperations.setOperation(QueryExecutionTree::JOIN, &join);
       _consumedOperations.setVariableColumns(join.getVariableColumns());
+      _consumedOperations.setContextVars(addedSubtree.getContextVars());
     }
   }
 }
@@ -403,6 +495,13 @@ QueryGraph::Node* QueryGraph::collapseAndCreateExecutionTree() {
     deg1Nodes = getNodesWithDegreeOne();
   }
   assert(lastUpdatedNode != std::numeric_limits<size_t>::max());
+  Node* root = getNode(lastUpdatedNode);
+  if (root->getConsumedOperations().getType() ==
+      QueryExecutionTree::UNDEFINED) {
+    // Should only happen for the special case: pure text query.
+    AD_CHECK(root->_isContextNode);
+    root->useContextRootOperation();
+  }
   return (getNode(lastUpdatedNode));
 }
 
@@ -483,11 +582,13 @@ void QueryGraph::applySolutionModifiers(const QueryExecutionTree& treeSoFar,
         *finalTree = distinctTree;
       } else {
         finalTree->setVariableColumns(distinctTree.getVariableColumnMap());
+        finalTree->setContextVars(distinctTree.getContextVars());
         Sort sort(_qec, distinctTree, orderCol);
         finalTree->setOperation(QueryExecutionTree::SORT, &sort);
       }
     } else {
       finalTree->setVariableColumns(distinctTree.getVariableColumnMap());
+      finalTree->setContextVars(distinctTree.getContextVars());
       vector<pair<size_t, bool>> sortIndices;
       for (auto& ord : _query._orderBy) {
         sortIndices.emplace_back(
@@ -519,17 +620,28 @@ void QueryGraph::applyFilters(const QueryExecutionTree& treeSoFar,
 unordered_map<string, size_t>
 QueryGraph::createVariableColumnsMapForTextOperation(
     const string& contextVar,
-    const vector<QueryExecutionTree>& subtrees) {
+    const string& entityVar,
+    const vector<pair<QueryExecutionTree, size_t>>& subtrees) {
+  AD_CHECK(contextVar.size() > 0);
   unordered_map<string, size_t> map;
   size_t n = 0;
-  map[contextVar] = n++;
+  if (entityVar.size() > 0) {
+    map[entityVar] = n++;
+    map[string("SCORE(") + entityVar + ")"] = n++;
+    map[contextVar] = n++;
+  } else {
+    map[contextVar] = n++;
+    map[string("SCORE(") + contextVar + ")"] = n++;
+  }
+
   for (size_t i = 0; i < subtrees.size(); ++i) {
     size_t offset = n;
-    for (auto it = subtrees[i].getVariableColumnMap().begin();
-         it != subtrees[i].getVariableColumnMap().end(); ++it) {
+    for (auto it = subtrees[i].first.getVariableColumnMap().begin();
+         it != subtrees[i].first.getVariableColumnMap().end(); ++it) {
       map[it->first] = offset + it->second;
       ++n;
     }
   }
   return map;
 }
+
