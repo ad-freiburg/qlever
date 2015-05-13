@@ -8,6 +8,7 @@
 #include "./Index.h"
 #include "../parser/ContextFileParser.h"
 #include "../util/Simple8bCode.h"
+#include "FTSAlgorithms.h"
 
 // _____________________________________________________________________________
 void Index::addTextFromContextFile(const string& contextFile) {
@@ -76,82 +77,126 @@ void Index::addTextFromOnDiskIndex() {
 }
 
 // _____________________________________________________________________________
-size_t Index::passContextFileForVocabulary(string const& contextFile) {
-  LOG(INFO) << "Making pass over ContextFile " << contextFile <<
-            " for vocabulary." << std::endl;
-  ContextFileParser::Line line;
-  ContextFileParser p(contextFile);
-  std::unordered_set<string> items;
-  size_t i = 0;
-  while (p.getLine(line)) {
-    ++i;
-    if (!line._isEntity) {
-      items.insert(line._word);
-    }
-    if (i % 10000000 == 0) {
-      LOG(INFO) << "Lines processed: " << i << '\n';
-    }
-  }
-  LOG(INFO) << "Pass done.\n";
-  _textVocab.createFromSet(items);
-  return i;
+size_t Index::passContextFileForVocabulary(string const
+& contextFile) {
+LOG(INFO)
+
+<< "Making pass over ContextFile " << contextFile <<
+" for vocabulary." <<
+std::endl;
+ContextFileParser::Line line;
+ContextFileParser p(contextFile);
+std::unordered_set<string> items;
+size_t i = 0;
+while (p.
+getLine(line)
+) {
+++
+i;
+if (!line._isEntity) {
+items.
+insert(line
+._word);
+}
+if (i % 10000000 == 0) {
+LOG(INFO)
+
+<< "Lines processed: " << i << '\n';
+}
+}
+LOG(INFO)
+
+<< "Pass done.\n";
+_textVocab.
+createFromSet(items);
+return
+i;
 }
 
 // _____________________________________________________________________________
-void Index::passContextFileIntoVector(string const& contextFile,
-                                      Index::TextVec& vec) {
-  LOG(INFO) << "Making pass over ContextFile " << contextFile
-            << " and creating stxxl vector.\n";
-  ContextFileParser::Line line;
-  ContextFileParser p(contextFile);
-  std::unordered_map<string, Id> vocabMap = _vocab.asMap();
-  size_t i = 0;
-  // write using vector_bufwriter
-  TextVec::bufwriter_type writer(vec);
-  std::unordered_map<Id, Score> wordsInContext;
-  std::unordered_map<Id, Score> entitiesInContext;
-  Id currentContext = 0;
-  size_t entityNotFoundErrorMsgCount = 0;
-  while (p.getLine(line)) {
-    if (line._contextId != currentContext) {
-      addContextToVector(writer, currentContext, wordsInContext,
-                         entitiesInContext);
-      currentContext = line._contextId;
-      wordsInContext.clear();
-      entitiesInContext.clear();
-    }
-    if (line._isEntity) {
-      Id eid;
-      if (_vocab.getId(line._word, &eid)) {
-        entitiesInContext[eid] += line._score;
-      } else {
-        if (entityNotFoundErrorMsgCount < 20) {
-          LOG(WARN) << "Entity from text not in KB: " << line._word << '\n';
-          if (++entityNotFoundErrorMsgCount == 20) {
-            LOG(WARN) << "There are more entities not in the KB..."
-                  " suppressing further warnings...\n";
-          }
-        }
-      }
-    } else {
-      Id wid;
+void Index::passContextFileIntoVector(string const
+& contextFile,
+Index::TextVec& vec
+) {
+LOG(INFO)
+
+<< "Making pass over ContextFile " << contextFile
+<< " and creating stxxl vector.\n";
+ContextFileParser::Line line;
+ContextFileParser p(contextFile);
+std::unordered_map<string, Id> vocabMap = _vocab.asMap();
+size_t i = 0;
+// write using vector_bufwriter
+TextVec::bufwriter_type writer(vec);
+std::unordered_map<Id, Score> wordsInContext;
+std::unordered_map<Id, Score> entitiesInContext;
+Id currentContext = 0;
+size_t entityNotFoundErrorMsgCount = 0;
+while (p.
+getLine(line)
+) {
+if (line._contextId != currentContext) {
+addContextToVector(writer, currentContext, wordsInContext,
+    entitiesInContext
+);
+currentContext = line._contextId;
+wordsInContext.
+
+clear();
+
+entitiesInContext.
+
+clear();
+
+}
+if (line._isEntity) {
+Id eid;
+if (_vocab.
+getId(line
+._word, &eid)) {
+entitiesInContext[eid] += line.
+_score;
+} else {
+if (entityNotFoundErrorMsgCount < 20) {
+LOG(WARN)
+
+<< "Entity from text not in KB: " << line._word << '\n';
+if (++entityNotFoundErrorMsgCount == 20) {
+LOG(WARN)
+
+<< "There are more entities not in the KB..."
+" suppressing further warnings...\n";
+}
+}
+}
+} else {
+Id wid;
 #ifndef NDEBUG
-      bool ret = _textVocab.getId(line._word, &wid);
-      assert(ret);
+bool ret = _textVocab.getId(line._word, &wid);
+assert(ret);
 #else
       _textVocab.getId(line._word, &wid);
       #endif
 
-      wordsInContext[wid] += line._score;
-    }
-    ++i;
-    if (i % 10000000 == 0) {
-      LOG(INFO) << "Lines processed: " << i << '\n';
-    }
-  }
-  addContextToVector(writer, currentContext, wordsInContext, entitiesInContext);
-  writer.finish();
-  LOG(INFO) << "Pass done.\n";
+wordsInContext[wid] += line.
+_score;
+}
+++
+i;
+if (i % 10000000 == 0) {
+LOG(INFO)
+
+<< "Lines processed: " << i << '\n';
+}
+}
+addContextToVector(writer, currentContext, wordsInContext, entitiesInContext
+);
+writer.
+
+finish();
+LOG(INFO)
+
+<< "Pass done.\n";
 }
 
 // _____________________________________________________________________________
@@ -475,10 +520,13 @@ void Index::getContextListForWords(const string& words,
       getWordPostingsForTerm(term, cidVecs.back(), scoreVecs.back());
     }
     if (cidVecs.size() == 2) {
-      intersectTwoPostingLists(cidVecs[0], scoreVecs[1], cidVecs[1],
-                               scoreVecs[1], cids, scores);
+      FTSAlgorithms::intersectTwoPostingLists(cidVecs[0], scoreVecs[1],
+                                              cidVecs[1],
+                                              scoreVecs[1], cids, scores);
     } else {
-      intersectKWay(cidVecs, scoreVecs, cids, scores);
+      vector<Id> dummy;
+      FTSAlgorithms::intersectKWay(cidVecs, scoreVecs, nullptr, cids, dummy,
+                                   scores);
     }
   } else {
     getWordPostingsForTerm(terms[0], cids, scores);
@@ -532,8 +580,8 @@ void Index::getWordPostingsForTerm(const string& term, vector<Id>& cids,
                       static_cast<size_t>(tbmd._cl._lastByte + 1 -
                                           tbmd._cl._startScorelist),
                       blockScores);
-    filterByRange(idRange, blockCids, blockWids, blockScores,
-                  cids, scores);
+    FTSAlgorithms::filterByRange(idRange, blockCids, blockWids, blockScores,
+                                 cids, scores);
   } else {
     readGapComprList(tbmd._cl._nofElements,
                      tbmd._cl._startContextlist,
@@ -569,18 +617,19 @@ void Index::getECListForWords(const string& words,
     // Take all other words and get word posting lists for them.
     // Intersect all and keep the entity word ids.
     size_t useElFromTerm = getIndexOfBestSuitedElTerm(terms);
-    vector<Id> eCids;
-    vector<Id> eWids;
-    vector<Score> eScores;
+
     if (terms.size() == 2) {
       // Special case of two terms: no k-way intersect needed.
       vector<Id> wCids;
       vector<Score> wScores;
+      vector<Id> eCids;
+      vector<Id> eWids;
+      vector<Score> eScores;
       size_t onlyWordsFrom = 1 - useElFromTerm;
       getWordPostingsForTerm(terms[onlyWordsFrom], wCids, wScores);
       getEntityPostingsForTerm(terms[useElFromTerm], eCids, eWids, eScores);
-      intersectKeepLastWids(wCids, wScores, eCids, eScores, eWids, cids, eids,
-                            scores);
+      FTSAlgorithms::intersect(wCids, wScores, eCids, eWids, eScores, cids,
+                               eids, scores);
     } else {
       // Generic case: Use a k-way intersect whereas the entity postings
       // play a special role.
@@ -593,9 +642,13 @@ void Index::getECListForWords(const string& words,
           getWordPostingsForTerm(terms[i], cidVecs.back(), scoreVecs.back());
         }
       }
-      getEntityPostingsForTerm(terms[useElFromTerm], eCids, eWids, eScores);
-      intersectKWayKeepLastWids(cidsVec, scoresVec, eCids, eScores, eWids, cids,
-                                eids, scores);
+      cidVecs.push_back(vector<Id>());
+      scoreVecs.push_back(vector<Score>());
+      vector<Id> eWids;
+      getEntityPostingsForTerm(terms[useElFromTerm], cidVecs.back(), eWids,
+                               scoreVecs.back());
+      FTSAlgorithms::intersectKWay(cidVecs, scoreVecs, &eWids, cids, eids,
+                                   scores);
     }
   } else {
     // Special case: Just one word to deal with.
@@ -603,7 +656,7 @@ void Index::getECListForWords(const string& words,
   }
 
   // TODO: Make n variable.
-  aggScoresAndTakeTopKContexts(cids, eids, scores, 1, result);
+  FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 1, result);
   LOG(DEBUG) << "Done with getECListForWords.\n";
 }
 
@@ -674,8 +727,9 @@ void Index::getEntityPostingsForTerm(const string& term, vector<Id>& cids,
                       static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
                                           tbmd._entityCl._startScorelist),
                       eBlockScores);
-    intersect(matchingContexts, matchingContextScores, eBlockCids, eBlockWids,
-              eBlockScores, cids, eids, scores);
+    FTSAlgorithms::intersect(matchingContexts, matchingContextScores,
+                             eBlockCids, eBlockWids,
+                             eBlockScores, cids, eids, scores);
   }
 }
 
@@ -741,194 +795,41 @@ void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
 }
 
 // _____________________________________________________________________________
-void Index::filterByRange(const IdRange& idRange, const vector<Id>& blockCids,
-                          const vector<Id>& blockWids,
-                          const vector<Score>& blockScores,
-                          vector<Id>& resultCids,
-                          vector<Score>& resultScores) const {
-  AD_CHECK(blockCids.size() == blockWids.size());
-  AD_CHECK(blockCids.size() == blockScores.size());
-  LOG(DEBUG) << "Filtering " << blockCids.size() <<
-             " elements by ID range...\n";
+size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
+  // It is beneficial to choose a term where no filtering by regular word id
+  // is needed. Then the entity lists can be read directly from disk.
+  // For others it is always necessary to reach wordlist and filter them
+  // if such an entity list is taken, another interesection is necessary.
 
-  resultCids.resize(blockCids.size() + 2);
-  resultScores.resize(blockCids.size() + 2);
-  size_t nofResultElements = 0;
+  // Apart from that, entity lists are usually larger by a factor.
+  // Hence it makes sense to choose the smallest.
 
-  for (size_t i = 0; i < blockWids.size(); ++i) {
-    if (blockWids[i] >= idRange._first && blockWids[i] <= idRange._last) {
-      resultCids[nofResultElements] = blockCids[i];
-      resultScores[nofResultElements++] = blockScores[i];
-    }
-  }
-
-  resultCids.resize(nofResultElements);
-  resultScores.resize(nofResultElements);
-
-  AD_CHECK(resultCids.size() == resultScores.size());
-  LOG(DEBUG) << "Filtering by ID range done. Result has " <<
-             resultCids.size() << " elements.\n";
-}
-
-// _____________________________________________________________________________
-void Index::getTopKByScores(const vector<Id>& cids, const vector<Score>& scores,
-                            size_t k, Index::WidthOneList *result) const {
-  AD_CHECK_EQ(cids.size(), scores.size());
-  k = std::min(k, cids.size());
-  LOG(DEBUG) << "Call getTopKByScores (partial sort of " << cids.size()
-             << " contexts by score)...\n";
-  vector<size_t> indices;
-  indices.resize(scores.size());
-  for (size_t i = 0; i < indices.size(); ++i) {
-    indices[i] = i;
-  }
-  LOG(DEBUG) << "Doing the partial sort...\n";
-  std::partial_sort(indices.begin(), indices.begin() + k, indices.end(),
-                    [&scores](size_t a, size_t b) {
-                      return scores[a] > scores[b];
-                    });
-  LOG(DEBUG) << "Packing the final WidthOneList of cIds...\n";
-  result->reserve(k + 2);
-  result->resize(k);
-  for (size_t i = 0; i < k; ++i) {
-    (*result)[i] = {{cids[indices[i]]}};
-  }
-  LOG(DEBUG) << "Done with getTopKByScores.\n";
-}
-
-// _____________________________________________________________________________
-void Index::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
-                                         const vector<Id>& eids,
-                                         const vector<Score>& scores,
-                                         size_t k,
-                                         Index::WidthThreeList *result) const {
-  AD_CHECK_EQ(cids.size(), eids.size());
-  AD_CHECK_EQ(cids.size(), scores.size());
-  LOG(DEBUG) << "Going from an entity, context and score list of size: "
-             << cids.size() << " elements to a table with distinct entities "
-             << "and at most " << k << " contexts per entity.\n";
-
-  // The default case where k == 1 can use a map for a O(n) solution
-  if (k == 1) {
-    aggScoresAndTakeTopContext(cids, eids, scores, result);
-    return;
-  }
-
-  // Otherwise use a max heap of size k for the context scores  to achieve
-  // O(k log n)
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-           "> 1 contexts per entity not yet implemented.")
-
-
-  // The result is NOT sorted due to the usage of maps.
-  // Resorting the result is a seperate operation now.
-  // Benefit 1) it's not always necessary to sort.
-  // Benefit 2) The result size can be MUCH smaller than n.
-  LOG(DEBUG) << "Done. There are " << result->size() <<
-             " entity-score-context tuples now.\n";
-}
-
-// _____________________________________________________________________________
-void Index::aggScoresAndTakeTopContext(const vector<Id>& cids,
-                                       const vector<Id>& eids,
-                                       const vector<Score>& scores,
-                                       Index::WidthThreeList *result) const {
-  LOG(DEBUG) << "Special case with 1 contexts per entity...\n";
-  typedef unordered_map<Id, pair<Score, pair<Id, Score>>> AggMap;
-  AggMap map;
-  for (size_t i = 0; i < eids.size(); ++i) {
-    if (map.count(eids[i]) == 0) {
-      map[eids[i]] = pair<Score, pair<Id, Score>>(
-          1, pair<Id, Score>(cids[i], scores[i]));
+  // Heuristic: Always prefer no-filtering terms over otheres, then
+  // pick the one with the smallest EL block to be read.
+  std::vector<std::tuple<size_t, bool, size_t>> toBeSorted;
+  for (size_t i = 0; i < terms.size(); ++i) {
+    IdRange range;
+    if (terms[i].back() == PREFIX_CHAR) {
+      _textVocab.getIdRangeForFullTextPrefix(terms[i], &range);
     } else {
-      auto& val = map[eids[i]];
-      val.first += 1;
-      if (val.second.second < scores[i]) {
-        val.second = pair<Id, Score>(cids[i], scores[i]);
-      }
+      _textVocab.getId(terms[i], &range._first);
+      range._last = range._first;
     }
+    auto tbmd = _textMeta.getBlockInfoByWordRange(range._first, range._last);
+    toBeSorted.emplace_back(
+        std::make_tuple(i, tbmd._firstWordId == tbmd._lastWordId,
+                        tbmd._entityCl._nofElements));
   }
-  result->reserve(map.size() + 2);
-  result->resize(map.size());
-  size_t n = 0;
-  for (auto it = map.begin(); it != map.end(); ++it) {
-    (*result)[n++] =
-        array<Id, 3>{{
-                         it->first,  // entity
-                         static_cast<Id>(it->second.first),  // entity score
-                         it->second.second.first  // top context Id
-                     }};
-  }
-  AD_CHECK_EQ(n, result->size());
-  LOG(DEBUG) << "Done. There are " << result->size() <<
-             " entity-score-context tuples now.\n";
+  std::sort(toBeSorted.begin(), toBeSorted.end(),
+            [](const std::tuple<size_t, bool, size_t>& a,
+               const std::tuple<size_t, bool, size_t>& b) {
+              if (std::get<1>(a) == std::get<1>(b)) {
+                return std::get<2>(a) < std::get<2>(b);
+              } else {
+                return std::get<1>(a);
+              }
+            });
+  return std::get<0>(toBeSorted[0]);
 }
 
-// _____________________________________________________________________________
-void Index::intersect(const vector<Id>& matchingContexts,
-                      const vector<Score>& matchingContextScores,
-                      const vector<Id>& eBlockCids,
-                      const vector<Id>& eBlockWids,
-                      const vector<Score>& eBlockScores,
-                      vector<Id>& resultCids,
-                      vector<Id>& resultEids,
-                      vector<Score>& resultScores) const {
-  LOG(DEBUG) << "Intersection to filter the entity postings from a block "
-             << "so that only matching ones remain\n";
-  LOG(DEBUG) << "matchingContexts size: " << matchingContexts.size() << '\n';
-  LOG(DEBUG) << "eBlockCids size: " << eBlockCids.size() << '\n';
-  resultCids.resize(eBlockCids.size());
-  resultEids.resize(eBlockCids.size());
-  resultScores.resize(eBlockCids.size());
-  // Cast away constness so we can add sentinels that will be removed
-  // in the end and create and add those sentinels.
-  // Note: this is only efficient if capacity + 2 >= size for the input
-  // context lists. For now, we assume that all lists are read from disk
-  // where they had more than enough size allocated.
-  auto& l1 = const_cast<vector<Id>&>(matchingContexts);
-  auto& l2 = const_cast<vector<Id>&>(eBlockCids);
-  // The two below are needed for the final sentinel match
-  auto& wids = const_cast<vector<Id>&>(eBlockWids);
-  auto& scores = const_cast<vector<Score>&>(eBlockScores);
 
-  Id sent1 = std::numeric_limits<Id>::max();
-  Id sent2 = std::numeric_limits<Id>::max() - 1;
-  Id sentMatch = std::numeric_limits<Id>::max() - 2;
-
-  l1.push_back(sentMatch);
-  l2.push_back(sentMatch);
-  l1.push_back(sent1);
-  l2.push_back(sent2);
-  wids.push_back(0);
-  scores.push_back(0);
-
-  size_t i = 0;
-  size_t j = 0;
-  size_t n = 0;
-
-  while (l1[i] < sent1) {
-    while (l1[i] < l2[j]) { ++i; }
-    while (l2[j] < l1[i]) { ++j; }
-    while (l1[i] == l2[j]) {
-      // Make sure we get all matching elements from the entity list (l2)
-      // that match the current context.
-      // If there are multiple elements for that context in l1,
-      // we can safely skip them unless we want to incorporate the scores
-      // later on.
-      resultCids[n] = l2[j];
-      resultEids[n] = wids[j];
-      resultScores[n++] = scores[j++];
-    }
-    ++i;
-  }
-
-  // Remove sentinels
-  l1.resize(l1.size() - 2);
-  l2.resize(l2.size() - 2);
-  wids.resize(wids.size() - 1);
-  scores.resize(scores.size() - 1);
-  resultCids.resize(n - 1);
-  resultEids.resize(n - 1);
-  resultScores.resize(n - 1);
-  LOG(DEBUG) << "Intersection done. Size: " << resultCids.size() << "\n";
-}

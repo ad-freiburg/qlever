@@ -30,8 +30,10 @@ public:
 
 
   // Forbid copy and assignment
-  Index & operator=(const Index&) = delete;
+  Index& operator=(const Index&) = delete;
+
   Index(const Index&) = delete;
+
   Index() = default;
 
   // Creates an index from a TSV file.
@@ -77,14 +79,14 @@ public:
 
   const string& idToString(Id id) const;
 
-  void scanPSO(const string& predicate, WidthTwoList* result) const;
+  void scanPSO(const string& predicate, WidthTwoList *result) const;
 
-  void scanPSO(const string& predicate, const string& subject, WidthOneList*
+  void scanPSO(const string& predicate, const string& subject, WidthOneList *
   result) const;
 
-  void scanPOS(const string& predicate, WidthTwoList* result) const;
+  void scanPOS(const string& predicate, WidthTwoList *result) const;
 
-  void scanPOS(const string& predicate, const string& object, WidthOneList*
+  void scanPOS(const string& predicate, const string& object, WidthOneList *
   result) const;
 
   // --------------------------------------------------------------------------
@@ -92,9 +94,9 @@ public:
   // --------------------------------------------------------------------------
   const string& wordIdToString(Id id) const;
 
-  void getContextListForWords(const string& words, WidthTwoList* result) const;
+  void getContextListForWords(const string& words, WidthTwoList *result) const;
 
-  void getECListForWords(const string& words, WidthThreeList* result) const;
+  void getECListForWords(const string& words, WidthThreeList *result) const;
 
   void getWordPostingsForTerm(const string& term, vector<Id>& cids,
                               vector<Score>& scores) const;
@@ -161,13 +163,13 @@ private:
 
   void scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
                               Id lhsId, ad_utility::File& indexFile,
-                              WidthOneList* result) const;
+                              WidthOneList *result) const;
 
   void scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                  const pair<off_t, size_t>& followBlock,
                                  Id lhsId, ad_utility::File& indexFile,
                                  off_t upperBound,
-                                 WidthOneList* result) const;
+                                 WidthOneList *result) const;
 
   void addContextToVector(TextVec::bufwriter_type& writer, Id context,
                           const unordered_map<Id, Score>& words,
@@ -181,32 +183,9 @@ private:
   void readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
                          vector<T>& result) const;
 
-  void filterByRange(const IdRange& idRange, const vector<Id>& blockCids,
-                     const vector<Id>& blockWids,
-                     const vector<Score>& blockScores,
-                     vector<Id>& resultCids,
-                     vector<Score>& resultScores) const;
 
-  void intersect(const vector<Id>& matchingContexts,
-                 const vector<Score>& matchingContextScores,
-                 const vector<Id>& eBlockCids, const vector<Id>& eBlockWids,
-                 const vector<Score>& eBlockScores, vector<Id>& resultCids,
-                 vector<Id>& resultEids, vector<Score>& resultScores) const;
+  size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
 
-  void getTopKByScores(const vector<Id>& cids, const vector<Score>& scores,
-                       size_t k, WidthOneList* result) const;
-
-  void aggScoresAndTakeTopKContexts(const vector<Id>& cids,
-                                    const vector<Id>& eids,
-                                    const vector<Score>& scores,
-                                    size_t k,
-                                    WidthThreeList* result) const;
-
-  // Special case where k == 1.
-  void aggScoresAndTakeTopContext(const vector<Id>& cids,
-                                  const vector<Id>& eids,
-                                  const vector<Score>& scores,
-                                  WidthThreeList* result) const;
 
   void calculateBlockBoundaries();
 
@@ -218,7 +197,7 @@ private:
   //! to file.
   //! Returns the number of bytes written.
   template<class Numeric>
-  size_t writeList(Numeric* data, size_t nofElements,
+  size_t writeList(Numeric *data, size_t nofElements,
                    ad_utility::File& file) const;
 
   typedef unordered_map<Id, Id> IdCodeMap;

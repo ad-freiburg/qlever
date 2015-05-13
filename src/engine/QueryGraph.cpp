@@ -627,7 +627,7 @@ QueryGraph::createVariableColumnsMapForTextOperation(
   size_t n = 0;
   if (entityVar.size() > 0) {
     map[entityVar] = n++;
-    map[string("SCORE(") + entityVar + ")"] = n++;
+    map[string("SCORE(") + entityVar + "|" + contextVar +  ")"] = n++;
     map[contextVar] = n++;
   } else {
     map[contextVar] = n++;

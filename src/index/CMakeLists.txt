@@ -5,6 +5,6 @@ add_library(index
               IndexMetaData.h IndexMetaData.cpp
               StxxlSortFunctors.h
             	TextMetaData.cpp TextMetaData.h
-            	DocsDB.cpp DocsDB.h)
+            	DocsDB.cpp DocsDB.h FTSAlgorithms.cpp FTSAlgorithms.h)
 
 target_link_libraries(index parser ${STXXL_LIBRARIES})

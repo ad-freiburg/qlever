@@ -229,19 +229,19 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_FALSE(pq._reduced);
 
   pq = SparqlParser::parse(
-      "SELECT DISTINCT ?x SCORE(?x) ?y WHERE \t {?x :myrel ?y}\n"
-          "ORDER BY ASC(?y) DESC(SCORE(?x)) LIMIT 10 OFFSET 15");
+      "SELECT DISTINCT ?x SCORE(?x|?c) ?y WHERE \t {?x :myrel ?y}\n"
+          "ORDER BY ASC(?y) DESC(SCORE(?x|?c)) LIMIT 10 OFFSET 15");
   pq.expandPrefixes();
   ASSERT_EQ(0, pq._prefixes.size());
   ASSERT_EQ(3, pq._selectedVariables.size());
-  ASSERT_EQ("SCORE(?x)", pq._selectedVariables[1]);
+  ASSERT_EQ("SCORE(?x|?c)", pq._selectedVariables[1]);
   ASSERT_EQ(1, pq._whereClauseTriples.size());
   ASSERT_EQ("10", pq._limit);
   ASSERT_EQ("15", pq._offset);
   ASSERT_EQ(size_t(2), pq._orderBy.size());
   ASSERT_EQ("?y", pq._orderBy[0]._key);
   ASSERT_FALSE(pq._orderBy[0]._desc);
-  ASSERT_EQ("SCORE(?x)", pq._orderBy[1]._key);
+  ASSERT_EQ("SCORE(?x|?c)", pq._orderBy[1]._key);
   ASSERT_TRUE(pq._orderBy[1]._desc);
   ASSERT_TRUE(pq._distinct);
   ASSERT_FALSE(pq._reduced);

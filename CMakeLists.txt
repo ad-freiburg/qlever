@@ -21,7 +21,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-set(LOG_LEVEL 5)
+set(LOG_LEVEL 4)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -DLOGLEVEL=${LOG_LEVEL}")
 
 
@@ -45,6 +45,8 @@ include_directories(${STXXL_INCLUDE_DIRS})
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
 message(STATUS "CXX_FLAGS_RELEASE are : " ${CMAKE_CXX_FLAGS_RELEASE})
+message(STATUS "CXX_FLAGS_DEBUG are : " ${CMAKE_CXX_FLAGS_DEBUG})
+message(STATUS "IMPORTANT: Make sure you have selected the desired CMAKE_BUILD_TYPE")
 message(STATUS ---)
 
 ###############################################################################
@@ -88,3 +90,4 @@ add_test(ContextFileParserTest test/ContextFileParserTest)
 add_test(IndexMetaDataTest test/IndexMetaDataTest)
 add_test(IndexTest test/IndexTest)
 add_test(EngineTest test/EngineTest)
+add_test(FTSAlgorithmsTest test/FTSAlgorithmsTest)

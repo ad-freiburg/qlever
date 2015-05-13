@@ -37,6 +37,9 @@ target_link_libraries(IndexMetaDataTest gtest_main index -pthread)
 add_executable(IndexTest IndexTest.cpp)
 target_link_libraries(IndexTest gtest_main index -pthread)
 
+add_executable(FTSAlgorithmsTest FTSAlgorithmsTest.cpp)
+target_link_libraries(FTSAlgorithmsTest gtest_main index -pthread)
+
 add_executable(EngineTest EngineTest.cpp)
 target_link_libraries(EngineTest gtest_main engine -pthread)
 
@@ -54,4 +57,5 @@ add_library(tests
             IndexMetaDataTest
             IndexTest
             EngineTest
+            FTSAlgorithmsTest
             )
