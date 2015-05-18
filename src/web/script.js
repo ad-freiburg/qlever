@@ -2,8 +2,33 @@
  * Created by buchholb on 3/31/15.
  */
 $(document).ready(function () {
+    var ind = window.location.href.indexOf("?query=");
+    if (ind > 0) {
+        ind += 7;
+        var ccInd = window.location.href.indexOf("&cmd=clearcache");
+        if (ccInd > 0) {
+            $("#clear").prop("checked", true);
+            $("#query").val(decodeURIComponent(
+                window.location.href.substr(ind, ccInd - ind)));
+        } else {
+            $("#query").val(decodeURIComponent(
+                window.location.href.substr(ind)));
+        }
+        processQuery(window.location.href.substr(ind - 7));
+    }
     $("#runbtn").click(function () {
-        processQuery($("#query").val())
+        var q = encodeURIComponent($("#query").val());
+        console.log(q);
+        var queryString = "?query=" + q;
+        if ($("#clear").prop('checked')) {
+            console.log("With clearcache");
+            queryString += "&cmd=clearcache";
+        } else {
+            console.log("Without clearcache");
+        }
+        window.location = window.location.href.substr(0,
+                window.location.href.indexOf("?")) + queryString;
+        processQuery(queryString)
     });
 });
 
@@ -19,7 +44,9 @@ function getShortStr(str, maxLength) {
     var cpy = str;
     if (cpy.charAt(0) == '<') {
         pos = cpy.lastIndexOf('/');
-        if (pos < 0) { pos += 1; }
+        if (pos < 0) {
+            pos += 1;
+        }
         cpy = cpy.substring(pos + 1, cpy.length - 1);
         if (cpy.length > maxLength) {
             return cpy.substring(0, maxLength - 1) + "[...]"
@@ -42,16 +69,7 @@ function getShortStr(str, maxLength) {
 }
 
 function processQuery(query) {
-    console.log(encodeURIComponent(query));
-    var queryString = "/?query=" + encodeURIComponent(query);
-    if ($("#clear").prop('checked')) {
-        console.log("With clearcache");
-        queryString += "&cmd=clearcache";
-    } else {
-        console.log("Without clearcache");
-    }
-
-    $.getJSON(queryString, function (result) {
+    $.getJSON("/" + query, function (result) {
         var res = "<div id=\"res\">";
         // Time
         res += "<div id=\"time\">";
@@ -61,7 +79,7 @@ function processQuery(query) {
         res += "&nbsp;- Computation: " + result.time.computeResult + "<br/>";
         res += "&nbsp;- Creating JSON: "
             + (parseInt(result.time.total.replace(/ms/, ""))
-                - parseInt(result.time.computeResult.replace(/ms/, ""))).toString()
+            - parseInt(result.time.computeResult.replace(/ms/, ""))).toString()
             + "ms";
         res += "</div>";
         res += "<table id=\"restab\">";
@@ -70,7 +88,7 @@ function processQuery(query) {
             for (var j = 0; j < result.res[i].length; ++j) {
                 res += "<td title=\"" + htmlEscape(result.res[i][j]).replace(/\"/g, "&quot;") + "\">"
                     + htmlEscape(getShortStr(result.res[i][j], 26))
-                    +"</td>";
+                    + "</td>";
             }
             res += "</tr>";
         }

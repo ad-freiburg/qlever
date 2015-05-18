@@ -93,7 +93,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
 
 
   // The result is NOT sorted due to the usage of maps.
-  // Resorting the result is a seperate operation now.
+  // Resorting the result is a separate operation now.
   // Benefit 1) it's not always necessary to sort.
   // Benefit 2) The result size can be MUCH smaller than n.
   LOG(DEBUG) << "Done. There are " << result->size() <<
@@ -110,14 +110,16 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(const vector<Id>& cids,
   AggMap map;
   for (size_t i = 0; i < eids.size(); ++i) {
     if (map.count(eids[i]) == 0) {
-      map[eids[i]] = pair<Score, pair<Id, Score >>(
-          scores[i], pair<Id, Score>(cids[i], scores[i]));
+      map[eids[i]] = std::make_pair(1, std::make_pair(cids[i], scores[i]));
+      // map[eids[i]] = std::make_pair(scores[i],
+      // std::make_pair(cids[i], scores[i]));
     } else {
       auto& val = map[eids[i]];
-      val.first += scores[i];
+      // val.first += scores[i];
+      ++val.first;
       if (val.second.second < scores[i]) {
-        val.second = pair<Id, Score>(cids[i], scores[i]);
-      }
+        val.second = std::make_pair(cids[i], scores[i]);
+      };
     }
   }
   result->reserve(map.size() + 2);

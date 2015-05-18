@@ -78,125 +78,125 @@ void Index::addTextFromOnDiskIndex() {
 
 // _____________________________________________________________________________
 size_t Index::passContextFileForVocabulary(string const
-& contextFile) {
-LOG(INFO)
+                                           & contextFile) {
+  LOG(INFO)
 
-<< "Making pass over ContextFile " << contextFile <<
-" for vocabulary." <<
-std::endl;
-ContextFileParser::Line line;
-ContextFileParser p(contextFile);
-std::unordered_set<string> items;
-size_t i = 0;
-while (p.
-getLine(line)
-) {
-++
-i;
-if (!line._isEntity) {
-items.
-insert(line
-._word);
-}
-if (i % 10000000 == 0) {
-LOG(INFO)
+    << "Making pass over ContextFile " << contextFile <<
+    " for vocabulary." <<
+    std::endl;
+  ContextFileParser::Line line;
+  ContextFileParser p(contextFile);
+  std::unordered_set<string> items;
+  size_t i = 0;
+  while (p.
+      getLine(line)
+      ) {
+    ++
+        i;
+    if (!line._isEntity) {
+      items.
+          insert(line
+                     ._word);
+    }
+    if (i % 10000000 == 0) {
+      LOG(INFO)
 
-<< "Lines processed: " << i << '\n';
-}
-}
-LOG(INFO)
+        << "Lines processed: " << i << '\n';
+    }
+  }
+  LOG(INFO)
 
-<< "Pass done.\n";
-_textVocab.
-createFromSet(items);
-return
-i;
+    << "Pass done.\n";
+  _textVocab.
+      createFromSet(items);
+  return
+      i;
 }
 
 // _____________________________________________________________________________
 void Index::passContextFileIntoVector(string const
-& contextFile,
-Index::TextVec& vec
+                                      & contextFile,
+                                      Index::TextVec& vec
 ) {
-LOG(INFO)
+  LOG(INFO)
 
-<< "Making pass over ContextFile " << contextFile
-<< " and creating stxxl vector.\n";
-ContextFileParser::Line line;
-ContextFileParser p(contextFile);
-std::unordered_map<string, Id> vocabMap = _vocab.asMap();
-size_t i = 0;
+    << "Making pass over ContextFile " << contextFile
+    << " and creating stxxl vector.\n";
+  ContextFileParser::Line line;
+  ContextFileParser p(contextFile);
+  std::unordered_map<string, Id> vocabMap = _vocab.asMap();
+  size_t i = 0;
 // write using vector_bufwriter
-TextVec::bufwriter_type writer(vec);
-std::unordered_map<Id, Score> wordsInContext;
-std::unordered_map<Id, Score> entitiesInContext;
-Id currentContext = 0;
-size_t entityNotFoundErrorMsgCount = 0;
-while (p.
-getLine(line)
-) {
-if (line._contextId != currentContext) {
-addContextToVector(writer, currentContext, wordsInContext,
-    entitiesInContext
-);
-currentContext = line._contextId;
-wordsInContext.
+  TextVec::bufwriter_type writer(vec);
+  std::unordered_map<Id, Score> wordsInContext;
+  std::unordered_map<Id, Score> entitiesInContext;
+  Id currentContext = 0;
+  size_t entityNotFoundErrorMsgCount = 0;
+  while (p.
+      getLine(line)
+      ) {
+    if (line._contextId != currentContext) {
+      addContextToVector(writer, currentContext, wordsInContext,
+                         entitiesInContext
+      );
+      currentContext = line._contextId;
+      wordsInContext.
 
-clear();
+          clear();
 
-entitiesInContext.
+      entitiesInContext.
 
-clear();
+          clear();
 
-}
-if (line._isEntity) {
-Id eid;
-if (_vocab.
-getId(line
-._word, &eid)) {
-entitiesInContext[eid] += line.
-_score;
-} else {
-if (entityNotFoundErrorMsgCount < 20) {
-LOG(WARN)
+    }
+    if (line._isEntity) {
+      Id eid;
+      if (_vocab.
+          getId(line
+                    ._word, &eid)) {
+        entitiesInContext[eid] += line.
+            _score;
+      } else {
+        if (entityNotFoundErrorMsgCount < 20) {
+          LOG(WARN)
 
-<< "Entity from text not in KB: " << line._word << '\n';
-if (++entityNotFoundErrorMsgCount == 20) {
-LOG(WARN)
+            << "Entity from text not in KB: " << line._word << '\n';
+          if (++entityNotFoundErrorMsgCount == 20) {
+            LOG(WARN)
 
-<< "There are more entities not in the KB..."
-" suppressing further warnings...\n";
-}
-}
-}
-} else {
-Id wid;
+              << "There are more entities not in the KB..."
+                  " suppressing further warnings...\n";
+          }
+        }
+      }
+    } else {
+      Id wid;
 #ifndef NDEBUG
-bool ret = _textVocab.getId(line._word, &wid);
-assert(ret);
+      bool ret = _textVocab.getId(line._word, &wid);
+      assert(ret);
 #else
       _textVocab.getId(line._word, &wid);
       #endif
 
-wordsInContext[wid] += line.
-_score;
-}
-++
-i;
-if (i % 10000000 == 0) {
-LOG(INFO)
+      wordsInContext[wid] += line.
+          _score;
+    }
+    ++
+        i;
+    if (i % 10000000 == 0) {
+      LOG(INFO)
 
-<< "Lines processed: " << i << '\n';
-}
-}
-addContextToVector(writer, currentContext, wordsInContext, entitiesInContext
-);
-writer.
+        << "Lines processed: " << i << '\n';
+    }
+  }
+  addContextToVector(writer, currentContext, wordsInContext, entitiesInContext
+  );
+  writer.
 
-finish();
-LOG(INFO)
+      finish();
+  LOG(INFO)
 
-<< "Pass done.\n";
+    << "Pass done.\n";
 }
 
 // _____________________________________________________________________________
@@ -561,7 +561,8 @@ void Index::getWordPostingsForTerm(const string& term, vector<Id>& cids,
   }
   const auto& tbmd = _textMeta.getBlockInfoByWordRange(idRange._first,
                                                        idRange._last);
-  if (tbmd._cl.hasMultipleWords()) {
+  if (tbmd._cl.hasMultipleWords() || (tbmd._firstWordId == idRange._first &&
+                                      tbmd._lastWordId == idRange._last)) {
     vector<Id> blockCids;
     vector<Id> blockWids;
     vector<Score> blockScores;

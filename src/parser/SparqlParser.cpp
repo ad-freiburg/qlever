@@ -190,7 +190,8 @@ void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
   while (j < str.size() && str[j] != '\t' && str[j] != ' ' &&
          str[j] != '\n') { ++j; }
   string p = str.substr(i, j - i);
-  if (p == IN_CONTEXT_RELATION) {
+  if (p == IN_CONTEXT_RELATION ||
+      p.find(IN_CONTEXT_RELATION_NS) != string::npos) {
     string o = ad_utility::strip(str.substr(j), " \t\n");
     query._whereClauseTriples.push_back(SparqlTriple(s, p, o));
   } else {

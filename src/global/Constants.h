@@ -19,4 +19,6 @@ static const size_t DISTINCT_LHS_PER_BLOCK = 10 * 1000;
 static const size_t IN_CONTEXT_CARDINALITY_ESTIMATE = 1000 * 1000 * 1000;
 
 static const char IN_CONTEXT_RELATION[] = "<in-context>";
+static const char IN_CONTEXT_RELATION_NS[] = ":in-context";
 static const char HAS_CONTEXT_RELATION[] = "<contains-context>";
+static const char HAS_CONTEXT_RELATION_NS[] = ":contains-context";

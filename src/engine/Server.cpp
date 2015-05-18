@@ -68,30 +68,35 @@ void Server::run() {
 }
 
 // _____________________________________________________________________________
-void Server::process(Socket* client, QueryExecutionContext* qec) const {
+void Server::process(Socket *client, QueryExecutionContext *qec) const {
   string request;
   string response;
   string query;
   string contentType;
   client->recieve(&request);
-  if (request.find("?") == string::npos) {
-    size_t indexOfGET = request.find("GET");
-    size_t indexOfHTTP = request.find("HTTP");
 
-    if (indexOfGET != request.npos && indexOfHTTP != request.npos) {
-      string file = request.substr(indexOfGET + 5,
-                                   indexOfHTTP - (indexOfGET + 5) - 1);
-      // Use hardcoded white-listing for index.html and style.css
-      // can be changed if more should ever be needed, for now keep it simple.
-      if (file == "index.html"
-          || file == "style.css"
-          || file == "script.js") {
-        serveFile(client, file);
-      } else {
-        LOG(INFO) << "Ignoring request for file " << file << '\n';
-      }
+  size_t indexOfGET = request.find("GET");
+  size_t indexOfHTTP = request.find("HTTP");
+  size_t upper = indexOfHTTP;
+
+  if (indexOfGET != request.npos && indexOfHTTP != request.npos) {
+    size_t indexOfQuest = request.find("?", indexOfGET);
+    if (indexOfQuest != string::npos && indexOfQuest < indexOfHTTP) {
+      upper = indexOfQuest + 1;
     }
-  } else {
+    string file = request.substr(indexOfGET + 5, upper - (indexOfGET + 5) - 1);
+    // Use hardcoded white-listing for index.html and style.css
+    // can be changed if more should ever be needed, for now keep it simple.
+    LOG(DEBUG) << "file: " << file << '\n';
+    if (file == "index.html" || file == "style.css" || file == "script.js") {
+      serveFile(client, file);
+      return;
+    }
+    if (indexOfQuest == string::npos) {
+      LOG(INFO) << "Ignoring request for file " << file << '\n';
+      return;
+    }
+
     try {
       ParamValueMap params = parseHttpRequest(request);
       if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
@@ -101,6 +106,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       LOG(INFO) << "Query: " << query << '\n';
       ParsedQuery pq = SparqlParser::parse(query);
       pq.expandPrefixes();
+
       QueryGraph qg(qec);
       qg.createFromParsedQuery(pq);
       const QueryExecutionTree& qet = qg.getExecutionTree();
@@ -113,6 +119,8 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
     }
     string httpResponse = createHttpResponse(response, contentType);
     client->send(httpResponse);
+  } else {
+    LOG(INFO) << "Ignoring invalid request " << request << '\n';
   }
 }
 
@@ -129,7 +137,8 @@ Server::ParamValueMap Server::parseHttpRequest(
 
   if (indexOfGET == httpRequest.npos || indexOfHTTP == httpRequest.npos) {
     AD_THROW(ad_semsearch::Exception::BAD_REQUEST, "Invalid request. "
-        "Only supporting proper HTTP GET requests!\n" + httpRequest);
+                                                       "Only supporting proper HTTP GET requests!\n" +
+                                                   httpRequest);
   }
 
   string request = httpRequest.substr(indexOfGET + 3,
@@ -138,7 +147,7 @@ Server::ParamValueMap Server::parseHttpRequest(
   size_t index = request.find("?");
   if (index == request.npos) {
     AD_THROW(ad_semsearch::Exception::BAD_REQUEST, "Invalid request. "
-        "At least one parameters is required for meaningful queries!\n"
+                                                       "At least one parameters is required for meaningful queries!\n"
                                                    + httpRequest);
   }
   size_t next = request.find('&', index + 1);
@@ -299,7 +308,7 @@ string Server::composeResponseJson(const string& query,
 }
 
 // _____________________________________________________________________________
-void Server::serveFile(Socket* client, const string& requestedFile) const {
+void Server::serveFile(Socket *client, const string& requestedFile) const {
   string contentString;
   string contentType = "text/plain";
   string statusString = "HTTP/1.0 200 OK";
