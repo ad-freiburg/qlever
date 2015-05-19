@@ -26,8 +26,9 @@ $(document).ready(function () {
         } else {
             console.log("Without clearcache");
         }
-        window.location = window.location.href.substr(0,
-                window.location.href.indexOf("?")) + queryString;
+        window.history.pushState("object or string", "Title",
+            window.location.href.substr(0, window.location.href.indexOf("?"))
+            + queryString);
         processQuery(queryString)
     });
 });
