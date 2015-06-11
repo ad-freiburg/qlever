@@ -601,15 +601,13 @@ void Index::getWordPostingsForTerm(const string& term, vector<Id>& cids,
 }
 
 // _____________________________________________________________________________
-void Index::getECListForWords(const string& words,
-                              Index::WidthThreeList *result) const {
-  LOG(DEBUG) << "In getECListForWords...\n";
+void Index::getContextEntityScoreListsForWords(const string& words,
+                                               vector<Id>& cids,
+                                               vector<Id>& eids,
+                                               vector<Score>& scores) const {
+  LOG(INFO) << "In getEntityContextScoreListsForWords...\n";
   auto terms = ad_utility::split(words, ' ');
   AD_CHECK(terms.size() > 0);
-
-  vector<Id> cids;
-  vector<Id> eids;
-  vector<Score> scores;
   if (terms.size() > 1) {
     // Find the term with the smallest block and/or one where no filtering
     // via wordlists is necessary. Onyl take entity postings form this one.
@@ -655,7 +653,17 @@ void Index::getECListForWords(const string& words,
     // Special case: Just one word to deal with.
     getEntityPostingsForTerm(terms[0], cids, eids, scores);
   }
+  LOG(INFO) << "Done with getEntityContextScoreListsForWords...\n";
+}
 
+// _____________________________________________________________________________
+void Index::getECListForWords(const string& words,
+                              Index::WidthThreeList *result) const {
+  LOG(DEBUG) << "In getECListForWords...\n";
+  vector<Id> cids;
+  vector<Id> eids;
+  vector<Score> scores;
+  getContextEntityScoreListsForWords(words, cids, eids, scores);
   // TODO: Make n variable.
   FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 1, result);
   LOG(DEBUG) << "Done with getECListForWords.\n";
@@ -833,4 +841,78 @@ size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
   return std::get<0>(toBeSorted[0]);
 }
 
+// _____________________________________________________________________________
+template<size_t I>
+void Index::getECListForWordsAndSingleSub(const string& words,
+                                          const vector<array<Id, I>> subres,
+                                          size_t subResMainCol,
+                                          vector<array<Id, 3 + I>>& res) const {
+  // Get context entity postings matching the words
+  vector<Id> cids;
+  vector<Id> eids;
+  vector<Score> scores;
+  getContextEntityScoreListsForWords(words, cids, eids, scores);
 
+  LOG(DEBUG) << "Filtering matching contexts and building cross-product...\n";
+  if (cids.size() > 0) {
+    // Transform the sub res into a map from key entity to tuples
+    std::unordered_map<Id, vector<array<Id, I>>> subEs;
+    for (size_t i = 0; i < subres.size(); ++i) {
+      auto& tuples = subEs[subres[i][subResMainCol]];
+      tuples.push_back(subres[i]);
+    }
+    // Test if each context is fitting.
+    size_t currentContextFrom = 0;
+    Id currentContext = cids[0];
+    bool matched = false;
+    for (size_t i = 0; i < cids.size(); ++i) {
+      if (cids[i] != currentContext) {
+        if (matched) {
+          // For such a context form the cross product and create tuples.
+          vector<array<Id, 3>> contextEPostings;
+          contextEPostings.reserve(i - currentContextFrom);
+          for (size_t j = currentContextFrom; j < i; ++j) {
+            contextEPostings.emplace_back(
+                array<Id, 3>{{eids[j], static_cast<Id>(scores[j]), cids[j]}});
+            FTSAlgorithms::appendCrossProduct(contextEPostings, subEs, res);
+          }
+        }
+        matched = false;
+        currentContext = cids[i];
+        currentContextFrom = i;
+      }
+      if (!matched) {
+        matched = (subEs.count(eids[i]) > 0);
+      }
+    }
+  }
+}
+
+template
+void Index::getECListForWordsAndSingleSub(const string& words,
+                                          const vector<array<Id, 1>> subres,
+                                          size_t subResMainCol,
+                                          vector<array<Id, 4>>& res) const;
+
+template
+void Index::getECListForWordsAndSingleSub(const string& words,
+                                          const vector<array<Id, 2>> subres,
+                                          size_t subResMainCol,
+                                          vector<array<Id, 5>>& res) const;
+
+// _____________________________________________________________________________
+void Index::getECListForWordsAndTwoW1Subs(const string& words,
+                                          const vector<array<Id, 1>> subres1,
+                                          const vector<array<Id, 1>> subres2,
+                                          vector<array<Id, 5>>& res) const {
+
+}
+
+// _____________________________________________________________________________
+void Index::getECListForWordsAndSubtrees(const string& words,
+                                         const vector<pair<
+                                             const vector<vector<Id>>&&,
+                                             size_t>> subResVecs,
+                                         vector<vector<Id>>& res) const {
+
+}

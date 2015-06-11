@@ -307,7 +307,7 @@ QueryExecutionTree QueryGraph::Node::consumeIcIntoSubtree(
   addedSubtree.setVariableColumns(
       QueryGraph::createVariableColumnsMapForTextOperation(other->_label,
                                                            _label,
-                                                           _storedOperations));
+                                                           other->_storedOperations));
   for (auto& tree : _storedOperations) {
     for (auto& var : tree.first.getContextVars()) {
       addedSubtree.addContextVar(var);
@@ -335,7 +335,7 @@ QueryExecutionTree QueryGraph::Node::consumeHcIntoSubtree(
   addedSubtree.setVariableColumns(
       QueryGraph::createVariableColumnsMapForTextOperation(other->_label,
                                                            _label,
-                                                           _storedOperations));
+                                                           other->_storedOperations));
   for (auto& tree : _storedOperations) {
     for (auto& var : tree.first.getContextVars()) {
       addedSubtree.addContextVar(var);

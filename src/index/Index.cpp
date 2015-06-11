@@ -497,4 +497,3 @@ size_t Index::relationCardinality(const string& relationName) const {
   return 0;
 }
 
-

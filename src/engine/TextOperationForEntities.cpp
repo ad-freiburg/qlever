@@ -44,7 +44,7 @@ void TextOperationForEntities::computeResult(ResultTable *result) const {
   LOG(DEBUG) << "TextOperationForEntities result computation..." << endl;
   if (_subtrees.size() == 0) {
     result->_nofColumns = 3;
-    result->_fixedSizeData = new vector<array<Id, 2>>;
+    result->_fixedSizeData = new vector<array<Id, 3>>;
     getExecutionContext()->getIndex().getECListForWords(
         _words,
         reinterpret_cast<vector<array<Id, 3>> *>(result->_fixedSizeData));
@@ -54,19 +54,71 @@ void TextOperationForEntities::computeResult(ResultTable *result) const {
       result->_nofColumns +=
           _subtrees[i].first.getRootOperation()->getResultWidth();
     }
-    if (_subtrees.size() > 1) {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-               "Not supporting higher dimensional entity cross products, yet.")
-    }
-    array<Id, 4> tmp;
-   // getExecutionContext()->getIndex().getECrossProductForWords(
-   //     _words,
-   //     &tmp);
-    if (result->_nofColumns <= 5) {
-  //    result->_fixedSizeData = new vector<array<Id, result->_nofColumns>>;
-      // Fill fixed size result.
+    if (result->_nofColumns == 4) {
+      result->_fixedSizeData = new vector<array<Id, 4>>;
+      AD_CHECK(_subtrees.size() == 1);
+      AD_CHECK(_subtrees[0].first.getResult()._nofColumns == 1);
+      const Index::WidthOneList& subres =
+          *static_cast<Index::WidthOneList *>(
+              _subtrees[0].first.getResult()._fixedSizeData);
+      getExecutionContext()->getIndex()
+          .getECListForWordsAndSingleSub(_words,
+                                         subres,
+                                         _subtrees[0].second,
+                                         *static_cast<vector<array<Id, 4>> *>(
+                                             result->_fixedSizeData));
+    } else if (result->_nofColumns == 5) {
+      result->_fixedSizeData = new vector<array<Id, 5>>;
+      if (_subtrees.size() == 1) {
+        AD_CHECK(_subtrees[0].first.getResult()._nofColumns == 2);
+        const Index::WidthTwoList& subres =
+            *static_cast<Index::WidthTwoList *>(
+                _subtrees[0].first.getResult()._fixedSizeData);
+        getExecutionContext()->getIndex()
+            .getECListForWordsAndSingleSub(_words,
+                                           subres,
+                                           _subtrees[0].second,
+                                           *static_cast<vector<array<Id, 5>> *>(
+                                               result->_fixedSizeData));
+      } else {
+        AD_CHECK(_subtrees.size() == 2);
+        AD_CHECK(_subtrees[0].first.getResult()._nofColumns == 1);
+        AD_CHECK(_subtrees[0].second == 0);
+        AD_CHECK(_subtrees[1].first.getResult()._nofColumns == 1);
+        AD_CHECK(_subtrees[1].second == 0);
+        const Index::WidthOneList& subres1 =
+            *static_cast<Index::WidthOneList *>(
+                _subtrees[0].first.getResult()._fixedSizeData);
+        const Index::WidthOneList& subres2 =
+            *static_cast<Index::WidthOneList *>(
+                _subtrees[1].first.getResult()._fixedSizeData);
+        getExecutionContext()->getIndex()
+            .getECListForWordsAndTwoW1Subs(_words,
+                                           subres1,
+                                           subres2,
+                                           *static_cast<vector<array<Id, 5>> *>(
+                                               result->_fixedSizeData));
+      }
     } else {
-     // Fill variable size result.
+      // Var size result.
+      LOG(WARN) << "No perfectly efficient: Transforming subtree result"
+                << " into vector<vector> representation for convenience\n";
+      vector<pair<const vector<vector<Id>>&&, size_t>> subResVecs;
+      for (size_t i = 0; i < _subtrees.size(); ++i) {
+        const ResultTable& r = _subtrees[i].first.getResult();
+        if (r._nofColumns > 5) {
+          subResVecs.emplace_back(
+              std::make_pair(r._varSizeData, _subtrees[i].second));
+        } else {
+          subResVecs.emplace_back(
+              std::make_pair(r.getDataAsVarSize(), _subtrees[i].second));
+        }
+      }
+      LOG(WARN) << "Transformation into vec of vec done.\n";
+      getExecutionContext()->getIndex()
+          .getECListForWordsAndSubtrees(_words,
+                                        subResVecs,
+                                        result->_varSizeData);
     }
   }
   result->_status = ResultTable::FINISHED;
