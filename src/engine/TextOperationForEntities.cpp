@@ -101,7 +101,7 @@ void TextOperationForEntities::computeResult(ResultTable *result) const {
       }
     } else {
       // Var size result.
-      LOG(WARN) << "No perfectly efficient: Transforming subtree result"
+      LOG(WARN) << "Not perfectly efficient: Transforming subtree result"
                 << " into vector<vector> representation for convenience\n";
       vector<pair<const vector<vector<Id>>&&, size_t>> subResVecs;
       for (size_t i = 0; i < _subtrees.size(); ++i) {

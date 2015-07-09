@@ -147,7 +147,10 @@ void QueryExecutionTree::setVariableColumn(const string& variable, int column) {
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getVariableColumn(const string& variable) const {
-  AD_CHECK(_variableColumnMap.count(variable) > 0);
+  if (_variableColumnMap.count(variable) == 0) {
+    AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+             "Variable could not be mapped to result column. Var: " + variable);
+  }
   return _variableColumnMap.find(variable)->second;
 }
 

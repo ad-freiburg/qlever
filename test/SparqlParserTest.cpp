@@ -136,6 +136,19 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ("?c", pq._whereClauseTriples[3]._s);
     ASSERT_EQ("<in-context>", pq._whereClauseTriples[3]._p);
     ASSERT_EQ("coca* abuse", pq._whereClauseTriples[3]._o);
+
+    pq = SparqlParser::parse(
+        "PREFIX : <>\n"
+            "SELECT ?x ?y ?z TEXT(?c) SCORE(?c) ?c WHERE {\n"
+            "?x :is-a :Politician .\n"
+            "?x :in-context ?c .\n"
+            "?c :in-context friend .\n"
+            "?c :in-context ?y .\n"
+            "?y :is-a :Scientist .\n"
+            "FILTER(?x != ?y) .\n"
+            "} ORDER BY ?c");
+    pq.expandPrefixes();
+    ASSERT_EQ(1, pq._filters.size());
   }
   catch (const ad_semsearch::Exception& e) {
     FAIL() << e.getFullErrorMessage();

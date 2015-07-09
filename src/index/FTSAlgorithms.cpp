@@ -371,3 +371,38 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
   if (entityMode) { resEids.resize(n); }
   LOG(DEBUG) << "Intersection done. Size: " << resCids.size() << "\n";
 }
+
+
+void FTSAlgorithms::appendCrossProduct(const vector<Id> &cids,
+                                       const vector<Id> &eids,
+                                       size_t from,
+                                       size_t toExclusive,
+                                       const std::unordered_set<Id> &subRes1,
+                                       const std::unordered_set<Id> &subRes2,
+                                       vector<array<Id, 5>> &res) {
+  LOG(TRACE) << "Append cross-product called for a context with " <<
+             toExclusive - from << " postings.\n";
+  vector<Id> contextSubRes1;
+  vector<Id> contextSubRes2;
+  for (size_t i = from; i < toExclusive; ++i) {
+    if (subRes1.count(eids[i]) > 0) {
+      contextSubRes1.push_back(eids[i]);
+    }
+    if (subRes2.count(eids[i]) > 0) {
+      contextSubRes2.push_back(eids[i]);
+    }
+  }
+  for (size_t i = from; i < toExclusive; ++i) {
+    for (size_t j = 0; j < contextSubRes1.size(); ++j) {
+      for (size_t k = 0; k < contextSubRes2.size(); ++k) {
+        res.emplace_back(array<Id, 5>{{
+                                          eids[i],
+                                          3,
+                                          cids[i],
+                                          contextSubRes1[j],
+                                          contextSubRes2[k]
+                                      }});
+      }
+    }
+  }
+}

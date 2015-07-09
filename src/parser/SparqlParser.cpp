@@ -38,8 +38,8 @@ ParsedQuery SparqlParser::parse(const string& query) {
   }
 
   parsePrologue(ad_utility::strip(query.substr(0, i), " \n\t"), result);
-  parseSelect(ad_utility::strip(query.substr(i, j - (i + 1)), " \n\t"), result);
-  parseWhere(ad_utility::strip(query.substr(j, k - j), " \n\t"), result);
+  parseSelect(ad_utility::strip(query.substr(i, j - i), " \n\t"), result);
+  parseWhere(ad_utility::strip(query.substr(j, k - j + 1), " \n\t"), result);
 
   parseSolutionModifiers(ad_utility::strip(query.substr(k + 1), " \n\t"),
                          result);
@@ -103,6 +103,7 @@ void SparqlParser::parseSelect(const string& str, ParsedQuery& query) {
 void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
   size_t i = str.find('{');
   size_t j = str.find('}', i);
+  assert(j != string::npos);
   if (i == string::npos) {
     throw ParseException("Need curly braces in where clause.");
   }
@@ -118,7 +119,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
   bool insideLiteral = false;
   while (start < inner.size()) {
     size_t k = start;
-    while (inner[k] == ' ' || inner[k] == '\t') { ++k; }
+    while (inner[k] == ' ' || inner[k] == '\t' || inner[k] == '\n') { ++k; }
     if (inner[k] == 'F') {
       if (inner.substr(k, 6) == "FILTER") {
         size_t end = inner.find(')', k);

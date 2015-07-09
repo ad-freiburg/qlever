@@ -8,7 +8,7 @@
 #include "./Index.h"
 #include "../parser/ContextFileParser.h"
 #include "../util/Simple8bCode.h"
-#include "FTSAlgorithms.h"
+#include "./FTSAlgorithms.h"
 
 // _____________________________________________________________________________
 void Index::addTextFromContextFile(const string& contextFile) {
@@ -853,6 +853,11 @@ void Index::getECListForWordsAndSingleSub(const string& words,
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
 
+  // TODO: more code for efficienty.
+  // Examine the possiblity to branch if subresult is much larger
+  // than the number of matching postings.
+  // Could binary search then instead of create the map first.
+
   LOG(DEBUG) << "Filtering matching contexts and building cross-product...\n";
   if (cids.size() > 0) {
     // Transform the sub res into a map from key entity to tuples
@@ -869,13 +874,17 @@ void Index::getECListForWordsAndSingleSub(const string& words,
       if (cids[i] != currentContext) {
         if (matched) {
           // For such a context form the cross product and create tuples.
-          vector<array<Id, 3>> contextEPostings;
-          contextEPostings.reserve(i - currentContextFrom);
-          for (size_t j = currentContextFrom; j < i; ++j) {
-            contextEPostings.emplace_back(
-                array<Id, 3>{{eids[j], static_cast<Id>(scores[j]), cids[j]}});
-            FTSAlgorithms::appendCrossProduct(contextEPostings, subEs, res);
-          }
+//          vector<array<Id, 2>> contextEPostings;
+//          contextEPostings.reserve(i - currentContextFrom);
+//          for (size_t j = currentContextFrom; j < i; ++j) {
+//            assert(cids[j] == currentContext);
+//            contextEPostings.emplace_back(
+//                array<Id, 2>{{eids[j], static_cast<Id>(scores[j])}});
+//            FTSAlgorithms::appendCrossProduct(
+//                contextEPostings, subEs, cids[j], res);
+//          }
+          FTSAlgorithms::appendCrossProduct(
+              cids, eids, currentContextFrom, i, subEs, res);
         }
         matched = false;
         currentContext = cids[i];
@@ -905,7 +914,57 @@ void Index::getECListForWordsAndTwoW1Subs(const string& words,
                                           const vector<array<Id, 1>> subres1,
                                           const vector<array<Id, 1>> subres2,
                                           vector<array<Id, 5>>& res) const {
+  // Get context entity postings matching the words
+  vector<Id> cids;
+  vector<Id> eids;
+  vector<Score> scores;
+  getContextEntityScoreListsForWords(words, cids, eids, scores);
 
+  // TODO: more code for efficienty.
+  // Examine the possiblity to branch if subresults are
+  // much larger than the number of matching postings.
+  // Could binary search in them, then instead of create sets first.
+
+  LOG(DEBUG) << "Filtering matching contexts and building cross-product...\n";
+  if (cids.size() > 0) {
+    // Transform the sub res' into sets of entity Ids
+    std::unordered_set<Id> subEs1;
+    std::unordered_set<Id> subEs2;
+    for (size_t i = 0; i < subres1.size(); ++i) {
+      subEs1.insert(subres1[i][0]);
+    }
+    for (size_t i = 0; i < subres2.size(); ++i) {
+      subEs2.insert(subres2[i][0]);
+    }
+    // Test if each context is fitting.
+    size_t currentContextFrom = 0;
+    Id currentContext = cids[0];
+    bool matched = false;
+    bool matched1 = false;
+    bool matched2 = false;
+    for (size_t i = 0; i < cids.size(); ++i) {
+      if (cids[i] != currentContext) {
+        if (matched) {
+          FTSAlgorithms::appendCrossProduct(
+              cids, eids, currentContextFrom, i, subEs1, subEs2, res);
+        }
+        matched = false;
+        matched1 = false;
+        matched2 = false;
+        currentContext = cids[i];
+        currentContextFrom = i;
+      }
+      if (!matched) {
+        if (!matched1) {
+          matched1 = (subEs1.count(eids[i]) > 0);
+        }
+        if (!matched2) {
+          matched2 = (subEs2.count(eids[i]) > 0);
+        }
+        matched = matched1 && matched2;
+      }
+    }
+  }
 }
 
 // _____________________________________________________________________________

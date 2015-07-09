@@ -292,13 +292,98 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
               return a[0] < b[0];
             });
   ASSERT_EQ(0, result[0][0]);
-  ASSERT_EQ(13, result[0][1]);
-  ASSERT_EQ(10, result[0][2]);
+  ASSERT_EQ(4, result[0][1]);
+  ASSERT_EQ(4, result[0][2]);
   ASSERT_EQ(1, result[1][0]);
   ASSERT_EQ(1, result[1][1]);
   ASSERT_EQ(3, result[1][2]);
 };
 
+TEST(FTSAlgorithmsTest, appendCrossProductWithSingleOtherTest) {
+
+  unordered_map<Id, vector<array<Id, 1>>> subRes;
+  subRes[1] = vector<array<Id, 1>>{{{1}}};
+
+  vector<array<Id, 4>> res;
+
+
+  vector<Id> cids;
+  cids.push_back(1);
+  cids.push_back(1);
+
+  vector<Id> eids;
+  eids.push_back(0);
+  eids.push_back(1);
+
+  FTSAlgorithms::appendCrossProduct(cids, eids, 0, 2, subRes, res);
+
+  ASSERT_EQ(2, res.size());
+  ASSERT_EQ(0, res[0][0]);
+  ASSERT_EQ(2, res[0][1]);
+  ASSERT_EQ(1, res[0][2]);
+  ASSERT_EQ(1, res[0][3]);
+  ASSERT_EQ(1, res[1][0]);
+  ASSERT_EQ(2, res[1][1]);
+  ASSERT_EQ(1, res[1][2]);
+  ASSERT_EQ(1, res[1][3]);
+
+  subRes[0] = vector<array<Id, 1>>{{{0}}};
+  res.clear();
+  FTSAlgorithms::appendCrossProduct(cids, eids, 0, 2, subRes, res);
+
+  ASSERT_EQ(4, res.size());
+  ASSERT_EQ(0, res[0][0]);
+  ASSERT_EQ(2, res[0][1]);
+  ASSERT_EQ(1, res[0][2]);
+  ASSERT_EQ(0, res[0][3]);
+  ASSERT_EQ(0, res[1][0]);
+  ASSERT_EQ(2, res[1][1]);
+  ASSERT_EQ(1, res[1][2]);
+  ASSERT_EQ(1, res[1][3]);
+  ASSERT_EQ(1, res[2][0]);
+  ASSERT_EQ(2, res[2][1]);
+  ASSERT_EQ(1, res[2][2]);
+  ASSERT_EQ(0, res[2][3]);
+  ASSERT_EQ(1, res[3][0]);
+  ASSERT_EQ(2, res[3][1]);
+  ASSERT_EQ(1, res[3][2]);
+  ASSERT_EQ(1, res[3][3]);
+}
+
+TEST(FTSAlgorithmsTest, appendCrossProductWithTwoW1Test) {
+  std::unordered_set<Id> subRes1;
+  subRes1.insert(1);
+  subRes1.insert(2);
+
+  std::unordered_set<Id> subRes2;
+  subRes2.insert(0);
+  subRes2.insert(5);
+
+
+  vector<array<Id, 5>> res;
+
+  vector<Id> cids;
+  cids.push_back(1);
+  cids.push_back(1);
+
+  vector<Id> eids;
+  eids.push_back(0);
+  eids.push_back(1);
+
+  FTSAlgorithms::appendCrossProduct(cids, eids, 0, 2, subRes1, subRes2, res);
+
+  ASSERT_EQ(2, res.size());
+  ASSERT_EQ(0, res[0][0]);
+  ASSERT_EQ(3, res[0][1]);
+  ASSERT_EQ(1, res[0][2]);
+  ASSERT_EQ(1, res[0][3]);
+  ASSERT_EQ(0, res[0][4]);
+  ASSERT_EQ(1, res[1][0]);
+  ASSERT_EQ(3, res[1][1]);
+  ASSERT_EQ(1, res[1][2]);
+  ASSERT_EQ(1, res[1][3]);
+  ASSERT_EQ(0, res[0][4]);
+}
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
