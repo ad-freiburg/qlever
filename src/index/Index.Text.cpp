@@ -854,11 +854,12 @@ void Index::getECListForWordsAndSingleSub(const string& words,
   getContextEntityScoreListsForWords(words, cids, eids, scores);
 
   // TODO: more code for efficienty.
-  // Examine the possiblity to branch if subresult is much larger
+  // Examine the possibility to branch if subresult is much larger
   // than the number of matching postings.
   // Could binary search then instead of create the map first.
 
   LOG(DEBUG) << "Filtering matching contexts and building cross-product...\n";
+  vector<array<Id, 3 + I>> nonAggRes;
   if (cids.size() > 0) {
     // Transform the sub res into a map from key entity to tuples
     std::unordered_map<Id, vector<array<Id, I>>> subEs;
@@ -873,18 +874,8 @@ void Index::getECListForWordsAndSingleSub(const string& words,
     for (size_t i = 0; i < cids.size(); ++i) {
       if (cids[i] != currentContext) {
         if (matched) {
-          // For such a context form the cross product and create tuples.
-//          vector<array<Id, 2>> contextEPostings;
-//          contextEPostings.reserve(i - currentContextFrom);
-//          for (size_t j = currentContextFrom; j < i; ++j) {
-//            assert(cids[j] == currentContext);
-//            contextEPostings.emplace_back(
-//                array<Id, 2>{{eids[j], static_cast<Id>(scores[j])}});
-//            FTSAlgorithms::appendCrossProduct(
-//                contextEPostings, subEs, cids[j], res);
-//          }
           FTSAlgorithms::appendCrossProduct(
-              cids, eids, currentContextFrom, i, subEs, res);
+              cids, eids, scores, currentContextFrom, i, subEs, nonAggRes);
         }
         matched = false;
         currentContext = cids[i];
@@ -895,6 +886,9 @@ void Index::getECListForWordsAndSingleSub(const string& words,
       }
     }
   }
+  // TODO: Make k a parameter.
+  size_t k = 1;
+  FTSAlgorithms::aggScoresAndTakeTopKContexts(nonAggRes, k, res);
 }
 
 template
@@ -926,6 +920,7 @@ void Index::getECListForWordsAndTwoW1Subs(const string& words,
   // Could binary search in them, then instead of create sets first.
 
   LOG(DEBUG) << "Filtering matching contexts and building cross-product...\n";
+  vector<array<Id, 5>> nonAggRes;
   if (cids.size() > 0) {
     // Transform the sub res' into sets of entity Ids
     std::unordered_set<Id> subEs1;
@@ -946,7 +941,7 @@ void Index::getECListForWordsAndTwoW1Subs(const string& words,
       if (cids[i] != currentContext) {
         if (matched) {
           FTSAlgorithms::appendCrossProduct(
-              cids, eids, currentContextFrom, i, subEs1, subEs2, res);
+              cids, eids, scores, currentContextFrom, i, subEs1, subEs2, res);
         }
         matched = false;
         matched1 = false;
@@ -965,6 +960,9 @@ void Index::getECListForWordsAndTwoW1Subs(const string& words,
       }
     }
   }
+  // TODO: Make k a parameter.
+  size_t k = 1;
+  FTSAlgorithms::aggScoresAndTakeTopKContexts(nonAggRes, k, res);
 }
 
 // _____________________________________________________________________________

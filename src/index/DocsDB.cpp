@@ -29,5 +29,6 @@ string DocsDB::getTextExcerpt(Id cid) const {
   string line;
   _dbFile.readLine(&line, buf, BUFFER_SIZE_DOCSFILE_LINE);
   delete[] buf;
-  return line;
+  // Skip the Id
+  return line.substr(line.find('\t'));
 }

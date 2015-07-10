@@ -101,6 +101,82 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
 }
 
 // _____________________________________________________________________________
+template<typename Row>
+void FTSAlgorithms::aggScoresAndTakeTopKContexts(
+    vector<Row>& nonAggRes, size_t k,
+    vector<Row>& res) {
+
+  LOG(DEBUG) << "Aggregating scores from a list of size " << nonAggRes.size()
+             << " while keeping the top " << k << " contexts each.\n";
+
+  if (nonAggRes.size() == 0) return;
+
+  size_t width = nonAggRes[0].size();
+  std::sort(nonAggRes.begin(), nonAggRes.end(),
+            [&width](const Row& l, const Row& r) {
+              if (l[0] == r[0]) {
+                for (size_t i = 3; i < width; ++i) {
+                  if (l[i] == r[i]) continue;
+                  return l[i] < r[i];
+                }
+                return l[1] < r[1];
+              }
+              return l[0] < r[0];
+            });
+
+  res.push_back(nonAggRes[0]);
+  size_t contextsInResult = 1;
+  for (size_t i = 1; i < nonAggRes.size(); ++i) {
+    bool same = false;
+    if (nonAggRes[i][0] == res.back()[0]) {
+      same = true;
+      for (size_t j = 3; j < width; ++j) {
+        if (nonAggRes[i][j] != res.back()[j]) {
+          same = false;
+          break;
+        }
+      }
+    }
+    if (same) {
+      ++contextsInResult;
+      if (contextsInResult <= k) {
+        res.push_back(nonAggRes[i]);
+      }
+    } else {
+      // Other
+
+      // update scores on last
+      for (size_t j = res.size() - std::min(contextsInResult, k);
+           j < res.size(); ++j) {
+        assert(j < i);
+        assert(j < res.size());
+        res[j][1] = contextsInResult;
+      }
+
+      // start with current
+      res.push_back(nonAggRes[i]);
+      contextsInResult = 1;
+    }
+  }
+
+  LOG(DEBUG) << "Done. There are " << res.size() <<
+             " entity-score-context tuples now.\n";
+}
+
+template void FTSAlgorithms::aggScoresAndTakeTopKContexts(
+    vector<array<Id, 4>>& nonAggRes, size_t k,
+    vector<array<Id, 4>>& res);
+
+template void FTSAlgorithms::aggScoresAndTakeTopKContexts(
+    vector<array<Id, 5>>& nonAggRes, size_t k,
+    vector<array<Id, 5>>& res);
+
+template void FTSAlgorithms::aggScoresAndTakeTopKContexts(
+    vector<vector<Id>>& nonAggRes, size_t k,
+    vector<vector<Id>>& res);
+
+
+// _____________________________________________________________________________
 void FTSAlgorithms::aggScoresAndTakeTopContext(const vector<Id>& cids,
                                                const vector<Id>& eids,
                                                const vector<Score>& scores,
@@ -373,13 +449,14 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
 }
 
 
-void FTSAlgorithms::appendCrossProduct(const vector<Id> &cids,
-                                       const vector<Id> &eids,
+void FTSAlgorithms::appendCrossProduct(const vector<Id>& cids,
+                                       const vector<Id>& eids,
+                                       const vector<Score>& scores,
                                        size_t from,
                                        size_t toExclusive,
-                                       const std::unordered_set<Id> &subRes1,
-                                       const std::unordered_set<Id> &subRes2,
-                                       vector<array<Id, 5>> &res) {
+                                       const std::unordered_set<Id>& subRes1,
+                                       const std::unordered_set<Id>& subRes2,
+                                       vector<array<Id, 5>>& res) {
   LOG(TRACE) << "Append cross-product called for a context with " <<
              toExclusive - from << " postings.\n";
   vector<Id> contextSubRes1;
@@ -397,7 +474,7 @@ void FTSAlgorithms::appendCrossProduct(const vector<Id> &cids,
       for (size_t k = 0; k < contextSubRes2.size(); ++k) {
         res.emplace_back(array<Id, 5>{{
                                           eids[i],
-                                          3,
+                                          scores[i],
                                           cids[i],
                                           contextSubRes1[j],
                                           contextSubRes2[k]
@@ -406,3 +483,4 @@ void FTSAlgorithms::appendCrossProduct(const vector<Id> &cids,
     }
   }
 }
+

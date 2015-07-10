@@ -18,18 +18,24 @@ using std::vector;
 class TextOperationForEntities : public Operation {
 public:
 
-  TextOperationForEntities(QueryExecutionContext* qec, const string& words,
-                const vector<pair<QueryExecutionTree, size_t>>& subtrees);
+  TextOperationForEntities(QueryExecutionContext *qec, const string& words,
+                           const vector<pair<QueryExecutionTree, size_t>>& subtrees);
 
   virtual string asString() const;
+
   virtual size_t getResultWidth() const;
+
   virtual size_t resultSortedOn() const {
-    return std::numeric_limits<size_t>::max();
+    if (_subtrees.size() == 0) {
+      return std::numeric_limits<size_t>::max();
+    } else {
+      return 0;
+    };
   }
 
 private:
   string _words;
   vector<pair<QueryExecutionTree, size_t>> _subtrees;
 
-  virtual void computeResult(ResultTable* result) const;
+  virtual void computeResult(ResultTable *result) const;
 };

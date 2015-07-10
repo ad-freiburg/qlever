@@ -69,8 +69,20 @@ function getShortStr(str, maxLength) {
     return str;
 }
 
+
+function displayError(result) {
+    var disp = "<div id=\"err\">";
+    disp += "Query: " + "<br/>" + result.query  + "<br/>" + "<br/>" + "<br/>";
+    disp += "Error Msg: " + "<br/>" + result.exception + "<br/>" + "<br/>";
+    $("#answer").html(disp);
+}
+
 function processQuery(query) {
     $.getJSON("/" + query, function (result) {
+        if (result.status == "ERROR") {
+            displayError(result);
+            return;
+        }
         var res = "<div id=\"res\">";
         // Time
         res += "<div id=\"time\">";

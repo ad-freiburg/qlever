@@ -379,7 +379,10 @@ void QueryGraph::Node::consume(QueryGraph::Node* other,
     // Case: "this" is a context node.
     // Words and maybe stored operations have been set.
     // No reason to create a proper root for this yet.
-    AD_CHECK(_storedWords.size() > 0);
+    if(_storedWords.size() == 0) {
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+      "No words stored for node " + _label);
+    }
     return;
   }
   if (_consumedOperations.isEmpty()) {

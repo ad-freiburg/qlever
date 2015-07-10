@@ -136,9 +136,9 @@ Server::ParamValueMap Server::parseHttpRequest(
   size_t indexOfHTTP = httpRequest.find("HTTP");
 
   if (indexOfGET == httpRequest.npos || indexOfHTTP == httpRequest.npos) {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST, "Invalid request. "
-                                                       "Only supporting proper HTTP GET requests!\n" +
-                                                   httpRequest);
+    AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
+             "Invalid request. Only supporting proper HTTP GET requests!\n" +
+             httpRequest);
   }
 
   string request = httpRequest.substr(indexOfGET + 3,
@@ -146,9 +146,10 @@ Server::ParamValueMap Server::parseHttpRequest(
 
   size_t index = request.find("?");
   if (index == request.npos) {
-    AD_THROW(ad_semsearch::Exception::BAD_REQUEST, "Invalid request. "
-                                                       "At least one parameters is required for meaningful queries!\n"
-                                                   + httpRequest);
+    AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
+             "Invalid request. At least one parameters is "
+                 "required for meaningful queries!\n"
+             + httpRequest);
   }
   size_t next = request.find('&', index + 1);
   while (next != request.npos) {
@@ -273,7 +274,7 @@ string Server::composeResponseJson(const string& query,
 
   string msg = ad_utility::escapeForJson(exception.getFullErrorMessage());
 
-  os << "\"Exception-Error-Message\": \"" << msg << "\"\r\n"
+  os << "\"exception\": \"" << msg << "\"\r\n"
   << "}\r\n";
 
   return os.str();

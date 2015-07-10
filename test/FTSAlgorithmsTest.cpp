@@ -315,7 +315,11 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithSingleOtherTest) {
   eids.push_back(0);
   eids.push_back(1);
 
-  FTSAlgorithms::appendCrossProduct(cids, eids, 0, 2, subRes, res);
+  vector<Score> scores;
+  scores.push_back(2);
+  scores.push_back(2);
+
+  FTSAlgorithms::appendCrossProduct(cids, eids, scores, 0, 2, subRes, res);
 
   ASSERT_EQ(2, res.size());
   ASSERT_EQ(0, res[0][0]);
@@ -329,7 +333,7 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithSingleOtherTest) {
 
   subRes[0] = vector<array<Id, 1>>{{{0}}};
   res.clear();
-  FTSAlgorithms::appendCrossProduct(cids, eids, 0, 2, subRes, res);
+  FTSAlgorithms::appendCrossProduct(cids, eids, scores, 0, 2, subRes, res);
 
   ASSERT_EQ(4, res.size());
   ASSERT_EQ(0, res[0][0]);
@@ -370,16 +374,21 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithTwoW1Test) {
   eids.push_back(0);
   eids.push_back(1);
 
-  FTSAlgorithms::appendCrossProduct(cids, eids, 0, 2, subRes1, subRes2, res);
+  vector<Score> scores;
+  scores.push_back(2);
+  scores.push_back(2);
+
+  FTSAlgorithms::appendCrossProduct(cids, eids, scores,
+                                    0, 2, subRes1, subRes2, res);
 
   ASSERT_EQ(2, res.size());
   ASSERT_EQ(0, res[0][0]);
-  ASSERT_EQ(3, res[0][1]);
+  ASSERT_EQ(2, res[0][1]);
   ASSERT_EQ(1, res[0][2]);
   ASSERT_EQ(1, res[0][3]);
   ASSERT_EQ(0, res[0][4]);
   ASSERT_EQ(1, res[1][0]);
-  ASSERT_EQ(3, res[1][1]);
+  ASSERT_EQ(2, res[1][1]);
   ASSERT_EQ(1, res[1][2]);
   ASSERT_EQ(1, res[1][3]);
   ASSERT_EQ(0, res[0][4]);

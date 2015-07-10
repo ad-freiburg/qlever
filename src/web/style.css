@@ -58,6 +58,15 @@ table {
     font-size: 15px;
 }
 
+#err {
+    margin: 30px 0px;
+    padding: 10px;
+    font-size: 15px;
+    border-style: solid;
+    border-color: #ff0000;
+    max-width: 810px;
+}
+
 td {
     border: 1px solid black;
     border-collapse: collapse;
