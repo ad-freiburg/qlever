@@ -605,7 +605,7 @@ void Index::getContextEntityScoreListsForWords(const string& words,
                                                vector<Id>& cids,
                                                vector<Id>& eids,
                                                vector<Score>& scores) const {
-  LOG(INFO) << "In getEntityContextScoreListsForWords...\n";
+  LOG(DEBUG) << "In getEntityContextScoreListsForWords...\n";
   auto terms = ad_utility::split(words, ' ');
   AD_CHECK(terms.size() > 0);
   if (terms.size() > 1) {
@@ -653,7 +653,8 @@ void Index::getContextEntityScoreListsForWords(const string& words,
     // Special case: Just one word to deal with.
     getEntityPostingsForTerm(terms[0], cids, eids, scores);
   }
-  LOG(INFO) << "Done with getEntityContextScoreListsForWords...\n";
+  LOG(DEBUG) << "Done with getEntityContextScoreListsForWords. "
+             << "Got " << cids.size() << " elements. \n";
 }
 
 // _____________________________________________________________________________
@@ -666,7 +667,8 @@ void Index::getECListForWords(const string& words,
   getContextEntityScoreListsForWords(words, cids, eids, scores);
   // TODO: Make n variable.
   FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 1, result);
-  LOG(DEBUG) << "Done with getECListForWords.\n";
+  LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
+             << "\n";
 }
 
 // _____________________________________________________________________________
@@ -941,7 +943,8 @@ void Index::getECListForWordsAndTwoW1Subs(const string& words,
       if (cids[i] != currentContext) {
         if (matched) {
           FTSAlgorithms::appendCrossProduct(
-              cids, eids, scores, currentContextFrom, i, subEs1, subEs2, res);
+              cids, eids, scores, currentContextFrom, i, subEs1, subEs2,
+              nonAggRes);
         }
         matched = false;
         matched1 = false;

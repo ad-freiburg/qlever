@@ -106,6 +106,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     vector<Row>& nonAggRes, size_t k,
     vector<Row>& res) {
 
+  AD_CHECK(res.size() == 0);
   LOG(DEBUG) << "Aggregating scores from a list of size " << nonAggRes.size()
              << " while keeping the top " << k << " contexts each.\n";
 
@@ -461,7 +462,12 @@ void FTSAlgorithms::appendCrossProduct(const vector<Id>& cids,
              toExclusive - from << " postings.\n";
   vector<Id> contextSubRes1;
   vector<Id> contextSubRes2;
+  std::unordered_set<Id> done;
   for (size_t i = from; i < toExclusive; ++i) {
+    if (done.count(eids[i])) {
+      continue;
+    }
+    done.insert(eids[i]);
     if (subRes1.count(eids[i]) > 0) {
       contextSubRes1.push_back(eids[i]);
     }
