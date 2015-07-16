@@ -46,7 +46,7 @@ size_t IndexScan::getResultWidth() const {
 
 // _____________________________________________________________________________
 void IndexScan::computeResult(ResultTable* result) const {
-  LOG(INFO) << "IndexScan result computation...\n";
+  LOG(DEBUG) << "IndexScan result computation...\n";
   switch (_type) {
     case PSO_BOUND_S:
       computePSOboundS(result);
@@ -61,7 +61,7 @@ void IndexScan::computeResult(ResultTable* result) const {
       computePOSfreeO(result);
       break;
   }
-  LOG(INFO) << "IndexScan result computation done.\n";
+  LOG(DEBUG) << "IndexScan result computation done.\n";
 }
 
 // _____________________________________________________________________________

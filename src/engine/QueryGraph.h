@@ -138,8 +138,7 @@ public:
     string asString() const;
 
     // Get the expectedCardinality.
-    // Lazily computes the value once.
-    size_t expectedCardinality(size_t remainingRelationCardinality);
+    size_t expectedCardinality(const string& relation);
 
     const QueryExecutionTree& getConsumedOperations() const {
       return _consumedOperations;

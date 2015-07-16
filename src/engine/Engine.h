@@ -487,11 +487,6 @@ void Engine::join(const A& a, size_t jc1, const B& b, size_t jc2,
   result->resize(result->size() - 1);
 
   LOG(DEBUG) << "Join done.\n";
-  LOG(TRACE) << "First result row: ";
-  for (size_t i = 0; i < (*result)[0].size(); ++i) {
-    std::cout << (*result)[0][i] << " ";
-  }
-  std::cout << '\n';
   LOG(DEBUG) << "Result: size = " << result->size() << "\n";
 }
 
