@@ -101,23 +101,27 @@ void TextOperationForEntities::computeResult(ResultTable *result) const {
       }
     } else {
       // Var size result.
-      LOG(WARN) << "Not perfectly efficient: Transforming subtree result"
-                << " into vector<vector> representation for convenience\n";
-      vector<pair<const vector<vector<Id>>&&, size_t>> subResVecs;
+      LOG(DEBUG) << "Transforming sub results into maps...\n";
+      vector<unordered_map<Id, vector<vector<Id>>>> subResMaps;
+      subResMaps.resize(_subtrees.size());
       for (size_t i = 0; i < _subtrees.size(); ++i) {
         const ResultTable& r = _subtrees[i].first.getResult();
         if (r._nofColumns > 5) {
-          subResVecs.emplace_back(
-              std::make_pair(r._varSizeData, _subtrees[i].second));
+          for (size_t j = 0; i < r._varSizeData.size(); ++j) {
+            subResMaps[i][r._varSizeData[j][_subtrees[i].second]]
+                .push_back(r._varSizeData[j]);
+          }
         } else {
-          subResVecs.emplace_back(
-              std::make_pair(r.getDataAsVarSize(), _subtrees[i].second));
+          const vector<vector<Id>> varR = r.getDataAsVarSize();
+          for (size_t j = 0; j < varR.size(); ++j) {
+            subResMaps[i][varR[j][_subtrees[i].second]].push_back(varR[j]);
+          }
         }
       }
-      LOG(WARN) << "Transformation into vec of vec done.\n";
+      LOG(DEBUG) << "Transformation into maps done.\n";
       getExecutionContext()->getIndex()
           .getECListForWordsAndSubtrees(_words,
-                                        subResVecs,
+                                        subResMaps,
                                         result->_varSizeData);
     }
   }

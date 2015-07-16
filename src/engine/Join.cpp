@@ -175,7 +175,7 @@ void Join::computeResult(ResultTable* result) const {
           &result->_varSizeData);
     } else {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 1>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 2>>*>(leftRes._fixedSizeData),
           _leftJoinCol,
           rightRes._varSizeData,
           _rightJoinCol,

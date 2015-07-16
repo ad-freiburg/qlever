@@ -135,5 +135,14 @@ public:
       const std::unordered_set<Id>& subRes1,
       const std::unordered_set<Id>& subRes2,
       vector<array<Id, 5>>& res);
+
+  static void appendCrossProduct(
+      const vector<Id>& cids,
+      const vector<Id>& eids,
+      const vector<Score>& scores,
+      size_t from,
+      size_t toExclusive,
+      const vector<std::unordered_map<Id, vector<vector<Id>>>>&,
+      vector<vector<Id>>& res);
 };
 

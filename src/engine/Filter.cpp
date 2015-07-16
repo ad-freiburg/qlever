@@ -373,7 +373,7 @@ void Filter::computeResult(ResultTable* result) const {
         case SparqlFilter::EQ:
           getEngine()
               .filter(
-                  *static_cast<vector<RT>*>(subRes._fixedSizeData),
+                  subRes._varSizeData,
                   [&l, &r](const RT& e) {
                     return e[l] == e[r];
                   }, &result->_varSizeData);
@@ -381,7 +381,7 @@ void Filter::computeResult(ResultTable* result) const {
         case SparqlFilter::NE:
           getEngine()
               .filter(
-                  *static_cast<vector<RT>*>(subRes._fixedSizeData),
+                  subRes._varSizeData,
                   [&l, &r](const RT& e) {
                     return e[l] != e[r];
                   }, &result->_varSizeData);
@@ -389,7 +389,7 @@ void Filter::computeResult(ResultTable* result) const {
         case SparqlFilter::LT:
           getEngine()
               .filter(
-                  *static_cast<vector<RT>*>(subRes._fixedSizeData),
+                  subRes._varSizeData,
                   [&l, &r](const RT& e) {
                     return e[l] < e[r];
                   }, &result->_varSizeData);
@@ -397,7 +397,7 @@ void Filter::computeResult(ResultTable* result) const {
         case SparqlFilter::LE:
           getEngine()
               .filter(
-                  *static_cast<vector<RT>*>(subRes._fixedSizeData),
+                  subRes._varSizeData,
                   [&l, &r](const RT& e) {
                     return e[l] <= e[r];
                   }, &result->_varSizeData);
@@ -405,7 +405,7 @@ void Filter::computeResult(ResultTable* result) const {
         case SparqlFilter::GT:
           getEngine()
               .filter(
-                  *static_cast<vector<RT>*>(subRes._fixedSizeData),
+                  subRes._varSizeData,
                   [&l, &r](const RT& e) {
                     return e[l] > e[r];
                   }, &result->_varSizeData);
@@ -413,7 +413,7 @@ void Filter::computeResult(ResultTable* result) const {
         case SparqlFilter::GE:
           getEngine()
               .filter(
-                  *static_cast<vector<RT>*>(subRes._fixedSizeData),
+                  subRes._varSizeData,
                   [&l, &r](const RT& e) {
                     return e[l] >= e[r];
                   }, &result->_varSizeData);

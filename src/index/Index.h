@@ -116,7 +116,7 @@ public:
 
   void getECListForWordsAndSubtrees(
       const string& words,
-      const vector<pair<const vector<vector<Id>>&&, size_t>> subResVecs,
+      const vector<unordered_map<Id, vector<vector<Id>>>>& subResVecs,
       vector<vector<Id>>& res) const;
 
   void getWordPostingsForTerm(const string& term, vector<Id>& cids,

@@ -41,11 +41,10 @@ public:
   static inline vector<E> joinTuplesInVec(
       const A& a, const B& b, size_t leaveOutInB) {
     vector<E> res;
-    res.resize(a.size() + b.size() - 1);
-    std::copy(a.begin(), a.end(), res.begin());
-    std::copy(b.begin(), b.begin() + leaveOutInB, res.begin() + a.size());
-    std::copy(b.begin() + leaveOutInB + 1, b.end(),
-              res.begin() + a.size() + leaveOutInB);
+    res.reserve(a.size() + b.size() - 1);
+    res.insert(res.end(), a.begin(), a.end());
+    res.insert(res.end(), b.begin(), b.begin() + leaveOutInB);
+    res.insert(res.end(), b.begin() + leaveOutInB + 1, b.end());
     return res;
   };
 
@@ -488,6 +487,11 @@ void Engine::join(const A& a, size_t jc1, const B& b, size_t jc2,
   result->resize(result->size() - 1);
 
   LOG(DEBUG) << "Join done.\n";
+  LOG(TRACE) << "First result row: ";
+  for (size_t i = 0; i < (*result)[0].size(); ++i) {
+    std::cout << (*result)[0][i] << " ";
+  }
+  std::cout << '\n';
   LOG(DEBUG) << "Result: size = " << result->size() << "\n";
 }
 

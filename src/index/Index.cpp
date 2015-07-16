@@ -425,6 +425,7 @@ void Index::scanPOS(const string& predicate, const string& object,
 
 // _____________________________________________________________________________
 const string& Index::idToString(Id id) const {
+  assert(id < _vocab.size());
   return _vocab[id];
 }
 

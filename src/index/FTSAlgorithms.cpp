@@ -490,3 +490,62 @@ void FTSAlgorithms::appendCrossProduct(const vector<Id>& cids,
   }
 }
 
+// _____________________________________________________________________________
+void FTSAlgorithms::appendCrossProduct(
+    const vector<Id>& cids,
+    const vector<Id>& eids,
+    const vector<Score>& scores,
+    size_t from,
+    size_t toExclusive,
+    const vector<unordered_map<Id, vector<vector<Id>>>>& subResMaps,
+    vector<vector<Id>>& res) {
+
+  LOG(TRACE) << "Append cross-product called for a context with " <<
+             toExclusive - from << " postings.\n";
+
+  vector<vector<vector<Id>>> subResMatches;
+  subResMatches.resize(subResMaps.size());
+  std::unordered_set<Id> distinctEids;
+  for (size_t i = from; i < toExclusive; ++i) {
+    if (distinctEids.count(eids[i])) {
+      continue;
+    }
+    distinctEids.insert(eids[i]);
+    for (size_t j = 0; j < subResMaps.size(); ++j) {
+      if (subResMaps[j].count(eids[i]) > 0) {
+        for (const vector<Id>& row : subResMaps[j].find(eids[i])->second) {
+          subResMatches[j].push_back(row);
+        }
+      }
+    }
+  }
+  for (size_t i = from; i < toExclusive; ++i) {
+    // In order to create the cross product between subsets,
+    // we compute the number of result rows and use
+    // modulo operations to index the correct sources.
+
+    // Example: cross product between sets of sizes a x b x c
+    // Then the n'th row is composed of:
+    // n % a               from a,
+    // (n / a) % b         from b,
+    // ((n / a) / b) % c   from c.
+    size_t nofResultRows = distinctEids.size();
+    for (size_t j = 0; j < subResMatches.size(); ++j) {
+      nofResultRows *= subResMatches[j].size();
+    }
+
+    for (size_t n = 0; n < nofResultRows; ++n) {
+      vector<Id> resRow = {eids[i], scores[i], cids[i]};
+      for (size_t j = 0; j < subResMatches.size(); ++j) {
+        size_t index = n;
+        for (size_t k = 0; k < j; ++k) {
+          index /= subResMatches[k].size();
+        }
+        index %= subResMatches[j].size();
+        vector<Id>& append = subResMatches[j][index];
+        resRow.insert(resRow.end(), append.begin(), append.end());
+      }
+      res.push_back(resRow);
+    }
+  }
+}

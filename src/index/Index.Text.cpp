@@ -969,10 +969,51 @@ void Index::getECListForWordsAndTwoW1Subs(const string& words,
 }
 
 // _____________________________________________________________________________
-void Index::getECListForWordsAndSubtrees(const string& words,
-                                         const vector<pair<
-                                             const vector<vector<Id>>&&,
-                                             size_t>> subResVecs,
-                                         vector<vector<Id>>& res) const {
+void Index::getECListForWordsAndSubtrees(
+    const string& words,
+    const vector<unordered_map<Id, vector<vector<Id>>>>& subResMaps,
+    vector<vector<Id>>& res) const {
+  // Get context entity postings matching the words
+  vector<Id> cids;
+  vector<Id> eids;
+  vector<Score> scores;
+  getContextEntityScoreListsForWords(words, cids, eids, scores);
 
+  LOG(DEBUG) << "Filtering matching contexts and building cross-product...\n";
+  vector<vector<Id>> nonAggRes;
+  if (cids.size() > 0) {
+    // Test if each context is fitting.
+    size_t currentContextFrom = 0;
+    Id currentContext = cids[0];
+    bool matched = false;
+    vector<bool> matchedSubs;
+    matchedSubs.resize(subResMaps.size(), false);
+    for (size_t i = 0; i < cids.size(); ++i) {
+      if (cids[i] != currentContext) {
+        if (matched) {
+          FTSAlgorithms::appendCrossProduct(
+              cids, eids, scores, currentContextFrom, i, subResMaps, nonAggRes);
+        }
+        matched = false;
+        std::fill(matchedSubs.begin(), matchedSubs.end(), false);
+        currentContext = cids[i];
+        currentContextFrom = i;
+      }
+      if (!matched) {
+        matched = true;
+        for (size_t j = 0; j < matchedSubs.size(); ++j) {
+          if (!matchedSubs[j]) {
+            if (subResMaps[j].count(eids[i]) > 0) {
+              matchedSubs[j] = true;
+            } else {
+              matched = false;
+            }
+          }
+        }
+      }
+    }
+  }
+  // TODO: Make k a parameter.
+  size_t k = 1;
+  FTSAlgorithms::aggScoresAndTakeTopKContexts(nonAggRes, k, res);
 }
