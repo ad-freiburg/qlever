@@ -258,7 +258,20 @@ QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
       }
     }
   } else {
-    // Case: Other has a subtree result, must be a variable then
+    // Case: Other has a subtree result, must be a variable then.
+    // Make sure other->_consumedOperations is sorted.
+    if (other->_consumedOperations.resultSortedOn() !=
+        other->_consumedOperations.getVariableColumn(other->_label)) {
+      QueryExecutionTree sortedReplacement(other->_consumedOperations.getQec());
+      Sort sort(_qec, other->_consumedOperations,
+                other->_consumedOperations.getVariableColumn(other->_label));
+      sortedReplacement.setOperation(QueryExecutionTree::SORT, &sort);
+      sortedReplacement
+          .setVariableColumns(other->_consumedOperations.getVariableColumnMap());
+      sortedReplacement.setContextVars(
+          other->_consumedOperations.getContextVars());
+      other->_consumedOperations = sortedReplacement;
+    }
     if (edge._reversed) {
       QueryExecutionTree nestedTree(_qec);
       IndexScan is(_qec, IndexScan::POS_FREE_O);  // Ordered by O (join)
@@ -401,9 +414,11 @@ void QueryGraph::Node::consume(QueryGraph::Node *other,
   if (_consumedOperations.isEmpty()) {
     _consumedOperations = addedSubtree;
   } else {
+    // JOIN
+    // Make sure _consumed Operation is sorted
     if (_consumedOperations.resultSortedOn() !=
         _consumedOperations.getVariableColumn(_label)) {
-      QueryExecutionTree sortedReplacement(_consumedOperations);
+      QueryExecutionTree sortedReplacement(_consumedOperations.getQec());
       Sort sort(_qec, _consumedOperations,
                 _consumedOperations.getVariableColumn(_label));
       sortedReplacement.setOperation(QueryExecutionTree::SORT, &sort);
@@ -412,6 +427,7 @@ void QueryGraph::Node::consume(QueryGraph::Node *other,
       sortedReplacement.setContextVars(_consumedOperations.getContextVars());
       _consumedOperations = sortedReplacement;
     }
+    // Make sure addedSubtree is sorted
     if (addedSubtree.getVariableColumn(_label)
         == addedSubtree.resultSortedOn()) {
       Join join(_qec, _consumedOperations,
@@ -441,14 +457,38 @@ void QueryGraph::Node::consume(QueryGraph::Node *other,
 // _____________________________________________________________________________
 size_t QueryGraph::Node::expectedCardinality(
     const string& relation) {
-
-  size_t relationSize;
+  // Treat in-context differently.
+  // 1) Do it preferably, EXCEPT if there is a non-subtree var.
+  // 2) Inside, still prefer literals vars over subtree vars.
   if (relation == IN_CONTEXT_RELATION) {
-    relationSize = 10;
-  } else if (_qec) {
+    if (ad_utility::startsWith(_label, "?")
+        && _label.find(' ') == string::npos) {
+      // Case: variable.
+      if (_consumedOperations.getType() != QueryExecutionTree::UNDEFINED) {
+          // Case: sub-result
+          return 10;
+      } else {
+        // Case: No sub-result.
+        if (_isContextNode) {
+          // Case: a context node that has now degree 1. Do ASAP.
+          return 1;
+        } else {
+          // Case: a free variable. Delay as long as possible.
+          return std::numeric_limits<size_t>::max() - 1;
+        }
+      }
+    } else {
+      // Case: label, best / smallest case.
+      return 1;
+    }
+  }
+
+  // Case: Not in-context.
+  size_t relationSize;
+  if (_qec) {
     relationSize = _qec->getIndex().relationCardinality(relation);
   } else {
-    relationSize = 10; // Only used in test-case code.
+    relationSize = 100; // Only used in test-case code.
   }
   if (_expectedCardinality == std::numeric_limits<size_t>::max()) {
     if (ad_utility::startsWith(_label, "?")
@@ -473,7 +513,8 @@ size_t QueryGraph::Node::expectedCardinality(
       _expectedCardinality = 1 + relationSize / 10;
     }
   }
-  return _expectedCardinality;
+  size_t notInContextAdd = 50;
+  return notInContextAdd + _expectedCardinality;
 }
 
 // _____________________________________________________________________________

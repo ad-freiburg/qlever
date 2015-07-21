@@ -973,6 +973,7 @@ void Index::getECListForWordsAndSubtrees(
     const string& words,
     const vector<unordered_map<Id, vector<vector<Id>>>>& subResMaps,
     vector<vector<Id>>& res) const {
+
   // Get context entity postings matching the words
   vector<Id> cids;
   vector<Id> eids;

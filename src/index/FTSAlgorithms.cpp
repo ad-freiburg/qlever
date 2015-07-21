@@ -500,9 +500,6 @@ void FTSAlgorithms::appendCrossProduct(
     const vector<unordered_map<Id, vector<vector<Id>>>>& subResMaps,
     vector<vector<Id>>& res) {
 
-  LOG(TRACE) << "Append cross-product called for a context with " <<
-             toExclusive - from << " postings.\n";
-
   vector<vector<vector<Id>>> subResMatches;
   subResMatches.resize(subResMaps.size());
   std::unordered_set<Id> distinctEids;
@@ -529,7 +526,7 @@ void FTSAlgorithms::appendCrossProduct(
     // n % a               from a,
     // (n / a) % b         from b,
     // ((n / a) / b) % c   from c.
-    size_t nofResultRows = distinctEids.size();
+    size_t nofResultRows = 1;
     for (size_t j = 0; j < subResMatches.size(); ++j) {
       nofResultRows *= subResMatches[j].size();
     }
