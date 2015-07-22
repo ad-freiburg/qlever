@@ -43,6 +43,8 @@ string ParsedQuery::asString() const {
   os << "\n}";
 
   os << "\nLIMIT: " << (_limit.size() > 0 ? _limit : "no limit specified");
+  os << "\nTEXTLIMIT: "
+  << (_textLimit.size() > 0 ? _textLimit : "no limit specified");
   os << "\nOFFSET: " << (_offset.size() > 0 ? _offset : "no offset specified");
   os << "\nDISTINCT modifier is " << (_distinct ? "" : "not ") << "present.";
   os << "\nREDUCED modifier is " << (_reduced ? "" : "not ") << "present.";

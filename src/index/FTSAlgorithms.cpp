@@ -3,6 +3,8 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <utility>
+#include <map>
+#include <set>
 #include <unordered_map>
 #include "./FTSAlgorithms.h"
 
@@ -86,10 +88,48 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
     return;
   }
 
-  // Otherwise use a max heap of size k for the context scores  to achieve
-  // O(k log n)
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-           "> 1 contexts per entity not yet implemented.")
+  // Use a map (ordered) and keep it at size k for the context scores
+  // This achieves O(n log k)
+  LOG(DEBUG) << "Heap-using case with " << k << " contexts per entity...\n";
+
+  using ScoreToContext = std::set<pair<Score, Id>>;
+  using ScoreAndStC = pair<Score, ScoreToContext>;
+  using AggMap = unordered_map<Id, ScoreAndStC>;
+  AggMap map;
+  for (size_t i = 0; i < eids.size(); ++i) {
+    if (map.count(eids[i]) == 0) {
+      ScoreToContext inner;
+      inner.insert(std::make_pair(scores[i], cids[i]));
+      map[eids[i]] = std::make_pair(1, inner);
+    } else {
+      auto& val = map[eids[i]];
+      // val.first += scores[i];
+      ++val.first;
+      ScoreToContext& stc = val.second;
+      if (stc.size() < k || stc.begin()->first < scores[i]) {
+        if (stc.size() == k) {
+          stc.erase(*stc.begin());
+        }
+        stc.insert(std::make_pair(scores[i], cids[i]));
+      };
+    }
+  }
+  result->reserve(map.size() * k + 2);
+  for (auto it = map.begin(); it != map.end(); ++it) {
+    Id eid = it->first;
+    Id entityScore = static_cast<Id>(it->second.first);
+    ScoreToContext& stc = it->second.second;
+    for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
+      result->emplace_back(
+          array<Id, 3>{{
+                           eid,
+                           entityScore,
+                           itt->second
+                       }});
+    }
+  }
+  LOG(DEBUG) << "Done. There are " << result->size() <<
+             " entity-score-context tuples now.\n";
 
 
   // The result is NOT sorted due to the usage of maps.

@@ -84,6 +84,7 @@ public:
   vector<SparqlFilter> _filters;
   vector<OrderKey> _orderBy;
   string _limit;
+  string _textLimit;
   string _offset;
   bool _reduced;
   bool _distinct;

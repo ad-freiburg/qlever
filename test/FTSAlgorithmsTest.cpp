@@ -235,7 +235,57 @@ TEST(FTSAlgorithmsTest, intersectKWayTest) {
 };
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
-  FAIL() << "Not yet implemented";
+  try {
+    FTSAlgorithms::WidthThreeList result;
+    vector<Id> cids;
+    vector<Id> eids;
+    vector<Score> scores;
+
+    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
+    ASSERT_EQ(0, result.size());
+
+    cids.push_back(0);
+    cids.push_back(1);
+    cids.push_back(2);
+
+    eids.push_back(0);
+    eids.push_back(0);
+    eids.push_back(0);
+
+    scores.push_back(0);
+    scores.push_back(1);
+    scores.push_back(2);
+
+    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
+    ASSERT_EQ(2, result.size());
+    ASSERT_EQ(0, result[0][0]);
+    ASSERT_EQ(3, result[0][1]);
+    ASSERT_EQ(2, result[0][2]);
+    ASSERT_EQ(0, result[1][0]);
+    ASSERT_EQ(3, result[1][1]);
+    ASSERT_EQ(1, result[1][2]);
+
+    cids.push_back(4);
+    eids.push_back(1);
+    scores.push_back(1);
+
+    result.clear();
+    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
+    ASSERT_EQ(3, result.size());
+    std::sort(result.begin(), result.end(),
+              [](const array<Id, 3>& a, const array<Id, 3>& b) {
+                return a[0] < b[0];
+              });
+    ASSERT_EQ(1, result[2][0]);
+    ASSERT_EQ(1, result[2][1]);
+    ASSERT_EQ(4, result[2][2]);
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
 };
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
@@ -393,6 +443,7 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithTwoW1Test) {
   ASSERT_EQ(1, res[1][3]);
   ASSERT_EQ(0, res[0][4]);
 }
+
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

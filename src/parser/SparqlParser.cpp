@@ -250,6 +250,10 @@ void SparqlParser::parseSolutionModifiers(const string& str,
       query._limit = tokens[i + 1];
       ++i;
     }
+    if (tokens[i] == "TEXTLIMIT" && i < tokens.size() - 1) {
+      query._textLimit = tokens[i + 1];
+      ++i;
+    }
     if (tokens[i] == "OFFSET" && i < tokens.size() - 1) {
       query._offset = tokens[i + 1];
       ++i;
