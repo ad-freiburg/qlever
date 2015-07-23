@@ -51,6 +51,10 @@ public:
 
   virtual size_t resultSortedOn() const { return 0; }
 
+  virtual void setTextLimit(size_t limit) {
+    // Do nothing.
+  }
+
 private:
   ScanType _type;
   string _subject;

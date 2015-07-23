@@ -28,6 +28,11 @@ public:
 
   unordered_map<string, size_t> getVariableColumns() const;
 
+  virtual void setTextLimit(size_t limit) {
+    _left->setTextLimit(limit);
+    _right->setTextLimit(limit);
+  }
+
 private:
   QueryExecutionTree* _left;
   QueryExecutionTree* _right;

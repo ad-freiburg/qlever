@@ -31,6 +31,10 @@ public:
   virtual string asString() const;
   virtual size_t resultSortedOn() const { return _sortCol; }
 
+  virtual void setTextLimit(size_t limit) {
+    _subtree->setTextLimit(limit);
+  }
+
 private:
   QueryExecutionTree* _subtree;
   size_t _sortCol;

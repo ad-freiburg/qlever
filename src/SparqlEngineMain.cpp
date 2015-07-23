@@ -131,7 +131,6 @@ void processQuery(QueryExecutionContext& qec, const string &query) {
   pq.expandPrefixes();
   QueryGraph qg(&qec);
   qg.createFromParsedQuery(pq);
-
   const QueryExecutionTree& qet = qg.getExecutionTree();
 
   // const ResultTable& res = qet.getResult();

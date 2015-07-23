@@ -24,8 +24,11 @@ size_t TextOperationForEntities::getResultWidth() const {
 TextOperationForEntities::TextOperationForEntities(
     QueryExecutionContext *qec,
     const string& words,
-    const vector<pair<QueryExecutionTree, size_t>>& subtrees) :
-    Operation(qec), _words(words), _subtrees(subtrees) { }
+    const vector<pair<QueryExecutionTree, size_t>>& subtrees,
+    size_t textLimit) :
+    Operation(qec), _words(words), _subtrees(subtrees) {
+  setTextLimit(textLimit);
+}
 
 // _____________________________________________________________________________
 string TextOperationForEntities::asString() const {
@@ -36,6 +39,7 @@ string TextOperationForEntities::asString() const {
     os << "\n\tand " << _subtrees[i].first.asString() << " [" <<
     _subtrees[i].second << "]";
   }
+  os << " with textLimit = " << _textLimit;
   return os.str();
 }
 
@@ -47,6 +51,7 @@ void TextOperationForEntities::computeResult(ResultTable *result) const {
     result->_fixedSizeData = new vector<array<Id, 3>>;
     getExecutionContext()->getIndex().getECListForWords(
         _words,
+        _textLimit,
         reinterpret_cast<vector<array<Id, 3>> *>(result->_fixedSizeData));
   } else {
     result->_nofColumns = 3;
@@ -65,6 +70,7 @@ void TextOperationForEntities::computeResult(ResultTable *result) const {
           .getECListForWordsAndSingleSub(_words,
                                          subres,
                                          _subtrees[0].second,
+                                         _textLimit,
                                          *static_cast<vector<array<Id, 4>> *>(
                                              result->_fixedSizeData));
     } else if (result->_nofColumns == 5) {
@@ -78,6 +84,7 @@ void TextOperationForEntities::computeResult(ResultTable *result) const {
             .getECListForWordsAndSingleSub(_words,
                                            subres,
                                            _subtrees[0].second,
+                                           _textLimit,
                                            *static_cast<vector<array<Id, 5>> *>(
                                                result->_fixedSizeData));
       } else {
@@ -96,6 +103,7 @@ void TextOperationForEntities::computeResult(ResultTable *result) const {
             .getECListForWordsAndTwoW1Subs(_words,
                                            subres1,
                                            subres2,
+                                           _textLimit,
                                            *static_cast<vector<array<Id, 5>> *>(
                                                result->_fixedSizeData));
       }
@@ -122,6 +130,7 @@ void TextOperationForEntities::computeResult(ResultTable *result) const {
       getExecutionContext()->getIndex()
           .getECListForWordsAndSubtrees(_words,
                                         subResMaps,
+                                        _textLimit,
                                         result->_varSizeData);
     }
   }

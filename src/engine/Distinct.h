@@ -37,6 +37,10 @@ public:
     return _subtree->resultSortedOn();
   }
 
+  virtual void setTextLimit(size_t limit) {
+    _subtree->setTextLimit(limit);
+  }
+
 private:
   QueryExecutionTree* _subtree;
   vector<size_t> _keepIndices;

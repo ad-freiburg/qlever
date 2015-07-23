@@ -24,8 +24,10 @@ size_t TextOperationForContexts::getResultWidth() const {
 TextOperationForContexts::TextOperationForContexts(
     QueryExecutionContext* qec,
     const string& words,
-    const vector<pair<QueryExecutionTree, size_t>>& subtrees) :
-    Operation(qec), _words(words), _subtrees(subtrees) { }
+    const vector<pair<QueryExecutionTree, size_t>>& subtrees,
+    size_t textLimit) :
+    Operation(qec), _words(words), _subtrees(subtrees), _textLimit(textLimit) {
+}
 
 // _____________________________________________________________________________
 string TextOperationForContexts::asString() const {
@@ -36,6 +38,7 @@ string TextOperationForContexts::asString() const {
     os << "\n\tand " << _subtrees[i].first.asString() << " [" <<
     _subtrees[i].second << "]";
   }
+  os << " with textLimit = " << _textLimit;
   return os.str();
 }
 

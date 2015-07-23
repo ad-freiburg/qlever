@@ -66,6 +66,8 @@ public:
 
   virtual size_t resultSortedOn() const = 0;
 
+  virtual void setTextLimit(size_t limit) = 0;
+
 protected:
 
   QueryExecutionContext* getExecutionContext() const {

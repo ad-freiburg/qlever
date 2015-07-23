@@ -18,8 +18,10 @@ using std::vector;
 class TextOperationForEntities : public Operation {
 public:
 
-  TextOperationForEntities(QueryExecutionContext *qec, const string& words,
-                           const vector<pair<QueryExecutionTree, size_t>>& subtrees);
+  TextOperationForEntities(
+      QueryExecutionContext *qec, const string& words,
+      const vector<pair<QueryExecutionTree, size_t>>& subtrees,
+      size_t textLimit);
 
   virtual string asString() const;
 
@@ -33,9 +35,17 @@ public:
     };
   }
 
+  virtual void setTextLimit(size_t limit) {
+    _textLimit = limit;
+    for (auto& st: _subtrees) {
+      st.first.setTextLimit(limit);
+    }
+  }
+
 private:
   string _words;
   vector<pair<QueryExecutionTree, size_t>> _subtrees;
+  size_t _textLimit;
 
   virtual void computeResult(ResultTable *result) const;
 };

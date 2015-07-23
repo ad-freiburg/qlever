@@ -241,7 +241,8 @@ void SparqlParser::parseSolutionModifiers(const string& str,
       i += 1;
       while (i + 1 < tokens.size()
              && tokens[i + 1] != "LIMIT"
-             && tokens[i + 1] != "OFFSET") {
+             && tokens[i + 1] != "OFFSET"
+             && tokens[i + 1] != "TEXTLIMIT") {
         query._orderBy.emplace_back(OrderKey(tokens[i + 1]));
         ++i;
       }

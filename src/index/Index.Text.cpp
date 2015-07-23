@@ -548,8 +548,8 @@ void Index::getWordPostingsForTerm(const string& term, vector<Id>& cids,
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
   IdRange idRange;
   if (term[term.size() - 1] == PREFIX_CHAR) {
-    LOG(INFO) << "Prefix: " << term << " not in vocabulary\n";
     if (!_textVocab.getIdRangeForFullTextPrefix(term, &idRange)) {
+      LOG(INFO) << "Prefix: " << term << " not in vocabulary\n";
       return;
     }
   } else {
@@ -659,14 +659,15 @@ void Index::getContextEntityScoreListsForWords(const string& words,
 
 // _____________________________________________________________________________
 void Index::getECListForWords(const string& words,
+                              size_t limit,
                               Index::WidthThreeList *result) const {
   LOG(DEBUG) << "In getECListForWords...\n";
   vector<Id> cids;
   vector<Id> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
-  // TODO: Make n variable.
-  FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 1, result);
+  FTSAlgorithms::aggScoresAndTakeTopKContexts(
+      cids, eids, scores, limit, result);
   LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
              << "\n";
 }
@@ -848,6 +849,7 @@ template<size_t I>
 void Index::getECListForWordsAndSingleSub(const string& words,
                                           const vector<array<Id, I>> subres,
                                           size_t subResMainCol,
+                                          size_t limit,
                                           vector<array<Id, 3 + I>>& res) const {
   // Get context entity postings matching the words
   vector<Id> cids;
@@ -888,27 +890,28 @@ void Index::getECListForWordsAndSingleSub(const string& words,
       }
     }
   }
-  // TODO: Make k a parameter.
-  size_t k = 1;
-  FTSAlgorithms::aggScoresAndTakeTopKContexts(nonAggRes, k, res);
+  FTSAlgorithms::aggScoresAndTakeTopKContexts(nonAggRes, limit, res);
 }
 
 template
 void Index::getECListForWordsAndSingleSub(const string& words,
                                           const vector<array<Id, 1>> subres,
                                           size_t subResMainCol,
+                                          size_t limit,
                                           vector<array<Id, 4>>& res) const;
 
 template
 void Index::getECListForWordsAndSingleSub(const string& words,
                                           const vector<array<Id, 2>> subres,
                                           size_t subResMainCol,
+                                          size_t limit,
                                           vector<array<Id, 5>>& res) const;
 
 // _____________________________________________________________________________
 void Index::getECListForWordsAndTwoW1Subs(const string& words,
                                           const vector<array<Id, 1>> subres1,
                                           const vector<array<Id, 1>> subres2,
+                                          size_t limit,
                                           vector<array<Id, 5>>& res) const {
   // Get context entity postings matching the words
   vector<Id> cids;
@@ -963,15 +966,14 @@ void Index::getECListForWordsAndTwoW1Subs(const string& words,
       }
     }
   }
-  // TODO: Make k a parameter.
-  size_t k = 1;
-  FTSAlgorithms::aggScoresAndTakeTopKContexts(nonAggRes, k, res);
+  FTSAlgorithms::aggScoresAndTakeTopKContexts(nonAggRes, limit, res);
 }
 
 // _____________________________________________________________________________
 void Index::getECListForWordsAndSubtrees(
     const string& words,
     const vector<unordered_map<Id, vector<vector<Id>>>>& subResMaps,
+    size_t limit,
     vector<vector<Id>>& res) const {
 
   // Get context entity postings matching the words
@@ -1014,7 +1016,6 @@ void Index::getECListForWordsAndSubtrees(
       }
     }
   }
-  // TODO: Make k a parameter.
-  size_t k = 1;
-  FTSAlgorithms::aggScoresAndTakeTopKContexts(nonAggRes, k, res);
+
+  FTSAlgorithms::aggScoresAndTakeTopKContexts(nonAggRes, limit, res);
 }

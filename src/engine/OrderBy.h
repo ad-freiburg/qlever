@@ -37,6 +37,10 @@ public:
     return std::numeric_limits<size_t>::max();
   }
 
+  virtual void setTextLimit(size_t limit) {
+    _subtree->setTextLimit(limit);
+  }
+
 private:
   QueryExecutionTree* _subtree;
   vector<pair<size_t, bool>> _sortIndices;

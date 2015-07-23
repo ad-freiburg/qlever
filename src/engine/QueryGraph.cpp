@@ -27,13 +27,15 @@ using std::pair;
 // _____________________________________________________________________________
 QueryGraph::QueryGraph() :
     _qec(nullptr), _nodeMap(), _nodeIds(), _adjLists(), _nodePayloads(),
-    _selectVariables(), _query(), _executionTree(nullptr), _nofTerminals(0) {
+    _selectVariables(), _query(), _executionTree(nullptr), _nofTerminals(0),
+    _textLimit(1) {
 }
 
 // _____________________________________________________________________________
 QueryGraph::QueryGraph(QueryExecutionContext *qec) :
     _qec(qec), _nodeMap(), _nodeIds(), _adjLists(), _nodePayloads(),
-    _selectVariables(), _query(), _executionTree(nullptr), _nofTerminals(0) {
+    _selectVariables(), _query(), _executionTree(nullptr), _nofTerminals(0),
+    _textLimit(1) {
 }
 
 // _____________________________________________________________________________
@@ -48,7 +50,8 @@ QueryGraph::QueryGraph(const QueryGraph& other) :
     _nodePayloads(other._nodePayloads),
     _selectVariables(other._selectVariables),
     _query(other._query),
-    _nofTerminals(other._nofTerminals) {
+    _nofTerminals(other._nofTerminals),
+    _textLimit(other._textLimit) {
   if (other._executionTree) {
     _executionTree = new QueryExecutionTree(*other._executionTree);
   } else {
@@ -69,6 +72,7 @@ QueryGraph& QueryGraph::operator=(const QueryGraph& other) {
     _executionTree = nullptr;
   }
   _nofTerminals = other._nofTerminals;
+  _textLimit = other._textLimit;
   return *this;
 }
 
@@ -153,7 +157,7 @@ void QueryGraph::collapseNode(size_t u) {
   }
   _adjLists[v] = newList;
   // Add the according operation / do the merging.
-  getNode(v)->consume(getNode(u), _adjLists[u][0]);
+  getNode(v)->consume(getNode(u), _adjLists[u][0], _textLimit);
   // Remove edges from this
   _adjLists[u].clear();
 };
@@ -189,11 +193,12 @@ string QueryGraph::asString() {
 // _____________________________________________________________________________
 QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
     QueryGraph::Node *other,
-    const QueryGraph::Edge& edge) {
+    const QueryGraph::Edge& edge,
+    size_t textLimit) {
   if (edge._label == IN_CONTEXT_RELATION) {
     if (other->_isContextNode) {
       // Do the pendent to the Broccoli occurs-with operation.
-      return consumeIcIntoSubtree(other, edge);
+      return consumeIcIntoSubtree(other, edge, textLimit);
     } else {
       // Case: *this is the context node.
       // We ensure that it is consumed later on by consumeIcIntoSubtree.
@@ -222,7 +227,7 @@ QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
   }
   if (edge._label == HAS_CONTEXT_RELATION) {
     AD_CHECK(other->_isContextNode);
-    return consumeHcIntoSubtree(other, edge);
+    return consumeHcIntoSubtree(other, edge, textLimit);
   }
   QueryExecutionTree addedSubtree(_qec);
   if (other->getConsumedOperations().isEmpty()) {
@@ -305,7 +310,8 @@ QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
 // _____________________________________________________________________________
 QueryExecutionTree QueryGraph::Node::consumeIcIntoSubtree(
     QueryGraph::Node *other,
-    const QueryGraph::Edge& edge) {
+    const QueryGraph::Edge& edge,
+    size_t textLimit) {
   AD_CHECK(other->_isContextNode);
   QueryExecutionTree addedSubtree(_qec);
   if (other->_storedWords.size() == 0) {
@@ -315,7 +321,7 @@ QueryExecutionTree QueryGraph::Node::consumeIcIntoSubtree(
   }
 
   TextOperationForEntities textOp(_qec, other->_storedWords,
-                                  other->_storedOperations);
+                                  other->_storedOperations, textLimit);
   addedSubtree.setOperation(QueryExecutionTree::TEXT_FOR_ENTITIES, &textOp);
   addedSubtree.setVariableColumns(
       QueryGraph::createVariableColumnsMapForTextOperation(
@@ -334,7 +340,8 @@ QueryExecutionTree QueryGraph::Node::consumeIcIntoSubtree(
 // _____________________________________________________________________________
 QueryExecutionTree QueryGraph::Node::consumeHcIntoSubtree(
     QueryGraph::Node *other,
-    const QueryGraph::Edge& edge) {
+    const QueryGraph::Edge& edge,
+    size_t textLimit) {
   AD_CHECK(other->_isContextNode);
   QueryExecutionTree addedSubtree(_qec);
   if (other->_storedWords.size() == 0) {
@@ -344,7 +351,7 @@ QueryExecutionTree QueryGraph::Node::consumeHcIntoSubtree(
   }
 
   TextOperationForContexts textOp(_qec, other->_storedWords,
-                                  other->_storedOperations);
+                                  other->_storedOperations, textLimit);
   addedSubtree.setOperation(QueryExecutionTree::TEXT_FOR_CONTEXTS, &textOp);
   addedSubtree.setVariableColumns(
       QueryGraph::createVariableColumnsMapForTextOperation(
@@ -362,7 +369,7 @@ QueryExecutionTree QueryGraph::Node::consumeHcIntoSubtree(
 }
 
 // _____________________________________________________________________________
-void QueryGraph::Node::useContextRootOperation() {
+void QueryGraph::Node::useContextRootOperation(size_t textLimit) {
   AD_CHECK(_isContextNode);
   _consumedOperations = QueryExecutionTree(_qec);
   if (_storedWords.size() == 0) {
@@ -371,7 +378,7 @@ void QueryGraph::Node::useContextRootOperation() {
              "For now, always need words or fixed entity for a contexts.");
   }
   TextOperationForContexts textOp(_qec, _storedWords,
-                                  _storedOperations);
+                                  _storedOperations, textLimit);
   _consumedOperations.setOperation(QueryExecutionTree::TEXT_FOR_CONTEXTS,
                                    &textOp);
   _consumedOperations.setVariableColumns(
@@ -388,8 +395,9 @@ void QueryGraph::Node::useContextRootOperation() {
 
 // _____________________________________________________________________________
 void QueryGraph::Node::consume(QueryGraph::Node *other,
-                               const QueryGraph::Edge& edge) {
-  QueryExecutionTree addedSubtree(consumeIntoSubtree(other, edge));
+                               const QueryGraph::Edge& edge,
+                               size_t textLimit) {
+  QueryExecutionTree addedSubtree(consumeIntoSubtree(other, edge, textLimit));
   if (!addedSubtree.getRootOperation()) {
     // Case: "this" is a context node.
     // Words and maybe stored operations have been set.
@@ -535,11 +543,15 @@ void QueryGraph::createFromParsedQuery(const ParsedQuery& pq) {
   for (size_t i = 0; i < pq._selectedVariables.size(); ++i) {
     _selectVariables.insert(pq._selectedVariables[i]);
   }
+  _textLimit = 1;
+  if (pq._textLimit.size() > 0 ) {
+    _textLimit = static_cast<size_t>(atol(pq._textLimit.c_str()));
+  }
   _query = pq;
 }
 
 // _____________________________________________________________________________
-QueryGraph::Node *QueryGraph::collapseAndCreateExecutionTree() {
+QueryGraph::Node* QueryGraph::collapseAndCreateExecutionTree() {
   auto deg1Nodes = getNodesWithDegreeOne();
   if (deg1Nodes.size() == 0) {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
@@ -572,7 +584,7 @@ QueryGraph::Node *QueryGraph::collapseAndCreateExecutionTree() {
       QueryExecutionTree::UNDEFINED) {
     // Should only happen for the special case: pure text query.
     AD_CHECK(root->_isContextNode);
-    root->useContextRootOperation();
+    root->useContextRootOperation(_textLimit);
   }
   return (getNode(lastUpdatedNode));
 }
@@ -627,7 +639,6 @@ const QueryExecutionTree& QueryGraph::getExecutionTree() {
     // applyFilters(interm, _executionTree);
     applyFilters(root->getConsumedOperations(), &interm);
     applySolutionModifiers(interm, _executionTree);
-
   }
   LOG(TRACE) << "Final execution tree: " << _executionTree->asString() << '\n';
   return *_executionTree;

@@ -121,19 +121,22 @@ public:
     // accessed during every consumption.
     // Updates the expected cardinality and the list of subtree results that
     // have to be joined on the columns that represent the node's label.
-    void consume(Node* other, const QueryGraph::Edge& edge);
+    void consume(Node* other, const QueryGraph::Edge& edge, size_t textLimit);
 
     // Does the actual consumption. Does not handle joiningg with previously
     // consumed subtrees, yet.
     QueryExecutionTree consumeIntoSubtree(Node* other,
-                                          const QueryGraph::Edge& edge);
+                                          const QueryGraph::Edge& edge,
+                                          size_t textLimit);
 
     // Special case: relation is in-context
     QueryExecutionTree consumeIcIntoSubtree(Node* other,
-                                            const QueryGraph::Edge& edge);
+                                            const QueryGraph::Edge& edge,
+                                            size_t textLimit);
     // Special case: relation is has-contexts
     QueryExecutionTree consumeHcIntoSubtree(Node* other,
-                                            const QueryGraph::Edge& edge);
+                                            const QueryGraph::Edge& edge,
+                                            size_t textLimit);
 
     string asString() const;
 
@@ -148,7 +151,7 @@ public:
       return ad_utility::startsWith(_label, "?");
     }
 
-    void useContextRootOperation();
+    void useContextRootOperation(size_t textLimit);
 
   private:
     QueryExecutionContext* _qec;
@@ -189,6 +192,7 @@ private:
   ParsedQuery _query;
   QueryExecutionTree* _executionTree;  // Ownership, new when created. Delete!
   size_t _nofTerminals;
+  size_t _textLimit;
 
   void collapseNode(size_t u);
 

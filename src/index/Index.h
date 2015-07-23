@@ -96,7 +96,8 @@ public:
 
   void getContextListForWords(const string& words, WidthTwoList *result) const;
 
-  void getECListForWords(const string& words, WidthThreeList *result) const;
+  void getECListForWords(const string& words, size_t limit,
+                         WidthThreeList *result) const;
 
   void getContextEntityScoreListsForWords(const string& words,
                                           vector<Id>& cids,
@@ -107,16 +108,19 @@ public:
   void getECListForWordsAndSingleSub(const string& words,
                                      const vector<array<Id, I>> subres,
                                      size_t subResMainCol,
+                                     size_t limit,
                                      vector<array<Id, 3 + I>>& res) const;
 
   void getECListForWordsAndTwoW1Subs(const string& words,
                                      const vector<array<Id, 1>> subres1,
                                      const vector<array<Id, 1>> subres2,
+                                     size_t limit,
                                      vector<array<Id, 5>>& res) const;
 
   void getECListForWordsAndSubtrees(
       const string& words,
       const vector<unordered_map<Id, vector<vector<Id>>>>& subResVecs,
+      size_t limit,
       vector<vector<Id>>& res) const;
 
   void getWordPostingsForTerm(const string& term, vector<Id>& cids,

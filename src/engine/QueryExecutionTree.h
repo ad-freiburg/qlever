@@ -114,6 +114,10 @@ public:
     _contextVars.insert(var);
   }
 
+  void setTextLimit(size_t limit) {
+    _rootOperation->setTextLimit(limit);
+  }
+
 private:
   QueryExecutionContext* _qec;   // No ownership
   unordered_map<string, size_t> _variableColumnMap;
