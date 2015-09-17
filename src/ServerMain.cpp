@@ -25,14 +25,14 @@ using std::cerr;
 
 // Available options.
 struct option options[] = {
-  {"ontology-basename", required_argument, NULL, 'o'},
+  {"index", required_argument, NULL, 'i'},
   {"port", required_argument, NULL, 'p'},
   {"text", no_argument, NULL, 't'},
   {NULL, 0, NULL, 0}
 };
 
 void printUsage() {
-  cout << "Usage: ./ServerMain -p <PORT> -o <ontology-basename> (-t)" << endl;
+  cout << "Usage: ./ServerMain -p <PORT> -i <index> (-t)" << endl;
 }
 
 // Main function.
@@ -51,18 +51,18 @@ int main(int argc, char** argv) {
 
   // Init variables that may or may not be
   // filled / set depending on the options.
-  string ontologyBase = "";
+  string index = "";
   bool text = false;
   int port = -1;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "o:p:t", options, NULL);
+    int c = getopt_long(argc, argv, "i:p:t", options, NULL);
     if (c == -1) break;
     switch (c) {
-      case 'o':
-        ontologyBase = optarg;
+      case 'i':
+        index = optarg;
         break;
       case 'p':
         port = atoi(optarg);
@@ -79,14 +79,14 @@ int main(int argc, char** argv) {
     }
   }
 
-  if (ontologyBase.size() == 0 || port == -1) {
+  if (index.size() == 0 || port == -1) {
     printUsage();
     exit(1);
   }
 
   try {
     Server server(port);
-    server.initialize(ontologyBase, text);
+    server.initialize(index, text);
     server.run();
   } catch(const ad_semsearch::Exception& e) {
     LOG(ERROR) << e.getFullErrorMessage() << '\n';

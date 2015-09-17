@@ -179,18 +179,26 @@ private:
   template<typename Row>
   void writeTsvTable(const vector<Row>& data, size_t from,
                      size_t upperBound,
-                     const vector<size_t>& validIndices,
+                     const vector<pair<size_t, OutputType>>& validIndices,
                      std::ostream& out) const {
     for (size_t i = from; i < upperBound; ++i) {
       const auto& row = data[i];
-      for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
-        out << ad_utility::escapeForJson(
-            _qec->getIndex().idToString(row[validIndices[j]]))
-        << ad_utility::escapeForJson("\t");
+      for (size_t j = 0; j < validIndices.size(); ++j) {
+        switch (validIndices[j].second) {
+          case KB:
+            out << _qec->getIndex().idToString(row[validIndices[j].first]);
+            break;
+          case VERBATIM:
+            out << row[validIndices[j].first] << "\",\"";
+            break;
+          case TEXT:
+            out << _qec->getIndex().getTextExcerpt(row[validIndices[j].first]);
+            break;
+          default: AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+                            "Cannot deduce output type.");
+        }
+        out << (j + 1 < validIndices.size() ? '\t' : '\n');
       }
-      out << ad_utility::escapeForJson(_qec->getIndex().idToString(
-          row[validIndices[validIndices.size() - 1]]));
-      out << "\n";
     }
   }
 };

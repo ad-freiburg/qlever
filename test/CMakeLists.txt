@@ -43,6 +43,9 @@ target_link_libraries(FTSAlgorithmsTest gtest_main index -pthread)
 add_executable(EngineTest EngineTest.cpp)
 target_link_libraries(EngineTest gtest_main engine -pthread)
 
+add_executable(QueryPlannerTest QueryPlannerTest.cpp)
+target_link_libraries(QueryPlannerTest gtest_main engine -pthread)
+
 add_library(tests
 						SparqlParserTest
 						StringUtilsTest
@@ -58,4 +61,5 @@ add_library(tests
             IndexTest
             EngineTest
             FTSAlgorithmsTest
+            QueryPlannerTest
             )

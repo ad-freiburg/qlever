@@ -90,10 +90,14 @@ QueryExecutionTree::~QueryExecutionTree() {
 
 // _____________________________________________________________________________
 string QueryExecutionTree::asString() const {
-  std::ostringstream os;
-  os << "{" << _rootOperation->asString() << " | width: " << getResultWidth()
-  << "}";
-  return os.str();
+  if (_rootOperation) {
+    std::ostringstream os;
+    os << "{" << _rootOperation->asString() << " | width: " << getResultWidth()
+    << "}";
+    return os.str();
+  } else {
+    return "<Empty QueryExecutionTree>";
+  }
 }
 
 // _____________________________________________________________________________
@@ -169,10 +173,21 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
   // They may trigger computation (but does not have to).
   const ResultTable& res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  vector<size_t> validIndices;
-  for (const auto& var : selectVars) {
+  vector<pair<size_t, OutputType>> validIndices;
+  for (auto var : selectVars) {
+    OutputType outputType = OutputType::KB;
+    if (ad_utility::startsWith(var, "SCORE(") || isContextvar(var)) {
+      outputType = OutputType::VERBATIM;
+    }
+    if (ad_utility::startsWith(var, "TEXT(")) {
+      outputType = OutputType::TEXT;
+      var = var.substr(5, var.rfind(')') - 5);
+    }
+
     if (getVariableColumnMap().find(var) != getVariableColumnMap().end()) {
-      validIndices.push_back(getVariableColumnMap().find(var)->second);
+      validIndices.push_back(
+          pair<size_t, OutputType>(getVariableColumnMap().find(var)->second,
+                                   outputType));
     }
   }
   if (validIndices.size() == 0) { return; }
