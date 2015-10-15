@@ -118,7 +118,11 @@ public:
     _rootOperation->setTextLimit(limit);
   }
 
-private:
+    size_t getCostEstimate() const;
+
+    size_t getSizeEstimate() const;
+
+  private:
   QueryExecutionContext* _qec;   // No ownership
   unordered_map<string, size_t> _variableColumnMap;
   Operation* _rootOperation;  // Owned child. Will be deleted at deconstruction.

@@ -13,34 +13,48 @@ using std::unordered_map;
 
 
 class Join : public Operation {
-public:
+  public:
 
-  Join(QueryExecutionContext* qec, const QueryExecutionTree& t1,
-      const QueryExecutionTree& t2, size_t t1JoinCol, size_t t2JoinCol,
-      bool keepJoinColumn = true);
-  Join(const Join& other);
-  Join& operator=(const Join& other);
-  virtual ~Join();
+    Join(QueryExecutionContext *qec, const QueryExecutionTree& t1,
+         const QueryExecutionTree& t2, size_t t1JoinCol, size_t t2JoinCol,
+         bool keepJoinColumn = true);
 
-  virtual string asString() const;
-  virtual size_t getResultWidth() const;
-  virtual size_t resultSortedOn() const;
+    Join(const Join& other);
 
-  unordered_map<string, size_t> getVariableColumns() const;
+    Join& operator=(const Join& other);
 
-  virtual void setTextLimit(size_t limit) {
-    _left->setTextLimit(limit);
-    _right->setTextLimit(limit);
-  }
+    virtual ~Join();
 
-private:
-  QueryExecutionTree* _left;
-  QueryExecutionTree* _right;
+    virtual string asString() const;
 
-  size_t _leftJoinCol;
-  size_t _rightJoinCol;
+    virtual size_t getResultWidth() const;
 
-  bool _keepJoinColumn;
+    virtual size_t resultSortedOn() const;
 
-  virtual void computeResult(ResultTable* result) const;
+    unordered_map<string, size_t> getVariableColumns() const;
+
+    virtual void setTextLimit(size_t limit) {
+      _left->setTextLimit(limit);
+      _right->setTextLimit(limit);
+    }
+
+    virtual size_t getSizeEstimate() const {
+      return std::min(_left->getSizeEstimate(), _right->getSizeEstimate()) / 2;
+    }
+
+    virtual size_t getCostEstimate() const {
+      return _left->getSizeEstimate() / 2 + _left->getCostEstimate() +
+          _right->getSizeEstimate() / 2 + _right->getCostEstimate();
+    }
+
+  private:
+    QueryExecutionTree *_left;
+    QueryExecutionTree *_right;
+
+    size_t _leftJoinCol;
+    size_t _rightJoinCol;
+
+    bool _keepJoinColumn;
+
+    virtual void computeResult(ResultTable *result) const;
 };

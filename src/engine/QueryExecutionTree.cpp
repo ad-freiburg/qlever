@@ -275,3 +275,13 @@ void QueryExecutionTree::writeResultToStreamAsJson(
   out << "]";
   LOG(DEBUG) << "Done creating readable result.\n";
 }
+
+// _____________________________________________________________________________
+size_t QueryExecutionTree::getCostEstimate() const {
+  return _rootOperation->getCostEstimate();
+}
+
+// _____________________________________________________________________________
+size_t QueryExecutionTree::getSizeEstimate() const {
+  return _rootOperation->getSizeEstimate();
+}

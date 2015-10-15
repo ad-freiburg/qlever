@@ -103,3 +103,28 @@ void IndexScan::computePOSfreeO(ResultTable* result) const {
       static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
   result->_status = ResultTable::FINISHED;
 }
+
+// _____________________________________________________________________________
+size_t IndexScan::computeSizeEstimate() const {
+  if (_executionContext) {
+    // Should always be in this branch. Else is only for test cases.
+    switch (_type) {
+      case POS_FREE_O:
+      case PSO_FREE_S:
+        return getIndex().relationCardinality(_predicate);
+      case PSO_BOUND_S:
+        // TODO: improve estimate
+        return std::max(size_t(1),
+                        getIndex().relationCardinality(_predicate) / 100);
+      case POS_BOUND_O:
+        // TODO: improve estimate
+        return std::max(size_t(1),
+                        getIndex().relationCardinality(_predicate) / 100);
+      default:
+        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+        "Unsupported Scan type.");
+    }
+  } else {
+    return 1000;
+  }
+}

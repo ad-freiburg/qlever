@@ -19,5 +19,5 @@ arab_states_p_gulf	SELECT DISTINCT ?p WHERE { ?p <is-a> <Country> . ?p <in-conte
 people_born_in_europe_limit100	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> } LIMIT 100
 people_born_in_europe_limit100_offset100	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> } LIMIT 100 OFFSET 100
 people_born_in_europe_limit100_offset200k	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> } LIMIT 100 OFFSET 200000
-music_friend_athlete_limi1000	SELECT DISTINCT ?p ?s WHERE { ?p <is-a> <Musician> . ?s <is-a> <Athlete> . ?p <in-context> ?c . ?s <in-context> ?c . <word:friend> <in-context> ?c . FILTER(?p != ?s) } LIMIT 1000
+music_friend_athlete_limit1000	SELECT DISTINCT ?p ?s WHERE { ?p <is-a> <Musician> . ?s <is-a> <Athlete> . ?p <in-context> ?c . ?s <in-context> ?c . <word:friend> <in-context> ?c . FILTER(?p != ?s) } LIMIT 1000
 polit_friend_scient_mhp	SELECT DISTINCT ?p ?s WHERE { ?p <is-a> <Politician> . ?s <is-a> <Scientist> . ?p <in-context> ?c . ?s <in-context> ?c . <word:friend> <in-context> ?c . ?s <in-context> ?c2 . <word:manhattan> <in-context> ?c2 . <word:project> <in-context> ?c2 . FILTER(?p != ?s) }

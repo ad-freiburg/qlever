@@ -17,35 +17,44 @@ using std::pair;
 using std::vector;
 
 class Filter : public Operation {
-public:
-  virtual size_t getResultWidth() const;
+  public:
+    virtual size_t getResultWidth() const;
 
-public:
+  public:
 
-  Filter(QueryExecutionContext* qec, const QueryExecutionTree& subtree,
-      SparqlFilter::FilterType type, size_t var1Column, size_t var2Column);
+    Filter(QueryExecutionContext *qec, const QueryExecutionTree& subtree,
+           SparqlFilter::FilterType type, size_t var1Column, size_t var2Column);
 
-  Filter(const Filter& other);
+    Filter(const Filter& other);
 
-  Filter& operator=(const Filter& other);
+    Filter& operator=(const Filter& other);
 
-  virtual ~Filter();
+    virtual ~Filter();
 
-  virtual string asString() const;
+    virtual string asString() const;
 
-  virtual size_t resultSortedOn() const {
-    return _subtree->resultSortedOn();
-  }
+    virtual size_t resultSortedOn() const {
+      return _subtree->resultSortedOn();
+    }
 
-  virtual void setTextLimit(size_t limit) {
-    _subtree->setTextLimit(limit);
-  }
+    virtual void setTextLimit(size_t limit) {
+      _subtree->setTextLimit(limit);
+    }
 
-private:
-  QueryExecutionTree* _subtree;
-  SparqlFilter::FilterType _type;
-  size_t _lhsInd;
-  size_t _rhsInd;
+    virtual size_t getSizeEstimate() const {
+      // TODO: return a better estimate
+      return _subtree->getSizeEstimate() / 2;
+    }
 
-  virtual void computeResult(ResultTable* result) const;
+    virtual size_t getCostEstimate() const {
+      return getSizeEstimate() + _subtree->getCostEstimate();
+    }
+
+  private:
+    QueryExecutionTree *_subtree;
+    SparqlFilter::FilterType _type;
+    size_t _lhsInd;
+    size_t _rhsInd;
+
+    virtual void computeResult(ResultTable *result) const;
 };

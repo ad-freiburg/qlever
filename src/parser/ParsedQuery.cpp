@@ -70,7 +70,7 @@ string SparqlPrefix::asString() const {
 // _____________________________________________________________________________
 string SparqlTriple::asString() const {
   std::ostringstream os;
-  os << "{s: " << _s << ",\tp: " << _p << ",\to: " << _o << "}";
+  os << "{s: " << _s << " p: " << _p << ", o: " << _o << "}";
   return os.str();
 }
 

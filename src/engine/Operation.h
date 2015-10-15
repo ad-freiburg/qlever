@@ -11,75 +11,75 @@
 using std::endl;
 
 class Operation {
-public:
+  public:
 
-  // Default Constructor.
-  Operation() : _executionContext(NULL) {
-  }
-
-  // Typical Constructor.
-  explicit Operation(QueryExecutionContext* executionContext) :
-      _executionContext(executionContext) {
-  }
-
-  // Destructor.
-  virtual ~Operation() {
-    // Do NOT delete _executionContext, since
-    // there is no ownership.
-  }
-
-  // Get the result for the subtree rooted at this element.
-  // Use existing results if they are already available, otherwise
-  // trigger computation.
-  const ResultTable& getResult() const {
-    LOG(TRACE) << "Get result from cache (possibly empty)" << endl;
-    LOG(TRACE) << "Using key: \"" << asString() << "\"" << endl;
-    ResultTable* result =
-        _executionContext->getCachedResultForQueryTree(asString());
-    if (result->_status != ResultTable::FINISHED) {
-      LOG(TRACE) << "Result from cache is empty. Compute it." << endl;
-      computeResult(result);
+    // Default Constructor.
+    Operation() : _executionContext(NULL) {
     }
-    LOG(TRACE) << "Result should be filled." << endl;
-    AD_CHECK_EQ(ResultTable::FINISHED, result->_status);
-    return *result;
-  }
 
-  //! Set the QueryExecutionContext for this particular element.
-  void setQueryExecutionContext(QueryExecutionContext* executionContext) {
-    _executionContext = executionContext;
-  }
+    // Typical Constructor.
+    explicit Operation(QueryExecutionContext *executionContext) :
+        _executionContext(executionContext) {
+    }
 
-  const Index& getIndex() const {
-    return _executionContext->getIndex();
-  }
+    // Destructor.
+    virtual ~Operation() {
+      // Do NOT delete _executionContext, since
+      // there is no ownership.
+    }
 
-  const Engine& getEngine() const {
-    return _executionContext->getEngine();
-  }
+    // Get the result for the subtree rooted at this element.
+    // Use existing results if they are already available, otherwise
+    // trigger computation.
+    const ResultTable& getResult() const {
+      LOG(TRACE) << "Get result from cache (possibly empty)" << endl;
+      LOG(TRACE) << "Using key: \"" << asString() << "\"" << endl;
+      ResultTable *result =
+          _executionContext->getCachedResultForQueryTree(asString());
+      if (result->_status != ResultTable::FINISHED) {
+        LOG(TRACE) << "Result from cache is empty. Compute it." << endl;
+        computeResult(result);
+      }
+      LOG(TRACE) << "Result should be filled." << endl;
+      AD_CHECK_EQ(ResultTable::FINISHED, result->_status);
+      return *result;
+    }
 
-  // Get a unique, not ambiguous string representation for a subtree.
-  // This should possible act like an ID for each subtree.
-  virtual string asString() const = 0;
+    //! Set the QueryExecutionContext for this particular element.
+    void setQueryExecutionContext(QueryExecutionContext *executionContext) {
+      _executionContext = executionContext;
+    }
 
-  virtual size_t getResultWidth() const = 0;
+    const Index& getIndex() const {
+      return _executionContext->getIndex();
+    }
 
-  virtual size_t resultSortedOn() const = 0;
+    const Engine& getEngine() const {
+      return _executionContext->getEngine();
+    }
 
-  virtual void setTextLimit(size_t limit) = 0;
+    // Get a unique, not ambiguous string representation for a subtree.
+    // This should possible act like an ID for each subtree.
+    virtual string asString() const = 0;
+    virtual size_t getResultWidth() const = 0;
+    virtual size_t resultSortedOn() const = 0;
+    virtual void setTextLimit(size_t limit) = 0;
+    virtual size_t getCostEstimate() const = 0;
+    virtual size_t getSizeEstimate() const = 0;
 
-protected:
+  protected:
 
-  QueryExecutionContext* getExecutionContext() const {
-    return _executionContext;
-  }
+    QueryExecutionContext *getExecutionContext() const {
+      return _executionContext;
+    }
 
-  // The QueryExecutionContext for this particular element.
-  // No ownership.
-  QueryExecutionContext* _executionContext;
+    // The QueryExecutionContext for this particular element.
+    // No ownership.
+    QueryExecutionContext *_executionContext;
 
-private:
-  //! Compute the result of the query-subtree rooted at this element..
-  //! Computes both, an EntityList and a HitList.
-  virtual void computeResult(ResultTable* result) const = 0;
+  private:
+    //! Compute the result of the query-subtree rooted at this element..
+    //! Computes both, an EntityList and a HitList.
+    virtual void computeResult(ResultTable *result) const = 0;
 };
+

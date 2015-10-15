@@ -17,33 +17,41 @@ using std::pair;
 using std::vector;
 
 class Distinct : public Operation {
-public:
-  virtual size_t getResultWidth() const;
+  public:
+    virtual size_t getResultWidth() const;
 
-public:
+  public:
 
-  Distinct(QueryExecutionContext* qec, const QueryExecutionTree& subtree,
-      const vector<size_t>& keepIndices);
+    Distinct(QueryExecutionContext *qec, const QueryExecutionTree& subtree,
+             const vector<size_t>& keepIndices);
 
-  Distinct(const Distinct& other);
+    Distinct(const Distinct& other);
 
-  Distinct& operator=(const Distinct& other);
+    Distinct& operator=(const Distinct& other);
 
-  virtual ~Distinct();
+    virtual ~Distinct();
 
-  virtual string asString() const;
+    virtual string asString() const;
 
-  virtual size_t resultSortedOn() const {
-    return _subtree->resultSortedOn();
-  }
+    virtual size_t resultSortedOn() const {
+      return _subtree->resultSortedOn();
+    }
 
-  virtual void setTextLimit(size_t limit) {
-    _subtree->setTextLimit(limit);
-  }
+    virtual void setTextLimit(size_t limit) {
+      _subtree->setTextLimit(limit);
+    }
 
-private:
-  QueryExecutionTree* _subtree;
-  vector<size_t> _keepIndices;
+    virtual size_t getSizeEstimate() const {
+      return _subtree->getSizeEstimate();
+    }
 
-  virtual void computeResult(ResultTable* result) const;
+    virtual size_t getCostEstimate() const {
+      return getSizeEstimate() + _subtree->getCostEstimate();
+    }
+
+  private:
+    QueryExecutionTree *_subtree;
+    vector<size_t> _keepIndices;
+
+    virtual void computeResult(ResultTable *result) const;
 };

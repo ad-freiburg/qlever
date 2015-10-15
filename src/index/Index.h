@@ -89,6 +89,7 @@ public:
   void scanPOS(const string& predicate, const string& object, WidthOneList *
   result) const;
 
+
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
   // --------------------------------------------------------------------------

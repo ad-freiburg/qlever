@@ -14,30 +14,44 @@ using std::unordered_map;
 
 
 class Sort : public Operation {
-public:
-  virtual size_t getResultWidth() const;
+  public:
+    virtual size_t getResultWidth() const;
 
-public:
+  public:
 
-  Sort(QueryExecutionContext* qec, const QueryExecutionTree& subtree,
-      size_t sortCol);
+    Sort(QueryExecutionContext *qec, const QueryExecutionTree& subtree,
+         size_t sortCol);
 
-  Sort(const Sort& other);
+    Sort(const Sort& other);
 
-  Sort& operator=(const Sort& other);
+    Sort& operator=(const Sort& other);
 
-  virtual ~Sort();
+    virtual ~Sort();
 
-  virtual string asString() const;
-  virtual size_t resultSortedOn() const { return _sortCol; }
+    virtual string asString() const;
 
-  virtual void setTextLimit(size_t limit) {
-    _subtree->setTextLimit(limit);
-  }
+    virtual size_t resultSortedOn() const { return _sortCol; }
 
-private:
-  QueryExecutionTree* _subtree;
-  size_t _sortCol;
+    virtual void setTextLimit(size_t limit) {
+      _subtree->setTextLimit(limit);
+    }
 
-  virtual void computeResult(ResultTable* result) const;
+    virtual size_t getSizeEstimate() const {
+      return _subtree->getSizeEstimate();
+    }
+
+    virtual size_t getCostEstimate() const {
+      size_t size = getSizeEstimate();
+      size_t logSize = std::max(size_t(1),
+          static_cast<size_t>(logb(static_cast<double>(getSizeEstimate()))));
+      size_t nlogn = size * logSize;
+      size_t subcost = _subtree->getCostEstimate();
+      return nlogn + subcost;
+    }
+
+  private:
+    QueryExecutionTree *_subtree;
+    size_t _sortCol;
+
+    virtual void computeResult(ResultTable *result) const;
 };

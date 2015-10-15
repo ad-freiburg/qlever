@@ -9,66 +9,84 @@
 using std::string;
 
 class IndexScan : public Operation {
-public:
-  enum ScanType {
-    PSO_BOUND_S = 0,
-    POS_BOUND_O = 1,
-    PSO_FREE_S = 2,
-    POS_FREE_O = 3
-  };
+  public:
+    enum ScanType {
+        PSO_BOUND_S = 0,
+        POS_BOUND_O = 1,
+        PSO_FREE_S = 2,
+        POS_FREE_O = 3
+    };
 
-  virtual string asString() const;
+    virtual string asString() const;
 
-  IndexScan(QueryExecutionContext* qec, ScanType type) :
-      Operation(qec), _type(type) {
-  }
-
-  virtual ~IndexScan() { }
-
-  void setSubject(const string& subject) {
-    size_t posUs = subject.rfind('_');
-    if (posUs != string::npos) {
-      _subject = subject.substr(0, posUs);
-    } else {
-      _subject = subject;
+    IndexScan(QueryExecutionContext *qec, ScanType type) :
+        Operation(qec), _type(type), _sizeEstimate(0) {
     }
-  }
 
-  void setPredicate(const string& predicate) {
-    _predicate = predicate;
-  }
+    virtual ~IndexScan() { }
 
-  void setObject(const string& object) {
-    size_t posUs = object.rfind('_');
-    if (posUs != string::npos) {
-      _object = object.substr(0, posUs);
-    } else {
-      _object = object;
+    void setSubject(const string& subject) {
+      size_t posUs = subject.rfind('_');
+      if (posUs != string::npos) {
+        _subject = subject.substr(0, posUs);
+      } else {
+        _subject = subject;
+      }
     }
-  }
 
-  virtual size_t getResultWidth() const;
+    void setPredicate(const string& predicate) {
+      _predicate = predicate;
+    }
 
-  virtual size_t resultSortedOn() const { return 0; }
+    void setObject(const string& object) {
+      size_t posUs = object.rfind('_');
+      if (posUs != string::npos) {
+        _object = object.substr(0, posUs);
+      } else {
+        _object = object;
+      }
+    }
 
-  virtual void setTextLimit(size_t limit) {
-    // Do nothing.
-  }
+    virtual size_t getResultWidth() const;
 
-private:
-  ScanType _type;
-  string _subject;
-  string _predicate;
-  string _object;
+    virtual size_t resultSortedOn() const { return 0; }
 
-  virtual void computeResult(ResultTable* result) const;
+    virtual void setTextLimit(size_t limit) {
+      // Do nothing.
+    }
 
-  void computePSOboundS(ResultTable* result) const;
+    virtual size_t getSizeEstimate() const {
+      if (_sizeEstimate > 0) {
+        return _sizeEstimate;
+      }
+      return computeSizeEstimate();
+    }
 
-  void computePSOfreeS(ResultTable* result) const;
+    virtual size_t getCostEstimate() const {
+      return getSizeEstimate();
+    }
 
-  void computePOSboundO(ResultTable* result) const;
+    void precomputeSizeEstimate() {
+      _sizeEstimate = computeSizeEstimate();
+    }
 
-  void computePOSfreeO(ResultTable* result) const;
+  private:
+    ScanType _type;
+    string _subject;
+    string _predicate;
+    string _object;
+    size_t _sizeEstimate;
+
+    virtual void computeResult(ResultTable *result) const;
+
+    void computePSOboundS(ResultTable *result) const;
+
+    void computePSOfreeS(ResultTable *result) const;
+
+    void computePOSboundO(ResultTable *result) const;
+
+    void computePOSfreeO(ResultTable *result) const;
+
+    size_t computeSizeEstimate() const;
 };
 
