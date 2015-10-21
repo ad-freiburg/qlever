@@ -265,7 +265,7 @@ class File {
 #else
       size_t readReturn = read(lastOffset, sizeof(off_t));
       assert(readReturn == (size_t) sizeof(off_t));
-      assert(lastOffset > 0);
+      assert(lastOffset != nullptr);
 #endif
 
       return lastOffsetOffset;

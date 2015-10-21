@@ -198,7 +198,7 @@ QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
   if (edge._label == IN_CONTEXT_RELATION) {
     if (other->_isContextNode) {
       // Do the pendent to the Broccoli occurs-with operation.
-      return consumeIcIntoSubtree(other, edge, textLimit);
+      return consumeIcIntoSubtree(other, textLimit);
     } else {
       // Case: *this is the context node.
       // We ensure that it is consumed later on by consumeIcIntoSubtree.
@@ -227,7 +227,7 @@ QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
   }
   if (edge._label == HAS_CONTEXT_RELATION) {
     AD_CHECK(other->_isContextNode);
-    return consumeHcIntoSubtree(other, edge, textLimit);
+    return consumeHcIntoSubtree(other, textLimit);
   }
   QueryExecutionTree addedSubtree(_qec);
   if (other->getConsumedOperations().isEmpty()) {
@@ -310,7 +310,6 @@ QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
 // _____________________________________________________________________________
 QueryExecutionTree QueryGraph::Node::consumeIcIntoSubtree(
     QueryGraph::Node *other,
-    const QueryGraph::Edge& edge,
     size_t textLimit) {
   AD_CHECK(other->_isContextNode);
   QueryExecutionTree addedSubtree(_qec);
@@ -340,7 +339,6 @@ QueryExecutionTree QueryGraph::Node::consumeIcIntoSubtree(
 // _____________________________________________________________________________
 QueryExecutionTree QueryGraph::Node::consumeHcIntoSubtree(
     QueryGraph::Node *other,
-    const QueryGraph::Edge& edge,
     size_t textLimit) {
   AD_CHECK(other->_isContextNode);
   QueryExecutionTree addedSubtree(_qec);

@@ -131,11 +131,9 @@ public:
 
     // Special case: relation is in-context
     QueryExecutionTree consumeIcIntoSubtree(Node* other,
-                                            const QueryGraph::Edge& edge,
                                             size_t textLimit);
     // Special case: relation is has-contexts
     QueryExecutionTree consumeHcIntoSubtree(Node* other,
-                                            const QueryGraph::Edge& edge,
                                             size_t textLimit);
 
     string asString() const;
