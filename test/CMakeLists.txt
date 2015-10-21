@@ -47,8 +47,8 @@ add_executable(QueryPlannerTest QueryPlannerTest.cpp)
 target_link_libraries(QueryPlannerTest gtest_main engine -pthread)
 
 add_library(tests
-						SparqlParserTest
-						StringUtilsTest
+            SparqlParserTest
+			StringUtilsTest
             LRUCacheTest
             QueryGraphTest
             QueryExecutionTreeTest
