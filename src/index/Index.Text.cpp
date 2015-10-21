@@ -471,13 +471,13 @@ void Index::createCodebooks(const vector<Index::Posting>& postings,
                const std::pair<Score, size_t>& b) {
               return a.second < b.second;
             });
-  for (size_t i = 0; i < wfVec.size(); ++i) {
-    wordCodebook.push_back(wfVec[i].first);
-    wordCodemap[wfVec[i].first] = i;
+  for (size_t j = 0; j < wfVec.size(); ++i) {
+    wordCodebook.push_back(wfVec[j].first);
+    wordCodemap[wfVec[j].first] = j;
   }
-  for (size_t i = 0; i < sfVec.size(); ++i) {
-    scoreCodebook.push_back(sfVec[i].first);
-    scoreCodemap[sfVec[i].first] = i;
+  for (size_t j = 0; j < sfVec.size(); ++i) {
+    scoreCodebook.push_back(sfVec[j].first);
+    scoreCodemap[sfVec[j].first] = j;
   }
 }
 
@@ -485,7 +485,7 @@ void Index::createCodebooks(const vector<Index::Posting>& postings,
 template<class T>
 size_t Index::writeCodebook(const vector<T>& codebook,
                             ad_utility::File& file) const {
-  off_t byteSizeOfCodebook = sizeof(T) * codebook.size();
+  off_t byteSizeOfCodebook = static_cast<off_t>(sizeof(T) * codebook.size());
   file.write(&byteSizeOfCodebook, sizeof(byteSizeOfCodebook));
   file.write(codebook.data(), byteSizeOfCodebook);
   return byteSizeOfCodebook + sizeof(byteSizeOfCodebook);
@@ -792,7 +792,7 @@ void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
   ret = _textIndexFile.read(encoded,
                             static_cast<size_t>(nofBytes - (current - from)));
   current += ret;
-  AD_CHECK_EQ(current - from, nofBytes);
+  AD_CHECK_EQ(size_t(current - from), nofBytes);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
   ad_utility::Simple8bCode::decode(encoded, nofElements, result.data());
   LOG(DEBUG) << "Reverting frequency encoded items to actual IDs...\n";
