@@ -35,9 +35,9 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -std=c++11 -Wall -DLOGLEVEL=
 ################################
 # GTEST
 ################################
-add_subdirectory(third_party/googletest)
-include_directories(third_party/googletest/include
-                      third_party/googletest/)
+add_subdirectory(third_party/googletest/googletest)
+include_directories(third_party/googletest/googletest/include
+                      third_party/googletest/googletest/)
 ################################
 # STXXL
 ################################
