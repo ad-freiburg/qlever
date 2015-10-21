@@ -144,19 +144,18 @@ class Simple8bCode {
       while (nofElementsDone < nofElements) {
         unsigned char selector = encoded[nofCodeWordsDone]
             & SIMPLE8B_SELECTOR_MASK;
-        if (selector <= 1) {
-          // Case: Long sequences of 1's compressed.
-          for (size_t i = 0; i < SIMPLE8B_SELECTORS[selector]._groupSize;
-              ++i) {
-            decoded[nofElementsDone + i] = 0;
-          }
-        } else {
+        if (selector > 1) {
           // Case: Usual decompression.
           for (size_t i = 0; i < SIMPLE8B_SELECTORS[selector]._groupSize;
-              ++i) {
+               ++i) {
             decoded[nofElementsDone + i] = (encoded[nofCodeWordsDone] >>
-                (4 + SIMPLE8B_SELECTORS[selector]._itemWidth * i))
-                & SIMPLE8B_SELECTORS[selector]._mask;
+                                            (4 + SIMPLE8B_SELECTORS[selector]._itemWidth * i))
+                                           & SIMPLE8B_SELECTORS[selector]._mask;
+          }
+        } else {
+          // Case: Long sequences of 1's (or 0's) compressed.
+          for (size_t i = 0; i < SIMPLE8B_SELECTORS[selector]._groupSize; ++i) {
+            decoded[nofElementsDone + i] = 0;
           }
         }
         nofElementsDone += SIMPLE8B_SELECTORS[selector]._groupSize;
