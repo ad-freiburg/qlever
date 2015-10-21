@@ -249,7 +249,15 @@ TEST(QueryPlannerTest, testStarTwoFree) {
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
-      ASSERT_EQ("xxx", qet.asString());
+      ASSERT_EQ("{JOIN(\n\t"
+                    "{JOIN(\n\t"
+                    "{SCAN POS with P = \"<http://rdf.myprefix.com/xxx/rel2>\", O = \"<http://abc.de>\" | width: 1} [0]\n\t"
+                    "|X|\n\t"
+                    "{SCAN PSO with P = \"<http://rdf.myprefix.com/ns/myrel>\" | width: 2} [0]\n"
+                    ") | width: 2} [0]\n\t"
+                    "|X|\n\t"
+                    "{SCAN POS with P = \"<http://rdf.myprefix.com/myrel>\" | width: 2} [0]\n"
+                    ") | width: 3}", qet.asString());
     }
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
