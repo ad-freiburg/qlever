@@ -5,6 +5,7 @@
 #include "IndexScan.h"
 #include "Join.h"
 #include "Sort.h"
+#include "OrderBy.h"
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext *qec) : _qec(qec) { }
@@ -51,7 +52,14 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
     }
   }
 
-  vector<SubtreePlan>& lastRow = dpTab[tg._nodeMap.size() - 1];
+  // If there is an order by clause, add another row to the table and
+  // just add an order by / sort to every previous result if needed.
+  // If the ordering is perfect already, just copy the plan.
+  if (pq._orderBy.size() > 0) {
+    dpTab.emplace_back(getOrderByRow(pq, dpTab));
+  }
+
+  vector<SubtreePlan>& lastRow = dpTab[dpTab.size() - 1];
   AD_CHECK_GT(lastRow.size(), 0);
   size_t minCost = lastRow[0].getCostEstimate();
   size_t minInd = 0;
@@ -65,6 +73,51 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
 
   LOG(DEBUG) << "Done creating execution plan.\n";
   return lastRow[minInd]._qet;
+}
+
+// _____________________________________________________________________________
+vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
+    const ParsedQuery& pq,
+    const vector<vector<SubtreePlan>>& dpTab) const {
+  const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
+  vector<SubtreePlan> added;
+  added.reserve(previous.size());
+  for (size_t i = 0; i < previous.size(); ++i) {
+    if (pq._orderBy.size() == 1 && !pq._orderBy[0]._desc) {
+      size_t col = previous[i]._qet.getVariableColumn(pq._orderBy[0]._key);
+      if (col == previous[i]._qet.resultSortedOn()) {
+        // Already sorted perfectly
+        added.push_back(previous[i]);
+      } else {
+        QueryExecutionTree tree(_qec);
+        Sort sort(_qec, previous[i]._qet, col);
+        tree.setVariableColumns(previous[i]._qet.getVariableColumnMap());
+        tree.setOperation(QueryExecutionTree::SORT, &sort);
+        tree.setContextVars(previous[i]._qet.getContextVars());
+        SubtreePlan plan(_qec);
+        plan._qet = tree;
+        plan._idsOfIncludedNodes = previous[i]._idsOfIncludedNodes;
+        added.push_back(plan);
+      }
+    } else {
+      QueryExecutionTree tree(_qec);
+      vector<pair<size_t, bool>> sortIndices;
+      for (auto& ord : pq._orderBy) {
+        sortIndices.emplace_back(
+            pair<size_t, bool>{previous[i]._qet.getVariableColumn(ord._key),
+                               ord._desc});
+      }
+      OrderBy ob(_qec, previous[i]._qet, sortIndices);
+      tree.setVariableColumns(previous[i]._qet.getVariableColumnMap());
+      tree.setOperation(QueryExecutionTree::ORDER_BY, &ob);
+      tree.setContextVars(previous[i]._qet.getContextVars());
+      SubtreePlan plan(_qec);
+      plan._qet = tree;
+      plan._idsOfIncludedNodes = previous[i]._idsOfIncludedNodes;
+      added.push_back(plan);
+    }
+  }
+  return added;
 }
 
 // _____________________________________________________________________________
@@ -372,7 +425,7 @@ string QueryPlanner::getPruningKey(const QueryPlanner::SubtreePlan& plan,
   // Get the ordered var
   std::ostringstream os;
   for (auto it = plan._qet.getVariableColumnMap().begin();
-      it != plan._qet.getVariableColumnMap().end(); ++it) {
+       it != plan._qet.getVariableColumnMap().end(); ++it) {
     if (it->second == orderedOnCol) {
       os << it->first;
       break;
