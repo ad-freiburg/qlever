@@ -3,8 +3,11 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <vector>
 #include "../parser/ParsedQuery.h"
 #include "QueryExecutionTree.h"
+
+using std::vector;
 
 class QueryPlanner {
   public:
@@ -77,5 +80,9 @@ class QueryPlanner {
         const SubtreePlan& a, const SubtreePlan& b) const;
 
     string getPruningKey(const SubtreePlan& plan, size_t orderedOnCol) const;
+
+    void applyFiltersIfPossible(vector<SubtreePlan>& row,
+                                const vector<SparqlFilter>& filters,
+                                const TripleGraph& graph) const;
 };
 

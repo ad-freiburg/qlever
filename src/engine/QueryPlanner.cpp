@@ -6,6 +6,7 @@
 #include "Join.h"
 #include "Sort.h"
 #include "OrderBy.h"
+#include "Distinct.h"
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext *qec) : _qec(qec) { }
@@ -21,6 +22,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   // they share a variable.
 
   TripleGraph tg = createTripleGraph(pq);
+
 
   // Each node/triple corresponds to a scan (more than one way possible),
   // each edge corresponds to a possible join.
@@ -41,6 +43,20 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   // To generate a plan for k triples, all subsets between i and k-i are
   // joined.
 
+
+  // Filters are now added to the mix when building execution plans.
+  // Without them, a plan has an execution tree and a set of
+  // covered triple nodes.
+  // With them, it also has a set of covered filters.
+  // A filter can be applied as soon as all variables that occur in the filter
+  // Are covered by the query. This is also always the place where this is done.
+
+  // TODO: resolve cyclic queries and turn them into filters.
+  // Copy made so that something can be added for cyclic queries.
+  vector<SparqlFilter> filters = pq._filters;
+
+
+
   vector<vector<SubtreePlan>> dpTab;
   dpTab.emplace_back(seedWithScans(tg));
 
@@ -49,6 +65,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
     for (size_t i = 1; i <= k / 2; ++i) {
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
+      applyFiltersIfPossible(dpTab.back(), filters, tg);
     }
   }
 
@@ -69,6 +86,25 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
       minCost = lastRow[i].getCostEstimate();
       minInd = i;
     }
+  }
+
+
+  // A distinct modifier is applied in the end. This is very easy
+  // but not necessarily optimal.
+  // TODO: Adjust so that the optimal place for the operation is found.
+  if (pq._distinct) {
+    QueryExecutionTree distinctTree(lastRow[minInd]._qet);
+    vector<size_t> keepIndices;
+    for (const auto& var : pq._selectedVariables) {
+      if (lastRow[minInd]._qet.getVariableColumnMap().find(var) !=
+          lastRow[minInd]._qet.getVariableColumnMap().end()) {
+        keepIndices.push_back(
+            lastRow[minInd]._qet.getVariableColumnMap().find(var)->second);
+      }
+    }
+    Distinct distinct(_qec, lastRow[minInd]._qet, keepIndices);
+    distinctTree.setOperation(QueryExecutionTree::DISTINCT, &distinct);
+    return distinctTree;
   }
 
   LOG(DEBUG) << "Done creating execution plan.\n";
@@ -438,4 +474,12 @@ string QueryPlanner::getPruningKey(const QueryPlanner::SubtreePlan& plan,
     os << ' ' << ind;
   }
   return os.str();
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::applyFiltersIfPossible(
+    vector<QueryPlanner::SubtreePlan>& row,
+    const vector<SparqlFilter>& filters,
+    const QueryPlanner::TripleGraph& graph) const {
+
 }
