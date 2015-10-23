@@ -268,6 +268,49 @@ TEST(QueryPlannerTest, testStarTwoFree) {
   }
 }
 
+
+TEST(QueryPlannerTest, testFilterAfterSeed) {
+  try {
+    ParsedQuery pq = SparqlParser::parse("SELECT ?x ?y ?z WHERE {"
+                                             "?x <r> ?y . ?y <r> ?z . "
+                                             "FILTER(?x != ?y) }");
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ("{JOIN(\n\t"
+                  "{FILTER {SCAN POS with P = \"<r>\" | width: 2} with col 1 != col 0 | width: 2} [0]"
+                  "\n\t|X|\n\t"
+                  "{SCAN PSO with P = \"<r>\" | width: 2} [0]"
+                  "\n) | width: 3}", qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
+TEST(QueryPlannerTest, testFilterAfterJoin) {
+  try {
+    ParsedQuery pq = SparqlParser::parse("SELECT ?x ?y ?z WHERE {"
+                                             "?x <r> ?y . ?y <r> ?z . "
+                                             "FILTER(?x != ?z) }");
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ("{FILTER {JOIN(\n\t"
+                  "{SCAN POS with P = \"<r>\" | width: 2} [0]"
+                  "\n\t|X|\n\t"
+                  "{SCAN PSO with P = \"<r>\" | width: 2} [0]"
+                  "\n) | width: 3} with col 1 != col 2 | width: 3}", qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
 //TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
 //  try {
 //    ParsedQuery pq = SparqlParser::parse(

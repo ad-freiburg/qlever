@@ -122,6 +122,8 @@ public:
 
     size_t getSizeEstimate() const;
 
+    bool varCovered(string var) const;
+
   private:
   QueryExecutionContext* _qec;   // No ownership
   unordered_map<string, size_t> _variableColumnMap;

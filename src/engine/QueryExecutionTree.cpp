@@ -285,3 +285,8 @@ size_t QueryExecutionTree::getCostEstimate() const {
 size_t QueryExecutionTree::getSizeEstimate() const {
   return _rootOperation->getSizeEstimate();
 }
+
+// _____________________________________________________________________________
+bool QueryExecutionTree::varCovered(string var) const {
+  return _variableColumnMap.count(var) > 0;
+}

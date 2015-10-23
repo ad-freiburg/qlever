@@ -7,6 +7,7 @@
 #include "Sort.h"
 #include "OrderBy.h"
 #include "Distinct.h"
+#include "Filter.h"
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext *qec) : _qec(qec) { }
@@ -56,16 +57,16 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   vector<SparqlFilter> filters = pq._filters;
 
 
-
   vector<vector<SubtreePlan>> dpTab;
   dpTab.emplace_back(seedWithScans(tg));
+  applyFiltersIfPossible(dpTab.back(), filters);
 
   for (size_t k = 2; k <= tg._nodeMap.size(); ++k) {
     dpTab.emplace_back(vector<SubtreePlan>());
     for (size_t i = 1; i <= k / 2; ++i) {
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
-      applyFiltersIfPossible(dpTab.back(), filters, tg);
+      applyFiltersIfPossible(dpTab.back(), filters);
     }
   }
 
@@ -133,6 +134,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
         SubtreePlan plan(_qec);
         plan._qet = tree;
         plan._idsOfIncludedNodes = previous[i]._idsOfIncludedNodes;
+        plan._idsOfIncludedFilters = previous[i]._idsOfIncludedFilters;
         added.push_back(plan);
       }
     } else {
@@ -150,6 +152,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
       SubtreePlan plan(_qec);
       plan._qet = tree;
       plan._idsOfIncludedNodes = previous[i]._idsOfIncludedNodes;
+      plan._idsOfIncludedFilters = previous[i]._idsOfIncludedFilters;
       added.push_back(plan);
     }
   }
@@ -354,6 +357,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
         tree.setOperation(QueryExecutionTree::JOIN, &join);
         SubtreePlan plan(_qec);
         plan._qet = tree;
+        plan._idsOfIncludedFilters = a[i]._idsOfIncludedFilters;
         plan._idsOfIncludedNodes = a[i]._idsOfIncludedNodes;
         plan._idsOfIncludedNodes.insert(b[j]._idsOfIncludedNodes.begin(),
                                         b[j]._idsOfIncludedNodes.end());
@@ -479,7 +483,34 @@ string QueryPlanner::getPruningKey(const QueryPlanner::SubtreePlan& plan,
 // _____________________________________________________________________________
 void QueryPlanner::applyFiltersIfPossible(
     vector<QueryPlanner::SubtreePlan>& row,
-    const vector<SparqlFilter>& filters,
-    const QueryPlanner::TripleGraph& graph) const {
-
+    const vector<SparqlFilter>& filters) const {
+  // Apply every filter possible.
+  // It is possible when,
+  // 1) the filter has not already been applied
+  // 2) all variables in the filter are covered by the query so far
+  for (size_t n = 0; n < row.size(); ++n) {
+    const auto& plan = row[n];
+    for (size_t i = 0; i < filters.size(); ++i) {
+      if (plan._idsOfIncludedFilters.count(i) > 0) {
+        continue;
+      }
+      if (plan._qet.varCovered(filters[i]._lhs) &&
+          plan._qet.varCovered(filters[i]._rhs)) {
+        // Apply this filter.
+        SubtreePlan newPlan(_qec);
+        newPlan._idsOfIncludedFilters = plan._idsOfIncludedFilters;
+        newPlan._idsOfIncludedFilters.insert(i);
+        newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
+        QueryExecutionTree tree(_qec);
+        Filter filter(_qec, plan._qet, filters[i]._type,
+                      plan._qet.getVariableColumn(filters[i]._lhs),
+                      plan._qet.getVariableColumn(filters[i]._rhs));
+        tree.setVariableColumns(plan._qet.getVariableColumnMap());
+        tree.setOperation(QueryExecutionTree::FILTER, &filter);
+        tree.setContextVars(plan._qet.getContextVars());
+        newPlan._qet = tree;
+        row[n] = newPlan;
+      }
+    }
+  }
 }

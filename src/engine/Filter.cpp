@@ -54,25 +54,25 @@ Filter::~Filter() {
 // _____________________________________________________________________________
 string Filter::asString() const {
   std::ostringstream os;
-  os << "Filter " << _subtree->asString() << " with ";
+  os << "FILTER " << _subtree->asString() << " with ";
   switch (_type) {
     case SparqlFilter::EQ :
-      os << "col " << _lhsInd << " == col " << _rhsInd << '\n';
+      os << "col " << _lhsInd << " == col " << _rhsInd;
       break;
     case SparqlFilter::NE :
-      os << "col " << _lhsInd << " != col " << _rhsInd << '\n';
+      os << "col " << _lhsInd << " != col " << _rhsInd;
       break;
     case SparqlFilter::LT :
-      os << "col " << _lhsInd << " < col " << _rhsInd << '\n';
+      os << "col " << _lhsInd << " < col " << _rhsInd;
       break;
     case SparqlFilter::LE :
-      os << "col " << _lhsInd << " <= col " << _rhsInd << '\n';
+      os << "col " << _lhsInd << " <= col " << _rhsInd;
       break;
     case SparqlFilter::GT :
-      os << "col " << _lhsInd << " > col " << _rhsInd << '\n';
+      os << "col " << _lhsInd << " > col " << _rhsInd;
       break;
     case SparqlFilter::GE :
-      os << "col " << _lhsInd << " >= col " << _rhsInd << '\n';
+      os << "col " << _lhsInd << " >= col " << _rhsInd;
       break;
   }
 

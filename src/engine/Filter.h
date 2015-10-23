@@ -43,7 +43,7 @@ class Filter : public Operation {
 
     virtual size_t getSizeEstimate() const {
       // TODO: return a better estimate
-      return _subtree->getSizeEstimate() / 2;
+      return _subtree->getSizeEstimate() / 10;
     }
 
     virtual size_t getCostEstimate() const {

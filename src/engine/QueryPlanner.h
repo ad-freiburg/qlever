@@ -44,6 +44,7 @@ class QueryPlanner {
 
         QueryExecutionTree _qet;
         std::unordered_set<size_t> _idsOfIncludedNodes;
+        std::unordered_set<size_t> _idsOfIncludedFilters;
 
         size_t getCostEstimate() const;
 
@@ -82,7 +83,6 @@ class QueryPlanner {
     string getPruningKey(const SubtreePlan& plan, size_t orderedOnCol) const;
 
     void applyFiltersIfPossible(vector<SubtreePlan>& row,
-                                const vector<SparqlFilter>& filters,
-                                const TripleGraph& graph) const;
+                                const vector<SparqlFilter>& filters) const;
 };
 
