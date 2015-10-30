@@ -1,0 +1,30 @@
+Thoughts:
+
+IN-CONTEXT:
+
+The query planner creates a node for each triple and a scan for each node.
+This is not necessary for each in-context relation because several triples are worded in one operation.
+The only pyhsical scan for a relation is the scan of the wordlists.
+Thus, only triples of the form in-context <WORDS> need a SCAN.
+Where WORDS can be literals, prefixes and also concrete entities.
+TODO: This will change when there is support for text without words.
+Other connected triples have to be connected all at once.
+
+
+Idea:
+Split the whole query at text operations.
+Processing a text operations means to fully deal with a context variable.
+
+Simple solution:
+Create execution trees for each split and then one TextOperationForContexts
+better solution:
+Enumerate the simple solution for each split subgraph an option where it is left out but instead a reuslt is obtained
+using a TextOperationForEntities.
+Finally pick the best overall result.
+
+HAS-CONTEXT:
+This is identical to the cone above, but a triple is connected differently.
+Again, it could come from below and be used to filter lists or it could be connected above the text,
+in particular joining with a result of a TextOperationForContexts.
+A difference is that there can be more than one relation that go join with the result of the text operation.
+
