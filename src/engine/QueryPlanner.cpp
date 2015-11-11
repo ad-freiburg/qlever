@@ -44,7 +44,6 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   // To generate a plan for k triples, all subsets between i and k-i are
   // joined.
 
-
   // Filters are now added to the mix when building execution plans.
   // Without them, a plan has an execution tree and a set of
   // covered triple nodes.
@@ -52,32 +51,26 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   // A filter can be applied as soon as all variables that occur in the filter
   // Are covered by the query. This is also always the place where this is done.
 
-  // TODO: resolve cyclic queries and turn them into filters.
-  // Copy made so that something can be added for cyclic queries.
-  vector<SparqlFilter> filters = pq._filters;
+  // TODO: resolve cycles involving a text operation.
+  // Split the graph at possible text operations.
+  vector<pair<TripleGraph, vector<SparqlFilter>>> tgs = tg.split(pq._filters);
 
-
-  vector<vector<SubtreePlan>> dpTab;
-  dpTab.emplace_back(seedWithScans(tg));
-  applyFiltersIfPossible(dpTab.back(), filters);
-
-  for (size_t k = 2; k <= tg._nodeMap.size(); ++k) {
-    dpTab.emplace_back(vector<SubtreePlan>());
-    for (size_t i = 1; i <= k / 2; ++i) {
-      auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
-      dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
-      applyFiltersIfPossible(dpTab.back(), filters);
-    }
+  vector<vector<SubtreePlan>> finalTab;
+  if (tgs.size() == 1) {
+    finalTab = fillDpTab(tgs[0].first, tgs[0].second);
+  } else {
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+    "No text yet.");
   }
 
   // If there is an order by clause, add another row to the table and
   // just add an order by / sort to every previous result if needed.
   // If the ordering is perfect already, just copy the plan.
   if (pq._orderBy.size() > 0) {
-    dpTab.emplace_back(getOrderByRow(pq, dpTab));
+    finalTab.emplace_back(getOrderByRow(pq, finalTab));
   }
 
-  vector<SubtreePlan>& lastRow = dpTab[dpTab.size() - 1];
+  vector<SubtreePlan>& lastRow = finalTab.back();
   AD_CHECK_GT(lastRow.size(), 0);
   size_t minCost = lastRow[0].getCostEstimate();
   size_t minInd = 0;
@@ -100,7 +93,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
       if (lastRow[minInd]._qet.getVariableColumnMap().find(var) !=
           lastRow[minInd]._qet.getVariableColumnMap().end()) {
         keepIndices.push_back(
-            lastRow[minInd]._qet.getVariableColumnMap().find(var)->second);
+            lastRow[minInd]._qet.getVariableColumnMap().find(
+                var)->second);
       }
     }
     Distinct distinct(_qec, lastRow[minInd]._qet, keepIndices);
@@ -121,14 +115,16 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
   added.reserve(previous.size());
   for (size_t i = 0; i < previous.size(); ++i) {
     if (pq._orderBy.size() == 1 && !pq._orderBy[0]._desc) {
-      size_t col = previous[i]._qet.getVariableColumn(pq._orderBy[0]._key);
+      size_t col = previous[i]._qet.getVariableColumn(
+          pq._orderBy[0]._key);
       if (col == previous[i]._qet.resultSortedOn()) {
         // Already sorted perfectly
         added.push_back(previous[i]);
       } else {
         QueryExecutionTree tree(_qec);
         Sort sort(_qec, previous[i]._qet, col);
-        tree.setVariableColumns(previous[i]._qet.getVariableColumnMap());
+        tree.setVariableColumns(
+            previous[i]._qet.getVariableColumnMap());
         tree.setOperation(QueryExecutionTree::SORT, &sort);
         tree.setContextVars(previous[i]._qet.getContextVars());
         SubtreePlan plan(_qec);
@@ -142,8 +138,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
       vector<pair<size_t, bool>> sortIndices;
       for (auto& ord : pq._orderBy) {
         sortIndices.emplace_back(
-            pair<size_t, bool>{previous[i]._qet.getVariableColumn(ord._key),
-                               ord._desc});
+            pair<size_t, bool>{
+                previous[i]._qet.getVariableColumn(ord._key),
+                ord._desc});
       }
       OrderBy ob(_qec, previous[i]._qet, sortIndices);
       tree.setVariableColumns(previous[i]._qet.getVariableColumnMap());
@@ -202,7 +199,8 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   TripleGraph tg;
   for (auto& t : query._whereClauseTriples) {
     // Add a node for the triple.
-    tg._nodeStorage.emplace_back(TripleGraph::Node(tg._nodeStorage.size(), t));
+    tg._nodeStorage.emplace_back(
+        TripleGraph::Node(tg._nodeStorage.size(), t));
     auto& addedNode = tg._nodeStorage.back();
     tg._nodeMap[addedNode._id] = &tg._nodeStorage.back();
     tg._adjLists.emplace_back(vector<size_t>());
@@ -245,14 +243,16 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScans(
         scan.setPredicate(node._triple._p);
         scan.setObject(node._triple._o);
         scan.precomputeSizeEstimate();
-        tree.setOperation(QueryExecutionTree::OperationType::SCAN, &scan);
+        tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                          &scan);
         tree.setVariableColumn(node._triple._s, 0);
       } else if (isVariable(node._triple._o)) {
         IndexScan scan(_qec, IndexScan::ScanType::PSO_BOUND_S);
         scan.setPredicate(node._triple._p);
         scan.setSubject(node._triple._s);
         scan.precomputeSizeEstimate();
-        tree.setOperation(QueryExecutionTree::OperationType::SCAN, &scan);
+        tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                          &scan);
         tree.setVariableColumn(node._triple._o, 0);
       } else {
         // Pred variable.
@@ -279,7 +279,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScans(
         IndexScan scan(_qec, IndexScan::ScanType::PSO_FREE_S);
         scan.setPredicate(node._triple._p);
         scan.precomputeSizeEstimate();
-        tree.setOperation(QueryExecutionTree::OperationType::SCAN, &scan);
+        tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                          &scan);
         tree.setVariableColumn(node._triple._s, 0);
         tree.setVariableColumn(node._triple._o, 1);
         plan._qet = tree;
@@ -292,7 +293,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScans(
         IndexScan scan(_qec, IndexScan::ScanType::POS_FREE_O);
         scan.setPredicate(node._triple._p);
         scan.precomputeSizeEstimate();
-        tree.setOperation(QueryExecutionTree::OperationType::SCAN, &scan);
+        tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                          &scan);
         tree.setVariableColumn(node._triple._o, 0);
         tree.setVariableColumn(node._triple._s, 1);
         plan._qet = tree;
@@ -359,8 +361,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
         plan._qet = tree;
         plan._idsOfIncludedFilters = a[i]._idsOfIncludedFilters;
         plan._idsOfIncludedNodes = a[i]._idsOfIncludedNodes;
-        plan._idsOfIncludedNodes.insert(b[j]._idsOfIncludedNodes.begin(),
-                                        b[j]._idsOfIncludedNodes.end());
+        plan._idsOfIncludedNodes.insert(
+            b[j]._idsOfIncludedNodes.begin(),
+            b[j]._idsOfIncludedNodes.end());
         candidates[getPruningKey(plan, jcs[0][0])].emplace_back(plan);
       }
     }
@@ -392,7 +395,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
 string QueryPlanner::TripleGraph::asString() const {
   std::ostringstream os;
   for (size_t i = 0; i < _adjLists.size(); ++i) {
-    os << i << " " << _nodeMap.find(i)->second->_triple.asString() << " : (";
+    os << i << " " << _nodeMap.find(i)->second->_triple.asString() <<
+    " : (";
     for (size_t j = 0; j < _adjLists[i].size(); ++j) {
       os << _adjLists[i][j];
       if (j < _adjLists[i].size() - 1) { os << ", "; }
@@ -513,4 +517,40 @@ void QueryPlanner::applyFiltersIfPossible(
       }
     }
   }
+}
+
+// _____________________________________________________________________________
+vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
+    const QueryPlanner::TripleGraph& tg,
+    const vector<SparqlFilter>& filters) const {
+
+
+  // TODO: resolve cyclic queries and turn them into filters.
+  // Copy made so that something can be added for cyclic queries.
+  // tg.turnCyclesIntoFilters(filters);
+
+
+  vector<vector<SubtreePlan>> dpTab;
+  dpTab.emplace_back(seedWithScans(tg));
+  applyFiltersIfPossible(dpTab.back(), filters);
+
+  for (size_t k = 2; k <= tg._nodeMap.size(); ++k) {
+    dpTab.emplace_back(vector<SubtreePlan>());
+    for (size_t i = 1; i <= k / 2; ++i) {
+      auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
+      dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(),
+                          newPlans.end());
+      applyFiltersIfPossible(dpTab.back(), filters);
+    }
+  }
+  return dpTab;
+}
+
+// _____________________________________________________________________________
+vector<pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>>
+QueryPlanner::TripleGraph::split(
+    const vector<SparqlFilter>& origFilters) const {
+  vector<pair<TripleGraph, vector<SparqlFilter>>> res;
+  res.emplace_back(*this, origFilters);
+  return res;
 }

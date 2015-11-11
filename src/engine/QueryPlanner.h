@@ -36,6 +36,9 @@ class QueryPlanner {
         vector<vector<size_t>> _adjLists;
         std::unordered_map<size_t, Node *> _nodeMap;
         std::list<Node> _nodeStorage;
+
+      vector<pair<TripleGraph, vector<SparqlFilter>>> split(
+          const vector<SparqlFilter>& origFilters) const;
     };
 
     class SubtreePlan {
@@ -84,5 +87,8 @@ class QueryPlanner {
 
     void applyFiltersIfPossible(vector<SubtreePlan>& row,
                                 const vector<SparqlFilter>& filters) const;
+
+    vector<vector<SubtreePlan>> fillDpTab(const TripleGraph& graph,
+                                          const vector<SparqlFilter>& fs) const;
 };
 

@@ -15,7 +15,7 @@ Make sure you use a 64bit Linux with:
 
 Other compilers (and OS) are not supported, yet. 
 So far no major problems are known. 
-Support for more plattforms would be a highly appreciated contribution.
+Support for more platforms would be a highly appreciated contribution.
 
 1. Build:
 ---------
@@ -30,7 +30,7 @@ For old versions of git, that do not support this parameter, you can do:
     git clone https://github.com/Buchhold/SparqlEngineDraft.git
     cd SparqlEngineDraft
     git submodule init
-    git subodule update
+    git submodule update
     
 
 b) Go to a folder where you want to build the binaries.
@@ -186,10 +186,6 @@ Note the use the the relation `has-context` that links the context to a text sou
 For now, each context is required to have a triple `<in-context> ENTITY/WORD`. 
 Pure connections to variables (e.g. "Books with a description that mentions a plant.") are planned for the future.
 
-
-a) <in-context>
----------------
-The most important addition relation. Each context variable 
 
 
 How to obtain data to play around with
