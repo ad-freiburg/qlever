@@ -318,6 +318,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
     const vector<QueryPlanner::SubtreePlan>& b,
     const QueryPlanner::TripleGraph& tg) const {
   // TODO: Add text features.
+  // TODO: Add the following features:
+  // If a join is supposed to happen, always check if it happens between
+  // a scan with a relatively large result size
+  // esp. with an entire relation but also with something like is-a Person
+  // If that is the case look at the size estimate for the other side,
+  // if that is rather small, replace the join and scan by a combination.
   std::unordered_map<string, vector<SubtreePlan>> candidates;
   // Find all pairs between a and b that are connected by an edge.
   for (size_t i = 0; i < a.size(); ++i) {
@@ -326,7 +332,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
         // Find join variable(s) / columns.
         auto jcs = getJoinColumns(a[i], b[j]);
         if (jcs.size() != 1) {
-          // TODO: change into a join and subsequent select.
+          // TODO: Add joins with secondary join columns.
           AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
                    "Joins should happen on one variable only, for now. "
                        "No cyclic queries either, currently.");
@@ -421,19 +427,28 @@ size_t QueryPlanner::SubtreePlan::getSizeEstimate() const {
 bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
                              const QueryPlanner::SubtreePlan& b,
                              const QueryPlanner::TripleGraph& tg) const {
-  // Check if one includes the other
-  bool included = true;
+
   auto& smaller = a._idsOfIncludedNodes.size() < b._idsOfIncludedNodes.size()
                   ? a._idsOfIncludedNodes : b._idsOfIncludedNodes;
   auto& bigger = a._idsOfIncludedNodes.size() < b._idsOfIncludedNodes.size()
                  ? b._idsOfIncludedNodes : a._idsOfIncludedNodes;
+//  // Check if one includes the other
+//  bool included = true;
+//  for (auto nodeId : smaller) {
+//    if (bigger.count(nodeId) == 0) {
+//      included = false;
+//      break;
+//    }
+//  }
+//  if (included) { return false; }
+
+  // Check if there is overlap.
+  // If so, don't consider them as properly overlapping.
   for (auto nodeId : smaller) {
-    if (bigger.count(nodeId) == 0) {
-      included = false;
-      break;
+    if (bigger.count(nodeId) > 0) {
+      return false;
     }
   }
-  if (included) { return false; }
 
   for (auto nodeId : a._idsOfIncludedNodes) {
     auto& connectedNodes = tg._adjLists[nodeId];

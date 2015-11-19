@@ -43,7 +43,13 @@ class Filter : public Operation {
 
     virtual size_t getSizeEstimate() const {
       // TODO: return a better estimate
-      return _subtree->getSizeEstimate() / 10;
+      if (_type == SparqlFilter::FilterType::EQ) {
+        return _subtree->getSizeEstimate() / 100;
+      } if (_type == SparqlFilter::FilterType::NE) {
+        return _subtree->getSizeEstimate() / 2;
+      } else {
+        return _subtree->getSizeEstimate() / 10;
+      }
     }
 
     virtual size_t getCostEstimate() const {

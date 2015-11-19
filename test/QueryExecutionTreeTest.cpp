@@ -165,6 +165,8 @@ TEST(QueryExecutionTreeTest, testSpielbergMovieActors) {
   }
 }
 
+
+
 TEST(QueryExecutionTreeTest, testActorsBornInEurope) {
   try {
     ParsedQuery pq = SparqlParser::parse(

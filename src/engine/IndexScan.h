@@ -26,12 +26,7 @@ class IndexScan : public Operation {
     virtual ~IndexScan() { }
 
     void setSubject(const string& subject) {
-      size_t posUs = subject.rfind('_');
-      if (posUs != string::npos) {
-        _subject = subject.substr(0, posUs);
-      } else {
-        _subject = subject;
-      }
+      _subject = subject;
     }
 
     void setPredicate(const string& predicate) {
@@ -39,12 +34,7 @@ class IndexScan : public Operation {
     }
 
     void setObject(const string& object) {
-      size_t posUs = object.rfind('_');
-      if (posUs != string::npos) {
-        _object = object.substr(0, posUs);
-      } else {
-        _object = object;
-      }
+      _object = object;
     }
 
     virtual size_t getResultWidth() const;

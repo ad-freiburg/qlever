@@ -157,6 +157,8 @@ public:
     QueryExecutionTree _consumedOperations;
     vector<pair<QueryExecutionTree, size_t>> _storedOperations;
     string _storedWords;
+
+      string clearLabel(const string& label);
   };
 
   QueryGraph();

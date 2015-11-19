@@ -235,13 +235,13 @@ QueryExecutionTree QueryGraph::Node::consumeIntoSubtree(
       // Case: Other has no subtree result and a fixed obj (or subj).
       if (edge._reversed) {
         IndexScan is(_qec, IndexScan::POS_BOUND_O);
-        is.setObject(other->_label);
+        is.setObject(clearLabel(other->_label));
         is.setPredicate(edge._label);
         addedSubtree.setOperation(QueryExecutionTree::SCAN, &is);
         addedSubtree.setVariableColumn(_label, 0);
       } else {
         IndexScan is(_qec, IndexScan::PSO_BOUND_S);
-        is.setSubject(other->_label);
+        is.setSubject(clearLabel(other->_label));
         is.setPredicate(edge._label);
         addedSubtree.setOperation(QueryExecutionTree::SCAN, &is);
         addedSubtree.setVariableColumn(_label, 0);
@@ -729,3 +729,7 @@ QueryGraph::createVariableColumnsMapForTextOperation(
   return map;
 }
 
+// _____________________________________________________________________________
+string QueryGraph::Node::clearLabel(const string& label) {
+  return label.substr(0, label.rfind('_'));
+}

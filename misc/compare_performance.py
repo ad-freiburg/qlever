@@ -11,8 +11,9 @@ virtuoso_isql_port = "1111"
 virtuso_isql_user = "dba"
 rdf3x_run_binary = "/home/buchholb/rdf3x-0.3.8/bin/rdf3xquery"
 rdf3x_db = "/local/scratch/bjoern/data/rdf3x/fulldb"
-my_binary = "/local/scratch/bjoern/work/tmp/SparqlEngineMain"
+my_binary_old = "/local/scratch/bjoern/work/SparqlEngineMainOld"
 my_index = "/local/scratch/bjoern/data/testfulltext"
+my_binary = "/local/scratch/bjoern/work/tmp/SparqlEngineMain"
 
 parser = argparse.ArgumentParser()
 
@@ -101,6 +102,21 @@ def get_rdf3X_query_times(query_file):
   #os.remove('__tmp.rdf3xqueries')
   return results
   
+def get_my_query_times_old(query_file):
+  with open('__tmp.myqueries', 'w') as tmpfile:
+    for line in open(query_file):
+      tmpfile.write(expanded_to_my_syntax(line.strip().split('\t')[1]) + '\n')
+  myout = subprocess.check_output([my_binary_old, '-i', my_index, '-t', '--queryfile', '__tmp.myqueries'])
+  print 'my (old) output lines: ' + str(len(myout.split('\n')))
+  results = []
+  for line in myout.split('\n'):
+    i = line.find('Done. Time: ')
+    if i >= 0:
+      j = line.find('ms')
+      results.append(line[i + 12 : j + 2])
+  #os.remove('__tmp.myqueries')
+  return results
+
 def get_my_query_times(query_file):
   with open('__tmp.myqueries', 'w') as tmpfile:
     for line in open(query_file):
@@ -123,25 +139,27 @@ def processQueries(query_file, pwd):
   virtuoso_times = get_virtuoso_query_times(query_file, pwd)
   rdf3x_times = get_rdf3X_query_times(query_file)
   my_times = get_my_query_times(query_file)
-  return queries, virtuoso_times, rdf3x_times, my_times
+  my_times_old = get_my_query_times_old(query_file)
+  return queries, virtuoso_times, rdf3x_times, my_times, my_times_old
 
 
-def print_result_table(queries, virtuoso_times, rdf3x_times, my_times):
+def print_result_table(queries, virtuoso_times, rdf3x_times, my_times, my_times_old):
   assert len(queries) == len(virtuoso_times)
   assert len(queries) == len(rdf3x_times)
   assert len(queries) == len(my_times)
-  print "\t".join(['id', 'query', 'virtuoso', 'rdf3x', 'mine'])  
-  print "\t".join(['----', '-----', '-----', '-----', '-----'])  
+  assert len(queries) == len(my_times_old)
+  print "\t".join(['id', 'query', 'virtuoso', 'rdf3x', 'mine', 'mine_old'])
+  print "\t".join(['----', '-----', '-----', '-----', '-----', '-----'])
   for i in range(0, len(queries)):
-    print "\t".join([queries[i], virtuoso_times[i], rdf3x_times[i], my_times[i]])
+    print "\t".join([queries[i], virtuoso_times[i], rdf3x_times[i], my_times[i], my_times_old[i]])
 
 
 
 def main():
   args = vars(parser.parse_args())
   queries = args['queryfile']
-  queries, virtuoso_times, rdf3x_times, my_times = processQueries(queries, args['virtuoso_pwd'])
-  print_result_table(queries, virtuoso_times, rdf3x_times, my_times)
+  queries, virtuoso_times, rdf3x_times, my_times, my_times_old = processQueries(queries, args['virtuoso_pwd'])
+  print_result_table(queries, virtuoso_times, rdf3x_times, my_times, my_times_old)
 
 
 if __name__ == '__main__':

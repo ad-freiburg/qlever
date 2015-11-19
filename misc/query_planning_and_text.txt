@@ -18,7 +18,7 @@ Processing a text operations means to fully deal with a context variable.
 Simple solution:
 Create execution trees for each split and then one TextOperationForContexts
 better solution:
-Enumerate the simple solution for each split subgraph an option where it is left out but instead a reuslt is obtained
+Enumerate the simple solution for each split subgraph an option where it is left out but instead a result is obtained
 using a TextOperationForEntities.
 Finally pick the best overall result.
 

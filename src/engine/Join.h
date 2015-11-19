@@ -39,12 +39,13 @@ class Join : public Operation {
     }
 
     virtual size_t getSizeEstimate() const {
-      return std::min(_left->getSizeEstimate(), _right->getSizeEstimate()) / 2;
+      // return std::min(_left->getSizeEstimate(), _right->getSizeEstimate()) / 2;
+      return (_left->getSizeEstimate() + _right->getSizeEstimate()) / 4;
     }
 
     virtual size_t getCostEstimate() const {
-      return _left->getSizeEstimate() / 2 + _left->getCostEstimate() +
-          _right->getSizeEstimate() / 2 + _right->getCostEstimate();
+      return _left->getSizeEstimate() + _left->getCostEstimate() +
+          _right->getSizeEstimate()  + _right->getCostEstimate();
     }
 
   private:

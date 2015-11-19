@@ -13,6 +13,7 @@
 #include "parser/SparqlParser.h"
 #include "engine/QueryGraph.h"
 #include "util/Timer.h"
+#include "engine/QueryPlanner.h"
 
 using std::string;
 using std::cout;
@@ -140,11 +141,30 @@ void processQuery(QueryExecutionContext& qec, const string &query) {
   t.start();
   SparqlParser sp;
   ParsedQuery pq = sp.parse(query);
-
   pq.expandPrefixes();
+
+  QueryPlanner qp(&qec);
+  ad_utility::Timer timer;
+  timer.start();
+  auto qet = qp.createExecutionTree(pq);
+  timer.stop();
+
+  LOG(DEBUG) << "Time to create Execution Tree: " << timer.msecs() << "ms\n";
+
+  timer.start();
   QueryGraph qg(&qec);
   qg.createFromParsedQuery(pq);
-  const QueryExecutionTree& qet = qg.getExecutionTree();
+  const QueryExecutionTree& qetOld = qg.getExecutionTree();
+  timer.stop();
+
+  LOG(INFO) << "Time to create old execution tree: " << timer.msecs() << "ms\n";
+
+  if (qet.asString() == qetOld.asString()) {
+    LOG(INFO) << "Execution trees identical!\n";
+  } else {
+    LOG(INFO) << "Execution Tree:" << qet.asString() << '\n';
+    LOG(INFO) << "Old Execution Tree:" << qetOld.asString() << '\n';
+  }
 
   size_t limit = MAX_NOF_ROWS_IN_RESULT;
   size_t offset = 0;

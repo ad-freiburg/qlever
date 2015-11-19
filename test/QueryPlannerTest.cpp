@@ -39,6 +39,19 @@ TEST(QueryPlannerTest, createTripleGraph) {
               "2 {s: <X> p: ?p, o: <Y>} : (0)",
           tg.asString());
     }
+
+    {
+      ParsedQuery pq = SparqlParser::parse(
+          "SELECT ?x WHERE { ?x <is-a> <Book> . \n"
+              "?x <Author> <Anthony_Newman_(Author)> }");
+      pq.expandPrefixes();
+      QueryPlanner qp(nullptr);
+      auto tg = qp.createTripleGraph(pq);
+      ASSERT_EQ(
+          "0 {s: ?x p: <is-a>, o: <Book>} : (1)\n"
+          "1 {s: ?x p: <Author>, o: <Anthony_Newman_(Author)>} : (0)",
+          tg.asString());
+    }
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -302,6 +315,52 @@ TEST(QueryPlannerTest, testFilterAfterJoin) {
                   "\n\t|X|\n\t"
                   "{SCAN PSO with P = \"<r>\" | width: 2} [0]"
                   "\n) | width: 3} with col 1 != col 2 | width: 3}", qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
+TEST(QueryExecutionTreeTest, testBooksbyNewman) {
+  try {
+    ParsedQuery pq = SparqlParser::parse(
+        "SELECT ?x WHERE { ?x <is-a> <Book> . "
+            "?x <Author> <Anthony_Newman_(Author)> }");
+    pq.expandPrefixes();
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ("{JOIN(\n"
+                  "\t{SCAN POS with P = \"<Author>\", "
+                  "O = \"<Anthony_Newman_(Author)>\" | width: 1} [0]\n"
+                  "\t|X|\n"
+                  "\t{SCAN POS with P = \"<is-a>\", O = \"<Book>\" | width: 1} [0]\n"
+                  ") | width: 1}",
+              qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
+
+TEST(QueryExecutionTreeTest, testBooksGermanAwardNomAuth) {
+  try {
+    ParsedQuery pq = SparqlParser::parse(
+        "SELECT ?x ?y WHERE { "
+            "?x <is-a> <Person> . "
+            "?x <Country_of_nationality> <Germany> . "
+            "?x <Author> ?y . "
+            "?y <is-a> <Award-Nominated_Work> }");
+    pq.expandPrefixes();
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    // Just check that ther is no exception, here.
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
