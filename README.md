@@ -73,11 +73,11 @@ The full call will look like this:
 
 a) Without text collection:
 
-    ./ServerMain -o /path/to/myindex -p <PORT>
+    ./ServerMain -i /path/to/myindex -p <PORT>
 
 b) With text collection:
 
-    ./ServerMain -o /path/to/myindex -p <PORT> -t
+    ./ServerMain -i /path/to/myindex -p <PORT> -t
 
 
 4. Running queries:
