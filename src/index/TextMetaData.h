@@ -95,6 +95,10 @@ public:
 
   off_t getOffsetAfter();
 
+  const TextBlockMetaData& getBlockById(size_t id) const {
+    return _blocks[id];
+  }
+
 private:
   vector<Id> _blockUpperBoundWordIds;
   vector<TextBlockMetaData> _blocks;

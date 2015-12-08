@@ -134,6 +134,9 @@ public:
     return _docsDB.getTextExcerpt(cid);
   }
 
+  // Only for debug reasons and external encoding tests.
+  void dumpAsciiLists() const;
+
 private:
   string _onDiskBase;
   Vocabulary _vocab;
@@ -244,4 +247,6 @@ private:
   friend class IndexTest_createFromTsvTest_Test;
 
   friend class IndexTest_createFromOnDiskIndexTest_Test;
+
+    void writeAsciiListFile(string filename, const vector<Id>& ids) const;
 };

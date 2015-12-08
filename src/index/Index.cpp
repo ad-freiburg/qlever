@@ -53,7 +53,7 @@ void Index::createFromNTriplesFile(const string& ntFile,
 // _____________________________________________________________________________
 size_t Index::passTsvFileForVocabulary(const string& tsvFile) {
   LOG(INFO) << "Making pass over TsvFile " << tsvFile << " for vocabulary."
-        << std::endl;
+            << std::endl;
   array<string, 3> spo;
   TsvParser p(tsvFile);
   std::unordered_set<string> items;
@@ -75,7 +75,7 @@ size_t Index::passTsvFileForVocabulary(const string& tsvFile) {
 // _____________________________________________________________________________
 void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data) {
   LOG(INFO) << "Making pass over TsvFile " << tsvFile
-        << " and creating stxxl vector.\n";
+            << " and creating stxxl vector.\n";
   array<string, 3> spo;
   TsvParser p(tsvFile);
   std::unordered_map<string, Id> vocabMap = _vocab.asMap();
@@ -84,10 +84,10 @@ void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data) {
   ExtVec::bufwriter_type writer(data);
   while (p.getLine(spo)) {
     writer << array<Id, 3>{{
-        vocabMap.find(spo[0])->second,
-        vocabMap.find(spo[1])->second,
-        vocabMap.find(spo[2])->second
-    }};
+                               vocabMap.find(spo[0])->second,
+                               vocabMap.find(spo[1])->second,
+                               vocabMap.find(spo[2])->second
+                           }};
     ++i;
     if (i % 10000000 == 0) {
       LOG(INFO) << "Lines processed: " << i << '\n';
@@ -143,16 +143,17 @@ void Index::passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data) {
   writer.finish();
   LOG(INFO) << "Pass done.\n";
 }
+
 // _____________________________________________________________________________
 void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
-    IndexMetaData& metaData, size_t c1, size_t c2) {
+                              IndexMetaData& metaData, size_t c1, size_t c2) {
   if (vec.size() == 0) {
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
     return;
   }
   ad_utility::File out(fileName.c_str(), "w");
   LOG(INFO) << "Creating an on-disk index permutation of " << vec.size()
-        << " elements / facts." << std::endl;
+            << " elements / facts." << std::endl;
   // Iterate over the vector and identify relation boundaries
   size_t from = 0;
   Id currentRel = vec[0][1];
@@ -181,7 +182,7 @@ void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
 
   LOG(INFO) << "Done creating index permutation." << std::endl;
   LOG(INFO) << "Writing statistics for this permutation:\n"
-        << metaData.statistics() << std::endl;
+            << metaData.statistics() << std::endl;
 
   LOG(INFO) << "Writing Meta data to index file...\n";
   out << metaData;
@@ -193,7 +194,8 @@ void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
 
 // _____________________________________________________________________________
 RelationMetaData Index::writeRel(ad_utility::File& out, off_t currentOffset,
-    Id relId, const vector<array<Id, 2>>& data, bool functional) {
+                                 Id relId, const vector<array<Id, 2>>& data,
+                                 bool functional) {
   LOG(TRACE) << "Writing a relation ...\n";
   AD_CHECK_GT(data.size(), 0);
   RelationMetaData rmd;
@@ -230,7 +232,7 @@ RelationMetaData& Index::writeFunctionalRelation(
       if (nofDistinctLhs % DISTINCT_LHS_PER_BLOCK == 0) {
         rmd._blocks.emplace_back(
             BlockMetaData(data[i][0],
-                rmd._startFullIndex + i * 2 * sizeof(Id)));
+                          rmd._startFullIndex + i * 2 * sizeof(Id)));
       }
       ++nofDistinctLhs;
     }
@@ -240,13 +242,14 @@ RelationMetaData& Index::writeFunctionalRelation(
 
 // _____________________________________________________________________________
 RelationMetaData& Index::writeNonFunctionalRelation(ad_utility::File& out,
-    const vector<array<Id, 2>>& data, RelationMetaData& rmd) {
+                                                    const vector<array<Id, 2>>& data,
+                                                    RelationMetaData& rmd) {
   LOG(TRACE) << "Writing part for non-functional relation ...\n";
   // Make a pass over the data and extract a RHS list for each LHS.
   // Prepare both in buffers.
   // TODO: add compression - at least to RHS.
-  pair<Id, off_t>* bufLhs = new pair<Id, off_t>[data.size()];
-  Id* bufRhs = new Id[data.size()];
+  pair<Id, off_t> *bufLhs = new pair<Id, off_t>[data.size()];
+  Id *bufRhs = new Id[data.size()];
   size_t nofDistinctLhs = 0;
   Id lastLhs = std::numeric_limits<Id>::max();
   size_t nofRhsDone = 0;
@@ -261,7 +264,7 @@ RelationMetaData& Index::writeNonFunctionalRelation(ad_utility::File& out,
 
   // Go over the Lhs data once more and adjust the offsets.
   off_t startRhs = rmd.getStartOfLhs()
-      + nofDistinctLhs * (sizeof(Id) + sizeof(off_t));
+                   + nofDistinctLhs * (sizeof(Id) + sizeof(off_t));
 
   for (size_t i = 0; i < nofDistinctLhs; ++i) {
     bufLhs[i].second += startRhs;
@@ -281,7 +284,8 @@ RelationMetaData& Index::writeNonFunctionalRelation(ad_utility::File& out,
   for (size_t i = 0; i < nofDistinctLhs; ++i) {
     if (i % DISTINCT_LHS_PER_BLOCK == 0) {
       rmd._blocks.emplace_back(BlockMetaData(bufLhs[i].first,
-          rmd.getStartOfLhs() + i * (sizeof(Id) + sizeof(off_t))));
+                                             rmd.getStartOfLhs() +
+                                             i * (sizeof(Id) + sizeof(off_t))));
     }
   }
 
@@ -299,12 +303,12 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   AD_CHECK(_psoFile.isOpen() && _posFile.isOpen());
   off_t metaFrom;
   off_t metaTo = _psoFile.getLastOffset(&metaFrom);
-  unsigned char* buf = new unsigned char[metaTo - metaFrom];
+  unsigned char *buf = new unsigned char[metaTo - metaFrom];
   _psoFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
   _psoMeta.createFromByteBuffer(buf);
   delete[] buf;
   LOG(INFO) << "Registered PSO permutation: " << _psoMeta.statistics()
-        << std::endl;
+            << std::endl;
 
   metaTo = _posFile.getLastOffset(&metaFrom);
   buf = new unsigned char[metaTo - metaFrom];
@@ -312,7 +316,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   _posMeta.createFromByteBuffer(buf);
   delete[] buf;
   LOG(INFO) << "Registered POS permutation: " << _posMeta.statistics()
-        << std::endl;
+            << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -330,7 +334,7 @@ void Index::openFileHandles() {
 }
 
 // _____________________________________________________________________________
-void Index::scanPSO(const string& predicate, WidthTwoList* result) const {
+void Index::scanPSO(const string& predicate, WidthTwoList *result) const {
   LOG(DEBUG) << "Performing PSO scan for full relation: " << predicate << "\n";
   Id relId;
   if (_vocab.getId(predicate, &relId)) {
@@ -341,7 +345,7 @@ void Index::scanPSO(const string& predicate, WidthTwoList* result) const {
       result->reserve(rmd._nofElements + 2);
       result->resize(rmd._nofElements);
       _psoFile.read(result->data(), rmd._nofElements * 2 * sizeof(Id),
-          rmd._startFullIndex);
+                    rmd._startFullIndex);
     }
   }
   LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
@@ -349,7 +353,7 @@ void Index::scanPSO(const string& predicate, WidthTwoList* result) const {
 
 // _____________________________________________________________________________
 void Index::scanPSO(const string& predicate, const string& subject,
-    WidthOneList* result) const {
+                    WidthOneList *result) const {
   LOG(DEBUG) << "Performing PSO scan of relation" << predicate
              << "with fixed subject: " << subject << "...\n";
   Id relId;
@@ -365,7 +369,7 @@ void Index::scanPSO(const string& predicate, const string& subject,
       } else {
         pair<off_t, size_t> block2 = rmd.getFollowBlockForLhs(subjId);
         scanNonFunctionalRelation(blockOff, block2, subjId, _psoFile,
-            rmd._offsetAfter, result);
+                                  rmd._offsetAfter, result);
       }
     } else {
       LOG(DEBUG) << "So such relation.\n";
@@ -377,7 +381,7 @@ void Index::scanPSO(const string& predicate, const string& subject,
 }
 
 // _____________________________________________________________________________
-void Index::scanPOS(const string& predicate, WidthTwoList* result) const {
+void Index::scanPOS(const string& predicate, WidthTwoList *result) const {
   LOG(DEBUG) << "Performing POS scan for full relation: " << predicate << "\n";
   Id relId;
   if (_vocab.getId(predicate, &relId)) {
@@ -388,7 +392,7 @@ void Index::scanPOS(const string& predicate, WidthTwoList* result) const {
       result->reserve(rmd._nofElements + 2);
       result->resize(rmd._nofElements);
       _posFile.read(result->data(), rmd._nofElements * 2 * sizeof(Id),
-          rmd._startFullIndex);
+                    rmd._startFullIndex);
     }
   }
   LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
@@ -396,7 +400,7 @@ void Index::scanPOS(const string& predicate, WidthTwoList* result) const {
 
 // _____________________________________________________________________________
 void Index::scanPOS(const string& predicate, const string& object,
-    WidthOneList* result) const {
+                    WidthOneList *result) const {
   LOG(DEBUG) << "Performing POS scan of relation" << predicate
              << "with fixed object: " << object << "...\n";
   Id relId;
@@ -412,7 +416,7 @@ void Index::scanPOS(const string& predicate, const string& object,
       } else {
         pair<off_t, size_t> block2 = rmd.getFollowBlockForLhs(objId);
         scanNonFunctionalRelation(blockOff, block2, objId, _posFile,
-            rmd._offsetAfter, result);
+                                  rmd._offsetAfter, result);
       }
     } else {
       LOG(DEBUG) << "No such relation.\n";
@@ -431,34 +435,36 @@ const string& Index::idToString(Id id) const {
 
 // _____________________________________________________________________________
 void Index::scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
-    Id lhsId, ad_utility::File& indexFile, WidthOneList* result) const {
+                                   Id lhsId, ad_utility::File& indexFile,
+                                   WidthOneList *result) const {
   LOG(TRACE) << "Scanning functional relation ...\n";
   WidthTwoList block;
   block.resize(blockOff.second / (2 * sizeof(Id)));
   indexFile.read(block.data(), blockOff.second, blockOff.first);
   auto it = std::lower_bound(block.begin(), block.end(), lhsId,
-      [](const array<Id, 2>& elem, Id key) {
-        return elem[0] < key;
-      });
+                             [](const array<Id, 2>& elem, Id key) {
+                                 return elem[0] < key;
+                             });
   if ((*it)[0] == lhsId) {
-    result->push_back(array<Id, 1>{{(*it)[1]}});
+    result->push_back(array<Id, 1>{(*it)[1]});
   }
   LOG(TRACE) << "Read " << result->size() << " RHS.\n";
 }
 
 // _____________________________________________________________________________
 void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
-    const pair<off_t, size_t>& followBlock,
-    Id lhsId, ad_utility::File& indexFile, off_t upperBound,
-    Index::WidthOneList* result) const {
+                                      const pair<off_t, size_t>& followBlock,
+                                      Id lhsId, ad_utility::File& indexFile,
+                                      off_t upperBound,
+                                      Index::WidthOneList *result) const {
   LOG(TRACE) << "Scanning non-functional relation ...\n";
   vector<pair<Id, off_t>> block;
   block.resize(blockOff.second / (sizeof(Id) + sizeof(off_t)));
   indexFile.read(block.data(), blockOff.second, blockOff.first);
   auto it = std::lower_bound(block.begin(), block.end(), lhsId,
-      [](const pair<Id, off_t>& elem, Id key) {
-        return elem.first < key;
-      });
+                             [](const pair<Id, off_t>& elem, Id key) {
+                                 return elem.first < key;
+                             });
   if (it->first == lhsId) {
     size_t nofBytes = 0;
     if ((it + 1) != block.end()) {
@@ -498,3 +504,11 @@ size_t Index::relationCardinality(const string& relationName) const {
   return 0;
 }
 
+// _____________________________________________________________________________
+void Index::writeAsciiListFile(string filename, const vector<Id>& ids) const {
+  std::ofstream f(filename.c_str());
+  for (size_t i = 0; i < ids.size(); ++i) {
+    f << ids[i] << ' ';
+  }
+  f.close();
+}
