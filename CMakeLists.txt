@@ -79,6 +79,9 @@ target_link_libraries (SparqlEngineMain engine)
 add_executable(ServerMain src/ServerMain.cpp)
 target_link_libraries (ServerMain engine)
 
+add_executable(WriteIndexListsMain src/WriteIndexListsMain.cpp)
+target_link_libraries (WriteIndexListsMain engine)
+
 
 enable_testing()
 add_test(SparqlParserTest test/SparqlParserTest)

@@ -18,6 +18,9 @@ class QueryPlanner {
     class TripleGraph {
       public:
 
+        TripleGraph() = default;
+        TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
+
         class Node {
           public:
             Node(size_t id, const SparqlTriple& t) : _id(id), _triple(t) {
@@ -33,12 +36,30 @@ class QueryPlanner {
 
         string asString() const;
 
+        bool isTextNode(size_t i) const;
+
         vector<vector<size_t>> _adjLists;
         std::unordered_map<size_t, Node *> _nodeMap;
         std::list<Node> _nodeStorage;
 
-      vector<pair<TripleGraph, vector<SparqlFilter>>> split(
-          const vector<SparqlFilter>& origFilters) const;
+        void splitAtText(
+            const vector<SparqlFilter>& origFilters,
+            vector<pair<TripleGraph, vector<SparqlFilter>>>& subgraphs,
+            unordered_map<string, vector<size_t>>& contextVarToTextNodesIds,
+            vector<SparqlFilter>& filtersWithContextVars) const;
+
+      private:
+        vector<pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
+            const vector<SparqlFilter>& origFilters,
+            unordered_map<string, vector<size_t>>& contextVarTotextNodes) const;
+
+
+        vector<size_t> bfsLeaveOut(size_t startNode,
+                                   unordered_set<size_t> leaveOut) const;
+
+        vector<SparqlFilter> pickFilters(
+            const vector<SparqlFilter>& origFilters,
+            const vector<size_t>& nodes) const;
     };
 
     class SubtreePlan {

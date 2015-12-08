@@ -1,6 +1,8 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+
+#include <algorithm>
 #include "./QueryPlanner.h"
 #include "IndexScan.h"
 #include "Join.h"
@@ -51,16 +53,24 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   // A filter can be applied as soon as all variables that occur in the filter
   // Are covered by the query. This is also always the place where this is done.
 
+  // TODO: resolve cyclic queries and turn them into filters.
+  // Copy made so that something can be added for cyclic queries.
+  // tg.turnCyclesIntoFilters(filters);
+
   // TODO: resolve cycles involving a text operation.
   // Split the graph at possible text operations.
-  vector<pair<TripleGraph, vector<SparqlFilter>>> tgs = tg.split(pq._filters);
+  vector<pair<TripleGraph, vector<SparqlFilter>>> graphs;
+  unordered_map<string, vector<size_t>> contextVarTotextNodes;
+  vector<SparqlFilter> filtersWithContextVars;
+  tg.splitAtText(pq._filters, graphs, contextVarTotextNodes,
+                 filtersWithContextVars);
 
   vector<vector<SubtreePlan>> finalTab;
-  if (tgs.size() == 1) {
-    finalTab = fillDpTab(tgs[0].first, tgs[0].second);
+  if (graphs.size() == 1) {
+    finalTab = fillDpTab(graphs[0].first, graphs[0].second);
   } else {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-    "No text yet.");
+             "No text yet.");
   }
 
   // If there is an order by clause, add another row to the table and
@@ -317,7 +327,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
     const vector<QueryPlanner::SubtreePlan>& a,
     const vector<QueryPlanner::SubtreePlan>& b,
     const QueryPlanner::TripleGraph& tg) const {
-  // TODO: Add text features.
   // TODO: Add the following features:
   // If a join is supposed to happen, always check if it happens between
   // a scan with a relatively large result size
@@ -432,15 +441,6 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
                   ? a._idsOfIncludedNodes : b._idsOfIncludedNodes;
   auto& bigger = a._idsOfIncludedNodes.size() < b._idsOfIncludedNodes.size()
                  ? b._idsOfIncludedNodes : a._idsOfIncludedNodes;
-//  // Check if one includes the other
-//  bool included = true;
-//  for (auto nodeId : smaller) {
-//    if (bigger.count(nodeId) == 0) {
-//      included = false;
-//      break;
-//    }
-//  }
-//  if (included) { return false; }
 
   // Check if there is overlap.
   // If so, don't consider them as properly overlapping.
@@ -539,12 +539,6 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg,
     const vector<SparqlFilter>& filters) const {
 
-
-  // TODO: resolve cyclic queries and turn them into filters.
-  // Copy made so that something can be added for cyclic queries.
-  // tg.turnCyclesIntoFilters(filters);
-
-
   vector<vector<SubtreePlan>> dpTab;
   dpTab.emplace_back(seedWithScans(tg));
   applyFiltersIfPossible(dpTab.back(), filters);
@@ -562,10 +556,132 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
 }
 
 // _____________________________________________________________________________
+bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
+  return _nodeMap.count(i) > 0 &&
+         (_nodeMap.find(i)->second->_triple._p == IN_CONTEXT_RELATION ||
+          _nodeMap.find(i)->second->_triple._p == HAS_CONTEXT_RELATION);
+}
+
+
+// _____________________________________________________________________________
+void QueryPlanner::TripleGraph::splitAtText(
+    const vector<SparqlFilter>& origFilters,
+    vector<pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>>& subgraphs,
+    unordered_map<string, vector<size_t>>& contextVarToTextNodesIds,
+    vector<SparqlFilter>& filtersWithContextVars) const {
+  std::set<string> varsInNonContextTriples;
+  std::set<string> varsInContextTriples;
+  std::set<string> contextVars;
+  // Find all context vars.
+  for (size_t i = 0; i < _adjLists.size(); ++i) {
+    if (isTextNode(i)) {
+      varsInContextTriples.insert(
+          _nodeMap.find(i)->second->_variables.begin(),
+          _nodeMap.find(i)->second->_variables.end());
+    } else {
+      varsInNonContextTriples.insert(
+          _nodeMap.find(i)->second->_variables.begin(),
+          _nodeMap.find(i)->second->_variables.end());
+    }
+  }
+  std::set_difference(varsInContextTriples.begin(),
+                      varsInContextTriples.end(),
+                      varsInNonContextTriples.begin(),
+                      varsInNonContextTriples.end(),
+                      std::inserter(contextVars, contextVars.begin()));
+  // Iterate again and fill contextVar -> triples map
+  for (size_t i = 0; i < _adjLists.size(); ++i) {
+    if (isTextNode(i)) {
+      if (contextVars.count(_nodeMap.find(i)->second->_triple._s) > 0) {
+        contextVarToTextNodesIds[_nodeMap.find(
+            i)->second->_triple._s].push_back(i);
+        AD_CHECK_EQ(0, contextVars.count(_nodeMap.find(i)->second->_triple._o));
+      }
+      if (contextVars.count(_nodeMap.find(i)->second->_triple._o) > 0) {
+        contextVarToTextNodesIds[_nodeMap.find(
+            i)->second->_triple._o].push_back(i);
+        AD_CHECK_EQ(0, contextVars.count(_nodeMap.find(i)->second->_triple._s));
+      }
+    }
+  }
+  vector<SparqlFilter> filtersWithoutContextVars;
+  for (auto& f : origFilters) {
+    if (contextVars.count(f._lhs) > 0 || contextVars.count(f._lhs) > 0) {
+      filtersWithContextVars.push_back(f);
+    } else {
+      filtersWithoutContextVars.push_back(f);
+    }
+  }
+  subgraphs = splitAtContextVars(filtersWithoutContextVars,
+                                 contextVarToTextNodesIds);
+}
+
+
+// _____________________________________________________________________________
 vector<pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>>
-QueryPlanner::TripleGraph::split(
-    const vector<SparqlFilter>& origFilters) const {
-  vector<pair<TripleGraph, vector<SparqlFilter>>> res;
-  res.emplace_back(*this, origFilters);
-  return res;
+QueryPlanner::TripleGraph::splitAtContextVars(
+    const vector<SparqlFilter>& origFilters,
+    unordered_map<string, vector<size_t>>& contextVarToTextNodes) const {
+  vector<pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>> retVal;
+  // Recursively split the graph a context nodes.
+  // Base-case: No no context nodes, return the graph itself.
+  if (contextVarToTextNodes.size() == 0) {
+    retVal.emplace_back(make_pair(*this, origFilters));
+  } else {
+    // Just take the first contextVar at split at it.
+    auto& cVar = contextVarToTextNodes.begin()->first;
+    unordered_set<size_t> textNodeIds;
+    textNodeIds.insert(contextVarToTextNodes.begin()->second.begin(),
+                       contextVarToTextNodes.begin()->second.end());
+
+    // For the next iteration / recursive call(s):
+    // Leave out the first one because it has been worked on in this call.
+    unordered_map<string, vector<size_t>> cTMapNextIteration;
+    cTMapNextIteration.insert(++contextVarToTextNodes.begin(),
+                              contextVarToTextNodes.end());
+
+    // Find a node to starte the split.
+    size_t startNode = 0;
+    while (startNode < _adjLists.size() && textNodeIds.count(startNode) > 0) {
+      ++startNode;
+    }
+    // If no start node was found, this means only text triples left.
+    // --> don't enter code block below and return empty vector.
+    if (startNode != _adjLists.size()) {
+      // If we have a start node, do a BFS to obtain a set of reachable nodes
+      auto reachableNodes = bfsLeaveOut(startNode, textNodeIds);
+      if (reachableNodes.size() == _adjLists.size() - textNodeIds.size()) {
+        // Case: cyclic or text operation was on the "outside"
+        // -> only one split to work with further
+        TripleGraph withoutText(*this, reachableNodes);
+        vector<SparqlFilter> filters = pickFilters(origFilters, reachableNodes);
+        auto recursiveResult = splitAtContextVars(filters, cTMapNextIteration);
+        retVal.insert(retVal.begin(), recursiveResult.begin(),
+                      recursiveResult.end());
+      } else {
+        // Case: The split created two or more non-empty parts.
+      }
+    }
+  }
+  return retVal;
+}
+
+// _____________________________________________________________________________
+vector<size_t> QueryPlanner::TripleGraph::bfsLeaveOut(
+    size_t startNode,
+    unordered_set<size_t> leaveOut) const {
+  return std::vector<size_t>();
+}
+
+// _____________________________________________________________________________
+vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
+    const vector<SparqlFilter>& origFilters,
+    const vector<size_t>& nodes) const {
+  return std::vector<SparqlFilter>();
+}
+
+// _____________________________________________________________________________
+QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
+                                       vector<size_t> keepNodes) {
+
 }
