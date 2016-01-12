@@ -56,7 +56,7 @@ namespace ad_utility {
     // ! multiple of 8.
     // ! Requires encoded to be preallocated with sufficient space.
     template<typename Numeric>
-    static size_t encode(const Numeric* plaintext, size_t nofElements,
+    static size_t encode(Numeric* plaintext, size_t nofElements,
             uint64_t* encoded) {
       size_t nofElementsEncoded = 0;
       size_t nofCodeWordsDone = 0;
@@ -141,7 +141,7 @@ namespace ad_utility {
     // ! The overhead is included so that no check for noundaries
     // ! is necessary inside the decoding of a single codeword.
     template<typename Numeric>
-    static void decode(const uint64_t* encoded, const size_t& nofElements,
+    static void decode(uint64_t* encoded, size_t nofElements,
                        Numeric* decoded) {
       size_t nofElementsDone = 0;
       size_t nofCodeWordsDone = 0;
