@@ -63,6 +63,8 @@ namespace ad_utility {
       while (nofElementsEncoded < nofElements) {
         // it's the lambda.
         size_t itemsLeft = nofElements - nofElementsEncoded;
+        // Count the number of consecutive 0's and decide if
+        // selectors 0 or 1 can be used
         bool selector0 = true;
         bool selector1 = false;
         for (size_t i = 0; i < std::min<size_t>(240, itemsLeft); ++i) {
