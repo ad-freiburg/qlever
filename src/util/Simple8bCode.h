@@ -1,6 +1,6 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Zhiwei Zhang <zhiwei.zhang@saturn.uni-freiburg.de>
+// Author: Björn Buchhold <buchholb> and Zhiwei Zhang <zhang>
 
 #pragma once
 #include <stdint.h>
@@ -50,113 +50,13 @@ namespace ad_utility {
   class Simple8bCode {
    public:
 
-    Simple8bCode() {
-      _encoded = new uint64_t[10];
-      _cursor = 0;
-      _word = 0;
-      _selector = 0;
-      _itemWidth = 0;
-      _groupSize = 0;
-    }
-
-    template<typename Numeric>
-    explicit Simple8bCode(const Numeric* plaintext, const size_t& nofElements) {
-      _encoded = new uint64_t[nofElements];
-      encode(plaintext, nofElements, _encoded);
-      _cursor = 0;
-      _word = _encoded[_cursor];
-      _selector = _word & SIMPLE8B_SELECTOR_MASK;
-      _itemWidth = SIMPLE8B_SELECTORS[_selector]._itemWidth & 15;
-      _groupSize = SIMPLE8B_SELECTORS[_selector]._groupSize & 15;
-      _word = _word >> 4;
-    }
-
-    ~Simple8bCode() {
-      delete[] _encoded;
-    }
-
-    uint64_t getNextWord() {
-      ++_cursor;
-      _word = _encoded[_cursor];
-      _selector = _word & SIMPLE8B_SELECTOR_MASK;
-      _itemWidth = SIMPLE8B_SELECTORS[_selector]._itemWidth & 15;
-      _groupSize = SIMPLE8B_SELECTORS[_selector]._groupSize & 15;
-      _word = _word >> 4;
-      return _word;
-    }
-
-    // ! the Successor function, to decode and return the next pointer.
-    // ! This operation steps the file cursor (the current access point)
-    // ! forwards a single pointer (or, depending on the exact context, a single integer).
-    template<typename Numeric>
-    void successor(Numeric* returnValue) {
-      if (_groupSize == 0) {
-        _word = getNextWord();
-      }
-      *returnValue = _word & SIMPLE8B_SELECTORS[_selector]._mask;
-      _word = _word >> _itemWidth;
-      _groupSize--;
-    }
-
-    // ! Forwards Search, to locate the next document pointer whose value
-    // ! is greater than or equal to d, for some supplied value d.
-    // ! This operation potentially shifts the file cursor to a large distance,
-    // ! in terms of both pointers and stored integers.
-    template<typename Numeric>
-    void forwardSearch(const Numeric& reference) {
-      Numeric currentNumeric = _word & SIMPLE8B_SELECTORS[_selector]._mask;
-      while (currentNumeric < reference) {
-        if (_groupSize <= 1) {
-          _word = getNextWord();
-          currentNumeric = _word & SIMPLE8B_SELECTORS[_selector]._mask;
-          continue;
-        }
-        if (SIMPLE8B_SELECTORS[_selector]._mask < reference) {
-          while (SIMPLE8B_SELECTORS[_selector]._mask < reference) {
-            _word = getNextWord();
-          }
-          _itemWidth = SIMPLE8B_SELECTORS[_selector]._itemWidth & 15;
-          _groupSize = SIMPLE8B_SELECTORS[_selector]._groupSize & 15;
-          _word = _word >> 4;
-          currentNumeric = _word & SIMPLE8B_SELECTORS[_selector]._mask;
-          continue;
-        }
-        _word = _word >> _itemWidth;
-        _groupSize--;
-        currentNumeric = _word & SIMPLE8B_SELECTORS[_selector]._mask;
-      }
-    }
-
-    // ! Forwards Seek, to shift the file cursor forwards by x integers,
-    // ! for some supplied value x. In comparison with Forwards Search,
-    // ! this operation steps a defined number of integers, rather than
-    // ! until a particular value is located.
-    void forwardSeek(const size_t& x) {
-      size_t parameterofMovement = x;
-      if (parameterofMovement > _groupSize) {
-        while (parameterofMovement > _groupSize) {
-          parameterofMovement -= _groupSize;
-          ++_cursor;
-          _groupSize = SIMPLE8B_SELECTORS[_encoded[_cursor]
-                            & SIMPLE8B_SELECTOR_MASK]._groupSize & 15;
-        }
-        _word = _encoded[_cursor];
-        _selector = _word & SIMPLE8B_SELECTOR_MASK;
-        _itemWidth = SIMPLE8B_SELECTORS[_selector]._itemWidth & 15;
-        _word = _word >> 4;
-      }
-      _word = _word >> (parameterofMovement * _itemWidth);
-      _groupSize -= parameterofMovement;
-    }
-
     // ! Encodes a list of elements that can be interpreted as numeric values
     // ! using the Simple8b compression scheme.
     // ! Returns the number of bytes in the encoded array, will always be a
     // ! multiple of 8.
     // ! Requires encoded to be preallocated with sufficient space.
-    // ! the parameter show is used to controll the output.
     template<typename Numeric>
-    static void encode(const Numeric* plaintext, const size_t& nofElements,
+    static size_t encode(const Numeric* plaintext, size_t nofElements,
             uint64_t* encoded) {
       size_t nofElementsEncoded = 0;
       size_t nofCodeWordsDone = 0;
@@ -172,6 +72,11 @@ namespace ad_utility {
             break;
           }
         }
+        // If there are less than 240 elements left and all the elements are 0,
+        // then we should not use the selector0. Otherwise the words in the 
+        // encoded list maybe represent more words than the actually encoded.
+        // This step is necessary for the optimal decode function, which runs 
+        // more faster than the old decode function.
         if (itemsLeft < 240 && selector0) {
           selector0 = false;
           if (itemsLeft >= 120)  selector1 = true;
@@ -190,11 +95,12 @@ namespace ad_utility {
           ++nofCodeWordsDone;
           continue;
         }
-
+        // Try selectors for as many items per codeword as possible,
+        // take the next selector whenever it is not possible.
         for (unsigned char selector = 2; selector < 16; ++selector) {
           uint64_t codeword = selector;
           size_t nofItemsInWord = 0;
-
+          // Do the check again, it's also necessary for the optimal decode function.
           if (itemsLeft < SIMPLE8B_SELECTORS[selector]._groupSize) {
             continue;
           }
@@ -226,94 +132,14 @@ namespace ad_utility {
           }
         }
       }
+      return sizeof(uint64_t) * nofCodeWordsDone;
     }
-
-    /*
-    * This is the original encode function from Buchhold.
-    *
-    *   template<typename Numeric>
-    *   static void encode(Numeric* plaintext, size_t nofElements,
-    *       uint64_t* encoded) {
-    *     size_t nofElementsEncoded = 0;
-    *     size_t nofCodeWordsDone = 0;
-    *     while (nofElementsEncoded < nofElements) {
-    *       size_t itemsLeft = nofElements - nofElementsEncoded;
-    *       // Count the number of consecutive 0's and decide if
-    *       // selectors 0 or 1 can be used
-    *       bool selector0 = true;
-    *       bool selector1 = false;
-    *       for (size_t i = 0; i < std::min<size_t>(240, itemsLeft); ++i) {
-    *         if (plaintext[nofElementsEncoded + i] != 0) {
-    *           if (i > 120) {
-    *             selector0 = false;
-    *             selector1 = true;
-    *             break;
-    *           } else {
-    *             // Not possible to use selector 0 or 1
-    *             selector0 = false;
-    *             break;
-    *           }
-    *         }
-    *       }
-    *       if (selector0) {
-    *         // Use selector 0 to compress 240 consecutive 0's.
-    *         encoded[nofCodeWordsDone] = 0;
-    *         nofElementsEncoded += 240;
-    *         nofCodeWordsDone++;
-    *         continue;
-    *       }
-    *       if (selector1) {
-    *         // Use selector 1 to compress 120 consecutive 0's.
-    *         encoded[nofCodeWordsDone] = 1;
-    *         nofElementsEncoded += 120;
-    *         nofCodeWordsDone++;
-    *         continue;
-    *       }
-    *       // Try selectors for as many items per codeword as possible,
-    *       // take the next selector whenever it is not possible.
-    *       for (unsigned char selector = 2; selector < 16; ++selector) {
-    *         uint64_t codeword = selector;
-    *         size_t nofItemsInWord = 0;
-    *         while (nofItemsInWord < std::min<size_t>(itemsLeft,
-    *             SIMPLE8B_SELECTORS[selector]._groupSize)) {
-    *           // Check that the max value (60 bit) is not exceeded.
-    *           assert(plaintext[nofElementsEncoded + nofItemsInWord]
-    *                            <= 0x0FFFFFFFFFFFFFFF);
-    *           // If an element is too large, break the loop.
-    *           // Later we recognize that not enough elements
-    *           // were written for the specific selector, and hence try the next
-    *           // selector.
-    *           if (plaintext[nofElementsEncoded + nofItemsInWord]
-    *               > SIMPLE8B_SELECTORS[selector]._mask) {
-    *             break;
-    *           }
-    *           codeword |= (static_cast<uint64_t>(
-    *               plaintext[nofElementsEncoded + nofItemsInWord])
-    *               << (4 +  // Selector bits.
-    *               nofItemsInWord * SIMPLE8B_SELECTORS[selector]._itemWidth));
-    *           ++nofItemsInWord;
-    *         }
-    *         // Check if enough elements have been written to fit the selector
-    *         // or if the loop was left earlier.
-    *         if (nofItemsInWord == SIMPLE8B_SELECTORS[selector]._groupSize ||
-    *             nofItemsInWord == itemsLeft) {
-    *           encoded[nofCodeWordsDone] = codeword;
-    *           nofElementsEncoded += nofItemsInWord;
-    *           ++nofCodeWordsDone;
-    *           break;
-    *         }
-    *       }
-    *     }
-    *   }
-    */
 
     // ! Decodes a list of elements using the Simple8b compression scheme.
     // ! Requires decoded to be preallocated with sufficient space,
     // ! i.e. sizeof(Numeric) * (nofElements + 239).
     // ! The overhead is included so that no check for noundaries
     // ! is necessary inside the decoding of a single codeword.
-
-    // ! This decode function is the optimal.
     template<typename Numeric>
     static void decode(const uint64_t* encoded, const size_t& nofElements,
                        Numeric* decoded) {
@@ -342,57 +168,5 @@ namespace ad_utility {
         ++nofCodeWordsDone;
       }
     }
-
-    /*
-    * This is the original decode function from Buchhold
-    *
-    *   template<typename Numeric>
-    *   static void decode(uint64_t* encoded, size_t nofElements,
-    *       Numeric* decoded, const bool& show = false) {
-    *     size_t nofElementsDone = 0;
-    *     size_t nofCodeWordsDone = 0;
-    *     // Loop over full 64bit codewords
-    *     while (nofElementsDone < nofElements) {
-    *       unsigned char selector = encoded[nofCodeWordsDone]
-    *           & SIMPLE8B_SELECTOR_MASK;
-    *       if (selector > 1) {
-    *         // Case: Usual decompression.
-    *         for (size_t i = 0; i < SIMPLE8B_SELECTORS[selector]._groupSize;
-    *              ++i) {
-    *           decoded[nofElementsDone + i] = (encoded[nofCodeWordsDone] >>
-    *                                           (4 + SIMPLE8B_SELECTORS[selector]._itemWidth * i))
-    *                                          & SIMPLE8B_SELECTORS[selector]._mask;
-    *         }
-    *       } else {
-    *         // Case: Long sequences of 1's (or 0's) compressed.
-    *         for (size_t i = 0; i < SIMPLE8B_SELECTORS[selector]._groupSize; ++i) {
-    *           decoded[nofElementsDone + i] = 0;
-    *         }
-    *       }
-    *       nofElementsDone += SIMPLE8B_SELECTORS[selector]._groupSize;
-    *       ++nofCodeWordsDone;
-    *     }
-    *   }
-    */
-
-   private:
-
-    // the encoded code.
-    uint64_t* _encoded;
-
-    // the current word buffer.
-    uint64_t _word;
-
-    // the current selector of the word buffer in the encoded code.
-    unsigned char _selector;
-
-    // the current access position in the encoded code.
-    size_t _cursor;
-
-    // the current itemWidth of the word buffer.
-    size_t _itemWidth;
-
-    // the current number of the encoded word in the current word buffer.
-    size_t _groupSize;
   };
 }
