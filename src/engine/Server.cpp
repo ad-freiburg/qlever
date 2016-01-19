@@ -207,7 +207,8 @@ string Server::createHttpResponse(const string& content,
   std::ostringstream os;
   os << "HTTP/1.0 200 OK\r\n" << "Content-Length: " << content.size() << "\r\n"
   << "Connection: close\r\n" << "Content-Type: " << contentType
-  << "; charset=" << "UTF-8" << "\r\n" << "\r\n" << content;
+  << "; charset=" << "UTF-8" << "\r\n"
+  << "Access-Control-Allow-Origin: *" << "\r\n" << "\r\n" << content;
   return os.str();
 }
 
@@ -253,8 +254,9 @@ string Server::composeResponseJson(const ParsedQuery& query,
 }
 
 // _____________________________________________________________________________
-string Server::composeResponseJson(const string& query,
-                                   const ad_semsearch::Exception& exception) const {
+string Server::composeResponseJson(
+    const string& query,
+    const ad_semsearch::Exception& exception) const {
   std::ostringstream os;
   _requestProcessingTimer.stop();
 
@@ -339,6 +341,7 @@ void Server::serveFile(Socket *client, const string& requestedFile) const {
   headerStream << statusString << "\r\n"
   << "Content-Length: " << contentLength << "\r\n"
   << "Content-Type: " << contentType << "\r\n"
+  << "Access-Control-Allow-Origin: *\r\n"
   << "Connection: close\r\n"
   << "\r\n";
 
