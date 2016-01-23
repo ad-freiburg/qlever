@@ -58,30 +58,18 @@ namespace ad_utility {
     template<typename Numeric>
     static size_t encode(Numeric* plaintext, size_t nofElements,
             uint64_t* encoded) {
-      size_t nofElementsEncoded = 0;
-      size_t nofCodeWordsDone = 0;
+      size_t nofElementsEncoded(0), nofCodeWordsDone(0);
       while (nofElementsEncoded < nofElements) {
-        // it's the lambda.
         size_t itemsLeft = nofElements - nofElementsEncoded;
         // Count the number of consecutive 0's and decide if
         // selectors 0 or 1 can be used
-        bool selector0 = true;
-        bool selector1 = false;
-        for (size_t i = 0; i < std::min<size_t>(240, itemsLeft); ++i) {
-          if (plaintext[nofElementsEncoded + i] != 0) {
+        bool selector0(true), selector1(false);
+        for (unsigned char i(0); i < std::min<size_t>(240, itemsLeft); ++i) {
+          if (plaintext[nofElementsEncoded + i]) {
             selector0 = false;
-            if (i > 120) selector1 = true;
+            if (i >= 120) selector1 = true;
             break;
           }
-        }
-        // If there are less than 240 elements left and all the elements are 0,
-        // then we should not use the selector0. Otherwise the words in the 
-        // encoded list maybe represent more words than the actually encoded.
-        // This step is necessary for the optimal decode function, which runs 
-        // more faster than the old decode function.
-        if (itemsLeft < 240 && selector0) {
-          selector0 = false;
-          if (itemsLeft >= 120)  selector1 = true;
         }
         if (selector0) {
           // Use selector 0 to compress 240 consecutive 0's.
@@ -95,43 +83,43 @@ namespace ad_utility {
           encoded[nofCodeWordsDone] = 1;
           nofElementsEncoded += 120;
           ++nofCodeWordsDone;
-          continue;
+          // We update the itemsleft so that we can directly try to compress
+          // the elements from the selector 2 not from selector 0 again.
+          itemsLeft -= 120;
         }
         // Try selectors for as many items per codeword as possible,
         // take the next selector whenever it is not possible.
-        for (unsigned char selector = 2; selector < 16; ++selector) {
-          uint64_t codeword = selector;
-          size_t nofItemsInWord = 0;
-          // Do the check again, it's also necessary for the optimal decode function.
-          if (itemsLeft < SIMPLE8B_SELECTORS[selector]._groupSize) {
-            continue;
-          }
-          while (nofItemsInWord < SIMPLE8B_SELECTORS[selector]._groupSize) {
-            // Check that the max value (60 bit) is not exceeded.
-            assert(plaintext[nofElementsEncoded + nofItemsInWord]
-                   <= 0x0FFFFFFFFFFFFFFF);
-            // If an element is too large, break the loop.
-            // Later we recognize that not enough elements
-            // were written for the specific selector, and hence try the next
-            // selector.
-            if (plaintext[nofElementsEncoded + nofItemsInWord]
-                > SIMPLE8B_SELECTORS[selector]._mask) {
-              break;
-            }
+        for (unsigned char selector(2); selector < 16; ++selector) {
+          uint64_t codeword(selector);
+          unsigned char nofItemsInWord (0);
+          // If an element is too large, break the loop.
+          // Later we recognize that not enough elements
+          // were written for the specific selector, and hence try the next
+          // selector.
+          while (nofItemsInWord < std::min<size_t>(
+                itemsLeft, SIMPLE8B_SELECTORS[selector]._groupSize)
+                 && !(plaintext[nofElementsEncoded + nofItemsInWord]
+                      > SIMPLE8B_SELECTORS[selector]._mask)) {
             codeword |= (static_cast<uint64_t>(
-                         plaintext[nofElementsEncoded + nofItemsInWord])
+                        plaintext[nofElementsEncoded + nofItemsInWord])
                          << (4 +  // Selector bits.
-                     nofItemsInWord * SIMPLE8B_SELECTORS[selector]._itemWidth));
+                        nofItemsInWord * SIMPLE8B_SELECTORS[selector]._itemWidth));
             ++nofItemsInWord;
           }
           // Check if enough elements have been written to fit the selector
           // or if the loop was left earlier.
-          if (nofItemsInWord == SIMPLE8B_SELECTORS[selector]._groupSize) {
+          if (nofItemsInWord == std::min<size_t>(itemsLeft,
+              SIMPLE8B_SELECTORS[selector]._groupSize)) {
             encoded[nofCodeWordsDone] = codeword;
             nofElementsEncoded += nofItemsInWord;
             ++nofCodeWordsDone;
             break;
           }
+          // Check that the max value (60 bit) is not exceeded.
+          // I put it here to same some for this check, otherwise we must
+          // for each elements in hte plaintext do this check.
+          assert(plaintext[nofElementsEncoded + nofItemsInWord]
+                 <= 0x0FFFFFFFFFFFFFFF);
         }
       }
       return sizeof(uint64_t) * nofCodeWordsDone;
@@ -145,29 +133,18 @@ namespace ad_utility {
     template<typename Numeric>
     static void decode(uint64_t* encoded, size_t nofElements,
                        Numeric* decoded) {
-      size_t nofElementsDone = 0;
-      size_t nofCodeWordsDone = 0;
-      // Loop over full 64bit codewords
-      while (nofElementsDone < nofElements) {
-        unsigned char selector = encoded[nofCodeWordsDone]
-            & SIMPLE8B_SELECTOR_MASK;
-        if (selector > 1 && encoded[nofCodeWordsDone] != selector) {
-          // Case: Usual decompression.
-          // if encoded[nofCodeWordsDone] == selector, then we know that
-          // there are selector consecutive 0's. We don't need to do the
-          // assignment for 0, because the initial assignment of the normal
-          // Numeric type is 0. We can save a lot of time to decompress the
-          // code which constains not only 0.
-          uint64_t word = encoded[nofCodeWordsDone] >> 4;
-          for (size_t i = 0; i < SIMPLE8B_SELECTORS[selector]._groupSize;
-               ++i) {
-            decoded[nofElementsDone + i] = word
-            & SIMPLE8B_SELECTORS[selector]._mask;
-            word = word >> SIMPLE8B_SELECTORS[selector]._itemWidth;
-          }
+      uint64_t word;
+      // Loop over full 64bit codewords and
+      for (size_t nofElementsDone(0), nofCodeWordsDone(0),
+           selector(encoded[nofCodeWordsDone] & SIMPLE8B_SELECTOR_MASK);
+           nofElementsDone < nofElements; ++nofCodeWordsDone,
+           selector = encoded[nofCodeWordsDone] & SIMPLE8B_SELECTOR_MASK) {
+        word = encoded[nofCodeWordsDone] >> 4;
+        for (size_t i(0); i < SIMPLE8B_SELECTORS[selector]._groupSize;
+             ++i) {
+          decoded[nofElementsDone++] = word & SIMPLE8B_SELECTORS[selector]._mask;
+          word >>= SIMPLE8B_SELECTORS[selector]._itemWidth;
         }
-        nofElementsDone += SIMPLE8B_SELECTORS[selector]._groupSize;
-        ++nofCodeWordsDone;
       }
     }
   };
