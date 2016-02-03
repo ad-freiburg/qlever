@@ -396,7 +396,12 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
                                   vector<Id>& resEids,
                                   vector<Score>& resScores) {
   size_t k = cidVecs.size();
+  if (cidVecs[k - 1].size() == 0) {
+    LOG(DEBUG) << "Empty list involved, no intersect necessary.\n";
+    return;
+  }
   LOG(DEBUG) << "K-way intersection of " << k << " lists of sizes:\n";
+
 
   const bool entityMode = lastListEids != nullptr;
 

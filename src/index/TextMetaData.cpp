@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include "./TextMetaData.h"
 #include "../util/ReadableNumberFact.h"
+#include "../global/Constants.h"
 
 using std::unordered_map;
 
@@ -29,7 +30,7 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(const Id lower,
   if (upper > *it) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "The ID Range seems to exceed the range possible "
-                 "given to the current min prefix size");
+                 "given to the current min prefix size ");
   }
 
   // Use the info to retrieve an index.

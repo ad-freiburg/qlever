@@ -12,7 +12,8 @@ virtuso_isql_user = "dba"
 rdf3x_run_binary = "/home/buchholb/rdf3x-0.3.8/bin/rdf3xquery"
 rdf3x_db = "/local/scratch/bjoern/data/rdf3x/fulldb"
 my_binary_old = "/local/scratch/bjoern/work/SparqlEngineMainOld"
-my_index = "/local/scratch/bjoern/data/testfulltext"
+my_index_old = "/local/scratch/bjoern/data/testfulltext"
+my_index = "/local/scratch/bjoern/data/full-with-text.25jan2016"
 my_binary = "/local/scratch/bjoern/work/tmp/SparqlEngineMain"
 
 parser = argparse.ArgumentParser()
@@ -106,7 +107,7 @@ def get_my_query_times_old(query_file):
   with open('__tmp.myqueries', 'w') as tmpfile:
     for line in open(query_file):
       tmpfile.write(expanded_to_my_syntax(line.strip().split('\t')[1]) + '\n')
-  myout = subprocess.check_output([my_binary_old, '-i', my_index, '-t', '--queryfile', '__tmp.myqueries'])
+  myout = subprocess.check_output([my_binary_old, '-i', my_index_old, '-t', '--queryfile', '__tmp.myqueries'])
   print 'my (old) output lines: ' + str(len(myout.split('\n')))
   results = []
   for line in myout.split('\n'):

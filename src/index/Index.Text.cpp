@@ -519,7 +519,7 @@ void Index::getWordPostingsForTerm(const string& term, vector<Id>& cids,
   }
   const auto& tbmd = _textMeta.getBlockInfoByWordRange(idRange._first,
                                                        idRange._last);
-  if (tbmd._cl.hasMultipleWords() || (tbmd._firstWordId == idRange._first &&
+  if (tbmd._cl.hasMultipleWords() && !(tbmd._firstWordId == idRange._first &&
                                       tbmd._lastWordId == idRange._last)) {
     vector<Id> blockCids;
     vector<Id> blockWids;
@@ -732,6 +732,7 @@ void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
 template<typename T>
 void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
                               vector<T>& result) const {
+  AD_CHECK_GT(nofBytes, 0);
   LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from <<
              ", nofBytes: " << nofBytes << '\n';
