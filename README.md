@@ -52,6 +52,7 @@ d) Run ctest. All tests should pass:
 
 IMPORTANT:
 THERE HAS TO BE SUFFICIENT DISK SPACE IN UNDER THE PATH USE CHOOSE FOR YOUR INDEX!
+FOR NOW - ALL FILES HAVE TO BE UTF8 ENCODED!
 
 a) from an NTriples file (currently no blank nodes allowed):
 
