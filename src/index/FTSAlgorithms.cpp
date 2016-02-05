@@ -59,7 +59,7 @@ void FTSAlgorithms::getTopKByScores(const vector<Id>& cids,
   LOG(DEBUG) << "Doing the partial sort...\n";
   std::partial_sort(indices.begin(), indices.begin() + k, indices.end(),
                     [&scores](size_t a, size_t b) {
-                      return scores[a] > scores[b];
+                        return scores[a] > scores[b];
                     });
   LOG(DEBUG) << "Packing the final WidthOneList of cIds...\n";
   result->reserve(k + 2);
@@ -155,14 +155,14 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
   size_t width = nonAggRes[0].size();
   std::sort(nonAggRes.begin(), nonAggRes.end(),
             [&width](const Row& l, const Row& r) {
-              if (l[0] == r[0]) {
-                for (size_t i = 3; i < width; ++i) {
-                  if (l[i] == r[i]) continue;
-                  return l[i] < r[i];
+                if (l[0] == r[0]) {
+                  for (size_t i = 3; i < width; ++i) {
+                    if (l[i] == r[i]) continue;
+                    return l[i] < r[i];
+                  }
+                  return l[1] < r[1];
                 }
-                return l[1] < r[1];
-              }
-              return l[0] < r[0];
+                return l[0] < r[0];
             });
 
   res.push_back(nonAggRes[0]);
@@ -396,11 +396,18 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
                                   vector<Id>& resEids,
                                   vector<Score>& resScores) {
   size_t k = cidVecs.size();
-  if (cidVecs[k - 1].size() == 0) {
-    LOG(DEBUG) << "Empty list involved, no intersect necessary.\n";
-    return;
+  {
+    if (cidVecs[k - 1].size() == 0) {
+      LOG(DEBUG) << "Empty list involved, no intersect necessary.\n";
+      return;
+    }
+    std::ostringstream os;
+    for (const auto& l : cidVecs) {
+      os << l.size() << ' ';
+    }
+    LOG(DEBUG) << "K-way intersection of " << k << " lists of sizes: " <<
+               os.str() << '\n';
   }
-  LOG(DEBUG) << "K-way intersection of " << k << " lists of sizes:\n";
 
 
   const bool entityMode = lastListEids != nullptr;
