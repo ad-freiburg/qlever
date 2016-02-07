@@ -13,9 +13,9 @@ using std::unordered_map;
 const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(const Id lower,
                                                                const Id upper) const {
   AD_CHECK_GE(upper, lower);
-  AD_CHECK_GT(_blocks.size(), 0);
-  AD_CHECK_EQ(_blocks.size(), _blockUpperBoundWordIds.size());
-
+  assert(_blocks.size() > 0);
+  assert(_blocks.size() == _blockUpperBoundWordIds.size()
+                           + _blockUpperBoundEntityIds.size());
 
   // Binary search in the sorted _blockUpperBoundWordIds vector.
   vector<Id>::const_iterator it = std::lower_bound(
@@ -35,6 +35,30 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(const Id lower,
 
   // Use the info to retrieve an index.
   size_t index = static_cast<size_t>(it - _blockUpperBoundWordIds.begin());
+  assert(lower <= _blocks[index]._lastWordId);
+  assert(lower >= _blocks[index]._firstWordId);
+  return _blocks[index];
+}
+
+// _____________________________________________________________________________
+const TextBlockMetaData& TextMetaData::getBlockInfoByEntityId(
+    const Id eid) const {
+  assert(_blocks.size() > 0);
+  assert(_blocks.size() == _blockUpperBoundWordIds.size()
+                           + _blockUpperBoundEntityIds.size());
+
+  // Binary search in the sorted _blockUpperBoundWordIds vector.
+  vector<Id>::const_iterator it = std::lower_bound(
+      _blockUpperBoundEntityIds.begin(), _blockUpperBoundEntityIds.end(),
+      eid);
+
+  assert(*it == eid);
+
+  // Use the info to retrieve an index.
+  size_t index = static_cast<size_t>(it - _blockUpperBoundEntityIds.begin())
+                 + _blockUpperBoundWordIds.size();
+  assert(eid == _blocks[index]._lastWordId);
+  assert(eid >= _blocks[index]._firstWordId);
   return _blocks[index];
 }
 
@@ -55,14 +79,25 @@ ad_utility::File& operator<<(ad_utility::File& f,
 }
 
 // _____________________________________________________________________________
-TextMetaData& TextMetaData::createFromByteBuffer(unsigned char* buffer) {
-  size_t nofBlocks = *reinterpret_cast<size_t*>(buffer);
+TextMetaData& TextMetaData::createFromByteBuffer(unsigned char *buffer) {
+  size_t nofBlocks = *reinterpret_cast<size_t *>(buffer);
   off_t offset = sizeof(size_t);
+  bool stepEntity = false;
   for (size_t i = 0; i < nofBlocks; ++i) {
     TextBlockMetaData tbmd;
     tbmd.createFromByteBuffer(buffer + offset);
     offset += TextBlockMetaData::sizeOnDisk();
-    _blockUpperBoundWordIds.push_back(tbmd._lastWordId);
+    if (!stepEntity) {
+      if (_blocks.size() == 0 ||
+          _blocks.back()._lastWordId + 1 == tbmd._firstWordId) {
+        _blockUpperBoundWordIds.push_back(tbmd._lastWordId);
+      } else {
+        stepEntity = true;
+        _blockUpperBoundEntityIds.push_back(tbmd._lastWordId);
+      }
+    } else {
+      _blockUpperBoundEntityIds.push_back(tbmd._lastWordId);
+    }
     _blocks.emplace_back(tbmd);
   }
   return *this;
@@ -79,11 +114,11 @@ ad_utility::File& operator<<(ad_utility::File& f,
 
 // _____________________________________________________________________________
 TextBlockMetaData& TextBlockMetaData::createFromByteBuffer(
-    unsigned char* buffer) {
+    unsigned char *buffer) {
   off_t offset = 0;
-  _firstWordId = *reinterpret_cast<Id*>(buffer + offset);
+  _firstWordId = *reinterpret_cast<Id *>(buffer + offset);
   offset += sizeof(_firstWordId);
-  _lastWordId = *reinterpret_cast<Id*>(buffer + offset);
+  _lastWordId = *reinterpret_cast<Id *>(buffer + offset);
   offset += sizeof(_lastWordId);
   _cl.createFromByteBuffer(buffer + offset);
   offset += ContextListMetaData::sizeOnDisk();
@@ -104,17 +139,17 @@ ad_utility::File& operator<<(ad_utility::File& f,
 
 // _____________________________________________________________________________
 ContextListMetaData& ContextListMetaData::createFromByteBuffer(
-    unsigned char* buffer) {
+    unsigned char *buffer) {
   off_t offset = 0;
-  _nofElements = *reinterpret_cast<size_t*>(buffer + offset);
+  _nofElements = *reinterpret_cast<size_t *>(buffer + offset);
   offset += sizeof(_nofElements);
-  _startContextlist = *reinterpret_cast<off_t*>(buffer + offset);
+  _startContextlist = *reinterpret_cast<off_t *>(buffer + offset);
   offset += sizeof(_startContextlist);
-  _startWordlist = *reinterpret_cast<off_t*>(buffer + offset);
+  _startWordlist = *reinterpret_cast<off_t *>(buffer + offset);
   offset += sizeof(_startWordlist);
-  _startScorelist = *reinterpret_cast<off_t*>(buffer + offset);
+  _startScorelist = *reinterpret_cast<off_t *>(buffer + offset);
   offset += sizeof(_startScorelist);
-  _lastByte = *reinterpret_cast<off_t*>(buffer + offset);
+  _lastByte = *reinterpret_cast<off_t *>(buffer + offset);
   return *this;
 }
 

@@ -59,7 +59,7 @@ void FTSAlgorithms::getTopKByScores(const vector<Id>& cids,
   LOG(DEBUG) << "Doing the partial sort...\n";
   std::partial_sort(indices.begin(), indices.begin() + k, indices.end(),
                     [&scores](size_t a, size_t b) {
-                        return scores[a] > scores[b];
+                      return scores[a] > scores[b];
                     });
   LOG(DEBUG) << "Packing the final WidthOneList of cIds...\n";
   result->reserve(k + 2);
@@ -155,14 +155,14 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
   size_t width = nonAggRes[0].size();
   std::sort(nonAggRes.begin(), nonAggRes.end(),
             [&width](const Row& l, const Row& r) {
-                if (l[0] == r[0]) {
-                  for (size_t i = 3; i < width; ++i) {
-                    if (l[i] == r[i]) continue;
-                    return l[i] < r[i];
-                  }
-                  return l[1] < r[1];
+              if (l[0] == r[0]) {
+                for (size_t i = 3; i < width; ++i) {
+                  if (l[i] == r[i]) continue;
+                  return l[i] < r[i];
                 }
-                return l[0] < r[0];
+                return l[1] < r[1];
+              }
+              return l[0] < r[0];
             });
 
   res.push_back(nonAggRes[0]);
@@ -409,7 +409,6 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
                os.str() << '\n';
   }
 
-
   const bool entityMode = lastListEids != nullptr;
 
   size_t minSize = std::numeric_limits<size_t>::max();
@@ -468,11 +467,20 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
         if (entityMode) {
           // If entities are involved, there may be multiple postings
           // for one context. Handle all matching the current context.
-          while (nextIndices[k - 1] - 1 < cidVecs[k - 1].size()
-                 && cidVecs[k - 1][nextIndices[k - 1] - 1] == currentContext) {
+          std::ostringstream os;
+          while (
+              (k - 1 == currentList ? nextIndices[k - 1] : nextIndices[k - 1] -
+                                                           1) <
+              cidVecs[k - 1].size() &&
+              cidVecs[k - 1][(k - 1 == currentList ? nextIndices[k - 1] :
+                              nextIndices[k - 1] - 1)] == currentContext) {
             resCids[n] = currentContext;
-            resEids[n] = (*lastListEids)[nextIndices[k - 1] - 1];
-            resScores[n++] = s + scoreVecs[k - 1][nextIndices[k - 1] - 1];
+            resEids[n] = (*lastListEids)[(k - 1 == currentList ?
+                                          nextIndices[k - 1] :
+                                          nextIndices[k - 1] - 1)];
+            resScores[n++] = s + scoreVecs[k - 1][(k - 1 == currentList ?
+                                                   nextIndices[k - 1] :
+                                                   nextIndices[k - 1] - 1)];
             nextIndices[k - 1] += 1;
           }
         } else {

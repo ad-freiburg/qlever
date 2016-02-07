@@ -83,6 +83,8 @@ public:
   const TextBlockMetaData& getBlockInfoByWordRange(const Id lower,
                                                    const Id upper) const;
 
+  const TextBlockMetaData& getBlockInfoByEntityId(const Id eid) const;
+
   size_t getBlockCount() const;
 
   // Restores meta data from raw memory.
@@ -101,6 +103,7 @@ public:
 
 private:
   vector<Id> _blockUpperBoundWordIds;
+  vector<Id> _blockUpperBoundEntityIds;
   vector<TextBlockMetaData> _blocks;
 
   friend ad_utility::File& operator<<(ad_utility::File& f,

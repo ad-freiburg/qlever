@@ -184,6 +184,8 @@ void Index::addContextToVector(
   // written to a comp* block once.
   for (Id blockId : touchedBlocks) {
     for (auto it = entities.begin(); it != entities.end(); ++it) {
+      // Don't add an entity to its own block..
+      if (blockId == getEntityBlockId(it->first)) { continue; }
       writer << std::make_tuple(blockId, context, it->first, it->second, true);
     }
   }
@@ -422,12 +424,12 @@ void Index::createCodebooks(const vector<Index::Posting>& postings,
   std::sort(wfVec.begin(), wfVec.end(),
             [](const std::pair<Id, size_t>& a,
                const std::pair<Id, size_t>& b) {
-                return a.second > b.second;
+              return a.second > b.second;
             });
   std::sort(sfVec.begin(), sfVec.end(),
             [](const std::pair<Score, size_t>& a,
                const std::pair<Score, size_t>& b) {
-                return a.second > b.second;
+              return a.second > b.second;
             });
   for (size_t j = 0; j < wfVec.size(); ++j) {
     wordCodebook.push_back(wfVec[j].first);
@@ -520,7 +522,7 @@ void Index::getWordPostingsForTerm(const string& term, vector<Id>& cids,
   const auto& tbmd = _textMeta.getBlockInfoByWordRange(idRange._first,
                                                        idRange._last);
   if (tbmd._cl.hasMultipleWords() && !(tbmd._firstWordId == idRange._first &&
-                                      tbmd._lastWordId == idRange._last)) {
+                                       tbmd._lastWordId == idRange._last)) {
     vector<Id> blockCids;
     vector<Id> blockWids;
     vector<Score> blockScores;
@@ -568,7 +570,7 @@ void Index::getContextEntityScoreListsForWords(const string& words,
   AD_CHECK(terms.size() > 0);
   if (terms.size() > 1) {
     // Find the term with the smallest block and/or one where no filtering
-    // via wordlists is necessary. Onyl take entity postings form this one.
+    // via wordlists is necessary. Only take entity postings form this one.
     // This is valid because the set of co-occuring entities depends on
     // the context and not on the word/block used as entry point.
     // Take all other words and get word posting lists for them.
@@ -978,11 +980,11 @@ size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
   std::sort(toBeSorted.begin(), toBeSorted.end(),
             [](const std::tuple<size_t, bool, size_t>& a,
                const std::tuple<size_t, bool, size_t>& b) {
-                if (std::get<1>(a) == std::get<1>(b)) {
-                  return std::get<2>(a) < std::get<2>(b);
-                } else {
-                  return std::get<1>(a);
-                }
+              if (std::get<1>(a) == std::get<1>(b)) {
+                return std::get<2>(a) < std::get<2>(b);
+              } else {
+                return std::get<1>(a);
+              }
             });
   return std::get<0>(toBeSorted[0]);
 }
