@@ -57,20 +57,28 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   // Copy made so that something can be added for cyclic queries.
   // tg.turnCyclesIntoFilters(filters);
 
-  // TODO: resolve cycles involving a text operation.
   // Split the graph at possible text operations.
   vector<pair<TripleGraph, vector<SparqlFilter>>> graphs;
-  unordered_map<string, vector<size_t>> contextVarTotextNodes;
+  unordered_map<string, vector<size_t>> contextVarToTextNodes;
   vector<SparqlFilter> filtersWithContextVars;
-  tg.splitAtText(pq._filters, graphs, contextVarTotextNodes,
+  tg.splitAtText(pq._filters, graphs, contextVarToTextNodes,
                  filtersWithContextVars);
 
   vector<vector<SubtreePlan>> finalTab;
   if (graphs.size() == 1) {
     finalTab = fillDpTab(graphs[0].first, graphs[0].second);
+    if (contextVarToTextNodes.size() > 0) {
+      addOutsideText(finalTab, graphs[0].first, contextVarToTextNodes,
+                                filtersWithContextVars);
+    }
   } else {
-    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-             "No text yet.");
+    vector<vector<vector<SubtreePlan>>> tabsNoText;
+    for (auto& e : graphs) {
+      tabsNoText.emplace_back(fillDpTab(e.first, e.second));
+    }
+    // TODO: implement!
+    // finalTab = combineGraphsAtText(graphs, tabsNoText, contextVarToTextNodes,
+    //                              filtersWithContextVars);
   }
 
   // If there is an order by clause, add another row to the table and
@@ -238,7 +246,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScans(
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
     const TripleGraph::Node& node = *tg._nodeMap.find(i)->second;
     if (node._variables.size() == 0) {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                "Triples should have at least one variable. Not the case in: "
                + node._triple.asString());
     }
@@ -556,6 +564,17 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
 }
 
 // _____________________________________________________________________________
+void QueryPlanner::addOutsideText(
+    vector<vector<QueryPlanner::SubtreePlan>>& planTable,
+    const TripleGraph& tg,
+    const unordered_map<string, vector<size_t>>& cvarToTextNodes,
+    const vector<SparqlFilter>& textFilters) const {
+  // TODO: two cases - 1) only affects one var,
+  // TODO: 2) effects more than one and broke a cycle.
+}
+
+
+// _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
   return _nodeMap.count(i) > 0 &&
          (_nodeMap.find(i)->second->_triple._p == IN_CONTEXT_RELATION ||
@@ -589,6 +608,7 @@ void QueryPlanner::TripleGraph::splitAtText(
                       varsInNonContextTriples.begin(),
                       varsInNonContextTriples.end(),
                       std::inserter(contextVars, contextVars.begin()));
+
   // Iterate again and fill contextVar -> triples map
   for (size_t i = 0; i < _adjLists.size(); ++i) {
     if (isTextNode(i)) {
@@ -628,8 +648,7 @@ QueryPlanner::TripleGraph::splitAtContextVars(
   if (contextVarToTextNodes.size() == 0) {
     retVal.emplace_back(make_pair(*this, origFilters));
   } else {
-    // Just take the first contextVar at split at it.
-    auto& cVar = contextVarToTextNodes.begin()->first;
+    // Just take the first contextVar and split at it.
     unordered_set<size_t> textNodeIds;
     textNodeIds.insert(contextVarToTextNodes.begin()->second.begin(),
                        contextVarToTextNodes.begin()->second.end());
@@ -640,7 +659,7 @@ QueryPlanner::TripleGraph::splitAtContextVars(
     cTMapNextIteration.insert(++contextVarToTextNodes.begin(),
                               contextVarToTextNodes.end());
 
-    // Find a node to starte the split.
+    // Find a node to start the split.
     size_t startNode = 0;
     while (startNode < _adjLists.size() && textNodeIds.count(startNode) > 0) {
       ++startNode;
@@ -652,14 +671,20 @@ QueryPlanner::TripleGraph::splitAtContextVars(
       auto reachableNodes = bfsLeaveOut(startNode, textNodeIds);
       if (reachableNodes.size() == _adjLists.size() - textNodeIds.size()) {
         // Case: cyclic or text operation was on the "outside"
-        // -> only one split to work with further
+        // -> only one split to work with further.
+        // Recursively solve this split
+        // (because there may be another context var in it)
         TripleGraph withoutText(*this, reachableNodes);
         vector<SparqlFilter> filters = pickFilters(origFilters, reachableNodes);
-        auto recursiveResult = splitAtContextVars(filters, cTMapNextIteration);
+        auto recursiveResult = withoutText.splitAtContextVars(filters,
+                                                              cTMapNextIteration);
         retVal.insert(retVal.begin(), recursiveResult.begin(),
                       recursiveResult.end());
+        // TODO: How is text dealt with?
       } else {
         // Case: The split created two or more non-empty parts.
+        // TODO: continue here
+        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
       }
     }
   }
@@ -670,18 +695,99 @@ QueryPlanner::TripleGraph::splitAtContextVars(
 vector<size_t> QueryPlanner::TripleGraph::bfsLeaveOut(
     size_t startNode,
     unordered_set<size_t> leaveOut) const {
-  return std::vector<size_t>();
+  vector<size_t> res;
+  unordered_set<size_t> visited;
+  std::list<size_t> queue;
+  queue.push_back(startNode);
+  visited.insert(startNode);
+  while (!queue.empty()) {
+    size_t n = queue.front();
+    queue.pop_front();
+    res.push_back(n);
+    auto& neighbors = _adjLists[n];
+    for (size_t v : neighbors) {
+      if (visited.count(v) == 0 && leaveOut.count(v) == 0) {
+        visited.insert(v);
+        queue.push_back(v);
+      }
+    }
+  }
+  return res;
 }
 
 // _____________________________________________________________________________
 vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
     const vector<SparqlFilter>& origFilters,
     const vector<size_t>& nodes) const {
-  return std::vector<SparqlFilter>();
+  vector<SparqlFilter> ret;
+  unordered_set<string> coveredVariables;
+  for (auto n : nodes) {
+    auto& node = *_nodeMap.find(n)->second;
+    coveredVariables.insert(node._variables.begin(), node._variables.end());
+  }
+  for (auto& f : origFilters) {
+    if (coveredVariables.count(f._lhs) > 0 ||
+        coveredVariables.count(f._rhs) > 0) {
+      ret.push_back(f);
+    }
+  }
+  return ret;
 }
 
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
                                        vector<size_t> keepNodes) {
+  unordered_set<size_t> keep;
+  for (auto v : keepNodes) {
+    keep.insert(v);
+  }
+  // Copy nodes to be kept and assign new node id's.
+  // Keep information about the id change in a map.
+  unordered_map<size_t, size_t> idChange;
+  for (size_t i = 0; i < other._nodeMap.size(); ++i) {
+    if (keep.count(i) > 0) {
+      _nodeStorage.push_back(*other._nodeMap.find(i)->second);
+      idChange[i] = _nodeMap.size();
+      _nodeMap[idChange[i]] = &_nodeStorage.back();
+    }
+  }
+  // Adjust adjacency lists accordingly.
+  for (size_t i = 0; i < other._adjLists.size(); ++i) {
+    if (keep.count(i) > 0) {
+      vector<size_t> adjList;
+      for (size_t v : other._adjLists[i]) {
+        if (keep.count(v) > 0) {
+          adjList.push_back(idChange[v]);
+        }
+      }
+      _adjLists.push_back(adjList);
+    }
+  }
+}
+
+// _____________________________________________________________________________
+QueryPlanner::TripleGraph::TripleGraph(const TripleGraph& other)
+    : _adjLists(other._adjLists), _nodeMap(), _nodeStorage() {
+  for (auto it = other._nodeMap.begin(); it != other._nodeMap.end(); ++it) {
+    _nodeStorage.push_back(*it->second);
+    _nodeMap[it->first] = &_nodeStorage.back();
+  }
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::TripleGraph::operator=(const TripleGraph& other) {
+  _adjLists = other._adjLists;
+  for (auto it = other._nodeMap.begin(); it != other._nodeMap.end(); ++it) {
+    _nodeStorage.push_back(*it->second);
+    _nodeMap[it->first] = &_nodeStorage.back();
+  }
+}
+
+// _____________________________________________________________________________
+QueryPlanner::TripleGraph::TripleGraph() :
+    _adjLists(), _nodeMap(), _nodeStorage() {
 
 }
+
+
+

@@ -21,9 +21,9 @@ TEST(QueryPlannerTest, createTripleGraph) {
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(pq);
       ASSERT_EQ(
-          "0 {s: ?x p: <http://rdf.myprefix.com/myrel>, o: ?y} : (1, 2)\n"
-              "1 {s: ?y p: <http://rdf.myprefix.com/ns/myrel>, o: ?z} : (0, 2)\n"
-              "2 {s: ?y p: <http://rdf.myprefix.com/xxx/rel2>, o: <http://abc.de>} : (0, 1)",
+          "0 {s: ?x, p: <http://rdf.myprefix.com/myrel>, o: ?y} : (1, 2)\n"
+              "1 {s: ?y, p: <http://rdf.myprefix.com/ns/myrel>, o: ?z} : (0, 2)\n"
+              "2 {s: ?y, p: <http://rdf.myprefix.com/xxx/rel2>, o: <http://abc.de>} : (0, 1)",
           tg.asString());
     }
 
@@ -34,9 +34,9 @@ TEST(QueryPlannerTest, createTripleGraph) {
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(pq);
       ASSERT_EQ(
-          "0 {s: ?x p: ?p, o: <X>} : (1, 2)\n"
-              "1 {s: ?x p: ?p2, o: <Y>} : (0)\n"
-              "2 {s: <X> p: ?p, o: <Y>} : (0)",
+          "0 {s: ?x, p: ?p, o: <X>} : (1, 2)\n"
+          "1 {s: ?x, p: ?p2, o: <Y>} : (0)\n"
+          "2 {s: <X>, p: ?p, o: <Y>} : (0)",
           tg.asString());
     }
 
@@ -48,8 +48,8 @@ TEST(QueryPlannerTest, createTripleGraph) {
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(pq);
       ASSERT_EQ(
-          "0 {s: ?x p: <is-a>, o: <Book>} : (1)\n"
-          "1 {s: ?x p: <Author>, o: <Anthony_Newman_(Author)>} : (0)",
+          "0 {s: ?x, p: <is-a>, o: <Book>} : (1)\n"
+              "1 {s: ?x, p: <Author>, o: <Anthony_Newman_(Author)>} : (0)",
           tg.asString());
     }
   } catch (const ad_semsearch::Exception& e) {
@@ -61,6 +61,153 @@ TEST(QueryPlannerTest, createTripleGraph) {
   }
 }
 
+TEST(QueryPlannerTest, testCpyCtorWithKeepNodes) {
+  try {
+    {
+      ParsedQuery pq = SparqlParser::parse(
+          "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
+      pq.expandPrefixes();
+      QueryPlanner qp(nullptr);
+      auto tg = qp.createTripleGraph(pq);
+      ASSERT_EQ(2u, tg._nodeMap.find(0)->second->_variables.size());
+      ASSERT_EQ(2u, tg._nodeMap.find(1)->second->_variables.size());
+      ASSERT_EQ(1u, tg._nodeMap.find(2)->second->_variables.size());
+      ASSERT_EQ(
+          "0 {s: ?x, p: ?p, o: <X>} : (1, 2)\n"
+              "1 {s: ?x, p: ?p2, o: <Y>} : (0)\n"
+              "2 {s: <X>, p: ?p, o: <Y>} : (0)",
+          tg.asString());
+      {
+        vector<size_t> keep;
+        QueryPlanner::TripleGraph tgnew(tg, keep);
+        ASSERT_EQ("", tgnew.asString());
+      }
+      {
+        vector<size_t> keep;
+        keep.push_back(0);
+        keep.push_back(1);
+        keep.push_back(2);
+        QueryPlanner::TripleGraph tgnew(tg, keep);
+        ASSERT_EQ(
+            "0 {s: ?x, p: ?p, o: <X>} : (1, 2)\n"
+                "1 {s: ?x, p: ?p2, o: <Y>} : (0)\n"
+                "2 {s: <X>, p: ?p, o: <Y>} : (0)",
+            tgnew.asString());
+        ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
+        ASSERT_EQ(2u, tgnew._nodeMap.find(1)->second->_variables.size());
+        ASSERT_EQ(1u, tgnew._nodeMap.find(2)->second->_variables.size());
+      }
+      {
+        vector<size_t> keep;
+        keep.push_back(0);
+        QueryPlanner::TripleGraph tgnew(tg, keep);
+        ASSERT_EQ(
+            "0 {s: ?x, p: ?p, o: <X>} : ()",
+            tgnew.asString());
+        ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
+      }
+      {
+        vector<size_t> keep;
+        keep.push_back(0);
+        keep.push_back(1);
+        QueryPlanner::TripleGraph tgnew(tg, keep);
+        ASSERT_EQ(
+            "0 {s: ?x, p: ?p, o: <X>} : (1)\n"
+                "1 {s: ?x, p: ?p2, o: <Y>} : (0)",
+            tgnew.asString());
+        ASSERT_EQ(2u, tgnew._nodeMap.find(0)->second->_variables.size());
+        ASSERT_EQ(2u, tgnew._nodeMap.find(1)->second->_variables.size());
+      }
+    }
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
+TEST(QueryPlannerTest, testBFSLeaveOut) {
+  try {
+    {
+      ParsedQuery pq = SparqlParser::parse(
+          "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
+      pq.expandPrefixes();
+      QueryPlanner qp(nullptr);
+      auto tg = qp.createTripleGraph(pq);
+      ASSERT_EQ(3u, tg._adjLists.size());
+      unordered_set<size_t> lo;
+      auto out = tg.bfsLeaveOut(0, lo);
+      ASSERT_EQ(3u, out.size());
+      lo.insert(1);
+      out = tg.bfsLeaveOut(0, lo);
+      ASSERT_EQ(2u, out.size());
+      lo.insert(2);
+      out = tg.bfsLeaveOut(0, lo);
+      ASSERT_EQ(1u, out.size());
+      lo.clear();
+      lo.insert(0);
+      out = tg.bfsLeaveOut(1, lo);
+      ASSERT_EQ(1u, out.size());
+    }
+    {
+      ParsedQuery pq = SparqlParser::parse(
+          "SELECT ?x WHERE {<A> <B> ?x. ?x <C> ?y. ?y <X> <Y>}");
+      pq.expandPrefixes();
+      QueryPlanner qp(nullptr);
+      auto tg = qp.createTripleGraph(pq);
+      unordered_set<size_t> lo;
+      auto out = tg.bfsLeaveOut(0, lo);
+      ASSERT_EQ(3u, out.size());
+      lo.insert(1);
+      out = tg.bfsLeaveOut(0, lo);
+      ASSERT_EQ(1u, out.size());
+      lo.insert(2);
+      out = tg.bfsLeaveOut(0, lo);
+      ASSERT_EQ(1u, out.size());
+      lo.clear();
+      lo.insert(0);
+      out = tg.bfsLeaveOut(1, lo);
+      ASSERT_EQ(2u, out.size());
+    }
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
+TEST(QueryPlannerTest, testSplitAtContextVars) {
+  try {
+    {
+      ParsedQuery pq = SparqlParser::parse(
+          "SELECT ?x WHERE {?x <p> <X>. ?x <in-context> ?c. ?c <in-context> abc}");
+      pq.expandPrefixes();
+      QueryPlanner qp(nullptr);
+      auto tg = qp.createTripleGraph(pq);
+      ASSERT_EQ(
+          "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
+              "1 {s: ?x, p: <in-context>, o: ?c} : (0, 2)\n"
+              "2 {s: ?c, p: <in-context>, o: abc} : (1)",
+          tg.asString());
+      unordered_map<string, vector<size_t>> cvarToNodeIds;
+      vector<std::pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>> tgs;
+      vector<SparqlFilter> filtersWithCvars;
+      tg.splitAtText(pq._filters, tgs, cvarToNodeIds, filtersWithCvars);
+      ASSERT_EQ(0u, filtersWithCvars.size());
+      ASSERT_EQ(1u, tgs.size());
+      ASSERT_EQ(1u, cvarToNodeIds.size());
+      ASSERT_EQ(2u, cvarToNodeIds["?c"].size());
+      ASSERT_EQ(1u, cvarToNodeIds["?c"][0]);
+      ASSERT_EQ(2u, cvarToNodeIds["?c"][1]);
+      ASSERT_EQ(0u, tgs[0].second.size());
+      ASSERT_EQ("0 {s: ?x, p: <p>, o: <X>} : ()", tgs[0].first.asString());
+    }
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
 
 TEST(QueryPlannerTest, testSPX) {
   ParsedQuery pq = SparqlParser::parse(
@@ -110,9 +257,9 @@ TEST(QueryPlannerTest, test_free_PX) {
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   EXPECT_TRUE("{SCAN POS with P = \"<http://rdf.myprefix.com/myrel>\" | width: "
-                "2}" == qet.asString() ||
-                  "{SCAN PSO with P = \"<http://rdf.myprefix.com/myrel>\" | width: "
-                      "2}" == qet.asString());
+                  "2}" == qet.asString() ||
+              "{SCAN PSO with P = \"<http://rdf.myprefix.com/myrel>\" | width: "
+                  "2}" == qet.asString());
 }
 
 TEST(QueryPlannerTest, testSPX_SPX) {
@@ -197,19 +344,19 @@ TEST(QueryPlannerTest, testSpielbergMovieActors) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     EXPECT_TRUE(("{JOIN(\n"
-                  "\t{SCAN POS with P = \"<pre/acted-in>\" | width: 2} [0]\n"
-                  "\t|X|\n"
-                  "\t{SCAN POS with P = \"<pre/directed-by>\", "
-                  "O = \"<pre/SS>\" | width: 1} [0]\n"
-                  ") | width: 2}"
-               == qet.asString()) ||
+                     "\t{SCAN POS with P = \"<pre/acted-in>\" | width: 2} [0]\n"
+                     "\t|X|\n"
+                     "\t{SCAN POS with P = \"<pre/directed-by>\", "
+                     "O = \"<pre/SS>\" | width: 1} [0]\n"
+                     ") | width: 2}"
+                 == qet.asString()) ||
                 ("{JOIN(\n"
                      "\t{SCAN POS with P = \"<pre/directed-by>\", "
-                   "\t|X|\n"
+                     "\t|X|\n"
                      "\t{SCAN POS with P = \"<pre/acted-in>\" | width: 2} [0]\n"
-                   "O = \"<pre/SS>\" | width: 1} [0]\n"
-                   ") | width: 2}"
-                == qet.asString()));
+                     "O = \"<pre/SS>\" | width: 1} [0]\n"
+                     ") | width: 2}"
+                 == qet.asString()));
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -314,7 +461,8 @@ TEST(QueryPlannerTest, testFilterAfterJoin) {
                   "{SCAN POS with P = \"<r>\" | width: 2} [0]"
                   "\n\t|X|\n\t"
                   "{SCAN PSO with P = \"<r>\" | width: 2} [0]"
-                  "\n) | width: 3} with col 1 != col 2 | width: 3}", qet.asString());
+                  "\n) | width: 3} with col 1 != col 2 | width: 3}",
+              qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -370,33 +518,35 @@ TEST(QueryExecutionTreeTest, testBooksGermanAwardNomAuth) {
   }
 }
 
-//TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
-//  try {
-//    ParsedQuery pq = SparqlParser::parse(
-//        "SELECT ?a \n "
-//            "WHERE \t {?a <is-a> <Plant> . ?a <in-context> ?c. "
-//            "?c <in-context> edible leaves} TEXTLIMIT 5");
-//    pq.expandPrefixes();
-//    QueryPlanner qp(nullptr);
-//    QueryExecutionTree qet = qp.createExecutionTree(pq);
-//    ASSERT_EQ("{JOIN(\n"
-//                  "\t{SCAN POS with P = \"<is-a>\", "
-//                  "O = \"<Plant>\" | width: 1} [0]\n"
-//                  "\t|X|\n"
-//                  "\t{SORT {TEXT OPERATION FOR ENTITIES: "
-//                  "co-occurrence with words: "
-//                  "\"edible leaves\" with textLimit = 5 | width: 3} on 0 "
-//                  "| width: 3} [0]\n) | width: 3}",
-//              qet.asString());
-//  } catch (const ad_semsearch::Exception& e) {
-//    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
-//    FAIL() << e.getFullErrorMessage();
-//  } catch (const std::exception& e) {
-//    std::cout << "Caught: " << e.what() << std::endl;
-//    FAIL() << e.what();
-//  }
-//}
-//
+TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
+  try {
+    ParsedQuery pq = SparqlParser::parse(
+        "SELECT ?a \n "
+            "WHERE \t {?a <is-a> <Plant> . ?a <in-context> ?c. "
+            "?c <in-context> edible leaves} TEXTLIMIT 5");
+    pq.expandPrefixes();
+    QueryPlanner qp(nullptr);
+    QueryPlanner::TripleGraph tg = qp.createTripleGraph(pq);
+    ASSERT_EQ(1u, tg._nodeMap.find(0)->second->_variables.size());
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ("{JOIN(\n"
+                  "\t{SCAN POS with P = \"<is-a>\", "
+                  "O = \"<Plant>\" | width: 1} [0]\n"
+                  "\t|X|\n"
+                  "\t{SORT {TEXT OPERATION FOR ENTITIES: "
+                  "co-occurrence with words: "
+                  "\"edible leaves\" with textLimit = 5 | width: 3} on 0 "
+                  "| width: 3} [0]\n) | width: 3}",
+              qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
 //TEST(QueryExecutionTreeTest, testTextQuerySE) {
 //  try {
 //    ParsedQuery pq = SparqlParser::parse(
@@ -519,7 +669,7 @@ TEST(QueryExecutionTreeTest, testBooksGermanAwardNomAuth) {
 //  }
 //}
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

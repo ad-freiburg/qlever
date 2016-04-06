@@ -18,8 +18,11 @@ class QueryPlanner {
     class TripleGraph {
       public:
 
-        TripleGraph() = default;
+        TripleGraph();
+        TripleGraph(const TripleGraph& other);
+        void operator=(const TripleGraph& other);
         TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
+
 
         class Node {
           public:
@@ -40,7 +43,7 @@ class QueryPlanner {
 
         vector<vector<size_t>> _adjLists;
         std::unordered_map<size_t, Node *> _nodeMap;
-        std::list<Node> _nodeStorage;
+        std::list<TripleGraph::Node> _nodeStorage;
 
         void splitAtText(
             const vector<SparqlFilter>& origFilters,
@@ -48,14 +51,14 @@ class QueryPlanner {
             unordered_map<string, vector<size_t>>& contextVarToTextNodesIds,
             vector<SparqlFilter>& filtersWithContextVars) const;
 
+
+      vector<size_t> bfsLeaveOut(size_t startNode,
+                                 unordered_set<size_t> leaveOut) const;
+
       private:
         vector<pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
             const vector<SparqlFilter>& origFilters,
             unordered_map<string, vector<size_t>>& contextVarTotextNodes) const;
-
-
-        vector<size_t> bfsLeaveOut(size_t startNode,
-                                   unordered_set<size_t> leaveOut) const;
 
         vector<SparqlFilter> pickFilters(
             const vector<SparqlFilter>& origFilters,
@@ -111,5 +114,11 @@ class QueryPlanner {
 
     vector<vector<SubtreePlan>> fillDpTab(const TripleGraph& graph,
                                           const vector<SparqlFilter>& fs) const;
+
+    void addOutsideText(
+        vector<vector<SubtreePlan>>& planTable,
+        const TripleGraph& tg,
+        const unordered_map<string, vector<size_t>>& cvarToTextNodes,
+        const vector<SparqlFilter>& textFilters) const;
 };
 
