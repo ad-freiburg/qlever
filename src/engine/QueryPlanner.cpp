@@ -10,6 +10,8 @@
 #include "OrderBy.h"
 #include "Distinct.h"
 #include "Filter.h"
+#include "TextOperationForEntities.h"
+#include "QueryGraph.h"
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext *qec) : _qec(qec) { }
@@ -68,8 +70,9 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   if (graphs.size() == 1) {
     finalTab = fillDpTab(graphs[0].first, graphs[0].second);
     if (contextVarToTextNodes.size() > 0) {
-      addOutsideText(finalTab, graphs[0].first, contextVarToTextNodes,
-                                filtersWithContextVars);
+      addOutsideText(finalTab, tg, contextVarToTextNodes,
+                     filtersWithContextVars,
+                     static_cast<size_t>(atol(pq._textLimit.c_str())));
     }
   } else {
     vector<vector<vector<SubtreePlan>>> tabsNoText;
@@ -568,9 +571,108 @@ void QueryPlanner::addOutsideText(
     vector<vector<QueryPlanner::SubtreePlan>>& planTable,
     const TripleGraph& tg,
     const unordered_map<string, vector<size_t>>& cvarToTextNodes,
-    const vector<SparqlFilter>& textFilters) const {
-  // TODO: two cases - 1) only affects one var,
-  // TODO: 2) effects more than one and broke a cycle.
+    const vector<SparqlFilter>& textFilters,
+    size_t textLimit) const {
+  for (auto it = cvarToTextNodes.begin(); it != cvarToTextNodes.end(); ++it) {
+    addOutsideText(planTable, tg, it->first, it->second, textFilters,
+                   textLimit);
+  }
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::addOutsideText(
+    vector<vector<QueryPlanner::SubtreePlan>>& planTable,
+    const TripleGraph& tg,
+    const string& cvar,
+    const vector<size_t>& cvarTextNodes,
+    const vector<SparqlFilter>& textFilters,
+    size_t textLimit) const {
+  std::unordered_set<string> affectedVariables;
+  std::unordered_set<string> wordParts;
+  for (auto nodeId : cvarTextNodes) {
+    const auto& triple = tg._nodeMap.find(nodeId)->second->_triple;
+    if (isVariable(triple._s) && triple._s != cvar) {
+      affectedVariables.insert(triple._s);
+    }
+    if (isVariable(triple._o) && triple._o != cvar) {
+      affectedVariables.insert(triple._o);
+    }
+    if (!isVariable(triple._o)) {
+      wordParts.insert(triple._o);
+    }
+  }
+  AD_CHECK_GT(affectedVariables.size(), 0);
+  if (wordParts.size() == 0) {
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+             "Need a word part for each text operation.");
+  }
+
+  if (affectedVariables.size() == 1) {
+    // Case 1: only one variable affected
+    // Create a text operation for entities.
+    QueryExecutionTree textSubtree(_qec);
+    if (wordParts.size() == 1) {
+      TextOperationForEntities textOp(_qec, *wordParts.begin(), textLimit);
+      textSubtree.setOperation(QueryExecutionTree::TEXT_FOR_ENTITIES, &textOp);
+      textSubtree.setVariableColumns(
+          QueryGraph::createVariableColumnsMapForTextOperation(
+              cvar,
+              *affectedVariables.begin()));
+      textSubtree.addContextVar(cvar);
+    } else {
+      // TODO: join results for indiv word parts
+    }
+    // If there is no other part, we're done.
+    if (planTable.size() == 0) {
+      planTable.push_back(vector<SubtreePlan>());
+      SubtreePlan textPlan(_qec);
+      textPlan._qet = textSubtree;
+      textPlan._idsOfIncludedNodes.insert(cvarTextNodes.begin(),
+                                          cvarTextNodes.end());
+      planTable.back().push_back(textPlan);
+    } else {
+      // Otherwise, for each result make the combination.
+      planTable.push_back(vector<SubtreePlan>());
+      const auto& lastRow = planTable[planTable.size() - 2];
+      for (auto& plan : lastRow) {
+        SubtreePlan combinedPlan(_qec);
+        combinedPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
+        combinedPlan._idsOfIncludedNodes.insert(
+            cvarTextNodes.begin(), cvarTextNodes.end());
+        combinedPlan._idsOfIncludedFilters = plan._idsOfIncludedFilters;
+        // Make sure the rest is sorted by that variable.
+        QueryExecutionTree left(_qec);
+        if (plan._qet.resultSortedOn() ==
+            plan._qet.getVariableColumn(*affectedVariables.begin())) {
+          left = plan._qet;
+        } else {
+          // Create a sort operation.
+          Sort sort(_qec, plan._qet,
+                    plan._qet.getVariableColumn(*affectedVariables.begin()));
+          left.setVariableColumns(plan._qet.getVariableColumnMap());
+          left.setOperation(QueryExecutionTree::SORT, &sort);
+        }
+        QueryExecutionTree right(_qec);
+        Sort textSort(_qec, textSubtree,
+                  textSubtree.getVariableColumn(*affectedVariables.begin()));
+        right.setVariableColumns(textSubtree.getVariableColumnMap());
+        right.setOperation(QueryExecutionTree::SORT, &textSort);
+        // Join the text result and the rest.
+        Join join(_qec, left, right, left.resultSortedOn(),
+                  right.resultSortedOn());
+        combinedPlan._qet.setOperation(QueryExecutionTree::JOIN, &join);
+        combinedPlan._qet.setVariableColumns(join.getVariableColumns());
+        combinedPlan._qet.setContextVars(left.getContextVars());
+        combinedPlan._qet.addContextVar(cvar);
+        planTable.back().emplace_back(combinedPlan);
+      }
+    }
+  } else {
+    // Case 2: Multiple variables affected
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
+  }
+
+
 }
 
 

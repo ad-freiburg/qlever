@@ -104,7 +104,7 @@ public:
 
   struct Node {
   public:
-    Node(QueryExecutionContext* qec, const string& label);
+    Node(QueryExecutionContext *qec, const string& label);
 
     virtual ~Node();
 
@@ -121,19 +121,20 @@ public:
     // accessed during every consumption.
     // Updates the expected cardinality and the list of subtree results that
     // have to be joined on the columns that represent the node's label.
-    void consume(Node* other, const QueryGraph::Edge& edge, size_t textLimit);
+    void consume(Node *other, const QueryGraph::Edge& edge, size_t textLimit);
 
     // Does the actual consumption. Does not handle joiningg with previously
     // consumed subtrees, yet.
-    QueryExecutionTree consumeIntoSubtree(Node* other,
+    QueryExecutionTree consumeIntoSubtree(Node *other,
                                           const QueryGraph::Edge& edge,
                                           size_t textLimit);
 
     // Special case: relation is in-context
-    QueryExecutionTree consumeIcIntoSubtree(Node* other,
+    QueryExecutionTree consumeIcIntoSubtree(Node *other,
                                             size_t textLimit);
+
     // Special case: relation is has-contexts
-    QueryExecutionTree consumeHcIntoSubtree(Node* other,
+    QueryExecutionTree consumeHcIntoSubtree(Node *other,
                                             size_t textLimit);
 
     string asString() const;
@@ -152,18 +153,18 @@ public:
     void useContextRootOperation(size_t textLimit);
 
   private:
-    QueryExecutionContext* _qec;
+    QueryExecutionContext *_qec;
     size_t _expectedCardinality;
     QueryExecutionTree _consumedOperations;
     vector<pair<QueryExecutionTree, size_t>> _storedOperations;
     string _storedWords;
 
-      string clearLabel(const string& label);
+    string clearLabel(const string& label);
   };
 
   QueryGraph();
 
-  explicit QueryGraph(QueryExecutionContext* qec);
+  explicit QueryGraph(QueryExecutionContext *qec);
 
   ~QueryGraph();
 
@@ -182,21 +183,29 @@ public:
       const string& entityVar,
       const vector<pair<QueryExecutionTree, size_t>>& subtrees);
 
+  static unordered_map<string, size_t> createVariableColumnsMapForTextOperation(
+      const string& contextVar,
+      const string& entityVar) {
+    return createVariableColumnsMapForTextOperation(
+        contextVar, entityVar,
+        vector<pair<QueryExecutionTree, size_t>>());
+  };
+
 private:
-  QueryExecutionContext* _qec;  // No ownership, don't delete.
-  unordered_map<size_t, Node*> _nodeMap;
+  QueryExecutionContext *_qec;  // No ownership, don't delete.
+  unordered_map<size_t, Node *> _nodeMap;
   unordered_map<string, size_t> _nodeIds;
   vector<vector<Edge>> _adjLists;
   list<Node> _nodePayloads;
   unordered_set<string> _selectVariables;
   ParsedQuery _query;
-  QueryExecutionTree* _executionTree;  // Ownership, new when created. Delete!
+  QueryExecutionTree *_executionTree;  // Ownership, new when created. Delete!
   size_t _nofTerminals;
   size_t _textLimit;
 
   void collapseNode(size_t u);
 
-  Node* collapseAndCreateExecutionTree();
+  Node *collapseAndCreateExecutionTree();
 
   string addNode(const string& label);
 
@@ -204,17 +213,17 @@ private:
 
   size_t getNodeId(const string& label) const;
 
-  Node* getNode(size_t nodeId);
+  Node *getNode(size_t nodeId);
 
-  Node* getNode(const string& label);
+  Node *getNode(const string& label);
 
   vector<size_t> getNodesWithDegreeOne() const;
 
   void applyFilters(const QueryExecutionTree& treeSoFar,
-                    QueryExecutionTree* treeAfter);
+                    QueryExecutionTree *treeAfter);
 
   void applySolutionModifiers(const QueryExecutionTree& treeSoFar,
-                              QueryExecutionTree* finalTree) const;
+                              QueryExecutionTree *finalTree) const;
 
 
   friend class QueryGraphTest_testAddNode_Test;

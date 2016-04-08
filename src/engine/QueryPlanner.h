@@ -115,10 +115,19 @@ class QueryPlanner {
     vector<vector<SubtreePlan>> fillDpTab(const TripleGraph& graph,
                                           const vector<SparqlFilter>& fs) const;
 
+  void addOutsideText(
+      vector<vector<SubtreePlan>>& planTable,
+      const TripleGraph& tg,
+      const unordered_map<string, vector<size_t>>& cvarToTextNodes,
+      const vector<SparqlFilter>& textFilters,
+      size_t textLimit) const;
+
     void addOutsideText(
         vector<vector<SubtreePlan>>& planTable,
         const TripleGraph& tg,
-        const unordered_map<string, vector<size_t>>& cvarToTextNodes,
-        const vector<SparqlFilter>& textFilters) const;
+        const string& cvar,
+        const vector<size_t>& cvarTextNodes,
+        const vector<SparqlFilter>& textFilters,
+        size_t textLimit) const;
 };
 
