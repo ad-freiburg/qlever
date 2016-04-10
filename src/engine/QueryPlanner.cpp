@@ -12,6 +12,7 @@
 #include "Filter.h"
 #include "TextOperationForEntities.h"
 #include "QueryGraph.h"
+#include "TextOperationForContexts.h"
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext *qec) : _qec(qec) { }
@@ -67,21 +68,28 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
                  filtersWithContextVars);
 
   vector<vector<SubtreePlan>> finalTab;
-  if (graphs.size() == 1) {
+  if (graphs.size() == 0) {
+    SubtreePlan plan = pureTextQuery(tg, contextVarToTextNodes,
+                                     filtersWithContextVars,
+                                     getTextLimit(pq._textLimit));
+    vector<SubtreePlan> oneElementRow;
+    oneElementRow.emplace_back(plan);
+    finalTab.emplace_back(oneElementRow);
+  } else if (graphs.size() == 1) {
     finalTab = fillDpTab(graphs[0].first, graphs[0].second);
     if (contextVarToTextNodes.size() > 0) {
       addOutsideText(finalTab, tg, contextVarToTextNodes,
                      filtersWithContextVars,
-                     static_cast<size_t>(atol(pq._textLimit.c_str())));
+                     getTextLimit(pq._textLimit));
     }
   } else {
     vector<vector<vector<SubtreePlan>>> tabsNoText;
     for (auto& e : graphs) {
       tabsNoText.emplace_back(fillDpTab(e.first, e.second));
     }
-    // TODO: implement!
-    // finalTab = combineGraphsAtText(graphs, tabsNoText, contextVarToTextNodes,
-    //                              filtersWithContextVars);
+    finalTab = combineGraphsAtText(graphs, tabsNoText, contextVarToTextNodes,
+                                   filtersWithContextVars,
+                                   getTextLimit(pq._textLimit));
   }
 
   // If there is an order by clause, add another row to the table and
@@ -567,6 +575,16 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
 }
 
 // _____________________________________________________________________________
+vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::combineGraphsAtText(
+    const vector<pair<TripleGraph, vector<SparqlFilter>>>& graphs,
+    const vector<vector<vector<QueryPlanner::SubtreePlan>>>& tabsNoText,
+    const unordered_map<string, vector<size_t>>& contextVarToTextNodes,
+    const vector<SparqlFilter>& filtersWithContextVars,
+    size_t textLimit) const {
+  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TTODO");
+}
+
+// _____________________________________________________________________________
 void QueryPlanner::addOutsideText(
     vector<vector<QueryPlanner::SubtreePlan>>& planTable,
     const TripleGraph& tg,
@@ -588,7 +606,7 @@ void QueryPlanner::addOutsideText(
     const vector<SparqlFilter>& textFilters,
     size_t textLimit) const {
   std::unordered_set<string> affectedVariables;
-  std::unordered_set<string> wordParts;
+  string wordPart;
   for (auto nodeId : cvarTextNodes) {
     const auto& triple = tg._nodeMap.find(nodeId)->second->_triple;
     if (isVariable(triple._s) && triple._s != cvar) {
@@ -598,11 +616,19 @@ void QueryPlanner::addOutsideText(
       affectedVariables.insert(triple._o);
     }
     if (!isVariable(triple._o)) {
-      wordParts.insert(triple._o);
+      if (wordPart.size() == 0) {
+        wordPart = triple._o;
+      } else {
+        // It is okay to just concat multiple parts because they refer to the
+        // same CONTEXT variable. i.e. co-occurrence of all triples within
+        // the same context is desired anyway.
+        // For different contexts, a different cvar would have been used.
+        wordPart += " " + triple._o;
+      }
     }
   }
   AD_CHECK_GT(affectedVariables.size(), 0);
-  if (wordParts.size() == 0) {
+  if (wordPart.size() == 0) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "Need a word part for each text operation.");
   }
@@ -611,17 +637,13 @@ void QueryPlanner::addOutsideText(
     // Case 1: only one variable affected
     // Create a text operation for entities.
     QueryExecutionTree textSubtree(_qec);
-    if (wordParts.size() == 1) {
-      TextOperationForEntities textOp(_qec, *wordParts.begin(), textLimit);
-      textSubtree.setOperation(QueryExecutionTree::TEXT_FOR_ENTITIES, &textOp);
-      textSubtree.setVariableColumns(
-          QueryGraph::createVariableColumnsMapForTextOperation(
-              cvar,
-              *affectedVariables.begin()));
-      textSubtree.addContextVar(cvar);
-    } else {
-      // TODO: join results for indiv word parts
-    }
+    TextOperationForEntities textOp(_qec, wordPart, textLimit);
+    textSubtree.setOperation(QueryExecutionTree::TEXT_FOR_ENTITIES, &textOp);
+    textSubtree.setVariableColumns(
+        QueryGraph::createVariableColumnsMapForTextOperation(
+            cvar,
+            *affectedVariables.begin()));
+    textSubtree.addContextVar(cvar);
     // If there is no other part, we're done.
     if (planTable.size() == 0) {
       planTable.push_back(vector<SubtreePlan>());
@@ -654,7 +676,8 @@ void QueryPlanner::addOutsideText(
         }
         QueryExecutionTree right(_qec);
         Sort textSort(_qec, textSubtree,
-                  textSubtree.getVariableColumn(*affectedVariables.begin()));
+                      textSubtree.getVariableColumn(
+                          *affectedVariables.begin()));
         right.setVariableColumns(textSubtree.getVariableColumnMap());
         right.setOperation(QueryExecutionTree::SORT, &textSort);
         // Join the text result and the rest.
@@ -669,10 +692,72 @@ void QueryPlanner::addOutsideText(
     }
   } else {
     // Case 2: Multiple variables affected
+    // Since this is for outside text, this means the query originally
+    // was a cycle that was broken by removing the text operation.
+    // the dpTab so far computes the solution for the non-txtual part.
+    // The text operation has to keep rows where all affected varibales
+    // occur in the same context.
+    // Other than for connecting two graphs with a text operation, we
+    // do not have to build cross products for matches inside a context.
+    // We just filter and keep a subset of rows form the original table.
+    // TODO: implement this part of the code and the described operation.
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
   }
 
 
+}
+
+// _____________________________________________________________________________
+QueryPlanner::SubtreePlan QueryPlanner::pureTextQuery(
+    const TripleGraph& tg,
+    const unordered_map<string, vector<size_t>>& cvarToTextNodes,
+    const vector<SparqlFilter>& textFilters,
+    size_t textLimit) const {
+  if (cvarToTextNodes.size() == 0) {
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+             "Appears to be an empoty query.");
+  }
+  if (cvarToTextNodes.size() != 1) {
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+             "Appears to be a disconnected query. "
+                 "Those are not supported (other than through union).");
+  }
+  string wordPart;
+  for (auto nodeId : cvarToTextNodes.begin()->second) {
+    const auto& triple = tg._nodeMap.find(nodeId)->second->_triple;
+    if (wordPart.size() == 0) {
+      wordPart = triple._o;
+    } else {
+      // It is okay to just concat multiple parts because they refer to the
+      // same CONTEXT variable. i.e. co-occurrence of all triples within
+      // the same context is desired anyway.
+      // For different contexts, a different cvar would have been used.
+      wordPart += " " + triple._o;
+    }
+  }
+
+  QueryExecutionTree textSubtree(_qec);
+  TextOperationForContexts textOp(_qec, wordPart, textLimit);
+  textSubtree.
+      setOperation(QueryExecutionTree::TEXT_FOR_CONTEXTS, &textOp
+  );
+  textSubtree.setVariableColumn(cvarToTextNodes.begin()->first, 0);
+  textSubtree.addContextVar(cvarToTextNodes.begin()->first);
+  SubtreePlan textPlan(_qec);
+  textPlan._qet = textSubtree;
+  textPlan._idsOfIncludedNodes.insert(
+      cvarToTextNodes.begin()->second.begin(),
+      cvarToTextNodes.begin()->second.end());
+  return textPlan;
+}
+
+// _____________________________________________________________________________
+size_t QueryPlanner::getTextLimit(const string& textLimitString) const {
+  if (textLimitString.size() == 0) {
+    return 1;
+  } else {
+    return static_cast<size_t>(atol(textLimitString.c_str()));
+  }
 }
 
 
@@ -717,12 +802,14 @@ void QueryPlanner::TripleGraph::splitAtText(
       if (contextVars.count(_nodeMap.find(i)->second->_triple._s) > 0) {
         contextVarToTextNodesIds[_nodeMap.find(
             i)->second->_triple._s].push_back(i);
-        AD_CHECK_EQ(0, contextVars.count(_nodeMap.find(i)->second->_triple._o));
+        AD_CHECK_EQ(0,
+                    contextVars.count(_nodeMap.find(i)->second->_triple._o));
       }
       if (contextVars.count(_nodeMap.find(i)->second->_triple._o) > 0) {
         contextVarToTextNodesIds[_nodeMap.find(
             i)->second->_triple._o].push_back(i);
-        AD_CHECK_EQ(0, contextVars.count(_nodeMap.find(i)->second->_triple._s));
+        AD_CHECK_EQ(0,
+                    contextVars.count(_nodeMap.find(i)->second->_triple._s));
       }
     }
   }
@@ -777,16 +864,42 @@ QueryPlanner::TripleGraph::splitAtContextVars(
         // Recursively solve this split
         // (because there may be another context var in it)
         TripleGraph withoutText(*this, reachableNodes);
-        vector<SparqlFilter> filters = pickFilters(origFilters, reachableNodes);
+        vector<SparqlFilter> filters = pickFilters(origFilters,
+                                                   reachableNodes);
         auto recursiveResult = withoutText.splitAtContextVars(filters,
                                                               cTMapNextIteration);
         retVal.insert(retVal.begin(), recursiveResult.begin(),
                       recursiveResult.end());
-        // TODO: How is text dealt with?
       } else {
         // Case: The split created two or more non-empty parts.
-        // TODO: continue here
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
+        // Find all parts so that the number of triples in them plus
+        // the number of text triples equals the number of total triples.
+        vector<vector<size_t>> setsOfReachablesNodes;
+        unordered_set<size_t> nodesDone;
+        nodesDone.insert(textNodeIds.begin(), textNodeIds.end());
+        nodesDone.insert(reachableNodes.begin(), reachableNodes.end());
+        setsOfReachablesNodes.emplace_back(reachableNodes);
+        assert(nodesDone.size() < _adjLists.size());
+        while (nodesDone.size() < _adjLists.size()) {
+          while (startNode < _adjLists.size() &&
+                 nodesDone.count(startNode) > 0) {
+            ++startNode;
+          }
+          reachableNodes = bfsLeaveOut(startNode, textNodeIds);
+          nodesDone.insert(reachableNodes.begin(), reachableNodes.end());
+          setsOfReachablesNodes.emplace_back(reachableNodes);
+        }
+        // Recursively split each part because there may be other context vars.
+        for (const auto& rNodes : setsOfReachablesNodes) {
+          TripleGraph smallerGraph(*this, rNodes);
+          vector<SparqlFilter> filters = pickFilters(origFilters,
+                                                     rNodes);
+          auto recursiveResult = smallerGraph.splitAtContextVars(
+              filters,
+              cTMapNextIteration);
+          retVal.insert(retVal.begin(), recursiveResult.begin(),
+                        recursiveResult.end());
+        }
       }
     }
   }
