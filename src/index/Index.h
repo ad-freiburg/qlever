@@ -70,6 +70,9 @@ public:
   typedef vector<array<Id, 1>> WidthOneList;
   typedef vector<array<Id, 2>> WidthTwoList;
   typedef vector<array<Id, 3>> WidthThreeList;
+  typedef vector<array<Id, 4>> WidthFourList;
+  typedef vector<array<Id, 5>> WidthFiveList;
+  typedef vector<vector<Id>> VarWidthList;
 
 
   // --------------------------------------------------------------------------
@@ -100,6 +103,17 @@ public:
   void getECListForWords(const string& words, size_t limit,
                          WidthThreeList *result) const;
 
+  // With an extra free variable.
+  void getECListForWords(const string& words, size_t limit,
+                         WidthFourList *result) const;
+
+  // With two extra free variables.
+  void getECListForWords(const string& words, size_t limit,
+                         WidthFiveList *result) const;
+
+  void getECListForWords(const string& words, size_t limit, size_t nofFreevars,
+                         VarWidthList& result) const;
+
   void getContextEntityScoreListsForWords(const string& words,
                                           vector<Id>& cids,
                                           vector<Id>& eids,
@@ -107,10 +121,16 @@ public:
 
   template<size_t I>
   void getECListForWordsAndSingleSub(const string& words,
-                                     const vector<array<Id, I>> subres,
+                                     const vector<array<Id, I>>& subres,
                                      size_t subResMainCol,
                                      size_t limit,
                                      vector<array<Id, 3 + I>>& res) const;
+
+  // With an extra free variable.
+  void getECListForWordsAndSingleSub(const string& words,
+                                     const vector<array<Id, 1>>& subres,
+                                     size_t limit,
+                                     vector<array<Id, 5>>& res) const;
 
   void getECListForWordsAndTwoW1Subs(const string& words,
                                      const vector<array<Id, 1>> subres1,
@@ -122,6 +142,13 @@ public:
       const string& words,
       const vector<unordered_map<Id, vector<vector<Id>>>>& subResVecs,
       size_t limit,
+      vector<vector<Id>>& res) const;
+
+  void getECListForWordsAndSubtrees(
+      const string& words,
+      const vector<unordered_map<Id, vector<vector<Id>>>>& subResVecs,
+      size_t limit,
+      size_t nofFreeVariables,
       vector<vector<Id>>& res) const;
 
   void getWordPostingsForTerm(const string& term, vector<Id>& cids,
@@ -248,5 +275,5 @@ private:
 
   friend class IndexTest_createFromOnDiskIndexTest_Test;
 
-    void writeAsciiListFile(string filename, const vector<Id>& ids) const;
+  void writeAsciiListFile(string filename, const vector<Id>& ids) const;
 };

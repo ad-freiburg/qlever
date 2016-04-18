@@ -21,6 +21,9 @@ public:
   typedef vector<array<Id, 1>> WidthOneList;
   typedef vector<array<Id, 2>> WidthTwoList;
   typedef vector<array<Id, 3>> WidthThreeList;
+  typedef vector<array<Id, 4>> WidthFourList;
+  typedef vector<array<Id, 5>> WidthFiveList;
+  typedef vector<vector<Id>> VarWidthList;
 
   static void filterByRange(const IdRange& idRange, const vector<Id>& blockCids,
                             const vector<Id>& blockWids,
@@ -53,6 +56,28 @@ public:
                                            size_t k,
                                            WidthThreeList *result);
 
+  static void multFreeVarsAggScoresAndTakeTopKContexts(
+      const vector<Id>& cids,
+      const vector<Id>& eids,
+      const vector<Score>& scores,
+      size_t nofFreeVars,
+      WidthFourList& result);
+
+  static void multFreeVarsAggScoresAndTakeTopKContexts(
+      const vector<Id>& cids,
+      const vector<Id>& eids,
+      const vector<Score>& scores,
+      size_t nofFreeVars,
+      WidthFiveList& result);
+
+  static void multFreeVarsAggScoresAndTakeTopKContexts(
+      const vector<Id>& cids,
+      const vector<Id>& eids,
+      const vector<Score>& scores,
+      size_t k,
+      size_t nofFreeVars,
+      VarWidthList& result);
+
   template<typename Row>
   static void aggScoresAndTakeTopKContexts(vector<Row>& nonAggRes,
                                            size_t k,
@@ -63,7 +88,6 @@ public:
                                          const vector<Id>& eids,
                                          const vector<Score>& scores,
                                          WidthThreeList *result);
-
 
 
   // K-way intersect whereas there may be word ids / entity ids
@@ -107,7 +131,7 @@ public:
                                      static_cast<Id>(scores[i]),
                                      cids[i],
                                      tup,
-                                     GenSeq < I > ()));
+                                     GenSeq<I>()));
       }
     }
   }

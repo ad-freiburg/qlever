@@ -606,3 +606,27 @@ void FTSAlgorithms::appendCrossProduct(
     }
   }
 }
+
+// _____________________________________________________________________________
+void FTSAlgorithms::multFreeVarsAggScoresAndTakeTopKContexts(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t k, size_t nofFreeVars, VarWidthList& result) {
+  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
+}
+
+// _____________________________________________________________________________
+void FTSAlgorithms::multFreeVarsAggScoresAndTakeTopKContexts(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofFreeVars, WidthFourList& result) {
+  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
+}
+
+// _____________________________________________________________________________
+void FTSAlgorithms::multFreeVarsAggScoresAndTakeTopKContexts(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofFreeVars, WidthFiveList& result) {
+  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
+}
+
+
+

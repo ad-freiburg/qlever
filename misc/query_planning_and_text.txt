@@ -23,8 +23,18 @@ using a TextOperationForEntities.
 Finally pick the best overall result.
 
 HAS-CONTEXT:
-This is identical to the cone above, but a triple is connected differently.
+This is identical to the one above, but a triple is connected differently.
 Again, it could come from below and be used to filter lists or it could be connected above the text,
 in particular joining with a result of a TextOperationForContexts.
 A difference is that there can be more than one relation that go join with the result of the text operation.
+
+NEW IDEA:
+
+Treat TextCliques as cliques that correspond to one operation in the tree.
+There are two cases to distinguish:
+1) Use them as a leaf, i.e. oldschool plants e/l or creating an entity crossproduct that is joined later on.
+2) allow creation of subtree plans with text operations that work like sorts (one child) and can be applied at any point in the graph. also adds to the list of covered nodes.
+
+?? question: Should I directly build nodes for text cliques or build and detect cliques?
+
 

@@ -633,6 +633,50 @@ void Index::getECListForWords(const string& words,
 }
 
 // _____________________________________________________________________________
+void Index::getECListForWords(const string& words,
+                              size_t limit,
+                              Index::WidthFourList *result) const {
+  LOG(DEBUG) << "In getECListForWords...\n";
+  vector<Id> cids;
+  vector<Id> eids;
+  vector<Score> scores;
+  getContextEntityScoreListsForWords(words, cids, eids, scores);
+  FTSAlgorithms::multFreeVarsAggScoresAndTakeTopKContexts(
+      cids, eids, scores, limit, *result);
+  LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
+             << "\n";
+}
+
+// _____________________________________________________________________________
+void Index::getECListForWords(const string& words,
+                              size_t limit,
+                              Index::WidthFiveList *result) const {
+  LOG(DEBUG) << "In getECListForWords...\n";
+  vector<Id> cids;
+  vector<Id> eids;
+  vector<Score> scores;
+  getContextEntityScoreListsForWords(words, cids, eids, scores);
+  FTSAlgorithms::multFreeVarsAggScoresAndTakeTopKContexts(
+      cids, eids, scores, limit, *result);
+  LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
+             << "\n";
+}
+
+// _____________________________________________________________________________
+void Index::getECListForWords(const string& words, size_t limit,
+                              size_t nofFreeVars, VarWidthList& result) const {
+  LOG(DEBUG) << "In getECListForWords...\n";
+  vector<Id> cids;
+  vector<Id> eids;
+  vector<Score> scores;
+  getContextEntityScoreListsForWords(words, cids, eids, scores);
+  FTSAlgorithms::multFreeVarsAggScoresAndTakeTopKContexts(
+      cids, eids, scores, limit, nofFreeVars, result);
+  LOG(DEBUG) << "Done with getECListForWords. Result size: " << result.size()
+             << "\n";
+}
+
+// _____________________________________________________________________________
 void Index::getEntityPostingsForTerm(const string& term, vector<Id>& cids,
                                      vector<Id>& eids,
                                      vector<Score>& scores) const {
@@ -992,7 +1036,7 @@ size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
 // _____________________________________________________________________________
 template<size_t I>
 void Index::getECListForWordsAndSingleSub(const string& words,
-                                          const vector<array<Id, I>> subres,
+                                          const vector<array<Id, I>>& subres,
                                           size_t subResMainCol,
                                           size_t limit,
                                           vector<array<Id, 3 + I>>& res) const {
@@ -1040,17 +1084,27 @@ void Index::getECListForWordsAndSingleSub(const string& words,
 
 template
 void Index::getECListForWordsAndSingleSub(const string& words,
-                                          const vector<array<Id, 1>> subres,
+                                          const vector<array<Id, 1>>& subres,
                                           size_t subResMainCol,
                                           size_t limit,
                                           vector<array<Id, 4>>& res) const;
 
 template
 void Index::getECListForWordsAndSingleSub(const string& words,
-                                          const vector<array<Id, 2>> subres,
+                                          const vector<array<Id, 2>>& subres,
                                           size_t subResMainCol,
                                           size_t limit,
                                           vector<array<Id, 5>>& res) const;
+
+// _____________________________________________________________________________
+void Index::getECListForWordsAndSingleSub(const string& words,
+                                          const vector<array<Id, 1>>& subres,
+                                          size_t limit,
+                                          vector<array<Id, 5>>& res) const {
+  // Version with exactly one subtree and one free variable.
+  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
+}
+
 
 // _____________________________________________________________________________
 void Index::getECListForWordsAndTwoW1Subs(const string& words,
@@ -1064,8 +1118,8 @@ void Index::getECListForWordsAndTwoW1Subs(const string& words,
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
 
-  // TODO: more code for efficienty.
-  // Examine the possiblity to branch if subresults are
+  // TODO: more code for efficiency.
+  // Examine the possibility to branch if subresults are
   // much larger than the number of matching postings.
   // Could binary search in them, then instead of create sets first.
 
@@ -1164,3 +1218,21 @@ void Index::getECListForWordsAndSubtrees(
 
   FTSAlgorithms::aggScoresAndTakeTopKContexts(nonAggRes, limit, res);
 }
+
+// _____________________________________________________________________________
+void Index::getECListForWordsAndSubtrees(
+    const string& words,
+    const vector<unordered_map<Id, vector<vector<Id>>>>& subResVecs,
+    size_t limit, size_t nofFreeVariables,
+    vector<vector<Id>>& res) const {
+  if (nofFreeVariables == 0) {
+    getECListForWordsAndSubtrees(words, subResVecs, limit, res);
+  } else {
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
+    // TODO
+  }
+}
+
+
+
+

@@ -568,6 +568,68 @@ TEST(QueryExecutionTreeTest, testTextQuerySE) {
   }
 }
 
+TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
+  try {
+    ParsedQuery pq = SparqlParser::parse(
+        "PREFIX : <>\n"
+            "SELECT ?x ?y TEXT(?c)\n "
+            "WHERE \t {"
+            "?x :Place_of_birth ?y ."
+            "?y :Contained_by :Europe ."
+            "?x :in-context ?c ."
+            "?c :in-context cocaine ."
+            "}");
+    pq.expandPrefixes();
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ("{JOIN(\n\t"
+                  "{SCAN POS with P = \"<Contained_by>\", O = \"<Europe>\" | width: 1} [0]"
+                  "\n\t|X|\n\t"
+                  "{SORT {JOIN(\n\t"
+                  "{SCAN PSO with P = \"<Place_of_birth>\" | width: 2} [0]"
+                  "\n\t|X|\n\t"
+                  "{SORT {TEXT OPERATION FOR ENTITIES: co-occurrence with words: "
+                  "\"cocaine\" with textLimit = 1 | width: 3} on 0 "
+                  "| width: 3} [0]\n) | width: 4} "
+                  "on 1 | width: 4} [1]\n) | width: 4}",
+              qet.asString());
+    ASSERT_EQ(0u, qet.getVariableColumn("?y"));
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
+TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
+  try {
+    ParsedQuery pq = SparqlParser::parse(
+        "PREFIX : <>"
+            "SELECT ?x ?y WHERE {"
+            "?x :is-a :Politician ."
+            "?x :in-context ?c ."
+            "?c :in-context friend* ."
+            "?y :in-context ?c ."
+            "}");
+    pq.expandPrefixes();
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ("{TEXT OPERATION FOR ENTITIES: co-occurrence with words: "
+                  "\"friend*\"\n"
+                  "\tand {SCAN POS with P = \"<is-a>\", O = \"<Politician>\" "
+                  "| width: 1} [0] with textLimit = 1 | width: 4}",
+              qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
 TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
   try {
     ParsedQuery pq = SparqlParser::parse(
@@ -606,68 +668,7 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
   }
 }
 
-TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
-  try {
-    ParsedQuery pq = SparqlParser::parse(
-        "PREFIX : <>"
-            "SELECT ?x ?y WHERE {"
-            "?x :is-a :Politician ."
-            "?x :in-context ?c ."
-            "?c :in-context friend* ."
-            "?y :in-context ?c ."
-            "}");
-    pq.expandPrefixes();
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ("{TEXT OPERATION FOR ENTITIES: co-occurrence with words: "
-                  "\"friend*\"\n"
-                  "\tand {SCAN POS with P = \"<is-a>\", O = \"<Politician>\" "
-                  "| width: 1} [0] with textLimit = 1 | width: 4}",
-              qet.asString());
-  } catch (const ad_semsearch::Exception& e) {
-    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
-    FAIL() << e.getFullErrorMessage();
-  } catch (const std::exception& e) {
-    std::cout << "Caught: " << e.what() << std::endl;
-    FAIL() << e.what();
-  }
-}
 
-
-TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
-  try {
-    ParsedQuery pq = SparqlParser::parse(
-        "PREFIX : <>\n"
-            "SELECT ?x ?y TEXT(?c)\n "
-            "WHERE \t {"
-            "?x :Place_of_birth ?y ."
-            "?y :Contained_by :Europe ."
-            "?x :in-context ?c ."
-            "?c :in-context cocaine ."
-            "}");
-    pq.expandPrefixes();
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ("{JOIN(\n\t"
-                  "{SCAN POS with P = \"<Contained_by>\", O = \"<Europe>\" | width: 1} [0]"
-                  "\n\t|X|\n\t"
-                  "{SORT {JOIN(\n\t"
-                  "{SCAN PSO with P = \"<Place_of_birth>\" | width: 2} [0]"
-                  "\n\t|X|\n\t"
-                  "{SORT {TEXT OPERATION FOR ENTITIES: co-occurrence with words: "
-                  "\"cocaine\" with textLimit = 1 | width: 3} on 0 "
-                  "| width: 3} [0]\n) | width: 4} "
-                  "on 1 | width: 4} [1]\n) | width: 4}",
-              qet.asString());
-    ASSERT_EQ(0u, qet.getVariableColumn("?y"));
-  } catch (const ad_semsearch::Exception& e) {
-    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
-    FAIL() << e.getFullErrorMessage();
-  } catch (const std::exception& e) {
-    std::cout << "Caught: " << e.what() << std::endl;
-    FAIL() << e.what();
-  }
-}
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);

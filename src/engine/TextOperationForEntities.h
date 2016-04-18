@@ -21,15 +21,15 @@ public:
   TextOperationForEntities(
       QueryExecutionContext *qec, const string& words,
       const vector<pair<QueryExecutionTree, size_t>>& subtrees,
-      size_t textLimit);
+      size_t textLimit, size_t nofFreeVars = 0);
 
   // Delegate in the case without a subtree.
   TextOperationForEntities(
       QueryExecutionContext *qec, const string& words,
-      size_t textLimit)
+      size_t textLimit, size_t nofFreeVars = 0)
       : TextOperationForEntities(qec, words,
                                  vector<pair<QueryExecutionTree, size_t>>(),
-                                 textLimit) { };
+                                 textLimit, nofFreeVars) { };
 
   virtual string asString() const;
 
@@ -69,6 +69,10 @@ private:
   string _words;
   vector<pair<QueryExecutionTree, size_t>> _subtrees;
   size_t _textLimit;
+  size_t _freeVars;
 
   virtual void computeResult(ResultTable *result) const;
+  void computeResultNoSubtrees(ResultTable *result) const;
+  void computeResultOneSubtree(ResultTable *result) const;
+  void computeResultMultSubtrees(ResultTable *result) const;
 };
