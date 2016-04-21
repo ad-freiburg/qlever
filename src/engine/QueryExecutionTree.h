@@ -39,7 +39,9 @@ public:
     FILTER = 5,
     DISTINCT = 6,
     TEXT_FOR_CONTEXTS = 7,
-    TEXT_FOR_ENTITIES = 8
+    TEXT_FOR_ENTITIES = 8,
+    TEXT_WITHOUT_FILTER = 9,
+    TEXT_WITH_FILTER = 10
   };
 
   enum OutputType {
@@ -72,7 +74,7 @@ public:
     return _type == OperationType::UNDEFINED || !_rootOperation;
   }
 
-  void setVariableColumn(const string& var, int i);
+  void setVariableColumn(const string& var, size_t i);
 
   size_t getVariableColumn(const string& var) const;
 

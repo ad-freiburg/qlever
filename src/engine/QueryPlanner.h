@@ -22,22 +22,44 @@ public:
 
     TripleGraph(const TripleGraph& other);
 
-    void operator=(const TripleGraph& other);
+    TripleGraph& operator=(const TripleGraph& other);
 
     TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
 
 
     class Node {
     public:
-      Node(size_t id, const SparqlTriple& t) : _id(id), _triple(t) {
+      Node(size_t id, const SparqlTriple& t) : _id(id), _triple(t),
+                                               _variables(), _cvar(),
+                                               _wordPart() {
         if (isVariable(t._s)) { _variables.insert(t._s); }
         if (isVariable(t._p)) { _variables.insert(t._p); }
         if (isVariable(t._o)) { _variables.insert(t._o); }
       }
 
+      Node(size_t id, const string& cvar, const string& wordPart,
+           const vector<SparqlTriple>& trips) :
+          _id(id), _triple(cvar,
+                           IN_CONTEXT_RELATION,
+                           wordPart),
+          _variables(), _cvar(cvar), _wordPart(wordPart) {
+        _variables.insert(cvar);
+        for (const auto& t: trips) {
+          if (isVariable(t._s)) { _variables.insert(t._s); }
+          if (isVariable(t._p)) { _variables.insert(t._p); }
+          if (isVariable(t._o)) { _variables.insert(t._o); }
+        }
+      }
+
+      Node(const Node& other) = default;
+
+      Node& operator=(const Node& other) = default;
+
       size_t _id;
       SparqlTriple _triple;
-      std::unordered_set<string> _variables;
+      std::set<string> _variables;
+      string _cvar;
+      string _wordPart;
     };
 
     string asString() const;
@@ -48,15 +70,15 @@ public:
     std::unordered_map<size_t, Node *> _nodeMap;
     std::list<TripleGraph::Node> _nodeStorage;
 
-    void splitAtText(
-        const vector<SparqlFilter>& origFilters,
-        vector<pair<TripleGraph, vector<SparqlFilter>>>& subgraphs,
-        unordered_map<string, vector<size_t>>& contextVarToTextNodesIds,
-        vector<SparqlFilter>& filtersWithContextVars) const;
+    unordered_map<string, vector<size_t>> identifyTextCliques() const;
 
 
     vector<size_t> bfsLeaveOut(size_t startNode,
                                unordered_set<size_t> leaveOut) const;
+
+    void collapseTextCliques();
+
+    bool isPureTextQuery();
 
   private:
     vector<pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
@@ -126,7 +148,7 @@ private:
                        unordered_map<string, vector<SparqlTriple>>& varToTrip,
                        unordered_set<string>& contextVars) const;
 
-  vector<SubtreePlan> seedWithScans(const TripleGraph& tg) const;
+  vector<SubtreePlan> seedWithScansAndText(const TripleGraph& tg) const;
 
   vector<SubtreePlan> merge(const vector<SubtreePlan>& a,
                             const vector<SubtreePlan>& b,
@@ -150,14 +172,6 @@ private:
   vector<vector<SubtreePlan>> fillDpTab(const TripleGraph& graph,
                                         const vector<SparqlFilter>& fs) const;
 
-  vector<vector<SubtreePlan>> combineGraphsAtText(
-      const TripleGraph& fullTg,
-      const vector<pair<TripleGraph, vector<SparqlFilter>>>& graphs,
-      const vector<vector<vector<QueryPlanner::SubtreePlan>>>& tabsNoText,
-      const unordered_map<string, vector<size_t>>& contextVarToTextNodes,
-      const vector<SparqlFilter>& filtersWithContextVars,
-      size_t textLimit) const;
-
   void addOutsideText(
       vector<vector<SubtreePlan>>& planTable,
       const TripleGraph& tg,
@@ -173,12 +187,10 @@ private:
       const vector<SparqlFilter>& textFilters,
       size_t textLimit) const;
 
-  SubtreePlan pureTextQuery(
-      const TripleGraph& tg,
-      const unordered_map<string, vector<size_t>>& cvarToTextNodes,
-      const vector<SparqlFilter>& textFilters,
-      size_t textLimit) const;
+  SubtreePlan pureTextQuery(const TripleGraph& tg) const;
 
   size_t getTextLimit(const string& textLimitString) const;
+
+  SubtreePlan getTextLeafPlan(const TripleGraph::Node& node) const;
 };
 

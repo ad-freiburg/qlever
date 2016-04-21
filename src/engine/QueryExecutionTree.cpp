@@ -14,11 +14,13 @@
 #include "./Distinct.h"
 #include "TextOperationForEntities.h"
 #include "TextOperationForContexts.h"
+#include "TextOperationWithFilter.h"
+#include "TextOperationWithoutFilter.h"
 
 using std::string;
 
 // _____________________________________________________________________________
-QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* qec) :
+QueryExecutionTree::QueryExecutionTree(QueryExecutionContext *qec) :
     _qec(qec),
     _variableColumnMap(),
     _rootOperation(nullptr),
@@ -35,35 +37,43 @@ QueryExecutionTree::QueryExecutionTree(const QueryExecutionTree& other) :
   switch (other._type) {
     case OperationType::SCAN:
       _rootOperation = new IndexScan(
-          *static_cast<IndexScan*>(other._rootOperation));
+          *static_cast<IndexScan *>(other._rootOperation));
       break;
     case OperationType::JOIN:
       _rootOperation = new Join(
-          *static_cast<Join*>(other._rootOperation));
+          *static_cast<Join *>(other._rootOperation));
       break;
     case OperationType::SORT:
       _rootOperation = new Sort(
-          *static_cast<Sort*>(other._rootOperation));
+          *static_cast<Sort *>(other._rootOperation));
       break;
     case OperationType::ORDER_BY:
       _rootOperation = new OrderBy(
-          *static_cast<OrderBy*>(other._rootOperation));
+          *static_cast<OrderBy *>(other._rootOperation));
       break;
     case OperationType::FILTER:
       _rootOperation = new Filter(
-          *static_cast<Filter*>(other._rootOperation));
+          *static_cast<Filter *>(other._rootOperation));
       break;
     case OperationType::DISTINCT:
       _rootOperation = new Distinct(
-          *static_cast<Distinct*>(other._rootOperation));
+          *static_cast<Distinct *>(other._rootOperation));
       break;
     case OperationType::TEXT_FOR_ENTITIES:
       _rootOperation = new TextOperationForEntities(
-          *static_cast<TextOperationForEntities*>(other._rootOperation));
+          *static_cast<TextOperationForEntities *>(other._rootOperation));
       break;
     case OperationType::TEXT_FOR_CONTEXTS:
       _rootOperation = new TextOperationForContexts(
-          *static_cast<TextOperationForContexts*>(other._rootOperation));
+          *static_cast<TextOperationForContexts *>(other._rootOperation));
+      break;
+    case OperationType::TEXT_WITHOUT_FILTER:
+      _rootOperation = new TextOperationWithoutFilter(
+          *static_cast<TextOperationWithoutFilter *>(other._rootOperation));
+      break;
+    case OperationType::TEXT_WITH_FILTER:
+      _rootOperation = new TextOperationWithFilter(
+          *static_cast<TextOperationWithFilter *>(other._rootOperation));
       break;
     case UNDEFINED:
     default:
@@ -102,42 +112,52 @@ string QueryExecutionTree::asString() const {
 
 // _____________________________________________________________________________
 void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
-                                      Operation* op) {
+                                      Operation *op) {
   _type = type;
   switch (type) {
     case OperationType::SCAN:
       delete _rootOperation;
-      _rootOperation = new IndexScan(*static_cast<IndexScan*>(op));
+      _rootOperation = new IndexScan(*static_cast<IndexScan *>(op));
       break;
     case OperationType::JOIN:
       delete _rootOperation;
-      _rootOperation = new Join(*static_cast<Join*>(op));
+      _rootOperation = new Join(*static_cast<Join *>(op));
       break;
     case OperationType::SORT:
       delete _rootOperation;
-      _rootOperation = new Sort(*static_cast<Sort*>(op));
+      _rootOperation = new Sort(*static_cast<Sort *>(op));
       break;
     case OperationType::ORDER_BY:
       delete _rootOperation;
-      _rootOperation = new OrderBy(*static_cast<OrderBy*>(op));
+      _rootOperation = new OrderBy(*static_cast<OrderBy *>(op));
       break;
     case OperationType::FILTER:
       delete _rootOperation;
-      _rootOperation = new Filter(*static_cast<Filter*>(op));
+      _rootOperation = new Filter(*static_cast<Filter *>(op));
       break;
     case OperationType::DISTINCT:
       delete _rootOperation;
-      _rootOperation = new Distinct(*static_cast<Distinct*>(op));
+      _rootOperation = new Distinct(*static_cast<Distinct *>(op));
       break;
     case OperationType::TEXT_FOR_ENTITIES:
       delete _rootOperation;
       _rootOperation = new TextOperationForEntities(
-          *static_cast<TextOperationForEntities*>(op));
+          *static_cast<TextOperationForEntities *>(op));
       break;
     case OperationType::TEXT_FOR_CONTEXTS:
       delete _rootOperation;
       _rootOperation = new TextOperationForContexts(
-          *static_cast<TextOperationForContexts*>(op));
+          *static_cast<TextOperationForContexts *>(op));
+      break;
+    case OperationType::TEXT_WITHOUT_FILTER:
+      delete _rootOperation;
+      _rootOperation = new TextOperationWithoutFilter(
+          *static_cast<TextOperationWithoutFilter *>(op));
+      break;
+    case OperationType::TEXT_WITH_FILTER:
+      delete _rootOperation;
+      _rootOperation = new TextOperationWithFilter(
+          *static_cast<TextOperationWithFilter *>(op));
       break;
     default: AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, "Cannot set "
         "an operation with undefined type.");
@@ -145,7 +165,8 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
 }
 
 // _____________________________________________________________________________
-void QueryExecutionTree::setVariableColumn(const string& variable, int column) {
+void QueryExecutionTree::setVariableColumn(const string& variable,
+                                           size_t column) {
   _variableColumnMap[variable] = column;
 }
 
@@ -192,23 +213,23 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
   }
   if (validIndices.size() == 0) { return; }
   if (res._nofColumns == 1) {
-    auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 1>> *>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 2) {
-    auto data = static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 2>> *>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 3) {
-    auto data = static_cast<vector<array<Id, 3>>*>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 3>> *>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 4) {
-    auto data = static_cast<vector<array<Id, 4>>*>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 4>> *>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 5) {
-    auto data = static_cast<vector<array<Id, 5>>*>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 5>> *>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else {
@@ -243,28 +264,28 @@ void QueryExecutionTree::writeResultToStreamAsJson(
     if (getVariableColumnMap().find(var) != getVariableColumnMap().end()) {
       validIndices.push_back(
           pair<size_t, OutputType>(getVariableColumnMap().find(var)->second,
-                             outputType));
+                                   outputType));
     }
   }
   if (validIndices.size() == 0) { return; }
   if (res._nofColumns == 1) {
-    auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 1>> *>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 2) {
-    auto data = static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 2>> *>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 3) {
-    auto data = static_cast<vector<array<Id, 3>>*>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 3>> *>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 4) {
-    auto data = static_cast<vector<array<Id, 4>>*>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 4>> *>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 5) {
-    auto data = static_cast<vector<array<Id, 5>>*>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 5>> *>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else {

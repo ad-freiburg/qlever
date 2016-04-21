@@ -177,31 +177,122 @@ TEST(QueryPlannerTest, testBFSLeaveOut) {
   }
 }
 
-TEST(QueryPlannerTest, testSplitAtContextVars) {
+TEST(QueryPlannerTest, testcollapseTextCliques) {
   try {
     {
-      ParsedQuery pq = SparqlParser::parse(
-          "SELECT ?x WHERE {?x <p> <X>. ?x <in-context> ?c. ?c <in-context> abc}");
-      pq.expandPrefixes();
-      QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(pq);
-      ASSERT_EQ(
-          "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-              "1 {s: ?x, p: <in-context>, o: ?c} : (0, 2)\n"
-              "2 {s: ?c, p: <in-context>, o: abc} : (1)",
-          tg.asString());
-      unordered_map<string, vector<size_t>> cvarToNodeIds;
-      vector<std::pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>> tgs;
-      vector<SparqlFilter> filtersWithCvars;
-      tg.splitAtText(pq._filters, tgs, cvarToNodeIds, filtersWithCvars);
-      ASSERT_EQ(0u, filtersWithCvars.size());
-      ASSERT_EQ(1u, tgs.size());
-      ASSERT_EQ(1u, cvarToNodeIds.size());
-      ASSERT_EQ(2u, cvarToNodeIds["?c"].size());
-      ASSERT_EQ(1u, cvarToNodeIds["?c"][0]);
-      ASSERT_EQ(2u, cvarToNodeIds["?c"][1]);
-      ASSERT_EQ(0u, tgs[0].second.size());
-      ASSERT_EQ("0 {s: ?x, p: <p>, o: <X>} : ()", tgs[0].first.asString());
+      {
+        ParsedQuery pq = SparqlParser::parse(
+            "SELECT ?x WHERE {?x <p> <X>. ?x <in-context> ?c. ?c <in-context> abc}");
+        pq.expandPrefixes();
+        QueryPlanner qp(nullptr);
+        auto tg = qp.createTripleGraph(pq);
+        ASSERT_EQ(
+            "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
+                "1 {s: ?x, p: <in-context>, o: ?c} : (0, 2)\n"
+                "2 {s: ?c, p: <in-context>, o: abc} : (1)",
+            tg.asString());
+        tg.collapseTextCliques();
+        ASSERT_EQ(
+            "0 {TextOP for ?c, wordPart: \"abc\"} : (1)\n"
+                "1 {s: ?x, p: <p>, o: <X>} : (0)",
+            tg.asString());
+        ASSERT_EQ(2ul, tg._nodeMap[0]->_variables.size());
+        ASSERT_EQ(1ul, tg._nodeMap[1]->_variables.size());
+      }
+      {
+        ParsedQuery pq = SparqlParser::parse(
+            "SELECT ?x WHERE {?x <p> <X>. ?x <in-context> ?c. ?c <in-context> abc . ?y <in-context> ?c}");
+        pq.expandPrefixes();
+        QueryPlanner qp(nullptr);
+        auto tg = qp.createTripleGraph(pq);
+        ASSERT_EQ(
+            "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
+                "1 {s: ?x, p: <in-context>, o: ?c} : (0, 2, 3)\n"
+                "2 {s: ?c, p: <in-context>, o: abc} : (1, 3)\n"
+                "3 {s: ?y, p: <in-context>, o: ?c} : (1, 2)",
+            tg.asString());
+        tg.collapseTextCliques();
+        ASSERT_EQ(
+            "0 {TextOP for ?c, wordPart: \"abc\"} : (1)\n"
+                "1 {s: ?x, p: <p>, o: <X>} : (0)",
+            tg.asString());
+        ASSERT_EQ(3ul, tg._nodeMap[0]->_variables.size());
+        ASSERT_EQ(1ul, tg._nodeMap[1]->_variables.size());
+      }
+      {
+        ParsedQuery pq = SparqlParser::parse(
+            "SELECT ?x WHERE {?x <p> <X>. ?x <in-context> ?c. ?c <in-context> abc . ?y <in-context> ?c. ?y <P2> <X2>}");
+        pq.expandPrefixes();
+        QueryPlanner qp(nullptr);
+        auto tg = qp.createTripleGraph(pq);
+        ASSERT_EQ(
+            "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
+                "1 {s: ?x, p: <in-context>, o: ?c} : (0, 2, 3)\n"
+                "2 {s: ?c, p: <in-context>, o: abc} : (1, 3)\n"
+                "3 {s: ?y, p: <in-context>, o: ?c} : (1, 2, 4)\n"
+                "4 {s: ?y, p: <P2>, o: <X2>} : (3)",
+            tg.asString());
+        tg.collapseTextCliques();
+        ASSERT_EQ(
+            "0 {TextOP for ?c, wordPart: \"abc\"} : (1, 2)\n"
+                "1 {s: ?x, p: <p>, o: <X>} : (0)\n"
+                "2 {s: ?y, p: <P2>, o: <X2>} : (0)",
+            tg.asString());
+        ASSERT_EQ(3ul, tg._nodeMap[0]->_variables.size());
+        ASSERT_EQ(1ul, tg._nodeMap[1]->_variables.size());
+        ASSERT_EQ(1ul, tg._nodeMap[2]->_variables.size());
+      }
+      {
+        ParsedQuery pq = SparqlParser::parse(
+            "SELECT ?x WHERE {?x <p> <X>. ?x <in-context> ?c. ?c <in-context> abc . ?y <in-context> ?c. ?y <in-context> ?c2. ?c2 <in-context> xx}");
+        pq.expandPrefixes();
+        QueryPlanner qp(nullptr);
+        auto tg = qp.createTripleGraph(pq);
+        ASSERT_EQ(
+            "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
+                "1 {s: ?x, p: <in-context>, o: ?c} : (0, 2, 3)\n"
+                "2 {s: ?c, p: <in-context>, o: abc} : (1, 3)\n"
+                "3 {s: ?y, p: <in-context>, o: ?c} : (1, 2, 4)\n"
+                "4 {s: ?y, p: <in-context>, o: ?c2} : (3, 5)\n"
+                "5 {s: ?c2, p: <in-context>, o: xx} : (4)",
+            tg.asString());
+        tg.collapseTextCliques();
+        ASSERT_EQ(
+            "0 {TextOP for ?c2, wordPart: \"xx\"} : (1)\n"
+            "1 {TextOP for ?c, wordPart: \"abc\"} : (0, 2)\n"
+                "2 {s: ?x, p: <p>, o: <X>} : (1)",
+            tg.asString());
+        ASSERT_EQ(2ul, tg._nodeMap[0]->_variables.size());
+        ASSERT_EQ(3ul, tg._nodeMap[1]->_variables.size());
+        ASSERT_EQ(1ul, tg._nodeMap[2]->_variables.size());
+      }
+      {
+        ParsedQuery pq = SparqlParser::parse(
+            "SELECT ?x WHERE {?x <p> <X>. ?x <in-context> ?c. ?c <in-context> abc . ?y <in-context> ?c. ?y <in-context> ?c2. ?c2 <in-context> xx. ?y <P2> <X2>}");
+        pq.expandPrefixes();
+        QueryPlanner qp(nullptr);
+        auto tg = qp.createTripleGraph(pq);
+        ASSERT_EQ(
+            "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
+                "1 {s: ?x, p: <in-context>, o: ?c} : (0, 2, 3)\n"
+                "2 {s: ?c, p: <in-context>, o: abc} : (1, 3)\n"
+                "3 {s: ?y, p: <in-context>, o: ?c} : (1, 2, 4, 6)\n"
+                "4 {s: ?y, p: <in-context>, o: ?c2} : (3, 5, 6)\n"
+                "5 {s: ?c2, p: <in-context>, o: xx} : (4)\n"
+                "6 {s: ?y, p: <P2>, o: <X2>} : (3, 4)",
+            tg.asString());
+        tg.collapseTextCliques();
+        ASSERT_EQ(
+            "0 {TextOP for ?c2, wordPart: \"xx\"} : (1, 3)\n"
+                "1 {TextOP for ?c, wordPart: \"abc\"} : (0, 2, 3)\n"
+                "2 {s: ?x, p: <p>, o: <X>} : (1)\n"
+                "3 {s: ?y, p: <P2>, o: <X2>} : (0, 1)",
+            tg.asString());
+        ASSERT_EQ(2ul, tg._nodeMap[0]->_variables.size());
+        ASSERT_EQ(3ul, tg._nodeMap[1]->_variables.size());
+        ASSERT_EQ(1ul, tg._nodeMap[2]->_variables.size());
+        ASSERT_EQ(1ul, tg._nodeMap[3]->_variables.size());
+      }
     }
   } catch (const std::exception& e) {
     std::cout << "Caught: " << e.what() << std::endl;
