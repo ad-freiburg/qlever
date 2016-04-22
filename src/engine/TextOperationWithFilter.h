@@ -71,8 +71,4 @@ private:
   size_t _filterColumn;
 
   virtual void computeResult(ResultTable *result) const;
-
-  void computeResultOneVar(ResultTable *result) const;
-
-  void computeResultMultVars(ResultTable *result) const;
 };

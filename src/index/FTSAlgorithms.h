@@ -54,28 +54,30 @@ public:
                                            const vector<Id>& eids,
                                            const vector<Score>& scores,
                                            size_t k,
-                                           WidthThreeList *result);
+                                           WidthThreeList& result);
 
-  static void multFreeVarsAggScoresAndTakeTopKContexts(
+  static void multVarsAggScoresAndTakeTopKContexts(
       const vector<Id>& cids,
       const vector<Id>& eids,
       const vector<Score>& scores,
       size_t nofFreeVars,
+      size_t k,
       WidthFourList& result);
 
-  static void multFreeVarsAggScoresAndTakeTopKContexts(
+  static void multVarsAggScoresAndTakeTopKContexts(
       const vector<Id>& cids,
       const vector<Id>& eids,
       const vector<Score>& scores,
       size_t nofFreeVars,
+      size_t k,
       WidthFiveList& result);
 
-  static void multFreeVarsAggScoresAndTakeTopKContexts(
+  static void multVarsAggScoresAndTakeTopKContexts(
       const vector<Id>& cids,
       const vector<Id>& eids,
       const vector<Score>& scores,
+      size_t nofVars,
       size_t k,
-      size_t nofFreeVars,
       VarWidthList& result);
 
   template<typename Row>
@@ -87,7 +89,7 @@ public:
   static void aggScoresAndTakeTopContext(const vector<Id>& cids,
                                          const vector<Id>& eids,
                                          const vector<Score>& scores,
-                                         WidthThreeList *result);
+                                         WidthThreeList& result);
 
 
   // K-way intersect whereas there may be word ids / entity ids

@@ -48,17 +48,46 @@ void TextOperationWithoutFilter::computeResult(ResultTable *result) const {
 
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultNoVar(ResultTable *result) const {
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
+  result->_nofColumns = 2;
+  result->_fixedSizeData = new vector<array<Id, 2>>;
+  getExecutionContext()->getIndex().getContextListForWords(
+      _words,
+      reinterpret_cast<vector<array<Id, 2>> *>(result->_fixedSizeData));
 }
 
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultOneVar(
     ResultTable *result) const {
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
+  result->_nofColumns = 3;
+  result->_fixedSizeData = new vector<array<Id, 3>>;
+  getExecutionContext()->getIndex().getECListForWords(
+      _words,
+      _textLimit,
+      *reinterpret_cast<vector<array<Id, 3>> *>(result->_fixedSizeData));
 }
 
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultMultVars(
     ResultTable *result) const {
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
+  if (_nofVars == 2) {
+    result->_fixedSizeData = new vector<array<Id, 4>>;
+    getExecutionContext()->getIndex().getECListForWords(
+        _words,
+        _nofVars,
+        _textLimit,
+        *reinterpret_cast<vector<array<Id, 4>> *>(result->_fixedSizeData));
+  } else if (_nofVars == 3) {
+    result->_fixedSizeData = new vector<array<Id, 5>>;
+    getExecutionContext()->getIndex().getECListForWords(
+        _words,
+        _nofVars,
+        _textLimit,
+        *reinterpret_cast<vector<array<Id, 5>> *>(result->_fixedSizeData));
+  } else {
+    getExecutionContext()->getIndex().getECListForWords(
+        _words,
+        _nofVars,
+        _textLimit,
+        result->_varSizeData);
+  }
 }

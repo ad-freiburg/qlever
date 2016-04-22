@@ -31,7 +31,7 @@ void Index::buildDocsDB(const string& docsFileName) {
   ad_utility::File docsFile(docsFileName.c_str(), "r");
   ad_utility::File out(string(_onDiskBase + ".text.docsDB").c_str(), "w");
   off_t currentOffset = 0;
-  char *buf = new char[BUFFER_SIZE_DOCSFILE_LINE];
+  char* buf = new char[BUFFER_SIZE_DOCSFILE_LINE];
   string line;
   while (docsFile.readLine(&line, buf, BUFFER_SIZE_DOCSFILE_LINE)) {
     out.writeLine(line);
@@ -57,7 +57,7 @@ void Index::addTextFromOnDiskIndex() {
   AD_CHECK(_textIndexFile.isOpen());
   off_t metaFrom;
   off_t metaTo = _textIndexFile.getLastOffset(&metaFrom);
-  unsigned char *buf = new unsigned char[metaTo - metaFrom];
+  unsigned char* buf = new unsigned char[metaTo - metaFrom];
   _textIndexFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
   _textMeta.createFromByteBuffer(buf);
   delete[] buf;
@@ -271,9 +271,9 @@ ContextListMetaData Index::writePostings(ad_utility::File& out,
 
   // Collect the individual lists
   // Context lists are gap encoded, word and score lists frequency encoded.
-  Id *contextList = new Id[meta._nofElements];
-  Id *wordList = new Id[meta._nofElements];
-  Score *scoreList = new Score[meta._nofElements];
+  Id* contextList = new Id[meta._nofElements];
+  Id* wordList = new Id[meta._nofElements];
+  Score* scoreList = new Score[meta._nofElements];
 
   size_t n = 0;
 
@@ -374,10 +374,10 @@ Id Index::getEntityBlockId(Id entityId) const {
 
 // _____________________________________________________________________________
 template<typename Numeric>
-size_t Index::writeList(Numeric *data, size_t nofElements,
+size_t Index::writeList(Numeric* data, size_t nofElements,
                         ad_utility::File& file) const {
   if (nofElements > 0) {
-    uint64_t *encoded = new uint64_t[nofElements];
+    uint64_t* encoded = new uint64_t[nofElements];
     size_t size = ad_utility::Simple8bCode::encode(data, nofElements,
                                                    encoded);
     size_t ret = file.write(encoded, size);
@@ -464,7 +464,7 @@ const string& Index::wordIdToString(Id id) const {
 
 // _____________________________________________________________________________
 void Index::getContextListForWords(const string& words,
-                                   Index::WidthTwoList *result) const {
+                                   Index::WidthTwoList* result) const {
   LOG(DEBUG) << "In getContextListForWords...\n";
   auto terms = ad_utility::split(words, ' ');
   AD_CHECK(terms.size() > 0);
@@ -620,7 +620,7 @@ void Index::getContextEntityScoreListsForWords(const string& words,
 // _____________________________________________________________________________
 void Index::getECListForWords(const string& words,
                               size_t limit,
-                              Index::WidthThreeList *result) const {
+                              Index::WidthThreeList& result) const {
   LOG(DEBUG) << "In getECListForWords...\n";
   vector<Id> cids;
   vector<Id> eids;
@@ -628,53 +628,87 @@ void Index::getECListForWords(const string& words,
   getContextEntityScoreListsForWords(words, cids, eids, scores);
   FTSAlgorithms::aggScoresAndTakeTopKContexts(
       cids, eids, scores, limit, result);
-  LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
-             << "\n";
-}
-
-// _____________________________________________________________________________
-void Index::getECListForWords(const string& words,
-                              size_t limit,
-                              Index::WidthFourList *result) const {
-  LOG(DEBUG) << "In getECListForWords...\n";
-  vector<Id> cids;
-  vector<Id> eids;
-  vector<Score> scores;
-  getContextEntityScoreListsForWords(words, cids, eids, scores);
-  FTSAlgorithms::multFreeVarsAggScoresAndTakeTopKContexts(
-      cids, eids, scores, limit, *result);
-  LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
-             << "\n";
-}
-
-// _____________________________________________________________________________
-void Index::getECListForWords(const string& words,
-                              size_t limit,
-                              Index::WidthFiveList *result) const {
-  LOG(DEBUG) << "In getECListForWords...\n";
-  vector<Id> cids;
-  vector<Id> eids;
-  vector<Score> scores;
-  getContextEntityScoreListsForWords(words, cids, eids, scores);
-  FTSAlgorithms::multFreeVarsAggScoresAndTakeTopKContexts(
-      cids, eids, scores, limit, *result);
-  LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
-             << "\n";
-}
-
-// _____________________________________________________________________________
-void Index::getECListForWords(const string& words, size_t limit,
-                              size_t nofFreeVars, VarWidthList& result) const {
-  LOG(DEBUG) << "In getECListForWords...\n";
-  vector<Id> cids;
-  vector<Id> eids;
-  vector<Score> scores;
-  getContextEntityScoreListsForWords(words, cids, eids, scores);
-  FTSAlgorithms::multFreeVarsAggScoresAndTakeTopKContexts(
-      cids, eids, scores, limit, nofFreeVars, result);
   LOG(DEBUG) << "Done with getECListForWords. Result size: " << result.size()
              << "\n";
 }
+
+
+// _____________________________________________________________________________
+template<typename Result>
+void Index::getECListForWords(const string& words,
+                              size_t nofVars,
+                              size_t limit,
+                              Result& result) const {
+  LOG(DEBUG) << "In getECListForWords...\n";
+  vector<Id> cids;
+  vector<Id> eids;
+  vector<Score> scores;
+  getContextEntityScoreListsForWords(words, cids, eids, scores);
+  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
+      cids, eids, scores, nofVars, limit, result);
+  LOG(DEBUG) << "Done with getECListForWords. Result size: " << result.size()
+             << "\n";
+}
+
+// _____________________________________________________________________________
+// Instantiate for width 4, 5 and var lists. 3 is covered by the simple case.
+template void Index::getECListForWords(const string&, size_t, size_t,
+                                       Index::WidthFourList& result) const;
+
+template void Index::getECListForWords(const string&, size_t, size_t,
+                                       Index::WidthFiveList& result) const;
+
+template void Index::getECListForWords(const string&, size_t, size_t,
+                                       Index::VarWidthList& result) const;
+
+// _____________________________________________________________________________
+template<typename FilterTable, typename ResultList>
+void Index::getFilteredECListForWords(const string& words,
+                                      const FilterTable& filter,
+                                      size_t filterColumn, size_t nofVars,
+                                      size_t limit, ResultList& result) const {
+  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
+}
+
+// _____________________________________________________________________________
+// Instantiate for different filter and result widths.
+template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthOneList&, size_t, size_t, size_t,
+    Index::WidthThreeList& result) const;
+template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthOneList&, size_t, size_t, size_t,
+    Index::WidthFourList& result) const;
+template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthOneList&, size_t, size_t, size_t,
+    Index::WidthFiveList& result) const;
+template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthOneList&, size_t, size_t, size_t,
+    Index::VarWidthList& result) const;
+template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthTwoList&, size_t, size_t, size_t,
+    Index::WidthFourList& result) const;
+template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthTwoList&, size_t, size_t, size_t,
+    Index::WidthFiveList& result) const;
+template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthTwoList&, size_t, size_t, size_t,
+    Index::VarWidthList& result) const;
+template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthThreeList&, size_t, size_t, size_t,
+    Index::WidthFiveList& result) const;
+template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthThreeList&, size_t, size_t, size_t,
+    Index::VarWidthList& result) const;
+template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthFourList&, size_t, size_t, size_t,
+    Index::VarWidthList& result) const;
+template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthFiveList&, size_t, size_t, size_t,
+    Index::VarWidthList& result) const;
+template void Index::getFilteredECListForWords(
+    const string&, const Index::VarWidthList&, size_t, size_t, size_t,
+    Index::VarWidthList& result) const;
+
 
 // _____________________________________________________________________________
 void Index::getEntityPostingsForTerm(const string& term, vector<Id>& cids,
@@ -758,7 +792,7 @@ void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from <<
              ", nofBytes: " << nofBytes << '\n';
   result.resize(nofElements + 250);
-  uint64_t *encoded = new uint64_t[nofBytes / 8];
+  uint64_t* encoded = new uint64_t[nofBytes / 8];
   _textIndexFile.read(encoded, nofBytes, from);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
   ad_utility::Simple8bCode::decode(encoded, nofElements, result.data());
@@ -783,14 +817,14 @@ void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from <<
              ", nofBytes: " << nofBytes << '\n';
   size_t nofCodebookBytes;
-  uint64_t *encoded = new uint64_t[nofElements];
+  uint64_t* encoded = new uint64_t[nofElements];
   result.resize(nofElements + 250);
   off_t current = from;
   size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t), current);
   LOG(TRACE) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
   AD_CHECK_EQ(sizeof(off_t), ret);
   current += ret;
-  T *codebook = new T[nofCodebookBytes / sizeof(T)];
+  T* codebook = new T[nofCodebookBytes / sizeof(T)];
   ret = _textIndexFile.read(codebook, nofCodebookBytes);
   current += ret;
   AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
@@ -842,7 +876,7 @@ void Index::dumpAsciiLists() const {
                                           tbmd._cl._startContextlist);
 
       ids.resize(nofElements + 250);
-      uint64_t *encodedD = new uint64_t[nofBytes / 8];
+      uint64_t* encodedD = new uint64_t[nofBytes / 8];
       _textIndexFile.read(encodedD, nofBytes, from);
       LOG(DEBUG) << "Decoding Simple8b code...\n";
       ad_utility::Simple8bCode::decode(encodedD, nofElements, ids.data());
@@ -858,14 +892,14 @@ void Index::dumpAsciiLists() const {
 
         ids.clear();
         ids.resize(nofElements + 250);
-        uint64_t *encodedW = new uint64_t[nofBytes / 8];
+        uint64_t* encodedW = new uint64_t[nofBytes / 8];
         off_t current = from;
         size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t),
                                          current);
         LOG(DEBUG) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
         AD_CHECK_EQ(sizeof(off_t), ret);
         current += ret;
-        Id *codebookW = new Id[nofCodebookBytes / sizeof(Id)];
+        Id* codebookW = new Id[nofCodebookBytes / sizeof(Id)];
         ret = _textIndexFile.read(codebookW, nofCodebookBytes);
         current += ret;
         AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
@@ -887,14 +921,14 @@ void Index::dumpAsciiLists() const {
                                      tbmd._cl._startScorelist);
       ids.clear();
       ids.resize(nofElements + 250);
-      uint64_t *encodedS = new uint64_t[nofBytes / 8];
+      uint64_t* encodedS = new uint64_t[nofBytes / 8];
       off_t current = from;
       size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t),
                                        current);
       LOG(DEBUG) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
       AD_CHECK_EQ(sizeof(off_t), ret);
       current += ret;
-      Score *codebookS = new Score[nofCodebookBytes / sizeof(Score)];
+      Score* codebookS = new Score[nofCodebookBytes / sizeof(Score)];
       ret = _textIndexFile.read(codebookS, nofCodebookBytes);
       current += ret;
       AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
@@ -924,7 +958,7 @@ void Index::dumpAsciiLists() const {
                                           tbmd._entityCl._startContextlist);
       ids.clear();
       ids.resize(nofElements + 250);
-      uint64_t *encodedD = new uint64_t[nofBytes / 8];
+      uint64_t* encodedD = new uint64_t[nofBytes / 8];
       _textIndexFile.read(encodedD, nofBytes, from);
       LOG(DEBUG) << "Decoding Simple8b code...\n";
       ad_utility::Simple8bCode::decode(encodedD, nofElements, ids.data());
@@ -940,14 +974,14 @@ void Index::dumpAsciiLists() const {
 
         ids.clear();
         ids.resize(nofElements + 250);
-        uint64_t *encodedW = new uint64_t[nofBytes / 8];
+        uint64_t* encodedW = new uint64_t[nofBytes / 8];
         off_t current = from;
         size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t),
                                          current);
         LOG(DEBUG) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
         AD_CHECK_EQ(sizeof(off_t), ret);
         current += ret;
-        Id *codebookW = new Id[nofCodebookBytes / sizeof(Id)];
+        Id* codebookW = new Id[nofCodebookBytes / sizeof(Id)];
         ret = _textIndexFile.read(codebookW, nofCodebookBytes);
         current += ret;
         AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
@@ -969,14 +1003,14 @@ void Index::dumpAsciiLists() const {
                                      tbmd._entityCl._startScorelist);
       ids.clear();
       ids.resize(nofElements + 250);
-      uint64_t *encodedS = new uint64_t[nofBytes / 8];
+      uint64_t* encodedS = new uint64_t[nofBytes / 8];
       off_t current = from;
       size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t),
                                        current);
       LOG(DEBUG) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
       AD_CHECK_EQ(sizeof(off_t), ret);
       current += ret;
-      Score *codebookS = new Score[nofCodebookBytes / sizeof(Score)];
+      Score* codebookS = new Score[nofCodebookBytes / sizeof(Score)];
       ret = _textIndexFile.read(codebookS, nofCodebookBytes);
       current += ret;
       AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
@@ -1232,6 +1266,10 @@ void Index::getECListForWordsAndSubtrees(
     // TODO
   }
 }
+
+
+
+
 
 
 

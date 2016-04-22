@@ -46,7 +46,7 @@ void FTSAlgorithms::filterByRange(const IdRange& idRange,
 void FTSAlgorithms::getTopKByScores(const vector<Id>& cids,
                                     const vector<Score>& scores,
                                     size_t k,
-                                    WidthOneList *result) {
+                                    WidthOneList* result) {
   AD_CHECK_EQ(cids.size(), scores.size());
   k = std::min(k, cids.size());
   LOG(DEBUG) << "Call getTopKByScores (partial sort of " << cids.size()
@@ -75,7 +75,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
                                                  const vector<Id>& eids,
                                                  const vector<Score>& scores,
                                                  size_t k,
-                                                 WidthThreeList *result) {
+                                                 WidthThreeList& result) {
   AD_CHECK_EQ(cids.size(), eids.size());
   AD_CHECK_EQ(cids.size(), scores.size());
   LOG(DEBUG) << "Going from an entity, context and score list of size: "
@@ -114,21 +114,20 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
       };
     }
   }
-  result->reserve(map.size() * k + 2);
+  result.reserve(map.size() * k + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     Id eid = it->first;
     Id entityScore = static_cast<Id>(it->second.first);
     ScoreToContext& stc = it->second.second;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
-      result->emplace_back(
-          array<Id, 3>{{
-                           eid,
-                           entityScore,
-                           itt->second
-                       }});
+      result.emplace_back(array<Id, 3>{{
+                                           eid,
+                                           entityScore,
+                                           itt->second
+                                       }});
     }
   }
-  LOG(DEBUG) << "Done. There are " << result->size() <<
+  LOG(DEBUG) << "Done. There are " << result.size() <<
              " entity-score-context tuples now.\n";
 
 
@@ -136,7 +135,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
   // Resorting the result is a separate operation now.
   // Benefit 1) it's not always necessary to sort.
   // Benefit 2) The result size can be MUCH smaller than n.
-  LOG(DEBUG) << "Done. There are " << result->size() <<
+  LOG(DEBUG) << "Done. There are " << result.size() <<
              " entity-score-context tuples now.\n";
 }
 
@@ -221,7 +220,7 @@ template void FTSAlgorithms::aggScoresAndTakeTopKContexts(
 void FTSAlgorithms::aggScoresAndTakeTopContext(const vector<Id>& cids,
                                                const vector<Id>& eids,
                                                const vector<Score>& scores,
-                                               WidthThreeList *result) {
+                                               WidthThreeList& result) {
   LOG(DEBUG) << "Special case with 1 contexts per entity...\n";
   typedef unordered_map<Id, pair<Score, pair<Id, Score>>> AggMap;
   AggMap map;
@@ -239,20 +238,19 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(const vector<Id>& cids,
       };
     }
   }
-  result->reserve(map.size() + 2);
-  result->resize(map.size());
+  result.reserve(map.size() + 2);
+  result.resize(map.size());
   size_t n = 0;
   for (auto it = map.begin(); it != map.end(); ++it) {
-    (*result)[n++] =
-        array<Id, 3>{{
-                         it->first,  // entity
-                         static_cast<Id>(it->second.first),  // entity score
-                         it->second.second.first  // top context Id
-                     }};
+    result[n++] = array<Id, 3>{{
+                                   it->second.second.first,
+                                   static_cast<Id>(it->second.first),
+                                   it->first
+                               }};
   }
-  AD_CHECK_EQ(n, result->size());
-  LOG(DEBUG) << "Done. There are " << result->size() <<
-             " entity-score-context tuples now.\n";
+  AD_CHECK_EQ(n, result.size());
+  LOG(DEBUG) << "Done. There are " << result.size() <<
+             " context-score-entity tuples now.\n";
 }
 
 // _____________________________________________________________________________
@@ -391,7 +389,7 @@ void FTSAlgorithms::intersectTwoPostingLists(const vector<Id>& cids1,
 // _____________________________________________________________________________
 void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
                                   const vector<vector<Score>>& scoreVecs,
-                                  vector<Id> *lastListEids,
+                                  vector<Id>* lastListEids,
                                   vector<Id>& resCids,
                                   vector<Id>& resEids,
                                   vector<Score>& resScores) {
@@ -509,7 +507,7 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
   LOG(DEBUG) << "Intersection done. Size: " << resCids.size() << "\n";
 }
 
-
+// _____________________________________________________________________________
 void FTSAlgorithms::appendCrossProduct(const vector<Id>& cids,
                                        const vector<Id>& eids,
                                        const vector<Score>& scores,
@@ -608,23 +606,23 @@ void FTSAlgorithms::appendCrossProduct(
 }
 
 // _____________________________________________________________________________
-void FTSAlgorithms::multFreeVarsAggScoresAndTakeTopKContexts(
+void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
-    size_t k, size_t nofFreeVars, VarWidthList& result) {
+    size_t nofVars, size_t k, VarWidthList& result) {
   AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
 }
 
 // _____________________________________________________________________________
-void FTSAlgorithms::multFreeVarsAggScoresAndTakeTopKContexts(
+void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
-    size_t nofFreeVars, WidthFourList& result) {
+    size_t nofFreeVars, size_t k, WidthFourList& result) {
   AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
 }
 
 // _____________________________________________________________________________
-void FTSAlgorithms::multFreeVarsAggScoresAndTakeTopKContexts(
+void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
-    size_t nofFreeVars, WidthFiveList& result) {
+    size_t nofFreeVars, size_t k, WidthFiveList& result) {
   AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
 }
 
