@@ -667,7 +667,26 @@ void Index::getFilteredECListForWords(const string& words,
                                       const FilterTable& filter,
                                       size_t filterColumn, size_t nofVars,
                                       size_t limit, ResultList& result) const {
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
+  LOG(DEBUG) << "In getFilteredECListForWords...\n";
+  // Build a map filterEid->set<Rows>
+  using FilterMap = unordered_map<Id, FilterTable>;
+  FilterMap fMap;
+  for (auto& row : filter) {
+    fMap[row[filterColumn]].push_back(row);
+  }
+  vector<Id> cids;
+  vector<Id> eids;
+  vector<Score> scores;
+  getContextEntityScoreListsForWords(words, cids, eids, scores);
+  if (nofVars == 1) {
+    FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
+        cids, eids, scores, fMap, limit, result);
+  } else {
+    FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
+        cids, eids, scores, fMap, nofVars, limit, result);
+  }
+  LOG(DEBUG) << "Done with getFilteredECListForWords. Result size: "
+             << result.size() << "\n";
 }
 
 // _____________________________________________________________________________
@@ -675,36 +694,47 @@ void Index::getFilteredECListForWords(const string& words,
 template void Index::getFilteredECListForWords(
     const string&, const Index::WidthOneList&, size_t, size_t, size_t,
     Index::WidthThreeList& result) const;
+
 template void Index::getFilteredECListForWords(
     const string&, const Index::WidthOneList&, size_t, size_t, size_t,
     Index::WidthFourList& result) const;
+
 template void Index::getFilteredECListForWords(
     const string&, const Index::WidthOneList&, size_t, size_t, size_t,
     Index::WidthFiveList& result) const;
+
 template void Index::getFilteredECListForWords(
     const string&, const Index::WidthOneList&, size_t, size_t, size_t,
     Index::VarWidthList& result) const;
+
 template void Index::getFilteredECListForWords(
     const string&, const Index::WidthTwoList&, size_t, size_t, size_t,
     Index::WidthFourList& result) const;
+
 template void Index::getFilteredECListForWords(
     const string&, const Index::WidthTwoList&, size_t, size_t, size_t,
     Index::WidthFiveList& result) const;
+
 template void Index::getFilteredECListForWords(
     const string&, const Index::WidthTwoList&, size_t, size_t, size_t,
     Index::VarWidthList& result) const;
+
 template void Index::getFilteredECListForWords(
     const string&, const Index::WidthThreeList&, size_t, size_t, size_t,
     Index::WidthFiveList& result) const;
+
 template void Index::getFilteredECListForWords(
     const string&, const Index::WidthThreeList&, size_t, size_t, size_t,
     Index::VarWidthList& result) const;
+
 template void Index::getFilteredECListForWords(
     const string&, const Index::WidthFourList&, size_t, size_t, size_t,
     Index::VarWidthList& result) const;
+
 template void Index::getFilteredECListForWords(
     const string&, const Index::WidthFiveList&, size_t, size_t, size_t,
     Index::VarWidthList& result) const;
+
 template void Index::getFilteredECListForWords(
     const string&, const Index::VarWidthList&, size_t, size_t, size_t,
     Index::VarWidthList& result) const;

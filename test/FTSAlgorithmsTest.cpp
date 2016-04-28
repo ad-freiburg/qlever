@@ -19,7 +19,7 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   // Empty
   FTSAlgorithms::filterByRange(idRange, blockCids, blockWids, blockScores,
                                resultCids, resultScores);
-  ASSERT_EQ(0, resultCids.size());
+  ASSERT_EQ(0u, resultCids.size());
 
   // None
   blockCids.push_back(0);
@@ -28,7 +28,7 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
 
   FTSAlgorithms::filterByRange(idRange, blockCids, blockWids, blockScores,
                                resultCids, resultScores);
-  ASSERT_EQ(0, resultCids.size());
+  ASSERT_EQ(0u, resultCids.size());
 
   // Match
   blockCids.push_back(0);
@@ -48,8 +48,8 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
 
   FTSAlgorithms::filterByRange(idRange, blockCids, blockWids, blockScores,
                                resultCids, resultScores);
-  ASSERT_EQ(4, resultCids.size());
-  ASSERT_EQ(4, resultScores.size());
+  ASSERT_EQ(4u, resultCids.size());
+  ASSERT_EQ(4u, resultScores.size());
 
   resultCids.clear();
   resultScores.clear();
@@ -61,8 +61,8 @@ TEST(FTSAlgorithmsTest, filterByRangeTest) {
   // Partial
   FTSAlgorithms::filterByRange(idRange, blockCids, blockWids, blockScores,
                                resultCids, resultScores);
-  ASSERT_EQ(4, resultCids.size());
-  ASSERT_EQ(4, resultScores.size());
+  ASSERT_EQ(4u, resultCids.size());
+  ASSERT_EQ(4u, resultScores.size());
 
 };
 
@@ -78,8 +78,8 @@ TEST(FTSAlgorithmsTest, intersectTest) {
   FTSAlgorithms::intersect(matchingContexts, matchingContextScores, eBlockCids,
                            eBlockWids, eBlockScores, resultCids, resultEids,
                            resultScores);
-  ASSERT_EQ(0, resultCids.size());
-  ASSERT_EQ(0, resultScores.size());
+  ASSERT_EQ(0u, resultCids.size());
+  ASSERT_EQ(0u, resultScores.size());
 
   matchingContexts.push_back(0);
   matchingContexts.push_back(2);
@@ -91,8 +91,8 @@ TEST(FTSAlgorithmsTest, intersectTest) {
   FTSAlgorithms::intersect(matchingContexts, matchingContextScores, eBlockCids,
                            eBlockWids, eBlockScores, resultCids, resultEids,
                            resultScores);
-  ASSERT_EQ(0, resultCids.size());
-  ASSERT_EQ(0, resultScores.size());
+  ASSERT_EQ(0u, resultCids.size());
+  ASSERT_EQ(0u, resultScores.size());
 
   eBlockCids.push_back(1);
   eBlockCids.push_back(2);
@@ -110,9 +110,9 @@ TEST(FTSAlgorithmsTest, intersectTest) {
   FTSAlgorithms::intersect(matchingContexts, matchingContextScores, eBlockCids,
                            eBlockWids, eBlockScores, resultCids, resultEids,
                            resultScores);
-  ASSERT_EQ(2, resultCids.size());
-  ASSERT_EQ(2, resultEids.size());
-  ASSERT_EQ(2, resultScores.size());
+  ASSERT_EQ(2u, resultCids.size());
+  ASSERT_EQ(2u, resultEids.size());
+  ASSERT_EQ(2u, resultScores.size());
 };
 
 TEST(FTSAlgorithmsTest, intersectTwoPostingListsTest) {
@@ -124,8 +124,8 @@ TEST(FTSAlgorithmsTest, intersectTwoPostingListsTest) {
   vector<Score> resScores;
   FTSAlgorithms::intersectTwoPostingLists(cids1, scores1, cids2, scores2,
                                           resCids, resScores);
-  ASSERT_EQ(0, resCids.size());
-  ASSERT_EQ(0, resScores.size());
+  ASSERT_EQ(0u, resCids.size());
+  ASSERT_EQ(0u, resScores.size());
 
   cids1.push_back(0);
   cids1.push_back(2);
@@ -133,22 +133,22 @@ TEST(FTSAlgorithmsTest, intersectTwoPostingListsTest) {
   scores1.push_back(1);
   FTSAlgorithms::intersectTwoPostingLists(cids1, scores1, cids2, scores2,
                                           resCids, resScores);
-  ASSERT_EQ(0, resCids.size());
-  ASSERT_EQ(0, resScores.size());
+  ASSERT_EQ(0u, resCids.size());
+  ASSERT_EQ(0u, resScores.size());
 
   cids2.push_back(2);
   scores2.push_back(1);
   FTSAlgorithms::intersectTwoPostingLists(cids1, scores1, cids2, scores2,
                                           resCids, resScores);
-  ASSERT_EQ(1, resCids.size());
-  ASSERT_EQ(1, resScores.size());
+  ASSERT_EQ(1u, resCids.size());
+  ASSERT_EQ(1u, resScores.size());
 
   cids2.push_back(4);
   scores2.push_back(1);
   FTSAlgorithms::intersectTwoPostingLists(cids1, scores1, cids2, scores2,
                                           resCids, resScores);
-  ASSERT_EQ(1, resCids.size());
-  ASSERT_EQ(1, resScores.size());
+  ASSERT_EQ(1u, resCids.size());
+  ASSERT_EQ(1u, resScores.size());
 };
 
 TEST(FTSAlgorithmsTest, intersectKWayTest) {
@@ -187,11 +187,11 @@ TEST(FTSAlgorithmsTest, intersectKWayTest) {
   // No eids / no special case
   FTSAlgorithms::intersectKWay(cidVecs, scoreVecs, nullptr, resCids, resEids,
                                resScores);
-  ASSERT_EQ(2, resCids.size());
-  ASSERT_EQ(0, resEids.size());
-  ASSERT_EQ(2, resScores.size());
-  ASSERT_EQ(3, resScores[0]);
-  ASSERT_EQ(5, resScores[1]);
+  ASSERT_EQ(2u, resCids.size());
+  ASSERT_EQ(0u, resEids.size());
+  ASSERT_EQ(2u, resScores.size());
+  ASSERT_EQ(3u, resScores[0]);
+  ASSERT_EQ(5u, resScores[1]);
 
   // With eids
   eids.push_back(1);
@@ -223,15 +223,15 @@ TEST(FTSAlgorithmsTest, intersectKWayTest) {
 
   FTSAlgorithms::intersectKWay(cidVecs, scoreVecs, &eids, resCids, resEids,
                                resScores);
-  ASSERT_EQ(2, resCids.size());
-  ASSERT_EQ(2, resEids.size());
-  ASSERT_EQ(2, resScores.size());
-  ASSERT_EQ(10, resCids[0]);
-  ASSERT_EQ(10, resCids[1]);
-  ASSERT_EQ(1, resEids[0]);
-  ASSERT_EQ(2, resEids[1]);
-  ASSERT_EQ(6, resScores[0]);
-  ASSERT_EQ(9, resScores[1]);
+  ASSERT_EQ(2u, resCids.size());
+  ASSERT_EQ(2u, resEids.size());
+  ASSERT_EQ(2u, resScores.size());
+  ASSERT_EQ(10u, resCids[0]);
+  ASSERT_EQ(10u, resCids[1]);
+  ASSERT_EQ(1u, resEids[0]);
+  ASSERT_EQ(2u, resEids[1]);
+  ASSERT_EQ(6u, resScores[0]);
+  ASSERT_EQ(9u, resScores[1]);
 };
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
@@ -241,8 +241,8 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
     vector<Id> eids;
     vector<Score> scores;
 
-    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
-    ASSERT_EQ(0, result.size());
+    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, result);
+    ASSERT_EQ(0u, result.size());
 
     cids.push_back(0);
     cids.push_back(1);
@@ -256,29 +256,29 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
     scores.push_back(1);
     scores.push_back(2);
 
-    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
-    ASSERT_EQ(2, result.size());
-    ASSERT_EQ(0, result[0][0]);
-    ASSERT_EQ(3, result[0][1]);
-    ASSERT_EQ(2, result[0][2]);
-    ASSERT_EQ(0, result[1][0]);
-    ASSERT_EQ(3, result[1][1]);
-    ASSERT_EQ(1, result[1][2]);
+    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, result);
+    ASSERT_EQ(2u, result.size());
+    ASSERT_EQ(0u, result[0][0]);
+    ASSERT_EQ(3u, result[0][1]);
+    ASSERT_EQ(2u, result[0][2]);
+    ASSERT_EQ(0u, result[1][0]);
+    ASSERT_EQ(3u, result[1][1]);
+    ASSERT_EQ(1u, result[1][2]);
 
     cids.push_back(4);
     eids.push_back(1);
     scores.push_back(1);
 
     result.clear();
-    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
-    ASSERT_EQ(3, result.size());
+    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, result);
+    ASSERT_EQ(3u, result.size());
     std::sort(result.begin(), result.end(),
               [](const array<Id, 3>& a, const array<Id, 3>& b) {
                 return a[0] < b[0];
               });
-    ASSERT_EQ(1, result[2][0]);
-    ASSERT_EQ(1, result[2][1]);
-    ASSERT_EQ(4, result[2][2]);
+    ASSERT_EQ(1u, result[2][0]);
+    ASSERT_EQ(1u, result[2][1]);
+    ASSERT_EQ(4u, result[2][2]);
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -293,8 +293,8 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   vector<Id> cids;
   vector<Id> eids;
   vector<Score> scores;
-  FTSAlgorithms::aggScoresAndTakeTopContext(cids, eids, scores, &result);
-  ASSERT_EQ(0, result.size());
+  FTSAlgorithms::aggScoresAndTakeTopContext(cids, eids, scores, result);
+  ASSERT_EQ(0u, result.size());
 
   cids.push_back(0);
   cids.push_back(1);
@@ -308,45 +308,45 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   scores.push_back(1);
   scores.push_back(2);
 
-  FTSAlgorithms::aggScoresAndTakeTopContext(cids, eids, scores, &result);
-  ASSERT_EQ(1, result.size());
-  ASSERT_EQ(0, result[0][0]);
-  ASSERT_EQ(3, result[0][1]);
-  ASSERT_EQ(2, result[0][2]);
+  FTSAlgorithms::aggScoresAndTakeTopContext(cids, eids, scores, result);
+  ASSERT_EQ(1u, result.size());
+  ASSERT_EQ(2u, result[0][0]);
+  ASSERT_EQ(3u, result[0][1]);
+  ASSERT_EQ(0u, result[0][2]);
 
   cids.push_back(3);
   eids.push_back(1);
   scores.push_back(1);
 
-  FTSAlgorithms::aggScoresAndTakeTopContext(cids, eids, scores, &result);
-  ASSERT_EQ(2, result.size());
+  FTSAlgorithms::aggScoresAndTakeTopContext(cids, eids, scores, result);
+  ASSERT_EQ(2u, result.size());
   std::sort(result.begin(), result.end(),
             [](const array<Id, 3>& a, const array<Id, 3>& b) {
-              return a[0] < b[0];
+              return a[2] < b[2];
             });
-  ASSERT_EQ(0, result[0][0]);
-  ASSERT_EQ(3, result[0][1]);
-  ASSERT_EQ(2, result[0][2]);
-  ASSERT_EQ(1, result[1][0]);
-  ASSERT_EQ(1, result[1][1]);
-  ASSERT_EQ(3, result[1][2]);
+  ASSERT_EQ(2u, result[0][0]);
+  ASSERT_EQ(3u, result[0][1]);
+  ASSERT_EQ(0u, result[0][2]);
+  ASSERT_EQ(3u, result[1][0]);
+  ASSERT_EQ(1u, result[1][1]);
+  ASSERT_EQ(1u, result[1][2]);
 
   cids.push_back(4);
   eids.push_back(0);
   scores.push_back(10);
 
-  FTSAlgorithms::aggScoresAndTakeTopContext(cids, eids, scores, &result);
-  ASSERT_EQ(2, result.size());
+  FTSAlgorithms::aggScoresAndTakeTopContext(cids, eids, scores, result);
+  ASSERT_EQ(2u, result.size());
   std::sort(result.begin(), result.end(),
             [](const array<Id, 3>& a, const array<Id, 3>& b) {
-              return a[0] < b[0];
+              return a[2] < b[2];
             });
-  ASSERT_EQ(0, result[0][0]);
-  ASSERT_EQ(4, result[0][1]);
-  ASSERT_EQ(4, result[0][2]);
-  ASSERT_EQ(1, result[1][0]);
-  ASSERT_EQ(1, result[1][1]);
-  ASSERT_EQ(3, result[1][2]);
+  ASSERT_EQ(4u, result[0][0]);
+  ASSERT_EQ(4u, result[0][1]);
+  ASSERT_EQ(0u, result[0][2]);
+  ASSERT_EQ(3u, result[1][0]);
+  ASSERT_EQ(1u, result[1][1]);
+  ASSERT_EQ(1u, result[1][2]);
 };
 
 TEST(FTSAlgorithmsTest, appendCrossProductWithSingleOtherTest) {
@@ -371,37 +371,37 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithSingleOtherTest) {
 
   FTSAlgorithms::appendCrossProduct(cids, eids, scores, 0, 2, subRes, res);
 
-  ASSERT_EQ(2, res.size());
-  ASSERT_EQ(0, res[0][0]);
-  ASSERT_EQ(2, res[0][1]);
-  ASSERT_EQ(1, res[0][2]);
-  ASSERT_EQ(1, res[0][3]);
-  ASSERT_EQ(1, res[1][0]);
-  ASSERT_EQ(2, res[1][1]);
-  ASSERT_EQ(1, res[1][2]);
-  ASSERT_EQ(1, res[1][3]);
+  ASSERT_EQ(2u, res.size());
+  ASSERT_EQ(0u, res[0][0]);
+  ASSERT_EQ(2u, res[0][1]);
+  ASSERT_EQ(1u, res[0][2]);
+  ASSERT_EQ(1u, res[0][3]);
+  ASSERT_EQ(1u, res[1][0]);
+  ASSERT_EQ(2u, res[1][1]);
+  ASSERT_EQ(1u, res[1][2]);
+  ASSERT_EQ(1u, res[1][3]);
 
   subRes[0] = vector<array<Id, 1>>{{{0}}};
   res.clear();
   FTSAlgorithms::appendCrossProduct(cids, eids, scores, 0, 2, subRes, res);
 
-  ASSERT_EQ(4, res.size());
-  ASSERT_EQ(0, res[0][0]);
-  ASSERT_EQ(2, res[0][1]);
-  ASSERT_EQ(1, res[0][2]);
-  ASSERT_EQ(0, res[0][3]);
-  ASSERT_EQ(0, res[1][0]);
-  ASSERT_EQ(2, res[1][1]);
-  ASSERT_EQ(1, res[1][2]);
-  ASSERT_EQ(1, res[1][3]);
-  ASSERT_EQ(1, res[2][0]);
-  ASSERT_EQ(2, res[2][1]);
-  ASSERT_EQ(1, res[2][2]);
-  ASSERT_EQ(0, res[2][3]);
-  ASSERT_EQ(1, res[3][0]);
-  ASSERT_EQ(2, res[3][1]);
-  ASSERT_EQ(1, res[3][2]);
-  ASSERT_EQ(1, res[3][3]);
+  ASSERT_EQ(4u, res.size());
+  ASSERT_EQ(0u, res[0][0]);
+  ASSERT_EQ(2u, res[0][1]);
+  ASSERT_EQ(1u, res[0][2]);
+  ASSERT_EQ(0u, res[0][3]);
+  ASSERT_EQ(0u, res[1][0]);
+  ASSERT_EQ(2u, res[1][1]);
+  ASSERT_EQ(1u, res[1][2]);
+  ASSERT_EQ(1u, res[1][3]);
+  ASSERT_EQ(1u, res[2][0]);
+  ASSERT_EQ(2u, res[2][1]);
+  ASSERT_EQ(1u, res[2][2]);
+  ASSERT_EQ(0u, res[2][3]);
+  ASSERT_EQ(1u, res[3][0]);
+  ASSERT_EQ(2u, res[3][1]);
+  ASSERT_EQ(1u, res[3][2]);
+  ASSERT_EQ(1u, res[3][3]);
 }
 
 TEST(FTSAlgorithmsTest, appendCrossProductWithTwoW1Test) {
@@ -431,17 +431,17 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithTwoW1Test) {
   FTSAlgorithms::appendCrossProduct(cids, eids, scores,
                                     0, 2, subRes1, subRes2, res);
 
-  ASSERT_EQ(2, res.size());
-  ASSERT_EQ(0, res[0][0]);
-  ASSERT_EQ(2, res[0][1]);
-  ASSERT_EQ(1, res[0][2]);
-  ASSERT_EQ(1, res[0][3]);
-  ASSERT_EQ(0, res[0][4]);
-  ASSERT_EQ(1, res[1][0]);
-  ASSERT_EQ(2, res[1][1]);
-  ASSERT_EQ(1, res[1][2]);
-  ASSERT_EQ(1, res[1][3]);
-  ASSERT_EQ(0, res[0][4]);
+  ASSERT_EQ(2u, res.size());
+  ASSERT_EQ(0u, res[0][0]);
+  ASSERT_EQ(2u, res[0][1]);
+  ASSERT_EQ(1u, res[0][2]);
+  ASSERT_EQ(1u, res[0][3]);
+  ASSERT_EQ(0u, res[0][4]);
+  ASSERT_EQ(1u, res[1][0]);
+  ASSERT_EQ(2u, res[1][1]);
+  ASSERT_EQ(1u, res[1][2]);
+  ASSERT_EQ(1u, res[1][3]);
+  ASSERT_EQ(0u, res[0][4]);
 }
 
 int main(int argc, char **argv) {

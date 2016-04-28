@@ -425,15 +425,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
               &textOp);
           unordered_map<string, size_t> vcmap(
               textPlan._qet.getVariableColumnMap());
-          size_t leftSize = textPlan._qet.getResultWidth();
+          // Subtract one because the entity that we filtered on
+          // is provided by the filter table and still has the same place there.
+          size_t leftSize = textPlan._qet.getResultWidth() - 1;
           for (auto it = otherPlan._qet.getVariableColumnMap().begin();
                it != otherPlan._qet.getVariableColumnMap().end(); ++it) {
-            if (it->second < otherPlanJc) {
               vcmap[it->first] = leftSize + it->second;
-            }
-            if (it->second > otherPlanJc) {
-              vcmap[it->first] = leftSize + it->second - 1;
-            }
           }
           tree.setVariableColumns(vcmap);
           tree.setContextVars(otherPlan._qet.getContextVars());
