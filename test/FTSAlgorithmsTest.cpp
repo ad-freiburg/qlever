@@ -444,7 +444,219 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithTwoW1Test) {
   ASSERT_EQ(0u, res[0][4]);
 }
 
-int main(int argc, char **argv) {
+TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
+  vector<Id> cids;
+  vector<Id> eids;
+  vector<Score> scores;
+  size_t nofVars = 2;
+  size_t k = 1;
+  FTSAlgorithms::WidthFourList resW4;
+  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(cids, eids, scores,
+                                                      nofVars, k, resW4);
+  ASSERT_EQ(0u, resW4.size());
+  nofVars = 5;
+  k = 10;
+  FTSAlgorithms::VarWidthList resWV;
+  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(cids, eids, scores,
+                                                      nofVars, k, resWV);
+  ASSERT_EQ(0u, resWV.size());
+
+  cids.push_back(0);
+  cids.push_back(1);
+  cids.push_back(1);
+  cids.push_back(2);
+  cids.push_back(2);
+  cids.push_back(2);
+
+  eids.push_back(0);
+  eids.push_back(0);
+  eids.push_back(1);
+  eids.push_back(0);
+  eids.push_back(1);
+  eids.push_back(2);
+
+  scores.push_back(10);
+  scores.push_back(1);
+  scores.push_back(3);
+  scores.push_back(1);
+  scores.push_back(1);
+  scores.push_back(1);
+
+  nofVars = 2;
+  k = 1;
+  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(cids, eids, scores,
+                                                      nofVars, k, resW4);
+
+  // Res 0-0-0 (3) | 0-1 1-0 1-1 (2) | 0-2 1-2 2-0 2-1 2-2 (1)
+  ASSERT_EQ(9u, resW4.size());
+  std::sort(std::begin(resW4), std::end(resW4),
+            [](const array<Id, 4>& a, const array<Id, 4>& b) {
+              return a[1] > b[1];
+            });
+  ASSERT_EQ(3u, resW4[0][1]);
+  ASSERT_EQ(0u, resW4[0][0]);
+  ASSERT_EQ(0u, resW4[0][2]);
+  ASSERT_EQ(0u, resW4[0][3]);
+  ASSERT_EQ(2u, resW4[1][1]);
+  ASSERT_EQ(2u, resW4[2][1]);
+  ASSERT_EQ(2u, resW4[3][1]);
+  ASSERT_EQ(1u, resW4[4][1]);
+  ASSERT_EQ(1u, resW4[5][1]);
+  k = 2;
+  resW4.clear();
+  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(cids, eids, scores,
+                                                      nofVars, k, resW4);
+  ASSERT_EQ(13u, resW4.size());
+  std::sort(std::begin(resW4), std::end(resW4),
+            [](const array<Id, 4>& a, const array<Id, 4>& b) {
+              return a[1] > b[1];
+            });
+  ASSERT_EQ(3u, resW4[0][1]);
+  ASSERT_EQ(0u, resW4[0][0]);
+  ASSERT_EQ(0u, resW4[0][2]);
+  ASSERT_EQ(0u, resW4[0][3]);
+  ASSERT_EQ(1u, resW4[1][0]);
+  ASSERT_EQ(3u, resW4[1][1]);
+  ASSERT_EQ(0u, resW4[1][2]);
+  ASSERT_EQ(0u, resW4[1][3]);
+
+  nofVars = 3;
+  k = 1;
+  FTSAlgorithms::WidthFiveList resW5;
+  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(cids, eids, scores,
+                                                      nofVars, k, resW5);
+  ASSERT_EQ(27u, resW5.size());  // Res size 3^3
+
+
+  nofVars = 10;
+  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(cids, eids, scores,
+                                                      nofVars, k, resWV);
+  ASSERT_EQ(59049u, resWV.size());  // Res size: 3^10 = 59049
+}
+
+TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
+  vector<Id> cids;
+  vector<Id> eids;
+  vector<Score> scores;
+  size_t k = 1;
+  FTSAlgorithms::WidthThreeList resW3;
+  unordered_map<Id, FTSAlgorithms::WidthOneList> fMap1;
+
+  FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
+                                                          fMap1, k, resW3);
+  ASSERT_EQ(0u, resW3.size());
+
+
+  cids.push_back(0);
+  cids.push_back(1);
+  cids.push_back(1);
+  cids.push_back(2);
+  cids.push_back(2);
+  cids.push_back(2);
+
+  eids.push_back(0);
+  eids.push_back(0);
+  eids.push_back(1);
+  eids.push_back(0);
+  eids.push_back(1);
+  eids.push_back(2);
+
+  scores.push_back(10);
+  scores.push_back(1);
+  scores.push_back(3);
+  scores.push_back(1);
+  scores.push_back(1);
+  scores.push_back(1);
+
+  FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
+                                                          fMap1, k, resW3);
+  ASSERT_EQ(0u, resW3.size());
+
+  fMap1[1].emplace_back(array<Id, 1>{{1}});
+
+  FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
+                                                          fMap1, k, resW3);
+  ASSERT_EQ(1u, resW3.size());
+  resW3.clear();
+  k = 10;
+  FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
+                                                          fMap1, k, resW3);
+  ASSERT_EQ(2u, resW3.size());
+
+  fMap1[0].emplace_back(array<Id, 1>{{0}});
+  resW3.clear();
+  FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
+                                                          fMap1, k, resW3);
+  ASSERT_EQ(5u, resW3.size());
+
+  unordered_map<Id, FTSAlgorithms::WidthFourList> fMap4;
+  fMap4[0].emplace_back(array<Id, 4>{{0, 0, 0, 0}});
+  fMap4[0].emplace_back(array<Id, 4>{{0, 1, 0, 0}});
+  fMap4[0].emplace_back(array<Id, 4>{{0, 2, 0, 0}});
+  FTSAlgorithms::VarWidthList resVar;
+  k = 1;
+  FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
+                                                          fMap4, k, resVar);
+  ASSERT_EQ(3u, resVar.size());
+
+  fMap4[2].emplace_back(array<Id, 4>{{2, 2, 2, 2}});
+  resVar.clear();
+  FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
+                                                          fMap4, k, resVar);
+  ASSERT_EQ(4u, resVar.size());
+}
+
+TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
+  try {
+    vector<Id> cids;
+    vector<Id> eids;
+    vector<Score> scores;
+    cids.push_back(0);
+    cids.push_back(1);
+    cids.push_back(1);
+    cids.push_back(2);
+    cids.push_back(2);
+    cids.push_back(2);
+
+    eids.push_back(0);
+    eids.push_back(0);
+    eids.push_back(1);
+    eids.push_back(0);
+    eids.push_back(1);
+    eids.push_back(2);
+
+    scores.push_back(10);
+    scores.push_back(1);
+    scores.push_back(3);
+    scores.push_back(1);
+    scores.push_back(1);
+    scores.push_back(1);
+
+    size_t k = 1;
+    FTSAlgorithms::WidthFourList resW4;
+    unordered_map<Id, FTSAlgorithms::WidthOneList> fMap1;
+
+    size_t nofVars = 2;
+    FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
+        cids, eids, scores, fMap1, nofVars, k, resW4);
+    ASSERT_EQ(0u, resW4.size());
+
+    fMap1[1].emplace_back(array<Id, 1>{{1}});
+
+    FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
+        cids, eids, scores, fMap1, nofVars, k, resW4);
+    ASSERT_EQ(3u, resW4.size()); // 11 10 12
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
+
+int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

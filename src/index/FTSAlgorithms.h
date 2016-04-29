@@ -245,13 +245,10 @@ public:
   template<typename InTup>
   static inline void fillTuple(
       Id cid, Id score, const InTup& in, vector<Id>& out) {
-    out.resize(in.size() + 2);
-    out[0] = cid;
-    out[1] = score;
-    size_t n = 2;
-    for (auto e : in) {
-      out[n++] = e;
-    }
+    out.reserve(in.size() + 2);
+    out.push_back(cid);
+    out.push_back(score);
+    out.insert(std::end(out), std::begin(in), std::end(in));
   }
 
   template<typename Iter1, typename Iter2, size_t I>
@@ -268,6 +265,7 @@ public:
       out[n++] = *fBegin;
       ++fBegin;
     }
+    assert(n == I);
   }
 
   template<typename Iter1, typename Iter2>
