@@ -645,7 +645,7 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
 
     FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
         cids, eids, scores, fMap1, nofVars, k, resW4);
-    ASSERT_EQ(3u, resW4.size()); // 11 10 12
+    ASSERT_EQ(3u, resW4.size()); // 1-1 1-0 1-2
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
