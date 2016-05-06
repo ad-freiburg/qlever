@@ -16,7 +16,7 @@
 #include "TextOperationWithFilter.h"
 
 // _____________________________________________________________________________
-QueryPlanner::QueryPlanner(QueryExecutionContext *qec) : _qec(qec) { }
+QueryPlanner::QueryPlanner(QueryExecutionContext* qec) : _qec(qec) { }
 
 // _____________________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(
@@ -416,25 +416,36 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           QueryExecutionTree tree(_qec);
           // Subtract 1 for variables.size() for the context var.
           const TextOperationWithoutFilter& noFilter =
-              *static_cast<const TextOperationWithoutFilter *>(textPlan._qet.getRootOperation());
+              *static_cast<const TextOperationWithoutFilter*>(textPlan._qet.getRootOperation());
           TextOperationWithFilter textOp(_qec, noFilter.getWordPart(),
                                          noFilter.getNofVars(), &otherPlan._qet,
                                          otherPlanJc);
           tree.setOperation(
               QueryExecutionTree::OperationType::TEXT_WITH_FILTER,
               &textOp);
-          unordered_map<string, size_t> vcmap(
-              textPlan._qet.getVariableColumnMap());
+          unordered_map<string, size_t> vcmap;
           // Subtract one because the entity that we filtered on
           // is provided by the filter table and still has the same place there.
-          size_t leftSize = textPlan._qet.getResultWidth() - 1;
+          size_t colN = 2;
+          string cvar = *textPlan._qet.getContextVars().begin();
+          for (auto it = textPlan._qet.getVariableColumnMap().begin();
+               it != textPlan._qet.getVariableColumnMap().end(); ++it) {
+            if (it->first == cvar ||
+                it->first == string("SCORE(") + cvar + ")") {
+              vcmap[it->first] = it->second;
+            } else if (otherPlan._qet.getVariableColumnMap().count(it->first) ==
+                       0) {
+              vcmap[it->first] = colN++;
+            }
+          }
+          assert(colN == textPlan._qet.getResultWidth() - 1);
           for (auto it = otherPlan._qet.getVariableColumnMap().begin();
                it != otherPlan._qet.getVariableColumnMap().end(); ++it) {
-              vcmap[it->first] = leftSize + it->second;
+            vcmap[it->first] = colN + it->second;
           }
           tree.setVariableColumns(vcmap);
           tree.setContextVars(otherPlan._qet.getContextVars());
-          tree.addContextVar(*textPlan._qet.getContextVars().begin());
+          tree.addContextVar(cvar);
           plan._qet = tree;
           candidates[getPruningKey(plan, jcs[0][0])].emplace_back(plan);
         }
@@ -491,6 +502,18 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
         minIndex = i;
       }
     }
+    if (it->second.size() > 1) {
+      LOG(DEBUG) << "PRUNING SOMETHING AWAY. TREES:" << std::endl;
+      for (size_t i = 0; i < it->second.size(); ++i) {
+        if (it->second[i].getCostEstimate() < minCost) {
+          LOG(DEBUG) << it->second[i]._qet.asString() << std::endl;
+          LOG(DEBUG) << "cost: " << it->second[i].getCostEstimate() <<
+                     std::endl;
+        }
+      }
+    }
+
+
     prunedPlans.push_back(it->second[minIndex]);
   }
 

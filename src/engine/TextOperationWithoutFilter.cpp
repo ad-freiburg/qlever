@@ -71,6 +71,7 @@ void TextOperationWithoutFilter::computeResultMultVars(
     ResultTable *result) const {
   if (_nofVars == 2) {
     result->_fixedSizeData = new vector<array<Id, 4>>;
+    result->_nofColumns = 4;
     getExecutionContext()->getIndex().getECListForWords(
         _words,
         _nofVars,
@@ -78,12 +79,14 @@ void TextOperationWithoutFilter::computeResultMultVars(
         *reinterpret_cast<vector<array<Id, 4>> *>(result->_fixedSizeData));
   } else if (_nofVars == 3) {
     result->_fixedSizeData = new vector<array<Id, 5>>;
+    result->_nofColumns = 5;
     getExecutionContext()->getIndex().getECListForWords(
         _words,
         _nofVars,
         _textLimit,
         *reinterpret_cast<vector<array<Id, 5>> *>(result->_fixedSizeData));
   } else {
+    result->_nofColumns = _nofVars + 2;
     getExecutionContext()->getIndex().getECListForWords(
         _words,
         _nofVars,

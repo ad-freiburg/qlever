@@ -626,7 +626,7 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
     eids.push_back(2);
 
     scores.push_back(10);
-    scores.push_back(1);
+    scores.push_back(3);
     scores.push_back(3);
     scores.push_back(1);
     scores.push_back(1);
@@ -646,6 +646,19 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
     FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
         cids, eids, scores, fMap1, nofVars, k, resW4);
     ASSERT_EQ(3u, resW4.size()); // 1-1 1-0 1-2
+    ASSERT_EQ(1u, resW4[0][0]);
+    ASSERT_EQ(2u, resW4[0][1]);
+    ASSERT_EQ(1u, resW4[0][2]);
+    ASSERT_EQ(1u, resW4[0][3]);
+    ASSERT_EQ(2u, resW4[1][0]);
+    ASSERT_EQ(1u, resW4[1][1]);
+    ASSERT_EQ(2u, resW4[1][2]);
+    ASSERT_EQ(1u, resW4[1][3]);
+    ASSERT_EQ(1u, resW4[2][0]);
+    ASSERT_EQ(2u, resW4[2][1]);
+    ASSERT_EQ(0u, resW4[2][2]);
+    ASSERT_EQ(1u, resW4[2][3]);
+
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();

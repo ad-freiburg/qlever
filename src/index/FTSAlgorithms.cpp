@@ -1440,9 +1440,9 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   using RowType = typename std::decay<decltype(*std::begin(result))>::type;
   for (auto it = map.begin(); it != map.end(); ++it) {
     ScoreToContext& stc = it->second.second;
+    Id rscore = it->second.first;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
       Id cid = itt->second;
-      Id rscore = itt->first;
       const vector<Id>& keyEids = it->first;
       const FilterTab& filterRows = fMap.find(keyEids[0])->second;
       for (auto& fRow : filterRows) {
