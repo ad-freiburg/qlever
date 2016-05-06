@@ -47,11 +47,11 @@ public:
     if (_executionContext) {
       // TODO: return a better estimate!
     }
-    return 10000;
+    return size_t(10000 * 0.8);
   }
 
   virtual size_t getCostEstimate() const {
-    return getSizeEstimate() * (1 + _nofVars);
+    return getSizeEstimate() * _nofVars + _filterResult->getCostEstimate();
   }
 
   const string& getWordPart() const {

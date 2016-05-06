@@ -68,7 +68,7 @@ string TextOperationWithFilter::asString() const {
 void TextOperationWithFilter::computeResult(ResultTable* result) const {
   LOG(DEBUG) << "TextOperationWithFilter result computation..." << endl;
   AD_CHECK_GE(_nofVars, 1);
-  result->_nofColumns = 2 + _filterResult->getResultWidth();
+  result->_nofColumns = 2 + _filterResult->getResultWidth() + _nofVars - 1;
   if (_filterResult->getResultWidth() == 1) {
     AD_CHECK_GE(result->_nofColumns, 3);
     if (result->_nofColumns == 3) {
