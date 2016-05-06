@@ -115,6 +115,7 @@ void Server::process(Socket *client, QueryExecutionContext *qec) const {
       QueryExecutionTree qet = qp.createExecutionTree(pq);
       LOG(DEBUG) << qet.asString() << std::endl;
       response = composeResponseJson(pq, qet);
+
       contentType = "application/json";
     } catch (const ad_semsearch::Exception& e) {
       response = composeResponseJson(query, e);

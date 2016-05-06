@@ -42,7 +42,7 @@ public:
   }
 
   virtual size_t getCostEstimate() const {
-    return getSizeEstimate() * (1 + _nofVars);
+    return getSizeEstimate() * _nofVars;
   }
 
   const string& getWordPart() const {
