@@ -99,6 +99,8 @@ public:
   // --------------------------------------------------------------------------
   const string& wordIdToString(Id id) const;
 
+  size_t getSizeEstimate(const string& words) const;
+
   void getContextListForWords(const string& words, WidthTwoList* result) const;
 
   void getECListForWords(const string& words, size_t limit,

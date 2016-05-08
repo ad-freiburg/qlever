@@ -20,6 +20,6 @@ add_library(engine
         OrderBy.h OrderBy.cpp
         Filter.h Filter.cpp
         Server.h Server.cpp
-        QueryPlanner.cpp QueryPlanner.h)
+        QueryPlanner.cpp QueryPlanner.h ScanningJoin.cpp ScanningJoin.h)
 
 target_link_libraries(engine index)

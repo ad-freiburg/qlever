@@ -18,9 +18,9 @@ using std::vector;
 class TextOperationWithFilter : public Operation {
 public:
 
-  TextOperationWithFilter(QueryExecutionContext *qec, const string& words,
+  TextOperationWithFilter(QueryExecutionContext* qec, const string& words,
                           size_t nofVars,
-                          const QueryExecutionTree *filterResult,
+                          const QueryExecutionTree* filterResult,
                           size_t filterColumn, size_t textLimit = 1);
 
   TextOperationWithFilter(const TextOperationWithFilter& other);
@@ -45,13 +45,16 @@ public:
 
   virtual size_t getSizeEstimate() const {
     if (_executionContext) {
-      // TODO: return a better estimate!
+      _executionContext->getIndex().getSizeEstimate(_words);
     }
     return size_t(10000 * 0.8);
   }
 
   virtual size_t getCostEstimate() const {
-    return getSizeEstimate() * _nofVars + _filterResult->getCostEstimate();
+    return static_cast<size_t>(getSizeEstimate() * _nofVars +
+           _filterResult->getSizeEstimate() * 2 *
+           HASH_MAP_OPERATION_COST_FACTOR +
+           _filterResult->getCostEstimate());
   }
 
   const string& getWordPart() const {
@@ -67,8 +70,8 @@ private:
   size_t _nofVars;
   size_t _textLimit;
 
-  QueryExecutionTree *_filterResult;
+  QueryExecutionTree* _filterResult;
   size_t _filterColumn;
 
-  virtual void computeResult(ResultTable *result) const;
+  virtual void computeResult(ResultTable* result) const;
 };

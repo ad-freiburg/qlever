@@ -60,7 +60,7 @@ class IndexScan : public Operation {
       _sizeEstimate = computeSizeEstimate();
     }
 
-  private:
+  protected:
     ScanType _type;
     string _subject;
     string _predicate;

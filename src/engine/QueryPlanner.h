@@ -11,7 +11,7 @@ using std::vector;
 
 class QueryPlanner {
 public:
-  explicit QueryPlanner(QueryExecutionContext *qec);
+  explicit QueryPlanner(QueryExecutionContext* qec);
 
   QueryExecutionTree createExecutionTree(const ParsedQuery& pq) const;
 
@@ -67,7 +67,7 @@ public:
     bool isTextNode(size_t i) const;
 
     vector<vector<size_t>> _adjLists;
-    std::unordered_map<size_t, Node *> _nodeMap;
+    std::unordered_map<size_t, Node*> _nodeMap;
     std::list<TripleGraph::Node> _nodeStorage;
 
     unordered_map<string, vector<size_t>> identifyTextCliques() const;
@@ -92,7 +92,7 @@ public:
 
   class SubtreePlan {
   public:
-    explicit SubtreePlan(QueryExecutionContext *qec) : _qet(qec) { }
+    explicit SubtreePlan(QueryExecutionContext* qec) : _qet(qec) { }
 
     QueryExecutionTree _qet;
     std::unordered_set<size_t> _idsOfIncludedNodes;
@@ -138,7 +138,7 @@ public:
   };
 
 private:
-  QueryExecutionContext *_qec;
+  QueryExecutionContext* _qec;
 
   static bool isVariable(const string& elem);
 
@@ -167,7 +167,8 @@ private:
   string getPruningKey(const SubtreePlan& plan, size_t orderedOnCol) const;
 
   void applyFiltersIfPossible(vector<SubtreePlan>& row,
-                              const vector<SparqlFilter>& filters) const;
+                              const vector<SparqlFilter>& filters,
+                              bool replaceInsteadOfAddPlans) const;
 
   vector<vector<SubtreePlan>> fillDpTab(const TripleGraph& graph,
                                         const vector<SparqlFilter>& fs) const;

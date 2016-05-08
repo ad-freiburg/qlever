@@ -390,36 +390,36 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
         }
         if (
             (a[i]._qet.getType() ==
-             QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER &&
-             b[j]._qet.getType() !=
-             QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER) ||
-            (a[i]._qet.getType() !=
-             QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER &&
+             QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER ||
              b[j]._qet.getType() ==
              QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER)) {
           // If one of the join results is a text operation without filter
           // also consider using the other one as filter and thus
           // turning this join into a text operation with filter, instead,
-          const SubtreePlan& textPlan = a[i]._qet.getType() ==
-                                        QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER
-                                        ? a[i] : b[j];
-          const SubtreePlan& otherPlan = a[i]._qet.getType() ==
-                                         QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER
-                                         ? b[j] : a[i];
-          size_t otherPlanJc = a[i]._qet.getType() ==
-                               QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER
-                               ? jcs[0][1] : jcs[0][0];
+          bool aTextOp = true;
+          // If both are TextOps, the smaller one will be used as filter.
+          if (a[i]._qet.getType() !=
+              QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER ||
+              (b[j]._qet.getType() ==
+               QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER &&
+               b[j]._qet.getSizeEstimate() > a[i]._qet.getSizeEstimate())) {
+            aTextOp = false;
+          }
+          const SubtreePlan& textPlan = aTextOp ? a[i] : b[j];
+          const SubtreePlan& filterPlan = aTextOp ? b[j] : a[i];
+          size_t otherPlanJc = aTextOp ? jcs[0][1] : jcs[0][0];
           SubtreePlan plan(_qec);
-          plan._idsOfIncludedNodes = otherPlan._idsOfIncludedNodes;
+          plan._idsOfIncludedNodes = filterPlan._idsOfIncludedNodes;
           plan._idsOfIncludedNodes.insert(
               *textPlan._idsOfIncludedNodes.begin());
+          plan._idsOfIncludedFilters = filterPlan._idsOfIncludedFilters;
           QueryExecutionTree tree(_qec);
           // Subtract 1 for variables.size() for the context var.
           const TextOperationWithoutFilter& noFilter =
               *static_cast<const TextOperationWithoutFilter*>(textPlan._qet.getRootOperation());
           TextOperationWithFilter textOp(_qec, noFilter.getWordPart(),
-                                         noFilter.getNofVars(), &otherPlan._qet,
-                                         otherPlanJc);
+                                         noFilter.getNofVars(),
+                                         &filterPlan._qet, otherPlanJc);
           tree.setOperation(
               QueryExecutionTree::OperationType::TEXT_WITH_FILTER,
               &textOp);
@@ -433,18 +433,18 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
             if (it->first == cvar ||
                 it->first == string("SCORE(") + cvar + ")") {
               vcmap[it->first] = it->second;
-            } else if (otherPlan._qet.getVariableColumnMap().count(it->first) ==
-                       0) {
+            } else if (
+                filterPlan._qet.getVariableColumnMap().count(it->first) == 0) {
               vcmap[it->first] = colN++;
             }
           }
           assert(colN == textPlan._qet.getResultWidth() - 1);
-          for (auto it = otherPlan._qet.getVariableColumnMap().begin();
-               it != otherPlan._qet.getVariableColumnMap().end(); ++it) {
+          for (auto it = filterPlan._qet.getVariableColumnMap().begin();
+               it != filterPlan._qet.getVariableColumnMap().end(); ++it) {
             vcmap[it->first] = colN + it->second;
           }
           tree.setVariableColumns(vcmap);
-          tree.setContextVars(otherPlan._qet.getContextVars());
+          tree.setContextVars(filterPlan._qet.getContextVars());
           tree.addContextVar(cvar);
           plan._qet = tree;
           candidates[getPruningKey(plan, jcs[0][0])].emplace_back(plan);
@@ -502,22 +502,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
         minIndex = i;
       }
     }
-    if (it->second.size() > 1) {
-      LOG(DEBUG) << "PRUNING SOMETHING AWAY. TREES:" << std::endl;
-      for (size_t i = 0; i < it->second.size(); ++i) {
-        if (it->second[i].getCostEstimate() < minCost) {
-          LOG(DEBUG) << it->second[i]._qet.asString() << std::endl;
-          LOG(DEBUG) << "cost: " << it->second[i].getCostEstimate() <<
-                     std::endl;
-        }
-      }
-    }
-
-
     prunedPlans.push_back(it->second[minIndex]);
   }
-
-
   return prunedPlans;
 }
 
@@ -616,17 +602,42 @@ string QueryPlanner::getPruningKey(const QueryPlanner::SubtreePlan& plan,
   for (size_t ind : orderedIncludedNodes) {
     os << ' ' << ind;
   }
+
+  os << " f: ";
+  std::set<size_t> orderedFilters;
+  orderedFilters.insert(plan._idsOfIncludedFilters.begin(),
+                        plan._idsOfIncludedFilters.end());
+  for (size_t ind : orderedFilters) {
+    os << ' ' << ind;
+  }
   return os.str();
 }
 
 // _____________________________________________________________________________
 void QueryPlanner::applyFiltersIfPossible(
     vector<QueryPlanner::SubtreePlan>& row,
-    const vector<SparqlFilter>& filters) const {
+    const vector<SparqlFilter>& filters,
+    bool replace) const {
   // Apply every filter possible.
   // It is possible when,
   // 1) the filter has not already been applied
   // 2) all variables in the filter are covered by the query so far
+  // New 06 May 2016:
+  // There is a problem with the so-called (name may be changed)
+  // TextOperationWithFilter ops: This method applies SPARQL filters
+  // to all the leaf TextOperations (when feasible) and thus
+  // prevents the special case from being applied when subtrees are merged.
+  // Fix: Also copy plans without applying the filter.
+  // Problem: If the method gets called multiple times, plans with filters
+  // May be duplicated. To prevent this, calling code has to ensure
+  // That the method is only called once on each row.
+  // Similarly this affects the (albeit rare) fact that a filter is directly
+  // applicable after a scan of a huge relation where a subsequent
+  // join with a small result could be translated into one or more scans
+  // directly.
+  // This also helps with cases where applying the filter later is better.
+  // Finally, the replace flag can be set to enforce that all filters are applied.
+  // This should be done for the last row in the DPTab so that no filters are missed.
   for (size_t n = 0; n < row.size(); ++n) {
     const auto& plan = row[n];
     for (size_t i = 0; i < filters.size(); ++i) {
@@ -648,7 +659,11 @@ void QueryPlanner::applyFiltersIfPossible(
         tree.setOperation(QueryExecutionTree::FILTER, &filter);
         tree.setContextVars(plan._qet.getContextVars());
         newPlan._qet = tree;
-        row[n] = newPlan;
+        if (replace) {
+          row[n] = newPlan;
+        } else {
+          row.push_back(newPlan);
+        }
       }
     }
   }
@@ -661,7 +676,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
 
   vector<vector<SubtreePlan>> dpTab;
   dpTab.emplace_back(seedWithScansAndText(tg));
-  applyFiltersIfPossible(dpTab.back(), filters);
+  applyFiltersIfPossible(dpTab.back(), filters, tg._nodeMap.size() == 1);
 
   for (size_t k = 2; k <= tg._nodeMap.size(); ++k) {
     dpTab.emplace_back(vector<SubtreePlan>());
@@ -669,7 +684,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(),
                           newPlans.end());
-      applyFiltersIfPossible(dpTab.back(), filters);
+      applyFiltersIfPossible(dpTab.back(), filters, k == tg._nodeMap.size());
     }
   }
   return dpTab;

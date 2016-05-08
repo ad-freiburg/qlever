@@ -26,7 +26,7 @@ public:
   virtual size_t getResultWidth() const;
 
   virtual size_t resultSortedOn() const {
-    // TODO: rethink when implemented.
+    // unsorted, obtained from iterating over hashmap.
     return std::numeric_limits<size_t>::max();
   }
 
@@ -36,7 +36,7 @@ public:
 
   virtual size_t getSizeEstimate() const {
     if (_executionContext) {
-      // TODO: return a better estimate!
+      _executionContext->getIndex().getSizeEstimate(_words);
     }
     return 10000;
   }

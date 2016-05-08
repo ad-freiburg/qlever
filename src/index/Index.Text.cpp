@@ -1297,6 +1297,28 @@ void Index::getECListForWordsAndSubtrees(
   }
 }
 
+// _____________________________________________________________________________
+size_t Index::getSizeEstimate(const string& words) const {
+  size_t minElLength = std::numeric_limits<size_t>::max();
+  auto terms = ad_utility::split(words, ' ');
+  for (size_t i = 0; i < terms.size(); ++i) {
+    IdRange range;
+    if (terms[i].back() == PREFIX_CHAR) {
+      _textVocab.getIdRangeForFullTextPrefix(terms[i], &range);
+    } else {
+      _textVocab.getId(terms[i], &range._first);
+      range._last = range._first;
+    }
+    auto tbmd = _textMeta.getBlockInfoByWordRange(range._first, range._last);
+    if (minElLength > tbmd._entityCl._nofElements) {
+      minElLength = tbmd._entityCl._nofElements;
+    }
+  }
+  return minElLength;
+}
+
+
+
 
 
 

@@ -1442,12 +1442,11 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     ScoreToContext& stc = it->second.second;
     Id rscore = it->second.first;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
-      Id cid = itt->second;
       const vector<Id>& keyEids = it->first;
       const FilterTab& filterRows = fMap.find(keyEids[0])->second;
       for (auto& fRow : filterRows) {
         RowType rRow;
-        fillTuple(cid, rscore, keyEids.begin() + 1, keyEids.end(), fRow.begin(),
+        fillTuple(itt->second, rscore, keyEids.begin() + 1, keyEids.end(), fRow.begin(),
                   fRow.end(), rRow);
         result.emplace_back(rRow);
       }

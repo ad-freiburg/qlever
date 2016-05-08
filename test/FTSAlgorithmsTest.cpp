@@ -659,6 +659,45 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
     ASSERT_EQ(0u, resW4[2][2]);
     ASSERT_EQ(1u, resW4[2][3]);
 
+    resW4.clear();
+    FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
+        cids, eids, scores, fMap1, nofVars, 2, resW4);
+    ASSERT_EQ(5u, resW4.size()); // 2x 1-1  2x 1-0   1x 1-2
+
+    std::sort(std::begin(resW4), std::end(resW4),
+              [](const array<Id, 4>& a, const array<Id, 4>& b) {
+                if (a[1] == b[1]) {
+                  if (a[2] == b[2]) {
+                    return a[0] < b[0];
+                  }
+                  return a[2] < b[2];
+                }
+                return a[1] > b[1];
+              });
+
+    ASSERT_EQ(1u, resW4[0][0]);
+    ASSERT_EQ(2u, resW4[0][1]);
+    ASSERT_EQ(0u, resW4[0][2]);
+    ASSERT_EQ(1u, resW4[0][3]);
+    ASSERT_EQ(2u, resW4[1][0]);
+    ASSERT_EQ(2u, resW4[1][1]);
+    ASSERT_EQ(0u, resW4[1][2]);
+    ASSERT_EQ(1u, resW4[1][3]);
+
+    ASSERT_EQ(1u, resW4[2][0]);
+    ASSERT_EQ(2u, resW4[2][1]);
+    ASSERT_EQ(1u, resW4[2][2]);
+    ASSERT_EQ(1u, resW4[2][3]);
+    ASSERT_EQ(2u, resW4[3][0]);
+    ASSERT_EQ(2u, resW4[3][1]);
+    ASSERT_EQ(1u, resW4[3][2]);
+    ASSERT_EQ(1u, resW4[3][3]);
+
+    ASSERT_EQ(2u, resW4[4][0]);
+    ASSERT_EQ(1u, resW4[4][1]);
+    ASSERT_EQ(2u, resW4[4][2]);
+    ASSERT_EQ(1u, resW4[4][3]);
+
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
