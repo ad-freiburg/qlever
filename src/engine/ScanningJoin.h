@@ -34,8 +34,6 @@ class ScanningJoin : public IndexScan {
     return _subtreeJoinCol;
   }
 
-  unordered_map<string, size_t> getVariableColumns() const;
-
   virtual void setTextLimit(size_t limit) {
     _subtree->setTextLimit(limit);
   }
@@ -52,4 +50,4 @@ private:
   QueryExecutionTree* _subtree;
   size_t _subtreeJoinCol;
   virtual void computeResult(ResultTable* result) const;
-}
+};

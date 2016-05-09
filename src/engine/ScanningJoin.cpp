@@ -40,20 +40,15 @@ ScanningJoin::~ScanningJoin() {
 
 // _____________________________________________________________________________
 string ScanningJoin::asString() const {
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
-  return "TODO";
+  std::ostringstream os;
+  os << "SCANNING JOIN for the result of " << _subtree << " on col " <<
+  _subtreeJoinCol << " and the equivalent of: " << IndexScan::asString();
+  return os.str();
 }
 
 // _____________________________________________________________________________
 size_t ScanningJoin::getResultWidth() const {
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
-  return IndexScan::getResultWidth();
-}
-
-// _____________________________________________________________________________
-unordered_map<string, size_t> ScanningJoin::getVariableColumns() const {
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
-  return std::unordered_map<std::__cxx11::string, size_t>();
+  return IndexScan::getResultWidth() - 1 + _subtree->getResultWidth();
 }
 
 // _____________________________________________________________________________
