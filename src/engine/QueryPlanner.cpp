@@ -86,9 +86,9 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
     for (auto& e : graphs) {
       tabsNoText.emplace_back(fillDpTab(e.first, e.second));
     }
-    finalTab = combineGraphsAtText(graphs, tabsNoText, contextVarToTextNodes,
-                                   filtersWithContextVars,
-                                   getTextLimit(pq._textLimit));
+ //   finalTab = combineGraphsAtText(graphs, tabsNoText, contextVarToTextNodes,
+//                                   filtersWithContextVars,
+  //                                 getTextLimit(pq._textLimit));
   }
 
   // If there is an order by clause, add another row to the table and
@@ -590,7 +590,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::combineGraphsAtText(
     // to one of the subgraphs.
     std::unordered_set<size_t> indicesOfAffectedGraphs;
     for (auto id : nodeIds) {
-      const Node& _
+//      const Node& _
     }
 
     // For all outside text, call the method to add outside text, first.

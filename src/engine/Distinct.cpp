@@ -60,7 +60,7 @@ void Distinct::computeResult(ResultTable* result) const {
   result->_nofColumns = subRes._nofColumns;
   switch (subRes._nofColumns) {
     case 1: {
-      typedef array<Id, 2> RT;
+      typedef array<Id, 1> RT;
       auto res = new vector<RT>();
       result->_fixedSizeData = res;
       getEngine().distinct(*static_cast<vector<RT>*>(subRes._fixedSizeData),
