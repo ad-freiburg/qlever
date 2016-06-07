@@ -1,0 +1,99 @@
+import argparse
+import sys
+import os
+import subprocess
+from subprocess import Popen
+
+__author__ = 'buchholb'
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument('--queryfile',
+                    type=str,
+                    help='One line per (standard) SPARQL query. TS specific transformations are made by the python script.',
+                    required=True)
+
+parser.add_argument('--index',
+                    type=str,
+                    help='Index to use.',
+                    required=True)
+
+parser.add_argument('binaries', metavar='B', type=str, nargs='+',
+                    help='binaries to use, always as two strings, one name and a path.')
+
+
+def expanded_to_my_syntax(q):
+    before_where, after_where = q.split('WHERE')
+    no_mod, mod = after_where.strip().split('}')
+    clauses = no_mod.strip('{').split('.')
+    new_clauses = []
+    context_to_words = {}
+    for c in clauses:
+        if '<word:' in c:
+            s, p, o = c.strip().split(' ')
+            if o not in context_to_words:
+                context_to_words[o] = []
+            context_to_words[o].append(s[6: -1])
+        else:
+            new_clauses.append(c)
+    for c, ws in context_to_words.iteritems():
+        new_clauses.append(' ' + c + ' <in-context> ' + ' '.join(ws) + ' ')
+    new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
+    return 'WHERE'.join([before_where, new_after_where])
+
+
+def get_query_times(query_file, binary, index):
+    with open('__tmp.myqueries', 'w') as tmpfile:
+        for line in open(query_file):
+            tmpfile.write(
+                expanded_to_my_syntax(line.strip().split('\t')[1]) + '\n')
+    myout = subprocess.check_output(
+        [binary, '-i', index, '-t', '--queryfile', '__tmp.myqueries'])
+    nof_output_lines = str(len(myout.split('\n')))
+    times = []
+    for line in myout.split('\n'):
+        i = line.find('Done. Time: ')
+        if i >= 0:
+            j = line.find('ms')
+            results.append(line[i + 12: j + 2])
+    os.remove('__tmp.myqueries')
+    return (nof_output_lines, times)
+
+
+def process_queries_and_print_stats(query_file, binaries, index):
+    queries = []
+    for line in open(query_file):
+        queries.append(line.strip())
+    th_titles = ['query']
+    results = []
+    for (name, path) in binaries:
+        th_titles.append(name + " nof_lines")
+        th_titles.append(name + " times")
+        r = get_query_times(query_file, path, index)
+        if len(r) != len(queries):
+            print 'PROBLEM PROCESSING: ' + name + ' WITH PATH: ' + path
+        results.append(r)
+    print '\t'.join(th_titles)
+    print '\t'.join(['----' * len(th_titles)])
+    for i in range(0, len(queries)):
+        line_strs = [queries[i]]
+        for res in results:
+            line_strs.append(res[i][0])
+            line_strs.append(res[i][1])
+        print '\t'.join(line_strs)
+
+
+def main():
+    args = vars(parser.parse_args())
+    queries = args['queryfile']
+    index = args['index']
+    arg_bins = args.binaries
+    assert len(arg_bins) % 2 == 0
+    binaries = []
+    for i in range(0, len(arg_bins) / 2):
+        binaries.append(arg_bins[2 * i], arg_bins[2 * i + 1])
+    process_queries_and_print_stats(queries, binaries, index)
+
+
+if __name__ == '__main__':
+    main()
