@@ -42,22 +42,33 @@ def expanded_to_my_syntax(q):
     return 'WHERE'.join([before_where, new_after_where])
 
 
-def get_query_times(query_file, binary, index):
+def get_query_times(query_file, name, binary, index):
     with open('__tmp.myqueries', 'w') as tmpfile:
         for line in open(query_file):
             tmpfile.write(
                 expanded_to_my_syntax(line.strip().split('\t')[1]) + '\n')
+    coutfile = open('__tmp.cout.' + name, 'w')
     myout = subprocess.check_output(
         [binary, '-i', index, '-t', '--queryfile', '__tmp.myqueries'])
+    coutfile.write(myout)
+    coutfile.write('\n\n\n\n')
     nof_output_lines = str(len(myout.split('\n')))
     times = []
+    nof_matches_no_limit = []
+    nof_matches_limit = []
     for line in myout.split('\n'):
         i = line.find('Done. Time: ')
         if i >= 0:
             j = line.find('ms')
-            results.append(line[i + 12: j + 2])
+            times.append(line[i + 12: j + 2])
+        i = line.find('Number of matches (no limit): ')
+        if i >= 0:
+            nof_matches_no_limit.append(line[i + 30:])
+            i = line.find('Number of matches (limit): ')
+        if i >= 0:
+            nof_matches_limit.append(line[i + 27:])
     os.remove('__tmp.myqueries')
-    return (nof_output_lines, times)
+    return zip(times, nof_matches_no_limit, nof_matches_limit)
 
 
 def process_queries_and_print_stats(query_file, binaries, index):
@@ -67,9 +78,10 @@ def process_queries_and_print_stats(query_file, binaries, index):
     th_titles = ['query']
     results = []
     for (name, path) in binaries:
-        th_titles.append(name + " nof_lines")
-        th_titles.append(name + " times")
-        r = get_query_times(query_file, path, index)
+        th_titles.append(name + "_times")
+        th_titles.append(name + "_nof_matches_no_limit")
+        th_titles.append(name + "_nof_matches_limit")
+        r = get_query_times(query_file, name, path, index)
         if len(r) != len(queries):
             print 'PROBLEM PROCESSING: ' + name + ' WITH PATH: ' + path
         results.append(r)
@@ -80,6 +92,7 @@ def process_queries_and_print_stats(query_file, binaries, index):
         for res in results:
             line_strs.append(res[i][0])
             line_strs.append(res[i][1])
+            line_strs.append(res[i][2])
         print '\t'.join(line_strs)
 
 
@@ -87,11 +100,11 @@ def main():
     args = vars(parser.parse_args())
     queries = args['queryfile']
     index = args['index']
-    arg_bins = args.binaries
+    arg_bins = args['binaries']
     assert len(arg_bins) % 2 == 0
     binaries = []
     for i in range(0, len(arg_bins) / 2):
-        binaries.append(arg_bins[2 * i], arg_bins[2 * i + 1])
+        binaries.append((arg_bins[2 * i], arg_bins[2 * i + 1]))
     process_queries_and_print_stats(queries, binaries, index)
 
 

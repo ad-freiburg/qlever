@@ -435,18 +435,6 @@ void Engine::join(const A& a, size_t jc1, const B& b, size_t jc2,
     return;
   }
 
-  LOG(TRACE) << "First A row: ";
-  for (size_t i = 0; i < a[0].size(); ++i) {
-    std::cout << a[0][i] << " ";
-  }
-  std::cout << '\n';
-
-  LOG(TRACE) << "First B row: ";
-  for (size_t i = 0; i < b[0].size(); ++i) {
-    std::cout << b[0][i] << " ";
-  }
-  std::cout << '\n';
-
   // Cast away constness so we can add sentinels that will be removed
   // in the end and create and add those sentinels.
   A& l1 = const_cast<A&>(a);
@@ -499,11 +487,6 @@ void Engine::join(const A& a, size_t jc1, const B& b, size_t jc2,
   result->resize(result->size() - 1);
 
   LOG(DEBUG) << "Join done.\n";
-  LOG(TRACE) << "First result row: ";
-  for (size_t i = 0; i < (*result)[0].size(); ++i) {
-    std::cout << (*result)[0][i] << " ";
-  }
-  std::cout << '\n';
   LOG(DEBUG) << "Result: size = " << result->size() << "\n";
 }
 

@@ -26,21 +26,21 @@ using std::cerr;
 
 // Available options.
 struct option options[] = {
-    {"queryfile", required_argument, NULL, 'q'},
-    {"interactive", no_argument, NULL, 'I'},
-    {"index", required_argument, NULL, 'i'},
-    {"text", no_argument, NULL, 't'},
-    {NULL, 0, NULL, 0}
+    {"queryfile",   required_argument, NULL, 'q'},
+    {"interactive", no_argument,       NULL, 'I'},
+    {"index",       required_argument, NULL, 'i'},
+    {"text",        no_argument,       NULL, 't'},
+    {NULL, 0,                          NULL, 0}
 };
 
-void processQuery(QueryExecutionContext& qec, const string &query);
+void processQuery(QueryExecutionContext& qec, const string& query);
 
 // Main function.
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   cout.sync_with_stdio(false);
   std::cout << std::endl << EMPH_ON
-      << "SparqlEngineMain, version " << __DATE__
-      << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
+  << "SparqlEngineMain, version " << __DATE__
+  << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
 
   char* locale = setlocale(LC_CTYPE, "en_US.utf8");
   cout << "Set locale LC_CTYPE to: " << locale << endl;
@@ -76,9 +76,9 @@ int main(int argc, char **argv) {
         break;
       default:
         cout << endl
-            << "! ERROR in processing options (getopt returned '" << c
-            << "' = 0x" << std::setbase(16) << c << ")"
-            << endl << endl;
+        << "! ERROR in processing options (getopt returned '" << c
+        << "' = 0x" << std::setbase(16) << c << ")"
+        << endl << endl;
         exit(1);
     }
   }
@@ -126,17 +126,17 @@ int main(int argc, char **argv) {
         processQuery(qec, line);
       }
     }
-  } catch (const std::exception &e) {
+  } catch (const std::exception& e) {
     cout << string("Caught exceptions: ") + e.what();
     return 1;
-  } catch (ad_semsearch::Exception &e) {
+  } catch (ad_semsearch::Exception& e) {
     cout << e.getFullErrorMessage() << std::endl;
   }
 
   return 0;
 }
 
-void processQuery(QueryExecutionContext& qec, const string &query) {
+void processQuery(QueryExecutionContext& qec, const string& query) {
   ad_utility::Timer t;
   t.start();
   SparqlParser sp;
@@ -151,7 +151,7 @@ void processQuery(QueryExecutionContext& qec, const string &query) {
   size_t limit = MAX_NOF_ROWS_IN_RESULT;
   size_t offset = 0;
   if (pq._limit.size() > 0) {
-     limit = static_cast<size_t>(atol(pq._limit.c_str()));
+    limit = static_cast<size_t>(atol(pq._limit.c_str()));
   }
   if (pq._offset.size() > 0) {
     offset = static_cast<size_t>(atol(pq._offset.c_str()));
@@ -159,4 +159,8 @@ void processQuery(QueryExecutionContext& qec, const string &query) {
   qet.writeResultToStream(cout, pq._selectedVariables, limit, offset);
   t.stop();
   std::cout << "\nDone. Time: " << t.usecs() / 1000.0 << " ms\n";
+  std::cout << "\nNumber of matches (no limit): " << qet.getResult().size() <<
+  "\n";
+  std::cout << "\nNumber of matches (limit): " <<
+  std::min(qet.getResult().size(), size_t(atoi(pq._limit.c_str()))) << "\n";
 }
