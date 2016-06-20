@@ -1,0 +1,24 @@
+semsearch_movies-starring-erykah-badu               $1 is-a Movie; $1 occurs-with appear*|acted|role*|star* $2; $2 equals Erykah_Badu
+semsearch_movies-starring-joe-frazier               $1 is-a Movie; $1 occurs-with appear*|acted|role*|star* $2; $2 equals Joe_Frazier
+semsearch_movies-starring-rafael-rosell             $1 is-a Movie; $1 occurs-with appear*|acted|role*|star* $2; $2 equals Rafael_Rosell
+semsearch_nations-portuguese-official-language      $1 is-a Country; $1 has-official-language $2; $2 equals Portuguese_language
+semsearch_orders-choirs-angels                      $1 is-a Angel; $1 occurs-with hierarchy angel*
+semsearch_permanent-members-un-security-council     $1 is-a Country; $1 occurs-with permanent member security council united nations
+semsearch_presidents-mount-rushmore-shooting        $1 is-a President; $1 occurs-with depict* mount rushmore; $1 occurs-with shooting
+semsearch_provinces-territories-canada              $1 is-a Country; $1 occurs-with province|territory located $2; $2 equals Canada
+semsearch_ratt-albums                               $1 is-a Album; $1 occurs-with produc*|record*|publish* $2; $2 equals Ratt
+semsearch_republics-former-yugoslavia               $1 is-a Country; $1 occurs-with republic former $2; $2 equals Socialist_Federal_Republic_of_Yugoslavia
+semsearch_revolutionaries-1959-cuba                 $1 is-a Revolutionist; $1 occurs-with 1959 cuba*
+semsearch_standard-axioms-set-theory                $1 is-a Maxim; $1 occurs-with set theory
+semsearch_states-border-oklahoma                    $1 is-a Country; $1 occurs-with border $2; $2 equals Oklahoma
+semsearch_ten-ancient-greek-city-kingdoms-cyprus    $1 is-a City; $1 occurs-with greek ancient cyprus*
+semsearch_first-13-american-states                  $1 is-a Country; $1 occurs-with state united states america
+semsearch_four-companions-prophet                   $1 is-a Person; $1 occurs-with companion* islamic prophet
+semsearch_twelve-tribes-israel                      $1 is-a Tribe; $1 occurs-with twelve israel*
+semsearch_books-paul-of-tarsus                      $1 is-a Book; $1 occurs-with write*|wrote*|written -not $2; $2 equals Paul_of_Tarsus
+semsearch_languages-afghanistan                     $1 is-a Language; $1 occurs-with spoken|speak* afghanistan
+semsearch_tv-shows-thomas-jane                      $1 is-a Show_(Entertainment); $1 occurs-with appear*|role*|occur* $2; $2 equals Thomas_Jane
+semsearch_british-monarch-head-of-state             $1 is-a Country; $1 occurs-with monarch $2; $2 equals Elizabeth_II_of_the_United_Kingdom
+semsearch_jacki-weaver-spouses                      $1 is-a Person; $1 occurs-with spouse|marr* $2; $2 equals Jacki_Weaver
+semsearch_inventor-python                           $1 is-a Person; $1 occurs-with invent*|author python language
+semsearch_wonders-ancient-world                     $1 is-a Building; $1 occurs-with wonder* ancient world

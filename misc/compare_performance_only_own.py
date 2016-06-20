@@ -45,8 +45,11 @@ def expanded_to_my_syntax(q):
 def get_query_times(query_file, name, binary, index):
     with open('__tmp.myqueries', 'w') as tmpfile:
         for line in open(query_file):
-            tmpfile.write(
-                expanded_to_my_syntax(line.strip().split('\t')[1]) + '\n')
+            try:
+                tmpfile.write(expanded_to_my_syntax(line.strip().split('\t')[1]) + '\n')
+            except IndexError:
+                print("Problem with tabs in : " + line)
+                exit(1)
     coutfile = open('__tmp.cout.' + name, 'w')
     myout = subprocess.check_output(
         [binary, '-i', index, '-t', '--queryfile', '__tmp.myqueries']).decode(
@@ -91,7 +94,7 @@ def process_queries_and_print_stats(query_file, binaries, index):
         r = get_query_times(query_file, name, path, index)
         results.append(r)
     print('\t'.join(th_titles))
-    print('\t'.join(['----' * len(th_titles)]))
+    print('\t'.join(['----'] * len(th_titles)))
     for i in range(0, len(queries)):
         line_strs = [queries[i]]
         for res in results:

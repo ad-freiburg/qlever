@@ -11,19 +11,51 @@ simon_q10	SELECT ?x ?y ?z WHERE{ ?x <is-a> <Musical_Recording> . ?x <Recorded_by
 astronauts	SELECT ?p WHERE { ?p <is-a> <Astronaut> }
 persons_limit_100	SELECT ?p WHERE { ?p <is-a> <Person> } LIMIT 100
 plant_edible_leaves	SELECT DISTINCT ?p WHERE { ?p <is-a> <Plant> . ?p <in-context> ?c . <word:edible> <in-context> ?c . <word:leaves> <in-context> ?c }
-astro_walk_moon	SELECT DISTINCT ?p WHERE { ?p <is-a> <Astronaut> . ?p <in-context> ?c . <word:walk> <in-context> ?c . <word:moon> <in-context> ?c }
 beatles_siblings	SELECT DISTINCT ?p ?b WHERE { ?p <Sibling> ?b . ?b <Member_of> <The_Beatles> . FILTER(?p != ?b) }
 tallest_building_text	SELECT DISTINCT ?b WHERE { ?b <is-a> <Building> . ?b <in-context> ?c . <word:tallest> <in-context> ?c }
 dd_persons	SELECT DISTINCT ?p WHERE { ?p <is-a> <Person> . ?p <in-context> ?c . <word:drug> <in-context> ?c . <word:death> <in-context> ?c }
-arab_states_p_gulf	SELECT DISTINCT ?p WHERE { ?p <is-a> <Country> . ?p <in-context> ?c . <word:arab> <in-context> ?c . <word:states> <in-context> ?c . <word:persian> <in-context> ?c . <word:gulf> <in-context> ?c }
 people_born_in_europe_limit100	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> } LIMIT 100
 people_born_in_europe_limit100_offset100	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> } LIMIT 100 OFFSET 100
 people_born_in_europe_limit100_offset200k	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> } LIMIT 100 OFFSET 200000
 music_friend_athlete_limit1000	SELECT DISTINCT ?p ?s WHERE { ?p <is-a> <Musician> . ?s <is-a> <Athlete> . ?p <in-context> ?c . ?s <in-context> ?c . <word:friend> <in-context> ?c . FILTER(?p != ?s) } LIMIT 1000
 polit_friend_scient_mhp	SELECT DISTINCT ?p ?s WHERE { ?p <is-a> <Politician> . ?s <is-a> <Scientist> . ?p <in-context> ?c . ?s <in-context> ?c . <word:friend> <in-context> ?c . ?s <in-context> ?c2 . <word:manhattan> <in-context> ?c2 . <word:project> <in-context> ?c2 . FILTER(?p != ?s) }
-person_comp*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . ?c <in-context> comp* }
-person_extrarythmic	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . ?c <in-context> extrarythmic }
 csci_algorithm	SELECT ?x WHERE { ?x <is-a> <Computer_scientist> . ?x <in-context> ?c . ?c <in-context> algorithm }
 csci_doping	SELECT ?x WHERE { ?x <is-a> <Computer_scientist> . ?x <in-context> ?c . ?c <in-context> doping }
 csci_comp*	SELECT ?x WHERE { ?x <is-a> <Computer_scientist> . ?x <in-context> ?c . ?c <in-context> comp* }
+csci_computer	SELECT ?x WHERE { ?x <is-a> <Computer_scientist> . ?x <in-context> ?c . ?c <in-context> computer }
 csci_trspassing	SELECT ?x WHERE { ?x <is-a> <Computer_scientist> . ?x <in-context> ?c . ?c <in-context> trespassing }
+person_comp*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . ?c <in-context> comp* }
+person_company	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . ?c <in-context> company }
+person_extrav	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . ?c <in-context> extrav }
+semsearch_apollo-astronauts-walked-moon	SELECT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . ?c <in-context> walk* moon . ?x <Space_Mission> ?m . ?m <Space_program> <Apollo_program> }
+semsearch_apollo-astronauts-walked-moon.norel	SELECT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . ?c <in-context> walk* moon . ?x <in-context> ?c2 . ?c2 <in-context> apollo }
+semsearch_arab-states-persian-gulf	SELECT ?x WHERE { ?x <is-a> <Country> . ?x <in-context> ?c . ?c <in-context> arab state persian gulf }
+semsearch_astronauts-landed-moon	SELECT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . ?c <in-context> landed moon }
+semsearch_axis-powers-world-war-II	SELECT ?x WHERE { ?x <is-a> <Country> . ?x <in-context> ?c . ?c <in-context> axis power <World_War_II> }
+semsearch_boroughs-new-york-city	SELECT ?x WHERE { ?x <is-a> <Location> . ?x <in-context> ?c . ?c <in-context> borough <New_York> }
+semsearch_branches-us-military	SELECT ?x WHERE { ?x <is-a> <Organisation> . ?x <in-context> ?c . ?c <in-context> branch united states military }
+semsearch_continents-in-the-world	SELECT ?x WHERE { ?x <is-a> <Continent> }
+semsearch_nicole-kidman-siblings	SELECT ?x WHERE { ?x <Sibling> <Nicole_Kidman> }
+semsearch_nicole-kidman-siblings.norel	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . ?c <in-context> sibling <Nicole_Kidman> }
+semsearch_dioceses-church-of-ireland	SELECT ?x WHERE { ?x <Organisation> <Church_of_Ireland> }
+semsearch_dioceses-church-of-ireland.norel	SELECT ?x WHERE { ?x <is-a> <Organisation> <Religious Jurisdiction> . ?x <in-context> ?c . ?c <in-context> diocese <Church_of_Ireland> }
+semsearch_first-targets-of-the-atomic-bomb	SELECT ?x WHERE { ?x <is-a> <Location> . ?x <in-context> ?c . ?c <in-context> target atomic bomb }
+semsearch_five-great-epics-tamil-literature	SELECT ?x WHERE { ?x <is-a> <Writting_Work> . ?x <in-context> ?c . ?c <in-context> tamil epic }
+semsearch_gods-dwelt-mount-olympus	SELECT ?x WHERE { ?x <is-a> <Deity> . ?x <in-context> ?c . ?c <in-context> mount olympus }
+semsearch_henry-iis-brothers-and-sisters	SELECT ?x WHERE { ?x <Sibling> <Henry_II_of_England> }
+semsearch_henry-iis-brothers-and-sisters.norel	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . ?c <in-context> sibling <Henry_II_of_England> }
+semsearch_hijackers-september-11	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . ?c <in-context> hijacker september 11 attacks }
+semsearch_houses-russian-parliament	SELECT ?x WHERE { <Federal_Assembly> <Component_bodies> ?x}
+semsearch_houses-russian-parliament.norel	SELECT ?x WHERE { ?x <is-a> <Governmental_Body> . ?x <in-context> ?c . ?c <in-context> house russian parliament }
+semsearch_john-lennon-parents	SELECT ?x WHERE { <John_Lennon> <Parent> ?x }
+semsearch_john-lennon-parents.norel	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . ?c <in-context> parent <John_Lennon> }
+semsearch_kenyas-captain-cricket	SELECT ?x WHERE { ?x <is-a> <Cricketer> . ?x <in-context> ?c . ?c <in-context> captain* kenya* }
+semsearch_kublai-khan-siblings	SELECT ?x WHERE { ?x <Sibling> <Kublai_Khan> }
+semsearch_kublai-khan-siblings.norel	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . ?c <in-context> sibling <Kublai_Khan> }
+semsearch_lilly-allen-parents	SELECT ?x WHERE { <Lilly_Allen> <Parent> ?x }
+semsearch_lilly-allen-parents.norel	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . ?c <in-context> parent <Lilly_Allen> }
+semsearch_major-leagues-united-states	SELECT ?x WHERE { ?x <is-a> <Sports_Association> . ?x <in-context> ?c . ?c <in-context> major league <United_States_of_America> }
+semsearch_matt-berry-tv-series	SELECT ?x WHERE { ?e <Series> ?x . <Matt_Berry> <TV_episode_performance> ?e }
+semsearch_matt-berry-tv-series.norel	SELECT ?x WHERE { ?x <is-a> <TV_Programme> . ?x <in-context> ?c . ?c <in-context> matt berry }
+semsearch_members-u2	SELECT ?x WHERE { ?x <Member_of> <U2> }
+semsearch_members-u2.norel	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . ?c <in-context> member* <U2> }
