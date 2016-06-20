@@ -99,12 +99,12 @@ int main(int argc, char** argv) {
     QueryExecutionContext qec(index, engine);
 
     if (queryfile == "") {
-      cout << "No queryfile provided, switching to interactive mode.." << endl;
+      cout << "No query file provided, switching to interactive mode.." << endl;
       interactive = true;
     }
 
     if (interactive) {
-      cout << "Interactive mode... ingnoring query." << endl << endl;
+      cout << "Interactive mode... ignoring query." << endl << endl;
       while (true) {
         std::ostringstream os;
         string line;
