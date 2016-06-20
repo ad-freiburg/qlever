@@ -36,7 +36,7 @@ def expanded_to_my_syntax(q):
             context_to_words[o].append(s[6: -1])
         else:
             new_clauses.append(c)
-    for c, ws in context_to_words.iteritems():
+    for c, ws in context_to_words.items():
         new_clauses.append(' ' + c + ' <in-context> ' + ' '.join(ws) + ' ')
     new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
     return 'WHERE'.join([before_where, new_after_where])
@@ -49,7 +49,8 @@ def get_query_times(query_file, name, binary, index):
                 expanded_to_my_syntax(line.strip().split('\t')[1]) + '\n')
     coutfile = open('__tmp.cout.' + name, 'w')
     myout = subprocess.check_output(
-        [binary, '-i', index, '-t', '--queryfile', '__tmp.myqueries'])
+        [binary, '-i', index, '-t', '--queryfile', '__tmp.myqueries']).decode(
+        'utf-8')
     coutfile.write(myout)
     coutfile.write('\n\n\n\n')
     nof_output_lines = str(len(myout.split('\n')))
@@ -64,11 +65,17 @@ def get_query_times(query_file, name, binary, index):
         i = line.find('Number of matches (no limit): ')
         if i >= 0:
             nof_matches_no_limit.append(line[i + 30:])
-            i = line.find('Number of matches (limit): ')
+        i = line.find('Number of matches (limit): ')
         if i >= 0:
             nof_matches_limit.append(line[i + 27:])
     os.remove('__tmp.myqueries')
-    return zip(times, nof_matches_no_limit, nof_matches_limit)
+    queries = []
+    for line in open(query_file):
+        queries.append(line.strip())
+    if len(times) != len(queries) or len(times) != len(
+            nof_matches_no_limit) or len(times) != len(nof_matches_limit):
+        print('PROBLEM PROCESSING: ' + name + ' WITH PATH: ' + path)
+    return list(zip(times, nof_matches_no_limit, nof_matches_limit))
 
 
 def process_queries_and_print_stats(query_file, binaries, index):
@@ -80,20 +87,18 @@ def process_queries_and_print_stats(query_file, binaries, index):
     for (name, path) in binaries:
         th_titles.append(name + "_times")
         th_titles.append(name + "_nof_matches_no_limit")
-        th_titles.append(name + "_nof_matches_limit")
+        #th_titles.append(name + "_nof_matches_limit")
         r = get_query_times(query_file, name, path, index)
-        if len(r) != len(queries):
-            print 'PROBLEM PROCESSING: ' + name + ' WITH PATH: ' + path
         results.append(r)
-    print '\t'.join(th_titles)
-    print '\t'.join(['----' * len(th_titles)])
+    print('\t'.join(th_titles))
+    print('\t'.join(['----' * len(th_titles)]))
     for i in range(0, len(queries)):
         line_strs = [queries[i]]
         for res in results:
             line_strs.append(res[i][0])
             line_strs.append(res[i][1])
-            line_strs.append(res[i][2])
-        print '\t'.join(line_strs)
+            #line_strs.append(res[i][2])
+        print('\t'.join(line_strs))
 
 
 def main():
@@ -103,7 +108,7 @@ def main():
     arg_bins = args['binaries']
     assert len(arg_bins) % 2 == 0
     binaries = []
-    for i in range(0, len(arg_bins) / 2):
+    for i in range(0, len(arg_bins) // 2):
         binaries.append((arg_bins[2 * i], arg_bins[2 * i + 1]))
     process_queries_and_print_stats(queries, binaries, index)
 
