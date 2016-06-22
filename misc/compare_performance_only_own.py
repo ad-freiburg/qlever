@@ -30,7 +30,11 @@ def expanded_to_my_syntax(q):
     context_to_words = {}
     for c in clauses:
         if '<word:' in c:
-            s, p, o = c.strip().split(' ')
+            try:
+                s, p, o = c.strip().split(' ')
+            except ValueError:
+                print("Problem in : " + c)
+                exit(1)
             if o not in context_to_words:
                 context_to_words[o] = []
             context_to_words[o].append(s[6: -1])
@@ -56,7 +60,6 @@ def get_query_times(query_file, name, binary, index):
         'utf-8')
     coutfile.write(myout)
     coutfile.write('\n\n\n\n')
-    nof_output_lines = str(len(myout.split('\n')))
     times = []
     nof_matches_no_limit = []
     nof_matches_limit = []
@@ -71,13 +74,13 @@ def get_query_times(query_file, name, binary, index):
         i = line.find('Number of matches (limit): ')
         if i >= 0:
             nof_matches_limit.append(line[i + 27:])
-    os.remove('__tmp.myqueries')
+    #os.remove('__tmp.myqueries')
     queries = []
     for line in open(query_file):
         queries.append(line.strip())
     if len(times) != len(queries) or len(times) != len(
             nof_matches_no_limit) or len(times) != len(nof_matches_limit):
-        print('PROBLEM PROCESSING: ' + name + ' WITH PATH: ' + path)
+        print('PROBLEM PROCESSING: ' + name + ' WITH PATH: ' + binary)
     return list(zip(times, nof_matches_no_limit, nof_matches_limit))
 
 
