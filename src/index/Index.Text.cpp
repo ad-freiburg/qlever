@@ -505,22 +505,30 @@ void Index::getContextListForWords(const string& words,
 // _____________________________________________________________________________
 void Index::getWordPostingsForTerm(const string& term, vector<Id>& cids,
                                    vector<Score>& scores) const {
+  assert(term.size() > 0);
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
   IdRange idRange;
+  bool entityTerm = (term[0] == '<' && term.back() == '>');
   if (term[term.size() - 1] == PREFIX_CHAR) {
     if (!_textVocab.getIdRangeForFullTextPrefix(term, &idRange)) {
       LOG(INFO) << "Prefix: " << term << " not in vocabulary\n";
       return;
     }
   } else {
-    if (!_textVocab.getId(term, &idRange._first)) {
+    if (entityTerm) {
+      if (!_vocab.getId(term, &idRange._first)) {
+        LOG(INFO) << "Term: " << term << " not in entity vocabulary\n";
+        return;
+      }
+    } else if (!_textVocab.getId(term, &idRange._first)) {
       LOG(INFO) << "Term: " << term << " not in vocabulary\n";
       return;
     }
     idRange._last = idRange._first;
   }
-  const auto& tbmd = _textMeta.getBlockInfoByWordRange(idRange._first,
-                                                       idRange._last);
+  const auto& tbmd = entityTerm ? _textMeta.getBlockInfoByEntityId(
+      idRange._first) : _textMeta.getBlockInfoByWordRange(idRange._first,
+                                                          idRange._last);
   if (tbmd._cl.hasMultipleWords() && !(tbmd._firstWordId == idRange._first &&
                                        tbmd._lastWordId == idRange._last)) {
     vector<Id> blockCids;
@@ -576,6 +584,8 @@ void Index::getContextEntityScoreListsForWords(const string& words,
     // Take all other words and get word posting lists for them.
     // Intersect all and keep the entity word ids.
     size_t useElFromTerm = getIndexOfBestSuitedElTerm(terms);
+    LOG(TRACE) << "Best term to take entity list from: " <<
+               terms[useElFromTerm] << std::endl;
 
     if (terms.size() == 2) {
       // Special case of two terms: no k-way intersect needed.
@@ -744,21 +754,29 @@ template void Index::getFilteredECListForWords(
 void Index::getEntityPostingsForTerm(const string& term, vector<Id>& cids,
                                      vector<Id>& eids,
                                      vector<Score>& scores) const {
+  LOG(DEBUG) << "Getting entity postings for term: " << term << '\n';
   IdRange idRange;
-  if (term[term.size() - 1] == PREFIX_CHAR) {
+  bool entityTerm = (term[0] == '<' && term.back() == '>');
+  if (term.back() == PREFIX_CHAR) {
     LOG(INFO) << "Prefix: " << term << " not in vocabulary\n";
     if (!_textVocab.getIdRangeForFullTextPrefix(term, &idRange)) {
       return;
     }
   } else {
-    if (!_textVocab.getId(term, &idRange._first)) {
-      LOG(INFO) << "Term: " << term << " not in vocabulary\n";
+    if (entityTerm) {
+      if (!_vocab.getId(term, &idRange._first)) {
+        LOG(DEBUG) << "Term: " << term << " not in entity vocabulary\n";
+        return;
+      }
+    } else if (!_textVocab.getId(term, &idRange._first)) {
+      LOG(DEBUG) << "Term: " << term << " not in vocabulary\n";
       return;
     }
     idRange._last = idRange._first;
   }
-  const auto& tbmd = _textMeta.getBlockInfoByWordRange(idRange._first,
-                                                       idRange._last);
+  const auto& tbmd = entityTerm ? _textMeta.getBlockInfoByEntityId(
+      idRange._first) : _textMeta.getBlockInfoByWordRange(idRange._first,
+                                                          idRange._last);
 
   if (!tbmd._cl.hasMultipleWords() || (tbmd._firstWordId == idRange._first &&
                                        tbmd._lastWordId == idRange._last)) {
@@ -1073,14 +1091,27 @@ size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
   // pick the one with the smallest EL block to be read.
   std::vector<std::tuple<size_t, bool, size_t>> toBeSorted;
   for (size_t i = 0; i < terms.size(); ++i) {
+    bool entityTerm = (terms[i][0] == '<' && terms[i].back() == '>');
     IdRange range;
     if (terms[i].back() == PREFIX_CHAR) {
       _textVocab.getIdRangeForFullTextPrefix(terms[i], &range);
     } else {
-      _textVocab.getId(terms[i], &range._first);
+      if (entityTerm) {
+        if (!_vocab.getId(terms[i], &range._first)) {
+          LOG(DEBUG) << "Term: " << terms[i] << " not in entity vocabulary\n";
+          return i;
+        } else {
+
+        }
+      } else if (!_textVocab.getId(terms[i], &range._first)) {
+        LOG(DEBUG) << "Term: " << terms[i] << " not in vocabulary\n";
+        return i;
+      }
       range._last = range._first;
     }
-    auto tbmd = _textMeta.getBlockInfoByWordRange(range._first, range._last);
+    const auto& tbmd = entityTerm ? _textMeta.getBlockInfoByEntityId(
+        range._first) : _textMeta.getBlockInfoByWordRange(range._first,
+                                                          range._last);
     toBeSorted.emplace_back(
         std::make_tuple(i, tbmd._firstWordId == tbmd._lastWordId,
                         tbmd._entityCl._nofElements));
@@ -1303,13 +1334,24 @@ size_t Index::getSizeEstimate(const string& words) const {
   auto terms = ad_utility::split(words, ' ');
   for (size_t i = 0; i < terms.size(); ++i) {
     IdRange range;
+    bool entityTerm = (terms[i][0] == '<' && terms[i].back() == '>');
     if (terms[i].back() == PREFIX_CHAR) {
       _textVocab.getIdRangeForFullTextPrefix(terms[i], &range);
     } else {
-      _textVocab.getId(terms[i], &range._first);
+      if (entityTerm) {
+        if (!_vocab.getId(terms[i], &range._first)) {
+          LOG(DEBUG) << "Term: " << terms[i] << " not in entity vocabulary\n";
+          return 0;
+        }
+      } else if (!_textVocab.getId(terms[i], &range._first)) {
+        LOG(DEBUG) << "Term: " << terms[i] << " not in vocabulary\n";
+        return 0;
+      }
       range._last = range._first;
     }
-    auto tbmd = _textMeta.getBlockInfoByWordRange(range._first, range._last);
+    const auto& tbmd = entityTerm ? _textMeta.getBlockInfoByEntityId(
+        range._first) : _textMeta.getBlockInfoByWordRange(range._first,
+                                                          range._last);
     if (minElLength > tbmd._entityCl._nofElements) {
       minElLength = tbmd._entityCl._nofElements;
     }

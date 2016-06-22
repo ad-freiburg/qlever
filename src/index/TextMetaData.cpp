@@ -58,7 +58,7 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByEntityId(
   size_t index = static_cast<size_t>(it - _blockUpperBoundEntityIds.begin())
                  + _blockUpperBoundWordIds.size();
   assert(eid == _blocks[index]._lastWordId);
-  assert(eid >= _blocks[index]._firstWordId);
+  assert(eid == _blocks[index]._firstWordId);
   return _blocks[index];
 }
 
