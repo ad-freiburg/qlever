@@ -35,8 +35,8 @@ TEST(QueryPlannerTest, createTripleGraph) {
       auto tg = qp.createTripleGraph(pq);
       ASSERT_EQ(
           "0 {s: ?x, p: ?p, o: <X>} : (1, 2)\n"
-          "1 {s: ?x, p: ?p2, o: <Y>} : (0)\n"
-          "2 {s: <X>, p: ?p, o: <Y>} : (0)",
+              "1 {s: ?x, p: ?p2, o: <Y>} : (0)\n"
+              "2 {s: <X>, p: ?p, o: <Y>} : (0)",
           tg.asString());
     }
 
@@ -259,7 +259,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
         tg.collapseTextCliques();
         ASSERT_EQ(
             "0 {TextOP for ?c2, wordPart: \"xx\"} : (1)\n"
-            "1 {TextOP for ?c, wordPart: \"abc\"} : (0, 2)\n"
+                "1 {TextOP for ?c, wordPart: \"abc\"} : (0, 2)\n"
                 "2 {s: ?x, p: <p>, o: <X>} : (1)",
             tg.asString());
         ASSERT_EQ(2ul, tg._nodeMap[0]->_variables.size());
@@ -599,6 +599,7 @@ TEST(QueryExecutionTreeTest, testBooksGermanAwardNomAuth) {
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_GT(qet.asString().size(), 0);
     // Just check that ther is no exception, here.
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
@@ -620,15 +621,21 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
     QueryPlanner::TripleGraph tg = qp.createTripleGraph(pq);
     ASSERT_EQ(1u, tg._nodeMap.find(0)->second->_variables.size());
     QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ("{JOIN(\n"
-                  "\t{SCAN POS with P = \"<is-a>\", "
-                  "O = \"<Plant>\" | width: 1} [0]\n"
-                  "\t|X|\n"
-                  "\t{SORT {TEXT OPERATION FOR ENTITIES: "
-                  "co-occurrence with words: "
-                  "\"edible leaves\" with textLimit = 5 | width: 3} on 0 "
-                  "| width: 3} [0]\n) | width: 3}",
-              qet.asString());
+    ASSERT_EQ(
+        "{TEXT OPERATION WITH FILTER: co-occurrence with words: "
+            "\"edible leaves\" and 1 variables with textLimit = 5 "
+            "filtered by {SCAN POS with P = \"<is-a>\", O = \"<Plant>\" "
+            "| width: 1} on column 0 | width: 3}",
+        qet.asString());
+    // ASSERT_EQ("{JOIN(\n"
+    //              "\t{SCAN POS with P = \"<is-a>\", "
+    //              "O = \"<Plant>\" | width: 1} [0]\n"
+    //              "\t|X|\n"
+    //              "\t{SORT {TEXT OPERATION FOR ENTITIES: "
+    //              "co-occurrence with words: "
+    //              "\"edible leaves\" with textLimit = 5 | width: 3} on 0 "
+    //              "| width: 3} [0]\n) | width: 3}",
+    //          qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -646,9 +653,9 @@ TEST(QueryExecutionTreeTest, testTextQuerySE) {
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ("{TEXT OPERATION FOR CONTEXTS: "
-                  "co-occurrence with words: "
-                  "\"search engine\" with textLimit = 1 | width: 2}",
+    ASSERT_EQ("{TEXT OPERATION WITHOUT FILTER: co-occurrence with words: "
+                  "\"search engine\" and 0 variables with textLimit = 1 "
+                  "| width: 2}",
               qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
@@ -673,18 +680,28 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ("{JOIN(\n\t"
-                  "{SCAN POS with P = \"<Contained_by>\", O = \"<Europe>\" | width: 1} [0]"
-                  "\n\t|X|\n\t"
-                  "{SORT {JOIN(\n\t"
-                  "{SCAN PSO with P = \"<Place_of_birth>\" | width: 2} [0]"
-                  "\n\t|X|\n\t"
-                  "{SORT {TEXT OPERATION FOR ENTITIES: co-occurrence with words: "
-                  "\"cocaine\" with textLimit = 1 | width: 3} on 0 "
-                  "| width: 3} [0]\n) | width: 4} "
-                  "on 1 | width: 4} [1]\n) | width: 4}",
-              qet.asString());
-    ASSERT_EQ(0u, qet.getVariableColumn("?y"));
+    ASSERT_EQ(
+        "{TEXT OPERATION WITH FILTER: co-occurrence with words: "
+            "\"cocaine\" and 1 variables with textLimit = 1 "
+            "filtered by {JOIN(\n\t{SCAN POS with P = \"<Contained_by>\", "
+            "O = \"<Europe>\" | width: 1} [0]\n"
+            "\t|X|\n\t{SCAN POS with P = \"<Place_of_birth>\" "
+            "| width: 2} [0]\n) | width: 2} on column 1 | width: 4}",
+        qet.asString());
+//    ASSERT_EQ("{JOIN(\n\t"
+//                  "{SCAN POS with P = \"<Contained_by>\", O = \"<Europe>\" | width: 1} [0]"
+//                  "\n\t|X|\n\t"
+//                  "{SORT {JOIN(\n\t"
+//                  "{SCAN PSO with P = \"<Place_of_birth>\" | width: 2} [0]"
+//                  "\n\t|X|\n\t"
+//                  "{SORT {TEXT OPERATION FOR ENTITIES: co-occurrence with words: "
+//                  "\"cocaine\" with textLimit = 1 | width: 3} on 0 "
+//                  "| width: 3} [0]\n) | width: 4} "
+//                  "on 1 | width: 4} [1]\n) | width: 4}",
+//              qet.asString());
+    ASSERT_EQ(0u, qet.getVariableColumn("?c"));
+    ASSERT_EQ(1u, qet.getVariableColumn("SCORE(?c)"));
+    ASSERT_EQ(2u, qet.getVariableColumn("?y"));
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -707,10 +724,10 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ("{TEXT OPERATION FOR ENTITIES: co-occurrence with words: "
-                  "\"friend*\"\n"
-                  "\tand {SCAN POS with P = \"<is-a>\", O = \"<Politician>\" "
-                  "| width: 1} [0] with textLimit = 1 | width: 4}",
+    ASSERT_EQ("{TEXT OPERATION WITH FILTER: co-occurrence with words: "
+                  "\"friend*\" and 2 variables with textLimit = 1 "
+                  "filtered by {SCAN POS with P = \"<is-a>\", "
+                  "O = \"<Politician>\" | width: 1} on column 0 | width: 4}",
               qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
@@ -736,20 +753,29 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ("{JOIN(\n\t"
-                  "{SCAN POS with P = \"<is-a>\", O = \"<Politician>\" | width: 1} [0]\n\t"
-                  "|X|\n\t"
-                  "{TEXT OPERATION FOR ENTITIES: co-occurrence with words: \"friend*\"\n\t"
-                  "and {JOIN(\n\t"
-                  "{SCAN POS with P = \"<is-a>\", O = \"<Scientist>\" | width: 1} [0]\n\t"
-                  "|X|\n\t"
-                  "{SORT {TEXT OPERATION FOR ENTITIES: "
-                  "co-occurrence with words: \"manhattan project\" "
-                  "with textLimit = 1 | width: 3} on 0 | width: 3} [0]\n) "
-                  "| width: 3} [0] with textLimit = 1 | width: 6} [0]\n) "
-                  "| width: 6}",
-              qet.asString());
-
+    ASSERT_EQ("{TEXT OPERATION WITH FILTER: co-occurrence with words: "
+                  "\"manhattan project\" and 1 variables with textLimit = 1 "
+                  "filtered by {JOIN(\n\t{SCAN POS with P = \"<is-a>\", "
+                  "O = \"<Scientist>\" | width: 1} [0]\n"
+                  "\t|X|\n\t{SORT {TEXT OPERATION WITH FILTER: "
+                  "co-occurrence with words: \"friend*\" and "
+                  "2 variables with textLimit = 1 filtered by "
+                  "{SCAN POS with P = \"<is-a>\", O = \"<Politician>\" "
+                  "| width: 1} on column 0 | width: 4} on 2 | width: 4} [2]\n) "
+                  "| width: 4} on column 0 | width: 6}", qet.asString());
+//    ASSERT_EQ("{JOIN(\n\t"
+//                  "{SCAN POS with P = \"<is-a>\", O = \"<Politician>\" | width: 1} [0]\n\t"
+//                  "|X|\n\t"
+//                  "{TEXT OPERATION FOR ENTITIES: co-occurrence with words: \"friend*\"\n\t"
+//                  "and {JOIN(\n\t"
+//                  "{SCAN POS with P = \"<is-a>\", O = \"<Scientist>\" | width: 1} [0]\n\t"
+//                  "|X|\n\t"
+//                  "{SORT {TEXT OPERATION FOR ENTITIES: "
+//                  "co-occurrence with words: \"manhattan project\" "
+//                  "with textLimit = 1 | width: 3} on 0 | width: 3} [0]\n) "
+//                  "| width: 3} [0] with textLimit = 1 | width: 6} [0]\n) "
+//                  "| width: 6}",
+//              qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -760,8 +786,7 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
 }
 
 
-
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

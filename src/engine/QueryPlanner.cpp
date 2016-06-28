@@ -10,8 +10,6 @@
 #include "OrderBy.h"
 #include "Distinct.h"
 #include "Filter.h"
-#include "TextOperationForEntities.h"
-#include "TextOperationForContexts.h"
 #include "TextOperationWithoutFilter.h"
 #include "TextOperationWithFilter.h"
 
@@ -76,15 +74,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   // Cycles have to be avoided (by previously removing a triple and using it
   // as a filter later on).
 
-  // Deal with pure text queries
-  if (tg.isPureTextQuery()) {
-    SubtreePlan plan = pureTextQuery(tg);
-    vector<SubtreePlan> oneElementRow;
-    oneElementRow.emplace_back(plan);
-    finalTab.emplace_back(oneElementRow);
-  } else {
-    finalTab = fillDpTab(tg, pq._filters);
-  }
+  finalTab = fillDpTab(tg, pq._filters);
+
 
   // If there is an order by clause, add another row to the table and
   // just add an order by / sort to every previous result if needed.
@@ -688,22 +679,6 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     }
   }
   return dpTab;
-}
-
-// _____________________________________________________________________________
-QueryPlanner::SubtreePlan QueryPlanner::pureTextQuery(
-    const TripleGraph& tg) const {
-  QueryExecutionTree textSubtree(_qec);
-  TextOperationForContexts textOp(_qec, tg._nodeStorage.begin()->_wordPart, 1);
-  textSubtree.setOperation(QueryExecutionTree::TEXT_FOR_CONTEXTS, &textOp);
-  textSubtree.setVariableColumn(tg._nodeStorage.begin()->_cvar, 0);
-  textSubtree.setVariableColumn(
-      string("SCORE(") + tg._nodeStorage.begin()->_cvar + ")", 1);
-  textSubtree.addContextVar(tg._nodeStorage.begin()->_cvar);
-  SubtreePlan textPlan(_qec);
-  textPlan._qet = textSubtree;
-  textPlan._idsOfIncludedNodes.insert(0);
-  return textPlan;
 }
 
 // _____________________________________________________________________________

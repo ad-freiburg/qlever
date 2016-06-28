@@ -173,8 +173,6 @@ private:
   vector<vector<SubtreePlan>> fillDpTab(const TripleGraph& graph,
                                         const vector<SparqlFilter>& fs) const;
 
-  SubtreePlan pureTextQuery(const TripleGraph& tg) const;
-
   size_t getTextLimit(const string& textLimitString) const;
 
   SubtreePlan getTextLeafPlan(const TripleGraph::Node& node) const;

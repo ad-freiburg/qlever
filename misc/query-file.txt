@@ -28,6 +28,7 @@ person_comp*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:c
 person_company	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:company> <in-context> ?c }
 person_extrav	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:extrav> <in-context> ?c }
 fire_in_asian_city	SELECT ?ci ?p ?a WHERE { ?ci <is-a> <City/Town/Village> . ?ci <Contained_by> <Asia> . ?ci <in-context> ?c . <word:fire> <in-context> ?c . <word:destroyed> <in-context> ?c . ?ci <Population> ?p . ?ci <Nearby_airport> ?a }
+pure_text_database_research	SELECT ?c WHERE { <word:database> <in-context> ?c . <word:research> <in-context> ?c } LIMIT 100
 entity_ow_semantic_search	SELECT ?e WHERE { ?e <in-context> ?c . <word:semantic> <in-context> ?c . <word:search> <in-context> ?c }
 semsearch_apollo-astronauts-walked-moon.rel	SELECT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . <word:walk*> <in-context> ?c . <word:moon> <in-context> ?c . ?x <Space_Mission> ?m . ?m <Space_program> <Apollo_program> }
 semsearch_apollo-astronauts-walked-moon.text	SELECT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . <word:walk*> <in-context> ?c . <word:moon> <in-context> ?c . ?x <in-context> ?c2 . <word:apollo> <in-context> ?c2 }
