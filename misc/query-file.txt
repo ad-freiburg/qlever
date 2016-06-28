@@ -27,6 +27,8 @@ csci_trspassing	SELECT ?x WHERE { ?x <is-a> <Computer_scientist> . ?x <in-contex
 person_comp*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:comp*> <in-context> ?c }
 person_company	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:company> <in-context> ?c }
 person_extrav	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:extrav> <in-context> ?c }
+fire_in_asian_city	SELECT ?ci ?p ?a WHERE { ?ci <is-a> <City/Town/Village> . ?ci <Contained_by> <Asia> . ?ci <in-context> ?c . <word:fire> <in-context> ?c . <word:destroyed> <in-context> ?c . ?ci <Population> ?p . ?ci <Nearby_airport> ?a }
+entity_ow_semantic_search	SELECT ?e WHERE { ?e <in-context> ?c . <word:semantic> <in-context> ?c . <word:search> <in-context> ?c }
 semsearch_apollo-astronauts-walked-moon.rel	SELECT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . <word:walk*> <in-context> ?c . <word:moon> <in-context> ?c . ?x <Space_Mission> ?m . ?m <Space_program> <Apollo_program> }
 semsearch_apollo-astronauts-walked-moon.text	SELECT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . <word:walk*> <in-context> ?c . <word:moon> <in-context> ?c . ?x <in-context> ?c2 . <word:apollo> <in-context> ?c2 }
 semsearch_arab-states-persian-gulf	SELECT ?x WHERE { ?x <is-a> <Country> . ?x <in-context> ?c . <word:arab> <in-context> ?c . <word:state> <in-context> ?c . <word:persian> <in-context> ?c . <word:gulf> <in-context> ?c }
@@ -37,10 +39,10 @@ semsearch_branches-us-military	SELECT ?x WHERE { ?x <is-a> <Organization> . ?x <
 semsearch_continents-in-the-world	SELECT ?x WHERE { ?x <is-a> <Continent> }
 semsearch_nicole-kidman-siblings.rel	SELECT ?x WHERE { ?x <Sibling> <Nicole_Kidman> }
 semsearch_nicole-kidman-siblings.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:sibling> <in-context> ?c . <Nicole_Kidman> <in-context> ?c }
-semsearch_dioceses-church-of-ireland.rel	SELECT ?x WHERE { ?x <Organization> <Church_of_Ireland> }
-semsearch_dioceses-church-of-ireland.text	SELECT ?x WHERE { ?x <is-a> <Organization> <Religious Jurisdiction> . ?x <in-context> ?c . <word:diocese> <in-context> ?c . <Church_of_Ireland> <in-context> ?c }
+semsearch_dioceses-church-of-ireland.rel	SELECT ?x WHERE { ?x <Organisation> <Church_of_Ireland> }
+semsearch_dioceses-church-of-ireland.text	SELECT ?x WHERE { ?x <is-a> <Religious Jurisdiction> . ?x <in-context> ?c . <word:diocese> <in-context> ?c . <Church_of_Ireland> <in-context> ?c }
 semsearch_first-targets-of-the-atomic-bomb	SELECT ?x WHERE { ?x <is-a> <Location> . ?x <in-context> ?c . <word:target> <in-context> ?c . <word:atomic> <in-context> ?c . <word:bomb> <in-context> ?c }
-semsearch_five-great-epics-tamil-literature	SELECT ?x WHERE { ?x <is-a> <Writting_Work> . ?x <in-context> ?c . <word:tamil> <in-context> ?c . <word:epic> <in-context> ?c }
+semsearch_five-great-epics-tamil-literature	SELECT ?x WHERE { ?x <is-a> <Written_Work> . ?x <in-context> ?c . <word:tamil> <in-context> ?c . <word:epic> <in-context> ?c }
 semsearch_gods-dwelt-mount-olympus	SELECT ?x WHERE { ?x <is-a> <Deity> . ?x <in-context> ?c . <word:mount> <in-context> ?c . <word:olympus> <in-context> ?c }
 semsearch_henry-iis-brothers-and-sisters.rel	SELECT ?x WHERE { ?x <Sibling> <Henry_II_of_England> }
 semsearch_henry-iis-brothers-and-sisters.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:sibling> <in-context> ?c . <Henry_II_of_England> <in-context> ?c }
@@ -52,13 +54,13 @@ semsearch_john-lennon-parents.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in
 semsearch_kenyas-captain-cricket	SELECT ?x WHERE { ?x <is-a> <Cricketer> . ?x <in-context> ?c . <word:captain*> <in-context> ?c . <word:kenya*> <in-context> ?c }
 semsearch_kublai-khan-siblings.rel	SELECT ?x WHERE { ?x <Sibling> <Kublai_Khan> }
 semsearch_kublai-khan-siblings.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:sibling> <in-context> ?c . <Kublai_Khan> <in-context> ?c }
-semsearch_lilly-allen-parents.rel	SELECT ?x WHERE { <Lilly_Allen> <Parent> ?x }
-semsearch_lilly-allen-parents.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:parent*> <in-context> ?c . <Lilly_Allen> <in-context> ?c }
+semsearch_lilly-allen-parents.rel	SELECT ?x WHERE { <Lily_Allen> <Parent> ?x }
+semsearch_lilly-allen-parents.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:parent*> <in-context> ?c . <Lily_Allen> <in-context> ?c }
 semsearch_major-leagues-united-states	SELECT ?x WHERE { ?x <is-a> <Sports_Association> . ?x <in-context> ?c . <word:major> <in-context> ?c . <word:league> <in-context> ?c . <United_States_of_America> <in-context> ?c }
 semsearch_matt-berry-tv-series.rel	SELECT ?x WHERE { ?e <Series> ?x . <Matt_Berry> <TV_episode_performance> ?e }
 semsearch_matt-berry-tv-series.text	SELECT ?x WHERE { ?x <is-a> <TV_Programme> . ?x <in-context> ?c . <word:matt> <in-context> ?c . <word:berry> <in-context> ?c }
 semsearch_members-u2.rel	SELECT ?x WHERE { ?x <Member_of> <U2> }
-semsearch_members-u2.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:member*> <in-context> ?c . <U2> <in-context> ?c }
+semsearch_members-u2.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:member*> <in-context> ?c . <word:u2> <in-context> ?c }
 semsearch_movies-starring-erykah-badu.rel	SELECT ?x WHERE { <Erykah_Badu> <Film_performance> ?x }
 semsearch_movies-starring-erykah-badu.text	SELECT ?x WHERE { ?x <is-a> <Film> . ?x <in-context> ?c . <word:appear*> <in-context> ?c . <Erykah_Badu> <in-context> ?c }
 semsearch_movies-starring-joe-frazier.rel 	SELECT ?x WHERE { <Joe_Frazier> <Film_performance> ?x }
@@ -81,8 +83,8 @@ semsearch_four-companions-prophet	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-
 semsearch_twelves-tribes-israel	SELECT ?x WHERE { ?x <is-a> <Location> . ?x <in-context> ?c . <word:twelve> <in-context> ?c . <word:tribes> <in-context> ?c . <word:israel> <in-context> ?c }
 semsearch_books-paul-of-tarsus	SELECT ?x WHERE { ?x <is-a> <Book> . ?x <in-context> ?c . <word:paul> <in-context> ?c . <word:tarsus> <in-context> ?c }
 semsearch_languages-afghanistan	SELECT ?x WHERE { ?x <is-a> <Human_Language> . ?x <in-context> ?c . <word:afghanistan> <in-context> ?c }
-semsearch_tv-shows-thomas-jane	SELECT ?x WHERE { ?x <is-a> <TV_Programme> . ?x <in-context> ?c . <Thomas_Jane> <in-context> ?c }
+semsearch_tv-shows-thomas-jane	SELECT ?x WHERE { ?x <is-a> <TV_Program> . ?x <in-context> ?c . <Thomas_Jane> <in-context> ?c }
 semsearch_british-monarch-head-of-state	SELECT ?x WHERE { ?x <is-a> <Country> . ?x <in-context> ?c . <word:head> <in-context> ?c . <word:state> <in-context> ?c . <word:british> <in-context> ?c . <word:monarch> <in-context> ?c }
 semsearch_jacki-weaver-spouses	SELECT ?x WHERE { ?x <Spouse_(or_domestic_partner)> <Jacki_Weaver> }
-semsearch_inventor-python	SELECT ?x WHERE { <Python_(Programming_Language> <Developer> ?x }
+semsearch_inventor-python	SELECT ?x WHERE { <Python_(Programming_Language)> <Developer> ?x }
 semsearch_wonders-ancient-world	SELECT ?x WHERE { ?x <is-a> <Structure> . ?x <in-context> ?c . <word:wonder*> <in-context> ?c . <word:ancient> <in-context> ?c . <word:world> <in-context> ?c }

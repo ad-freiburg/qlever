@@ -36,7 +36,7 @@ public:
 
   virtual size_t getSizeEstimate() const {
     if (_executionContext) {
-      _executionContext->getIndex().getSizeEstimate(_words);
+      return _executionContext->getIndex().getSizeEstimate(_words);
     }
     return 10000;
   }
