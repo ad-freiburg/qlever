@@ -70,25 +70,7 @@ void TextOperationForEntities::computeResultNoSubtrees(
     getExecutionContext()->getIndex().getECListForWords(
         _words,
         _textLimit,
-        reinterpret_cast<vector<array<Id, 3>> *>(result->_fixedSizeData));
-  } else if (_freeVars == 1) {
-    result->_fixedSizeData = new vector<array<Id, 4>>;
-    getExecutionContext()->getIndex().getECListForWords(
-        _words,
-        _textLimit,
-        reinterpret_cast<vector<array<Id, 4>> *>(result->_fixedSizeData));
-  } else if (_freeVars == 2) {
-    result->_fixedSizeData = new vector<array<Id, 5>>;
-    getExecutionContext()->getIndex().getECListForWords(
-        _words,
-        _textLimit,
-        reinterpret_cast<vector<array<Id, 5>> *>(result->_fixedSizeData));
-  } else {
-    getExecutionContext()->getIndex().getECListForWords(
-        _words,
-        _textLimit,
-        _freeVars,
-        result->_varSizeData);
+        *reinterpret_cast<vector<array<Id, 3>> *>(result->_fixedSizeData));
   }
 }
 

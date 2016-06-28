@@ -1,0 +1,3 @@
+semsearch_orders-choirs-angels                      $1 is-a Angel; $1 occurs-with hierarchy angel*			result entities not in freebase
+semsearch_provinces-territories-canada		SELECT ?x WHERE { ?x <is-a> <Canadian_Province> } UNION { ?x <is-a> <Canadian_Territory> }
+semsearch_standard-axioms-set-theory                $1 is-a Maxim; $1 occurs-with set theory 			result not in FB

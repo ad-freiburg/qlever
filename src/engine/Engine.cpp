@@ -48,6 +48,7 @@ void Engine::join(
     const vector<array<E, M>>& b,
     size_t joinColumn2,
     vector<array<E, (N + M - 1)>>* result) {
+  if (a.size() == 0 || b.size() == 0) { return; }
   if (joinColumn1 == 0) {
     if (joinColumn2 == 0) {
       doJoin<E, N, 0, M, 0>(a, b, result);

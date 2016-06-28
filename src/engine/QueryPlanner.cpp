@@ -10,11 +10,11 @@
 #include "OrderBy.h"
 #include "Distinct.h"
 #include "Filter.h"
-#include "TextOperationForEntities.h"
-#include "TextOperationForContexts.h"
+#include "TextOperationWithoutFilter.h"
+#include "TextOperationWithFilter.h"
 
 // _____________________________________________________________________________
-QueryPlanner::QueryPlanner(QueryExecutionContext *qec) : _qec(qec) { }
+QueryPlanner::QueryPlanner(QueryExecutionContext* qec) : _qec(qec) { }
 
 // _____________________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(
@@ -27,7 +27,6 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   // they share a variable.
 
   TripleGraph tg = createTripleGraph(pq);
-
 
   // Each node/triple corresponds to a scan (more than one way possible),
   // each edge corresponds to a possible join.
@@ -59,37 +58,24 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   // Copy made so that something can be added for cyclic queries.
   // tg.turnCyclesIntoFilters(filters);
 
-  // Split the graph at possible text operations.
-  vector<pair<TripleGraph, vector<SparqlFilter>>> graphs;
-  unordered_map<string, vector<size_t>> contextVarToTextNodes;
-  vector<SparqlFilter> filtersWithContextVars;
-  tg.splitAtText(pq._filters, graphs, contextVarToTextNodes,
-                 filtersWithContextVars);
-
+  // Text operations from cliques (all triples connected via the context cvar).
+  // Detect them and turn them into nodes with stored word part and
+  // edges to connected variables.
+  tg.collapseTextCliques();
   vector<vector<SubtreePlan>> finalTab;
-  if (graphs.size() == 0) {
-    SubtreePlan plan = pureTextQuery(tg, contextVarToTextNodes,
-                                     filtersWithContextVars,
-                                     getTextLimit(pq._textLimit));
-    vector<SubtreePlan> oneElementRow;
-    oneElementRow.emplace_back(plan);
-    finalTab.emplace_back(oneElementRow);
-  } else if (graphs.size() == 1) {
-    finalTab = fillDpTab(graphs[0].first, graphs[0].second);
-    if (contextVarToTextNodes.size() > 0) {
-      addOutsideText(finalTab, tg, contextVarToTextNodes,
-                     filtersWithContextVars,
-                     getTextLimit(pq._textLimit));
-    }
-  } else {
-    vector<vector<vector<SubtreePlan>>> tabsNoText;
-    for (auto& e : graphs) {
-      tabsNoText.emplace_back(fillDpTab(e.first, e.second));
-    }
- //   finalTab = combineGraphsAtText(graphs, tabsNoText, contextVarToTextNodes,
-//                                   filtersWithContextVars,
-  //                                 getTextLimit(pq._textLimit));
-  }
+
+  // Each text operation has two ways how it can be used.
+  // 1) As leave in the bottom row of the tab.
+  // According to the number of connected varibales, the operation creates
+  // a cross product with n entities that can be used in subsequent joins.
+  // 2) as intermediate unary (downwards) nodes in the execution tree.
+  // This is a bit similar to sorts: they can be applied after each step
+  // and will filter on one variable.
+  // Cycles have to be avoided (by previously removing a triple and using it
+  // as a filter later on).
+
+  finalTab = fillDpTab(tg, pq._filters);
+
 
   // If there is an order by clause, add another row to the table and
   // just add an order by / sort to every previous result if needed.
@@ -130,6 +116,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
     return distinctTree;
   }
 
+  lastRow[minInd]._qet.setTextLimit(getTextLimit(pq._textLimit));
   LOG(DEBUG) << "Done creating execution plan.\n";
   return lastRow[minInd]._qet;
 }
@@ -250,94 +237,122 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
 }
 
 // _____________________________________________________________________________
-vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScans(
+vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg) const {
   vector<SubtreePlan> seeds;
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
     const TripleGraph::Node& node = *tg._nodeMap.find(i)->second;
-    if (node._variables.size() == 0) {
-      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-               "Triples should have at least one variable. Not the case in: "
-               + node._triple.asString());
-    }
-
-    if (node._variables.size() == 1) {
-      // Just pick one direction, they should be equivalent.
-      SubtreePlan plan(_qec);
-      plan._idsOfIncludedNodes.insert(i);
-      QueryExecutionTree tree(_qec);
-      if (isVariable(node._triple._s)) {
-        IndexScan scan(_qec, IndexScan::ScanType::POS_BOUND_O);
-        scan.setPredicate(node._triple._p);
-        scan.setObject(node._triple._o);
-        scan.precomputeSizeEstimate();
-        tree.setOperation(QueryExecutionTree::OperationType::SCAN,
-                          &scan);
-        tree.setVariableColumn(node._triple._s, 0);
-      } else if (isVariable(node._triple._o)) {
-        IndexScan scan(_qec, IndexScan::ScanType::PSO_BOUND_S);
-        scan.setPredicate(node._triple._p);
-        scan.setSubject(node._triple._s);
-        scan.precomputeSizeEstimate();
-        tree.setOperation(QueryExecutionTree::OperationType::SCAN,
-                          &scan);
-        tree.setVariableColumn(node._triple._o, 0);
-      } else {
-        // Pred variable.
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                 "No predicate vars yet, please. Triple in question: "
+    if (node._cvar.size() > 0) {
+      seeds.push_back(getTextLeafPlan(node));
+    } else {
+      if (node._variables.size() == 0) {
+        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                 "Triples should have at least one variable. Not the case in: "
                  + node._triple.asString());
       }
-      plan._qet = tree;
-      seeds.push_back(plan);
-    }
-
-    if (node._variables.size() == 2) {
-      // Add plans for both possible scan directions.
-      if (isVariable(node._triple._p)) {
-        // Pred variable.
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                 "No predicate vars yet, please. Triple in question: "
-                 + node._triple.asString());
-      }
-      {
+      if (node._variables.size() == 1) {
+        // Just pick one direction, they should be equivalent.
         SubtreePlan plan(_qec);
         plan._idsOfIncludedNodes.insert(i);
         QueryExecutionTree tree(_qec);
-        IndexScan scan(_qec, IndexScan::ScanType::PSO_FREE_S);
-        scan.setPredicate(node._triple._p);
-        scan.precomputeSizeEstimate();
-        tree.setOperation(QueryExecutionTree::OperationType::SCAN,
-                          &scan);
-        tree.setVariableColumn(node._triple._s, 0);
-        tree.setVariableColumn(node._triple._o, 1);
+        if (isVariable(node._triple._s)) {
+          IndexScan scan(_qec, IndexScan::ScanType::POS_BOUND_O);
+          scan.setPredicate(node._triple._p);
+          scan.setObject(node._triple._o);
+          scan.precomputeSizeEstimate();
+          tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                            &scan);
+          tree.setVariableColumn(node._triple._s, 0);
+        } else if (isVariable(node._triple._o)) {
+          IndexScan scan(_qec, IndexScan::ScanType::PSO_BOUND_S);
+          scan.setPredicate(node._triple._p);
+          scan.setSubject(node._triple._s);
+          scan.precomputeSizeEstimate();
+          tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                            &scan);
+          tree.setVariableColumn(node._triple._o, 0);
+        } else {
+          // Pred variable.
+          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+                   "No predicate vars yet, please. Triple in question: "
+                   + node._triple.asString());
+        }
         plan._qet = tree;
         seeds.push_back(plan);
       }
-      {
-        SubtreePlan plan(_qec);
-        plan._idsOfIncludedNodes.insert(i);
-        QueryExecutionTree tree(_qec);
-        IndexScan scan(_qec, IndexScan::ScanType::POS_FREE_O);
-        scan.setPredicate(node._triple._p);
-        scan.precomputeSizeEstimate();
-        tree.setOperation(QueryExecutionTree::OperationType::SCAN,
-                          &scan);
-        tree.setVariableColumn(node._triple._o, 0);
-        tree.setVariableColumn(node._triple._s, 1);
-        plan._qet = tree;
-        seeds.push_back(plan);
-      }
-    }
 
-    if (node._variables.size() >= 3) {
-      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-               "Triples should have at most two variables. Not the case in: "
-               + node._triple.asString());
+      if (node._variables.size() == 2) {
+        // Add plans for both possible scan directions.
+        if (isVariable(node._triple._p)) {
+          // Pred variable.
+          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+                   "No predicate vars yet, please. Triple in question: "
+                   + node._triple.asString());
+        }
+        {
+          SubtreePlan plan(_qec);
+          plan._idsOfIncludedNodes.insert(i);
+          QueryExecutionTree tree(_qec);
+          IndexScan scan(_qec, IndexScan::ScanType::PSO_FREE_S);
+          scan.setPredicate(node._triple._p);
+          scan.precomputeSizeEstimate();
+          tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                            &scan);
+          tree.setVariableColumn(node._triple._s, 0);
+          tree.setVariableColumn(node._triple._o, 1);
+          plan._qet = tree;
+          seeds.push_back(plan);
+        }
+        {
+          SubtreePlan plan(_qec);
+          plan._idsOfIncludedNodes.insert(i);
+          QueryExecutionTree tree(_qec);
+          IndexScan scan(_qec, IndexScan::ScanType::POS_FREE_O);
+          scan.setPredicate(node._triple._p);
+          scan.precomputeSizeEstimate();
+          tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                            &scan);
+          tree.setVariableColumn(node._triple._o, 0);
+          tree.setVariableColumn(node._triple._s, 1);
+          plan._qet = tree;
+          seeds.push_back(plan);
+        }
+      }
+      if (node._variables.size() >= 3) {
+        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+                 "Triples should have at most two variables. Not the case in: "
+                 + node._triple.asString());
+      }
     }
   }
-
   return seeds;
+}
+
+// _____________________________________________________________________________
+QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
+    const QueryPlanner::TripleGraph::Node& node) const {
+  SubtreePlan plan(_qec);
+  plan._idsOfIncludedNodes.insert(node._id);
+  QueryExecutionTree tree(_qec);
+  AD_CHECK(node._wordPart.size() > 0);
+  // Subtract 1 for variables.size() for the context var.
+  TextOperationWithoutFilter textOp(_qec, node._wordPart,
+                                    node._variables.size() - 1);
+  tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
+                    &textOp);
+  unordered_map<string, size_t> vcmap;
+  size_t index = 0;
+  vcmap[node._cvar] = index++;
+  vcmap[string("SCORE(") + node._cvar + ")"] = index++;
+  for (const auto& var : node._variables) {
+    if (var != node._cvar) {
+      vcmap[var] = index++;
+    }
+  }
+  tree.setVariableColumns(vcmap);
+  tree.addContextVar(node._cvar);
+  plan._qet = tree;
+  return plan;
 }
 
 // _____________________________________________________________________________
@@ -363,6 +378,67 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
                    "Joins should happen on one variable only, for now. "
                        "No cyclic queries either, currently.");
+        }
+        if (
+            (a[i]._qet.getType() ==
+             QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER ||
+             b[j]._qet.getType() ==
+             QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER)) {
+          // If one of the join results is a text operation without filter
+          // also consider using the other one as filter and thus
+          // turning this join into a text operation with filter, instead,
+          bool aTextOp = true;
+          // If both are TextOps, the smaller one will be used as filter.
+          if (a[i]._qet.getType() !=
+              QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER ||
+              (b[j]._qet.getType() ==
+               QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER &&
+               b[j]._qet.getSizeEstimate() > a[i]._qet.getSizeEstimate())) {
+            aTextOp = false;
+          }
+          const SubtreePlan& textPlan = aTextOp ? a[i] : b[j];
+          const SubtreePlan& filterPlan = aTextOp ? b[j] : a[i];
+          size_t otherPlanJc = aTextOp ? jcs[0][1] : jcs[0][0];
+          SubtreePlan plan(_qec);
+          plan._idsOfIncludedNodes = filterPlan._idsOfIncludedNodes;
+          plan._idsOfIncludedNodes.insert(
+              *textPlan._idsOfIncludedNodes.begin());
+          plan._idsOfIncludedFilters = filterPlan._idsOfIncludedFilters;
+          QueryExecutionTree tree(_qec);
+          // Subtract 1 for variables.size() for the context var.
+          const TextOperationWithoutFilter& noFilter =
+              *static_cast<const TextOperationWithoutFilter*>(textPlan._qet.getRootOperation());
+          TextOperationWithFilter textOp(_qec, noFilter.getWordPart(),
+                                         noFilter.getNofVars(),
+                                         &filterPlan._qet, otherPlanJc);
+          tree.setOperation(
+              QueryExecutionTree::OperationType::TEXT_WITH_FILTER,
+              &textOp);
+          unordered_map<string, size_t> vcmap;
+          // Subtract one because the entity that we filtered on
+          // is provided by the filter table and still has the same place there.
+          size_t colN = 2;
+          string cvar = *textPlan._qet.getContextVars().begin();
+          for (auto it = textPlan._qet.getVariableColumnMap().begin();
+               it != textPlan._qet.getVariableColumnMap().end(); ++it) {
+            if (it->first == cvar ||
+                it->first == string("SCORE(") + cvar + ")") {
+              vcmap[it->first] = it->second;
+            } else if (
+                filterPlan._qet.getVariableColumnMap().count(it->first) == 0) {
+              vcmap[it->first] = colN++;
+            }
+          }
+          assert(colN == textPlan._qet.getResultWidth() - 1);
+          for (auto it = filterPlan._qet.getVariableColumnMap().begin();
+               it != filterPlan._qet.getVariableColumnMap().end(); ++it) {
+            vcmap[it->first] = colN + it->second;
+          }
+          tree.setVariableColumns(vcmap);
+          tree.setContextVars(filterPlan._qet.getContextVars());
+          tree.addContextVar(cvar);
+          plan._qet = tree;
+          candidates[getPruningKey(plan, jcs[0][0])].emplace_back(plan);
         }
         // Check if a sub-result has to be re-sorted
         // TODO: replace with HashJoin maybe (or add variant to possible plans).
@@ -419,8 +495,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
     }
     prunedPlans.push_back(it->second[minIndex]);
   }
-
-
   return prunedPlans;
 }
 
@@ -428,8 +502,13 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
 string QueryPlanner::TripleGraph::asString() const {
   std::ostringstream os;
   for (size_t i = 0; i < _adjLists.size(); ++i) {
-    os << i << " " << _nodeMap.find(i)->second->_triple.asString() <<
-    " : (";
+    if (_nodeMap.find(i)->second->_cvar.size() == 0) {
+      os << i << " " << _nodeMap.find(i)->second->_triple.asString() << " : (";
+    } else {
+      os << i << " {TextOP for " << _nodeMap.find(i)->second->_cvar <<
+      ", wordPart: \"" << _nodeMap.find(i)->second->_wordPart << "\"} : (";
+    }
+
     for (size_t j = 0; j < _adjLists[i].size(); ++j) {
       os << _adjLists[i][j];
       if (j < _adjLists[i].size() - 1) { os << ", "; }
@@ -514,17 +593,42 @@ string QueryPlanner::getPruningKey(const QueryPlanner::SubtreePlan& plan,
   for (size_t ind : orderedIncludedNodes) {
     os << ' ' << ind;
   }
+
+  os << " f: ";
+  std::set<size_t> orderedFilters;
+  orderedFilters.insert(plan._idsOfIncludedFilters.begin(),
+                        plan._idsOfIncludedFilters.end());
+  for (size_t ind : orderedFilters) {
+    os << ' ' << ind;
+  }
   return os.str();
 }
 
 // _____________________________________________________________________________
 void QueryPlanner::applyFiltersIfPossible(
     vector<QueryPlanner::SubtreePlan>& row,
-    const vector<SparqlFilter>& filters) const {
+    const vector<SparqlFilter>& filters,
+    bool replace) const {
   // Apply every filter possible.
   // It is possible when,
   // 1) the filter has not already been applied
   // 2) all variables in the filter are covered by the query so far
+  // New 06 May 2016:
+  // There is a problem with the so-called (name may be changed)
+  // TextOperationWithFilter ops: This method applies SPARQL filters
+  // to all the leaf TextOperations (when feasible) and thus
+  // prevents the special case from being applied when subtrees are merged.
+  // Fix: Also copy plans without applying the filter.
+  // Problem: If the method gets called multiple times, plans with filters
+  // May be duplicated. To prevent this, calling code has to ensure
+  // That the method is only called once on each row.
+  // Similarly this affects the (albeit rare) fact that a filter is directly
+  // applicable after a scan of a huge relation where a subsequent
+  // join with a small result could be translated into one or more scans
+  // directly.
+  // This also helps with cases where applying the filter later is better.
+  // Finally, the replace flag can be set to enforce that all filters are applied.
+  // This should be done for the last row in the DPTab so that no filters are missed.
   for (size_t n = 0; n < row.size(); ++n) {
     const auto& plan = row[n];
     for (size_t i = 0; i < filters.size(); ++i) {
@@ -546,7 +650,11 @@ void QueryPlanner::applyFiltersIfPossible(
         tree.setOperation(QueryExecutionTree::FILTER, &filter);
         tree.setContextVars(plan._qet.getContextVars());
         newPlan._qet = tree;
-        row[n] = newPlan;
+        if (replace) {
+          row[n] = newPlan;
+        } else {
+          row.push_back(newPlan);
+        }
       }
     }
   }
@@ -558,8 +666,8 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const vector<SparqlFilter>& filters) const {
 
   vector<vector<SubtreePlan>> dpTab;
-  dpTab.emplace_back(seedWithScans(tg));
-  applyFiltersIfPossible(dpTab.back(), filters);
+  dpTab.emplace_back(seedWithScansAndText(tg));
+  applyFiltersIfPossible(dpTab.back(), filters, tg._nodeMap.size() == 1);
 
   for (size_t k = 2; k <= tg._nodeMap.size(); ++k) {
     dpTab.emplace_back(vector<SubtreePlan>());
@@ -567,232 +675,10 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(),
                           newPlans.end());
-      applyFiltersIfPossible(dpTab.back(), filters);
+      applyFiltersIfPossible(dpTab.back(), filters, k == tg._nodeMap.size());
     }
   }
   return dpTab;
-}
-
-// _____________________________________________________________________________
-vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::combineGraphsAtText(
-    const TripleGraph& fullTg,
-    const vector<pair<TripleGraph, vector<SparqlFilter>>>& graphs,
-    const vector<vector<vector<QueryPlanner::SubtreePlan>>>& tabsNoText,
-    const unordered_map<string, vector<size_t>>& contextVarToTextNodes,
-    const vector<SparqlFilter>& filtersWithContextVars,
-    size_t textLimit) const {
-  // Go through all context vars.
-  for (auto it = contextVarToTextNodes.begin();
-       it != contextVarToTextNodes.end(); ++it) {
-    const auto& var = it->first;
-    const auto& nodeIds = it->second;
-    // Always check if a context connects two graphs or is outside text connected
-    // to one of the subgraphs.
-    std::unordered_set<size_t> indicesOfAffectedGraphs;
-    for (auto id : nodeIds) {
-//      const Node& _
-    }
-
-    // For all outside text, call the method to add outside text, first.
-
-    // For connecting text, always use a SubgraphCombiningTextOperation.
-  }
-
-
-
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TTODO");
-}
-
-// _____________________________________________________________________________
-void QueryPlanner::addOutsideText(
-    vector<vector<QueryPlanner::SubtreePlan>>& planTable,
-    const TripleGraph& tg,
-    const unordered_map<string, vector<size_t>>& cvarToTextNodes,
-    const vector<SparqlFilter>& textFilters,
-    size_t textLimit) const {
-  for (auto it = cvarToTextNodes.begin(); it != cvarToTextNodes.end(); ++it) {
-    addOutsideText(planTable, tg, it->first, it->second, textFilters,
-                   textLimit);
-  }
-}
-
-// _____________________________________________________________________________
-void QueryPlanner::addOutsideText(
-    vector<vector<QueryPlanner::SubtreePlan>>& planTable,
-    const TripleGraph& tg,
-    const string& cvar,
-    const vector<size_t>& cvarTextNodes,
-    const vector<SparqlFilter>& textFilters,
-    size_t textLimit) const {
-
-  string wordPart;
-  unordered_set<string> freeVars;
-  unordered_set<string> boundVars;
-
-  for (auto nodeId : cvarTextNodes) {
-    const auto& triple = tg._nodeMap.find(nodeId)->second->_triple;
-    if (isVariable(triple._s) && triple._s != cvar) {
-      if (planTable.back().begin()->_qet.varCovered(triple._s)) {
-        boundVars.insert(triple._s);
-      } else {
-        freeVars.insert(triple._s);
-      }
-    }
-    if (isVariable(triple._o) && triple._o != cvar) {
-      if (planTable.back().begin()->_qet.varCovered(triple._o)) {
-        boundVars.insert(triple._o);
-      } else {
-        freeVars.insert(triple._o);
-      }
-    }
-    if (!isVariable(triple._o)) {
-      if (wordPart.size() == 0) {
-        wordPart = triple._o;
-      } else {
-        // It is okay to just concat multiple parts because they refer to the
-        // same CONTEXT variable. i.e. co-occurrence of all triples within
-        // the same context is desired anyway.
-        // For different contexts, a different cvar would have been used.
-        wordPart += " " + triple._o;
-      }
-    }
-  }
-
-  if (wordPart.size() == 0) {
-    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-             "Need a word part for each text operation.");
-  }
-
-  AD_CHECK_GT(boundVars.size(), 0);
-  if (boundVars.size() > 1) {
-    // CASE: A cycle was broken:
-    // The dpTab so far computes the solution for the non-textual part.
-    // The text operation has to keep rows where all affected variables
-    // occur in the same context.
-    // Other than for connecting two graphs with a text operation, we
-    // do not have to build cross products for matches inside a context.
-    // We just filter and keep a subset of rows from the original table.
-    // This may include an additional free variable (case below).
-    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
-    // TODO: remember there may be free variables as well!
-    return;
-  }
-
-  // CASE: No cycle, 0 or some free variables in the same context.
-  // At least one variable is bound (otherwise we'd have text-only).
-  // Use TextOperationForEntities with 0 or more free variables.
-  // For each such free var, a full cross-product is built.
-  // Therefore, just remember the freeVars and proceed similar to the case
-  // With exactly one affected variable.
-
-
-  // Create a text operation for entities.
-  AD_CHECK_EQ(boundVars.size(), 1);
-  QueryExecutionTree textSubtree(_qec);
-  if (freeVars.size() == 0) {
-    TextOperationForEntities textOp(_qec, wordPart, textLimit);
-    textSubtree.setOperation(QueryExecutionTree::TEXT_FOR_ENTITIES, &textOp);
-    textSubtree.setVariableColumns(
-        createVariableColumnsMapForTextOperation(cvar,
-                                                 *boundVars.begin()));
-  } else {
-    TextOperationForEntities textOp(_qec, wordPart, textLimit, freeVars.size());
-    textSubtree.setOperation(QueryExecutionTree::TEXT_FOR_ENTITIES, &textOp);
-    textSubtree.setVariableColumns(
-        createVariableColumnsMapForTextOperation(
-            cvar, *boundVars.begin(), freeVars));
-  }
-  textSubtree.addContextVar(cvar);
-  // If there is no other part, we're done.
-  if (planTable.size() == 0) {
-    planTable.push_back(vector<SubtreePlan>());
-    SubtreePlan textPlan(_qec);
-    textPlan._qet = textSubtree;
-    textPlan._idsOfIncludedNodes.insert(cvarTextNodes.begin(),
-                                        cvarTextNodes.end());
-    planTable.back().push_back(textPlan);
-  } else {
-    // Otherwise, for each result make the combination.
-    planTable.push_back(vector<SubtreePlan>());
-    const auto& lastRow = planTable[planTable.size() - 2];
-    for (auto& plan : lastRow) {
-      SubtreePlan combinedPlan(_qec);
-      combinedPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
-      combinedPlan._idsOfIncludedNodes.insert(
-          cvarTextNodes.begin(), cvarTextNodes.end());
-      combinedPlan._idsOfIncludedFilters = plan._idsOfIncludedFilters;
-      // Make sure the rest is sorted by that variable.
-      QueryExecutionTree left(_qec);
-      if (plan._qet.resultSortedOn() ==
-          plan._qet.getVariableColumn(*boundVars.begin())) {
-        left = plan._qet;
-      } else {
-        // Create a sort operation.
-        Sort sort(_qec, plan._qet,
-                  plan._qet.getVariableColumn(*boundVars.begin()));
-        left.setVariableColumns(plan._qet.getVariableColumnMap());
-        left.setOperation(QueryExecutionTree::SORT, &sort);
-      }
-      QueryExecutionTree right(_qec);
-      Sort textSort(_qec, textSubtree,
-                    textSubtree.getVariableColumn(
-                        *boundVars.begin()));
-      right.setVariableColumns(textSubtree.getVariableColumnMap());
-      right.setOperation(QueryExecutionTree::SORT, &textSort);
-      // Join the text result and the rest.
-      Join join(_qec, left, right, left.resultSortedOn(),
-                right.resultSortedOn());
-      combinedPlan._qet.setOperation(QueryExecutionTree::JOIN, &join);
-      combinedPlan._qet.setVariableColumns(join.getVariableColumns());
-      combinedPlan._qet.setContextVars(left.getContextVars());
-      combinedPlan._qet.addContextVar(cvar);
-      planTable.back().emplace_back(combinedPlan);
-    }
-  }
-}
-
-// _____________________________________________________________________________
-QueryPlanner::SubtreePlan QueryPlanner::pureTextQuery(
-    const TripleGraph& tg,
-    const unordered_map<string, vector<size_t>>& cvarToTextNodes,
-    const vector<SparqlFilter>& textFilters,
-    size_t textLimit) const {
-  if (cvarToTextNodes.size() == 0) {
-    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-             "Appears to be an empoty query.");
-  }
-  if (cvarToTextNodes.size() != 1) {
-    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-             "Appears to be a disconnected query. "
-                 "Those are not supported (other than through union).");
-  }
-  string wordPart;
-  for (auto nodeId : cvarToTextNodes.begin()->second) {
-    const auto& triple = tg._nodeMap.find(nodeId)->second->_triple;
-    if (wordPart.size() == 0) {
-      wordPart = triple._o;
-    } else {
-      // It is okay to just concat multiple parts because they refer to the
-      // same CONTEXT variable. i.e. co-occurrence of all triples within
-      // the same context is desired anyway.
-      // For different contexts, a different cvar would have been used.
-      wordPart += " " + triple._o;
-    }
-  }
-
-  QueryExecutionTree textSubtree(_qec);
-  TextOperationForContexts textOp(_qec, wordPart, textLimit);
-  textSubtree.
-      setOperation(QueryExecutionTree::TEXT_FOR_CONTEXTS, &textOp
-  );
-  textSubtree.setVariableColumn(cvarToTextNodes.begin()->first, 0);
-  textSubtree.addContextVar(cvarToTextNodes.begin()->first);
-  SubtreePlan textPlan(_qec);
-  textPlan._qet = textSubtree;
-  textPlan._idsOfIncludedNodes.insert(
-      cvarToTextNodes.begin()->second.begin(),
-      cvarToTextNodes.begin()->second.end());
-  return textPlan;
 }
 
 // _____________________________________________________________________________
@@ -812,13 +698,10 @@ bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
           _nodeMap.find(i)->second->_triple._p == HAS_CONTEXT_RELATION);
 }
 
-
 // _____________________________________________________________________________
-void QueryPlanner::TripleGraph::splitAtText(
-    const vector<SparqlFilter>& origFilters,
-    vector<pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>>& subgraphs,
-    unordered_map<string, vector<size_t>>& contextVarToTextNodesIds,
-    vector<SparqlFilter>& filtersWithContextVars) const {
+unordered_map<string, vector<size_t>>
+QueryPlanner::TripleGraph::identifyTextCliques() const {
+  unordered_map<string, vector<size_t>> contextVarToTextNodesIds;
   std::set<string> contextVars;
   // Find all context vars.
   for (size_t i = 0; i < _adjLists.size(); ++i) {
@@ -859,16 +742,7 @@ void QueryPlanner::TripleGraph::splitAtText(
       }
     }
   }
-  vector<SparqlFilter> filtersWithoutContextVars;
-  for (auto& f : origFilters) {
-    if (contextVars.count(f._lhs) > 0 || contextVars.count(f._lhs) > 0) {
-      filtersWithContextVars.push_back(f);
-    } else {
-      filtersWithoutContextVars.push_back(f);
-    }
-  }
-  subgraphs = splitAtContextVars(filtersWithoutContextVars,
-                                 contextVarToTextNodesIds);
+  return contextVarToTextNodesIds;
 }
 
 
@@ -1009,6 +883,7 @@ QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
     if (keep.count(i) > 0) {
       _nodeStorage.push_back(*other._nodeMap.find(i)->second);
       idChange[i] = _nodeMap.size();
+      _nodeStorage.back()._id = _nodeMap.size();
       _nodeMap[idChange[i]] = &_nodeStorage.back();
     }
   }
@@ -1036,12 +911,14 @@ QueryPlanner::TripleGraph::TripleGraph(const TripleGraph& other)
 }
 
 // _____________________________________________________________________________
-void QueryPlanner::TripleGraph::operator=(const TripleGraph& other) {
+QueryPlanner::TripleGraph& QueryPlanner::TripleGraph::operator=(
+    const TripleGraph& other) {
   _adjLists = other._adjLists;
   for (auto it = other._nodeMap.begin(); it != other._nodeMap.end(); ++it) {
     _nodeStorage.push_back(*it->second);
     _nodeMap[it->first] = &_nodeStorage.back();
   }
+  return *this;
 }
 
 // _____________________________________________________________________________
@@ -1049,6 +926,113 @@ QueryPlanner::TripleGraph::TripleGraph() :
     _adjLists(), _nodeMap(), _nodeStorage() {
 
 }
+
+// _____________________________________________________________________________
+void QueryPlanner::TripleGraph::collapseTextCliques() {
+  // Create a map from context var to triples it occurs in (the cliques).
+  std::unordered_map<string, vector<size_t>> cvarsToTextNodes(
+      identifyTextCliques());
+  if (cvarsToTextNodes.size() == 0) { return; }
+  // Now turn each such clique into a new node the represents that whole
+  // text operation clique.
+  size_t id = 0;
+  vector<Node> textNodes;
+  unordered_map<size_t, size_t> removedNodeIds;
+  vector<std::set<size_t>> tnAdjSetsToOldIds;
+  for (auto it = cvarsToTextNodes.begin(); it != cvarsToTextNodes.end(); ++it) {
+    auto& cvar = it->first;
+    string wordPart;
+    vector<SparqlTriple> trips;
+    tnAdjSetsToOldIds.push_back(std::set<size_t>());
+    auto& adjNodes = tnAdjSetsToOldIds.back();
+    for (auto nid : it->second) {
+      removedNodeIds[nid] = id;
+      adjNodes.insert(_adjLists[nid].begin(), _adjLists[nid].end());
+      auto& triple = _nodeMap[nid]->_triple;
+      trips.push_back(triple);
+      if (triple._s == cvar && !isVariable(triple._o)) {
+        if (wordPart.size() > 0) {
+          wordPart += " ";
+        }
+        wordPart += triple._o;
+      }
+      if (triple._o == cvar && !isVariable(triple._s)) {
+        if (wordPart.size() > 0) {
+          wordPart += " ";
+        }
+        wordPart += triple._s;
+      }
+    }
+    textNodes.emplace_back(Node(id++, cvar, wordPart, trips));
+    assert(tnAdjSetsToOldIds.size() == id);
+  }
+
+  // Finally update the graph (node ids and adj lists).
+  vector<vector<size_t>> oldAdjLists = _adjLists;
+  std::list<TripleGraph::Node> oldNodeStorage = _nodeStorage;
+  _nodeStorage.clear();
+  _nodeMap.clear();
+  _adjLists.clear();
+  unordered_map<size_t, size_t> idMapOldToNew;
+  unordered_map<size_t, size_t> idMapNewToOld;
+
+  // Storage and ids.
+  for (auto& tn : textNodes) {
+    _nodeStorage.push_back(tn);
+    _nodeMap[tn._id] = &_nodeStorage.back();
+  }
+
+  for (auto& n : oldNodeStorage) {
+    if (removedNodeIds.count(n._id) == 0) {
+      idMapOldToNew[n._id] = id;
+      idMapNewToOld[id] = n._id;
+      n._id = id++;
+      _nodeStorage.push_back(n);
+      _nodeMap[n._id] = &_nodeStorage.back();
+    }
+  }
+
+  // Adj lists
+  // First for newly created text nodes.
+  for (size_t i = 0; i < tnAdjSetsToOldIds.size(); ++i) {
+    const auto& nodes = tnAdjSetsToOldIds[i];
+    std::set<size_t> adjNodes;
+    for (auto nid : nodes) {
+      if (removedNodeIds.count(nid) == 0) {
+        adjNodes.insert(idMapOldToNew[nid]);
+      } else if (removedNodeIds[nid] != i) {
+        adjNodes.insert(removedNodeIds[nid]);
+      }
+    }
+    vector<size_t> adjList;
+    adjList.insert(adjList.begin(), adjNodes.begin(), adjNodes.end());
+    _adjLists.emplace_back(adjList);
+  }
+  assert(_adjLists.size() == textNodes.size());
+  assert(_adjLists.size() == tnAdjSetsToOldIds.size());
+  // Then for remaining (regular) nodes.
+  for (size_t i = textNodes.size(); i < _nodeMap.size(); ++i) {
+    const Node& node = *_nodeMap[i];
+    const auto& oldAdjList = oldAdjLists[idMapNewToOld[node._id]];
+    std::set<size_t> adjNodes;
+    for (auto nid : oldAdjList) {
+      if (removedNodeIds.count(nid) == 0) {
+        adjNodes.insert(idMapOldToNew[nid]);
+      } else {
+        adjNodes.insert(removedNodeIds[nid]);
+      }
+    }
+    vector<size_t> adjList;
+    adjList.insert(adjList.begin(), adjNodes.begin(), adjNodes.end());
+    _adjLists.emplace_back(adjList);
+  }
+}
+
+// _____________________________________________________________________________
+bool QueryPlanner::TripleGraph::isPureTextQuery() {
+  return _nodeStorage.size() == 1 && _nodeStorage.begin()->_cvar.size() > 0;
+}
+
 
 // _____________________________________________________________________________
 unordered_map<string, size_t>
@@ -1083,5 +1067,3 @@ QueryPlanner::createVariableColumnsMapForTextOperation(
   }
   return map;
 }
-
-

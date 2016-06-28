@@ -14,6 +14,7 @@
 #include "../util/File.h"
 #include "./TextMetaData.h"
 #include "./DocsDB.h"
+#include "../engine/ResultTable.h"
 
 
 using std::string;
@@ -82,14 +83,14 @@ public:
 
   const string& idToString(Id id) const;
 
-  void scanPSO(const string& predicate, WidthTwoList *result) const;
+  void scanPSO(const string& predicate, WidthTwoList* result) const;
 
-  void scanPSO(const string& predicate, const string& subject, WidthOneList *
+  void scanPSO(const string& predicate, const string& subject, WidthOneList*
   result) const;
 
-  void scanPOS(const string& predicate, WidthTwoList *result) const;
+  void scanPOS(const string& predicate, WidthTwoList* result) const;
 
-  void scanPOS(const string& predicate, const string& object, WidthOneList *
+  void scanPOS(const string& predicate, const string& object, WidthOneList*
   result) const;
 
 
@@ -98,21 +99,25 @@ public:
   // --------------------------------------------------------------------------
   const string& wordIdToString(Id id) const;
 
-  void getContextListForWords(const string& words, WidthTwoList *result) const;
+  size_t getSizeEstimate(const string& words) const;
+
+  void getContextListForWords(const string& words, WidthTwoList* result) const;
 
   void getECListForWords(const string& words, size_t limit,
-                         WidthThreeList *result) const;
+                         WidthThreeList& result) const;
 
-  // With an extra free variable.
-  void getECListForWords(const string& words, size_t limit,
-                         WidthFourList *result) const;
+  // With two or more variables.
+  template<typename ResultList>
+  void getECListForWords(const string& words, size_t nofVars, size_t limit,
+                         ResultList& result) const;
 
-  // With two extra free variables.
-  void getECListForWords(const string& words, size_t limit,
-                         WidthFiveList *result) const;
-
-  void getECListForWords(const string& words, size_t limit, size_t nofFreevars,
-                         VarWidthList& result) const;
+  // With filtering. Needs many template instantiations but
+  // only nofVars truly makes a difference. Others are just data types
+  // of result tables.
+  template<typename FilterTable, typename ResultList>
+  void getFilteredECListForWords(const string& words, const FilterTable& filter,
+                                 size_t filterColumn, size_t nofVars, size_t limit,
+                                 ResultList& result) const;
 
   void getContextEntityScoreListsForWords(const string& words,
                                           vector<Id>& cids,
@@ -219,13 +224,13 @@ private:
 
   void scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
                               Id lhsId, ad_utility::File& indexFile,
-                              WidthOneList *result) const;
+                              WidthOneList* result) const;
 
   void scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                  const pair<off_t, size_t>& followBlock,
                                  Id lhsId, ad_utility::File& indexFile,
                                  off_t upperBound,
-                                 WidthOneList *result) const;
+                                 WidthOneList* result) const;
 
   void addContextToVector(TextVec::bufwriter_type& writer, Id context,
                           const unordered_map<Id, Score>& words,
@@ -253,7 +258,7 @@ private:
   //! to file.
   //! Returns the number of bytes written.
   template<class Numeric>
-  size_t writeList(Numeric *data, size_t nofElements,
+  size_t writeList(Numeric* data, size_t nofElements,
                    ad_utility::File& file) const;
 
   typedef unordered_map<Id, Id> IdCodeMap;

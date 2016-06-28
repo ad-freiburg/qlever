@@ -11,6 +11,7 @@
 #include "../util/Log.h"
 #include "../parser/ParseException.h"
 #include "./Server.h"
+#include "QueryPlanner.h"
 
 
 // _____________________________________________________________________________
@@ -107,10 +108,14 @@ void Server::process(Socket *client, QueryExecutionContext *qec) const {
       ParsedQuery pq = SparqlParser::parse(query);
       pq.expandPrefixes();
 
-      QueryGraph qg(qec);
-      qg.createFromParsedQuery(pq);
-      const QueryExecutionTree& qet = qg.getExecutionTree();
+      // QueryGraph qg(qec);
+      // qg.createFromParsedQuery(pq);
+      // const QueryExecutionTree& qet = qg.getExecutionTree();
+      QueryPlanner qp(qec);
+      QueryExecutionTree qet = qp.createExecutionTree(pq);
+      LOG(DEBUG) << qet.asString() << std::endl;
       response = composeResponseJson(pq, qet);
+
       contentType = "application/json";
     } catch (const ad_semsearch::Exception& e) {
       response = composeResponseJson(query, e);

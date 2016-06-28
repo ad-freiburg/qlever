@@ -41,7 +41,7 @@ class IndexScan : public Operation {
 
     virtual size_t resultSortedOn() const { return 0; }
 
-    virtual void setTextLimit(size_t limit) {
+    virtual void setTextLimit(size_t) {
       // Do nothing.
     }
 
@@ -60,7 +60,7 @@ class IndexScan : public Operation {
       _sizeEstimate = computeSizeEstimate();
     }
 
-  private:
+  protected:
     ScanType _type;
     string _subject;
     string _predicate;

@@ -37,7 +37,7 @@ def expanded_to_my_syntax(q):
   for c in clauses:
     if '<word:' in c:
       s, p, o = c.strip().split(' ')
-      if (o not in context_to_words):
+      if o not in context_to_words:
         context_to_words[o] = []
       context_to_words[o].append(s[6 : -1])
     else:
