@@ -18,7 +18,7 @@ using std::vector;
 class TextOperationWithoutFilter : public Operation {
 public:
 
-  TextOperationWithoutFilter(QueryExecutionContext *qec, const string& words,
+  TextOperationWithoutFilter(QueryExecutionContext* qec, const string& words,
                              size_t nofVars, size_t textLimit = 1);
 
   virtual string asString() const;
@@ -26,7 +26,7 @@ public:
   virtual size_t getResultWidth() const;
 
   virtual size_t resultSortedOn() const {
-    // unsorted, obtained from iterating over hashmap.
+    // unsorted, obtained from iterating over a hash map.
     return std::numeric_limits<size_t>::max();
   }
 
@@ -36,13 +36,21 @@ public:
 
   virtual size_t getSizeEstimate() const {
     if (_executionContext) {
-      return _executionContext->getIndex().getSizeEstimate(_words);
+      return static_cast<size_t>(
+          _executionContext->getIndex().getSizeEstimate(_words));
     }
-    return 10000;
+    return size_t(10000 * 0.8);
   }
 
   virtual size_t getCostEstimate() const {
-    return getSizeEstimate() * _nofVars;
+    if (_executionContext) {
+      return static_cast<size_t>(
+          _executionContext->getCostFactor("NO_FILTER_PUNISH") * (
+              getSizeEstimate() * _nofVars));
+    } else {
+      return getSizeEstimate() * _nofVars;
+    }
+
   }
 
   const string& getWordPart() const {
@@ -59,11 +67,11 @@ private:
   size_t _textLimit;
 
 
-  virtual void computeResult(ResultTable *result) const;
+  virtual void computeResult(ResultTable* result) const;
 
-  void computeResultNoVar(ResultTable *result) const;
+  void computeResultNoVar(ResultTable* result) const;
 
-  void computeResultOneVar(ResultTable *result) const;
+  void computeResultOneVar(ResultTable* result) const;
 
-  void computeResultMultVars(ResultTable *result) const;
+  void computeResultMultVars(ResultTable* result) const;
 };

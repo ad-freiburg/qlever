@@ -34,7 +34,7 @@ public:
   virtual size_t getResultWidth() const;
 
   virtual size_t resultSortedOn() const {
-    // TODO: rethink when implemented
+    // unsorted, obtained from iterating over a hash map.
     return std::numeric_limits<size_t>::max();
   }
 
@@ -45,16 +45,25 @@ public:
 
   virtual size_t getSizeEstimate() const {
     if (_executionContext) {
-      return _executionContext->getIndex().getSizeEstimate(_words);
+      return static_cast<size_t>(
+          _executionContext->getIndex().getSizeEstimate(_words) *
+          _executionContext->getCostFactor("FILTER_SELECTIVITY"));
     }
     return size_t(10000 * 0.8);
   }
 
   virtual size_t getCostEstimate() const {
-    return static_cast<size_t>(getSizeEstimate() * _nofVars +
-           _filterResult->getSizeEstimate() * 2 *
-           HASH_MAP_OPERATION_COST_FACTOR +
-           _filterResult->getCostEstimate());
+    if (_executionContext) {
+      return static_cast<size_t>(
+          _executionContext->getCostFactor("FILTER_PUNISH") * (
+              getSizeEstimate() * _nofVars +
+              _filterResult->getSizeEstimate() *
+              _executionContext->getCostFactor("HASH_MAP_OPERATION_COST") +
+              _filterResult->getCostEstimate()));
+    } else {
+      return _filterResult->getSizeEstimate() * 2 +
+             _filterResult->getCostEstimate();
+    }
   }
 
   const string& getWordPart() const {

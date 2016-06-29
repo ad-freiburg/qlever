@@ -26,10 +26,11 @@ using std::cerr;
 
 // Available options.
 struct option options[] = {
-    {"queryfile",   required_argument, NULL, 'q'},
-    {"interactive", no_argument,       NULL, 'I'},
-    {"index",       required_argument, NULL, 'i'},
-    {"text",        no_argument,       NULL, 't'},
+    {"queryfile",    required_argument, NULL, 'q'},
+    {"interactive",  no_argument,       NULL, 'I'},
+    {"index",        required_argument, NULL, 'i'},
+    {"text",         no_argument,       NULL, 't'},
+    {"cost-factors", required_argument, NULL, 'c'},
     {NULL, 0,                          NULL, 0}
 };
 
@@ -53,13 +54,14 @@ int main(int argc, char** argv) {
 
   string queryfile;
   string indexName = "";
+  string costFactosFileName = "";
   bool text = false;
   bool interactive = false;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "q:Ii:t", options, NULL);
+    int c = getopt_long(argc, argv, "q:Ii:tc:", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'q':
@@ -73,6 +75,9 @@ int main(int argc, char** argv) {
         break;
       case 't':
         text = true;
+        break;
+      case 'c':
+        costFactosFileName = optarg;
         break;
       default:
         cout << endl
@@ -97,6 +102,9 @@ int main(int argc, char** argv) {
     }
 
     QueryExecutionContext qec(index, engine);
+    if (costFactosFileName.size() > 0) {
+      qec.readCostFactorsFromTSVFile(costFactosFileName);
+    }
 
     if (queryfile == "") {
       cout << "No query file provided, switching to interactive mode.." << endl;

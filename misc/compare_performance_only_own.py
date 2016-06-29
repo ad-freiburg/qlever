@@ -46,18 +46,19 @@ def expanded_to_my_syntax(q):
     return 'WHERE'.join([before_where, new_after_where])
 
 
-def get_query_times(query_file, name, binary, index):
+def get_query_times(query_file, name, binary, costFactors, index):
     with open('__tmp.myqueries', 'w') as tmpfile:
         for line in open(query_file):
             try:
-                tmpfile.write(expanded_to_my_syntax(line.strip().split('\t')[1]) + '\n')
+                tmpfile.write(
+                    expanded_to_my_syntax(line.strip().split('\t')[1]) + '\n')
             except IndexError:
                 print("Problem with tabs in : " + line)
                 exit(1)
     coutfile = open('__tmp.cout.' + name, 'w')
     myout = subprocess.check_output(
-        [binary, '-i', index, '-t', '--queryfile', '__tmp.myqueries']).decode(
-        'utf-8')
+        [binary, '-i', index, '-t', '--queryfile', '__tmp.myqueries', '-c',
+         costFactors]).decode('utf-8')
     coutfile.write(myout)
     coutfile.write('\n\n\n\n')
     times = []
@@ -74,7 +75,7 @@ def get_query_times(query_file, name, binary, index):
         i = line.find('Number of matches (limit): ')
         if i >= 0:
             nof_matches_limit.append(line[i + 27:])
-    #os.remove('__tmp.myqueries')
+    # os.remove('__tmp.myqueries')
     queries = []
     for line in open(query_file):
         queries.append(line.strip())
@@ -88,13 +89,13 @@ def process_queries_and_print_stats(query_file, binaries, index):
     queries = []
     for line in open(query_file):
         queries.append(line.strip())
-    th_titles = ['query']
+    th_titles = ['id', 'query']
     results = []
-    for (name, path) in binaries:
+    for (name, path, costFactors) in binaries:
         th_titles.append(name + "_times")
         th_titles.append(name + "_nof_matches_no_limit")
-        #th_titles.append(name + "_nof_matches_limit")
-        r = get_query_times(query_file, name, path, index)
+        # th_titles.append(name + "_nof_matches_limit")
+        r = get_query_times(query_file, name, path, costFactors, index)
         results.append(r)
     print('\t'.join(th_titles))
     print('\t'.join(['----'] * len(th_titles)))
@@ -103,7 +104,7 @@ def process_queries_and_print_stats(query_file, binaries, index):
         for res in results:
             line_strs.append(res[i][0])
             line_strs.append(res[i][1])
-            #line_strs.append(res[i][2])
+            # line_strs.append(res[i][2])
         print('\t'.join(line_strs))
 
 
@@ -112,10 +113,11 @@ def main():
     queries = args['queryfile']
     index = args['index']
     arg_bins = args['binaries']
-    assert len(arg_bins) % 2 == 0
+    assert len(arg_bins) % 3 == 0
     binaries = []
-    for i in range(0, len(arg_bins) // 2):
-        binaries.append((arg_bins[2 * i], arg_bins[2 * i + 1]))
+    for i in range(0, len(arg_bins) // 3):
+        binaries.append(
+            (arg_bins[3 * i], arg_bins[3 * i + 1], arg_bins[3 * i + 2]))
     process_queries_and_print_stats(queries, binaries, index)
 
 

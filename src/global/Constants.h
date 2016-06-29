@@ -17,7 +17,6 @@ static const size_t BUFFER_SIZE_DOCSFILE_LINE = 1024 * 1024 * 100;
 static const size_t DISTINCT_LHS_PER_BLOCK = 10 * 1000;
 
 static const size_t IN_CONTEXT_CARDINALITY_ESTIMATE = 1000 * 1000 * 1000;
-static const float HASH_MAP_OPERATION_COST_FACTOR = 2.0;
 
 static const char IN_CONTEXT_RELATION[] = "<in-context>";
 static const char IN_CONTEXT_RELATION_NS[] = ":in-context";

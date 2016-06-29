@@ -16,6 +16,7 @@
 using std::vector;
 using std::array;
 using std::unordered_map;
+using std::unordered_set;
 
 
 class FTSAlgorithms {
@@ -268,6 +269,20 @@ public:
     assert(n == I);
   }
 
+  template<typename Iter, size_t I>
+  static inline void fillTuple(Id cid, Id score, Iter keyBegin, Iter keyEnd,
+                               Id eid, array<Id, I>& out) {
+    out[0] = cid;
+    out[1] = score;
+    size_t n = 2;
+    while (keyBegin != keyEnd) {
+      out[n++] = *keyBegin;
+      ++keyBegin;
+    }
+    out[n++] = eid;
+    assert(n == I);
+  }
+
   template<typename Iter1, typename Iter2>
   static inline void fillTuple(Id cid, Id score, Iter1 keyBegin, Iter1 keyEnd,
                                Iter2 fBegin, Iter2 fEnd, vector<Id>& out) {
@@ -305,12 +320,30 @@ public:
       size_t k,
       ResultTab& result);
 
+  static void oneVarFilterAggScoresAndTakeTopKContexts(
+      const vector<Id>& cids,
+      const vector<Id>& eids,
+      const vector<Score>& scores,
+      const unordered_set<Id>& fSet,
+      size_t k,
+      WidthThreeList& result);
+
   template<typename FilterTab, typename ResultTab>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
       const vector<Id>& cids,
       const vector<Id>& eids,
       const vector<Score>& scores,
       const unordered_map<Id, FilterTab>& fMap,
+      size_t nofVars,
+      size_t k,
+      ResultTab& result);
+
+  template<typename ResultTab>
+  static void multVarsFilterAggScoresAndTakeTopKContexts(
+      const vector<Id>& cids,
+      const vector<Id>& eids,
+      const vector<Score>& scores,
+      const unordered_set<Id>& fSet,
       size_t nofVars,
       size_t k,
       ResultTab& result);

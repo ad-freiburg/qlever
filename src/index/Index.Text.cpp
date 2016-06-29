@@ -680,9 +680,10 @@ void Index::getFilteredECListForWords(const string& words,
   LOG(DEBUG) << "In getFilteredECListForWords...\n";
   // Build a map filterEid->set<Rows>
   using FilterMap = unordered_map<Id, FilterTable>;
+  LOG(DEBUG) << "Constructing map...\n";
   FilterMap fMap;
-  for (auto& row : filter) {
-    fMap[row[filterColumn]].push_back(row);
+  for (size_t i = 0; i < filter.size(); ++i) {
+    fMap[filter[i][filterColumn]].push_back(filter[i]);
   }
   vector<Id> cids;
   vector<Id> eids;
@@ -698,6 +699,37 @@ void Index::getFilteredECListForWords(const string& words,
   LOG(DEBUG) << "Done with getFilteredECListForWords. Result size: "
              << result.size() << "\n";
 }
+
+// _____________________________________________________________________________
+template<typename ResultList>
+void Index::getFilteredECListForWords(
+    const string& words,
+    const Index::WidthOneList& filter,
+    size_t nofVars,
+    size_t limit, ResultList& result) const {
+  LOG(DEBUG) << "In getFilteredECListForWords...\n";
+  // Build a map filterEid->set<Rows>
+  using FilterSet = std::unordered_set<Id>;
+  LOG(DEBUG) << "Constructing filter set...\n";
+  FilterSet fSet;
+  for (size_t i = 0; i < filter.size(); ++i) {
+    fSet.insert(filter[i][0]);
+  }
+  vector<Id> cids;
+  vector<Id> eids;
+  vector<Score> scores;
+  getContextEntityScoreListsForWords(words, cids, eids, scores);
+  if (nofVars == 1) {
+    FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
+        cids, eids, scores, fSet, limit, result);
+  } else {
+    FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
+        cids, eids, scores, fSet, nofVars, limit, result);
+  }
+  LOG(DEBUG) << "Done with getFilteredECListForWords. Result size: "
+             << result.size() << "\n";
+}
+
 
 // _____________________________________________________________________________
 // Instantiate for different filter and result widths.
@@ -758,8 +790,8 @@ void Index::getEntityPostingsForTerm(const string& term, vector<Id>& cids,
   IdRange idRange;
   bool entityTerm = (term[0] == '<' && term.back() == '>');
   if (term.back() == PREFIX_CHAR) {
-    LOG(INFO) << "Prefix: " << term << " not in vocabulary\n";
     if (!_textVocab.getIdRangeForFullTextPrefix(term, &idRange)) {
+      LOG(INFO) << "Prefix: " << term << " not in vocabulary\n";
       return;
     }
   } else {

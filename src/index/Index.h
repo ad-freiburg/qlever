@@ -116,7 +116,15 @@ public:
   // of result tables.
   template<typename FilterTable, typename ResultList>
   void getFilteredECListForWords(const string& words, const FilterTable& filter,
-                                 size_t filterColumn, size_t nofVars, size_t limit,
+                                 size_t filterColumn, size_t nofVars,
+                                 size_t limit,
+                                 ResultList& result) const;
+
+  // Special cast with a width-one filter.
+  template<typename ResultList>
+  void getFilteredECListForWords(const string& words,
+                                 const WidthOneList& filter,
+                                 size_t nofVars, size_t limit,
                                  ResultList& result) const;
 
   void getContextEntityScoreListsForWords(const string& words,

@@ -12,6 +12,7 @@
 #include "./Engine.h"
 #include "../global/Constants.h"
 #include "../index/Index.h"
+#include "QueryPlanningCostFactors.h"
 
 using std::string;
 using std::vector;
@@ -25,7 +26,7 @@ public:
 
   QueryExecutionContext(const Index& index, const Engine& engine) :
       _subtreeCache(NOF_SUBTREES_TO_CACHE),
-      _index(&index), _engine(&engine) {
+      _index(&index), _engine(&engine), _costFactors() {
   }
 
   ResultTable* getCachedResultForQueryTree(
@@ -45,10 +46,19 @@ public:
     _subtreeCache.clear();
   }
 
+  void readCostFactorsFromTSVFile(const string& fileName) {
+    _costFactors.readFromFile(fileName);
+  }
+
+  float getCostFactor(const string& key) const {
+    return _costFactors.getCostFactor(key);
+  };
+
 private:
 
   SubtreeCache _subtreeCache;
   const Index* _index;
   const Engine* _engine;
+  QueryPlanningCostFactors _costFactors;
 };
 
