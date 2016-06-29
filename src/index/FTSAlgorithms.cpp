@@ -1353,6 +1353,11 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
              " tuples now.\n";
 };
 
+template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
+    const vector<Id>&, const vector<Id>&, const vector<Score>&,
+    const unordered_set<Id>&, size_t,
+    FTSAlgorithms::WidthThreeList&);
+
 // Extra functions that should never get called but are needed
 // for the compiler:
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
@@ -1728,3 +1733,23 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   LOG(DEBUG) << "Done. There are " << result.size() <<
              " tuples now.\n";
 }
+
+template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
+    const vector<Id>&, const vector<Id>&, const vector<Score>&,
+    const unordered_set<Id>&, size_t, size_t,
+    FTSAlgorithms::WidthThreeList&);
+
+template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
+    const vector<Id>&, const vector<Id>&, const vector<Score>&,
+    const unordered_set<Id>&, size_t, size_t,
+    FTSAlgorithms::WidthFourList&);
+
+template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
+    const vector<Id>&, const vector<Id>&, const vector<Score>&,
+    const unordered_set<Id>&, size_t, size_t,
+    FTSAlgorithms::WidthFiveList&);
+
+template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
+    const vector<Id>&, const vector<Id>&, const vector<Score>&,
+    const unordered_set<Id>&, size_t, size_t,
+    FTSAlgorithms::VarWidthList&);

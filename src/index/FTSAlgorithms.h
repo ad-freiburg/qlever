@@ -299,6 +299,18 @@ public:
     assert(n == I);
   }
 
+  template<typename Iter>
+  static inline void fillTuple(Id cid, Id score, Iter keyBegin, Iter keyEnd,
+                               Id eid, vector<Id>& out) {
+    out.push_back(cid);
+    out.push_back(score);
+    while (keyBegin != keyEnd) {
+      out.push_back(*keyBegin);
+      ++keyBegin;
+    }
+    out.push_back(eid);
+  }
+
   template<typename Iter1, typename Iter2>
   static inline void fillTuple(Id cid, Id score, Iter1 keyBegin, Iter1 keyEnd,
                                Iter2 fBegin, Iter2 fEnd, vector<Id>& out) {
