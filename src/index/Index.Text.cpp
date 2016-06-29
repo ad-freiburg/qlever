@@ -750,6 +750,22 @@ template void Index::getFilteredECListForWords(
     Index::VarWidthList& result) const;
 
 template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthOneList&, size_t, size_t,
+    Index::WidthThreeList& result) const;
+
+template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthOneList&, size_t, size_t,
+    Index::WidthFourList& result) const;
+
+template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthOneList&, size_t, size_t,
+    Index::WidthFiveList& result) const;
+
+template void Index::getFilteredECListForWords(
+    const string&, const Index::WidthOneList&, size_t, size_t,
+    Index::VarWidthList& result) const;
+
+template void Index::getFilteredECListForWords(
     const string&, const Index::WidthTwoList&, size_t, size_t, size_t,
     Index::WidthFourList& result) const;
 

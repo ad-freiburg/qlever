@@ -1290,13 +1290,14 @@ template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     FTSAlgorithms::VarWidthList&);
 
 // _____________________________________________________________________________
+template<typename ResultList>
 void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>& cids,
     const vector<Id>& eids,
     const vector<Score>& scores,
     const unordered_set<Id>& fSet,
     size_t k,
-    WidthThreeList& result) {
+    ResultList& result) {
   AD_CHECK_EQ(cids.size(), eids.size());
   AD_CHECK_EQ(cids.size(), scores.size());
   LOG(DEBUG) << "Going from an entity, context and score list of size: "
@@ -1343,7 +1344,9 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     Id score = static_cast<Id>(it->second.first);
     ScoreToContext& stc = it->second.second;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
-      result.emplace_back(RowType{{itt->second, score, eid}});
+      RowType row;
+      fillThreeTuple(itt->second, score, eid, row);
+      result.emplace_back(row);
     }
   }
   LOG(DEBUG) << "Done. There are " << result.size() <<
@@ -1365,6 +1368,21 @@ template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
     const unordered_map<Id, FTSAlgorithms::WidthOneList>&, size_t,
+    FTSAlgorithms::VarWidthList&);
+
+template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
+    const vector<Id>&, const vector<Id>&, const vector<Score>&,
+    const unordered_set<Id>&, size_t,
+    FTSAlgorithms::WidthFourList&);
+
+template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
+    const vector<Id>&, const vector<Id>&, const vector<Score>&,
+    const unordered_set<Id>&, size_t,
+    FTSAlgorithms::WidthFiveList&);
+
+template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
+    const vector<Id>&, const vector<Id>&, const vector<Score>&,
+    const unordered_set<Id>&, size_t,
     FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(

@@ -252,6 +252,22 @@ public:
     out.insert(std::end(out), std::begin(in), std::end(in));
   }
 
+  template<size_t I>
+  static inline void fillThreeTuple(
+      Id cid, Id score, Id eid, array<Id, I>& out) {
+    out[0] = cid;
+    out[1] = score;
+    out[2] = eid;
+  }
+
+  static inline void fillThreeTuple(
+      Id cid, Id score, Id eid, vector<Id>& out) {
+    out.resize(3);
+    out[0] = cid;
+    out[1] = score;
+    out[2] = eid;
+  }
+
   template<typename Iter1, typename Iter2, size_t I>
   static inline void fillTuple(Id cid, Id score, Iter1 keyBegin, Iter1 keyEnd,
                                Iter2 fBegin, Iter2 fEnd, array<Id, I>& out) {
@@ -320,13 +336,14 @@ public:
       size_t k,
       ResultTab& result);
 
+  template<typename ResultList>
   static void oneVarFilterAggScoresAndTakeTopKContexts(
       const vector<Id>& cids,
       const vector<Id>& eids,
       const vector<Score>& scores,
       const unordered_set<Id>& fSet,
       size_t k,
-      WidthThreeList& result);
+      ResultList& result);
 
   template<typename FilterTab, typename ResultTab>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
