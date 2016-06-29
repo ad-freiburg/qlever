@@ -76,7 +76,6 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
       getExecutionContext()->getIndex().getFilteredECListForWords(
           _words,
           *static_cast<vector<array<Id, 1>>*>(_filterResult->getResult()._fixedSizeData),
-          _filterColumn,
           _nofVars,
           _textLimit,
           *reinterpret_cast<vector<array<Id, 3>>*>(result->_fixedSizeData));
@@ -85,7 +84,6 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
       getExecutionContext()->getIndex().getFilteredECListForWords(
           _words,
           *static_cast<vector<array<Id, 1>>*>(_filterResult->getResult()._fixedSizeData),
-          _filterColumn,
           _nofVars,
           _textLimit,
           *reinterpret_cast<vector<array<Id, 4>>*>(result->_fixedSizeData));
@@ -94,7 +92,6 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
       getExecutionContext()->getIndex().getFilteredECListForWords(
           _words,
           *static_cast<vector<array<Id, 1>>*>(_filterResult->getResult()._fixedSizeData),
-          _filterColumn,
           _nofVars,
           _textLimit,
           *reinterpret_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
@@ -102,7 +99,6 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
       getExecutionContext()->getIndex().getFilteredECListForWords(
           _words,
           *static_cast<vector<array<Id, 1>>*>(_filterResult->getResult()._fixedSizeData),
-          _filterColumn,
           _nofVars,
           _textLimit,
           result->_varSizeData);
