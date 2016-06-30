@@ -342,7 +342,7 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
                   "| width: 3} [0]\n) | width: 4} "
                   "on 1 | width: 4} [1]\n) | width: 4}",
               qet.asString());
-    ASSERT_EQ(0, qet.getVariableColumn("?y"));
+    ASSERT_EQ(0u, qet.getVariableColumn("?y"));
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();

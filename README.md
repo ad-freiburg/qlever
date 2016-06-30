@@ -56,19 +56,22 @@ FOR NOW - ALL FILES HAVE TO BE UTF8 ENCODED!
 
 a) from an NTriples file (currently no blank nodes allowed):
 
-    ./IndexBuilderMain -n /path/to/input.nt -b /path/to/myindex
+    ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt
 
 b) from a TSV File (no spaces / tabs in spo):
 
-    ./IndexBuilderMain -t /path/to/input.tsv -b /path/to/myindex
+    ./IndexBuilderMain -i /path/to/myindex -t /path/to/input.tsv 
 
 To include a text collection, the wordsfile (see below for the required format) has to be passed with -w.
 To support text snippest a docsfile (see below for the required format)has to be passed with -d
 
 The full call will look like this:
 
-    ./IndexBuilderMain -t /path/to/input.tsv -w /path/to/wordsfile -d /path/to/docsfile -b /path/to/myindex
+    ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -w /path/to/wordsfile -d /path/to/docsfile 
+    
+If you want to use predicate variables (perfectly normal for SPARQL but rarely used in semantic text queries), use an optional argument -a to build all permutations:
 
+    ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -a -w /path/to/wordsfile -d /path/to/docsfile 
 3. Starting a Sever:
 --------------------
 

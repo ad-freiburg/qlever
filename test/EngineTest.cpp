@@ -25,27 +25,27 @@ TEST(EngineTest, joinTest) {
   e.join(a, 0, b, 0, &res);
 
 
-  ASSERT_EQ(1, res[0][0]);
-  ASSERT_EQ(1, res[0][1]);
-  ASSERT_EQ(3, res[0][2]);
+  ASSERT_EQ(1u, res[0][0]);
+  ASSERT_EQ(1u, res[0][1]);
+  ASSERT_EQ(3u, res[0][2]);
 
-  ASSERT_EQ(1, res[1][0]);
-  ASSERT_EQ(1, res[1][1]);
-  ASSERT_EQ(8, res[1][2]);
+  ASSERT_EQ(1u, res[1][0]);
+  ASSERT_EQ(1u, res[1][1]);
+  ASSERT_EQ(8u, res[1][2]);
 
-  ASSERT_EQ(1, res[2][0]);
-  ASSERT_EQ(3, res[2][1]);
-  ASSERT_EQ(3, res[2][2]);
+  ASSERT_EQ(1u, res[2][0]);
+  ASSERT_EQ(3u, res[2][1]);
+  ASSERT_EQ(3u, res[2][2]);
 
-  ASSERT_EQ(1, res[3][0]);
-  ASSERT_EQ(3, res[3][1]);
-  ASSERT_EQ(8, res[3][2]);
+  ASSERT_EQ(1u, res[3][0]);
+  ASSERT_EQ(3u, res[3][1]);
+  ASSERT_EQ(8u, res[3][2]);
 
-  ASSERT_EQ(5, res.size());
+  ASSERT_EQ(5u, res.size());
 
-  ASSERT_EQ(4, res[4][0]);
-  ASSERT_EQ(1, res[4][1]);
-  ASSERT_EQ(2, res[4][2]);
+  ASSERT_EQ(4u, res[4][0]);
+  ASSERT_EQ(1u, res[4][1]);
+  ASSERT_EQ(2u, res[4][2]);
 };
 
 int main(int argc, char** argv) {

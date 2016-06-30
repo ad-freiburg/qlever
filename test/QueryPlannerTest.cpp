@@ -599,7 +599,7 @@ TEST(QueryExecutionTreeTest, testBooksGermanAwardNomAuth) {
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_GT(qet.asString().size(), 0);
+    ASSERT_GT(qet.asString().size(), 0u);
     // Just check that ther is no exception, here.
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;

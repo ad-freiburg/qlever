@@ -21,7 +21,7 @@
 
 TEST(RelationMetaDataTest, getBlockStartAndNofBytesForLhsTest) {
   vector<BlockMetaData> bs;
-  off_t afterFI =  6 * 2 * sizeof(Id);
+  off_t afterFI = 6 * 2 * sizeof(Id);
   off_t afterLhs = afterFI + 4 * (sizeof(Id) + sizeof(off_t));
   off_t afterRhs = afterLhs + 6 * sizeof(Id);
   bs.push_back(BlockMetaData(10, afterFI));
@@ -35,16 +35,18 @@ TEST(RelationMetaDataTest, getBlockStartAndNofBytesForLhsTest) {
   ASSERT_EQ(afterFI, rv.first);
   ASSERT_EQ(2 * (sizeof(Id) + sizeof(off_t)), rv.second);
   rv = rmd.getBlockStartAndNofBytesForLhs(16);
-  ASSERT_EQ(afterFI + 2 * (sizeof(Id) + sizeof(off_t)), rv.first);
+  ASSERT_EQ(afterFI + 2 * (sizeof(Id) + sizeof(off_t)),
+            static_cast<size_t>(rv.first));
   ASSERT_EQ(2 * (sizeof(Id) + sizeof(off_t)), rv.second);
   rv = rmd.getBlockStartAndNofBytesForLhs(17);
-  ASSERT_EQ(afterFI + 2 * (sizeof(Id) + sizeof(off_t)), rv.first);
+  ASSERT_EQ(afterFI + 2 * (sizeof(Id) + sizeof(off_t)),
+            static_cast<size_t>(rv.first));
   ASSERT_EQ(2 * (sizeof(Id) + sizeof(off_t)), rv.second);
 }
 
 TEST(RelationMetaDataTest, writeReadTest) {
   vector<BlockMetaData> bs;
-  off_t afterFI =  6 * 2 * sizeof(Id);
+  off_t afterFI = 6 * 2 * sizeof(Id);
   off_t afterLhs = afterFI + 4 * (sizeof(Id) + sizeof(off_t));
   off_t afterRhs = afterLhs + 6 * sizeof(Id);
   bs.push_back(BlockMetaData(10, afterFI));
@@ -57,7 +59,7 @@ TEST(RelationMetaDataTest, writeReadTest) {
 
   ad_utility::File in("_testtmp.rmd", "r");
   ASSERT_EQ(3 * sizeof(Id) + 5 * sizeof(off_t) + 2 * sizeof(size_t),
-      rmd.bytesRequired());
+            rmd.bytesRequired());
   unsigned char* buf = new unsigned char[rmd.bytesRequired()];
   in.read(buf, rmd.bytesRequired());
   RelationMetaData rmd2;
@@ -81,7 +83,7 @@ TEST(RelationMetaDataTest, writeReadTest) {
 
 TEST(IndexMetaDataTest, writeReadTest) {
   vector<BlockMetaData> bs;
-  off_t afterFI =  6 * 2 * sizeof(Id);
+  off_t afterFI = 6 * 2 * sizeof(Id);
   off_t afterLhs = afterFI + 4 * (sizeof(Id) + sizeof(off_t));
   off_t afterRhs = afterLhs + 6 * sizeof(Id);
   bs.push_back(BlockMetaData(10, afterFI));
@@ -114,9 +116,11 @@ TEST(IndexMetaDataTest, writeReadTest) {
   ASSERT_EQ(rmd._nofBlocks, imd2.getRmd(1)._nofBlocks);
   ASSERT_EQ(rmd._blocks.size(), imd2.getRmd(1)._blocks.size());
   ASSERT_EQ(rmd._blocks[0]._firstLhs, imd2.getRmd(1)._blocks[0]._firstLhs);
-  ASSERT_EQ(rmd._blocks[0]._startOffset, imd2.getRmd(1)._blocks[0]._startOffset);
+  ASSERT_EQ(rmd._blocks[0]._startOffset,
+            imd2.getRmd(1)._blocks[0]._startOffset);
   ASSERT_EQ(rmd._blocks[1]._firstLhs, imd2.getRmd(1)._blocks[1]._firstLhs);
-  ASSERT_EQ(rmd._blocks[1]._startOffset, imd2.getRmd(1)._blocks[1]._startOffset);
+  ASSERT_EQ(rmd._blocks[1]._startOffset,
+            imd2.getRmd(1)._blocks[1]._startOffset);
 
   ASSERT_EQ(rmd2._relId, imd2.getRmd(2)._relId);
   ASSERT_EQ(rmd2._startFullIndex, imd2.getRmd(2)._startFullIndex);
@@ -126,9 +130,11 @@ TEST(IndexMetaDataTest, writeReadTest) {
   ASSERT_EQ(rmd2._nofBlocks, imd2.getRmd(2)._nofBlocks);
   ASSERT_EQ(rmd2._blocks.size(), imd2.getRmd(2)._blocks.size());
   ASSERT_EQ(rmd2._blocks[0]._firstLhs, imd2.getRmd(2)._blocks[0]._firstLhs);
-  ASSERT_EQ(rmd2._blocks[0]._startOffset, imd2.getRmd(2)._blocks[0]._startOffset);
+  ASSERT_EQ(rmd2._blocks[0]._startOffset,
+            imd2.getRmd(2)._blocks[0]._startOffset);
   ASSERT_EQ(rmd2._blocks[1]._firstLhs, imd2.getRmd(2)._blocks[1]._firstLhs);
-  ASSERT_EQ(rmd2._blocks[1]._startOffset, imd2.getRmd(2)._blocks[1]._startOffset);
+  ASSERT_EQ(rmd2._blocks[1]._startOffset,
+            imd2.getRmd(2)._blocks[1]._startOffset);
 }
 
 
