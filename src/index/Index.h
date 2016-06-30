@@ -216,6 +216,7 @@ private:
   static void createPermutation(const string& fileName,
                                 const ExtVec& vec,
                                 IndexMetaData& meta,
+                                size_t c0,
                                 size_t c1, size_t c2);
 
   void createTextIndex(const string& filename, const TextVec& vec);

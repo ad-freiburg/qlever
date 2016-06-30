@@ -24,33 +24,33 @@ void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
   LOG(INFO) << "Sorting for PSO permutation..." << std::endl;
   stxxl::sort(begin(v), end(v), SortByPSO(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
-  createPermutation(indexFilename + ".pso", v, _psoMeta, 0, 2);
+  createPermutation(indexFilename + ".pso", v, _psoMeta, 1, 0, 2);
   // POS permutation
   LOG(INFO) << "Sorting for POS permutation..." << std::endl;;
   stxxl::sort(begin(v), end(v), SortByPOS(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
-  createPermutation(indexFilename + ".pos", v, _posMeta, 2, 0);
+  createPermutation(indexFilename + ".pos", v, _posMeta, 1, 2, 0);
   if (allPermutations) {
     // SPO permutation
     LOG(INFO) << "Sorting for SPO permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".spo", v, _spoMeta, 1, 2);
+    createPermutation(indexFilename + ".spo", v, _spoMeta, 0, 1, 2);
     // SOP permutation
     LOG(INFO) << "Sorting for SOP permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortBySOP(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".sop", v, _sopMeta, 2, 1);
+    createPermutation(indexFilename + ".sop", v, _sopMeta, 0, 2, 1);
     // OSP permutation
     LOG(INFO) << "Sorting for OSP permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortByOSP(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".sop", v, _ospMeta, 0, 1);
+    createPermutation(indexFilename + ".sop", v, _ospMeta, 2, 0, 1);
     // OPS permutation
     LOG(INFO) << "Sorting for OPS permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortByOPS(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".ops", v, _opsMeta, 1, 0);
+    createPermutation(indexFilename + ".ops", v, _opsMeta, 2, 1, 0);
   }
   openFileHandles();
 }
@@ -68,32 +68,32 @@ void Index::createFromNTriplesFile(const string& ntFile,
   LOG(INFO) << "Sorting for PSO permutation..." << std::endl;
   stxxl::sort(begin(v), end(v), SortByPSO(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
-  createPermutation(indexFilename + ".pso", v, _psoMeta, 0, 2);
+  createPermutation(indexFilename + ".pso", v, _psoMeta, 1, 0, 2);
   LOG(INFO) << "Sorting for POS permutation..." << std::endl;;
   stxxl::sort(begin(v), end(v), SortByPOS(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;;
-  createPermutation(indexFilename + ".pos", v, _posMeta, 2, 0);
+  createPermutation(indexFilename + ".pos", v, _posMeta, 1, 2, 0);
   if (allPermutations) {
     // SPO permutation
     LOG(INFO) << "Sorting for SPO permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".spo", v, _spoMeta, 1, 2);
+    createPermutation(indexFilename + ".spo", v, _spoMeta, 0, 1, 2);
     // SOP permutation
     LOG(INFO) << "Sorting for SOP permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortBySOP(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".sop", v, _sopMeta, 2, 1);
+    createPermutation(indexFilename + ".sop", v, _sopMeta, 0, 2, 1);
     // OSP permutation
     LOG(INFO) << "Sorting for OSP permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortByOSP(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".sop", v, _ospMeta, 0, 1);
+    createPermutation(indexFilename + ".sop", v, _ospMeta, 2, 0, 1);
     // OPS permutation
     LOG(INFO) << "Sorting for OPS permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortByOPS(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".ops", v, _opsMeta, 1, 0);
+    createPermutation(indexFilename + ".ops", v, _opsMeta, 2, 1, 0);
   }
   openFileHandles();
 }
@@ -194,7 +194,8 @@ void Index::passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data) {
 
 // _____________________________________________________________________________
 void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
-                              IndexMetaData& metaData, size_t c1, size_t c2) {
+                              IndexMetaData& metaData, size_t c0, size_t c1,
+                              size_t c2) {
   if (vec.size() == 0) {
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
     return;
@@ -204,17 +205,17 @@ void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
             << " elements / facts." << std::endl;
   // Iterate over the vector and identify relation boundaries
   size_t from = 0;
-  Id currentRel = vec[0][1];
+  Id currentRel = vec[0][c0];
   off_t lastOffset = 0;
   vector<array<Id, 2>> buffer;
   bool functional = true;
   Id lastLhs = std::numeric_limits<Id>::max();
   for (ExtVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
-    if ((*reader)[1] != currentRel) {
+    if ((*reader)[c0] != currentRel) {
       metaData.add(writeRel(out, lastOffset, currentRel, buffer, functional));
       buffer.clear();
       lastOffset = metaData.getOffsetAfter();
-      currentRel = (*reader)[1];
+      currentRel = (*reader)[c0];
       functional = true;
     } else {
       if ((*reader)[c1] == lastLhs) {
