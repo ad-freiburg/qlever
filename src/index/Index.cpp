@@ -530,6 +530,138 @@ void Index::scanPOS(const string& predicate, const string& object,
 }
 
 // _____________________________________________________________________________
+void Index::scanSOP(const string& subject, const string& object, WidthOneList*
+result) const {
+  if (!_sopFile.isOpen()) {
+    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+             "Cannot use predicate variables without the required "
+                 "index permutations. Build an index with option -a "
+                 "to use this feature.");
+  }
+  LOG(DEBUG) << "Performing SOP scan of list for " << subject
+             << "with fixed object: " << object << "...\n";
+  Id relId;
+  Id objId;
+  if (_vocab.getId(subject, &relId) && _vocab.getId(object, &objId)) {
+    if (_sopMeta.relationExists(relId)) {
+      const RelationMetaData& rmd = _sopMeta.getRmd(relId);
+      pair<off_t, size_t> blockOff = rmd.getBlockStartAndNofBytesForLhs(objId);
+      // Functional relations have blocks point into the pair index,
+      // non-functional relations have them point into lhs lists
+      if (rmd.isFunctional()) {
+        scanFunctionalRelation(blockOff, objId, _sopFile, result);
+      } else {
+        pair<off_t, size_t> block2 = rmd.getFollowBlockForLhs(objId);
+        scanNonFunctionalRelation(blockOff, block2, objId, _sopFile,
+                                  rmd._offsetAfter, result);
+      }
+    } else {
+      LOG(DEBUG) << "No such relation.\n";
+    }
+  } else {
+    LOG(DEBUG) << "No such object.\n";
+  }
+  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
+}
+
+// _____________________________________________________________________________
+void Index::scanSPO(const string& subject, WidthTwoList* result) const {
+  if (!_spoFile.isOpen()) {
+    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+             "Cannot use predicate variables without the required "
+                 "index permutations. Build an index with option -a "
+                 "to use this feature.");
+  }
+  LOG(DEBUG) << "Performing SPO scan for full list for: " << subject << "\n";
+  Id relId;
+  if (_vocab.getId(subject, &relId)) {
+    LOG(TRACE) << "Successfully got relation ID.\n";
+    if (_spoMeta.relationExists(relId)) {
+      LOG(TRACE) << "Relation exists.\n";
+      const RelationMetaData& rmd = _spoMeta.getRmd(relId);
+      result->reserve(rmd._nofElements + 2);
+      result->resize(rmd._nofElements);
+      _spoFile.read(result->data(), rmd._nofElements * 2 * sizeof(Id),
+                    rmd._startFullIndex);
+    }
+  }
+  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
+}
+
+// _____________________________________________________________________________
+void Index::scanSOP(const string& subject, WidthTwoList* result) const {
+  if (!_sopFile.isOpen()) {
+    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+             "Cannot use predicate variables without the required "
+                 "index permutations. Build an index with option -a "
+                 "to use this feature.");
+  }
+  LOG(DEBUG) << "Performing SOP scan for full list for: " << subject << "\n";
+  Id relId;
+  if (_vocab.getId(subject, &relId)) {
+    LOG(TRACE) << "Successfully got relation ID.\n";
+    if (_sopMeta.relationExists(relId)) {
+      LOG(TRACE) << "Relation exists.\n";
+      const RelationMetaData& rmd = _sopMeta.getRmd(relId);
+      result->reserve(rmd._nofElements + 2);
+      result->resize(rmd._nofElements);
+      _sopFile.read(result->data(), rmd._nofElements * 2 * sizeof(Id),
+                    rmd._startFullIndex);
+    }
+  }
+  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
+}
+
+// _____________________________________________________________________________
+void Index::scanOPS(const string& object, WidthTwoList* result) const {
+  if (!_opsFile.isOpen()) {
+    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+             "Cannot use predicate variables without the required "
+                 "index permutations. Build an index with option -a "
+                 "to use this feature.");
+  }
+  LOG(DEBUG) << "Performing OPS scan for full list for: " << object << "\n";
+  Id relId;
+  if (_vocab.getId(object, &relId)) {
+    LOG(TRACE) << "Successfully got relation ID.\n";
+    if (_opsMeta.relationExists(relId)) {
+      LOG(TRACE) << "Relation exists.\n";
+      const RelationMetaData& rmd = _opsMeta.getRmd(relId);
+      result->reserve(rmd._nofElements + 2);
+      result->resize(rmd._nofElements);
+      _opsFile.read(result->data(), rmd._nofElements * 2 * sizeof(Id),
+                    rmd._startFullIndex);
+    }
+  }
+  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
+}
+
+// _____________________________________________________________________________
+void Index::scanOSP(const string& object, WidthTwoList* result) const {
+  if (!_ospFile.isOpen()) {
+    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+             "Cannot use predicate variables without the required "
+                 "index permutations. Build an index with option -a "
+                 "to use this feature.");
+  }
+  LOG(DEBUG) << "Performing OSP scan for full list for: " << object << "\n";
+  Id relId;
+  if (_vocab.getId(object, &relId)) {
+    LOG(TRACE) << "Successfully got relation ID.\n";
+    if (_ospMeta.relationExists(relId)) {
+      LOG(TRACE) << "Relation exists.\n";
+      const RelationMetaData& rmd = _ospMeta.getRmd(relId);
+      result->reserve(rmd._nofElements + 2);
+      result->resize(rmd._nofElements);
+      _ospFile.read(result->data(), rmd._nofElements * 2 * sizeof(Id),
+                    rmd._startFullIndex);
+    }
+  }
+  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
+}
+
+
+// _____________________________________________________________________________
 const string& Index::idToString(Id id) const {
   assert(id < _vocab.size());
   return _vocab[id];

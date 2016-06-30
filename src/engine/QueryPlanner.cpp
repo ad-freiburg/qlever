@@ -272,10 +272,13 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                             &scan);
           tree.setVariableColumn(node._triple._o, 0);
         } else {
-          // Pred variable.
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                   "No predicate vars yet, please. Triple in question: "
-                   + node._triple.asString());
+          IndexScan scan(_qec, IndexScan::ScanType::SOP_BOUND_O);
+          scan.setSubject(node._triple._s);
+          scan.setObject(node._triple._o);
+          scan.precomputeSizeEstimate();
+          tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                            &scan);
+          tree.setVariableColumn(node._triple._p, 0);
         }
         plan._qet = tree;
         seeds.push_back(plan);
@@ -283,39 +286,95 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
 
       if (node._variables.size() == 2) {
         // Add plans for both possible scan directions.
-        if (isVariable(node._triple._p)) {
-          // Pred variable.
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                   "No predicate vars yet, please. Triple in question: "
-                   + node._triple.asString());
+        if (!isVariable(node._triple._p)) {
+          {
+            SubtreePlan plan(_qec);
+            plan._idsOfIncludedNodes.insert(i);
+            QueryExecutionTree tree(_qec);
+            IndexScan scan(_qec, IndexScan::ScanType::PSO_FREE_S);
+            scan.setPredicate(node._triple._p);
+            scan.precomputeSizeEstimate();
+            tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                              &scan);
+            tree.setVariableColumn(node._triple._s, 0);
+            tree.setVariableColumn(node._triple._o, 1);
+            plan._qet = tree;
+            seeds.push_back(plan);
+          }
+          {
+            SubtreePlan plan(_qec);
+            plan._idsOfIncludedNodes.insert(i);
+            QueryExecutionTree tree(_qec);
+            IndexScan scan(_qec, IndexScan::ScanType::POS_FREE_O);
+            scan.setPredicate(node._triple._p);
+            scan.precomputeSizeEstimate();
+            tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                              &scan);
+            tree.setVariableColumn(node._triple._o, 0);
+            tree.setVariableColumn(node._triple._s, 1);
+            plan._qet = tree;
+            seeds.push_back(plan);
+          }
         }
-        {
-          SubtreePlan plan(_qec);
-          plan._idsOfIncludedNodes.insert(i);
-          QueryExecutionTree tree(_qec);
-          IndexScan scan(_qec, IndexScan::ScanType::PSO_FREE_S);
-          scan.setPredicate(node._triple._p);
-          scan.precomputeSizeEstimate();
-          tree.setOperation(QueryExecutionTree::OperationType::SCAN,
-                            &scan);
-          tree.setVariableColumn(node._triple._s, 0);
-          tree.setVariableColumn(node._triple._o, 1);
-          plan._qet = tree;
-          seeds.push_back(plan);
+        if (!isVariable(node._triple._s)) {
+          {
+            SubtreePlan plan(_qec);
+            plan._idsOfIncludedNodes.insert(i);
+            QueryExecutionTree tree(_qec);
+            IndexScan scan(_qec, IndexScan::ScanType::SPO_FREE_P);
+            scan.setSubject(node._triple._s);
+            scan.precomputeSizeEstimate();
+            tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                              &scan);
+            tree.setVariableColumn(node._triple._p, 0);
+            tree.setVariableColumn(node._triple._o, 1);
+            plan._qet = tree;
+            seeds.push_back(plan);
+          }
+          {
+            SubtreePlan plan(_qec);
+            plan._idsOfIncludedNodes.insert(i);
+            QueryExecutionTree tree(_qec);
+            IndexScan scan(_qec, IndexScan::ScanType::SOP_FREE_O);
+            scan.setSubject(node._triple._s);
+            scan.precomputeSizeEstimate();
+            tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                              &scan);
+            tree.setVariableColumn(node._triple._o, 0);
+            tree.setVariableColumn(node._triple._p, 1);
+            plan._qet = tree;
+            seeds.push_back(plan);
+          }
         }
-        {
-          SubtreePlan plan(_qec);
-          plan._idsOfIncludedNodes.insert(i);
-          QueryExecutionTree tree(_qec);
-          IndexScan scan(_qec, IndexScan::ScanType::POS_FREE_O);
-          scan.setPredicate(node._triple._p);
-          scan.precomputeSizeEstimate();
-          tree.setOperation(QueryExecutionTree::OperationType::SCAN,
-                            &scan);
-          tree.setVariableColumn(node._triple._o, 0);
-          tree.setVariableColumn(node._triple._s, 1);
-          plan._qet = tree;
-          seeds.push_back(plan);
+        if (!isVariable(node._triple._o)) {
+          {
+            SubtreePlan plan(_qec);
+            plan._idsOfIncludedNodes.insert(i);
+            QueryExecutionTree tree(_qec);
+            IndexScan scan(_qec, IndexScan::ScanType::OSP_FREE_S);
+            scan.setObject(node._triple._o);
+            scan.precomputeSizeEstimate();
+            tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                              &scan);
+            tree.setVariableColumn(node._triple._s, 0);
+            tree.setVariableColumn(node._triple._p, 1);
+            plan._qet = tree;
+            seeds.push_back(plan);
+          }
+          {
+            SubtreePlan plan(_qec);
+            plan._idsOfIncludedNodes.insert(i);
+            QueryExecutionTree tree(_qec);
+            IndexScan scan(_qec, IndexScan::ScanType::OPS_FREE_P);
+            scan.setObject(node._triple._o);
+            scan.precomputeSizeEstimate();
+            tree.setOperation(QueryExecutionTree::OperationType::SCAN,
+                              &scan);
+            tree.setVariableColumn(node._triple._p, 0);
+            tree.setVariableColumn(node._triple._s, 1);
+            plan._qet = tree;
+            seeds.push_back(plan);
+          }
         }
       }
       if (node._variables.size() >= 3) {

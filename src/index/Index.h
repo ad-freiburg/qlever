@@ -95,6 +95,18 @@ public:
   void scanPOS(const string& predicate, const string& object, WidthOneList*
   result) const;
 
+  void scanSOP(const string& subject, const string& object, WidthOneList*
+  result) const;
+
+  void scanSPO(const string& subject, WidthTwoList* result) const;
+
+  void scanSOP(const string& subject, WidthTwoList* result) const;
+
+  void scanOPS(const string& object, WidthTwoList* result) const;
+
+  void scanOSP(const string& object, WidthTwoList* result) const;
+
+
 
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
