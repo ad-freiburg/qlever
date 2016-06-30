@@ -24,7 +24,7 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
   ad_utility::File stxxlConfig(".stxxl", "w");
   std::ostringstream config;
   config << "disk=" << getStxxlDiskFileName(location, tail) << ","
-      << STXXL_DISK_SIZE_INDEX_TEST << ",syscall";
+  << STXXL_DISK_SIZE_INDEX_TEST << ",syscall";
   stxxlConfig.writeLine(config.str());
 }
 
@@ -51,7 +51,7 @@ TEST(IndexTest, createFromTsvTest) {
     f.close();
 
     Index index;
-    index.createFromTsvFile("_testtmp2.tsv", "_testindex");
+    index.createFromTsvFile("_testtmp2.tsv", "_testindex", false);
 
     ASSERT_TRUE(index._psoMeta.relationExists(2));
     ASSERT_TRUE(index._psoMeta.relationExists(3));
@@ -59,8 +59,8 @@ TEST(IndexTest, createFromTsvTest) {
     ASSERT_FALSE(index._psoMeta.relationExists(4));
     ASSERT_FALSE(index._psoMeta.getRmd(2).isFunctional());
     ASSERT_TRUE(index._psoMeta.getRmd(3).isFunctional());
-    ASSERT_EQ(1, index._psoMeta.getRmd(2)._nofBlocks);
-    ASSERT_EQ(1, index._psoMeta.getRmd(3)._nofBlocks);
+    ASSERT_EQ(1u, index._psoMeta.getRmd(2)._nofBlocks);
+    ASSERT_EQ(1u, index._psoMeta.getRmd(3)._nofBlocks);
 
     ASSERT_TRUE(index._posMeta.relationExists(2));
     ASSERT_TRUE(index._posMeta.relationExists(3));
@@ -75,36 +75,36 @@ TEST(IndexTest, createFromTsvTest) {
     psoFile.read(buf, nofbytes);
 
 
-    size_t bytesDone = 0;
+    off_t bytesDone = 0;
     // Relation b
     // Pair index
     ASSERT_EQ(Id(0), *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(4, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(0, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(5, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     // Lhs info
-    ASSERT_EQ(0, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(bytesDone + sizeof(off_t),
-        *reinterpret_cast<off_t*>(buf + bytesDone));
+    ASSERT_EQ(static_cast<off_t>(bytesDone + sizeof(off_t)),
+              *reinterpret_cast<off_t*>(buf + bytesDone));
     bytesDone += sizeof(off_t);
     // Rhs list
-    ASSERT_EQ(4, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(5, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     // Relation b2
     ASSERT_EQ(Id(0), *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(4, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(1, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(5, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     // No LHS & RHS
     ASSERT_EQ(index._psoMeta.getOffsetAfter(), bytesDone);
@@ -147,13 +147,13 @@ TEST(IndexTest, createFromTsvTest) {
     f.close();
 
     Index index;
-    index.createFromTsvFile("_testtmp2.tsv", "_testindex");
+    index.createFromTsvFile("_testtmp2.tsv", "_testindex", false);
 
     ASSERT_TRUE(index._psoMeta.relationExists(7));
     ASSERT_FALSE(index._psoMeta.relationExists(1));
 
     ASSERT_FALSE(index._psoMeta.getRmd(7).isFunctional());
-    ASSERT_EQ(1, index._psoMeta.getRmd(7)._nofBlocks);
+    ASSERT_EQ(1u, index._psoMeta.getRmd(7)._nofBlocks);
 
     ASSERT_TRUE(index._posMeta.relationExists(7));
     ASSERT_FALSE(index._posMeta.getRmd(7).isFunctional());
@@ -164,70 +164,72 @@ TEST(IndexTest, createFromTsvTest) {
     psoFile.read(buf, nofbytes);
 
 
-    size_t bytesDone = 0;
+    off_t bytesDone = 0;
 
     // Pair index
-    ASSERT_EQ(4, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(0, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(4, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(1, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(4, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(2, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(5, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(0, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(5, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(3, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(6, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(1, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(6, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(2, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     // Lhs info
 
-    ASSERT_EQ(4, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(index._psoMeta.getRmd(7)._startRhs,
+              *reinterpret_cast<off_t*>(buf + bytesDone));
+    bytesDone += sizeof(off_t);
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(
+        static_cast<off_t>(index._psoMeta.getRmd(7)._startRhs + 3 * sizeof(Id)),
         *reinterpret_cast<off_t*>(buf + bytesDone));
     bytesDone += sizeof(off_t);
-    ASSERT_EQ(5, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(index._psoMeta.getRmd(7)._startRhs + 3 * sizeof(Id),
-        *reinterpret_cast<off_t*>(buf + bytesDone));
-    bytesDone += sizeof(off_t);
-    ASSERT_EQ(6, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(index._psoMeta.getRmd(7)._startRhs + 5 * sizeof(Id),
+    ASSERT_EQ(
+        static_cast<off_t>(index._psoMeta.getRmd(7)._startRhs + 5 * sizeof(Id)),
         *reinterpret_cast<off_t*>(buf + bytesDone));
     bytesDone += sizeof(off_t);
 
     // Rhs list
     ASSERT_EQ(bytesDone, index._psoMeta.getRmd(7)._startRhs);
-    ASSERT_EQ(0, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(1, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(2, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(0, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(3, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(1, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(2, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
 
     delete[] buf;
     psoFile.close();
@@ -242,72 +244,75 @@ TEST(IndexTest, createFromTsvTest) {
     bytesDone = 0;
 
     // Pair index
-    ASSERT_EQ(0, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(4, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(0, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(5, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(1, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(4, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(1, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(6, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(2, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(4, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(2, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(6, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(3, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(5, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
 
     // Lhs info
-    ASSERT_EQ(0, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(index._posMeta.getRmd(7)._startRhs,
+              *reinterpret_cast<off_t*>(buf + bytesDone));
+    bytesDone += sizeof(off_t);
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(
+        static_cast<off_t>(index._posMeta.getRmd(7)._startRhs + 2 * sizeof(Id)),
         *reinterpret_cast<off_t*>(buf + bytesDone));
     bytesDone += sizeof(off_t);
-    ASSERT_EQ(1, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(index._posMeta.getRmd(7)._startRhs + 2 * sizeof(Id),
+    ASSERT_EQ(
+        static_cast<off_t>(index._posMeta.getRmd(7)._startRhs + 4 * sizeof(Id)),
         *reinterpret_cast<off_t*>(buf + bytesDone));
     bytesDone += sizeof(off_t);
-    ASSERT_EQ(2, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(index._posMeta.getRmd(7)._startRhs + 4 * sizeof(Id),
-        *reinterpret_cast<off_t*>(buf + bytesDone));
-    bytesDone += sizeof(off_t);
-    ASSERT_EQ(3, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(index._posMeta.getRmd(7)._startRhs + 6 * sizeof(Id),
+    ASSERT_EQ(
+        static_cast<off_t>(index._posMeta.getRmd(7)._startRhs + 6 * sizeof(Id)),
         *reinterpret_cast<off_t*>(buf + bytesDone));
     bytesDone += sizeof(off_t);
 
     // Rhs list
     ASSERT_EQ(bytesDone, index._posMeta.getRmd(7)._startRhs);
-    ASSERT_EQ(4, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(5, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(4, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(6, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(4, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(6, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(5, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
 
     delete[] buf;
     psoFile.close();
@@ -344,7 +349,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
 
   {
     Index indexPrim;
-    indexPrim.createFromTsvFile("_testtmp3.tsv", "_testindex2");
+    indexPrim.createFromTsvFile("_testtmp3.tsv", "_testindex2", false);
   }
 
   Index index;
@@ -356,8 +361,8 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   ASSERT_FALSE(index._psoMeta.relationExists(4));
   ASSERT_FALSE(index._psoMeta.getRmd(2).isFunctional());
   ASSERT_TRUE(index._psoMeta.getRmd(3).isFunctional());
-  ASSERT_EQ(1, index._psoMeta.getRmd(2)._nofBlocks);
-  ASSERT_EQ(1, index._psoMeta.getRmd(3)._nofBlocks);
+  ASSERT_EQ(1u, index._psoMeta.getRmd(2)._nofBlocks);
+  ASSERT_EQ(1u, index._psoMeta.getRmd(3)._nofBlocks);
 
   ASSERT_TRUE(index._posMeta.relationExists(2));
   ASSERT_TRUE(index._posMeta.relationExists(3));
@@ -394,51 +399,51 @@ TEST(IndexTest, scanTest) {
   f.close();
   {
     Index index;
-    index.createFromTsvFile("_testtmp2.tsv", "_testindex");
+    index.createFromTsvFile("_testtmp2.tsv", "_testindex", false);
 
     Index::WidthOneList wol;
     Index::WidthTwoList wtl;
 
     index.scanPSO("b", &wtl);
-    ASSERT_EQ(2, wtl.size());
-    ASSERT_EQ(0, wtl[0][0]);
-    ASSERT_EQ(4, wtl[0][1]);
-    ASSERT_EQ(0, wtl[1][0]);
-    ASSERT_EQ(5, wtl[1][1]);
+    ASSERT_EQ(2u, wtl.size());
+    ASSERT_EQ(0u, wtl[0][0]);
+    ASSERT_EQ(4u, wtl[0][1]);
+    ASSERT_EQ(0u, wtl[1][0]);
+    ASSERT_EQ(5u, wtl[1][1]);
     wtl.clear();
     index.scanPSO("x", &wtl);
-    ASSERT_EQ(0, wtl.size());
+    ASSERT_EQ(0u, wtl.size());
 
     index.scanPSO("c", &wtl);
-    ASSERT_EQ(0, wtl.size());
+    ASSERT_EQ(0u, wtl.size());
 
 
     index.scanPOS("b", &wtl);
-    ASSERT_EQ(2, wtl.size());
-    ASSERT_EQ(4, wtl[0][0]);
-    ASSERT_EQ(0, wtl[0][1]);
-    ASSERT_EQ(5, wtl[1][0]);
-    ASSERT_EQ(0, wtl[1][1]);
+    ASSERT_EQ(2u, wtl.size());
+    ASSERT_EQ(4u, wtl[0][0]);
+    ASSERT_EQ(0u, wtl[0][1]);
+    ASSERT_EQ(5u, wtl[1][0]);
+    ASSERT_EQ(0u, wtl[1][1]);
     wtl.clear();
     index.scanPOS("x", &wtl);
-    ASSERT_EQ(0, wtl.size());
+    ASSERT_EQ(0u, wtl.size());
 
     index.scanPOS("c", &wtl);
-    ASSERT_EQ(0, wtl.size());
+    ASSERT_EQ(0u, wtl.size());
 
 
     index.scanPSO("b", "a", &wol);
-    ASSERT_EQ(2, wol.size());
-    ASSERT_EQ(4, wol[0][0]);
-    ASSERT_EQ(5, wol[1][0]);
+    ASSERT_EQ(2u, wol.size());
+    ASSERT_EQ(4u, wol[0][0]);
+    ASSERT_EQ(5u, wol[1][0]);
     wol.clear();
     index.scanPSO("b", "c", &wol);
-    ASSERT_EQ(0, wol.size());
+    ASSERT_EQ(0u, wol.size());
 
 
     index.scanPOS("b2", "c2", &wol);
-    ASSERT_EQ(1, wol.size());
-    ASSERT_EQ(1, wol[0][0]);
+    ASSERT_EQ(1u, wol.size());
+    ASSERT_EQ(1u, wol[0][0]);
   }
 
   remove("_testtmp2.tsv");
@@ -475,85 +480,85 @@ TEST(IndexTest, scanTest) {
 
   {
     Index index;
-    index.createFromTsvFile("_testtmp2.tsv", "_testindex");
+    index.createFromTsvFile("_testtmp2.tsv", "_testindex", false);
 
     Index::WidthOneList wol;
     Index::WidthTwoList wtl;
 
     index.scanPSO("is-a", &wtl);
-    ASSERT_EQ(7, wtl.size());
-    ASSERT_EQ(4, wtl[0][0]);
-    ASSERT_EQ(0, wtl[0][1]);
-    ASSERT_EQ(4, wtl[1][0]);
-    ASSERT_EQ(1, wtl[1][1]);
-    ASSERT_EQ(4, wtl[2][0]);
-    ASSERT_EQ(2, wtl[2][1]);
-    ASSERT_EQ(5, wtl[3][0]);
-    ASSERT_EQ(0, wtl[3][1]);
-    ASSERT_EQ(5, wtl[4][0]);
-    ASSERT_EQ(3, wtl[4][1]);
-    ASSERT_EQ(6, wtl[5][0]);
-    ASSERT_EQ(1, wtl[5][1]);
-    ASSERT_EQ(6, wtl[6][0]);
-    ASSERT_EQ(2, wtl[6][1]);
+    ASSERT_EQ(7u, wtl.size());
+    ASSERT_EQ(4u, wtl[0][0]);
+    ASSERT_EQ(0u, wtl[0][1]);
+    ASSERT_EQ(4u, wtl[1][0]);
+    ASSERT_EQ(1u, wtl[1][1]);
+    ASSERT_EQ(4u, wtl[2][0]);
+    ASSERT_EQ(2u, wtl[2][1]);
+    ASSERT_EQ(5u, wtl[3][0]);
+    ASSERT_EQ(0u, wtl[3][1]);
+    ASSERT_EQ(5u, wtl[4][0]);
+    ASSERT_EQ(3u, wtl[4][1]);
+    ASSERT_EQ(6u, wtl[5][0]);
+    ASSERT_EQ(1u, wtl[5][1]);
+    ASSERT_EQ(6u, wtl[6][0]);
+    ASSERT_EQ(2u, wtl[6][1]);
 
     index.scanPOS("is-a", &wtl);
-    ASSERT_EQ(7, wtl.size());
-    ASSERT_EQ(0, wtl[0][0]);
-    ASSERT_EQ(4, wtl[0][1]);
-    ASSERT_EQ(0, wtl[1][0]);
-    ASSERT_EQ(5, wtl[1][1]);
-    ASSERT_EQ(1, wtl[2][0]);
-    ASSERT_EQ(4, wtl[2][1]);
-    ASSERT_EQ(1, wtl[3][0]);
-    ASSERT_EQ(6, wtl[3][1]);
-    ASSERT_EQ(2, wtl[4][0]);
-    ASSERT_EQ(4, wtl[4][1]);
-    ASSERT_EQ(2, wtl[5][0]);
-    ASSERT_EQ(6, wtl[5][1]);
-    ASSERT_EQ(3, wtl[6][0]);
-    ASSERT_EQ(5, wtl[6][1]);
+    ASSERT_EQ(7u, wtl.size());
+    ASSERT_EQ(0u, wtl[0][0]);
+    ASSERT_EQ(4u, wtl[0][1]);
+    ASSERT_EQ(0u, wtl[1][0]);
+    ASSERT_EQ(5u, wtl[1][1]);
+    ASSERT_EQ(1u, wtl[2][0]);
+    ASSERT_EQ(4u, wtl[2][1]);
+    ASSERT_EQ(1u, wtl[3][0]);
+    ASSERT_EQ(6u, wtl[3][1]);
+    ASSERT_EQ(2u, wtl[4][0]);
+    ASSERT_EQ(4u, wtl[4][1]);
+    ASSERT_EQ(2u, wtl[5][0]);
+    ASSERT_EQ(6u, wtl[5][1]);
+    ASSERT_EQ(3u, wtl[6][0]);
+    ASSERT_EQ(5u, wtl[6][1]);
 
     index.scanPOS("is-a", "0", &wol);
-    ASSERT_EQ(2, wol.size());
-    ASSERT_EQ(4, wol[0][0]);
-    ASSERT_EQ(5, wol[1][0]);
+    ASSERT_EQ(2u, wol.size());
+    ASSERT_EQ(4u, wol[0][0]);
+    ASSERT_EQ(5u, wol[1][0]);
 
     wol.clear();
     index.scanPOS("is-a", "1", &wol);
-    ASSERT_EQ(2, wol.size());
-    ASSERT_EQ(4, wol[0][0]);
-    ASSERT_EQ(6, wol[1][0]);
+    ASSERT_EQ(2u, wol.size());
+    ASSERT_EQ(4u, wol[0][0]);
+    ASSERT_EQ(6u, wol[1][0]);
 
     wol.clear();
     index.scanPOS("is-a", "2", &wol);
-    ASSERT_EQ(2, wol.size());
-    ASSERT_EQ(4, wol[0][0]);
-    ASSERT_EQ(6, wol[1][0]);
+    ASSERT_EQ(2u, wol.size());
+    ASSERT_EQ(4u, wol[0][0]);
+    ASSERT_EQ(6u, wol[1][0]);
 
     wol.clear();
     index.scanPOS("is-a", "3", &wol);
-    ASSERT_EQ(1, wol.size());
-    ASSERT_EQ(5, wol[0][0]);
+    ASSERT_EQ(1u, wol.size());
+    ASSERT_EQ(5u, wol[0][0]);
 
     wol.clear();
     index.scanPSO("is-a", "a", &wol);
-    ASSERT_EQ(3, wol.size());
-    ASSERT_EQ(0, wol[0][0]);
-    ASSERT_EQ(1, wol[1][0]);
-    ASSERT_EQ(2, wol[2][0]);
+    ASSERT_EQ(3u, wol.size());
+    ASSERT_EQ(0u, wol[0][0]);
+    ASSERT_EQ(1u, wol[1][0]);
+    ASSERT_EQ(2u, wol[2][0]);
 
     wol.clear();
     index.scanPSO("is-a", "b", &wol);
-    ASSERT_EQ(2, wol.size());
-    ASSERT_EQ(0, wol[0][0]);
-    ASSERT_EQ(3, wol[1][0]);
+    ASSERT_EQ(2u, wol.size());
+    ASSERT_EQ(0u, wol[0][0]);
+    ASSERT_EQ(3u, wol[1][0]);
 
     wol.clear();
     index.scanPSO("is-a", "c", &wol);
-    ASSERT_EQ(2, wol.size());
-    ASSERT_EQ(1, wol[0][0]);
-    ASSERT_EQ(2, wol[1][0]);
+    ASSERT_EQ(2u, wol.size());
+    ASSERT_EQ(1u, wol[0][0]);
+    ASSERT_EQ(2u, wol[1][0]);
   }
   remove("_testtmp2.tsv");
   std::remove(stxxlFileName.c_str());

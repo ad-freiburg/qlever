@@ -46,7 +46,8 @@ public:
   // Creates an index from a file in NTriples format.
   // Will write vocabulary and on-disk index data.
   // Also ends up with fully functional in-memory metadata.
-  void createFromNTriplesFile(const string& ntFile, const string& onDiskBase);
+  void createFromNTriplesFile(const string& ntFile, const string& onDiskBase,
+                              bool allPermutations);
 
   // Creates an index object from an on disk index
   // that has previously been constructed.

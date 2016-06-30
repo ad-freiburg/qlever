@@ -29,7 +29,7 @@ using std::cerr;
 struct option options[] = {
     {"tsv-file",          required_argument, NULL, 't'},
     {"ntriples-file",     required_argument, NULL, 'n'},
-    {"index-basename",    required_argument, NULL, 'b'},
+    {"index-basename",    required_argument, NULL, 'i'},
     {"words-by-contexts", required_argument, NULL, 'w'},
     {"docs-by-contexts",  required_argument, NULL, 'd'},
     {"all-permutations",  no_argument,       NULL, 'a'},
@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "t:n:b:w:d:a", options, NULL);
+    int c = getopt_long(argc, argv, "t:n:i:w:d:a", options, NULL);
     if (c == -1) { break; }
     switch (c) {
       case 't':
@@ -88,7 +88,7 @@ int main(int argc, char** argv) {
       case 'n':
         ntFile = optarg;
         break;
-      case 'b':
+      case 'i':
         baseName = optarg;
         break;
       case 'w':
@@ -110,7 +110,7 @@ int main(int argc, char** argv) {
   }
 
   if (baseName.size() == 0) {
-    cout << "Missing required argument --index-basename (-b)..." << endl;
+    cout << "Missing required argument --index-basename (-i)..." << endl;
     exit(1);
   }
 

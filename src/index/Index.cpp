@@ -28,8 +28,8 @@ void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
   // POS permutation
   LOG(INFO) << "Sorting for POS permutation..." << std::endl;;
   stxxl::sort(begin(v), end(v), SortByPOS(), STXXL_MEMORY_TO_USE);
-  createPermutation(indexFilename + ".pos", v, _posMeta, 2, 0);
   LOG(INFO) << "Sort done." << std::endl;
+  createPermutation(indexFilename + ".pos", v, _posMeta, 2, 0);
   if (allPermutations) {
     // SPO permutation
     LOG(INFO) << "Sorting for SPO permutation..." << std::endl;
@@ -57,7 +57,8 @@ void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
 
 // _____________________________________________________________________________
 void Index::createFromNTriplesFile(const string& ntFile,
-                                   const string& onDiskBase) {
+                                   const string& onDiskBase,
+                                   bool allPermutations) {
   _onDiskBase = onDiskBase;
   string indexFilename = _onDiskBase + ".index";
   size_t nofLines = passNTriplesFileForVocabulary(ntFile);
@@ -72,6 +73,28 @@ void Index::createFromNTriplesFile(const string& ntFile,
   stxxl::sort(begin(v), end(v), SortByPOS(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;;
   createPermutation(indexFilename + ".pos", v, _posMeta, 2, 0);
+  if (allPermutations) {
+    // SPO permutation
+    LOG(INFO) << "Sorting for SPO permutation..." << std::endl;
+    stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
+    LOG(INFO) << "Sort done." << std::endl;
+    createPermutation(indexFilename + ".spo", v, _spoMeta, 1, 2);
+    // SOP permutation
+    LOG(INFO) << "Sorting for SOP permutation..." << std::endl;
+    stxxl::sort(begin(v), end(v), SortBySOP(), STXXL_MEMORY_TO_USE);
+    LOG(INFO) << "Sort done." << std::endl;
+    createPermutation(indexFilename + ".sop", v, _sopMeta, 2, 1);
+    // OSP permutation
+    LOG(INFO) << "Sorting for OSP permutation..." << std::endl;
+    stxxl::sort(begin(v), end(v), SortByOSP(), STXXL_MEMORY_TO_USE);
+    LOG(INFO) << "Sort done." << std::endl;
+    createPermutation(indexFilename + ".sop", v, _ospMeta, 0, 1);
+    // OPS permutation
+    LOG(INFO) << "Sorting for OPS permutation..." << std::endl;
+    stxxl::sort(begin(v), end(v), SortByOPS(), STXXL_MEMORY_TO_USE);
+    LOG(INFO) << "Sort done." << std::endl;
+    createPermutation(indexFilename + ".ops", v, _opsMeta, 1, 0);
+  }
   openFileHandles();
 }
 
@@ -326,6 +349,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   _psoFile.open(string(_onDiskBase + ".index.pso").c_str(), "r");
   _posFile.open(string(_onDiskBase + ".index.pos").c_str(), "r");
   AD_CHECK(_psoFile.isOpen() && _posFile.isOpen());
+  // PSO
   off_t metaFrom;
   off_t metaTo = _psoFile.getLastOffset(&metaFrom);
   unsigned char* buf = new unsigned char[metaTo - metaFrom];
@@ -334,7 +358,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   delete[] buf;
   LOG(INFO) << "Registered PSO permutation: " << _psoMeta.statistics()
             << std::endl;
-
+  // POS
   metaTo = _posFile.getLastOffset(&metaFrom);
   buf = new unsigned char[metaTo - metaFrom];
   _posFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
@@ -342,6 +366,46 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   delete[] buf;
   LOG(INFO) << "Registered POS permutation: " << _posMeta.statistics()
             << std::endl;
+  if (ad_utility::File::exists(_onDiskBase + ".index.spo")) {
+    _spoFile.open(string(_onDiskBase + ".index.spo").c_str(), "r");
+    _sopFile.open(string(_onDiskBase + ".index.sop").c_str(), "r");
+    _ospFile.open(string(_onDiskBase + ".index.osp").c_str(), "r");
+    _opsFile.open(string(_onDiskBase + ".index.ops").c_str(), "r");
+    AD_CHECK(_spoFile.isOpen() && _sopFile.isOpen() && _ospFile.isOpen() &&
+             _opsFile.isOpen());
+    // SPO
+    metaTo = _spoFile.getLastOffset(&metaFrom);
+    buf = new unsigned char[metaTo - metaFrom];
+    _spoFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
+    _spoMeta.createFromByteBuffer(buf);
+    delete[] buf;
+    LOG(INFO) << "Registered SPO permutation: " << _spoMeta.statistics()
+              << std::endl;
+    // SOP
+    metaTo = _sopFile.getLastOffset(&metaFrom);
+    buf = new unsigned char[metaTo - metaFrom];
+    _sopFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
+    _sopMeta.createFromByteBuffer(buf);
+    delete[] buf;
+    LOG(INFO) << "Registered SOP permutation: " << _psoMeta.statistics()
+              << std::endl;
+    // OSP
+    metaTo = _ospFile.getLastOffset(&metaFrom);
+    buf = new unsigned char[metaTo - metaFrom];
+    _ospFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
+    _ospMeta.createFromByteBuffer(buf);
+    delete[] buf;
+    LOG(INFO) << "Registered OSP permutation: " << _ospMeta.statistics()
+              << std::endl;
+    // OPS
+    metaTo = _opsFile.getLastOffset(&metaFrom);
+    buf = new unsigned char[metaTo - metaFrom];
+    _opsFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
+    _opsMeta.createFromByteBuffer(buf);
+    delete[] buf;
+    LOG(INFO) << "Registered OPS permutation: " << _opsMeta.statistics()
+              << std::endl;
+  }
 }
 
 // _____________________________________________________________________________
@@ -375,7 +439,7 @@ void Index::scanPSO(const string& predicate, WidthTwoList* result) const {
   LOG(DEBUG) << "Performing PSO scan for full relation: " << predicate << "\n";
   Id relId;
   if (_vocab.getId(predicate, &relId)) {
-    LOG(TRACE) << "Sucessfully got relation ID.\n";
+    LOG(TRACE) << "Successfully got relation ID.\n";
     if (_psoMeta.relationExists(relId)) {
       LOG(TRACE) << "Relation exists.\n";
       const RelationMetaData& rmd = _psoMeta.getRmd(relId);
@@ -409,10 +473,10 @@ void Index::scanPSO(const string& predicate, const string& subject,
                                   rmd._offsetAfter, result);
       }
     } else {
-      LOG(DEBUG) << "So such relation.\n";
+      LOG(DEBUG) << "No such relation.\n";
     }
   } else {
-    LOG(DEBUG) << "So such subject.\n";
+    LOG(DEBUG) << "No such subject.\n";
   }
   LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
 }
@@ -422,7 +486,7 @@ void Index::scanPOS(const string& predicate, WidthTwoList* result) const {
   LOG(DEBUG) << "Performing POS scan for full relation: " << predicate << "\n";
   Id relId;
   if (_vocab.getId(predicate, &relId)) {
-    LOG(TRACE) << "Sucessfully got relation ID.\n";
+    LOG(TRACE) << "Successfully got relation ID.\n";
     if (_posMeta.relationExists(relId)) {
       LOG(TRACE) << "Relation exists.\n";
       const RelationMetaData& rmd = _posMeta.getRmd(relId);
