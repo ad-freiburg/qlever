@@ -40,7 +40,8 @@ public:
   // Creates an index from a TSV file.
   // Will write vocabulary and on-disk index data.
   // Also ends up with fully functional in-memory metadata.
-  void createFromTsvFile(const string& tsvFile, const string& onDiskBase);
+  void createFromTsvFile(const string& tsvFile, const string& onDiskBase,
+                         bool allPermutations);
 
   // Creates an index from a file in NTriples format.
   // Will write vocabulary and on-disk index data.
@@ -183,12 +184,20 @@ private:
   Vocabulary _textVocab;
   IndexMetaData _psoMeta;
   IndexMetaData _posMeta;
+  IndexMetaData _spoMeta;
+  IndexMetaData _sopMeta;
+  IndexMetaData _ospMeta;
+  IndexMetaData _opsMeta;
   TextMetaData _textMeta;
   DocsDB _docsDB;
   vector<Id> _blockBoundaries;
   off_t _currentoff_t;
   mutable ad_utility::File _psoFile;
   mutable ad_utility::File _posFile;
+  mutable ad_utility::File _spoFile;
+  mutable ad_utility::File _sopFile;
+  mutable ad_utility::File _ospFile;
+  mutable ad_utility::File _opsFile;
   mutable ad_utility::File _textIndexFile;
 
   size_t passTsvFileForVocabulary(const string& tsvFile);

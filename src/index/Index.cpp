@@ -12,21 +12,46 @@
 using std::array;
 
 // _____________________________________________________________________________
-void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase) {
+void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
+                              bool allPermutations) {
   _onDiskBase = onDiskBase;
   string indexFilename = _onDiskBase + ".index";
   size_t nofLines = passTsvFileForVocabulary(tsvFile);
   _vocab.writeToFile(onDiskBase + ".vocabulary");
   ExtVec v(nofLines);
   passTsvFileIntoIdVector(tsvFile, v);
+  // PSO permutation
   LOG(INFO) << "Sorting for PSO permutation..." << std::endl;
   stxxl::sort(begin(v), end(v), SortByPSO(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
   createPermutation(indexFilename + ".pso", v, _psoMeta, 0, 2);
+  // POS permutation
   LOG(INFO) << "Sorting for POS permutation..." << std::endl;;
   stxxl::sort(begin(v), end(v), SortByPOS(), STXXL_MEMORY_TO_USE);
-  LOG(INFO) << "Sort done." << std::endl;;
   createPermutation(indexFilename + ".pos", v, _posMeta, 2, 0);
+  LOG(INFO) << "Sort done." << std::endl;
+  if (allPermutations) {
+    // SPO permutation
+    LOG(INFO) << "Sorting for SPO permutation..." << std::endl;
+    stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
+    LOG(INFO) << "Sort done." << std::endl;
+    createPermutation(indexFilename + ".spo", v, _spoMeta, 1, 2);
+    // SOP permutation
+    LOG(INFO) << "Sorting for SOP permutation..." << std::endl;
+    stxxl::sort(begin(v), end(v), SortBySOP(), STXXL_MEMORY_TO_USE);
+    LOG(INFO) << "Sort done." << std::endl;
+    createPermutation(indexFilename + ".sop", v, _sopMeta, 2, 1);
+    // OSP permutation
+    LOG(INFO) << "Sorting for OSP permutation..." << std::endl;
+    stxxl::sort(begin(v), end(v), SortByOSP(), STXXL_MEMORY_TO_USE);
+    LOG(INFO) << "Sort done." << std::endl;
+    createPermutation(indexFilename + ".sop", v, _ospMeta, 0, 1);
+    // OPS permutation
+    LOG(INFO) << "Sorting for OPS permutation..." << std::endl;
+    stxxl::sort(begin(v), end(v), SortByOPS(), STXXL_MEMORY_TO_USE);
+    LOG(INFO) << "Sort done." << std::endl;
+    createPermutation(indexFilename + ".ops", v, _opsMeta, 1, 0);
+  }
   openFileHandles();
 }
 
@@ -248,8 +273,8 @@ RelationMetaData& Index::writeNonFunctionalRelation(ad_utility::File& out,
   // Make a pass over the data and extract a RHS list for each LHS.
   // Prepare both in buffers.
   // TODO: add compression - at least to RHS.
-  pair<Id, off_t> *bufLhs = new pair<Id, off_t>[data.size()];
-  Id *bufRhs = new Id[data.size()];
+  pair<Id, off_t>* bufLhs = new pair<Id, off_t>[data.size()];
+  Id* bufRhs = new Id[data.size()];
   size_t nofDistinctLhs = 0;
   Id lastLhs = std::numeric_limits<Id>::max();
   size_t nofRhsDone = 0;
@@ -303,7 +328,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   AD_CHECK(_psoFile.isOpen() && _posFile.isOpen());
   off_t metaFrom;
   off_t metaTo = _psoFile.getLastOffset(&metaFrom);
-  unsigned char *buf = new unsigned char[metaTo - metaFrom];
+  unsigned char* buf = new unsigned char[metaTo - metaFrom];
   _psoFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
   _psoMeta.createFromByteBuffer(buf);
   delete[] buf;
@@ -327,14 +352,26 @@ bool Index::ready() const {
 // _____________________________________________________________________________
 void Index::openFileHandles() {
   AD_CHECK(_onDiskBase.size() > 0);
-  _psoFile.open(string(_onDiskBase + ".index.pso").c_str(), "r");
-  _posFile.open(string(_onDiskBase + ".index.pos").c_str(), "r");
+  _psoFile.open((_onDiskBase + ".index.pso").c_str(), "r");
+  _posFile.open((_onDiskBase + ".index.pos").c_str(), "r");
+  if (ad_utility::File::exists(_onDiskBase + ".index.spo")) {
+    _spoFile.open((_onDiskBase + ".index.spo").c_str(), "r");
+  }
+  if (ad_utility::File::exists(_onDiskBase + ".index.sop")) {
+    _sopFile.open((_onDiskBase + ".index.sop").c_str(), "r");
+  }
+  if (ad_utility::File::exists(_onDiskBase + ".index.osp")) {
+    _ospFile.open((_onDiskBase + ".index.osp").c_str(), "r");
+  }
+  if (ad_utility::File::exists(_onDiskBase + ".index.ops")) {
+    _opsFile.open((_onDiskBase + ".index.ops").c_str(), "r");
+  }
   AD_CHECK(_psoFile.isOpen());
   AD_CHECK(_posFile.isOpen());
 }
 
 // _____________________________________________________________________________
-void Index::scanPSO(const string& predicate, WidthTwoList *result) const {
+void Index::scanPSO(const string& predicate, WidthTwoList* result) const {
   LOG(DEBUG) << "Performing PSO scan for full relation: " << predicate << "\n";
   Id relId;
   if (_vocab.getId(predicate, &relId)) {
@@ -353,7 +390,7 @@ void Index::scanPSO(const string& predicate, WidthTwoList *result) const {
 
 // _____________________________________________________________________________
 void Index::scanPSO(const string& predicate, const string& subject,
-                    WidthOneList *result) const {
+                    WidthOneList* result) const {
   LOG(DEBUG) << "Performing PSO scan of relation" << predicate
              << "with fixed subject: " << subject << "...\n";
   Id relId;
@@ -381,7 +418,7 @@ void Index::scanPSO(const string& predicate, const string& subject,
 }
 
 // _____________________________________________________________________________
-void Index::scanPOS(const string& predicate, WidthTwoList *result) const {
+void Index::scanPOS(const string& predicate, WidthTwoList* result) const {
   LOG(DEBUG) << "Performing POS scan for full relation: " << predicate << "\n";
   Id relId;
   if (_vocab.getId(predicate, &relId)) {
@@ -400,7 +437,7 @@ void Index::scanPOS(const string& predicate, WidthTwoList *result) const {
 
 // _____________________________________________________________________________
 void Index::scanPOS(const string& predicate, const string& object,
-                    WidthOneList *result) const {
+                    WidthOneList* result) const {
   LOG(DEBUG) << "Performing POS scan of relation" << predicate
              << "with fixed object: " << object << "...\n";
   Id relId;
@@ -436,14 +473,14 @@ const string& Index::idToString(Id id) const {
 // _____________________________________________________________________________
 void Index::scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                    Id lhsId, ad_utility::File& indexFile,
-                                   WidthOneList *result) const {
+                                   WidthOneList* result) const {
   LOG(TRACE) << "Scanning functional relation ...\n";
   WidthTwoList block;
   block.resize(blockOff.second / (2 * sizeof(Id)));
   indexFile.read(block.data(), blockOff.second, blockOff.first);
   auto it = std::lower_bound(block.begin(), block.end(), lhsId,
                              [](const array<Id, 2>& elem, Id key) {
-                                 return elem[0] < key;
+                               return elem[0] < key;
                              });
   if ((*it)[0] == lhsId) {
     result->push_back(array<Id, 1>{(*it)[1]});
@@ -456,14 +493,14 @@ void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                       const pair<off_t, size_t>& followBlock,
                                       Id lhsId, ad_utility::File& indexFile,
                                       off_t upperBound,
-                                      Index::WidthOneList *result) const {
+                                      Index::WidthOneList* result) const {
   LOG(TRACE) << "Scanning non-functional relation ...\n";
   vector<pair<Id, off_t>> block;
   block.resize(blockOff.second / (sizeof(Id) + sizeof(off_t)));
   indexFile.read(block.data(), blockOff.second, blockOff.first);
   auto it = std::lower_bound(block.begin(), block.end(), lhsId,
                              [](const pair<Id, off_t>& elem, Id key) {
-                                 return elem.first < key;
+                               return elem.first < key;
                              });
   if (it->first == lhsId) {
     size_t nofBytes = 0;

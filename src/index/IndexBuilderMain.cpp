@@ -32,6 +32,7 @@ struct option options[] = {
     {"index-basename",    required_argument, NULL, 'b'},
     {"words-by-contexts", required_argument, NULL, 'w'},
     {"docs-by-contexts",  required_argument, NULL, 'd'},
+    {"all-permutations",  no_argument,       NULL, 'a'},
     {NULL, 0,                                NULL, 0}
 };
 
@@ -74,10 +75,11 @@ int main(int argc, char** argv) {
   string baseName;
   string wordsfile;
   string docsfile;
+  bool allPermutations = false;
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "t:n:b:w:d:", options, NULL);
+    int c = getopt_long(argc, argv, "t:n:b:w:d:a", options, NULL);
     if (c == -1) { break; }
     switch (c) {
       case 't':
@@ -94,6 +96,9 @@ int main(int argc, char** argv) {
         break;
       case 'd':
         docsfile = optarg;
+        break;
+      case 'a':
+        allPermutations = true;
         break;
       default:
         cout << endl
@@ -127,9 +132,9 @@ int main(int argc, char** argv) {
   try {
     Index index;
     if (ntFile.size() > 0) {
-      index.createFromNTriplesFile(ntFile, baseName);
+      index.createFromNTriplesFile(ntFile, baseName, allPermutations);
     } else if (tsvFile.size() > 0) {
-      index.createFromTsvFile(tsvFile, baseName);
+      index.createFromTsvFile(tsvFile, baseName, allPermutations);
     } else {
       index.createFromOnDiskIndex(baseName);
     }
