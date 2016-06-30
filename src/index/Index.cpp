@@ -45,7 +45,7 @@ void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
     LOG(INFO) << "Sorting for OSP permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortByOSP(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".sop", v, _ospMeta, 2, 0, 1);
+    createPermutation(indexFilename + ".osp", v, _ospMeta, 2, 0, 1);
     // OPS permutation
     LOG(INFO) << "Sorting for OPS permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortByOPS(), STXXL_MEMORY_TO_USE);
@@ -88,7 +88,7 @@ void Index::createFromNTriplesFile(const string& ntFile,
     LOG(INFO) << "Sorting for OSP permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortByOSP(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".sop", v, _ospMeta, 2, 0, 1);
+    createPermutation(indexFilename + ".osp", v, _ospMeta, 2, 0, 1);
     // OPS permutation
     LOG(INFO) << "Sorting for OPS permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortByOPS(), STXXL_MEMORY_TO_USE);
