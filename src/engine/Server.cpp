@@ -113,7 +113,7 @@ void Server::process(Socket *client, QueryExecutionContext *qec) const {
       // const QueryExecutionTree& qet = qg.getExecutionTree();
       QueryPlanner qp(qec);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
-      LOG(DEBUG) << qet.asString() << std::endl;
+      LOG(INFO) << qet.asString() << std::endl;
       response = composeResponseJson(pq, qet);
 
       contentType = "application/json";
