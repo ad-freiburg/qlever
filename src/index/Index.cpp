@@ -739,6 +739,91 @@ size_t Index::relationCardinality(const string& relationName) const {
 }
 
 // _____________________________________________________________________________
+size_t Index::subjectCardinality(const string& sub) const {
+  Id relId;
+  if (_vocab.getId(sub, &relId)) {
+    if (this->_spoMeta.relationExists(relId)) {
+      return this->_spoMeta.getRmd(relId)._nofElements;
+    }
+  }
+  return 0;
+}
+
+// _____________________________________________________________________________
+size_t Index::objectCardinality(const string& obj) const {
+  Id relId;
+  if (_vocab.getId(obj, &relId)) {
+    if (this->_ospMeta.relationExists(relId)) {
+      return this->_ospMeta.getRmd(relId)._nofElements;
+    }
+  }
+  return 0;
+}
+
+// _____________________________________________________________________________
+size_t Index::sizeEstimate(const string& sub, const string& pred,
+                           const string& obj) const {
+  // One or two of the parameters have to be empty strings.
+  // This determines the permutations to use.
+
+  // With only one nonempty string, we can get the exact count.
+  // With two, we can check if the relation is functional (return 1) or not
+  // where we approximate the result size by the block size.
+  if (sub.size() > 0 && pred.size() == 0 && obj.size() == 0) {
+    return subjectCardinality(sub);
+  }
+  if (sub.size() == 0 && pred.size() > 0 && obj.size() == 0) {
+    return relationCardinality(pred);
+  }
+  if (sub.size() > 0 && pred.size() == 0 && obj.size() > 0) {
+    return objectCardinality(obj);
+  }
+  if (sub.size() > 0 && pred.size() > 0 && obj.size() == 0) {
+    Id sId;
+    Id pId;
+    if (_vocab.getId(sub, &sId) && _vocab.getId(pred, &pId)) {
+      if (this->_spoMeta.relationExists(sId)) {
+        const auto& rmd = this->_spoMeta.getRmd(sId);
+        if (rmd.isFunctional()) {
+          return 1;
+        } else {
+          return rmd.getBlockStartAndNofBytesForLhs(pId).second;
+        }
+      }
+    }
+  }
+  if (sub.size() > 0 && pred.size() == 0 && obj.size() > 0) {
+    Id sId;
+    Id oId;
+    if (_vocab.getId(sub, &sId) && _vocab.getId(obj, &oId)) {
+      if (this->_sopMeta.relationExists(sId)) {
+        const auto& rmd = this->_sopMeta.getRmd(sId);
+        if (rmd.isFunctional()) {
+          return 1;
+        } else {
+          return rmd.getBlockStartAndNofBytesForLhs(oId).second;
+        }
+      }
+    }
+  }
+  if (sub.size() == 0 && pred.size() > 0 && obj.size() > 0) {
+    Id pId;
+    Id oId;
+    if (_vocab.getId(pred, &pId) && _vocab.getId(obj, &oId)) {
+      if (this->_posMeta.relationExists(pId)) {
+        const auto& rmd = this->_posMeta.getRmd(pId);
+        if (rmd.isFunctional()) {
+          return 1;
+        } else {
+          return rmd.getBlockStartAndNofBytesForLhs(oId).second;
+        }
+      }
+    }
+  }
+  return 0;
+}
+
+// _____________________________________________________________________________
 void Index::writeAsciiListFile(string filename, const vector<Id>& ids) const {
   std::ofstream f(filename.c_str());
   for (size_t i = 0; i < ids.size(); ++i) {

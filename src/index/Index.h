@@ -82,6 +82,11 @@ public:
   // RDF RETRIEVAL
   // --------------------------------------------------------------------------
   size_t relationCardinality(const string& relationName) const;
+  size_t subjectCardinality(const string& sub) const;
+  size_t objectCardinality(const string& obj) const;
+
+  size_t sizeEstimate(const string& sub, const string& pred,
+                      const string& obj) const;
 
   const string& idToString(Id id) const;
 
@@ -105,7 +110,6 @@ public:
   void scanOPS(const string& object, WidthTwoList* result) const;
 
   void scanOSP(const string& object, WidthTwoList* result) const;
-
 
 
   // --------------------------------------------------------------------------
