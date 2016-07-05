@@ -500,15 +500,24 @@ TEST(QueryPlannerTest, testStarTwoFree) {
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
-      ASSERT_EQ("{JOIN(\n\t"
-                    "{JOIN(\n\t"
-                    "{SCAN POS with P = \"<http://rdf.myprefix.com/xxx/rel2>\", O = \"<http://abc.de>\" | width: 1} [0]\n\t"
-                    "|X|\n\t"
-                    "{SCAN PSO with P = \"<http://rdf.myprefix.com/ns/myrel>\" | width: 2} [0]\n"
-                    ") | width: 2} [0]\n\t"
-                    "|X|\n\t"
-                    "{SCAN POS with P = \"<http://rdf.myprefix.com/myrel>\" | width: 2} [0]\n"
-                    ") | width: 3}", qet.asString());
+      ASSERT_EQ(
+          "{JOIN(\n\t{JOIN(\n\t"
+              "{SCAN POS with P = \"<http://rdf.myprefix.com/myrel>\" "
+              "| width: 2} [0]\n\t|X|\n\t"
+              "{SCAN PSO with P = \"<http://rdf.myprefix.com/ns/myrel>\" "
+              "| width: 2} [0]\n) | width: 3} [0]\n\t|X|\n\t"
+              "{SCAN POS with P = \"<http://rdf.myprefix.com/xxx/rel2>\", "
+              "O = \"<http://abc.de>\" | width: 1} [0]\n) | width: 3}",
+          qet.asString());
+//      ASSERT_EQ("{JOIN(\n\t"
+//                    "{JOIN(\n\t"
+//                    "{SCAN POS with P = \"<http://rdf.myprefix.com/xxx/rel2>\", O = \"<http://abc.de>\" | width: 1} [0]\n\t"
+//                    "|X|\n\t"
+//                    "{SCAN PSO with P = \"<http://rdf.myprefix.com/ns/myrel>\" | width: 2} [0]\n"
+//                    ") | width: 2} [0]\n\t"
+//                    "|X|\n\t"
+//                    "{SCAN POS with P = \"<http://rdf.myprefix.com/myrel>\" | width: 2} [0]\n"
+//                    ") | width: 3}", qet.asString());
     }
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
@@ -756,13 +765,13 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
     ASSERT_EQ("{TEXT OPERATION WITH FILTER: co-occurrence with words: "
                   "\"manhattan project\" and 1 variables with textLimit = 1 "
                   "filtered by {JOIN(\n\t{SCAN POS with P = \"<is-a>\", "
-                  "O = \"<Scientist>\" | width: 1} [0]\n"
+                  "O = \"<Politician>\" | width: 1} [0]\n"
                   "\t|X|\n\t{SORT {TEXT OPERATION WITH FILTER: "
                   "co-occurrence with words: \"friend*\" and "
                   "2 variables with textLimit = 1 filtered by "
-                  "{SCAN POS with P = \"<is-a>\", O = \"<Politician>\" "
+                  "{SCAN POS with P = \"<is-a>\", O = \"<Scientist>\" "
                   "| width: 1} on column 0 | width: 4} on 2 | width: 4} [2]\n) "
-                  "| width: 4} on column 0 | width: 6}", qet.asString());
+                  "| width: 4} on column 3 | width: 6}", qet.asString());
 //    ASSERT_EQ("{JOIN(\n\t"
 //                  "{SCAN POS with P = \"<is-a>\", O = \"<Politician>\" | width: 1} [0]\n\t"
 //                  "|X|\n\t"
