@@ -16,6 +16,7 @@
 #include "TextOperationForContexts.h"
 #include "TextOperationWithFilter.h"
 #include "TextOperationWithoutFilter.h"
+#include "TwoColumnJoin.h"
 
 using std::string;
 
@@ -74,6 +75,10 @@ QueryExecutionTree::QueryExecutionTree(const QueryExecutionTree& other) :
     case OperationType::TEXT_WITH_FILTER:
       _rootOperation = new TextOperationWithFilter(
           *static_cast<TextOperationWithFilter *>(other._rootOperation));
+      break;
+    case OperationType::TWO_COL_JOIN:
+      _rootOperation = new TwoColumnJoin(
+          *static_cast<TwoColumnJoin *>(other._rootOperation));
       break;
     case UNDEFINED:
     default:
@@ -158,6 +163,11 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
       delete _rootOperation;
       _rootOperation = new TextOperationWithFilter(
           *static_cast<TextOperationWithFilter *>(op));
+      break;
+    case OperationType::TWO_COL_JOIN:
+      delete _rootOperation;
+      _rootOperation = new TwoColumnJoin(
+          *static_cast<TwoColumnJoin *>(op));
       break;
     default: AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, "Cannot set "
         "an operation with undefined type.");

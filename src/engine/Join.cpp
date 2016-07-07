@@ -56,7 +56,7 @@ Join& Join::operator=(const Join& other) {
   _left = new QueryExecutionTree(*other._left);
   delete _right;
   _right = new QueryExecutionTree(*other._right);
-  _leftJoinCol = other._rightJoinCol;
+  _leftJoinCol = other._leftJoinCol;
   _rightJoinCol = other._rightJoinCol;
   _keepJoinColumn = other._keepJoinColumn;
   return *this;

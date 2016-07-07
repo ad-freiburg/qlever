@@ -12,6 +12,7 @@
 #include "Filter.h"
 #include "TextOperationWithoutFilter.h"
 #include "TextOperationWithFilter.h"
+#include "TwoColumnJoin.h"
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec) : _qec(qec) { }
@@ -432,12 +433,70 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
       if (connected(a[i], b[j], tg)) {
         // Find join variable(s) / columns.
         auto jcs = getJoinColumns(a[i], b[j]);
-        if (jcs.size() != 1) {
-          // TODO: Add joins with secondary join columns.
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                   "Joins should happen on one variable only, for now. "
-                       "No cyclic queries either, currently.");
+        if (jcs.size() > 2) {
+          LOG(WARN) << "Not considering possible join on "
+                    << "three or more columns at once.\n";
+          continue;
         }
+        if (jcs.size() == 2 &&
+            (a[i]._qet.getType() ==
+             QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER ||
+             b[j]._qet.getType() ==
+             QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER)) {
+          LOG(WARN) << "Not considering possible join on "
+                    << "two columns at once taht involce text operations.\n";
+          continue;
+        }
+        if (jcs.size() == 2) {
+          // SPECIAL CASE: Cyclic queries -> join on exactly two columns
+          // Check if a sub-result has to be re-sorted
+          // Consider both ways to order join columns as primary / secondary
+          for (size_t c = 0; c < 2; ++c) {
+            QueryExecutionTree left(_qec);
+            QueryExecutionTree right(_qec);
+            if (a[i]._qet.resultSortedOn() == jcs[c][0] &&
+                a[i]._qet.getResultWidth() == 2) {
+              left = a[i]._qet;
+            } else {
+              // Create an order by operation.
+              vector<pair<size_t, bool>> sortIndices;
+              sortIndices.emplace_back(std::make_pair(jcs[c][0], false));
+              sortIndices.emplace_back(std::make_pair(jcs[(c + 1) % 2][0], false));
+              OrderBy orderBy(_qec, a[i]._qet, sortIndices);
+              left.setVariableColumns(a[i]._qet.getVariableColumnMap());
+              left.setOperation(QueryExecutionTree::ORDER_BY, &orderBy);
+            }
+            if (b[j]._qet.resultSortedOn() == jcs[c][1] &&
+                b[j]._qet.getResultWidth() == 2) {
+              right = b[j]._qet;
+            } else {
+              // Create a sort operation.
+              // Create an order by operation.
+              vector<pair<size_t, bool>> sortIndices;
+              sortIndices.emplace_back(std::make_pair(jcs[c][1], false));
+              sortIndices.emplace_back(std::make_pair(jcs[(c + 1) % 2][1], false));
+              OrderBy orderBy(_qec, b[j]._qet, sortIndices);
+              right.setVariableColumns(b[j]._qet.getVariableColumnMap());
+              right.setOperation(QueryExecutionTree::ORDER_BY, &orderBy);
+            }
+            // Create the join operation.
+            QueryExecutionTree tree(_qec);
+            TwoColumnJoin join(_qec, left, right, jcs);
+            tree.setVariableColumns(join.getVariableColumns());
+            tree.setOperation(QueryExecutionTree::TWO_COL_JOIN, &join);
+            SubtreePlan plan(_qec);
+            plan._qet = tree;
+            plan._idsOfIncludedFilters = a[i]._idsOfIncludedFilters;
+            plan._idsOfIncludedNodes = a[i]._idsOfIncludedNodes;
+            plan._idsOfIncludedNodes.insert(
+                b[j]._idsOfIncludedNodes.begin(),
+                b[j]._idsOfIncludedNodes.end());
+            candidates[getPruningKey(plan, jcs[c][0])].emplace_back(plan);
+          }
+          continue;
+        }
+
+        // CASE: JOIN ON ONE COLUMN ONLY.
         if (
             (a[i]._qet.getType() ==
              QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER ||

@@ -17,43 +17,47 @@ using std::pair;
 using std::vector;
 
 class OrderBy : public Operation {
-  public:
-    virtual size_t getResultWidth() const;
+public:
+  virtual size_t getResultWidth() const;
 
-  public:
+public:
 
-    OrderBy(QueryExecutionContext *qec, const QueryExecutionTree& subtree,
-            const vector<pair<size_t, bool>>& sortIndices);
+  OrderBy(QueryExecutionContext* qec, const QueryExecutionTree& subtree,
+          const vector<pair<size_t, bool>>& sortIndices);
 
-    OrderBy(const OrderBy& other);
+  OrderBy(const OrderBy& other);
 
-    OrderBy& operator=(const OrderBy& other);
+  OrderBy& operator=(const OrderBy& other);
 
-    virtual ~OrderBy();
+  virtual ~OrderBy();
 
-    virtual string asString() const;
+  virtual string asString() const;
 
-    virtual size_t resultSortedOn() const {
-      return std::numeric_limits<size_t>::max();
-    }
+  virtual size_t resultSortedOn() const {
+    return std::numeric_limits<size_t>::max();
+  }
 
-    virtual void setTextLimit(size_t limit) {
-      _subtree->setTextLimit(limit);
-    }
+  virtual void setTextLimit(size_t limit) {
+    _subtree->setTextLimit(limit);
+  }
 
-    virtual size_t getSizeEstimate() const {
-      return _subtree->getSizeEstimate();
-    }
+  virtual size_t getSizeEstimate() const {
+    return _subtree->getSizeEstimate();
+  }
 
-    virtual size_t getCostEstimate() const {
-      return size_t(getSizeEstimate() * logb(getSizeEstimate()))
-             + _subtree->getCostEstimate();
-    }
+  virtual size_t getCostEstimate() const {
+    size_t size = getSizeEstimate();
+    size_t logSize = std::max(size_t(1), static_cast<size_t>(logb(
+                                  static_cast<double>(getSizeEstimate()))));
+    size_t nlogn = size * logSize;
+    size_t subcost = _subtree->getCostEstimate();
+    return nlogn + subcost;
+  }
 
 
-  private:
-    QueryExecutionTree *_subtree;
-    vector<pair<size_t, bool>> _sortIndices;
+private:
+  QueryExecutionTree* _subtree;
+  vector<pair<size_t, bool>> _sortIndices;
 
-    virtual void computeResult(ResultTable *result) const;
+  virtual void computeResult(ResultTable* result) const;
 };

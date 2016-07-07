@@ -22,6 +22,7 @@ add_library(engine
         Server.h Server.cpp
         QueryPlanner.cpp QueryPlanner.h
         ScanningJoin.cpp ScanningJoin.h
-        QueryPlanningCostFactors.cpp QueryPlanningCostFactors.h)
+        QueryPlanningCostFactors.cpp QueryPlanningCostFactors.h
+        TwoColumnJoin.cpp TwoColumnJoin.h)
 
 target_link_libraries(engine index)

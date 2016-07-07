@@ -41,7 +41,8 @@ public:
     TEXT_FOR_CONTEXTS = 7,
     TEXT_FOR_ENTITIES = 8,
     TEXT_WITHOUT_FILTER = 9,
-    TEXT_WITH_FILTER = 10
+    TEXT_WITH_FILTER = 10,
+    TWO_COL_JOIN
   };
 
   enum OutputType {

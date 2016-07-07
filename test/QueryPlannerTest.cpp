@@ -496,7 +496,7 @@ TEST(QueryPlannerTest, testStarTwoFree) {
               "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
               "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
               "SELECT ?x ?z \n "
-              "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y xxx:rel2 <http://abc.de>}");
+              "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z. ?y xxx:rel2 <http://abc.de>}");
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
@@ -785,6 +785,32 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
 //                  "| width: 3} [0] with textLimit = 1 | width: 6} [0]\n) "
 //                  "| width: 6}",
 //              qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
+TEST(QueryExecutionTreeTest, testCyclicQuery) {
+  try {
+    ParsedQuery pq = SparqlParser::parse(
+        "SELECT ?x ?y ?m WHERE { ?x <Spouse_(or_domestic_partner)> ?y . "
+            "?x <Film_performance> ?m . ?y <Film_performance> ?m }");
+    pq.expandPrefixes();
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ("{TWO_COLUMN_JOIN("
+                  "\n\t{OrderBy {JOIN(\n\t"
+                  "{SCAN POS with P = \"<Film_performance>\" | width: 2} [0]"
+                  "\n\t|X|\n\t"
+                  "{SCAN POS with P = \"<Film_performance>\" | width: 2} [0]\n"
+                  ") | width: 3} on asc(2) asc(1)  | width: 3} [1 & 2]"
+                  "\n\t|X|\n\t"
+                  "{SCAN PSO with P = \"<Spouse_(or_domestic_partner)>\" "
+                  "| width: 2} [1 & 0]\n) | width: 3}", qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
