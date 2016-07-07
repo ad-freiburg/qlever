@@ -76,21 +76,63 @@ string TwoColumnJoin::asString() const {
 
 // _____________________________________________________________________________
 void TwoColumnJoin::computeResult(ResultTable* result) const {
-  LOG(DEBUG) << "Join result computation..." << endl;
-  size_t leftWidth = _left->getResultWidth();
-  size_t rightWidth = _right->getResultWidth();
-  const ResultTable& leftRes = _left->getRootOperation()->getResult();
-  const ResultTable& rightRes = _right->getRootOperation()->getResult();
-
   AD_CHECK(result);
   AD_CHECK(!result->_fixedSizeData);
+  LOG(DEBUG) << "TwoColumnJoin result computation..." << endl;
 
-  result->_nofColumns = leftWidth + rightWidth - 2;
-  result->_sortedBy = _jc1Left;
+  // Deal with the case that one of the lists is width two and
+  // with join columns 0 1. This means we can use the filter method.
+  if ((_left->getResultWidth() == 2 && _jc1Left == 0 && _jc2Left == 1) ||
+      (_right->getResultWidth() == 2 && _jc1Right == 0 && _jc2Right == 1)) {
+    bool rightFilter = (_right->getResultWidth() == 2 && _jc1Right == 0 &&
+                        _jc2Right == 1);
+    const auto& v = rightFilter ? _left : _right;
+    const auto& filter = *static_cast<vector<array<Id, 2>>*>(
+        rightFilter ? _right->getResult()._fixedSizeData
+                    : _left->getResult()._fixedSizeData);
+    size_t jc1 = rightFilter ? _jc1Left : _jc1Right;
+    size_t jc2 = rightFilter ? _jc2Left : _jc2Right;
+    result->_sortedBy = jc1;
+    result->_nofColumns = v->getResultWidth();
 
+    AD_CHECK_GE(result->_nofColumns, 2);
 
-  result->_status = ResultTable::FINISHED;
-  LOG(DEBUG) << "Join result computation done." << endl;
+    if (result->_nofColumns == 2) {
+      using ResType = vector<array<Id, 2>>;
+      result->_fixedSizeData = new ResType();
+      getEngine().filter(*static_cast<ResType*>(v->getResult()._fixedSizeData),
+                         jc1, jc2, filter,
+                         static_cast<ResType*>(result->_fixedSizeData));
+    } else if (result->_nofColumns == 3) {
+      using ResType = vector<array<Id, 3>>;
+      result->_fixedSizeData = new ResType();
+      getEngine().filter(*static_cast<ResType*>(v->getResult()._fixedSizeData),
+                         jc1, jc2, filter,
+                         static_cast<ResType*>(result->_fixedSizeData));
+    } else if (result->_nofColumns == 4) {
+      using ResType = vector<array<Id, 4>>;
+      result->_fixedSizeData = new ResType();
+      getEngine().filter(*static_cast<ResType*>(v->getResult()._fixedSizeData),
+                         jc1, jc2, filter,
+                         static_cast<ResType*>(result->_fixedSizeData));
+    } else if (result->_nofColumns == 5) {
+      using ResType = vector<array<Id, 5>>;
+      result->_fixedSizeData = new ResType();
+      getEngine().filter(*static_cast<ResType*>(v->getResult()._fixedSizeData),
+                         jc1, jc2, filter,
+                         static_cast<ResType*>(result->_fixedSizeData));
+    } else {
+      getEngine().filter(v->getResult()._varSizeData, jc1, jc2, filter,
+                         &result->_varSizeData);
+    }
+
+    result->_status = ResultTable::FINISHED;
+    LOG(DEBUG) << "TwoColumnJoin result computation done." << endl;
+    return;
+  }
+  // TOOD: implement the other case later
+  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+           "For now, prefer cyclic queries to be resolved using a single join.")
 }
 
 // _____________________________________________________________________________

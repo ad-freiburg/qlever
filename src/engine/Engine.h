@@ -129,6 +129,78 @@ public:
     LOG(DEBUG) << "Filter done, size now: " << result->size() << " elements.\n";
   }
 
+  template<typename T>
+  static void filter(
+      const vector<T>& v,
+      size_t fc1,
+      size_t fc2,
+      const vector<array<Id, 2>>& filter,
+      vector<T>* result) {
+    AD_CHECK(result);
+    AD_CHECK(result->size() == 0);
+    LOG(DEBUG) << "Filtering " << v.size() <<
+               " elements with a filter relation with " << filter.size() <<
+               "elements\n";
+
+    // Check trivial case.
+    if (v.size() == 0 || filter.size() == 0) { return; }
+
+    // Cast away constness so we can add sentinels that will be removed
+    // in the end and create and add those sentinels.
+    vector<T>& l1 = const_cast<vector<T>&>(v);
+    vector<array<Id, 2>>& l2 = const_cast<vector<array<Id, 2>>&>(filter);
+
+    Id sent1 = std::numeric_limits<Id>::max();
+    Id sent2 = std::numeric_limits<Id>::max() - 1;
+    Id sentMatch = std::numeric_limits<Id>::max() - 2;
+    auto elem1 = l1[0];
+    auto elem2 = l2[0];
+    auto match1 = l1[0];
+    auto match2 = l2[0];
+
+    match1[fc1] = sentMatch;
+    match1[fc2] = sentMatch;
+    match2[0] = sentMatch;
+    match2[1] = sentMatch;
+    elem1[fc1] = sent1;
+    elem2[0] = sent2;
+    l1.push_back(match1);
+    l2.push_back(match2);
+    l1.push_back(elem1);
+    l2.push_back(elem2);
+    // Intersect both lists.
+    size_t i = 0;
+    size_t j = 0;
+
+    while (l1[i][fc1] < sent1) {
+      while (l1[i][fc1] < l2[j][0]) { ++i; }
+      while (l2[j][0] < l1[i][fc1]) { ++j; }
+      while (l1[i][fc1] == l2[j][0]) {
+        // fc1 match, create cross-product
+        // Check fc2
+        if (l1[i][fc2] == l2[j][1]) {
+          result->push_back(l1[i]);
+          ++i;
+          if (i == l1.size()) break;
+        } else if (l1[i][fc2] < l2[j][1]) {
+          ++i;
+          if (i == l1.size()) break;
+        } else {
+          ++j;
+          if (j == l2.size()) break;
+        }
+
+      }
+    }
+
+    // Remove sentinels
+    l1.resize(l1.size() - 2);
+    l2.resize(l2.size() - 2);
+    result->pop_back();
+
+    LOG(DEBUG) << "Filter done, size now: " << result->size() << " elements.\n";
+  }
+
   template<typename E, size_t N>
   static void sort(vector<array<E, N>>& tab, size_t keyColumn) {
     LOG(DEBUG) << "Sorting " << tab.size() << " elements.\n";
