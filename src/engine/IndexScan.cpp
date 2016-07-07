@@ -60,6 +60,8 @@ size_t IndexScan::getResultWidth() const {
     case OSP_FREE_S:
     case OPS_FREE_P:
       return 2;
+    default:
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Should be unreachable.");
   }
 }
 
