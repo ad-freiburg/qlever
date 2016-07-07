@@ -43,13 +43,14 @@ public:
   }
 
   virtual size_t getCostEstimate() const {
-    // Punish if not one of the two has width 2.
-    if (_left->getResultWidth() != 2 && _right->getResultWidth() != 2) {
-      return (_left->getSizeEstimate() + _left->getCostEstimate() +
-              _right->getSizeEstimate() + _right->getCostEstimate()) * 1000;
+    if ((_left->getResultWidth() == 2 && _jc1Left == 0 && _jc2Left == 1) ||
+       (_right->getResultWidth() == 2 && _jc1Right == 0 && _jc2Right == 1)) {
+      return _left->getSizeEstimate() + _left->getCostEstimate() +
+              _right->getSizeEstimate() + _right->getCostEstimate();
     }
-    return _left->getSizeEstimate() + _left->getCostEstimate() +
-           _right->getSizeEstimate() + _right->getCostEstimate();
+    // PUNISH IF NO DIRECT JOIN IS AVAILABLE FOR FILTER
+    return (_left->getSizeEstimate() + _left->getCostEstimate() +
+           _right->getSizeEstimate() + _right->getCostEstimate()) * 1000;
   }
 
 private:
