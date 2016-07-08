@@ -87,11 +87,16 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
 
   vector<SubtreePlan>& lastRow = finalTab.back();
   AD_CHECK_GT(lastRow.size(), 0);
+  string tree = lastRow[0]._qet.asString();
+  LOG(DEBUG) << tree << '\n';
   size_t minCost = lastRow[0].getCostEstimate();
   size_t minInd = 0;
 
   for (size_t i = 1; i < lastRow.size(); ++i) {
-    if (lastRow[i].getCostEstimate() < minCost) {
+    size_t thisCost = lastRow[i].getCostEstimate();
+    tree = lastRow[i]._qet.asString();
+    LOG(DEBUG) << tree << '\n';
+    if (thisCost < minCost) {
       minCost = lastRow[i].getCostEstimate();
       minInd = i;
     }
@@ -461,7 +466,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
               // Create an order by operation.
               vector<pair<size_t, bool>> sortIndices;
               sortIndices.emplace_back(std::make_pair(jcs[c][0], false));
-              sortIndices.emplace_back(std::make_pair(jcs[(c + 1) % 2][0], false));
+              sortIndices.emplace_back(
+                  std::make_pair(jcs[(c + 1) % 2][0], false));
               OrderBy orderBy(_qec, a[i]._qet, sortIndices);
               left.setVariableColumns(a[i]._qet.getVariableColumnMap());
               left.setOperation(QueryExecutionTree::ORDER_BY, &orderBy);
@@ -474,7 +480,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
               // Create an order by operation.
               vector<pair<size_t, bool>> sortIndices;
               sortIndices.emplace_back(std::make_pair(jcs[c][1], false));
-              sortIndices.emplace_back(std::make_pair(jcs[(c + 1) % 2][1], false));
+              sortIndices.emplace_back(
+                  std::make_pair(jcs[(c + 1) % 2][1], false));
               OrderBy orderBy(_qec, b[j]._qet, sortIndices);
               right.setVariableColumns(b[j]._qet.getVariableColumnMap());
               right.setOperation(QueryExecutionTree::ORDER_BY, &orderBy);

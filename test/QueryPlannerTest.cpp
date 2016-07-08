@@ -801,16 +801,16 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
             "?x <Film_performance> ?m . ?y <Film_performance> ?m }");
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ("{TWO_COLUMN_JOIN("
                   "\n\t{OrderBy {JOIN(\n\t"
                   "{SCAN POS with P = \"<Film_performance>\" | width: 2} [0]"
                   "\n\t|X|\n\t"
                   "{SCAN POS with P = \"<Film_performance>\" | width: 2} [0]\n"
-                  ") | width: 3} on asc(2) asc(1)  | width: 3} [1 & 2]"
+                  ") | width: 3} on asc(2) asc(1)  | width: 3} [2 & 1]"
                   "\n\t|X|\n\t"
                   "{SCAN PSO with P = \"<Spouse_(or_domestic_partner)>\" "
-                  "| width: 2} [1 & 0]\n) | width: 3}", qet.asString());
+                  "| width: 2} [0 & 1]\n) | width: 3}", qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();

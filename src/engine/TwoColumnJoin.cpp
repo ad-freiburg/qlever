@@ -30,6 +30,21 @@ TwoColumnJoin::TwoColumnJoin(QueryExecutionContext* qec,
     _jc1Right = jcs[0][0];
     _jc2Right = jcs[1][0];
   }
+  // Now check if one of them is an index scan with width two.
+  // If so, make sure that its first jc is 0 and the second 1.
+  if (_left->getType() == QueryExecutionTree::SCAN &&
+      _left->getResultWidth() == 2) {
+    if (_jc1Left > _jc2Left) {
+      std::swap(_jc1Left, _jc2Left);
+      std::swap(_jc1Right, _jc2Right);
+    }
+  } else if (_right->getType() == QueryExecutionTree::SCAN &&
+      _right->getResultWidth() == 2) {
+    if (_jc1Right > _jc2Right) {
+      std::swap(_jc1Left, _jc2Left);
+      std::swap(_jc1Right, _jc2Right);
+    }
+  }
 }
 
 // _____________________________________________________________________________
