@@ -87,15 +87,11 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
 
   vector<SubtreePlan>& lastRow = finalTab.back();
   AD_CHECK_GT(lastRow.size(), 0);
-  string tree = lastRow[0]._qet.asString();
-  LOG(DEBUG) << tree << '\n';
   size_t minCost = lastRow[0].getCostEstimate();
   size_t minInd = 0;
 
   for (size_t i = 1; i < lastRow.size(); ++i) {
     size_t thisCost = lastRow[i].getCostEstimate();
-    tree = lastRow[i]._qet.asString();
-    LOG(DEBUG) << tree << '\n';
     if (thisCost < minCost) {
       minCost = lastRow[i].getCostEstimate();
       minInd = i;
