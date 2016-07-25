@@ -55,10 +55,6 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   // A filter can be applied as soon as all variables that occur in the filter
   // Are covered by the query. This is also always the place where this is done.
 
-  // TODO: resolve cyclic queries and turn them into filters.
-  // Copy made so that something can be added for cyclic queries.
-  // tg.turnCyclesIntoFilters(filters);
-
   // Text operations from cliques (all triples connected via the context cvar).
   // Detect them and turn them into nodes with stored word part and
   // edges to connected variables.
@@ -67,7 +63,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
 
   // Each text operation has two ways how it can be used.
   // 1) As leave in the bottom row of the tab.
-  // According to the number of connected varibales, the operation creates
+  // According to the number of connected variables, the operation creates
   // a cross product with n entities that can be used in subsequent joins.
   // 2) as intermediate unary (downwards) nodes in the execution tree.
   // This is a bit similar to sorts: they can be applied after each step
@@ -445,39 +441,48 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
              b[j]._qet.getType() ==
              QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER)) {
           LOG(WARN) << "Not considering possible join on "
-                    << "two columns at once taht involce text operations.\n";
+                    << "two columns, if they involve text operations.\n";
           continue;
         }
         if (jcs.size() == 2) {
           // SPECIAL CASE: Cyclic queries -> join on exactly two columns
           // Check if a sub-result has to be re-sorted
           // Consider both ways to order join columns as primary / secondary
-          for (size_t c = 0; c < 2; ++c) {
+          // Make four iterations instead of two so that first and second
+          // column can be swapped and more trees are constructed (of which
+          // the optimal solution will be picked).
+          // The ordeer plays a role for the efficient implementation for
+          // filtering directly with a scan's result.
+          for (size_t n = 0; n < 4; ++n) {
+            size_t c = n / 2;
+            size_t swap = n % 2;
             QueryExecutionTree left(_qec);
             QueryExecutionTree right(_qec);
-            if (a[i]._qet.resultSortedOn() == jcs[c][0] &&
+            if (a[i]._qet.resultSortedOn() == jcs[c][(0 + swap) % 2] &&
                 a[i]._qet.getResultWidth() == 2) {
               left = a[i]._qet;
             } else {
               // Create an order by operation.
               vector<pair<size_t, bool>> sortIndices;
-              sortIndices.emplace_back(std::make_pair(jcs[c][0], false));
               sortIndices.emplace_back(
-                  std::make_pair(jcs[(c + 1) % 2][0], false));
+                  std::make_pair(jcs[c][(0 + swap) % 2], false));
+              sortIndices.emplace_back(
+                  std::make_pair(jcs[(c + 1) % 2][(0 + swap) % 2], false));
               OrderBy orderBy(_qec, a[i]._qet, sortIndices);
               left.setVariableColumns(a[i]._qet.getVariableColumnMap());
               left.setOperation(QueryExecutionTree::ORDER_BY, &orderBy);
             }
-            if (b[j]._qet.resultSortedOn() == jcs[c][1] &&
+            if (b[j]._qet.resultSortedOn() == jcs[c][(1 + swap) % 2] &&
                 b[j]._qet.getResultWidth() == 2) {
               right = b[j]._qet;
             } else {
               // Create a sort operation.
               // Create an order by operation.
               vector<pair<size_t, bool>> sortIndices;
-              sortIndices.emplace_back(std::make_pair(jcs[c][1], false));
               sortIndices.emplace_back(
-                  std::make_pair(jcs[(c + 1) % 2][1], false));
+                  std::make_pair(jcs[c][(1 + swap) % 2], false));
+              sortIndices.emplace_back(
+                  std::make_pair(jcs[(c + 1) % 2][(1 + swap) % 2], false));
               OrderBy orderBy(_qec, b[j]._qet, sortIndices);
               right.setVariableColumns(b[j]._qet.getVariableColumnMap());
               right.setOperation(QueryExecutionTree::ORDER_BY, &orderBy);
@@ -494,7 +499,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
             plan._idsOfIncludedNodes.insert(
                 b[j]._idsOfIncludedNodes.begin(),
                 b[j]._idsOfIncludedNodes.end());
-            candidates[getPruningKey(plan, jcs[c][0])].emplace_back(plan);
+            candidates[getPruningKey(
+                plan,
+                jcs[c][(0 + swap) % 2])].emplace_back(plan);
           }
           continue;
         }
