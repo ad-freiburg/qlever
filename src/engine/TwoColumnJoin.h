@@ -39,7 +39,7 @@ public:
   }
 
   virtual size_t getSizeEstimate() const {
-    return (_left->getSizeEstimate() + _right->getSizeEstimate()) / 6;
+    return (_left->getSizeEstimate() + _right->getSizeEstimate()) / 10;
   }
 
   virtual size_t getCostEstimate() const {

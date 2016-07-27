@@ -15,7 +15,7 @@
 #include "TwoColumnJoin.h"
 
 // _____________________________________________________________________________
-QueryPlanner::QueryPlanner(QueryExecutionContext* qec) : _qec(qec) { }
+QueryPlanner::QueryPlanner(QueryExecutionContext *qec) : _qec(qec) { }
 
 // _____________________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(
@@ -535,7 +535,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           QueryExecutionTree tree(_qec);
           // Subtract 1 for variables.size() for the context var.
           const TextOperationWithoutFilter& noFilter =
-              *static_cast<const TextOperationWithoutFilter*>(textPlan._qet.getRootOperation());
+              *static_cast<const TextOperationWithoutFilter *>(textPlan._qet.getRootOperation());
           TextOperationWithFilter textOp(_qec, noFilter.getWordPart(),
                                          noFilter.getNofVars(),
                                          &filterPlan._qet, otherPlanJc);
@@ -576,6 +576,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           left = a[i]._qet;
         } else {
           // Create a sort operation.
+          // But never sort scans, they could have just scanned differently.
+          if (a[i]._qet.getType() == QueryExecutionTree::SCAN) {
+            continue;
+          }
           Sort sort(_qec, a[i]._qet, jcs[0][0]);
           left.setVariableColumns(a[i]._qet.getVariableColumnMap());
           left.setOperation(QueryExecutionTree::SORT, &sort);
@@ -584,6 +588,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           right = b[j]._qet;
         } else {
           // Create a sort operation.
+          // But never sort scans, they could have just scanned differently.
+          if (b[j]._qet.getType() == QueryExecutionTree::SCAN) {
+            continue;
+          }
           Sort sort(_qec, b[j]._qet, jcs[0][1]);
           right.setVariableColumns(b[j]._qet.getVariableColumnMap());
           right.setOperation(QueryExecutionTree::SORT, &sort);

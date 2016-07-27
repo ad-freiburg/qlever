@@ -297,8 +297,8 @@ RelationMetaData& Index::writeNonFunctionalRelation(ad_utility::File& out,
   // Make a pass over the data and extract a RHS list for each LHS.
   // Prepare both in buffers.
   // TODO: add compression - at least to RHS.
-  pair<Id, off_t>* bufLhs = new pair<Id, off_t>[data.size()];
-  Id* bufRhs = new Id[data.size()];
+  pair<Id, off_t> *bufLhs = new pair<Id, off_t>[data.size()];
+  Id *bufRhs = new Id[data.size()];
   size_t nofDistinctLhs = 0;
   Id lastLhs = std::numeric_limits<Id>::max();
   size_t nofRhsDone = 0;
@@ -353,7 +353,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   // PSO
   off_t metaFrom;
   off_t metaTo = _psoFile.getLastOffset(&metaFrom);
-  unsigned char* buf = new unsigned char[metaTo - metaFrom];
+  unsigned char *buf = new unsigned char[metaTo - metaFrom];
   _psoFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
   _psoMeta.createFromByteBuffer(buf);
   delete[] buf;
@@ -436,7 +436,7 @@ void Index::openFileHandles() {
 }
 
 // _____________________________________________________________________________
-void Index::scanPSO(const string& predicate, WidthTwoList* result) const {
+void Index::scanPSO(const string& predicate, WidthTwoList *result) const {
   LOG(DEBUG) << "Performing PSO scan for full relation: " << predicate << "\n";
   Id relId;
   if (_vocab.getId(predicate, &relId)) {
@@ -455,7 +455,7 @@ void Index::scanPSO(const string& predicate, WidthTwoList* result) const {
 
 // _____________________________________________________________________________
 void Index::scanPSO(const string& predicate, const string& subject,
-                    WidthOneList* result) const {
+                    WidthOneList *result) const {
   LOG(DEBUG) << "Performing PSO scan of relation" << predicate
              << "with fixed subject: " << subject << "...\n";
   Id relId;
@@ -483,7 +483,7 @@ void Index::scanPSO(const string& predicate, const string& subject,
 }
 
 // _____________________________________________________________________________
-void Index::scanPOS(const string& predicate, WidthTwoList* result) const {
+void Index::scanPOS(const string& predicate, WidthTwoList *result) const {
   LOG(DEBUG) << "Performing POS scan for full relation: " << predicate << "\n";
   Id relId;
   if (_vocab.getId(predicate, &relId)) {
@@ -502,7 +502,7 @@ void Index::scanPOS(const string& predicate, WidthTwoList* result) const {
 
 // _____________________________________________________________________________
 void Index::scanPOS(const string& predicate, const string& object,
-                    WidthOneList* result) const {
+                    WidthOneList *result) const {
   LOG(DEBUG) << "Performing POS scan of relation" << predicate
              << "with fixed object: " << object << "...\n";
   Id relId;
@@ -530,7 +530,7 @@ void Index::scanPOS(const string& predicate, const string& object,
 }
 
 // _____________________________________________________________________________
-void Index::scanSOP(const string& subject, const string& object, WidthOneList*
+void Index::scanSOP(const string& subject, const string& object, WidthOneList *
 result) const {
   if (!_sopFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
@@ -565,7 +565,7 @@ result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanSPO(const string& subject, WidthTwoList* result) const {
+void Index::scanSPO(const string& subject, WidthTwoList *result) const {
   if (!_spoFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Cannot use predicate variables without the required "
@@ -589,7 +589,7 @@ void Index::scanSPO(const string& subject, WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanSOP(const string& subject, WidthTwoList* result) const {
+void Index::scanSOP(const string& subject, WidthTwoList *result) const {
   if (!_sopFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Cannot use predicate variables without the required "
@@ -613,7 +613,7 @@ void Index::scanSOP(const string& subject, WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanOPS(const string& object, WidthTwoList* result) const {
+void Index::scanOPS(const string& object, WidthTwoList *result) const {
   if (!_opsFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Cannot use predicate variables without the required "
@@ -637,7 +637,7 @@ void Index::scanOPS(const string& object, WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanOSP(const string& object, WidthTwoList* result) const {
+void Index::scanOSP(const string& object, WidthTwoList *result) const {
   if (!_ospFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Cannot use predicate variables without the required "
@@ -670,14 +670,14 @@ const string& Index::idToString(Id id) const {
 // _____________________________________________________________________________
 void Index::scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                    Id lhsId, ad_utility::File& indexFile,
-                                   WidthOneList* result) const {
+                                   WidthOneList *result) const {
   LOG(TRACE) << "Scanning functional relation ...\n";
   WidthTwoList block;
   block.resize(blockOff.second / (2 * sizeof(Id)));
   indexFile.read(block.data(), blockOff.second, blockOff.first);
   auto it = std::lower_bound(block.begin(), block.end(), lhsId,
                              [](const array<Id, 2>& elem, Id key) {
-                               return elem[0] < key;
+                                 return elem[0] < key;
                              });
   if ((*it)[0] == lhsId) {
     result->push_back(array<Id, 1>{(*it)[1]});
@@ -690,14 +690,14 @@ void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                       const pair<off_t, size_t>& followBlock,
                                       Id lhsId, ad_utility::File& indexFile,
                                       off_t upperBound,
-                                      Index::WidthOneList* result) const {
+                                      Index::WidthOneList *result) const {
   LOG(TRACE) << "Scanning non-functional relation ...\n";
   vector<pair<Id, off_t>> block;
   block.resize(blockOff.second / (sizeof(Id) + sizeof(off_t)));
   indexFile.read(block.data(), blockOff.second, blockOff.first);
   auto it = std::lower_bound(block.begin(), block.end(), lhsId,
                              [](const pair<Id, off_t>& elem, Id key) {
-                               return elem.first < key;
+                                 return elem.first < key;
                              });
   if (it->first == lhsId) {
     size_t nofBytes = 0;
@@ -775,7 +775,7 @@ size_t Index::sizeEstimate(const string& sub, const string& pred,
   if (sub.size() == 0 && pred.size() > 0 && obj.size() == 0) {
     return relationCardinality(pred);
   }
-  if (sub.size() > 0 && pred.size() == 0 && obj.size() > 0) {
+  if (sub.size() == 0 && pred.size() == 0 && obj.size() > 0) {
     return objectCardinality(obj);
   }
   if (sub.size() > 0 && pred.size() > 0 && obj.size() == 0) {
@@ -787,7 +787,12 @@ size_t Index::sizeEstimate(const string& sub, const string& pred,
         if (rmd.isFunctional()) {
           return 1;
         } else {
-          return rmd.getBlockStartAndNofBytesForLhs(pId).second;
+          // TODO: better estimate. Blocks don't work out either
+          return std::max(
+              size_t(1),
+              std::min(subjectCardinality(sub), relationCardinality(pred)) /
+              500);
+          // return rmd.getBlockStartAndNofBytesForLhs(pId).second;
         }
       }
     }
@@ -801,7 +806,12 @@ size_t Index::sizeEstimate(const string& sub, const string& pred,
         if (rmd.isFunctional()) {
           return 1;
         } else {
-          return rmd.getBlockStartAndNofBytesForLhs(oId).second;
+          // TODO: better estimate. Blocks don't work out either
+          return std::max(
+              size_t(1),
+              std::min(subjectCardinality(sub), objectCardinality(obj)) /
+              500);
+          // return rmd.getBlockStartAndNofBytesForLhs(oId).second;
         }
       }
     }
@@ -815,7 +825,16 @@ size_t Index::sizeEstimate(const string& sub, const string& pred,
         if (rmd.isFunctional()) {
           return 1;
         } else {
-          return rmd.getBlockStartAndNofBytesForLhs(oId).second;
+          // TODO: better estimate. Blocks don't work out either
+          if (_opsFile.isOpen()) {
+            return std::max(
+                size_t(1),
+                std::min(relationCardinality(pred), objectCardinality(obj)) /
+                500);
+          } else {
+            return std::max(size_t(1), relationCardinality(pred) / 500);
+          }
+          // return rmd.getBlockStartAndNofBytesForLhs(oId).second;
         }
       }
     }

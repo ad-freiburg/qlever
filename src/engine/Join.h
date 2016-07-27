@@ -38,14 +38,25 @@ class Join : public Operation {
       _right->setTextLimit(limit);
     }
 
+    bool isSelfJoin() const;
+
     virtual size_t getSizeEstimate() const {
       // return std::min(_left->getSizeEstimate(), _right->getSizeEstimate()) / 2;
-      return (_left->getSizeEstimate() + _right->getSizeEstimate()) / 4;
+      // Self joins generallay increase the size
+      if (isSelfJoin()) {
+        return std::max(
+            size_t(1),
+            (_left->getSizeEstimate() + _right->getSizeEstimate()) * 10);
+      }
+      return std::max(
+          size_t(1),
+          (_left->getSizeEstimate() + _right->getSizeEstimate()) / 4);
     }
 
     virtual size_t getCostEstimate() const {
-      return _left->getSizeEstimate() + _left->getCostEstimate() +
-          _right->getSizeEstimate()  + _right->getCostEstimate();
+      return getSizeEstimate() +
+             _left->getSizeEstimate() + _left->getCostEstimate() +
+             _right->getSizeEstimate() + _right->getCostEstimate();
     }
 
   private:

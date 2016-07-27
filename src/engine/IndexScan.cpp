@@ -147,7 +147,7 @@ void IndexScan::computePOSfreeO(ResultTable* result) const {
 // _____________________________________________________________________________
 size_t IndexScan::computeSizeEstimate() const {
   if (_executionContext) {
-    return getIndex().sizeEstimate(_subject, _object, _predicate);
+    return getIndex().sizeEstimate(_subject, _predicate, _object);
     //// Should always be in this branch. Else is only for test cases.
 //    switch (_type) {
 //      case POS_FREE_O:

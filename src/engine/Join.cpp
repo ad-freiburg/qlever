@@ -6,12 +6,13 @@
 #include <unordered_map>
 #include "./QueryExecutionTree.h"
 #include "./Join.h"
+#include "Sort.h"
 
 using std::string;
 using std::unordered_map;
 
 // _____________________________________________________________________________
-Join::Join(QueryExecutionContext* qec,
+Join::Join(QueryExecutionContext *qec,
            const QueryExecutionTree& t1,
            const QueryExecutionTree& t2,
            size_t t1JoinCol,
@@ -65,13 +66,13 @@ Join& Join::operator=(const Join& other) {
 // _____________________________________________________________________________
 string Join::asString() const {
   std::ostringstream os;
-  os << "JOIN(\n\t" << _left->asString() << " [" << _leftJoinCol <<
-  "]\n\t|X|\n\t" << _right->asString() << " [" << _rightJoinCol << "]\n)";
+  os << "JOIN(\n" << _left->asString() << " [" << _leftJoinCol <<
+  "]\n|X|\n" << _right->asString() << " [" << _rightJoinCol << "]\n)";
   return os.str();
 }
 
 // _____________________________________________________________________________
-void Join::computeResult(ResultTable* result) const {
+void Join::computeResult(ResultTable *result) const {
   LOG(DEBUG) << "Join result computation..." << endl;
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
@@ -88,46 +89,46 @@ void Join::computeResult(ResultTable* result) const {
     if (rightWidth == 1) {
       result->_fixedSizeData = new vector<array<Id, 1>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 1>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 1>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 1>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 1>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 1>>*>(result->_fixedSizeData));
+          static_cast<vector<array<Id, 1>> *>(result->_fixedSizeData));
     } else if (rightWidth == 2) {
       result->_fixedSizeData = new vector<array<Id, 2>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 1>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 1>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 2>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 2>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
+          static_cast<vector<array<Id, 2>> *>(result->_fixedSizeData));
     } else if (rightWidth == 3) {
       result->_fixedSizeData = new vector<array<Id, 3>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 1>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 1>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 3>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 3>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 3>>*>(result->_fixedSizeData));
+          static_cast<vector<array<Id, 3>> *>(result->_fixedSizeData));
     } else if (rightWidth == 4) {
       result->_fixedSizeData = new vector<array<Id, 4>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 1>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 1>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 4>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 4>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 4>>*>(result->_fixedSizeData));
+          static_cast<vector<array<Id, 4>> *>(result->_fixedSizeData));
     } else if (rightWidth == 5) {
       result->_fixedSizeData = new vector<array<Id, 5>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 1>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 1>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 5>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 5>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
+          static_cast<vector<array<Id, 5>> *>(result->_fixedSizeData));
     } else {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 1>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 1>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
           rightRes._varSizeData,
           _rightJoinCol,
@@ -137,45 +138,45 @@ void Join::computeResult(ResultTable* result) const {
     if (rightWidth == 1) {
       result->_fixedSizeData = new vector<array<Id, 2>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 2>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 2>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 1>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 1>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));;
+          static_cast<vector<array<Id, 2>> *>(result->_fixedSizeData));;
     } else if (rightWidth == 2) {
       result->_fixedSizeData = new vector<array<Id, 3>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 2>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 2>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 2>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 2>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 3>>*>(result->_fixedSizeData));
+          static_cast<vector<array<Id, 3>> *>(result->_fixedSizeData));
     } else if (rightWidth == 3) {
       result->_fixedSizeData = new vector<array<Id, 4>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 2>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 2>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 3>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 3>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 4>>*>(result->_fixedSizeData));
+          static_cast<vector<array<Id, 4>> *>(result->_fixedSizeData));
     } else if (rightWidth == 4) {
       result->_fixedSizeData = new vector<array<Id, 5>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 2>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 2>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 4>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 4>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
+          static_cast<vector<array<Id, 5>> *>(result->_fixedSizeData));
     } else if (rightWidth == 5) {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 2>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 2>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 5>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 5>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
           &result->_varSizeData);
     } else {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 2>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 2>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
           rightRes._varSizeData,
           _rightJoinCol,
@@ -185,44 +186,44 @@ void Join::computeResult(ResultTable* result) const {
     if (rightWidth == 1) {
       result->_fixedSizeData = new vector<array<Id, 3>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 3>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 3>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 1>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 1>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 3>>*>(result->_fixedSizeData));
+          static_cast<vector<array<Id, 3>> *>(result->_fixedSizeData));
     } else if (rightWidth == 2) {
       result->_fixedSizeData = new vector<array<Id, 4>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 3>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 3>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 2>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 2>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 4>>*>(result->_fixedSizeData));
+          static_cast<vector<array<Id, 4>> *>(result->_fixedSizeData));
     } else if (rightWidth == 3) {
       result->_fixedSizeData = new vector<array<Id, 5>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 3>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 3>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 3>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 3>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
+          static_cast<vector<array<Id, 5>> *>(result->_fixedSizeData));
     } else if (rightWidth == 4) {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 3>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 3>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 4>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 4>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
           &result->_varSizeData);
     } else if (rightWidth == 5) {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 3>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 3>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 5>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 5>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
           &result->_varSizeData);
     } else {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 3>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 3>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
           rightRes._varSizeData,
           _rightJoinCol,
@@ -232,43 +233,43 @@ void Join::computeResult(ResultTable* result) const {
     if (rightWidth == 1) {
       result->_fixedSizeData = new vector<array<Id, 4>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 4>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 4>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 1>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 1>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 4>>*>(result->_fixedSizeData));
+          static_cast<vector<array<Id, 4>> *>(result->_fixedSizeData));
     } else if (rightWidth == 2) {
       result->_fixedSizeData = new vector<array<Id, 5>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 4>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 4>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 2>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 2>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
+          static_cast<vector<array<Id, 5>> *>(result->_fixedSizeData));
     } else if (rightWidth == 3) {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 4>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 4>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 3>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 3>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
           &result->_varSizeData);
     } else if (rightWidth == 4) {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 4>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 4>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 4>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 4>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
           &result->_varSizeData);
     } else if (rightWidth == 5) {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 4>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 4>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 5>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 5>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
           &result->_varSizeData);
     } else {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 4>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 4>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
           rightRes._varSizeData,
           _rightJoinCol,
@@ -278,42 +279,42 @@ void Join::computeResult(ResultTable* result) const {
     if (rightWidth == 1) {
       result->_fixedSizeData = new vector<array<Id, 5>>();
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 5>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 5>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 1>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 1>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
-          static_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
+          static_cast<vector<array<Id, 5>> *>(result->_fixedSizeData));
     } else if (rightWidth == 2) {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 5>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 5>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 2>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 2>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
           &result->_varSizeData);
     } else if (rightWidth == 3) {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 5>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 5>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 3>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 3>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
           &result->_varSizeData);
     } else if (rightWidth == 4) {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 5>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 5>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 4>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 4>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
           &result->_varSizeData);
     } else if (rightWidth == 5) {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 5>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 5>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
-          *static_cast<const vector<array<Id, 5>>*>(rightRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 5>> *>(rightRes._fixedSizeData),
           _rightJoinCol,
           &result->_varSizeData);
     } else {
       _executionContext->getEngine().join(
-          *static_cast<const vector<array<Id, 5>>*>(leftRes._fixedSizeData),
+          *static_cast<const vector<array<Id, 5>> *>(leftRes._fixedSizeData),
           _leftJoinCol,
           rightRes._varSizeData,
           _rightJoinCol,
@@ -336,7 +337,7 @@ unordered_map<string, size_t> Join::getVariableColumns() const {
   unordered_map<string, size_t> retVal(_left->getVariableColumnMap());
   size_t leftSize = _left->getResultWidth();
   for (auto it = _right->getVariableColumnMap().begin();
-        it != _right->getVariableColumnMap().end(); ++it) {
+       it != _right->getVariableColumnMap().end(); ++it) {
     if (it->second < _rightJoinCol) {
       retVal[it->first] = leftSize + it->second;
     }
@@ -359,3 +360,10 @@ size_t Join::getResultWidth() const {
 size_t Join::resultSortedOn() const {
   return _leftJoinCol;
 }
+
+// _____________________________________________________________________________
+bool Join::isSelfJoin() const {
+  return _left->asString() == _right->asString();
+}
+
+

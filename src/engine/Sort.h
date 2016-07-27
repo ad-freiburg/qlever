@@ -40,10 +40,14 @@ class Sort : public Operation {
       return _subtree->getSizeEstimate();
     }
 
+    QueryExecutionTree* getSubtree() const {
+      return _subtree;
+    }
+
     virtual size_t getCostEstimate() const {
       size_t size = getSizeEstimate();
-      size_t logSize = std::max(size_t(1),
-          static_cast<size_t>(logb(static_cast<double>(getSizeEstimate()))));
+      size_t logSize = std::max(size_t(2),
+          static_cast<size_t>(logb(static_cast<double>(size))));
       size_t nlogn = size * logSize;
       size_t subcost = _subtree->getCostEstimate();
       return nlogn + subcost;

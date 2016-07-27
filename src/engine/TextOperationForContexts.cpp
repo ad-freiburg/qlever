@@ -35,7 +35,7 @@ string TextOperationForContexts::asString() const {
   os << "TEXT OPERATION FOR CONTEXTS:" << " co-occurrence with words: \"" <<
   _words << "\"";
   for (size_t i = 0; i < _subtrees.size(); ++i) {
-    os << "\n\tand " << _subtrees[i].first.asString() << " [" <<
+    os << "\nand " << _subtrees[i].first.asString() << " [" <<
     _subtrees[i].second << "]";
   }
   os << " with textLimit = " << _textLimit;

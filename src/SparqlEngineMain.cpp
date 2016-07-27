@@ -155,7 +155,8 @@ void processQuery(QueryExecutionContext& qec, const string& query) {
   timer.start();
   auto qet = qp.createExecutionTree(pq);
   timer.stop();
-  LOG(DEBUG) << "Time to create Execution Tree: " << timer.msecs() << "ms\n";
+  LOG(INFO) << "Time to create Execution Tree: " << timer.msecs() << "ms\n";
+  LOG(INFO) << "Execution Tree: " << qet.asString() << "ms\n";
   size_t limit = MAX_NOF_ROWS_IN_RESULT;
   size_t offset = 0;
   if (pq._limit.size() > 0) {

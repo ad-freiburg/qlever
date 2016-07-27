@@ -82,9 +82,9 @@ TwoColumnJoin& TwoColumnJoin::operator=(const TwoColumnJoin& other) {
 // _____________________________________________________________________________
 string TwoColumnJoin::asString() const {
   std::ostringstream os;
-  os << "TWO_COLUMN_JOIN(\n\t" << _left->asString() << " [" << _jc1Left <<
+  os << "TWO_COLUMN_JOIN(\n" << _left->asString() << " [" << _jc1Left <<
   " & " << _jc2Left <<
-  "]\n\t|X|\n\t" << _right->asString() << " [" << _jc1Right << " & " <<
+  "]\n|X|\n" << _right->asString() << " [" << _jc1Right << " & " <<
   _jc2Right << "]\n)";
   return os.str();
 }

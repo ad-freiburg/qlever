@@ -12,7 +12,7 @@ TEST(QueryExecutionTreeTest, testSPX) {
   ParsedQuery pq = SparqlParser::parse(
       "PREFIX : <http://rdf.myprefix.com/>\n"
           "SELECT ?x \n "
-          "WHERE \t {?x :myrel :obj}");
+          "WHERE  {?x :myrel :obj}");
   pq.expandPrefixes();
   QueryGraph qg;
   qg.createFromParsedQuery(pq);
@@ -26,7 +26,7 @@ TEST(QueryExecutionTreeTest, testXPO) {
   ParsedQuery pq = SparqlParser::parse(
       "PREFIX : <http://rdf.myprefix.com/>\n"
           "SELECT ?x \n "
-          "WHERE \t {:subj :myrel ?x}");
+          "WHERE  {:subj :myrel ?x}");
   pq.expandPrefixes();
   QueryGraph qg;
   qg.createFromParsedQuery(pq);
@@ -40,7 +40,7 @@ TEST(QueryExecutionTreeTest, testSP_free_) {
   ParsedQuery pq = SparqlParser::parse(
       "PREFIX : <http://rdf.myprefix.com/>\n"
           "SELECT ?x \n "
-          "WHERE \t {?x :myrel ?y}");
+          "WHERE  {?x :myrel ?y}");
   pq.expandPrefixes();
   QueryGraph qg;
   qg.createFromParsedQuery(pq);
@@ -54,7 +54,7 @@ TEST(QueryExecutionTreeTest, test_free_PX) {
   ParsedQuery pq = SparqlParser::parse(
       "PREFIX : <http://rdf.myprefix.com/>\n"
           "SELECT ?x \n "
-          "WHERE \t {?y :myrel ?x}");
+          "WHERE  {?y :myrel ?x}");
   pq.expandPrefixes();
   QueryGraph qg;
   qg.createFromParsedQuery(pq);
@@ -69,15 +69,15 @@ TEST(QueryExecutionTreeTest, testSPX_SPX) {
     ParsedQuery pq = SparqlParser::parse(
         "PREFIX : <pre/>\n"
             "SELECT ?x \n "
-            "WHERE \t {:s1 :r ?x. :s2 :r ?x}");
+            "WHERE  {:s1 :r ?x. :s2 :r ?x}");
     pq.expandPrefixes();
     QueryGraph qg;
     qg.createFromParsedQuery(pq);
     const QueryExecutionTree& qet = qg.getExecutionTree();
     ASSERT_EQ("{JOIN(\n"
-                  "\t{SCAN PSO with P = \"<pre/r>\", S = \"<pre/s1>\" | width: 1} [0]\n"
-                  "\t|X|\n"
-                  "\t{SCAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\" | width: 1} [0]\n"
+                  "{SCAN PSO with P = \"<pre/r>\", S = \"<pre/s1>\" | width: 1} [0]\n"
+                  "|X|\n"
+                  "{SCAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\" | width: 1} [0]\n"
                   ") | width: 1}",
               qet.asString());
   } catch (const ad_semsearch::Exception& e) {
@@ -94,15 +94,15 @@ TEST(QueryExecutionTreeTest, test_free_PX_SPX) {
     ParsedQuery pq = SparqlParser::parse(
         "PREFIX : <pre/>\n"
             "SELECT ?x ?y \n "
-            "WHERE \t {?y :r ?x . :s2 :r ?x}");
+            "WHERE  {?y :r ?x . :s2 :r ?x}");
     pq.expandPrefixes();
     QueryGraph qg;
     qg.createFromParsedQuery(pq);
     const QueryExecutionTree& qet = qg.getExecutionTree();
     ASSERT_EQ("{JOIN(\n"
-                  "\t{SCAN POS with P = \"<pre/r>\" | width: 2} [0]\n"
-                  "\t|X|\n"
-                  "\t{SCAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\" | width: 1} [0]\n"
+                  "{SCAN POS with P = \"<pre/r>\" | width: 2} [0]\n"
+                  "|X|\n"
+                  "{SCAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\" | width: 1} [0]\n"
                   ") | width: 2}",
               qet.asString());
   } catch (const ad_semsearch::Exception& e) {
@@ -119,15 +119,15 @@ TEST(QueryExecutionTreeTest, test_free_PX__free_PX) {
     ParsedQuery pq = SparqlParser::parse(
         "PREFIX : <pre/>\n"
             "SELECT ?x ?y ?z \n "
-            "WHERE \t {?y :r ?x. ?z :r ?x}");
+            "WHERE  {?y :r ?x. ?z :r ?x}");
     pq.expandPrefixes();
     QueryGraph qg;
     qg.createFromParsedQuery(pq);
     const QueryExecutionTree& qet = qg.getExecutionTree();
     ASSERT_EQ("{JOIN(\n"
-                  "\t{SCAN POS with P = \"<pre/r>\" | width: 2} [0]\n"
-                  "\t|X|\n"
-                  "\t{SCAN POS with P = \"<pre/r>\" | width: 2} [0]\n"
+                  "{SCAN POS with P = \"<pre/r>\" | width: 2} [0]\n"
+                  "|X|\n"
+                  "{SCAN POS with P = \"<pre/r>\" | width: 2} [0]\n"
                   ") | width: 3}",
               qet.asString());
   } catch (const ad_semsearch::Exception& e) {
@@ -144,15 +144,15 @@ TEST(QueryExecutionTreeTest, testSpielbergMovieActors) {
     ParsedQuery pq = SparqlParser::parse(
         "PREFIX : <pre/>\n"
             "SELECT ?a \n "
-            "WHERE \t {?a :acted-in ?m. ?m :directed-by :SS}");
+            "WHERE  {?a :acted-in ?m. ?m :directed-by :SS}");
     pq.expandPrefixes();
     QueryGraph qg;
     qg.createFromParsedQuery(pq);
     const QueryExecutionTree& qet = qg.getExecutionTree();
     ASSERT_EQ("{JOIN(\n"
-                  "\t{SCAN POS with P = \"<pre/acted-in>\" | width: 2} [0]\n"
-                  "\t|X|\n"
-                  "\t{SCAN POS with P = \"<pre/directed-by>\", "
+                  "{SCAN POS with P = \"<pre/acted-in>\" | width: 2} [0]\n"
+                  "|X|\n"
+                  "{SCAN POS with P = \"<pre/directed-by>\", "
                   "O = \"<pre/SS>\" | width: 1} [0]\n"
                   ") | width: 2}",
               qet.asString());
@@ -172,19 +172,19 @@ TEST(QueryExecutionTreeTest, testActorsBornInEurope) {
     ParsedQuery pq = SparqlParser::parse(
         "PREFIX : <pre/>\n"
             "SELECT ?a \n "
-            "WHERE \t {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}");
+            "WHERE  {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}");
     pq.expandPrefixes();
     QueryGraph qg;
     qg.createFromParsedQuery(pq);
     const QueryExecutionTree& qet = qg.getExecutionTree();
     ASSERT_EQ("{JOIN(\n"
-                  "\t{SCAN POS with P = \"<pre/profession>\", "
+                  "{SCAN POS with P = \"<pre/profession>\", "
                   "O = \"<pre/Actor>\" | width: 1} [0]\n"
-                  "\t|X|\n"
-                  "\t{SORT {JOIN(\n"
-                  "\t{SCAN POS with P = \"<pre/born-in>\" | width: 2} [0]\n"
-                  "\t|X|\n"
-                  "\t{SCAN POS with P = \"<pre/in>\", O = \"<pre/Europe>\" | "
+                  "|X|\n"
+                  "{SORT {JOIN(\n"
+                  "{SCAN POS with P = \"<pre/born-in>\" | width: 2} [0]\n"
+                  "|X|\n"
+                  "{SCAN POS with P = \"<pre/in>\", O = \"<pre/Europe>\" | "
                   "width: 1} [0]\n"
                   ") | width: 2} on 1 | width: 2} [1]\n"
                   ") | width: 2}",
@@ -202,17 +202,17 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
   try {
     ParsedQuery pq = SparqlParser::parse(
         "SELECT ?a \n "
-            "WHERE \t {?a <is-a> <Plant> . ?a <in-context> ?c. "
+            "WHERE  {?a <is-a> <Plant> . ?a <in-context> ?c. "
             "?c <in-context> edible leaves} TEXTLIMIT 5");
     pq.expandPrefixes();
     QueryGraph qg;
     qg.createFromParsedQuery(pq);
     const QueryExecutionTree& qet = qg.getExecutionTree();
     ASSERT_EQ("{JOIN(\n"
-                  "\t{SCAN POS with P = \"<is-a>\", "
+                  "{SCAN POS with P = \"<is-a>\", "
                   "O = \"<Plant>\" | width: 1} [0]\n"
-                  "\t|X|\n"
-                  "\t{SORT {TEXT OPERATION FOR ENTITIES: "
+                  "|X|\n"
+                  "{SORT {TEXT OPERATION FOR ENTITIES: "
                   "co-occurrence with words: "
                   "\"edible leaves\" with textLimit = 5 | width: 3} on 0 "
                   "| width: 3} [0]\n) | width: 3}",
@@ -230,7 +230,7 @@ TEST(QueryExecutionTreeTest, testTextQuerySE) {
   try {
     ParsedQuery pq = SparqlParser::parse(
         "SELECT TEXT(?c) \n "
-            "WHERE \t {?c <in-context> search engine}");
+            "WHERE  {?c <in-context> search engine}");
     pq.expandPrefixes();
     QueryGraph qg;
     qg.createFromParsedQuery(pq);
@@ -252,7 +252,7 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
   try {
     ParsedQuery pq = SparqlParser::parse(
         "SELECT ?p ?s \n "
-            "WHERE \t {"
+            "WHERE  {"
             "?a <is-a> <Politician> . "
             "?a <in-context> ?c ."
             "?c <in-context> friend* ."
@@ -264,13 +264,13 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
     QueryGraph qg;
     qg.createFromParsedQuery(pq);
     const QueryExecutionTree& qet = qg.getExecutionTree();
-    ASSERT_EQ("{JOIN(\n\t"
-      "{SCAN POS with P = \"<is-a>\", O = \"<Politician>\" | width: 1} [0]\n\t"
-      "|X|\n\t"
-      "{TEXT OPERATION FOR ENTITIES: co-occurrence with words: \"friend*\"\n\t"
-      "and {JOIN(\n\t"
-      "{SCAN POS with P = \"<is-a>\", O = \"<Scientist>\" | width: 1} [0]\n\t"
-      "|X|\n\t"
+    ASSERT_EQ("{JOIN(\n"
+      "{SCAN POS with P = \"<is-a>\", O = \"<Politician>\" | width: 1} [0]\n"
+      "|X|\n"
+      "{TEXT OPERATION FOR ENTITIES: co-occurrence with words: \"friend*\"\n"
+      "and {JOIN(\n"
+      "{SCAN POS with P = \"<is-a>\", O = \"<Scientist>\" | width: 1} [0]\n"
+      "|X|\n"
       "{SORT {TEXT OPERATION FOR ENTITIES: "
                   "co-occurrence with words: \"manhattan project\" "
                   "with textLimit = 1 | width: 3} on 0 | width: 3} [0]\n) "
@@ -303,7 +303,7 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
     const QueryExecutionTree& qet = qg.getExecutionTree();
     ASSERT_EQ("{TEXT OPERATION FOR ENTITIES: co-occurrence with words: "
                   "\"friend*\"\n"
-                  "\tand {SCAN POS with P = \"<is-a>\", O = \"<Politician>\" "
+                  "and {SCAN POS with P = \"<is-a>\", O = \"<Politician>\" "
                   "| width: 1} [0] with textLimit = 1 | width: 4}",
               qet.asString());
   } catch (const ad_semsearch::Exception& e) {
@@ -321,7 +321,7 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
     ParsedQuery pq = SparqlParser::parse(
         "PREFIX : <>\n"
             "SELECT ?x ?y TEXT(?c)\n "
-            "WHERE \t {"
+            "WHERE  {"
             "?x :Place_of_birth ?y ."
             "?y :Contained_by :Europe ."
             "?x :in-context ?c ."
@@ -331,12 +331,12 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
     QueryGraph qg;
     qg.createFromParsedQuery(pq);
     const QueryExecutionTree& qet = qg.getExecutionTree();
-    ASSERT_EQ("{JOIN(\n\t"
+    ASSERT_EQ("{JOIN(\n"
     "{SCAN POS with P = \"<Contained_by>\", O = \"<Europe>\" | width: 1} [0]"
-                  "\n\t|X|\n\t"
-    "{SORT {JOIN(\n\t"
+                  "\n|X|\n"
+    "{SORT {JOIN(\n"
       "{SCAN PSO with P = \"<Place_of_birth>\" | width: 2} [0]"
-                  "\n\t|X|\n\t"
+                  "\n|X|\n"
       "{SORT {TEXT OPERATION FOR ENTITIES: co-occurrence with words: "
                   "\"cocaine\" with textLimit = 1 | width: 3} on 0 "
                   "| width: 3} [0]\n) | width: 4} "
