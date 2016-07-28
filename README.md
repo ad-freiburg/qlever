@@ -54,6 +54,9 @@ IMPORTANT:
 THERE HAS TO BE SUFFICIENT DISK SPACE IN UNDER THE PATH USE CHOOSE FOR YOUR INDEX!
 FOR NOW - ALL FILES HAVE TO BE UTF8 ENCODED!
 
+    You can use the files described and linked later in this document: 
+    "How to obtain data to play around with"
+
 a) from an NTriples file (currently no blank nodes allowed):
 
     ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt
@@ -83,6 +86,8 @@ b) With text collection:
 
     ./ServerMain -i /path/to/myindex -p <PORT> -t
 
+Depending on if you built the index with the -a version, two or six index permutations will be registered.
+For some data this can be a significant difference in memory consumption.
 
 4. Running queries:
 -------------------
@@ -102,11 +107,37 @@ The following two input files are needed for full feature support:
 
 a) Wordsfile
 ------------
-A file with TODO
+A tab-separated file with one line per posting and following the format:
+
+    word    isEntity    contextId   score
+        
+For example, for a sentence "He discovered penicillin, a drug.", it could look like this:
+
+    He                  0   0   1
+    <Alexander_Fleming> 1   0   1
+    dicovered           0   0   1
+    penicillin          0   0   1
+    <Penicillin>        1   0   1
+    penicillin          0   1   1
+    <Penicillin>        1   1   1
+    a                   0   1   1
+    drug                0   1   1
+
+
+This file is used to build the text index from.
 
 b) Docsfile
 -----------
-A file with TODO
+A tab-separated file with one line per original unit of text and following the format:
+
+    max_context_id  text
+    
+For example, for the sentence above:
+
+    1   He discovered penicillin, a drug.
+    
+Note that this file is only used to display proper excerpts as evidence for texttual matches.
+
 
 
 5.2 Supported Queries
@@ -122,7 +153,7 @@ A query for plants with edible leaves:
         ?c <in-context> edible leaves
     } 
     
-The special relation `:in-context` to state that results for `?plant` have to occur in a context `?c`.
+The special relation `<in-context>` to state that results for `?plant` have to occur in a context `?c`.
 In contexts matching `?c`, there also have to be oth words `edible` and `leaves`.
 
 A query for Astronauts who walked on the moon:
@@ -194,4 +225,30 @@ Pure connections to variables (e.g. "Books with a description that mentions a pl
 
 How to obtain data to play around with
 ======================================
+
+1. Use the tiny examples contained in the repository
+--------------------------------------------------
+
+These are tiny and there's nothing meaningful to discover.
+
+They are fine for setting up a working sever within seconds and getting comfortable with the query language.
+
+TODO: add and describe content and queries
+
+2. Download these prepared input files
+-------------------------------
+
+TODO: describe.
+
+
+3. Download prepared input for English Wikipedia text and a KB derived from Freebase
+--------------------------
+
+TODO: example queries
+
+
+4. Use any knowledge base and text collection of your choice
+------------------------
+ 
+TODO: give examples + describe how to do ER
 

@@ -11,10 +11,10 @@
 // _____________________________________________________________________________
 QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
   // Set default values
-  _factors["FILTER_PUNISH"] = 1.0;
+  _factors["FILTER_PUNISH"] = 10.0;
   _factors["NO_FILTER_PUNISH"] = 1.0;
   _factors["FILTER_SELECTIVITY"] = 0.5;
-  _factors["HASH_MAP_OPERATION_COST"] = 2.0;
+  _factors["HASH_MAP_OPERATION_COST"] = 5.0;
 }
 
 // _____________________________________________________________________________
