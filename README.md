@@ -111,7 +111,7 @@ A tab-separated file with one line per posting and following the format:
 
     word    isEntity    contextId   score
         
-For example, for a sentence "He discovered penicillin, a drug.", it could look like this:
+For example, for a sentence `He discovered penicillin, a drug.`, it could look like this:
 
     He                  0   0   1
     <Alexander_Fleming> 1   0   1
@@ -123,7 +123,7 @@ For example, for a sentence "He discovered penicillin, a drug.", it could look l
     a                   0   1   1
     drug                0   1   1
 
-
+Note that some form of entity recognition / linking has been done.
 This file is used to build the text index from.
 
 b) Docsfile
@@ -230,25 +230,58 @@ How to obtain data to play around with
 --------------------------------------------------
 
 These are tiny and there's nothing meaningful to discover.
+They are fine for setting up a working sever within seconds and getting comfortable with the query language:
 
-They are fine for setting up a working sever within seconds and getting comfortable with the query language.
+    SparqlEngineDraft/misc/tiny-example.kb.nt
+    SparqlEngineDraft/misc/tiny-example.wordsfile.tsv
+    SparqlEngineDraft/misc/tiny-example.docsfile.tsv
+    
+Note that we left out stopwords (unlike in the docsfile) to demonstrate how this can be done if desired.
+If you build an index using these files and ask the query:
 
-TODO: add and describe content and queries
+    SELECT ?x TEXT(?c) WHERE {
+        ?x <is-a> <Scientist> .
+        ?x <in-context> ?c .
+        ?c <in-context> penicillin
+    }  ORDER BY DESC(SCORE(?c))
+    
+You should find `<Alexander_Fleming>` and the textual evidence for that match.
+
+You can also display his awards or find `<Albert_Einstein>` and his awards with the following query:
+
+    SELECT ?x ?award TEXT(?c) WHERE {
+        ?x <is-a> <Scientist> .
+        ?x <in-context> ?c .
+        ?c <in-context> theory rela* .
+        ?x <Award_Won> ?award
+    }  ORDER BY DESC(SCORE(?c))
+
+have a look at the (really tiny) input files to get a feeling for how this works.
+
+Again, there's not much to be done with this data.
+For a meaningful index, use the example data below.
 
 2. Download these prepared input files
 -------------------------------
 
-TODO: describe.
+These files are of medium size ( XX million facts, but only a small subset of Wikipedia articles, in particular those about scientists.)
 
+* [knowledge-base nt](http://broccoli.cs.uni-freiburg.de)
+* [wordsfile tsv](http://broccoli.cs.uni-freiburg.de)
+* [docsfile tsv](http://broccoli.cs.uni-freiburg.de)
 
 3. Download prepared input for English Wikipedia text and a KB derived from Freebase
 --------------------------
 
-TODO: example queries
+* [knowledge-base nt](http://broccoli.cs.uni-freiburg.de)
+* [wordsfile tsv](http://broccoli.cs.uni-freiburg.de)
+* [docsfile tsv](http://broccoli.cs.uni-freiburg.de)
 
 
 4. Use any knowledge base and text collection of your choice
 ------------------------
  
-TODO: give examples + describe how to do ER
+Create the files similar to the three files provided as sample downloads for other data sets.
+Usually, knowledge base files do not have to be changed. Only words- and docsfile have to be produced.
+
 

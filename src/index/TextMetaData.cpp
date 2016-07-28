@@ -41,6 +41,20 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(const Id lower,
 }
 
 // _____________________________________________________________________________
+bool TextMetaData::existsTextBlockForEntityId(const Id eid) const {
+  assert(_blocks.size() > 0);
+  assert(_blocks.size() == _blockUpperBoundWordIds.size()
+                           + _blockUpperBoundEntityIds.size());
+
+  // Binary search in the sorted _blockUpperBoundWordIds vector.
+  vector<Id>::const_iterator it = std::lower_bound(
+      _blockUpperBoundEntityIds.begin(), _blockUpperBoundEntityIds.end(),
+      eid);
+
+  return(*it == eid);
+}
+
+// _____________________________________________________________________________
 const TextBlockMetaData& TextMetaData::getBlockInfoByEntityId(
     const Id eid) const {
   assert(_blocks.size() > 0);
@@ -227,3 +241,4 @@ void TextMetaData::addBlock(const TextBlockMetaData& md) {
 off_t TextMetaData::getOffsetAfter() {
   return _blocks.back()._entityCl._lastByte + 1;
 }
+
