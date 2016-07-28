@@ -285,3 +285,9 @@ Create the files similar to the three files provided as sample downloads for oth
 Usually, knowledge base files do not have to be changed. Only words- and docsfile have to be produced.
 
 
+Troubleshooting
+===============
+
+If you have problems, try to rebuild when compiling with -DCMAKE_BUILD_TYPE=Debug.
+In particular also rebuild the index. 
+The release build assumes machine written words- and docsfiles and ommits sanity checks for the sake of speed. 
