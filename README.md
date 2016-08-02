@@ -226,7 +226,7 @@ Pure connections to variables (e.g. "Books with a description that mentions a pl
 How to obtain data to play around with
 ======================================
 
-1. Use the tiny examples contained in the repository
+Use the tiny examples contained in the repository
 --------------------------------------------------
 
 These are tiny and there's nothing meaningful to discover.
@@ -261,25 +261,35 @@ have a look at the (really tiny) input files to get a feeling for how this works
 Again, there's not much to be done with this data.
 For a meaningful index, use the example data below.
 
-2. Download these prepared input files
--------------------------------
+Download prepared input files for a collection about scientists
+---------------------------------------------------------------
 
-These files are of medium size ( XX million facts, but only a small subset of Wikipedia articles, in particular those about scientists.)
+These files are of medium size (facts about scientists - only one hop from a scientist in a knowledge graph. Text are Wikipedia articles about scientists.)
+Includes a knowledge base as nt file, and a words- and docsfile as tsv. 
 
-* [knowledge-base nt](http://broccoli.cs.uni-freiburg.de)
-* [wordsfile tsv](http://broccoli.cs.uni-freiburg.de)
-* [docsfile tsv](http://broccoli.cs.uni-freiburg.de)
+[scientist_collection.zip](http://broccoli.cs.uni-freiburg.de):
 
-3. Download prepared input for English Wikipedia text and a KB derived from Freebase
---------------------------
-
-* [knowledge-base nt](http://broccoli.cs.uni-freiburg.de)
-* [wordsfile tsv](http://broccoli.cs.uni-freiburg.de)
-* [docsfile tsv](http://broccoli.cs.uni-freiburg.de)
+* XX GB unzipped
+* X million facts
+* XX million text postings
 
 
-4. Use any knowledge base and text collection of your choice
-------------------------
+
+Download prepared input for English Wikipedia text and a KB derived from Freebase
+---------------------------------------------------------------------------------
+
+Includes a knowledge base as nt file, and a words- and docsfile as tsv.
+Text and facts are basically equivalent to the [Broccoli](http://broccoli.cs.uni-freiburg.de) search engine. 
+
+[wikipedia_freebase_data.zip](http://broccoli.cs.uni-freiburg.de):
+
+* XX GB unzipped
+* X million facts
+* XX million text postings
+
+
+Use any knowledge base and text collection of your choice
+---------------------------------------------------------
  
 Create the files similar to the three files provided as sample downloads for other data sets.
 Usually, knowledge base files do not have to be changed. Only words- and docsfile have to be produced.
