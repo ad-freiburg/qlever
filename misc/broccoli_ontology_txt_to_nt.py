@@ -20,6 +20,8 @@ def handleSubject(element):
             new += '&lt'
         elif c == '>':
             new += '&gt'
+        elif c == ' ':
+            new += '_'
         else:
             new += c
     new += '>'
@@ -34,6 +36,8 @@ def handleObject(element):
                 new += '&lt'
             elif c == '>':
                 new += '&gt'
+            elif c == ' ':
+                new += '_'
             else:
                 new += c
         new += '>'
