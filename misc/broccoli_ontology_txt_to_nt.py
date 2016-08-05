@@ -29,7 +29,7 @@ def handleSubject(element):
 def handleObject(element):
     if element and element[0] != '"':
         new = '<'
-        for c in element[1:-1]:
+        for c in element:
             if c == '<':
                 new += '&lt'
             elif c == '>':
