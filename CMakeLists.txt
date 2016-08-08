@@ -61,6 +61,7 @@ message(STATUS ---)
 add_subdirectory(src/parser)
 add_subdirectory(src/engine)
 add_subdirectory(src/index)
+add_subdirectory(src/experiments)
 add_subdirectory(test)
 
 
@@ -82,6 +83,8 @@ target_link_libraries (ServerMain engine)
 add_executable(WriteIndexListsMain src/WriteIndexListsMain.cpp)
 target_link_libraries (WriteIndexListsMain engine)
 
+add_executable(TextFilterComparison src/experiments/TextFilterComparison.cpp)
+target_link_libraries (TextFilterComparison experiments)
 
 enable_testing()
 add_test(SparqlParserTest test/SparqlParserTest)
