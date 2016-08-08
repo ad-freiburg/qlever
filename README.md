@@ -269,7 +269,7 @@ Includes a knowledge base as nt file, and a words- and docsfile as tsv.
 
 [scientist-collection.zip](http://filicudi.informatik.uni-freiburg.de/bjoern-data/scientist-collection.zip):
 
-* X MB zipped
+* 78 MB zipped
 * 318 MB unzipped
 * 350 k facts
 * 11.7 m text postings
