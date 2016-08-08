@@ -501,14 +501,13 @@ TEST(QueryPlannerTest, testStarTwoFree) {
       QueryPlanner qp(nullptr);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
       ASSERT_EQ(
-          "{JOIN(\n{JOIN(\n"
-              "{SCAN POS with P = \"<http://rdf.myprefix.com/myrel>\" "
-              "| width: 2} [0]\n|X|\n"
-              "{SCAN PSO with P = \"<http://rdf.myprefix.com/ns/myrel>\" "
-              "| width: 2} [0]\n) | width: 3} [0]\n|X|\n"
-              "{SCAN POS with P = \"<http://rdf.myprefix.com/xxx/rel2>\", "
-              "O = \"<http://abc.de>\" | width: 1} [0]\n) | width: 3}",
-          qet.asString());
+      "{JOIN(\n{JOIN(\n"
+          "{SCAN POS with P = \"<http://rdf.myprefix.com/xxx/rel2>\", "
+          "O = \"<http://abc.de>\" | width: 1} [0]\n|X|\n"
+          "{SCAN PSO with P = \"<http://rdf.myprefix.com/ns/myrel>\" "
+          "| width: 2} [0]\n) | width: 2} [0]\n|X|\n"
+          "{SCAN POS with P = \"<http://rdf.myprefix.com/myrel>\" "
+          "| width: 2} [0]\n) | width: 3}", qet.asString());
     }
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
