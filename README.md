@@ -274,7 +274,7 @@ Includes a knowledge base as nt file, and a words- and docsfile as tsv.
 * 350 k facts
 * 11.7 m text postings
 
-Here is a sample query to try and check if everytign worked for you:
+Here is a sample query to try and check if everything worked for you:
 
     SELECT ?x SCORE(?c) TEXT(?c) WHERE {
         ?x <is-a> <Scientist> .
@@ -297,6 +297,16 @@ Text and facts are basically equivalent to the [Broccoli](http://broccoli.cs.uni
 * 103 GB unzipped
 * 372 million facts
 * 2.8 billion text postings
+
+Here is a sample query to try and check if everything worked for you:
+
+    SELECT ?x SCORE(?c) TEXT(?c) WHERE {
+        ?x <is-a> <Astronaut> .
+        ?x <in-context> ?c .
+        ?c <in-context> walk* moon
+    }
+    ORDER BY DESC(SCORE(?c))
+
 
 
 Use any knowledge base and text collection of your choice
