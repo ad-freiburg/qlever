@@ -267,7 +267,7 @@ Download prepared input files for a collection about scientists
 These files are of medium size (facts about scientists - only one hop from a scientist in a knowledge graph. Text are Wikipedia articles about scientists.)
 Includes a knowledge base as nt file, and a words- and docsfile as tsv. 
 
-[scientist_collection.zip](http://filicudi.informatik.uni-freiburg.de/bjoern-data/scientist-collection.zip):
+[scientist-collection.zip](http://filicudi.informatik.uni-freiburg.de/bjoern-data/scientist-collection.zip):
 
 * 318 MB unzipped
 * 350 k facts
@@ -290,7 +290,7 @@ Download prepared input for English Wikipedia text and a KB derived from Freebas
 Includes a knowledge base as nt file, and a words- and docsfile as tsv.
 Text and facts are basically equivalent to the [Broccoli](http://broccoli.cs.uni-freiburg.de) search engine. 
 
-[wikipedia_freebase_data.zip]([scientist_collection.zip](http://filicudi.informatik.uni-freiburg.de/bjoern-data/wikipedia-freebase.zip):):
+[wikipedia-freebasezip](http://filicudi.informatik.uni-freiburg.de/bjoern-data/wikipedia-freebase.zip):
 
 * XX GB unzipped
 * X million facts
