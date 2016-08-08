@@ -72,9 +72,7 @@ public:
           (_left->getSizeEstimate() + _right->getSizeEstimate()) * 10);
     }
     if (easySides == 0) {
-      return std::max(
-          size_t(1),
-          (_left->getSizeEstimate() + _right->getSizeEstimate()) / 4);
+      return (_left->getSizeEstimate() + _right->getSizeEstimate()) * 4);
     } else if (easySides == 1) {
       return std::max(
           size_t(1),
