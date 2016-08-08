@@ -21,7 +21,7 @@
 using std::string;
 
 // _____________________________________________________________________________
-QueryExecutionTree::QueryExecutionTree(QueryExecutionContext *qec) :
+QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* qec) :
     _qec(qec),
     _variableColumnMap(),
     _rootOperation(nullptr),
@@ -38,47 +38,47 @@ QueryExecutionTree::QueryExecutionTree(const QueryExecutionTree& other) :
   switch (other._type) {
     case OperationType::SCAN:
       _rootOperation = new IndexScan(
-          *static_cast<IndexScan *>(other._rootOperation));
+          *static_cast<IndexScan*>(other._rootOperation));
       break;
     case OperationType::JOIN:
       _rootOperation = new Join(
-          *static_cast<Join *>(other._rootOperation));
+          *static_cast<Join*>(other._rootOperation));
       break;
     case OperationType::SORT:
       _rootOperation = new Sort(
-          *static_cast<Sort *>(other._rootOperation));
+          *static_cast<Sort*>(other._rootOperation));
       break;
     case OperationType::ORDER_BY:
       _rootOperation = new OrderBy(
-          *static_cast<OrderBy *>(other._rootOperation));
+          *static_cast<OrderBy*>(other._rootOperation));
       break;
     case OperationType::FILTER:
       _rootOperation = new Filter(
-          *static_cast<Filter *>(other._rootOperation));
+          *static_cast<Filter*>(other._rootOperation));
       break;
     case OperationType::DISTINCT:
       _rootOperation = new Distinct(
-          *static_cast<Distinct *>(other._rootOperation));
+          *static_cast<Distinct*>(other._rootOperation));
       break;
     case OperationType::TEXT_FOR_ENTITIES:
       _rootOperation = new TextOperationForEntities(
-          *static_cast<TextOperationForEntities *>(other._rootOperation));
+          *static_cast<TextOperationForEntities*>(other._rootOperation));
       break;
     case OperationType::TEXT_FOR_CONTEXTS:
       _rootOperation = new TextOperationForContexts(
-          *static_cast<TextOperationForContexts *>(other._rootOperation));
+          *static_cast<TextOperationForContexts*>(other._rootOperation));
       break;
     case OperationType::TEXT_WITHOUT_FILTER:
       _rootOperation = new TextOperationWithoutFilter(
-          *static_cast<TextOperationWithoutFilter *>(other._rootOperation));
+          *static_cast<TextOperationWithoutFilter*>(other._rootOperation));
       break;
     case OperationType::TEXT_WITH_FILTER:
       _rootOperation = new TextOperationWithFilter(
-          *static_cast<TextOperationWithFilter *>(other._rootOperation));
+          *static_cast<TextOperationWithFilter*>(other._rootOperation));
       break;
     case OperationType::TWO_COL_JOIN:
       _rootOperation = new TwoColumnJoin(
-          *static_cast<TwoColumnJoin *>(other._rootOperation));
+          *static_cast<TwoColumnJoin*>(other._rootOperation));
       break;
     case UNDEFINED:
     default:
@@ -108,7 +108,10 @@ string QueryExecutionTree::asString() const {
   if (_rootOperation) {
     std::ostringstream os;
     os << "{" << _rootOperation->asString() << " | width: " << getResultWidth()
-    << "}";
+       << "}";
+    if (_qec) {
+      os << " [estimated size: " << getSizeEstimate() << "]";
+    }
     return os.str();
   } else {
     return "<Empty QueryExecutionTree>";
@@ -117,57 +120,57 @@ string QueryExecutionTree::asString() const {
 
 // _____________________________________________________________________________
 void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
-                                      Operation *op) {
+                                      Operation* op) {
   _type = type;
   switch (type) {
     case OperationType::SCAN:
       delete _rootOperation;
-      _rootOperation = new IndexScan(*static_cast<IndexScan *>(op));
+      _rootOperation = new IndexScan(*static_cast<IndexScan*>(op));
       break;
     case OperationType::JOIN:
       delete _rootOperation;
-      _rootOperation = new Join(*static_cast<Join *>(op));
+      _rootOperation = new Join(*static_cast<Join*>(op));
       break;
     case OperationType::SORT:
       delete _rootOperation;
-      _rootOperation = new Sort(*static_cast<Sort *>(op));
+      _rootOperation = new Sort(*static_cast<Sort*>(op));
       break;
     case OperationType::ORDER_BY:
       delete _rootOperation;
-      _rootOperation = new OrderBy(*static_cast<OrderBy *>(op));
+      _rootOperation = new OrderBy(*static_cast<OrderBy*>(op));
       break;
     case OperationType::FILTER:
       delete _rootOperation;
-      _rootOperation = new Filter(*static_cast<Filter *>(op));
+      _rootOperation = new Filter(*static_cast<Filter*>(op));
       break;
     case OperationType::DISTINCT:
       delete _rootOperation;
-      _rootOperation = new Distinct(*static_cast<Distinct *>(op));
+      _rootOperation = new Distinct(*static_cast<Distinct*>(op));
       break;
     case OperationType::TEXT_FOR_ENTITIES:
       delete _rootOperation;
       _rootOperation = new TextOperationForEntities(
-          *static_cast<TextOperationForEntities *>(op));
+          *static_cast<TextOperationForEntities*>(op));
       break;
     case OperationType::TEXT_FOR_CONTEXTS:
       delete _rootOperation;
       _rootOperation = new TextOperationForContexts(
-          *static_cast<TextOperationForContexts *>(op));
+          *static_cast<TextOperationForContexts*>(op));
       break;
     case OperationType::TEXT_WITHOUT_FILTER:
       delete _rootOperation;
       _rootOperation = new TextOperationWithoutFilter(
-          *static_cast<TextOperationWithoutFilter *>(op));
+          *static_cast<TextOperationWithoutFilter*>(op));
       break;
     case OperationType::TEXT_WITH_FILTER:
       delete _rootOperation;
       _rootOperation = new TextOperationWithFilter(
-          *static_cast<TextOperationWithFilter *>(op));
+          *static_cast<TextOperationWithFilter*>(op));
       break;
     case OperationType::TWO_COL_JOIN:
       delete _rootOperation;
       _rootOperation = new TwoColumnJoin(
-          *static_cast<TwoColumnJoin *>(op));
+          *static_cast<TwoColumnJoin*>(op));
       break;
     default: AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, "Cannot set "
         "an operation with undefined type.");
@@ -223,23 +226,23 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
   }
   if (validIndices.size() == 0) { return; }
   if (res._nofColumns == 1) {
-    auto data = static_cast<vector<array<Id, 1>> *>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 2) {
-    auto data = static_cast<vector<array<Id, 2>> *>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 3) {
-    auto data = static_cast<vector<array<Id, 3>> *>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 3>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 4) {
-    auto data = static_cast<vector<array<Id, 4>> *>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 4>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 5) {
-    auto data = static_cast<vector<array<Id, 5>> *>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 5>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTsvTable(*data, offset, upperBound, validIndices, out);
   } else {
@@ -279,23 +282,23 @@ void QueryExecutionTree::writeResultToStreamAsJson(
   }
   if (validIndices.size() == 0) { return; }
   if (res._nofColumns == 1) {
-    auto data = static_cast<vector<array<Id, 1>> *>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 2) {
-    auto data = static_cast<vector<array<Id, 2>> *>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 3) {
-    auto data = static_cast<vector<array<Id, 3>> *>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 3>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 4) {
-    auto data = static_cast<vector<array<Id, 4>> *>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 4>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 5) {
-    auto data = static_cast<vector<array<Id, 5>> *>(res._fixedSizeData);
+    auto data = static_cast<vector<array<Id, 5>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, out);
   } else {
