@@ -298,6 +298,26 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_EQ("?movie", pq._whereClauseTriples[1]._s);
   ASSERT_EQ("<directed-by>", pq._whereClauseTriples[1]._p);
   ASSERT_EQ("<Scott%2C%20Ridley>", pq._whereClauseTriples[1]._o);
+
+  pq = SparqlParser::parse(
+      "PREFIX xsd: <http://www.w3.org/2010/XMLSchema#>"
+          "SELECT DISTINCT ?movie WHERE { \n"
+          "\n"
+          "?movie <from-year> \"00-00-2000\"^^xsd:date .\n"
+          "\n"
+          "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50");
+  pq.expandPrefixes();
+  ASSERT_EQ(1u, pq._prefixes.size());
+  ASSERT_EQ(1u, pq._selectedVariables.size());
+  ASSERT_EQ("?movie", pq._selectedVariables[0]);
+  ASSERT_EQ(2u, pq._whereClauseTriples.size());
+  ASSERT_EQ("?movie", pq._whereClauseTriples[0]._s);
+  ASSERT_EQ("<from-year>", pq._whereClauseTriples[0]._p);
+  ASSERT_EQ("\"00-00-2000\"^^<http://www.w3.org/2010/XMLSchema#date>",
+            pq._whereClauseTriples[0]._o);
+  ASSERT_EQ("?movie", pq._whereClauseTriples[1]._s);
+  ASSERT_EQ("<directed-by>", pq._whereClauseTriples[1]._p);
+  ASSERT_EQ("<Scott%2C%20Ridley>", pq._whereClauseTriples[1]._o);
 }
 
 int main(int argc, char** argv) {

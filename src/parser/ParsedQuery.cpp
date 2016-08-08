@@ -44,7 +44,7 @@ string ParsedQuery::asString() const {
 
   os << "\nLIMIT: " << (_limit.size() > 0 ? _limit : "no limit specified");
   os << "\nTEXTLIMIT: "
-  << (_textLimit.size() > 0 ? _textLimit : "no limit specified");
+     << (_textLimit.size() > 0 ? _textLimit : "no limit specified");
   os << "\nOFFSET: " << (_offset.size() > 0 ? _offset : "no offset specified");
   os << "\nDISTINCT modifier is " << (_distinct ? "" : "not ") << "present.";
   os << "\nREDUCED modifier is " << (_reduced ? "" : "not ") << "present.";
@@ -89,15 +89,28 @@ void ParsedQuery::expandPrefixes() {
 }
 
 // _____________________________________________________________________________
-void ParsedQuery::expandPrefix(string& item, 
-    const std::unordered_map<string, string>& prefixMap) {
+void ParsedQuery::expandPrefix(string& item,
+                               const std::unordered_map<string, string>& prefixMap) {
   if (!ad_utility::startsWith(item, "?") &&
       !ad_utility::startsWith(item, "<")) {
     size_t i = item.find(':');
-    if (i != string::npos && prefixMap.count(item.substr(0, i)) > 0) {
-      string prefixUri = prefixMap.find(item.substr(0, i))->second;
-      item = prefixUri.substr(0, prefixUri.size() - 1)
-          + item.substr(i + 1) + '>';
+    size_t from = item.find("^^");
+    if (from == string::npos) {
+      from = 0;
+    } else {
+      from += 2;
+    }
+    if (i != string::npos && i >= from &&
+        prefixMap.count(item.substr(from, i - from)) > 0) {
+      string prefixUri = prefixMap.find(item.substr(from, i - from))->second;
+      if (from == 0) {
+        item = prefixUri.substr(0, prefixUri.size() - 1)
+               + item.substr(i + 1) + '>';
+      } else {
+        item = item.substr(0, from) +
+            prefixUri.substr(0, prefixUri.size() - 1)
+               + item.substr(i + 1) + '>';
+      }
     }
   }
 }
