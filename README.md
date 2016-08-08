@@ -311,4 +311,4 @@ Troubleshooting
 
 If you have problems, try to rebuild when compiling with -DCMAKE_BUILD_TYPE=Debug.
 In particular also rebuild the index. 
-The release build assumes machine written words- and docsfiles and ommits sanity checks for the sake of speed. 
+The release build assumes machine written words- and docsfiles and omits sanity checks for the sake of speed.
