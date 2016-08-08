@@ -269,6 +269,7 @@ Includes a knowledge base as nt file, and a words- and docsfile as tsv.
 
 [scientist-collection.zip](http://filicudi.informatik.uni-freiburg.de/bjoern-data/scientist-collection.zip):
 
+* X MB zipped
 * 318 MB unzipped
 * 350 k facts
 * 11.7 m text postings
@@ -290,11 +291,12 @@ Download prepared input for English Wikipedia text and a KB derived from Freebas
 Includes a knowledge base as nt file, and a words- and docsfile as tsv.
 Text and facts are basically equivalent to the [Broccoli](http://broccoli.cs.uni-freiburg.de) search engine. 
 
-[wikipedia-freebasezip](http://filicudi.informatik.uni-freiburg.de/bjoern-data/wikipedia-freebase.zip):
+[wikipedia-freebase.zip](http://filicudi.informatik.uni-freiburg.de/bjoern-data/wikipedia-freebase.zip):
 
-* XX GB unzipped
-* X million facts
-* XX million text postings
+* 21 GB zipped
+* 103 GB unzipped
+* 372 million facts
+* 2.8 billion text postings
 
 
 Use any knowledge base and text collection of your choice
