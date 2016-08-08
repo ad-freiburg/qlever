@@ -291,7 +291,7 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
     f._type = SparqlFilter::LT;
   } else if (tokens[1] == "<=") {
     f._type = SparqlFilter::LE;
-  } else if (tokens[1] == "<") {
+  } else if (tokens[1] == ">") {
     f._type = SparqlFilter::GT;
   } else if (tokens[1] == ">=") {
     f._type = SparqlFilter::GE;
