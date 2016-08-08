@@ -274,8 +274,7 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "Unknown syntax for filter: " + filter);
   }
-  if (tokens[0].size() == 0 || tokens[0][0] != '?' || tokens[2].size() == 0 ||
-      tokens[2][0] != '?') {
+  if (tokens[0].size() == 0 || tokens[0][0] != '?' || tokens[2].size() == 0) {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
              "Filter not supported yet: " + filter);
   }
