@@ -74,7 +74,8 @@ The full call will look like this:
     
 If you want to use predicate variables (perfectly normal for SPARQL but rarely used in semantic text queries), use an optional argument -a to build all permutations:
 
-    ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -a -w /path/to/wordsfile -d /path/to/docsfile 
+    ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -a -w /path/to/wordsfile -d /path/to/docsfile
+
 3. Starting a Sever:
 --------------------
 
