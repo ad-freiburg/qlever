@@ -144,7 +144,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
         if (inner[k] == ':') { insideNsThing = true; }
       } else {
         if (insideUri && inner[k] == '>') { insideUri = false; }
-        if (insideLiteral && inner[k] == '\"') { insideUri = false; }
+        if (insideLiteral && inner[k] == '\"') { insideLiteral = false; }
         if (insideNsThing && (inner[k] == ' ' || inner[k] == '\t')) {
           insideNsThing = false;
         }
