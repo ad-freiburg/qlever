@@ -46,6 +46,9 @@ target_link_libraries(EngineTest gtest_main engine -pthread)
 add_executable(QueryPlannerTest QueryPlannerTest.cpp)
 target_link_libraries(QueryPlannerTest gtest_main engine -pthread)
 
+add_executable(ConversionsTest ConversionsTest.cpp)
+target_link_libraries(ConversionsTest gtest_main engine -pthread)
+
 add_library(tests
             SparqlParserTest
 			StringUtilsTest
@@ -62,4 +65,5 @@ add_library(tests
             EngineTest
             FTSAlgorithmsTest
             QueryPlannerTest
+            ConversionsTest
             )
