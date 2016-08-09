@@ -31,7 +31,28 @@ public:
 
   ResultTable(const ResultTable&);
 
-  ResultTable& operator=(const ResultTable&);
+  ResultTable(ResultTable&& other) noexcept {
+    swap(*this, other);
+  }
+
+  ResultTable& operator=(ResultTable other) {
+    swap(*this, other);
+    return *this;
+  }
+
+  ResultTable& operator=(ResultTable&& other) noexcept {
+    swap(*this, other);
+    return *this;
+  }
+
+  friend void swap(ResultTable& a, ResultTable& b) noexcept {
+    using std::swap;
+    swap(a._status, b._status);
+    swap(a._nofColumns, b._nofColumns);
+    swap(a._sortedBy, b._sortedBy);
+    swap(a._varSizeData, b._varSizeData);
+    swap(a._fixedSizeData, b._fixedSizeData);
+  }
 
   virtual ~ResultTable();
 

@@ -18,13 +18,18 @@ size_t Filter::getResultWidth() const {
 
 // _____________________________________________________________________________
 Filter::Filter(QueryExecutionContext* qec, const QueryExecutionTree& subtree,
-               SparqlFilter::FilterType type, size_t lhsInd, size_t rhsInd) :
+               SparqlFilter::FilterType type, size_t lhsInd, size_t rhsInd, Id rhsId) :
     Operation(qec),
     _subtree(new QueryExecutionTree(subtree)),
     _type(type),
     _lhsInd(lhsInd),
-    _rhsInd(rhsInd) {
+    _rhsInd(rhsInd),
+    _rhsId(rhsId) {
+  AD_CHECK(rhsId == std::numeric_limits<Id>::max()
+           || rhsInd == std::numeric_limits<size_t>::max());
 }
+
+
 
 // _____________________________________________________________________________
 Filter::Filter(const Filter& other) :
@@ -32,19 +37,27 @@ Filter::Filter(const Filter& other) :
     _subtree(new QueryExecutionTree(*other._subtree)),
     _type(other._type),
     _lhsInd(other._lhsInd),
-    _rhsInd(other._rhsInd) {
+    _rhsInd(other._rhsInd),
+    _rhsId(other._rhsId) {
 }
 
 // _____________________________________________________________________________
-Filter& Filter::operator=(const Filter& other) {
-  delete _subtree;
-  _executionContext = other._executionContext;
-  _subtree = new QueryExecutionTree(*other._subtree);
-  _type = other._type;
-  _lhsInd = other._lhsInd;
-  _rhsInd = other._rhsInd;
+Filter::Filter(Filter&& other) noexcept {
+    swap(*this, other);
+}
+
+// _____________________________________________________________________________
+Filter& Filter::operator=(Filter other) {
+  swap(*this, other);
   return *this;
 }
+
+// _____________________________________________________________________________
+Filter& Filter::operator=(Filter&& other) noexcept {
+  swap(*this, other);
+  return *this;
+}
+
 
 // _____________________________________________________________________________
 Filter::~Filter() {
@@ -55,25 +68,30 @@ Filter::~Filter() {
 string Filter::asString() const {
   std::ostringstream os;
   os << "FILTER " << _subtree->asString() << " with ";
+  os << "col " << _lhsInd;
   switch (_type) {
     case SparqlFilter::EQ :
-      os << "col " << _lhsInd << " == col " << _rhsInd;
+      os << " == ";
       break;
     case SparqlFilter::NE :
-      os << "col " << _lhsInd << " != col " << _rhsInd;
+      os << " != ";
       break;
     case SparqlFilter::LT :
-      os << "col " << _lhsInd << " < col " << _rhsInd;
+      os << " < ";
       break;
     case SparqlFilter::LE :
-      os << "col " << _lhsInd << " <= col " << _rhsInd;
-      break;
+      os << " <= ";
     case SparqlFilter::GT :
-      os << "col " << _lhsInd << " > col " << _rhsInd;
+      os << " > ";
       break;
     case SparqlFilter::GE :
-      os << "col " << _lhsInd << " >= col " << _rhsInd;
+      os << " <= ";
       break;
+  }
+  if (_rhsInd != std::numeric_limits<size_t>::max()) {
+    os << "col " << _rhsInd;
+  } else {
+    os << "entity Id " << _rhsId;
   }
 
   return os.str();
