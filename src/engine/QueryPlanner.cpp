@@ -15,7 +15,7 @@
 #include "TwoColumnJoin.h"
 
 // _____________________________________________________________________________
-QueryPlanner::QueryPlanner(QueryExecutionContext *qec) : _qec(qec) { }
+QueryPlanner::QueryPlanner(QueryExecutionContext *qec) : _qec(qec) {}
 
 // _____________________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(
@@ -642,7 +642,7 @@ string QueryPlanner::TripleGraph::asString() const {
       os << i << " " << _nodeMap.find(i)->second->_triple.asString() << " : (";
     } else {
       os << i << " {TextOP for " << _nodeMap.find(i)->second->_cvar <<
-      ", wordPart: \"" << _nodeMap.find(i)->second->_wordPart << "\"} : (";
+         ", wordPart: \"" << _nodeMap.find(i)->second->_wordPart << "\"} : (";
     }
 
     for (size_t j = 0; j < _adjLists[i].size(); ++j) {
@@ -772,18 +772,48 @@ void QueryPlanner::applyFiltersIfPossible(
         continue;
       }
       if (plan._qet.varCovered(filters[i]._lhs) &&
-          plan._qet.varCovered(filters[i]._rhs)) {
+          (!isVariable(filters[i]._rhs) ||
+          plan._qet.varCovered(filters[i]._rhs))) {
         // Apply this filter.
         SubtreePlan newPlan(_qec);
         newPlan._idsOfIncludedFilters = plan._idsOfIncludedFilters;
         newPlan._idsOfIncludedFilters.insert(i);
         newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
         QueryExecutionTree tree(_qec);
-        Filter filter(_qec, plan._qet, filters[i]._type,
-                      plan._qet.getVariableColumn(filters[i]._lhs),
-                      plan._qet.getVariableColumn(filters[i]._rhs));
+        if (isVariable(filters[i]._rhs)) {
+          Filter filter(_qec, plan._qet, filters[i]._type,
+                        plan._qet.getVariableColumn(filters[i]._lhs),
+                        plan._qet.getVariableColumn(filters[i]._rhs));
+          tree.setOperation(QueryExecutionTree::FILTER, &filter);
+        } else {
+          Id entityId = 0;
+          if (_qec) {
+            if (!ad_utility::isXsdValue(filters[i]._rhs)) {
+              if (!_qec->getIndex().getVocab().getId(filters[i]._rhs,
+                                                     &entityId)) {
+                entityId = std::numeric_limits<size_t>::max() - 1;
+              }
+            } else {
+              if (filters[i]._type == SparqlFilter::GE ||
+                  filters[i]._type == SparqlFilter::GT) {
+                entityId = _qec->getIndex().getVocab().getValueIdLb(
+                    ad_utility::convertValueLiteralToIndexWord(
+                        filters[i]._rhs));
+              } else {
+                entityId = _qec->getIndex().getVocab().getValueIdUb(
+                    ad_utility::convertValueLiteralToIndexWord(
+                        filters[i]._rhs));
+              }
+            }
+          }
+          Filter filter(_qec, plan._qet, filters[i]._type,
+                        plan._qet.getVariableColumn(filters[i]._lhs),
+                        std::numeric_limits<size_t>::max(),
+                        entityId);
+          tree.setOperation(QueryExecutionTree::FILTER, &filter);
+        }
+
         tree.setVariableColumns(plan._qet.getVariableColumnMap());
-        tree.setOperation(QueryExecutionTree::FILTER, &filter);
         tree.setContextVars(plan._qet.getContextVars());
         newPlan._qet = tree;
         if (replace) {

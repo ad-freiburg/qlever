@@ -8,6 +8,7 @@
 #include "../parser/TsvParser.h"
 #include "./Index.h"
 #include "../parser/NTriplesParser.h"
+#include "../util/Conversions.h"
 
 using std::array;
 
@@ -107,6 +108,9 @@ size_t Index::passTsvFileForVocabulary(const string& tsvFile) {
   std::unordered_set<string> items;
   size_t i = 0;
   while (p.getLine(spo)) {
+    if (ad_utility::isXsdValue(spo[2])) {
+      spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
+    }
     items.insert(spo[0]);
     items.insert(spo[1]);
     items.insert(spo[2]);
@@ -131,6 +135,9 @@ void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data) {
   // write using vector_bufwriter
   ExtVec::bufwriter_type writer(data);
   while (p.getLine(spo)) {
+    if (ad_utility::isXsdValue(spo[2])) {
+      spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
+    }
     writer << array<Id, 3>{{
                                vocabMap.find(spo[0])->second,
                                vocabMap.find(spo[1])->second,
@@ -154,6 +161,9 @@ size_t Index::passNTriplesFileForVocabulary(const string& ntFile) {
   std::unordered_set<string> items;
   size_t i = 0;
   while (p.getLine(spo)) {
+    if (ad_utility::isXsdValue(spo[2])) {
+      spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
+    }
     items.insert(spo[0]);
     items.insert(spo[1]);
     items.insert(spo[2]);
@@ -178,6 +188,9 @@ void Index::passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data) {
   // write using vector_bufwriter
   ExtVec::bufwriter_type writer(data);
   while (p.getLine(spo)) {
+    if (ad_utility::isXsdValue(spo[2])) {
+      spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
+    }
     writer << array<Id, 3>{{
                                vocabMap.find(spo[0])->second,
                                vocabMap.find(spo[1])->second,

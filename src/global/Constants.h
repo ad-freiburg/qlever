@@ -23,6 +23,7 @@ static const char IN_CONTEXT_RELATION_NS[] = ":in-context";
 static const char HAS_CONTEXT_RELATION[] = "<contains-context>";
 static const char HAS_CONTEXT_RELATION_NS[] = ":contains-context";
 
+static const char VALUE_PREFIX[] = ":v:";
 static const char VALUE_DATE_PREFIX[] = ":v:date:";
 static const char VALUE_FLOAT_PREFIX[] = ":v:float:";
 static const char XSD_DATETIME_SUFFIX[] = "^^<http://www.w3.org/2001/XMLSchema#dateTime>";

@@ -65,6 +65,9 @@ inline string getBase10ComplementOfIntegerString(const string& orig);
 //! Remove leading zeros.
 inline string removeLeadingZeros(const string& orig);
 
+//! Check if this looks like an value literal
+inline bool isXsdValue(const string val);
+
 // _____________________________________________________________________________
 string convertValueLiteralToIndexWord(const string& orig) {
   assert(orig.size() > 0);
@@ -102,6 +105,7 @@ string convertValueLiteralToIndexWord(const string& orig) {
           DEFAULT_NOF_VALUE_MANTISSA_DIGITS) + "F";
     }
   }
+  return orig;
 }
 
 // _____________________________________________________________________________
@@ -462,5 +466,9 @@ inline string removeLeadingZeros(const string& orig) {
   return os.str();
 }
 
+// _____________________________________________________________________________
+bool isXsdValue(const string val) {
+  return val.size() > 0 && val[0] == '\"' && val.find("\"^^") != string::npos;
+}
 }
 

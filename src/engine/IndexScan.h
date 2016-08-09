@@ -5,6 +5,7 @@
 
 #include <string>
 #include "./Operation.h"
+#include "../util/Conversions.h"
 
 using std::string;
 
@@ -39,7 +40,11 @@ public:
   }
 
   void setObject(const string& object) {
-    _object = object;
+    if (!ad_utility::isXsdValue(object)) {
+      _object = object;
+    } else {
+     _object = ad_utility::convertValueLiteralToIndexWord(object);
+    }
   }
 
   virtual size_t getResultWidth() const;
