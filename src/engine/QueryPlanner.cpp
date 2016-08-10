@@ -766,14 +766,14 @@ void QueryPlanner::applyFiltersIfPossible(
   // Finally, the replace flag can be set to enforce that all filters are applied.
   // This should be done for the last row in the DPTab so that no filters are missed.
   for (size_t n = 0; n < row.size(); ++n) {
-    const auto& plan = row[n];
     for (size_t i = 0; i < filters.size(); ++i) {
+      const auto& plan = row[n];
       if (plan._idsOfIncludedFilters.count(i) > 0) {
         continue;
       }
       if (plan._qet.varCovered(filters[i]._lhs) &&
           (!isVariable(filters[i]._rhs) ||
-          plan._qet.varCovered(filters[i]._rhs))) {
+           plan._qet.varCovered(filters[i]._rhs))) {
         // Apply this filter.
         SubtreePlan newPlan(_qec);
         newPlan._idsOfIncludedFilters = plan._idsOfIncludedFilters;
@@ -794,13 +794,27 @@ void QueryPlanner::applyFiltersIfPossible(
                 entityId = std::numeric_limits<size_t>::max() - 1;
               }
             } else {
-              if (filters[i]._type == SparqlFilter::GE ||
-                  filters[i]._type == SparqlFilter::GT) {
-                entityId = _qec->getIndex().getVocab().getValueIdLb(
+              if (filters[i]._type == SparqlFilter::EQ ||
+                  filters[i]._type == SparqlFilter::NE) {
+                if (!_qec->getIndex().getVocab().getId(
+                    ad_utility::convertValueLiteralToIndexWord(filters[i]._rhs),
+                    &entityId)) {
+                  entityId = std::numeric_limits<size_t>::max() - 1;
+                }
+              } else if (filters[i]._type == SparqlFilter::GE) {
+                entityId = _qec->getIndex().getVocab().getValueIdForGE(
                     ad_utility::convertValueLiteralToIndexWord(
                         filters[i]._rhs));
-              } else {
-                entityId = _qec->getIndex().getVocab().getValueIdUb(
+              } else if (filters[i]._type == SparqlFilter::GT) {
+                entityId = _qec->getIndex().getVocab().getValueIdForGT(
+                    ad_utility::convertValueLiteralToIndexWord(
+                        filters[i]._rhs));
+              } else if (filters[i]._type == SparqlFilter::LT) {
+                entityId = _qec->getIndex().getVocab().getValueIdForLT(
+                    ad_utility::convertValueLiteralToIndexWord(
+                        filters[i]._rhs));
+              } else if (filters[i]._type == SparqlFilter::LE) {
+                entityId = _qec->getIndex().getVocab().getValueIdForLE(
                     ad_utility::convertValueLiteralToIndexWord(
                         filters[i]._rhs));
               }
@@ -1105,7 +1119,8 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
   vector<Node> textNodes;
   unordered_map<size_t, size_t> removedNodeIds;
   vector<std::set<size_t>> tnAdjSetsToOldIds;
-  for (auto it = cvarsToTextNodes.begin(); it != cvarsToTextNodes.end(); ++it) {
+  for (auto it = cvarsToTextNodes.begin();
+       it != cvarsToTextNodes.end(); ++it) {
     auto& cvar = it->first;
     string wordPart;
     vector<SparqlTriple> trips;

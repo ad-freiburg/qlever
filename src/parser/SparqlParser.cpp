@@ -269,7 +269,8 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
   size_t j = str.find(')', i + 1);
   AD_CHECK(j != string::npos);
   string filter = str.substr(i + 1, j - i - 1);
-  auto tokens = ad_utility::split(filter, ' ');
+  auto tokens = ad_utility::split(
+      ad_utility::strip(ad_utility::normalizeSpaces(filter), ' '), ' ');
   if (tokens.size() != 3) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "Unknown syntax for filter: " + filter);

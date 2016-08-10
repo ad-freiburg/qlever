@@ -31,7 +31,12 @@ public:
 
   ResultTable(const ResultTable&);
 
-  ResultTable(ResultTable&& other) noexcept {
+  ResultTable(ResultTable&& other) noexcept :
+      _status(ResultTable::OTHER),
+      _nofColumns(0),
+      _sortedBy(0),
+      _varSizeData(),
+      _fixedSizeData(nullptr){
     swap(*this, other);
   }
 

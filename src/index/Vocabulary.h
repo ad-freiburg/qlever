@@ -99,12 +99,41 @@ class Vocabulary {
       return *id < _words.size() && _words[*id] == word;
     }
 
-    Id getValueIdLb(const string& indexWord) const {
-      return lower_bound(indexWord);
+    Id getValueIdForLT(const string& indexWord) const {
+      Id lb = lower_bound(indexWord);
+      if (_words[lb] != indexWord) {
+        // This means we lb points to a value that should actually fit already
+        // thus increase it. It will be larger than lb now but lt will only
+        // match smaller ones, i.e. at most lb
+        lb++;
+      }
+      return lb;
     }
 
-    Id getValueIdUb(const string& indexWord) const {
-      return upper_bound(indexWord);
+    Id getValueIdForLE(const string& indexWord) const {
+      Id lb = lower_bound(indexWord);
+      // There shouldn't be a problem here. If indexWord is in the vocab,
+      // lb == indexWord and LE can be done, if not, lb will be the next lower
+      // id, but due to LE, it will match nevertheless.
+      return lb;
+    }
+
+    Id getValueIdForGT(const string& indexWord) const {
+      Id lb = lower_bound(indexWord);
+      // No problem here. If indexWord is not in the vocab, lb points
+      // to the next lower value. GT will only match larger ones, then.
+      return lb;
+    }
+
+    Id getValueIdForGE(const string& indexWord) const {
+      Id lb = lower_bound(indexWord);
+      if (_words[lb] != indexWord) {
+        // lb now points to a smaller Id that shouldn't match.
+        // increase it by one. The increase one will be larger than indexWord
+        // but the GE semantics will match it still.
+        lb++;
+      }
+      return lb;
     }
 
     //! Get an Id range that matches a prefix.
