@@ -227,9 +227,18 @@ string convertFloatToIndexWord(const string& orig,
     ++i;
   }
 
-  // No need to add padding to the mantissa.
   os << 'E';
-  os << mant.str();
+  os << mant.str().substr(0, DEFAULT_NOF_VALUE_MANTISSA_DIGITS);
+  // Padding for mantissa. Necessary because we append something
+  // to restore the original type.
+  for (size_t i = mant.str().size();
+       i < DEFAULT_NOF_VALUE_MANTISSA_DIGITS; ++i) {
+    if (!negaMantissa) {
+      os << '0';
+    } else {
+      os << '9';
+    }
+  }
   return os.str();
 }
 
@@ -277,7 +286,7 @@ string convertIndexWordToFloat(const string& indexWord) {
     while (mantissa[i] == '0') {
       ++i;
     }
-    os << mantissa.substr(i);
+    os << ad_utility::rstrip(mantissa.substr(i), '0');
   } else {
     // Skip leading zeros of the mantissa
     size_t i = 0;
@@ -285,14 +294,29 @@ string convertIndexWordToFloat(const string& indexWord) {
       ++i;
     }
 
+    // Collect later zeros and only write them if something nonzero is found.
+    // This eliminates the padding.
+    std::ostringstream zeros;
     size_t tenToThe = 0;
     while (i < mantissa.size()) {
-      os << mantissa[i];
+      if (mantissa[i] == '0') {
+        zeros << '0';
+      } else {
+        os << zeros.str();
+        zeros.str("");
+        os << mantissa[i];
+      }
       ++i;
       if (tenToThe == absExponent) {
+        os << zeros.str();
+        zeros.str("");
         os << ".";
       }
       ++tenToThe;
+    }
+
+    if (os.str().back() == '.') {
+      os << '0';
     }
 
     if (absExponent > mantissa.size()) {

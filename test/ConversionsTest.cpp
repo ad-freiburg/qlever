@@ -21,15 +21,19 @@ TEST(ConversionsTest, getBase10ComplementOfIntegerString) {
 TEST(ConversionsTest, convertFloatToIndexWord) {
   string zero = "0.0";
   string pos = "0.339";
-  string pos2 = "1.70";
-  string pos3 = "2.0000";
-  string pos4 = "2.09999";
+  string pos2 = "1.7";
+  string pos3 = "2.0";
+  string pos4 = "2.0000009999";
   string pos5 = "2.9999";
   string pos6 = "111000.05";
   string neg = "-0.0005002";
   string neg2 = "-0.005002";
   string neg3 = "-2023.414";
   string neg4 = "-3023.414";
+  string extra = "0.001";
+  string extra2 = "-0.001";
+  string extra3 = "-0.10001";
+  string extra4 = "-0.100001";
 
   vector<string> indexWords;
   indexWords.push_back(convertFloatToIndexWord(zero, 10, 20));
@@ -43,20 +47,29 @@ TEST(ConversionsTest, convertFloatToIndexWord) {
   indexWords.push_back(convertFloatToIndexWord(pos4, 10, 20));
   indexWords.push_back(convertFloatToIndexWord(pos5, 10, 20));
   indexWords.push_back(convertFloatToIndexWord(pos6, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(extra, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(extra2, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(extra3, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(extra4, 10, 20));
+
 
   std::sort(indexWords.begin(), indexWords.end());
 
   ASSERT_EQ(neg4, convertIndexWordToFloat(indexWords[0]));
   ASSERT_EQ(neg3, convertIndexWordToFloat(indexWords[1]));
-  ASSERT_EQ(neg2, convertIndexWordToFloat(indexWords[2]));
-  ASSERT_EQ(neg, convertIndexWordToFloat(indexWords[3]));
-  ASSERT_EQ(zero, convertIndexWordToFloat(indexWords[4]));
-  ASSERT_EQ(pos, convertIndexWordToFloat(indexWords[5]));
-  ASSERT_EQ(pos2, convertIndexWordToFloat(indexWords[6]));
-  ASSERT_EQ(pos3, convertIndexWordToFloat(indexWords[7]));
-  ASSERT_EQ(pos4, convertIndexWordToFloat(indexWords[8]));
-  ASSERT_EQ(pos5, convertIndexWordToFloat(indexWords[9]));
-  ASSERT_EQ(pos6, convertIndexWordToFloat(indexWords[10]));
+  ASSERT_EQ(extra3, convertIndexWordToFloat(indexWords[2]));
+  ASSERT_EQ(extra4, convertIndexWordToFloat(indexWords[3]));
+  ASSERT_EQ(neg2, convertIndexWordToFloat(indexWords[4]));
+  ASSERT_EQ(extra2, convertIndexWordToFloat(indexWords[5]));
+  ASSERT_EQ(neg, convertIndexWordToFloat(indexWords[6]));
+  ASSERT_EQ(zero, convertIndexWordToFloat(indexWords[7]));
+  ASSERT_EQ(extra, convertIndexWordToFloat(indexWords[8]));
+  ASSERT_EQ(pos, convertIndexWordToFloat(indexWords[9]));
+  ASSERT_EQ(pos2, convertIndexWordToFloat(indexWords[10]));
+  ASSERT_EQ(pos3, convertIndexWordToFloat(indexWords[11]));
+  ASSERT_EQ(pos4, convertIndexWordToFloat(indexWords[12]));
+  ASSERT_EQ(pos5, convertIndexWordToFloat(indexWords[13]));
+  ASSERT_EQ(pos6, convertIndexWordToFloat(indexWords[14]));
 
   ASSERT_EQ("0.0", convertIndexWordToFloat(
       convertFloatToIndexWord("0", 5, 5)));
@@ -130,12 +143,22 @@ TEST(ConversionsTest, endToEndNumbers) {
   string nin3 = "\"-80.7\"^^<http://www.w3.org/2001/XMLSchema#float>";
   string in4 = "\"1230.7\"^^<http://www.w3.org/2001/XMLSchema#float>";
   string nin4 = "\"-1230.7\"^^<http://www.w3.org/2001/XMLSchema#float>";
+  string in5 = "\"1230.9\"^^<http://www.w3.org/2001/XMLSchema#float>";
+  string in6 = "\"1230.9902\"^^<http://www.w3.org/2001/XMLSchema#float>";
+  string in7 = "\"1230.998\"^^<http://www.w3.org/2001/XMLSchema#float>";
+  string in8 = "\"1230.999\"^^<http://www.w3.org/2001/XMLSchema#float>";
+  string in9 = "\"1230.99901\"^^<http://www.w3.org/2001/XMLSchema#float>";
 
   vector<string> indexWords;
   indexWords.push_back(convertValueLiteralToIndexWord(in));
   indexWords.push_back(convertValueLiteralToIndexWord(in2));
   indexWords.push_back(convertValueLiteralToIndexWord(in3));
   indexWords.push_back(convertValueLiteralToIndexWord(in4));
+  indexWords.push_back(convertValueLiteralToIndexWord(in5));
+  indexWords.push_back(convertValueLiteralToIndexWord(in6));
+  indexWords.push_back(convertValueLiteralToIndexWord(in7));
+  indexWords.push_back(convertValueLiteralToIndexWord(in8));
+  indexWords.push_back(convertValueLiteralToIndexWord(in9));
   indexWords.push_back(convertValueLiteralToIndexWord(nin));
   indexWords.push_back(convertValueLiteralToIndexWord(nin2));
   indexWords.push_back(convertValueLiteralToIndexWord(nin3));
@@ -151,6 +174,11 @@ TEST(ConversionsTest, endToEndNumbers) {
   ASSERT_EQ(in2, convertIndexWordToValueLiteral(indexWords[5]));
   ASSERT_EQ(in, convertIndexWordToValueLiteral(indexWords[6]));
   ASSERT_EQ(in4, convertIndexWordToValueLiteral(indexWords[7]));
+  ASSERT_EQ(in5, convertIndexWordToValueLiteral(indexWords[8]));
+  ASSERT_EQ(in6, convertIndexWordToValueLiteral(indexWords[9]));
+  ASSERT_EQ(in7, convertIndexWordToValueLiteral(indexWords[10]));
+  ASSERT_EQ(in8, convertIndexWordToValueLiteral(indexWords[11]));
+  ASSERT_EQ(in9, convertIndexWordToValueLiteral(indexWords[12]));
 }
 
 int main(int argc, char **argv) {
