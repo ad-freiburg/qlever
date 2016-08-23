@@ -72,6 +72,14 @@ function getShortStr(str, maxLength) {
     var cpy = str;
     if (cpy.charAt(0) == '<') {
         pos = cpy.lastIndexOf('/');
+        var paraClose = cpy.lastIndexOf(')');
+        if (paraClose > 0 && paraClose > pos) {
+            var paraOpen = cpy.lastIndexOf('(', paraClose);
+            if (paraOpen > 0 && paraOpen < pos) {
+                pos = cpy.lastIndexOf('/', paraOpen);
+            }
+        }
+
         if (pos < 0) {
             pos += 1;
         }
