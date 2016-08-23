@@ -225,7 +225,8 @@ void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
   Id lastLhs = std::numeric_limits<Id>::max();
   for (ExtVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if ((*reader)[c0] != currentRel) {
-      metaData.add(writeRel(out, lastOffset, currentRel, buffer, functional));
+      auto md = writeRel(out, lastOffset, currentRel, buffer, functional);
+      metaData.add(md.first, md.second);
       buffer.clear();
       lastOffset = metaData.getOffsetAfter();
       currentRel = (*reader)[c0];
@@ -239,7 +240,8 @@ void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
     lastLhs = (*reader)[c1];
   }
   if (from < vec.size()) {
-    metaData.add(writeRel(out, lastOffset, currentRel, buffer, functional));
+    auto md = writeRel(out, lastOffset, currentRel, buffer, functional);
+    metaData.add(md.first, md.second);
   }
 
   LOG(INFO) << "Done creating index permutation." << std::endl;
@@ -255,105 +257,117 @@ void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
 }
 
 // _____________________________________________________________________________
-RelationMetaData Index::writeRel(ad_utility::File& out, off_t currentOffset,
-                                 Id relId, const vector<array<Id, 2>>& data,
-                                 bool functional) {
+pair<FullRelationMetaData, BlockBasedRelationMetaData>
+Index::writeRel(ad_utility::File& out, off_t currentOffset,
+                Id relId, const vector<array<Id, 2>>& data,
+                bool functional) {
   LOG(TRACE) << "Writing a relation ...\n";
   AD_CHECK_GT(data.size(), 0);
-  RelationMetaData rmd;
-  rmd._relId = relId;
-  rmd._startFullIndex = currentOffset;
-  rmd._nofElements = data.size();
+  FullRelationMetaData rmd(relId, currentOffset, data.size(), functional,
+                           !functional &&
+                           data.size() > USE_BLOCKS_INDEX_SIZE_TRESHOLD);
 
   // Write the full pair index.
   out.write(data.data(), data.size() * 2 * sizeof(Id));
+  pair<FullRelationMetaData, BlockBasedRelationMetaData> ret;
+  ret.first = rmd;
 
   if (functional) {
-    rmd = writeFunctionalRelation(data, rmd);
+    writeFunctionalRelation(data, ret);
   } else {
-    rmd = writeNonFunctionalRelation(out, data, rmd);
+    writeNonFunctionalRelation(out, data, ret);
   };
-  rmd._nofBlocks = rmd._blocks.size();
   LOG(TRACE) << "Done writing relation.\n";
-  return rmd;
+  return ret;
 }
 
 // _____________________________________________________________________________
-RelationMetaData& Index::writeFunctionalRelation(
-    const vector<array<Id, 2>>& data, RelationMetaData& rmd) {
-  LOG(TRACE) << "Writing part for functional relation ...\n";
-  // Do not write extra LHS and RHS lists.
-  rmd._startRhs = rmd._startFullIndex + data.size() * 2 * sizeof(Id);
-  rmd._offsetAfter = rmd._startRhs;
-  // Create the block data for the RelationMetaData.
-  // Blocks are offsets into the full pair index for functional relations.
-  size_t nofDistinctLhs = 0;
-  Id lastLhs = std::numeric_limits<Id>::max();
-  for (size_t i = 0; i < data.size(); ++i) {
-    if (data[i][0] != lastLhs) {
-      if (nofDistinctLhs % DISTINCT_LHS_PER_BLOCK == 0) {
-        rmd._blocks.emplace_back(
-            BlockMetaData(data[i][0],
-                          rmd._startFullIndex + i * 2 * sizeof(Id)));
+void Index::writeFunctionalRelation(
+    const vector<array<Id, 2>>& data,
+    pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd) {
+  // Only has to do something if there are blocks.
+  if (rmd.first.hasBlocks()) {
+    LOG(TRACE) << "Writing part for functional relation ...\n";
+    // Do not write extra LHS and RHS lists.
+    rmd.second._startRhs =
+        rmd.first._startFullIndex + rmd.first.getNofBytesForFulltextIndex();
+    // Since the relation is functional, there are no lhs lists and thus this
+    // is trivial.
+    rmd.second._offsetAfter = rmd.second._startRhs;
+    // Create the block data for the meta data.
+    // Blocks are offsets into the full pair index for functional relations.
+    size_t nofDistinctLhs = 0;
+    Id lastLhs = std::numeric_limits<Id>::max();
+    for (size_t i = 0; i < data.size(); ++i) {
+      if (data[i][0] != lastLhs) {
+        if (nofDistinctLhs % DISTINCT_LHS_PER_BLOCK == 0) {
+          rmd.second._blocks.emplace_back(
+              BlockMetaData(data[i][0],
+                            rmd.first._startFullIndex + i * 2 * sizeof(Id)));
+        }
+        ++nofDistinctLhs;
       }
-      ++nofDistinctLhs;
     }
   }
-  return rmd;
 }
 
 // _____________________________________________________________________________
-RelationMetaData& Index::writeNonFunctionalRelation(ad_utility::File& out,
-                                                    const vector<array<Id, 2>>& data,
-                                                    RelationMetaData& rmd) {
-  LOG(TRACE) << "Writing part for non-functional relation ...\n";
-  // Make a pass over the data and extract a RHS list for each LHS.
-  // Prepare both in buffers.
-  // TODO: add compression - at least to RHS.
-  pair<Id, off_t> *bufLhs = new pair<Id, off_t>[data.size()];
-  Id *bufRhs = new Id[data.size()];
-  size_t nofDistinctLhs = 0;
-  Id lastLhs = std::numeric_limits<Id>::max();
-  size_t nofRhsDone = 0;
-  for (; nofRhsDone < data.size(); ++nofRhsDone) {
-    if (data[nofRhsDone][0] != lastLhs) {
-      bufLhs[nofDistinctLhs++] =
-          pair<Id, off_t>(data[nofRhsDone][0], nofRhsDone * sizeof(Id));
-      lastLhs = data[nofRhsDone][0];
+void Index::writeNonFunctionalRelation(
+    ad_utility::File& out,
+    const vector<array<Id, 2>>& data,
+    pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd) {
+  // Only has to do something if there are blocks.
+  if (rmd.first.hasBlocks()) {
+    LOG(TRACE) << "Writing part for non-functional relation ...\n";
+    // Make a pass over the data and extract a RHS list for each LHS.
+    // Prepare both in buffers.
+    // TODO: add compression - at least to RHS.
+    pair<Id, off_t>* bufLhs = new pair<Id, off_t>[data.size()];
+    Id* bufRhs = new Id[data.size()];
+    size_t nofDistinctLhs = 0;
+    Id lastLhs = std::numeric_limits<Id>::max();
+    size_t nofRhsDone = 0;
+    for (; nofRhsDone < data.size(); ++nofRhsDone) {
+      if (data[nofRhsDone][0] != lastLhs) {
+        bufLhs[nofDistinctLhs++] =
+            pair<Id, off_t>(data[nofRhsDone][0], nofRhsDone * sizeof(Id));
+        lastLhs = data[nofRhsDone][0];
+      }
+      bufRhs[nofRhsDone] = data[nofRhsDone][1];
     }
-    bufRhs[nofRhsDone] = data[nofRhsDone][1];
-  }
 
-  // Go over the Lhs data once more and adjust the offsets.
-  off_t startRhs = rmd.getStartOfLhs()
-                   + nofDistinctLhs * (sizeof(Id) + sizeof(off_t));
+    // Go over the Lhs data once more and adjust the offsets.
+    off_t startRhs = rmd.first.getStartOfLhs()
+                     + nofDistinctLhs * (sizeof(Id) + sizeof(off_t));
 
-  for (size_t i = 0; i < nofDistinctLhs; ++i) {
-    bufLhs[i].second += startRhs;
-  }
-
-  // Write to file.
-  out.write(bufLhs, nofDistinctLhs * (sizeof(Id) + sizeof(off_t)));
-  out.write(bufRhs, data.size() * sizeof(Id));
-
-
-  // Update meta data.
-  rmd._startRhs = startRhs;
-  rmd._offsetAfter = startRhs + rmd._nofElements * sizeof(Id);
-
-  // Create the block data for the RelationMetaData.
-  // Block are offsets into the LHS list for non-functional relations.
-  for (size_t i = 0; i < nofDistinctLhs; ++i) {
-    if (i % DISTINCT_LHS_PER_BLOCK == 0) {
-      rmd._blocks.emplace_back(BlockMetaData(bufLhs[i].first,
-                                             rmd.getStartOfLhs() +
-                                             i * (sizeof(Id) + sizeof(off_t))));
+    for (size_t i = 0; i < nofDistinctLhs; ++i) {
+      bufLhs[i].second += startRhs;
     }
-  }
 
-  delete[] bufLhs;
-  delete[] bufRhs;
-  return rmd;
+    // Write to file.
+    out.write(bufLhs, nofDistinctLhs * (sizeof(Id) + sizeof(off_t)));
+    out.write(bufRhs, data.size() * sizeof(Id));
+
+
+    // Update meta data.
+    rmd.second._startRhs = startRhs;
+    rmd.second._offsetAfter =
+        startRhs + rmd.first.getNofElements() * sizeof(Id);
+
+    // Create the block data for the FullRelationMetaData.
+    // Block are offsets into the LHS list for non-functional relations.
+    for (size_t i = 0; i < nofDistinctLhs; ++i) {
+      if (i % DISTINCT_LHS_PER_BLOCK == 0) {
+        rmd.second._blocks.emplace_back(BlockMetaData(bufLhs[i].first,
+                                                      rmd.first.getStartOfLhs() +
+                                                      i *
+                                                      (sizeof(Id) +
+                                                       sizeof(off_t))));
+      }
+    }
+    delete[] bufLhs;
+    delete[] bufRhs;
+  }
 }
 
 // _____________________________________________________________________________
@@ -366,7 +380,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   // PSO
   off_t metaFrom;
   off_t metaTo = _psoFile.getLastOffset(&metaFrom);
-  unsigned char *buf = new unsigned char[metaTo - metaFrom];
+  unsigned char* buf = new unsigned char[metaTo - metaFrom];
   _psoFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
   _psoMeta.createFromByteBuffer(buf);
   delete[] buf;
@@ -449,17 +463,17 @@ void Index::openFileHandles() {
 }
 
 // _____________________________________________________________________________
-void Index::scanPSO(const string& predicate, WidthTwoList *result) const {
+void Index::scanPSO(const string& predicate, WidthTwoList* result) const {
   LOG(DEBUG) << "Performing PSO scan for full relation: " << predicate << "\n";
   Id relId;
   if (_vocab.getId(predicate, &relId)) {
     LOG(TRACE) << "Successfully got relation ID.\n";
     if (_psoMeta.relationExists(relId)) {
       LOG(TRACE) << "Relation exists.\n";
-      const RelationMetaData& rmd = _psoMeta.getRmd(relId);
-      result->reserve(rmd._nofElements + 2);
-      result->resize(rmd._nofElements);
-      _psoFile.read(result->data(), rmd._nofElements * 2 * sizeof(Id),
+      const FullRelationMetaData& rmd = _psoMeta.getRmd(relId)._rmdPairs;
+      result->reserve(rmd.getNofElements() + 2);
+      result->resize(rmd.getNofElements());
+      _psoFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
                     rmd._startFullIndex);
     }
   }
@@ -468,23 +482,36 @@ void Index::scanPSO(const string& predicate, WidthTwoList *result) const {
 
 // _____________________________________________________________________________
 void Index::scanPSO(const string& predicate, const string& subject,
-                    WidthOneList *result) const {
+                    WidthOneList* result) const {
   LOG(DEBUG) << "Performing PSO scan of relation" << predicate
              << "with fixed subject: " << subject << "...\n";
   Id relId;
   Id subjId;
   if (_vocab.getId(predicate, &relId) && _vocab.getId(subject, &subjId)) {
     if (_psoMeta.relationExists(relId)) {
-      const RelationMetaData& rmd = _psoMeta.getRmd(relId);
-      pair<off_t, size_t> blockOff = rmd.getBlockStartAndNofBytesForLhs(subjId);
-      // Functional relations have blocks point into the pair index,
-      // non-functional relations have them point into lhs lists
-      if (rmd.isFunctional()) {
-        scanFunctionalRelation(blockOff, subjId, _psoFile, result);
+      auto rmd = _psoMeta.getRmd(relId);
+      if (rmd.hasBlocks()) {
+        pair<off_t, size_t> blockOff = rmd._rmdBlocks->getBlockStartAndNofBytesForLhs(
+            subjId);
+        // Functional relations have blocks point into the pair index,
+        // non-functional relations have them point into lhs lists
+        if (rmd.isFunctional()) {
+          scanFunctionalRelation(blockOff, subjId, _psoFile, result);
+        } else {
+          pair<off_t, size_t> block2 = rmd._rmdBlocks->getFollowBlockForLhs(
+              subjId);
+          scanNonFunctionalRelation(blockOff, block2, subjId, _psoFile,
+                                    rmd._rmdBlocks->_offsetAfter, result);
+        }
       } else {
-        pair<off_t, size_t> block2 = rmd.getFollowBlockForLhs(subjId);
-        scanNonFunctionalRelation(blockOff, block2, subjId, _psoFile,
-                                  rmd._offsetAfter, result);
+        // If we don't have blocks, scan the whole relation and filter / restrict.
+        result->reserve(rmd.getNofElements() + 2);
+        result->resize(rmd.getNofElements());
+        WidthTwoList fullRelation;
+        _psoFile.read(fullRelation.data(),
+                      rmd.getNofElements() * 2 * sizeof(Id),
+                      rmd._rmdPairs._startFullIndex);
+        getRhsForSingleLhs(fullRelation, subjId, result);
       }
     } else {
       LOG(DEBUG) << "No such relation.\n";
@@ -496,17 +523,17 @@ void Index::scanPSO(const string& predicate, const string& subject,
 }
 
 // _____________________________________________________________________________
-void Index::scanPOS(const string& predicate, WidthTwoList *result) const {
+void Index::scanPOS(const string& predicate, WidthTwoList* result) const {
   LOG(DEBUG) << "Performing POS scan for full relation: " << predicate << "\n";
   Id relId;
   if (_vocab.getId(predicate, &relId)) {
     LOG(TRACE) << "Successfully got relation ID.\n";
     if (_posMeta.relationExists(relId)) {
       LOG(TRACE) << "Relation exists.\n";
-      const RelationMetaData& rmd = _posMeta.getRmd(relId);
-      result->reserve(rmd._nofElements + 2);
-      result->resize(rmd._nofElements);
-      _posFile.read(result->data(), rmd._nofElements * 2 * sizeof(Id),
+      const FullRelationMetaData& rmd = _posMeta.getRmd(relId)._rmdPairs;
+      result->reserve(rmd.getNofElements() + 2);
+      result->resize(rmd.getNofElements());
+      _posFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
                     rmd._startFullIndex);
     }
   }
@@ -515,23 +542,36 @@ void Index::scanPOS(const string& predicate, WidthTwoList *result) const {
 
 // _____________________________________________________________________________
 void Index::scanPOS(const string& predicate, const string& object,
-                    WidthOneList *result) const {
+                    WidthOneList* result) const {
   LOG(DEBUG) << "Performing POS scan of relation" << predicate
              << "with fixed object: " << object << "...\n";
   Id relId;
   Id objId;
   if (_vocab.getId(predicate, &relId) && _vocab.getId(object, &objId)) {
     if (_posMeta.relationExists(relId)) {
-      const RelationMetaData& rmd = _posMeta.getRmd(relId);
-      pair<off_t, size_t> blockOff = rmd.getBlockStartAndNofBytesForLhs(objId);
-      // Functional relations have blocks point into the pair index,
-      // non-functional relations have them point into lhs lists
-      if (rmd.isFunctional()) {
-        scanFunctionalRelation(blockOff, objId, _posFile, result);
+      auto rmd = _posMeta.getRmd(relId);
+      if (rmd.hasBlocks()) {
+        pair<off_t, size_t> blockOff = rmd._rmdBlocks->getBlockStartAndNofBytesForLhs(
+            objId);
+        // Functional relations have blocks point into the pair index,
+        // non-functional relations have them point into lhs lists
+        if (rmd.isFunctional()) {
+          scanFunctionalRelation(blockOff, objId, _posFile, result);
+        } else {
+          pair<off_t, size_t> block2 = rmd._rmdBlocks->getFollowBlockForLhs(
+              objId);
+          scanNonFunctionalRelation(blockOff, block2, objId, _posFile,
+                                    rmd._rmdBlocks->_offsetAfter, result);
+        }
       } else {
-        pair<off_t, size_t> block2 = rmd.getFollowBlockForLhs(objId);
-        scanNonFunctionalRelation(blockOff, block2, objId, _posFile,
-                                  rmd._offsetAfter, result);
+        // If we don't have blocks, scan the whole relation and filter / restrict.
+        result->reserve(rmd.getNofElements() + 2);
+        result->resize(rmd.getNofElements());
+        WidthTwoList fullRelation;
+        _posFile.read(fullRelation.data(),
+                      rmd.getNofElements() * 2 * sizeof(Id),
+                      rmd._rmdPairs._startFullIndex);
+        getRhsForSingleLhs(fullRelation, objId, result);
       }
     } else {
       LOG(DEBUG) << "No such relation.\n";
@@ -543,7 +583,7 @@ void Index::scanPOS(const string& predicate, const string& object,
 }
 
 // _____________________________________________________________________________
-void Index::scanSOP(const string& subject, const string& object, WidthOneList *
+void Index::scanSOP(const string& subject, const string& object, WidthOneList*
 result) const {
   if (!_sopFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
@@ -557,16 +597,29 @@ result) const {
   Id objId;
   if (_vocab.getId(subject, &relId) && _vocab.getId(object, &objId)) {
     if (_sopMeta.relationExists(relId)) {
-      const RelationMetaData& rmd = _sopMeta.getRmd(relId);
-      pair<off_t, size_t> blockOff = rmd.getBlockStartAndNofBytesForLhs(objId);
-      // Functional relations have blocks point into the pair index,
-      // non-functional relations have them point into lhs lists
-      if (rmd.isFunctional()) {
-        scanFunctionalRelation(blockOff, objId, _sopFile, result);
+      auto rmd = _sopMeta.getRmd(relId);
+      if (rmd.hasBlocks()) {
+        pair<off_t, size_t> blockOff = rmd._rmdBlocks->getBlockStartAndNofBytesForLhs(
+            objId);
+        // Functional relations have blocks point into the pair index,
+        // non-functional relations have them point into lhs lists
+        if (rmd.isFunctional()) {
+          scanFunctionalRelation(blockOff, objId, _sopFile, result);
+        } else {
+          pair<off_t, size_t> block2 = rmd._rmdBlocks->getFollowBlockForLhs(
+              objId);
+          scanNonFunctionalRelation(blockOff, block2, objId, _sopFile,
+                                    rmd._rmdBlocks->_offsetAfter, result);
+        }
       } else {
-        pair<off_t, size_t> block2 = rmd.getFollowBlockForLhs(objId);
-        scanNonFunctionalRelation(blockOff, block2, objId, _sopFile,
-                                  rmd._offsetAfter, result);
+        // If we don't have blocks, scan the whole relation and filter / restrict.
+        result->reserve(rmd.getNofElements() + 2);
+        result->resize(rmd.getNofElements());
+        WidthTwoList fullRelation;
+        _sopFile.read(fullRelation.data(),
+                      rmd.getNofElements() * 2 * sizeof(Id),
+                      rmd._rmdPairs._startFullIndex);
+        getRhsForSingleLhs(fullRelation, objId, result);
       }
     } else {
       LOG(DEBUG) << "No such relation.\n";
@@ -578,7 +631,7 @@ result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanSPO(const string& subject, WidthTwoList *result) const {
+void Index::scanSPO(const string& subject, WidthTwoList* result) const {
   if (!_spoFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Cannot use predicate variables without the required "
@@ -591,10 +644,10 @@ void Index::scanSPO(const string& subject, WidthTwoList *result) const {
     LOG(TRACE) << "Successfully got relation ID.\n";
     if (_spoMeta.relationExists(relId)) {
       LOG(TRACE) << "Relation exists.\n";
-      const RelationMetaData& rmd = _spoMeta.getRmd(relId);
-      result->reserve(rmd._nofElements + 2);
-      result->resize(rmd._nofElements);
-      _spoFile.read(result->data(), rmd._nofElements * 2 * sizeof(Id),
+      const FullRelationMetaData& rmd = _spoMeta.getRmd(relId)._rmdPairs;
+      result->reserve(rmd.getNofElements() + 2);
+      result->resize(rmd.getNofElements());
+      _spoFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
                     rmd._startFullIndex);
     }
   }
@@ -602,7 +655,7 @@ void Index::scanSPO(const string& subject, WidthTwoList *result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanSOP(const string& subject, WidthTwoList *result) const {
+void Index::scanSOP(const string& subject, WidthTwoList* result) const {
   if (!_sopFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Cannot use predicate variables without the required "
@@ -615,10 +668,10 @@ void Index::scanSOP(const string& subject, WidthTwoList *result) const {
     LOG(TRACE) << "Successfully got relation ID.\n";
     if (_sopMeta.relationExists(relId)) {
       LOG(TRACE) << "Relation exists.\n";
-      const RelationMetaData& rmd = _sopMeta.getRmd(relId);
-      result->reserve(rmd._nofElements + 2);
-      result->resize(rmd._nofElements);
-      _sopFile.read(result->data(), rmd._nofElements * 2 * sizeof(Id),
+      const FullRelationMetaData& rmd = _sopMeta.getRmd(relId)._rmdPairs;
+      result->reserve(rmd.getNofElements() + 2);
+      result->resize(rmd.getNofElements());
+      _sopFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
                     rmd._startFullIndex);
     }
   }
@@ -626,7 +679,7 @@ void Index::scanSOP(const string& subject, WidthTwoList *result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanOPS(const string& object, WidthTwoList *result) const {
+void Index::scanOPS(const string& object, WidthTwoList* result) const {
   if (!_opsFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Cannot use predicate variables without the required "
@@ -639,10 +692,10 @@ void Index::scanOPS(const string& object, WidthTwoList *result) const {
     LOG(TRACE) << "Successfully got relation ID.\n";
     if (_opsMeta.relationExists(relId)) {
       LOG(TRACE) << "Relation exists.\n";
-      const RelationMetaData& rmd = _opsMeta.getRmd(relId);
-      result->reserve(rmd._nofElements + 2);
-      result->resize(rmd._nofElements);
-      _opsFile.read(result->data(), rmd._nofElements * 2 * sizeof(Id),
+      const FullRelationMetaData& rmd = _opsMeta.getRmd(relId)._rmdPairs;
+      result->reserve(rmd.getNofElements() + 2);
+      result->resize(rmd.getNofElements());
+      _opsFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
                     rmd._startFullIndex);
     }
   }
@@ -650,7 +703,7 @@ void Index::scanOPS(const string& object, WidthTwoList *result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanOSP(const string& object, WidthTwoList *result) const {
+void Index::scanOSP(const string& object, WidthTwoList* result) const {
   if (!_ospFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Cannot use predicate variables without the required "
@@ -663,10 +716,10 @@ void Index::scanOSP(const string& object, WidthTwoList *result) const {
     LOG(TRACE) << "Successfully got relation ID.\n";
     if (_ospMeta.relationExists(relId)) {
       LOG(TRACE) << "Relation exists.\n";
-      const RelationMetaData& rmd = _ospMeta.getRmd(relId);
-      result->reserve(rmd._nofElements + 2);
-      result->resize(rmd._nofElements);
-      _ospFile.read(result->data(), rmd._nofElements * 2 * sizeof(Id),
+      const FullRelationMetaData& rmd = _ospMeta.getRmd(relId)._rmdPairs;
+      result->reserve(rmd.getNofElements() + 2);
+      result->resize(rmd.getNofElements());
+      _ospFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
                     rmd._startFullIndex);
     }
   }
@@ -683,14 +736,14 @@ const string& Index::idToString(Id id) const {
 // _____________________________________________________________________________
 void Index::scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                    Id lhsId, ad_utility::File& indexFile,
-                                   WidthOneList *result) const {
+                                   WidthOneList* result) const {
   LOG(TRACE) << "Scanning functional relation ...\n";
   WidthTwoList block;
   block.resize(blockOff.second / (2 * sizeof(Id)));
   indexFile.read(block.data(), blockOff.second, blockOff.first);
   auto it = std::lower_bound(block.begin(), block.end(), lhsId,
                              [](const array<Id, 2>& elem, Id key) {
-                                 return elem[0] < key;
+                               return elem[0] < key;
                              });
   if ((*it)[0] == lhsId) {
     result->push_back(array<Id, 1>{(*it)[1]});
@@ -703,14 +756,14 @@ void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                       const pair<off_t, size_t>& followBlock,
                                       Id lhsId, ad_utility::File& indexFile,
                                       off_t upperBound,
-                                      Index::WidthOneList *result) const {
+                                      Index::WidthOneList* result) const {
   LOG(TRACE) << "Scanning non-functional relation ...\n";
   vector<pair<Id, off_t>> block;
   block.resize(blockOff.second / (sizeof(Id) + sizeof(off_t)));
   indexFile.read(block.data(), blockOff.second, blockOff.first);
   auto it = std::lower_bound(block.begin(), block.end(), lhsId,
                              [](const pair<Id, off_t>& elem, Id key) {
-                                 return elem.first < key;
+                               return elem.first < key;
                              });
   if (it->first == lhsId) {
     size_t nofBytes = 0;
@@ -745,7 +798,7 @@ size_t Index::relationCardinality(const string& relationName) const {
   Id relId;
   if (_vocab.getId(relationName, &relId)) {
     if (this->_psoMeta.relationExists(relId)) {
-      return this->_psoMeta.getRmd(relId)._nofElements;
+      return this->_psoMeta.getRmd(relId).getNofElements();
     }
   }
   return 0;
@@ -756,7 +809,7 @@ size_t Index::subjectCardinality(const string& sub) const {
   Id relId;
   if (_vocab.getId(sub, &relId)) {
     if (this->_spoMeta.relationExists(relId)) {
-      return this->_spoMeta.getRmd(relId)._nofElements;
+      return this->_spoMeta.getRmd(relId).getNofElements();
     }
   }
   return 0;
@@ -767,7 +820,7 @@ size_t Index::objectCardinality(const string& obj) const {
   Id relId;
   if (_vocab.getId(obj, &relId)) {
     if (this->_ospMeta.relationExists(relId)) {
-      return this->_ospMeta.getRmd(relId)._nofElements;
+      return this->_ospMeta.getRmd(relId).getNofElements();
     }
   }
   return 0;

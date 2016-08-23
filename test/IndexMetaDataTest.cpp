@@ -7,6 +7,45 @@
 #include "../src/util/File.h"
 #include "../src/index/IndexMetaData.h"
 
+
+TEST(FullRelationMetaDataTest, testFunctionAndBlockFlagging) {
+  FullRelationMetaData rmd(0, 0, 5, false, false);
+  ASSERT_EQ(5u, rmd.getNofElements());
+  ASSERT_FALSE(rmd.hasBlocks());
+  ASSERT_FALSE(rmd.isFunctional());
+
+  rmd.setHasBlocks(true);
+  ASSERT_EQ(5u, rmd.getNofElements());
+  ASSERT_TRUE(rmd.hasBlocks());
+  ASSERT_FALSE(rmd.isFunctional());
+
+  rmd.setIsFunctional(true);
+  ASSERT_EQ(5u, rmd.getNofElements());
+  ASSERT_TRUE(rmd.hasBlocks());
+  ASSERT_TRUE(rmd.isFunctional());
+
+  rmd.setIsFunctional(false);
+  ASSERT_EQ(5u, rmd.getNofElements());
+  ASSERT_TRUE(rmd.hasBlocks());
+  ASSERT_FALSE(rmd.isFunctional());
+
+  rmd.setHasBlocks(false);
+  ASSERT_EQ(5u, rmd.getNofElements());
+  ASSERT_FALSE(rmd.hasBlocks());
+  ASSERT_FALSE(rmd.isFunctional());
+
+  rmd.setIsFunctional(true);
+  ASSERT_EQ(5u, rmd.getNofElements());
+  ASSERT_FALSE(rmd.hasBlocks());
+  ASSERT_TRUE(rmd.isFunctional());
+
+  FullRelationMetaData rmd2(0, 0, 5, true, true);
+  rmd2.setIsFunctional(true);
+  ASSERT_EQ(5u, rmd2.getNofElements());
+  ASSERT_TRUE(rmd2.hasBlocks());
+  ASSERT_TRUE(rmd2.isFunctional());
+}
+
 // Let rmd be meta-data for a relation:
 // 10 20
 // 10 21
@@ -26,7 +65,7 @@ TEST(RelationMetaDataTest, getBlockStartAndNofBytesForLhsTest) {
   off_t afterRhs = afterLhs + 6 * sizeof(Id);
   bs.push_back(BlockMetaData(10, afterFI));
   bs.push_back(BlockMetaData(16, afterFI + 2 * (sizeof(Id) + sizeof(off_t))));
-  RelationMetaData rmd(1, 0, afterLhs, afterRhs, 6, 2, bs);
+  BlockBasedRelationMetaData rmd(afterLhs, afterRhs, bs);
 
   auto rv = rmd.getBlockStartAndNofBytesForLhs(10);
   ASSERT_EQ(afterFI, rv.first);
@@ -45,96 +84,119 @@ TEST(RelationMetaDataTest, getBlockStartAndNofBytesForLhsTest) {
 }
 
 TEST(RelationMetaDataTest, writeReadTest) {
-  vector<BlockMetaData> bs;
-  off_t afterFI = 6 * 2 * sizeof(Id);
-  off_t afterLhs = afterFI + 4 * (sizeof(Id) + sizeof(off_t));
-  off_t afterRhs = afterLhs + 6 * sizeof(Id);
-  bs.push_back(BlockMetaData(10, afterFI));
-  bs.push_back(BlockMetaData(16, afterFI + 2 * (sizeof(Id) + sizeof(off_t))));
-  RelationMetaData rmd(1, 0, afterLhs, afterRhs, 6, 2, bs);
+  try {
+    vector<BlockMetaData> bs;
+    off_t afterFI = 6 * 2 * sizeof(Id);
+    off_t afterLhs = afterFI + 4 * (sizeof(Id) + sizeof(off_t));
+    off_t afterRhs = afterLhs + 6 * sizeof(Id);
+    bs.push_back(BlockMetaData(10, afterFI));
+    bs.push_back(BlockMetaData(16, afterFI + 2 * (sizeof(Id) + sizeof(off_t))));
+    FullRelationMetaData rmdF(1, 0, 6, false, true);
+    BlockBasedRelationMetaData rmdB(afterLhs, afterRhs, bs);
 
-  ad_utility::File f("_testtmp.rmd", "w");
-  f << rmd;
-  f.close();
+    ad_utility::File f("_testtmp.rmd", "w");
+    f << rmdF << rmdB;
+    f.close();
 
-  ad_utility::File in("_testtmp.rmd", "r");
-  ASSERT_EQ(3 * sizeof(Id) + 5 * sizeof(off_t) + 2 * sizeof(size_t),
-            rmd.bytesRequired());
-  unsigned char* buf = new unsigned char[rmd.bytesRequired()];
-  in.read(buf, rmd.bytesRequired());
-  RelationMetaData rmd2;
-  rmd2.createFromByteBuffer(buf);
+    ad_utility::File in("_testtmp.rmd", "r");
+    unsigned char* buf = new unsigned char[rmdF.bytesRequired() +
+                                           rmdB.bytesRequired()];
+    in.read(buf, rmdF.bytesRequired() + rmdB.bytesRequired());
+    FullRelationMetaData rmdF2;
+    rmdF2.createFromByteBuffer(buf);
+    BlockBasedRelationMetaData rmdB2;
+    rmdB2.createFromByteBuffer(buf + rmdF.bytesRequired());
 
-  delete[] buf;
-  remove("_testtmp.rmd");
+    delete[] buf;
+    remove("_testtmp.rmd");
 
-  ASSERT_EQ(rmd._relId, rmd2._relId);
-  ASSERT_EQ(rmd._startFullIndex, rmd2._startFullIndex);
-  ASSERT_EQ(rmd._startRhs, rmd2._startRhs);
-  ASSERT_EQ(rmd._offsetAfter, rmd2._offsetAfter);
-  ASSERT_EQ(rmd._nofElements, rmd2._nofElements);
-  ASSERT_EQ(rmd._nofBlocks, rmd2._nofBlocks);
-  ASSERT_EQ(rmd._blocks.size(), rmd2._blocks.size());
-  ASSERT_EQ(rmd._blocks[0]._firstLhs, rmd2._blocks[0]._firstLhs);
-  ASSERT_EQ(rmd._blocks[0]._startOffset, rmd2._blocks[0]._startOffset);
-  ASSERT_EQ(rmd._blocks[1]._firstLhs, rmd2._blocks[1]._firstLhs);
-  ASSERT_EQ(rmd._blocks[1]._startOffset, rmd2._blocks[1]._startOffset);
+    ASSERT_EQ(rmdF._relId, rmdF2._relId);
+    ASSERT_EQ(rmdF._startFullIndex, rmdF2._startFullIndex);
+    ASSERT_EQ(rmdB._startRhs, rmdB2._startRhs);
+    ASSERT_EQ(rmdB._offsetAfter, rmdB2._offsetAfter);
+    ASSERT_EQ(rmdF.getNofElements(), rmdF2.getNofElements());
+    ASSERT_EQ(rmdB._blocks.size(), rmdB2._blocks.size());
+    ASSERT_EQ(rmdB._blocks[0]._firstLhs, rmdB2._blocks[0]._firstLhs);
+    ASSERT_EQ(rmdB._blocks[0]._startOffset, rmdB2._blocks[0]._startOffset);
+    ASSERT_EQ(rmdB._blocks[1]._firstLhs, rmdB2._blocks[1]._firstLhs);
+    ASSERT_EQ(rmdB._blocks[1]._startOffset, rmdB2._blocks[1]._startOffset);
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
 }
 
-TEST(IndexMetaDataTest, writeReadTest) {
-  vector<BlockMetaData> bs;
-  off_t afterFI = 6 * 2 * sizeof(Id);
-  off_t afterLhs = afterFI + 4 * (sizeof(Id) + sizeof(off_t));
-  off_t afterRhs = afterLhs + 6 * sizeof(Id);
-  bs.push_back(BlockMetaData(10, afterFI));
-  bs.push_back(BlockMetaData(16, afterFI + 2 * (sizeof(Id) + sizeof(off_t))));
-  RelationMetaData rmd(1, 0, afterLhs, afterRhs, 6, 2, bs);
-  RelationMetaData rmd2(rmd);
-  rmd2._relId = 2;
-  IndexMetaData imd;
-  imd.add(rmd);
-  imd.add(rmd2);
+TEST(IndexMetaDataTest, writeReadTest2) {
+  try {
+    vector<BlockMetaData> bs;
+    off_t afterFI = 6 * 2 * sizeof(Id);
+    off_t afterLhs = afterFI + 4 * (sizeof(Id) + sizeof(off_t));
+    off_t afterRhs = afterLhs + 6 * sizeof(Id);
+    bs.push_back(BlockMetaData(10, afterFI));
+    bs.push_back(BlockMetaData(16, afterFI + 2 * (sizeof(Id) + sizeof(off_t))));
+    FullRelationMetaData rmdF(1, 0, 6, false, true);
+    BlockBasedRelationMetaData rmdB(afterLhs, afterRhs, bs);
+    FullRelationMetaData rmdF2(rmdF);
+    rmdF2._relId = 2;
+    IndexMetaData imd;
+    imd.add(rmdF, rmdB);
+    imd.add(rmdF2, rmdB);
 
-  ad_utility::File f("_testtmp.imd", "w");
-  f << imd;
-  f.close();
+    ad_utility::File f("_testtmp.imd", "w");
+    f << imd;
+    f.close();
 
-  ad_utility::File in("_testtmp.imd", "r");
-  size_t imdBytes = sizeof(size_t) + rmd.bytesRequired() * 2;
-  unsigned char* buf = new unsigned char[imdBytes];
-  in.read(buf, imdBytes);
-  IndexMetaData imd2;
-  imd2.createFromByteBuffer(buf);
-  delete[] buf;
-  remove("_testtmp.rmd");
+    ad_utility::File in("_testtmp.imd", "r");
+    size_t imdBytes =
+        sizeof(size_t) + sizeof(off_t) +
+        (rmdF.bytesRequired() + rmdB.bytesRequired()) * 2;
+    unsigned char* buf = new unsigned char[imdBytes];
+    in.read(buf, imdBytes);
+    IndexMetaData imd2;
+    imd2.createFromByteBuffer(buf);
+    delete[] buf;
+    remove("_testtmp.rmd");
 
-  ASSERT_EQ(rmd._relId, imd2.getRmd(1)._relId);
-  ASSERT_EQ(rmd._startFullIndex, imd2.getRmd(1)._startFullIndex);
-  ASSERT_EQ(rmd._startRhs, imd2.getRmd(1)._startRhs);
-  ASSERT_EQ(rmd._offsetAfter, imd2.getRmd(1)._offsetAfter);
-  ASSERT_EQ(rmd._nofElements, imd2.getRmd(1)._nofElements);
-  ASSERT_EQ(rmd._nofBlocks, imd2.getRmd(1)._nofBlocks);
-  ASSERT_EQ(rmd._blocks.size(), imd2.getRmd(1)._blocks.size());
-  ASSERT_EQ(rmd._blocks[0]._firstLhs, imd2.getRmd(1)._blocks[0]._firstLhs);
-  ASSERT_EQ(rmd._blocks[0]._startOffset,
-            imd2.getRmd(1)._blocks[0]._startOffset);
-  ASSERT_EQ(rmd._blocks[1]._firstLhs, imd2.getRmd(1)._blocks[1]._firstLhs);
-  ASSERT_EQ(rmd._blocks[1]._startOffset,
-            imd2.getRmd(1)._blocks[1]._startOffset);
+    ASSERT_EQ(rmdF._relId, imd2.getRmd(1)._rmdPairs._relId);
+    ASSERT_EQ(rmdF._startFullIndex, imd2.getRmd(1)._rmdPairs._startFullIndex);
+    ASSERT_EQ(rmdB._startRhs, imd2.getRmd(1)._rmdBlocks->_startRhs);
+    ASSERT_EQ(rmdB._offsetAfter, imd2.getRmd(1)._rmdBlocks->_offsetAfter);
+    ASSERT_EQ(rmdF.getNofElements(), imd2.getRmd(1)._rmdPairs.getNofElements());
+    ASSERT_EQ(rmdB._blocks.size(), imd2.getRmd(1)._rmdBlocks->_blocks.size());
+    ASSERT_EQ(rmdB._blocks[0]._firstLhs,
+              imd2.getRmd(1)._rmdBlocks->_blocks[0]._firstLhs);
+    ASSERT_EQ(rmdB._blocks[0]._startOffset,
+              imd2.getRmd(1)._rmdBlocks->_blocks[0]._startOffset);
+    ASSERT_EQ(rmdB._blocks[1]._firstLhs,
+              imd2.getRmd(1)._rmdBlocks->_blocks[1]._firstLhs);
+    ASSERT_EQ(rmdB._blocks[1]._startOffset,
+              imd2.getRmd(1)._rmdBlocks->_blocks[1]._startOffset);
 
-  ASSERT_EQ(rmd2._relId, imd2.getRmd(2)._relId);
-  ASSERT_EQ(rmd2._startFullIndex, imd2.getRmd(2)._startFullIndex);
-  ASSERT_EQ(rmd2._startRhs, imd2.getRmd(2)._startRhs);
-  ASSERT_EQ(rmd2._offsetAfter, imd2.getRmd(2)._offsetAfter);
-  ASSERT_EQ(rmd2._nofElements, imd2.getRmd(2)._nofElements);
-  ASSERT_EQ(rmd2._nofBlocks, imd2.getRmd(2)._nofBlocks);
-  ASSERT_EQ(rmd2._blocks.size(), imd2.getRmd(2)._blocks.size());
-  ASSERT_EQ(rmd2._blocks[0]._firstLhs, imd2.getRmd(2)._blocks[0]._firstLhs);
-  ASSERT_EQ(rmd2._blocks[0]._startOffset,
-            imd2.getRmd(2)._blocks[0]._startOffset);
-  ASSERT_EQ(rmd2._blocks[1]._firstLhs, imd2.getRmd(2)._blocks[1]._firstLhs);
-  ASSERT_EQ(rmd2._blocks[1]._startOffset,
-            imd2.getRmd(2)._blocks[1]._startOffset);
+    ASSERT_EQ(rmdF2._relId, imd2.getRmd(2)._rmdPairs._relId);
+    ASSERT_EQ(rmdF2._startFullIndex, imd2.getRmd(2)._rmdPairs._startFullIndex);
+    ASSERT_EQ(rmdB._startRhs, imd2.getRmd(2)._rmdBlocks->_startRhs);
+    ASSERT_EQ(rmdB._offsetAfter, imd2.getRmd(2)._rmdBlocks->_offsetAfter);
+    ASSERT_EQ(rmdF2.getNofElements(),
+              imd2.getRmd(2)._rmdPairs.getNofElements());
+    ASSERT_EQ(rmdB._blocks.size(), imd2.getRmd(2)._rmdBlocks->_blocks.size());
+    ASSERT_EQ(rmdB._blocks[0]._firstLhs,
+              imd2.getRmd(2)._rmdBlocks->_blocks[0]._firstLhs);
+    ASSERT_EQ(rmdB._blocks[0]._startOffset,
+              imd2.getRmd(2)._rmdBlocks->_blocks[0]._startOffset);
+    ASSERT_EQ(rmdB._blocks[1]._firstLhs,
+              imd2.getRmd(2)._rmdBlocks->_blocks[1]._firstLhs);
+    ASSERT_EQ(rmdB._blocks[1]._startOffset,
+              imd2.getRmd(2)._rmdBlocks->_blocks[1]._startOffset);
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
 }
 
 

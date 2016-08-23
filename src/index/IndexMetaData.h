@@ -17,59 +17,89 @@ using std::vector;
 using std::pair;
 using std::unordered_map;
 
-// Copy & Paste from IndexLayout.txt:
-//
-//
-// -----
-// 3. Meta Data
-// -----
-//
-// --
-// a) Relation Meta Data
-// --
-// * rel Id
-// * offset: start of FullIndex
-// * offset: end of BlockIndex RHS (needed for upper bound on last block)
-// * # elements
-// * # blocks
-// * vector of BlockMetaData (pairs)
-//
-//
-//
-// + isFunctional (# block == 0)
-// + getSizeOfFullIndex()
-// + pair<offset, size_t> getBlockStartAndNofBytesForLhs()
-//      Get info from two BMS. Only available if not functional.
-// + offset getRhsForLhs
-//
-// --
-// b) Block Meta Data
-// --
-// - minLHS
-// - offset: start of RHS Data
+// Check IndexLayout.txt for explanations (expected comments).
+// Removed comments here so that not two places had to be kept up-to-date.
+
+static const uint64_t IS_FUNCTIONAL_MASK = 0x0100000000000000;
+static const uint64_t HAS_BLOCKS_MASK = 0x0200000000000000;
+static const uint64_t NOF_ELEMENTS_MASK = 0x00FFFFFFFFFFFFFF;
 
 class BlockMetaData {
 public:
-  BlockMetaData() :_firstLhs(0), _startOffset(0) { }
-  BlockMetaData(Id lhs, off_t start) :_firstLhs(lhs), _startOffset(start) { }
+  BlockMetaData() : _firstLhs(0), _startOffset(0) {}
+
+  BlockMetaData(Id lhs, off_t start) : _firstLhs(lhs), _startOffset(start) {}
+
   Id _firstLhs;
   off_t _startOffset;
 };
 
-class RelationMetaData {
+class FullRelationMetaData {
 public:
-  RelationMetaData();
+  FullRelationMetaData();
 
-  RelationMetaData(Id relId, off_t startFullIndex, off_t startRhs,
-      off_t offsetAfter, size_t nofElements, size_t nofBlocks,
-      const vector<BlockMetaData>& blocks);
+  FullRelationMetaData(Id relId, off_t startFullIndex, size_t nofElements,
+                       bool isFunctional, bool hasBlocks);
 
   size_t getNofBytesForFulltextIndex() const;
 
+
+  // Returns true if there is exactly one RHS for each LHS in the relation
+  bool isFunctional() const;
+
+  bool hasBlocks() const;
+
+  // Handle the fact that those properties are encoded in the same
+  // size_t as the number of elements.
+  void setIsFunctional(bool isFunctional);
+
+  void setHasBlocks(bool hasBlocks);
+
+  size_t getNofElements() const;
+
+
+  // Restores meta data from raw memory.
+  // Needed when registering an index on startup.
+  FullRelationMetaData& createFromByteBuffer(unsigned char* buffer);
+
+  // The size this object will require when serialized to file.
+  size_t bytesRequired() const;
+
   off_t getStartOfLhs() const;
 
-  // Returns true if there is exactly one RHS for each LHS in the realtion
-  bool isFunctional() const;
+  Id _relId;
+  off_t _startFullIndex;
+
+  friend ad_utility::File& operator<<(ad_utility::File& f,
+                                      const FullRelationMetaData& rmd);
+
+private:
+  // first byte: type
+  // other 7 bytes: the nof elements.
+  uint64_t _typeAndNofElements;
+};
+
+inline ad_utility::File& operator<<(ad_utility::File& f,
+                                    const FullRelationMetaData& rmd) {
+  f.write(&rmd._relId, sizeof(rmd._relId));
+  f.write(&rmd._startFullIndex, sizeof(rmd._startFullIndex));
+  f.write(&rmd._typeAndNofElements, sizeof(rmd._typeAndNofElements));
+  return f;
+}
+
+class BlockBasedRelationMetaData {
+public:
+  BlockBasedRelationMetaData();
+
+  BlockBasedRelationMetaData(off_t startRhs, off_t offsetAfter,
+                             const vector<BlockMetaData>& blocks);
+
+  // The size this object will require when serialized to file.
+  size_t bytesRequired() const;
+
+  // Restores meta data from raw memory.
+  // Needed when registering an index on startup.
+  BlockBasedRelationMetaData& createFromByteBuffer(unsigned char* buffer);
 
   // Takes a LHS and returns the offset into the file at which the
   // corresponding block can be read as well as the nof bytes to read.
@@ -88,31 +118,56 @@ public:
   // it means it is the last block and the offsetAfter can be used.
   pair<off_t, size_t> getFollowBlockForLhs(Id lhs) const;
 
-  // Restores meta data from raw memory.
-  // Needed when registering an index on startup.
-  RelationMetaData& createFromByteBuffer(unsigned char* buffer);
-
-  // The size this object will require when serialized to file.
-  size_t bytesRequired() const;
-
-  Id _relId;
-  off_t _startFullIndex;
   off_t _startRhs;
   off_t _offsetAfter;
-  size_t _nofElements;
-  size_t _nofBlocks;
   vector<BlockMetaData> _blocks;
 };
 
 inline ad_utility::File& operator<<(ad_utility::File& f,
-    const RelationMetaData& rmd) {
-  f.write(&rmd._relId, sizeof(rmd._relId));
-  f.write(&rmd._startFullIndex, sizeof(rmd._startFullIndex));
+                                    const BlockBasedRelationMetaData& rmd) {
   f.write(&rmd._startRhs, sizeof(rmd._startRhs));
   f.write(&rmd._offsetAfter, sizeof(rmd._offsetAfter));
-  f.write(&rmd._nofElements, sizeof(rmd._nofElements));
-  f.write(&rmd._nofBlocks, sizeof(rmd._nofBlocks));
-  f.write(rmd._blocks.data(), rmd._nofBlocks * sizeof(BlockMetaData));
+  auto nofBlocks = rmd._blocks.size();
+  f.write(&nofBlocks, sizeof(nofBlocks));
+  f.write(rmd._blocks.data(), nofBlocks * sizeof(BlockMetaData));
+  return f;
+}
+
+class RelationMetaData {
+public:
+
+  explicit RelationMetaData(const FullRelationMetaData& rmdPairs) :
+      _rmdPairs(rmdPairs),
+      _rmdBlocks(nullptr) {}
+
+  off_t getStartOfLhs() const {
+    return _rmdPairs.getStartOfLhs();
+  }
+
+  size_t getNofBytesForFulltextIndex() const {
+    return _rmdPairs.getNofBytesForFulltextIndex();
+  }
+
+  // Returns true if there is exactly one RHS for each LHS in the relation
+  bool isFunctional() const {
+    return _rmdPairs.isFunctional();
+  }
+
+  bool hasBlocks() const {
+    return _rmdPairs.hasBlocks();
+  }
+
+  size_t getNofElements() const {
+    return _rmdPairs.getNofElements();
+  }
+
+  const FullRelationMetaData& _rmdPairs;
+  const BlockBasedRelationMetaData* _rmdBlocks;
+};
+
+inline ad_utility::File& operator<<(ad_utility::File& f,
+                                    const RelationMetaData& rmd) {
+  f << rmd._rmdPairs << *rmd._rmdBlocks;
   return f;
 }
 
@@ -120,9 +175,12 @@ class IndexMetaData {
 public:
   IndexMetaData();
 
-  void add(const RelationMetaData& rmd);
+  void
+  add(const FullRelationMetaData& rmd, const BlockBasedRelationMetaData& bRmd);
+
   off_t getOffsetAfter() const;
-  const RelationMetaData& getRmd(Id relId) const;
+
+  const RelationMetaData getRmd(Id relId) const;
 
   void createFromByteBuffer(unsigned char* buf);
 
@@ -131,11 +189,16 @@ public:
   string statistics() const;
 
 private:
-  unordered_map<Id, RelationMetaData> _data;
   off_t _offsetAfter;
+  unordered_map<Id, FullRelationMetaData> _data;
+  unordered_map<Id, BlockBasedRelationMetaData> _blockData;
 
   friend ad_utility::File& operator<<(ad_utility::File& f,
-      const IndexMetaData& rmd);
+                                      const IndexMetaData& rmd);
+
+  size_t getNofBlocksForRelation(const Id relId) const;
+
+  size_t getTotalBytesForRelation(const FullRelationMetaData& frmd) const;
 };
 
 ad_utility::File& operator<<(ad_utility::File& f, const IndexMetaData& imd);
