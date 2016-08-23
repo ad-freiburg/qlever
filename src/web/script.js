@@ -26,10 +26,37 @@ $(document).ready(function () {
         } else {
             console.log("Without clearcache");
         }
+        var loc = window.location.href.substr(0, window.location.href.indexOf("?"));
+        if (loc.length == 0) {
+            loc = "index.html"
+        }
         window.history.pushState("object or string", "Title",
-            window.location.href.substr(0, window.location.href.indexOf("?"))
-            + queryString);
+            loc + queryString);
         processQuery(queryString)
+    });
+    $("#csvbtn").click(function () {
+        var q = encodeURIComponent($("#query").val());
+        console.log(q);
+        var queryString = "?query=" + q;
+        if ($("#clear").prop('checked')) {
+            console.log("With clearcache");
+            queryString += "&cmd=clearcache";
+        } else {
+            console.log("Without clearcache");
+        }
+        processCsvQuery(queryString)
+    });
+    $("#tsvbtn").click(function () {
+        var q = encodeURIComponent($("#query").val());
+        console.log(q);
+        var queryString = "?query=" + q;
+        if ($("#clear").prop('checked')) {
+            console.log("With clearcache");
+            queryString += "&cmd=clearcache";
+        } else {
+            console.log("Without clearcache");
+        }
+        processTsvQuery(queryString)
     });
 });
 
@@ -75,6 +102,16 @@ function displayError(result) {
     disp += "Query: " + "<br/>" + result.query  + "<br/>" + "<br/>" + "<br/>";
     disp += "Error Msg: " + "<br/>" + result.exception + "<br/>" + "<br/>";
     $("#answer").html(disp);
+}
+
+function processCsvQuery(query) {
+        window.location.href = "/" + query + "&action=csv_export";
+        return false;
+}
+
+function processTsvQuery(query) {
+    window.location.href = "/" + query + "&action=tsv_export";
+    return false;
 }
 
 function processQuery(query) {

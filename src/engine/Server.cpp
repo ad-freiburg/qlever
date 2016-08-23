@@ -69,7 +69,7 @@ void Server::run() {
 }
 
 // _____________________________________________________________________________
-void Server::process(Socket *client, QueryExecutionContext *qec) const {
+void Server::process(Socket* client, QueryExecutionContext* qec) const {
   string request;
   string response;
   string query;
@@ -86,6 +86,11 @@ void Server::process(Socket *client, QueryExecutionContext *qec) const {
       upper = indexOfQuest + 1;
     }
     string file = request.substr(indexOfGET + 5, upper - (indexOfGET + 5) - 1);
+    if (file.size() == 0) {
+      if (request[indexOfGET + 5] != '?') {
+        file = "index.html";
+      }
+    }
     // Use hardcoded white-listing for index.html and style.css
     // can be changed if more should ever be needed, for now keep it simple.
     LOG(DEBUG) << "file: " << file << '\n';
@@ -103,6 +108,7 @@ void Server::process(Socket *client, QueryExecutionContext *qec) const {
       if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
         qec->clearCache();
       }
+
       query = createQueryFromHttpParams(params);
       LOG(INFO) << "Query: " << query << '\n';
       ParsedQuery pq = SparqlParser::parse(query);
@@ -114,9 +120,22 @@ void Server::process(Socket *client, QueryExecutionContext *qec) const {
       QueryPlanner qp(qec);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
       LOG(INFO) << qet.asString() << std::endl;
-      response = composeResponseJson(pq, qet);
 
-      contentType = "application/json";
+      if (ad_utility::getLowercase(params["action"]) == "csv_export") {
+        // CSV export
+        response = composeResponseSepValues(pq, qet, ',');
+        contentType = "text/csv\r\n"
+            "Content-Disposition: attachment;filename=export.csv";
+      } else if (ad_utility::getLowercase(params["action"]) == "tsv_export") {
+        // TSV export
+        response = composeResponseSepValues(pq, qet, '\t');
+        contentType = "text/tsv\r\n"
+            "Content-Disposition: attachment;filename=export.tsv";
+      } else {
+        // Normal case: JSON response
+        response = composeResponseJson(pq, qet);
+        contentType = "application/json";
+      }
     } catch (const ad_semsearch::Exception& e) {
       response = composeResponseJson(query, e);
     } catch (const ParseException& e) {
@@ -211,9 +230,9 @@ string Server::createHttpResponse(const string& content,
                                   const string& contentType) const {
   std::ostringstream os;
   os << "HTTP/1.0 200 OK\r\n" << "Content-Length: " << content.size() << "\r\n"
-  << "Connection: close\r\n" << "Content-Type: " << contentType
-  << "; charset=" << "UTF-8" << "\r\n"
-  << "Access-Control-Allow-Origin: *" << "\r\n" << "\r\n" << content;
+     << "Connection: close\r\n" << "Content-Type: " << contentType
+     << "; charset=" << "UTF-8" << "\r\n"
+     << "Access-Control-Allow-Origin: *" << "\r\n" << "\r\n" << content;
   return os.str();
 }
 
@@ -229,11 +248,11 @@ string Server::composeResponseJson(const ParsedQuery& query,
 
   std::ostringstream os;
   os << "{\r\n"
-  << "\"query\": \""
-  << ad_utility::escapeForJson(query._originalString)
-  << "\",\r\n"
-  << "\"status\": \"OK\",\r\n"
-  << "\"resultsize\": \"" << resultSize << "\",\r\n";
+     << "\"query\": \""
+     << ad_utility::escapeForJson(query._originalString)
+     << "\",\r\n"
+     << "\"status\": \"OK\",\r\n"
+     << "\"resultsize\": \"" << resultSize << "\",\r\n";
 
   os << "\"res\": ";
   size_t limit = MAX_NOF_ROWS_IN_RESULT;
@@ -250,10 +269,29 @@ string Server::composeResponseJson(const ParsedQuery& query,
   os << ",\r\n";
 
   os << "\"time\": {\r\n"
-  << "\"total\": \"" << _requestProcessingTimer.usecs() / 1000.0 << "ms\",\r\n"
-  << "\"computeResult\": \"" << compResultUsecs / 1000.0 << "ms\"\r\n"
-  << "}\r\n"
-  << "}\r\n";
+     << "\"total\": \"" << _requestProcessingTimer.usecs() / 1000.0
+     << "ms\",\r\n"
+     << "\"computeResult\": \"" << compResultUsecs / 1000.0 << "ms\"\r\n"
+     << "}\r\n"
+     << "}\r\n";
+
+  return os.str();
+}
+
+// _____________________________________________________________________________
+string Server::composeResponseSepValues(const ParsedQuery& query,
+                                        const QueryExecutionTree& qet,
+                                        char sep) const {
+  std::ostringstream os;
+  size_t limit = std::numeric_limits<size_t>::max();
+  size_t offset = 0;
+  if (query._limit.size() > 0) {
+    limit = static_cast<size_t>(atol(query._limit.c_str()));
+  }
+  if (query._offset.size() > 0) {
+    offset = static_cast<size_t>(atol(query._offset.c_str()));
+  }
+  qet.writeResultToStream(os, query._selectedVariables, limit, offset, sep);
 
   return os.str();
 }
@@ -266,23 +304,23 @@ string Server::composeResponseJson(
   _requestProcessingTimer.stop();
 
   os << "{\r\n"
-  << "\"query\": \""
-  << ad_utility::escapeForJson(query)
-  << "\",\r\n"
-  << "\"status\": \"ERROR\",\r\n"
-  << "\"resultsize\": \"0\",\r\n"
-  << "\"time\": {\r\n"
-  << "\"total\": \"" << _requestProcessingTimer.msecs() / 1000.0
-  << "ms\",\r\n"
-  << "\"computeResult\": \"" << _requestProcessingTimer.msecs() / 1000.0
-  << "ms\"\r\n"
-  << "},\r\n";
+     << "\"query\": \""
+     << ad_utility::escapeForJson(query)
+     << "\",\r\n"
+     << "\"status\": \"ERROR\",\r\n"
+     << "\"resultsize\": \"0\",\r\n"
+     << "\"time\": {\r\n"
+     << "\"total\": \"" << _requestProcessingTimer.msecs() / 1000.0
+     << "ms\",\r\n"
+     << "\"computeResult\": \"" << _requestProcessingTimer.msecs() / 1000.0
+     << "ms\"\r\n"
+     << "},\r\n";
 
 
   string msg = ad_utility::escapeForJson(exception.getFullErrorMessage());
 
   os << "\"exception\": \"" << msg << "\"\r\n"
-  << "}\r\n";
+     << "}\r\n";
 
   return os.str();
 }
@@ -294,29 +332,29 @@ string Server::composeResponseJson(const string& query,
   _requestProcessingTimer.stop();
 
   os << "{\r\n"
-  << "\"query\": \""
-  << ad_utility::escapeForJson(query)
-  << "\",\r\n"
-  << "\"status\": \"ERROR\",\r\n"
-  << "\"resultsize\": \"0\",\r\n"
-  << "\"time\": {\r\n"
-  << "\"total\": \"" << _requestProcessingTimer.msecs()
-  << "ms\",\r\n"
-  << "\"computeResult\": \"" << _requestProcessingTimer.msecs()
-  << "ms\"\r\n"
-  << "},\r\n";
+     << "\"query\": \""
+     << ad_utility::escapeForJson(query)
+     << "\",\r\n"
+     << "\"status\": \"ERROR\",\r\n"
+     << "\"resultsize\": \"0\",\r\n"
+     << "\"time\": {\r\n"
+     << "\"total\": \"" << _requestProcessingTimer.msecs()
+     << "ms\",\r\n"
+     << "\"computeResult\": \"" << _requestProcessingTimer.msecs()
+     << "ms\"\r\n"
+     << "},\r\n";
 
 
   string msg = ad_utility::escapeForJson(exception.what());
 
   os << "\"Exception-Error-Message\": \"" << msg << "\"\r\n"
-  << "}\r\n";
+     << "}\r\n";
 
   return os.str();
 }
 
 // _____________________________________________________________________________
-void Server::serveFile(Socket *client, const string& requestedFile) const {
+void Server::serveFile(Socket* client, const string& requestedFile) const {
   string contentString;
   string contentType = "text/plain";
   string statusString = "HTTP/1.0 200 OK";
@@ -344,11 +382,11 @@ void Server::serveFile(Socket *client, const string& requestedFile) const {
   size_t contentLength = contentString.size();
   std::ostringstream headerStream;
   headerStream << statusString << "\r\n"
-  << "Content-Length: " << contentLength << "\r\n"
-  << "Content-Type: " << contentType << "\r\n"
-  << "Access-Control-Allow-Origin: *\r\n"
-  << "Connection: close\r\n"
-  << "\r\n";
+               << "Content-Length: " << contentLength << "\r\n"
+               << "Content-Type: " << contentType << "\r\n"
+               << "Access-Control-Allow-Origin: *\r\n"
+               << "Connection: close\r\n"
+               << "\r\n";
 
   string data = headerStream.str();
   data += contentString;

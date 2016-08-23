@@ -203,7 +203,8 @@ void QueryExecutionTree::setVariableColumns(
 void QueryExecutionTree::writeResultToStream(std::ostream& out,
                                              const vector<string>& selectVars,
                                              size_t limit,
-                                             size_t offset) const {
+                                             size_t offset,
+                                             char sep) const {
   // They may trigger computation (but does not have to).
   const ResultTable& res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
@@ -228,27 +229,27 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
   if (res._nofColumns == 1) {
     auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    writeTsvTable(*data, offset, upperBound, validIndices, out);
+    writeTable(*data, sep, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 2) {
     auto data = static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    writeTsvTable(*data, offset, upperBound, validIndices, out);
+    writeTable(*data, sep, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 3) {
     auto data = static_cast<vector<array<Id, 3>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    writeTsvTable(*data, offset, upperBound, validIndices, out);
+    writeTable(*data, sep, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 4) {
     auto data = static_cast<vector<array<Id, 4>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    writeTsvTable(*data, offset, upperBound, validIndices, out);
+    writeTable(*data, sep, offset, upperBound, validIndices, out);
   } else if (res._nofColumns == 5) {
     auto data = static_cast<vector<array<Id, 5>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    writeTsvTable(*data, offset, upperBound, validIndices, out);
+    writeTable(*data, sep, offset, upperBound, validIndices, out);
   } else {
     size_t upperBound = std::min<size_t>(offset + limit,
                                          res._varSizeData.size());
-    writeTsvTable(res._varSizeData, offset, upperBound, validIndices, out);
+    writeTable(res._varSizeData, sep, offset, upperBound, validIndices, out);
   }
   LOG(DEBUG) << "Done creating readable result.\n";
 }

@@ -8,7 +8,7 @@ static const int STXXL_DISK_SIZE_INDEX_BUILDER = 300000;
 static const int STXXL_DISK_SIZE_INDEX_TEST = 10;
 
 static const size_t NOF_SUBTREES_TO_CACHE = 50;
-static const size_t MAX_NOF_ROWS_IN_RESULT = 1000000;
+static const size_t MAX_NOF_ROWS_IN_RESULT = 100000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
 static const char PREFIX_CHAR = '*';
 

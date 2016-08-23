@@ -47,6 +47,7 @@ private:
   bool _initialized;
 
   void process(Socket* client, QueryExecutionContext* qec) const;
+
   void serveFile(Socket* client, const string& requestedFile) const;
 
   ParamValueMap parseHttpRequest(const string& request) const;
@@ -54,17 +55,20 @@ private:
   string createQueryFromHttpParams(const ParamValueMap& params) const;
 
   string createHttpResponse(const string& content,
-      const string& contentType) const;
+                            const string& contentType) const;
 
   string composeResponseJson(const ParsedQuery& query,
-      const QueryExecutionTree& qet) const;
+                             const QueryExecutionTree& qet) const;
+
+  string composeResponseSepValues(const ParsedQuery& query,
+                                  const QueryExecutionTree& qet,
+                                  char sep) const;
 
   string composeResponseJson(const string& query,
-      const ad_semsearch::Exception& e) const;
+                             const ad_semsearch::Exception& e) const;
 
   string composeResponseJson(const string& query,
-      const ParseException& e) const;
-
+                             const ParseException& e) const;
 
 
   mutable ad_utility::Timer _requestProcessingTimer;
