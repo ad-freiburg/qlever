@@ -113,25 +113,21 @@ Benefit: RHS can be read / decompressed directly in vector<array<Id, 1>>.
 -----
 
 --
-a) Relation Meta Data
+a) Full Index Relation Meta Data
 --
 * rel Id
 * offset: start of FullIndex
-* offset: end of BlockIndex RHS (needed for upper bound on last block)
-* # elements
+* # elements (this field also encodes two flags isFunctional and hasBlocks)
+
+
+b) Block Index Relation Meta Data
+* start of rhs lists
+* offset after (needed for upper bound operations on lhs')
 * # blocks
 * vector of BlockMetaData (pairs)
 
-
-
-+ isFunctional (# block == 0)
-+ getSizeOfFullIndex()
-+ pair<offset, size_t> getBlockStartAndNofBytesForLhs()
-		Get info from two BMS. Only available if not functional.
-+ offset getRhsForLhs
-
 --
-b) Block Meta Data
+c) Block Meta Data
 --
 - minLHS
 - offset: start of RHS Data
@@ -143,10 +139,18 @@ b) Block Meta Data
 
 REL1.REl2.REL3...RELn.META.startOfMetaOffset
 RELi := {
-	FullIndex.Block-Lhs.BLock-Rhs     if not functional
-	FullIndex 												if functional
+	FullIndex.Block-Lhs.BLock-Rhs     if not functional and larger than $const
+	FullIndex 												if functional or smaller than $const
 }
 
 META := RMD1.RMD2...RMDn
 RMDi := rId.startOfFI.lastByteOffset.#elem.#blocks.BMD1.BMD2...BMDn
 BMDi := minLHS.rhsDataOffset
+
+
+5. Problem with all Permutations and solution:
+---------------------------------
+Extremely high number of relations, but very small. No block index needed.
+Solution: Have different metadata for them, do a read-full + filter
+for the read-single use-case.
+
