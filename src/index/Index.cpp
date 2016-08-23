@@ -401,7 +401,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
     _sopFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
     _sopMeta.createFromByteBuffer(buf);
     delete[] buf;
-    LOG(INFO) << "Registered SOP permutation: " << _psoMeta.statistics()
+    LOG(INFO) << "Registered SOP permutation: " << _sopMeta.statistics()
               << std::endl;
     // OSP
     metaTo = _ospFile.getLastOffset(&metaFrom);
