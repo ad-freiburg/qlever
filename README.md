@@ -1,6 +1,12 @@
 SparqlEngineDraft
 =================
 
+This Readme sets you up to use the engine and to quickly build and query your own index.
+If you're interested in advanced topics, please check the following files (note that they aren't of perfect quality)
+
+* [List of Features](features.md)
+* [The Index (currently incomplete)](src/index/IndexLayout.txt)
+
 How to use
 ==========
 
@@ -51,13 +57,15 @@ d) Run ctest. All tests should pass:
 ---------------------
 
 IMPORTANT:
-THERE HAS TO BE SUFFICIENT DISK SPACE IN UNDER THE PATH USE CHOOSE FOR YOUR INDEX!
-FOR NOW - ALL FILES HAVE TO BE UTF8 ENCODED!
+THERE HAS TO BE SUFFICIENT DISK SPACE UNDER THE PATH YOU CHOOSE FOR YOUR INDEX!
+FOR NOW - ALL FILES HAVE TO BE UTF-8 ENCODED!
 
     You can use the files described and linked later in this document: 
     "How to obtain data to play around with"
 
 a) from an NTriples file (currently no blank nodes allowed):
+
+Note that the string passed to -i is the base name of various index files produced.
 
     ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt
 
@@ -66,13 +74,13 @@ b) from a TSV File (no spaces / tabs in spo):
     ./IndexBuilderMain -i /path/to/myindex -t /path/to/input.tsv 
 
 To include a text collection, the wordsfile (see below for the required format) has to be passed with -w.
-To support text snippest a docsfile (see below for the required format)has to be passed with -d
+To support text snippets, a docsfile (see below for the required format)has to be passed with -d
 
 The full call will look like this:
 
     ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -w /path/to/wordsfile -d /path/to/docsfile 
     
-If you want to use predicate variables (perfectly normal for SPARQL but rarely used in semantic text queries), use an optional argument -a to build all permutations:
+If you want support for SPARQL queries with predicate variables  (perfectly normal for SPARQL but rarely used in semantic text queries), use an optional argument -a to build all permutations:
 
     ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -a -w /path/to/wordsfile -d /path/to/docsfile
 
@@ -93,7 +101,7 @@ For some data this can be a significant difference in memory consumption.
 4. Running queries:
 -------------------
 
-    curl 'http://localhost:<PORT>/&query=SELECT ?x WHERE {?x <rel> ?y}'
+    curl 'http://localhost:<PORT>/?query=SELECT ?x WHERE {?x <rel> ?y}'
 
 or visit:
 
@@ -259,6 +267,12 @@ You can also display his awards or find `<Albert_Einstein>` and his awards with 
 
 have a look at the (really tiny) input files to get a feeling for how this works.
 
+Curl-versions (ready for copy&paste) of the queries:
+
+    SELECT ?x TEXT(?c) WHERE \{ ?x <is-a> <Scientist> . ?x <in-context> ?c . ?c <in-context> penicillin \} ORDER BY DESC(SCORE(?c))    
+
+    SELECT ?x ?award TEXT(?c) WHERE \{ ?x <is-a> <Scientist> . ?x <in-context> ?c . ?c <in-context> theory rela* . ?x <Award_Won> ?award \}  ORDER BY DESC(SCORE(?c))
+    
 Again, there's not much to be done with this data.
 For a meaningful index, use the example data below.
 
@@ -284,7 +298,9 @@ Here is a sample query to try and check if everything worked for you:
     }
     ORDER BY DESC(SCORE(?c))
 
+Curl-version (ready for copy&paste) of the query:
 
+    SELECT ?x SCORE(?c) TEXT(?c) WHERE \{ ?x <is-a> <Scientist> . ?x <in-context> ?c . ?c <in-context> relati* \} ORDER BY DESC(SCORE(?c))
 
 Download prepared input for English Wikipedia text and a KB derived from Freebase
 ---------------------------------------------------------------------------------
@@ -308,7 +324,9 @@ Here is a sample query to try and check if everything worked for you:
     }
     ORDER BY DESC(SCORE(?c))
 
+Curl-version (ready for copy&paste) of the query:
 
+    SELECT ?x SCORE(?c) TEXT(?c) WHERE \{ ?x <is-a> <Astronaut> . ?x <in-context> ?c . ?c <in-context> walk* moon \} ORDER BY DESC(SCORE(?c))
 
 Use any knowledge base and text collection of your choice
 ---------------------------------------------------------
