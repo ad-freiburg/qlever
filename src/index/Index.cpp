@@ -505,9 +505,8 @@ void Index::scanPSO(const string& predicate, const string& subject,
         }
       } else {
         // If we don't have blocks, scan the whole relation and filter / restrict.
-        result->reserve(rmd.getNofElements() + 2);
-        result->resize(rmd.getNofElements());
         WidthTwoList fullRelation;
+        fullRelation.resize(rmd.getNofElements());
         _psoFile.read(fullRelation.data(),
                       rmd.getNofElements() * 2 * sizeof(Id),
                       rmd._rmdPairs._startFullIndex);
@@ -565,9 +564,8 @@ void Index::scanPOS(const string& predicate, const string& object,
         }
       } else {
         // If we don't have blocks, scan the whole relation and filter / restrict.
-        result->reserve(rmd.getNofElements() + 2);
-        result->resize(rmd.getNofElements());
         WidthTwoList fullRelation;
+        fullRelation.resize(rmd.getNofElements());
         _posFile.read(fullRelation.data(),
                       rmd.getNofElements() * 2 * sizeof(Id),
                       rmd._rmdPairs._startFullIndex);
@@ -613,9 +611,8 @@ result) const {
         }
       } else {
         // If we don't have blocks, scan the whole relation and filter / restrict.
-        result->reserve(rmd.getNofElements() + 2);
-        result->resize(rmd.getNofElements());
         WidthTwoList fullRelation;
+        fullRelation.resize(rmd.getNofElements());
         _sopFile.read(fullRelation.data(),
                       rmd.getNofElements() * 2 * sizeof(Id),
                       rmd._rmdPairs._startFullIndex);
