@@ -24,7 +24,7 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
   ad_utility::File stxxlConfig(".stxxl", "w");
   std::ostringstream config;
   config << "disk=" << getStxxlDiskFileName(location, tail) << ","
-  << STXXL_DISK_SIZE_INDEX_TEST << ",syscall";
+         << STXXL_DISK_SIZE_INDEX_TEST << ",syscall";
   stxxlConfig.writeLine(config.str());
 }
 
@@ -59,8 +59,7 @@ TEST(IndexTest, createFromTsvTest) {
     ASSERT_FALSE(index._psoMeta.relationExists(4));
     ASSERT_FALSE(index._psoMeta.getRmd(2).isFunctional());
     ASSERT_TRUE(index._psoMeta.getRmd(3).isFunctional());
-    ASSERT_EQ(1u, index._psoMeta.getRmd(2)._nofBlocks);
-    ASSERT_EQ(1u, index._psoMeta.getRmd(3)._nofBlocks);
+    ASSERT_FALSE(index._psoMeta.getRmd(2).hasBlocks());
 
     ASSERT_TRUE(index._posMeta.relationExists(2));
     ASSERT_TRUE(index._posMeta.relationExists(3));
@@ -86,17 +85,19 @@ TEST(IndexTest, createFromTsvTest) {
     bytesDone += sizeof(Id);
     ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    // Lhs info
-    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(static_cast<off_t>(bytesDone + sizeof(off_t)),
-              *reinterpret_cast<off_t*>(buf + bytesDone));
-    bytesDone += sizeof(off_t);
-    // Rhs list
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
+    // No (more) block info because of the change from Aug2016 and
+    // due to the reasons that the test relation is very small.
+//    // Lhs info
+//    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(static_cast<off_t>(bytesDone + sizeof(off_t)),
+//              *reinterpret_cast<off_t*>(buf + bytesDone));
+//    bytesDone += sizeof(off_t);
+//    // Rhs list
+//    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
     // Relation b2
     ASSERT_EQ(Id(0), *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
@@ -153,7 +154,7 @@ TEST(IndexTest, createFromTsvTest) {
     ASSERT_FALSE(index._psoMeta.relationExists(1));
 
     ASSERT_FALSE(index._psoMeta.getRmd(7).isFunctional());
-    ASSERT_EQ(1u, index._psoMeta.getRmd(7)._nofBlocks);
+    ASSERT_FALSE(index._psoMeta.getRmd(7).hasBlocks());
 
     ASSERT_TRUE(index._posMeta.relationExists(7));
     ASSERT_FALSE(index._posMeta.getRmd(7).isFunctional());
@@ -197,39 +198,41 @@ TEST(IndexTest, createFromTsvTest) {
     bytesDone += sizeof(Id);
     // Lhs info
 
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(index._psoMeta.getRmd(7)._startRhs,
-              *reinterpret_cast<off_t*>(buf + bytesDone));
-    bytesDone += sizeof(off_t);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(
-        static_cast<off_t>(index._psoMeta.getRmd(7)._startRhs + 3 * sizeof(Id)),
-        *reinterpret_cast<off_t*>(buf + bytesDone));
-    bytesDone += sizeof(off_t);
-    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(
-        static_cast<off_t>(index._psoMeta.getRmd(7)._startRhs + 5 * sizeof(Id)),
-        *reinterpret_cast<off_t*>(buf + bytesDone));
-    bytesDone += sizeof(off_t);
-
-    // Rhs list
-    ASSERT_EQ(bytesDone, index._psoMeta.getRmd(7)._startRhs);
-    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(index._psoMeta.getRmd(7)._rmdBlocks->_startRhs,
+//              *reinterpret_cast<off_t*>(buf + bytesDone));
+//    bytesDone += sizeof(off_t);
+//    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(
+//        static_cast<off_t>(index._psoMeta.getRmd(7)._rmdBlocks->_startRhs +
+//                           3 * sizeof(Id)),
+//        *reinterpret_cast<off_t*>(buf + bytesDone));
+//    bytesDone += sizeof(off_t);
+//    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(
+//        static_cast<off_t>(index._psoMeta.getRmd(7)._rmdBlocks->_startRhs +
+//                           5 * sizeof(Id)),
+//        *reinterpret_cast<off_t*>(buf + bytesDone));
+//    bytesDone += sizeof(off_t);
+//
+//    // Rhs list
+//    ASSERT_EQ(bytesDone, index._psoMeta.getRmd(7)._rmdBlocks->_startRhs);
+//    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
 
     delete[] buf;
     psoFile.close();
@@ -274,45 +277,48 @@ TEST(IndexTest, createFromTsvTest) {
     bytesDone += sizeof(Id);
 
     // Lhs info
-    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(index._posMeta.getRmd(7)._startRhs,
-              *reinterpret_cast<off_t*>(buf + bytesDone));
-    bytesDone += sizeof(off_t);
-    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(
-        static_cast<off_t>(index._posMeta.getRmd(7)._startRhs + 2 * sizeof(Id)),
-        *reinterpret_cast<off_t*>(buf + bytesDone));
-    bytesDone += sizeof(off_t);
-    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(
-        static_cast<off_t>(index._posMeta.getRmd(7)._startRhs + 4 * sizeof(Id)),
-        *reinterpret_cast<off_t*>(buf + bytesDone));
-    bytesDone += sizeof(off_t);
-    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(
-        static_cast<off_t>(index._posMeta.getRmd(7)._startRhs + 6 * sizeof(Id)),
-        *reinterpret_cast<off_t*>(buf + bytesDone));
-    bytesDone += sizeof(off_t);
-
-    // Rhs list
-    ASSERT_EQ(bytesDone, index._posMeta.getRmd(7)._startRhs);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(index._posMeta.getRmd(7)._rmdBlocks->_startRhs,
+//              *reinterpret_cast<off_t*>(buf + bytesDone));
+//    bytesDone += sizeof(off_t);
+//    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(
+//        static_cast<off_t>(index._posMeta.getRmd(7)._rmdBlocks->_startRhs +
+//                           2 * sizeof(Id)),
+//        *reinterpret_cast<off_t*>(buf + bytesDone));
+//    bytesDone += sizeof(off_t);
+//    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(
+//        static_cast<off_t>(index._posMeta.getRmd(7)._rmdBlocks->_startRhs +
+//                           4 * sizeof(Id)),
+//        *reinterpret_cast<off_t*>(buf + bytesDone));
+//    bytesDone += sizeof(off_t);
+//    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(
+//        static_cast<off_t>(index._posMeta.getRmd(7)._rmdBlocks->_startRhs +
+//                           6 * sizeof(Id)),
+//        *reinterpret_cast<off_t*>(buf + bytesDone));
+//    bytesDone += sizeof(off_t);
+//
+//    // Rhs list
+//    ASSERT_EQ(bytesDone, index._posMeta.getRmd(7)._rmdBlocks->_startRhs);
+//    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
+//    bytesDone += sizeof(Id);
+//    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
 
     delete[] buf;
     psoFile.close();
@@ -361,8 +367,8 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   ASSERT_FALSE(index._psoMeta.relationExists(4));
   ASSERT_FALSE(index._psoMeta.getRmd(2).isFunctional());
   ASSERT_TRUE(index._psoMeta.getRmd(3).isFunctional());
-  ASSERT_EQ(1u, index._psoMeta.getRmd(2)._nofBlocks);
-  ASSERT_EQ(1u, index._psoMeta.getRmd(3)._nofBlocks);
+  ASSERT_FALSE(index._psoMeta.getRmd(2).hasBlocks());
+  ASSERT_FALSE(index._psoMeta.getRmd(3).hasBlocks());
 
   ASSERT_TRUE(index._posMeta.relationExists(2));
   ASSERT_TRUE(index._posMeta.relationExists(3));
