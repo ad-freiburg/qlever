@@ -4,7 +4,7 @@
 #pragma once
 
 static const int STXXL_MEMORY_TO_USE = 1024 * 1024 * 1024;
-static const int STXXL_DISK_SIZE_INDEX_BUILDER = 300000;
+static const int STXXL_DISK_SIZE_INDEX_BUILDER = 500 * 1000;
 static const int STXXL_DISK_SIZE_INDEX_TEST = 10;
 
 static const size_t NOF_SUBTREES_TO_CACHE = 50;
