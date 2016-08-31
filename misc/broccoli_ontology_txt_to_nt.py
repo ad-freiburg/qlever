@@ -50,10 +50,10 @@ def writeNtFileToStdout(ontologytxt):
     for line in open(ontologytxt):
         cols = line.strip('\n').split('\t')
         if len(cols) != 4 or cols[3] != '.':
-            sys.err.write('Ignoring malformed line: ' + line)
+            print('Ignoring malformed line: ' + line, file=sys.stderr)
         else:
-            print '\t'.join([handleSubject(cols[0]), handleSubject(cols[1]),
-                             handleObject(cols[2]), '.'])
+            print('\t'.join([handleSubject(cols[0]), handleSubject(cols[1]),
+                             handleObject(cols[2]), '.']))
 
 
 def main():
