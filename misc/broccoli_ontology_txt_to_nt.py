@@ -22,6 +22,8 @@ def handleSubject(element):
             new += '&gt'
         elif c == ' ':
             new += '_'
+        elif c == '"':
+            new += '%22'
         else:
             new += c
     new += '>'
@@ -29,7 +31,7 @@ def handleSubject(element):
 
 
 def handleObject(element):
-    if element and element[0] != '"':
+    if element and (element[0] != '"' or element[-1] != '>'):
         new = '<'
         for c in element:
             if c == '<':
@@ -38,6 +40,8 @@ def handleObject(element):
                 new += '&gt'
             elif c == ' ':
                 new += '_'
+            elif c == '"':
+                new += '%22'
             else:
                 new += c
         new += '>'

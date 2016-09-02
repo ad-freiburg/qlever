@@ -24,9 +24,10 @@ def writeNtToStdout(wordsfile):
     for line in open(wordsfile):
         (word, entityFlag, cid, score) = line.strip('\n').split('\t')
         if entityFlag == "1":
-            print('\t'.join([word, "<in-context>", "<context:" + cid + ">"]))
+            print('\t'.join([word, "<in-context>", "<context:" + cid + ">", '.']))
         else:
-            print('\t'.join(["<word:" + escapeUriStuff(word) + ">", "<in-context>", "<context:" + cid + ">"]))
+            print('\t'.join(["<word:" + escapeUriStuff(word) + ">",
+                "<in-context>", "<context:" + cid + ">", '.']))
 
 
 def main():

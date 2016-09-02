@@ -18,7 +18,7 @@ def writeOrigTextFileToStdout(wordsfile):
     cid = cols[0]
     text = cols[3].replace('@@', '')
     if currentText and currentText != text:
-      print "\t".join([lastCid, currentText])
+      print ("\t".join([lastCid, currentText]))
     currentText = text
     lastCid = cid
 

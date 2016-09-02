@@ -1,5 +1,6 @@
 import argparse
 import sys
+from broccoli_ontology_txt_to_nt import handleSubject
 
 __author__ = 'buchholb'
 
@@ -14,11 +15,11 @@ def writeContextFileToStdout(wordsfile):
 		for line in open(wordsfile):
 			cols = line.strip('\n').split('\t')
 			if cols[0].startswith(':e:'):
-				cols[0] = '<' + cols[0][3:] + '>'
+				cols[0] = handleSubject(cols[0])
 				entityFlag = '1'
 			else:
 				entityFlag = '0'
-			print '\t'.join([cols[0], entityFlag, cols[1], cols[2]])
+			print('\t'.join([cols[0], entityFlag, cols[1], cols[2]]))
 
 
 def main():
