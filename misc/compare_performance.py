@@ -82,7 +82,7 @@ def get_virtuoso_query_times(query_file, pwd):
             tmpfile.write('SPARQL ' + line.strip().split('\t')[1] + ';\n')
     virtout = subprocess.check_output(
         [virtuoso_run_binary, virtuoso_isql_port, virtuso_isql_user, pwd,
-         '__tmp.virtqueries'])
+         '__tmp.virtqueries']).decode('utf-8')
     coutfile = open('__tmp.cout.virtuoso', 'w')
     coutfile.write(virtout)
     coutfile.write('\n\n\n\n')
@@ -90,19 +90,20 @@ def get_virtuoso_query_times(query_file, pwd):
     nof_matches = []
     last_i = 0
     for line in virtout.split('\n'):
-        i = line.find('Done. Time: ')
+        i = line.find('Rows. --')
         if i >= 0:
             j = line.find('msec')
             times.append(line[i + 9: j + 2])
-            nof_matches.append(i - 1 - last_i)
+            nof_matches.append(line[:i])
             last_i = i
             # os.remove('__tmp.rdf3xqueries')
         queries = []
     for line in open(query_file):
         queries.append(line.strip())
     if len(times) != len(queries) or len(times) != len(nof_matches):
-        print('PROBLEM PROCESSING VIRTUOSO!', file=sys.stderr)
-        return times, nof_matches
+        print('PROBLEM PROCESSING VIRTUOSO: q:' + str(len(queries)) + ' t:' +
+                str(len(times)) + ' #:' + str(len(nof_matches)), file=sys.stderr)
+    return times, nof_matches
 
 
 def get_rdf3X_query_times(query_file):
@@ -111,12 +112,13 @@ def get_rdf3X_query_times(query_file):
             tmpfile.write(
                 rewrite_filter_for_rdf3x(line.strip().split('\t')[1]) + '\n')
     rdf3xout = subprocess.check_output(
-        [rdf3x_run_binary, rdf3x_db, '__tmp.rdf3xqueries'])
+        [rdf3x_run_binary, rdf3x_db, '__tmp.rdf3xqueries']).decode('utf-8')
     coutfile = open('__tmp.cout.rdf3x', 'w')
     coutfile.write(rdf3xout)
     coutfile.write('\n\n\n\n')
     times = []
     nof_matches = []
+    last_i = 0
     for line in rdf3xout.split('\n'):
         i = line.find('Done. Time: ')
         if i >= 0:
@@ -129,7 +131,8 @@ def get_rdf3X_query_times(query_file):
     for line in open(query_file):
         queries.append(line.strip())
     if len(times) != len(queries) or len(times) != len(nof_matches):
-        print('PROBLEM PROCESSING RDF3X!', file=sys.stderr)
+        print('PROBLEM PROCESSING RDF3X: q:' + str(len(queries)) + ' t:' +
+                str(len(times)) + ' #:' + str(len(nof_matches)), file=sys.stderr)
     return times, nof_matches
 
 
@@ -165,9 +168,9 @@ def get_my_query_times(query_file):
     queries = []
     for line in open(query_file):
         queries.append(line.strip())
-    if len(times) != len(queries) or len(times) != len(
-            nof_matches_no_limit) or len(times) != len(nof_matches_limit):
-        print('PROBLEM PROCESSING MINE!', file=sys.stderr)
+    if len(times) != len(queries) or len(times) != len(nof_matches_limit):
+        print('PROBLEM PROCESSING MINE: q:' + str(len(queries)) + ' t:' +
+                str(len(times)) + ' #:' + str(len(nof_matches_limit)), file=sys.stderr)
     return times, nof_matches_limit
 
 
@@ -183,9 +186,9 @@ def processQueries(query_file, pwd):
 
 def print_result_table(queries, virtuoso_times, virtuoso_counts, rdf3x_times,
                        rdf3x_counts, my_times, my_counts):
-    assert len(queries) == len(virtuoso_times)
-    assert len(queries) == len(rdf3x_times)
-    assert len(queries) == len(my_times)
+    #assert len(queries) == len(virtuoso_times)
+    #assert len(queries) == len(rdf3x_times)
+    #assert len(queries) == len(my_times)
     print("\t".join(['id', 'query', 'virtuoso', 'rdf3x', 'mine']))
     print("\t".join(['----', '-----', '-----', '-----', '-----']))
     for i in range(0, len(queries)):
@@ -196,8 +199,8 @@ def print_result_table(queries, virtuoso_times, virtuoso_counts, rdf3x_times,
                 my_counts[
                     i]:
             print('DIFFERENT COUTNS FOR QUERY: ' + queries[i] + ': ' +
-                  virtuoso_counts[i] + ' vs ' + rdf3x_counts[i] + ' vs '
-                  + my_counts[i],
+                  str(virtuoso_counts[i]) + ' vs ' + str(rdf3x_counts[i]) + ' vs '
+                  + str(my_counts[i]),
                   file=sys.stderr)
 
 

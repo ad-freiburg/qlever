@@ -12,14 +12,14 @@ parser.add_argument('--wordsfile',
                     required=True)
 
 def writeContextFileToStdout(wordsfile):
-		for line in open(wordsfile):
-			cols = line.strip('\n').split('\t')
-			if cols[0].startswith(':e:'):
-				cols[0] = handleSubject(cols[0])
-				entityFlag = '1'
-			else:
-				entityFlag = '0'
-			print('\t'.join([cols[0], entityFlag, cols[1], cols[2]]))
+    for line in open(wordsfile):
+        cols = line.strip('\n').split('\t')
+        if cols[0].startswith(':e:'):
+            cols[0] = handleSubject(cols[0][3:])
+            entityFlag = '1'
+        else:
+            entityFlag = '0'
+        print('\t'.join([cols[0], entityFlag, cols[1], cols[2]]))
 
 
 def main():

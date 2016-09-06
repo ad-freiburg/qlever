@@ -43,7 +43,7 @@ semsearch_continents-in-the-world	SELECT ?x WHERE { ?x <is-a> <Continent> }
 semsearch_nicole-kidman-siblings.rel	SELECT ?x WHERE { ?x <Sibling> <Nicole_Kidman> }
 semsearch_nicole-kidman-siblings.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:sibling> <in-context> ?c . <Nicole_Kidman> <in-context> ?c }
 semsearch_dioceses-church-of-ireland.rel	SELECT ?x WHERE { ?x <Organisation> <Church_of_Ireland> }
-semsearch_dioceses-church-of-ireland.text	SELECT ?x WHERE { ?x <is-a> <Religious Jurisdiction> . ?x <in-context> ?c . <word:diocese> <in-context> ?c . <Church_of_Ireland> <in-context> ?c }
+semsearch_dioceses-church-of-ireland.text	SELECT ?x WHERE { ?x <is-a> <Religious_Jurisdiction> . ?x <in-context> ?c . <word:diocese> <in-context> ?c . <Church_of_Ireland> <in-context> ?c }
 semsearch_first-targets-of-the-atomic-bomb	SELECT ?x WHERE { ?x <is-a> <Location> . ?x <in-context> ?c . <word:target> <in-context> ?c . <word:atomic> <in-context> ?c . <word:bomb> <in-context> ?c }
 semsearch_five-great-epics-tamil-literature	SELECT ?x WHERE { ?x <is-a> <Written_Work> . ?x <in-context> ?c . <word:tamil> <in-context> ?c . <word:epic> <in-context> ?c }
 semsearch_gods-dwelt-mount-olympus	SELECT ?x WHERE { ?x <is-a> <Deity> . ?x <in-context> ?c . <word:mount> <in-context> ?c . <word:olympus> <in-context> ?c }
@@ -81,7 +81,7 @@ semsearch_republics-former-yugoslavia	SELECT ?x WHERE { ?x <is-a> <Country> . ?x
 semsearch_revolutionaries-1959-cuba	SELECT ?x WHERE { ?x <is-a> <Revolutionary> . ?x <in-context> ?c . <word:cuba> <in-context> ?c . <word:1959> <in-context> ?c2 . ?x <in-context> ?c2 }
 semsearch_states-border-oklahoma	SELECT ?x WHERE { ?x <is-a> <US_State> . ?x <in-context> ?c . <word:border> <in-context> ?c . <Oklahoma> <in-context> ?c }
 semsearch_ten-ancient-greek-city-kingdoms-cyprus	SELECT ?x WHERE { ?x <is-a> <City/Town/Village> . ?x <in-context> ?c . <word:greek> <in-context> ?c . <word:ancient> <in-context> ?c . <word:cyprus> <in-context> ?c }
-semsearch_first-13-american-states	SELECT ?x WHERE { ?x <is-a> <US_State> . ?x <Date_founded> ?d } ORDER_BY(?d) LIMIT 13
+semsearch_first-13-american-states	SELECT ?x WHERE { ?x <is-a> <US_State> . ?x <Date_founded> ?d } ORDER BY(?d) LIMIT 13
 semsearch_four-companions-prophet	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:companions> <in-context> ?c . <word:prophet> <in-context> ?c }
 semsearch_twelves-tribes-israel	SELECT ?x WHERE { ?x <is-a> <Location> . ?x <in-context> ?c . <word:twelve> <in-context> ?c . <word:tribes> <in-context> ?c . <word:israel> <in-context> ?c }
 semsearch_books-paul-of-tarsus	SELECT ?x WHERE { ?x <is-a> <Book> . ?x <in-context> ?c . <word:paul> <in-context> ?c . <word:tarsus> <in-context> ?c }
