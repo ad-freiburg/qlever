@@ -1398,7 +1398,9 @@ size_t Index::getSizeEstimate(const string& words) const {
     IdRange range;
     bool entityTerm = (terms[i][0] == '<' && terms[i].back() == '>');
     if (terms[i].back() == PREFIX_CHAR) {
-      _textVocab.getIdRangeForFullTextPrefix(terms[i], &range);
+      if (!_textVocab.getIdRangeForFullTextPrefix(terms[i], &range)) {
+        return 0;
+      }
     } else {
       if (entityTerm) {
         if (!_vocab.getId(terms[i], &range._first)) {
