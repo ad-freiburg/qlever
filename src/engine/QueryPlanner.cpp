@@ -604,11 +604,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
         tree.setOperation(QueryExecutionTree::JOIN, &join);
         SubtreePlan plan(_qec);
         plan._qet = tree;
-        plan._idsOfIncludedFilters = a[i]._idsOfIncludedFilters;
         plan._idsOfIncludedNodes = a[i]._idsOfIncludedNodes;
-        plan._idsOfIncludedNodes.insert(
-            b[j]._idsOfIncludedNodes.begin(),
-            b[j]._idsOfIncludedNodes.end());
+        plan._idsOfIncludedNodes.insert(b[j]._idsOfIncludedNodes.begin(),
+                                        b[j]._idsOfIncludedNodes.end());
+        plan._idsOfIncludedFilters = a[i]._idsOfIncludedFilters;
+        plan._idsOfIncludedFilters.insert(b[j]._idsOfIncludedFilters.begin(),
+                                          b[j]._idsOfIncludedFilters.end());
         candidates[getPruningKey(plan, jcs[0][0])].emplace_back(plan);
       }
     }
@@ -754,7 +755,7 @@ void QueryPlanner::applyFiltersIfPossible(
   // TextOperationWithFilter ops: This method applies SPARQL filters
   // to all the leaf TextOperations (when feasible) and thus
   // prevents the special case from being applied when subtrees are merged.
-  // Fix: Also copy plans without applying the filter.
+  // Fix: Also copy (CHANGE not all plans but TextOperation) without applying the filter.
   // Problem: If the method gets called multiple times, plans with filters
   // May be duplicated. To prevent this, calling code has to ensure
   // That the method is only called once on each row.
@@ -830,7 +831,7 @@ void QueryPlanner::applyFiltersIfPossible(
         tree.setVariableColumns(plan._qet.getVariableColumnMap());
         tree.setContextVars(plan._qet.getContextVars());
         newPlan._qet = tree;
-        if (replace) {
+        if (replace || row[n]._qet.getType() != QueryExecutionTree::TEXT_WITHOUT_FILTER) {
           row[n] = newPlan;
         } else {
           row.push_back(newPlan);

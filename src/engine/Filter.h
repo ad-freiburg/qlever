@@ -57,13 +57,24 @@ class Filter : public Operation {
 
     virtual size_t getSizeEstimate() const {
       // TODO: return a better estimate
-      if (_type == SparqlFilter::FilterType::EQ) {
-        return _subtree->getSizeEstimate() / 100;
-      }
-      if (_type == SparqlFilter::FilterType::NE) {
-        return _subtree->getSizeEstimate() / 4;
+      if (_rhsId == std::numeric_limits<Id>::max()) {
+        if (_type == SparqlFilter::FilterType::EQ) {
+          return _subtree->getSizeEstimate() / 1000;
+        }
+        if (_type == SparqlFilter::FilterType::NE) {
+          return _subtree->getSizeEstimate() / 4;
+        } else {
+          return _subtree->getSizeEstimate() / 2;
+        }
       } else {
-        return _subtree->getSizeEstimate() / 2;
+        if (_type == SparqlFilter::FilterType::EQ) {
+          return _subtree->getSizeEstimate() / 1000;
+        }
+        if (_type == SparqlFilter::FilterType::NE) {
+          return _subtree->getSizeEstimate() / 4;
+        } else {
+          return _subtree->getSizeEstimate() / 50;
+        }
       }
     }
 
@@ -72,8 +83,12 @@ class Filter : public Operation {
              _subtree->getCostEstimate();
     }
 
+    const QueryExecutionTree* getSubtree() const {
+        return _subtree;
+    };
+
   private:
-    QueryExecutionTree *_subtree;
+    QueryExecutionTree* _subtree;
     SparqlFilter::FilterType _type;
     size_t _lhsInd;
     size_t _rhsInd;
