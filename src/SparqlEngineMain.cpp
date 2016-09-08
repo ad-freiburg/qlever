@@ -47,10 +47,10 @@ int main(int argc, char** argv) {
   cout << "Set locale LC_CTYPE to: " << locale << endl;
 
 
-  std::locale loc;
-  ad_utility::ReadableNumberFacet facet(1);
-  std::locale locWithNumberGrouping(loc, &facet);
-  ad_utility::Log::imbue(locWithNumberGrouping);
+  //std::locale loc;
+  //ad_utility::ReadableNumberFacet facet(1);
+  //std::locale locWithNumberGrouping(loc, &facet);
+  //ad_utility::Log::imbue(locWithNumberGrouping);
 
   string queryfile;
   string indexName = "";
@@ -170,6 +170,8 @@ void processQuery(QueryExecutionContext& qec, const string& query) {
   std::cout << "\nDone. Time: " << t.usecs() / 1000.0 << " ms\n";
   std::cout << "\nNumber of matches (no limit): " << qet.getResult().size() <<
   "\n";
+  size_t effectiveLimit = atoi(pq._limit.c_str()) > 0 ? 
+    atoi(pq._limit.c_str()) : qet.getResult().size();
   std::cout << "\nNumber of matches (limit): " <<
-  std::min(qet.getResult().size(), size_t(atoi(pq._limit.c_str()))) << "\n";
+  std::min(qet.getResult().size(), effectiveLimit) << "\n";
 }

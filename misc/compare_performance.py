@@ -8,8 +8,8 @@ virtuoso_run_binary = "/home/buchholb/virtuoso/bin/isql"
 virtuoso_isql_port = "1111"
 virtuso_isql_user = "dba"
 rdf3x_run_binary = "/home/buchholb/rdf3x-0.3.8/bin/rdf3xquery"
-rdf3x_db = "/local/scratch/bjoern/data/rdf3x//wikipedia-freebase.combined.db.2"
-my_index = "/local/scratch/bjoern/data/wikipedia-freebase.2016-09-02"
+rdf3x_db = "/local/scratch/bjoern/data/rdf3x//wikipedia-freebase.combined.db"
+my_index = "/local/scratch/bjoern/data/wikipedia-freebase"
 my_binary = "/local/scratch/bjoern/work/tmp/SparqlEngineMain"
 
 parser = argparse.ArgumentParser()
@@ -94,7 +94,7 @@ def get_virtuoso_query_times(query_file, pwd):
         if i >= 0:
             j = line.find('msec')
             times.append(line[i + 9: j + 2])
-            nof_matches.append(line[:i])
+            nof_matches.append(int(line[:i]))
             last_i = i
             # os.remove('__tmp.rdf3xqueries')
         queries = []
@@ -118,14 +118,14 @@ def get_rdf3X_query_times(query_file):
     coutfile.write('\n\n\n\n')
     times = []
     nof_matches = []
-    last_i = 0
-    for line in rdf3xout.split('\n'):
+    last_ln = 0
+    for ln, line in enumerate(rdf3xout.split('\n')):
         i = line.find('Done. Time: ')
         if i >= 0:
             j = line.find('ms')
-            times.append(line[i + 9: j + 2])
-            nof_matches.append(i - 1 - last_i)
-            last_i = i
+            times.append(line[i + 12: j + 2])
+            nof_matches.append(ln - last_ln - 1)
+            last_ln = ln + 1
     # os.remove('__tmp.rdf3xqueries')
     queries = []
     for line in open(query_file):
@@ -160,10 +160,10 @@ def get_my_query_times(query_file):
             times.append(line[i + 12: j + 2])
         i = line.find('Number of matches (no limit): ')
         if i >= 0:
-            nof_matches_no_limit.append(line[i + 30:])
+            nof_matches_no_limit.append(int(line[i + 30:]))
         i = line.find('Number of matches (limit): ')
         if i >= 0:
-            nof_matches_limit.append(line[i + 27:])
+            nof_matches_limit.append(int(line[i + 27:]))
     # os.remove('__tmp.myqueries')
     queries = []
     for line in open(query_file):
@@ -196,9 +196,8 @@ def print_result_table(queries, virtuoso_times, virtuoso_counts, rdf3x_times,
             "\t".join(
                 [queries[i], virtuoso_times[i], rdf3x_times[i], my_times[i]]))
         if virtuoso_counts[i] != rdf3x_counts[i] or virtuoso_counts[i] != \
-                my_counts[
-                    i]:
-            print('DIFFERENT COUTNS FOR QUERY: ' + queries[i] + ': ' +
+                my_counts[i]:
+            print('DIFFERENT COUNTS FOR QUERY: ' + queries[i] + ': ' +
                   str(virtuoso_counts[i]) + ' vs ' + str(rdf3x_counts[i]) + ' vs '
                   + str(my_counts[i]),
                   file=sys.stderr)
