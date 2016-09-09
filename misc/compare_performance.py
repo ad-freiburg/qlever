@@ -103,8 +103,9 @@ def rewrite_to_bif_contains_inc(q):
         else:
             new_clauses.append(c)
     for c, ws in context_to_words.items():
-        new_clauses.append(' ' + c + ' <text> ?text ')
-        new_clauses.append(' ?text bif:contains "' + ' and '.join(ws) + '" ')
+        new_clauses.append(' ' + c + ' <text> ?text' + c + ' ')
+        new_clauses.append(' ?text' + c + ' bif:contains "'
+                           + ' and '.join(ws) + '" ')
     new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
     return 'WHERE'.join([before_where, new_after_where])
 
