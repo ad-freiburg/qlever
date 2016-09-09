@@ -156,9 +156,9 @@ def rewrite_to_bif_contains(q):
                     print("Problem in : " + c, file=sys.stderr)
                     exit(1)
     for e, cs in entities_to_contexts.items():
-        for c in cs:
-            new_clauses.append(' ' + e + ' <text> ?text ')
-            new_clauses.append(' ?text bif:contains "' + ' and '.join(context_to_words[c]) + '" ')
+        for i, c in enumerate(cs):
+            new_clauses.append(' ' + e + ' <text> ?text' + str(i) + ' ')
+            new_clauses.append(' ?text' + str(i) + ' bif:contains "' + ' and '.join(context_to_words[c]) + '" ')
     new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
     return 'WHERE'.join([before_where, new_after_where])
 
@@ -357,7 +357,7 @@ def processQueries(query_file, pwd):
 def print_result_table(queries, bifc_times, bifc_counts,
                        bifc_inc_times, bifc_inc_counts,
                        rdf3x_times, rdf3x_counts, my_times, my_counts):
-    print("\t".join(['id', 'query', 'bifc', 'bifc_inc' 'rdf3x', 'mine']))
+    print("\t".join(['id', 'query', 'bifc', 'bifc_inc', 'rdf3x', 'mine']))
     print("\t".join(['----', '-----', '-----', '-----', '-----', '-----']))
     for i in range(0, len(queries)):
         print(
