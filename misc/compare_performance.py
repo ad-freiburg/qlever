@@ -145,6 +145,13 @@ def rewrite_to_bif_contains(q):
                     if s not in entities_to_contexts:
                         entities_to_contexts[s] = []
                     entities_to_contexts[s].append(o)
+                    times_on_rhs = 0
+                    for e, cs in entities_to_contexts.items():
+                        if o in cs:
+                            times_on_rhs += 1
+                    if times_on_rhs > 1:
+                        print('Inexpressible in bif:c without in-c: ' + q.strip(), file=sys.stderr)
+                        return 'NOT POSSIBLE: ' + q.strip()
                 except ValueError:
                     print("Problem in : " + c, file=sys.stderr)
                     exit(1)
@@ -259,7 +266,7 @@ def get_rdf3X_query_times(query_file):
     with open('__tmp.rdf3x_queries', 'w') as tmpfile:
         i = 0
         for line in open(query_file):
-            rdf3x_query = rewrite_to_bif_contains(line.strip().split('\t')[1])
+            rdf3x_query = rewrite_for_rdf3x(line.strip().split('\t')[1])
             if 'NOT POSSIBLE:' in rdf3x_query:
                 impossibles[i] = True
             else:
