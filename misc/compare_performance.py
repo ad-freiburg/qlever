@@ -263,7 +263,7 @@ def get_rdf3X_query_times(query_file):
             if 'NOT POSSIBLE:' in rdf3x_query:
                 impossibles[i] = True
             else:
-                tmpfile.write(rdf3x_query)
+                tmpfile.write(rdf3x_query + '\n')
             i += 1
     rdf3xout = subprocess.check_output(
         [rdf3x_run_binary, rdf3x_db, '__tmp.rdf3x_queries']).decode('utf-8')
@@ -368,8 +368,8 @@ def main():
     args = vars(parser.parse_args())
     queries = args['queryfile']
     queries, bifc_times, bifc_counts, bifc_inc_times, bifc_inc_counts, \
-    rdf3x_times, rdf3x_counts, my_times, my_counts = processQueries(
-        queries, args['virtuoso_pwd'])
+        rdf3x_times, rdf3x_counts, my_times, my_counts = processQueries(
+            queries, args['virtuoso_pwd'])
     print_result_table(queries,
                        bifc_times, bifc_counts,
                        bifc_inc_times, bifc_inc_counts,
