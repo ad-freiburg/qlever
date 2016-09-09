@@ -94,7 +94,7 @@ def rewrite_to_bif_contains_inc(q):
                 if o not in context_to_words:
                     context_to_words[o] = []
                 word = s[6: -1]
-                if word[-1] == '*':
+                if word[-1] == '*' or word.isdigit():
                     word = "'" + word + "'"
                 context_to_words[o].append(word)
             except ValueError:
@@ -127,7 +127,7 @@ def rewrite_to_bif_contains(q):
                 if o not in context_to_words:
                     context_to_words[o] = []
                 word = s[6: -1]
-                if word[-1] == '*':
+                if word[-1] == '*' or word.isdigit():
                     word = "'" + word + "'"
                 context_to_words[o].append(word)
             except ValueError:
@@ -237,6 +237,7 @@ def get_virtuoso_bifc_inc_query_times(query_file, pwd):
     with open('__tmp.bifc_inc_queries', 'w') as tmpfile:
         for line in open(query_file):
             bifc_query = rewrite_to_bif_contains_inc(line.strip().split('\t')[1])
+            tmpfile.write('SPARQL ' + bifc_query + ';\n')
     virtout = subprocess.check_output(
         [virtuoso_run_binary, bifc_inc_isql_port, virtuso_isql_user, pwd,
          '__tmp.bifc_inc_queries']).decode('utf-8')
