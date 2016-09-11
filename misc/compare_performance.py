@@ -1,6 +1,8 @@
 import argparse
 import sys
 import subprocess
+import json, requests
+
 
 __author__ = 'buchholb'
 
@@ -13,6 +15,7 @@ rdf3x_run_binary = "/home/buchholb/rdf3x-0.3.8/bin/rdf3xquery"
 rdf3x_db = "/local/scratch/bjoern/data/rdf3x//wikipedia-freebase.combined.db"
 my_index = "/local/scratch/bjoern/data/wikipedia-freebase"
 my_binary = "/local/scratch/bjoern/work/tmp/SparqlEngineMain"
+broccoli_api = 'http://filicudi.informatik.uni-freiburg.de:6001/'
 
 parser = argparse.ArgumentParser()
 
@@ -73,6 +76,9 @@ def rewrite_for_rdf3x(q):
     if 'OFFSET' in mod:
         print('Inexpressible in OFFSET clause in rdf3x: ' + mod, file=sys.stderr)
         return 'NOT POSSIBLE: ' + q.strip()
+    if 'ORDER BY' in mod:
+        mod = mod.replace('(', ' ')
+        mod = mod.replace(')', '')
     new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
     return 'WHERE'.join([before_where, new_after_where])
 
@@ -162,6 +168,91 @@ def rewrite_to_bif_contains(q):
             new_clauses.append(' ?text' + str(i) + ' bif:contains "' + ' and '.join(context_to_words[c]) + '" ')
     new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
     return 'WHERE'.join([before_where, new_after_where])
+
+
+def rewrite_for_broccoli(q):
+    before_where, after_where = q.split('WHERE')
+    if before_where.count('?') > 1:
+        print("Inexpressible in Broccoli: " + q.strip(), file=sys.stderr)
+        return "NOT POSSIBLE: " + q.strip()
+    i = before_where.find('?')
+    j = before_where.find(' ', i)
+    var_to_var = dict()
+    select_var = before_where[i:j]
+    var_to_var[select_var] = '$1'
+    after_where = after_where.replace(select_var, '$1')
+    j = 0
+    while '?' in after_where:
+        i = after_where.find('?', j)
+        j = after_where.find(' ', i)
+        sparql_var = after_where[i:j]
+        bro_var = '$' + str(len(var_to_var) + 1)
+        var_to_var[sparql_var] = bro_var
+        after_where = after_where.replace(sparql_var, bro_var)
+    no_mod, mod = after_where.strip().split('}')
+    if 'FILTER' in after_where or 'ORDER' in mod:
+        print("Inexpressible in Broccoli: " + q.strip(), file=sys.stderr)
+        return "NOT POSSIBLE: " + q.strip()
+    clauses = no_mod.strip('{').split('.')
+    new_clauses = []
+    context_to_words = {}
+    context_to_entities = {}
+    for c in clauses:
+        try:
+            s, p, o = c.strip().split(' ')
+            if p == '<in-context>':
+                if '<word' in s:
+                    if o not in context_to_words:
+                        context_to_words[o] = []
+                    context_to_words[o].append(s[6: -1])
+                else:
+                    if o not in context_to_entities:
+                        context_to_entities[o] = []
+                    context_to_entities[o].append(s)
+            else:
+                if p[0] != '<':
+                    print("Inexpressible in Broccoli: " + c, file=sys.stderr)
+                    return "NOT POSSIBLE: " + q.strip()
+                p = ':r:' + p[1:-1]
+                if s[0] == '<':
+                    var_to_var[s] = '$' + str(len(var_to_var) + 1)
+                    entity = s[1:-1]
+                    s = var_to_var[s]
+                    new_clauses.append(s + " :r:equals :e:" + entity)
+                if o[0] == '<':
+                    if p == ':r:is-a':
+                        o = ':e:' + o[1:-1]
+                    else:
+                        var_to_var[o] = '$' + str(len(var_to_var) + 1)
+                        entity = o[1:-1]
+                        o = var_to_var[o]
+                        new_clauses.append(o + " :r:equals :e:" + entity)
+                new_clauses.append(' '.join([s, p, o]))
+        except ValueError:
+            print("Problem in : " + c, file=sys.stderr)
+            exit(1)
+    if len(context_to_entities) > 0 and len(context_to_words) == 0:
+        print("Inexpressible in Broccoli: " + c, file=sys.stderr)
+        return "NOT POSSIBLE: " + q.strip()
+    for c, es in context_to_entities.items():
+        new_clauses.append(es[0] + ' :r:occurs-with '
+                           + ' '.join(context_to_words[c]) + ' '
+                           + ' '.join(es[1:]))
+    new_after_where = ';'.join(new_clauses)
+    broccoli_mod = '&nofrelations=0&nofhitgroups=0&nofclasses=0'
+    i = mod.find('LIMIT')
+    if i:
+        limit = mod[i+6:mod.find(' ', i + 6)]
+        broccoli_mod += '&nofinstances=' + limit
+    else:
+        broccoli_mod += '&nofinstances=999999'
+    i = mod.find('LIMIT')
+    if i:
+        offset = mod[i+6:mod.find(' ', i + 7)]
+        broccoli_mod += '&firstinstance=' + offset
+    return '?s=' + new_after_where.strip() + '&query=$1' + broccoli_mod
+
+
 
 
 def get_virtuoso_query_times(query_file, pwd):
@@ -306,7 +397,7 @@ def get_rdf3X_query_times(query_file):
 
 
 def get_my_query_times(query_file):
-    with open('__tmp.myqueries', 'w') as tmpfile:
+    with open('__tmp.my_queries', 'w') as tmpfile:
         for line in open(query_file):
             try:
                 tmpfile.write(
@@ -316,7 +407,7 @@ def get_my_query_times(query_file):
                 exit(1)
     coutfile = open('__tmp.cout.mine', 'w')
     myout = subprocess.check_output(
-        [my_binary, '-i', my_index, '-t', '--queryfile', '__tmp.myqueries']).decode('utf-8')
+        [my_binary, '-i', my_index, '-t', '--queryfile', '__tmp.my_queries']).decode('utf-8')
     coutfile.write(myout)
     coutfile.write('\n\n\n\n')
     times = []
@@ -333,7 +424,7 @@ def get_my_query_times(query_file):
         i = line.find('Number of matches (limit): ')
         if i >= 0:
             nof_matches_limit.append(int(line[i + 27:]))
-    # os.remove('__tmp.myqueries')
+    # os.remove('__tmp.my_queries')
     queries = []
     for line in open(query_file):
         queries.append(line.strip())
@@ -341,6 +432,41 @@ def get_my_query_times(query_file):
         print('PROBLEM PROCESSING MINE: q:' + str(len(queries)) + ' t:' +
                 str(len(times)) + ' #:' + str(len(nof_matches_limit)), file=sys.stderr)
     return times, nof_matches_limit
+
+
+def get_broccoli_query_times(query_file):
+    impossibles = {}
+    with open('__tmp.broccoli_queries', 'w') as tmpfile:
+        i = 0
+        for line in open(query_file):
+            broccoli_query = rewrite_for_broccoli(line.strip().split('\t')[1])
+            if 'NOT POSSIBLE:' in broccoli_query:
+                impossibles[i] = True
+            else:
+                tmpfile.write(broccoli_query + '\n')
+            i += 1
+    times = []
+    nof_matches = []
+    while len(times) in impossibles:
+        times.append('-')
+        nof_matches.append(0)
+    with open('__tmp.cout.broccoli', '2') as coutfile:
+        for line in open('__tmp.broccoli_queries'):
+            out = requests.get(broccoli_api + line.strip()
+                               + '&format=json&cmd=clearcache').json()
+            coutfile.write(str(out))
+            times.append(out['result']['time']['total'])
+            nof_matches.append((out['instances']['sent']))
+            while len(times) in impossibles:
+                times.append('-')
+                nof_matches.append(0)
+    queries = []
+    for line in open(query_file):
+        queries.append(line.strip())
+    if len(times) != len(queries) or len(times) != len(nof_matches):
+        print('PROBLEM PROCESSING BROCCOLI: q:' + str(len(queries)) + ' t:' +
+              str(len(times)) + ' #:' + str(len(nof_matches)), file=sys.stderr)
+    return times, nof_matches
 
 
 def processQueries(query_file, pwd):
@@ -352,24 +478,29 @@ def processQueries(query_file, pwd):
         query_file, pwd)
     rdf3x_times, rdf3x_counts = get_rdf3X_query_times(query_file)
     my_times, my_counts = get_my_query_times(query_file)
+    broccoli_times, broccoli_counts = get_broccoli_query_times(query_file)
     return queries, bifc_times, bifc_counts, bifc_inc_times, bifc_inc_counts, \
-           rdf3x_times, rdf3x_counts, my_times, my_counts
+        rdf3x_times, rdf3x_counts, my_times, my_counts, \
+        broccoli_times, broccoli_counts
 
 
 def print_result_table(queries, bifc_times, bifc_counts,
                        bifc_inc_times, bifc_inc_counts,
-                       rdf3x_times, rdf3x_counts, my_times, my_counts):
-    print("\t".join(['id', 'query', 'bifc', 'bifc_inc', 'rdf3x', 'mine']))
-    print("\t".join(['----', '-----', '-----', '-----', '-----', '-----']))
+                       rdf3x_times, rdf3x_counts, my_times, my_counts,
+                       broccoli_times, broccoli_counts):
+    print("\t".join(['id', 'query', 'bifc', 'bifc_inc', 'rdf3x', 'mine', 'broccoli']))
+    print("\t".join(['---', '---', '---', '---', '---', '---', '---']))
     for i in range(0, len(queries)):
         print(
             "\t".join([queries[i], bifc_times[i], bifc_inc_times[i],
-                       rdf3x_times[i], my_times[i]]))
+                       rdf3x_times[i], my_times[i], broccoli_times[i]]))
         if bifc_counts[i] != rdf3x_counts[i] or bifc_counts[i] != \
-                bifc_inc_counts[i] or bifc_counts[i] != my_counts[i]:
+                bifc_inc_counts[i] or bifc_counts[i] != my_counts[i] \
+                or bifc_counts[i] != broccoli_counts[i]:
             print('DIFFERENT COUNTS FOR QUERY: ' + queries[i] + ': ' +
                   str(bifc_counts[i]) + ' vs ' + str(bifc_inc_counts[i])
-                  + ' vs ' + str(rdf3x_counts[i]) + ' vs '+ str(my_counts[i]),
+                  + ' vs ' + str(rdf3x_counts[i]) + ' vs '+ str(my_counts[i])
+                  + ' vs '+ str(broccoli_counts[i]),
                   file=sys.stderr)
 
 
@@ -377,13 +508,15 @@ def main():
     args = vars(parser.parse_args())
     queries = args['queryfile']
     queries, bifc_times, bifc_counts, bifc_inc_times, bifc_inc_counts, \
-        rdf3x_times, rdf3x_counts, my_times, my_counts = processQueries(
+        rdf3x_times, rdf3x_counts, my_times, my_counts, \
+    broccoli_times, broccoli_counts = processQueries(
             queries, args['virtuoso_pwd'])
     print_result_table(queries,
                        bifc_times, bifc_counts,
                        bifc_inc_times, bifc_inc_counts,
                        rdf3x_times, rdf3x_counts,
-                       my_times, my_counts)
+                       my_times, my_counts,
+                       broccoli_times, broccoli_counts)
 
 
 if __name__ == '__main__':

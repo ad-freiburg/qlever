@@ -19,6 +19,8 @@ parser.add_argument('--bifc-query-outfile', type=str)
 
 parser.add_argument('--bifc-inc-query-outfile', type=str)
 
+parser.add_argument('--broccoli-query-outfile', type=str)
+
 
 def main():
     args = vars(parser.parse_args())
@@ -39,6 +41,10 @@ def main():
         with open(args['bifc_inc_query_outfile'], 'w') as outfile:
             for line in open(queries):
                 print(compare_performance.rewrite_to_bif_contains_inc(line), file=outfile)
+    if (args['broccoli_query_outfile']):
+        with open(args['broccoli_query_outfile'], 'w') as outfile:
+            for line in open(queries):
+                print(compare_performance.rewrite_for_broccoli(line), file=outfile)
 
 if __name__ == '__main__':
     main()
