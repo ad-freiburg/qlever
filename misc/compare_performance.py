@@ -238,16 +238,20 @@ def rewrite_for_broccoli(q):
         new_clauses.append(es[0] + ' :r:occurs-with '
                            + ' '.join(context_to_words[c]) + ' '
                            + ' '.join(es[1:]))
+    for c, ws in context_to_words.items():
+        if c not in context_to_entities:
+            new_clauses.append('$1 :r:has-occurrence-of ' + ' '.join(ws))
+
     new_after_where = ';'.join(new_clauses)
     broccoli_mod = '&nofrelations=0&nofhitgroups=0&nofclasses=0'
-    i = mod.find('LIMIT')
-    if i:
+    if 'LIMIT' in mod:
+        i = mod.find('LIMIT')
         limit = mod[i+6:mod.find(' ', i + 6)]
         broccoli_mod += '&nofinstances=' + limit
     else:
         broccoli_mod += '&nofinstances=999999'
-    i = mod.find('LIMIT')
-    if i:
+    if 'OFFSET' in mod:
+        i = mod.find('OFFSET')
         offset = mod[i+6:mod.find(' ', i + 7)]
         broccoli_mod += '&firstinstance=' + offset
     return '?s=' + new_after_where.strip() + '&query=$1' + broccoli_mod
@@ -450,13 +454,13 @@ def get_broccoli_query_times(query_file):
     while len(times) in impossibles:
         times.append('-')
         nof_matches.append(0)
-    with open('__tmp.cout.broccoli', '2') as coutfile:
+    with open('__tmp.cout.broccoli', 'w') as coutfile:
         for line in open('__tmp.broccoli_queries'):
             out = requests.get(broccoli_api + line.strip()
                                + '&format=json&cmd=clearcache').json()
             coutfile.write(str(out))
             times.append(out['result']['time']['total'])
-            nof_matches.append((out['instances']['sent']))
+            nof_matches.append(int(out['result']['res']['instances']['sent']))
             while len(times) in impossibles:
                 times.append('-')
                 nof_matches.append(0)
