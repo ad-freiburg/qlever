@@ -1,0 +1,93 @@
+?s=$1 :r:is-a :e:Book;$2 :r:equals :e:Anthony_Newman_(Author);$1 :r:Author $2&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:Comedy;$1 :r:Genre $2;$1 :r:is-a :e:Award-Nominated_Work;$1 :r:is-a :e:Film&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Politician;$1 :r:Film_performance $2;$3 :r:equals :e:Comedy;$2 :r:Genre $3&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Olympic_athlete;$1 :r:is-a :e:Deceased_Person&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:Technodrome,_Volume_2_(Consumer_product);$1 :r:Release $2;$1 :r:is-a :e:Canonical_Version;$1 :r:is-a :e:Musical_Recording&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+NOT POSSIBLE: simon_q6	SELECT ?x ?y WHERE { ?x <is-a> <Person> . ?x <Country_of_nationality> <Germany> . ?y <Author> ?x . ?y <is-a> <Award-Nominated_Work> }
+?s=$1 :r:is-a :e:Politician;$1 :r:Parent $2;$1 :r:Parent $3;$2 :r:is-a :e:Politician;$3 :r:is-a :e:Politician&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+NOT POSSIBLE: simon_q8	SELECT ?x ?y WHERE{ ?x <is-a> <Monarch> . ?x <is-a> <Deceased_Person> .?x <Cause_of_death> <Assassination> . ?x <Place_of_birth> ?y }
+?s=$1 :r:is-a :e:Lake;$2 :r:equals :e:Russia;$1 :r:Contained_by $2&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+NOT POSSIBLE: simon_q10	SELECT ?x ?y ?z WHERE{ ?x <is-a> <Musical_Recording> . ?x <Recorded_by> ?y . ?y <Award_Won> <Bollywood_Movie_Humanitarian_Award> . ?y <Celebrity_friend> ?z . ?z <Profession> <Prophet> }
+?s=$1 :r:is-a :e:Astronaut&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Person&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=10
+?s=$1 :r:is-a :e:Plant;$1 :r:occurs-with edible leaves&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+NOT POSSIBLE: bjoern_beatles_siblings	SELECT DISTINCT ?p ?b WHERE { ?p <Sibling> ?b . ?b <Member_of> <The_Beatles> . FILTER(?p != ?b) }
+?s=$1 :r:is-a :e:Building;$1 :r:occurs-with tallest&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Person;$1 :r:occurs-with drug death&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+NOT POSSIBLE: bjoern_people_born_in_europe_limit100	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> } LIMIT 100
+NOT POSSIBLE: bjoern_people_born_in_europe_limit100_offset100	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> } LIMIT 100 OFFSET 100
+NOT POSSIBLE: bjoern_people_born_in_europe_limit100_offset200k	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> } LIMIT 100 OFFSET 200000
+NOT POSSIBLE: bjoern_music_friend_athlete_limit1000	SELECT DISTINCT ?p ?s WHERE { ?p <is-a> <Musician> . ?s <is-a> <Athlete> . ?p <in-context> ?c . ?s <in-context> ?c . <word:friend> <in-context> ?c . FILTER(?p != ?s) } LIMIT 1000
+NOT POSSIBLE: bjoern_polit_friend_scient_mhp	SELECT DISTINCT ?p ?s WHERE { ?p <is-a> <Politician> . ?s <is-a> <Scientist> . ?p <in-context> ?c . ?s <in-context> ?c . <word:friend> <in-context> ?c . ?s <in-context> ?c2 . <word:manhattan> <in-context> ?c2 . <word:project> <in-context> ?c2 . FILTER(?p != ?s) }
+?s=$1 :r:is-a :e:Computer_scientist;$1 :r:occurs-with algorithm&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Computer_scientist;$1 :r:occurs-with doping&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Computer_scientist;$1 :r:occurs-with comp*&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Computer_scientist;$1 :r:occurs-with computer&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Computer_scientist;$1 :r:occurs-with trespassing&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Person;$1 :r:occurs-with comp*&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Person;$1 :r:occurs-with company&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Person;$1 :r:occurs-with extrav&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+NOT POSSIBLE: bjoern_fire_in_asian_city	SELECT ?ci ?p ?a WHERE { ?ci <is-a> <City/Town/Village> . ?ci <Contained_by> <Asia> . ?ci <in-context> ?c . <word:fire> <in-context> ?c . <word:destroyed> <in-context> ?c . ?ci <Population> ?p . ?ci <Nearby_airport> ?a }
+?s=$1 :r:has-occurrence-of database research&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=10
+?s=$1 :r:occurs-with semantic search&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Scientist;$3 :r:equals :e:Ulm;$1 :r:Place_of_birth $3;$1 :r:occurs-with rela*&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Scientist;$3 :r:equals :e:Ulm;$1 :r:Place_of_birth $3;$1 :r:occurs-with relativity&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Astronaut;$1 :r:Space_Mission $3;$4 :r:equals :e:Apollo_program;$3 :r:Space_program $4;$1 :r:occurs-with walk* moon&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Astronaut;$1 :r:occurs-with walk* moon ;$1 :r:occurs-with apollo&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Country;$1 :r:occurs-with arab state persian gulf&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Astronaut;$1 :r:occurs-with landed moon&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Country;$1 :r:occurs-with axis power <World_War_II>&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Location;$1 :r:occurs-with borough <New_York>&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Organization;$1 :r:occurs-with branch united states military&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Continent&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:Nicole_Kidman;$1 :r:Sibling $2&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Person;$1 :r:occurs-with sibling <Nicole_Kidman>&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:Church_of_Ireland;$1 :r:Organisation $2&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Religious_Jurisdiction;$1 :r:occurs-with diocese <Church_of_Ireland>&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Location;$1 :r:occurs-with target atomic bomb&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Written_Work;$1 :r:occurs-with tamil epic&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Deity;$1 :r:occurs-with mount olympus&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:Henry_II_of_England;$1 :r:Sibling $2&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Person;$1 :r:occurs-with sibling <Henry_II_of_England>&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Person;$1 :r:occurs-with hijacker september 11 attacks&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:Federal_Assembly;$2 :r:Component_bodies $1&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Governmental_Body;$1 :r:occurs-with house russian parliament&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:John_Lennon;$2 :r:Parent $1&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Person;$1 :r:occurs-with parent <John_Lennon>&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Cricketer;$1 :r:occurs-with captain* kenya*&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:Kublai_Khan;$1 :r:Sibling $2&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Person;$1 :r:occurs-with sibling <Kublai_Khan>&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:Lily_Allen;$2 :r:Parent $1&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Person;$1 :r:occurs-with parent* <Lily_Allen>&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Sports_Association;$1 :r:occurs-with major league <United_States_of_America>&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:Series $1;$3 :r:equals :e:Matt_Berry;$3 :r:TV_episode_performance $2&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:TV_Programme;$1 :r:occurs-with matt berry&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:U2;$1 :r:Member_of $2&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Person;$1 :r:occurs-with member* u2&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:Erykah_Badu;$2 :r:Film_performance $1&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Film;$1 :r:occurs-with appear* <Erykah_Badu>&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:Joe_Frazier;$2 :r:Film_performance $1&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Film;$1 :r:occurs-with appear* <Joe_Frazier>&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:Rafael_Rosell;$2 :r:Film_performance $1&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Film;$1 :r:occurs-with appear* <Rafael_Rosell>&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Country;$2 :r:equals :e:Portuguese_Language;$1 :r:Official_Language $2&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Country;$1 :r:occurs-with official language portuguese&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Country;$1 :r:occurs-with permanent member* united nations security council&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:US_President;$3 :r:equals :e:Ballistic_trauma;$1 :r:Cause_of_death $3;$1 :r:occurs-with mount rushmore&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:US_President;$1 :r:occurs-with mount rushmore ;$1 :r:occurs-with shot&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Musical_Album;$2 :r:equals :e:Ratt;$1 :r:Artist $2&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+NOT POSSIBLE: semsearch_ratt-albums.text	SELECT ?x WHERE { ?x <is-a> <Musical_Album> . ?x <in-context> ?c . <Ratt> <in-context> ?c }
+?s=$1 :r:is-a :e:Country;$1 :r:occurs-with former yugoslavia&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Revolutionary;$1 :r:occurs-with cuba ;$1 :r:occurs-with 1959&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:US_State;$1 :r:occurs-with border <Oklahoma>&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:City/Town/Village;$1 :r:occurs-with greek ancient cyprus&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+NOT POSSIBLE: semsearch_first-13-american-states	SELECT ?x ?d WHERE { ?x <is-a> <US_State> . ?x <Date_founded> ?d } ORDER BY(?d) LIMIT 13
+?s=$1 :r:is-a :e:Person;$1 :r:occurs-with companions prophet&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Location;$1 :r:occurs-with twelve tribes israel&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Book;$1 :r:occurs-with paul tarsus&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Human_Language;$1 :r:occurs-with afghanistan&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+NOT POSSIBLE: semsearch_tv-shows-thomas-jane	SELECT ?x WHERE { ?x <is-a> <TV_Program> . ?x <in-context> ?c . <Thomas_Jane> <in-context> ?c }
+?s=$1 :r:is-a :e:Country;$1 :r:occurs-with head state british monarch&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:Jacki_Weaver;$1 :r:Spouse_(or_domestic_partner) $2&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$2 :r:equals :e:Python_(Programming_Language);$2 :r:Developer $1&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999
+?s=$1 :r:is-a :e:Structure;$1 :r:occurs-with wonder* ancient world&query=$1&nofrelations=0&nofhitgroups=0&nofclasses=0&nofinstances=999999

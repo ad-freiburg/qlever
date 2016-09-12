@@ -1,0 +1,12 @@
+id	query	bifc	bifc_inc	rdf3x	mine	broccoli
+---	---	---	---	---	---	---
+simon_q1	SELECT ?x WHERE { ?x <is-a> <Book> . ?x <Author> <Anthony_Newman_(Author)> }	3 ms	2 ms	0.126 ms	8.233 ms	34ms
+simon_q2	SELECT ?x WHERE { ?x <Genre> <Comedy> . ?x <is-a> <Award-Nominated_Work> . ?x <is-a> <Film> }	79 ms	77 ms	48.018 ms	15.209 ms	40ms
+simon_q3	SELECT ?x WHERE { ?x <is-a> <Politician> . ?x <Film_performance> ?y . ?y <Genre> <Comedy> }	474 ms	271 ms	62.689 ms	122.079 ms	158ms
+simon_q4	SELECT ?x WHERE { ?x <is-a> <Olympic_athlete> . ?x <is-a> <Deceased_Person> }	130 ms	131 ms	81.582 ms	17.521 ms	46ms
+simon_q5	SELECT ?x WHERE { ?x <Release> <Technodrome,_Volume_2_(Consumer_product)> . ?x <is-a> <Canonical_Version> . ?x <is-a> <Musical_Recording> }	2 ms	2 ms	14.465 ms	419.263 ms	796ms
+simon_q6	SELECT ?x ?y WHERE { ?x <is-a> <Person> . ?x <Country_of_nationality> <Germany> . ?y <Author> ?x . ?y <is-a> <Award-Nominated_Work> }	135 ms	97 ms	175.115 ms	119.96 ms	-
+simon_q7	SELECT ?x WHERE { ?x <is-a> <Politician> . ?x <Parent> ?y . ?x <Parent> ?z . ?y <is-a> <Politician> . ?z <is-a> <Politician> }	27 ms	4 ms	9.937 ms	26.584 ms	6ms
+simon_q8	SELECT ?x ?y WHERE{ ?x <is-a> <Monarch> . ?x <is-a> <Deceased_Person> .?x <Cause_of_death> <Assassination> . ?x <Place_of_birth> ?y }	5 ms	4 ms	38.725 ms	17.007 ms	-
+simon_q9	SELECT ?x WHERE{ ?x <is-a> <Lake> . ?x <Contained_by> <Russia> }	5 ms	4 ms	2.861 ms	0.712 ms	161ms
+simon_q10	SELECT ?x ?y ?z WHERE{ ?x <is-a> <Musical_Recording> . ?x <Recorded_by> ?y . ?y <Award_Won> <Bollywood_Movie_Humanitarian_Award> . ?y <Celebrity_friend> ?z . ?z <Profession> <Prophet> }	3 ms	2 ms	0.077 ms	2344.44 ms	-

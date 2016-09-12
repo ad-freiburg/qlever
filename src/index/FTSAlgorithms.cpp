@@ -256,21 +256,17 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
         if (entityMode) {
           // If entities are involved, there may be multiple postings
           // for one context. Handle all matching the current context.
-          while (
-              (k - 1 == currentList ? nextIndices[k - 1] : nextIndices[k - 1] -
-                                                           1) <
-              cidVecs[k - 1].size() &&
-              cidVecs[k - 1][(k - 1 == currentList ? nextIndices[k - 1] :
-                              nextIndices[k - 1] - 1)] == currentContext) {
+          size_t matchInEL = (k - 1 == currentList ?
+                                   nextIndices[k - 1] :
+                                   nextIndices[k - 1] - 1);
+          while (matchInEL < cidVecs[k - 1].size() &&
+              cidVecs[k - 1][matchInEL] == currentContext) {
             resCids[n] = currentContext;
-            resEids[n] = (*lastListEids)[(k - 1 == currentList ?
-                                          nextIndices[k - 1] :
-                                          nextIndices[k - 1] - 1)];
-            resScores[n++] = s + scoreVecs[k - 1][(k - 1 == currentList ?
-                                                   nextIndices[k - 1] :
-                                                   nextIndices[k - 1] - 1)];
-            nextIndices[k - 1] += 1;
+            resEids[n] = (*lastListEids)[matchInEL];
+            resScores[n++] = s + scoreVecs[k - 1][matchInEL];
+            ++matchInEL;
           }
+          nextIndices[k - 1] = matchInEL;
         } else {
           resCids[n] = currentContext;
           resScores[n++] = s + scoreVecs[k - 1][(k - 1 == currentList ?
