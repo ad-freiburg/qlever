@@ -582,6 +582,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           }
           Sort sort(_qec, a[i]._qet, jcs[0][0]);
           left.setVariableColumns(a[i]._qet.getVariableColumnMap());
+          left.setContextVars(a[i]._qet.getContextVars());
           left.setOperation(QueryExecutionTree::SORT, &sort);
         }
         if (b[j]._qet.resultSortedOn() == jcs[0][1]) {
@@ -594,6 +595,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           }
           Sort sort(_qec, b[j]._qet, jcs[0][1]);
           right.setVariableColumns(b[j]._qet.getVariableColumnMap());
+          right.setContextVars(b[j]._qet.getContextVars());
           right.setOperation(QueryExecutionTree::SORT, &sort);
         }
 
@@ -601,6 +603,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
         QueryExecutionTree tree(_qec);
         Join join(_qec, left, right, jcs[0][0], jcs[0][1]);
         tree.setVariableColumns(join.getVariableColumns());
+        tree.setContextVars(join.getContextVars());
         tree.setOperation(QueryExecutionTree::JOIN, &join);
         SubtreePlan plan(_qec);
         plan._qet = tree;

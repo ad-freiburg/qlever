@@ -366,4 +366,12 @@ bool Join::isSelfJoin() const {
   return _left->asString() == _right->asString();
 }
 
+// _____________________________________________________________________________
+unordered_set<string> Join::getContextVars() const {
+  auto cvars = _left->getContextVars();
+  cvars.insert(_right->getContextVars().begin(),
+               _right->getContextVars().end());
+  return cvars;
+}
+
 

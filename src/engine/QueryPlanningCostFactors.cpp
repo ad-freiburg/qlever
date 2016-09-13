@@ -5,6 +5,7 @@
 #include <fstream>
 #include "../util/StringUtils.h"
 #include "../util/Exception.h"
+#include "../util/Log.h"
 #include "./QueryPlanningCostFactors.h"
 
 
@@ -13,8 +14,8 @@ QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
   // Set default values
   _factors["FILTER_PUNISH"] = 100.0;
   _factors["NO_FILTER_PUNISH"] = 1.0;
-  _factors["FILTER_SELECTIVITY"] = 0.5;
-  _factors["HASH_MAP_OPERATION_COST"] = 50.0;
+  _factors["FILTER_SELECTIVITY"] = 0.1;
+  _factors["HASH_MAP_OPERATION_COST"] = 20.0;
 }
 
 // _____________________________________________________________________________
@@ -24,7 +25,10 @@ void QueryPlanningCostFactors::readFromFile(const string& fileName) {
   while (std::getline(in, line)) {
     auto v = ad_utility::split(line, '\t');
     AD_CHECK_EQ(v.size(), 2);
-    _factors[v[0]] = atol(v[1].c_str());
+    LOG(INFO) << "Setting cost factor: " << v[0] << " from " 
+              << _factors[v[0]] << " to " << atof(v[1].c_str()) << '\n';
+    _factors[v[0]] = atof(v[1].c_str());
+
   }
 }
 

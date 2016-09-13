@@ -492,12 +492,16 @@ def print_result_table(queries, bifc_times, bifc_counts,
                        bifc_inc_times, bifc_inc_counts,
                        rdf3x_times, rdf3x_counts, my_times, my_counts,
                        broccoli_times, broccoli_counts):
-    print("\t".join(['id', 'query', 'bifc', 'bifc_inc', 'rdf3x', 'mine', 'broccoli']))
-    print("\t".join(['---', '---', '---', '---', '---', '---', '---']))
+    print("\t".join(['id', 'query', 'bifc', '#match', 'bifc_inc', '#match', 'rdf3x', '#match', 'mine', '#match', 'broccoli', '#match']))
+    print("\t".join(['---', '---', '---', '---', '---', '---', '---', '---', '---', '---', '---', '---']))
     for i in range(0, len(queries)):
         print(
-            "\t".join([queries[i], bifc_times[i], bifc_inc_times[i],
-                       rdf3x_times[i], my_times[i], broccoli_times[i]]))
+            "\t".join([queries[i],
+                       bifc_times[i], str(bifc_counts[i]),
+                       bifc_inc_times[i], str(bifc_inc_counts[i]),
+                       rdf3x_times[i], str(rdf3x_counts[i]),
+                       my_times[i], str(my_counts[i]),
+                       broccoli_times[i], str(broccoli_counts[i])]))
         if bifc_counts[i] != rdf3x_counts[i] or bifc_counts[i] != \
                 bifc_inc_counts[i] or bifc_counts[i] != my_counts[i] \
                 or bifc_counts[i] != broccoli_counts[i]:

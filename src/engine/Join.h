@@ -33,6 +33,7 @@ public:
   virtual size_t resultSortedOn() const;
 
   unordered_map<string, size_t> getVariableColumns() const;
+  unordered_set<string> getContextVars() const;
 
   virtual void setTextLimit(size_t limit) {
     _left->setTextLimit(limit);
@@ -90,7 +91,9 @@ public:
            _right->getSizeEstimate() + _right->getCostEstimate();
   }
 
-private:
+
+
+  private:
   QueryExecutionTree* _left;
   QueryExecutionTree* _right;
 

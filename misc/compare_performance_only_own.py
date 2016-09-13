@@ -59,8 +59,8 @@ def get_query_times(query_file, name, binary, costFactors, index):
     myout = subprocess.check_output(
         [binary, '-i', index, '-t', '--queryfile', '__tmp.myqueries', '-c',
          costFactors]).decode('utf-8')
-    coutfile.write(myout)
-    coutfile.write('\n\n\n\n')
+    print(myout, file=coutfile)
+    print('\n\n\n', file=coutfile)
     times = []
     nof_matches_no_limit = []
     nof_matches_limit = []
