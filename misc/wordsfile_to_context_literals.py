@@ -42,7 +42,7 @@ def transform(wordsfile, incontext):
         if entityFlag == "1":
             entities.append(word)
         else:
-            words.append(word)
+            words.append(word.replace('"', '').replace("'", ""))
     write_nt_to_stdout(current_c, entities, words, incontext)
 
 
