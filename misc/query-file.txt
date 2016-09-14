@@ -27,7 +27,8 @@ bjoern_csci_trspassing	SELECT ?x WHERE { ?x <is-a> <Computer_scientist> . ?x <in
 bjoern_person_comp*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:comp*> <in-context> ?c }
 bjoern_person_company	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:company> <in-context> ?c }
 bjoern_person_extrav	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:extrav> <in-context> ?c }
-bjoern_fire_in_asian_city	SELECT ?ci ?p ?a WHERE { ?ci <is-a> <City/Town/Village> . ?ci <Contained_by> <Asia> . ?ci <in-context> ?c . <word:fire> <in-context> ?c . <word:destroyed> <in-context> ?c . ?ci <Population> ?p . ?ci <Nearby_airport> ?a }
+bjoern_fire_in_asian_city	SELECT ?ci WHERE { ?ci <is-a> <City/Town/Village> . ?ci <Contained_by> <Asia> . ?ci <in-context> ?c . <word:fire> <in-context> ?c . <word:destroyed> <in-context> ?c }
+bjoern_fire_in_asian_city_pop_airport	SELECT ?ci ?p ?a WHERE { ?ci <is-a> <City/Town/Village> . ?ci <Contained_by> <Asia> . ?ci <in-context> ?c . <word:fire> <in-context> ?c . <word:destroyed> <in-context> ?c . ?ci <Population> ?p . ?ci <Nearby_airport> ?a }
 bjoern_pure_text_database_research	SELECT ?c WHERE { <word:database> <in-context> ?c . <word:research> <in-context> ?c } LIMIT 100
 bjoern_entity_ow_semantic_search	SELECT ?e WHERE { ?e <in-context> ?c . <word:semantic> <in-context> ?c . <word:search> <in-context> ?c }
 bjoern_sci_ulm_rela*	SELECT ?p WHERE {?p <is-a> <Scientist> . ?p <Place_of_birth> <Ulm> . ?p <in-context> ?c . <word:rela*> <in-context> ?c }

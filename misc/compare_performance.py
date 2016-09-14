@@ -205,6 +205,12 @@ def rewrite_for_broccoli(q):
                     if o not in context_to_words:
                         context_to_words[o] = []
                     context_to_words[o].append(s[6: -1])
+                elif s[0] == '<':
+                    bro_var = '$' + str(len(var_to_var) + 1)
+                    var_to_var[s] = bro_var
+                    entity = s[1:-1]
+                    new_clauses.append(bro_var + " :r:equals :e:" + entity)
+                    context_to_entities[o].append(bro_var)
                 else:
                     if o not in context_to_entities:
                         context_to_entities[o] = []
