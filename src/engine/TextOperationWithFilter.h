@@ -53,6 +53,9 @@ public:
   }
 
   virtual size_t getCostEstimate() const {
+    if (_filterResult->knownEmptyResult()) {
+      return 0;
+    }
     if (_executionContext) {
       return static_cast<size_t>(
           _executionContext->getCostFactor("FILTER_PUNISH") * (
@@ -75,8 +78,9 @@ public:
   }
 
   virtual bool knownEmptyResult() const {
-    return _executionContext->getIndex().getSizeEstimate(_words) == 0
-           || _filterResult->knownEmptyResult();
+    return _filterResult->knownEmptyResult() ||
+        (_executionContext &&
+            _executionContext->getIndex().getSizeEstimate(_words) == 0);
   }
 
 private:

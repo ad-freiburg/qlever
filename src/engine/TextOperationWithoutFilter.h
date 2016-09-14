@@ -62,7 +62,8 @@ public:
   }
 
     virtual bool knownEmptyResult() const {
-      return _executionContext->getIndex().getSizeEstimate(_words) == 0;
+      return _executionContext &&
+          _executionContext->getIndex().getSizeEstimate(_words) == 0;
     }
 private:
   string _words;

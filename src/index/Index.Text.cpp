@@ -692,23 +692,25 @@ void Index::getFilteredECListForWords(const string& words,
                                       size_t filterColumn, size_t nofVars,
                                       size_t limit, ResultList& result) const {
   LOG(DEBUG) << "In getFilteredECListForWords...\n";
-  // Build a map filterEid->set<Rows>
-  using FilterMap = unordered_map<Id, FilterTable>;
-  LOG(DEBUG) << "Constructing map...\n";
-  FilterMap fMap;
-  for (size_t i = 0; i < filter.size(); ++i) {
-    fMap[filter[i][filterColumn]].push_back(filter[i]);
-  }
-  vector<Id> cids;
-  vector<Id> eids;
-  vector<Score> scores;
-  getContextEntityScoreListsForWords(words, cids, eids, scores);
-  if (nofVars == 1) {
-    FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
-        cids, eids, scores, fMap, limit, result);
-  } else {
-    FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
-        cids, eids, scores, fMap, nofVars, limit, result);
+  if (filter.size() > 0) {
+    // Build a map filterEid->set<Rows>
+    using FilterMap = unordered_map<Id, FilterTable>;
+    LOG(DEBUG) << "Constructing map...\n";
+    FilterMap fMap;
+    for (size_t i = 0; i < filter.size(); ++i) {
+      fMap[filter[i][filterColumn]].push_back(filter[i]);
+    }
+    vector<Id> cids;
+    vector<Id> eids;
+    vector<Score> scores;
+    getContextEntityScoreListsForWords(words, cids, eids, scores);
+    if (nofVars == 1) {
+      FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
+          cids, eids, scores, fMap, limit, result);
+    } else {
+      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
+          cids, eids, scores, fMap, nofVars, limit, result);
+    }
   }
   LOG(DEBUG) << "Done with getFilteredECListForWords. Result size: "
              << result.size() << "\n";
