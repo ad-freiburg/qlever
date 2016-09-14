@@ -46,6 +46,10 @@ class ScanningJoin : public IndexScan {
     return _subtree->getSizeEstimate() + getSizeEstimate() * 10;
   }
 
+  virtual bool knownEmptyResult() const {
+    return _subtree->knownEmptyResult() || IndexScan::knownEmptyResult();
+  }
+
 private:
   QueryExecutionTree* _subtree;
   size_t _subtreeJoinCol;

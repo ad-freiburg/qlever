@@ -53,6 +53,10 @@ public:
            _right->getSizeEstimate() + _right->getCostEstimate()) * 1000;
   }
 
+    virtual bool knownEmptyResult() const {
+      return _left->knownEmptyResult() || _right->knownEmptyResult();
+    }
+
 private:
   QueryExecutionTree* _left;
   QueryExecutionTree* _right;

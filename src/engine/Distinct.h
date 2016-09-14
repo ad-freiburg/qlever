@@ -49,6 +49,10 @@ class Distinct : public Operation {
       return getSizeEstimate() + _subtree->getCostEstimate();
     }
 
+    virtual bool knownEmptyResult() const {
+      return _subtree->knownEmptyResult();
+    }
+
   private:
     QueryExecutionTree *_subtree;
     vector<size_t> _keepIndices;

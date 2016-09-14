@@ -76,6 +76,26 @@ void Join::computeResult(ResultTable *result) const {
   LOG(DEBUG) << "Join result computation..." << endl;
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
+
+  // Checking this before calling getResult on the subtrees can
+  // avoid the computation of an non-empty subtree.
+  if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
+    size_t resWidth = leftWidth + rightWidth - 1;
+    if (resWidth == 1) {
+      result->_fixedSizeData = new vector<array<Id, 1>>();
+    } else if (resWidth == 2) {
+      result->_fixedSizeData = new vector<array<Id, 2>>();
+    } else if (resWidth == 3) {
+      result->_fixedSizeData = new vector<array<Id, 3>>();
+    } else if (resWidth == 4) {
+      result->_fixedSizeData = new vector<array<Id, 4>>();
+    } else if (resWidth == 5) {
+      result->_fixedSizeData = new vector<array<Id, 5>>();
+    }
+    result->_status = ResultTable::FINISHED;
+    return;
+  }
+
   const ResultTable& leftRes = _left->getRootOperation()->getResult();
   const ResultTable& rightRes = _right->getRootOperation()->getResult();
 

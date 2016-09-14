@@ -54,6 +54,9 @@ public:
     return nlogn + subcost;
   }
 
+  virtual bool knownEmptyResult() const {
+    return _subtree->knownEmptyResult();
+  }
 
 private:
   QueryExecutionTree* _subtree;

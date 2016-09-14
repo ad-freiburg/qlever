@@ -74,6 +74,11 @@ public:
     return _nofVars;
   }
 
+  virtual bool knownEmptyResult() const {
+    return _executionContext->getIndex().getSizeEstimate(_words) == 0
+           || _filterResult->knownEmptyResult();
+  }
+
 private:
   string _words;
   size_t _nofVars;

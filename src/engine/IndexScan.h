@@ -26,7 +26,8 @@ public:
   virtual string asString() const;
 
   IndexScan(QueryExecutionContext* qec, ScanType type) :
-      Operation(qec), _type(type), _sizeEstimate(0) {
+      Operation(qec), _type(type),
+      _sizeEstimate(std::numeric_limits<size_t>::max()) {
   }
 
   virtual ~IndexScan() { }
@@ -56,7 +57,7 @@ public:
   }
 
   virtual size_t getSizeEstimate() const {
-    if (_sizeEstimate > 0) {
+    if (_sizeEstimate != std::numeric_limits<size_t>::max()) {
       return _sizeEstimate;
     }
     return computeSizeEstimate();
@@ -68,6 +69,10 @@ public:
 
   void precomputeSizeEstimate() {
     _sizeEstimate = computeSizeEstimate();
+  }
+
+  virtual bool knownEmptyResult() const {
+    return getSizeEstimate() == 0;
   }
 
 protected:

@@ -53,6 +53,10 @@ class Sort : public Operation {
       return nlogn + subcost;
     }
 
+    virtual bool knownEmptyResult() const {
+      return _subtree->knownEmptyResult();
+    }
+
   private:
     QueryExecutionTree *_subtree;
     size_t _sortCol;

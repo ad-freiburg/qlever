@@ -43,6 +43,9 @@ public:
   bool isSelfJoin() const;
 
   virtual size_t getSizeEstimate() const {
+    if (_left->getSizeEstimate() == 0 || _right->getSizeEstimate() == 0) {
+      return 0;
+    }
     // Check if there are easy sides, i.e. a scan with only one
     // variable.
     // As a very basic heuristic, we expect joins with those to be even more
@@ -91,7 +94,9 @@ public:
            _right->getSizeEstimate() + _right->getCostEstimate();
   }
 
-
+  virtual bool knownEmptyResult() const {
+    return _left->knownEmptyResult() || _right->knownEmptyResult();
+  }
 
   private:
   QueryExecutionTree* _left;

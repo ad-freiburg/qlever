@@ -65,6 +65,10 @@ public:
     return sum;
   }
 
+    virtual bool knownEmptyResult() const {
+      return getSizeEstimate() == 0;
+    }
+
 private:
   string _words;
   vector<pair<QueryExecutionTree, size_t>> _subtrees;

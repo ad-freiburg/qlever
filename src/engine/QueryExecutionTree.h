@@ -130,6 +130,10 @@ public:
 
   bool varCovered(string var) const;
 
+  bool knownEmptyResult() const {
+    return _rootOperation->knownEmptyResult();
+  }
+
 private:
   QueryExecutionContext* _qec;   // No ownership
   unordered_map<string, size_t> _variableColumnMap;

@@ -87,6 +87,10 @@ class Filter : public Operation {
         return _subtree;
     };
 
+    virtual bool knownEmptyResult() const {
+      return _subtree->knownEmptyResult();
+    }
+
   private:
     QueryExecutionTree* _subtree;
     SparqlFilter::FilterType _type;
