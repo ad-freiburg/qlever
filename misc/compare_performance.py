@@ -483,26 +483,31 @@ def processQueries(query_file, pwd):
     queries = []
     for line in open(query_file):
         queries.append(line.strip())
+    virt_times, virt_counts = get_virtuoso_query_times(query_file, pwd)
     bifc_times, bifc_counts = get_virtuoso_bifc_query_times(query_file, pwd)
     bifc_inc_times, bifc_inc_counts = get_virtuoso_bifc_inc_query_times(
         query_file, pwd)
     rdf3x_times, rdf3x_counts = get_rdf3X_query_times(query_file)
     my_times, my_counts = get_my_query_times(query_file)
     broccoli_times, broccoli_counts = get_broccoli_query_times(query_file)
-    return queries, bifc_times, bifc_counts, bifc_inc_times, bifc_inc_counts, \
-        rdf3x_times, rdf3x_counts, my_times, my_counts, \
-        broccoli_times, broccoli_counts
+    return queries, virt_times, virt_counts, bifc_times, bifc_counts, \
+           bifc_inc_times, bifc_inc_counts, rdf3x_times, rdf3x_counts, \
+           my_times, my_counts, broccoli_times, broccoli_counts
 
 
-def print_result_table(queries, bifc_times, bifc_counts,
+def print_result_table(queries,
+                       virt_times, virt_counts,
+                       bifc_times, bifc_counts,
                        bifc_inc_times, bifc_inc_counts,
-                       rdf3x_times, rdf3x_counts, my_times, my_counts,
+                       rdf3x_times, rdf3x_counts,
+                       my_times, my_counts,
                        broccoli_times, broccoli_counts):
-    print("\t".join(['id', 'query', 'bifc', '#match', 'bifc_inc', '#match', 'rdf3x', '#match', 'mine', '#match', 'broccoli', '#match']))
-    print("\t".join(['---', '---', '---', '---', '---', '---', '---', '---', '---', '---', '---', '---']))
+    print("\t".join(['id', 'query', 'virt', '#match, ''bifc', '#match', 'bifc_inc', '#match', 'rdf3x', '#match', 'mine', '#match', 'broccoli', '#match']))
+    print("\t".join(['---', '---', '---','---', '---', '---', '---', '---', '---', '---', '---', '---', '---', '---']))
     for i in range(0, len(queries)):
         print(
             "\t".join([queries[i],
+                       virt_times[i], str(virt_counts[i]),
                        bifc_times[i], str(bifc_counts[i]),
                        bifc_inc_times[i], str(bifc_inc_counts[i]),
                        rdf3x_times[i], str(rdf3x_counts[i]),
