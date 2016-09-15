@@ -29,6 +29,21 @@ parser.add_argument('--virtuoso-pwd',
                     help='Password for the (already running) virtuoso instance',
                     required=True)
 
+parser.add_argument('--all', action='store_true', help='should all be executed?',
+                    default=False)
+parser.add_argument('--virt', action='store_true', help='should virt be executed?',
+                    default=False)
+parser.add_argument('--bifc', action='store_true', help='should bifc be executed?',
+                    default=False)
+parser.add_argument('--bifc-inc', action='store_true', help='should bifc_inc be executed?',
+                    default=False)
+parser.add_argument('--mine', action='store_true', help='should mine be executed?',
+                    default=False)
+parser.add_argument('--rdf3x', action='store_true', help='should rdf3x be executed?',
+                    default=False)
+parser.add_argument('--broccoli', action='store_true', help='should broccoli be executed?',
+                    default=False)
+
 
 def expanded_to_my_syntax(q):
     before_where, after_where = q.split('WHERE')
@@ -249,7 +264,7 @@ def rewrite_for_broccoli(q):
             new_clauses.append('$1 :r:has-occurrence-of ' + ' '.join(ws))
 
     new_after_where = ';'.join(new_clauses)
-    broccoli_mod = '&nofrelations=0&nofhitgroups=0&nofclasses=0'
+    broccoli_mod = '&nofrelations=0&nofhitgroups=0&nofclasses=0&nofwords=0'
     if 'LIMIT' in mod:
         i = mod.find('LIMIT')
         limit = mod[i+6:mod.find(' ', i + 6)]
@@ -268,7 +283,10 @@ def rewrite_for_broccoli(q):
 def get_virtuoso_query_times(query_file, pwd):
     with open('__tmp.virtqueries', 'w') as tmpfile:
         for line in open(query_file):
-            tmpfile.write('SPARQL ' + line.strip().split('\t')[1] + ';\n')
+            query = 'SPARQL ' + line.strip().split('\t')[1] + ';'
+            if '<in-context>' in query and 'DISTINCT' not in query:
+                query = query.replace('SELECT', 'SELECT DISTINCT')
+            print(query, file=tmpfile)
     virtout = subprocess.check_output(
         [virtuoso_run_binary, virtuoso_isql_port, virtuso_isql_user, pwd,
          '__tmp.virtqueries']).decode('utf-8')
@@ -460,11 +478,17 @@ def get_broccoli_query_times(query_file):
     while len(times) in impossibles:
         times.append('-')
         nof_matches.append(0)
+    first = True
     with open('__tmp.cout.broccoli', 'w') as coutfile:
         for line in open('__tmp.broccoli_queries'):
-            out = requests.get(broccoli_api + line.strip()
-                               + '&format=json&cmd=clearcache').json()
-            coutfile.write(str(out))
+            if first:
+                out = requests.get(broccoli_api + line.strip()
+                                   + '&format=json&cmd=clearcache').json()
+                first = False
+            else:
+                out = requests.get(broccoli_api + line.strip()
+                               + '&format=json').json()
+            print(str(out), file=coutfile)
             times.append(out['result']['time']['total'])
             nof_matches.append(int(out['result']['res']['instances']['sent']))
             while len(times) in impossibles:
@@ -479,63 +503,63 @@ def get_broccoli_query_times(query_file):
     return times, nof_matches
 
 
-def processQueries(query_file, pwd):
-    queries = []
-    for line in open(query_file):
-        queries.append(line.strip())
-    virt_times, virt_counts = get_virtuoso_query_times(query_file, pwd)
-    bifc_times, bifc_counts = get_virtuoso_bifc_query_times(query_file, pwd)
-    bifc_inc_times, bifc_inc_counts = get_virtuoso_bifc_inc_query_times(
-        query_file, pwd)
-    rdf3x_times, rdf3x_counts = get_rdf3X_query_times(query_file)
-    my_times, my_counts = get_my_query_times(query_file)
-    broccoli_times, broccoli_counts = get_broccoli_query_times(query_file)
-    return queries, virt_times, virt_counts, bifc_times, bifc_counts, \
-           bifc_inc_times, bifc_inc_counts, rdf3x_times, rdf3x_counts, \
-           my_times, my_counts, broccoli_times, broccoli_counts
-
-
-def print_result_table(queries,
-                       virt_times, virt_counts,
-                       bifc_times, bifc_counts,
-                       bifc_inc_times, bifc_inc_counts,
-                       rdf3x_times, rdf3x_counts,
-                       my_times, my_counts,
-                       broccoli_times, broccoli_counts):
-    print("\t".join(['id', 'query', 'virt', '#match, ''bifc', '#match', 'bifc_inc', '#match', 'rdf3x', '#match', 'mine', '#match', 'broccoli', '#match']))
-    print("\t".join(['---', '---', '---','---', '---', '---', '---', '---', '---', '---', '---', '---', '---', '---']))
+def print_result_table(queries, headers, time_and_counts):
+    print('\t'.join(headers))
+    print('\t'.join(['---' * len(headers)]))
     for i in range(0, len(queries)):
-        print(
-            "\t".join([queries[i],
-                       virt_times[i], str(virt_counts[i]),
-                       bifc_times[i], str(bifc_counts[i]),
-                       bifc_inc_times[i], str(bifc_inc_counts[i]),
-                       rdf3x_times[i], str(rdf3x_counts[i]),
-                       my_times[i], str(my_counts[i]),
-                       broccoli_times[i], str(broccoli_counts[i])]))
-        if bifc_counts[i] != rdf3x_counts[i] or bifc_counts[i] != \
-                bifc_inc_counts[i] or bifc_counts[i] != my_counts[i] \
-                or bifc_counts[i] != broccoli_counts[i]:
-            print('DIFFERENT COUNTS FOR QUERY: ' + queries[i] + ': ' +
-                  str(bifc_counts[i]) + ' vs ' + str(bifc_inc_counts[i])
-                  + ' vs ' + str(rdf3x_counts[i]) + ' vs '+ str(my_counts[i])
-                  + ' vs '+ str(broccoli_counts[i]),
-                  file=sys.stderr)
+        row = [queries[i]]
+        for (times, counts) in time_and_counts:
+            row.append(str(times[i]))
+            row.append(str(counts[i]))
+        print('\t'.join(row))
 
 
 def main():
     args = vars(parser.parse_args())
-    queries = args['queryfile']
-    queries, bifc_times, bifc_counts, bifc_inc_times, bifc_inc_counts, \
-        rdf3x_times, rdf3x_counts, my_times, my_counts, \
-    broccoli_times, broccoli_counts = processQueries(
-            queries, args['virtuoso_pwd'])
-    print_result_table(queries,
-                       bifc_times, bifc_counts,
-                       bifc_inc_times, bifc_inc_counts,
-                       rdf3x_times, rdf3x_counts,
-                       my_times, my_counts,
-                       broccoli_times, broccoli_counts)
+    query_file = args['queryfile']
+    queries = []
+    for line in open(query_file):
+        queries.append(line.strip())
+    all = args['all']
+    virt = args['virt']
+    bifc = args['bifc']
+    bifc_inc = args['bifc_inc']
+    rdf3x = args['rdf3x']
+    mine = args['mine']
+    broccoli = args['broccoli']
+    headers = []
+    time_and_counts = []
+    if all or virt:
+        headers.append('virt')
+        headers.append('#m_virt')
+        times, matches = get_virtuoso_query_times(query_file, args['virtuoso_pwd'])
+        time_and_counts.append((times, matches))
+    if all or bifc:
+        headers.append('bifc')
+        headers.append('#m_bifc')
+        times, matches = get_virtuoso_bifc_query_times(query_file, args['virtuoso_pwd'])
+        time_and_counts.append((times, matches))
+    if all or bifc_inc:
+        headers.append('bifc_inc')
+        headers.append('#m_bifc_inc')
+        times, matches = get_virtuoso_bifc_inc_query_times(query_file, args['bifc_inc'])
+        time_and_counts.append((times, matches))
+    if all or rdf3x:
+        headers.append('rdf3x')
+        headers.append('#m_rdf3x')
+        times, matches = get_rdf3X_query_times(query_file)
+        time_and_counts.append((times, matches))
+    if all or mine:
+        headers.append('mine')
+        headers.append('#m_mine')
+        times, matches = get_my_query_times(query_file)
+        time_and_counts.append((times, matches))
+    if all or broccoli:
+        headers.append('broccoli')
+        headers.append('#m_broccoli')
+        times, matches = get_broccoli_query_times(query_file)
+        time_and_counts.append((times, matches))
+    print_result_table(queries, headers, time_and_counts)
 
 
 if __name__ == '__main__':
