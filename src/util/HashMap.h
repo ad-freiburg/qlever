@@ -4,8 +4,7 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
-#include <google/dense_hash_map>
+#include <sparsehash/dense_hash_map>
 
 #include "./DefaultKeyProvider.h"
 
