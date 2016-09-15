@@ -7,6 +7,7 @@
 #include <set>
 #include <unordered_map>
 #include "./FTSAlgorithms.h"
+#include "../util/HashMap.h"
 
 
 using std::pair;
@@ -472,7 +473,7 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(const vector<Id>& cids,
                                                const vector<Score>& scores,
                                                WidthThreeList& result) {
   LOG(DEBUG) << "Special case with 1 contexts per entity...\n";
-  typedef unordered_map<Id, pair<Score, pair<Id, Score>>> AggMap;
+  typedef ad_utility::HashMap<Id, pair<Score, pair<Id, Score>>> AggMap;
   AggMap map;
   for (size_t i = 0; i < eids.size(); ++i) {
     if (map.count(eids[i]) == 0) {

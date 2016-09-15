@@ -7,9 +7,8 @@
 #include <assert.h>
 #include <list>
 #include <utility>
-#include <unordered_map>
+#include "./HashMap.h"
 
-using std::unordered_map;
 using std::list;
 using std::pair;
 
@@ -27,7 +26,7 @@ namespace ad_utility {
 //! as full-text-query cache where one might want to get the best fit of any
 //! entry that can be used to filter the desired result from.
 template<class Key, class Value,
-    class AccessMap = unordered_map<Key,
+    class AccessMap = ad_utility::HashMap<Key,
         typename list<pair<Key, Value>>::iterator>>
 class LRUCache {
   private:

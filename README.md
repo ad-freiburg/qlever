@@ -18,10 +18,18 @@ Make sure you use a 64bit Linux with:
 * git
 * g++ 4.8 or higher
 * CMake 2.8.4 or higher
+* google-sparsehash
 
 Other compilers (and OS) are not supported, yet. 
 So far no major problems are known. 
 Support for more platforms would be a highly appreciated contribution.
+
+As of September 2016, you also have to have google sparsehash installed.
+If this sin't the case on your system run
+
+    git clone https://github.com/sparsehash/sparsehash.git
+    cd  sparsehash
+    ./configure && make && sudo make install
 
 1. Build:
 ---------

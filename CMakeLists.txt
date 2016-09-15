@@ -36,8 +36,7 @@ set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DLOGLEVEL=${LOG_LEVEL_DEBUG
 # GTEST
 ################################
 add_subdirectory(third_party/googletest/googletest)
-include_directories(third_party/googletest/googletest/include
-                      third_party/googletest/googletest/)
+include_directories(third_party/googletest/googletest/include)
 ################################
 # STXXL
 ################################
@@ -104,3 +103,4 @@ add_test(EngineTest test/EngineTest)
 add_test(FTSAlgorithmsTest test/FTSAlgorithmsTest)
 add_test(QueryPlannerTest test/QueryPlannerTest)
 add_test(ConversionsTest test/ConversionsTest)
+add_test(SparsehashTest test/SparsehashTest)
