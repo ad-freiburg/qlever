@@ -50,7 +50,7 @@ add_executable(ConversionsTest ConversionsTest.cpp)
 target_link_libraries(ConversionsTest gtest_main engine -pthread)
 
 add_executable(SparsehashTest SparsehashTest.cpp)
-target_link_libraries(SparsehashTest gtest_main engine -pthread)
+target_link_libraries(SparsehashTest gtest_main -pthread)
 
 add_library(tests
             SparqlParserTest
