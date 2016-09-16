@@ -3,13 +3,11 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <sstream>
-#include <unordered_map>
 #include "./QueryExecutionTree.h"
 #include "./Join.h"
 #include "Sort.h"
 
 using std::string;
-using std::unordered_map;
 
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext *qec,
@@ -353,8 +351,8 @@ void Join::computeResult(ResultTable *result) const {
 }
 
 // _____________________________________________________________________________
-unordered_map<string, size_t> Join::getVariableColumns() const {
-  unordered_map<string, size_t> retVal(_left->getVariableColumnMap());
+ad_utility::HashMap<string, size_t> Join::getVariableColumns() const {
+  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumnMap());
   size_t leftSize = _left->getResultWidth();
   for (auto it = _right->getVariableColumnMap().begin();
        it != _right->getVariableColumnMap().end(); ++it) {
@@ -387,7 +385,7 @@ bool Join::isSelfJoin() const {
 }
 
 // _____________________________________________________________________________
-unordered_set<string> Join::getContextVars() const {
+ad_utility::HashSet<string> Join::getContextVars() const {
   auto cvars = _left->getContextVars();
   cvars.insert(_right->getContextVars().begin(),
                _right->getContextVars().end());

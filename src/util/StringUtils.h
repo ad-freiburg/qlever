@@ -15,7 +15,7 @@
 #include <sstream>
 #include <vector>
 #include <grp.h>
-#include <unordered_set>
+#include "./HashSet.h"
 
 using std::string;
 using std::vector;
@@ -383,7 +383,7 @@ vector<string> splitAny(const string& orig, const char *seps) {
 
 // _____________________________________________________________________________
 vector<string> splitAny(const string& orig, const string& seps) {
-  std::unordered_set<char> chars;
+  HashSet<char> chars;
   for (size_t i = 0; i < seps.size(); ++i) {
     chars.insert(seps[i]);
   }
@@ -417,7 +417,7 @@ inline string lstrip(const string& text, char c) {
 
 // _____________________________________________________________________________
 inline string lstrip(const string& text, string s) {
-  std::unordered_set<char> chars;
+  ad_utility::HashSet<char> chars;
   for (size_t i = 0; i < s.size(); ++i) {
     chars.insert(s[i]);
   }
@@ -440,7 +440,7 @@ inline string rstrip(const string& text, char c) {
 
 // _____________________________________________________________________________
 inline string rstrip(const string& text, string s) {
-  std::unordered_set<char> chars;
+  ad_utility::HashSet<char> chars;
   for (size_t i = 0; i < s.size(); ++i) {
     chars.insert(s[i]);
   }

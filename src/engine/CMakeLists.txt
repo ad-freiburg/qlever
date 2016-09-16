@@ -2,7 +2,6 @@ add_library(engine
         Engine.h Engine.cpp
         IndexSequence.h
         QueryExecutionTree.h QueryExecutionTree.cpp
-        QueryGraph.h QueryGraph.cpp
         Operation.h
         ../global/Id.h
         ../global/Constants.h
@@ -12,7 +11,6 @@ add_library(engine
         IndexScan.h IndexScan.cpp
         Join.h Join.cpp
         Sort.h Sort.cpp
-        TextOperationForEntities.h TextOperationForEntities.cpp
         TextOperationForContexts.h TextOperationForContexts.cpp
         TextOperationWithoutFilter.h TextOperationWithoutFilter.cpp
         TextOperationWithFilter.h TextOperationWithFilter.cpp

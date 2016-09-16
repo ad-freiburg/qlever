@@ -5,18 +5,20 @@
 
 #include <vector>
 #include <array>
-#include <unordered_map>
+
 
 #include "../global/Id.h"
 #include "./Vocabulary.h"
 #include "../engine/IndexSequence.h"
 #include "../engine/ResultTable.h"
+#include "../util/HashMap.h"
+#include "../util/HashSet.h"
 
 
 using std::vector;
 using std::array;
-using std::unordered_map;
-using std::unordered_set;
+
+using ad_utility::HashSet;
 
 
 class FTSAlgorithms {
@@ -88,7 +90,6 @@ public:
                             vector<Score>& resultScores);
 
   static void intersect(const vector<Id>& matchingContexts,
-                        const vector<Score>& matchingContextScores,
                         const vector<Id>& eBlockCids,
                         const vector<Id>& eBlockWids,
                         const vector<Score>& eBlockScores,
@@ -194,7 +195,7 @@ public:
       const vector<Score>& scores,
       size_t from,
       size_t toExclusive,
-      const unordered_map<Id, vector<array<Id, I>>>& subRes,
+      const ad_utility::HashMap<Id, vector<array<Id, I>>>& subRes,
       vector<array<Id, 3 + I>>& res) {
     LOG(TRACE) << "Append cross-product called for a context with " <<
                toExclusive - from << " postings.\n";
@@ -326,8 +327,8 @@ public:
       const vector<Score>& scores,
       size_t from,
       size_t toExclusive,
-      const std::unordered_set<Id>& subRes1,
-      const std::unordered_set<Id>& subRes2,
+      const ad_utility::HashSet<Id>& subRes1,
+      const ad_utility::HashSet<Id>& subRes2,
       vector<array<Id, 5>>& res);
 
   static void appendCrossProduct(
@@ -336,7 +337,7 @@ public:
       const vector<Score>& scores,
       size_t from,
       size_t toExclusive,
-      const vector<std::unordered_map<Id, vector<vector<Id>>>>&,
+      const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>&,
       vector<vector<Id>>& res);
 
   template<typename FilterTab, typename ResultTab>
@@ -344,7 +345,7 @@ public:
       const vector<Id>& cids,
       const vector<Id>& eids,
       const vector<Score>& scores,
-      const unordered_map<Id, FilterTab>& fMap,
+      const ad_utility::HashMap<Id, FilterTab>& fMap,
       size_t k,
       ResultTab& result);
 
@@ -353,7 +354,7 @@ public:
       const vector<Id>& cids,
       const vector<Id>& eids,
       const vector<Score>& scores,
-      const unordered_set<Id>& fSet,
+      const ad_utility::HashSet<Id>& fSet,
       size_t k,
       ResultList& result);
 
@@ -362,7 +363,7 @@ public:
       const vector<Id>& cids,
       const vector<Id>& eids,
       const vector<Score>& scores,
-      const unordered_map<Id, FilterTab>& fMap,
+      const ad_utility::HashMap<Id, FilterTab>& fMap,
       size_t nofVars,
       size_t k,
       ResultTab& result);
@@ -372,7 +373,7 @@ public:
       const vector<Id>& cids,
       const vector<Id>& eids,
       const vector<Score>& scores,
-      const unordered_set<Id>& fSet,
+      const ad_utility::HashSet<Id>& fSet,
       size_t nofVars,
       size_t k,
       ResultTab& result);

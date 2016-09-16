@@ -4,13 +4,13 @@
 #pragma once
 
 #include <list>
-#include <unordered_map>
+
 #include "./IndexScan.h"
 #include "./QueryExecutionTree.h"
 
 
 using std::list;
-using std::unordered_map;
+
 
 // Special operation that replaces a join between a (usually very small
 // in terms of #rows) result and the result of a (usually very large) scan

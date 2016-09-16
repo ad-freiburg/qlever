@@ -184,13 +184,13 @@ public:
 
   void getECListForWordsAndSubtrees(
       const string& words,
-      const vector<unordered_map<Id, vector<vector<Id>>>>& subResVecs,
+      const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
       size_t limit,
       vector<vector<Id>>& res) const;
 
   void getECListForWordsAndSubtrees(
       const string& words,
-      const vector<unordered_map<Id, vector<vector<Id>>>>& subResVecs,
+      const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
       size_t limit,
       size_t nofFreeVariables,
       vector<vector<Id>>& res) const;
@@ -284,8 +284,8 @@ private:
                                  WidthOneList* result) const;
 
   void addContextToVector(TextVec::bufwriter_type& writer, Id context,
-                          const unordered_map<Id, Score>& words,
-                          const unordered_map<Id, Score>& entities);
+                          const ad_utility::HashMap<Id, Score>& words,
+                          const ad_utility::HashMap<Id, Score>& entities);
 
   template<typename T>
   void readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
@@ -312,8 +312,8 @@ private:
   size_t writeList(Numeric* data, size_t nofElements,
                    ad_utility::File& file) const;
 
-  typedef unordered_map<Id, Id> IdCodeMap;
-  typedef unordered_map<Score, Score> ScoreCodeMap;
+  typedef ad_utility::HashMap<Id, Id> IdCodeMap;
+  typedef ad_utility::HashMap<Score, Score> ScoreCodeMap;
   typedef vector<Id> IdCodebook;
   typedef vector<Score> ScoreCodebook;
 

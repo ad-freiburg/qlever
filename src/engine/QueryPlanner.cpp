@@ -172,8 +172,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
 // _____________________________________________________________________________
 void QueryPlanner::getVarTripleMap(
     const ParsedQuery& pq,
-    unordered_map<string, vector<SparqlTriple>>& varToTrip,
-    unordered_set<string>& contextVars) const {
+    ad_utility::HashMap<string, vector<SparqlTriple>>& varToTrip,
+    ad_utility::HashSet<string>& contextVars) const {
   for (auto& t: pq._whereClauseTriples) {
     if (isVariable(t._s)) {
       varToTrip[t._s].push_back(t);
@@ -397,7 +397,7 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
                                     node._variables.size() - 1);
   tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
                     &textOp);
-  unordered_map<string, size_t> vcmap;
+  ad_utility::HashMap<string, size_t> vcmap;
   size_t index = 0;
   vcmap[node._cvar] = index++;
   vcmap[string("SCORE(") + node._cvar + ")"] = index++;
@@ -423,7 +423,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
   // esp. with an entire relation but also with something like is-a Person
   // If that is the case look at the size estimate for the other side,
   // if that is rather small, replace the join and scan by a combination.
-  std::unordered_map<string, vector<SubtreePlan>> candidates;
+  ad_utility::HashMap<string, vector<SubtreePlan>> candidates;
   // Find all pairs between a and b that are connected by an edge.
   for (size_t i = 0; i < a.size(); ++i) {
     for (size_t j = 0; j < b.size(); ++j) {
@@ -542,7 +542,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           tree.setOperation(
               QueryExecutionTree::OperationType::TEXT_WITH_FILTER,
               &textOp);
-          unordered_map<string, size_t> vcmap;
+          ad_utility::HashMap<string, size_t> vcmap;
           // Subtract one because the entity that we filtered on
           // is provided by the filter table and still has the same place there.
           size_t colN = 2;
@@ -883,9 +883,9 @@ bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
 }
 
 // _____________________________________________________________________________
-unordered_map<string, vector<size_t>>
+ad_utility::HashMap<string, vector<size_t>>
 QueryPlanner::TripleGraph::identifyTextCliques() const {
-  unordered_map<string, vector<size_t>> contextVarToTextNodesIds;
+  ad_utility::HashMap<string, vector<size_t>> contextVarToTextNodesIds;
   std::set<string> contextVars;
   // Find all context vars.
   for (size_t i = 0; i < _adjLists.size(); ++i) {
@@ -934,7 +934,7 @@ QueryPlanner::TripleGraph::identifyTextCliques() const {
 vector<pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>>
 QueryPlanner::TripleGraph::splitAtContextVars(
     const vector<SparqlFilter>& origFilters,
-    unordered_map<string, vector<size_t>>& contextVarToTextNodes) const {
+    ad_utility::HashMap<string, vector<size_t>>& contextVarToTextNodes) const {
   vector<pair<QueryPlanner::TripleGraph, vector<SparqlFilter>>> retVal;
   // Recursively split the graph a context nodes.
   // Base-case: No no context nodes, return the graph itself.
@@ -942,13 +942,13 @@ QueryPlanner::TripleGraph::splitAtContextVars(
     retVal.emplace_back(make_pair(*this, origFilters));
   } else {
     // Just take the first contextVar and split at it.
-    unordered_set<size_t> textNodeIds;
+    ad_utility::HashSet<size_t> textNodeIds;
     textNodeIds.insert(contextVarToTextNodes.begin()->second.begin(),
                        contextVarToTextNodes.begin()->second.end());
 
     // For the next iteration / recursive call(s):
     // Leave out the first one because it has been worked on in this call.
-    unordered_map<string, vector<size_t>> cTMapNextIteration;
+    ad_utility::HashMap<string, vector<size_t>> cTMapNextIteration;
     cTMapNextIteration.insert(++contextVarToTextNodes.begin(),
                               contextVarToTextNodes.end());
 
@@ -979,7 +979,7 @@ QueryPlanner::TripleGraph::splitAtContextVars(
         // Find all parts so that the number of triples in them plus
         // the number of text triples equals the number of total triples.
         vector<vector<size_t>> setsOfReachablesNodes;
-        unordered_set<size_t> nodesDone;
+        ad_utility::HashSet<size_t> nodesDone;
         nodesDone.insert(textNodeIds.begin(), textNodeIds.end());
         nodesDone.insert(reachableNodes.begin(), reachableNodes.end());
         setsOfReachablesNodes.emplace_back(reachableNodes);
@@ -1013,9 +1013,9 @@ QueryPlanner::TripleGraph::splitAtContextVars(
 // _____________________________________________________________________________
 vector<size_t> QueryPlanner::TripleGraph::bfsLeaveOut(
     size_t startNode,
-    unordered_set<size_t> leaveOut) const {
+    ad_utility::HashSet<size_t> leaveOut) const {
   vector<size_t> res;
-  unordered_set<size_t> visited;
+  ad_utility::HashSet<size_t> visited;
   std::list<size_t> queue;
   queue.push_back(startNode);
   visited.insert(startNode);
@@ -1039,7 +1039,7 @@ vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
     const vector<SparqlFilter>& origFilters,
     const vector<size_t>& nodes) const {
   vector<SparqlFilter> ret;
-  unordered_set<string> coveredVariables;
+  ad_utility::HashSet<string> coveredVariables;
   for (auto n : nodes) {
     auto& node = *_nodeMap.find(n)->second;
     coveredVariables.insert(node._variables.begin(), node._variables.end());
@@ -1056,13 +1056,13 @@ vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
                                        vector<size_t> keepNodes) {
-  unordered_set<size_t> keep;
+  ad_utility::HashSet<size_t> keep;
   for (auto v : keepNodes) {
     keep.insert(v);
   }
   // Copy nodes to be kept and assign new node id's.
   // Keep information about the id change in a map.
-  unordered_map<size_t, size_t> idChange;
+  ad_utility::HashMap<size_t, size_t> idChange;
   for (size_t i = 0; i < other._nodeMap.size(); ++i) {
     if (keep.count(i) > 0) {
       _nodeStorage.push_back(*other._nodeMap.find(i)->second);
@@ -1114,14 +1114,14 @@ QueryPlanner::TripleGraph::TripleGraph() :
 // _____________________________________________________________________________
 void QueryPlanner::TripleGraph::collapseTextCliques() {
   // Create a map from context var to triples it occurs in (the cliques).
-  std::unordered_map<string, vector<size_t>> cvarsToTextNodes(
+  ad_utility::HashMap<string, vector<size_t>> cvarsToTextNodes(
       identifyTextCliques());
   if (cvarsToTextNodes.size() == 0) { return; }
   // Now turn each such clique into a new node the represents that whole
   // text operation clique.
   size_t id = 0;
   vector<Node> textNodes;
-  unordered_map<size_t, size_t> removedNodeIds;
+  ad_utility::HashMap<size_t, size_t> removedNodeIds;
   vector<std::set<size_t>> tnAdjSetsToOldIds;
   for (auto it = cvarsToTextNodes.begin();
        it != cvarsToTextNodes.end(); ++it) {
@@ -1158,8 +1158,8 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
   _nodeStorage.clear();
   _nodeMap.clear();
   _adjLists.clear();
-  unordered_map<size_t, size_t> idMapOldToNew;
-  unordered_map<size_t, size_t> idMapNewToOld;
+  ad_utility::HashMap<size_t, size_t> idMapOldToNew;
+  ad_utility::HashMap<size_t, size_t> idMapNewToOld;
 
   // Storage and ids.
   for (auto& tn : textNodes) {
@@ -1220,14 +1220,14 @@ bool QueryPlanner::TripleGraph::isPureTextQuery() {
 
 
 // _____________________________________________________________________________
-unordered_map<string, size_t>
+ad_utility::HashMap<string, size_t>
 QueryPlanner::createVariableColumnsMapForTextOperation(
     const string& contextVar,
     const string& entityVar,
-    const unordered_set<string>& freeVars,
+    const ad_utility::HashSet<string>& freeVars,
     const vector<pair<QueryExecutionTree, size_t>>& subtrees) {
   AD_CHECK(contextVar.size() > 0);
-  unordered_map<string, size_t> map;
+  ad_utility::HashMap<string, size_t> map;
   size_t n = 0;
   if (entityVar.size() > 0) {
     map[entityVar] = n++;

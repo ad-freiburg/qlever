@@ -2,16 +2,14 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <unordered_map>
 #include "./TextMetaData.h"
 #include "../util/ReadableNumberFact.h"
 #include "../global/Constants.h"
 
-using std::unordered_map;
-
 // _____________________________________________________________________________
-const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(const Id lower,
-                                                               const Id upper) const {
+const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
+    const Id lower,
+    const Id upper) const {
   AD_CHECK_GE(upper, lower);
   assert(_blocks.size() > 0);
   assert(_blocks.size() == _blockUpperBoundWordIds.size()
@@ -51,7 +49,7 @@ bool TextMetaData::existsTextBlockForEntityId(const Id eid) const {
       _blockUpperBoundEntityIds.begin(), _blockUpperBoundEntityIds.end(),
       eid);
 
-  return(*it == eid);
+  return (*it == eid);
 }
 
 // _____________________________________________________________________________
@@ -93,8 +91,8 @@ ad_utility::File& operator<<(ad_utility::File& f,
 }
 
 // _____________________________________________________________________________
-TextMetaData& TextMetaData::createFromByteBuffer(unsigned char *buffer) {
-  size_t nofBlocks = *reinterpret_cast<size_t *>(buffer);
+TextMetaData& TextMetaData::createFromByteBuffer(unsigned char* buffer) {
+  size_t nofBlocks = *reinterpret_cast<size_t*>(buffer);
   off_t offset = sizeof(size_t);
   bool stepEntity = false;
   for (size_t i = 0; i < nofBlocks; ++i) {
@@ -128,11 +126,11 @@ ad_utility::File& operator<<(ad_utility::File& f,
 
 // _____________________________________________________________________________
 TextBlockMetaData& TextBlockMetaData::createFromByteBuffer(
-    unsigned char *buffer) {
+    unsigned char* buffer) {
   off_t offset = 0;
-  _firstWordId = *reinterpret_cast<Id *>(buffer + offset);
+  _firstWordId = *reinterpret_cast<Id*>(buffer + offset);
   offset += sizeof(_firstWordId);
-  _lastWordId = *reinterpret_cast<Id *>(buffer + offset);
+  _lastWordId = *reinterpret_cast<Id*>(buffer + offset);
   offset += sizeof(_lastWordId);
   _cl.createFromByteBuffer(buffer + offset);
   offset += ContextListMetaData::sizeOnDisk();
@@ -153,17 +151,17 @@ ad_utility::File& operator<<(ad_utility::File& f,
 
 // _____________________________________________________________________________
 ContextListMetaData& ContextListMetaData::createFromByteBuffer(
-    unsigned char *buffer) {
+    unsigned char* buffer) {
   off_t offset = 0;
-  _nofElements = *reinterpret_cast<size_t *>(buffer + offset);
+  _nofElements = *reinterpret_cast<size_t*>(buffer + offset);
   offset += sizeof(_nofElements);
-  _startContextlist = *reinterpret_cast<off_t *>(buffer + offset);
+  _startContextlist = *reinterpret_cast<off_t*>(buffer + offset);
   offset += sizeof(_startContextlist);
-  _startWordlist = *reinterpret_cast<off_t *>(buffer + offset);
+  _startWordlist = *reinterpret_cast<off_t*>(buffer + offset);
   offset += sizeof(_startWordlist);
-  _startScorelist = *reinterpret_cast<off_t *>(buffer + offset);
+  _startScorelist = *reinterpret_cast<off_t*>(buffer + offset);
   offset += sizeof(_startScorelist);
-  _lastByte = *reinterpret_cast<off_t *>(buffer + offset);
+  _lastByte = *reinterpret_cast<off_t*>(buffer + offset);
   return *this;
 }
 
@@ -206,13 +204,13 @@ string TextMetaData::statistics() const {
   }
   os << "-------------------------------------------------------------------\n";
   os << "# Elements: " <<
-  totalElementsClassicLists + totalElementsEntityLists << '\n';
+     totalElementsClassicLists + totalElementsEntityLists << '\n';
   os << "  thereof:\n";
   os << "    Elements in classic lists: " << totalElementsClassicLists << '\n';
   os << "    Elements in entity lists:  " << totalElementsEntityLists << '\n';
   os << "-------------------------------------------------------------------\n";
   os << "# Bytes: " <<
-  totalBytesClassicLists + totalBytesEntityLists << '\n';
+     totalBytesClassicLists + totalBytesEntityLists << '\n';
   os << "  thereof:\n";
   os << "    Bytes in classic lists: " << totalBytesClassicLists << '\n';
   os << "    Bytes in entity lists:  " << totalBytesEntityLists << '\n';
@@ -225,8 +223,8 @@ string TextMetaData::statistics() const {
   os << "\n";
   os << "-------------------------------------------------------------------\n";
   os << "Theoretical (naiive) size: " <<
-  (totalElementsClassicLists + totalElementsEntityLists) *
-  (2 * sizeof(Id) + sizeof(Score)) << '\n';
+     (totalElementsClassicLists + totalElementsEntityLists) *
+     (2 * sizeof(Id) + sizeof(Score)) << '\n';
   os << "-------------------------------------------------------------------\n";
   return os.str();
 }

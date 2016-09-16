@@ -11,7 +11,6 @@
 
 #include "util/ReadableNumberFact.h"
 #include "parser/SparqlParser.h"
-#include "engine/QueryGraph.h"
 #include "util/Timer.h"
 #include "engine/QueryPlanner.h"
 

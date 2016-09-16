@@ -26,7 +26,7 @@ class DefaultKeyProvider<string> {
 
 const string DefaultKeyProvider<string>::DEFAULT_EMPTY_KEY = ""; // NOLINT
 
- const string DefaultKeyProvider<string>::DEFAULT_DELETED_KEY = // NOLINT
+const string DefaultKeyProvider<string>::DEFAULT_DELETED_KEY = // NOLINT
     "__adutils_default_deleted_key";
 
 template<class KeyType>

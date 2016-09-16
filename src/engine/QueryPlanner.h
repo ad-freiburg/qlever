@@ -67,14 +67,14 @@ public:
     bool isTextNode(size_t i) const;
 
     vector<vector<size_t>> _adjLists;
-    std::unordered_map<size_t, Node*> _nodeMap;
+    ad_utility::HashMap<size_t, Node*> _nodeMap;
     std::list<TripleGraph::Node> _nodeStorage;
 
-    unordered_map<string, vector<size_t>> identifyTextCliques() const;
+    ad_utility::HashMap<string, vector<size_t>> identifyTextCliques() const;
 
 
     vector<size_t> bfsLeaveOut(size_t startNode,
-                               unordered_set<size_t> leaveOut) const;
+                               ad_utility::HashSet<size_t> leaveOut) const;
 
     void collapseTextCliques();
 
@@ -83,7 +83,7 @@ public:
   private:
     vector<pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
         const vector<SparqlFilter>& origFilters,
-        unordered_map<string, vector<size_t>>& contextVarTotextNodes) const;
+        ad_utility::HashMap<string, vector<size_t>>& contextVarTotextNodes) const;
 
     vector<SparqlFilter> pickFilters(
         const vector<SparqlFilter>& origFilters,
@@ -92,11 +92,11 @@ public:
 
   class SubtreePlan {
   public:
-    explicit SubtreePlan(QueryExecutionContext* qec) : _qet(qec) { }
+    explicit SubtreePlan(QueryExecutionContext* qec) : _qet(qec) {}
 
     QueryExecutionTree _qet;
-    std::unordered_set<size_t> _idsOfIncludedNodes;
-    std::unordered_set<size_t> _idsOfIncludedFilters;
+    ad_utility::HashSet<size_t> _idsOfIncludedNodes;
+    ad_utility::HashSet<size_t> _idsOfIncludedFilters;
 
     size_t getCostEstimate() const;
 
@@ -106,21 +106,24 @@ public:
   TripleGraph createTripleGraph(const ParsedQuery& query) const;
 
 
-  static unordered_map<string, size_t> createVariableColumnsMapForTextOperation(
+  static ad_utility::HashMap<string, size_t>
+  createVariableColumnsMapForTextOperation(
       const string& contextVar,
       const string& entityVar,
-      const unordered_set<string>& freeVars,
+      const ad_utility::HashSet<string>& freeVars,
       const vector<pair<QueryExecutionTree, size_t>>& subtrees);
 
-  static unordered_map<string, size_t> createVariableColumnsMapForTextOperation(
+  static ad_utility::HashMap<string, size_t>
+  createVariableColumnsMapForTextOperation(
       const string& contextVar,
       const string& entityVar,
       const vector<pair<QueryExecutionTree, size_t>>& subtrees) {
     return createVariableColumnsMapForTextOperation(
-        contextVar, entityVar, unordered_set<string>(), subtrees);
+        contextVar, entityVar, ad_utility::HashSet<string>(), subtrees);
   };
 
-  static unordered_map<string, size_t> createVariableColumnsMapForTextOperation(
+  static ad_utility::HashMap<string, size_t>
+  createVariableColumnsMapForTextOperation(
       const string& contextVar,
       const string& entityVar) {
     return createVariableColumnsMapForTextOperation(
@@ -128,10 +131,11 @@ public:
         vector<pair<QueryExecutionTree, size_t>>());
   }
 
-  static unordered_map<string, size_t> createVariableColumnsMapForTextOperation(
+  static ad_utility::HashMap<string, size_t>
+  createVariableColumnsMapForTextOperation(
       const string& contextVar,
       const string& entityVar,
-      const unordered_set<string>& freeVars) {
+      const ad_utility::HashSet<string>& freeVars) {
     return createVariableColumnsMapForTextOperation(
         contextVar, entityVar, freeVars,
         vector<pair<QueryExecutionTree, size_t>>());
@@ -144,9 +148,10 @@ private:
 
   static bool isWords(const string& elem);
 
-  void getVarTripleMap(const ParsedQuery& pq,
-                       unordered_map<string, vector<SparqlTriple>>& varToTrip,
-                       unordered_set<string>& contextVars) const;
+  void getVarTripleMap(
+      const ParsedQuery& pq,
+      ad_utility::HashMap<string, vector<SparqlTriple>>& varToTrip,
+      ad_utility::HashSet<string>& contextVars) const;
 
   vector<SubtreePlan> seedWithScansAndText(const TripleGraph& tg) const;
 

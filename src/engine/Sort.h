@@ -4,13 +4,13 @@
 #pragma once
 
 #include <list>
-#include <unordered_map>
+
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
 
 
 using std::list;
-using std::unordered_map;
+
 
 
 class Sort : public Operation {

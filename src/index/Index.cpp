@@ -3,7 +3,6 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <algorithm>
-#include <unordered_set>
 #include <stxxl/algorithm>
 #include "../parser/TsvParser.h"
 #include "./Index.h"
@@ -105,7 +104,7 @@ size_t Index::passTsvFileForVocabulary(const string& tsvFile) {
             << std::endl;
   array<string, 3> spo;
   TsvParser p(tsvFile);
-  std::unordered_set<string> items;
+  ad_utility::HashSet<string> items;
   size_t i = 0;
   while (p.getLine(spo)) {
     if (ad_utility::isXsdValue(spo[2])) {
@@ -130,7 +129,7 @@ void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data) {
             << " and creating stxxl vector.\n";
   array<string, 3> spo;
   TsvParser p(tsvFile);
-  std::unordered_map<string, Id> vocabMap = _vocab.asMap();
+  ad_utility::HashMap<string, Id> vocabMap = _vocab.asMap();
   size_t i = 0;
   // write using vector_bufwriter
   ExtVec::bufwriter_type writer(data);
@@ -158,7 +157,7 @@ size_t Index::passNTriplesFileForVocabulary(const string& ntFile) {
             << std::endl;
   array<string, 3> spo;
   NTriplesParser p(ntFile);
-  std::unordered_set<string> items;
+  ad_utility::HashSet<string> items;
   size_t i = 0;
   while (p.getLine(spo)) {
     if (ad_utility::isXsdValue(spo[2])) {
@@ -183,7 +182,7 @@ void Index::passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data) {
             << " and creating stxxl vector.\n";
   array<string, 3> spo;
   NTriplesParser p(ntFile);
-  std::unordered_map<string, Id> vocabMap = _vocab.asMap();
+  ad_utility::HashMap<string, Id> vocabMap = _vocab.asMap();
   size_t i = 0;
   // write using vector_bufwriter
   ExtVec::bufwriter_type writer(data);

@@ -7,6 +7,8 @@
 
 #include "../util/File.h"
 #include "./Vocabulary.h"
+#include "../util/HashSet.h"
+#include "../util/HashMap.h"
 
 using std::string;
 
@@ -46,7 +48,7 @@ void Vocabulary::writeToFile(const string& fileName) const {
 }
 
 // _____________________________________________________________________________
-void Vocabulary::createFromSet(const std::unordered_set<string>& set) {
+void Vocabulary::createFromSet(const ad_utility::HashSet<string>& set) {
   LOG(INFO) << "Creating vocabulary from set ...\n";
   _words.clear();
   _words.reserve(set.size());
@@ -57,9 +59,8 @@ void Vocabulary::createFromSet(const std::unordered_set<string>& set) {
 }
 
 // _____________________________________________________________________________
-std::unordered_map<string, Id> Vocabulary::asMap() {
-  std::unordered_map<string, Id> map;
-  map.reserve(_words.size());
+ad_utility::HashMap<string, Id> Vocabulary::asMap() {
+  ad_utility::HashMap<string, Id> map;
   for (size_t i = 0; i < _words.size(); ++i) {
     map[_words[i]] = i;
   }

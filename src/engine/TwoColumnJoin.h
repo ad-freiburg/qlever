@@ -4,12 +4,12 @@
 #pragma once
 
 #include <list>
-#include <unordered_map>
+
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
 
 using std::list;
-using std::unordered_map;
+
 
 
 class TwoColumnJoin : public Operation {
@@ -31,7 +31,7 @@ public:
 
   virtual size_t resultSortedOn() const;
 
-  unordered_map<string, size_t> getVariableColumns() const;
+  ad_utility::HashMap<string, size_t> getVariableColumns() const;
 
   virtual void setTextLimit(size_t limit) {
     _left->setTextLimit(limit);

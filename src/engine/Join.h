@@ -4,14 +4,13 @@
 #pragma once
 
 #include <list>
-#include <unordered_map>
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
-#include "IndexScan.h"
+#include "./IndexScan.h"
+#include "../util/HashMap.h"
+#include "../util/HashSet.h"
 
 using std::list;
-using std::unordered_map;
-
 
 class Join : public Operation {
 public:
@@ -32,8 +31,8 @@ public:
 
   virtual size_t resultSortedOn() const;
 
-  unordered_map<string, size_t> getVariableColumns() const;
-  unordered_set<string> getContextVars() const;
+  ad_utility::HashMap<string, size_t> getVariableColumns() const;
+  ad_utility::HashSet<string> getContextVars() const;
 
   virtual void setTextLimit(size_t limit) {
     _left->setTextLimit(limit);

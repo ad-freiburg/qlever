@@ -83,7 +83,7 @@ size_t Index::passContextFileForVocabulary(string const
             " for vocabulary." << std::endl;
   ContextFileParser::Line line;
   ContextFileParser p(contextFile);
-  std::unordered_set<string> items;
+  ad_utility::HashSet<string> items;
   size_t i = 0;
   while (p.getLine(line)) {
     ++i;
@@ -110,8 +110,8 @@ void Index::passContextFileIntoVector(const string& contextFile,
   size_t i = 0;
   // write using vector_bufwriter
   TextVec::bufwriter_type writer(vec);
-  std::unordered_map<Id, Score> wordsInContext;
-  std::unordered_map<Id, Score> entitiesInContext;
+  ad_utility::HashMap<Id, Score> wordsInContext;
+  ad_utility::HashMap<Id, Score> entitiesInContext;
   Id currentContext = 0;
   size_t entityNotFoundErrorMsgCount = 0;
   while (p.getLine(line)) {
@@ -159,11 +159,11 @@ void Index::passContextFileIntoVector(const string& contextFile,
 // _____________________________________________________________________________
 void Index::addContextToVector(
     Index::TextVec::bufwriter_type& writer,
-    Id context, const unordered_map<Id, Score>& words,
-    const unordered_map<Id, Score>& entities) {
+    Id context, const ad_utility::HashMap<Id, Score>& words,
+    const ad_utility::HashMap<Id, Score>& entities) {
   // Determine blocks for each word and each entity.
   // Add the posting to each block.
-  std::unordered_set<Id> touchedBlocks;
+  ad_utility::HashSet<Id> touchedBlocks;
   for (auto it = words.begin(); it != words.end(); ++it) {
     Id blockId = getWordBlockId(it->first);
     touchedBlocks.insert(blockId);
@@ -405,8 +405,8 @@ void Index::createCodebooks(const vector<Index::Posting>& postings,
                             Index::IdCodebook& wordCodebook,
                             Index::ScoreCodeMap& scoreCodemap,
                             Index::ScoreCodebook& scoreCodebook) const {
-  unordered_map<Id, size_t> wfMap;
-  unordered_map<Score, size_t> sfMap;
+  ad_utility::HashMap<Id, size_t> wfMap;
+  ad_utility::HashMap<Score, size_t> sfMap;
   for (const auto& p: postings) {
     wfMap[std::get<1>(p)] = 0;
     sfMap[std::get<2>(p)] = 0;
@@ -611,7 +611,7 @@ void Index::getContextEntityScoreListsForWords(const string& words,
       size_t onlyWordsFrom = 1 - useElFromTerm;
       getWordPostingsForTerm(terms[onlyWordsFrom], wCids, wScores);
       getEntityPostingsForTerm(terms[useElFromTerm], eCids, eWids, eScores);
-      FTSAlgorithms::intersect(wCids, wScores, eCids, eWids, eScores, cids,
+      FTSAlgorithms::intersect(wCids, eCids, eWids, eScores, cids,
                                eids, scores);
     } else {
       // Generic case: Use a k-way intersect whereas the entity postings
@@ -694,7 +694,7 @@ void Index::getFilteredECListForWords(const string& words,
   LOG(DEBUG) << "In getFilteredECListForWords...\n";
   if (filter.size() > 0) {
     // Build a map filterEid->set<Rows>
-    using FilterMap = unordered_map<Id, FilterTable>;
+    using FilterMap = ad_utility::HashMap<Id, FilterTable>;
     LOG(DEBUG) << "Constructing map...\n";
     FilterMap fMap;
     for (size_t i = 0; i < filter.size(); ++i) {
@@ -725,7 +725,7 @@ void Index::getFilteredECListForWords(
     size_t limit, ResultList& result) const {
   LOG(DEBUG) << "In getFilteredECListForWords...\n";
   // Build a map filterEid->set<Rows>
-  using FilterSet = std::unordered_set<Id>;
+  using FilterSet = ad_utility::HashSet<Id>;
   LOG(DEBUG) << "Constructing filter set...\n";
   FilterSet fSet;
   for (size_t i = 0; i < filter.size(); ++i) {
@@ -889,7 +889,7 @@ void Index::getEntityPostingsForTerm(const string& term, vector<Id>& cids,
                       static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
                                           tbmd._entityCl._startScorelist),
                       eBlockScores);
-    FTSAlgorithms::intersect(matchingContexts, matchingContextScores,
+    FTSAlgorithms::intersect(matchingContexts,
                              eBlockCids, eBlockWids,
                              eBlockScores, cids, eids, scores);
   }
@@ -1214,7 +1214,7 @@ void Index::getECListForWordsAndSingleSub(const string& words,
   vector<array<Id, 3 + I>> nonAggRes;
   if (cids.size() > 0) {
     // Transform the sub res into a map from key entity to tuples
-    std::unordered_map<Id, vector<array<Id, I>>> subEs;
+    ad_utility::HashMap<Id, vector<array<Id, I>>> subEs;
     for (size_t i = 0; i < subres.size(); ++i) {
       auto& tuples = subEs[subres[i][subResMainCol]];
       tuples.push_back(subres[i]);
@@ -1255,15 +1255,6 @@ void Index::getECListForWordsAndSingleSub(const string& words,
                                           size_t limit,
                                           vector<array<Id, 5>>& res) const;
 
-// _____________________________________________________________________________
-void Index::getECListForWordsAndSingleSub(const string& words,
-                                          const vector<array<Id, 1>>& subres,
-                                          size_t limit,
-                                          vector<array<Id, 5>>& res) const {
-  // Version with exactly one subtree and one free variable.
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
-}
-
 
 // _____________________________________________________________________________
 void Index::getECListForWordsAndTwoW1Subs(const string& words,
@@ -1286,8 +1277,8 @@ void Index::getECListForWordsAndTwoW1Subs(const string& words,
   vector<array<Id, 5>> nonAggRes;
   if (cids.size() > 0) {
     // Transform the sub res' into sets of entity Ids
-    std::unordered_set<Id> subEs1;
-    std::unordered_set<Id> subEs2;
+    ad_utility::HashSet<Id> subEs1;
+    ad_utility::HashSet<Id> subEs2;
     for (size_t i = 0; i < subres1.size(); ++i) {
       subEs1.insert(subres1[i][0]);
     }
@@ -1330,7 +1321,7 @@ void Index::getECListForWordsAndTwoW1Subs(const string& words,
 // _____________________________________________________________________________
 void Index::getECListForWordsAndSubtrees(
     const string& words,
-    const vector<unordered_map<Id, vector<vector<Id>>>>& subResMaps,
+    const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResMaps,
     size_t limit,
     vector<vector<Id>>& res) const {
 
@@ -1376,20 +1367,6 @@ void Index::getECListForWordsAndSubtrees(
   }
 
   FTSAlgorithms::aggScoresAndTakeTopKContexts(nonAggRes, limit, res);
-}
-
-// _____________________________________________________________________________
-void Index::getECListForWordsAndSubtrees(
-    const string& words,
-    const vector<unordered_map<Id, vector<vector<Id>>>>& subResVecs,
-    size_t limit, size_t nofFreeVariables,
-    vector<vector<Id>>& res) const {
-  if (nofFreeVariables == 0) {
-    getECListForWordsAndSubtrees(words, subResVecs, limit, res);
-  } else {
-    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
-    // TODO
-  }
 }
 
 // _____________________________________________________________________________

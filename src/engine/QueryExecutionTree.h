@@ -4,16 +4,13 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
 #include "./QueryExecutionContext.h"
 #include "./Operation.h"
 #include "../util/Conversions.h"
+#include "../util/HashSet.h"
 
 
 using std::string;
-using std::unordered_map;
-using std::unordered_set;
 
 // A query execution tree.
 // Processed bottom up, this gives an ordering to the operations
@@ -40,10 +37,9 @@ public:
     FILTER = 5,
     DISTINCT = 6,
     TEXT_FOR_CONTEXTS = 7,
-    TEXT_FOR_ENTITIES = 8,
-    TEXT_WITHOUT_FILTER = 9,
-    TEXT_WITH_FILTER = 10,
-    TWO_COL_JOIN
+    TEXT_WITHOUT_FILTER = 8,
+    TEXT_WITH_FILTER = 9,
+    TWO_COL_JOIN = 10
   };
 
   enum OutputType {
@@ -60,7 +56,7 @@ public:
     return _qec;
   }
 
-  const unordered_map<string, size_t>& getVariableColumnMap() const {
+  const ad_utility::HashMap<string, size_t>& getVariableColumnMap() const {
     return _variableColumnMap;
   }
 
@@ -80,13 +76,13 @@ public:
 
   size_t getVariableColumn(const string& var) const;
 
-  void setVariableColumns(const unordered_map<string, size_t>& map);
+  void setVariableColumns(const ad_utility::HashMap<string, size_t>& map);
 
-  void setContextVars(const unordered_set<string>& set) {
+  void setContextVars(const ad_utility::HashSet<string>& set) {
     _contextVars = set;
   }
 
-  const unordered_set<string>& getContextVars() const {
+  const ad_utility::HashSet<string>& getContextVars() const {
     return _contextVars;
   }
 
@@ -136,10 +132,10 @@ public:
 
 private:
   QueryExecutionContext* _qec;   // No ownership
-  unordered_map<string, size_t> _variableColumnMap;
+  ad_utility::HashMap<string, size_t> _variableColumnMap;
   Operation* _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
-  unordered_set<string> _contextVars;
+  ad_utility::HashSet<string> _contextVars;
 
   template<typename Row>
   void writeJsonTable(const vector<Row>& data, size_t from,

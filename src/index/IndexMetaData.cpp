@@ -100,8 +100,7 @@ string IndexMetaData::statistics() const {
   size_t totalElements = 0;
   size_t totalBytes = 0;
   size_t totalBlocks = 0;
-  for (unordered_map<Id, FullRelationMetaData>::const_iterator it = _data.begin();
-       it != _data.end(); ++it) {
+  for (auto it = _data.begin(); it != _data.end(); ++it) {
     totalElements += it->second.getNofElements();
     totalBytes += getTotalBytesForRelation(it->second);
     totalBlocks += getNofBlocksForRelation(it->first);

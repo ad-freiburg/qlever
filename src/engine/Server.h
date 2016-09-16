@@ -6,19 +6,18 @@
 
 #include <string>
 #include <vector>
-#include <unordered_map>
 
 #include "../util/Socket.h"
 #include "../util/Timer.h"
 #include "../parser/SparqlParser.h"
 #include "../index/Index.h"
 #include "../engine/Engine.h"
-#include "../engine/QueryGraph.h"
 #include "../parser/ParseException.h"
+#include "./QueryExecutionContext.h"
+#include "./QueryExecutionTree.h"
 
 using std::string;
 using std::vector;
-using std::unordered_map;
 
 using ad_utility::Socket;
 
@@ -30,7 +29,7 @@ public:
       _serverSocket(), _port(port), _index(), _engine(), _initialized(false) {
   }
 
-  typedef unordered_map<string, string> ParamValueMap;
+  typedef ad_utility::HashMap<string, string> ParamValueMap;
 
   // Initialize the server.
   void initialize(const string& ontologyBaseName, bool useText);

@@ -3,7 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <sstream>
-#include <unordered_map>
+
 #include "./Comparators.h"
 #include "./QueryExecutionTree.h"
 #include "./OrderBy.h"
@@ -11,7 +11,7 @@
 
 
 using std::string;
-using std::unordered_map;
+
 
 // _____________________________________________________________________________
 size_t OrderBy::getResultWidth() const {

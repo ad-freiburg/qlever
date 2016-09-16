@@ -3,13 +3,11 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <sstream>
-#include <unordered_map>
 #include "./QueryExecutionTree.h"
 #include "./Filter.h"
 
 
 using std::string;
-using std::unordered_map;
 
 // _____________________________________________________________________________
 size_t Filter::getResultWidth() const {

@@ -12,7 +12,6 @@
 #include "./OrderBy.h"
 #include "./Filter.h"
 #include "./Distinct.h"
-#include "TextOperationForEntities.h"
 #include "TextOperationForContexts.h"
 #include "TextOperationWithFilter.h"
 #include "TextOperationWithoutFilter.h"
@@ -59,10 +58,6 @@ QueryExecutionTree::QueryExecutionTree(const QueryExecutionTree& other) :
     case OperationType::DISTINCT:
       _rootOperation = new Distinct(
           *static_cast<Distinct*>(other._rootOperation));
-      break;
-    case OperationType::TEXT_FOR_ENTITIES:
-      _rootOperation = new TextOperationForEntities(
-          *static_cast<TextOperationForEntities*>(other._rootOperation));
       break;
     case OperationType::TEXT_FOR_CONTEXTS:
       _rootOperation = new TextOperationForContexts(
@@ -147,11 +142,6 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
       delete _rootOperation;
       _rootOperation = new Distinct(*static_cast<Distinct*>(op));
       break;
-    case OperationType::TEXT_FOR_ENTITIES:
-      delete _rootOperation;
-      _rootOperation = new TextOperationForEntities(
-          *static_cast<TextOperationForEntities*>(op));
-      break;
     case OperationType::TEXT_FOR_CONTEXTS:
       delete _rootOperation;
       _rootOperation = new TextOperationForContexts(
@@ -194,7 +184,7 @@ size_t QueryExecutionTree::getVariableColumn(const string& variable) const {
 
 // _____________________________________________________________________________
 void QueryExecutionTree::setVariableColumns(
-    unordered_map<string, size_t> const& map) {
+    ad_utility::HashMap<string, size_t> const& map) {
   _variableColumnMap = map;
 }
 

@@ -6,16 +6,16 @@
 #include <array>
 #include <vector>
 #include <utility>
-#include <unordered_map>
 
 #include "../global/Id.h"
 #include "../util/File.h"
+#include "../util/HashMap.h"
+#include "../util/HashMap.h"
 
 
 using std::array;
 using std::vector;
 using std::pair;
-using std::unordered_map;
 
 // Check IndexLayout.txt for explanations (expected comments).
 // Removed comments here so that not two places had to be kept up-to-date.
@@ -190,8 +190,8 @@ public:
 
 private:
   off_t _offsetAfter;
-  unordered_map<Id, FullRelationMetaData> _data;
-  unordered_map<Id, BlockBasedRelationMetaData> _blockData;
+  ad_utility::HashMap<Id, FullRelationMetaData> _data;
+  ad_utility::HashMap<Id, BlockBasedRelationMetaData> _blockData;
 
   friend ad_utility::File& operator<<(ad_utility::File& f,
                                       const IndexMetaData& rmd);

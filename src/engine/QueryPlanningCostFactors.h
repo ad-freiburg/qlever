@@ -5,10 +5,11 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
+#include "../util/HashMap.h"
+
 
 using std::string;
-using std::unordered_map;
+
 
 // Simple container for cost factors.
 // Comes with default values, that can be set and read from a file
@@ -18,5 +19,5 @@ public:
   void readFromFile(const string& fileName);
   float getCostFactor(const string& key) const;
 private:
-  unordered_map<string, float> _factors;
+  ad_utility::HashMap<string, float> _factors;
 };

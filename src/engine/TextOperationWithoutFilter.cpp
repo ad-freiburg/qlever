@@ -3,13 +3,12 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <sstream>
-#include <unordered_map>
 #include "./QueryExecutionTree.h"
 #include "TextOperationWithoutFilter.h"
 
 
 using std::string;
-using std::unordered_map;
+
 
 // _____________________________________________________________________________
 size_t TextOperationWithoutFilter::getResultWidth() const {

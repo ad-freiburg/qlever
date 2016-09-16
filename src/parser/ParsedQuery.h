@@ -5,8 +5,9 @@
 
 #include <string>
 #include <vector>
-#include <unordered_map>
+
 #include "../util/StringUtils.h"
+#include "../util/HashMap.h"
 
 using std::string;
 using std::vector;
@@ -96,5 +97,5 @@ public:
 
 private:
   static void expandPrefix(string& item,
-      const std::unordered_map<string, string>& prefixMap);
+      const ad_utility::HashMap<string, string>& prefixMap);
 };

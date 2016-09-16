@@ -6,12 +6,12 @@
 #include <list>
 #include <utility>
 #include <vector>
-#include <unordered_map>
+
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
 
 using std::list;
-using std::unordered_map;
+
 using std::pair;
 using std::vector;
 

@@ -5,7 +5,6 @@
 #include <string>
 #include <sstream>
 #include <vector>
-#include <unordered_map>
 
 #include "../util/StringUtils.h"
 #include "ParsedQuery.h"
@@ -76,7 +75,7 @@ string SparqlTriple::asString() const {
 
 // _____________________________________________________________________________
 void ParsedQuery::expandPrefixes() {
-  std::unordered_map<string, string> prefixMap;
+  ad_utility::HashMap<string, string> prefixMap;
   for (const auto& p: _prefixes) {
     prefixMap[p._prefix] = p._uri;
   }
@@ -89,8 +88,9 @@ void ParsedQuery::expandPrefixes() {
 }
 
 // _____________________________________________________________________________
-void ParsedQuery::expandPrefix(string& item,
-                               const std::unordered_map<string, string>& prefixMap) {
+void ParsedQuery::expandPrefix(
+    string& item,
+    const ad_utility::HashMap<string, string>& prefixMap) {
   if (!ad_utility::startsWith(item, "?") &&
       !ad_utility::startsWith(item, "<")) {
     size_t i = item.find(':');
@@ -108,7 +108,7 @@ void ParsedQuery::expandPrefix(string& item,
                + item.substr(i + 1) + '>';
       } else {
         item = item.substr(0, from) +
-            prefixUri.substr(0, prefixUri.size() - 1)
+               prefixUri.substr(0, prefixUri.size() - 1)
                + item.substr(i + 1) + '>';
       }
     }

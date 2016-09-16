@@ -5,13 +5,11 @@
 #include <utility>
 #include <map>
 #include <set>
-#include <unordered_map>
 #include "./FTSAlgorithms.h"
 #include "../util/HashMap.h"
-
+#include "../util/HashSet.h"
 
 using std::pair;
-using std::unordered_map;
 
 // _____________________________________________________________________________
 void FTSAlgorithms::filterByRange(const IdRange& idRange,
@@ -46,7 +44,6 @@ void FTSAlgorithms::filterByRange(const IdRange& idRange,
 
 // _____________________________________________________________________________
 void FTSAlgorithms::intersect(const vector<Id>& matchingContexts,
-                              const vector<Score>& matchingContextScores,
                               const vector<Id>& eBlockCids,
                               const vector<Id>& eBlockWids,
                               const vector<Score>& eBlockScores,
@@ -346,7 +343,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
 
   using ScoreToContext = std::set<pair<Score, Id>>;
   using ScoreAndStC = pair<Score, ScoreToContext>;
-  using AggMap = unordered_map<Id, ScoreAndStC>;
+  using AggMap = ad_utility::HashMap<Id, ScoreAndStC>;
   AggMap map;
   for (size_t i = 0; i < eids.size(); ++i) {
     if (map.count(eids[i]) == 0) {
@@ -522,8 +519,10 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
                " contexts per entity...\n";
     using ScoreToContext = std::set<pair<Score, Id>>;
     using ScoreAndStC = pair<Score, ScoreToContext>;
-    using AggMap = unordered_map<vector<Id>, ScoreAndStC, IdVectorHash>;
-    AggMap map;
+    using AggMap = ad_utility::HashMap<vector<Id>, ScoreAndStC, IdVectorHash>;
+    vector<Id> emptyKey = {{std::numeric_limits<Id>::max()}};
+    vector<Id> deletedKey = {{std::numeric_limits<Id>::max() - 1}};
+    AggMap map(emptyKey, deletedKey);
     vector<Id> entitiesInContext;
     Id currentCid = cids[0];
     Score cscore = scores[0];
@@ -633,8 +632,15 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
 
     using ScoreToContext = std::set<pair<Score, Id>>;
     using ScoreAndStC = pair<Score, ScoreToContext>;
-    using AggMap = unordered_map<std::pair<Id, Id>, ScoreAndStC, IdPairHash>;
-    AggMap map;
+    using AggMap = ad_utility::HashMap<std::pair<Id, Id>, ScoreAndStC, IdPairHash>;
+    AggMap map(
+        std::make_pair(
+            std::numeric_limits<Id>::max(),
+            std::numeric_limits<Id>::max()),
+        std::make_pair(
+            std::numeric_limits<Id>::max() - 1,
+            std::numeric_limits<Id>::max() - 1)
+    );
     vector<Id> entitiesInContext;
     Id currentCid = cids[0];
     Score cscore = scores[0];
@@ -733,8 +739,19 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
 
     using ScoreToContext = std::set<pair<Score, Id>>;
     using ScoreAndStC = pair<Score, ScoreToContext>;
-    using AggMap = unordered_map<std::tuple<Id, Id, Id>, ScoreAndStC, IdTripleHash>;
-    AggMap map;
+    using AggMap = ad_utility::HashMap<std::tuple<Id, Id, Id>,
+        ScoreAndStC, IdTripleHash>;
+    auto emptyKey = std::make_tuple(
+        std::numeric_limits<Id>::max(),
+        std::numeric_limits<Id>::max(),
+        std::numeric_limits<Id>::max()
+    );
+    auto deletedKey = std::make_tuple(
+        std::numeric_limits<Id>::max() - 1,
+        std::numeric_limits<Id>::max() - 1,
+        std::numeric_limits<Id>::max() - 1
+    );
+    AggMap map(emptyKey, deletedKey);
     vector<Id> entitiesInContext;
     Id currentCid = cids[0];
     Score cscore = scores[0];
@@ -836,9 +853,17 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   // For each context build a cross product of width 2.
   // Store them in a map, use a pair of id's as key and
   // an appropriate hash function.
-  using AggMap = unordered_map<pair<Id, Id>,
+  using AggMap = ad_utility::HashMap<pair<Id, Id>,
       pair<Score, pair<Id, Score>>, IdPairHash>;
-  AggMap map;
+  auto emptyKey = std::make_pair(
+      std::numeric_limits<Id>::max(),
+      std::numeric_limits<Id>::max()
+  );
+  auto deletedKey = std::make_pair(
+      std::numeric_limits<Id>::max() - 1,
+      std::numeric_limits<Id>::max() - 1
+  );
+  AggMap map(emptyKey, deletedKey);
   vector<Id> entitiesInContext;
   Id currentCid = cids[0];
   Score cscore = scores[0];
@@ -920,9 +945,19 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   // an appropriate hash function.
 
 
-  using AggMap = unordered_map<std::tuple<Id, Id, Id>,
+  using AggMap = ad_utility::HashMap<std::tuple<Id, Id, Id>,
       pair<Score, pair<Id, Score>>, IdTripleHash>;
-  AggMap map;
+  auto emptyKey = std::make_tuple(
+      std::numeric_limits<Id>::max(),
+      std::numeric_limits<Id>::max(),
+      std::numeric_limits<Id>::max()
+  );
+  auto deletedKey = std::make_tuple(
+      std::numeric_limits<Id>::max() - 1,
+      std::numeric_limits<Id>::max() - 1,
+      std::numeric_limits<Id>::max() - 1
+  );
+  AggMap map(emptyKey, deletedKey);
   vector<Id> entitiesInContext;
   Id currentCid = cids[0];
   Score cscore = scores[0];
@@ -1010,9 +1045,11 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   // For each context build a cross product of width 2.
   // Store them in a map, use a pair of id's as key and
   // an appropriate hash function.
-  using AggMap = unordered_map<std::vector<Id>,
+  using AggMap = ad_utility::HashMap<std::vector<Id>,
       pair<Score, pair<Id, Score>>, IdVectorHash>;
-  AggMap map;
+  vector<Id> emptyKey = {{std::numeric_limits<Id>::max()}};
+  vector<Id> deletedKey = {{std::numeric_limits<Id>::max() - 1}};
+  AggMap map(emptyKey, deletedKey);
   vector<Id> entitiesInContext;
   Id currentCid = cids[0];
   Score cscore = scores[0];
@@ -1100,14 +1137,14 @@ void FTSAlgorithms::appendCrossProduct(const vector<Id>& cids,
                                        const vector<Score>& scores,
                                        size_t from,
                                        size_t toExclusive,
-                                       const std::unordered_set<Id>& subRes1,
-                                       const std::unordered_set<Id>& subRes2,
+                                       const ad_utility::HashSet<Id>& subRes1,
+                                       const ad_utility::HashSet<Id>& subRes2,
                                        vector<array<Id, 5>>& res) {
   LOG(TRACE) << "Append cross-product called for a context with " <<
              toExclusive - from << " postings.\n";
   vector<Id> contextSubRes1;
   vector<Id> contextSubRes2;
-  std::unordered_set<Id> done;
+  ad_utility::HashSet<Id> done;
   for (size_t i = from; i < toExclusive; ++i) {
     if (done.count(eids[i])) {
       continue;
@@ -1142,12 +1179,12 @@ void FTSAlgorithms::appendCrossProduct(
     const vector<Score>& scores,
     size_t from,
     size_t toExclusive,
-    const vector<unordered_map<Id, vector<vector<Id>>>>& subResMaps,
+    const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResMaps,
     vector<vector<Id>>& res) {
 
   vector<vector<vector<Id>>> subResMatches;
   subResMatches.resize(subResMaps.size());
-  std::unordered_set<Id> distinctEids;
+  ad_utility::HashSet<Id> distinctEids;
   for (size_t i = from; i < toExclusive; ++i) {
     if (distinctEids.count(eids[i])) {
       continue;
@@ -1198,7 +1235,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>& cids,
     const vector<Id>& eids,
     const vector<Score>& scores,
-    const unordered_map<Id, FilterTab>& fMap,
+    const ad_utility::HashMap<Id, FilterTab>& fMap,
     size_t k,
     ResultTab& result) {
   AD_CHECK_EQ(cids.size(), eids.size());
@@ -1216,7 +1253,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
 
   using ScoreToContext = std::set<pair<Score, Id>>;
   using ScoreAndStC = pair<Score, ScoreToContext>;
-  using AggMap = unordered_map<Id, ScoreAndStC>;
+  using AggMap = ad_utility::HashMap<Id, ScoreAndStC>;
   AggMap map;
   for (size_t i = 0; i < eids.size(); ++i) {
     if (fMap.count(eids[i]) > 0) {
@@ -1258,32 +1295,32 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthOneList>&, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthOneList>&, size_t,
     FTSAlgorithms::WidthThreeList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthTwoList>&, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthTwoList>&, size_t,
     FTSAlgorithms::WidthFourList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthThreeList>&, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthThreeList>&, size_t,
     FTSAlgorithms::WidthFiveList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthFourList>&, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthFourList>&, size_t,
     FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthFiveList>&, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthFiveList>&, size_t,
     FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::VarWidthList>&, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::VarWidthList>&, size_t,
     FTSAlgorithms::VarWidthList&);
 
 // _____________________________________________________________________________
@@ -1292,7 +1329,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>& cids,
     const vector<Id>& eids,
     const vector<Score>& scores,
-    const unordered_set<Id>& fSet,
+    const ad_utility::HashSet<Id>& fSet,
     size_t k,
     ResultList& result) {
   AD_CHECK_EQ(cids.size(), eids.size());
@@ -1312,7 +1349,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
 
   using ScoreToContext = std::set<pair<Score, Id>>;
   using ScoreAndStC = pair<Score, ScoreToContext>;
-  using AggMap = unordered_map<Id, ScoreAndStC>;
+  using AggMap = ad_utility::HashMap<Id, ScoreAndStC>;
   AggMap map;
   for (size_t i = 0; i < eids.size(); ++i) {
     if (fSet.count(eids[i]) > 0) {
@@ -1352,54 +1389,54 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_set<Id>&, size_t,
+    const ad_utility::HashSet<Id>&, size_t,
     FTSAlgorithms::WidthThreeList&);
 
 // Extra functions that should never get called but are needed
 // for the compiler:
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthOneList>&, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthOneList>&, size_t,
     FTSAlgorithms::WidthFourList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthOneList>&, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthOneList>&, size_t,
     FTSAlgorithms::WidthFiveList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthOneList>&, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthOneList>&, size_t,
     FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_set<Id>&, size_t,
+    const ad_utility::HashSet<Id>&, size_t,
     FTSAlgorithms::WidthFourList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_set<Id>&, size_t,
+    const ad_utility::HashSet<Id>&, size_t,
     FTSAlgorithms::WidthFiveList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_set<Id>&, size_t,
+    const ad_utility::HashSet<Id>&, size_t,
     FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthTwoList>&, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthTwoList>&, size_t,
     FTSAlgorithms::WidthFiveList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthTwoList>&, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthTwoList>&, size_t,
     FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthThreeList>&, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthThreeList>&, size_t,
     FTSAlgorithms::VarWidthList&);
 
 // _____________________________________________________________________________
@@ -1408,7 +1445,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>& cids,
     const vector<Id>& eids,
     const vector<Score>& scores,
-    const unordered_map<Id, FilterTab>& fMap,
+    const ad_utility::HashMap<Id, FilterTab>& fMap,
     size_t nofVars,
     size_t kLimit,
     ResultTab& result) {
@@ -1422,8 +1459,10 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
              " contexts per entity...\n";
   using ScoreToContext = std::set<pair<Score, Id>>;
   using ScoreAndStC = pair<Score, ScoreToContext>;
-  using AggMap = unordered_map<vector<Id>, ScoreAndStC, IdVectorHash>;
-  AggMap map;
+  using AggMap = ad_utility::HashMap<vector<Id>, ScoreAndStC, IdVectorHash>;
+  vector<Id> emptyKey = {{std::numeric_limits<Id>::max()}};
+  vector<Id> deletedKey = {{std::numeric_limits<Id>::max() - 1}};
+  AggMap map(emptyKey, deletedKey);
   vector<Id> entitiesInContext;
   vector<Id> filteredEntitiesInContext;
   Id currentCid = cids[0];
@@ -1541,62 +1580,62 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthOneList>&, size_t, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthOneList>&, size_t, size_t,
     FTSAlgorithms::WidthThreeList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthOneList>&, size_t, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthOneList>&, size_t, size_t,
     FTSAlgorithms::WidthFourList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthOneList>&, size_t, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthOneList>&, size_t, size_t,
     FTSAlgorithms::WidthFiveList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthOneList>&, size_t, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthOneList>&, size_t, size_t,
     FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthTwoList>&, size_t, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthTwoList>&, size_t, size_t,
     FTSAlgorithms::WidthFourList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthTwoList>&, size_t, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthTwoList>&, size_t, size_t,
     FTSAlgorithms::WidthFiveList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthTwoList>&, size_t, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthTwoList>&, size_t, size_t,
     FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthThreeList>&, size_t, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthThreeList>&, size_t, size_t,
     FTSAlgorithms::WidthFiveList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthThreeList>&, size_t, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthThreeList>&, size_t, size_t,
     FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthFourList>&, size_t, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthFourList>&, size_t, size_t,
     FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::WidthFiveList>&, size_t, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthFiveList>&, size_t, size_t,
     FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_map<Id, FTSAlgorithms::VarWidthList>&, size_t, size_t,
+    const ad_utility::HashMap<Id, FTSAlgorithms::VarWidthList>&, size_t, size_t,
     FTSAlgorithms::VarWidthList&);
 
 // _____________________________________________________________________________
@@ -1605,7 +1644,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>& cids,
     const vector<Id>& eids,
     const vector<Score>& scores,
-    const unordered_set<Id>& fSet,
+    const ad_utility::HashSet<Id>& fSet,
     size_t nofVars,
     size_t kLimit,
     ResultTab& result) {
@@ -1619,8 +1658,10 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
              " contexts per entity...\n";
   using ScoreToContext = std::set<pair<Score, Id>>;
   using ScoreAndStC = pair<Score, ScoreToContext>;
-  using AggMap = unordered_map<vector<Id>, ScoreAndStC, IdVectorHash>;
-  AggMap map;
+  using AggMap = ad_utility::HashMap<vector<Id>, ScoreAndStC, IdVectorHash>;
+  vector<Id> emptyKey = {{std::numeric_limits<Id>::max()}};
+  vector<Id> deletedKey = {{std::numeric_limits<Id>::max() - 1}};
+  AggMap map(emptyKey, deletedKey);
   vector<Id> entitiesInContext;
   vector<Id> filteredEntitiesInContext;
   Id currentCid = cids[0];
@@ -1733,20 +1774,20 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_set<Id>&, size_t, size_t,
+    const ad_utility::HashSet<Id>&, size_t, size_t,
     FTSAlgorithms::WidthThreeList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_set<Id>&, size_t, size_t,
+    const ad_utility::HashSet<Id>&, size_t, size_t,
     FTSAlgorithms::WidthFourList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_set<Id>&, size_t, size_t,
+    const ad_utility::HashSet<Id>&, size_t, size_t,
     FTSAlgorithms::WidthFiveList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const unordered_set<Id>&, size_t, size_t,
+    const ad_utility::HashSet<Id>&, size_t, size_t,
     FTSAlgorithms::VarWidthList&);

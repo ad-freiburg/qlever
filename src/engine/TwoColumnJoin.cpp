@@ -5,7 +5,7 @@
 #include "./TwoColumnJoin.h"
 
 using std::string;
-using std::unordered_map;
+
 
 // _____________________________________________________________________________
 TwoColumnJoin::TwoColumnJoin(QueryExecutionContext* qec,
@@ -151,8 +151,8 @@ void TwoColumnJoin::computeResult(ResultTable* result) const {
 }
 
 // _____________________________________________________________________________
-unordered_map<string, size_t> TwoColumnJoin::getVariableColumns() const {
-  unordered_map<string, size_t> retVal(_left->getVariableColumnMap());
+ad_utility::HashMap<string, size_t> TwoColumnJoin::getVariableColumns() const {
+  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumnMap());
   size_t leftSize = _left->getResultWidth();
   for (auto it = _right->getVariableColumnMap().begin();
        it != _right->getVariableColumnMap().end(); ++it) {
