@@ -75,6 +75,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
   string query;
   string contentType;
   client->recieve(&request);
+  LOG(DEBUG) << "Got request from client." << endl;
 
   size_t indexOfGET = request.find("GET");
   size_t indexOfHTTP = request.find("HTTP");
