@@ -72,7 +72,7 @@ TEST(VocabularyTest, readWriteTest) {
 }
 
 TEST(VocabularyTest, createFromSetTest) {
-  std::unordered_set<string> s;
+  ad_utility::HashSet<string> s;
   s.insert("a");
   s.insert("ab");
   s.insert("ba");

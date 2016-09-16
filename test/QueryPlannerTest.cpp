@@ -134,7 +134,7 @@ TEST(QueryPlannerTest, testBFSLeaveOut) {
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(pq);
       ASSERT_EQ(3u, tg._adjLists.size());
-      unordered_set<size_t> lo;
+      ad_utility::HashSet<size_t> lo;
       auto out = tg.bfsLeaveOut(0, lo);
       ASSERT_EQ(3u, out.size());
       lo.insert(1);
@@ -154,7 +154,7 @@ TEST(QueryPlannerTest, testBFSLeaveOut) {
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(pq);
-      unordered_set<size_t> lo;
+      ad_utility::HashSet<size_t> lo;
       auto out = tg.bfsLeaveOut(0, lo);
       ASSERT_EQ(3u, out.size());
       lo.insert(1);
@@ -258,12 +258,12 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             tg.asString());
         tg.collapseTextCliques();
         ASSERT_EQ(
-            "0 {TextOP for ?c2, wordPart: \"xx\"} : (1)\n"
-                "1 {TextOP for ?c, wordPart: \"abc\"} : (0, 2)\n"
-                "2 {s: ?x, p: <p>, o: <X>} : (1)",
+            "0 {TextOP for ?c, wordPart: \"abc\"} : (1, 2)\n"
+                "1 {TextOP for ?c2, wordPart: \"xx\"} : (0)\n"
+                "2 {s: ?x, p: <p>, o: <X>} : (0)",
             tg.asString());
-        ASSERT_EQ(2ul, tg._nodeMap[0]->_variables.size());
-        ASSERT_EQ(3ul, tg._nodeMap[1]->_variables.size());
+        ASSERT_EQ(3ul, tg._nodeMap[0]->_variables.size());
+        ASSERT_EQ(2ul, tg._nodeMap[1]->_variables.size());
         ASSERT_EQ(1ul, tg._nodeMap[2]->_variables.size());
       }
       {
@@ -283,13 +283,13 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             tg.asString());
         tg.collapseTextCliques();
         ASSERT_EQ(
-            "0 {TextOP for ?c2, wordPart: \"xx\"} : (1, 3)\n"
-                "1 {TextOP for ?c, wordPart: \"abc\"} : (0, 2, 3)\n"
-                "2 {s: ?x, p: <p>, o: <X>} : (1)\n"
+            "0 {TextOP for ?c, wordPart: \"abc\"} : (1, 2, 3)\n"
+                "1 {TextOP for ?c2, wordPart: \"xx\"} : (0, 3)\n"
+                "2 {s: ?x, p: <p>, o: <X>} : (0)\n"
                 "3 {s: ?y, p: <P2>, o: <X2>} : (0, 1)",
             tg.asString());
-        ASSERT_EQ(2ul, tg._nodeMap[0]->_variables.size());
-        ASSERT_EQ(3ul, tg._nodeMap[1]->_variables.size());
+        ASSERT_EQ(3ul, tg._nodeMap[0]->_variables.size());
+        ASSERT_EQ(2ul, tg._nodeMap[1]->_variables.size());
         ASSERT_EQ(1ul, tg._nodeMap[2]->_variables.size());
         ASSERT_EQ(1ul, tg._nodeMap[3]->_variables.size());
       }

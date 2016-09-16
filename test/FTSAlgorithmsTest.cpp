@@ -75,7 +75,7 @@ TEST(FTSAlgorithmsTest, intersectTest) {
   vector<Id> resultCids;
   vector<Id> resultEids;
   vector<Score> resultScores;
-  FTSAlgorithms::intersect(matchingContexts, matchingContextScores, eBlockCids,
+  FTSAlgorithms::intersect(matchingContexts, eBlockCids,
                            eBlockWids, eBlockScores, resultCids, resultEids,
                            resultScores);
   ASSERT_EQ(0u, resultCids.size());
@@ -88,7 +88,7 @@ TEST(FTSAlgorithmsTest, intersectTest) {
   matchingContextScores.push_back(1);
   matchingContextScores.push_back(1);
 
-  FTSAlgorithms::intersect(matchingContexts, matchingContextScores, eBlockCids,
+  FTSAlgorithms::intersect(matchingContexts, eBlockCids,
                            eBlockWids, eBlockScores, resultCids, resultEids,
                            resultScores);
   ASSERT_EQ(0u, resultCids.size());
@@ -107,7 +107,7 @@ TEST(FTSAlgorithmsTest, intersectTest) {
   eBlockScores.push_back(1);
   eBlockScores.push_back(1);
 
-  FTSAlgorithms::intersect(matchingContexts, matchingContextScores, eBlockCids,
+  FTSAlgorithms::intersect(matchingContexts, eBlockCids,
                            eBlockWids, eBlockScores, resultCids, resultEids,
                            resultScores);
   ASSERT_EQ(2u, resultCids.size());
@@ -351,7 +351,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
 
 TEST(FTSAlgorithmsTest, appendCrossProductWithSingleOtherTest) {
 
-  unordered_map<Id, vector<array<Id, 1>>> subRes;
+  ad_utility::HashMap<Id, vector<array<Id, 1>>> subRes;
   subRes[1] = vector<array<Id, 1>>{{{1}}};
 
   vector<array<Id, 4>> res;
@@ -405,11 +405,11 @@ TEST(FTSAlgorithmsTest, appendCrossProductWithSingleOtherTest) {
 }
 
 TEST(FTSAlgorithmsTest, appendCrossProductWithTwoW1Test) {
-  std::unordered_set<Id> subRes1;
+  ad_utility::HashSet<Id> subRes1;
   subRes1.insert(1);
   subRes1.insert(2);
 
-  std::unordered_set<Id> subRes2;
+  ad_utility::HashSet<Id> subRes2;
   subRes2.insert(0);
   subRes2.insert(5);
 
@@ -540,7 +540,7 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   vector<Score> scores;
   size_t k = 1;
   FTSAlgorithms::WidthThreeList resW3;
-  unordered_map<Id, FTSAlgorithms::WidthOneList> fMap1;
+  ad_utility::HashMap<Id, FTSAlgorithms::WidthOneList> fMap1;
 
   FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
                                                           fMap1, k, resW3);
@@ -589,7 +589,7 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
                                                           fMap1, k, resW3);
   ASSERT_EQ(5u, resW3.size());
 
-  unordered_map<Id, FTSAlgorithms::WidthFourList> fMap4;
+  ad_utility::HashMap<Id, FTSAlgorithms::WidthFourList> fMap4;
   fMap4[0].emplace_back(array<Id, 4>{{0, 0, 0, 0}});
   fMap4[0].emplace_back(array<Id, 4>{{0, 1, 0, 0}});
   fMap4[0].emplace_back(array<Id, 4>{{0, 2, 0, 0}});
@@ -634,7 +634,7 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
 
     size_t k = 1;
     FTSAlgorithms::WidthFourList resW4;
-    unordered_map<Id, FTSAlgorithms::WidthOneList> fMap1;
+    ad_utility::HashMap<Id, FTSAlgorithms::WidthOneList> fMap1;
 
     size_t nofVars = 2;
     FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(

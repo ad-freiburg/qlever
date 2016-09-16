@@ -24,7 +24,8 @@ class DefaultKeyProvider<string> {
     static const string DEFAULT_DELETED_KEY;
 };
 
-const string DefaultKeyProvider<string>::DEFAULT_EMPTY_KEY = ""; // NOLINT
+const string DefaultKeyProvider<string>::DEFAULT_EMPTY_KEY =
+    "__adutils_default_empty_key"; // NOLINT
 
 const string DefaultKeyProvider<string>::DEFAULT_DELETED_KEY = // NOLINT
     "__adutils_default_deleted_key";

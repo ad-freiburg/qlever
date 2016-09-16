@@ -7,9 +7,6 @@ target_link_libraries(StringUtilsTest gtest_main -pthread)
 add_executable(LRUCacheTest LRUCacheTest.cpp)
 target_link_libraries(LRUCacheTest gtest_main -pthread)
 
-add_executable(QueryGraphTest QueryGraphTest.cpp)
-target_link_libraries(QueryGraphTest gtest_main engine -pthread)
-
 add_executable(FileTest FileTest.cpp)
 target_link_libraries(FileTest gtest_main -pthread)
 
@@ -53,7 +50,6 @@ add_library(tests
             SparqlParserTest
 			StringUtilsTest
             LRUCacheTest
-            QueryGraphTest
             Simple8bTest
             FileTest
             VocabularyTest
