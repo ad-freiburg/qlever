@@ -25,7 +25,7 @@ void Server::initialize(const string& ontologyBaseName, bool useText) {
   }
 
   // Init the server socket.
-  bool ret = _serverSocket.create() && _serverSocket.bind(_port)
+  bool ret = _serverSocket.create(true) && _serverSocket.bind(_port)
              && _serverSocket.listen();
   if (!ret) {
     LOG(ERROR)
