@@ -1,0 +1,2 @@
+text_database_research	SELECT ?c WHERE { <word:database> <in-context> ?c . <word:research> <in-context> ?c }
+text_entity_ow_semantic_search	SELECT ?e WHERE { ?e <in-context> ?c . <word:semantic> <in-context> ?c . <word:search> <in-context> ?c }

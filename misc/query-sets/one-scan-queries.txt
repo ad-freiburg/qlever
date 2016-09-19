@@ -1,0 +1,10 @@
+onescan_isa-firefighter	SELECT ?x WHERE { ?x <is-a> <Firefighter> }
+onescan_bornin-ulm	SELECT ?x WHERE { ?x <Place_of_birth> <Ulm> }
+onescan_usedtotreat-bleeding	SELECT ?x WHERE { ?x <Used_to_Treat> <Bleeding> }
+onescan_gender-male	SELECT ?x WHERE { ?x <Gender> <Male> }
+onescan_recording-smellslikets	SELECT ?x WHERE { ?x <Recording> <Smells_Like_Teen_Spirit> }
+onescan_award-moh	SELECT ?x WHERE { ?x <Award_Won> <Medal_of_Honor> }
+onescan_cuisine-ital	SELECT ?x WHERE { ?x <Cuisine> <Italian_food> }
+onescan_dir-spielb	SELECT ?x WHERE { ?x <Directed_by> <Steven_Spielberg> }
+onescan_structheight	SELECT ?x ?y WHERE { ?x <Structural_Height> ?y }
+onescan_area	SELECT	?x ?y WHERE { ?x <Area> ?y }

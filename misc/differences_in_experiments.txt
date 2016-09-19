@@ -1,2 +1,0 @@
-1) No score for postings
-2) Scoring text matches

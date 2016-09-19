@@ -1,0 +1,4 @@
+cwt_music-friend-athlete-limit10000	SELECT DISTINCT ?p ?s WHERE { ?p <is-a> <Musician> . ?s <is-a> <Athlete> . ?p <in-context> ?c . ?s <in-context> ?c . <word:friend> <in-context> ?c . FILTER(?p != ?s) } LIMIT 10000
+cwt_polit-friend-scient-mhp	SELECT DISTINCT ?p ?s WHERE { ?p <is-a> <Politician> . ?s <is-a> <Scientist> . ?p <in-context> ?c . ?s <in-context> ?c . <word:friend> <in-context> ?c . ?s <in-context> ?c2 . <word:manhattan> <in-context> ?c2 . <word:project> <in-context> ?c2 . FILTER(?p != ?s) }
+cwt_fire_in_asian_city	SELECT ?ci WHERE { ?ci <is-a> <City/Town/Village> . ?ci <Contained_by> <Asia> . ?ci <in-context> ?c . <word:fire> <in-context> ?c . <word:destroyed> <in-context> ?c }
+cwt_fire_in_asian_city_pop_airport	SELECT ?ci ?p ?a WHERE { ?ci <is-a> <City/Town/Village> . ?ci <Contained_by> <Asia> . ?ci <in-context> ?c . <word:fire> <in-context> ?c . <word:destroyed> <in-context> ?c . ?ci <Population> ?p . ?ci <Nearby_airport> ?a }
