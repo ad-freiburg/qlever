@@ -109,8 +109,35 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
                 var)->second);
       }
     }
-    Distinct distinct(_qec, lastRow[minInd]._qet, keepIndices);
-    distinctTree.setOperation(QueryExecutionTree::DISTINCT, &distinct);
+    if (std::find(keepIndices.begin(), keepIndices.end(),
+                 lastRow[minInd]._qet.resultSortedOn()) != keepIndices.end()) {
+      Distinct distinct(_qec, lastRow[minInd]._qet, keepIndices);
+      distinctTree.setOperation(QueryExecutionTree::DISTINCT, &distinct);
+    } else {
+      if (keepIndices.size() == 1) {
+        QueryExecutionTree tree(_qec);
+        Sort sort(_qec, lastRow[minInd]._qet, keepIndices[0]);
+        tree.setVariableColumns(
+            lastRow[minInd]._qet.getVariableColumnMap());
+        tree.setOperation(QueryExecutionTree::SORT, &sort);
+        tree.setContextVars(lastRow[minInd]._qet.getContextVars());
+        Distinct distinct(_qec, tree, keepIndices);
+        distinctTree.setOperation(QueryExecutionTree::DISTINCT, &distinct);
+      } else {
+        QueryExecutionTree tree(_qec);
+        vector<pair<size_t, bool>> obCols;
+        for (auto& i : keepIndices) {
+          obCols.emplace_back(std::make_pair(i, false));
+        }
+        OrderBy ob(_qec, lastRow[minInd]._qet, obCols);
+        tree.setVariableColumns(
+            lastRow[minInd]._qet.getVariableColumnMap());
+        tree.setOperation(QueryExecutionTree::ORDER_BY, &ob);
+        tree.setContextVars(lastRow[minInd]._qet.getContextVars());
+        Distinct distinct(_qec, tree, keepIndices);
+        distinctTree.setOperation(QueryExecutionTree::DISTINCT, &distinct);
+      }
+    }
     return distinctTree;
   }
 

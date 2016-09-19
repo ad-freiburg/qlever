@@ -725,7 +725,7 @@ void Index::scanOSP(const string& object, WidthTwoList* result) const {
 
 // _____________________________________________________________________________
 const string& Index::idToString(Id id) const {
-  assert(id < _vocab.size());
+  AD_CHECK(id < _vocab.size());
   return _vocab[id];
 }
 
