@@ -2,4 +2,4 @@ cnt_people-born-in-europe-l100	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> 
 cnt_people-born-in-europe-l100-o200k	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> } LIMIT 100 OFFSET 200000
 cnt_people-top4rel	SELECT ?x ?1 ?2 ?3 ?4 WHERE { ?x <Gender> ?1 . ?x <Date_of_birth> ?2 . ?x <Place_of_birth> ?3 . ?x <Country_of_nationality> ?4 }
 cnt_building-top5rel	SELECT ?x ?1 ?2 ?3 ?4 ?5 WHERE { ?x <Contained_by> ?1 . ?x <Opened> ?2 . ?x <Designation_as_Natural_or_Cultural_Site> ?3 . ?x <Architectural_Style> ?4 . ?x <Area> ?5 }
-cnt_chain-sc-sc-doo	SELECT ?x WHERE { ?x <Spouse_(or_domestic_partner) ?a . ?a <Childrean> ?b . ?b <Spouse_(or_domestic_partner) ?c . ?c <Childrean> <Duke_of_Orléans> }
+cnt_chain-sc-sc-doo	SELECT ?x WHERE { ?x <Spouse_(or_domestic_partner)> ?a . ?a <Children> ?b . ?b <Spouse_(or_domestic_partner)> ?c . ?c <Children> <Duke_of_Orléans> }
