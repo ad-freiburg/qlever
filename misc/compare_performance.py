@@ -542,7 +542,7 @@ def main():
     if all or bifc_inc:
         headers.append('bifc_inc')
         headers.append('#m_bifc_inc')
-        times, matches = get_virtuoso_bifc_inc_query_times(query_file, args['bifc_inc'])
+        times, matches = get_virtuoso_bifc_inc_query_times(query_file, args['virtuoso_pwd'])
         time_and_counts.append((times, matches))
     if all or rdf3x:
         headers.append('rdf3x')
