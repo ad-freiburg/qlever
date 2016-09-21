@@ -1,4 +1,4 @@
-semsearch_apollo-astronauts-walked-moon.rel	SELECT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . <word:walk*> <in-context> ?c . <word:moon> <in-context> ?c . ?x <Space_Mission> ?m . ?m <Space_program> <Apollo_program> }
+semsearch_apollo-astronauts-walked-moon.rel	SELECT DISTINCT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . <word:walk*> <in-context> ?c . <word:moon> <in-context> ?c . ?x <Space_Mission> ?m . ?m <Space_program> <Apollo_program> }
 semsearch_apollo-astronauts-walked-moon.text	SELECT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . <word:walk*> <in-context> ?c . <word:moon> <in-context> ?c . ?x <in-context> ?c2 . <word:apollo> <in-context> ?c2 }
 semsearch_arab-states-persian-gulf	SELECT ?x WHERE { ?x <is-a> <Country> . ?x <in-context> ?c . <word:arab> <in-context> ?c . <word:state> <in-context> ?c . <word:persian> <in-context> ?c . <word:gulf> <in-context> ?c }
 semsearch_astronauts-landed-moon	SELECT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . <word:landed> <in-context> ?c . <word:moon> <in-context> ?c }
