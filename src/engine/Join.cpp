@@ -95,6 +95,25 @@ void Join::computeResult(ResultTable *result) const {
   }
 
   const ResultTable& leftRes = _left->getRootOperation()->getResult();
+
+  // Check if we can stop early.
+  if (leftRes.size() == 0) {
+    size_t resWidth = leftWidth + rightWidth - 1;
+    if (resWidth == 1) {
+      result->_fixedSizeData = new vector<array<Id, 1>>();
+    } else if (resWidth == 2) {
+      result->_fixedSizeData = new vector<array<Id, 2>>();
+    } else if (resWidth == 3) {
+      result->_fixedSizeData = new vector<array<Id, 3>>();
+    } else if (resWidth == 4) {
+      result->_fixedSizeData = new vector<array<Id, 4>>();
+    } else if (resWidth == 5) {
+      result->_fixedSizeData = new vector<array<Id, 5>>();
+    }
+    result->_status = ResultTable::FINISHED;
+    return;
+  }
+
   const ResultTable& rightRes = _right->getRootOperation()->getResult();
 
   AD_CHECK(result);

@@ -528,6 +528,8 @@ def main():
     mine = args['mine']
     broccoli = args['broccoli']
     headers = []
+    headers.append('id')
+    headers.append('query')
     time_and_counts = []
     if all or virt:
         headers.append('virt')

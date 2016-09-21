@@ -33,6 +33,9 @@ public:
       : _s(s), _p(p), _o(o) {
   }
 
+  bool operator==(const SparqlTriple& other) const {
+    return _s == other._s && _p == other._p &&_o == other._o;
+  }
   string _s, _p, _o;
 
   string asString() const;

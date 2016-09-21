@@ -8,6 +8,7 @@
 #include "./ParseException.h"
 #include "../util/Exception.h"
 #include "../global/Constants.h"
+#include "../util/Log.h"
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parse(const string& query) {
@@ -226,7 +227,17 @@ void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
              str[j] != '\n') { ++j; }
     }
     string o = str.substr(i, j - i);
-    query._whereClauseTriples.push_back(SparqlTriple(s, p, o));
+    SparqlTriple triple(s, p, o);
+    // Quadratic in number of triples in query.
+    // Shouldn't be a problem here, though.
+    // Could use a (hash)-set instead of vector.
+    if (std::find(query._whereClauseTriples.begin(),
+                  query._whereClauseTriples.end(), triple) !=
+        query._whereClauseTriples.end()) {
+      LOG(INFO) << "Ignoring duplicate triple: " << str << std::endl;
+    } else {
+      query._whereClauseTriples.push_back(triple);
+    }
   }
 }
 
