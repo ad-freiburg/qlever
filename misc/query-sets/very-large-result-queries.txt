@@ -1,6 +1,6 @@
-bjoern_person_comp*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:comp*> <in-context> ?c }
-bjoern_csci_computer	SELECT ?x WHERE { ?x <is-a> <Computer_scientist> . ?x <in-context> ?c . <word:computer> <in-context> ?c }
-bjoern_person_company	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:company> <in-context> ?c }
-bjoern_person_comp*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:war> <in-context> ?c }
-bjoern_person_anti*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:anti*> <in-context> ?c }
-bjoern_topic_auto*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:auto*> <in-context> ?c }
+vlr_person_comp*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:comp*> <in-context> ?c }
+vlr_csci_computer	SELECT ?x WHERE { ?x <is-a> <Computer_scientist> . ?x <in-context> ?c . <word:computer> <in-context> ?c }
+vlr_person_company	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:company> <in-context> ?c }
+vlr_person_comp*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:war> <in-context> ?c }
+vlr_person_anti*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:anti*> <in-context> ?c }
+vlr_topic_auto*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:auto*> <in-context> ?c }

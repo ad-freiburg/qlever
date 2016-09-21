@@ -1,10 +1,10 @@
 isatext_plant-edible-leaves	SELECT ?p WHERE { ?p <is-a> <Plant> . ?p <in-context> ?c . <word:edible> <in-context> ?c . <word:leaves> <in-context> ?c }
-isatext_astro-walk-moon	SELECT ?p WHERE { ?p <is-a> <Astronaut> . ?p <in-context> ?c . <word:walk*> <in-context> ?c . <word:moon> <in-context> ?c }
 isatext_person-dd	SELECT ?p WHERE { ?p <is-a> <Person> . ?p <in-context> ?c . <word:drug> <in-context> ?c . <word:death> <in-context> ?c }
 isatext_hormone-stress	SELECT ?p WHERE { ?p <is-a> <Hormone> . ?p <in-context> ?c . <word:stress> <in-context> ?c }
 isatext_athlete-doping	SELECT ?p WHERE { ?p <is-a> <Athlete> . ?p <in-context> ?c . <word:doping> <in-context> ?c }
 isatext_politician-scandal	SELECT ?p WHERE { ?p <is-a> <Politician> . ?p <in-context> ?c . <word:scandal> <in-context> ?c }
 isatext_person-stress	SELECT ?p WHERE { ?p <is-a> <Person> . ?p <in-context> ?c . <word:stress> <in-context> ?c }
-isatext_musician-rehab	SELECT ?p WHERE { ?p <is-a> <Musician> . ?p <in-context> ?c . <word:rehab> <in-context> ?c }
-isatext_musician-fight	SELECT ?p WHERE { ?p <is-a> <Musician> . ?p <in-context> ?c . <word:fight*> <in-context> ?c }
+isatext_structure-tallest-oldest	SELECT ?p WHERE { ?p <is-a> <Structure> . ?p <in-context> ?c . <word:tallest> <in-context> ?c . <word:oldest> <in-context> ?c }
 isatext_country-worldwar	SELECT ?p WHERE { ?p <is-a> <Country> . ?p <in-context> ?c . <word:war> <in-context> ?c . <word:world> <in-context> ?c}
+isatext_drug-treatcancer	SELECT ?p WHERE { ?p <is-a> <Drug> . ?p <in-context> ?c . <word:treat> <in-context> ?c . <word:cancer> <in-context> ?c}
+isatext_scientist-spalgo	SELECT ?p WHERE { ?p <is-a> <Scientist> . ?p <in-context> ?c . <word:shortest> <in-context> ?c . <word:path> <in-context> ?c . <word:algorithm> <in-context> ?c }

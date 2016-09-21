@@ -1,0 +1,2 @@
+filterv_location-asia-pop200k+	SELECT ?x ?y { WHERE ?x <is-a> <Location> . ?x <Contained_by> <Asia> . ?x <Population> ?y . FILTER(?y > "200000"^^<http://www.w3.org/2001/XMLSchema#integer>) }
+filterv_drama-actor-bornafter-1990	SELECT ?x ?f ?d { WHERE ?x <Film_performance> ?f. ?f <Genre> <Drama> . ?x <Date_of_birth> ?d . FILTER(?d > "1990"^^<http://www.w3.org/2001/XMLSchema#date>) }
