@@ -14,4 +14,3 @@ beatles_siblings	SELECT DISTINCT ?p ?b WHERE { ?p <Sibling> ?b . ?b <Member_of> 
 people_born_in_europe_limit100	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> } LIMIT 100
 people_born_in_europe_limit100_offset100	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> } LIMIT 100 OFFSET 100
 people_born_in_europe_limit100_offset200k	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> } LIMIT 100 OFFSET 200000
-
