@@ -1,5 +1,5 @@
-filterv_location-asia-pop200k+	PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT ?x ?y WHERE { ?x <is-a> <Location> . ?x <Contained_by> <Asia> . ?x <Population> ?y . FILTER(?y > "200000"^^xsd:integer) }
-filterv_drama-actor-bornafter-1990	PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT ?x ?f ?d WHERE { ?x <Film_performance> ?f. ?f <Genre> <Drama> . ?x <Date_of_birth> ?d . FILTER(?d > "1990-12-31"xsd:date>) }
-filterv_people-bornin-1995	PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT ?x ?d WHERE { ?x <Date_of_birth> ?d . FILTER(?d > "1994-12-31"xsd:date>) . FILTER(?d <= "1995-12-31"xsd:date>)  }
-filterv_people-over-2m10	PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT ?x ?h WHERE { ?x <Height> ?h . FILTER(?h > "2.1"xsd:float>)  }
-filterv_scientists-tallen-than-ae	PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT ?x ?h ?hae  WHERE { ?x <is-a> <Scientist> . ?x <Height> ?h . <Albert_Einstein> <Height> ?hae . FILTER(?h > ?hae)  }
+filterv_location-asia-pop200k+	SELECT ?x ?y WHERE { ?x <is-a> <Location> . ?x <Contained_by> <Asia> . ?x <Population> ?y . FILTER(?y > "200000"^^<http://www.w3.org/2001/XMLSchema#integer>) }
+filterv_drama-actor-bornafter-1990	SELECT ?x ?f ?d WHERE { ?x <Film_performance> ?f. ?f <Genre> <Drama> . ?x <Date_of_birth> ?d . FILTER(?d > "1990-12-31"^^<http://www.w3.org/2001/XMLSchema#date>) }
+filterv_people-bornin-1995	SELECT ?x ?d WHERE { ?x <Date_of_birth> ?d . FILTER(?d > "1994-12-31"^^<http://www.w3.org/2001/XMLSchema#date> ) . FILTER(?d <= "1995-12-31"^^<http://www.w3.org/2001/XMLSchema#date> )  }
+filterv_people-over-2m10	SELECT ?x ?h WHERE { ?x <Height> ?h . FILTER(?h > "2.1"^^<http://www.w3.org/2001/XMLSchema#float> )  }
+filterv_scientists-taller-than-their-sibbling	PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT ?x ?h ?s ?hs  WHERE { ?x <is-a> <Scientist> . ?x <Height> ?h . ?x <Sibling> ?s . ?s <Height> ?hae . FILTER(?h > ?hae)  }

@@ -12,8 +12,8 @@ bifc_isql_port = "1113"
 bifc_inc_isql_port = "1114"
 virtuso_isql_user = "dba"
 rdf3x_run_binary = "/home/buchholb/rdf3x-0.3.8/bin/rdf3xquery"
-rdf3x_db = "/local/scratch/bjoern/data/rdf3x//wikipedia-freebase.combined.db"
-my_index = "/local/scratch/bjoern/data/wikipedia-freebase"
+rdf3x_db = "/local/scratch/bjoern/data/rdf3x/wikipedia-freebase.combined.db"
+my_index = "/local/scratch/bjoern/data/wikipedia-fbeasy.withstopwords"
 my_binary = "/local/scratch/bjoern/work/tmp/SparqlEngineMain"
 broccoli_api = 'http://filicudi.informatik.uni-freiburg.de:6001/'
 
@@ -72,6 +72,9 @@ def expanded_to_my_syntax(q):
 def rewrite_for_rdf3x(q):
     if '*>' in q:
         print('Inexpressible prefix search in rdf3x: ' + q.strip(), file=sys.stderr)
+        return 'NOT POSSIBLE: ' + q.strip()
+    if 'FILTER' in q and 'FILTER' in q[q.find('FILTER') + 5:]:
+        print('More than one FILTER inexpressible in rdf3x: ' + q.strip(), file=sys.stderr)
         return 'NOT POSSIBLE: ' + q.strip()
     before_where, after_where = q.split('WHERE')
     if '<in-context>' in q and 'DISTINCT' not in q:
