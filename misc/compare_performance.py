@@ -94,9 +94,6 @@ def rewrite_for_rdf3x(q):
     if 'OFFSET' in mod:
         print('Inexpressible in OFFSET clause in rdf3x: ' + mod, file=sys.stderr)
         return 'NOT POSSIBLE: ' + q.strip()
-    if 'ORDER BY' in mod:
-        mod = mod.replace('(', ' ')
-        mod = mod.replace(')', '')
     new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
     return 'WHERE'.join([before_where, new_after_where])
 
