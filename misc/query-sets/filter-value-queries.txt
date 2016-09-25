@@ -2,4 +2,9 @@ filterv_location-asia-pop200k+	SELECT ?x ?y WHERE { ?x <is-a> <Location> . ?x <C
 filterv_drama-actor-bornafter-1990	SELECT ?x ?f ?d WHERE { ?x <Film_performance> ?f. ?f <Genre> <Drama> . ?x <Date_of_birth> ?d . FILTER(?d > "1990-12-31"^^<http://www.w3.org/2001/XMLSchema#date>) }
 filterv_people-bornin-1995	SELECT ?x ?d WHERE { ?x <Date_of_birth> ?d . FILTER(?d > "1994-12-31"^^<http://www.w3.org/2001/XMLSchema#date> ) . FILTER(?d <= "1995-12-31"^^<http://www.w3.org/2001/XMLSchema#date> )  }
 filterv_people-over-2m10	SELECT ?x ?h WHERE { ?x <Height> ?h . FILTER(?h > "2.1"^^<http://www.w3.org/2001/XMLSchema#float> )  }
-filterv_scientists-taller-than-their-sibbling	PREFIX xsd: <http://www.w3.org/2001/XMLSchema#> SELECT ?x ?h ?s ?hs  WHERE { ?x <is-a> <Scientist> . ?x <Height> ?h . ?x <Sibling> ?s . ?s <Height> ?hae . FILTER(?h > ?hae)  }
+filterv_person-under2m10	SELECT ?x ?h WHERE { ?x <Height> ?h . FILTER(?h < "2.1"^^<http://www.w3.org/2001/XMLSchema#float> )  }
+filterv_scientists-taller-than-their-sibling	SELECT ?x ?h ?s ?hs  WHERE { ?x <is-a> <Scientist> . ?x <Height> ?h . ?x <Sibling> ?s . ?s <Height> ?hae . FILTER(?h > ?hae)  }
+filterv_sci-bornin-ulm-taller1.74	SELECT ?x WHERE { ?x <is-a> <Scientist> . ?x <Place_of_birth> <Ulm> . ?x <Height> ?h . FILTER(?h >= "1.74"^^<http://www.w3.org/2001/XMLSchema#float>) }
+building_over-30-floors	SELECT ?x WHERE { ?x <is-a> <Building> . ?x <Floors> ?f . FILTER(?f > "30"^^<http://www.w3.org/2001/XMLSchema#int>) }
+building_less-floors-than-height	SELECT ?x WHERE { ?x <is-a> <Building> . ?x <Floors> ?f . ?x <Structural_Height> ?h . FILTER(?f < ?h) }
+building_geq-floors-than-height	SELECT ?x WHERE { ?x <is-a> <Building> . ?x <Floors> ?f . ?x <Structural_Height> ?h . FILTER(?f >= ?h) }
