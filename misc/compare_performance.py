@@ -225,6 +225,8 @@ def rewrite_for_broccoli(q):
                     var_to_var[s] = bro_var
                     entity = s[1:-1]
                     new_clauses.append(bro_var + " :r:equals :e:" + entity)
+                    if o not in context_to_entities:
+                        context_to_entities[o] = []
                     context_to_entities[o].append(bro_var)
                 else:
                     if o not in context_to_entities:
