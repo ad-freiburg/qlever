@@ -210,6 +210,7 @@ def rewrite_for_broccoli(q):
         return "NOT POSSIBLE: " + q.strip()
     clauses = no_mod.strip('{').split('.')
     new_clauses = []
+    equals_vars = []
     context_to_words = {}
     context_to_entities = {}
     for c in clauses:
@@ -225,6 +226,7 @@ def rewrite_for_broccoli(q):
                     var_to_var[s] = bro_var
                     entity = s[1:-1]
                     new_clauses.append(bro_var + " :r:equals :e:" + entity)
+                    equals_vars.append(bro_var)
                     if o not in context_to_entities:
                         context_to_entities[o] = []
                     context_to_entities[o].append(bro_var)
@@ -242,6 +244,7 @@ def rewrite_for_broccoli(q):
                     entity = s[1:-1]
                     s = var_to_var[s]
                     new_clauses.append(s + " :r:equals :e:" + entity)
+                    equals_vars.append(s)
                 if o[0] == '<':
                     if p == ':r:is-a':
                         o = ':e:' + o[1:-1]
@@ -250,6 +253,7 @@ def rewrite_for_broccoli(q):
                         entity = o[1:-1]
                         o = var_to_var[o]
                         new_clauses.append(o + " :r:equals :e:" + entity)
+                        equals_vars.append(o)
                 new_clauses.append(' '.join([s, p, o]))
         except ValueError:
             print("Problem in : " + c, file=sys.stderr)
@@ -258,7 +262,12 @@ def rewrite_for_broccoli(q):
         print("Inexpressible in Broccoli: " + c, file=sys.stderr)
         return "NOT POSSIBLE: " + q.strip()
     for c, es in context_to_entities.items():
-        new_clauses.append(es[0] + ' :r:occurs-with '
+        if es[0] in equals_vars:
+            new_clauses.append('$1 :r:has-occurrence-of '
+                               + ' '.join(context_to_words[c]) + ' '
+                               + ' '.join(es))
+        else:
+            new_clauses.append(es[0] + ' :r:occurs-with '
                            + ' '.join(context_to_words[c]) + ' '
                            + ' '.join(es[1:]))
     for c, ws in context_to_words.items():
