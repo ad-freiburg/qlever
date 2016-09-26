@@ -1,7 +1,7 @@
 text_country	SELECT ?c WHERE { <word:country> <in-context> ?c }
 text_database-research	SELECT ?c WHERE { <word:database> <in-context> ?c . <word:research> <in-context> ?c }
 text_apple-computer	SELECT ?c WHERE { <word:apple> <in-context> ?c . <word:computer> <in-context> ?c }
-text_entapple-computer	SELECT ?c WHERE { <Apple_Inc> <in-context> ?c . <word:computer> <in-context> ?c }
+text_entapple-computer	SELECT ?c WHERE { <Apple_Inc.> <in-context> ?c . <word:computer> <in-context> ?c }
 text_car-manufact*	SELECT ?c WHERE { <word:car> <in-context> ?c . <word:manufact*> <in-context> ?c }
 text_entity-ow-semantic-search	SELECT ?e WHERE { ?e <in-context> ?c . <word:semantic> <in-context> ?c . <word:search> <in-context> ?c }
 text_entity-ow-international	SELECT ?e WHERE { ?e <in-context> ?c . <word:international> <in-context> ?c  }
