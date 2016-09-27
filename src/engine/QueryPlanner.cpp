@@ -101,16 +101,35 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   if (pq._distinct) {
     QueryExecutionTree distinctTree(lastRow[minInd]._qet);
     vector<size_t> keepIndices;
+    ad_utility::HashSet<size_t> indDone;
     for (const auto& var : pq._selectedVariables) {
       if (lastRow[minInd]._qet.getVariableColumnMap().find(var) !=
           lastRow[minInd]._qet.getVariableColumnMap().end()) {
-        keepIndices.push_back(
-            lastRow[minInd]._qet.getVariableColumnMap().find(
-                var)->second);
+        auto ind = lastRow[minInd]._qet.getVariableColumnMap().find(
+            var)->second;
+        if (indDone.count(ind) ==0) {
+          keepIndices.push_back(ind);
+          indDone.insert(ind);
+        }
+      } else if (ad_utility::startsWith(var, "SCORE(") ||
+                 ad_utility::startsWith(var, "TEXT(")) {
+        auto varInd = var.find('?');
+        auto cVar = var.substr(varInd, var.rfind(')') - varInd);
+        if (lastRow[minInd]._qet.getVariableColumnMap().find(cVar) !=
+            lastRow[minInd]._qet.getVariableColumnMap().end()) {
+          auto ind = lastRow[minInd]._qet.getVariableColumnMap().find(
+              cVar)->second;
+          if (indDone.count(ind) == 0) {
+            keepIndices.push_back(ind);
+            indDone.insert(ind);
+          }
+        }
       }
     }
-    if (std::find(keepIndices.begin(), keepIndices.end(),
-                 lastRow[minInd]._qet.resultSortedOn()) != keepIndices.end()) {
+    if (lastRow[minInd]._qet.getType() == QueryExecutionTree::SORT ||
+        lastRow[minInd]._qet.getType() == QueryExecutionTree::ORDER_BY ||
+        std::find(keepIndices.begin(), keepIndices.end(),
+                  lastRow[minInd]._qet.resultSortedOn()) != keepIndices.end()) {
       Distinct distinct(_qec, lastRow[minInd]._qet, keepIndices);
       distinctTree.setOperation(QueryExecutionTree::DISTINCT, &distinct);
     } else {
@@ -138,6 +157,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
         distinctTree.setOperation(QueryExecutionTree::DISTINCT, &distinct);
       }
     }
+    distinctTree.setTextLimit(getTextLimit(pq._textLimit));
     return distinctTree;
   }
 
@@ -861,7 +881,8 @@ void QueryPlanner::applyFiltersIfPossible(
         tree.setVariableColumns(plan._qet.getVariableColumnMap());
         tree.setContextVars(plan._qet.getContextVars());
         newPlan._qet = tree;
-        if (replace || row[n]._qet.getType() != QueryExecutionTree::TEXT_WITHOUT_FILTER) {
+        if (replace ||
+            row[n]._qet.getType() != QueryExecutionTree::TEXT_WITHOUT_FILTER) {
           row[n] = newPlan;
         } else {
           row.push_back(newPlan);
