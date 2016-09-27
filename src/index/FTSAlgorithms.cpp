@@ -370,9 +370,9 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
     ScoreToContext& stc = it->second.second;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
       result.emplace_back(array<Id, 3>{{
-                                           eid,
+                                           itt->second,
                                            entityScore,
-                                           itt->second
+                                           eid
                                        }});
     }
   }
