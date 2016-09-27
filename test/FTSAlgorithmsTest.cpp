@@ -258,12 +258,13 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
 
     FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, result);
     ASSERT_EQ(2u, result.size());
-    ASSERT_EQ(0u, result[0][0]);
+    ASSERT_EQ(2u, result[0][0]);
+    ASSERT_EQ(0u, result[0][2]);
     ASSERT_EQ(3u, result[0][1]);
-    ASSERT_EQ(2u, result[0][2]);
-    ASSERT_EQ(0u, result[1][0]);
+    ASSERT_EQ(1u, result[1][0]);
+    ASSERT_EQ(0u, result[1][2]);
     ASSERT_EQ(3u, result[1][1]);
-    ASSERT_EQ(1u, result[1][2]);
+
 
     cids.push_back(4);
     eids.push_back(1);
@@ -276,9 +277,9 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
               [](const array<Id, 3>& a, const array<Id, 3>& b) {
                 return a[0] < b[0];
               });
-    ASSERT_EQ(1u, result[2][0]);
+    ASSERT_EQ(4u, result[2][0]);
     ASSERT_EQ(1u, result[2][1]);
-    ASSERT_EQ(4u, result[2][2]);
+    ASSERT_EQ(1u, result[2][2]);
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
