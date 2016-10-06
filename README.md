@@ -1,4 +1,4 @@
-SparqlEngineDraft
+QLever
 =================
 
 This Readme sets you up to use the engine and to quickly build and query your own index.
@@ -36,25 +36,25 @@ If this sin't the case on your system run
 
 a) Checkout this project:
 
-    git clone https://github.com/Buchhold/SparqlEngineDraft.git --recursive
+    git clone https://github.com/Buchhold/QLever.git --recursive
 
 Don't forget --recursive so that submodules will be updated. 
 For old versions of git, that do not support this parameter, you can do:
 
-    git clone https://github.com/Buchhold/SparqlEngineDraft.git
-    cd SparqlEngineDraft
+    git clone https://github.com/Buchhold/QLever.git
+    cd QLever
     git submodule init
     git submodule update
     
 
 b) Go to a folder where you want to build the binaries.
-Don't do this directly in SparqlEngineDraft
+Don't do this directly in QLever
 
     cd /path/to/YOUR_FOLDER
 
 c) Build the project
 
-    cmake /path/to/SparqlEngineDraft/ -DCMAKE_BUILD_TYPE=Release; make -j
+    cmake /path/to/QLever/ -DCMAKE_BUILD_TYPE=Release; make -j
 
 d) Run ctest. All tests should pass:
 
@@ -249,9 +249,9 @@ Use the tiny examples contained in the repository
 These are tiny and there's nothing meaningful to discover.
 They are fine for setting up a working sever within seconds and getting comfortable with the query language:
 
-    SparqlEngineDraft/misc/tiny-example.kb.nt
-    SparqlEngineDraft/misc/tiny-example.wordsfile.tsv
-    SparqlEngineDraft/misc/tiny-example.docsfile.tsv
+    QLever/misc/tiny-example.kb.nt
+    QLever/misc/tiny-example.wordsfile.tsv
+    QLever/misc/tiny-example.docsfile.tsv
     
 Note that we left out stopwords (unlike in the docsfile) to demonstrate how this can be done if desired.
 If you build an index using these files and ask the query:
