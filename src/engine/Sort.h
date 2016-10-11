@@ -8,58 +8,49 @@
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
 
-
 using std::list;
 
-
-
 class Sort : public Operation {
-  public:
-    virtual size_t getResultWidth() const;
+ public:
+  virtual size_t getResultWidth() const;
 
-  public:
+ public:
 
-    Sort(QueryExecutionContext *qec, const QueryExecutionTree& subtree,
-         size_t sortCol);
+  Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
+       size_t sortCol);
 
-    Sort(const Sort& other);
+  virtual string asString() const;
 
-    Sort& operator=(const Sort& other);
+  virtual size_t resultSortedOn() const { return _sortCol; }
 
-    virtual ~Sort();
+  virtual void setTextLimit(size_t limit) {
+    _subtree->setTextLimit(limit);
+  }
 
-    virtual string asString() const;
+  virtual size_t getSizeEstimate() {
+    return _subtree->getSizeEstimate();
+  }
 
-    virtual size_t resultSortedOn() const { return _sortCol; }
+  std::shared_ptr<QueryExecutionTree> getSubtree() const {
+    return _subtree;
+  }
 
-    virtual void setTextLimit(size_t limit) {
-      _subtree->setTextLimit(limit);
-    }
+  virtual size_t getCostEstimate() {
+    size_t size = getSizeEstimate();
+    size_t logSize = std::max(size_t(2),
+                              static_cast<size_t>(logb(static_cast<double>(size))));
+    size_t nlogn = size * logSize;
+    size_t subcost = _subtree->getCostEstimate();
+    return nlogn + subcost;
+  }
 
-    virtual size_t getSizeEstimate() const {
-      return _subtree->getSizeEstimate();
-    }
+  virtual bool knownEmptyResult() {
+    return _subtree->knownEmptyResult();
+  }
 
-    QueryExecutionTree* getSubtree() const {
-      return _subtree;
-    }
+ private:
+  std::shared_ptr<QueryExecutionTree> _subtree;
+  size_t _sortCol;
 
-    virtual size_t getCostEstimate() const {
-      size_t size = getSizeEstimate();
-      size_t logSize = std::max(size_t(2),
-          static_cast<size_t>(logb(static_cast<double>(size))));
-      size_t nlogn = size * logSize;
-      size_t subcost = _subtree->getCostEstimate();
-      return nlogn + subcost;
-    }
-
-    virtual bool knownEmptyResult() const {
-      return _subtree->knownEmptyResult();
-    }
-
-  private:
-    QueryExecutionTree *_subtree;
-    size_t _sortCol;
-
-    virtual void computeResult(ResultTable *result) const;
+  virtual void computeResult(ResultTable* result) const;
 };

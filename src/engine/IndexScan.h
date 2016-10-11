@@ -56,14 +56,14 @@ public:
     // Do nothing.
   }
 
-  virtual size_t getSizeEstimate() const {
-    if (_sizeEstimate != std::numeric_limits<size_t>::max()) {
-      return _sizeEstimate;
+  virtual size_t getSizeEstimate() {
+    if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
+      _sizeEstimate = computeSizeEstimate();
     }
-    return computeSizeEstimate();
+    return _sizeEstimate;
   }
 
-  virtual size_t getCostEstimate() const {
+  virtual size_t getCostEstimate() {
     return getSizeEstimate();
   }
 
@@ -71,7 +71,7 @@ public:
     _sizeEstimate = computeSizeEstimate();
   }
 
-  virtual bool knownEmptyResult() const {
+  virtual bool knownEmptyResult() {
     return getSizeEstimate() == 0;
   }
 

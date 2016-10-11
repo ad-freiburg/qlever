@@ -8,10 +8,7 @@
 #include "./QueryExecutionTree.h"
 #include "./OrderBy.h"
 
-
-
 using std::string;
-
 
 // _____________________________________________________________________________
 size_t OrderBy::getResultWidth() const {
@@ -19,32 +16,12 @@ size_t OrderBy::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-OrderBy::OrderBy(QueryExecutionContext* qec, const QueryExecutionTree& subtree,
-    const vector<pair<size_t, bool>>& sortIndices) :
+OrderBy::OrderBy(QueryExecutionContext* qec,
+                 std::shared_ptr<QueryExecutionTree> subtree,
+                 const vector<pair<size_t, bool>>& sortIndices) :
     Operation(qec),
-    _subtree(new QueryExecutionTree(subtree)),
+    _subtree(subtree),
     _sortIndices(sortIndices) {
-}
-
-// _____________________________________________________________________________
-OrderBy::OrderBy(const OrderBy& other) :
-    Operation(other._executionContext),
-    _subtree(new QueryExecutionTree(*other._subtree)),
-    _sortIndices(other._sortIndices) {
-}
-
-// _____________________________________________________________________________
-OrderBy& OrderBy::operator=(const OrderBy& other) {
-  delete _subtree;
-  _executionContext = other._executionContext;
-  _subtree = new QueryExecutionTree(*other._subtree);
-  _sortIndices = other._sortIndices;
-  return *this;
-}
-
-// _____________________________________________________________________________
-OrderBy::~OrderBy() {
-  delete _subtree;
 }
 
 // _____________________________________________________________________________
@@ -59,9 +36,10 @@ string OrderBy::asString() const {
 
 // _____________________________________________________________________________
 void OrderBy::computeResult(ResultTable* result) const {
-  LOG(DEBUG) << "OrderBy result computation..." << endl;
+  LOG(DEBUG) << "Gettign sub-result for OrderBy result computation..." << endl;
   AD_CHECK(_sortIndices.size() > 0);
   const ResultTable& subRes = _subtree->getResult();
+  LOG(DEBUG) << "OrderBy result computation..." << endl;
   result->_nofColumns = subRes._nofColumns;
   switch (subRes._nofColumns) {
     case 1: {
@@ -102,12 +80,12 @@ void OrderBy::computeResult(ResultTable* result) const {
     default: {
       result->_varSizeData = subRes._varSizeData;
       getEngine().sort(result->_varSizeData,
-          OBComp<vector<Id>>(_sortIndices));
+                       OBComp<vector<Id>>(_sortIndices));
       break;
     }
   }
   result->_sortedBy = (_sortIndices[0].second ? result->_nofColumns + 1 :
-      _sortIndices[0].first);
+                       _sortIndices[0].first);
   result->_status = ResultTable::FINISHED;
   LOG(DEBUG) << "OrderBy result computation done." << endl;
 }

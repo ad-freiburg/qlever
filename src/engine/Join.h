@@ -13,17 +13,14 @@
 using std::list;
 
 class Join : public Operation {
-public:
+ public:
 
-  Join(QueryExecutionContext* qec, const QueryExecutionTree& t1,
-       const QueryExecutionTree& t2, size_t t1JoinCol, size_t t2JoinCol,
+  Join(QueryExecutionContext* qec,
+       std::shared_ptr<QueryExecutionTree> t1,
+       std::shared_ptr<QueryExecutionTree> t2,
+       size_t t1JoinCol,
+       size_t t2JoinCol,
        bool keepJoinColumn = true);
-
-  Join(const Join& other);
-
-  Join& operator=(const Join& other);
-
-  virtual ~Join();
 
   virtual string asString() const;
 
@@ -31,18 +28,38 @@ public:
 
   virtual size_t resultSortedOn() const;
 
-  ad_utility::HashMap<string, size_t> getVariableColumns() const;
-  ad_utility::HashSet<string> getContextVars() const;
+  std::unordered_map<string, size_t> getVariableColumns() const;
+  std::unordered_set<string> getContextVars() const;
 
   virtual void setTextLimit(size_t limit) {
     _left->setTextLimit(limit);
     _right->setTextLimit(limit);
+    _sizeEstimateComputed = false;
   }
 
   bool isSelfJoin() const;
 
-  virtual size_t getSizeEstimate() const {
-    if (_left->getSizeEstimate() == 0 || _right->getSizeEstimate() == 0) {
+  virtual size_t getSizeEstimate() {
+    if (!_sizeEstimateComputed) {
+      _sizeEstimate = computeSizeEstimate();
+      _sizeEstimateComputed = true;
+    }
+    return _sizeEstimate;
+  }
+
+  virtual size_t getCostEstimate() {
+    return getSizeEstimate() +
+        _left->getSizeEstimate() + _left->getCostEstimate() +
+        _right->getSizeEstimate() + _right->getCostEstimate();
+  }
+
+  virtual bool knownEmptyResult() {
+    return _left->knownEmptyResult() || _right->knownEmptyResult();
+  }
+
+  size_t computeSizeEstimate() const {
+    if (_left->getSizeEstimate() == 0
+        || _right->getSizeEstimate() == 0) {
       return 0;
     }
     // Check if there are easy sides, i.e. a scan with only one
@@ -57,13 +74,13 @@ public:
     size_t easySides = 0;
     if (_left->getType() == QueryExecutionTree::SCAN) {
       if (static_cast<const IndexScan*>(
-              _left->getRootOperation())->getResultWidth() == 1) {
+          _left->getRootOperation().get())->getResultWidth() == 1) {
         ++easySides;
       }
     }
     if (_right->getType() == QueryExecutionTree::SCAN) {
       if (static_cast<const IndexScan*>(
-              _right->getRootOperation())->getResultWidth() == 1) {
+          _right->getRootOperation().get())->getResultWidth() == 1) {
         ++easySides;
       }
     }
@@ -72,39 +89,36 @@ public:
     if (isSelfJoin()) {
       return std::max(
           size_t(1),
-          (_left->getSizeEstimate() + _right->getSizeEstimate()) * 10);
+          (_left->getSizeEstimate() + _right->getSizeEstimate())
+              * 10);
     }
     if (easySides == 0) {
-      return (_left->getSizeEstimate() + _right->getSizeEstimate()) * 4;
+      return (_left->getSizeEstimate() + _right->getSizeEstimate())
+          * 4;
     } else if (easySides == 1) {
       return std::max(
           size_t(1),
-          (_left->getSizeEstimate() + _right->getSizeEstimate()) / 4);
+          (_left->getSizeEstimate() + _right->getSizeEstimate())
+              / 4);
     } else {
       return std::max(
           size_t(1),
-          (_left->getSizeEstimate() + _right->getSizeEstimate()) / 10);
+          (_left->getSizeEstimate() + _right->getSizeEstimate())
+              / 10);
     }
   }
 
-  virtual size_t getCostEstimate() const {
-    return getSizeEstimate() +
-           _left->getSizeEstimate() + _left->getCostEstimate() +
-           _right->getSizeEstimate() + _right->getCostEstimate();
-  }
-
-  virtual bool knownEmptyResult() const {
-    return _left->knownEmptyResult() || _right->knownEmptyResult();
-  }
-
-  private:
-  QueryExecutionTree* _left;
-  QueryExecutionTree* _right;
+ private:
+  std::shared_ptr<QueryExecutionTree> _left;
+  std::shared_ptr<QueryExecutionTree> _right;
 
   size_t _leftJoinCol;
   size_t _rightJoinCol;
 
   bool _keepJoinColumn;
+
+  bool _sizeEstimateComputed;
+  size_t _sizeEstimate;
 
   virtual void computeResult(ResultTable* result) const;
 };

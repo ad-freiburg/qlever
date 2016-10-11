@@ -29,76 +29,6 @@ QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* qec) :
 }
 
 // _____________________________________________________________________________
-QueryExecutionTree::QueryExecutionTree(const QueryExecutionTree& other) :
-    _qec(other._qec),
-    _variableColumnMap(other._variableColumnMap),
-    _type(other._type),
-    _contextVars(other._contextVars) {
-  switch (other._type) {
-    case OperationType::SCAN:
-      _rootOperation = new IndexScan(
-          *static_cast<IndexScan*>(other._rootOperation));
-      break;
-    case OperationType::JOIN:
-      _rootOperation = new Join(
-          *static_cast<Join*>(other._rootOperation));
-      break;
-    case OperationType::SORT:
-      _rootOperation = new Sort(
-          *static_cast<Sort*>(other._rootOperation));
-      break;
-    case OperationType::ORDER_BY:
-      _rootOperation = new OrderBy(
-          *static_cast<OrderBy*>(other._rootOperation));
-      break;
-    case OperationType::FILTER:
-      _rootOperation = new Filter(
-          *static_cast<Filter*>(other._rootOperation));
-      break;
-    case OperationType::DISTINCT:
-      _rootOperation = new Distinct(
-          *static_cast<Distinct*>(other._rootOperation));
-      break;
-    case OperationType::TEXT_FOR_CONTEXTS:
-      _rootOperation = new TextOperationForContexts(
-          *static_cast<TextOperationForContexts*>(other._rootOperation));
-      break;
-    case OperationType::TEXT_WITHOUT_FILTER:
-      _rootOperation = new TextOperationWithoutFilter(
-          *static_cast<TextOperationWithoutFilter*>(other._rootOperation));
-      break;
-    case OperationType::TEXT_WITH_FILTER:
-      _rootOperation = new TextOperationWithFilter(
-          *static_cast<TextOperationWithFilter*>(other._rootOperation));
-      break;
-    case OperationType::TWO_COL_JOIN:
-      _rootOperation = new TwoColumnJoin(
-          *static_cast<TwoColumnJoin*>(other._rootOperation));
-      break;
-    case UNDEFINED:
-    default:
-      _rootOperation = nullptr;
-  }
-}
-
-// _____________________________________________________________________________
-QueryExecutionTree& QueryExecutionTree::operator=(
-    const QueryExecutionTree& other) {
-  _qec = other._qec;
-  _variableColumnMap = other._variableColumnMap;
-  _contextVars = other._contextVars;
-  if (other._type != UNDEFINED) {
-    setOperation(other._type, other._rootOperation);
-  }
-  return *this;
-}
-
-// _____________________________________________________________________________
-QueryExecutionTree::~QueryExecutionTree() {
-  delete _rootOperation;
-}
-
-// _____________________________________________________________________________
 string QueryExecutionTree::asString() const {
   if (_rootOperation) {
     std::ostringstream os;
@@ -115,56 +45,9 @@ string QueryExecutionTree::asString() const {
 
 // _____________________________________________________________________________
 void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
-                                      Operation* op) {
+                                      std::shared_ptr<Operation> op) {
   _type = type;
-  switch (type) {
-    case OperationType::SCAN:
-      delete _rootOperation;
-      _rootOperation = new IndexScan(*static_cast<IndexScan*>(op));
-      break;
-    case OperationType::JOIN:
-      delete _rootOperation;
-      _rootOperation = new Join(*static_cast<Join*>(op));
-      break;
-    case OperationType::SORT:
-      delete _rootOperation;
-      _rootOperation = new Sort(*static_cast<Sort*>(op));
-      break;
-    case OperationType::ORDER_BY:
-      delete _rootOperation;
-      _rootOperation = new OrderBy(*static_cast<OrderBy*>(op));
-      break;
-    case OperationType::FILTER:
-      delete _rootOperation;
-      _rootOperation = new Filter(*static_cast<Filter*>(op));
-      break;
-    case OperationType::DISTINCT:
-      delete _rootOperation;
-      _rootOperation = new Distinct(*static_cast<Distinct*>(op));
-      break;
-    case OperationType::TEXT_FOR_CONTEXTS:
-      delete _rootOperation;
-      _rootOperation = new TextOperationForContexts(
-          *static_cast<TextOperationForContexts*>(op));
-      break;
-    case OperationType::TEXT_WITHOUT_FILTER:
-      delete _rootOperation;
-      _rootOperation = new TextOperationWithoutFilter(
-          *static_cast<TextOperationWithoutFilter*>(op));
-      break;
-    case OperationType::TEXT_WITH_FILTER:
-      delete _rootOperation;
-      _rootOperation = new TextOperationWithFilter(
-          *static_cast<TextOperationWithFilter*>(op));
-      break;
-    case OperationType::TWO_COL_JOIN:
-      delete _rootOperation;
-      _rootOperation = new TwoColumnJoin(
-          *static_cast<TwoColumnJoin*>(op));
-      break;
-    default: AD_THROW(ad_semsearch::Exception::ASSERT_FAILED, "Cannot set "
-        "an operation with undefined type.");
-  }
+  _rootOperation = op;
 }
 
 // _____________________________________________________________________________
@@ -184,7 +67,7 @@ size_t QueryExecutionTree::getVariableColumn(const string& variable) const {
 
 // _____________________________________________________________________________
 void QueryExecutionTree::setVariableColumns(
-    ad_utility::HashMap<string, size_t> const& map) {
+    std::unordered_map<string, size_t> const& map) {
   _variableColumnMap = map;
 }
 

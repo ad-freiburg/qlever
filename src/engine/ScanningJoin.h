@@ -38,15 +38,15 @@ class ScanningJoin : public IndexScan {
     _subtree->setTextLimit(limit);
   }
 
-  virtual size_t getSizeEstimate() const {
+  virtual size_t getSizeEstimate() {
     return _subtree->getSizeEstimate();
   }
 
-  virtual size_t getCostEstimate() const {
+  virtual size_t getCostEstimate() {
     return _subtree->getSizeEstimate() + getSizeEstimate() * 10;
   }
 
-  virtual bool knownEmptyResult() const {
+  virtual bool knownEmptyResult() {
     return _subtree->knownEmptyResult() || IndexScan::knownEmptyResult();
   }
 

@@ -19,39 +19,12 @@ size_t TextOperationWithFilter::getResultWidth() const {
 // _____________________________________________________________________________
 TextOperationWithFilter::TextOperationWithFilter(
     QueryExecutionContext* qec, const string& words, size_t nofVars,
-    const QueryExecutionTree* filterResult, size_t filterColumn,
+    std::shared_ptr<QueryExecutionTree> filterResult, size_t filterColumn,
     size_t textLimit) :
     Operation(qec), _words(words), _nofVars(nofVars),
-    _filterResult(new QueryExecutionTree(*filterResult)),
+    _filterResult(filterResult),
     _filterColumn(filterColumn) {
   setTextLimit(textLimit);
-}
-
-// _____________________________________________________________________________
-TextOperationWithFilter::TextOperationWithFilter(
-    const TextOperationWithFilter& other) :
-    Operation(other._executionContext), _words(other._words),
-    _nofVars(other._nofVars), _textLimit(other._textLimit),
-    _filterResult(new QueryExecutionTree(*other._filterResult)),
-    _filterColumn(other._filterColumn) {
-}
-
-// _____________________________________________________________________________
-TextOperationWithFilter& TextOperationWithFilter::operator=(
-    const TextOperationWithFilter& other) {
-  _executionContext = other._executionContext;
-  _words = other._words;
-  _nofVars = other._nofVars;
-  _textLimit = other._textLimit;
-  delete _filterResult;
-  _filterResult = new QueryExecutionTree(*other._filterResult);
-  _filterColumn = other._filterColumn;
-  return *this;
-}
-
-// _____________________________________________________________________________
-TextOperationWithFilter::~TextOperationWithFilter() {
-  delete _filterResult;
 }
 
 // _____________________________________________________________________________

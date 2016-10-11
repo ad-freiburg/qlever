@@ -34,7 +34,7 @@ public:
     _textLimit = limit;
   }
 
-  virtual size_t getSizeEstimate() const {
+  virtual size_t getSizeEstimate() {
     if (_executionContext) {
       return static_cast<size_t>(
           _executionContext->getIndex().getSizeEstimate(_words));
@@ -42,7 +42,7 @@ public:
     return size_t(10000 * 0.8);
   }
 
-  virtual size_t getCostEstimate() const {
+  virtual size_t getCostEstimate() {
     if (_executionContext) {
       return static_cast<size_t>(
           _executionContext->getCostFactor("NO_FILTER_PUNISH") * (
@@ -61,7 +61,7 @@ public:
     return _nofVars;
   }
 
-    virtual bool knownEmptyResult() const {
+    virtual bool knownEmptyResult() {
       return _executionContext &&
           _executionContext->getIndex().getSizeEstimate(_words) == 0;
     }

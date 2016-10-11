@@ -4,6 +4,9 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <bits/unordered_set.h>
 #include "./QueryExecutionContext.h"
 #include "./Operation.h"
 #include "../util/Conversions.h"
@@ -19,14 +22,6 @@ class QueryExecutionTree {
 
 public:
   explicit QueryExecutionTree(QueryExecutionContext* qec);
-
-  // Copy constructor
-  QueryExecutionTree(const QueryExecutionTree& other);
-
-  // Assignment operator
-  QueryExecutionTree& operator=(const QueryExecutionTree& other);
-
-  virtual ~QueryExecutionTree();
 
   enum OperationType {
     UNDEFINED = 0,
@@ -48,7 +43,7 @@ public:
     TEXT = 2
   };
 
-  void setOperation(OperationType type, Operation* op);
+  void setOperation(OperationType type, std::shared_ptr<Operation> op);
 
   string asString() const;
 
@@ -56,11 +51,11 @@ public:
     return _qec;
   }
 
-  const ad_utility::HashMap<string, size_t>& getVariableColumnMap() const {
+  const std::unordered_map<string, size_t>& getVariableColumnMap() const {
     return _variableColumnMap;
   }
 
-  const Operation* getRootOperation() const {
+  std::shared_ptr<Operation> getRootOperation() const {
     return _rootOperation;
   }
 
@@ -76,13 +71,13 @@ public:
 
   size_t getVariableColumn(const string& var) const;
 
-  void setVariableColumns(const ad_utility::HashMap<string, size_t>& map);
+  void setVariableColumns(const std::unordered_map<string, size_t>& map);
 
-  void setContextVars(const ad_utility::HashSet<string>& set) {
+  void setContextVars(const std::unordered_set<string>& set) {
     _contextVars = set;
   }
 
-  const ad_utility::HashSet<string>& getContextVars() const {
+  const std::unordered_set<string>& getContextVars() const {
     return _contextVars;
   }
 
@@ -132,10 +127,10 @@ public:
 
 private:
   QueryExecutionContext* _qec;   // No ownership
-  ad_utility::HashMap<string, size_t> _variableColumnMap;
-  Operation* _rootOperation;  // Owned child. Will be deleted at deconstruction.
+  std::unordered_map<string, size_t> _variableColumnMap;
+  std::shared_ptr<Operation> _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
-  ad_utility::HashSet<string> _contextVars;
+  std::unordered_set<string> _contextVars;
 
   template<typename Row>
   void writeJsonTable(const vector<Row>& data, size_t from,

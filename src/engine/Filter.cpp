@@ -6,7 +6,6 @@
 #include "./QueryExecutionTree.h"
 #include "./Filter.h"
 
-
 using std::string;
 
 // _____________________________________________________________________________
@@ -15,51 +14,20 @@ size_t Filter::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-Filter::Filter(QueryExecutionContext* qec, const QueryExecutionTree& subtree,
-               SparqlFilter::FilterType type, size_t lhsInd, size_t rhsInd, Id rhsId) :
+Filter::Filter(QueryExecutionContext* qec,
+               std::shared_ptr<QueryExecutionTree> subtree,
+               SparqlFilter::FilterType type,
+               size_t lhsInd,
+               size_t rhsInd,
+               Id rhsId) :
     Operation(qec),
-    _subtree(new QueryExecutionTree(subtree)),
+    _subtree(subtree),
     _type(type),
     _lhsInd(lhsInd),
     _rhsInd(rhsInd),
     _rhsId(rhsId) {
   AD_CHECK(rhsId == std::numeric_limits<Id>::max()
-           || rhsInd == std::numeric_limits<size_t>::max());
-}
-
-
-
-// _____________________________________________________________________________
-Filter::Filter(const Filter& other) :
-    Operation(other._executionContext),
-    _subtree(new QueryExecutionTree(*other._subtree)),
-    _type(other._type),
-    _lhsInd(other._lhsInd),
-    _rhsInd(other._rhsInd),
-    _rhsId(other._rhsId) {
-}
-
-// _____________________________________________________________________________
-Filter::Filter(Filter&& other) noexcept {
-    swap(*this, other);
-}
-
-// _____________________________________________________________________________
-Filter& Filter::operator=(Filter other) {
-  swap(*this, other);
-  return *this;
-}
-
-// _____________________________________________________________________________
-Filter& Filter::operator=(Filter&& other) noexcept {
-  swap(*this, other);
-  return *this;
-}
-
-
-// _____________________________________________________________________________
-Filter::~Filter() {
-  delete _subtree;
+               || rhsInd == std::numeric_limits<size_t>::max());
 }
 
 // _____________________________________________________________________________
@@ -68,22 +36,16 @@ string Filter::asString() const {
   os << "FILTER " << _subtree->asString() << " with ";
   os << "col " << _lhsInd;
   switch (_type) {
-    case SparqlFilter::EQ :
-      os << " == ";
+    case SparqlFilter::EQ :os << " == ";
       break;
-    case SparqlFilter::NE :
-      os << " != ";
+    case SparqlFilter::NE :os << " != ";
       break;
-    case SparqlFilter::LT :
-      os << " < ";
+    case SparqlFilter::LT :os << " < ";
       break;
-    case SparqlFilter::LE :
-      os << " <= ";
-    case SparqlFilter::GT :
-      os << " > ";
+    case SparqlFilter::LE :os << " <= ";
+    case SparqlFilter::GT :os << " > ";
       break;
-    case SparqlFilter::GE :
-      os << " <= ";
+    case SparqlFilter::GE :os << " <= ";
       break;
   }
   if (_rhsInd != std::numeric_limits<size_t>::max()) {
@@ -97,8 +59,9 @@ string Filter::asString() const {
 
 // _____________________________________________________________________________
 void Filter::computeResult(ResultTable* result) const {
-  LOG(DEBUG) << "Filter result computation..." << endl;
+  LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   const ResultTable& subRes = _subtree->getResult();
+  LOG(DEBUG) << "Filter result computation..." << endl;
   result->_nofColumns = subRes._nofColumns;
   size_t l = _lhsInd;
   size_t r = _rhsInd;
@@ -447,7 +410,7 @@ void Filter::computeResult(ResultTable* result) const {
 }
 
 // _____________________________________________________________________________
-void Filter::computeResultFixedValue(ResultTable *result) const {
+void Filter::computeResultFixedValue(ResultTable* result) const {
   LOG(DEBUG) << "Filter result computation..." << endl;
   const ResultTable& subRes = _subtree->getResult();
   result->_nofColumns = subRes._nofColumns;
@@ -464,7 +427,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] == r;
+                    return e[l] == r;
                   }, res);
           break;
         case SparqlFilter::NE:
@@ -472,7 +435,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] != r;
+                    return e[l] != r;
                   }, res);
           break;
         case SparqlFilter::LT:
@@ -480,7 +443,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] < r;
+                    return e[l] < r;
                   }, res);
           break;
         case SparqlFilter::LE:
@@ -488,7 +451,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] <= r;
+                    return e[l] <= r;
                   }, res);
           break;
         case SparqlFilter::GT:
@@ -496,7 +459,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] > r;
+                    return e[l] > r;
                   }, res);
           break;
         case SparqlFilter::GE:
@@ -504,7 +467,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] >= r;
+                    return e[l] >= r;
                   }, res);
           break;
       }
@@ -520,7 +483,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] == r;
+                    return e[l] == r;
                   }, res);
           break;
         case SparqlFilter::NE:
@@ -528,7 +491,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] != r;
+                    return e[l] != r;
                   }, res);
           break;
         case SparqlFilter::LT:
@@ -536,7 +499,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] < r;
+                    return e[l] < r;
                   }, res);
           break;
         case SparqlFilter::LE:
@@ -544,7 +507,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] <= r;
+                    return e[l] <= r;
                   }, res);
           break;
         case SparqlFilter::GT:
@@ -552,7 +515,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] > r;
+                    return e[l] > r;
                   }, res);
           break;
         case SparqlFilter::GE:
@@ -560,7 +523,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] >= r;
+                    return e[l] >= r;
                   }, res);
           break;
       }
@@ -576,7 +539,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] == r;
+                    return e[l] == r;
                   }, res);
           break;
         case SparqlFilter::NE:
@@ -584,7 +547,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] != r;
+                    return e[l] != r;
                   }, res);
           break;
         case SparqlFilter::LT:
@@ -592,7 +555,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] < r;
+                    return e[l] < r;
                   }, res);
           break;
         case SparqlFilter::LE:
@@ -600,7 +563,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] <= r;
+                    return e[l] <= r;
                   }, res);
           break;
         case SparqlFilter::GT:
@@ -608,7 +571,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] > r;
+                    return e[l] > r;
                   }, res);
           break;
         case SparqlFilter::GE:
@@ -616,7 +579,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] >= r;
+                    return e[l] >= r;
                   }, res);
           break;
       }
@@ -632,7 +595,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] == r;
+                    return e[l] == r;
                   }, res);
           break;
         case SparqlFilter::NE:
@@ -640,7 +603,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] != r;
+                    return e[l] != r;
                   }, res);
           break;
         case SparqlFilter::LT:
@@ -648,7 +611,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] < r;
+                    return e[l] < r;
                   }, res);
           break;
         case SparqlFilter::LE:
@@ -656,7 +619,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] <= r;
+                    return e[l] <= r;
                   }, res);
           break;
         case SparqlFilter::GT:
@@ -664,7 +627,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] > r;
+                    return e[l] > r;
                   }, res);
           break;
         case SparqlFilter::GE:
@@ -672,7 +635,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] >= r;
+                    return e[l] >= r;
                   }, res);
           break;
       }
@@ -688,7 +651,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] == r;
+                    return e[l] == r;
                   }, res);
           break;
         case SparqlFilter::NE:
@@ -696,7 +659,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] != r;
+                    return e[l] != r;
                   }, res);
           break;
         case SparqlFilter::LT:
@@ -704,7 +667,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] < r;
+                    return e[l] < r;
                   }, res);
           break;
         case SparqlFilter::LE:
@@ -712,7 +675,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] <= r;
+                    return e[l] <= r;
                   }, res);
           break;
         case SparqlFilter::GT:
@@ -720,7 +683,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] > r;
+                    return e[l] > r;
                   }, res);
           break;
         case SparqlFilter::GE:
@@ -728,7 +691,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   *static_cast<vector<RT>*>(subRes._fixedSizeData),
                   [&l, &r](const RT& e) {
-                      return e[l] >= r;
+                    return e[l] >= r;
                   }, res);
           break;
       }
@@ -742,7 +705,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   subRes._varSizeData,
                   [&l, &r](const RT& e) {
-                      return e[l] == r;
+                    return e[l] == r;
                   }, &result->_varSizeData);
           break;
         case SparqlFilter::NE:
@@ -750,7 +713,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   subRes._varSizeData,
                   [&l, &r](const RT& e) {
-                      return e[l] != r;
+                    return e[l] != r;
                   }, &result->_varSizeData);
           break;
         case SparqlFilter::LT:
@@ -758,7 +721,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   subRes._varSizeData,
                   [&l, &r](const RT& e) {
-                      return e[l] < r;
+                    return e[l] < r;
                   }, &result->_varSizeData);
           break;
         case SparqlFilter::LE:
@@ -766,7 +729,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   subRes._varSizeData,
                   [&l, &r](const RT& e) {
-                      return e[l] <= r;
+                    return e[l] <= r;
                   }, &result->_varSizeData);
           break;
         case SparqlFilter::GT:
@@ -774,7 +737,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   subRes._varSizeData,
                   [&l, &r](const RT& e) {
-                      return e[l] > r;
+                    return e[l] > r;
                   }, &result->_varSizeData);
           break;
         case SparqlFilter::GE:
@@ -782,7 +745,7 @@ void Filter::computeResultFixedValue(ResultTable *result) const {
               .filter(
                   subRes._varSizeData,
                   [&l, &r](const RT& e) {
-                      return e[l] >= r;
+                    return e[l] >= r;
                   }, &result->_varSizeData);
           break;
       }

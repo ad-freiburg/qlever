@@ -15,7 +15,7 @@ using std::string;
 size_t TextOperationForContexts::getResultWidth() const {
   size_t width = 2;
   for (size_t i = 0; i < _subtrees.size(); ++i) {
-    width += _subtrees[i].first.getRootOperation()->getResultWidth();
+    width += _subtrees[i].first->getRootOperation()->getResultWidth();
   }
   return width;
 }
@@ -24,7 +24,7 @@ size_t TextOperationForContexts::getResultWidth() const {
 TextOperationForContexts::TextOperationForContexts(
     QueryExecutionContext* qec,
     const string& words,
-    const vector<pair<QueryExecutionTree, size_t>>& subtrees,
+    const vector<pair<std::shared_ptr<QueryExecutionTree>, size_t>>& subtrees,
     size_t textLimit) :
     Operation(qec), _words(words), _subtrees(subtrees), _textLimit(textLimit) {
 }
@@ -35,7 +35,7 @@ string TextOperationForContexts::asString() const {
   os << "TEXT OPERATION FOR CONTEXTS:" << " co-occurrence with words: \"" <<
   _words << "\"";
   for (size_t i = 0; i < _subtrees.size(); ++i) {
-    os << "\nand " << _subtrees[i].first.asString() << " [" <<
+    os << "\nand " << _subtrees[i].first->asString() << " [" <<
     _subtrees[i].second << "]";
   }
   os << " with textLimit = " << _textLimit;

@@ -64,9 +64,9 @@ class Operation {
     virtual size_t getResultWidth() const = 0;
     virtual size_t resultSortedOn() const = 0;
     virtual void setTextLimit(size_t limit) = 0;
-    virtual size_t getCostEstimate() const = 0;
-    virtual size_t getSizeEstimate() const = 0;
-    virtual bool knownEmptyResult() const = 0;
+    virtual size_t getCostEstimate() = 0;
+    virtual size_t getSizeEstimate() = 0;
+    virtual bool knownEmptyResult() = 0;
 
   protected:
 

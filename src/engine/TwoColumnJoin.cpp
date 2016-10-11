@@ -9,24 +9,24 @@ using std::string;
 
 // _____________________________________________________________________________
 TwoColumnJoin::TwoColumnJoin(QueryExecutionContext* qec,
-                             const QueryExecutionTree& t1,
-                             const QueryExecutionTree& t2,
+                             std::shared_ptr<QueryExecutionTree> t1,
+                             std::shared_ptr<QueryExecutionTree> t2,
                              const vector<array<size_t, 2>>& jcs) : Operation(
     qec) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CHECK_EQ(jcs.size(), 2);
-  if (t1.asString() < t2.asString()) {
-    _left = new QueryExecutionTree(t1);
+  if (t1->asString() < t2->asString()) {
+    _left = t1;
     _jc1Left = jcs[0][0];
     _jc2Left = jcs[1][0];
-    _right = new QueryExecutionTree(t2);
+    _right = t2;
     _jc1Right = jcs[0][1];
     _jc2Right = jcs[1][1];
   } else {
-    _left = new QueryExecutionTree(t2);
+    _left = t2;
     _jc1Left = jcs[0][1];
     _jc2Left = jcs[1][1];
-    _right = new QueryExecutionTree(t1);
+    _right = t1;
     _jc1Right = jcs[0][0];
     _jc2Right = jcs[1][0];
   }
@@ -45,38 +45,6 @@ TwoColumnJoin::TwoColumnJoin(QueryExecutionContext* qec,
       std::swap(_jc1Right, _jc2Right);
     }
   }
-}
-
-// _____________________________________________________________________________
-TwoColumnJoin::~TwoColumnJoin() {
-  delete _left;
-  delete _right;
-}
-
-
-// _____________________________________________________________________________
-TwoColumnJoin::TwoColumnJoin(const TwoColumnJoin& other) :
-    Operation(other._executionContext),
-    _left(new QueryExecutionTree(*other._left)),
-    _right(new QueryExecutionTree(*other._right)),
-    _jc1Left(other._jc1Left),
-    _jc2Left(other._jc2Left),
-    _jc1Right(other._jc1Right),
-    _jc2Right(other._jc2Right) {
-}
-
-// _____________________________________________________________________________
-TwoColumnJoin& TwoColumnJoin::operator=(const TwoColumnJoin& other) {
-  _executionContext = other._executionContext;
-  delete _left;
-  _left = new QueryExecutionTree(*other._left);
-  delete _right;
-  _right = new QueryExecutionTree(*other._right);
-  _jc1Left = other._jc1Left;
-  _jc2Left = other._jc2Left;
-  _jc1Right = other._jc1Right;
-  _jc2Right = other._jc2Right;
-  return *this;
 }
 
 // _____________________________________________________________________________
@@ -151,8 +119,8 @@ void TwoColumnJoin::computeResult(ResultTable* result) const {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t> TwoColumnJoin::getVariableColumns() const {
-  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumnMap());
+std::unordered_map<string, size_t> TwoColumnJoin::getVariableColumns() const {
+  std::unordered_map<string, size_t> retVal(_left->getVariableColumnMap());
   size_t leftSize = _left->getResultWidth();
   for (auto it = _right->getVariableColumnMap().begin();
        it != _right->getVariableColumnMap().end(); ++it) {

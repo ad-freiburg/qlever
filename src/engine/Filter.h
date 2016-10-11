@@ -20,28 +20,9 @@ class Filter : public Operation {
 
   public:
 
-    Filter(QueryExecutionContext *qec, const QueryExecutionTree& subtree,
+    Filter(QueryExecutionContext *qec, std::shared_ptr<QueryExecutionTree> subtree,
            SparqlFilter::FilterType type, size_t var1Column, size_t var2Column,
            Id rhsId = std::numeric_limits<Id>::max());
-
-    Filter(const Filter& other);
-
-    Filter(Filter&& other) noexcept;
-
-    Filter& operator=(Filter other);
-
-    Filter& operator=(Filter&& other) noexcept;
-
-    friend void swap(Filter& a, Filter& b) noexcept {
-      using std::swap;
-      swap(a._subtree, b._subtree);
-      swap(a._type, b._type);
-      swap(a._lhsInd, b._lhsInd);
-      swap(a._rhsInd, b._rhsInd);
-      swap(a._rhsId, b._rhsId);
-    }
-
-    virtual ~Filter();
 
     virtual string asString() const;
 
@@ -53,7 +34,7 @@ class Filter : public Operation {
       _subtree->setTextLimit(limit);
     }
 
-    virtual size_t getSizeEstimate() const {
+    virtual size_t getSizeEstimate() {
       // TODO: return a better estimate
       if (_rhsId == std::numeric_limits<Id>::max()) {
         if (_type == SparqlFilter::FilterType::EQ) {
@@ -76,21 +57,21 @@ class Filter : public Operation {
       }
     }
 
-    virtual size_t getCostEstimate() const {
+    virtual size_t getCostEstimate() {
       return getSizeEstimate() + _subtree->getSizeEstimate() +
              _subtree->getCostEstimate();
     }
 
-    const QueryExecutionTree* getSubtree() const {
+    std::shared_ptr<QueryExecutionTree> getSubtree() const {
         return _subtree;
     };
 
-    virtual bool knownEmptyResult() const {
+    virtual bool knownEmptyResult() {
       return _subtree->knownEmptyResult();
     }
 
   private:
-    QueryExecutionTree* _subtree;
+    std::shared_ptr<QueryExecutionTree> _subtree;
     SparqlFilter::FilterType _type;
     size_t _lhsInd;
     size_t _rhsInd;

@@ -20,14 +20,8 @@ public:
 
   TextOperationWithFilter(QueryExecutionContext* qec, const string& words,
                           size_t nofVars,
-                          const QueryExecutionTree* filterResult,
+                          std::shared_ptr<QueryExecutionTree> filterResult,
                           size_t filterColumn, size_t textLimit = 1);
-
-  TextOperationWithFilter(const TextOperationWithFilter& other);
-
-  TextOperationWithFilter& operator=(const TextOperationWithFilter& other);
-
-  ~TextOperationWithFilter();
 
   virtual string asString() const;
 
@@ -43,7 +37,7 @@ public:
     _filterResult->setTextLimit(limit);
   }
 
-  virtual size_t getSizeEstimate() const {
+  virtual size_t getSizeEstimate() {
     if (_executionContext) {
       return static_cast<size_t>(
           _executionContext->getIndex().getSizeEstimate(_words) *
@@ -52,7 +46,7 @@ public:
     return size_t(10000 * 0.8);
   }
 
-  virtual size_t getCostEstimate() const {
+  virtual size_t getCostEstimate() {
     if (_filterResult->knownEmptyResult()) {
       return 0;
     }
@@ -77,7 +71,7 @@ public:
     return _nofVars;
   }
 
-  virtual bool knownEmptyResult() const {
+  virtual bool knownEmptyResult() {
     return _filterResult->knownEmptyResult() ||
         (_executionContext &&
             _executionContext->getIndex().getSizeEstimate(_words) == 0);
@@ -88,7 +82,7 @@ private:
   size_t _nofVars;
   size_t _textLimit;
 
-  QueryExecutionTree* _filterResult;
+  std::shared_ptr<QueryExecutionTree> _filterResult;
   size_t _filterColumn;
 
   virtual void computeResult(ResultTable* result) const;

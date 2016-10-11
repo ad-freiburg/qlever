@@ -10,13 +10,13 @@
 using std::vector;
 
 class QueryPlanner {
-public:
+ public:
   explicit QueryPlanner(QueryExecutionContext* qec);
 
   QueryExecutionTree createExecutionTree(const ParsedQuery& pq) const;
 
   class TripleGraph {
-  public:
+   public:
 
     TripleGraph();
 
@@ -26,9 +26,8 @@ public:
 
     TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
 
-
     class Node {
-    public:
+     public:
       Node(size_t id, const SparqlTriple& t) : _id(id), _triple(t),
                                                _variables(), _cvar(),
                                                _wordPart() {
@@ -72,7 +71,6 @@ public:
 
     ad_utility::HashMap<string, vector<size_t>> identifyTextCliques() const;
 
-
     vector<size_t> bfsLeaveOut(size_t startNode,
                                ad_utility::HashSet<size_t> leaveOut) const;
 
@@ -80,10 +78,11 @@ public:
 
     bool isPureTextQuery();
 
-  private:
+   private:
     vector<pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
         const vector<SparqlFilter>& origFilters,
-        ad_utility::HashMap<string, vector<size_t>>& contextVarTotextNodes) const;
+        ad_utility::HashMap<string,
+                            vector<size_t>>& contextVarTotextNodes) const;
 
     vector<SparqlFilter> pickFilters(
         const vector<SparqlFilter>& origFilters,
@@ -91,10 +90,11 @@ public:
   };
 
   class SubtreePlan {
-  public:
-    explicit SubtreePlan(QueryExecutionContext* qec) : _qet(qec) {}
+   public:
+    explicit SubtreePlan(QueryExecutionContext* qec)
+        : _qet(new QueryExecutionTree(qec)) { }
 
-    QueryExecutionTree _qet;
+    std::shared_ptr<QueryExecutionTree> _qet;
     ad_utility::HashSet<size_t> _idsOfIncludedNodes;
     ad_utility::HashSet<size_t> _idsOfIncludedFilters;
 
@@ -104,7 +104,6 @@ public:
   };
 
   TripleGraph createTripleGraph(const ParsedQuery& query) const;
-
 
   static ad_utility::HashMap<string, size_t>
   createVariableColumnsMapForTextOperation(
@@ -141,7 +140,7 @@ public:
         vector<pair<QueryExecutionTree, size_t>>());
   };
 
-private:
+ private:
   QueryExecutionContext* _qec;
 
   static bool isVariable(const string& elem);

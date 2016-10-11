@@ -14,7 +14,7 @@ virtuso_isql_user = "dba"
 rdf3x_run_binary = "/home/buchholb/rdf3x-0.3.8/bin/rdf3xquery"
 rdf3x_db = "/local/scratch/bjoern/data/rdf3x/wikipedia-freebase.combined.db"
 my_index = "/local/scratch/bjoern/data/wikipedia-fbeasy.withstopwords"
-my_binary = "/local/scratch/bjoern/work/tmp/SparqlEngineMain"
+my_binary = "/local/scratch/bjoern/work/build/SparqlEngineMain"
 broccoli_api = 'http://filicudi.informatik.uni-freiburg.de:6001/'
 
 parser = argparse.ArgumentParser()

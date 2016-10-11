@@ -16,33 +16,13 @@ size_t Distinct::getResultWidth() const {
 
 // _____________________________________________________________________________
 Distinct::Distinct(QueryExecutionContext* qec,
-                   const QueryExecutionTree& subtree,
+                   std::shared_ptr<QueryExecutionTree> subtree,
                    const vector<size_t>& keepIndices) :
     Operation(qec),
-    _subtree(new QueryExecutionTree(subtree)),
+    _subtree(subtree),
     _keepIndices(keepIndices) {
 }
 
-// _____________________________________________________________________________
-Distinct::Distinct(const Distinct& other) :
-    Operation(other._executionContext),
-    _subtree(new QueryExecutionTree(*other._subtree)),
-    _keepIndices(other._keepIndices) {
-}
-
-// _____________________________________________________________________________
-Distinct& Distinct::operator=(const Distinct& other) {
-  delete _subtree;
-  _executionContext = other._executionContext;
-  _subtree = new QueryExecutionTree(*other._subtree);
-  _keepIndices = other._keepIndices;
-  return *this;
-}
-
-// _____________________________________________________________________________
-Distinct::~Distinct() {
-  delete _subtree;
-}
 
 // _____________________________________________________________________________
 string Distinct::asString() const {
@@ -53,8 +33,9 @@ string Distinct::asString() const {
 
 // _____________________________________________________________________________
 void Distinct::computeResult(ResultTable* result) const {
-  LOG(DEBUG) << "Distinct result computation..." << endl;
+  LOG(DEBUG) << "Getting sub-result for distinct result computation..." << endl;
   const ResultTable& subRes = _subtree->getResult();
+  LOG(DEBUG) << "Distinct result computation..." << endl;
   result->_nofColumns = subRes._nofColumns;
   switch (subRes._nofColumns) {
     case 1: {

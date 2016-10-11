@@ -17,19 +17,14 @@ using std::pair;
 using std::vector;
 
 class OrderBy : public Operation {
-public:
+ public:
   virtual size_t getResultWidth() const;
 
-public:
+ public:
 
-  OrderBy(QueryExecutionContext* qec, const QueryExecutionTree& subtree,
+  OrderBy(QueryExecutionContext* qec,
+          std::shared_ptr<QueryExecutionTree> subtree,
           const vector<pair<size_t, bool>>& sortIndices);
-
-  OrderBy(const OrderBy& other);
-
-  OrderBy& operator=(const OrderBy& other);
-
-  virtual ~OrderBy();
 
   virtual string asString() const;
 
@@ -41,25 +36,25 @@ public:
     _subtree->setTextLimit(limit);
   }
 
-  virtual size_t getSizeEstimate() const {
+  virtual size_t getSizeEstimate() {
     return _subtree->getSizeEstimate();
   }
 
-  virtual size_t getCostEstimate() const {
+  virtual size_t getCostEstimate() {
     size_t size = getSizeEstimate();
     size_t logSize = std::max(size_t(1), static_cast<size_t>(logb(
-                                  static_cast<double>(getSizeEstimate()))));
+        static_cast<double>(getSizeEstimate()))));
     size_t nlogn = size * logSize;
     size_t subcost = _subtree->getCostEstimate();
     return nlogn + subcost;
   }
 
-  virtual bool knownEmptyResult() const {
+  virtual bool knownEmptyResult() {
     return _subtree->knownEmptyResult();
   }
 
-private:
-  QueryExecutionTree* _subtree;
+ private:
+  std::shared_ptr<QueryExecutionTree> _subtree;
   vector<pair<size_t, bool>> _sortIndices;
 
   virtual void computeResult(ResultTable* result) const;

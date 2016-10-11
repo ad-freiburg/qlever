@@ -22,14 +22,9 @@ class Distinct : public Operation {
 
   public:
 
-    Distinct(QueryExecutionContext *qec, const QueryExecutionTree& subtree,
+    Distinct(QueryExecutionContext *qec,
+             std::shared_ptr<QueryExecutionTree> subtree,
              const vector<size_t>& keepIndices);
-
-    Distinct(const Distinct& other);
-
-    Distinct& operator=(const Distinct& other);
-
-    virtual ~Distinct();
 
     virtual string asString() const;
 
@@ -41,20 +36,20 @@ class Distinct : public Operation {
       _subtree->setTextLimit(limit);
     }
 
-    virtual size_t getSizeEstimate() const {
+    virtual size_t getSizeEstimate() {
       return _subtree->getSizeEstimate();
     }
 
-    virtual size_t getCostEstimate() const {
+    virtual size_t getCostEstimate() {
       return getSizeEstimate() + _subtree->getCostEstimate();
     }
 
-    virtual bool knownEmptyResult() const {
+    virtual bool knownEmptyResult() {
       return _subtree->knownEmptyResult();
     }
 
   private:
-    QueryExecutionTree *_subtree;
+    std::shared_ptr<QueryExecutionTree> _subtree;
     vector<size_t> _keepIndices;
 
     virtual void computeResult(ResultTable *result) const;

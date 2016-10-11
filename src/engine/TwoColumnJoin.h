@@ -15,15 +15,9 @@ using std::list;
 class TwoColumnJoin : public Operation {
 public:
 
-  TwoColumnJoin(QueryExecutionContext* qec, const QueryExecutionTree& t1,
-                const QueryExecutionTree& t2,
+  TwoColumnJoin(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
+                std::shared_ptr<QueryExecutionTree> t2,
                 const std::vector<array<size_t, 2>>& joinCols);
-
-  TwoColumnJoin(const TwoColumnJoin& other);
-
-  TwoColumnJoin& operator=(const TwoColumnJoin& other);
-
-  virtual ~TwoColumnJoin();
 
   virtual string asString() const;
 
@@ -31,18 +25,18 @@ public:
 
   virtual size_t resultSortedOn() const;
 
-  ad_utility::HashMap<string, size_t> getVariableColumns() const;
+  std::unordered_map<string, size_t> getVariableColumns() const;
 
   virtual void setTextLimit(size_t limit) {
     _left->setTextLimit(limit);
     _right->setTextLimit(limit);
   }
 
-  virtual size_t getSizeEstimate() const {
+  virtual size_t getSizeEstimate() {
     return (_left->getSizeEstimate() + _right->getSizeEstimate()) / 10;
   }
 
-  virtual size_t getCostEstimate() const {
+  virtual size_t getCostEstimate() {
     if ((_left->getResultWidth() == 2 && _jc1Left == 0 && _jc2Left == 1) ||
        (_right->getResultWidth() == 2 && _jc1Right == 0 && _jc2Right == 1)) {
       return _left->getSizeEstimate() + _left->getCostEstimate() +
@@ -53,13 +47,13 @@ public:
            _right->getSizeEstimate() + _right->getCostEstimate()) * 1000;
   }
 
-    virtual bool knownEmptyResult() const {
+    virtual bool knownEmptyResult() {
       return _left->knownEmptyResult() || _right->knownEmptyResult();
     }
 
 private:
-  QueryExecutionTree* _left;
-  QueryExecutionTree* _right;
+  std::shared_ptr<QueryExecutionTree> _left;
+  std::shared_ptr<QueryExecutionTree> _right;
 
   size_t _jc1Left;
   size_t _jc2Left;

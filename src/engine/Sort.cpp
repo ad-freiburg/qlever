@@ -14,33 +14,14 @@ size_t Sort::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-Sort::Sort(QueryExecutionContext* qec, const QueryExecutionTree& subtree,
-    size_t sortCol) :
+Sort::Sort(QueryExecutionContext* qec,
+           std::shared_ptr<QueryExecutionTree> subtree,
+           size_t sortCol) :
     Operation(qec),
-    _subtree(new QueryExecutionTree(subtree)),
+    _subtree(subtree),
     _sortCol(sortCol) {
 }
 
-// _____________________________________________________________________________
-Sort::Sort(const Sort& other) :
-    Operation(other._executionContext),
-    _subtree(new QueryExecutionTree(*other._subtree)),
-    _sortCol(other._sortCol) {
-}
-
-// _____________________________________________________________________________
-Sort& Sort::operator=(const Sort& other) {
-  delete _subtree;
-  _executionContext = other._executionContext;
-  _subtree = new QueryExecutionTree(*other._subtree);
-  _sortCol = other._sortCol;
-  return *this;
-}
-
-// _____________________________________________________________________________
-Sort::~Sort() {
-  delete _subtree;
-}
 
 // _____________________________________________________________________________
 string Sort::asString() const {
@@ -51,8 +32,9 @@ string Sort::asString() const {
 
 // _____________________________________________________________________________
 void Sort::computeResult(ResultTable* result) const {
-  LOG(DEBUG) << "Sort result computation..." << endl;
+  LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
   const ResultTable& subRes = _subtree->getResult();
+  LOG(DEBUG) << "Sort result computation..." << endl;
   result->_nofColumns = subRes._nofColumns;
   switch (subRes._nofColumns) {
     case 1: {

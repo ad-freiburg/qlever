@@ -54,7 +54,7 @@ public:
     return _costFactors.getCostFactor(key);
   };
 
-private:
+ private:
 
   SubtreeCache _subtreeCache;
   const Index* _index;
