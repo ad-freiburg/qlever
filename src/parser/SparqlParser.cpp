@@ -95,7 +95,7 @@ void SparqlParser::parseSelect(const string& str, ParsedQuery& query) {
       query._selectedVariables.push_back(vars[i]);
     } else {
       throw ParseException(string("Invalid variable in select clause: \"") +
-                           vars[i] + "\"");
+          vars[i] + "\"");
     }
   }
 }
@@ -170,13 +170,13 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
 void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
   size_t i = 0;
   while (i < str.size() &&
-         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
+      (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
   if (i == str.size()) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
   }
   size_t j = i + 1;
   while (j < str.size() && str[j] != '\t' && str[j] != ' ' &&
-         str[j] != '\n') { ++j; }
+      str[j] != '\n') { ++j; }
   if (j == str.size()) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
   }
@@ -184,13 +184,13 @@ void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
   string s = str.substr(i, j - i);
   i = j;
   while (i < str.size() &&
-         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
+      (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
   if (i == str.size()) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
   }
   j = i + 1;
   while (j < str.size() && str[j] != '\t' && str[j] != ' ' &&
-         str[j] != '\n') { ++j; }
+      str[j] != '\n') { ++j; }
   string p = str.substr(i, j - i);
   if (p == IN_CONTEXT_RELATION ||
       p.find(IN_CONTEXT_RELATION_NS) != string::npos) {
@@ -199,7 +199,7 @@ void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
   } else {
     i = j;
     while (i < str.size() &&
-           (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
+        (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
     if (i == str.size()) {
       AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
     }
@@ -224,7 +224,7 @@ void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
         j = i + 1;
       }
       while (j < str.size() && str[j] != ' ' && str[j] != '\t' &&
-             str[j] != '\n') { ++j; }
+          str[j] != '\n') { ++j; }
     }
     string o = str.substr(i, j - i);
     SparqlTriple triple(s, p, o);
@@ -251,9 +251,9 @@ void SparqlParser::parseSolutionModifiers(const string& str,
         && tokens[i + 1] == "BY") {
       i += 1;
       while (i + 1 < tokens.size()
-             && tokens[i + 1] != "LIMIT"
-             && tokens[i + 1] != "OFFSET"
-             && tokens[i + 1] != "TEXTLIMIT") {
+          && tokens[i + 1] != "LIMIT"
+          && tokens[i + 1] != "OFFSET"
+          && tokens[i + 1] != "TEXTLIMIT") {
         query._orderBy.emplace_back(OrderKey(tokens[i + 1]));
         ++i;
       }
@@ -280,8 +280,25 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
   size_t j = str.find(')', i + 1);
   AD_CHECK(j != string::npos);
   string filter = str.substr(i + 1, j - i - 1);
-  auto tokens = ad_utility::split(
-      ad_utility::strip(ad_utility::normalizeSpaces(filter), ' '), ' ');
+  vector<string> tokens;
+  size_t startP2 = 0;
+  for (size_t si = 0; si < filter.size(); ++si) {
+    if (filter[si] == '=' || filter[si] == '!' || filter[si] == '<'
+        || filter[si] == '>') {
+      if (startP2 == 0) {
+        tokens.push_back(ad_utility::strip(filter.substr(0, si), " \t"));
+        startP2 = si;
+      }
+    } else {
+      if (startP2 > 0) {
+        tokens.push_back(ad_utility::strip(filter.substr(startP2, si - startP2),
+                                           " \t"));
+        tokens.push_back(ad_utility::strip(filter.substr(si), " \t"));
+        break;
+      }
+    }
+  }
+
   if (tokens.size() != 3) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "Unknown syntax for filter: " + filter);
@@ -293,6 +310,13 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
   SparqlFilter f;
   f._lhs = tokens[0];
   f._rhs = tokens[2];
+  if (f._rhs[0] == '\'') {
+    size_t closing = f._rhs.rfind('\'');
+    if (closing != 0) {
+      f._rhs[0] = '\"';
+      f._rhs[closing] = '\"';
+    }
+  }
 
   if (tokens[1] == "=" || tokens[1] == "==") {
     f._type = SparqlFilter::EQ;
