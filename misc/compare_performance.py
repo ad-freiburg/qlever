@@ -292,6 +292,7 @@ def rewrite_for_broccoli(q):
 
 
 def get_virtuoso_query_times(query_file, pwd):
+    print('get_virtuoso_query_times', file=sys.stderr)
     with open('__tmp.virtqueries', 'w') as tmpfile:
         for line in open(query_file):
             query = 'SPARQL ' + line.strip().split('\t')[1] + ';'
@@ -324,6 +325,7 @@ def get_virtuoso_query_times(query_file, pwd):
 
 
 def get_virtuoso_bifc_query_times(query_file, pwd):
+    print('get_virtuoso_bifc_query_times', file=sys.stderr)
     impossibles = {}
     with open('__tmp.bifc_queries', 'w') as tmpfile:
         i = 0
@@ -365,6 +367,7 @@ def get_virtuoso_bifc_query_times(query_file, pwd):
 
 
 def get_virtuoso_bifc_inc_query_times(query_file, pwd):
+    print('get_virtuoso_bifc_inc_query_times', file=sys.stderr)
     with open('__tmp.bifc_inc_queries', 'w') as tmpfile:
         for line in open(query_file):
             bifc_query = rewrite_to_bif_contains_inc(line.strip().split('\t')[1])
@@ -394,6 +397,7 @@ def get_virtuoso_bifc_inc_query_times(query_file, pwd):
 
 
 def get_rdf3X_query_times(query_file):
+    print('get_rdf3X_query_times', file=sys.stderr)
     impossibles = {}
     with open('__tmp.rdf3x_queries', 'w') as tmpfile:
         i = 0
@@ -436,6 +440,7 @@ def get_rdf3X_query_times(query_file):
 
 
 def get_my_query_times(query_file):
+    print('get_my_query_times', file=sys.stderr)
     with open('__tmp.my_queries', 'w') as tmpfile:
         for line in open(query_file):
             try:
@@ -474,6 +479,7 @@ def get_my_query_times(query_file):
 
 
 def get_broccoli_query_times(query_file):
+    print('get_broccoli_query_times', file=sys.stderr)
     impossibles = {}
     with open('__tmp.broccoli_queries', 'w') as tmpfile:
         i = 0
