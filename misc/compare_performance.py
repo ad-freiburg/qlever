@@ -516,13 +516,22 @@ def get_broccoli_query_times(query_file):
 
 def print_result_table(queries, headers, time_and_counts):
     print('\t'.join(headers))
-    print('\t'.join(['---' * len(headers)]))
+    print('\t'.join(['---'] * len(headers)))
+    data = []
+    for i in range(2, len(headers)):
+        data.append([])
     for i in range(0, len(queries)):
         row = [queries[i]]
+        approach_num = 0
         for (times, counts) in time_and_counts:
             row.append(str(times[i]))
             row.append(str(counts[i]))
+            if times[i] != '-':
+                data[approach_num * 2].append(float(times[i].strip().strip('ms').strip()))
+                data[approach_num * 2 + 1].append(float(counts[i]))
+            approach_num += 1
         print('\t'.join(row))
+    print('\t'.join(['average', ' '] + ['{0:.2f}'.format((sum(l) / len(l))) for l in data]))
 
 
 def main():
