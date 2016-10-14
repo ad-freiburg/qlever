@@ -26,20 +26,42 @@ parser.add_argument('--mine', action='store_true', help='should mine be executed
 parser.add_argument('--rdf3x', action='store_true', help='should rdf3x be executed?',
                     default=False)
 
+nof_permutations = 5
 
 def print_result_table(headers, query_to_approach_to_times):
     print('\t'.join(headers))
     print('\t'.join(['---'] * len(headers)))
+
+    approach_to_run_times = {}
+    for q, att in query_to_approach_to_times.items():
+        for a, t in att.items():
+            approach_to_run_times[a] = []
+            for i in range(0, nof_permutations):
+                approach_to_run_times[a].append([])
+        break
+
     for q, att in query_to_approach_to_times.items():
         row = [q]
         for approach in headers[2:]:
             row.append(produce_cell(att[approach]))
+            for perm_num, time in enumerate(att[approach]):
+                approach_to_run_times[approach][perm_num].append(time)
         print('\t'.join(row))
+
+    row = ['average', ' ']
+    for approach in headers[2:]:
+        run_times = approach_to_run_times[approach]
+        avgs = []
+        for ts in run_times:
+            cleaned_ts = [t for t in ts if t != -1.0]
+            avgs.append(sum(cleaned_ts) / len(cleaned_ts))
+        row.append(produce_cell(avgs))
+    print('\t'.join(row))
 
 def produce_cell(times):
     avg = sum(times) / len(times)
     dev = statistics.stdev(times)
-    cell = ' '.join([str(t) for t in times])
+    cell = ' '.join(['{0:.2f}'.format(t) for t in times])
     cell += ' | avg = ' + '{0:.2f}'.format(avg) + ' | stdev = ' + '{0:.2f}'.format(dev)
     return cell
 
@@ -47,7 +69,6 @@ def main():
     args = vars(parser.parse_args())
     query_file = args['queryfile']
     queries = []
-    nof_permutations = 5
     all = args['all']
     bifc_inc = args['bifc_inc']
     rdf3x = args['rdf3x']
