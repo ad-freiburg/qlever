@@ -8,10 +8,12 @@ __author__ = 'buchholb'
 
 parser = argparse.ArgumentParser()
 
-parser.add_argument('--times-file',
-                    type=str,
-                    help='Output of the compare_performance.py script',
-                    required=True)
+parser.add_argument('timesfiles', metavar='F', type=str, nargs='+',
+                    help='Output files of the compare_performance.py script. For each a boxplot will be produced.')
+
+
+parser.add_argument('hue', action='store_true',
+                    help='distinguish query types.')
 
 
 def get_data_frame_from_input_file(in_file):
@@ -51,12 +53,19 @@ def get_data_frame_from_input_file(in_file):
 
 def main():
     args = vars(parser.parse_args())
-    in_file = args['times_file']
-    df = get_data_frame_from_input_file(in_file)
-    print(df)
-    ax = sns.boxplot(x='type', y='time in ms', hue='approach', data=df)
-    ax.set(yscale="log")
-    ax.figure.savefig(in_file + '.boxplot.png')
+    files = args['timesfiles']
+    for f in files:
+        df = get_data_frame_from_input_file(f)
+        print(df)
+        if args['hue']:
+            ax = sns.boxplot(x='type', y='time in ms', hue='approach', data=df)
+        else:
+            ax = sns.boxplot(x='approach', y='time in ms', data=df)
+        ax.set(yscale="log")
+        ax.figure.savefig(f + '.boxplot.png')
+        ax.figure.clf()
+        ax.cla()
+
 
 
 if __name__ == '__main__':
