@@ -15,13 +15,15 @@ using std::string;
 // _____________________________________________________________________________
 Vocabulary::Vocabulary() {
 }
+
 // _____________________________________________________________________________
 Vocabulary::~Vocabulary() {
 }
 
 
 // _____________________________________________________________________________
-void Vocabulary::readFromFile(const string& fileName) {
+void Vocabulary::readFromFile(const string& fileName,
+                              const string& extLitsFileName) {
   LOG(INFO) << "Reading vocabulary from file " << fileName << "\n";
   _words.clear();
   std::fstream in(fileName.c_str(), std::ios_base::in);
@@ -31,6 +33,11 @@ void Vocabulary::readFromFile(const string& fileName) {
   }
   in.close();
   LOG(INFO) << "Done reading vocabulary from file.\n";
+  if (extLitsFileName.size() > 0) {
+    LOG(INFO) << "Registering external vocabulary for literals.\n";
+    _externalLitzerals.initFromFile(extLitsFileName);
+    LOG(INFO) << "Done registering external vocabulary for literals.\n";
+  }
 }
 
 // _____________________________________________________________________________
@@ -65,4 +72,15 @@ ad_utility::HashMap<string, Id> Vocabulary::asMap() {
     map[_words[i]] = i;
   }
   return map;
+}
+
+// _____________________________________________________________________________
+void Vocabulary::externalizeLiterals(const string& fileName) {
+  auto ext = std::lower_bound(_words.begin(), _words.end(),
+                              string({EXTERNALIZED_LITERALS_PREFIX}));
+  size_t nofInternal = ext - _words.begin();
+  vector<string> extVocab;
+  extVocab.insert(extVocab.end(), ext, _words.end());
+  _words.resize(nofInternal);
+  _externalLitzerals.buildFromVector(extVocab, fileName);
 }

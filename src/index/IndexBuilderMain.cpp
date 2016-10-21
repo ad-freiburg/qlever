@@ -33,6 +33,7 @@ struct option options[] = {
     {"words-by-contexts", required_argument, NULL, 'w'},
     {"docs-by-contexts",  required_argument, NULL, 'd'},
     {"all-permutations",  no_argument,       NULL, 'a'},
+    {"on-disk-literals",  no_argument,       NULL, 'l'},
     {NULL, 0,                                NULL, 0}
 };
 
@@ -52,15 +53,15 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
   ad_utility::File stxxlConfig(".stxxl", "w");
   std::ostringstream config;
   config << "disk=" << getStxxlDiskFileName(location, tail) << ","
-  << STXXL_DISK_SIZE_INDEX_BUILDER << ",syscall";
+         << STXXL_DISK_SIZE_INDEX_BUILDER << ",syscall";
   stxxlConfig.writeLine(config.str());
 }
 
 // Main function.
 int main(int argc, char** argv) {
   std::cout << std::endl << EMPH_ON
-  << "IndexBuilderMain, version " << __DATE__
-  << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
+            << "IndexBuilderMain, version " << __DATE__
+            << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
 
   char* locale = setlocale(LC_CTYPE, "en_US.utf8");
   cout << "Set locale LC_CTYPE to: " << locale << endl;
@@ -76,6 +77,7 @@ int main(int argc, char** argv) {
   string wordsfile;
   string docsfile;
   bool allPermutations = false;
+  bool onDiskLiterals = false;
   optind = 1;
   // Process command line arguments.
   while (true) {
@@ -100,11 +102,13 @@ int main(int argc, char** argv) {
       case 'a':
         allPermutations = true;
         break;
+      case 'l':
+        onDiskLiterals = true;
       default:
         cout << endl
-        << "! ERROR in processing options (getopt returned '" << c
-        << "' = 0x" << std::setbase(16) << c << ")"
-        << endl << endl;
+             << "! ERROR in processing options (getopt returned '" << c
+             << "' = 0x" << std::setbase(16) << c << ")"
+             << endl << endl;
         exit(1);
     }
   }
@@ -132,11 +136,13 @@ int main(int argc, char** argv) {
   try {
     Index index;
     if (ntFile.size() > 0) {
-      index.createFromNTriplesFile(ntFile, baseName, allPermutations);
+      index.createFromNTriplesFile(ntFile, baseName, allPermutations,
+                                   onDiskLiterals);
     } else if (tsvFile.size() > 0) {
-      index.createFromTsvFile(tsvFile, baseName, allPermutations);
+      index.createFromTsvFile(tsvFile, baseName, allPermutations,
+                              onDiskLiterals);
     } else {
-      index.createFromOnDiskIndex(baseName);
+      index.createFromOnDiskIndex(baseName, onDiskLiterals);
     }
 
     if (wordsfile.size() > 0) {

@@ -16,6 +16,9 @@ target_link_libraries(Simple8bTest gtest_main -pthread)
 add_executable(VocabularyTest VocabularyTest.cpp)
 target_link_libraries(VocabularyTest gtest_main index -pthread)
 
+add_executable(ExternalVocabularyTest ExternalVocabularyTest.cpp)
+target_link_libraries(ExternalVocabularyTest gtest_main index -pthread)
+
 add_executable(TsvParserTest TsvParserTest.cpp)
 target_link_libraries(TsvParserTest gtest_main parser -pthread)
 

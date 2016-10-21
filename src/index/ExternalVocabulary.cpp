@@ -1,0 +1,61 @@
+// Copyright 2016, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Björn Buchhold <buchholb>
+
+#include "./ExternalVocabulary.h"
+
+// _____________________________________________________________________________
+string ExternalVocabulary::operator[](Id id) const {
+  off_t from = 0;
+  off_t at = _startOfOffsets + id * sizeof(off_t);
+  at += _file.read(&from, sizeof(off_t), at);
+  off_t to;
+  _file.read(&to, sizeof(off_t), at);
+  assert(to > from);
+  size_t nofBytes = static_cast<size_t>(to - from);
+  char* buf = new char[nofBytes + 1];
+  _file.read(buf, nofBytes, from);
+  buf[nofBytes] = 0;
+  string word = buf;
+  delete[] buf;
+  return word;
+}
+
+// _____________________________________________________________________________
+Id ExternalVocabulary::binarySearchInVocab(const string& word) const {
+  Id lower = 0;
+  Id upper = _size;
+  while (lower < upper) {
+    Id i = (lower + upper) / 2;
+    string w = (*this)[i];
+    if (w < word) { lower = i + 1; }
+    else if (w > word) { upper = i - 1; }
+    else if (w == word) { return i; }
+  }
+  return lower;
+}
+
+// _____________________________________________________________________________
+void ExternalVocabulary::buildFromVector(const vector<string>& v,
+                                         const string& fileName) {
+  _file.open(fileName.c_str(), "w");
+  vector<off_t> offsets;
+  off_t currentOffset = 0;
+  _size = v.size();
+  for (size_t i = 0; i < v.size(); ++i) {
+    offsets.push_back(currentOffset);
+    currentOffset += _file.write(v[i].data(), v[i].size());
+  }
+  _startOfOffsets = currentOffset;
+  offsets.push_back(_startOfOffsets);
+  _file.write(offsets.data(), offsets.size() * sizeof(off_t));
+  _file.close();
+  initFromFile(fileName);
+}
+
+// _____________________________________________________________________________
+void ExternalVocabulary::initFromFile(const string& file) {
+  _file.open(file.c_str(), "r");
+  off_t posLastOfft = _file.getLastOffset(&_startOfOffsets);
+  _size = (posLastOfft - _startOfOffsets) / sizeof(off_t);
+}

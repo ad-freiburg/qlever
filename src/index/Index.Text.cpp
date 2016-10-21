@@ -1414,7 +1414,7 @@ void Index::getRhsForSingleLhs(const Index::WidthTwoList& in, Id lhsId,
   auto it = std::lower_bound(in.begin(),
                              in.end(),
                              array<Id, 2>{{lhsId, 0}},
-                             [](const array<Id, 2>& a, const array<Id, 2>& b){
+                             [](const array<Id, 2>& a, const array<Id, 2>& b) {
                                return a[0] < b[0];
                              });
 
@@ -1426,6 +1426,34 @@ void Index::getRhsForSingleLhs(const Index::WidthTwoList& in, Id lhsId,
   LOG(DEBUG)
     << "Done. Matching right-hand-side EntityList now has "
     << result->size() << " elements." << "\n";
+}
+
+// _____________________________________________________________________________
+bool Index::isLiteral(const string& object) {
+  return object.size() > 0 && object[0] == '\"';
+}
+
+// _____________________________________________________________________________
+bool Index::shouldBeExternalized(const string& object) {
+  if (object.size() > 100) { return true; }
+  string lang = getLanguage(object);
+  if (lang != "") {
+    return (lang != "en" && lang != "en_gb" && lang != "en_us" &&
+            lang != "de" && lang != "es" && lang != "fr");
+  }
+  return false;
+}
+
+// _____________________________________________________________________________
+string Index::getLanguage(const string& literal) {
+  auto lioAt = literal.rfind('@');
+  if (lioAt != string::npos) {
+    auto lioQ = literal.rfind('\"');
+    if (lioQ != string::npos && lioQ < lioAt) {
+      return literal.substr(lioAt + 1);
+    }
+  }
+  return "";
 }
 
 

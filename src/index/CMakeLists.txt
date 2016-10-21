@@ -2,6 +2,7 @@
 add_library(index
         Index.h Index.cpp Index.Text.cpp
         Vocabulary.h Vocabulary.cpp
+        ExternalVocabulary.h ExternalVocabulary.cpp
         IndexMetaData.h IndexMetaData.cpp
         StxxlSortFunctors.h
         TextMetaData.cpp TextMetaData.h

@@ -13,13 +13,16 @@ using std::array;
 
 // _____________________________________________________________________________
 void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
-                              bool allPermutations) {
+                              bool allPermutations, bool onDiskLiterals) {
   _onDiskBase = onDiskBase;
   string indexFilename = _onDiskBase + ".index";
-  size_t nofLines = passTsvFileForVocabulary(tsvFile);
-  _vocab.writeToFile(onDiskBase + ".vocabulary");
+  size_t nofLines = passTsvFileForVocabulary(tsvFile, onDiskLiterals);
   ExtVec v(nofLines);
-  passTsvFileIntoIdVector(tsvFile, v);
+  passTsvFileIntoIdVector(tsvFile, v, onDiskLiterals);
+  if (onDiskLiterals) {
+    _vocab.externalizeLiterals(_onDiskBase + ".literals-index");
+  }
+  _vocab.writeToFile(onDiskBase + ".vocabulary");
   // PSO permutation
   LOG(INFO) << "Sorting for PSO permutation..." << std::endl;
   stxxl::sort(begin(v), end(v), SortByPSO(), STXXL_MEMORY_TO_USE);
@@ -58,13 +61,16 @@ void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
 // _____________________________________________________________________________
 void Index::createFromNTriplesFile(const string& ntFile,
                                    const string& onDiskBase,
-                                   bool allPermutations) {
+                                   bool allPermutations, bool onDiskLiterals) {
   _onDiskBase = onDiskBase;
   string indexFilename = _onDiskBase + ".index";
-  size_t nofLines = passNTriplesFileForVocabulary(ntFile);
-  _vocab.writeToFile(onDiskBase + ".vocabulary");
+  size_t nofLines = passNTriplesFileForVocabulary(ntFile, onDiskLiterals);
   ExtVec v(nofLines);
-  passNTriplesFileIntoIdVector(ntFile, v);
+  passNTriplesFileIntoIdVector(ntFile, v, onDiskLiterals);
+  if (onDiskLiterals) {
+    _vocab.externalizeLiterals(onDiskBase + ".literals-index");
+  }
+  _vocab.writeToFile(onDiskBase + ".vocabulary");
   LOG(INFO) << "Sorting for PSO permutation..." << std::endl;
   stxxl::sort(begin(v), end(v), SortByPSO(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
@@ -99,7 +105,8 @@ void Index::createFromNTriplesFile(const string& ntFile,
 }
 
 // _____________________________________________________________________________
-size_t Index::passTsvFileForVocabulary(const string& tsvFile) {
+size_t
+Index::passTsvFileForVocabulary(const string& tsvFile, bool onDiskLiterals) {
   LOG(INFO) << "Making pass over TsvFile " << tsvFile << " for vocabulary."
             << std::endl;
   array<string, 3> spo;
@@ -109,6 +116,9 @@ size_t Index::passTsvFileForVocabulary(const string& tsvFile) {
   while (p.getLine(spo)) {
     if (ad_utility::isXsdValue(spo[2])) {
       spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
+    }
+    if (onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
+      spo[2] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[2];
     }
     items.insert(spo[0]);
     items.insert(spo[1]);
@@ -124,7 +134,8 @@ size_t Index::passTsvFileForVocabulary(const string& tsvFile) {
 }
 
 // _____________________________________________________________________________
-void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data) {
+void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data,
+                                    bool onDiskLiterals) {
   LOG(INFO) << "Making pass over TsvFile " << tsvFile
             << " and creating stxxl vector.\n";
   array<string, 3> spo;
@@ -136,6 +147,9 @@ void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data) {
   while (p.getLine(spo)) {
     if (ad_utility::isXsdValue(spo[2])) {
       spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
+    }
+    if (onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
+      spo[2] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[2];
     }
     writer << array<Id, 3>{{
                                vocabMap.find(spo[0])->second,
@@ -152,7 +166,8 @@ void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data) {
 }
 
 // _____________________________________________________________________________
-size_t Index::passNTriplesFileForVocabulary(const string& ntFile) {
+size_t Index::passNTriplesFileForVocabulary(const string& ntFile,
+                                            bool onDiskLiterals) {
   LOG(INFO) << "Making pass over NTriples " << ntFile << " for vocabulary."
             << std::endl;
   array<string, 3> spo;
@@ -162,6 +177,9 @@ size_t Index::passNTriplesFileForVocabulary(const string& ntFile) {
   while (p.getLine(spo)) {
     if (ad_utility::isXsdValue(spo[2])) {
       spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
+    }
+    if (onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
+      spo[2] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[2];
     }
     items.insert(spo[0]);
     items.insert(spo[1]);
@@ -177,7 +195,8 @@ size_t Index::passNTriplesFileForVocabulary(const string& ntFile) {
 }
 
 // _____________________________________________________________________________
-void Index::passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data) {
+void Index::passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data,
+                                         bool onDiskLiterals) {
   LOG(INFO) << "Making pass over NTriples " << ntFile
             << " and creating stxxl vector.\n";
   array<string, 3> spo;
@@ -189,6 +208,9 @@ void Index::passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data) {
   while (p.getLine(spo)) {
     if (ad_utility::isXsdValue(spo[2])) {
       spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
+    }
+    if (onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
+      spo[2] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[2];
     }
     writer << array<Id, 3>{{
                                vocabMap.find(spo[0])->second,
@@ -370,9 +392,11 @@ void Index::writeNonFunctionalRelation(
 }
 
 // _____________________________________________________________________________
-void Index::createFromOnDiskIndex(const string& onDiskBase) {
+void
+Index::createFromOnDiskIndex(const string& onDiskBase, bool onDiskLiterals) {
   _onDiskBase = onDiskBase;
-  _vocab.readFromFile(onDiskBase + ".vocabulary");
+  _vocab.readFromFile(onDiskBase + ".vocabulary",
+                      onDiskLiterals ? onDiskBase + ".literals-index" : "");
   _psoFile.open(string(_onDiskBase + ".index.pso").c_str(), "r");
   _posFile.open(string(_onDiskBase + ".index.pos").c_str(), "r");
   AD_CHECK(_psoFile.isOpen() && _posFile.isOpen());

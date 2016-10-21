@@ -41,18 +41,20 @@ public:
   // Will write vocabulary and on-disk index data.
   // Also ends up with fully functional in-memory metadata.
   void createFromTsvFile(const string& tsvFile, const string& onDiskBase,
-                         bool allPermutations);
+                         bool allPermutations, bool onDiskLiterals = false);
 
   // Creates an index from a file in NTriples format.
   // Will write vocabulary and on-disk index data.
   // Also ends up with fully functional in-memory metadata.
   void createFromNTriplesFile(const string& ntFile, const string& onDiskBase,
-                              bool allPermutations);
+                              bool allPermutations,
+                              bool onDiskLiterals = false);
 
   // Creates an index object from an on disk index
   // that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
-  void createFromOnDiskIndex(const string& onDiskBase);
+  void
+  createFromOnDiskIndex(const string& onDiskBase, bool onDiskLiterals = false);
 
   // Adds a text index to a fully initialized KB index.
   // Reads a context file and builds the index for the first time.
@@ -231,13 +233,18 @@ private:
   mutable ad_utility::File _opsFile;
   mutable ad_utility::File _textIndexFile;
 
-  size_t passTsvFileForVocabulary(const string& tsvFile);
+  size_t
+  passTsvFileForVocabulary(const string& tsvFile, bool onDiskLiterals = false);
 
-  void passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data);
+  void passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data,
+                               bool onDiskLiterals = false);
 
-  size_t passNTriplesFileForVocabulary(const string& tsvFile);
+  size_t
+  passNTriplesFileForVocabulary(const string& ntFile,
+                                bool onDiskLiterals = false);
 
-  void passNTriplesFileIntoIdVector(const string& tsvFile, ExtVec& data);
+  void passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data,
+                                    bool onDiskLiterals = false);
 
   size_t passContextFileForVocabulary(const string& contextFile);
 
@@ -334,5 +341,12 @@ private:
 
   void writeAsciiListFile(string filename, const vector<Id>& ids) const;
 
-  void getRhsForSingleLhs(const WidthTwoList& in, Id lhsId, WidthOneList* result) const;
+  void getRhsForSingleLhs(const WidthTwoList& in, Id lhsId,
+                          WidthOneList* result) const;
+
+  bool isLiteral(const string& object);
+
+  bool shouldBeExternalized(const string& object);
+
+  string getLanguage(const string& literal);
 };

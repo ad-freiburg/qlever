@@ -11,6 +11,7 @@ static const size_t NOF_SUBTREES_TO_CACHE = 100;
 static const size_t MAX_NOF_ROWS_IN_RESULT = 100000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
 static const char PREFIX_CHAR = '*';
+static const char EXTERNALIZED_LITERALS_PREFIX = 127;
 
 static const size_t BUFFER_SIZE_RELATION_SIZE = 1000 * 1000 * 1000;
 static const size_t BUFFER_SIZE_DOCSFILE_LINE = 1024 * 1024 * 100;

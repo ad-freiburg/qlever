@@ -17,6 +17,7 @@
 #include "../global/Constants.h"
 #include "../util/HashSet.h"
 #include "../util/HashMap.h"
+#include "ExternalVocabulary.h"
 
 
 using std::string;
@@ -66,7 +67,7 @@ public:
   virtual ~Vocabulary();
 
   //! Read the vocabulary from file.
-  void readFromFile(const string& fileName);
+  void readFromFile(const string& fileName, const string& extLitsFileName = "");
 
   //! Write the vocabulary to a file.
   void writeToFile(const string& fileName) const;
@@ -160,6 +161,12 @@ public:
 
   ad_utility::HashMap<string, Id> asMap();
 
+  void externalizeLiterals(const string& fileName);
+
+  const ExternalVocabulary& getExternalVocab() const {
+    return _externalLiterals;
+  }
+
 private:
 
   // Wraps std::lower_bound and returns an index instead of an iterator
@@ -198,6 +205,7 @@ private:
   }
 
   vector<string> _words;
+  ExternalVocabulary _externalLiterals;
 };
 
 
