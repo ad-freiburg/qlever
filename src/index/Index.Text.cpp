@@ -1438,8 +1438,8 @@ bool Index::shouldBeExternalized(const string& object) {
   if (object.size() > 100) { return true; }
   string lang = getLanguage(object);
   if (lang != "") {
-    return (lang != "en" && lang != "en_gb" && lang != "en_us" &&
-            lang != "de" && lang != "es" && lang != "fr");
+    return (lang != "en"); // && lang != "en_gb" && lang != "en_us" &&
+            // lang != "de" && lang != "es" && lang != "fr");
   }
   return false;
 }

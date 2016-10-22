@@ -80,7 +80,9 @@ void Vocabulary::externalizeLiterals(const string& fileName) {
                               string({EXTERNALIZED_LITERALS_PREFIX}));
   size_t nofInternal = ext - _words.begin();
   vector<string> extVocab;
-  extVocab.insert(extVocab.end(), ext, _words.end());
+  while (ext != _words.end()) {
+    extVocab.push_back(*ext++);
+  }
   _words.resize(nofInternal);
   _externalLiterals.buildFromVector(extVocab, fileName);
 }
