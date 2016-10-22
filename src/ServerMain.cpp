@@ -60,7 +60,7 @@ int main(int argc, char** argv) {
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "i:p:t", options, NULL);
+    int c = getopt_long(argc, argv, "i:p:tl", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'i':
