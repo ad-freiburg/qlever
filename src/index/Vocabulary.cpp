@@ -35,7 +35,7 @@ void Vocabulary::readFromFile(const string& fileName,
   LOG(INFO) << "Done reading vocabulary from file.\n";
   if (extLitsFileName.size() > 0) {
     LOG(INFO) << "Registering external vocabulary for literals.\n";
-    _externalLitzerals.initFromFile(extLitsFileName);
+    _externalLiterals.initFromFile(extLitsFileName);
     LOG(INFO) << "Done registering external vocabulary for literals.\n";
   }
 }
@@ -82,5 +82,5 @@ void Vocabulary::externalizeLiterals(const string& fileName) {
   vector<string> extVocab;
   extVocab.insert(extVocab.end(), ext, _words.end());
   _words.resize(nofInternal);
-  _externalLitzerals.buildFromVector(extVocab, fileName);
+  _externalLiterals.buildFromVector(extVocab, fileName);
 }
