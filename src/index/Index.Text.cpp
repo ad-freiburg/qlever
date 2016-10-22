@@ -1428,34 +1428,6 @@ void Index::getRhsForSingleLhs(const Index::WidthTwoList& in, Id lhsId,
     << result->size() << " elements." << "\n";
 }
 
-// _____________________________________________________________________________
-bool Index::isLiteral(const string& object) {
-  return object.size() > 0 && object[0] == '\"';
-}
-
-// _____________________________________________________________________________
-bool Index::shouldBeExternalized(const string& object) {
-  if (object.size() > 100) { return true; }
-  string lang = getLanguage(object);
-  if (lang != "") {
-    return (lang != "en"); // && lang != "en_gb" && lang != "en_us" &&
-            // lang != "de" && lang != "es" && lang != "fr");
-  }
-  return false;
-}
-
-// _____________________________________________________________________________
-string Index::getLanguage(const string& literal) {
-  auto lioAt = literal.rfind('@');
-  if (lioAt != string::npos) {
-    auto lioQ = literal.rfind('\"');
-    if (lioQ != string::npos && lioQ < lioAt) {
-      return literal.substr(lioAt + 1);
-    }
-  }
-  return "";
-}
-
 
 
 
