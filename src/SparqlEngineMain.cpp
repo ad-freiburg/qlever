@@ -30,6 +30,7 @@ struct option options[] = {
     {"index",        required_argument, NULL, 'i'},
     {"text",         no_argument,       NULL, 't'},
     {"cost-factors", required_argument, NULL, 'c'},
+    {"on-disk-literals",  no_argument,       NULL, 'l'},
     {NULL, 0,                          NULL, 0}
 };
 
@@ -56,6 +57,7 @@ int main(int argc, char** argv) {
   string costFactosFileName = "";
   bool text = false;
   bool interactive = false;
+  bool onDiskLiterals = false;
 
   optind = 1;
   // Process command line arguments.
@@ -78,6 +80,9 @@ int main(int argc, char** argv) {
       case 'c':
         costFactosFileName = optarg;
         break;
+      case 'l':
+        onDiskLiterals = true;
+        break;
       default:
         cout << endl
         << "! ERROR in processing options (getopt returned '" << c
@@ -95,7 +100,7 @@ int main(int argc, char** argv) {
   try {
     Engine engine;
     Index index;
-    index.createFromOnDiskIndex(indexName);
+    index.createFromOnDiskIndex(indexName, onDiskLiterals);
     if (text) {
       index.addTextFromOnDiskIndex();
     }

@@ -28,6 +28,7 @@ struct option options[] = {
   {"index", required_argument, NULL, 'i'},
   {"port", required_argument, NULL, 'p'},
   {"text", no_argument, NULL, 't'},
+  {"on-disk-literals",  no_argument,       NULL, 'l'},
   {NULL, 0, NULL, 0}
 };
 
@@ -53,6 +54,7 @@ int main(int argc, char** argv) {
   // filled / set depending on the options.
   string index = "";
   bool text = false;
+  bool onDiskLiterals = false;
   int port = -1;
 
   optind = 1;
@@ -70,6 +72,9 @@ int main(int argc, char** argv) {
       case 't':
         text = true;
         break;
+      case 'l':
+        onDiskLiterals = true;
+        break;
       default:
         cout << endl
              << "! ERROR in processing options (getopt returned '" << c
@@ -86,7 +91,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port);
-    server.initialize(index, text);
+    server.initialize(index, text, onDiskLiterals);
     server.run();
   } catch(const ad_semsearch::Exception& e) {
     LOG(ERROR) << e.getFullErrorMessage() << '\n';

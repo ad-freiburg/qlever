@@ -32,7 +32,8 @@ public:
   typedef ad_utility::HashMap<string, string> ParamValueMap;
 
   // Initialize the server.
-  void initialize(const string& ontologyBaseName, bool useText);
+  void initialize(const string& ontologyBaseName, bool useText,
+                  bool onDiskLiterals = false);
 
   //! Loop, wait for requests and trigger processing.
   void run();

@@ -104,6 +104,7 @@ int main(int argc, char** argv) {
         break;
       case 'l':
         onDiskLiterals = true;
+        break;
       default:
         cout << endl
              << "! ERROR in processing options (getopt returned '" << c

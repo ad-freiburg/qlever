@@ -15,11 +15,12 @@
 
 
 // _____________________________________________________________________________
-void Server::initialize(const string& ontologyBaseName, bool useText) {
+void Server::initialize(const string& ontologyBaseName, bool useText,
+                        bool onDiskLiterals) {
   LOG(INFO) << "Initializing server..." << std::endl;
 
   // Init the index.
-  _index.createFromOnDiskIndex(ontologyBaseName);
+  _index.createFromOnDiskIndex(ontologyBaseName, onDiskLiterals);
   if (useText) {
     _index.addTextFromOnDiskIndex();
   }
