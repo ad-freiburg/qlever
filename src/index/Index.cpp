@@ -748,9 +748,15 @@ void Index::scanOSP(const string& object, WidthTwoList* result) const {
 
 
 // _____________________________________________________________________________
-const string& Index::idToString(Id id) const {
-  AD_CHECK(id < _vocab.size());
-  return _vocab[id];
+string Index::idToString(Id id) const {
+  if (id < _vocab.size()) {
+    return _vocab[id];
+  } else {
+    id -= _vocab.size();
+    AD_CHECK(id < _vocab.getExternalVocab().size()) {
+      return _vocab.getExternalVocab()[id];
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -944,23 +950,5 @@ bool Index::isLiteral(const string& object) {
 
 // _____________________________________________________________________________
 bool Index::shouldBeExternalized(const string& object) {
-  if (object.size() > 100) { return true; }
-  string lang = getLanguage(object);
-  if (lang != "") {
-    return (lang != "en"); // && lang != "en_gb" && lang != "en_us" &&
-    // lang != "de" && lang != "es" && lang != "fr");
-  }
-  return false;
-}
-
-// _____________________________________________________________________________
-string Index::getLanguage(const string& literal) {
-  auto lioAt = literal.rfind('@');
-  if (lioAt != string::npos) {
-    auto lioQ = literal.rfind('\"');
-    if (lioQ != string::npos && lioQ < lioAt) {
-      return literal.substr(lioAt + 1);
-    }
-  }
-  return "";
+  return Vocabulary::shouldBeExternalized(object);
 }

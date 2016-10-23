@@ -86,3 +86,27 @@ void Vocabulary::externalizeLiterals(const string& fileName) {
   _words.resize(nofInternal);
   _externalLiterals.buildFromVector(extVocab, fileName);
 }
+
+// _____________________________________________________________________________
+bool Vocabulary::shouldBeExternalized(const string& word) {
+  if (word.size() > 100) { return true; }
+  string lang = getLanguage(word);
+  if (lang != "") {
+    return (lang != "en"); // && lang != "en_gb" && lang != "en_us" &&
+    // lang != "de" && lang != "es" && lang != "fr");
+  }
+  return false;
+}
+
+// _____________________________________________________________________________
+string Vocabulary::getLanguage(const string& literal) {
+  auto lioAt = literal.rfind('@');
+  if (lioAt != string::npos) {
+    auto lioQ = literal.rfind('\"');
+    if (lioQ != string::npos && lioQ < lioAt) {
+      return literal.substr(lioAt + 1);
+    }
+  }
+  return "";
+}
+

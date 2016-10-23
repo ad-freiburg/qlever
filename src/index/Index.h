@@ -101,7 +101,7 @@ public:
   size_t sizeEstimate(const string& sub, const string& pred,
                       const string& obj) const;
 
-  const string& idToString(Id id) const;
+  string idToString(Id id) const;
 
   void scanPSO(const string& predicate, WidthTwoList* result) const;
 
@@ -347,6 +347,4 @@ private:
   bool isLiteral(const string& object);
 
   bool shouldBeExternalized(const string& object);
-
-  string getLanguage(const string& literal);
 };

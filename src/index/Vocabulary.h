@@ -97,8 +97,11 @@ public:
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
   bool getId(const string& word, Id* id) const {
-    *id = lower_bound(word);
-    return *id < _words.size() && _words[*id] == word;
+    if (word[0] != '\"' || ! shouldBeExternalized(word)) {
+      *id = lower_bound(word);
+      return *id < _words.size() && _words[*id] == word;
+    }
+    return _externalLiterals.getId(word, id);
   }
 
   Id getValueIdForLT(const string& indexWord) const {
@@ -166,6 +169,9 @@ public:
   const ExternalVocabulary& getExternalVocab() const {
     return _externalLiterals;
   }
+
+  static bool shouldBeExternalized(const string& word);
+  static string getLanguage(const string& literal);
 
 private:
 
