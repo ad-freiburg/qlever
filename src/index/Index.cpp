@@ -393,7 +393,8 @@ void Index::writeNonFunctionalRelation(
 
 // _____________________________________________________________________________
 void
-Index::createFromOnDiskIndex(const string& onDiskBase, bool onDiskLiterals) {
+Index::createFromOnDiskIndex(const string& onDiskBase, bool allPermutations,
+                             bool onDiskLiterals) {
   _onDiskBase = onDiskBase;
   _vocab.readFromFile(onDiskBase + ".vocabulary",
                       onDiskLiterals ? onDiskBase + ".literals-index" : "");
@@ -417,7 +418,7 @@ Index::createFromOnDiskIndex(const string& onDiskBase, bool onDiskLiterals) {
   delete[] buf;
   LOG(INFO) << "Registered POS permutation: " << _posMeta.statistics()
             << std::endl;
-  if (ad_utility::File::exists(_onDiskBase + ".index.spo")) {
+  if (allPermutations) {
     _spoFile.open(string(_onDiskBase + ".index.spo").c_str(), "r");
     _sopFile.open(string(_onDiskBase + ".index.sop").c_str(), "r");
     _ospFile.open(string(_onDiskBase + ".index.osp").c_str(), "r");
@@ -753,7 +754,8 @@ string Index::idToString(Id id) const {
     return _vocab[id];
   } else {
     id -= _vocab.size();
-    AD_CHECK(id < _vocab.getExternalVocab().size()) {
+    AD_CHECK(id < _vocab.getExternalVocab().size())
+    {
       return _vocab.getExternalVocab()[id];
     }
   }

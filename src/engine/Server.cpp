@@ -16,11 +16,12 @@
 
 // _____________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
-                        bool onDiskLiterals) {
+                        bool allPermutations, bool onDiskLiterals) {
   LOG(INFO) << "Initializing server..." << std::endl;
 
   // Init the index.
-  _index.createFromOnDiskIndex(ontologyBaseName, onDiskLiterals);
+  _index.createFromOnDiskIndex(ontologyBaseName, allPermutations,
+                               onDiskLiterals);
   if (useText) {
     _index.addTextFromOnDiskIndex();
   }

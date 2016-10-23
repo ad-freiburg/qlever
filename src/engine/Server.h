@@ -33,6 +33,7 @@ public:
 
   // Initialize the server.
   void initialize(const string& ontologyBaseName, bool useText,
+                  bool allPermutations = false,
                   bool onDiskLiterals = false);
 
   //! Loop, wait for requests and trigger processing.

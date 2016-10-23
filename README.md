@@ -92,6 +92,8 @@ If you want support for SPARQL queries with predicate variables  (perfectly norm
 
     ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -a -w /path/to/wordsfile -d /path/to/docsfile
 
+If you want some literals to be written to an on disk vocabulary (by default this concerns literals longer than 100 chars and literals in less frequent lagnuages), add an topional parameter -l. This is useful for large knowledge bases that included texts (descriptions etc) as literals and thus consume lots of memory on startup without this option.
+
 3. Starting a Sever:
 --------------------
 
@@ -105,6 +107,10 @@ b) With text collection:
 
 Depending on if you built the index with the -a version, two or six index permutations will be registered.
 For some data this can be a significant difference in memory consumption.
+
+If you built an index using the -l and/or -a options, make sure to include it at startup
+
+    ./ServerMain -i /path/to/myindex -p <PORT> -t -a -l
 
 4. Running queries:
 -------------------

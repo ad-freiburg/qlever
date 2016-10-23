@@ -31,6 +31,7 @@ struct option options[] = {
     {"text",         no_argument,       NULL, 't'},
     {"cost-factors", required_argument, NULL, 'c'},
     {"on-disk-literals",  no_argument,       NULL, 'l'},
+    {"all-permutations",  no_argument,       NULL, 'a'},
     {NULL, 0,                          NULL, 0}
 };
 
@@ -58,11 +59,12 @@ int main(int argc, char** argv) {
   bool text = false;
   bool interactive = false;
   bool onDiskLiterals = false;
+  bool allPermutations = false;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "q:Ii:tc:l", options, NULL);
+    int c = getopt_long(argc, argv, "q:Ii:tc:la", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'q':
@@ -83,6 +85,9 @@ int main(int argc, char** argv) {
       case 'l':
         onDiskLiterals = true;
         break;
+      case 'a':
+        allPermutations = false;
+        break;
       default:
         cout << endl
         << "! ERROR in processing options (getopt returned '" << c
@@ -100,7 +105,7 @@ int main(int argc, char** argv) {
   try {
     Engine engine;
     Index index;
-    index.createFromOnDiskIndex(indexName, onDiskLiterals);
+    index.createFromOnDiskIndex(indexName, allPermutations, onDiskLiterals);
     if (text) {
       index.addTextFromOnDiskIndex();
     }

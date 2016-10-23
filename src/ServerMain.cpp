@@ -29,6 +29,7 @@ struct option options[] = {
   {"port", required_argument, NULL, 'p'},
   {"text", no_argument, NULL, 't'},
   {"on-disk-literals",  no_argument,       NULL, 'l'},
+  {"all-permutations",  no_argument,       NULL, 'a'},
   {NULL, 0, NULL, 0}
 };
 
@@ -55,12 +56,13 @@ int main(int argc, char** argv) {
   string index = "";
   bool text = false;
   bool onDiskLiterals = false;
+  bool allPermutations = false;
   int port = -1;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "i:p:tl", options, NULL);
+    int c = getopt_long(argc, argv, "i:p:tla", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'i':
@@ -74,6 +76,9 @@ int main(int argc, char** argv) {
         break;
       case 'l':
         onDiskLiterals = true;
+        break;
+      case 'a':
+        allPermutations = false;
         break;
       default:
         cout << endl
@@ -91,7 +96,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port);
-    server.initialize(index, text, onDiskLiterals);
+    server.initialize(index, text, allPermutations, onDiskLiterals);
     server.run();
   } catch(const ad_semsearch::Exception& e) {
     LOG(ERROR) << e.getFullErrorMessage() << '\n';

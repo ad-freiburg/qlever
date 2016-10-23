@@ -53,8 +53,9 @@ public:
   // Creates an index object from an on disk index
   // that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
-  void
-  createFromOnDiskIndex(const string& onDiskBase, bool onDiskLiterals = false);
+  void createFromOnDiskIndex(const string& onDiskBase,
+                             bool allPermutations = false,
+                             bool onDiskLiterals = false);
 
   // Adds a text index to a fully initialized KB index.
   // Reads a context file and builds the index for the first time.
