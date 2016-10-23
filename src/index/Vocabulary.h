@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
-
+#include <sparsehash/sparse_hash_map>
 
 #include "../util/Exception.h"
 #include "../util/StringUtils.h"
@@ -159,7 +159,7 @@ public:
 
   void createFromSet(const ad_utility::HashSet<string>& set);
 
-  ad_utility::HashMap<string, Id> asMap();
+  google::sparse_hash_map<string, Id> asMap();
 
   void externalizeLiterals(const string& fileName);
 

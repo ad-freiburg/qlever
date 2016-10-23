@@ -66,8 +66,8 @@ void Vocabulary::createFromSet(const ad_utility::HashSet<string>& set) {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, Id> Vocabulary::asMap() {
-  ad_utility::HashMap<string, Id> map;
+google::sparse_hash_map<string, Id> Vocabulary::asMap() {
+  google::sparse_hash_map<string, Id> map;
   for (size_t i = 0; i < _words.size(); ++i) {
     map[_words[i]] = i;
   }

@@ -140,7 +140,7 @@ void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data,
             << " and creating stxxl vector.\n";
   array<string, 3> spo;
   TsvParser p(tsvFile);
-  ad_utility::HashMap<string, Id> vocabMap = _vocab.asMap();
+  auto vocabMap = _vocab.asMap();
   size_t i = 0;
   // write using vector_bufwriter
   ExtVec::bufwriter_type writer(data);
@@ -201,7 +201,7 @@ void Index::passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data,
             << " and creating stxxl vector.\n";
   array<string, 3> spo;
   NTriplesParser p(ntFile);
-  ad_utility::HashMap<string, Id> vocabMap = _vocab.asMap();
+  google::sparse_hash_map<string, Id> vocabMap = _vocab.asMap();
   size_t i = 0;
   // write using vector_bufwriter
   ExtVec::bufwriter_type writer(data);
