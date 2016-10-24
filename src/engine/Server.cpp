@@ -76,6 +76,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
   string response;
   string query;
   string contentType;
+  LOG(DEBUG) << "Waiting for receive call to complete." << endl;
   client->recieve(&request);
   LOG(DEBUG) << "Got request from client." << endl;
 

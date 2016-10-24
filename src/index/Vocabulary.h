@@ -101,7 +101,9 @@ public:
       *id = lower_bound(word);
       return *id < _words.size() && _words[*id] == word;
     }
-    return _externalLiterals.getId(word, id);
+    bool success = _externalLiterals.getId(word, id);
+    *id += _words.size();
+    return success;
   }
 
   Id getValueIdForLT(const string& indexWord) const {

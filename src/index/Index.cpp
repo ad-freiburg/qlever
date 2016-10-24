@@ -191,6 +191,7 @@ size_t Index::passNTriplesFileForVocabulary(const string& ntFile,
   }
   LOG(INFO) << "Pass done.\n";
   _vocab.createFromSet(items);
+  items.clear();
   return i;
 }
 
@@ -507,8 +508,8 @@ void Index::scanPSO(const string& predicate, WidthTwoList* result) const {
 // _____________________________________________________________________________
 void Index::scanPSO(const string& predicate, const string& subject,
                     WidthOneList* result) const {
-  LOG(DEBUG) << "Performing PSO scan of relation" << predicate
-             << "with fixed subject: " << subject << "...\n";
+  LOG(DEBUG) << "Performing PSO scan of relation " << predicate
+             << " with fixed subject: " << subject << "...\n";
   Id relId;
   Id subjId;
   if (_vocab.getId(predicate, &relId) && _vocab.getId(subject, &subjId)) {
@@ -566,8 +567,8 @@ void Index::scanPOS(const string& predicate, WidthTwoList* result) const {
 // _____________________________________________________________________________
 void Index::scanPOS(const string& predicate, const string& object,
                     WidthOneList* result) const {
-  LOG(DEBUG) << "Performing POS scan of relation" << predicate
-             << "with fixed object: " << object << "...\n";
+  LOG(DEBUG) << "Performing POS scan of relation " << predicate
+             << " with fixed object: " << object << "...\n";
   Id relId;
   Id objId;
   if (_vocab.getId(predicate, &relId) && _vocab.getId(object, &objId)) {
@@ -614,7 +615,7 @@ result) const {
                  "to use this feature.");
   }
   LOG(DEBUG) << "Performing SOP scan of list for " << subject
-             << "with fixed object: " << object << "...\n";
+             << " with fixed object: " << object << "...\n";
   Id relId;
   Id objId;
   if (_vocab.getId(subject, &relId) && _vocab.getId(object, &objId)) {

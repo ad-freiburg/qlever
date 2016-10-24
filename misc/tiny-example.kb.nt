@@ -10,4 +10,6 @@
 <Albert_Einstein>	<Award_Won>	<Franklin_Medal>	.
 <Albert_Einstein>	<Award_Won>	<Max_Planck_Medal>	.
 <Albert_Einstein>	<Award_Won>	<Matteucci_Medal>	.
+<Albert_Einstein>	<GivenName>	"Alberto"@cliche_it	.
 <Penicillin>	<is-a>	<Drug>	.
+<Penicillin>	<description>	"This is a rather long text. If the index is built with the -l option, it should be externalized into an on-disk vocabulary."	.

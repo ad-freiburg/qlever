@@ -86,7 +86,7 @@ int main(int argc, char** argv) {
         onDiskLiterals = true;
         break;
       case 'a':
-        allPermutations = false;
+        allPermutations = true;
         break;
       default:
         cout << endl

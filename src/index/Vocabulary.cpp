@@ -76,6 +76,8 @@ google::sparse_hash_map<string, Id> Vocabulary::asMap() {
 
 // _____________________________________________________________________________
 void Vocabulary::externalizeLiterals(const string& fileName) {
+  LOG(INFO) << "Moving long and obscure literals to an on-disk vocabulary."
+            << std::endl;
   auto ext = std::lower_bound(_words.begin(), _words.end(),
                               string({EXTERNALIZED_LITERALS_PREFIX}));
   size_t nofInternal = ext - _words.begin();
@@ -85,11 +87,12 @@ void Vocabulary::externalizeLiterals(const string& fileName) {
   }
   _words.resize(nofInternal);
   _externalLiterals.buildFromVector(extVocab, fileName);
+  LOG(INFO) << "Done externalizing literals." << std::endl;
 }
 
 // _____________________________________________________________________________
 bool Vocabulary::shouldBeExternalized(const string& word) {
-  if (word.size() > 100) { return true; }
+  if (word.size() > 50) { return true; }
   string lang = getLanguage(word);
   if (lang != "") {
     return (lang != "en"); // && lang != "en_gb" && lang != "en_us" &&
