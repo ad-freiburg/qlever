@@ -44,6 +44,10 @@ class Distinct : public Operation {
       return getSizeEstimate() + _subtree->getCostEstimate();
     }
 
+    virtual float getMultiplicity(size_t col) {
+      return _subtree->getMultiplicity(col);
+    }
+
     virtual bool knownEmptyResult() {
       return _subtree->knownEmptyResult();
     }

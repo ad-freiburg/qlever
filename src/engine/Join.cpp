@@ -32,6 +32,7 @@ Join::Join(QueryExecutionContext* qec,
   _keepJoinColumn = keepJoinColumn;
   _sizeEstimate = 0;
   _sizeEstimateComputed = false;
+  _multiplicities.clear();
 }
 
 // _____________________________________________________________________________
@@ -400,7 +401,7 @@ std::unordered_map<string, size_t> Join::getVariableColumns() const {
 // _____________________________________________________________________________
 size_t Join::getResultWidth() const {
   size_t res = _left->getResultWidth() + _right->getResultWidth() -
-      (_keepJoinColumn ? 1 : 2);
+               (_keepJoinColumn ? 1 : 2);
   AD_CHECK(res > 0);
   return res;
 }
@@ -429,6 +430,87 @@ std::unordered_set<string> Join::getContextVars() const {
   cvars.insert(_right->getContextVars().begin(),
                _right->getContextVars().end());
   return cvars;
+}
+
+// _____________________________________________________________________________
+float Join::getMultiplicity(size_t col) {
+  if (_multiplicities.size() == 0) {
+    computeMultiplicities();
+  }
+  AD_CHECK_LT(col, _multiplicities.size());
+  return _multiplicities[col];
+}
+
+// _____________________________________________________________________________
+size_t Join::computeSizeEstimate() const {
+  if (_left->getSizeEstimate() == 0
+      || _right->getSizeEstimate() == 0) {
+    return 0;
+  }
+  // Check if there are easy sides, i.e. a scan with only one
+  // variable.
+  // As a very basic heuristic, we expect joins with those to be even more
+  // restrictive. Obvious counter examples are stuff like "?x <is-a> <Topic>",
+  // i.e. very large lists, but at least we certainly account for size
+  // already and such joins are still very nice
+  // (no sorting, certainly restrictive).
+  // Without any easy side, we assume the worst, i.e. that the join actually
+  // increases the result size over the sum of two subtree sizes.
+  size_t easySides = 0;
+  if (_left->getType() == QueryExecutionTree::SCAN) {
+    if (static_cast<const IndexScan*>(
+            _left->getRootOperation().get())->getResultWidth() == 1) {
+      ++easySides;
+    }
+  }
+  if (_right->getType() == QueryExecutionTree::SCAN) {
+    if (static_cast<const IndexScan*>(
+            _right->getRootOperation().get())->getResultWidth() == 1) {
+      ++easySides;
+    }
+  }
+  // return std::min(_left->getSizeEstimate(), _right->getSizeEstimate()) / 2;
+  // Self joins generally increase the size significantly.
+  if (isSelfJoin()) {
+    return std::max(
+        size_t(1),
+        (_left->getSizeEstimate() + _right->getSizeEstimate())
+        * 10);
+  }
+  if (easySides == 0) {
+    return (_left->getSizeEstimate() + _right->getSizeEstimate())
+           * 4;
+  } else if (easySides == 1) {
+    return std::max(
+        size_t(1),
+        (_left->getSizeEstimate() + _right->getSizeEstimate())
+        / 4);
+  } else {
+    return std::max(
+        size_t(1),
+        (_left->getSizeEstimate() + _right->getSizeEstimate())
+        / 10);
+  }
+}
+
+// _____________________________________________________________________________
+void Join::computeMultiplicities() {
+  if (_executionContext) {
+    float _leftJcM = _left->getMultiplicity(_leftJoinCol);
+    float _rightJcM = _right->getMultiplicity(_rightJoinCol);
+    for (size_t i = 0; i < _left->getResultWidth(); ++i) {
+      _multiplicities.emplace_back(_left->getMultiplicity(i) * _rightJcM);
+    }
+    for (size_t i = 0; i < _right->getResultWidth(); ++i) {
+      if (i == _rightJoinCol) { continue; }
+      _multiplicities.emplace_back(_right->getMultiplicity(i) * _leftJcM);
+    }
+  } else {
+    for (size_t i = 0; i < getResultWidth(); ++i) {
+      _multiplicities.emplace_back(1);
+    }
+  }
+  assert(_multiplicities.size() == getResultWidth());
 }
 
 

@@ -31,6 +31,10 @@ class Sort : public Operation {
     return _subtree->getSizeEstimate();
   }
 
+  virtual float getMultiplicity(size_t col) {
+    return _subtree->getMultiplicity(col);
+  }
+
   std::shared_ptr<QueryExecutionTree> getSubtree() const {
     return _subtree;
   }

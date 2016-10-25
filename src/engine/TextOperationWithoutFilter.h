@@ -50,7 +50,14 @@ public:
     } else {
       return getSizeEstimate() * _nofVars;
     }
+  }
 
+  virtual float getMultiplicity(size_t col) {
+    // TODO: return a better estimate!
+    if (col == 2) {
+      return _textLimit;
+    }
+    return 1;
   }
 
   const string& getWordPart() const {

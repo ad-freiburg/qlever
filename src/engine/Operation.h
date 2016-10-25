@@ -66,6 +66,7 @@ class Operation {
     virtual void setTextLimit(size_t limit) = 0;
     virtual size_t getCostEstimate() = 0;
     virtual size_t getSizeEstimate() = 0;
+    virtual float getMultiplicity(size_t col) = 0;
     virtual bool knownEmptyResult() = 0;
 
   protected:

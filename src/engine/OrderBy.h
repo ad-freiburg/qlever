@@ -40,6 +40,10 @@ class OrderBy : public Operation {
     return _subtree->getSizeEstimate();
   }
 
+  virtual float getMultiplicity(size_t col) {
+    return _subtree->getMultiplicity(col);
+  }
+
   virtual size_t getCostEstimate() {
     size_t size = getSizeEstimate();
     size_t logSize = std::max(size_t(1), static_cast<size_t>(logb(

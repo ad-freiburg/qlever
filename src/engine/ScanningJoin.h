@@ -42,6 +42,10 @@ class ScanningJoin : public IndexScan {
     return _subtree->getSizeEstimate();
   }
 
+  virtual float getMultiplicity(size_t col) {
+    return _subtree->getMultiplicity(col);
+  }
+
   virtual size_t getCostEstimate() {
     return _subtree->getSizeEstimate() + getSizeEstimate() * 10;
   }

@@ -60,6 +60,11 @@ class TextOperationForContexts : public Operation {
     return sum;
   }
 
+  virtual float getMultiplicity(size_t col) {
+    // TODO: return a better estimate!
+    return col;
+  }
+
   virtual bool knownEmptyResult() {
     // TODO: return a better estimate!
     return false;
