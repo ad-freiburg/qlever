@@ -30,7 +30,7 @@ public:
       _sizeEstimate(std::numeric_limits<size_t>::max()) {
   }
 
-  virtual ~IndexScan() { }
+  virtual ~IndexScan() {}
 
   void setSubject(const string& subject) {
     _subject = subject;
@@ -44,7 +44,7 @@ public:
     if (!ad_utility::isXsdValue(object)) {
       _object = object;
     } else {
-     _object = ad_utility::convertValueLiteralToIndexWord(object);
+      _object = ad_utility::convertValueLiteralToIndexWord(object);
     }
   }
 
@@ -67,6 +67,16 @@ public:
     return getSizeEstimate();
   }
 
+  void determineMultiplicities();
+
+  virtual float getMultiplicity(size_t col) {
+    if (_multiplicity.size() == 0) {
+      determineMultiplicities();
+    }
+    AD_CHECK_LT(col, _multiplicity.size());
+    return _multiplicity[col];
+  }
+
   void precomputeSizeEstimate() {
     _sizeEstimate = computeSizeEstimate();
   }
@@ -81,6 +91,7 @@ protected:
   string _predicate;
   string _object;
   size_t _sizeEstimate;
+  vector<float> _multiplicity;
 
   virtual void computeResult(ResultTable* result) const;
 

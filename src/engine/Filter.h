@@ -70,6 +70,10 @@ class Filter : public Operation {
       return _subtree->knownEmptyResult();
     }
 
+  virtual float getMultiplicity(size_t col) {
+    return _subtree->getMultiplicity(col);
+  }
+
   private:
     std::shared_ptr<QueryExecutionTree> _subtree;
     SparqlFilter::FilterType _type;

@@ -119,6 +119,15 @@ public:
 
   size_t getSizeEstimate() const;
 
+  float getMultiplicity(size_t col) const {
+    return _rootOperation->getMultiplicity(col);
+  }
+
+  size_t getDistinctEstimate(size_t col) const {
+    return static_cast<size_t>(_rootOperation->getSizeEstimate() /
+           _rootOperation->getMultiplicity(col));
+  }
+
   bool varCovered(string var) const;
 
   bool knownEmptyResult() const {

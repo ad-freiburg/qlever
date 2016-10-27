@@ -14,15 +14,15 @@ string IndexScan::asString() const {
   switch (_type) {
     case PSO_BOUND_S:
       os << "SCAN PSO with P = \"" << _predicate << "\", S = \"" << _subject <<
-      "\"";
+         "\"";
       break;
     case POS_BOUND_O:
       os << "SCAN POS with P = \"" << _predicate << "\", O = \"" << _object <<
-      "\"";
+         "\"";
       break;
     case SOP_BOUND_O:
       os << "SCAN SOP with S = \"" << _subject << "\", O = \"" << _object <<
-      "\"";
+         "\"";
       break;
     case PSO_FREE_S:
       os << "SCAN PSO with P = \"" << _predicate << "\"";
@@ -60,8 +60,8 @@ size_t IndexScan::getResultWidth() const {
     case OSP_FREE_S:
     case OPS_FREE_P:
       return 2;
-    default:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Should be unreachable.");
+    default: AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+                      "Should be unreachable.");
   }
 }
 
@@ -207,6 +207,25 @@ void IndexScan::computeOSPfreeS(ResultTable* result) const {
       _object,
       static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
   result->_status = ResultTable::FINISHED;
+}
+
+// _____________________________________________________________________________
+void IndexScan::determineMultiplicities() {
+  _multiplicity.clear();
+  if (_executionContext) {
+    if (getResultWidth() == 1) {
+      _multiplicity.emplace_back(getSizeEstimate());
+    } else {
+      array<float, 2> mults = getIndex().getMultiplicities(_subject, _predicate,
+                                                           _object);
+      _multiplicity.push_back(mults[0]);
+      _multiplicity.push_back(mults[1]);
+    }
+  } else {
+    _multiplicity.emplace_back(1);
+    _multiplicity.emplace_back(1);
+  }
+  assert(_multiplicity.size() == 1 || _multiplicity.size() == 2);
 }
 
 
