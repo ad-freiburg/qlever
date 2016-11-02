@@ -23,6 +23,16 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -Wall -Wextra  -DGTEST_HAS_TR1_TUPLE=0 -DGTEST_USE_OWN_TR1_TUPLE=0")
 
+if (${PERFTOOLS_PROFILER})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -lprofiler")
+    message(STATUS "Adding -lprofiler (make sure your have google-perftools installed.)")
+endif()
+
+if (${ALLOW_SHUTDOWN})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DALLOW_SHUTDOWN")
+    message(STATUS "Adding -DALLOW_SHUTDOWN")
+endif()
+
 set(LOG_LEVEL_INFO 3)
 set(LOG_LEVEL_DEBUG 4)
 set(LOG_LEVEL_TRACE 5)

@@ -15,6 +15,8 @@
 #include <netinet/tcp.h>
 
 #include <string>
+#include <sstream>
+#include <iostream>
 
 
 using std::string;
@@ -40,7 +42,7 @@ public:
   }
 
   //! Create the socket.
-  bool create(bool useTcpNoDelay =false) {
+  bool create(bool useTcpNoDelay = false) {
     _fd = socket(AF_INET, SOCK_STREAM, 0);
     if (useTcpNoDelay) {
       int flag = 1;
@@ -107,6 +109,24 @@ public:
       *data = buf;
     }
     return status;
+  }
+
+  string getRequest() const {
+    std::ostringstream os;
+    char buf[512];
+    for (;;) {
+      auto recvsize = recv(_fd, buf, sizeof(buf) - 1, MSG_DONTWAIT);
+//      std::cout << "recvsize: " << recvsize << std::endl;
+      if (recvsize == -1) {
+ //       std::cout << "errno: " << errno << std::endl;
+        if (errno != EAGAIN && errno != EWOULDBLOCK) { break; }
+        else { continue; }
+      } else if (recvsize == 0) { break; } // properly closed connection.
+      // Append
+      buf[recvsize] = '\0';
+      os << buf;
+    }
+    return os.str();
   }
 
   // Copied from online sources. Might be useful in the future.

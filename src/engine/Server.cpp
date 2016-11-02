@@ -27,7 +27,7 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
   }
 
   // Init the server socket.
-  bool ret = _serverSocket.create(true) && _serverSocket.bind(_port)
+  bool ret = _serverSocket.create() && _serverSocket.bind(_port)
              && _serverSocket.listen();
   if (!ret) {
     LOG(ERROR)
@@ -72,11 +72,12 @@ void Server::run() {
 
 // _____________________________________________________________________________
 void Server::process(Socket* client, QueryExecutionContext* qec) const {
-  string request;
   string response;
   string query;
   string contentType;
+  string request;
   client->recieve(&request);
+  //string request = client->getRequest();
   LOG(DEBUG) << "Got request from client." << endl;
 
   size_t indexOfGET = request.find("GET");
@@ -111,7 +112,13 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
         qec->clearCache();
       }
-
+#ifdef ALLOW_SHUTDOWN
+      if (ad_utility::getLowercase(params["cmd"]) == "shutdown") {
+        LOG(INFO) << "Shutdown triggered by HTTP request "
+        << "(deactivate by compiling without -DALLOW_SHUTDOWN)" << std::endl;
+        exit(0);
+      }
+#endif
       query = createQueryFromHttpParams(params);
       LOG(INFO) << "Query: " << query << '\n';
       ParsedQuery pq = SparqlParser::parse(query);

@@ -10,13 +10,13 @@
 using std::vector;
 
 class QueryPlanner {
- public:
+public:
   explicit QueryPlanner(QueryExecutionContext* qec);
 
   QueryExecutionTree createExecutionTree(const ParsedQuery& pq) const;
 
   class TripleGraph {
-   public:
+  public:
 
     TripleGraph();
 
@@ -27,7 +27,7 @@ class QueryPlanner {
     TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
 
     class Node {
-     public:
+    public:
       Node(size_t id, const SparqlTriple& t) : _id(id), _triple(t),
                                                _variables(), _cvar(),
                                                _wordPart() {
@@ -78,11 +78,11 @@ class QueryPlanner {
 
     bool isPureTextQuery();
 
-   private:
+  private:
     vector<pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
         const vector<SparqlFilter>& origFilters,
         ad_utility::HashMap<string,
-                            vector<size_t>>& contextVarTotextNodes) const;
+            vector<size_t>>& contextVarTotextNodes) const;
 
     vector<SparqlFilter> pickFilters(
         const vector<SparqlFilter>& origFilters,
@@ -90,17 +90,21 @@ class QueryPlanner {
   };
 
   class SubtreePlan {
-   public:
+  public:
     explicit SubtreePlan(QueryExecutionContext* qec)
-        : _qet(new QueryExecutionTree(qec)) { }
+        : _qet(new QueryExecutionTree(qec)),
+          _idsOfIncludedNodes(0),
+          _idsOfIncludedFilters(0) {}
 
     std::shared_ptr<QueryExecutionTree> _qet;
-    ad_utility::HashSet<size_t> _idsOfIncludedNodes;
-    ad_utility::HashSet<size_t> _idsOfIncludedFilters;
+    uint64_t _idsOfIncludedNodes;
+    uint64_t _idsOfIncludedFilters;
 
     size_t getCostEstimate() const;
 
     size_t getSizeEstimate() const;
+
+    void addAllNodes(uint64_t otherNodes);
   };
 
   TripleGraph createTripleGraph(const ParsedQuery& query) const;
@@ -140,7 +144,7 @@ class QueryPlanner {
         vector<pair<QueryExecutionTree, size_t>>());
   };
 
- private:
+private:
   QueryExecutionContext* _qec;
 
   static bool isVariable(const string& elem);

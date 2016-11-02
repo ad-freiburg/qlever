@@ -52,7 +52,7 @@ Don't do this directly in QLever
 
     cd /path/to/YOUR_FOLDER
 
-c) Build the project
+c) Build the project (Optional: add -DPERFTOOLS_PROFILER=True/False and -DALLOW_SHUTDOWN=True/False)
 
     cmake /path/to/QLever/ -DCMAKE_BUILD_TYPE=Release; make -j
 
