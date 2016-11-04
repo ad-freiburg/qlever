@@ -15,7 +15,6 @@ parser.add_argument('--w',
                     help='Output filename for the contexts file ("wordsfile").',
                     required=True)
 
-
 parser.add_argument('--d',
                     type=str,
                     help='Output filename for the orig text file ("docsfile").',
@@ -82,12 +81,14 @@ def write_context_to_wordsfile(context_id, tokens, wordsfile, stop_tokens):
             words = spl[1][:-1].lower()
             for word in words.split(' '):
                 if word not in stop_tokens:
-                    print('\t'.join([word, '0', context_id, '1']), file=wordsfile)
+                    print('\t'.join([word, '0', context_id, '1']),
+                          file=wordsfile)
             entity = entity_id_to_full_entity(spl[0][1:])
             print('\t'.join([entity, '1', context_id, '1']), file=wordsfile)
 
 
-def process(sentences, context_file_name, orig_file_name, first_context_id):
+def process(sentences, context_file_name, orig_file_name, first_context_id,
+            stop_tokens):
     context_id = first_context_id
     with open(context_file_name, 'w') as wordsfile:
         with open(orig_file_name, 'w') as docsfile:
@@ -102,7 +103,8 @@ def process(sentences, context_file_name, orig_file_name, first_context_id):
                 docsfile_tokens = [token_to_docsfile(t) for t in tokens]
                 print('\t'.join([str(context_id), ' '.join(docsfile_tokens)]),
                       file=docsfile)
-                write_context_to_wordsfile(str(context_id), tokens, wordsfile)
+                write_context_to_wordsfile(str(context_id), tokens, wordsfile,
+                                           stop_tokens)
                 context_id += 1
 
 
@@ -110,12 +112,14 @@ def read_stop_tokens(file_name):
     stop_tokens = set()
     for line in open(file_name, 'r'):
         stop_tokens.add(line.strip())
+    return stop_tokens
 
 
 def main():
     args = vars(parser.parse_args())
     stop_tokens = read_stop_tokens(args['stop_tokens_file'])
-    process(args['sentences'], args['w'], args['d'], args['first_context_id'])
+    process(args['sentences'], args['w'], args['d'], args['first_context_id'],
+            stop_tokens)
 
 
 if __name__ == '__main__':
