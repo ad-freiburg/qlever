@@ -32,6 +32,13 @@ parser.add_argument('--stop-tokens-file',
                          'one item a line and lower case.',
                     required=True)
 
+parser.add_argument('--length-one-non-alnum-is-not-stop',
+                    help='Usually, non-alpha-numeric tokens of length 1 '
+                         'are ignored. This option disables that so that '
+                         'everything can be used in the words-file.',
+                    default=False,
+                    action='store_true')
+
 
 def tokenize_sentence(s):
     tokens = []
@@ -70,25 +77,39 @@ def entity_id_to_full_entity(entity_id):
     return '<http://rdf.freebase.com/ns/' + entity_id + '/>'
 
 
-def write_context_to_wordsfile(context_id, tokens, wordsfile, stop_tokens):
+def should_be_written_to_wordsfile(word, stop_tokens, write_len_1_non_alnum):
+    return (write_len_1_non_alnum or len(
+        word) > 1 or word.isalnum()) and word not in stop_tokens
+
+
+def write_context_to_wordsfile(context_id, tokens, wordsfile, stop_tokens,
+                               write_len_1_non_alnum):
     for t in tokens:
-        is_entity = is_marked_entity(t)
-        lower = t.lower()
-        if not is_entity and lower not in stop_tokens:
-            print('\t'.join([lower, '0', context_id, '1']), file=wordsfile)
-        else:
-            spl = t.split('|')
-            words = spl[1][:-1].lower()
-            for word in words.split(' '):
-                if word not in stop_tokens:
-                    print('\t'.join([word, '0', context_id, '1']),
+        try:
+            is_entity = is_marked_entity(t)
+            lower = t.lower()
+            if not is_entity:
+                if should_be_written_to_wordsfile(lower, stop_tokens,
+                                                  write_len_1_non_alnum):
+                    print('\t'.join([lower, '0', context_id, '1']),
                           file=wordsfile)
-            entity = entity_id_to_full_entity(spl[0][1:])
-            print('\t'.join([entity, '1', context_id, '1']), file=wordsfile)
+            else:
+                spl = t.split('|')
+                words = spl[1][:-1].lower()
+                for word in words.split(' '):
+                    if should_be_written_to_wordsfile(word, stop_tokens,
+                                                      write_len_1_non_alnum):
+                        print('\t'.join([word, '0', context_id, '1']),
+                              file=wordsfile)
+                    entity = entity_id_to_full_entity(spl[0][1:])
+                    print('\t'.join([entity, '1', context_id, '1']),
+                          file=wordsfile)
+        except IndexError:
+            print('Problem on token: ' + t, file=sys.stderr)
 
 
 def process(sentences, context_file_name, orig_file_name, first_context_id,
-            stop_tokens):
+            stop_tokens, write_len_1_non_alnum):
     context_id = first_context_id
     with open(context_file_name, 'w') as wordsfile:
         with open(orig_file_name, 'w') as docsfile:
@@ -104,7 +125,7 @@ def process(sentences, context_file_name, orig_file_name, first_context_id,
                 print('\t'.join([str(context_id), ' '.join(docsfile_tokens)]),
                       file=docsfile)
                 write_context_to_wordsfile(str(context_id), tokens, wordsfile,
-                                           stop_tokens)
+                                           stop_tokens, write_len_1_non_alnum)
                 context_id += 1
 
 
@@ -119,7 +140,7 @@ def main():
     args = vars(parser.parse_args())
     stop_tokens = read_stop_tokens(args['stop_tokens_file'])
     process(args['sentences'], args['w'], args['d'], args['first_context_id'],
-            stop_tokens)
+            stop_tokens, args['length_one_non_alnum_is_not_stop'])
 
 
 if __name__ == '__main__':
