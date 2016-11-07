@@ -1,0 +1,1 @@
+for f in cw_split_*; do (NUM=000099; NUM=0; python3 /local/scratch/bjoern/work/QLever/misc/clueweb_sentences_to_context_and_orig_files.py --stop-tokens-file ~/broccoli/semantic-wikipedia.stop-words --sentences cw_split_000099 --w cw_split_000099.wordsfile --d cw_split_000099.docsfile --first-context-id ;) & done
