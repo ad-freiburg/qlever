@@ -32,8 +32,8 @@ It is possible to merge two sub-trees iff: 1) They do not already overlap in ter
 
 To merge two subtrees, a join is created. 
 Any subtree that is not yet sorted on the join column, is sorted by an extra SORT operation.
-There are two special cases: 
-1) If at least one subtree pertains to a TEXT_WITHOUT_FILTER operation, we create both possible plans: JOIN normally (plus SORT before) and a TEXT_WITH_FILTER operation.<sup>[1](#textwfilter)</sup>
+There are two special cases:  
+1) If at least one subtree pertains to a TEXT_WITHOUT_FILTER operation, we create both possible plans: JOIN normally (plus SORT before) and a TEXT_WITH_FILTER operation.<sup>[1](#textwfilter)</sup>  
 2) If they are connected by more than one edge, we have something we called a "cyclic query" already, and create a special TWO_COLUMN_JOIN operation.
 
 Before we return a row, we prune away unneeded execution trees. 
