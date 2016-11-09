@@ -33,7 +33,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   // each edge corresponds to a possible join.
 
   // Enumerate and judge possible query plans using a DP table.
-  // Each ExecutionTree for a sub-problem gives an estimate.
+  // Each ExecutionTree for a sub-problem gives an estimate:
+  // There are estimates for cost and size ( and multiplicity per column).
   // Start bottom up, i.e. with the scans for triples.
   // Always merge two solutions from the table by picking one possible join.
   // A join is possible, if there is an edge between the results.
@@ -55,7 +56,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   // A filter can be applied as soon as all variables that occur in the filter
   // Are covered by the query. This is also always the place where this is done.
 
-  // Text operations from cliques (all triples connected via the context cvar).
+  // Text operations form cliques (all triples connected via the context cvar).
   // Detect them and turn them into nodes with stored word part and
   // edges to connected variables.
   LOG(TRACE) << "Collapse text cliques..." << std::endl;;

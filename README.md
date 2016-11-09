@@ -4,8 +4,9 @@ QLever
 This Readme sets you up to use the engine and to quickly build and query your own index.
 If you're interested in advanced topics, please check the following files (note that they aren't of perfect quality)
 
-* [List of Features](features.md)
-* [The Index (currently incomplete)](src/index/IndexLayout.txt)
+* [List of Features](doc/features.md)
+* [Query Planning](doc/query_planning.md)
+* [The Index (currently incomplete)](doc/index_layout.md)
 
 How to use
 ==========

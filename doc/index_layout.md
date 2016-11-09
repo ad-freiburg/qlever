@@ -1,10 +1,10 @@
-----------
-PART I.A - Ontology Per Relation
---
+PART I. - Knowledge Base
+========================
+
 Treat variable predicates as special case, because they are.
 ----------
 
-Assume relation (SO or OS permutation):
+Assume relation (e.g. SO for PSO permutation):
 
 100	200
 100 201
@@ -16,8 +16,7 @@ Assume relation (SO or OS permutation):
 103	219
 104	211
 
------
-1. Full-Index:
+Full-Index:
 -----
 
 One big chunk of memory:
@@ -35,10 +34,10 @@ Needs resizing upfront and pass the memory as buffer to the fread.
 Required for this part in the relation's in-memory meta data:
 - start
 - # elements
-[- sizeof(Id) (no need to store)]
+- sizeof(Id) (no need to store)
 
------
-2. Block-Index:
+
+Block-Index:
 -----
 
 let s = sizeof(Id)
@@ -108,33 +107,31 @@ an additional disk read and additional space requirement:
 From block read LHS, from there read RHS.
 Benefit: RHS can be read / decompressed directly in vector<array<Id, 1>>.
 
------
-3. Meta Data
------
 
---
+Meta Data
+------------
+
 a) Full Index Relation Meta Data
 --
 * rel Id
 * offset: start of FullIndex
-* # elements (this field also encodes two flags isFunctional and hasBlocks)
+* number of elements (this field also encodes two flags isFunctional and hasBlocks)
 
 
 b) Block Index Relation Meta Data
 * start of rhs lists
 * offset after (needed for upper bound operations on lhs')
-* # blocks
+* number of blocks
 * vector of BlockMetaData (pairs)
 
---
+
 c) Block Meta Data
 --
 - minLHS
 - offset: start of RHS Data
 
 
------
-4. Full Layout of an index permutation
+Full Layout of an index permutation
 -----
 
 REL1.REl2.REL3...RELn.META.startOfMetaOffset
@@ -148,8 +145,9 @@ RMDi := rId.startOfFI.lastByteOffset.#elem.#blocks.BMD1.BMD2...BMDn
 BMDi := minLHS.rhsDataOffset
 
 
-5. Problem with all Permutations and solution:
----------------------------------
+Problem with all Permutations and solution:
+----------------------------------------------
+
 Extremely high number of relations, but very small. No block index needed.
 Solution: Have different metadata for them, do a read-full + filter
 for the read-single use-case.
