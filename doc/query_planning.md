@@ -35,14 +35,18 @@ There are two special cases:
 2) If they are connected by more than one edge, we have something we called a "cyclic query" already, and create a special <span style="font-variant: small-caps">two_column_join</span> operation.
 
 Before we return a row, we prune away unneeded execution trees. 
-For each combination of: included nodes + included filters + sorted_on_column, we only keep the one with the lowest cost estimate.
+For each combination of: included nodes + included filters + sort column, we only keep the one with the lowest cost estimate.
 
-After each row, we apply all possible <span style="font-variant: small-caps">filter</span> operations. <sup>[2](#filterfn)</sup>. 
+After each row, we apply all possible <span style="font-variant: small-caps">filter</span> operations<sup>.[2](#filterfn)</sup>
 When a <span style="font-variant: small-caps">filter</span> is applied we *add* another tree to that row. The exception is the very last (`n`'th) row where we replace the trees.
 This allows <span style="font-variant: small-caps">filter</span> operations to be taken at any time of the query. Usually it is better to take them earlier because they can only reduce the number of elements and are usually fast to evaluate, but sometimes it is better for them to be delayed because only then, a <span style="font-variant: small-caps">text_with_filter</span> operation can be created (it's only possible if one of the children is a <span style="font-variant: small-caps">text_without_filter</span> operation and not if a <span style="font-variant: small-caps">filter</span> is applied to it already).
 The exception is the last row where all <span style="font-variant: small-caps">filter</span>s have to be taken.
 Finally, the tree with the lowest cost estimate is used.
 
+&nbsp;
+
+<span style="font-size: small">
 <a name="textwfilter">1</a>: When a <span style="font-variant: small-caps">text_with_filter</span> operation is created, one subtree is kept as a child and the <span style="font-variant: small-caps">text_without_filter</span> operation is removed / included in the operation.
 
 <a name="filterfn">2</a>: A <span style="font-variant: small-caps">filter</span> operation can be applied as soon as all it's variables are covered somewhere in the query. This is possible because the number of distinct elements for each variable becomes lower while the query is executed. It is the highest after an initial <span style="font-variant: small-caps">scan</span> and always corresponds to the intersection after each join. That said, multiplicity and total number fo rows may become larger throughout the query - possibly by a lot. 
+</span>
