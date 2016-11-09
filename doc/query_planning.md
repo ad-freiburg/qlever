@@ -24,7 +24,7 @@ We use a dynamic programming approach. _TODO: read more related work and cite so
 
 Let `n` be the number of nodes in the graph (i.e. the number of triples in the SPARQL query for queries without text and possible less for queries with text part). 
 We then create DP table with `n` rows where the `k`'th row contains all possible QueryExecutionsTrees for sub-queries that contain `k` triples (`k in [1 .. n]`).
-We seed the first row with the `n` SCANs (or TEXT_WITHOUT_FILTER) operations pertaining to the nodes.
+We seed the first row with the `n` SCAN (or TEXT_WITHOUT_FILTER) operations pertaining to the nodes.
  
 Then we create row after row by trying all possible merges.
 The `k`'th row is created by trying to merge all combinations of rows `i` and `j`, s.th. `i + j = k`.
