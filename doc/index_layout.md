@@ -1,104 +1,103 @@
-PART I. - Knowledge Base
-========================
+#PART I. - Knowledge Base
 
-Treat variable predicates as special case, because they are.
-----------
+##Treat variable predicates as special case, because they are.
+
 
 Assume relation (e.g. SO for PSO permutation):
 
-100	200
-100 201
-100	202
-...
-101	200
-101 213
-102	212
-103	219
+100	200  
+100 201  
+100	202  
+...  
+101	200  
+101 213  
+102	212  
+103	219  
 104	211
 
-Full-Index:
------
+##Full-Index:
 
-One big chunk of memory:
+One big chunk of memory:  
 100.200.100.201...104.211
 
 TODO: Compress? Probably not at all.
 
-Use-case + benefit:
+Use-case + benefit:  
 Read full relation (usually for triples like "?var1 :rel ?var2",
 e.g. for joins in the middle of the exec tree)
 Can (hopefully) read that directly into memory that corresponds to a
 std::vector<std::array<Id, 2>>'s data.
 Needs resizing upfront and pass the memory as buffer to the fread.
 
-Required for this part in the relation's in-memory meta data:
-- start
-- # elements
+Required for this part in the relation's in-memory meta data:  
+- start  
+- number of elements  
 - sizeof(Id) (no need to store)
 
 
-Block-Index:
------
+##Block-Index:
+
 
 let s = sizeof(Id)
 
-RHS:
+###RHS:  
+@0:		200.201.202  
+@3s: 	200.213  
+@5s: 	212  
+@6s: 	219  
+@7s: 	211  
 
-@0:		200.201.202
-@3s: 	200.213
-@5s: 	212
-@6s: 	219
-@7s: 	211
+###LHS with offset:  
+@x:		100 0  
+@x+2:	101 3s  
+@x+4:	102 5s  
+@x+6:	103 6s  
+@x+8:	104 7s  
 
-LHS with offset:
-@x:		100 0
-@x+2:	101 3s
-@x+4:	102 5s
-@x+6:	103 6s
-@x+8:	104 7s
-
-"Block" data for LHS (in memory):
-100ff -> x
+###"Block" data for LHS (in memory):  
+100ff -> x  
 103ff -> x + 6
 
-Compression:
+###Compression:
 Possible to Gap encode RHS lists.
 Offsets become non-trivial but are known when writing the list.
 Drawback: decompression time
 TODO: Any compression for LHS? Messy to gap encode and have offsets into it.
 
-Use-case:
+###Use-case:
 Read only RHS for a fixed LHS. Can lookup the "block" from the in memory list.
 Read from the block offset to the next block's offset, translate into
 "LHS with offset" information. Binary search for the correct LHS and
 read+decompress the RHS list directly into a std::vector<std::array<Id, 1>>.
 The upper bound can, again, be taken from the next higher LHS.
 
-Required in final in-memory meta data:
+###Required in final in-memory meta data:
 Block data as sorted, binary-searchable list
 (hashmap not possible because not all lhs are there).
 Global / local upper bounds if last block or last lhs in a block are effected.
 
-Parameter:
+###Parameter:
 Blocksize - should probably depend on the max #LHS combined in a block
 and hence the size of the LHS+offset list that is read on access.
 
 
-Blowup:
+###Blowup:
 
-w.r.t. Full Index size X:
-RHS (1/2 X)
-+ LHS (min: 2 / max: X)
+w.r.t. Full Index size X:  
+RHS (1/2 X)  
++ LHS (min: 2 / max: X)  
 + Offsets (min: 2 / max: controlled)
 
 --> 0.5 X (compression possible) + eps up to 1.5 X (compression possible) + offsets
 
-Great: type relations, the direction from gender to person, etc.
-Problematic: functional relations, from person to gender.
-Solution: For fully functional relations, just let blocks offset into the
-					FullIndex! Read the whole Block, get the RHS.
+####Great: 
+type relations, the direction from gender to person, etc.
+####Problematic: 
+functional relations, from person to gender.
+####Solution: 
+For fully functional relations, just let blocks offset into the FullIndex! Read the whole Block, get the RHS.
 
-Question:
+####Question:
 What about non-functional relations with few RHSs per LHS, e.g. "married-to"
 Treating like functional relations works and needs reading the whole block +
 obtaining list of width-1 RHSs from it.
@@ -108,45 +107,45 @@ From block read LHS, from there read RHS.
 Benefit: RHS can be read / decompressed directly in vector<array<Id, 1>>.
 
 
-Meta Data
-------------
+##Meta Data
 
-a) Full Index Relation Meta Data
+
+###Full Index Relation Meta Data
 --
 * rel Id
 * offset: start of FullIndex
 * number of elements (this field also encodes two flags isFunctional and hasBlocks)
 
 
-b) Block Index Relation Meta Data
+###Block Index Relation Meta Data
 * start of rhs lists
 * offset after (needed for upper bound operations on lhs')
 * number of blocks
 * vector of BlockMetaData (pairs)
 
 
-c) Block Meta Data
+###Block Meta Data
 --
 - minLHS
 - offset: start of RHS Data
 
 
-Full Layout of an index permutation
------
-
-REL1.REl2.REL3...RELn.META.startOfMetaOffset
-RELi := {
-	FullIndex.Block-Lhs.BLock-Rhs     if not functional and larger than $const
-	FullIndex 												if functional or smaller than $const
-}
-
-META := RMD1.RMD2...RMDn
-RMDi := rId.startOfFI.lastByteOffset.#elem.#blocks.BMD1.BMD2...BMDn
-BMDi := minLHS.rhsDataOffset
+##Full Layout of an index permutation
 
 
-Problem with all Permutations and solution:
-----------------------------------------------
+REL1.REl2.REL3...RELn.META.startOfMetaOffset  
+RELi := {  
+	FullIndex.Block-Lhs.BLock-Rhs     if not functional and larger than $const  
+	FullIndex 						  if functional or smaller than $const  
+}  
+
+META := RMD1.RMD2...RMDn  
+RMDi := rId.startOfFI.lastByteOffset.#elem.#blocks.BMD1.BMD2...BMDn  
+BMDi := minLHS.rhsDataOffset  
+
+
+##Problem with all Permutations and solution:
+
 
 Extremely high number of relations, but very small. No block index needed.
 Solution: Have different metadata for them, do a read-full + filter
