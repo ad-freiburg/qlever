@@ -3,19 +3,19 @@
 
 ##Strategy:
 
-* Create a graph from the query.
+1. Create a graph from the query.
 Each triple corresponds to a node, there is an edge between two nodes iff they share a variable.
 Text operations always form cliques (all triples are connected via the context variable).
 Turn them into a single nodes with the word-part stored as payload.
 This node naturally has an edge to each connected variable.
 
-* Build a QueryExecutionTree object.
+2. Build a QueryExecutionTree object.
 The important part is its root operation.
 Such operations can have a no children (SCAN, TEXT_NO_FILTER), one child (SORT, TEXT_WITH_FILTER, DISTINCT, FILTER, ORDER_BY) or two children (JOIN, MULTI_COLUMN_JOIN). 
 Children are always QueryExecutionTree objects on their own and their results can be cached and/or reused within a query (e.g. a SCAN for type/object/name).
 In general, each node of the graph will correspond to an operation with no children.
 
-* Modifiers like ORDER_BY or DISTINCT are applied in the end (topmost in the tree). 
+3. Modifiers like ORDER_BY or DISTINCT are applied in the end (topmost in the tree). 
 LIMIT and OFFSET aren't applied at all and only considered when creating readable (JSON, std::cout, etc) results.
 
 ##Building the execution tree from the graph:
