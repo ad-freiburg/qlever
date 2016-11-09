@@ -24,14 +24,16 @@ We use a dynamic programming approach. _TODO: read more related work and cite so
 
 Let `n` be the number of nodes in the graph (i.e. the number of triples in the SPARQL query for queries without text and possible less for queries with text part). 
 We then create DP table with `n` rows where the `k`'th row contains all possible QueryExecutionsTrees for sub-queries that contain `k` triples (`k in [1 .. n]`).
-We seed the first row with the `n` SCANs (or TEXT_WITHOUT_FILTER) operations pertaining to the nodes. 
+We seed the first row with the `n` SCANs (or TEXT_WITHOUT_FILTER) operations pertaining to the nodes.
+ 
 Then we create row after row by trying all possible merges.
 The `k`'th row is created by trying to merge all combinations of rows `i` and `j`, s.th. `i + j = k`.
 It is possible to merge two sub-trees iff: 1) They do not already overlap in terms of included nodes/scans and 2) there is an edge between one of their contained nodes in the query graph.
+
 To merge two subtrees, a join is created. 
 Any subtree that is not yet sorted on the join column, is sorted by an extra SORT operation.
 There are two special cases: 
-1) If at least one subtree pertains to a TEXT_WITHOUT_FILTER operation, we create both possible plans: JOIN normally (plus SORT before) and a TEXT_WITH_FILTER operation. <sup>[1](#textwfilter)</sup>
+1) If at least one subtree pertains to a TEXT_WITHOUT_FILTER operation, we create both possible plans: JOIN normally (plus SORT before) and a TEXT_WITH_FILTER operation.<sup>[1](#textwfilter)</sup>
 2) If they are connected by more than one edge, we have something we called a "cyclic query" already, and create a special TWO_COLUMN_JOIN operation.
 
 Before we return a row, we prune away unneeded execution trees. 
@@ -43,7 +45,6 @@ This allows FILTER operations to be taken at any time of the query. Usually it i
 The exception is the last row where all FILTERS have to be taken.
 Finally, the tree with the lowest cost estimate is used.
 
-\
 &nbsp;
 
 <a name="textwfilter">1</a>: When a TEXT_WITH_FILTER operation is created, one subtree is kept as a child and the TEXT_WITHOUT_FILTER operation is removed / included in the operation.
