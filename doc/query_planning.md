@@ -49,6 +49,6 @@ Finally, the tree with the lowest cost estimate is used.
 
 &nbsp;
 
-<a name="textwfilter">1</a>: When a TEXT_WITH_FILTER operation is created, one subtree is kept as a child and the TEXT_WITHOUT_FILTER operation is removed / included in the operation.
+<a name="textwfilter">\[1\]</a>: When a TEXT_WITH_FILTER operation is created, one subtree is kept as a child and the TEXT_WITHOUT_FILTER operation is removed / included in the operation.
 
-<a name="filterfn">2</a>: A FILTER operation can be applied as soon as all it's variables are covered somewhere in the query. This is possible because the number of distinct elements for each variable becomes lower while the query is executed. It is the highest after an initial SCAN and always corresponds to the intersection after each join. That said, multiplicity and total number fo rows may become larger throughout the query - possibly by a lot. 
+<a name="filterfn">\[2\]</a>: A FILTER operation can be applied as soon as all it's variables are covered somewhere in the query. This is possible because the number of distinct elements for each variable becomes lower while the query is executed. It is the highest after an initial SCAN and always corresponds to the intersection after each join. That said, multiplicity and total number fo rows may become larger throughout the query - possibly by a lot. 
