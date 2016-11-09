@@ -28,7 +28,9 @@ We seed the first row with the `n` SCANs (or TEXT_WITHOUT_FILTER) operations per
  
 Then we create row after row by trying all possible merges.
 The `k`'th row is created by trying to merge all combinations of rows `i` and `j`, s.th. `i + j = k`.
-It is possible to merge two sub-trees iff: 1) They do not already overlap in terms of included nodes/scans and 2) there is an edge between one of their contained nodes in the query graph.
+It is possible to merge two sub-trees iff:  
+1) They do not already overlap in terms of included nodes/scans and  
+2) there is an edge between one of their contained nodes in the query graph.
 
 To merge two subtrees, a join is created. 
 Any subtree that is not yet sorted on the join column, is sorted by an extra SORT operation.
