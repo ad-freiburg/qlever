@@ -37,7 +37,7 @@ There are two special cases:
 Before we return a row, we prune away unneeded execution trees. 
 For each combination of: included nodes + included filters + sort column, we only keep the one with the lowest cost estimate.
 
-After each row, we apply all possible FILTER operations. <sup>[2](#filterfn)</sup>. 
+After each row, we apply all possible FILTER operations.<sup>[2](#filterfn)</sup> 
 When a FILTER is applied we *add* another tree to that row. The exception is the very last (`n`'th) row where we replace the trees.
 This allows FILTER operations to be taken at any time of the query. Usually it is better to take them earlier because they can only reduce the number of elements and are usually fast to evaluate, but sometimes it is better for them to be delayed because only then, a TEXT_WITH_FILTER operation can be created (it's only possible if one of the children is a TEXT_WITHOUT_FILTER operation and not if a FILTER is applied to it already).
 The exception is the last row where all FILTERS have to be taken.
