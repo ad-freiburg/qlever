@@ -143,7 +143,7 @@ int main(int argc, char** argv) {
       index.createFromTsvFile(tsvFile, baseName, allPermutations,
                               onDiskLiterals);
     } else {
-      index.createFromOnDiskIndex(baseName, onDiskLiterals);
+      index.createFromOnDiskIndex(baseName, allPermutations, onDiskLiterals);
     }
 
     if (wordsfile.size() > 0) {
