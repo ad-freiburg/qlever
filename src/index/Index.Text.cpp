@@ -48,6 +48,7 @@ void Index::buildDocsDB(const string& docsFileName) {
   }
   out.write(&startOfOffsets, sizeof(startOfOffsets));
   out.close();
+  delete[] buf;
   LOG(INFO) << "DocsDB done.\n";
 }
 

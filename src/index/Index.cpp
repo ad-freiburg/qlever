@@ -191,6 +191,7 @@ size_t Index::passNTriplesFileForVocabulary(const string& ntFile,
   }
   LOG(INFO) << "Pass done.\n";
   _vocab.createFromSet(items);
+  items.clear();
   return i;
 }
 
