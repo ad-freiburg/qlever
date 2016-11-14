@@ -18,7 +18,8 @@ void Index::addTextFromContextFile(const string& contextFile) {
   calculateBlockBoundaries();
   TextVec v(nofLines);
   passContextFileIntoVector(contextFile, v);
-  LOG(INFO) << "Sorting text index..." << std::endl;
+  LOG(INFO) << "Sorting text index with " << v.size() << " items ..."
+            << std::endl;
   stxxl::sort(begin(v), end(v), SortText(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
   createTextIndex(indexFilename, v);

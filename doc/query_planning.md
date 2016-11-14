@@ -1,5 +1,7 @@
 #Query Planning
 
+##Notation:
+
 
 ##Strategy:
 
