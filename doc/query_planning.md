@@ -1,7 +1,5 @@
 #Query Planning
 
-##Notation:
-
 
 ##Strategy:
 
@@ -12,13 +10,54 @@ Turn them into a single nodes with the word-part stored as payload.
 This node naturally has an edge to each connected variable.
 
 2. Build a QueryExecutionTree object.
-The important part is its root operation.
-Such operations can have a no children (SCAN, TEXT_NO_FILTER), one child (SORT, TEXT_WITH_FILTER, DISTINCT, FILTER, ORDER_BY) or two children (JOIN, MULTI_COLUMN_JOIN). 
-Children are always QueryExecutionTree objects on their own and their results can be cached and/or reused within a query (e.g. a SCAN for type/object/name).
-In general, each node of the graph will correspond to an operation with no children.
+The nodes in the tree are QueryExecutionTrees themselves. Each one has a single "Operation" member.
+These can be SCAN, JOIN, SORT, and so on, see the section on Operations below.
+Such operations can have a no children (e.g., SCAN, TEXT_NO_FILTER), one child (SORT, TEXT_WITH_FILTER, DISTINCT, FILTER, ORDER_BY) or two children (JOIN, MULTI_COLUMN_JOIN). 
+Children are always new nodes (i.e. QueryExecutionTree objects) and their results can be cached and/or reused within a query (e.g. a SCAN for type/object/name).
+In general, each leaf of the graph will correspond to an operation with no children.
 
 3. Modifiers like ORDER_BY or DISTINCT are applied in the end (topmost in the tree). 
 LIMIT and OFFSET aren't applied at all and only considered when creating readable (JSON, std::cout, etc) results.
+
+
+##Operations:
+
+###Obvious: 
+SCAN, JOIN, SORT, DISTINCT, FILTER, ORDER_BY
+
+###Non-obvious:
+
+####TEXT_NO_FILTER: 
+A text operation that, for given words (and a set TEXTLIMIT, default = 1), returns a table with 3 or more columns (context id, score, entities...). 
+In the most common case, there are three columns and the entity column holds entities that co-occur with the words.
+There are more of them when the SPARQL variable for the context is connected to more than one other variable, i.e. after the clique-collapsing described above, the combined nodes has multiple edges.
+TEXTLIMIT determines the max rows per combination of entities.
+This operation is enough to answer a query like
+
+    SELECT ?x WHERE { ?x <in-context> ?c . ?c <in-context> edible leaves }
+    
+And with another join (with a list of plants obtained from a scan) it can be used to answer 
+
+    SELECT ?x WHERE { ?x <is-a> <Plant> . ?x <in-context> ?c . ?c <in-context> edible leaves }
+    
+####TEXT_WITH_FILTER:
+
+A text operation like the one above with exactly one subtree as a child. Particularly useful to answer queries like:
+
+    SELECT ?x WHERE { ?x <is-a> <Computer_scientist> . ?x <in-context> ?c . ?c <in-context> comp* }
+    
+or 
+    
+    SELECT ?p ?x WHERE { ?p <is-a> <Person> . ?x <is-a> <Computer_scientist> . ?p <in-context> ?c . ?x <in-context> ?c . ?c <in-context> comp* . FILTER(?p != ?c)}
+    
+The idea is that the list of computer scientists is much smaller than the list of entities that co-occur with some suffix of comp*.
+Thus, the subtree to SCAN for computer scientists is used as a filter (hash set) and all contexts that don't contain one of them are discarded right away.
+This means that, at no point the list of all entities (with top context witnesses and scores) that occur with comp* is generated.
+Usually the above TEXT_NO_FILTER is the better choice, but in some extreme examples (like this one), filtering has a huge benefit.
+
+####MULTI_COLUMN_JOIN:
+
+
 
 ##Building the execution tree from the graph:
 

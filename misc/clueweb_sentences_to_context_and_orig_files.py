@@ -74,7 +74,7 @@ def token_to_docsfile(token):
 
 
 def entity_id_to_full_entity(entity_id):
-    return '<http://rdf.freebase.com/ns/' + entity_id + '/>'
+    return '<http://rdf.freebase.com/ns/' + entity_id + '>'
 
 
 def should_be_written_to_wordsfile(word, stop_tokens, write_len_1_non_alnum):
