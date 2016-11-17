@@ -18,7 +18,8 @@ public:
   void init(const string& fileName);
   string getTextExcerpt(Id cid) const;
 
-  vector<pair<Id, off_t>> _offsets;
   mutable ad_utility::File _dbFile;
+  off_t _startOfOffsets;
+  size_t _size;
 };
 
