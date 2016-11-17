@@ -153,6 +153,10 @@ class File {
       write("\n", 1);
     }
 
+    void flush() {
+      fflush(_file);
+    }
+
     bool isAtEof() {
       assert(_file);
       return feof(_file) != 0;

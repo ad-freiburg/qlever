@@ -31,32 +31,38 @@ void Index::buildDocsDB(const string& docsFileName) {
   LOG(INFO) << "Building DocsDB...\n";
   ad_utility::File docsFile(docsFileName.c_str(), "r");
   std::ofstream ofs(_onDiskBase + ".text.docsDB", std::ios_base::out);
-  // To avoid excessive use of RAM, we write the offsets to some temporary
-  // file first.
-  ad_utility::File tmp(string(_onDiskBase + ".text.doc-off.tmp").c_str(), "w");
+  // To avoid excessive use of RAM,
+  // we write the offsets to and stxxl:vector first;
+  typedef stxxl::VECTOR_GENERATOR<off_t>::result OffVec;
+  OffVec offsets;
   off_t currentOffset = 0;
   Id currentContextId = 0;
   char* buf = new char[BUFFER_SIZE_DOCSFILE_LINE];
   string line;
   while (docsFile.readLine(&line, buf, BUFFER_SIZE_DOCSFILE_LINE)) {
-    ofs << line;
     size_t tab = line.find('\t');
     Id contextId = static_cast<Id>(atol(line.substr(0, tab).c_str()));
+    line = line.substr(tab + 1);
+    ofs << line;
     while (currentContextId  < contextId) {
-      tmp.write(&currentOffset, sizeof(currentOffset));
+      offsets.push_back(currentOffset);
       currentContextId++;
     }
-    tmp.write(&currentOffset, sizeof(currentOffset));
-    // One extra byte for the newline:
-    currentOffset += line.size() + 1;
+    offsets.push_back(currentOffset);
+    currentContextId++;
+    currentOffset += line.size();
   }
-  tmp.write(&currentOffset, sizeof(currentOffset));
-  tmp.close();
+  offsets.push_back(currentOffset);
+
   delete[] buf;
+  ofs.close();
   // Now append the tmp file to the docsDB file.
-  std::ifstream ifs(_onDiskBase + ".text.doc-off.tmp", std::ios_base::binary);
-  ofs << ifs.rdbuf();
-  remove(string(_onDiskBase + ".text.doc-off.tmp").c_str());
+  ad_utility::File out(string(_onDiskBase + ".text.docsDB").c_str(), "a");
+  for (size_t i = 0; i < offsets.size(); ++i) {
+    off_t cur = offsets[i];
+    out.write(&cur, sizeof(cur));
+  }
+  out.close();
   LOG(INFO) << "DocsDB done.\n";
 }
 

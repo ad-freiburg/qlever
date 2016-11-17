@@ -23,7 +23,10 @@ string DocsDB::getTextExcerpt(Id cid) const {
   off_t at = _startOfOffsets + cid * sizeof(off_t);
   at += _dbFile.read(&from, sizeof(off_t), at);
   off_t to;
-  _dbFile.read(&to, sizeof(off_t), at);
+  at += _dbFile.read(&to, sizeof(off_t), at);
+  while(to == from) {
+    at += _dbFile.read(&to, sizeof(off_t), at);
+  }
   assert(to > from);
   size_t nofBytes = static_cast<size_t>(to - from);
   char* buf = new char[nofBytes + 1];
@@ -31,6 +34,5 @@ string DocsDB::getTextExcerpt(Id cid) const {
   buf[nofBytes] = 0;
   string line = buf;
   delete[] buf;
-  // Skip the Id
-  return line.substr(line.find('\t'));
+  return line;
 }
