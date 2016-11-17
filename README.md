@@ -217,10 +217,10 @@ This query doesn't search for an occurrence of the word moon but played where th
 
 Text / Knowledge-base data can be nested in queries. This allows queries like one for politicians that were friends with a scientist associated with the manhattan project:
 
-    SELECT ?p TEXT(?c) ?s TEXT(?c2) WHERE
+    SELECT ?p TEXT(?c) ?s TEXT(?c2) WHERE {
         ?p <is-a> <Politician> .
         ?p <in-context> ?c .
-        ?c <in-context> friend*
+        ?c <in-context> friend* .
         ?c <in-context> ?s .
         ?s <is-a> <Scientist> .
         ?s <in-context> ?c2 .
