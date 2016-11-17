@@ -119,9 +119,11 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  if (tsvFile.size() == 0 && ntFile.size() == 0 && wordsfile.size() == 0) {
+  if (tsvFile.size() == 0 && ntFile.size() == 0 && wordsfile.size() == 0
+      && docsfile.size() == 0) {
     cout << "Missing required argument --tsv-file (-t) or "
-        "--ntriples-file (-n) or --words-by-contexts (-w) ..." << endl;
+        "--ntriples-file (-n) or --words-by-contexts (-w) "
+        "or --docs-by-contexts (-d) ..." << endl;
     exit(1);
   }
 
