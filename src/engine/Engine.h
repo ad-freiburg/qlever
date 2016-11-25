@@ -442,9 +442,9 @@ class Engine {
           // Always fix l1 and go through l2.
           size_t keepJ = j;
           while (l1[i][I] == l2[j][J]) {
-            result->emplace_back(joinTuples(l1[i], l2[j],
-                                            GenSeq<N>(), GenSeqLo<M,
-                    (J < M ? J : M - 1)>()));
+            result->emplace_back(
+                joinTuples(l1[i], l2[j],
+                           GenSeq<N>(), GenSeqLo<M, (J < M ? J : M - 1)>()));
             ++j;
           }
           ++i;
