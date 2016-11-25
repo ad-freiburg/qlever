@@ -113,6 +113,8 @@ public:
 
   void setTextLimit(size_t limit) {
     _rootOperation->setTextLimit(limit);
+    // Invalidate caches asString representation.
+    _asString = "";  // triggers recomputation.
   }
 
   size_t getCostEstimate() const;

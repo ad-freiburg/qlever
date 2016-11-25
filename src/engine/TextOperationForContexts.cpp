@@ -38,7 +38,6 @@ string TextOperationForContexts::asString() const {
     os << "\nand " << _subtrees[i].first->asString() << " [" <<
     _subtrees[i].second << "]";
   }
-  os << " with textLimit = " << _textLimit;
   return os.str();
 }
 
