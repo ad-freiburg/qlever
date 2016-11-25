@@ -1415,7 +1415,7 @@ size_t Index::getSizeEstimate(const string& words) const {
       minElLength = tbmd._entityCl._nofElements;
     }
   }
-  return minElLength;
+  return 1 + minElLength / 100;
 }
 
 // _____________________________________________________________________________

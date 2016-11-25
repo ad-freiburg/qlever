@@ -34,6 +34,7 @@ string TextOperationWithFilter::asString() const {
   _words << "\" and " << _nofVars << " variables with textLimit = " <<
   _textLimit << " filtered by " <<
   _filterResult->asString() << " on column " << _filterColumn;
+  os << " with textLimit = " << _textLimit;
   return os.str();
 }
 
