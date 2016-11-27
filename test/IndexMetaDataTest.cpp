@@ -39,6 +39,20 @@ TEST(FullRelationMetaDataTest, testFunctionAndBlockFlagging) {
   ASSERT_FALSE(rmd.hasBlocks());
   ASSERT_TRUE(rmd.isFunctional());
 
+  rmd.setCol1LogMultiplicity(1);
+  ASSERT_EQ(5u, rmd.getNofElements());
+  ASSERT_FALSE(rmd.hasBlocks());
+  ASSERT_TRUE(rmd.isFunctional());
+  ASSERT_EQ(1u, rmd.getCol1LogMultiplicity());
+
+  rmd.setCol2LogMultiplicity(200);
+  ASSERT_EQ(5u, rmd.getNofElements());
+  ASSERT_FALSE(rmd.hasBlocks());
+  ASSERT_TRUE(rmd.isFunctional());
+  ASSERT_EQ(1u, rmd.getCol1LogMultiplicity());
+  ASSERT_EQ(200u, rmd.getCol2LogMultiplicity());
+
+
   FullRelationMetaData rmd2(0, 0, 5, true, true);
   rmd2.setIsFunctional(true);
   ASSERT_EQ(5u, rmd2.getNofElements());

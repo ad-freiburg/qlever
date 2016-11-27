@@ -142,7 +142,7 @@ size_t IndexMetaData::getTotalBytesForRelation(
 
 // _____________________________________________________________________________
 FullRelationMetaData::FullRelationMetaData() :
-    _relId(0), _startFullIndex(0), _typeAndNofElements(0) {
+    _relId(0), _startFullIndex(0), _typeMultAndNofElements(0) {
 }
 
 // _____________________________________________________________________________
@@ -150,7 +150,7 @@ FullRelationMetaData::FullRelationMetaData(Id relId, off_t startFullIndex,
                                            size_t nofElements,
                                            bool isFunctional, bool hasBlocks) :
     _relId(relId), _startFullIndex(startFullIndex),
-    _typeAndNofElements(nofElements) {
+    _typeMultAndNofElements(nofElements) {
   setIsFunctional(isFunctional);
   setHasBlocks(hasBlocks);
 }
@@ -162,36 +162,56 @@ size_t FullRelationMetaData::getNofBytesForFulltextIndex() const {
 
 // _____________________________________________________________________________
 bool FullRelationMetaData::isFunctional() const {
-  return (_typeAndNofElements & IS_FUNCTIONAL_MASK) != 0;
+  return (_typeMultAndNofElements & IS_FUNCTIONAL_MASK) != 0;
 }
 
 // _____________________________________________________________________________
 bool FullRelationMetaData::hasBlocks() const {
-  return (_typeAndNofElements & HAS_BLOCKS_MASK) != 0;
+  return (_typeMultAndNofElements & HAS_BLOCKS_MASK) != 0;
 }
 
 // _____________________________________________________________________________
 size_t FullRelationMetaData::getNofElements() const {
-  return size_t(_typeAndNofElements & NOF_ELEMENTS_MASK);
+  return size_t(_typeMultAndNofElements & NOF_ELEMENTS_MASK);
 }
 
 
 // _____________________________________________________________________________
 void FullRelationMetaData::setIsFunctional(bool isFunctional) {
   if (isFunctional) {
-    _typeAndNofElements |= IS_FUNCTIONAL_MASK;
+    _typeMultAndNofElements |= IS_FUNCTIONAL_MASK;
   } else {
-    _typeAndNofElements &= ~IS_FUNCTIONAL_MASK;
+    _typeMultAndNofElements &= ~IS_FUNCTIONAL_MASK;
   }
 }
 
 // _____________________________________________________________________________
 void FullRelationMetaData::setHasBlocks(bool hasBlocks) {
   if (hasBlocks) {
-    _typeAndNofElements |= HAS_BLOCKS_MASK;
+    _typeMultAndNofElements |= HAS_BLOCKS_MASK;
   } else {
-    _typeAndNofElements &= ~HAS_BLOCKS_MASK;
+    _typeMultAndNofElements &= ~HAS_BLOCKS_MASK;
   }
+}
+
+// _____________________________________________________________________________
+void FullRelationMetaData::setCol1LogMultiplicity(uint8_t mult) {
+  _typeMultAndNofElements |= (uint64_t(mult) << 48);
+}
+
+// _____________________________________________________________________________
+void FullRelationMetaData::setCol2LogMultiplicity(uint8_t mult) {
+  _typeMultAndNofElements |= (uint64_t(mult) << 40);
+}
+
+// _____________________________________________________________________________
+uint8_t FullRelationMetaData::getCol1LogMultiplicity() const {
+  return uint8_t((_typeMultAndNofElements & 0x00FF000000000000) >> 48);
+}
+
+// _____________________________________________________________________________
+uint8_t FullRelationMetaData::getCol2LogMultiplicity() const {
+  return uint8_t((_typeMultAndNofElements & 0x0000FF0000000000) >> 40);
 }
 
 
@@ -257,7 +277,7 @@ FullRelationMetaData& FullRelationMetaData::createFromByteBuffer(
 
   _relId = *reinterpret_cast<Id*>(buffer);
   _startFullIndex = *reinterpret_cast<off_t*>(buffer + sizeof(_relId));
-  _typeAndNofElements = *reinterpret_cast<uint64_t*>(
+  _typeMultAndNofElements = *reinterpret_cast<uint64_t*>(
       buffer + sizeof(Id) + sizeof(off_t));
   return *this;
 }
@@ -282,7 +302,7 @@ BlockBasedRelationMetaData& BlockBasedRelationMetaData::createFromByteBuffer(
 size_t FullRelationMetaData::bytesRequired() const {
   return sizeof(_relId)
          + sizeof(_startFullIndex)
-         + sizeof(_typeAndNofElements);
+         + sizeof(_typeMultAndNofElements);
 }
 
 // _____________________________________________________________________________

@@ -22,7 +22,8 @@ using std::pair;
 
 static const uint64_t IS_FUNCTIONAL_MASK = 0x0100000000000000;
 static const uint64_t HAS_BLOCKS_MASK = 0x0200000000000000;
-static const uint64_t NOF_ELEMENTS_MASK = 0x00FFFFFFFFFFFFFF;
+static const uint64_t NOF_ELEMENTS_MASK = 0x000000FFFFFFFFFF;
+static const uint64_t MAX_NOF_ELEMENTS = NOF_ELEMENTS_MASK;
 
 class BlockMetaData {
 public:
@@ -55,6 +56,11 @@ public:
 
   void setHasBlocks(bool hasBlocks);
 
+  void setCol1LogMultiplicity(uint8_t mult);
+  void setCol2LogMultiplicity(uint8_t mult);
+  uint8_t getCol1LogMultiplicity() const;
+  uint8_t getCol2LogMultiplicity() const;
+
   size_t getNofElements() const;
 
 
@@ -75,15 +81,17 @@ public:
 
 private:
   // first byte: type
-  // other 7 bytes: the nof elements.
-  uint64_t _typeAndNofElements;
+  // second byte: log(col1Multiplicity)
+  // third byte: log(col2Multiplicity)
+  // other 5 bytes: the nof elements.
+  uint64_t _typeMultAndNofElements;
 };
 
 inline ad_utility::File& operator<<(ad_utility::File& f,
                                     const FullRelationMetaData& rmd) {
   f.write(&rmd._relId, sizeof(rmd._relId));
   f.write(&rmd._startFullIndex, sizeof(rmd._startFullIndex));
-  f.write(&rmd._typeAndNofElements, sizeof(rmd._typeAndNofElements));
+  f.write(&rmd._typeMultAndNofElements, sizeof(rmd._typeMultAndNofElements));
   return f;
 }
 
