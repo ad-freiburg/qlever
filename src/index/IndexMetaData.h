@@ -17,7 +17,7 @@ using std::array;
 using std::vector;
 using std::pair;
 
-// Check IndexLayout.txt for explanations (expected comments).
+// Check index_layout.md for explanations (expected comments).
 // Removed comments here so that not two places had to be kept up-to-date.
 
 static const uint64_t IS_FUNCTIONAL_MASK = 0x0100000000000000;

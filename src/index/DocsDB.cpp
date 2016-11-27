@@ -9,26 +9,30 @@
 // _____________________________________________________________________________
 void DocsDB::init(const string& fileName) {
   _dbFile.open(fileName.c_str(), "r");
-  AD_CHECK(_dbFile.isOpen());
-  off_t offsetsFrom;
-  off_t offsetsTo = _dbFile.getLastOffset(&offsetsFrom);
-  _offsets.resize(static_cast<size_t>(offsetsTo - offsetsFrom) /
-                  (sizeof(off_t) + sizeof(Id)));
-  _dbFile.read(_offsets.data(), static_cast<size_t>(offsetsTo - offsetsFrom),
-               offsetsFrom);
+  if (_dbFile.empty()) {
+    _size = 0;
+  } else {
+    off_t posLastOfft = _dbFile.getLastOffset(&_startOfOffsets);
+    _size = (posLastOfft - _startOfOffsets) / sizeof(off_t);
+  }
 }
 
 // _____________________________________________________________________________
 string DocsDB::getTextExcerpt(Id cid) const {
-  auto it = std::lower_bound(_offsets.begin(), _offsets.end(), cid,
-                             [](const pair<Id, off_t>& pair, Id key) {
-                               return pair.first < key;
-                             });
-  char *buf = new char[BUFFER_SIZE_DOCSFILE_LINE];
-  _dbFile.seek(it->second, 0);
-  string line;
-  _dbFile.readLine(&line, buf, BUFFER_SIZE_DOCSFILE_LINE);
+  off_t from = 0;
+  off_t at = _startOfOffsets + cid * sizeof(off_t);
+  at += _dbFile.read(&from, sizeof(off_t), at);
+  off_t to;
+  at += _dbFile.read(&to, sizeof(off_t), at);
+  while(to == from) {
+    at += _dbFile.read(&to, sizeof(off_t), at);
+  }
+  assert(to > from);
+  size_t nofBytes = static_cast<size_t>(to - from);
+  char* buf = new char[nofBytes + 1];
+  _dbFile.read(buf, nofBytes, from);
+  buf[nofBytes] = 0;
+  string line = buf;
   delete[] buf;
-  // Skip the Id
-  return line.substr(line.find('\t'));
+  return line;
 }

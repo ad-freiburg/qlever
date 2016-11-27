@@ -94,6 +94,10 @@ class File {
       return true;
     }
 
+    bool empty() {
+      return sizeOfFile() == 0;
+    }
+
     // read from current file pointer position
     // returns the number of bytes read
     size_t readFromBeginning(void* targetBuffer, size_t nofBytesToRead) {
@@ -147,6 +151,10 @@ class File {
       assert(_file);
       write(line.c_str(), line.size());
       write("\n", 1);
+    }
+
+    void flush() {
+      fflush(_file);
     }
 
     bool isAtEof() {
@@ -248,6 +256,7 @@ class File {
       // seek to end of file
       seek((off_t) 0, SEEK_END);
       off_t sizeOfFile = tell();
+      assert(sizeOfFile > 0);
 
       // now seek to end of file - sizeof(off_t)
 #ifdef NDEBUG
@@ -258,7 +267,6 @@ class File {
 #endif
       const off_t lastOffsetOffset = ftello(_file);
       assert(lastOffsetOffset == (off_t) (sizeOfFile - sizeof(off_t)));
-      assert(lastOffsetOffset > (off_t) 0);
 
       // now read the last off_t
 #ifdef NDEBUG
@@ -277,6 +285,7 @@ class File {
       struct stat buffer;
       return (stat (path.c_str(), &buffer) == 0);
     }
+
 };
 }
 

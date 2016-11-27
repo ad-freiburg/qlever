@@ -27,6 +27,12 @@ void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
   LOG(INFO) << "Sorting for PSO permutation..." << std::endl;
   stxxl::sort(begin(v), end(v), SortByPSO(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
+  LOG(INFO) << "Performing unique to ensure RDF semantics..." << std::endl;
+  LOG(INFO) << "Size before: " << v.size() << std::endl;
+  auto last = std::unique(begin(v), end(v));
+  v.resize(size_t(last - v.begin()));
+  LOG(INFO) << "Done: unique." << std::endl;
+  LOG(INFO) << "Size after: " << v.size() << std::endl;
   createPermutation(indexFilename + ".pso", v, _psoMeta, 1, 0, 2);
   // POS permutation
   LOG(INFO) << "Sorting for POS permutation..." << std::endl;;
@@ -74,6 +80,12 @@ void Index::createFromNTriplesFile(const string& ntFile,
   LOG(INFO) << "Sorting for PSO permutation..." << std::endl;
   stxxl::sort(begin(v), end(v), SortByPSO(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
+  LOG(INFO) << "Performing unique to ensure RDF semantics..." << std::endl;
+  LOG(INFO) << "Size before: " << v.size() << std::endl;
+  auto last = std::unique(begin(v), end(v));
+  v.resize(size_t(last - v.begin()));
+  LOG(INFO) << "Done: unique." << std::endl;
+  LOG(INFO) << "Size after: " << v.size() << std::endl;
   createPermutation(indexFilename + ".pso", v, _psoMeta, 1, 0, 2);
   LOG(INFO) << "Sorting for POS permutation..." << std::endl;;
   stxxl::sort(begin(v), end(v), SortByPOS(), STXXL_MEMORY_TO_USE);

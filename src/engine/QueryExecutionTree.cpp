@@ -29,18 +29,22 @@ QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* qec) :
 }
 
 // _____________________________________________________________________________
-string QueryExecutionTree::asString() const {
-  if (_rootOperation) {
-    std::ostringstream os;
-    os << "{" << _rootOperation->asString() << " | width: " << getResultWidth()
-       << "}";
-    if (_qec) {
-      os << " [estimated size: " << getSizeEstimate() << "]";
+string QueryExecutionTree::asString() {
+  if (_asString.size() == 0) {
+    if (_rootOperation) {
+      std::ostringstream os;
+      os << "{" << _rootOperation->asString() << " | width: "
+         << getResultWidth()
+         << "}";
+      if (_qec) {
+        os << " [estimated size: " << getSizeEstimate() << "]";
+      }
+      _asString = os.str();
+    } else {
+      _asString = "<Empty QueryExecutionTree>";
     }
-    return os.str();
-  } else {
-    return "<Empty QueryExecutionTree>";
   }
+  return _asString;
 }
 
 // _____________________________________________________________________________
@@ -48,6 +52,7 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
                                       std::shared_ptr<Operation> op) {
   _type = type;
   _rootOperation = op;
+  _asString = "";
 }
 
 // _____________________________________________________________________________

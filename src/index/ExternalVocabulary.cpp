@@ -56,6 +56,10 @@ void ExternalVocabulary::buildFromVector(const vector<string>& v,
 // _____________________________________________________________________________
 void ExternalVocabulary::initFromFile(const string& file) {
   _file.open(file.c_str(), "r");
-  off_t posLastOfft = _file.getLastOffset(&_startOfOffsets);
-  _size = (posLastOfft - _startOfOffsets) / sizeof(off_t);
+  if (_file.empty()) {
+    _size = 0;
+  } else {
+    off_t posLastOfft = _file.getLastOffset(&_startOfOffsets);
+    _size = (posLastOfft - _startOfOffsets) / sizeof(off_t);
+  }
 }

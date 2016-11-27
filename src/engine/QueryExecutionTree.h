@@ -45,7 +45,7 @@ public:
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
 
-  string asString() const;
+  string asString();
 
   QueryExecutionContext* getQec() const {
     return _qec;
@@ -113,6 +113,8 @@ public:
 
   void setTextLimit(size_t limit) {
     _rootOperation->setTextLimit(limit);
+    // Invalidate caches asString representation.
+    _asString = "";  // triggers recomputation.
   }
 
   size_t getCostEstimate() const;
@@ -140,6 +142,7 @@ private:
   std::shared_ptr<Operation> _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
   std::unordered_set<string> _contextVars;
+  string _asString;
 
   template<typename Row>
   void writeJsonTable(const vector<Row>& data, size_t from,

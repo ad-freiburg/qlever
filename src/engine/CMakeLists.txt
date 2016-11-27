@@ -5,6 +5,7 @@ add_library(engine
         Operation.h
         ../global/Id.h
         ../global/Constants.h
+        ../util/Socket.h
         Comparators.h
         ResultTable.h ResultTable.cpp
         QueryExecutionContext.h
@@ -21,6 +22,7 @@ add_library(engine
         QueryPlanner.cpp QueryPlanner.h
         ScanningJoin.cpp ScanningJoin.h
         QueryPlanningCostFactors.cpp QueryPlanningCostFactors.h
-        TwoColumnJoin.cpp TwoColumnJoin.h)
+        TwoColumnJoin.cpp TwoColumnJoin.h
+)
 
 target_link_libraries(engine index)

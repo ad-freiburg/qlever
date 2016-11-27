@@ -4,8 +4,9 @@ QLever
 This Readme sets you up to use the engine and to quickly build and query your own index.
 If you're interested in advanced topics, please check the following files (note that they aren't of perfect quality)
 
-* [List of Features](features.md)
-* [The Index (currently incomplete)](src/index/IndexLayout.txt)
+* [List of Features (Not done yet!)](doc/features.md)
+* [Query Planning](doc/query_planning.md)
+* [The Index (currently incomplete)](doc/index_layout.md)
 
 How to use
 ==========
@@ -52,7 +53,7 @@ Don't do this directly in QLever
 
     cd /path/to/YOUR_FOLDER
 
-c) Build the project
+c) Build the project (Optional: add -DPERFTOOLS_PROFILER=True/False and -DALLOW_SHUTDOWN=True/False)
 
     cmake /path/to/QLever/ -DCMAKE_BUILD_TYPE=Release; make -j
 
@@ -90,9 +91,19 @@ The full call will look like this:
     
 If you want support for SPARQL queries with predicate variables  (perfectly normal for SPARQL but rarely used in semantic text queries), use an optional argument -a to build all permutations:
 
-    ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -a -w /path/to/wordsfile -d /path/to/docsfile
+    ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -a -w 
 
-If you want some literals to be written to an on disk vocabulary (by default this concerns literals longer than 100 chars and literals in less frequent lagnuages), add an topional parameter -l. This is useful for large knowledge bases that included texts (descriptions etc) as literals and thus consume lots of memory on startup without this option.
+If you want some literals to be written to an on disk vocabulary (by default this concerns literals longer than 50 chars and literals in less frequent lagnuages), add an topional parameter -l. This is useful for large knowledge bases that included texts (descriptions etc) as literals and thus consume lots of memory on startup without this option.
+
+    ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -l
+    
+You can also add a text index to an existing knowledge base index by ommitting -n and -t parameters (for KB input)
+
+    ./IndexBuilderMain -i /path/to/myindex -w /path/to/wordsfile -d /path/to/docsfile
+    
+All options can, of course, be combined. The full call with all permutations and literals on disk will look like this:
+                                         
+    ./IndexBuilderMain -a -l -i /path/to/myindex -n /path/to/input.nt -w /path/to/wordsfile -d /path/to/docsfile
 
 3. Starting a Sever:
 --------------------
@@ -206,10 +217,10 @@ This query doesn't search for an occurrence of the word moon but played where th
 
 Text / Knowledge-base data can be nested in queries. This allows queries like one for politicians that were friends with a scientist associated with the manhattan project:
 
-    SELECT ?p TEXT(?c) ?s TEXT(?c2) WHERE
+    SELECT ?p TEXT(?c) ?s TEXT(?c2) WHERE {
         ?p <is-a> <Politician> .
         ?p <in-context> ?c .
-        ?c <in-context> friend*
+        ?c <in-context> friend* .
         ?c <in-context> ?s .
         ?s <is-a> <Scientist> .
         ?s <in-context> ?c2 .
@@ -238,7 +249,7 @@ A query for books with descriptions that contain the word drug.
         ?c <in-context> drug
     }
     
-Note the use the the relation `has-context` that links the context to a text source (in this case the description) that may be an entity itself.
+Note the use of the relation `has-context` that links the context to a text source (in this case the description) that may be an entity itself.
 
 
 For now, each context is required to have a triple `<in-context> ENTITY/WORD`. 

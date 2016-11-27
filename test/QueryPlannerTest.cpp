@@ -794,10 +794,11 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
      QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ("{TWO_COLUMN_JOIN(\n"
                   "{OrderBy {JOIN(\n"
-                  "{SCAN PSO with P = \"<Film_performance>\" | width: 2} [0]"
+                  "{SCAN POS with P = \"<Spouse_(or_domestic_partner)>\" "
+                  "| width: 2} [0]"
                   "\n|X|\n"
-                  "{SCAN PSO with P = \"<Spouse_(or_domestic_partner)>\" "
-                  "| width: 2} [0]\n) | width: 3} on asc(2) asc(1)  | width: 3} [2 & 1]"
+                  "{SCAN PSO with P = \"<Film_performance>\" | width: 2} [0]\n)"
+                  " | width: 3} on asc(1) asc(2)  | width: 3} [1 & 2]"
                   "\n|X|\n{SCAN PSO with P = \"<Film_performance>\" "
                   "| width: 2} [0 & 1]\n) | width: 3}", qet.asString());
   } catch (const ad_semsearch::Exception& e) {

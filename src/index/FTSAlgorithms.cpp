@@ -4,6 +4,7 @@
 
 #include <utility>
 #include <map>
+#include <cmath>
 #include <set>
 #include "./FTSAlgorithms.h"
 #include "../util/HashMap.h"
