@@ -214,12 +214,31 @@ void IndexScan::determineMultiplicities() {
   _multiplicity.clear();
   if (_executionContext) {
     if (getResultWidth() == 1) {
-      _multiplicity.emplace_back(getSizeEstimate());
+      _multiplicity.emplace_back(1);
     } else {
-      array<float, 2> mults = getIndex().getMultiplicities(_subject, _predicate,
-                                                           _object);
-      _multiplicity.push_back(mults[0]);
-      _multiplicity.push_back(mults[1]);
+      switch (_type) {
+        case PSO_FREE_S:
+          _multiplicity = getIndex().getPSOMultiplicities(_predicate);
+          break;
+        case POS_FREE_O:
+          _multiplicity = getIndex().getPOSMultiplicities(_predicate);
+          break;
+        case SPO_FREE_P:
+          _multiplicity = getIndex().getSPOMultiplicities(_subject);
+          break;
+        case SOP_FREE_O:
+          _multiplicity = getIndex().getSOPMultiplicities(_subject);
+          break;
+        case OSP_FREE_S:
+          _multiplicity = getIndex().getOSPMultiplicities(_object);
+          break;
+        case OPS_FREE_P:
+          _multiplicity = getIndex().getOPSMultiplicities(_object);
+          break;
+        default:
+          AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,
+                   "Switch reached default block unexpectedly!");
+      }
     }
   } else {
     _multiplicity.emplace_back(1);

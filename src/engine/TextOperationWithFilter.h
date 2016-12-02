@@ -77,6 +77,8 @@ public:
             _executionContext->getIndex().getSizeEstimate(_words) == 0);
   }
 
+  virtual float getMultiplicity(size_t col);
+
 private:
   string _words;
   size_t _nofVars;
@@ -84,6 +86,10 @@ private:
 
   std::shared_ptr<QueryExecutionTree> _filterResult;
   size_t _filterColumn;
+
+  vector<float> _multiplicities;
+
+  void computeMultiplicities();
 
   virtual void computeResult(ResultTable* result) const;
 };

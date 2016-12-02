@@ -126,6 +126,13 @@ public:
   void scanOSP(const string& object, WidthTwoList* result) const;
 
 
+  vector<float> getPSOMultiplicities(const string& key) const;
+  vector<float> getPOSMultiplicities(const string& key) const;
+  vector<float> getSPOMultiplicities(const string& key) const;
+  vector<float> getSOPMultiplicities(const string& key) const;
+  vector<float> getOSPMultiplicities(const string& key) const;
+  vector<float> getOPSMultiplicities(const string& key) const;
+
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
   // --------------------------------------------------------------------------
@@ -173,12 +180,6 @@ public:
                                      size_t limit,
                                      vector<array<Id, 3 + I>>& res) const;
 
-  // With an extra free variable.
-  void getECListForWordsAndSingleSub(const string& words,
-                                     const vector<array<Id, 1>>& subres,
-                                     size_t limit,
-                                     vector<array<Id, 5>>& res) const;
-
   void getECListForWordsAndTwoW1Subs(const string& words,
                                      const vector<array<Id, 1>> subres1,
                                      const vector<array<Id, 1>> subres2,
@@ -191,12 +192,6 @@ public:
       size_t limit,
       vector<vector<Id>>& res) const;
 
-  void getECListForWordsAndSubtrees(
-      const string& words,
-      const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
-      size_t limit,
-      size_t nofFreeVariables,
-      vector<vector<Id>>& res) const;
 
   void getWordPostingsForTerm(const string& term, vector<Id>& cids,
                               vector<Score>& scores) const;
@@ -211,6 +206,10 @@ public:
 
   // Only for debug reasons and external encoding tests.
   void dumpAsciiLists() const;
+
+  float getAverageNofEntityContexts() const {
+    return _textMeta.getAverageNofEntityContexts();
+  };
 
 private:
   string _onDiskBase;
@@ -312,6 +311,8 @@ private:
   Id getWordBlockId(Id wordId) const;
 
   Id getEntityBlockId(Id entityId) const;
+
+  bool isEntityBlockId(Id blockId) const;
 
   //! Writes a list of elements (have to be able to be cast to unit64_t)
   //! to file.

@@ -87,6 +87,8 @@ ad_utility::File& operator<<(ad_utility::File& f,
   for (const auto& b : md._blocks) {
     f << b;
   }
+  f.write(&md._nofEntities, sizeof(md._nofEntities));
+  f.write(&md._nofEntityContexts, sizeof(md._nofEntityContexts));
   return f;
 }
 
@@ -112,6 +114,9 @@ TextMetaData& TextMetaData::createFromByteBuffer(unsigned char* buffer) {
     }
     _blocks.emplace_back(tbmd);
   }
+  _nofEntities = *reinterpret_cast<size_t*>(buffer + offset);
+  offset += sizeof(_nofEntities);
+  _nofEntityContexts = *reinterpret_cast<size_t*>(buffer + offset);
   return *this;
 }
 
@@ -209,6 +214,11 @@ string TextMetaData::statistics() const {
   os << "    Elements in classic lists: " << totalElementsClassicLists << '\n';
   os << "    Elements in entity lists:  " << totalElementsEntityLists << '\n';
   os << "-------------------------------------------------------------------\n";
+  os << "# Entities with text: " << _nofEntities << '\n';
+  os << "# Contexts for those entities: " << _nofEntityContexts << '\n';
+  os << "    Average contexts / entity: " << getAverageNofEntityContexts()
+     << '\n';
+  os << "-------------------------------------------------------------------\n";
   os << "# Bytes: " <<
      totalBytesClassicLists + totalBytesEntityLists << '\n';
   os << "  thereof:\n";
@@ -239,4 +249,3 @@ void TextMetaData::addBlock(const TextBlockMetaData& md) {
 off_t TextMetaData::getOffsetAfter() {
   return _blocks.back()._entityCl._lastByte + 1;
 }
-

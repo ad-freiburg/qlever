@@ -39,7 +39,7 @@ TwoColumnJoin::TwoColumnJoin(QueryExecutionContext* qec,
       std::swap(_jc1Right, _jc2Right);
     }
   } else if (_right->getType() == QueryExecutionTree::SCAN &&
-      _right->getResultWidth() == 2) {
+             _right->getResultWidth() == 2) {
     if (_jc1Right > _jc2Right) {
       std::swap(_jc1Left, _jc2Left);
       std::swap(_jc1Right, _jc2Right);
@@ -51,9 +51,9 @@ TwoColumnJoin::TwoColumnJoin(QueryExecutionContext* qec,
 string TwoColumnJoin::asString() const {
   std::ostringstream os;
   os << "TWO_COLUMN_JOIN(\n" << _left->asString() << " [" << _jc1Left <<
-  " & " << _jc2Left <<
-  "]\n|X|\n" << _right->asString() << " [" << _jc1Right << " & " <<
-  _jc2Right << "]\n)";
+     " & " << _jc2Left <<
+     "]\n|X|\n" << _right->asString() << " [" << _jc1Right << " & " <<
+     _jc2Right << "]\n)";
   return os.str();
 }
 
@@ -152,4 +152,40 @@ size_t TwoColumnJoin::getResultWidth() const {
 // _____________________________________________________________________________
 size_t TwoColumnJoin::resultSortedOn() const {
   return _jc1Left;
+}
+
+// _____________________________________________________________________________
+float TwoColumnJoin::getMultiplicity(size_t col) {
+  if (_multiplicities.size() == 0) {
+    computeMultiplicities();
+  }
+  AD_CHECK_LT(col, _multiplicities.size());
+  return _multiplicities[col];
+}
+
+// _____________________________________________________________________________
+void TwoColumnJoin::computeMultiplicities() {
+  // As currently implemented, one filters the other.
+  // Thus, we just take the min multiplicity for each pair join columns.
+  // The others are left untouched.
+  // The filtering may lower the result size (and the number of distincts)
+  // but multiplicities shouldn't be affected.
+  for (size_t i = 0; i < _left->getResultWidth(); ++i) {
+    if (i == _jc1Left) {
+      _multiplicities.push_back(std::min(_left->getMultiplicity(i),
+                                         _right->getMultiplicity(_jc1Right)));
+    } else if (i == _jc2Left) {
+      _multiplicities.push_back(std::min(_left->getMultiplicity(i),
+                                         _right->getMultiplicity(_jc2Right)));
+    } else {
+      _multiplicities.push_back(_left->getMultiplicity(i));
+    }
+  }
+
+  for (size_t i = 0; i < _right->getResultWidth(); ++i) {
+    if (i != _jc1Right && i != _jc2Right) {
+      _multiplicities.push_back(_right->getMultiplicity(i));
+    }
+  }
+  assert(_multiplicities.size() == getResultWidth());
 }

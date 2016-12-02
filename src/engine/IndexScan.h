@@ -73,7 +73,7 @@ public:
     if (_multiplicity.size() == 0) {
       determineMultiplicities();
     }
-    AD_CHECK_LT(col, _multiplicity.size());
+    assert(col < _multiplicity.size());
     return _multiplicity[col];
   }
 

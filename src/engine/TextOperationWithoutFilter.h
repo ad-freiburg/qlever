@@ -37,7 +37,9 @@ public:
   virtual size_t getSizeEstimate() {
     if (_executionContext) {
       return static_cast<size_t>(
-          _executionContext->getIndex().getSizeEstimate(_words));
+          _executionContext->getIndex().getSizeEstimate(_words) * std::min(
+              float(_textLimit),
+              _executionContext->getIndex().getAverageNofEntityContexts()));
     }
     return size_t(10000 * 0.8);
   }
@@ -53,9 +55,10 @@ public:
   }
 
   virtual float getMultiplicity(size_t col) {
-    // TODO: return a better estimate!
     if (col == 2) {
-      return _textLimit;
+      return std::min(
+          float(_textLimit),
+          _executionContext->getIndex().getAverageNofEntityContexts());
     }
     return 1;
   }
@@ -68,10 +71,11 @@ public:
     return _nofVars;
   }
 
-    virtual bool knownEmptyResult() {
-      return _executionContext &&
-          _executionContext->getIndex().getSizeEstimate(_words) == 0;
-    }
+  virtual bool knownEmptyResult() {
+    return _executionContext &&
+           _executionContext->getIndex().getSizeEstimate(_words) == 0;
+  }
+
 private:
   string _words;
   size_t _nofVars;

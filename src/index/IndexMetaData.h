@@ -40,6 +40,7 @@ public:
   FullRelationMetaData();
 
   FullRelationMetaData(Id relId, off_t startFullIndex, size_t nofElements,
+                       double col1Mult, double col2Mult,
                        bool isFunctional, bool hasBlocks);
 
   size_t getNofBytesForFulltextIndex() const;
@@ -169,6 +170,14 @@ public:
     return _rmdPairs.getNofElements();
   }
 
+  uint8_t getCol1LogMultiplicity() const {
+    return _rmdPairs.getCol1LogMultiplicity();
+  }
+
+  uint8_t getCol2LogMultiplicity() const {
+    return _rmdPairs.getCol2LogMultiplicity();
+  }
+
   const FullRelationMetaData& _rmdPairs;
   const BlockBasedRelationMetaData* _rmdBlocks;
 };
@@ -196,8 +205,11 @@ public:
 
   string statistics() const;
 
+
 private:
   off_t _offsetAfter;
+  size_t _avgNofEntityContexts;
+
   ad_utility::HashMap<Id, FullRelationMetaData> _data;
   ad_utility::HashMap<Id, BlockBasedRelationMetaData> _blockData;
 

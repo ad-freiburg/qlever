@@ -39,6 +39,14 @@ string QueryExecutionTree::asString() {
       if (_qec) {
         os << " [estimated size: " << getSizeEstimate() << "]";
       }
+
+#ifndef NDEBUG
+      os << " [multiplicities: ";
+      for (size_t i = 0; i < getResultWidth(); ++i) {
+        os << getMultiplicity(i) << ' ';
+      }
+      os << "]\n";
+#endif
       _asString = os.str();
     } else {
       _asString = "<Empty QueryExecutionTree>";

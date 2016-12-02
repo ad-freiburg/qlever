@@ -11,11 +11,11 @@
 using std::list;
 
 
-
 class TwoColumnJoin : public Operation {
 public:
 
-  TwoColumnJoin(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
+  TwoColumnJoin(QueryExecutionContext* qec,
+                std::shared_ptr<QueryExecutionTree> t1,
                 std::shared_ptr<QueryExecutionTree> t2,
                 const std::vector<array<size_t, 2>>& joinCols);
 
@@ -38,18 +38,20 @@ public:
 
   virtual size_t getCostEstimate() {
     if ((_left->getResultWidth() == 2 && _jc1Left == 0 && _jc2Left == 1) ||
-       (_right->getResultWidth() == 2 && _jc1Right == 0 && _jc2Right == 1)) {
+        (_right->getResultWidth() == 2 && _jc1Right == 0 && _jc2Right == 1)) {
       return _left->getSizeEstimate() + _left->getCostEstimate() +
-              _right->getSizeEstimate() + _right->getCostEstimate();
+             _right->getSizeEstimate() + _right->getCostEstimate();
     }
     // PUNISH IF NO DIRECT JOIN IS AVAILABLE FOR FILTER
     return (_left->getSizeEstimate() + _left->getCostEstimate() +
-           _right->getSizeEstimate() + _right->getCostEstimate()) * 1000;
+            _right->getSizeEstimate() + _right->getCostEstimate()) * 1000;
   }
 
-    virtual bool knownEmptyResult() {
-      return _left->knownEmptyResult() || _right->knownEmptyResult();
-    }
+  virtual bool knownEmptyResult() {
+    return _left->knownEmptyResult() || _right->knownEmptyResult();
+  }
+
+  virtual float getMultiplicity(size_t col);
 
 private:
   std::shared_ptr<QueryExecutionTree> _left;
@@ -59,6 +61,10 @@ private:
   size_t _jc2Left;
   size_t _jc1Right;
   size_t _jc2Right;
+
+  vector<float> _multiplicities;
+
+  void computeMultiplicities();
 
   virtual void computeResult(ResultTable* result) const;
 };

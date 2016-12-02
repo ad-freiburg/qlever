@@ -297,7 +297,21 @@ Index::writeRel(ad_utility::File& out, off_t currentOffset,
                 bool functional) {
   LOG(TRACE) << "Writing a relation ...\n";
   AD_CHECK_GT(data.size(), 0);
-  FullRelationMetaData rmd(relId, currentOffset, data.size(), functional,
+  LOG(TRACE) << "Calculating multiplicities ...\n";
+  ad_utility::HashSet<Id> distinctC1;
+  ad_utility::HashSet<Id> distinctC2;
+  for (size_t i = 0; i < data.size(); ++i) {
+    if (!functional) {
+      distinctC1.insert(data[i][0]);
+    }
+    distinctC2.insert(data[i][1]);
+  }
+  double multC1 = functional ?  1.0 : data.size() / double(distinctC1.size());
+  double multC2 = data.size() / double(distinctC2.size());
+  LOG(TRACE) << "Done calculating multiplicities.\n";
+  FullRelationMetaData rmd(relId, currentOffset, data.size(),
+                           multC1, multC2,
+                           functional,
                            !functional &&
                            data.size() > USE_BLOCKS_INDEX_SIZE_TRESHOLD);
 
@@ -966,4 +980,106 @@ bool Index::isLiteral(const string& object) {
 // _____________________________________________________________________________
 bool Index::shouldBeExternalized(const string& object) {
   return Vocabulary::shouldBeExternalized(object);
+}
+
+// _____________________________________________________________________________
+vector<float> Index::getPSOMultiplicities(const string& key) const {
+  Id keyId;
+  vector<float> res;
+  if (_vocab.getId(key, &keyId)) {
+    auto rmd = _psoMeta.getRmd(keyId);
+    auto logM1 = rmd.getCol1LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM1)));
+    auto logM2 = rmd.getCol2LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM2)));
+  } else {
+    res.push_back(1);
+    res.push_back(1);
+  }
+  return res;
+}
+
+// _____________________________________________________________________________
+vector<float> Index::getPOSMultiplicities(const string& key) const {
+  Id keyId;
+  vector<float> res;
+  if (_vocab.getId(key, &keyId)) {
+    auto rmd = _posMeta.getRmd(keyId);
+    auto logM1 = rmd.getCol1LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM1)));
+    auto logM2 = rmd.getCol2LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM2)));
+  } else {
+    res.push_back(1);
+    res.push_back(1);
+  }
+  return res;
+}
+
+// _____________________________________________________________________________
+vector<float> Index::getSPOMultiplicities(const string& key) const {
+  Id keyId;
+  vector<float> res;
+  if (_vocab.getId(key, &keyId)) {
+    auto rmd = _spoMeta.getRmd(keyId);
+    auto logM1 = rmd.getCol1LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM1)));
+    auto logM2 = rmd.getCol2LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM2)));
+  } else {
+    res.push_back(1);
+    res.push_back(1);
+  }
+  return res;
+}
+
+// _____________________________________________________________________________
+vector<float> Index::getSOPMultiplicities(const string& key) const {
+  Id keyId;
+  vector<float> res;
+  if (_vocab.getId(key, &keyId)) {
+    auto rmd = _sopMeta.getRmd(keyId);
+    auto logM1 = rmd.getCol1LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM1)));
+    auto logM2 = rmd.getCol2LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM2)));
+  } else {
+    res.push_back(1);
+    res.push_back(1);
+  }
+  return res;
+}
+
+// _____________________________________________________________________________
+vector<float> Index::getOSPMultiplicities(const string& key) const {
+  Id keyId;
+  vector<float> res;
+  if (_vocab.getId(key, &keyId)) {
+    auto rmd = _ospMeta.getRmd(keyId);
+    auto logM1 = rmd.getCol1LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM1)));
+    auto logM2 = rmd.getCol2LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM2)));
+  } else {
+    res.push_back(1);
+    res.push_back(1);
+  }
+  return res;
+}
+
+// _____________________________________________________________________________
+vector<float> Index::getOPSMultiplicities(const string& key) const {
+  Id keyId;
+  vector<float> res;
+  if (_vocab.getId(key, &keyId)) {
+    auto rmd = _opsMeta.getRmd(keyId);
+    auto logM1 = rmd.getCol1LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM1)));
+    auto logM2 = rmd.getCol2LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM2)));
+  } else {
+    res.push_back(1);
+    res.push_back(1);
+  }
+  return res;
 }

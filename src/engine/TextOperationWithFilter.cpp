@@ -31,9 +31,9 @@ TextOperationWithFilter::TextOperationWithFilter(
 string TextOperationWithFilter::asString() const {
   std::ostringstream os;
   os << "TEXT OPERATION WITH FILTER:" << " co-occurrence with words: \"" <<
-  _words << "\" and " << _nofVars << " variables with textLimit = " <<
-  _textLimit << " filtered by " <<
-  _filterResult->asString() << " on column " << _filterColumn;
+     _words << "\" and " << _nofVars << " variables with textLimit = " <<
+     _textLimit << " filtered by " <<
+     _filterResult->asString() << " on column " << _filterColumn;
   return os.str();
 }
 
@@ -152,4 +152,38 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
   }
   result->_status = ResultTable::FINISHED;
   LOG(DEBUG) << "TextOperationWithFilter result computation done." << endl;
+}
+
+
+// _____________________________________________________________________________
+float TextOperationWithFilter::getMultiplicity(size_t col) {
+  if (_multiplicities.size() == 0) {
+    computeMultiplicities();
+  }
+  AD_CHECK_LT(col, _multiplicities.size());
+  return _multiplicities[col];
+}
+
+// _____________________________________________________________________________
+void TextOperationWithFilter::computeMultiplicities() {
+  if (_executionContext) {
+    // Like without filter
+    float leftJcM = std::min(
+        float(_textLimit),
+        _executionContext->getIndex().getAverageNofEntityContexts());
+    float rightJcM = _filterResult->getMultiplicity(_filterColumn);
+    _multiplicities.emplace_back(1);  // cid
+    _multiplicities.emplace_back(1);  // score
+    _multiplicities.emplace_back(leftJcM * rightJcM); // entity from text
+
+    for (size_t i = 0; i < _filterResult->getResultWidth(); ++i) {
+      if (i == _filterColumn) { continue; }
+      _multiplicities.emplace_back(_filterResult->getMultiplicity(i) * leftJcM);
+    }
+  } else {
+    for (size_t i = 0; i < getResultWidth(); ++i) {
+      _multiplicities.emplace_back(1);
+    }
+  }
+  assert(_multiplicities.size() == getResultWidth());
 }

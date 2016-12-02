@@ -219,9 +219,15 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
   Id currentMaxWordId = std::numeric_limits<Id>::min();
   vector<Posting> classicPostings;
   vector<Posting> entityPostings;
+  size_t nofEntities = 0;
+  size_t nofEntityContexts = 0;
   for (TextVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if (std::get<0>(*reader) != currentBlockId) {
       AD_CHECK(classicPostings.size() > 0);
+      if (isEntityBlockId(currentBlockId)) {
+        ++nofEntities;
+        nofEntityContexts += classicPostings.size();
+      }
       ContextListMetaData classic = writePostings(out, classicPostings, true);
       ContextListMetaData entity = writePostings(out, entityPostings, false);
       _textMeta.addBlock(TextBlockMetaData(
@@ -259,6 +265,10 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
   }
   // Write the last block
   AD_CHECK(classicPostings.size() > 0);
+  if (isEntityBlockId(currentBlockId)) {
+    ++nofEntities;
+    nofEntityContexts += classicPostings.size();
+  }
   ContextListMetaData classic = writePostings(out, classicPostings, true);
   ContextListMetaData entity = writePostings(out, entityPostings, false);
   _textMeta.addBlock(TextBlockMetaData(
@@ -267,6 +277,8 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
       classic,
       entity
   ));
+  _textMeta.setNofEntities(nofEntities);
+  _textMeta.setNofEntityContexts(nofEntityContexts);
   classicPostings.clear();
   entityPostings.clear();
   LOG(INFO) << "Done creating text index." << std::endl;
@@ -396,6 +408,11 @@ Id Index::getWordBlockId(Id wordId) const {
 // _____________________________________________________________________________
 Id Index::getEntityBlockId(Id entityId) const {
   return entityId + _blockBoundaries.size();
+}
+
+// _____________________________________________________________________________
+bool Index::isEntityBlockId(Id blockId) const {
+  return blockId >= _blockBoundaries.size();
 }
 
 // _____________________________________________________________________________
@@ -1443,16 +1460,3 @@ void Index::getRhsForSingleLhs(const Index::WidthTwoList& in, Id lhsId,
     << "Done. Matching right-hand-side EntityList now has "
     << result->size() << " elements." << "\n";
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
