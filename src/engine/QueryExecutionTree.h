@@ -115,11 +115,12 @@ public:
     _rootOperation->setTextLimit(limit);
     // Invalidate caches asString representation.
     _asString = "";  // triggers recomputation.
+    _sizeEstimate = std::numeric_limits<size_t>::max();
   }
 
-  size_t getCostEstimate() const;
+  size_t getCostEstimate();
 
-  size_t getSizeEstimate() const;
+  size_t getSizeEstimate();
 
   float getMultiplicity(size_t col) const {
     return _rootOperation->getMultiplicity(col);
@@ -132,9 +133,7 @@ public:
 
   bool varCovered(string var) const;
 
-  bool knownEmptyResult() const {
-    return _rootOperation->knownEmptyResult();
-  }
+  bool knownEmptyResult();
 
 private:
   QueryExecutionContext* _qec;   // No ownership
@@ -143,6 +142,7 @@ private:
   OperationType _type;
   std::unordered_set<string> _contextVars;
   string _asString;
+  size_t _sizeEstimate;
 
   template<typename Row>
   void writeJsonTable(const vector<Row>& data, size_t from,

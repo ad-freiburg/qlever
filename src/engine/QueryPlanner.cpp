@@ -318,7 +318,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               scan(new IndexScan(_qec, IndexScan::ScanType::POS_BOUND_O));
           static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
           static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
-          static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
           tree.setOperation(QueryExecutionTree::OperationType::SCAN,
                             scan);
           tree.setVariableColumn(node._triple._s, 0);
@@ -327,7 +326,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               scan(new IndexScan(_qec, IndexScan::ScanType::PSO_BOUND_S));
           static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
           static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
-          static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
           tree.setOperation(QueryExecutionTree::OperationType::SCAN,
                             scan);
           tree.setVariableColumn(node._triple._o, 0);
@@ -336,15 +334,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
               scan(new IndexScan(_qec, IndexScan::ScanType::SOP_BOUND_O));
           static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
           static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
-          static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
           tree.setOperation(QueryExecutionTree::OperationType::SCAN,
                             scan);
           tree.setVariableColumn(node._triple._p, 0);
         }
         seeds.push_back(plan);
-      }
-
-      if (node._variables.size() == 2) {
+      } else if (node._variables.size() == 2) {
         // Add plans for both possible scan directions.
         if (!isVariable(node._triple._p)) {
           {
@@ -375,8 +370,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             tree.setVariableColumn(node._triple._s, 1);
             seeds.push_back(plan);
           }
-        }
-        if (!isVariable(node._triple._s)) {
+        } else if (!isVariable(node._triple._s)) {
           {
             SubtreePlan plan(_qec);
             plan._idsOfIncludedNodes |= (1 << i);
@@ -405,8 +399,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             tree.setVariableColumn(node._triple._p, 1);
             seeds.push_back(plan);
           }
-        }
-        if (!isVariable(node._triple._o)) {
+        } else if (!isVariable(node._triple._o)) {
           {
             SubtreePlan plan(_qec);
             plan._idsOfIncludedNodes |= (1 << i);
@@ -436,8 +429,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             seeds.push_back(plan);
           }
         }
-      }
-      if (node._variables.size() >= 3) {
+      } else {
         AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
                  "Triples should have at most two variables. Not the case in: "
                  + node._triple.asString());

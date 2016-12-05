@@ -35,13 +35,21 @@ public:
   virtual void setTextLimit(size_t limit) {
     _textLimit = limit;
     _filterResult->setTextLimit(limit);
+    _multiplicities.clear();
   }
 
   virtual size_t getSizeEstimate() {
     if (_executionContext) {
-      return static_cast<size_t>(
-          _executionContext->getIndex().getSizeEstimate(_words) *
-          _executionContext->getCostFactor("FILTER_SELECTIVITY"));
+      // NEW at 05 Dec 2016:
+      // Estimate the size of the result like the equivalent text without filter
+      // plus join.
+      auto textEst = _executionContext->getIndex().getSizeEstimate(_words);
+      size_t entityColInResult = 2;  // for readability
+      size_t nofDistinctFilter = static_cast<size_t>(
+          _filterResult->getSizeEstimate() /
+          _filterResult->getMultiplicity(_filterColumn));
+      return static_cast<size_t>(getMultiplicity(entityColInResult) *
+                                 std::min(nofDistinctFilter, textEst));
     }
     return size_t(10000 * 0.8);
   }
@@ -73,7 +81,7 @@ public:
 
   virtual bool knownEmptyResult() {
     return _filterResult->knownEmptyResult() ||
-        (_executionContext &&
+           (_executionContext &&
             _executionContext->getIndex().getSizeEstimate(_words) == 0);
   }
 

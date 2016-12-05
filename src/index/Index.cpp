@@ -306,7 +306,7 @@ Index::writeRel(ad_utility::File& out, off_t currentOffset,
     }
     distinctC2.insert(data[i][1]);
   }
-  double multC1 = functional ?  1.0 : data.size() / double(distinctC1.size());
+  double multC1 = functional ? 1.0 : data.size() / double(distinctC1.size());
   double multC2 = data.size() / double(distinctC2.size());
   LOG(TRACE) << "Done calculating multiplicities.\n";
   FullRelationMetaData rmd(relId, currentOffset, data.size(),
@@ -899,68 +899,11 @@ size_t Index::sizeEstimate(const string& sub, const string& pred,
   if (sub.size() == 0 && pred.size() == 0 && obj.size() > 0) {
     return objectCardinality(obj);
   }
-  if (sub.size() > 0 && pred.size() > 0 && obj.size() == 0) {
-    Id sId;
-    Id pId;
-    if (_vocab.getId(sub, &sId) && _vocab.getId(pred, &pId)) {
-      if (this->_spoMeta.relationExists(sId)) {
-        const auto& rmd = this->_spoMeta.getRmd(sId);
-        if (rmd.isFunctional()) {
-          return 1;
-        } else {
-          // TODO: better estimate. Blocks don't work out either
-          return std::max(
-              size_t(1),
-              std::min(subjectCardinality(sub), relationCardinality(pred)) /
-              500);
-          // return rmd.getBlockStartAndNofBytesForLhs(pId).second;
-        }
-      }
-    }
-  }
-  if (sub.size() > 0 && pred.size() == 0 && obj.size() > 0) {
-    Id sId;
-    Id oId;
-    if (_vocab.getId(sub, &sId) && _vocab.getId(obj, &oId)) {
-      if (this->_sopMeta.relationExists(sId)) {
-        const auto& rmd = this->_sopMeta.getRmd(sId);
-        if (rmd.isFunctional()) {
-          return 1;
-        } else {
-          // TODO: better estimate. Blocks don't work out either
-          return std::max(
-              size_t(1),
-              std::min(subjectCardinality(sub), objectCardinality(obj)) /
-              500);
-          // return rmd.getBlockStartAndNofBytesForLhs(oId).second;
-        }
-      }
-    }
-  }
-  if (sub.size() == 0 && pred.size() > 0 && obj.size() > 0) {
-    Id pId;
-    Id oId;
-    if (_vocab.getId(pred, &pId) && _vocab.getId(obj, &oId)) {
-      if (this->_posMeta.relationExists(pId)) {
-        const auto& rmd = this->_posMeta.getRmd(pId);
-        if (rmd.isFunctional()) {
-          return 1;
-        } else {
-          // TODO: better estimate. Blocks don't work out either
-          if (_opsFile.isOpen()) {
-            return std::max(
-                size_t(1),
-                std::min(relationCardinality(pred), objectCardinality(obj)) /
-                500);
-          } else {
-            return std::max(size_t(1), relationCardinality(pred) / 500);
-          }
-          // return rmd.getBlockStartAndNofBytesForLhs(oId).second;
-        }
-      }
-    }
-  }
-  return 0;
+  AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+           "Index::sizeEsimate called with more then one of S/P/O given. "
+               "This should never be the case anymore, "
+               " since for such SCANs we compute the result "
+               "directly and don't need an estimate anymore!");
 }
 
 // _____________________________________________________________________________

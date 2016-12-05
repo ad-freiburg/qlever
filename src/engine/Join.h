@@ -57,7 +57,7 @@ class Join : public Operation {
     return _left->knownEmptyResult() || _right->knownEmptyResult();
   }
 
-  size_t computeSizeEstimate() const;
+  size_t computeSizeEstimate();
 
   virtual float getMultiplicity(size_t col);
 

@@ -442,55 +442,23 @@ float Join::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t Join::computeSizeEstimate() const {
+size_t Join::computeSizeEstimate() {
   if (_left->getSizeEstimate() == 0
       || _right->getSizeEstimate() == 0) {
     return 0;
   }
-  // Check if there are easy sides, i.e. a scan with only one
-  // variable.
-  // As a very basic heuristic, we expect joins with those to be even more
-  // restrictive. Obvious counter examples are stuff like "?x <is-a> <Topic>",
-  // i.e. very large lists, but at least we certainly account for size
-  // already and such joins are still very nice
-  // (no sorting, certainly restrictive).
-  // Without any easy side, we assume the worst, i.e. that the join actually
-  // increases the result size over the sum of two subtree sizes.
-  size_t easySides = 0;
-  if (_left->getType() == QueryExecutionTree::SCAN) {
-    if (static_cast<const IndexScan*>(
-            _left->getRootOperation().get())->getResultWidth() == 1) {
-      ++easySides;
-    }
-  }
-  if (_right->getType() == QueryExecutionTree::SCAN) {
-    if (static_cast<const IndexScan*>(
-            _right->getRootOperation().get())->getResultWidth() == 1) {
-      ++easySides;
-    }
-  }
-  // return std::min(_left->getSizeEstimate(), _right->getSizeEstimate()) / 2;
-  // Self joins generally increase the size significantly.
-  if (isSelfJoin()) {
-    return std::max(
-        size_t(1),
-        (_left->getSizeEstimate() + _right->getSizeEstimate())
-        * 10);
-  }
-  if (easySides == 0) {
-    return (_left->getSizeEstimate() + _right->getSizeEstimate())
-           * 4;
-  } else if (easySides == 1) {
-    return std::max(
-        size_t(1),
-        (_left->getSizeEstimate() + _right->getSizeEstimate())
-        / 4);
-  } else {
-    return std::max(
-        size_t(1),
-        (_left->getSizeEstimate() + _right->getSizeEstimate())
-        / 10);
-  }
+  // NEW at 05 Dec 2016:
+  // Estimate the size of the join result by the new multiplicity for the join
+  // column (which is m = m1 * m2 where m1 and m2 are multiplicities of the
+  // join columns in the two child trees) times the the number of distinct
+  // elements estimated as  d = min(d1, d2).
+  auto joinColInResult = _leftJoinCol;  // for readability
+  size_t nofDistinctLeft = static_cast<size_t>(
+      _left->getSizeEstimate() / _left->getMultiplicity(_leftJoinCol));
+  size_t nofDistinctRight = static_cast<size_t>(
+      _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol));
+  return static_cast<size_t>(getMultiplicity(joinColInResult) *
+         std::min(nofDistinctLeft, nofDistinctRight));
 }
 
 // _____________________________________________________________________________

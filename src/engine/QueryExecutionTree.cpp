@@ -25,7 +25,9 @@ QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* qec) :
     _variableColumnMap(),
     _rootOperation(nullptr),
     _type(OperationType::UNDEFINED),
-    _contextVars() {
+    _contextVars(),
+    _asString(),
+    _sizeEstimate(std::numeric_limits<size_t>::max()) {
 }
 
 // _____________________________________________________________________________
@@ -61,6 +63,7 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
   _type = type;
   _rootOperation = op;
   _asString = "";
+  _sizeEstimate = std::numeric_limits<size_t>::max();
 }
 
 // _____________________________________________________________________________
@@ -198,13 +201,29 @@ void QueryExecutionTree::writeResultToStreamAsJson(
 }
 
 // _____________________________________________________________________________
-size_t QueryExecutionTree::getCostEstimate() const {
-  return _rootOperation->getCostEstimate();
+size_t QueryExecutionTree::getCostEstimate() {
+  if (_type == QueryExecutionTree::SCAN && getResultWidth() == 1) {
+    return getSizeEstimate();
+  } else {
+    return _rootOperation->getCostEstimate();
+  }
 }
 
 // _____________________________________________________________________________
-size_t QueryExecutionTree::getSizeEstimate() const {
-  return _rootOperation->getSizeEstimate();
+size_t QueryExecutionTree::getSizeEstimate() {
+  if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
+    if (_type == QueryExecutionTree::SCAN && getResultWidth() == 1) {
+      _sizeEstimate = getResult().size();
+    } else {
+      _sizeEstimate = _rootOperation->getSizeEstimate();
+    }
+  }
+  return _sizeEstimate;
+}
+
+// _____________________________________________________________________________
+bool QueryExecutionTree::knownEmptyResult() {
+  return getSizeEstimate() == 0;
 }
 
 // _____________________________________________________________________________
