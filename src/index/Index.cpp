@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include <cmath>
 #include <algorithm>
 #include <stxxl/algorithm>
 #include "../parser/TsvParser.h"

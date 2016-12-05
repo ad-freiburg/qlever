@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <stdio.h>
+#include <cmath>
 #include <algorithm>
 #include "./IndexMetaData.h"
 #include "../util/ReadableNumberFact.h"
