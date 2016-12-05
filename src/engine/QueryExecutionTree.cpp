@@ -38,16 +38,15 @@ string QueryExecutionTree::asString() {
       os << "{" << _rootOperation->asString() << " | width: "
          << getResultWidth()
          << "}";
+#ifndef NDEBUG
       if (_qec) {
         os << " [estimated size: " << getSizeEstimate() << "]";
+        os << " [multiplicities: ";
+        for (size_t i = 0; i < getResultWidth(); ++i) {
+          os << getMultiplicity(i) << ' ';
+        }
+        os << "]\n";
       }
-
-#ifndef NDEBUG
-      os << " [multiplicities: ";
-      for (size_t i = 0; i < getResultWidth(); ++i) {
-        os << getMultiplicity(i) << ' ';
-      }
-      os << "]\n";
 #endif
       _asString = os.str();
     } else {
@@ -212,10 +211,16 @@ size_t QueryExecutionTree::getCostEstimate() {
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getSizeEstimate() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
-    if (_type == QueryExecutionTree::SCAN && getResultWidth() == 1) {
-      _sizeEstimate = getResult().size();
+    if (_qec) {
+      if (_type == QueryExecutionTree::SCAN && getResultWidth() == 1) {
+        _sizeEstimate = getResult().size();
+      } else {
+        _sizeEstimate = _rootOperation->getSizeEstimate();
+      }
     } else {
-      _sizeEstimate = _rootOperation->getSizeEstimate();
+      // For test cases without index only:
+      // Make it deterministic by using the asString.
+      _sizeEstimate = 1000 + std::hash<string>{}(_rootOperation->asString()) % 1000;
     }
   }
   return _sizeEstimate;

@@ -755,13 +755,13 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
     ASSERT_EQ("{TEXT OPERATION WITH FILTER: co-occurrence with words: "
                   "\"manhattan project\" and 1 variables with textLimit = 1 "
                   "filtered by {JOIN(\n{SCAN POS with P = \"<is-a>\", "
-                  "O = \"<Politician>\" | width: 1} [0]\n"
+                  "O = \"<Scientist>\" | width: 1} [0]\n"
                   "|X|\n{SORT {TEXT OPERATION WITH FILTER: "
                   "co-occurrence with words: \"friend*\" and "
                   "2 variables with textLimit = 1 filtered by "
-                  "{SCAN POS with P = \"<is-a>\", O = \"<Scientist>\" "
+                  "{SCAN POS with P = \"<is-a>\", O = \"<Politician>\" "
                   "| width: 1} on column 0 | width: 4} on 2 | width: 4} [2]\n) "
-                  "| width: 4} on column 3 | width: 6}", qet.asString());
+                  "| width: 4} on column 0 | width: 6}", qet.asString());
 //    ASSERT_EQ("{JOIN(\n"
 //                  "{SCAN POS with P = \"<is-a>\", O = \"<Politician>\" | width: 1} [0]\n"
 //                  "|X|\n"

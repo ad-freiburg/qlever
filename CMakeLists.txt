@@ -33,6 +33,7 @@ if (${ALLOW_SHUTDOWN})
     message(STATUS "Adding -DALLOW_SHUTDOWN")
 endif()
 
+
 set(LOG_LEVEL_INFO 3)
 set(LOG_LEVEL_DEBUG 4)
 set(LOG_LEVEL_TRACE 5)
