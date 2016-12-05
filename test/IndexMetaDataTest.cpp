@@ -9,7 +9,7 @@
 
 
 TEST(FullRelationMetaDataTest, testFunctionAndBlockFlagging) {
-  FullRelationMetaData rmd(0, 0, 5, false, false);
+  FullRelationMetaData rmd(0, 0, 5, 1, 1, false, false);
   ASSERT_EQ(5u, rmd.getNofElements());
   ASSERT_FALSE(rmd.hasBlocks());
   ASSERT_FALSE(rmd.isFunctional());
@@ -53,7 +53,7 @@ TEST(FullRelationMetaDataTest, testFunctionAndBlockFlagging) {
   ASSERT_EQ(200u, rmd.getCol2LogMultiplicity());
 
 
-  FullRelationMetaData rmd2(0, 0, 5, true, true);
+  FullRelationMetaData rmd2(0, 0, 5, 1, 1, true, true);
   rmd2.setIsFunctional(true);
   ASSERT_EQ(5u, rmd2.getNofElements());
   ASSERT_TRUE(rmd2.hasBlocks());
@@ -105,7 +105,7 @@ TEST(RelationMetaDataTest, writeReadTest) {
     off_t afterRhs = afterLhs + 6 * sizeof(Id);
     bs.push_back(BlockMetaData(10, afterFI));
     bs.push_back(BlockMetaData(16, afterFI + 2 * (sizeof(Id) + sizeof(off_t))));
-    FullRelationMetaData rmdF(1, 0, 6, false, true);
+    FullRelationMetaData rmdF(1, 0, 6, 1, 1, false, true);
     BlockBasedRelationMetaData rmdB(afterLhs, afterRhs, bs);
 
     ad_utility::File f("_testtmp.rmd", "w");
@@ -151,7 +151,7 @@ TEST(IndexMetaDataTest, writeReadTest2) {
     off_t afterRhs = afterLhs + 6 * sizeof(Id);
     bs.push_back(BlockMetaData(10, afterFI));
     bs.push_back(BlockMetaData(16, afterFI + 2 * (sizeof(Id) + sizeof(off_t))));
-    FullRelationMetaData rmdF(1, 0, 6, false, true);
+    FullRelationMetaData rmdF(1, 0, 6, 1, 1, false, true);
     BlockBasedRelationMetaData rmdB(afterLhs, afterRhs, bs);
     FullRelationMetaData rmdF2(rmdF);
     rmdF2._relId = 2;
