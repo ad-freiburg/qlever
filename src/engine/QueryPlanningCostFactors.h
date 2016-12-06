@@ -17,7 +17,7 @@ class QueryPlanningCostFactors {
 public:
   QueryPlanningCostFactors();
   void readFromFile(const string& fileName);
-  float getCostFactor(const string& key) const;
+  double getCostFactor(const string& key) const;
 private:
-  ad_utility::HashMap<string, float> _factors;
+  ad_utility::HashMap<string, double> _factors;
 };

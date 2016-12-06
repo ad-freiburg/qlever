@@ -16,6 +16,7 @@ QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
   _factors["NO_FILTER_PUNISH"] = 1.0;
   _factors["FILTER_SELECTIVITY"] = 0.1;
   _factors["HASH_MAP_OPERATION_COST"] = 20.0;
+  _factors["JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR"] = 0.7;
 }
 
 // _____________________________________________________________________________
@@ -33,7 +34,7 @@ void QueryPlanningCostFactors::readFromFile(const string& fileName) {
 }
 
 // _____________________________________________________________________________
-float QueryPlanningCostFactors::getCostFactor(const string& key) const {
+double QueryPlanningCostFactors::getCostFactor(const string& key) const {
   return _factors.find(key)->second;
 }
 

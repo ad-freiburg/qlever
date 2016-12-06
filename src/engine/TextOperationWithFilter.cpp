@@ -187,3 +187,41 @@ void TextOperationWithFilter::computeMultiplicities() {
   }
   assert(_multiplicities.size() == getResultWidth());
 }
+
+// _____________________________________________________________________________
+size_t TextOperationWithFilter::getSizeEstimate() {
+  if (_executionContext) {
+    // NEW at 05 Dec 2016:
+    // Estimate the size of the result like the equivalent text without filter
+    // plus join.
+    auto textEst = _executionContext->getIndex().getSizeEstimate(_words);
+    size_t entityColInResult = 2;  // for readability
+    size_t nofDistinctFilter = static_cast<size_t>(
+        _filterResult->getSizeEstimate() /
+        _filterResult->getMultiplicity(_filterColumn));
+    return static_cast<size_t>(
+        _executionContext->getCostFactor(
+            "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") *
+        getMultiplicity(entityColInResult) *
+        std::min(nofDistinctFilter, textEst));
+  }
+  return size_t(10000 * 0.8);
+}
+
+// _____________________________________________________________________________
+size_t TextOperationWithFilter::getCostEstimate() {
+  if (_filterResult->knownEmptyResult()) {
+    return 0;
+  }
+  if (_executionContext) {
+    return static_cast<size_t>(
+        _executionContext->getCostFactor("FILTER_PUNISH") * (
+            getSizeEstimate() * _nofVars +
+            _filterResult->getSizeEstimate() *
+            _executionContext->getCostFactor("HASH_MAP_OPERATION_COST") +
+            _filterResult->getCostEstimate()));
+  } else {
+    return _filterResult->getSizeEstimate() * 2 +
+           _filterResult->getCostEstimate();
+  }
+}
