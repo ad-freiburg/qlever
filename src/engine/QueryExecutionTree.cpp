@@ -38,8 +38,7 @@ string QueryExecutionTree::asString() {
       os << "{" << _rootOperation->asString() << " | width: "
          << getResultWidth()
          << "}";
-#ifndef NDEBUG
-      if (_qec) {
+      if (LOGLEVEL >= DEBUG && _qec) {
         os << " [estimated size: " << getSizeEstimate() << "]";
         os << " [multiplicities: ";
         for (size_t i = 0; i < getResultWidth(); ++i) {
@@ -47,7 +46,6 @@ string QueryExecutionTree::asString() {
         }
         os << "]\n";
       }
-#endif
       _asString = os.str();
     } else {
       _asString = "<Empty QueryExecutionTree>";
@@ -220,7 +218,8 @@ size_t QueryExecutionTree::getSizeEstimate() {
     } else {
       // For test cases without index only:
       // Make it deterministic by using the asString.
-      _sizeEstimate = 1000 + std::hash<string>{}(_rootOperation->asString()) % 1000;
+      _sizeEstimate =
+          1000 + std::hash<string>{}(_rootOperation->asString()) % 1000;
     }
   }
   return _sizeEstimate;
