@@ -168,20 +168,33 @@ float TextOperationWithFilter::getMultiplicity(size_t col) {
 void TextOperationWithFilter::computeMultiplicities() {
   if (_executionContext) {
     // Like without filter
-    float leftJcM = std::min(
-        float(_textLimit),
-        _executionContext->getIndex().getAverageNofEntityContexts());
-    float rightJcM = _filterResult->getMultiplicity(_filterColumn);
-    _multiplicities.emplace_back(1);  // cid
-    _multiplicities.emplace_back(1);  // score
+    vector<float> multiplicitiesNoFilter;
+    for (size_t i = 0;
+         i < getResultWidth() + 1 - _filterResult->getResultWidth(); ++i) {
+      double nofEntitiesSingleVar;
+      if (_executionContext) {
+        nofEntitiesSingleVar =
+            _executionContext->getIndex().getSizeEstimate(_words) *
+            std::min(float(_textLimit),
+                     _executionContext->getIndex().getAverageNofEntityContexts());
+      } else {
+        nofEntitiesSingleVar = 10000 * 0.8;
+      }
+      multiplicitiesNoFilter.emplace_back(
+          pow(nofEntitiesSingleVar, _nofVars - 1));
+    }
 
-    // Now all entities / variables follow except.
-    // One of them will be inside the filter part, though. So one less.
-    for (size_t i = 0; i < _nofVars - 1; ++i) {
-      _multiplicities.push_back(leftJcM * rightJcM);
+    assert(multiplicitiesNoFilter.size() > 2);
+
+    // Like joins
+    float _leftJcM = multiplicitiesNoFilter[2];
+    float _rightJcM = _filterResult->getMultiplicity(_filterColumn);
+    for (size_t i = 0; i < multiplicitiesNoFilter.size() - 1; ++i) {
+      _multiplicities.emplace_back(multiplicitiesNoFilter[i] * _rightJcM);
     }
     for (size_t i = 0; i < _filterResult->getResultWidth(); ++i) {
-      _multiplicities.emplace_back(_filterResult->getMultiplicity(i) * leftJcM);
+      _multiplicities.emplace_back(
+          _filterResult->getMultiplicity(i) * _leftJcM);
     }
   } else {
     for (size_t i = 0; i < getResultWidth(); ++i) {
@@ -193,22 +206,39 @@ void TextOperationWithFilter::computeMultiplicities() {
 
 // _____________________________________________________________________________
 size_t TextOperationWithFilter::getSizeEstimate() {
-  if (_executionContext) {
-    // NEW at 05 Dec 2016:
-    // Estimate the size of the result like the equivalent text without filter
-    // plus join.
-    auto textEst = _executionContext->getIndex().getSizeEstimate(_words);
-    size_t entityColInResult = 2;  // for readability
-    size_t nofDistinctFilter = static_cast<size_t>(
-        _filterResult->getSizeEstimate() /
-        _filterResult->getMultiplicity(_filterColumn));
-    return static_cast<size_t>(
-        _executionContext->getCostFactor(
-            "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") *
-        getMultiplicity(entityColInResult) *
-        std::min(nofDistinctFilter, textEst));
+  if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
+    if (_executionContext) {
+      // NEW at 05 Dec 2016:
+      // Estimate the size of the result like the equivalent text without filter
+      // plus join.
+      double nofEntitiesSingleVar;
+      if (_executionContext) {
+        nofEntitiesSingleVar =
+            _executionContext->getIndex().getSizeEstimate(_words) *
+            std::min(float(_textLimit),
+                     _executionContext->getIndex().getAverageNofEntityContexts());
+      } else {
+        nofEntitiesSingleVar = 10000 * 0.8;
+      }
+
+      auto estNoFil = static_cast<size_t>(pow(nofEntitiesSingleVar, _nofVars));
+
+      size_t nofDistinctFilter = static_cast<size_t>(
+          _filterResult->getSizeEstimate() /
+          _filterResult->getMultiplicity(_filterColumn));
+
+      float joinColMultiplicity = getMultiplicity(
+          2 + (_nofVars - 1) + _filterColumn);
+
+      _sizeEstimate = static_cast<size_t>(
+          _executionContext->getCostFactor(
+              "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") *
+          joinColMultiplicity *
+          std::min(nofDistinctFilter, estNoFil));
+    }
+    _sizeEstimate = size_t(10000 * 0.8);
   }
-  return size_t(10000 * 0.8);
+  return _sizeEstimate;
 }
 
 // _____________________________________________________________________________

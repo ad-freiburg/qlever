@@ -18,21 +18,22 @@ size_t TextOperationWithoutFilter::getResultWidth() const {
 
 // _____________________________________________________________________________
 TextOperationWithoutFilter::TextOperationWithoutFilter(
-    QueryExecutionContext *qec, const string& words,
+    QueryExecutionContext* qec, const string& words,
     size_t nofVars, size_t textLimit) :
-    Operation(qec), _words(words), _nofVars(nofVars), _textLimit(textLimit) { }
+    Operation(qec), _words(words), _nofVars(nofVars), _textLimit(textLimit),
+    _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 
 // _____________________________________________________________________________
 string TextOperationWithoutFilter::asString() const {
   std::ostringstream os;
   os << "TEXT OPERATION WITHOUT FILTER:" << " co-occurrence with words: \"" <<
-  _words << "\" and " << _nofVars << " variables";;
+     _words << "\" and " << _nofVars << " variables";;
   os << " with textLimit = " << _textLimit;
   return os.str();
 }
 
 // _____________________________________________________________________________
-void TextOperationWithoutFilter::computeResult(ResultTable *result) const {
+void TextOperationWithoutFilter::computeResult(ResultTable* result) const {
   LOG(DEBUG) << "TextOperationWithoutFilter result computation..." << endl;
   if (_nofVars == 0) {
     computeResultNoVar(result);
@@ -46,28 +47,28 @@ void TextOperationWithoutFilter::computeResult(ResultTable *result) const {
 }
 
 // _____________________________________________________________________________
-void TextOperationWithoutFilter::computeResultNoVar(ResultTable *result) const {
+void TextOperationWithoutFilter::computeResultNoVar(ResultTable* result) const {
   result->_nofColumns = 2;
   result->_fixedSizeData = new vector<array<Id, 2>>;
   getExecutionContext()->getIndex().getContextListForWords(
       _words,
-      reinterpret_cast<vector<array<Id, 2>> *>(result->_fixedSizeData));
+      reinterpret_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
 }
 
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultOneVar(
-    ResultTable *result) const {
+    ResultTable* result) const {
   result->_nofColumns = 3;
   result->_fixedSizeData = new vector<array<Id, 3>>;
   getExecutionContext()->getIndex().getECListForWords(
       _words,
       _textLimit,
-      *reinterpret_cast<vector<array<Id, 3>> *>(result->_fixedSizeData));
+      *reinterpret_cast<vector<array<Id, 3>>*>(result->_fixedSizeData));
 }
 
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultMultVars(
-    ResultTable *result) const {
+    ResultTable* result) const {
   if (_nofVars == 2) {
     result->_fixedSizeData = new vector<array<Id, 4>>;
     result->_nofColumns = 4;
@@ -75,7 +76,7 @@ void TextOperationWithoutFilter::computeResultMultVars(
         _words,
         _nofVars,
         _textLimit,
-        *reinterpret_cast<vector<array<Id, 4>> *>(result->_fixedSizeData));
+        *reinterpret_cast<vector<array<Id, 4>>*>(result->_fixedSizeData));
   } else if (_nofVars == 3) {
     result->_fixedSizeData = new vector<array<Id, 5>>;
     result->_nofColumns = 5;
@@ -83,7 +84,7 @@ void TextOperationWithoutFilter::computeResultMultVars(
         _words,
         _nofVars,
         _textLimit,
-        *reinterpret_cast<vector<array<Id, 5>> *>(result->_fixedSizeData));
+        *reinterpret_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
   } else {
     result->_nofColumns = _nofVars + 2;
     getExecutionContext()->getIndex().getECListForWords(
@@ -92,4 +93,58 @@ void TextOperationWithoutFilter::computeResultMultVars(
         _textLimit,
         result->_varSizeData);
   }
+}
+
+// _____________________________________________________________________________
+size_t TextOperationWithoutFilter::getSizeEstimate() {
+  if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
+    double nofEntitiesSingleVar;
+    if (_executionContext) {
+      nofEntitiesSingleVar =
+          _executionContext->getIndex().getSizeEstimate(_words) *
+          std::min(float(_textLimit),
+                   _executionContext->getIndex().getAverageNofEntityContexts());
+    } else {
+      nofEntitiesSingleVar = 10000 * 0.8;
+    }
+    _sizeEstimate = static_cast<size_t>(pow(nofEntitiesSingleVar, _nofVars));
+  }
+  return _sizeEstimate;
+}
+
+// _____________________________________________________________________________
+size_t TextOperationWithoutFilter::getCostEstimate() {
+  if (_executionContext) {
+    return static_cast<size_t>(
+        _executionContext->getCostFactor("NO_FILTER_PUNISH") * (
+            getSizeEstimate() * _nofVars));
+  } else {
+    return getSizeEstimate() * _nofVars;
+  }
+}
+
+// _____________________________________________________________________________
+float TextOperationWithoutFilter::getMultiplicity(size_t col) {
+  if (_multiplicities.size() == 0) {
+    computeMultiplicities();
+  }
+  AD_CHECK_LT(col, _multiplicities.size());
+  return _multiplicities[col];
+}
+
+// _____________________________________________________________________________
+void TextOperationWithoutFilter::computeMultiplicities() {
+  for (size_t i = 0; i < getResultWidth(); ++i) {
+    double nofEntitiesSingleVar;
+    if (_executionContext) {
+      nofEntitiesSingleVar =
+          _executionContext->getIndex().getSizeEstimate(_words) *
+          std::min(float(_textLimit),
+                   _executionContext->getIndex().getAverageNofEntityContexts());
+    } else {
+      nofEntitiesSingleVar = 10000 * 0.8;
+    }
+    _multiplicities.emplace_back(pow(nofEntitiesSingleVar, _nofVars - 1));
+  }
+  assert(getResultWidth() == _multiplicities.size());
 }

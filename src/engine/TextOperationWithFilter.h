@@ -35,6 +35,7 @@ public:
   virtual void setTextLimit(size_t limit) {
     _textLimit = limit;
     _filterResult->setTextLimit(limit);
+    _sizeEstimate = std::numeric_limits<size_t>::max();
     _multiplicities.clear();
   }
 
@@ -65,6 +66,7 @@ private:
   std::shared_ptr<QueryExecutionTree> _filterResult;
   size_t _filterColumn;
 
+  size_t _sizeEstimate;
   vector<float> _multiplicities;
 
   void computeMultiplicities();

@@ -32,37 +32,15 @@ public:
 
   virtual void setTextLimit(size_t limit) {
     _textLimit = limit;
+    _multiplicities.clear();
+    _sizeEstimate = std::numeric_limits<size_t>::max();
   }
 
-  virtual size_t getSizeEstimate() {
-    if (_executionContext) {
-      return static_cast<size_t>(
-          _executionContext->getIndex().getSizeEstimate(_words) * std::min(
-              float(_textLimit),
-              _executionContext->getIndex().getAverageNofEntityContexts()));
-    }
-    return size_t(10000 * 0.8);
-  }
+  virtual size_t getSizeEstimate();
 
-  virtual size_t getCostEstimate() {
-    if (_executionContext) {
-      return static_cast<size_t>(
-          _executionContext->getCostFactor("NO_FILTER_PUNISH") * (
-              getSizeEstimate() * _nofVars));
-    } else {
-      return getSizeEstimate() * _nofVars;
-    }
-  }
+  virtual size_t getCostEstimate();
 
-  virtual float getMultiplicity(size_t col) {
-    // TODO what to do in the case of multiple variables?
-    if (col >= 2 && _executionContext) {
-      return std::min(
-          float(_textLimit),
-          _executionContext->getIndex().getAverageNofEntityContexts());
-    }
-    return 1;
-  }
+  virtual float getMultiplicity(size_t col);
 
   const string& getWordPart() const {
     return _words;
@@ -82,6 +60,10 @@ private:
   size_t _nofVars;
   size_t _textLimit;
 
+  size_t _sizeEstimate;
+  vector<float> _multiplicities;
+
+  void computeMultiplicities();
 
   virtual void computeResult(ResultTable* result) const;
 
