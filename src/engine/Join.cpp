@@ -459,10 +459,10 @@ size_t Join::computeSizeEstimate() {
       _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol));
   double factor = _executionContext ? _executionContext->getCostFactor(
       "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") : 1;
-  return static_cast<size_t>(
+  return std::max(size_t(1), static_cast<size_t>(
       factor *
       getMultiplicity(joinColInResult) *
-      std::min(nofDistinctLeft, nofDistinctRight));
+      std::min(nofDistinctLeft, nofDistinctRight)));
 }
 
 // _____________________________________________________________________________

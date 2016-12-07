@@ -230,11 +230,11 @@ size_t TextOperationWithFilter::getSizeEstimate() {
       float joinColMultiplicity = getMultiplicity(
           2 + (_nofVars - 1) + _filterColumn);
 
-      _sizeEstimate = static_cast<size_t>(
+      _sizeEstimate = std::max(size_t(1), static_cast<size_t>(
           _executionContext->getCostFactor(
               "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") *
           joinColMultiplicity *
-          std::min(nofDistinctFilter, estNoFil));
+          std::min(nofDistinctFilter, estNoFil)));
     }
     _sizeEstimate = size_t(10000 * 0.8);
   }
