@@ -55,7 +55,8 @@ public:
   }
 
   virtual float getMultiplicity(size_t col) {
-    if (col == 2 && _executionContext) {
+    // TODO what to do in the case of multiple variables?
+    if (col >= 2 && _executionContext) {
       return std::min(
           float(_textLimit),
           _executionContext->getIndex().getAverageNofEntityContexts());

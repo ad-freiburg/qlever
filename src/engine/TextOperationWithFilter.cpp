@@ -174,10 +174,13 @@ void TextOperationWithFilter::computeMultiplicities() {
     float rightJcM = _filterResult->getMultiplicity(_filterColumn);
     _multiplicities.emplace_back(1);  // cid
     _multiplicities.emplace_back(1);  // score
-    _multiplicities.emplace_back(leftJcM * rightJcM); // entity from text
 
+    // Now all entities / variables follow except.
+    // One of them will be inside the filter part, though. So one less.
+    for (size_t i = 0; i < _nofVars - 1; ++i) {
+      _multiplicities.push_back(leftJcM * rightJcM);
+    }
     for (size_t i = 0; i < _filterResult->getResultWidth(); ++i) {
-      if (i == _filterColumn) { continue; }
       _multiplicities.emplace_back(_filterResult->getMultiplicity(i) * leftJcM);
     }
   } else {
