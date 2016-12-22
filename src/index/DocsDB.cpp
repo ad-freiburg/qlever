@@ -19,11 +19,12 @@ void DocsDB::init(const string& fileName) {
 
 // _____________________________________________________________________________
 string DocsDB::getTextExcerpt(Id cid) const {
-  off_t from = 0;
+  off_t ft[2];
+  off_t& from = ft[0];
+  from = 0;
+  off_t& to = ft[1];
   off_t at = _startOfOffsets + cid * sizeof(off_t);
-  at += _dbFile.read(&from, sizeof(off_t), at);
-  off_t to;
-  at += _dbFile.read(&to, sizeof(off_t), at);
+  at += _dbFile.read(ft, 2 * sizeof(off_t), at);
   while(to == from) {
     at += _dbFile.read(&to, sizeof(off_t), at);
   }
