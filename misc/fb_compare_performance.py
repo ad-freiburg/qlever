@@ -83,6 +83,8 @@ def add_getting_names(q):
         clauses = no_mod.strip('{').split('.')
         new_clauses = []
         for v in vs:
+            if v == '?c':
+                continue
             before_where = before_where.replace(v, v + ' ' + v + 'name')
             new_clauses.append(' ' + v + ' fb:type.object.name.en  ' + v + 'name')
         context_to_words = {}
