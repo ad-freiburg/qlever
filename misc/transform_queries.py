@@ -21,6 +21,8 @@ parser.add_argument('--bifc-inc-query-outfile', type=str)
 
 parser.add_argument('--broccoli-query-outfile', type=str)
 
+parser.add_argument('--names', action='store_true', help='Should I select names for all variables?',
+                    default=False)
 
 def main():
     args = vars(parser.parse_args())
@@ -32,7 +34,10 @@ def main():
     if (args['my_query_outfile']):
         with open(args['my_query_outfile'], 'w') as outfile:
             for line in open(queries):
-                print(compare_performance.expanded_to_my_syntax(line), file=outfile)
+                q = line
+                if (args['names']):
+                    q = compare_performance.add_getting_names(q)
+                print(compare_performance.expanded_to_my_syntax(q), file=outfile)
     if (args['bifc_query_outfile']):
         with open(args['bifc_query_outfile'], 'w') as outfile:
             for line in open(queries):

@@ -83,7 +83,23 @@ void ParsedQuery::expandPrefixes() {
   for (auto& trip: _whereClauseTriples) {
     expandPrefix(trip._s, prefixMap);
     expandPrefix(trip._p, prefixMap);
-    expandPrefix(trip._o, prefixMap);
+    if (trip._p.find("in-context") != string::npos) {
+      auto tokens = ad_utility::split(trip._o, ' ');
+      trip._o = "";
+      for (size_t i = 0; i < tokens.size(); ++i) {
+        expandPrefix(tokens[i], prefixMap);
+        trip._o += tokens[i];
+        if (i + 1 < tokens.size()) { trip._o += " "; }
+      }
+    } else {
+      expandPrefix(trip._o, prefixMap);
+    }
+  }
+
+
+  for (auto& f: _filters) {
+    expandPrefix(f._lhs, prefixMap);
+    expandPrefix(f._rhs, prefixMap);
   }
 }
 

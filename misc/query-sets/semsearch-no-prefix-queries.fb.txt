@@ -45,5 +45,5 @@ semse-np_books-paul-of-tarsus	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x
 semse-np_languages-afghanistan	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE { ?x fb:type.object.type fb:language.human_language . ?x <in-context> ?c . <word:afghanistan> <in-context> ?c }
 semse-np_tv-shows-thomas-jane	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE { ?x fb:type.object.type fb:tv.tv_program . ?x <in-context> ?c . fb:m.0408np <in-context> ?c }
 semse-np_british-monarch-head-of-state	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE { ?x fb:type.object.type fb:location.country . ?x <in-context> ?c . <word:head> <in-context> ?c . <word:state> <in-context> ?c . <word:british> <in-context> ?c . <word:monarch> <in-context> ?c }
-semse-np_jacki-weaver-spouses	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE { fb:012mvxfx fb:people.person.spouse ?x  }
+semse-np_jacki-weaver-spouses	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE { fb:m.070db0 fb:people.person.spouse_s ?s . ?s fb:people.marriage.spouse ?x . FILTER(?x != fb:m.070db0 )  }
 semse-np_inventor-python	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE { fb:m.05z1_ fb:computer.programming_language.developers ?x . }
