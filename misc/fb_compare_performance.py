@@ -46,27 +46,30 @@ parser.add_argument('--broccoli', action='store_true', help='should broccoli be 
 
 
 def expanded_to_my_syntax(q):
-    before_where, after_where = q.split('WHERE')
-    no_mod, mod = after_where.strip().split('}')
-    clauses = no_mod.strip('{').split('.')
-    new_clauses = []
-    context_to_words = {}
-    for c in clauses:
-        if '<word:' in c:
-            try:
-                s, p, o = c.strip().split(' ')
-                if o not in context_to_words:
-                    context_to_words[o] = []
-                context_to_words[o].append(s[6: -1])
-            except ValueError:
-                print("Problem in : " + c, file=sys.stderr)
-                exit(1)
-        else:
-            new_clauses.append(c)
-    for c, ws in context_to_words.items():
-        new_clauses.append(' ' + c + ' <in-context> ' + ' '.join(ws) + ' ')
-    new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
-    return 'WHERE'.join([before_where, new_after_where])
+    try:
+        before_where, after_where = q.split('WHERE')
+        no_mod, mod = after_where.strip().split('}')
+        clauses = no_mod.strip('{').split('.')
+        new_clauses = []
+        context_to_words = {}
+        for c in clauses:
+            if '<word:' in c:
+                try:
+                    s, p, o = c.strip().split(' ')
+                    if o not in context_to_words:
+                        context_to_words[o] = []
+                    context_to_words[o].append(s[6: -1])
+                except ValueError:
+                    print("Problem in : " + c, file=sys.stderr)
+                    exit(1)
+            else:
+                new_clauses.append(c)
+        for c, ws in context_to_words.items():
+            new_clauses.append(' ' + c + ' <in-context> ' + ' '.join(ws) + ' ')
+        new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
+        return 'WHERE'.join([before_where, new_after_where])
+    except:
+        print("Problem in : " + q, file=sys.stderr)
 
 
 def rewrite_for_rdf3x(q):
