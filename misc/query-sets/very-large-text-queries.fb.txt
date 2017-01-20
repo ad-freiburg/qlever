@@ -1,0 +1,10 @@
+vtr_person-comp*	SELECT ?x WHERE { ?x fb:type.object.type fb:people.person . ?x <in-context> ?c . <word:comp*> <in-context> ?c }
+vlt_person-company	SELECT ?x WHERE { ?x fb:type.object.type fb:people.person . ?x <in-context> ?c . <word:company> <in-context> ?c }
+vlt_person-anti*	SELECT ?x WHERE { ?x fb:type.object.type fb:people.person . ?x <in-context> ?c . <word:anti*> <in-context> ?c }
+vlt_topic-auto*	SELECT ?x WHERE { ?x fb:type.object.type fb:common.topic . ?x <in-context> ?c . <word:auto*> <in-context> ?c }
+vlt_airline-inter*	SELECT ?x WHERE { ?x fb:type.object.type fb:aviation.airline . ?x <in-context> ?c . <word:inter*> <in-context> ?c }
+vlt_topic_extr*-supe*	SELECT ?x WHERE { ?x fb:type.object.type fb:common.topic . ?x <in-context> ?c . <word:extr*> <in-context> ?c . <word:supe*> <in-context> ?c }
+vlt_person-auto*-inte*	SELECT ?x WHERE { ?x fb:type.object.type fb:people.person . ?x <in-context> ?c . <word:auto*> <in-context> ?c . <word:inte*> <in-context> ?c }
+vlt_person-bi-europe-over*	SELECT ?x WHERE { ?x fb:type.object.type fb:people.person . ?x fb:people.person.place_of_birth ?p . ?p fb:location.location.containedby fb:m.02j9z . ?x <in-context> ?c . <word:over*> <in-context> ?c }
+vlt_female-sued-orga-pharma*	SELECT ?x ?o WHERE { ?x fb:people.person.gender fb:m.02zsn . ?x <in-context> ?c1 . <word:sued> <in-context> ?c1 . ?o <in-context> ?c1 . ?o fb:type.object.type fb:organization.organization . ?o <in-context> ?c2 . <word:pharma*> <in-context> ?c2 }
+vlt_footballer-play*euro-play*usa	SELECT ?x ?y ?z WHERE {?x fb:people.person.profession m.0gl2ny2 . ?x <in-context> ?c1 . <word:play*> <in-context> ?c1 . ?y <in-context> ?c1 . ?y fb:location.location.containedby fb:m.02j9z . ?x <in-context> ?c2 . <word:play*> <in-context> ?c2 . ?z <in-context> ?c2 . ?z fb:location.location.containedby fb:m.09c7w0}
