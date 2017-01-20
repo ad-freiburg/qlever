@@ -20,7 +20,7 @@ semse-np_john-lennon-parents.rel	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT
 semse-np_john-lennon-parents.text	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE { ?x fb:type.object.type fb:people.person . ?x <in-context> ?c . <word:parent> <in-context> ?c . fb:m.01vsl3_ <in-context> ?c }
 semse-np_kublai-khan-siblings.rel	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE { ?x fb:people.person.sibling_s ?s . fb:m.01bqc2 fb:people.person.sibling_s ?s }
 semse-np_kublai-khan-siblings.text	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE { ?x fb:type.object.type fb:people.person . ?x <in-context> ?c . <word:sibling> <in-context> ?c . fb:m.01bqc2 <in-context> ?c }
-semse-np_lilly-allen-parents.rel	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE { fb:people.person.children fb:m.0czkbt }
+semse-np_lilly-allen-parents.rel	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE { ?x fb:people.person.children fb:m.0czkbt }
 semse-np_major-leagues-united-states	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE { ?x fb:type.object.type fb:sport.sports_league . ?x <in-context> ?c . <word:major> <in-context> ?c . <word:league> <in-context> ?c . fb:m.09c7w0 <in-context> ?c }
 semse-np_matt-berry-tv-series.rel	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE { fb:m.08jcx2 fb:tv.tv_writer.episodes_written ?e . ?e fb:tv.tv_series_episode.series ?x}
 semse-np_matt-berry-tv-series.text	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE { ?x fb:type.object.type fb:tv.tv_series . ?x <in-context> ?c . <word:matt> <in-context> ?c . <word:berry> <in-context> ?c }
