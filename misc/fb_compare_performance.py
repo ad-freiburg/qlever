@@ -103,7 +103,9 @@ def add_getting_names(q):
         new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
         return 'WHERE'.join([before_where, new_after_where])
     except:
-        print("Problem in : " + q, file=sys.stderr)
+        e = sys.exc_info()[0]
+        print("Exception " + e, file=sys.stderr)
+        print("Problem in input : " + q, file=sys.stderr)
 
 
 def get_my_query_times(query_file, get_names):
