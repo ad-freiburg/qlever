@@ -75,7 +75,7 @@ def expanded_to_my_syntax(q):
         print("Problem in : " + q, file=sys.stderr)
 
 
-def add_getting_name(q):
+def add_getting_names(q):
     try:
         before_where, after_where = q.split('WHERE')
         vars = before_where.split('SELECT')[1].strip().lstrip('DISTINCT').lstrip().split(' ')
