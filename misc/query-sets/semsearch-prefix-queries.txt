@@ -1,0 +1,10 @@
+semse-p_apollo-astronauts-walked-moon.rel	SELECT DISTINCT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . <word:walk*> <in-context> ?c . <word:moon> <in-context> ?c . ?x <Space_Mission> ?m . ?m <Space_program> <Apollo_program> }
+semse-p_apollo-astronauts-walked-moon.text	SELECT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . <word:walk*> <in-context> ?c . <word:moon> <in-context> ?c . ?x <in-context> ?c2 . <word:apollo> <in-context> ?c2 }
+semse-p_kenyas-captain-cricket	SELECT ?x WHERE { ?x <is-a> <Cricketer> . ?x <in-context> ?c . <word:captain*> <in-context> ?c . <word:kenya*> <in-context> ?c }
+semse-p_lilly-allen-parents.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:parent*> <in-context> ?c . <Lily_Allen> <in-context> ?c }
+semse-p_members-u2.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:member*> <in-context> ?c . <word:u2> <in-context> ?c }
+semse-p_movies-starring-erykah-badu.text	SELECT ?x WHERE { ?x <is-a> <Film> . ?x <in-context> ?c . <word:appear*> <in-context> ?c . <Erykah_Badu> <in-context> ?c }
+semse-p_movies-starring-joe-frazier.text 	SELECT ?x WHERE { ?x <is-a> <Film> . ?x <in-context> ?c . <word:appear*> <in-context> ?c . <Joe_Frazier> <in-context> ?c }
+semse-p_movies-starring-rafael-rosell.text	SELECT ?x WHERE { ?x <is-a> <Film> . ?x <in-context> ?c . <word:appear*> <in-context> ?c . <Rafael_Rosell> <in-context> ?c }
+semse-p_permanent-members-un-security-council	SELECT ?x WHERE { ?x <is-a> <Country> . ?x <in-context> ?c . <word:permanent> <in-context> ?c . <word:member*> <in-context> ?c . <word:united> <in-context> ?c . <word:nations> <in-context> ?c .<word:security> <in-context> ?c .<word:council> <in-context> ?c }
+semse-p_wonders-ancient-world	SELECT ?x WHERE { ?x <is-a> <Structure> . ?x <in-context> ?c . <word:wonder*> <in-context> ?c . <word:ancient> <in-context> ?c . <word:world> <in-context> ?c }

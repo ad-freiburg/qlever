@@ -15,7 +15,7 @@ rdf3x_run_binary = "/home/buchholb/rdf3x-0.3.8/bin/rdf3xquery"
 rdf3x_db = "/local/raid/ad/buchholb/eval/rdf3x/wikipedia-freebase.combined.db"
 my_index = "/local/raid/ad/buchholb/eval/wikipedia-fbeasy.withstopwords"
 my_binary = "/home/buchholb/SparqlEngine/build/SparqlEngineMain"
-broccoli_api = 'http://filicudi.informatik.uni-freiburg.de:6001/'
+broccoli_api = 'http://localhost:6001/'
 
 parser = argparse.ArgumentParser()
 

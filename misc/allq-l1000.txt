@@ -1,0 +1,162 @@
+cnt_people-born-in-europe-l100	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> } LIMIT 1000
+cnt_people-born-in-europe-l100-o200k	SELECT DISTINCT ?p ?c WHERE { ?p <is-a> <Person> . ?p <Place_of_birth> ?c . ?c <Contained_by> <Europe> }  OFFSET 200000 LIMIT 1000
+cnt_people-top4rel	SELECT ?x ?1 ?2 ?3 ?4 WHERE { ?x <Gender> ?1 . ?x <Date_of_birth> ?2 . ?x <Place_of_birth> ?3 . ?x <Country_of_nationality> ?4 } LIMIT 1000
+cnt_building-top5rel	SELECT ?x ?1 ?2 ?3 ?4 ?5 WHERE { ?x <Contained_by> ?1 . ?x <Opened> ?2 . ?x <Designation_as_Natural_or_Cultural_Site> ?3 . ?x <Architectural_Style> ?4 . ?x <Area> ?5 } LIMIT 1000
+cnt_chain-sc-sc-doo	SELECT ?x WHERE { ?x <Spouse_(or_domestic_partner)> ?a . ?a <Children> ?b . ?b <Spouse_(or_domestic_partner)> ?c . ?c <Children> <Duke_of_Orléans> } LIMIT 1000
+cnt_people-bornin-european-capital	SELECT ?x ?y ?z WHERE { ?x <is-a> <Person> . ?x <Place_of_birth> ?y . ?y <Contained_by> <Europe> . ?z <Capital> ?y . ?z <is-a> <Country> } LIMIT 1000
+cnt_animal-breedof-artbythatguy	SELECT ?x ?y ?z WHERE { ?x <is-a> <Animal> . ?x <Breed_of> ?y . ?z <Art_Subject> ?y . ?z <Artist> <Franz_Marc> } LIMIT 1000
+cnt_personwithbdp-namedafter-personwithbdp	SELECT ?x ?xd ?xp ?y ?yd ?yp WHERE { ?x <is-a> <Person> . ?x <Date_of_birth> ?xd . ?x <Place_of_birth> ?xp . ?x <Named_after> ?y . ?y <is-a> <Person> . ?y <Date_of_birht> ?yd . ?y <Place_of_birth> ?yp } LIMIT 1000
+cnt_tallest_buildings_europe	SELECT ?x ?h WHERE { ?x <is-a> <Building> . ?x <Structural_Height> ?h . ?x <Contained_by> <Europe> } ORDER BY DESC(?h) LIMIT 1000
+cnt_singer_in_horror_film	SELECT ?x ?m WHERE { ?x <Profession> <Singer> . ?x <Film_performance> ?m . ?m <Genre> <Horror> } LIMIT 1000
+cwt_music-friend-athlete-limit10000	SELECT DISTINCT ?p ?s WHERE { ?p <is-a> <Musician> . ?s <is-a> <Athlete> . ?p <in-context> ?c . ?s <in-context> ?c . <word:friend> <in-context> ?c . FILTER(?p != ?s) } LIMIT 1000
+cwt_polit-friend-scient-mhp	SELECT DISTINCT ?p ?s WHERE { ?p <is-a> <Politician> . ?s <is-a> <Scientist> . ?p <in-context> ?c . ?s <in-context> ?c . <word:friend> <in-context> ?c . ?s <in-context> ?c2 . <word:manhattan> <in-context> ?c2 . <word:project> <in-context> ?c2 . FILTER(?p != ?s) } LIMIT 1000
+cwt_fire-in-asian-city	SELECT ?ci WHERE { ?ci <is-a> <City/Town/Village> . ?ci <Contained_by> <Asia> . ?ci <in-context> ?c . <word:fire> <in-context> ?c . <word:destroyed> <in-context> ?c } LIMIT 1000
+cwt_fire-in-asian-city-pop-airport	SELECT ?ci ?p ?a WHERE { ?ci <is-a> <City/Town/Village> . ?ci <Contained_by> <Asia> . ?ci <in-context> ?c . <word:fire> <in-context> ?c . <word:destroyed> <in-context> ?c . ?ci <Population> ?p . ?ci <Nearby_airport> ?a } LIMIT 1000
+cwt_sci-ulm-relativty	SELECT ?p WHERE {?p <is-a> <Scientist> . ?p <Place_of_birth> <Ulm> . ?p <in-context> ?c . <word:relativity> <in-context> ?c } LIMIT 1000
+cwt_polit-audience-religlead	SELECT ?pol ?lead WHERE { ?pol <is-a> <Politician> . ?pol <in-context> ?c . <word:audience> <in-context> ?c . ?lead <in-context> ?c . ?lead <Profession> <Religious_Leader_(Religious_Leadership_Title)> . FILTER(?pol != ?lead) } LIMIT 1000
+cwt_athlete-scandal-org-gov	SELECT ?a ?o WHERE { ?a <is-a> <Athlete> . ?a <in-context> ?c . <word:scandal> <in-context> ?c . ?o <in-context> ?c . ?o <is-a> <Organisation> . ?o <in-context> ?c2 . <word:government> <in-context> ?c2 } LIMIT 1000
+cwt_person-death-perscriptiondrug	SELECT ?p ?d WHERE { ?p <is-a> <Person> . ?p <in-context> ?c . <word:death> <in-context> ?c . ?d <in-context> ?c . ?d <is-a> <Drug> . ?d <Legal_status> <Prescription_drug> } LIMIT 1000
+cwt_city-volc-eruption	SELECT DISTINCT ?ci ?v WHERE { ?ci <is-a> <City/Town/Village> . ?ci <in-context> ?c . <word:eruption> <in-context> ?c . ?v <in-context> ?c . ?v <is-a> <Mountain> . ?v <in-context> ?c2 . <word:volcano> <in-context> ?c2 } LIMIT 1000
+cwt_mus-canc-con-usa	SELECT DISTINCT ?m ?l WHERE { ?m <is-a> <Musical_Artist> . ?m <in-context> ?c . <word:cancelled> <in-conttext> ?c . <word:concert> <in-context> ?c . ?l <in-context> ?c . ?l <Contained_by> <United_States_of_America> } LIMIT 1000
+filterv_location-asia-pop200k+	SELECT ?x ?y WHERE { ?x <is-a> <Location> . ?x <Contained_by> <Asia> . ?x <Population> ?y . FILTER(?y > "200000"^^<http://www.w3.org/2001/XMLSchema#integer>) } LIMIT 1000
+filterv_drama-actor-bornafter-1990	SELECT ?x ?f ?d WHERE { ?x <Film_performance> ?f. ?f <Genre> <Drama> . ?x <Date_of_birth> ?d . FILTER(?d > "1990-12-31"^^<http://www.w3.org/2001/XMLSchema#date>) } LIMIT 1000
+filterv_people-bornin-1995	SELECT ?x ?d WHERE { ?x <Date_of_birth> ?d . FILTER(?d > "1994-12-31"^^<http://www.w3.org/2001/XMLSchema#date> ) . FILTER(?d <= "1995-12-31"^^<http://www.w3.org/2001/XMLSchema#date> )  } LIMIT 1000
+filterv_people-over-2m10	SELECT ?x ?h WHERE { ?x <Height> ?h . FILTER(?h > "2.1"^^<http://www.w3.org/2001/XMLSchema#float> )  } LIMIT 1000
+filterv_person-under2m10	SELECT ?x ?h WHERE { ?x <Height> ?h . FILTER(?h < "2.1"^^<http://www.w3.org/2001/XMLSchema#float> )  } LIMIT 1000
+filterv_scientists-taller-than-their-sibling	SELECT ?x ?h ?s ?hs  WHERE { ?x <is-a> <Scientist> . ?x <Height> ?h . ?x <Sibling> ?s . ?s <Height> ?hae . FILTER(?h > ?hae)  } LIMIT 1000
+filterv_sci-bornin-ulm-taller1.74	SELECT ?x WHERE { ?x <is-a> <Scientist> . ?x <Place_of_birth> <Ulm> . ?x <Height> ?h . FILTER(?h >= "1.74"^^<http://www.w3.org/2001/XMLSchema#float>) } LIMIT 1000
+filterv_building-over-30-floors	SELECT ?x WHERE { ?x <is-a> <Building> . ?x <Floors> ?f . FILTER(?f > "30"^^<http://www.w3.org/2001/XMLSchema#int>) } LIMIT 1000
+filterv_building-less-floors-than-height	SELECT ?x WHERE { ?x <is-a> <Building> . ?x <Floors> ?f . ?x <Structural_Height> ?h . FILTER(?f < ?h) } LIMIT 1000
+filterv_building-geq-floors-than-height	SELECT ?x WHERE { ?x <is-a> <Building> . ?x <Floors> ?f . ?x <Structural_Height> ?h . FILTER(?f >= ?h) } LIMIT 1000
+isatext_prefix_astro-walk*-moon	SELECT ?p WHERE { ?p <is-a> <Astronaut> . ?p <in-context> ?c . <word:walk*> <in-context> ?c . <word:moon> <in-context> ?c } LIMIT 1000
+isatext_prefix_musician-fight*	SELECT ?p WHERE { ?p <is-a> <Musician> . ?p <in-context> ?c . <word:fight*> <in-context> ?c } LIMIT 1000
+isatext_prefix_singer-perform*	SELECT ?p WHERE { ?p <is-a> <Singer> . ?p <in-context> ?c . <word:perform*> <in-context> ?c } LIMIT 1000
+isatext_prefix_firefighter-crit*	SELECT ?p WHERE { ?p <is-a> <Firefighter> . ?p <in-context> ?c . <word:crit*> <in-context> ?c } LIMIT 1000
+isatext_prefix_animal-farm*	SELECT ?p WHERE { ?p <is-a> <Animal> . ?p <in-context> ?c . <word:farm*> <in-context> ?c } LIMIT 1000
+isatext_prefix_organisation-protest*	SELECT ?p WHERE { ?p <is-a> <Organisation> . ?p <in-context> ?c . <word:protest*> <in-context> ?c } LIMIT 1000
+isatext_prefix_drug-chem*-properties	SELECT ?p WHERE { ?p <is-a> <Drug> . ?p <in-context> ?c . <word:chem*> <in-context> ?c . <word:properties> <in-context> ?c } LIMIT 1000
+isatext_prefix_actor-play*-role*-criminal*	SELECT ?p WHERE { ?p <is-a> <Actor> . ?p <in-context> ?c . <word:play*> <in-context> ?c . <word:role*> <in-context> ?c . <word:criminal*> <in-context> ?c } LIMIT 1000
+isatext_prefix_location-down*-large*-river*	SELECT ?p WHERE { ?p <is-a> <Location> . ?p <in-context> ?c . <word:down*> <in-context> ?c . <word:large*> <in-context> ?c . <word:river*> <in-context> ?c } LIMIT 1000
+isatext_prefix_musician-rehab*	SELECT ?p WHERE { ?p <is-a> <Musician> . ?p <in-context> ?c . <word:rehab*> <in-context> ?c } LIMIT 1000
+isatext_plant-edible-leaves	SELECT ?p WHERE { ?p <is-a> <Plant> . ?p <in-context> ?c . <word:edible> <in-context> ?c . <word:leaves> <in-context> ?c } LIMIT 1000
+isatext_person-dd	SELECT ?p WHERE { ?p <is-a> <Person> . ?p <in-context> ?c . <word:drug> <in-context> ?c . <word:death> <in-context> ?c } LIMIT 1000
+isatext_hormone-stress	SELECT ?p WHERE { ?p <is-a> <Hormone> . ?p <in-context> ?c . <word:stress> <in-context> ?c } LIMIT 1000
+isatext_athlete-doping	SELECT ?p WHERE { ?p <is-a> <Athlete> . ?p <in-context> ?c . <word:doping> <in-context> ?c } LIMIT 1000
+isatext_politician-scandal	SELECT ?p WHERE { ?p <is-a> <Politician> . ?p <in-context> ?c . <word:scandal> <in-context> ?c } LIMIT 1000
+isatext_person-stress	SELECT ?p WHERE { ?p <is-a> <Person> . ?p <in-context> ?c . <word:stress> <in-context> ?c } LIMIT 1000
+isatext_structure-tallest-oldest	SELECT ?p WHERE { ?p <is-a> <Structure> . ?p <in-context> ?c . <word:tallest> <in-context> ?c . <word:oldest> <in-context> ?c } LIMIT 1000
+isatext_country-worldwar	SELECT ?p WHERE { ?p <is-a> <Country> . ?p <in-context> ?c . <word:war> <in-context> ?c . <word:world> <in-context> ?c} LIMIT 1000
+isatext_drug-treatcancer	SELECT ?p WHERE { ?p <is-a> <Drug> . ?p <in-context> ?c . <word:treat> <in-context> ?c . <word:cancer> <in-context> ?c} LIMIT 1000
+isatext_scientist-spalgo	SELECT ?p WHERE { ?p <is-a> <Scientist> . ?p <in-context> ?c . <word:shortest> <in-context> ?c . <word:path> <in-context> ?c . <word:algorithm> <in-context> ?c } LIMIT 1000
+onejoin_bornin-europe	SELECT ?x ?y WHERE { ?x <Place_of_birth> ?y . ?y <Contained_by> <Europe> } LIMIT 1000
+onejoin_german-actors	SELECT ?x WHERE { ?x <Profession> <Actor> . ?x <Country_of_nationality> <Germany> } LIMIT 1000
+onejoin_female_cs	SELECT ?x WHERE { ?x <is-a> <Computer_scientist> . ?x <Gender> <Female> } LIMIT 1000
+onejoin_ffc-initrelease	SELECT ?x ?y WHERE { ?x <Directed_by> <Francis_Ford_coppola> . ?x <Initial_release_date> ?y } LIMIT 1000
+onejoin_beatles_siblings	SELECT DISTINCT ?p ?b WHERE { ?p <Sibling> ?b . ?b <Member_of> <The_Beatles> . FILTER(?p != ?b) } LIMIT 1000
+onejoin_action-comedy 	SELECT ?x WHERE { ?x <Genre> <Action_Film> . ?x <Genre> <Comedy> } LIMIT 1000
+onejoin_fantasy-book 	SELECT ?x WHERE { ?x <is-a> <Book> . ?x <Genre> <Fantasy> } LIMIT 1000
+onejoin_org-sector	SELECT ?x ?y WHERE { ?x <is-a> <Organisation> . ?x <Sector> ?y } LIMIT 1000
+onejoin_building-architect	SELECT ?x ?y WHERE { ?x <is-a> <Building> . ?x <Architect> ?y } LIMIT 1000
+onejoin_album-artist	SELECT ?x ?y WHERE { ?x <is-a> <Musical_Album> . ?x <Artist> ?y } LIMIT 1000
+onescan_isa-firefighter	SELECT ?x WHERE { ?x <is-a> <Firefighter> } LIMIT 1000
+onescan_bornin-ulm	SELECT ?x WHERE { ?x <Place_of_birth> <Ulm> } LIMIT 1000
+onescan_usedtotreat-bleeding	SELECT ?x WHERE { ?x <Used_To_Treat> <Bleeding> } LIMIT 1000
+onescan_gender-male	SELECT ?x WHERE { ?x <Gender> <Male> } LIMIT 1000
+onescan_recording-smellslikets	SELECT ?x WHERE { ?x <Recording> <Smells_Like_Teen_Spirit> } LIMIT 1000
+onescan_award-moh	SELECT ?x WHERE { ?x <Award_Won> <Medal_of_Honor> } LIMIT 1000
+onescan_cuisine-ital	SELECT ?x WHERE { ?x <Cuisine> <Italian_food> } LIMIT 1000
+onescan_dir-spielb	SELECT ?x WHERE { ?x <Directed_by> <Steven_Spielberg> } LIMIT 1000
+onescan_structheight	SELECT ?x ?y WHERE { ?x <Structural_Height> ?y } LIMIT 1000
+onescan_area	SELECT ?x ?y WHERE { ?x <Area> ?y } LIMIT 1000
+text_country	SELECT ?c WHERE { <word:country> <in-context> ?c } LIMIT 1000
+text_database-research	SELECT ?c WHERE { <word:database> <in-context> ?c . <word:research> <in-context> ?c } LIMIT 1000
+text_microsoft-computer	SELECT ?c WHERE { <word:microsoft> <in-context> ?c . <word:computer> <in-context> ?c } LIMIT 1000
+text_entmircosoft-computer	SELECT ?c WHERE { <Microsoft_Corporation> <in-context> ?c . <word:computer> <in-context> ?c } LIMIT 1000
+text_car-manufact*	SELECT ?c WHERE { <word:car> <in-context> ?c . <word:manufact*> <in-context> ?c } LIMIT 1000
+text_entity-ow-semantic-search	SELECT ?e WHERE { ?e <in-context> ?c . <word:semantic> <in-context> ?c . <word:search> <in-context> ?c } LIMIT 1000
+text_entity-ow-international	SELECT ?e WHERE { ?e <in-context> ?c . <word:international> <in-context> ?c  } LIMIT 1000
+text_entity-ow-power-source	SELECT ?e WHERE { ?e <in-context> ?c . <word:power> <in-context> ?c  . <word:source> <in-context> ?c  } LIMIT 1000
+text_entity-ow-micro*	SELECT ?e WHERE { ?e <in-context> ?c . <word:micro*> <in-context> ?c } LIMIT 1000
+text_entity-ow-open*-prob	SELECT ?e WHERE { ?e <in-context> ?c . <word:open*> <in-context> ?c  . <word:prob*> <in-context> ?c  } LIMIT 1000
+semse-np_arab-states-persian-gulf	SELECT ?x WHERE { ?x <is-a> <Country> . ?x <in-context> ?c . <word:arab> <in-context> ?c . <word:state> <in-context> ?c . <word:persian> <in-context> ?c . <word:gulf> <in-context> ?c } LIMIT 1000
+semse-np_astronauts-landed-moon	SELECT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . <word:landed> <in-context> ?c . <word:moon> <in-context> ?c } LIMIT 1000
+semse-np_axis-powers-world-war-II	SELECT ?x WHERE { ?x <is-a> <Country> . ?x <in-context> ?c . <word:axis> <in-context> ?c . <word:power> <in-context> ?c . <World_War_II> <in-context> ?c } LIMIT 1000
+semse-np_boroughs-new-york-city	SELECT ?x WHERE { ?x <is-a> <Location> . ?x <in-context> ?c . <word:borough> <in-context> ?c . <New_York> <in-context> ?c } LIMIT 1000
+semse-np_branches-us-military	SELECT ?x WHERE { ?x <is-a> <Organisation> . ?x <in-context> ?c . <word:branch> <in-context> ?c . <word:united> <in-context> ?c . <word:states> <in-context> ?c . <word:military> <in-context> ?c } LIMIT 1000
+semse-np_continents-in-the-world	SELECT ?x WHERE { ?x <is-a> <Continent> } LIMIT 1000
+semse-np_nicole-kidman-siblings.rel	SELECT ?x WHERE { ?x <Sibling> <Nicole_Kidman> } LIMIT 1000
+semse-np_nicole-kidman-siblings.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:sibling> <in-context> ?c . <Nicole_Kidman> <in-context> ?c } LIMIT 1000
+semse-np_dioceses-church-of-ireland.rel	SELECT ?x WHERE { ?x <Organisation> <Church_of_Ireland> } LIMIT 1000
+semse-np_dioceses-church-of-ireland.text	SELECT ?x WHERE { ?x <is-a> <Religious_Jurisdiction> . ?x <in-context> ?c . <word:diocese> <in-context> ?c . <Church_of_Ireland> <in-context> ?c } LIMIT 1000
+semse-np_first-targets-of-the-atomic-bomb	SELECT ?x WHERE { ?x <is-a> <Location> . ?x <in-context> ?c . <word:target> <in-context> ?c . <word:atomic> <in-context> ?c . <word:bomb> <in-context> ?c } LIMIT 1000
+semse-np_five-great-epics-tamil-literature	SELECT ?x WHERE { ?x <is-a> <Written_Work> . ?x <in-context> ?c . <word:tamil> <in-context> ?c . <word:epic> <in-context> ?c } LIMIT 1000
+semse-np_gods-dwelt-mount-olympus	SELECT ?x WHERE { ?x <is-a> <Deity> . ?x <in-context> ?c . <word:mount> <in-context> ?c . <word:olympus> <in-context> ?c } LIMIT 1000
+semse-np_henry-iis-brothers-and-sisters.rel	SELECT ?x WHERE { ?x <Sibling> <Henry_II_of_England> } LIMIT 1000
+semse-np_henry-iis-brothers-and-sisters.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:sibling> <in-context> ?c . <Henry_II_of_England> <in-context> ?c } LIMIT 1000
+semse-np_hijackers-september-11	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:hijacker> <in-context> ?c . <word:september> <in-context> ?c . <word:11> <in-context> ?c . <word:attacks> <in-context> ?c } LIMIT 1000
+semse-np_houses-russian-parliament.rel	SELECT ?x WHERE { ?x <Body_this_is_a_component_of> <Federal_Assembly> } LIMIT 1000
+semse-np_houses-russian-parliament.text	SELECT ?x WHERE { ?x <is-a> <Governmental_Body> . ?x <in-context> ?c . <word:house> <in-context> ?c . <word:russian> <in-context> ?c . <word:parliament> <in-context> ?c } LIMIT 1000
+semse-np_john-lennon-parents.rel	SELECT ?x WHERE { ?x <Children> <John_Lennon> } LIMIT 1000
+semse-np_john-lennon-parents.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:parent> <in-context> ?c . <John_Lennon> <in-context> ?c } LIMIT 1000
+semse-np_kublai-khan-siblings.rel	SELECT ?x WHERE { ?x <Sibling> <Kublai_Khan> } LIMIT 1000
+semse-np_kublai-khan-siblings.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:sibling> <in-context> ?c . <Kublai_Khan> <in-context> ?c } LIMIT 1000
+semse-np_lilly-allen-parents.rel	SELECT ?x WHERE { ?x <Children> <Lily_Allen> } LIMIT 1000
+semse-np_major-leagues-united-states	SELECT ?x WHERE { ?x <is-a> <Sports_Association> . ?x <in-context> ?c . <word:major> <in-context> ?c . <word:league> <in-context> ?c . <United_States_of_America> <in-context> ?c } LIMIT 1000
+semse-np_matt-berry-tv-series.rel	SELECT ?x WHERE { ?e <Series> ?x . <Matt_Berry> <TV_episode_performance> ?e } LIMIT 1000
+semse-np_matt-berry-tv-series.text	SELECT ?x WHERE { ?x <is-a> <TV_Programme> . ?x <in-context> ?c . <word:matt> <in-context> ?c . <word:berry> <in-context> ?c } LIMIT 1000
+semse-np_members-u2.rel	SELECT ?x WHERE { ?x <Member_of> <U2> } LIMIT 1000
+semse-np_movies-starring-erykah-badu.rel	SELECT ?x WHERE { <Erykah_Badu> <Film_performance> ?x } LIMIT 1000
+semse-np_movies-starring-joe-frazier.rel 	SELECT ?x WHERE { <Joe_Frazier> <Film_performance> ?x } LIMIT 1000
+semse-np_movies-starring-rafael-rosell.rel	SELECT ?x WHERE { <Rafael_Rosell> <Film_performance> ?x } LIMIT 1000
+semse-np_nations-portuguese-official-language.rel	SELECT ?x WHERE { ?x <is-a> <Country> . ?x <Official_Language> <Portuguese_Language> } LIMIT 1000
+semse-np_nations-portuguese-official-language.text	SELECT ?x WHERE { ?x <is-a> <Country> . ?x <in-context> ?c . <word:official> <in-context> ?c . <word:language> <in-context> ?c . <word:portuguese> <in-context> ?c } LIMIT 1000
+semse-np_presidents-mount-rushmore-shooting.rel	SELECT ?x WHERE { ?x <is-a> <US_President> . ?x <in-context> ?c . <word:mount> <in-context> ?c . <word:rushmore> <in-context> ?c . ?x <Cause_of_death> <Ballistic_trauma> } LIMIT 1000
+semse-np_presidents-mount-rushmore-shooting.text	SELECT ?x WHERE { ?x <is-a> <US_President> . ?x <in-context> ?c . <word:mount> <in-context> ?c . <word:rushmore> <in-context> ?c . ?x <in-context> ?c2 . <word:shot> <in-context> ?c2 } LIMIT 1000
+semse-np_ratt-albums.rel	SELECT ?x WHERE { ?x <is-a> <Musical_Album> . ?x <Artist> <Ratt> } LIMIT 1000
+semse-np_ratt-albums.text	SELECT ?x WHERE { ?x <is-a> <Musical_Album> . ?x <in-context> ?c . <Ratt> <in-context> ?c } LIMIT 1000
+semse-np_republics-former-yugoslavia	SELECT ?x WHERE { ?x <is-a> <Country> . ?x <in-context> ?c . <word:former> <in-context> ?c . <word:yugoslavia> <in-context> ?c } LIMIT 1000
+semse-np_revolutionaries-1959-cuba	SELECT ?x WHERE { ?x <is-a> <Revolutionary> . ?x <in-context> ?c . <word:cuba> <in-context> ?c . <word:1959> <in-context> ?c2 . ?x <in-context> ?c2 } LIMIT 1000
+semse-np_states-border-oklahoma	SELECT ?x WHERE { ?x <is-a> <US_State> . ?x <in-context> ?c . <word:border> <in-context> ?c . <Oklahoma> <in-context> ?c } LIMIT 1000
+semse-np_ten-ancient-greek-city-kingdoms-cyprus	SELECT ?x WHERE { ?x <is-a> <City/Town/Village> . ?x <in-context> ?c . <word:greek> <in-context> ?c . <word:ancient> <in-context> ?c . <word:cyprus> <in-context> ?c } LIMIT 1000
+semse-np_first-13-american-states	SELECT ?x ?d WHERE { ?x <is-a> <US_State> . ?x <Date_founded> ?d } ORDER BY ?d LIMIT 13
+semse-np_four-companions-prophet	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:companions> <in-context> ?c . <word:prophet> <in-context> ?c } LIMIT 1000
+semse-np_twelves-tribes-israel	SELECT ?x WHERE { ?x <is-a> <Location> . ?x <in-context> ?c . <word:twelve> <in-context> ?c . <word:tribes> <in-context> ?c . <word:israel> <in-context> ?c } LIMIT 1000
+semse-np_books-paul-of-tarsus	SELECT ?x WHERE { ?x <is-a> <Book> . ?x <in-context> ?c . <word:paul> <in-context> ?c . <word:tarsus> <in-context> ?c } LIMIT 1000
+semse-np_languages-afghanistan	SELECT ?x WHERE { ?x <is-a> <Human_Language> . ?x <in-context> ?c . <word:afghanistan> <in-context> ?c } LIMIT 1000
+semse-np_tv-shows-thomas-jane	SELECT ?x WHERE { ?x <is-a> <TV_Program> . ?x <in-context> ?c . <Thomas_Jane> <in-context> ?c } LIMIT 1000
+semse-np_british-monarch-head-of-state	SELECT ?x WHERE { ?x <is-a> <Country> . ?x <in-context> ?c . <word:head> <in-context> ?c . <word:state> <in-context> ?c . <word:british> <in-context> ?c . <word:monarch> <in-context> ?c } LIMIT 1000
+semse-np_jacki-weaver-spouses	SELECT ?x WHERE { ?x <Spouse_(or_domestic_partner)> <Jacki_Weaver> } LIMIT 1000
+semse-np_inventor-python	SELECT ?x WHERE { <Python_(Programming_Language)> <Developer> ?x } LIMIT 1000
+semse-p_apollo-astronauts-walked-moon.rel	SELECT DISTINCT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . <word:walk*> <in-context> ?c . <word:moon> <in-context> ?c . ?x <Space_Mission> ?m . ?m <Space_program> <Apollo_program> } LIMIT 1000
+semse-p_apollo-astronauts-walked-moon.text	SELECT ?x WHERE { ?x <is-a> <Astronaut> . ?x <in-context> ?c . <word:walk*> <in-context> ?c . <word:moon> <in-context> ?c . ?x <in-context> ?c2 . <word:apollo> <in-context> ?c2 } LIMIT 1000
+semse-p_kenyas-captain-cricket	SELECT ?x WHERE { ?x <is-a> <Cricketer> . ?x <in-context> ?c . <word:captain*> <in-context> ?c . <word:kenya*> <in-context> ?c } LIMIT 1000
+semse-p_lilly-allen-parents.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:parent*> <in-context> ?c . <Lily_Allen> <in-context> ?c } LIMIT 1000
+semse-p_members-u2.text	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:member*> <in-context> ?c . <word:u2> <in-context> ?c } LIMIT 1000
+semse-p_movies-starring-erykah-badu.text	SELECT ?x WHERE { ?x <is-a> <Film> . ?x <in-context> ?c . <word:appear*> <in-context> ?c . <Erykah_Badu> <in-context> ?c } LIMIT 1000
+semse-p_movies-starring-joe-frazier.text 	SELECT ?x WHERE { ?x <is-a> <Film> . ?x <in-context> ?c . <word:appear*> <in-context> ?c . <Joe_Frazier> <in-context> ?c } LIMIT 1000
+semse-p_movies-starring-rafael-rosell.text	SELECT ?x WHERE { ?x <is-a> <Film> . ?x <in-context> ?c . <word:appear*> <in-context> ?c . <Rafael_Rosell> <in-context> ?c } LIMIT 1000
+semse-p_permanent-members-un-security-council	SELECT ?x WHERE { ?x <is-a> <Country> . ?x <in-context> ?c . <word:permanent> <in-context> ?c . <word:member*> <in-context> ?c . <word:united> <in-context> ?c . <word:nations> <in-context> ?c .<word:security> <in-context> ?c .<word:council> <in-context> ?c } LIMIT 1000
+semse-p_wonders-ancient-world	SELECT ?x WHERE { ?x <is-a> <Structure> . ?x <in-context> ?c . <word:wonder*> <in-context> ?c . <word:ancient> <in-context> ?c . <word:world> <in-context> ?c } LIMIT 1000
+simon_q1	SELECT ?x WHERE { ?x <is-a> <Book> . ?x <Author> <Anthony_Newman_(Author)> } LIMIT 1000
+simon_q1_fixed	SELECT ?x WHERE { ?x <is-a> <Book> . ?x <Author> <Anthony_Newman_(Pianist)> } LIMIT 1000
+simon_q2	SELECT ?x WHERE { ?x <Genre> <Comedy> . ?x <is-a> <Award-Nominated_Work> . ?x <is-a> <Film> } LIMIT 1000
+simon_q3	SELECT ?x WHERE { ?x <is-a> <Politician> . ?x <Film_performance> ?y . ?y <Genre> <Comedy> } LIMIT 1000
+simon_q4	SELECT ?x WHERE { ?x <is-a> <Olympic_athlete> . ?x <is-a> <Deceased_Person> } LIMIT 1000
+simon_q5	SELECT ?x WHERE { ?x <Release> <Technodrome,_Volume_2_(Consumer_product)> . ?x <is-a> <Canonical_Version> . ?x <is-a> <Musical_Recording> } LIMIT 1000
+simon_q6	SELECT ?x ?y WHERE { ?x <is-a> <Person> . ?x <Country_of_nationality> <Germany> . ?y <Author> ?x . ?y <is-a> <Award-Nominated_Work> } LIMIT 1000
+simon_q7	SELECT ?x WHERE { ?x <is-a> <Politician> . ?x <Parent> ?y . ?x <Parent> ?z . ?y <is-a> <Politician> . ?z <is-a> <Politician> } LIMIT 1000
+simon_q7_fixed	SELECT ?x WHERE { ?x <is-a> <Politician> . ?y <Children> ?x . ?z <Children> ?x . ?y <is-a> <Politician> . ?z <is-a> <Politician> } LIMIT 1000
+simon_q8	SELECT ?x ?y WHERE{ ?x <is-a> <Monarch> . ?x <is-a> <Deceased_Person> .?x <Cause_of_death> <Assassination> . ?x <Place_of_birth> ?y } LIMIT 1000
+simon_q9	SELECT ?x WHERE{ ?x <is-a> <Lake> . ?x <Contained_by> <Russia> } LIMIT 1000
+simon_q10	SELECT ?x ?y ?z WHERE{ ?x <is-a> <Musical_Recording> . ?x <Recorded_by> ?y . ?y <Award_Won> <Bollywood_Movie_Humanitarian_Award> . ?y <Celebrity_friend> ?z . ?z <Profession> <Prophet> } LIMIT 1000
+simon_q10_fixed	SELECT ?x ?y ?z WHERE{ ?x <is-a> <Musical_Recording> . ?x <Recorded_by> ?y . ?y <Award_Won> <Bollywood_Movie_Award_–_Humanitarian_Award> . ?y <Celebrity_friend> ?z . ?z <Profession> <Prophet> } LIMIT 1000
+vtr_person-comp*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:comp*> <in-context> ?c } LIMIT 1000
+vlt_person-company	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:company> <in-context> ?c } LIMIT 1000
+vlt_person-anti*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:anti*> <in-context> ?c } LIMIT 1000
+vlt_topic-auto*	SELECT ?x WHERE { ?x <is-a> <Topic> . ?x <in-context> ?c . <word:auto*> <in-context> ?c } LIMIT 1000
+vlt_airline-inter*	SELECT ?x WHERE { ?x <is-a> <Airline> . ?x <in-context> ?c . <word:inter*> <in-context> ?c } LIMIT 1000
+vlt_topic_extr*-supe*	SELECT ?x WHERE { ?x <is-a> <Topic> . ?x <in-context> ?c . <word:extr*> <in-context> ?c . <word:supe*> <in-context> ?c } LIMIT 1000
+vlt_person-auto*-inte*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:auto*> <in-context> ?c . <word:inte*> <in-context> ?c } LIMIT 1000
+vlt_person-bi-europe-over*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <Place_of_birth> ?p . ?p <Contained_by> <Europe> . ?x <in-context> ?c . <word:over*> <in-context> ?c } LIMIT 1000
+vlt_female-sued-orga-pharma*	SELECT ?x ?o WHERE { ?x <Gender> <Female> . ?x <in-context> ?c1 . <word:sued> <in-context> ?c1 . ?o <in-context> ?c1 . ?o <is-a> <Organisation> . ?o <in-context> ?c2 . <word:pharma*> <in-context> ?c2 } LIMIT 1000
+vlt_footballer-play*euro-play*usa	SELECT ?x ?y ?z WHERE {?x <is-a> <Football_player> . ?x <in-context> ?c1 . <word:play*> <in-context> ?c1 . ?y <in-context> ?c1 . ?y <Contained_by> <Europe> . ?x <in-context> ?c2 . <word:play*> <in-context> ?c2 . ?z <in-context> ?c2 . ?z <Contained_by> <United_States_of_America> } LIMIT 1000
