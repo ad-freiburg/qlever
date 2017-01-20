@@ -1,10 +1,10 @@
-text_country	SELECT ?c WHERE { <word:country> <in-context> ?c }
-text_database-research	SELECT ?c WHERE { <word:database> <in-context> ?c . <word:research> <in-context> ?c }
-text_microsoft-computer	SELECT ?c WHERE { <word:microsoft> <in-context> ?c . <word:computer> <in-context> ?c }
-text_entmircosoft-computer	SELECT ?c WHERE { <Microsoft_Corporation> <in-context> ?c . <word:computer> <in-context> ?c }
-text_car-manufact*	SELECT ?c WHERE { <word:car> <in-context> ?c . <word:manufact*> <in-context> ?c }
-text_entity-ow-semantic-search	SELECT ?e WHERE { ?e <in-context> ?c . <word:semantic> <in-context> ?c . <word:search> <in-context> ?c }
-text_entity-ow-international	SELECT ?e WHERE { ?e <in-context> ?c . <word:international> <in-context> ?c  }
-text_entity-ow-power-source	SELECT ?e WHERE { ?e <in-context> ?c . <word:power> <in-context> ?c  . <word:source> <in-context> ?c  }
-text_entity-ow-micro*	SELECT ?e WHERE { ?e <in-context> ?c . <word:micro*> <in-context> ?c }
-text_entity-ow-open*-prob	SELECT ?e WHERE { ?e <in-context> ?c . <word:open*> <in-context> ?c  . <word:prob*> <in-context> ?c  }
+text_country	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?c WHERE { <word:country> <in-context> ?c }
+text_database-research	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?c WHERE { <word:database> <in-context> ?c . <word:research> <in-context> ?c }
+text_microsoft-computer	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?c WHERE { <word:microsoft> <in-context> ?c . <word:computer> <in-context> ?c }
+text_entmircosoft-computer	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?c WHERE { fb:m.04sv4 <in-context> ?c . <word:computer> <in-context> ?c }
+text_car-manufact*	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?c WHERE { <word:car> <in-context> ?c . <word:manufact*> <in-context> ?c }
+text_entity-ow-semantic-search	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?e WHERE { ?e <in-context> ?c . <word:semantic> <in-context> ?c . <word:search> <in-context> ?c }
+text_entity-ow-international	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?e WHERE { ?e <in-context> ?c . <word:international> <in-context> ?c  }
+text_entity-ow-power-source	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?e WHERE { ?e <in-context> ?c . <word:power> <in-context> ?c  . <word:source> <in-context> ?c  }
+text_entity-ow-micro*	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?e WHERE { ?e <in-context> ?c . <word:micro*> <in-context> ?c }
+text_entity-ow-open*-prob	PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?e WHERE { ?e <in-context> ?c . <word:open*> <in-context> ?c  . <word:prob*> <in-context> ?c  }
