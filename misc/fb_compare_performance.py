@@ -124,7 +124,7 @@ def get_my_query_times(query_file, get_names):
                 exit(1)
     coutfile = open('__tmp.cout.mine', 'w')
     myout = subprocess.check_output(
-        [my_binary, '-i', my_index, '-t', '--queryfile', '__tmp.my_queries']).decode('utf-8')
+        [my_binary, '-i', my_index, '-t', '--queryfile', '__tmp.my_queries', '-l']).decode('utf-8')
     coutfile.write(myout)
     coutfile.write('\n\n\n\n')
     times = []
