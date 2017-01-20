@@ -78,13 +78,13 @@ def expanded_to_my_syntax(q):
 def add_getting_names(q):
     try:
         before_where, after_where = q.split('WHERE')
-        vars = before_where.split('SELECT')[1].strip().lstrip('DISTINCT').lstrip().split(' ')
+        vs = before_where.split('SELECT')[1].strip().lstrip('DISTINCT').lstrip().split(' ')
         no_mod, mod = after_where.strip().split('}')
         clauses = no_mod.strip('{').split('.')
         new_clauses = []
-        for v in vars:
-            before_where.replace(var, var + ' ' + var + 'name')
-            new_clauses.append(' ' + var + ' fb:type.object.name.en  ' + var + 'name')
+        for v in vs:
+            before_where = before_where.replace(v, v + ' ' + v + 'name')
+            new_clauses.append(' ' + v + ' fb:type.object.name.en  ' + v + 'name')
         context_to_words = {}
         for c in clauses:
             if '<word:' in c:
@@ -147,48 +147,6 @@ def get_my_query_times(query_file, get_names):
         print('PROBLEM PROCESSING MINE: q:' + str(len(queries)) + ' t:' +
                 str(len(times)) + ' #:' + str(len(nof_matches_limit)), file=sys.stderr)
     return times, nof_matches_limit
-
-
-def get_broccoli_query_times(query_file):
-    print('get_broccoli_query_times', file=sys.stderr)
-    impossibles = {}
-    with open('__tmp.broccoli_queries', 'w') as tmpfile:
-        i = 0
-        for line in open(query_file):
-            broccoli_query = rewrite_for_broccoli(line.strip().split('\t')[1])
-            if 'NOT POSSIBLE:' in broccoli_query:
-                impossibles[i] = True
-            else:
-                tmpfile.write(broccoli_query + '\n')
-            i += 1
-    times = []
-    nof_matches = []
-    while len(times) in impossibles:
-        times.append('-')
-        nof_matches.append(0)
-    first = True
-    with open('__tmp.cout.broccoli', 'w') as coutfile:
-        for line in open('__tmp.broccoli_queries'):
-            if first:
-                out = requests.get(broccoli_api + line.strip()
-                                   + '&format=json&cmd=clearcache').json()
-                first = False
-            else:
-                out = requests.get(broccoli_api + line.strip()
-                               + '&format=json').json()
-            print(str(out), file=coutfile)
-            times.append(out['result']['time']['total'])
-            nof_matches.append(int(out['result']['res']['instances']['sent']))
-            while len(times) in impossibles:
-                times.append('-')
-                nof_matches.append(0)
-    queries = []
-    for line in open(query_file):
-        queries.append(line.strip())
-    if len(times) != len(queries) or len(times) != len(nof_matches):
-        print('PROBLEM PROCESSING BROCCOLI: q:' + str(len(queries)) + ' t:' +
-              str(len(times)) + ' #:' + str(len(nof_matches)), file=sys.stderr)
-    return times, nof_matches
 
 
 def print_result_table(queries, headers, time_and_counts):
