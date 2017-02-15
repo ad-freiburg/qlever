@@ -231,30 +231,6 @@ Text / Knowledge-base data can be nested in queries. This allows queries like on
         ?t2 <in-text> "manhattan project"
     } ORDER BY DESC(SCORE(?t))
 
-#In addition to `<in-text>` there is another special relation `<has-context>` that is useful when search for documents.
-#
-#A query for documents that state that a plan has edible leaves:
-#
-#    SELECT ?doc ?plant WHERE { 
-#        ?doc <has-context> ?c
-#        ?plant <is-a> <Plant> . 
-#        ?plant <in-context> ?c . 
-#        ?c <in-context> edible leaves
-#    }    
-#
-#Again, features can be nested.
-#
-#A query for books with descriptions that contain the word drug.
-#
-#    SELECT ?book TEXT(?c) WHERE {
-#        ?book <is-a> <Book> .
-#        ?book <description ?d .
-#        ?d <has-context> ?c .
-#        ?c <in-context> drug
-#    }
-#    
-#Note the use of the relation `has-context` that links the context to a text source (in this case the description) that may be an entity itself.
-
 
 For now, each text-record variable is required to have a triple `<in-text> ENTITY/WORD`. 
 Pure connections to variables (e.g. "Books with a description that mentions a plant.") are planned for the future.
