@@ -95,7 +95,7 @@ void SparqlParser::parseSelect(const string& str, ParsedQuery& query) {
       query._selectedVariables.push_back(vars[i]);
     } else {
       throw ParseException(string("Invalid variable in select clause: \"") +
-          vars[i] + "\"");
+                           vars[i] + "\"");
     }
   }
 }
@@ -170,13 +170,13 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
 void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
   size_t i = 0;
   while (i < str.size() &&
-      (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
+         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
   if (i == str.size()) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
   }
   size_t j = i + 1;
   while (j < str.size() && str[j] != '\t' && str[j] != ' ' &&
-      str[j] != '\n') { ++j; }
+         str[j] != '\n') { ++j; }
   if (j == str.size()) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
   }
@@ -184,60 +184,59 @@ void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
   string s = str.substr(i, j - i);
   i = j;
   while (i < str.size() &&
-      (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
+         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
   if (i == str.size()) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
   }
   j = i + 1;
   while (j < str.size() && str[j] != '\t' && str[j] != ' ' &&
-      str[j] != '\n') { ++j; }
+         str[j] != '\n') { ++j; }
   string p = str.substr(i, j - i);
-  if (p == IN_CONTEXT_RELATION ||
-      p.find(IN_CONTEXT_RELATION_NS) != string::npos) {
-    string o = ad_utility::strip(str.substr(j), " \t\n");
-    query._whereClauseTriples.push_back(SparqlTriple(s, p, o));
-  } else {
-    i = j;
-    while (i < str.size() &&
-        (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
-    if (i == str.size()) {
-      AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
+
+  i = j;
+  while (i < str.size() &&
+         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
+  if (i == str.size()) {
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
+  }
+  if (str[i] == '<') {
+    // URI
+    j = str.find('>', i + 1);
+    if (j == string::npos) {
+      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+               "Illegal object in : " + str);
     }
-    if (str[i] == '<') {
-      // URI
-      j = str.find('>', i + 1);
+    ++j;
+  } else {
+    if (str[i] == '\"') {
+      // Literal
+      j = str.find('\"', i + 1);
       if (j == string::npos) {
         AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                 "Illegal object in : " + str);
+                 "Illegal literal in : " + str);
       }
       ++j;
     } else {
-      if (str[i] == '\"') {
-        // Literal
-        j = str.find('\"', i + 1);
-        if (j == string::npos) {
-          AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                   "Illegal literal in : " + str);
-        }
-        ++j;
-      } else {
-        j = i + 1;
-      }
-      while (j < str.size() && str[j] != ' ' && str[j] != '\t' &&
-          str[j] != '\n') { ++j; }
+      j = i + 1;
     }
-    string o = str.substr(i, j - i);
-    SparqlTriple triple(s, p, o);
-    // Quadratic in number of triples in query.
-    // Shouldn't be a problem here, though.
-    // Could use a (hash)-set instead of vector.
-    if (std::find(query._whereClauseTriples.begin(),
-                  query._whereClauseTriples.end(), triple) !=
-        query._whereClauseTriples.end()) {
-      LOG(INFO) << "Ignoring duplicate triple: " << str << std::endl;
-    } else {
-      query._whereClauseTriples.push_back(triple);
-    }
+    while (j < str.size() && str[j] != ' ' && str[j] != '\t' &&
+           str[j] != '\n') { ++j; }
+  }
+  string o = str.substr(i, j - i);
+  if (p == IN_CONTEXT_RELATION ||
+      p.find(IN_CONTEXT_RELATION_NS) != string::npos) {
+    o = stripKeywordLiteral(o);
+  }
+  SparqlTriple triple(s, p, o);
+  // Quadratic in number of triples in query.
+  // Shouldn't be a problem here, though.
+  // Could use a (hash)-set instead of vector.
+  if (std::find(query._whereClauseTriples.begin(),
+                query._whereClauseTriples.end(), triple) !=
+      query._whereClauseTriples.end()) {
+    LOG(INFO) << "Ignoring duplicate triple: " << str << std::endl;
+  } else {
+    query._whereClauseTriples.push_back(triple);
   }
 }
 
@@ -251,9 +250,9 @@ void SparqlParser::parseSolutionModifiers(const string& str,
         && tokens[i + 1] == "BY") {
       i += 1;
       while (i + 1 < tokens.size()
-          && tokens[i + 1] != "LIMIT"
-          && tokens[i + 1] != "OFFSET"
-          && tokens[i + 1] != "TEXTLIMIT") {
+             && tokens[i + 1] != "LIMIT"
+             && tokens[i + 1] != "OFFSET"
+             && tokens[i + 1] != "TEXTLIMIT") {
         query._orderBy.emplace_back(OrderKey(tokens[i + 1]));
         ++i;
       }
@@ -335,4 +334,15 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
              "Filter not supported yet: " + filter);
   }
   query._filters.emplace_back(f);
+}
+
+// _____________________________________________________________________________
+string SparqlParser::stripKeywordLiteral(const string& lit) {
+  if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
+    string stripped = ad_utility::strip(lit, '"');
+    stripped.erase(std::remove(stripped.begin(), stripped.end(), '\''),
+                   stripped.end());
+    return stripped;
+  }
+  return lit;
 }

@@ -122,8 +122,8 @@ TEST(ParserTest, testParse) {
 
     pq = SparqlParser::parse(
         "SELECT ?x ?y WHERE {?x is-a Actor .  FILTER(?x != ?y)."
-            "?y is-a Actor. ?x <in-context> ?c."
-            "?c <in-context> coca* abuse} LIMIT 10");
+            "?y is-a Actor. ?x <in-text> ?c."
+            "?c <in-text> \"coca* abuse\"} LIMIT 10");
     pq.expandPrefixes();
     ASSERT_EQ(1u, pq._filters.size());
     ASSERT_EQ("?x", pq._filters[0]._lhs);
@@ -131,19 +131,19 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(SparqlFilter::FilterType::NE, pq._filters[0]._type);
     ASSERT_EQ(4u, pq._whereClauseTriples.size());
     ASSERT_EQ("?x", pq._whereClauseTriples[2]._s);
-    ASSERT_EQ("<in-context>", pq._whereClauseTriples[2]._p);
+    ASSERT_EQ("<in-text>", pq._whereClauseTriples[2]._p);
     ASSERT_EQ("?c", pq._whereClauseTriples[2]._o);
     ASSERT_EQ("?c", pq._whereClauseTriples[3]._s);
-    ASSERT_EQ("<in-context>", pq._whereClauseTriples[3]._p);
+    ASSERT_EQ("<in-text>", pq._whereClauseTriples[3]._p);
     ASSERT_EQ("coca* abuse", pq._whereClauseTriples[3]._o);
 
     pq = SparqlParser::parse(
         "PREFIX : <>\n"
             "SELECT ?x ?y ?z TEXT(?c) SCORE(?c) ?c WHERE {\n"
             "?x :is-a :Politician .\n"
-            "?x :in-context ?c .\n"
-            "?c :in-context friend .\n"
-            "?c :in-context ?y .\n"
+            "?x :in-text ?c .\n"
+            "?c :in-text friend .\n"
+            "?c :in-text ?y .\n"
             "?y :is-a :Scientist .\n"
             "FILTER(?x != ?y) .\n"
             "} ORDER BY ?c");

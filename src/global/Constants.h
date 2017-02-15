@@ -22,10 +22,10 @@ static const size_t USE_BLOCKS_INDEX_SIZE_TRESHOLD = 20 * 1000;
 
 static const size_t IN_CONTEXT_CARDINALITY_ESTIMATE = 1000 * 1000 * 1000;
 
-static const char IN_CONTEXT_RELATION[] = "<in-context>";
-static const char IN_CONTEXT_RELATION_NS[] = ":in-context";
-static const char HAS_CONTEXT_RELATION[] = "<contains-context>";
-static const char HAS_CONTEXT_RELATION_NS[] = ":contains-context";
+static const char IN_CONTEXT_RELATION[] = "<in-text>";
+static const char IN_CONTEXT_RELATION_NS[] = ":in-text";
+static const char HAS_CONTEXT_RELATION[] = "<has-text>";
+static const char HAS_CONTEXT_RELATION_NS[] = ":has-text";
 
 static const char VALUE_PREFIX[] = ":v:";
 static const char VALUE_DATE_PREFIX[] = ":v:date:";

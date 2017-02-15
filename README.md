@@ -143,7 +143,7 @@ a) Wordsfile
 ------------
 A tab-separated file with one line per posting and following the format:
 
-    word    isEntity    contextId   score
+    word    isEntity    recordId   score
         
 For example, for a sentence `He discovered penicillin, a drug.`, it could look like this:
 
@@ -164,7 +164,7 @@ b) Docsfile
 -----------
 A tab-separated file with one line per original unit of text and following the format:
 
-    max_context_id  text
+    max_record_id  text
     
 For example, for the sentence above:
 
@@ -183,76 +183,80 @@ A query for plants with edible leaves:
 
     SELECT ?plant WHERE { 
         ?plant <is-a> <Plant> . 
-        ?plant <in-context> ?c . 
-        ?c <in-context> edible leaves
+        ?plant <in-text> ?t . 
+        ?t <in-text> "'edible' 'leaves'"
     } 
     
-The special relation `<in-context>` to state that results for `?plant` have to occur in a context `?c`.
-In contexts matching `?c`, there also have to be oth words `edible` and `leaves`.
+The special relation `<in-text>` to state that results for `?plant` have to occur in a text record `?t`.
+In records matching `?t`, there also have to be both words `edible` and `leaves`.
+Note that the single quotes can also be omitted and will be in further examples.
+Single quotes are necessary to mark phrases (which are not supported yet, but may be in the future).
 
 A query for Astronauts who walked on the moon:
 
-    SELECT ?a TEXT(?c) SCORE(?c) WHERE {
+    SELECT ?a TEXT(?t) SCORE(?t) WHERE {
         ?a <is-a> <Astronaut> . 
-        ?a <in-context> walk* moon
-    } ORDER BY DESC(SCORE(?c))
+        ?a <in-text> ?t .
+        ?t <in-text> "walk* moon"
+    } ORDER BY DESC(SCORE(?t))
     TEXTLIMIT 2
     
 Note the following features:
 
-* A star `*` can be used to search for a prefix as done in the keyword `walk*`. Note that there is a min prefix size depending on settingsat index build-time.
-* `SCORE` can be used to obtain the score of a text match. This is important to acieve a good ordering in the result. The typical way would be to `ORDER BY DESC(SCORE(?c))`.
-* Where `?c` just matches a context Id, `TEXT(?c)` can be used to extract a snippet.
+* A star `*` can be used to search for a prefix as done in the keyword `walk*`. Note that there is a min prefix size depending on settings at index build-time.
+* `SCORE` can be used to obtain the score of a text match. This is important to achieve a good ordering in the result. The typical way would be to `ORDER BY DESC(SCORE(?t))`.
+* Where `?t` just matches a text record Id, `TEXT(?t)` can be used to extract a snippet.
 * `TEXTLIMIT` can be used to control the number of result lines per text match. The default is 1.
 
 An alternative query for astronauts who walked on the moon:
 
-    SELECT ?a TEXT(?c) SCORE(?c) WHERE {
+    SELECT ?a TEXT(?t) SCORE(?t) WHERE {
         ?a <is-a> <Astronaut> . 
-        ?a <in-context> walk* <Moon> 
-    } ORDER BY DESC(SCORE(?c))
+        ?a <in-text> ?t .
+        ?t <in-text> "walk* <Moon>"
+    } ORDER BY DESC(SCORE(?t))
 
 This query doesn't search for an occurrence of the word moon but played where the entity `<Moon>` has been linked.
 
 
 Text / Knowledge-base data can be nested in queries. This allows queries like one for politicians that were friends with a scientist associated with the manhattan project:
 
-    SELECT ?p TEXT(?c) ?s TEXT(?c2) WHERE {
+    SELECT ?p TEXT(?t) ?s TEXT(?t2) WHERE {
         ?p <is-a> <Politician> .
-        ?p <in-context> ?c .
-        ?c <in-context> friend* .
-        ?c <in-context> ?s .
+        ?p <in-text> ?t .
+        ?t <in-text> friend* .
+        ?t <in-text> ?s .
         ?s <is-a> <Scientist> .
-        ?s <in-context> ?c2 .
-        ?c2 <in-context> manhattan project 
-    } ORDER BY DESC(SCORE(?c))
+        ?s <in-text> ?t2 .
+        ?t2 <in-text> "manhattan project"
+    } ORDER BY DESC(SCORE(?t))
 
-In addition to `<in-context>` there is another special relation `<has-context>` that is useful when search for documents.
+#In addition to `<in-text>` there is another special relation `<has-context>` that is useful when search for documents.
+#
+#A query for documents that state that a plan has edible leaves:
+#
+#    SELECT ?doc ?plant WHERE { 
+#        ?doc <has-context> ?c
+#        ?plant <is-a> <Plant> . 
+#        ?plant <in-context> ?c . 
+#        ?c <in-context> edible leaves
+#    }    
+#
+#Again, features can be nested.
+#
+#A query for books with descriptions that contain the word drug.
+#
+#    SELECT ?book TEXT(?c) WHERE {
+#        ?book <is-a> <Book> .
+#        ?book <description ?d .
+#        ?d <has-context> ?c .
+#        ?c <in-context> drug
+#    }
+#    
+#Note the use of the relation `has-context` that links the context to a text source (in this case the description) that may be an entity itself.
 
-A query for documents that state that a plan has edible leaves:
 
-    SELECT ?doc ?plant WHERE { 
-        ?doc <has-context> ?c
-        ?plant <is-a> <Plant> . 
-        ?plant <in-context> ?c . 
-        ?c <in-context> edible leaves
-    }    
-
-Again, features can be nested.
-
-A query for books with descriptions that contain the word drug.
-
-    SELECT ?book TEXT(?c) WHERE {
-        ?book <is-a> <Book> .
-        ?book <description ?d .
-        ?d <has-context> ?c .
-        ?c <in-context> drug
-    }
-    
-Note the use of the relation `has-context` that links the context to a text source (in this case the description) that may be an entity itself.
-
-
-For now, each context is required to have a triple `<in-context> ENTITY/WORD`. 
+For now, each text-record variable is required to have a triple `<in-text> ENTITY/WORD`. 
 Pure connections to variables (e.g. "Books with a description that mentions a plant.") are planned for the future.
 
 
@@ -273,30 +277,30 @@ They are fine for setting up a working sever within seconds and getting comforta
 Note that we left out stopwords (unlike in the docsfile) to demonstrate how this can be done if desired.
 If you build an index using these files and ask the query:
 
-    SELECT ?x TEXT(?c) WHERE {
+    SELECT ?x TEXT(?t) WHERE {
         ?x <is-a> <Scientist> .
-        ?x <in-context> ?c .
-        ?c <in-context> penicillin
-    }  ORDER BY DESC(SCORE(?c))
+        ?x <in-text> ?t .
+        ?t <in-text> "penicillin"
+    }  ORDER BY DESC(SCORE(?t))
     
 You should find `<Alexander_Fleming>` and the textual evidence for that match.
 
 You can also display his awards or find `<Albert_Einstein>` and his awards with the following query:
 
-    SELECT ?x ?award TEXT(?c) WHERE {
+    SELECT ?x ?award TEXT(?t) WHERE {
         ?x <is-a> <Scientist> .
-        ?x <in-context> ?c .
-        ?c <in-context> theory rela* .
+        ?x <in-text> ?t .
+        ?t <in-text> "theory rela*" .
         ?x <Award_Won> ?award
-    }  ORDER BY DESC(SCORE(?c))
+    }  ORDER BY DESC(SCORE(?t))
 
 have a look at the (really tiny) input files to get a feeling for how this works.
 
 Curl-versions (ready for copy&paste) of the queries:
 
-    SELECT ?x TEXT(?c) WHERE \{ ?x <is-a> <Scientist> . ?x <in-context> ?c . ?c <in-context> penicillin \} ORDER BY DESC(SCORE(?c))    
+    SELECT ?x TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?x <in-text> ?t . ?t <in-text> \"penicillin\" \} ORDER BY DESC(SCORE(?t))    
 
-    SELECT ?x ?award TEXT(?c) WHERE \{ ?x <is-a> <Scientist> . ?x <in-context> ?c . ?c <in-context> theory rela* . ?x <Award_Won> ?award \}  ORDER BY DESC(SCORE(?c))
+    SELECT ?x ?award TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?x <in-text> ?t . ?t <in-text> \"theory rela*\" . ?x <Award_Won> ?award \}  ORDER BY DESC(SCORE(?t))
     
 Again, there's not much to be done with this data.
 For a meaningful index, use the example data below.
@@ -316,16 +320,16 @@ Includes a knowledge base as nt file, and a words- and docsfile as tsv.
 
 Here is a sample query to try and check if everything worked for you:
 
-    SELECT ?x SCORE(?c) TEXT(?c) WHERE {
+    SELECT ?x SCORE(?t) TEXT(?t) WHERE {
         ?x <is-a> <Scientist> .
-        ?x <in-context> ?c .
-        ?c <in-context> relati*
+        ?x <in-text> ?t .
+        ?t <in-text> "relati*"
     }
-    ORDER BY DESC(SCORE(?c))
+    ORDER BY DESC(SCORE(?t))
 
 Curl-version (ready for copy&paste) of the query:
 
-    SELECT ?x SCORE(?c) TEXT(?c) WHERE \{ ?x <is-a> <Scientist> . ?x <in-context> ?c . ?c <in-context> relati* \} ORDER BY DESC(SCORE(?c))
+    SELECT ?x SCORE(?t) TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?x <in-text> ?t . ?t <in-text> \"relati*\" \} ORDER BY DESC(SCORE(?t))
 
 Download prepared input for English Wikipedia text and a KB derived from Freebase
 ---------------------------------------------------------------------------------
@@ -342,16 +346,16 @@ Text and facts are basically equivalent to the [Broccoli](http://broccoli.cs.uni
 
 Here is a sample query to try and check if everything worked for you:
 
-    SELECT ?x SCORE(?c) TEXT(?c) WHERE {
+    SELECT ?x SCORE(?t) TEXT(?t) WHERE {
         ?x <is-a> <Astronaut> .
-        ?x <in-context> ?c .
-        ?c <in-context> walk* moon
+        ?x <in-text> ?t .
+        ?t <in-text> "walk* moon"
     }
-    ORDER BY DESC(SCORE(?c))
+    ORDER BY DESC(SCORE(?t))
 
 Curl-version (ready for copy&paste) of the query:
 
-    SELECT ?x SCORE(?c) TEXT(?c) WHERE \{ ?x <is-a> <Astronaut> . ?x <in-context> ?c . ?c <in-context> walk* moon \} ORDER BY DESC(SCORE(?c))
+    SELECT ?x SCORE(?t) TEXT(?t) WHERE \{ ?x <is-a> <Astronaut> . ?x <in-text> ?t . ?t <in-text> \"walk* moon\" \} ORDER BY DESC(SCORE(?t))
 
 Use any knowledge base and text collection of your choice
 ---------------------------------------------------------

@@ -182,14 +182,14 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
     {
       {
         ParsedQuery pq = SparqlParser::parse(
-            "SELECT ?x WHERE {?x <p> <X>. ?x <in-context> ?c. ?c <in-context> abc}");
+            "SELECT ?x WHERE {?x <p> <X>. ?x <in-text> ?c. ?c <in-text> abc}");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(pq);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-                "1 {s: ?x, p: <in-context>, o: ?c} : (0, 2)\n"
-                "2 {s: ?c, p: <in-context>, o: abc} : (1)",
+                "1 {s: ?x, p: <in-text>, o: ?c} : (0, 2)\n"
+                "2 {s: ?c, p: <in-text>, o: abc} : (1)",
             tg.asString());
         tg.collapseTextCliques();
         ASSERT_EQ(
@@ -201,15 +201,15 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
       }
       {
         ParsedQuery pq = SparqlParser::parse(
-            "SELECT ?x WHERE {?x <p> <X>. ?x <in-context> ?c. ?c <in-context> abc . ?y <in-context> ?c}");
+            "SELECT ?x WHERE {?x <p> <X>. ?x <in-text> ?c. ?c <in-text> abc . ?y <in-text> ?c}");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(pq);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-                "1 {s: ?x, p: <in-context>, o: ?c} : (0, 2, 3)\n"
-                "2 {s: ?c, p: <in-context>, o: abc} : (1, 3)\n"
-                "3 {s: ?y, p: <in-context>, o: ?c} : (1, 2)",
+                "1 {s: ?x, p: <in-text>, o: ?c} : (0, 2, 3)\n"
+                "2 {s: ?c, p: <in-text>, o: abc} : (1, 3)\n"
+                "3 {s: ?y, p: <in-text>, o: ?c} : (1, 2)",
             tg.asString());
         tg.collapseTextCliques();
         ASSERT_EQ(
@@ -221,15 +221,15 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
       }
       {
         ParsedQuery pq = SparqlParser::parse(
-            "SELECT ?x WHERE {?x <p> <X>. ?x <in-context> ?c. ?c <in-context> abc . ?y <in-context> ?c. ?y <P2> <X2>}");
+            "SELECT ?x WHERE {?x <p> <X>. ?x <in-text> ?c. ?c <in-text> abc . ?y <in-text> ?c. ?y <P2> <X2>}");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(pq);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-                "1 {s: ?x, p: <in-context>, o: ?c} : (0, 2, 3)\n"
-                "2 {s: ?c, p: <in-context>, o: abc} : (1, 3)\n"
-                "3 {s: ?y, p: <in-context>, o: ?c} : (1, 2, 4)\n"
+                "1 {s: ?x, p: <in-text>, o: ?c} : (0, 2, 3)\n"
+                "2 {s: ?c, p: <in-text>, o: abc} : (1, 3)\n"
+                "3 {s: ?y, p: <in-text>, o: ?c} : (1, 2, 4)\n"
                 "4 {s: ?y, p: <P2>, o: <X2>} : (3)",
             tg.asString());
         tg.collapseTextCliques();
@@ -244,17 +244,17 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
       }
       {
         ParsedQuery pq = SparqlParser::parse(
-            "SELECT ?x WHERE {?x <p> <X>. ?x <in-context> ?c. ?c <in-context> abc . ?y <in-context> ?c. ?y <in-context> ?c2. ?c2 <in-context> xx}");
+            "SELECT ?x WHERE {?x <p> <X>. ?x <in-text> ?c. ?c <in-text> abc . ?y <in-text> ?c. ?y <in-text> ?c2. ?c2 <in-text> xx}");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(pq);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-                "1 {s: ?x, p: <in-context>, o: ?c} : (0, 2, 3)\n"
-                "2 {s: ?c, p: <in-context>, o: abc} : (1, 3)\n"
-                "3 {s: ?y, p: <in-context>, o: ?c} : (1, 2, 4)\n"
-                "4 {s: ?y, p: <in-context>, o: ?c2} : (3, 5)\n"
-                "5 {s: ?c2, p: <in-context>, o: xx} : (4)",
+                "1 {s: ?x, p: <in-text>, o: ?c} : (0, 2, 3)\n"
+                "2 {s: ?c, p: <in-text>, o: abc} : (1, 3)\n"
+                "3 {s: ?y, p: <in-text>, o: ?c} : (1, 2, 4)\n"
+                "4 {s: ?y, p: <in-text>, o: ?c2} : (3, 5)\n"
+                "5 {s: ?c2, p: <in-text>, o: xx} : (4)",
             tg.asString());
         tg.collapseTextCliques();
         ASSERT_EQ(
@@ -268,17 +268,17 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
       }
       {
         ParsedQuery pq = SparqlParser::parse(
-            "SELECT ?x WHERE {?x <p> <X>. ?x <in-context> ?c. ?c <in-context> abc . ?y <in-context> ?c. ?y <in-context> ?c2. ?c2 <in-context> xx. ?y <P2> <X2>}");
+            "SELECT ?x WHERE {?x <p> <X>. ?x <in-text> ?c. ?c <in-text> abc . ?y <in-text> ?c. ?y <in-text> ?c2. ?c2 <in-text> xx. ?y <P2> <X2>}");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(pq);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-                "1 {s: ?x, p: <in-context>, o: ?c} : (0, 2, 3)\n"
-                "2 {s: ?c, p: <in-context>, o: abc} : (1, 3)\n"
-                "3 {s: ?y, p: <in-context>, o: ?c} : (1, 2, 4, 6)\n"
-                "4 {s: ?y, p: <in-context>, o: ?c2} : (3, 5, 6)\n"
-                "5 {s: ?c2, p: <in-context>, o: xx} : (4)\n"
+                "1 {s: ?x, p: <in-text>, o: ?c} : (0, 2, 3)\n"
+                "2 {s: ?c, p: <in-text>, o: abc} : (1, 3)\n"
+                "3 {s: ?y, p: <in-text>, o: ?c} : (1, 2, 4, 6)\n"
+                "4 {s: ?y, p: <in-text>, o: ?c2} : (3, 5, 6)\n"
+                "5 {s: ?c2, p: <in-text>, o: xx} : (4)\n"
                 "6 {s: ?y, p: <P2>, o: <X2>} : (3, 4)",
             tg.asString());
         tg.collapseTextCliques();
@@ -613,8 +613,8 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
   try {
     ParsedQuery pq = SparqlParser::parse(
         "SELECT ?a \n "
-            "WHERE  {?a <is-a> <Plant> . ?a <in-context> ?c. "
-            "?c <in-context> edible leaves} TEXTLIMIT 5");
+            "WHERE  {?a <is-a> <Plant> . ?a <in-text> ?c. "
+            "?c <in-text> \"edible leaves\"} TEXTLIMIT 5");
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryPlanner::TripleGraph tg = qp.createTripleGraph(pq);
@@ -648,7 +648,7 @@ TEST(QueryExecutionTreeTest, testTextQuerySE) {
   try {
     ParsedQuery pq = SparqlParser::parse(
         "SELECT TEXT(?c) \n "
-            "WHERE  {?c <in-context> search engine}");
+            "WHERE  {?c <in-text> \"'search' 'engine'\"}");
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
@@ -673,8 +673,8 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
             "WHERE \t {"
             "?x :Place_of_birth ?y ."
             "?y :Contained_by :Europe ."
-            "?x :in-context ?c ."
-            "?c :in-context cocaine ."
+            "?x :in-text ?c ."
+            "?c :in-text cocaine ."
             "}");
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
@@ -716,9 +716,9 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
         "PREFIX : <>"
             "SELECT ?x ?y WHERE {"
             "?x :is-a :Politician ."
-            "?x :in-context ?c ."
-            "?c :in-context friend* ."
-            "?y :in-context ?c ."
+            "?x :in-text ?c ."
+            "?c :in-text friend* ."
+            "?y :in-text ?c ."
             "}");
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
@@ -743,12 +743,12 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
         "SELECT ?p ?s \n "
             "WHERE {"
             "?a <is-a> <Politician> . "
-            "?a <in-context> ?c ."
-            "?c <in-context> friend* ."
-            "?c <in-context> ?s ."
+            "?a <in-text> ?c ."
+            "?c <in-text> \"'friend*'\" ."
+            "?c <in-text> ?s ."
             "?s <is-a> <Scientist> ."
-            "?s <in-context> ?c2 ."
-            "?c2 <in-context> manhattan project}");
+            "?s <in-text> ?c2 ."
+            "?c2 <in-text> \"manhattan project\"}");
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
