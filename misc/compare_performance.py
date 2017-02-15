@@ -64,7 +64,7 @@ def expanded_to_my_syntax(q):
         else:
             new_clauses.append(c)
     for c, ws in context_to_words.items():
-        new_clauses.append(' ' + c + ' <in-context> ' + ' '.join(ws) + ' ')
+        new_clauses.append(' ' + c + ' <in-text> ' + ' '.join(ws) + ' ')
     new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
     return 'WHERE'.join([before_where, new_after_where])
 
@@ -77,7 +77,7 @@ def rewrite_for_rdf3x(q):
         print('More than one FILTER inexpressible in rdf3x: ' + q.strip(), file=sys.stderr)
         return 'NOT POSSIBLE: ' + q.strip()
     before_where, after_where = q.split('WHERE')
-    if '<in-context>' in q and 'DISTINCT' not in q:
+    if '<in-text>' in q and 'DISTINCT' not in q:
         before_where = before_where[:before_where.find('SELECT')] \
                        + ' SELECT DISTINCT' \
                        + before_where[before_where.find('SELECT') + 6:]
@@ -100,7 +100,7 @@ def rewrite_for_rdf3x(q):
 
 def rewrite_to_bif_contains_inc(q):
     before_where, after_where = q.split('WHERE')
-    if '<in-context>' in q and 'DISTINCT' not in q:
+    if '<in-text>' in q and 'DISTINCT' not in q:
         before_where = before_where[:before_where.find('SELECT')] \
                        + ' SELECT DISTINCT' \
                        + before_where[before_where.find('SELECT') + 6:]
@@ -133,7 +133,7 @@ def rewrite_to_bif_contains_inc(q):
 
 def rewrite_to_bif_contains(q):
     before_where, after_where = q.split('WHERE')
-    if '<in-context>' in q and 'DISTINCT' not in q:
+    if '<in-text>' in q and 'DISTINCT' not in q:
         before_where = before_where[:before_where.find('SELECT')] \
                        + ' SELECT DISTINCT' \
                        + before_where[before_where.find('SELECT') + 6:]
@@ -156,7 +156,7 @@ def rewrite_to_bif_contains(q):
                 print("Problem in : " + c, file=sys.stderr)
                 exit(1)
         else:
-            if '<in-context>' not in c:
+            if '<in-text>' not in c:
                 new_clauses.append(c)
             else:
                 try:
@@ -216,7 +216,7 @@ def rewrite_for_broccoli(q):
     for c in clauses:
         try:
             s, p, o = c.strip().split(' ')
-            if p == '<in-context>':
+            if p == '<in-text>':
                 if '<word' in s:
                     if o not in context_to_words:
                         context_to_words[o] = []
@@ -296,7 +296,7 @@ def get_virtuoso_query_times(query_file, pwd):
     with open('__tmp.virtqueries', 'w') as tmpfile:
         for line in open(query_file):
             query = 'SPARQL ' + line.strip().split('\t')[1] + ';'
-            if '<in-context>' in query and 'DISTINCT' not in query:
+            if '<in-text>' in query and 'DISTINCT' not in query:
                 query = query.replace('SELECT', 'SELECT DISTINCT')
             print(query, file=tmpfile)
     virtout = subprocess.check_output(

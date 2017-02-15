@@ -1,10 +1,10 @@
-text_country	SELECT ?c WHERE { <word:country> <in-context> ?c }
-text_database-research	SELECT ?c WHERE { <word:database> <in-context> ?c . <word:research> <in-context> ?c }
-text_microsoft-computer	SELECT ?c WHERE { <word:microsoft> <in-context> ?c . <word:computer> <in-context> ?c }
-text_entmircosoft-computer	SELECT ?c WHERE { <Microsoft_Corporation> <in-context> ?c . <word:computer> <in-context> ?c }
-text_car-manufact*	SELECT ?c WHERE { <word:car> <in-context> ?c . <word:manufact*> <in-context> ?c }
-text_entity-ow-semantic-search	SELECT ?e WHERE { ?e <in-context> ?c . <word:semantic> <in-context> ?c . <word:search> <in-context> ?c }
-text_entity-ow-international	SELECT ?e WHERE { ?e <in-context> ?c . <word:international> <in-context> ?c  }
-text_entity-ow-power-source	SELECT ?e WHERE { ?e <in-context> ?c . <word:power> <in-context> ?c  . <word:source> <in-context> ?c  }
-text_entity-ow-micro*	SELECT ?e WHERE { ?e <in-context> ?c . <word:micro*> <in-context> ?c }
-text_entity-ow-open*-prob	SELECT ?e WHERE { ?e <in-context> ?c . <word:open*> <in-context> ?c  . <word:prob*> <in-context> ?c  }
+text_country	SELECT ?c WHERE { <word:country> <in-text> ?c }
+text_database-research	SELECT ?c WHERE { <word:database> <in-text> ?c . <word:research> <in-text> ?c }
+text_microsoft-computer	SELECT ?c WHERE { <word:microsoft> <in-text> ?c . <word:computer> <in-text> ?c }
+text_entmircosoft-computer	SELECT ?c WHERE { <Microsoft_Corporation> <in-text> ?c . <word:computer> <in-text> ?c }
+text_car-manufact*	SELECT ?c WHERE { <word:car> <in-text> ?c . <word:manufact*> <in-text> ?c }
+text_entity-ow-semantic-search	SELECT ?e WHERE { ?e <in-text> ?c . <word:semantic> <in-text> ?c . <word:search> <in-text> ?c }
+text_entity-ow-international	SELECT ?e WHERE { ?e <in-text> ?c . <word:international> <in-text> ?c  }
+text_entity-ow-power-source	SELECT ?e WHERE { ?e <in-text> ?c . <word:power> <in-text> ?c  . <word:source> <in-text> ?c  }
+text_entity-ow-micro*	SELECT ?e WHERE { ?e <in-text> ?c . <word:micro*> <in-text> ?c }
+text_entity-ow-open*-prob	SELECT ?e WHERE { ?e <in-text> ?c . <word:open*> <in-text> ?c  . <word:prob*> <in-text> ?c  }

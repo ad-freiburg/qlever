@@ -1,10 +1,10 @@
-vtr_person-comp*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:comp*> <in-context> ?c }
-vlt_person-company	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:company> <in-context> ?c }
-vlt_person-anti*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:anti*> <in-context> ?c }
-vlt_topic-auto*	SELECT ?x WHERE { ?x <is-a> <Topic> . ?x <in-context> ?c . <word:auto*> <in-context> ?c }
-vlt_airline-inter*	SELECT ?x WHERE { ?x <is-a> <Airline> . ?x <in-context> ?c . <word:inter*> <in-context> ?c }
-vlt_topic_extr*-supe*	SELECT ?x WHERE { ?x <is-a> <Topic> . ?x <in-context> ?c . <word:extr*> <in-context> ?c . <word:supe*> <in-context> ?c }
-vlt_person-auto*-inte*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-context> ?c . <word:auto*> <in-context> ?c . <word:inte*> <in-context> ?c }
-vlt_person-bi-europe-over*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <Place_of_birth> ?p . ?p <Contained_by> <Europe> . ?x <in-context> ?c . <word:over*> <in-context> ?c }
-vlt_female-sued-orga-pharma*	SELECT ?x ?o WHERE { ?x <Gender> <Female> . ?x <in-context> ?c1 . <word:sued> <in-context> ?c1 . ?o <in-context> ?c1 . ?o <is-a> <Organisation> . ?o <in-context> ?c2 . <word:pharma*> <in-context> ?c2 }
-vlt_footballer-play*euro-play*usa	SELECT ?x ?y ?z WHERE {?x <is-a> <Football_player> . ?x <in-context> ?c1 . <word:play*> <in-context> ?c1 . ?y <in-context> ?c1 . ?y <Contained_by> <Europe> . ?x <in-context> ?c2 . <word:play*> <in-context> ?c2 . ?z <in-context> ?c2 . ?z <Contained_by> <United_States_of_America> }
+vtr_person-comp*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-text> ?c . <word:comp*> <in-text> ?c }
+vlt_person-company	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-text> ?c . <word:company> <in-text> ?c }
+vlt_person-anti*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-text> ?c . <word:anti*> <in-text> ?c }
+vlt_topic-auto*	SELECT ?x WHERE { ?x <is-a> <Topic> . ?x <in-text> ?c . <word:auto*> <in-text> ?c }
+vlt_airline-inter*	SELECT ?x WHERE { ?x <is-a> <Airline> . ?x <in-text> ?c . <word:inter*> <in-text> ?c }
+vlt_topic_extr*-supe*	SELECT ?x WHERE { ?x <is-a> <Topic> . ?x <in-text> ?c . <word:extr*> <in-text> ?c . <word:supe*> <in-text> ?c }
+vlt_person-auto*-inte*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-text> ?c . <word:auto*> <in-text> ?c . <word:inte*> <in-text> ?c }
+vlt_person-bi-europe-over*	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <Place_of_birth> ?p . ?p <Contained_by> <Europe> . ?x <in-text> ?c . <word:over*> <in-text> ?c }
+vlt_female-sued-orga-pharma*	SELECT ?x ?o WHERE { ?x <Gender> <Female> . ?x <in-text> ?c1 . <word:sued> <in-text> ?c1 . ?o <in-text> ?c1 . ?o <is-a> <Organisation> . ?o <in-text> ?c2 . <word:pharma*> <in-text> ?c2 }
+vlt_footballer-play*euro-play*usa	SELECT ?x ?y ?z WHERE {?x <is-a> <Football_player> . ?x <in-text> ?c1 . <word:play*> <in-text> ?c1 . ?y <in-text> ?c1 . ?y <Contained_by> <Europe> . ?x <in-text> ?c2 . <word:play*> <in-text> ?c2 . ?z <in-text> ?c2 . ?z <Contained_by> <United_States_of_America> }

@@ -1,10 +1,10 @@
-isatext_prefix_astro-walk*-moon	SELECT ?p WHERE { ?p <is-a> <Astronaut> . ?p <in-context> ?c . <word:walk*> <in-context> ?c . <word:moon> <in-context> ?c }
-isatext_prefix_musician-fight*	SELECT ?p WHERE { ?p <is-a> <Musician> . ?p <in-context> ?c . <word:fight*> <in-context> ?c }
-isatext_prefix_singer-perform*	SELECT ?p WHERE { ?p <is-a> <Singer> . ?p <in-context> ?c . <word:perform*> <in-context> ?c }
-isatext_prefix_firefighter-crit*	SELECT ?p WHERE { ?p <is-a> <Firefighter> . ?p <in-context> ?c . <word:crit*> <in-context> ?c }
-isatext_prefix_animal-farm*	SELECT ?p WHERE { ?p <is-a> <Animal> . ?p <in-context> ?c . <word:farm*> <in-context> ?c }
-isatext_prefix_organisation-protest*	SELECT ?p WHERE { ?p <is-a> <Organisation> . ?p <in-context> ?c . <word:protest*> <in-context> ?c }
-isatext_prefix_drug-chem*-properties	SELECT ?p WHERE { ?p <is-a> <Drug> . ?p <in-context> ?c . <word:chem*> <in-context> ?c . <word:properties> <in-context> ?c }
-isatext_prefix_actor-play*-role*-criminal*	SELECT ?p WHERE { ?p <is-a> <Actor> . ?p <in-context> ?c . <word:play*> <in-context> ?c . <word:role*> <in-context> ?c . <word:criminal*> <in-context> ?c }
-isatext_prefix_location-down*-large*-river*	SELECT ?p WHERE { ?p <is-a> <Location> . ?p <in-context> ?c . <word:down*> <in-context> ?c . <word:large*> <in-context> ?c . <word:river*> <in-context> ?c }
-isatext_prefix_musician-rehab*	SELECT ?p WHERE { ?p <is-a> <Musician> . ?p <in-context> ?c . <word:rehab*> <in-context> ?c }
+isatext_prefix_astro-walk*-moon	SELECT ?p WHERE { ?p <is-a> <Astronaut> . ?p <in-text> ?c . <word:walk*> <in-text> ?c . <word:moon> <in-text> ?c }
+isatext_prefix_musician-fight*	SELECT ?p WHERE { ?p <is-a> <Musician> . ?p <in-text> ?c . <word:fight*> <in-text> ?c }
+isatext_prefix_singer-perform*	SELECT ?p WHERE { ?p <is-a> <Singer> . ?p <in-text> ?c . <word:perform*> <in-text> ?c }
+isatext_prefix_firefighter-crit*	SELECT ?p WHERE { ?p <is-a> <Firefighter> . ?p <in-text> ?c . <word:crit*> <in-text> ?c }
+isatext_prefix_animal-farm*	SELECT ?p WHERE { ?p <is-a> <Animal> . ?p <in-text> ?c . <word:farm*> <in-text> ?c }
+isatext_prefix_organisation-protest*	SELECT ?p WHERE { ?p <is-a> <Organisation> . ?p <in-text> ?c . <word:protest*> <in-text> ?c }
+isatext_prefix_drug-chem*-properties	SELECT ?p WHERE { ?p <is-a> <Drug> . ?p <in-text> ?c . <word:chem*> <in-text> ?c . <word:properties> <in-text> ?c }
+isatext_prefix_actor-play*-role*-criminal*	SELECT ?p WHERE { ?p <is-a> <Actor> . ?p <in-text> ?c . <word:play*> <in-text> ?c . <word:role*> <in-text> ?c . <word:criminal*> <in-text> ?c }
+isatext_prefix_location-down*-large*-river*	SELECT ?p WHERE { ?p <is-a> <Location> . ?p <in-text> ?c . <word:down*> <in-text> ?c . <word:large*> <in-text> ?c . <word:river*> <in-text> ?c }
+isatext_prefix_musician-rehab*	SELECT ?p WHERE { ?p <is-a> <Musician> . ?p <in-text> ?c . <word:rehab*> <in-text> ?c }

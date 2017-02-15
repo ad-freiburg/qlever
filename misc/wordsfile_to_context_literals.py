@@ -21,7 +21,7 @@ def write_nt_to_stdout(cid, entities, words, incontext):
         print('\t'.join(
             ['<context:' + cid + '>', '<text>', ' '.join(words), '.']))
         for e in entities:
-            print('\t'.join([e, '<in-context>', '<context:' + cid + '>', '.']))
+            print('\t'.join([e, '<in-text>', '<context:' + cid + '>', '.']))
     else:
         context_lit = ' '.join(words)
         for e in entities:

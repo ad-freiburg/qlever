@@ -68,7 +68,7 @@ def expanded_to_my_syntax(q):
             else:
                 new_clauses.append(c)
         for c, ws in context_to_words.items():
-            new_clauses.append(' ' + c + ' <in-context> ' + ' '.join(ws) + ' ')
+            new_clauses.append(' ' + c + ' <in-text> ' + ' '.join(ws) + ' ')
         new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
         return 'WHERE'.join([before_where, new_after_where])
     except:
@@ -101,7 +101,7 @@ def add_getting_names(q):
             else:
                 new_clauses.append(c)
         for c, ws in context_to_words.items():
-            new_clauses.append(' ' + c + ' <in-context> ' + ' '.join(ws) + ' ')
+            new_clauses.append(' ' + c + ' <in-text> ' + ' '.join(ws) + ' ')
         new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
         return 'WHERE'.join([before_where, new_after_where])
     except:
