@@ -211,6 +211,14 @@ public:
     return _textMeta.getAverageNofEntityContexts();
   };
 
+  void setKbName(const string& name);
+  void setTextName(const string& name);
+
+  const string& getTextName() const { return _textMeta.getName(); }
+  const string& getKbName() const { return _psoMeta.getName(); }
+  size_t getNofTriples() const { return _psoMeta.getNofTriples(); }
+  size_t getNofTextRecords() const {return _textMeta.getNofTextRecords(); }
+
 private:
   string _onDiskBase;
   Vocabulary _vocab;

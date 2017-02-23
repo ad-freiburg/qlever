@@ -165,7 +165,7 @@ TEST(IndexMetaDataTest, writeReadTest2) {
 
     ad_utility::File in("_testtmp.imd", "r");
     size_t imdBytes =
-        sizeof(size_t) + sizeof(off_t) +
+        2 * sizeof(size_t) + sizeof(off_t) +
         (rmdF.bytesRequired() + rmdB.bytesRequired()) * 2;
     unsigned char* buf = new unsigned char[imdBytes];
     in.read(buf, imdBytes);

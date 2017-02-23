@@ -205,10 +205,16 @@ public:
 
   string statistics() const;
 
+  size_t getNofTriples() const { return _nofTriples; }
+
+  void setName(const string& name) { _name = name; }
+
+  const string& getName() const { return _name; }
 
 private:
   off_t _offsetAfter;
-  size_t _avgNofEntityContexts;
+  size_t _nofTriples;
+  string _name;
 
   ad_utility::HashMap<Id, FullRelationMetaData> _data;
   ad_utility::HashMap<Id, BlockBasedRelationMetaData> _blockData;

@@ -110,6 +110,12 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
 
     try {
       ParamValueMap params = parseHttpRequest(request);
+
+      if (ad_utility::getLowercase(params["cmd"]) == "stats") {
+        client->send(composeStatsJson());
+        return;
+      }
+
       if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
         qec->clearCache();
       }
@@ -402,4 +408,24 @@ void Server::serveFile(Socket* client, const string& requestedFile) const {
   string data = headerStream.str();
   data += contentString;
   client->send(data);
+}
+
+// _____________________________________________________________________________
+string Server::composeStatsJson() const {
+  std::ostringstream os;
+  os << "{\r\n"
+     << "\"kb-index\": \""
+     << _index.getKbName()
+     << "\",\r\n"
+      << "\"nof-triples\": \""
+      << _index.getNofTriples()
+      << "\",\r\n"
+      << "\"text-index\": \""
+      << _index.getTextName()
+      << "\",\r\n"
+      << "\"nof-records\": \""
+      << _index.getNofTextRecords()
+      << "\"\r\n"
+     << "}\r\n";
+  return os.str();
 }

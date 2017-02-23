@@ -9,7 +9,7 @@
 #include "../util/ReadableNumberFact.h"
 
 // _____________________________________________________________________________
-IndexMetaData::IndexMetaData() : _offsetAfter(0) {
+IndexMetaData::IndexMetaData() : _offsetAfter(0), _nofTriples(0), _name() {
 }
 
 // _____________________________________________________________________________
@@ -33,14 +33,19 @@ off_t IndexMetaData::getOffsetAfter() const {
 
 // _____________________________________________________________________________
 void IndexMetaData::createFromByteBuffer(unsigned char* buf) {
-  size_t nofRelations = *reinterpret_cast<size_t*>(buf);
+  size_t nameLength = *reinterpret_cast<size_t*>(buf);
   size_t nofBytesDone = sizeof(size_t);
+  _name.assign(reinterpret_cast<char*>(buf + nofBytesDone), nameLength);
+  nofBytesDone += nameLength;
+  size_t nofRelations = *reinterpret_cast<size_t*>(buf + nofBytesDone);
+  nofBytesDone += sizeof(size_t);
   _offsetAfter = *reinterpret_cast<off_t*>(buf + nofBytesDone);
   nofBytesDone += sizeof(off_t);
-
+  _nofTriples = 0;
   for (size_t i = 0; i < nofRelations; ++i) {
     FullRelationMetaData rmd;
     rmd.createFromByteBuffer(buf + nofBytesDone);
+    _nofTriples += rmd.getNofElements();
     nofBytesDone += rmd.bytesRequired();
     if (rmd.hasBlocks()) {
       BlockBasedRelationMetaData bRmd;
@@ -71,6 +76,9 @@ bool IndexMetaData::relationExists(Id relId) const {
 
 // _____________________________________________________________________________
 ad_utility::File& operator<<(ad_utility::File& f, const IndexMetaData& imd) {
+  size_t nameLength = imd._name.size();
+  f.write(&nameLength, sizeof(nameLength));
+  f.write(imd._name.data(), nameLength);
   size_t nofElements = imd._data.size();
   f.write(&nofElements, sizeof(nofElements));
   f.write(&imd._offsetAfter, sizeof(imd._offsetAfter));

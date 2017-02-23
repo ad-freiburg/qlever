@@ -129,9 +129,11 @@ void Index::passContextFileIntoVector(const string& contextFile,
   ad_utility::HashMap<Id, Score> wordsInContext;
   ad_utility::HashMap<Id, Score> entitiesInContext;
   Id currentContext = 0;
+  size_t nofContexts = 0;
   size_t entityNotFoundErrorMsgCount = 0;
   while (p.getLine(line)) {
     if (line._contextId != currentContext) {
+      ++nofContexts;
       addContextToVector(writer, currentContext, wordsInContext,
                          entitiesInContext);
       currentContext = line._contextId;
@@ -166,8 +168,9 @@ void Index::passContextFileIntoVector(const string& contextFile,
       LOG(INFO) << "Lines processed: " << i << '\n';
     }
   }
-  addContextToVector(writer, currentContext, wordsInContext, entitiesInContext
-  );
+  ++nofContexts;
+  addContextToVector(writer, currentContext, wordsInContext, entitiesInContext);
+  _textMeta.setNofTextRecords(nofContexts);
   writer.finish();
   LOG(INFO) << "Pass done.\n";
 }
@@ -1459,4 +1462,9 @@ void Index::getRhsForSingleLhs(const Index::WidthTwoList& in, Id lhsId,
   LOG(DEBUG)
     << "Done. Matching right-hand-side EntityList now has "
     << result->size() << " elements." << "\n";
+}
+
+// _____________________________________________________________________________
+void Index::setTextName(const string& name) {
+  _textMeta.setName(name);
 }

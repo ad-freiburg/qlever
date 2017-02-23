@@ -1027,3 +1027,13 @@ vector<float> Index::getOPSMultiplicities(const string& key) const {
   }
   return res;
 }
+
+// _____________________________________________________________________________
+void Index::setKbName(const string& name) {
+  _psoMeta.setName(name);
+  _posMeta.setName(name);
+  _spoMeta.setName(name);
+  _sopMeta.setName(name);
+  _ospMeta.setName(name);
+  _opsMeta.setName(name);
+}

@@ -121,6 +121,23 @@ public:
     _nofEntityContexts = nofEC;
   }
 
+  size_t getNofTextRecords() const {
+    return _nofTextRecords;
+  }
+
+  void setNofTextRecords(size_t nofC) {
+    _nofTextRecords = nofC;
+  }
+
+  const string& getName() const {
+    return _name;
+  }
+
+  void setName(const string& name) {
+    _name = name;
+  }
+
+
   float getAverageNofEntityContexts() const {
     return float(_nofEntityContexts) / _nofEntities;
   };
@@ -130,6 +147,8 @@ private:
   vector<Id> _blockUpperBoundEntityIds;
   size_t _nofEntities;
   size_t _nofEntityContexts;
+  size_t _nofTextRecords;
+  string _name;
   vector<TextBlockMetaData> _blocks;
 
   friend ad_utility::File& operator<<(ad_utility::File& f,

@@ -71,6 +71,8 @@ private:
   string composeResponseJson(const string& query,
                              const ParseException& e) const;
 
+  string composeStatsJson() const;
+
 
   mutable ad_utility::Timer _requestProcessingTimer;
 };
