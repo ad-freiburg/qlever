@@ -8,6 +8,14 @@ $(document).ready(function () {
         var ccInd = window.location.href.indexOf("&cmd=clearcache");
         if (ccInd > 0) {
             $("#clear").prop("checked", true);
+        }
+        var sInd = window.location.href.indexOf("&send=");
+        if (sInd > 0) {
+            if (ccInd <= 0 || ccInd > sInd) {
+                ccInd = sInd;
+            }
+        }
+        if (ccInd > 0) {
             $("#query").val(decodeURIComponent(
                 window.location.href.substr(ind, ccInd - ind)));
         } else {
@@ -26,6 +34,7 @@ $(document).ready(function () {
         } else {
             console.log("Without clearcache");
         }
+        queryString += "&send=100"
         var loc = window.location.href.substr(0, window.location.href.indexOf("?"));
         if (loc.length == 0) {
             loc = "index.html"
@@ -123,6 +132,16 @@ function processTsvQuery(query) {
 }
 
 function processQuery(query) {
+    maxSend = 0;
+    var sInd = window.location.href.indexOf("&send=");
+    if (sInd > 0) {
+        var nextAmp = window.location.href.indexOf("&", sInd + 1);
+        if (nextAmp > 0) {
+            maxSend = parseInt(window.location.href.substr(sInd + 6, nextAmp - (sInd + 6)))
+        } else {
+            maxSend = parseInt(window.location.href.substr(sInd + 6))
+        }
+    }
     $.getJSON("/" + query, function (result) {
         if (result.status == "ERROR") {
             displayError(result);
@@ -135,11 +154,17 @@ function processQuery(query) {
         res += "Time elapsed:<br>";
         res += "Total: " + result.time.total + "<br/>";
         res += "&nbsp;- Computation: " + result.time.computeResult + "<br/>";
-        res += "&nbsp;- Creating JSON: "
+        res += "&nbsp;- Resolving entity names + excerpts and creating JSON: "
             + (parseInt(result.time.total.replace(/ms/, ""))
             - parseInt(result.time.computeResult.replace(/ms/, ""))).toString()
             + "ms";
         res += "</div>";
+        if (maxSend > 0 && maxSend < parseInt(result.resultsize)) {
+            res += "<div>Only transmitted " + maxSend.toString()
+                + " rows out of the " + result.resultsize
+                + " that were computed server-side. " +
+                "<a href=\"" + window.location.href.substr(0, window.location.href.indexOf("&")) + "\">[show all]</a>";
+        }
         res += "<table id=\"restab\">";
         for (var i = 0; i < result.res.length; i++) {
             res += "<tr>"
