@@ -9,6 +9,19 @@ body {
     background-color: rgb(112, 112, 122);
 }
 
+#stats {
+    /* border: 1px solid #66757D; */
+    box-shadow: 4px 4px 4px rgb(24, 24, 24);
+    background-color: rgb(224, 224, 224);
+    min-width: 810px;
+    max-width: 1080px;
+    margin: 30px auto;
+    padding: 10px;
+    font-size: 15px;
+    padding-left: 80px;
+    border-radius: 7px
+}
+
 #content {
     /* border: 1px solid #66757D; */
     box-shadow: 4px 4px 4px rgb(24, 24, 24);

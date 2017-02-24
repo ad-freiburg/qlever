@@ -124,6 +124,19 @@ int main(int argc, char** argv) {
     }
   }
 
+  if (textIndexName.size() == 0 && wordsfile.size() > 0) {
+    textIndexName = ad_utility::getLastPartOfString(wordsfile, '/');
+  }
+
+  if (kbIndexName.size() == 0) {
+    if (ntFile.size() > 0) {
+      kbIndexName = ad_utility::getLastPartOfString(ntFile, '/');
+    }
+    if (tsvFile.size() > 0) {
+      kbIndexName = ad_utility::getLastPartOfString(tsvFile, '/');
+    }
+  }
+
   if (baseName.size() == 0) {
     cout << "Missing required argument --index-basename (-i)..." << endl;
     exit(1);

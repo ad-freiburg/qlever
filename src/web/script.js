@@ -2,6 +2,7 @@
  * Created by buchholb on 3/31/15.
  */
 $(document).ready(function () {
+    handleStatsDisplay();
     var ind = window.location.href.indexOf("?query=");
     if (ind > 0) {
         ind += 7;
@@ -39,7 +40,7 @@ $(document).ready(function () {
         if (loc.length == 0) {
             loc = "index.html"
         }
-        window.history.pushState("object or string", "Title",
+        window.history.pushState("html:index.html", "QLever",
             loc + queryString);
         processQuery(queryString)
     });
@@ -68,6 +69,21 @@ $(document).ready(function () {
         processTsvQuery(queryString)
     });
 });
+
+// Copy&paste from:
+// http://stackoverflow.com/questions/901115/how-can-i-get-query-string-values-in-javascript/
+// TODO: use consistently, so far it has been added later to comfortably get stats.
+function getParameterByName(name, url) {
+    if (!url) {
+        url = window.location.href;
+    }
+    name = name.replace(/[\[\]]/g, "\\$&");
+    var regex = new RegExp("[?&]" + name + "(=([^&#]*)|&|#|$)"),
+        results = regex.exec(url);
+    if (!results) return null;
+    if (!results[2]) return '';
+    return decodeURIComponent(results[2].replace(/\+/g, " "));
+}
 
 function htmlEscape(str) {
 //    return str.replace(/&/g, "&amp;")
@@ -178,5 +194,14 @@ function processQuery(query) {
         res += "</table>";
         res += "<div>";
         $("#answer").html(res);
+    });
+}
+
+function handleStatsDisplay() {
+    $.getJSON("/?cmd=stats", function (result) {
+        $("#kbname").html("KB index: <b>" + result.kbindex + "</b> ");
+        $("#textname").html("Text index: <b>" + result.textindex + "</b> ");
+        $("#ntriples").html("number of triples: <b>" + result.noftriples + "</b> ");
+        $("#nrecords").html("number of text records: <b>" + result.nofrecords + "</b> ");
     });
 }

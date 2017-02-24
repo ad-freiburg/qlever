@@ -112,7 +112,9 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       ParamValueMap params = parseHttpRequest(request);
 
       if (ad_utility::getLowercase(params["cmd"]) == "stats") {
+        LOG(INFO) << "Supplying index stats..." << std::endl;
         client->send(composeStatsJson());
+        LOG(INFO) << "Sent stats to client." << std::endl;
         return;
       }
 
@@ -421,16 +423,16 @@ void Server::serveFile(Socket* client, const string& requestedFile) const {
 string Server::composeStatsJson() const {
   std::ostringstream os;
   os << "{\r\n"
-     << "\"kb-index\": \""
+     << "\"kbindex\": \""
      << _index.getKbName()
      << "\",\r\n"
-      << "\"nof-triples\": \""
+      << "\"noftriples\": \""
       << _index.getNofTriples()
       << "\",\r\n"
-      << "\"text-index\": \""
+      << "\"textindex\": \""
       << _index.getTextName()
       << "\",\r\n"
-      << "\"nof-records\": \""
+      << "\"nofrecords\": \""
       << _index.getNofTextRecords()
       << "\"\r\n"
      << "}\r\n";
