@@ -98,7 +98,8 @@ public:
   void writeResultToStreamAsJson(std::ostream& out,
                                  const vector<string>& selectVars,
                                  size_t limit = MAX_NOF_ROWS_IN_RESULT,
-                                 size_t offset = 0) const;
+                                 size_t offset = 0,
+                                 size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
 
 
   size_t resultSortedOn() const { return _rootOperation->resultSortedOn(); }
@@ -148,10 +149,13 @@ private:
   void writeJsonTable(const vector<Row>& data, size_t from,
                       size_t upperBound,
                       const vector<pair<size_t, OutputType>>& validIndices,
+                      size_t maxSend,
                       std::ostream& out) const {
+    std::ostringstream throwaway;
     for (size_t i = from; i < upperBound; ++i) {
       const auto& row = data[i];
-      out << "[\"";
+      auto& os = (i < (maxSend + from) ? out : throwaway);
+      os << "[\"";
       for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
         switch (validIndices[j].second) {
           case KB: {
@@ -160,14 +164,14 @@ private:
             if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
               entity = ad_utility::convertIndexWordToValueLiteral(entity);
             }
-            out << ad_utility::escapeForJson(entity) << "\",\"";
+            os << ad_utility::escapeForJson(entity) << "\",\"";
             break;
           }
           case VERBATIM:
-            out << row[validIndices[j].first] << "\",\"";
+            os << row[validIndices[j].first] << "\",\"";
             break;
           case TEXT:
-            out << ad_utility::escapeForJson(
+            os << ad_utility::escapeForJson(
                 _qec->getIndex().getTextExcerpt(row[validIndices[j].first]))
                 << "\",\"";
             break;
@@ -182,14 +186,14 @@ private:
           if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
             entity = ad_utility::convertIndexWordToValueLiteral(entity);
           }
-          out << ad_utility::escapeForJson(entity) << "\"]";
+          os << ad_utility::escapeForJson(entity) << "\"]";
           break;
         }
         case VERBATIM:
-          out << row[validIndices[validIndices.size() - 1].first] << "\"]";
+          os << row[validIndices[validIndices.size() - 1].first] << "\"]";
           break;
         case TEXT:
-          out << ad_utility::escapeForJson(
+          os << ad_utility::escapeForJson(
               _qec->getIndex().getTextExcerpt(
                   row[validIndices[validIndices.size() - 1].first]))
               << "\"]";
@@ -197,8 +201,8 @@ private:
         default: AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
                           "Cannot deduce output type.");
       }
-      if (i + 1 < upperBound) { out << ", "; }
-      out << "\r\n";
+      if (i + 1 < upperBound && i + 1 < maxSend + from) { os << ", "; }
+      os << "\r\n";
     }
   }
 

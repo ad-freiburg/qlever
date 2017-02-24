@@ -119,6 +119,11 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
         qec->clearCache();
       }
+      auto it = params.find("send");
+      size_t maxSend = MAX_NOF_ROWS_IN_RESULT;
+      if (it != params.end()) {
+        maxSend = static_cast<size_t>(atol(it->second.c_str()));
+      }
 #ifdef ALLOW_SHUTDOWN
       if (ad_utility::getLowercase(params["cmd"]) == "shutdown") {
         LOG(INFO) << "Shutdown triggered by HTTP request "
@@ -150,7 +155,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
             "Content-Disposition: attachment;filename=export.tsv";
       } else {
         // Normal case: JSON response
-        response = composeResponseJson(pq, qet);
+        response = composeResponseJson(pq, qet, maxSend);
         contentType = "application/json";
       }
     } catch (const ad_semsearch::Exception& e) {
@@ -255,7 +260,8 @@ string Server::createHttpResponse(const string& content,
 
 // _____________________________________________________________________________
 string Server::composeResponseJson(const ParsedQuery& query,
-                                   const QueryExecutionTree& qet) const {
+                                   const QueryExecutionTree& qet,
+                                   size_t maxSend) const {
 
   const ResultTable& rt = qet.getResult();
   _requestProcessingTimer.stop();
@@ -281,7 +287,8 @@ string Server::composeResponseJson(const ParsedQuery& query,
     offset = static_cast<size_t>(atol(query._offset.c_str()));
   }
   _requestProcessingTimer.cont();
-  qet.writeResultToStreamAsJson(os, query._selectedVariables, limit, offset);
+  qet.writeResultToStreamAsJson(os, query._selectedVariables, limit, offset,
+                                maxSend);
   _requestProcessingTimer.stop();
   os << ",\r\n";
 

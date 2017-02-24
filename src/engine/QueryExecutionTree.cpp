@@ -145,7 +145,8 @@ void QueryExecutionTree::writeResultToStreamAsJson(
     std::ostream& out,
     const vector<string>& selectVars,
     size_t limit,
-    size_t offset) const {
+    size_t offset,
+    size_t maxSend) const {
   out << "[\r\n";
   // They may trigger computation (but does not have to).
   const ResultTable& res = getResult();
@@ -171,27 +172,28 @@ void QueryExecutionTree::writeResultToStreamAsJson(
   if (res._nofColumns == 1) {
     auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    writeJsonTable(*data, offset, upperBound, validIndices, out);
+    writeJsonTable(*data, offset, upperBound, validIndices, maxSend, out);
   } else if (res._nofColumns == 2) {
     auto data = static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    writeJsonTable(*data, offset, upperBound, validIndices, out);
+    writeJsonTable(*data, offset, upperBound, validIndices, maxSend, out);
   } else if (res._nofColumns == 3) {
     auto data = static_cast<vector<array<Id, 3>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    writeJsonTable(*data, offset, upperBound, validIndices, out);
+    writeJsonTable(*data, offset, upperBound, validIndices, maxSend, out);
   } else if (res._nofColumns == 4) {
     auto data = static_cast<vector<array<Id, 4>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    writeJsonTable(*data, offset, upperBound, validIndices, out);
+    writeJsonTable(*data, offset, upperBound, validIndices, maxSend, out);
   } else if (res._nofColumns == 5) {
     auto data = static_cast<vector<array<Id, 5>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
-    writeJsonTable(*data, offset, upperBound, validIndices, out);
+    writeJsonTable(*data, offset, upperBound, validIndices, maxSend, out);
   } else {
     size_t upperBound = std::min<size_t>(offset + limit,
                                          res._varSizeData.size());
-    writeJsonTable(res._varSizeData, offset, upperBound, validIndices, out);
+    writeJsonTable(res._varSizeData, offset, upperBound, validIndices, maxSend,
+                   out);
   }
   out << "]";
   LOG(DEBUG) << "Done creating readable result.\n";

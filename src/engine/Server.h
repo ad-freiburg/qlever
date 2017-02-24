@@ -59,7 +59,8 @@ private:
                             const string& contentType) const;
 
   string composeResponseJson(const ParsedQuery& query,
-                             const QueryExecutionTree& qet) const;
+                             const QueryExecutionTree& qet,
+                             size_t sendMax = MAX_NOF_ROWS_IN_RESULT) const;
 
   string composeResponseSepValues(const ParsedQuery& query,
                                   const QueryExecutionTree& qet,
