@@ -118,14 +118,14 @@ function getShortStr(str, maxLength) {
 
 function displayError(result) {
     var disp = "<div id=\"err\">";
-    disp += "Query: " + "<br/>" + result.query  + "<br/>" + "<br/>" + "<br/>";
+    disp += "Query: " + "<br/>" + result.query + "<br/>" + "<br/>" + "<br/>";
     disp += "Error Msg: " + "<br/>" + result.exception + "<br/>" + "<br/>";
     $("#answer").html(disp);
 }
 
 function processCsvQuery(query) {
-        window.location.href = "/" + query + "&action=csv_export";
-        return false;
+    window.location.href = "/" + query + "&action=csv_export";
+    return false;
 }
 
 function processTsvQuery(query) {
@@ -189,5 +189,17 @@ function handleStatsDisplay() {
         $("#textname").html("Text index: <b>" + result.textindex + "</b> ");
         $("#ntriples").html("number of triples: <b>" + result.noftriples + "</b> ");
         $("#nrecords").html("number of text records: <b>" + result.nofrecords + "</b> ");
+
+        if (result.permutations == "6") {
+            $("#permstats").html("Registered <b>" + result.permutations
+                + "</b> permutations of the KB index."
+                + " &nbsp; #subjects: <b>"
+                + result.nofsubjects + "</b>"
+                + " &nbsp; #predicates: <b>"
+                + result.nofpredicates + "</b>"
+                + " &nbsp; #objects: <b>" + result.nofobjects + "</b>");
+        } else {
+            $("#permstats").html("Registered <b>" + result.permutations + "</b> permutations of the KB index.")
+        }
     });
 }
