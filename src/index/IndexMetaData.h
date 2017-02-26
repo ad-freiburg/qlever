@@ -211,6 +211,8 @@ public:
 
   const string& getName() const { return _name; }
 
+  size_t getNofDistinctC1() const;
+
 private:
   off_t _offsetAfter;
   size_t _nofTriples;

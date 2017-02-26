@@ -426,15 +426,24 @@ string Server::composeStatsJson() const {
      << "\"kbindex\": \""
      << _index.getKbName()
      << "\",\r\n"
-      << "\"noftriples\": \""
-      << _index.getNofTriples()
-      << "\",\r\n"
-      << "\"textindex\": \""
-      << _index.getTextName()
-      << "\",\r\n"
-      << "\"nofrecords\": \""
-      << _index.getNofTextRecords()
-      << "\"\r\n"
+     << "\"permutations\": \""
+     << (_index.hasAllPermutations() ? "6" : "2")
+     << "\",\r\n";
+  if (_index.hasAllPermutations()) {
+    os << "\"nofsubjects\": \"" << _index.getNofSubjects() << "\",\r\n";
+    os << "\"nofpredicates\": \"" << _index.getNofPredicates() << "\",\r\n";
+    os << "\"nofobjects\": \"" << _index.getNofObjects() << "\",\r\n";
+  }
+
+  os << "\"noftriples\": \""
+     << _index.getNofTriples()
+     << "\",\r\n"
+     << "\"textindex\": \""
+     << _index.getTextName()
+     << "\",\r\n"
+     << "\"nofrecords\": \""
+     << _index.getNofTextRecords()
+     << "\"\r\n"
      << "}\r\n";
   return os.str();
 }

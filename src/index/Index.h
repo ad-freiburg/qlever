@@ -127,10 +127,15 @@ public:
 
 
   vector<float> getPSOMultiplicities(const string& key) const;
+
   vector<float> getPOSMultiplicities(const string& key) const;
+
   vector<float> getSPOMultiplicities(const string& key) const;
+
   vector<float> getSOPMultiplicities(const string& key) const;
+
   vector<float> getOSPMultiplicities(const string& key) const;
+
   vector<float> getOPSMultiplicities(const string& key) const;
 
   // --------------------------------------------------------------------------
@@ -212,12 +217,43 @@ public:
   };
 
   void setKbName(const string& name);
+
   void setTextName(const string& name);
 
   const string& getTextName() const { return _textMeta.getName(); }
+
   const string& getKbName() const { return _psoMeta.getName(); }
+
   size_t getNofTriples() const { return _psoMeta.getNofTriples(); }
-  size_t getNofTextRecords() const {return _textMeta.getNofTextRecords(); }
+
+  size_t getNofTextRecords() const { return _textMeta.getNofTextRecords(); }
+
+  size_t getNofSubjects() const {
+    if (hasAllPermutations()) {
+      return _spoMeta.getNofDistinctC1();
+    } else {
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+               "Can only get # distinct subjects if all 6 permutations "
+                   "have been registered on sever start (and index build time) "
+                   "with the -a option.")
+    }
+  }
+
+  size_t getNofObjects() const {
+    if (hasAllPermutations()) {
+      return _ospMeta.getNofDistinctC1();
+    } else {
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+               "Can only get # distinct subjects if all 6 permutations "
+                   "have been registered on sever start (and index build time) "
+                   "with the -a option.")
+    }
+  }
+
+  size_t getNofPredicates() const { return _psoMeta.getNofDistinctC1(); }
+
+  bool hasAllPermutations() const { return _spoFile.isOpen(); }
+
 
 private:
   string _onDiskBase;

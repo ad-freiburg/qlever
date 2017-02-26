@@ -149,6 +149,11 @@ size_t IndexMetaData::getTotalBytesForRelation(
 }
 
 // _____________________________________________________________________________
+size_t IndexMetaData::getNofDistinctC1() const {
+  return _data.size();
+}
+
+// _____________________________________________________________________________
 FullRelationMetaData::FullRelationMetaData() :
     _relId(0), _startFullIndex(0), _typeMultAndNofElements(0) {
 }
