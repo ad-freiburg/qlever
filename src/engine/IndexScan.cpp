@@ -42,6 +42,9 @@ string IndexScan::asString() const {
     case OSP_FREE_S:
       os << "SCAN OSP with O = \"" << _object << "\"";
       break;
+    case FULL_INDEX_SCAN:
+      os << "SCAN FOR FULL INDEX (DUMMY OPERATION)";
+      break;
   }
   return os.str();
 }
@@ -60,6 +63,8 @@ size_t IndexScan::getResultWidth() const {
     case OSP_FREE_S:
     case OPS_FREE_P:
       return 2;
+    case: FULL_INDEX_SCAN:
+      return 3;
     default: AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
                       "Should be unreachable.");
   }
@@ -96,6 +101,10 @@ void IndexScan::computeResult(ResultTable* result) const {
     case OPS_FREE_P:
       computeOPSfreeP(result);
       break;
+    case FULL_INDEX_SCAN:
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+      "Asked to execute a scan for the full index. "
+          "This should never happen.");
   }
   LOG(DEBUG) << "IndexScan result computation done.\n";
 }
@@ -235,6 +244,11 @@ void IndexScan::determineMultiplicities() {
         case OPS_FREE_P:
           _multiplicity = getIndex().getOPSMultiplicities(_object);
           break;
+        case FULL_INDEX_SCAN:
+        AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+                 "Asked to get multiplicities of a scan for the full index. "
+                     "This should never happen, instead directly get "
+                     "s/p/o multiplicities from the index.");
         default:
           AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,
                    "Switch reached default block unexpectedly!");

@@ -20,7 +20,8 @@ public:
     SOP_BOUND_O = 5,
     SOP_FREE_O = 6,
     OPS_FREE_P = 7,
-    OSP_FREE_S = 8
+    OSP_FREE_S = 8,
+    FULL_INDEX_SCAN = 9
   };
 
   virtual string asString() const;

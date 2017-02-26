@@ -900,6 +900,9 @@ size_t Index::sizeEstimate(const string& sub, const string& pred,
   if (sub.size() == 0 && pred.size() == 0 && obj.size() > 0) {
     return objectCardinality(obj);
   }
+  if (sub.size() == 0 && pred.size() == 0 && obj.size() == 0) {
+    return getNofTriples();
+  }
   AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
            "Index::sizeEsimate called with more then one of S/P/O given. "
                "This should never be the case anymore, "
