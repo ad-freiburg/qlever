@@ -562,6 +562,25 @@ TEST(QueryPlannerTest, testFilterAfterJoin) {
   }
 }
 
+
+TEST(QueryPlannerTest, threeVarTriples) {
+  try {
+    ParsedQuery pq = SparqlParser::parse("SELECT ?x ?p ?o WHERE {"
+                                             "<s> <p> ?x . ?x ?p ?o }");
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ("",
+              qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
+
 TEST(QueryExecutionTreeTest, testBooksbyNewman) {
   try {
     ParsedQuery pq = SparqlParser::parse(
