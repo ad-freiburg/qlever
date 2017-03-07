@@ -236,6 +236,45 @@ For now, each text-record variable is required to have a triple `<in-text> ENTIT
 Pure connections to variables (e.g. "Books with a description that mentions a plant.") are planned for the future.
 
 
+Advanced features
+=================
+
+Statistics:
+-----------------------
+
+You can get stats for the currently active index in the following way:
+
+    <server>:<port>/?cmd=stats
+    
+This query will yield a JSON response that features:
+
+* The name of the KB index
+* The number of triples in the KB index
+* The number of index permutations build (usually 2 or 6)
+* The numbers of distinct subjects, predicates and objects (only available if 6 permutations are built)
+* The name of the text index (if one is present)
+* The number of text records in the text index (if text index present)
+* The number of word occurrences/postings in the text index (if text index present)
+* The number of entity occurrences/postings in the text index (if text index present)
+
+
+The names of a index is the name of the input nt file (and wordsfile for the text index) but can also be specified manually while building an index.
+Therefore, IndexbuilderMain takes two optional arguments: --text-index-name (-T) and --kb-index-name (-K).
+
+
+Send vs Compute
+----------------
+
+Currently, QLever does not compute partial results if there is a LIMIT modifier.
+However, strings (for entities and text excerpts) are only resolved for those items that are actually send.
+Furthermore, in a UI, it is usually beneficial to get less than all result rows by default.
+
+While it is recommended for applications to specify a LIMIT, some experiments want to measure the time to produce the full result but not block the UI.
+Therefore an additional HTTP parameter "&send=<x>" can be used to only send x result rows but to compute the fully readable result for everything according to LIMIT.
+ 
+**IMPORTANT: Unless you want to measure QLever's performance, using LIMIT (+ OFFSET for sequential loading) should be preferred in all applications. That way should be faster and standard SPARQL without downsides.** 
+
+
 
 How to obtain data to play around with
 ======================================
