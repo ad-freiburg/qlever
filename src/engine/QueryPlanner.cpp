@@ -430,9 +430,22 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           }
         }
       } else {
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                 "Triples should have at most two variables. Not the case in: "
-                 + node._triple.asString());
+        if (!_qec || _qec->getIndex().hasAllPermutations()) {
+          SubtreePlan plan(_qec);
+          plan._idsOfIncludedNodes |= (1 << i);
+          auto& tree = *plan._qet.get();
+          std::shared_ptr<Operation>
+              scan(new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN));
+          static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+          tree.setOperation(QueryExecutionTree::OperationType::FULL_SCAN, scan);
+          seeds.push_back(plan);
+        } else {
+          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+                   "With only 2 permutations registered (no -a option), "
+                       "triples should have at most two variables. "
+                       "Not the case in: "
+                   + node._triple.asString());
+        }
       }
     }
   }
@@ -768,6 +781,11 @@ vector<array<size_t, 2>> QueryPlanner::getJoinColumns(
     const QueryPlanner::SubtreePlan& a,
     const QueryPlanner::SubtreePlan& b) const {
   vector<array<size_t, 2>> jcs;
+  // Handle joins with the full index
+  if (a._qet->getType() == QueryExecutionTree::FULL_SCAN) {
+    
+  }
+  // "Normal" case without the full index
   for (auto it = a._qet.get()->getVariableColumnMap().begin();
        it != a._qet.get()->getVariableColumnMap().end();
        ++it) {

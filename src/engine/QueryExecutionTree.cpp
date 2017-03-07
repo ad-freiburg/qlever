@@ -38,7 +38,7 @@ string QueryExecutionTree::asString() {
       os << "{" << _rootOperation->asString() << " | width: "
          << getResultWidth()
          << "}";
-      if (LOGLEVEL >= DEBUG && _qec) {
+      if (LOGLEVEL >= DEBUG && _qec && _type != FULL_SCAN) {
         os << " [estimated size: " << getSizeEstimate() << "]";
         os << " [multiplicities: ";
         for (size_t i = 0; i < getResultWidth(); ++i) {

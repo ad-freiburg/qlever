@@ -34,7 +34,8 @@ public:
     TEXT_FOR_CONTEXTS = 7,
     TEXT_WITHOUT_FILTER = 8,
     TEXT_WITH_FILTER = 9,
-    TWO_COL_JOIN = 10
+    TWO_COL_JOIN = 10,
+    FULL_SCAN = 11
   };
 
   enum OutputType {
