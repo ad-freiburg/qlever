@@ -9,7 +9,7 @@ __author__ = 'buchholb'
 virtuoso_run_binary = "/home/buchholb/virtuoso/bin/isql"
 virtuoso_isql_port = "1111"
 bifc_isql_port = "1113"
-bifc_inc_isql_port = "1114"
+bifc_inc_isql_port = "1115"
 virtuso_isql_user = "dba"
 rdf3x_run_binary = "/home/buchholb/rdf3x-0.3.8/bin/rdf3xquery"
 rdf3x_db = "/local/raid/ad/buchholb/eval/rdf3x/wikipedia-freebase.combined.db"
@@ -47,6 +47,74 @@ parser.add_argument('--broccoli', action='store_true', help='should broccoli be 
 parser.add_argument('--names', action='store_true', help='Should I select names for all variables?',
                     default=False)
 
+
+def rewrite_to_bif_contains_inc(q):
+    before_where, after_where = q.split('WHERE')
+    vs = before_where.split('SELECT')[1].strip().lstrip('DISTINCT').lstrip().split(' ')
+    if '<in-text>' in q and 'DISTINCT' not in q:
+        before_where = before_where[:before_where.find('SELECT')] \
+                       + ' SELECT DISTINCT' \
+                       + before_where[before_where.find('SELECT') + 6:]
+    no_mod, mod = after_where.strip().split('}')
+    clauses = no_mod.strip('{').split('.')
+    new_clauses = []
+    context_to_words = {}
+    for v in vs:
+        if v == '?c' or v == '?c2' or v == '?c1' or v.startswith('?val_'):
+            continue
+        before_where = before_where.replace(v, v + ' ' + v + 'name')
+        new_clauses.append(' ' + v + ' fb:type.object.name.en  ' + v + 'name')
+    for c in clauses:
+        if '<word:' in c:
+            try:
+                s, p, o = c.strip().split(' ')
+                if o not in context_to_words:
+                    context_to_words[o] = []
+                word = s[6: -1]
+                if word[-1] == '*' or word.isdigit():
+                    word = "'" + word + "'"
+                context_to_words[o].append(word)
+            except ValueError:
+                print("Problem in : " + c, file=sys.stderr)
+                exit(1)
+        else:
+            new_clauses.append(c)
+    for c, ws in context_to_words.items():
+        new_clauses.append(' ' + c + ' <text> ?text' + c[1:] + ' ')
+        new_clauses.append(' ?text' + c[1:] + ' bif:contains "'
+                           + ' and '.join(ws) + '" ')
+    new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
+    return 'WHERE'.join([before_where, new_after_where])
+
+def get_virtuoso_bifc_inc_query_times(query_file, pwd, get_names):
+    print('get_virtuoso_bifc_inc_query_times', file=sys.stderr)
+    with open('__tmp.bifc_inc_queries', 'w') as tmpfile:
+        for line in open(query_file):
+            q = line.strip().split('\t')[1]
+            bifc_query = rewrite_to_bif_contains_inc(q)
+            tmpfile.write('SPARQL ' + bifc_query + ';\n')
+    virtout = subprocess.check_output(
+        [virtuoso_run_binary, bifc_inc_isql_port, virtuso_isql_user, pwd,
+         '__tmp.bifc_inc_queries']).decode('utf-8')
+    coutfile = open('__tmp.cout.bifc_inc', 'w')
+    coutfile.write(virtout)
+    coutfile.write('\n\n\n\n')
+    times = []
+    nof_matches = []
+    for line in virtout.split('\n'):
+        i = line.find('Rows. --')
+        if i >= 0:
+            j = line.find('msec')
+            times.append(line[i + 9: j + 2])
+            nof_matches.append(int(line[:i]))
+            # os.remove('__tmp.bifc_inc_queries')
+    queries = []
+    for line in open(query_file):
+        queries.append(line.strip())
+    if len(times) != len(queries) or len(times) != len(nof_matches):
+        print('PROBLEM PROCESSING VIRTUOSO: q:' + str(len(queries)) + ' t:' +
+              str(len(times)) + ' #:' + str(len(nof_matches)), file=sys.stderr)
+    return times, nof_matches
 
 def expanded_to_my_syntax(q):
     try:
@@ -192,6 +260,12 @@ def main():
         headers.append('mine')
         headers.append('#m_mine')
         times, matches = get_my_query_times(query_file, args['names'])
+        time_and_counts.append((times, matches))
+    if all or bifc_inc:
+        headers.append('bifc_inc')
+        headers.append('#m_bifc_inc')
+        times, matches = get_virtuoso_bifc_inc_query_times(query_file,
+                args['virtuoso_pwd'], args['names'])
         time_and_counts.append((times, matches))
     print_result_table(queries, headers, time_and_counts)
 

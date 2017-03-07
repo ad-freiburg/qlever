@@ -51,6 +51,13 @@ def tokenize_sentence(s):
                 tokens.append(s[current_token_from:i])
                 current_token_from = i + 1
                 inside_entity = False
+            elif i + 1 < len(s) and s[i + 1] == '[':
+                if i > current_token_from:
+                    tok = s[current_token_from:i]
+                    if ' ' not in tok:
+                        tokens.append(tok)
+                inside_entity = False
+                current_token_from = i + 1
         else:
             if s[i] == ' ' and i > current_token_from:
                 tokens.append(s[current_token_from:i])
