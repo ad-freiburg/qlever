@@ -187,8 +187,10 @@ function handleStatsDisplay() {
     $.getJSON("/?cmd=stats", function (result) {
         $("#kbname").html("KB index: <b>" + result.kbindex + "</b> ");
         $("#textname").html("Text index: <b>" + result.textindex + "</b> ");
-        $("#ntriples").html("number of triples: <b>" + result.noftriples + "</b> ");
-        $("#nrecords").html("number of text records: <b>" + result.nofrecords + "</b> ");
+        $("#ntriples").html("Number of triples: <b>" + result.noftriples + "</b> ");
+        $("#nrecords").html("Number of text records: <b>" + result.nofrecords + "</b> ");
+        $("#nwo").html("Number of word occurrences: <b>" + result.nofwordpostings + "</b> ");
+        $("#neo").html("Number of entity occurrences: <b>" + result.nofentitypostings + "</b> ");
 
         if (result.permutations == "6") {
             $("#permstats").html("Registered <b>" + result.permutations

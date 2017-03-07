@@ -117,16 +117,32 @@ public:
     return _nofEntityContexts;
   }
 
-  void setNofEntityContexts(size_t nofEC) {
-    _nofEntityContexts = nofEC;
+  void setNofEntityContexts(size_t n) {
+    _nofEntityContexts = n;
   }
 
   size_t getNofTextRecords() const {
     return _nofTextRecords;
   }
 
-  void setNofTextRecords(size_t nofC) {
-    _nofTextRecords = nofC;
+  void setNofTextRecords(size_t n) {
+    _nofTextRecords = n;
+  }
+
+  size_t getNofWordPostings() const {
+    return _nofWordPostings;
+  }
+
+  void setNofWordPostings(size_t n) {
+    _nofWordPostings = n;
+  }
+
+  size_t getNofEntityPostings() const {
+    return _nofEntityPostings;
+  }
+
+  void setNofEntityPostings(size_t n) {
+    _nofEntityPostings = n;
   }
 
   const string& getName() const {
@@ -148,6 +164,8 @@ private:
   size_t _nofEntities;
   size_t _nofEntityContexts;
   size_t _nofTextRecords;
+  size_t _nofWordPostings;
+  size_t _nofEntityPostings;
   string _name;
   vector<TextBlockMetaData> _blocks;
 

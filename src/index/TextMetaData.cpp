@@ -90,6 +90,8 @@ ad_utility::File& operator<<(ad_utility::File& f,
   f.write(&md._nofEntities, sizeof(md._nofEntities));
   f.write(&md._nofEntityContexts, sizeof(md._nofEntityContexts));
   f.write(&md._nofTextRecords, sizeof(md._nofTextRecords));
+  f.write(&md._nofWordPostings, sizeof(md._nofWordPostings));
+  f.write(&md._nofEntityPostings, sizeof(md._nofEntityPostings));
   size_t nameLength = md._name.size();
   f.write(&nameLength, sizeof(nameLength));
   f.write(md._name.data(), nameLength);
@@ -124,6 +126,10 @@ TextMetaData& TextMetaData::createFromByteBuffer(unsigned char* buffer) {
   offset += sizeof(_nofEntityContexts);
   _nofTextRecords = *reinterpret_cast<size_t*>(buffer + offset);
   offset += sizeof(_nofTextRecords);
+  _nofWordPostings = *reinterpret_cast<size_t*>(buffer + offset);
+  offset += sizeof(_nofWordPostings);
+  _nofEntityPostings = *reinterpret_cast<size_t*>(buffer + offset);
+  offset += sizeof(_nofEntityPostings);
   size_t nameLength;
   nameLength = *reinterpret_cast<size_t*>(buffer + offset);
   offset += sizeof(nameLength);

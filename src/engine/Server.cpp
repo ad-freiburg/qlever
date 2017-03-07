@@ -443,6 +443,12 @@ string Server::composeStatsJson() const {
      << "\",\r\n"
      << "\"nofrecords\": \""
      << _index.getNofTextRecords()
+      << "\",\r\n"
+      << "\"nofwordpostings\": \""
+      << _index.getNofWordPostings()
+      << "\",\r\n"
+      << "\"nofentitypostings\": \""
+      << _index.getNofEntityPostings()
      << "\"\r\n"
      << "}\r\n";
   return os.str();

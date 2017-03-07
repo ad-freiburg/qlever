@@ -227,6 +227,8 @@ public:
   size_t getNofTriples() const { return _psoMeta.getNofTriples(); }
 
   size_t getNofTextRecords() const { return _textMeta.getNofTextRecords(); }
+  size_t getNofWordPostings() const { return _textMeta.getNofWordPostings(); }
+  size_t getNofEntityPostings() const { return _textMeta.getNofEntityPostings(); }
 
   size_t getNofSubjects() const {
     if (hasAllPermutations()) {

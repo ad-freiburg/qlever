@@ -130,6 +130,9 @@ void Index::passContextFileIntoVector(const string& contextFile,
   ad_utility::HashMap<Id, Score> entitiesInContext;
   Id currentContext = 0;
   size_t nofContexts = 0;
+  size_t nofWordPostings = 0;
+  size_t nofEntityPostings = 0;
+
   size_t entityNotFoundErrorMsgCount = 0;
   while (p.getLine(line)) {
     if (line._contextId != currentContext) {
@@ -141,6 +144,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
       entitiesInContext.clear();
     }
     if (line._isEntity) {
+      ++nofEntityPostings;
       Id eid;
       if (_vocab.getId(line._word, &eid)) {
         entitiesInContext[eid] += line._score;
@@ -154,6 +158,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
         }
       }
     } else {
+      ++nofWordPostings;
       Id wid;
 #ifndef NDEBUG
       bool ret = _textVocab.getId(line._word, &wid);
@@ -171,6 +176,9 @@ void Index::passContextFileIntoVector(const string& contextFile,
   ++nofContexts;
   addContextToVector(writer, currentContext, wordsInContext, entitiesInContext);
   _textMeta.setNofTextRecords(nofContexts);
+  _textMeta.setNofWordPostings(nofWordPostings);
+  _textMeta.setNofEntityPostings(nofEntityPostings);
+
   writer.finish();
   LOG(INFO) << "Pass done.\n";
 }
