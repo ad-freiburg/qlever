@@ -76,13 +76,13 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
 
   finalTab = fillDpTab(tg, pq._filters);
 
-
   // If there is an order by clause, add another row to the table and
   // just add an order by / sort to every previous result if needed.
   // If the ordering is perfect already, just copy the plan.
   if (pq._orderBy.size() > 0) {
     finalTab.emplace_back(getOrderByRow(pq, finalTab));
   }
+
 
   vector<SubtreePlan>& lastRow = finalTab.back();
   AD_CHECK_GT(lastRow.size(), 0);
@@ -605,12 +605,21 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
         }
         if (jcs.size() == 2) {
           // SPECIAL CASE: Cyclic queries -> join on exactly two columns
+
+          // Forbid a join between two dummies.
+          if ((a[i]._qet.get()->getType() == QueryExecutionTree::SCAN &&
+               a[i]._qet.get()->getRootOperation()->getResultWidth() == 3) &&
+              (b[j]._qet.get()->getType() == QueryExecutionTree::SCAN &&
+               b[j]._qet.get()->getRootOperation()->getResultWidth() == 3)) {
+            continue;
+          }
+
           // Check if a sub-result has to be re-sorted
           // Consider both ways to order join columns as primary / secondary
           // Make four iterations instead of two so that first and second
           // column can be swapped and more trees are constructed (of which
           // the optimal solution will be picked).
-          // The ordeer plays a role for the efficient implementation for
+          // The order plays a role for the efficient implementation for
           // filtering directly with a scan's result.
           for (size_t n = 0; n < 4; ++n) {
             size_t c = n / 2;
@@ -1024,6 +1033,12 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     dpTab.emplace_back(vector<SubtreePlan>());
     for (size_t i = 1; i <= k / 2; ++i) {
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
+      if (newPlans.size() == 0) {
+        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                 "Could not find a suitable execution tree. "
+                     "Likely cause: Queries that require joins of the full "
+                     "index with itself are not supported at the moment.");
+      }
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(),
                           newPlans.end());
       applyFiltersIfPossible(dpTab.back(), filters, k == tg._nodeMap.size());

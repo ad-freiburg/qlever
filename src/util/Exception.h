@@ -63,6 +63,8 @@ class Exception {
     //! optionally provided by thrower)
     string _errorDetails;
 
+    string _errorDetailsNoFileAndLines;
+
   public:
 
     //! Error codes
@@ -120,7 +122,7 @@ class Exception {
       case BAD_REQUEST:
         return "BAD REQUEST STRING";
       case BAD_QUERY:
-        return "BAD QUERY FORMAT";
+        return "BAD QUERY";
       case REALLOC_FAILED:
         return "MEMORY ALLOCATION ERROR: Realloc failed";
       case NEW_FAILED:
@@ -159,12 +161,14 @@ class Exception {
     explicit Exception(int errorCode) {
       _errorCode = errorCode;
       _errorDetails = "";
+      _errorDetailsNoFileAndLines = "";
     }
 
     //! Constructor (code + details)
     Exception(int errorCode, string errorDetails) {
       _errorCode = errorCode;
       _errorDetails = errorDetails;
+      _errorDetailsNoFileAndLines = errorDetails;
     }
 
     //! Constructor
@@ -172,6 +176,7 @@ class Exception {
     Exception(int errorCode, const string& errorDetails, const char* file_name,
         int line_no, const char* fct_name) {
       _errorCode = errorCode;
+      _errorDetailsNoFileAndLines = errorDetails;
       std::ostringstream os;
       if (errorDetails.size() > 0) os << errorDetails << "; ";
       os << "in " << file_name << ", line " << line_no << ", function "
@@ -187,6 +192,7 @@ class Exception {
     //! Set error details
     void setErrorDetails(const string& errorDetails) {
       _errorDetails = errorDetails;
+      _errorDetailsNoFileAndLines = _errorDetailsNoFileAndLines;
     }
 
     //! Get error Code
@@ -208,6 +214,10 @@ class Exception {
     string getFullErrorMessage() const {
       return _errorDetails.length() > 0 ? getErrorMessage() + " ("
           + _errorDetails + ")" : getErrorMessage();
+    }
+
+    const string& getErrorMsgNoFileAndLines() const {
+      return _errorDetailsNoFileAndLines;
     }
 };
 }

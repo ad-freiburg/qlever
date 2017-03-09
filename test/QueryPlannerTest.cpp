@@ -501,13 +501,13 @@ TEST(QueryPlannerTest, testStarTwoFree) {
       QueryPlanner qp(nullptr);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
       ASSERT_EQ(
-      "{JOIN(\n{JOIN(\n"
-          "{SCAN POS with P = \"<http://rdf.myprefix.com/xxx/rel2>\", "
-          "O = \"<http://abc.de>\" | width: 1} [0]\n|X|\n"
-          "{SCAN PSO with P = \"<http://rdf.myprefix.com/ns/myrel>\" "
-          "| width: 2} [0]\n) | width: 2} [0]\n|X|\n"
-          "{SCAN POS with P = \"<http://rdf.myprefix.com/myrel>\" "
-          "| width: 2} [0]\n) | width: 3}", qet.asString());
+          "{JOIN(\n{JOIN(\n"
+              "{SCAN POS with P = \"<http://rdf.myprefix.com/xxx/rel2>\", "
+              "O = \"<http://abc.de>\" | width: 1} [0]\n|X|\n"
+              "{SCAN PSO with P = \"<http://rdf.myprefix.com/ns/myrel>\" "
+              "| width: 2} [0]\n) | width: 2} [0]\n|X|\n"
+              "{SCAN POS with P = \"<http://rdf.myprefix.com/myrel>\" "
+              "| width: 2} [0]\n) | width: 3}", qet.asString());
     }
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
@@ -682,6 +682,26 @@ TEST(QueryPlannerTest, threeVarTriplesTCJ) {
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
+
+TEST(QueryPlannerTest, threeVarXthreeVarException) {
+  try {
+    ParsedQuery pq = SparqlParser::parse("SELECT ?s ?s2 WHERE {"
+                                             "?s ?p ?o . ?s2 ?p ?o }");
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    FAIL() << "Was expecting exception" << std::endl;
+  } catch (const ad_semsearch::Exception& e) {
+    ASSERT_EQ(
+        "Could not find a suitable execution tree. "
+            "Likely cause: Queries that require joins of the full index with "
+            "itself are not supported at the moment.",
+        e.getErrorMsgNoFileAndLines());
   } catch (const std::exception& e) {
     std::cout << "Caught: " << e.what() << std::endl;
     FAIL() << e.what();
@@ -917,7 +937,7 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
             "?x <Film_performance> ?m . ?y <Film_performance> ?m }");
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-     QueryExecutionTree qet = qp.createExecutionTree(pq);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ("{TWO_COLUMN_JOIN(\n"
                   "{OrderBy {JOIN(\n"
                   "{SCAN POS with P = \"<Spouse_(or_domestic_partner)>\" "
