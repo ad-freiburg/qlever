@@ -35,12 +35,6 @@ public:
     TEXT_WITHOUT_FILTER = 8,
     TEXT_WITH_FILTER = 9,
     TWO_COL_JOIN = 10,
-    FULL_SCAN_SPO = 11,
-    FULL_SCAN_SOP = 12,
-    FULL_SCAN_PSO = 13,
-    FULL_SCAN_POS = 14,
-    FULL_SCAN_OSP = 15,
-    FULL_SCAN_OPS = 16
   };
 
   enum OutputType {

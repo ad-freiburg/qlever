@@ -441,7 +441,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                 scan(
                 new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_SPO));
             static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::FULL_SCAN_SPO,
+            tree.setOperation(QueryExecutionTree::OperationType::SCAN,
                               scan);
             tree.setVariableColumn(node._triple._s, 0);
             tree.setVariableColumn(node._triple._p, 1);
@@ -457,7 +457,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                 scan(
                 new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_SOP));
             static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::FULL_SCAN_SOP,
+            tree.setOperation(QueryExecutionTree::OperationType::SCAN,
                               scan);
             tree.setVariableColumn(node._triple._s, 0);
             tree.setVariableColumn(node._triple._o, 1);
@@ -473,7 +473,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                 scan(
                 new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_PSO));
             static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::FULL_SCAN_PSO,
+            tree.setOperation(QueryExecutionTree::OperationType::SCAN,
                               scan);
             tree.setVariableColumn(node._triple._p, 0);
             tree.setVariableColumn(node._triple._s, 1);
@@ -489,7 +489,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                 scan(
                 new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_POS));
             static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::FULL_SCAN_POS,
+            tree.setOperation(QueryExecutionTree::OperationType::SCAN,
                               scan);
             tree.setVariableColumn(node._triple._p, 0);
             tree.setVariableColumn(node._triple._o, 1);
@@ -505,7 +505,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                 scan(
                 new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_OSP));
             static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::FULL_SCAN_OSP,
+            tree.setOperation(QueryExecutionTree::OperationType::SCAN,
                               scan);
             tree.setVariableColumn(node._triple._o, 0);
             tree.setVariableColumn(node._triple._s, 1);
@@ -521,7 +521,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                 scan(
                 new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_OPS));
             static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::FULL_SCAN_OPS,
+            tree.setOperation(QueryExecutionTree::OperationType::SCAN,
                               scan);
             tree.setVariableColumn(node._triple._o, 0);
             tree.setVariableColumn(node._triple._p, 1);
@@ -620,7 +620,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
             std::shared_ptr<QueryExecutionTree>
                 right(new QueryExecutionTree(_qec));
             if (a[i]._qet.get()->resultSortedOn() == jcs[c][(0 + swap) % 2] &&
-                a[i]._qet.get()->getResultWidth() == 2) {
+                (a[i]._qet.get()->getResultWidth() == 2 ||
+                 a[i]._qet.get()->getType() == QueryExecutionTree::SCAN)) {
               left = a[i]._qet;
             } else {
               // Create an order by operation.
@@ -849,7 +850,7 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
                              const QueryPlanner::SubtreePlan& b,
                              const QueryPlanner::TripleGraph& tg) const {
   // Check if there is overlap.
-  // If so, don't consider them as properly overlapping.
+  // If so, don't consider them as properly connected.
   if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) != 0) { return false; }
 
   for (size_t i = 0; i < 64; ++i) {

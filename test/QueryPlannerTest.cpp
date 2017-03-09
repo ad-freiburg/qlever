@@ -646,6 +646,47 @@ TEST(QueryPlannerTest, threeVarTriples) {
 
 }
 
+TEST(QueryPlannerTest, threeVarTriplesTCJ) {
+  try {
+    ParsedQuery pq = SparqlParser::parse("SELECT ?x ?p ?o WHERE {"
+                                             "<s> ?p ?x . ?x ?p ?o }");
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ("{TWO_COLUMN_JOIN(\n"
+                  "{SCAN FOR FULL INDEX SPO (DUMMY OPERATION) | "
+                  "width: 3} [0 & 1]"
+                  "\n|X|\n"
+                  "{SCAN SOP with S = \"<s>\" | width: 2} [0 & 1]"
+                  "\n) | width: 3}",
+              qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+
+  try {
+    ParsedQuery pq = SparqlParser::parse("SELECT ?s ?p ?o WHERE {"
+                                             "?s ?p ?o . ?s ?p <x> }");
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ("{TWO_COLUMN_JOIN(\n"
+                  "{SCAN FOR FULL INDEX SPO (DUMMY OPERATION) | "
+                  "width: 3} [0 & 1]"
+                  "\n|X|\n"
+                  "{SCAN OSP with O = \"<x>\" | width: 2} [0 & 1]"
+                  "\n) | width: 3}",
+              qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
 
 TEST(QueryExecutionTreeTest, testBooksbyNewman) {
   try {
