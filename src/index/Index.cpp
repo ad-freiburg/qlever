@@ -1032,6 +1032,60 @@ vector<float> Index::getOPSMultiplicities(const string& key) const {
 }
 
 // _____________________________________________________________________________
+vector<float> Index::getSPOMultiplicities() const {
+  return vector<float>{{
+                           static_cast<float>(getNofSubjects()),
+                           static_cast<float>(getNofPredicates()),
+                           static_cast<float>(getNofObjects())
+                       }};
+}
+
+// _____________________________________________________________________________
+vector<float> Index::getSOPMultiplicities() const {
+  return vector<float>{{
+                           static_cast<float>(getNofSubjects()),
+                           static_cast<float>(getNofObjects()),
+                           static_cast<float>(getNofPredicates())
+                       }};
+}
+
+// _____________________________________________________________________________
+vector<float> Index::getPSOMultiplicities() const {
+  return vector<float>{{
+                           static_cast<float>(getNofPredicates()),
+                           static_cast<float>(getNofSubjects()),
+                           static_cast<float>(getNofObjects())
+                       }};
+}
+
+// _____________________________________________________________________________
+vector<float> Index::getPOSMultiplicities() const {
+  return vector<float>{{
+                           static_cast<float>(getNofPredicates()),
+                           static_cast<float>(getNofObjects()),
+                           static_cast<float>(getNofSubjects())
+                       }};
+}
+
+// _____________________________________________________________________________
+vector<float> Index::getOSPMultiplicities() const {
+  return vector<float>{{
+                           static_cast<float>(getNofObjects()),
+                           static_cast<float>(getNofSubjects()),
+                           static_cast<float>(getNofPredicates())
+                       }};
+}
+
+// _____________________________________________________________________________
+vector<float> Index::getOPSMultiplicities() const {
+  return vector<float>{{
+                           static_cast<float>(getNofObjects()),
+                           static_cast<float>(getNofPredicates()),
+                           static_cast<float>(getNofSubjects())
+                       }};
+}
+
+// _____________________________________________________________________________
 void Index::setKbName(const string& name) {
   _psoMeta.setName(name);
   _posMeta.setName(name);

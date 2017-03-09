@@ -21,7 +21,12 @@ public:
     SOP_FREE_O = 6,
     OPS_FREE_P = 7,
     OSP_FREE_S = 8,
-    FULL_INDEX_SCAN = 9
+    FULL_INDEX_SCAN_SPO = 9,
+    FULL_INDEX_SCAN_SOP = 10,
+    FULL_INDEX_SCAN_PSO = 11,
+    FULL_INDEX_SCAN_POS = 12,
+    FULL_INDEX_SCAN_OSP = 13,
+    FULL_INDEX_SCAN_OPS = 14
   };
 
   virtual string asString() const;

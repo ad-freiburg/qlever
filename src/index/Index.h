@@ -126,17 +126,21 @@ public:
   void scanOSP(const string& object, WidthTwoList* result) const;
 
 
+  // Get multiplicities with given var (SCAN for 2 cols)
   vector<float> getPSOMultiplicities(const string& key) const;
-
   vector<float> getPOSMultiplicities(const string& key) const;
-
   vector<float> getSPOMultiplicities(const string& key) const;
-
   vector<float> getSOPMultiplicities(const string& key) const;
-
   vector<float> getOSPMultiplicities(const string& key) const;
-
   vector<float> getOPSMultiplicities(const string& key) const;
+
+  // Get multiplicities for full scans (dummy)
+  vector<float> getPSOMultiplicities() const;
+  vector<float> getPOSMultiplicities() const;
+  vector<float> getSPOMultiplicities() const;
+  vector<float> getSOPMultiplicities() const;
+  vector<float> getOSPMultiplicities() const;
+  vector<float> getOPSMultiplicities() const;
 
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL

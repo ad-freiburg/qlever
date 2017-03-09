@@ -431,14 +431,103 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         }
       } else {
         if (!_qec || _qec->getIndex().hasAllPermutations()) {
-          SubtreePlan plan(_qec);
-          plan._idsOfIncludedNodes |= (1 << i);
-          auto& tree = *plan._qet.get();
-          std::shared_ptr<Operation>
-              scan(new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN));
-          static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-          tree.setOperation(QueryExecutionTree::OperationType::FULL_SCAN, scan);
-          seeds.push_back(plan);
+          // Add plans for all six permutations.
+          // SPO
+          {
+            SubtreePlan plan(_qec);
+            plan._idsOfIncludedNodes |= (1 << i);
+            auto& tree = *plan._qet.get();
+            std::shared_ptr<Operation>
+                scan(
+                new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_SPO));
+            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+            tree.setOperation(QueryExecutionTree::OperationType::FULL_SCAN_SPO,
+                              scan);
+            tree.setVariableColumn(node._triple._s, 0);
+            tree.setVariableColumn(node._triple._p, 1);
+            tree.setVariableColumn(node._triple._o, 2);
+            seeds.push_back(plan);
+          }
+          // SOP
+          {
+            SubtreePlan plan(_qec);
+            plan._idsOfIncludedNodes |= (1 << i);
+            auto& tree = *plan._qet.get();
+            std::shared_ptr<Operation>
+                scan(
+                new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_SOP));
+            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+            tree.setOperation(QueryExecutionTree::OperationType::FULL_SCAN_SOP,
+                              scan);
+            tree.setVariableColumn(node._triple._s, 0);
+            tree.setVariableColumn(node._triple._o, 1);
+            tree.setVariableColumn(node._triple._p, 2);
+            seeds.push_back(plan);
+          }
+          // PSO
+          {
+            SubtreePlan plan(_qec);
+            plan._idsOfIncludedNodes |= (1 << i);
+            auto& tree = *plan._qet.get();
+            std::shared_ptr<Operation>
+                scan(
+                new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_PSO));
+            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+            tree.setOperation(QueryExecutionTree::OperationType::FULL_SCAN_PSO,
+                              scan);
+            tree.setVariableColumn(node._triple._p, 0);
+            tree.setVariableColumn(node._triple._s, 1);
+            tree.setVariableColumn(node._triple._o, 2);
+            seeds.push_back(plan);
+          }
+          // POS
+          {
+            SubtreePlan plan(_qec);
+            plan._idsOfIncludedNodes |= (1 << i);
+            auto& tree = *plan._qet.get();
+            std::shared_ptr<Operation>
+                scan(
+                new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_POS));
+            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+            tree.setOperation(QueryExecutionTree::OperationType::FULL_SCAN_POS,
+                              scan);
+            tree.setVariableColumn(node._triple._p, 0);
+            tree.setVariableColumn(node._triple._o, 1);
+            tree.setVariableColumn(node._triple._s, 2);
+            seeds.push_back(plan);
+          }
+          // OSP
+          {
+            SubtreePlan plan(_qec);
+            plan._idsOfIncludedNodes |= (1 << i);
+            auto& tree = *plan._qet.get();
+            std::shared_ptr<Operation>
+                scan(
+                new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_OSP));
+            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+            tree.setOperation(QueryExecutionTree::OperationType::FULL_SCAN_OSP,
+                              scan);
+            tree.setVariableColumn(node._triple._o, 0);
+            tree.setVariableColumn(node._triple._s, 1);
+            tree.setVariableColumn(node._triple._p, 2);
+            seeds.push_back(plan);
+          }
+          // OPS
+          {
+            SubtreePlan plan(_qec);
+            plan._idsOfIncludedNodes |= (1 << i);
+            auto& tree = *plan._qet.get();
+            std::shared_ptr<Operation>
+                scan(
+                new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_OPS));
+            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+            tree.setOperation(QueryExecutionTree::OperationType::FULL_SCAN_OPS,
+                              scan);
+            tree.setVariableColumn(node._triple._o, 0);
+            tree.setVariableColumn(node._triple._p, 1);
+            tree.setVariableColumn(node._triple._s, 2);
+            seeds.push_back(plan);
+          }
         } else {
           AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
                    "With only 2 permutations registered (no -a option), "
@@ -781,11 +870,6 @@ vector<array<size_t, 2>> QueryPlanner::getJoinColumns(
     const QueryPlanner::SubtreePlan& a,
     const QueryPlanner::SubtreePlan& b) const {
   vector<array<size_t, 2>> jcs;
-  // Handle joins with the full index
-  if (a._qet->getType() == QueryExecutionTree::FULL_SCAN) {
-    
-  }
-  // "Normal" case without the full index
   for (auto it = a._qet.get()->getVariableColumnMap().begin();
        it != a._qet.get()->getVariableColumnMap().end();
        ++it) {

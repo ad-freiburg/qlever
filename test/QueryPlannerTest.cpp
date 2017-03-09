@@ -569,7 +569,12 @@ TEST(QueryPlannerTest, threeVarTriples) {
                                              "<s> <p> ?x . ?x ?p ?o }");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ("",
+    ASSERT_EQ("{JOIN(\n"
+                  "{SCAN FOR FULL INDEX SPO (DUMMY OPERATION) | "
+                  "width: 3} [0]"
+                  "\n|X|\n"
+                  "{SCAN PSO with P = \"<p>\", S = \"<s>\" | width: 1} [0]"
+                  "\n) | width: 3}",
               qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
@@ -578,6 +583,67 @@ TEST(QueryPlannerTest, threeVarTriples) {
     std::cout << "Caught: " << e.what() << std::endl;
     FAIL() << e.what();
   }
+
+  try {
+    ParsedQuery pq = SparqlParser::parse("SELECT ?x ?p ?o WHERE {"
+                                             "<s> ?x <o> . ?x ?p ?o }");
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ("{JOIN(\n"
+                  "{SCAN FOR FULL INDEX SPO (DUMMY OPERATION) | "
+                  "width: 3} [0]"
+                  "\n|X|\n"
+                  "{SCAN SOP with S = \"<s>\", O = \"<o>\" | width: 1} [0]"
+                  "\n) | width: 3}",
+              qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+
+  try {
+    ParsedQuery pq = SparqlParser::parse("SELECT ?s ?p ?o WHERE {"
+                                             "<s> <p> ?p . ?s ?p ?o }");
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ("{JOIN(\n"
+                  "{SCAN FOR FULL INDEX PSO (DUMMY OPERATION) | "
+                  "width: 3} [0]"
+                  "\n|X|\n"
+                  "{SCAN PSO with P = \"<p>\", S = \"<s>\" | width: 1} [0]"
+                  "\n) | width: 3}",
+              qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+
+  try {
+    ParsedQuery pq = SparqlParser::parse("SELECT ?s ?p ?o WHERE {"
+                                             "<s> <p> ?o . ?s ?p ?o }");
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ("{JOIN(\n"
+                  "{SCAN FOR FULL INDEX OPS (DUMMY OPERATION) | "
+                  "width: 3} [0]"
+                  "\n|X|\n"
+                  "{SCAN PSO with P = \"<p>\", S = \"<s>\" | width: 1} [0]"
+                  "\n) | width: 3}",
+              qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+
 }
 
 
