@@ -68,6 +68,12 @@ void Join::computeResult(ResultTable* result) const {
     return;
   }
 
+  // Check for joins with dummy
+  if (isFullScanDummy(_left) || isFullScanDummy(_right)) {
+    computeResultForJoinWithFullScanDummy(result);
+    return;
+  }
+
   const ResultTable& leftRes = _left->getRootOperation()->getResult();
 
   // Check if we can stop early.
@@ -412,19 +418,6 @@ size_t Join::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-bool Join::isSelfJoin() const {
-  // For efficiency reasons we only consider self joins directly between scans.
-  if (_left->getResultWidth() == 2 && _right->getResultWidth() == 2
-      && (_left->getType() == QueryExecutionTree::SCAN
-          || _left->getType() == QueryExecutionTree::SORT)
-      && (_right->getType() == QueryExecutionTree::SCAN
-          || _right->getType() == QueryExecutionTree::SORT)) {
-    return _left->asString() == _right->asString();
-  }
-  return false;
-}
-
-// _____________________________________________________________________________
 std::unordered_set<string> Join::getContextVars() const {
   auto cvars = _left->getContextVars();
   cvars.insert(_right->getContextVars().begin(),
@@ -513,6 +506,152 @@ size_t Join::getCostEstimate() {
   return getSizeEstimate() +
          _left->getSizeEstimate() + _left->getCostEstimate() +
          _right->getSizeEstimate() + _right->getCostEstimate();
+}
+
+// _____________________________________________________________________________
+void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
+  if (isFullScanDummy(_left)) {
+    AD_CHECK(!isFullScanDummy(_right))
+    result->_nofColumns = _right->getResultWidth() + 2;
+    result->_sortedBy = 2 + _rightJoinCol;
+    const ResultTable& nonDummyRes = _right->getRootOperation()->getResult();
+    if (nonDummyRes.size() == 0) { return; }
+
+    if (_right->getResultWidth() == 1) {
+      const Index::WidthOneList& r = *static_cast<Index::WidthOneList*>(
+          nonDummyRes._fixedSizeData);
+      result->_fixedSizeData = new Index::WidthThreeList();
+      doComputeJoinWithFullScanDummyLeft(
+          r,
+          static_cast<Index::WidthThreeList*>(result->_fixedSizeData));
+    } else if (_right->getResultWidth() == 2) {
+      const Index::WidthTwoList& r = *static_cast<Index::WidthTwoList*>(
+          nonDummyRes._fixedSizeData);
+      result->_fixedSizeData = new Index::WidthFourList();
+      doComputeJoinWithFullScanDummyLeft(
+          r,
+          static_cast<Index::WidthFourList*>(result->_fixedSizeData));
+    } else if (_right->getResultWidth() == 3) {
+      const Index::WidthThreeList& r = *static_cast<Index::WidthThreeList*>(
+          nonDummyRes._fixedSizeData);
+      result->_fixedSizeData = new Index::WidthFiveList();
+      doComputeJoinWithFullScanDummyLeft(r, &result->_varSizeData);
+    } else if (_right->getResultWidth() == 4) {
+      const Index::WidthFourList& r = *static_cast<Index::WidthFourList*>(
+          nonDummyRes._fixedSizeData);
+      doComputeJoinWithFullScanDummyLeft(r, &result->_varSizeData);
+    } else if (_right->getResultWidth() == 5) {
+      const Index::WidthFiveList& r = *static_cast<Index::WidthFiveList*>(
+          nonDummyRes._fixedSizeData);
+      result->_fixedSizeData = new Index::WidthFiveList();
+      doComputeJoinWithFullScanDummyLeft(r, &result->_varSizeData);
+    } else {
+      const Index::VarWidthList& r = nonDummyRes._varSizeData;
+      doComputeJoinWithFullScanDummyLeft(r, &result->_varSizeData);
+    }
+  } else {
+    AD_CHECK(!isFullScanDummy(_left))
+    result->_nofColumns = _left->getResultWidth() + 2;
+    result->_sortedBy = _leftJoinCol;
+    const ResultTable& nonDummyRes = _left->getRootOperation()->getResult();
+    if (nonDummyRes.size() == 0) { return; }
+    if (_left->getResultWidth() == 1) {
+      const Index::WidthOneList& r = *static_cast<Index::WidthOneList*>(
+          nonDummyRes._fixedSizeData);
+      result->_fixedSizeData = new Index::WidthThreeList();
+      doComputeJoinWithFullScanDummyRight(
+          r,
+          static_cast<Index::WidthThreeList*>(result->_fixedSizeData));
+    } else if (_left->getResultWidth() == 2) {
+      const Index::WidthTwoList& r = *static_cast<Index::WidthTwoList*>(
+          nonDummyRes._fixedSizeData);
+      result->_fixedSizeData = new Index::WidthFourList();
+      doComputeJoinWithFullScanDummyRight(
+          r,
+          static_cast<Index::WidthFourList*>(result->_fixedSizeData));
+    } else if (_left->getResultWidth() == 3) {
+      const Index::WidthThreeList& r = *static_cast<Index::WidthThreeList*>(
+          nonDummyRes._fixedSizeData);
+      result->_fixedSizeData = new Index::WidthFiveList();
+      doComputeJoinWithFullScanDummyRight(r, &result->_varSizeData);
+    } else if (_left->getResultWidth() == 4) {
+      const Index::WidthFourList& r = *static_cast<Index::WidthFourList*>(
+          nonDummyRes._fixedSizeData);
+      doComputeJoinWithFullScanDummyRight(r, &result->_varSizeData);
+    } else if (_left->getResultWidth() == 5) {
+      const Index::WidthFiveList& r = *static_cast<Index::WidthFiveList*>(
+          nonDummyRes._fixedSizeData);
+      result->_fixedSizeData = new Index::WidthFiveList();
+      doComputeJoinWithFullScanDummyRight(r, &result->_varSizeData);
+    } else {
+      const Index::VarWidthList& r = nonDummyRes._varSizeData;
+      doComputeJoinWithFullScanDummyRight(r, &result->_varSizeData);
+    }
+  }
+  result->_status = ResultTable::FINISHED;
+
+}
+
+// _____________________________________________________________________________
+Join::ScanMethodType Join::getFittingScanMethod(
+    std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const {
+  void (Index::*scanMethod)(Id, Index::WidthTwoList*) const;
+  IndexScan& scan = *static_cast<IndexScan*>(
+      fullScanDummyTree->getRootOperation().get());
+  switch (scan.getType()) {
+    case IndexScan::FULL_INDEX_SCAN_SPO:
+      scanMethod = &Index::scanSPO;
+      break;
+    case IndexScan::FULL_INDEX_SCAN_SOP:
+      scanMethod = &Index::scanSOP;
+      break;
+    case IndexScan::FULL_INDEX_SCAN_PSO:
+      scanMethod = &Index::scanPSO;
+      break;
+    case IndexScan::FULL_INDEX_SCAN_POS:
+      scanMethod = &Index::scanPOS;
+      break;
+    case IndexScan::FULL_INDEX_SCAN_OSP:
+      scanMethod = &Index::scanOSP;
+      break;
+    case IndexScan::FULL_INDEX_SCAN_OPS:
+      scanMethod = &Index::scanOPS;
+      break;
+    default: AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+                      "Found non-dummy scan where one was expected.");
+  }
+  return scanMethod;
+}
+
+// _____________________________________________________________________________
+template<typename NonDummyResultList, typename ResultList>
+void Join::doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& ndr,
+                                              ResultList* res) const {
+  // Get the scan method (depends on type of dummy tree), use a function ptr.
+  void (Index::*scanMethod)(Id, Index::WidthTwoList*) const =
+  getFittingScanMethod(_left);
+  // Iterate through non-dummy.
+  Id currentJoinId = ndr[0][_rightJoinCol];
+  auto joinItemFrom = ndr.begin();
+  auto joinItemEnd = ndr.begin();
+  for (size_t i = 0; i < ndr.size(); ++i) {
+    // For each different element in the join column.
+    if (ndr[i][_rightJoinCol] == currentJoinId) {
+      ++joinItemEnd;
+    } else {
+      // Do a scan.
+      Index::WidthTwoList jr;
+      (getIndex().*scanMethod)(currentJoinId, &jr);
+      // Build the cross product.
+      appendCrossProduct(jr.begin(), jr.end(), joinItemFrom, joinItemEnd, res);
+      // Reset
+      currentJoinId = ndr[i][_rightJoinCol];
+      joinItemFrom = joinItemEnd;
+      ++joinItemEnd;
+    }
+
+  }
+
 }
 
 

@@ -125,6 +125,14 @@ public:
 
   void scanOSP(const string& object, WidthTwoList* result) const;
 
+  void scanPSO(Id predicate, WidthTwoList* result) const;
+  void scanPOS(Id predicate, WidthTwoList* result) const;
+  void scanSPO(Id subject, WidthTwoList* result) const;
+  void scanSOP(Id subject, WidthTwoList* result) const;
+  void scanOPS(Id object, WidthTwoList* result) const;
+  void scanOSP(Id object, WidthTwoList* result) const;
+
+
 
   // Get multiplicities with given var (SCAN for 2 cols)
   vector<float> getPSOMultiplicities(const string& key) const;

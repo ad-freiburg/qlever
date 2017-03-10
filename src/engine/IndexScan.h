@@ -91,6 +91,10 @@ public:
     return getSizeEstimate() == 0;
   }
 
+  ScanType getType() const {
+    return _type;
+  }
+
 protected:
   ScanType _type;
   string _subject;

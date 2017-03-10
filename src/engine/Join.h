@@ -38,8 +38,6 @@ public:
     _sizeEstimateComputed = false;
   }
 
-  bool isSelfJoin() const;
-
   virtual size_t getSizeEstimate() {
     if (!_sizeEstimateComputed) {
       _sizeEstimate = computeSizeEstimate();
@@ -81,4 +79,19 @@ private:
     return tree->getType() == QueryExecutionTree::SCAN &&
            tree->getResultWidth() == 3;
   }
+
+  void computeResultForJoinWithFullScanDummy(ResultTable* result) const;
+
+  typedef void (Index::*ScanMethodType)(Id, Index::WidthTwoList*) const;
+
+  ScanMethodType getFittingScanMethod(
+      std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const;
+
+  template<typename NonDummyResultList, typename ResultList>
+  void doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& v,
+                                      ResultList* r) const;
+
+  template<typename NonDummyResultList, typename ResultList>
+  void doComputeJoinWithFullScanDummyRight(const NonDummyResultList& v,
+                                          ResultList* r) const;
 };
