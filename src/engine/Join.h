@@ -13,7 +13,7 @@
 using std::list;
 
 class Join : public Operation {
- public:
+public:
 
   Join(QueryExecutionContext* qec,
        std::shared_ptr<QueryExecutionTree> t1,
@@ -29,6 +29,7 @@ class Join : public Operation {
   virtual size_t resultSortedOn() const;
 
   std::unordered_map<string, size_t> getVariableColumns() const;
+
   std::unordered_set<string> getContextVars() const;
 
   virtual void setTextLimit(size_t limit) {
@@ -47,11 +48,8 @@ class Join : public Operation {
     return _sizeEstimate;
   }
 
-  virtual size_t getCostEstimate() {
-    return getSizeEstimate() +
-        _left->getSizeEstimate() + _left->getCostEstimate() +
-        _right->getSizeEstimate() + _right->getCostEstimate();
-  }
+  virtual size_t getCostEstimate();
+
 
   virtual bool knownEmptyResult() {
     return _left->knownEmptyResult() || _right->knownEmptyResult();
@@ -61,7 +59,7 @@ class Join : public Operation {
 
   virtual float getMultiplicity(size_t col);
 
- private:
+private:
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
@@ -78,4 +76,9 @@ class Join : public Operation {
   virtual void computeResult(ResultTable* result) const;
 
   void computeMultiplicities();
+
+  static bool isFullScanDummy(std::shared_ptr<QueryExecutionTree> tree) {
+    return tree->getType() == QueryExecutionTree::SCAN &&
+           tree->getResultWidth() == 3;
+  }
 };

@@ -629,13 +629,18 @@ TEST(QueryPlannerTest, threeVarTriples) {
                                              "<s> <p> ?o . ?s ?p ?o }");
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ("{JOIN(\n"
-                  "{SCAN FOR FULL INDEX OPS (DUMMY OPERATION) | "
-                  "width: 3} [0]"
-                  "\n|X|\n"
-                  "{SCAN PSO with P = \"<p>\", S = \"<s>\" | width: 1} [0]"
-                  "\n) | width: 3}",
-              qet.asString());
+    ASSERT_TRUE("{JOIN(\n"
+                    "{SCAN FOR FULL INDEX OPS (DUMMY OPERATION) | "
+                    "width: 3} [0]"
+                    "\n|X|\n"
+                    "{SCAN PSO with P = \"<p>\", S = \"<s>\" | width: 1} [0]"
+                    "\n) | width: 3}" == qet.asString() ||
+                "{JOIN(\n"
+                    "{SCAN FOR FULL INDEX OSP (DUMMY OPERATION) | "
+                    "width: 3} [0]"
+                    "\n|X|\n"
+                    "{SCAN PSO with P = \"<p>\", S = \"<s>\" | width: 1} [0]"
+                    "\n) | width: 3}" == qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();

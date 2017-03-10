@@ -485,4 +485,35 @@ void Join::computeMultiplicities() {
   assert(_multiplicities.size() == getResultWidth());
 }
 
+// _____________________________________________________________________________
+size_t Join::getCostEstimate() {
+  float diskRandomAccessCost = _executionContext
+                               ? _executionContext->getCostFactor(
+          "DISK_RANDOM_ACCESS_COST") : 200000;
+  if (isFullScanDummy(_left)) {
+    size_t nofDistinctTabJc = static_cast<size_t>(
+        _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol));
+    float averageScanSize = _left->getMultiplicity(_leftJoinCol);
+
+    size_t costJoin = nofDistinctTabJc *
+                      static_cast<size_t>(diskRandomAccessCost +
+                                          averageScanSize);
+    return _left->getCostEstimate() + _right->getCostEstimate() + costJoin;
+  }
+  if (isFullScanDummy(_right)) {
+    size_t nofDistinctTabJc = static_cast<size_t>(
+        _left->getSizeEstimate() / _left->getMultiplicity(_leftJoinCol));
+    float averageScanSize = _right->getMultiplicity(_rightJoinCol);
+    size_t costJoin = nofDistinctTabJc *
+                      static_cast<size_t>(diskRandomAccessCost +
+                                          averageScanSize);
+    return _left->getCostEstimate() + _right->getCostEstimate() + costJoin;
+  }
+  // Normal case:
+  return getSizeEstimate() +
+         _left->getSizeEstimate() + _left->getCostEstimate() +
+         _right->getSizeEstimate() + _right->getCostEstimate();
+}
+
+
 
