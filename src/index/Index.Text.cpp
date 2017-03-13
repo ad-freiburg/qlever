@@ -1476,33 +1476,3 @@ void Index::getRhsForSingleLhs(const Index::WidthTwoList& in, Id lhsId,
 void Index::setTextName(const string& name) {
   _textMeta.setName(name);
 }
-
-// _____________________________________________________________________________
-void Index::scanPSO(Id predicate, Index::WidthTwoList* result) const {
-
-}
-
-// _____________________________________________________________________________
-void Index::scanPOS(Id predicate, Index::WidthTwoList* result) const {
-
-}
-
-// _____________________________________________________________________________
-void Index::scanSPO(Id subject, Index::WidthTwoList* result) const {
-
-}
-
-// _____________________________________________________________________________
-void Index::scanSOP(Id subject, Index::WidthTwoList* result) const {
-
-}
-
-// _____________________________________________________________________________
-void Index::scanOSP(Id object, Index::WidthTwoList* result) const {
-
-}
-
-// _____________________________________________________________________________
-void Index::scanOPS(Id object, Index::WidthTwoList* result) const {
-
-}

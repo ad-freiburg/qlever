@@ -162,10 +162,10 @@ void QueryExecutionTree::writeResultToStreamAsJson(
       var = var.substr(5, var.rfind(')') - 5);
     }
 
-    if (getVariableColumnMap().find(var) != getVariableColumnMap().end()) {
+    auto vc = getVariableColumnMap().find(var);
+    if (vc != getVariableColumnMap().end()) {
       validIndices.push_back(
-          pair<size_t, OutputType>(getVariableColumnMap().find(var)->second,
-                                   outputType));
+          pair<size_t, OutputType>(vc->second, outputType));
     }
   }
   if (validIndices.size() == 0) { return; }

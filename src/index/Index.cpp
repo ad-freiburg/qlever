@@ -519,15 +519,8 @@ void Index::scanPSO(const string& predicate, WidthTwoList* result) const {
   LOG(DEBUG) << "Performing PSO scan for full relation: " << predicate << "\n";
   Id relId;
   if (_vocab.getId(predicate, &relId)) {
-    LOG(TRACE) << "Successfully got relation ID.\n";
-    if (_psoMeta.relationExists(relId)) {
-      LOG(TRACE) << "Relation exists.\n";
-      const FullRelationMetaData& rmd = _psoMeta.getRmd(relId)._rmdPairs;
-      result->reserve(rmd.getNofElements() + 2);
-      result->resize(rmd.getNofElements());
-      _psoFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                    rmd._startFullIndex);
-    }
+    LOG(TRACE) << "Successfully got key ID.\n";
+    scanPSO(relId, result);
   }
   LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
 }
@@ -578,15 +571,8 @@ void Index::scanPOS(const string& predicate, WidthTwoList* result) const {
   LOG(DEBUG) << "Performing POS scan for full relation: " << predicate << "\n";
   Id relId;
   if (_vocab.getId(predicate, &relId)) {
-    LOG(TRACE) << "Successfully got relation ID.\n";
-    if (_posMeta.relationExists(relId)) {
-      LOG(TRACE) << "Relation exists.\n";
-      const FullRelationMetaData& rmd = _posMeta.getRmd(relId)._rmdPairs;
-      result->reserve(rmd.getNofElements() + 2);
-      result->resize(rmd.getNofElements());
-      _posFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                    rmd._startFullIndex);
-    }
+    LOG(TRACE) << "Successfully got key ID.\n";
+    scanPOS(relId, result);
   }
   LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
 }
@@ -690,15 +676,8 @@ void Index::scanSPO(const string& subject, WidthTwoList* result) const {
   LOG(DEBUG) << "Performing SPO scan for full list for: " << subject << "\n";
   Id relId;
   if (_vocab.getId(subject, &relId)) {
-    LOG(TRACE) << "Successfully got relation ID.\n";
-    if (_spoMeta.relationExists(relId)) {
-      LOG(TRACE) << "Relation exists.\n";
-      const FullRelationMetaData& rmd = _spoMeta.getRmd(relId)._rmdPairs;
-      result->reserve(rmd.getNofElements() + 2);
-      result->resize(rmd.getNofElements());
-      _spoFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                    rmd._startFullIndex);
-    }
+    LOG(TRACE) << "Successfully got key ID.\n";
+    scanSPO(relId, result);
   }
   LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
 }
@@ -714,15 +693,8 @@ void Index::scanSOP(const string& subject, WidthTwoList* result) const {
   LOG(DEBUG) << "Performing SOP scan for full list for: " << subject << "\n";
   Id relId;
   if (_vocab.getId(subject, &relId)) {
-    LOG(TRACE) << "Successfully got relation ID.\n";
-    if (_sopMeta.relationExists(relId)) {
-      LOG(TRACE) << "Relation exists.\n";
-      const FullRelationMetaData& rmd = _sopMeta.getRmd(relId)._rmdPairs;
-      result->reserve(rmd.getNofElements() + 2);
-      result->resize(rmd.getNofElements());
-      _sopFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                    rmd._startFullIndex);
-    }
+    LOG(TRACE) << "Successfully got key ID.\n";
+    scanSOP(relId, result);
   }
   LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
 }
@@ -738,15 +710,8 @@ void Index::scanOPS(const string& object, WidthTwoList* result) const {
   LOG(DEBUG) << "Performing OPS scan for full list for: " << object << "\n";
   Id relId;
   if (_vocab.getId(object, &relId)) {
-    LOG(TRACE) << "Successfully got relation ID.\n";
-    if (_opsMeta.relationExists(relId)) {
-      LOG(TRACE) << "Relation exists.\n";
-      const FullRelationMetaData& rmd = _opsMeta.getRmd(relId)._rmdPairs;
-      result->reserve(rmd.getNofElements() + 2);
-      result->resize(rmd.getNofElements());
-      _opsFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                    rmd._startFullIndex);
-    }
+    LOG(TRACE) << "Successfully got key ID.\n";
+    scanOPS(relId, result);
   }
   LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
 }
@@ -762,19 +727,77 @@ void Index::scanOSP(const string& object, WidthTwoList* result) const {
   LOG(DEBUG) << "Performing OSP scan for full list for: " << object << "\n";
   Id relId;
   if (_vocab.getId(object, &relId)) {
-    LOG(TRACE) << "Successfully got relation ID.\n";
-    if (_ospMeta.relationExists(relId)) {
-      LOG(TRACE) << "Relation exists.\n";
-      const FullRelationMetaData& rmd = _ospMeta.getRmd(relId)._rmdPairs;
-      result->reserve(rmd.getNofElements() + 2);
-      result->resize(rmd.getNofElements());
-      _ospFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                    rmd._startFullIndex);
-    }
+    LOG(TRACE) << "Successfully got key ID.\n";
+    scanOSP(relId, result);
   }
   LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
 }
 
+// _____________________________________________________________________________
+void Index::scanPSO(Id predicate, Index::WidthTwoList* result) const {
+  if (_psoMeta.relationExists(predicate)) {
+    const FullRelationMetaData& rmd = _psoMeta.getRmd(predicate)._rmdPairs;
+    result->reserve(rmd.getNofElements() + 2);
+    result->resize(rmd.getNofElements());
+    _psoFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
+                  rmd._startFullIndex);
+  }
+}
+
+// _____________________________________________________________________________
+void Index::scanPOS(Id predicate, Index::WidthTwoList* result) const {
+  if (_posMeta.relationExists(predicate)) {
+    const FullRelationMetaData& rmd = _posMeta.getRmd(predicate)._rmdPairs;
+    result->reserve(rmd.getNofElements() + 2);
+    result->resize(rmd.getNofElements());
+    _posFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
+                  rmd._startFullIndex);
+  }
+}
+
+// _____________________________________________________________________________
+void Index::scanSPO(Id subject, Index::WidthTwoList* result) const {
+  if (_spoMeta.relationExists(subject)) {
+    const FullRelationMetaData& rmd = _spoMeta.getRmd(subject)._rmdPairs;
+    result->reserve(rmd.getNofElements() + 2);
+    result->resize(rmd.getNofElements());
+    _spoFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
+                  rmd._startFullIndex);
+  }
+}
+
+// _____________________________________________________________________________
+void Index::scanSOP(Id subject, Index::WidthTwoList* result) const {
+  if (_sopMeta.relationExists(subject)) {
+    const FullRelationMetaData& rmd = _sopMeta.getRmd(subject)._rmdPairs;
+    result->reserve(rmd.getNofElements() + 2);
+    result->resize(rmd.getNofElements());
+    _sopFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
+                  rmd._startFullIndex);
+  }
+}
+
+// _____________________________________________________________________________
+void Index::scanOSP(Id object, Index::WidthTwoList* result) const {
+  if (_ospMeta.relationExists(object)) {
+    const FullRelationMetaData& rmd = _ospMeta.getRmd(object)._rmdPairs;
+    result->reserve(rmd.getNofElements() + 2);
+    result->resize(rmd.getNofElements());
+    _ospFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
+                  rmd._startFullIndex);
+  }
+}
+
+// _____________________________________________________________________________
+void Index::scanOPS(Id object, Index::WidthTwoList* result) const {
+  if (_opsMeta.relationExists(object)) {
+    const FullRelationMetaData& rmd = _opsMeta.getRmd(object)._rmdPairs;
+    result->reserve(rmd.getNofElements() + 2);
+    result->resize(rmd.getNofElements());
+    _opsFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
+                  rmd._startFullIndex);
+  }
+}
 
 // _____________________________________________________________________________
 string Index::idToString(Id id) const {
@@ -933,7 +956,7 @@ bool Index::shouldBeExternalized(const string& object) {
 vector<float> Index::getPSOMultiplicities(const string& key) const {
   Id keyId;
   vector<float> res;
-  if (_vocab.getId(key, &keyId)) {
+  if (_vocab.getId(key, &keyId) && _psoMeta.relationExists(keyId)) {
     auto rmd = _psoMeta.getRmd(keyId);
     auto logM1 = rmd.getCol1LogMultiplicity();
     res.push_back(static_cast<float>(pow(2, logM1)));
@@ -950,7 +973,7 @@ vector<float> Index::getPSOMultiplicities(const string& key) const {
 vector<float> Index::getPOSMultiplicities(const string& key) const {
   Id keyId;
   vector<float> res;
-  if (_vocab.getId(key, &keyId)) {
+  if (_vocab.getId(key, &keyId) && _posMeta.relationExists(keyId)) {
     auto rmd = _posMeta.getRmd(keyId);
     auto logM1 = rmd.getCol1LogMultiplicity();
     res.push_back(static_cast<float>(pow(2, logM1)));
@@ -967,7 +990,7 @@ vector<float> Index::getPOSMultiplicities(const string& key) const {
 vector<float> Index::getSPOMultiplicities(const string& key) const {
   Id keyId;
   vector<float> res;
-  if (_vocab.getId(key, &keyId)) {
+  if (_vocab.getId(key, &keyId) && _spoMeta.relationExists(keyId)) {
     auto rmd = _spoMeta.getRmd(keyId);
     auto logM1 = rmd.getCol1LogMultiplicity();
     res.push_back(static_cast<float>(pow(2, logM1)));
@@ -984,7 +1007,7 @@ vector<float> Index::getSPOMultiplicities(const string& key) const {
 vector<float> Index::getSOPMultiplicities(const string& key) const {
   Id keyId;
   vector<float> res;
-  if (_vocab.getId(key, &keyId)) {
+  if (_vocab.getId(key, &keyId) && _sopMeta.relationExists(keyId)) {
     auto rmd = _sopMeta.getRmd(keyId);
     auto logM1 = rmd.getCol1LogMultiplicity();
     res.push_back(static_cast<float>(pow(2, logM1)));
@@ -1001,7 +1024,7 @@ vector<float> Index::getSOPMultiplicities(const string& key) const {
 vector<float> Index::getOSPMultiplicities(const string& key) const {
   Id keyId;
   vector<float> res;
-  if (_vocab.getId(key, &keyId)) {
+  if (_vocab.getId(key, &keyId) && _ospMeta.relationExists(keyId)) {
     auto rmd = _ospMeta.getRmd(keyId);
     auto logM1 = rmd.getCol1LogMultiplicity();
     res.push_back(static_cast<float>(pow(2, logM1)));
@@ -1018,7 +1041,7 @@ vector<float> Index::getOSPMultiplicities(const string& key) const {
 vector<float> Index::getOPSMultiplicities(const string& key) const {
   Id keyId;
   vector<float> res;
-  if (_vocab.getId(key, &keyId)) {
+  if (_vocab.getId(key, &keyId) && _opsMeta.relationExists(keyId)) {
     auto rmd = _opsMeta.getRmd(keyId);
     auto logM1 = rmd.getCol1LogMultiplicity();
     res.push_back(static_cast<float>(pow(2, logM1)));

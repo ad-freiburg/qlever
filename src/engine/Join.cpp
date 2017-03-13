@@ -390,15 +390,42 @@ void Join::computeResult(ResultTable* result) const {
 
 // _____________________________________________________________________________
 std::unordered_map<string, size_t> Join::getVariableColumns() const {
-  std::unordered_map<string, size_t> retVal(_left->getVariableColumnMap());
-  size_t leftSize = _left->getResultWidth();
-  for (auto it = _right->getVariableColumnMap().begin();
-       it != _right->getVariableColumnMap().end(); ++it) {
-    if (it->second < _rightJoinCol) {
-      retVal[it->first] = leftSize + it->second;
+  std::unordered_map<string, size_t> retVal;
+  if (!isFullScanDummy(_left) && !isFullScanDummy(_right)) {
+    retVal = _left->getVariableColumnMap();
+    size_t leftSize = _left->getResultWidth();
+    for (auto it = _right->getVariableColumnMap().begin();
+         it != _right->getVariableColumnMap().end(); ++it) {
+      if (it->second < _rightJoinCol) {
+        retVal[it->first] = leftSize + it->second;
+      }
+      if (it->second > _rightJoinCol) {
+        retVal[it->first] = leftSize + it->second - 1;
+      }
     }
-    if (it->second > _rightJoinCol) {
-      retVal[it->first] = leftSize + it->second - 1;
+  } else {
+    if (isFullScanDummy(_right)) {
+      retVal = _left->getVariableColumnMap();
+      size_t leftSize = _left->getResultWidth();
+      for (auto it = _right->getVariableColumnMap().begin();
+           it != _right->getVariableColumnMap().end(); ++it) {
+        // Skip the first col for the dummy
+        if (it->second != 0) {
+          retVal[it->first] = leftSize + it->second -1;
+        }
+      }
+    } else {
+      for (auto it = _left->getVariableColumnMap().begin();
+           it != _left->getVariableColumnMap().end(); ++it) {
+        // Skip+drop the first col for the dummy and subtract one from others.
+        if (it->second != 0) {
+          retVal[it->first] = it->second - 1;
+        }
+      }
+      for (auto it = _right->getVariableColumnMap().begin();
+           it != _right->getVariableColumnMap().end(); ++it) {
+        retVal[it->first] = 2 + it->second;
+      }
     }
   }
   return retVal;
@@ -510,12 +537,12 @@ size_t Join::getCostEstimate() {
 
 // _____________________________________________________________________________
 void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
+  LOG(DEBUG) << "Join by making multiple scans..." << endl;
   if (isFullScanDummy(_left)) {
     AD_CHECK(!isFullScanDummy(_right))
     result->_nofColumns = _right->getResultWidth() + 2;
     result->_sortedBy = 2 + _rightJoinCol;
     const ResultTable& nonDummyRes = _right->getRootOperation()->getResult();
-    if (nonDummyRes.size() == 0) { return; }
 
     if (_right->getResultWidth() == 1) {
       const Index::WidthOneList& r = *static_cast<Index::WidthOneList*>(
@@ -553,8 +580,10 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
     AD_CHECK(!isFullScanDummy(_left))
     result->_nofColumns = _left->getResultWidth() + 2;
     result->_sortedBy = _leftJoinCol;
+    if (_left->knownEmptyResult()) {
+
+    }
     const ResultTable& nonDummyRes = _left->getRootOperation()->getResult();
-    if (nonDummyRes.size() == 0) { return; }
     if (_left->getResultWidth() == 1) {
       const Index::WidthOneList& r = *static_cast<Index::WidthOneList*>(
           nonDummyRes._fixedSizeData);
@@ -589,11 +618,11 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
     }
   }
   result->_status = ResultTable::FINISHED;
-
+  LOG(DEBUG) << "Join result computation done." << endl;
 }
 
 // _____________________________________________________________________________
-Join::ScanMethodType Join::getFittingScanMethod(
+Join::ScanMethodType Join::getScanMethod(
     std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const {
   void (Index::*scanMethod)(Id, Index::WidthTwoList*) const;
   IndexScan& scan = *static_cast<IndexScan*>(
@@ -627,9 +656,10 @@ Join::ScanMethodType Join::getFittingScanMethod(
 template<typename NonDummyResultList, typename ResultList>
 void Join::doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& ndr,
                                               ResultList* res) const {
+  if (ndr.size() == 0) { return; }
   // Get the scan method (depends on type of dummy tree), use a function ptr.
-  void (Index::*scanMethod)(Id, Index::WidthTwoList*) const =
-  getFittingScanMethod(_left);
+  typedef void (Index::*Scan)(Id, Index::WidthTwoList*) const;
+  Scan scan = getScanMethod(_left);
   // Iterate through non-dummy.
   Id currentJoinId = ndr[0][_rightJoinCol];
   auto joinItemFrom = ndr.begin();
@@ -640,8 +670,11 @@ void Join::doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& ndr,
       ++joinItemEnd;
     } else {
       // Do a scan.
+      LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
       Index::WidthTwoList jr;
-      (getIndex().*scanMethod)(currentJoinId, &jr);
+      const auto* index = &getIndex();
+      (index->*scan)(currentJoinId, &jr);
+      LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
       appendCrossProduct(jr.begin(), jr.end(), joinItemFrom, joinItemEnd, res);
       // Reset
@@ -649,10 +682,35 @@ void Join::doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& ndr,
       joinItemFrom = joinItemEnd;
       ++joinItemEnd;
     }
-
   }
-
 }
 
-
+// _____________________________________________________________________________
+template<typename NonDummyResultList, typename ResultList>
+void Join::doComputeJoinWithFullScanDummyRight(const NonDummyResultList& ndr,
+                                               ResultList* res) const {
+  if (ndr.size() == 0) { return; }
+  // Get the scan method (depends on type of dummy tree), use a function ptr.
+  void (Index::*scan)(Id, Index::WidthTwoList*) const = getScanMethod(_right);
+  // Iterate through non-dummy.
+  Id currentJoinId = ndr[0][_leftJoinCol];
+  auto joinItemFrom = ndr.begin();
+  auto joinItemEnd = ndr.begin();
+  for (size_t i = 0; i < ndr.size(); ++i) {
+    // For each different element in the join column.
+    if (ndr[i][_leftJoinCol] == currentJoinId) {
+      ++joinItemEnd;
+    } else {
+      // Do a scan.
+      Index::WidthTwoList jr;
+      (getIndex().*scan)(currentJoinId, &jr);
+      // Build the cross product.
+      appendCrossProduct(joinItemFrom, joinItemEnd, jr.begin(), jr.end(), res);
+      // Reset
+      currentJoinId = ndr[i][_leftJoinCol];
+      joinItemFrom = joinItemEnd;
+      ++joinItemEnd;
+    }
+  }
+}
 

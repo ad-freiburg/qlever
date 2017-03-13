@@ -48,6 +48,22 @@ class Engine {
       return res;
     };
 
+  template<size_t N, size_t M>
+  static inline void concatTuple(
+      const array<Id, N>& a,
+      const array<Id, M>& b,
+      array<Id, N + M>& res) {
+    std::copy(a.begin(), a.end(), res.begin());
+    std::copy(b.begin(), b.end(), res.begin() + N);
+  }
+
+  template<typename A, typename B>
+  static void concatTuple(const A& a, const B& b, vector<Id>& res) {
+    res.reserve(a.size() + b.size());
+    res.insert(res.end(), a.begin(), a.end());
+    res.insert(res.end(), b.begin(), b.end());
+  };
+
 
     template<typename E, size_t N, size_t... I>
     static vector<array<E, sizeof...(I)>> project(

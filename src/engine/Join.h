@@ -84,14 +84,42 @@ private:
 
   typedef void (Index::*ScanMethodType)(Id, Index::WidthTwoList*) const;
 
-  ScanMethodType getFittingScanMethod(
+  ScanMethodType getScanMethod(
       std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const;
 
   template<typename NonDummyResultList, typename ResultList>
   void doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& v,
-                                      ResultList* r) const;
+                                          ResultList* r) const;
 
   template<typename NonDummyResultList, typename ResultList>
   void doComputeJoinWithFullScanDummyRight(const NonDummyResultList& v,
-                                          ResultList* r) const;
+                                           ResultList* r) const;
+
+  // In Header to avoid numerous instantiations.
+  template<typename LhsIt, typename RhsIt>
+  void appendCrossProduct(LhsIt lbeg, LhsIt lend, RhsIt rbeg, RhsIt rend,
+                          vector<vector<Id>>* res) const {
+    for (auto it=lbeg;it != lend; ++it) {
+      for (auto itt = rbeg; itt != rend; ++itt) {
+        const auto& l = *it;
+        const auto& r = *itt;
+        vector<Id> entry;
+        Engine::concatTuple(l, r, entry);
+        res->emplace_back(entry);
+      }
+    }
+  };
+  template<typename LhsIt, typename RhsIt, size_t Width>
+  void appendCrossProduct(LhsIt lbeg, LhsIt lend, RhsIt rbeg, RhsIt rend,
+                          vector<array<Id, Width>>* res) const {
+    for (auto it=lbeg;it != lend; ++it) {
+      for (auto itt = rbeg; itt != rend; ++itt) {
+        const auto& l = *it;
+        const auto& r = *itt;
+        array<Id, Width> entry;
+        Engine::concatTuple(l, r, entry);
+        res->emplace_back(entry);
+      }
+    }
+  };
 };
