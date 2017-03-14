@@ -562,7 +562,9 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
       const Index::WidthThreeList& r = *static_cast<Index::WidthThreeList*>(
           nonDummyRes._fixedSizeData);
       result->_fixedSizeData = new Index::WidthFiveList();
-      doComputeJoinWithFullScanDummyLeft(r, &result->_varSizeData);
+      doComputeJoinWithFullScanDummyLeft(
+          r,
+          static_cast<Index::WidthFiveList*>(result->_fixedSizeData));
     } else if (_right->getResultWidth() == 4) {
       const Index::WidthFourList& r = *static_cast<Index::WidthFourList*>(
           nonDummyRes._fixedSizeData);
@@ -602,7 +604,9 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
       const Index::WidthThreeList& r = *static_cast<Index::WidthThreeList*>(
           nonDummyRes._fixedSizeData);
       result->_fixedSizeData = new Index::WidthFiveList();
-      doComputeJoinWithFullScanDummyRight(r, &result->_varSizeData);
+      doComputeJoinWithFullScanDummyRight(
+          r,
+          static_cast<Index::WidthFiveList*>(result->_fixedSizeData));
     } else if (_left->getResultWidth() == 4) {
       const Index::WidthFourList& r = *static_cast<Index::WidthFourList*>(
           nonDummyRes._fixedSizeData);
@@ -618,7 +622,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
     }
   }
   result->_status = ResultTable::FINISHED;
-  LOG(DEBUG) << "Join (with dummy) result computation done." << endl;
+  LOG(DEBUG) << "Join (with dummy) done. Size: " << result->size() << endl;
 }
 
 // _____________________________________________________________________________
@@ -661,6 +665,7 @@ void Join::doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& ndr,
   if (ndr.size() == 0) { return; }
   // Get the scan method (depends on type of dummy tree), use a function ptr.
   typedef void (Index::*Scan)(Id, Index::WidthTwoList*) const;
+  const auto* index = &getIndex();
   Scan scan = getScanMethod(_left);
   // Iterate through non-dummy.
   Id currentJoinId = ndr[0][_rightJoinCol];
@@ -674,7 +679,6 @@ void Join::doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& ndr,
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
       Index::WidthTwoList jr;
-      const auto* index = &getIndex();
       (index->*scan)(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
@@ -685,6 +689,13 @@ void Join::doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& ndr,
       ++joinItemEnd;
     }
   }
+  // Do the scan for the final element.
+  LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
+  Index::WidthTwoList jr;
+  (index->*scan)(currentJoinId, &jr);
+  LOG(TRACE) << "Got #items: " << jr.size() << endl;
+  // Build the cross product.
+  appendCrossProduct(jr.begin(), jr.end(), joinItemFrom, joinItemEnd, res);
 }
 
 // _____________________________________________________________________________
@@ -696,6 +707,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const NonDummyResultList& ndr,
   if (ndr.size() == 0) { return; }
   // Get the scan method (depends on type of dummy tree), use a function ptr.
   void (Index::*scan)(Id, Index::WidthTwoList*) const = getScanMethod(_right);
+  const auto* index = &getIndex();
   // Iterate through non-dummy.
   Id currentJoinId = ndr[0][_leftJoinCol];
   auto joinItemFrom = ndr.begin();
@@ -708,7 +720,6 @@ void Join::doComputeJoinWithFullScanDummyRight(const NonDummyResultList& ndr,
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
       Index::WidthTwoList jr;
-      const auto* index = &getIndex();
       (index->*scan)(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
@@ -719,5 +730,12 @@ void Join::doComputeJoinWithFullScanDummyRight(const NonDummyResultList& ndr,
       ++joinItemEnd;
     }
   }
+  // Do the scan for the final element.
+  LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
+  Index::WidthTwoList jr;
+  (index->*scan)(currentJoinId, &jr);
+  LOG(TRACE) << "Got #items: " << jr.size() << endl;
+  // Build the cross product.
+  appendCrossProduct(joinItemFrom, joinItemEnd, jr.begin(), jr.end(), res);
 }
 
