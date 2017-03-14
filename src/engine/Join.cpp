@@ -411,7 +411,7 @@ std::unordered_map<string, size_t> Join::getVariableColumns() const {
            it != _right->getVariableColumnMap().end(); ++it) {
         // Skip the first col for the dummy
         if (it->second != 0) {
-          retVal[it->first] = leftSize + it->second -1;
+          retVal[it->first] = leftSize + it->second - 1;
         }
       }
     } else {
@@ -618,7 +618,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
     }
   }
   result->_status = ResultTable::FINISHED;
-  LOG(DEBUG) << "Join result computation done." << endl;
+  LOG(DEBUG) << "Join (with dummy) result computation done." << endl;
 }
 
 // _____________________________________________________________________________
@@ -656,6 +656,8 @@ Join::ScanMethodType Join::getScanMethod(
 template<typename NonDummyResultList, typename ResultList>
 void Join::doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& ndr,
                                               ResultList* res) const {
+  LOG(TRACE) << "Dummy on right side, other join op size: " << ndr.siez()
+             << endl;
   if (ndr.size() == 0) { return; }
   // Get the scan method (depends on type of dummy tree), use a function ptr.
   typedef void (Index::*Scan)(Id, Index::WidthTwoList*) const;
@@ -689,6 +691,8 @@ void Join::doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& ndr,
 template<typename NonDummyResultList, typename ResultList>
 void Join::doComputeJoinWithFullScanDummyRight(const NonDummyResultList& ndr,
                                                ResultList* res) const {
+  LOG(TRACE) << "Dummy on right side, other join op size: " << ndr.siez()
+             << endl;
   if (ndr.size() == 0) { return; }
   // Get the scan method (depends on type of dummy tree), use a function ptr.
   void (Index::*scan)(Id, Index::WidthTwoList*) const = getScanMethod(_right);
