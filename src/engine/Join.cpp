@@ -656,7 +656,7 @@ Join::ScanMethodType Join::getScanMethod(
 template<typename NonDummyResultList, typename ResultList>
 void Join::doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& ndr,
                                               ResultList* res) const {
-  LOG(TRACE) << "Dummy on right side, other join op size: " << ndr.siez()
+  LOG(TRACE) << "Dummy on right side, other join op size: " << ndr.size()
              << endl;
   if (ndr.size() == 0) { return; }
   // Get the scan method (depends on type of dummy tree), use a function ptr.
@@ -691,7 +691,7 @@ void Join::doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& ndr,
 template<typename NonDummyResultList, typename ResultList>
 void Join::doComputeJoinWithFullScanDummyRight(const NonDummyResultList& ndr,
                                                ResultList* res) const {
-  LOG(TRACE) << "Dummy on right side, other join op size: " << ndr.siez()
+  LOG(TRACE) << "Dummy on right side, other join op size: " << ndr.size()
              << endl;
   if (ndr.size() == 0) { return; }
   // Get the scan method (depends on type of dummy tree), use a function ptr.
