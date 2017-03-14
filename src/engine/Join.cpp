@@ -706,8 +706,11 @@ void Join::doComputeJoinWithFullScanDummyRight(const NonDummyResultList& ndr,
       ++joinItemEnd;
     } else {
       // Do a scan.
+      LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
       Index::WidthTwoList jr;
-      (getIndex().*scan)(currentJoinId, &jr);
+      const auto* index = &getIndex();
+      (index->*scan)(currentJoinId, &jr);
+      LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
       appendCrossProduct(joinItemFrom, joinItemEnd, jr.begin(), jr.end(), res);
       // Reset
