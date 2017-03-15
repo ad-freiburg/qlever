@@ -572,7 +572,6 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
     } else if (_right->getResultWidth() == 5) {
       const Index::WidthFiveList& r = *static_cast<Index::WidthFiveList*>(
           nonDummyRes._fixedSizeData);
-      result->_fixedSizeData = new Index::WidthFiveList();
       doComputeJoinWithFullScanDummyLeft(r, &result->_varSizeData);
     } else {
       const Index::VarWidthList& r = nonDummyRes._varSizeData;
@@ -582,9 +581,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
     AD_CHECK(!isFullScanDummy(_left))
     result->_nofColumns = _left->getResultWidth() + 2;
     result->_sortedBy = _leftJoinCol;
-    if (_left->knownEmptyResult()) {
 
-    }
     const ResultTable& nonDummyRes = _left->getRootOperation()->getResult();
     if (_left->getResultWidth() == 1) {
       const Index::WidthOneList& r = *static_cast<Index::WidthOneList*>(
@@ -614,7 +611,6 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
     } else if (_left->getResultWidth() == 5) {
       const Index::WidthFiveList& r = *static_cast<Index::WidthFiveList*>(
           nonDummyRes._fixedSizeData);
-      result->_fixedSizeData = new Index::WidthFiveList();
       doComputeJoinWithFullScanDummyRight(r, &result->_varSizeData);
     } else {
       const Index::VarWidthList& r = nonDummyRes._varSizeData;
