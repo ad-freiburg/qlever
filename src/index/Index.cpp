@@ -1056,56 +1056,68 @@ vector<float> Index::getOPSMultiplicities(const string& key) const {
 
 // _____________________________________________________________________________
 vector<float> Index::getSPOMultiplicities() const {
-  return vector<float>{{
-                           static_cast<float>(getNofSubjects()),
-                           static_cast<float>(getNofPredicates()),
-                           static_cast<float>(getNofObjects())
-                       }};
+  return vector<float>{
+      {
+          static_cast<float>(getNofTriples() / getNofSubjects()),
+          static_cast<float>(getNofTriples() / getNofPredicates()),
+          static_cast<float>(getNofTriples() / getNofObjects())
+      }
+  };
 }
 
 // _____________________________________________________________________________
 vector<float> Index::getSOPMultiplicities() const {
-  return vector<float>{{
-                           static_cast<float>(getNofSubjects()),
-                           static_cast<float>(getNofObjects()),
-                           static_cast<float>(getNofPredicates())
-                       }};
+  return vector<float>{
+      {
+          static_cast<float>(getNofTriples() / getNofSubjects()),
+          static_cast<float>(getNofTriples() / getNofObjects()),
+          static_cast<float>(getNofTriples() / getNofPredicates())
+      }
+  };
 }
 
 // _____________________________________________________________________________
 vector<float> Index::getPSOMultiplicities() const {
-  return vector<float>{{
-                           static_cast<float>(getNofPredicates()),
-                           static_cast<float>(getNofSubjects()),
-                           static_cast<float>(getNofObjects())
-                       }};
+  return vector<float>{
+      {
+          static_cast<float>(getNofTriples() / getNofPredicates()),
+          static_cast<float>(getNofTriples() / getNofSubjects()),
+          static_cast<float>(getNofTriples() / getNofObjects())
+      }
+  };
 }
 
 // _____________________________________________________________________________
 vector<float> Index::getPOSMultiplicities() const {
-  return vector<float>{{
-                           static_cast<float>(getNofPredicates()),
-                           static_cast<float>(getNofObjects()),
-                           static_cast<float>(getNofSubjects())
-                       }};
+  return vector<float>{
+      {
+          static_cast<float>(getNofTriples() / getNofPredicates()),
+          static_cast<float>(getNofTriples() / getNofObjects()),
+          static_cast<float>(getNofTriples() / getNofSubjects())
+      }
+  };
 }
 
 // _____________________________________________________________________________
 vector<float> Index::getOSPMultiplicities() const {
-  return vector<float>{{
-                           static_cast<float>(getNofObjects()),
-                           static_cast<float>(getNofSubjects()),
-                           static_cast<float>(getNofPredicates())
-                       }};
+  return vector<float>{
+      {
+          static_cast<float>(getNofTriples() / getNofObjects()),
+          static_cast<float>(getNofTriples() / getNofSubjects()),
+          static_cast<float>(getNofTriples() / getNofPredicates())
+      }
+  };
 }
 
 // _____________________________________________________________________________
 vector<float> Index::getOPSMultiplicities() const {
-  return vector<float>{{
-                           static_cast<float>(getNofObjects()),
-                           static_cast<float>(getNofPredicates()),
-                           static_cast<float>(getNofSubjects())
-                       }};
+  return vector<float>{
+      {
+          static_cast<float>(getNofTriples() / getNofObjects()),
+          static_cast<float>(getNofTriples() / getNofPredicates()),
+          static_cast<float>(getNofTriples() / getNofSubjects())
+      }
+  };
 }
 
 // _____________________________________________________________________________
