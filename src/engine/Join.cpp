@@ -441,7 +441,11 @@ size_t Join::getResultWidth() const {
 
 // _____________________________________________________________________________
 size_t Join::resultSortedOn() const {
-  return _leftJoinCol;
+  if (!isFullScanDummy(_left)) {
+    return _leftJoinCol;
+  } else {
+    return 2 + _rightJoinCol;
+  }
 }
 
 // _____________________________________________________________________________
