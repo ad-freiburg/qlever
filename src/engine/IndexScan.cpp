@@ -9,8 +9,9 @@
 using std::string;
 
 // _____________________________________________________________________________
-string IndexScan::asString() const {
+string IndexScan::asString(size_t indent) const {
   std::ostringstream os;
+  for (size_t i = 0; i < indent; ++i) { os << ' ';}
   switch (_type) {
     case PSO_BOUND_S:
       os << "SCAN PSO with P = \"" << _predicate << "\", S = \"" << _subject <<

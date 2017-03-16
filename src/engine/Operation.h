@@ -33,7 +33,7 @@ class Operation {
     // trigger computation.
     const ResultTable& getResult() const {
       LOG(TRACE) << "Get result from cache (possibly empty)" << endl;
-      LOG(TRACE) << "Using key: \"" << asString() << "\"" << endl;
+      LOG(TRACE) << "Using key: \n" << asString() << endl;
       ResultTable *result =
           _executionContext->getCachedResultForQueryTree(asString());
       if (result->_status != ResultTable::FINISHED) {
@@ -60,7 +60,7 @@ class Operation {
 
     // Get a unique, not ambiguous string representation for a subtree.
     // This should possible act like an ID for each subtree.
-    virtual string asString() const = 0;
+    virtual string asString(size_t indent=0) const = 0;
     virtual size_t getResultWidth() const = 0;
     virtual size_t resultSortedOn() const = 0;
     virtual void setTextLimit(size_t limit) = 0;

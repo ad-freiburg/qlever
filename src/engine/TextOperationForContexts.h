@@ -30,7 +30,7 @@ class TextOperationForContexts : public Operation {
                                            size_t>>(),
                                textLimit) { }
 
-  virtual string asString() const;
+  virtual string asString(size_t indent = 0) const;
 
   virtual size_t getResultWidth() const;
 

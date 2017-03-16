@@ -45,7 +45,7 @@ public:
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
 
-  string asString();
+  string asString(size_t indent = 0);
 
   QueryExecutionContext* getQec() const {
     return _qec;

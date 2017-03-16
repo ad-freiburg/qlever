@@ -23,7 +23,7 @@ public:
                           std::shared_ptr<QueryExecutionTree> filterResult,
                           size_t filterColumn, size_t textLimit = 1);
 
-  virtual string asString() const;
+  virtual string asString(size_t indent) const;
 
   virtual size_t getResultWidth() const;
 

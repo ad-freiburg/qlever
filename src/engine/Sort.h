@@ -19,7 +19,7 @@ class Sort : public Operation {
   Sort(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
        size_t sortCol);
 
-  virtual string asString() const;
+  virtual string asString(size_t indent = 0) const;
 
   virtual size_t resultSortedOn() const { return _sortCol; }
 

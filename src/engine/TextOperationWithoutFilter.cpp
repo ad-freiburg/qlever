@@ -24,8 +24,9 @@ TextOperationWithoutFilter::TextOperationWithoutFilter(
     _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 
 // _____________________________________________________________________________
-string TextOperationWithoutFilter::asString() const {
+string TextOperationWithoutFilter::asString(size_t indent) const {
   std::ostringstream os;
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
   os << "TEXT OPERATION WITHOUT FILTER:" << " co-occurrence with words: \"" <<
      _words << "\" and " << _nofVars << " variables";;
   os << " with textLimit = " << _textLimit;

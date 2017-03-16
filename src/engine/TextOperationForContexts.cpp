@@ -30,13 +30,17 @@ TextOperationForContexts::TextOperationForContexts(
 }
 
 // _____________________________________________________________________________
-string TextOperationForContexts::asString() const {
+string TextOperationForContexts::asString(size_t indent) const {
   std::ostringstream os;
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
   os << "TEXT OPERATION FOR CONTEXTS:" << " co-occurrence with words: \"" <<
   _words << "\"";
   for (size_t i = 0; i < _subtrees.size(); ++i) {
-    os << "\nand " << _subtrees[i].first->asString() << " [" <<
-    _subtrees[i].second << "]";
+    os << "\n";
+    for (size_t i = 0; i < indent; ++i) { os << " "; }
+    os << "and\n" << _subtrees[i].first->asString(indent) << "\n";
+    for (size_t i = 0; i < indent; ++i) { os << " "; }
+    os << "[" << _subtrees[i].second << "]";
   }
   return os.str();
 }

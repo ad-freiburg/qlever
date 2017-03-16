@@ -24,7 +24,7 @@ class Filter : public Operation {
            SparqlFilter::FilterType type, size_t var1Column, size_t var2Column,
            Id rhsId = std::numeric_limits<Id>::max());
 
-    virtual string asString() const;
+    virtual string asString(size_t indent=0) const;
 
     virtual size_t resultSortedOn() const {
       return _subtree->resultSortedOn();

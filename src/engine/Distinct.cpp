@@ -25,9 +25,10 @@ Distinct::Distinct(QueryExecutionContext* qec,
 
 
 // _____________________________________________________________________________
-string Distinct::asString() const {
+string Distinct::asString(size_t indent) const {
   std::ostringstream os;
-  os << "Distinct " << _subtree->asString();
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << "Distinct " << _subtree->asString(indent);
   return os.str();
 }
 

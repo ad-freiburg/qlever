@@ -19,7 +19,7 @@ public:
                 std::shared_ptr<QueryExecutionTree> t2,
                 const std::vector<array<size_t, 2>>& joinCols);
 
-  virtual string asString() const;
+  virtual string asString(size_t indent = 0) const;
 
   virtual size_t getResultWidth() const;
 

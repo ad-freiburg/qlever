@@ -36,10 +36,14 @@ Join::Join(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string Join::asString() const {
+string Join::asString(size_t indent) const {
   std::ostringstream os;
-  os << "JOIN(\n" << _left->asString() << " [" << _leftJoinCol <<
-     "]\n|X|\n" << _right->asString() << " [" << _rightJoinCol << "]\n)";
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << "JOIN\n"
+     << _left->asString(indent) << " | join-column: [" << _leftJoinCol << "]\n";
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << "|X|\n"
+     << _right->asString(indent) << " | join-column: [" << _rightJoinCol << "]";
   return os.str();
 }
 

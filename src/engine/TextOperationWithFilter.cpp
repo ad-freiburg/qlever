@@ -28,12 +28,15 @@ TextOperationWithFilter::TextOperationWithFilter(
 }
 
 // _____________________________________________________________________________
-string TextOperationWithFilter::asString() const {
+string TextOperationWithFilter::asString(size_t indent) const {
   std::ostringstream os;
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
   os << "TEXT OPERATION WITH FILTER:" << " co-occurrence with words: \"" <<
      _words << "\" and " << _nofVars << " variables with textLimit = " <<
-     _textLimit << " filtered by " <<
-     _filterResult->asString() << " on column " << _filterColumn;
+     _textLimit << " filtered by\n" <<
+     _filterResult->asString(indent) << "\n";
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << " filtered on column " << _filterColumn;
   return os.str();
 }
 

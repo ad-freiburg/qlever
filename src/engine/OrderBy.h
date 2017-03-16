@@ -26,7 +26,7 @@ class OrderBy : public Operation {
           std::shared_ptr<QueryExecutionTree> subtree,
           const vector<pair<size_t, bool>>& sortIndices);
 
-  virtual string asString() const;
+  virtual string asString(size_t indent = 0) const;
 
   virtual size_t resultSortedOn() const {
     return std::numeric_limits<size_t>::max();

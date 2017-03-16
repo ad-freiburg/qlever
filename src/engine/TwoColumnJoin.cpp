@@ -48,12 +48,20 @@ TwoColumnJoin::TwoColumnJoin(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string TwoColumnJoin::asString() const {
+string TwoColumnJoin::asString(size_t indent) const {
   std::ostringstream os;
-  os << "TWO_COLUMN_JOIN(\n" << _left->asString() << " [" << _jc1Left <<
-     " & " << _jc2Left <<
-     "]\n|X|\n" << _right->asString() << " [" << _jc1Right << " & " <<
-     _jc2Right << "]\n)";
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << "TWO_COLUMN_JOIN\n";
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << _left->asString(indent) << "\n";
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << "join-columns: [" << _jc1Left << " & " << _jc2Left << "]\n";
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << "|X|\n";
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << _right->asString(indent) << "\n";
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << "join-columns: [" << _jc1Right << " & " << _jc2Right << "]";
   return os.str();
 }
 

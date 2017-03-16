@@ -31,20 +31,24 @@ QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* qec) :
 }
 
 // _____________________________________________________________________________
-string QueryExecutionTree::asString() {
+string QueryExecutionTree::asString(size_t indent) {
+  string indentStr;
+  for (size_t i = 0; i < indent; ++i) { indentStr += " "; }
   if (_asString.size() == 0) {
     if (_rootOperation) {
       std::ostringstream os;
-      os << "{" << _rootOperation->asString() << " | width: "
+      os << indentStr
+         << "{\n" << _rootOperation->asString(indent + 2) << "\n"
+         << indentStr << "} qet-width: "
          << getResultWidth()
-         << "}";
+         << " ";
       if (LOGLEVEL >= DEBUG && _qec) {
         os << " [estimated size: " << getSizeEstimate() << "]";
         os << " [multiplicities: ";
         for (size_t i = 0; i < getResultWidth(); ++i) {
           os << getMultiplicity(i) << ' ';
         }
-        os << "]\n";
+        os << "]";
       }
       _asString = os.str();
     } else {

@@ -29,7 +29,7 @@ public:
     FULL_INDEX_SCAN_OPS = 14
   };
 
-  virtual string asString() const;
+  virtual string asString(size_t indent = 0) const;
 
   IndexScan(QueryExecutionContext* qec, ScanType type) :
       Operation(qec), _type(type),

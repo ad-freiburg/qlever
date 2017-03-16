@@ -25,9 +25,12 @@ OrderBy::OrderBy(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string OrderBy::asString() const {
+string OrderBy::asString(size_t indent) const {
   std::ostringstream os;
-  os << "OrderBy " << _subtree->asString() << " on ";
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << "OrderBy " << _subtree->asString(indent) << "\n";
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << "order on ";
   for (auto ind : _sortIndices) {
     os << (ind.second ? "desc(" : "asc(") << ind.first << ") ";
   }

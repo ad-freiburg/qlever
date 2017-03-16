@@ -13,3 +13,16 @@
 <Albert_Einstein>	<GivenName>	"Alberto"@cliche_it	.
 <Penicillin>	<is-a>	<Drug>	.
 <Penicillin>	<description>	"This is a rather long text. If the index is built with the -l option, it should be externalized into an on-disk vocabulary."	.
+<Neil_Armstrong>	<is-a>	<Person>	.
+<Neil_Armstrong>	<is-a>	<Astronaut>	.
+<P1>	<is-a>	<Person>	.
+<P2>	<is-a>	<Person>	.
+<P3>	<is-a>	<Person>	.
+<P4>	<is-a>	<Person>	.
+<P5>	<is-a>	<Person>	.
+<P6>	<is-a>	<Person>	.
+<P7>	<is-a>	<Person>	.
+<P8>	<is-a>	<Person>	.
+<P9>	<is-a>	<Person>	.
+<P10>	<is-a>	<Person>	.
+<P11>	<is-a>	<Person>	.

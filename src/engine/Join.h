@@ -22,7 +22,7 @@ public:
        size_t t2JoinCol,
        bool keepJoinColumn = true);
 
-  virtual string asString() const;
+  virtual string asString(size_t indent = 0) const;
 
   virtual size_t getResultWidth() const;
 

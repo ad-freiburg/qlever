@@ -31,10 +31,12 @@ Filter::Filter(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string Filter::asString() const {
+string Filter::asString(size_t indent) const {
   std::ostringstream os;
-  os << "FILTER " << _subtree->asString() << " with ";
-  os << "col " << _lhsInd;
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << "FILTER " << _subtree->asString(indent) << "\n";
+  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os <<  " with col " << _lhsInd;
   switch (_type) {
     case SparqlFilter::EQ :os << " == ";
       break;

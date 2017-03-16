@@ -21,7 +21,7 @@ public:
   TextOperationWithoutFilter(QueryExecutionContext* qec, const string& words,
                              size_t nofVars, size_t textLimit = 1);
 
-  virtual string asString() const;
+  virtual string asString(size_t indent = 0) const;
 
   virtual size_t getResultWidth() const;
 
