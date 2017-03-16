@@ -420,16 +420,15 @@ TEST(QueryPlannerTest, testActorsBornInEurope) {
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ("{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/profession>\", "
-                  "O = \"<pre/Actor>\"\n  } qet-width: 1  | join-column: "
-                  "[0]\n  |X|\n  {\n    SORT     {\n      JOIN\n      {\n "
-                  "       SCAN POS with P = \"<pre/born-in>\"\n    "
-                  "  } qet-width: 2  | join-column: [0]\n      |X|\n    "
-                  "  {\n        SCAN POS with P = \"<pre/in>\", "
-                  "O = \"<pre/Europe>\"\n      } qet-width: 1 "
-                  " | join-column: [0]\n    } qet-width: 2 \n   "
-                  "  sort on 1\n  } qet-width: 2  | join-column: "
-                  "[1]\n} qet-width: 2 ",
+    ASSERT_EQ("{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/profession>\","
+                  " O = \"<pre/Actor>\"\n  } qet-width: 1  | join-column:"
+                  " [0]\n  |X|\n  {\n    SORT\n    {\n      JOIN\n     "
+                  " {\n        SCAN POS with P = \"<pre/born-in>\"\n     "
+                  " } qet-width: 2  | join-column: [0]\n      |X|\n      "
+                  "{\n        SCAN POS with P = \"<pre/in>\","
+                  " O = \"<pre/Europe>\"\n      } qet-width: 1  | "
+                  "join-column: [0]\n    } qet-width: 2  sort on 1\n  }"
+                  " qet-width: 2  | join-column: [1]\n} qet-width: 2 ",
               qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
@@ -854,18 +853,17 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
 //                  "| width: 6}",
 //              qet.asString());
     ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN POS with P = \"<is-a>\", O = \"<Politician>\""
-            "\n  } qet-width: 1  | join-column: [0]\n  |X|\n  {\n    SORT     "
-            "{\n      TEXT OPERATION WITH FILTER: co-occurrence with words: "
-            "\"friend*\" and 2 variables with textLimit = 1 filtered by\n     "
-            " {\n        TEXT OPERATION WITH FILTER: co-occurrence with words:"
-            " \"manhattan project\" and 1 variables with textLimit = 1 "
-            "filtered by\n        {\n          "
-            "SCAN POS with P = \"<is-a>\", O = \"<Scientist>\"\n        "
-            "} qet-width: 1 \n         filtered on column 0\n      "
-            "} qet-width: 3 \n       filtered on column 2\n    "
-            "} qet-width: 6 \n     sort on 2\n  } qet-width: 6  "
-            "| join-column: [2]\n} qet-width: 6 ",
+ "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
+     "\"manhattan project\" and 1 variables with textLimit = 1 filtered by\n  "
+     "{\n    JOIN\n    {\n      SCAN POS with"
+     " P = \"<is-a>\", O = \"<Politician>\"\n    } "
+     "qet-width: 1  | join-column: [0]\n    |X|\n    {\n      SORT\n      {\n "
+     "       TEXT OPERATION WITH FILTER: co-occurrence with words: \"friend*\""
+     " and 2 variables with textLimit = 1 filtered by\n        {\n          "
+     "SCAN POS with P = \"<is-a>\", O = \"<Scientist>\"\n        } "
+     "qet-width: 1 \n         filtered on column 0\n      } "
+     "qet-width: 4  sort on 2\n    } qet-width: 4  | join-column: [2]\n  }"
+     " qet-width: 4 \n   filtered on column 3\n} qet-width: 6 ",
         qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
