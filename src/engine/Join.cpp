@@ -481,6 +481,9 @@ size_t Join::computeSizeEstimate() {
   // join columns in the two child trees) times the the number of distinct
   // elements estimated as  d = min(d1, d2).
   auto joinColInResult = _leftJoinCol;  // for readability
+  if (isFullScanDummy(_left)) {
+    joinColInResult = _rightJoinCol + 2;
+  }
   size_t nofDistinctLeft = static_cast<size_t>(
       _left->getSizeEstimate() / _left->getMultiplicity(_leftJoinCol));
   size_t nofDistinctRight = static_cast<size_t>(
