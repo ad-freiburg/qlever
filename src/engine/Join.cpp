@@ -503,20 +503,24 @@ size_t Join::computeSizeEstimate() {
 // _____________________________________________________________________________
 void Join::computeMultiplicities() {
   if (_executionContext) {
-    float _leftJcM = _left->getMultiplicity(_leftJoinCol);
-    float _rightJcM = _right->getMultiplicity(_rightJoinCol);
+    size_t nofDistinctLeft = std::max(size_t(1), static_cast<size_t>(
+        _left->getSizeEstimate() / _left->getMultiplicity(_leftJoinCol)));
+    size_t nofDistinctRight = std::max(size_t(1), static_cast<size_t>(
+        _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol)));
+
+    size_t nofDistinctJc = std::min(nofDistinctLeft, nofDistinctRight);
     if (!isFullScanDummy(_left)) {
       for (size_t i = 0; i < _left->getResultWidth(); ++i) {
-        _multiplicities.emplace_back(_left->getMultiplicity(i) * _rightJcM);
+        _multiplicities.emplace_back(_left->getMultiplicity(i) * nofDistinctJc);
       }
     } else {
       for (size_t i = 1; i < _left->getResultWidth(); ++i) {
-        _multiplicities.emplace_back(_left->getMultiplicity(i) * _rightJcM);
+        _multiplicities.emplace_back(_left->getMultiplicity(i) * nofDistinctJc);
       }
     }
     for (size_t i = 0; i < _right->getResultWidth(); ++i) {
       if (i == _rightJoinCol && !isFullScanDummy(_left)) { continue; }
-      _multiplicities.emplace_back(_right->getMultiplicity(i) * _leftJcM);
+      _multiplicities.emplace_back(_right->getMultiplicity(i) * nofDistinctJc);
     }
   } else {
     for (size_t i = 0; i < getResultWidth(); ++i) {

@@ -1,0 +1,56 @@
+currently multiplicities (at least for queries involving full-scan dummies) can exceed the number of rows in a tree.
+this is obviously impossible and stupid.
+
+how does it happen:
+
+join
+
+A: size: 1000 m: 1 2 500 [2]
+B: size: 1000 m: 1 2 500 [0]
+
+A #distinct = 2
+B #distinct = 1000
+
+
+mults old: [1 2 500 500 1000 500²]
+
+estimate size: jc_mult_in_result:500 * min(A#d, B#d) = 500 * 2 = 1000
+
+That seems quite plausible. But how is the last mult so high?
+
+We say the multiplicity is very high, because it is high already in B and
+it is possible that for each row in B, we get 500 rows in the result
+because the join element is repeated so often in A
+
+However, as for the size result, we do not actually get the multiplication
+for each row in B but only for each matching row.
+Since we only expect two different elements to match, the number of kept
+rows in B is only estimated to be 2 (distinct in join col) * 1 (multiplicity
+of join col in B) = 2. Thus multiplicity should only be 1000!
+
+old formula for mult: m(old) * m(other_jc)
+proposed new formula for mult: distinct_in_jc * m(old)
+
+new mult: [2 4 1000 4 1000]
+
+
+---------------------------
+
+join
+
+A: size: 1000 m: 1 2 500 [1]
+B: size: 1000 m: 1 2 500 [2]
+
+A #distinct = 500
+B #distinct = 2
+
+mults old [500 1000 500² 2 4]
+
+size-est: 2 * 1000 = 2000
+
+mult new: [2 4 1000 2 4]
+
+---------------------------
+
+
+==> try the new formula for the multiplicity
