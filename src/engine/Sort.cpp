@@ -27,7 +27,7 @@ Sort::Sort(QueryExecutionContext* qec,
 string Sort::asString(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) { os << " "; }
-  os << "SORT\n" << _subtree->asString(indent) << " sort on " << _sortCol;
+  os << "SORT on column:" << _sortCol << "\n" << _subtree->asString(indent);
   return os.str();
 }
 

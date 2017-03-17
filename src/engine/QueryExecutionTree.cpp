@@ -39,7 +39,7 @@ string QueryExecutionTree::asString(size_t indent) {
       std::ostringstream os;
       os << indentStr
          << "{\n" << _rootOperation->asString(indent + 2) << "\n"
-         << indentStr << "} qet-width: "
+         << indentStr << "  qet-width: "
          << getResultWidth()
          << " ";
       if (LOGLEVEL >= DEBUG && _qec) {
@@ -50,6 +50,7 @@ string QueryExecutionTree::asString(size_t indent) {
         }
         os << "]";
       }
+      os << '\n' << indentStr << '}';
       _asString = os.str();
     } else {
       _asString = "<Empty QueryExecutionTree>";

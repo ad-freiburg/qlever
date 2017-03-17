@@ -750,7 +750,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           left = a[i]._qet;
         } else {
           // Create a sort operation.
-          // But never sort scans, they could have just scanned differently.
+          // But never sort scans, there we could have just scanned differently.
           if (a[i]._qet.get()->getType() == QueryExecutionTree::SCAN) {
             continue;
           }
@@ -764,7 +764,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           right = b[j]._qet;
         } else {
           // Create a sort operation.
-          // But never sort scans, they could have just scanned differently.
+          // But never sort scans, there we could have just scanned differently.
           if (b[j]._qet.get()->getType() == QueryExecutionTree::SCAN) {
             continue;
           }

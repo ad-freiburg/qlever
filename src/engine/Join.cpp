@@ -40,10 +40,10 @@ string Join::asString(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) { os << " "; }
   os << "JOIN\n"
-     << _left->asString(indent) << " | join-column: [" << _leftJoinCol << "]\n";
+     << _left->asString(indent) << " join-column: [" << _leftJoinCol << "]\n";
   for (size_t i = 0; i < indent; ++i) { os << " "; }
   os << "|X|\n"
-     << _right->asString(indent) << " | join-column: [" << _rightJoinCol << "]";
+     << _right->asString(indent) << " join-column: [" << _rightJoinCol << "]";
   return os.str();
 }
 
@@ -484,10 +484,10 @@ size_t Join::computeSizeEstimate() {
   if (isFullScanDummy(_left)) {
     joinColInResult = _rightJoinCol + 2;
   }
-  size_t nofDistinctLeft = static_cast<size_t>(
-      _left->getSizeEstimate() / _left->getMultiplicity(_leftJoinCol));
-  size_t nofDistinctRight = static_cast<size_t>(
-      _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol));
+  size_t nofDistinctLeft = std::max(size_t(1), static_cast<size_t>(
+      _left->getSizeEstimate() / _left->getMultiplicity(_leftJoinCol)));
+  size_t nofDistinctRight = std::max(size_t(1), static_cast<size_t>(
+      _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol)));
   double factor = _executionContext ? _executionContext->getCostFactor(
       "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") : 1;
   return std::max(size_t(1), static_cast<size_t>(
@@ -501,11 +501,17 @@ void Join::computeMultiplicities() {
   if (_executionContext) {
     float _leftJcM = _left->getMultiplicity(_leftJoinCol);
     float _rightJcM = _right->getMultiplicity(_rightJoinCol);
-    for (size_t i = 0; i < _left->getResultWidth(); ++i) {
-      _multiplicities.emplace_back(_left->getMultiplicity(i) * _rightJcM);
+    if (!isFullScanDummy(_left)) {
+      for (size_t i = 0; i < _left->getResultWidth(); ++i) {
+        _multiplicities.emplace_back(_left->getMultiplicity(i) * _rightJcM);
+      }
+    } else {
+      for (size_t i = 1; i < _left->getResultWidth(); ++i) {
+        _multiplicities.emplace_back(_left->getMultiplicity(i) * _rightJcM);
+      }
     }
     for (size_t i = 0; i < _right->getResultWidth(); ++i) {
-      if (i == _rightJoinCol) { continue; }
+      if (i == _rightJoinCol && !isFullScanDummy(_left)) { continue; }
       _multiplicities.emplace_back(_right->getMultiplicity(i) * _leftJcM);
     }
   } else {
