@@ -18,7 +18,7 @@ QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
   _factors["HASH_MAP_OPERATION_COST"] = 20.0;
   _factors["JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR"] = 0.8;
   _factors["DUMMY_JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR"] = 100.0;
-  _factors["DISK_RANDOM_ACCESS_COST"] = 10000000;
+  _factors["DISK_RANDOM_ACCESS_COST"] = 100000;
 }
 
 // _____________________________________________________________________________
