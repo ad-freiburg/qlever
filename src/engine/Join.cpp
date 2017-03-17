@@ -490,6 +490,9 @@ size_t Join::computeSizeEstimate() {
       _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol)));
   double factor = _executionContext ? _executionContext->getCostFactor(
       "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") : 1;
+  if (isFullScanDummy(_left) || isFullScanDummy(_right)) {
+    factor *= 10;
+  }
   return std::max(size_t(1), static_cast<size_t>(
       factor *
       getMultiplicity(joinColInResult) *
@@ -544,7 +547,8 @@ size_t Join::getCostEstimate() {
     size_t costJoin = nofDistinctTabJc *
                       static_cast<size_t>(diskRandomAccessCost +
                                           averageScanSize);
-    return _left->getCostEstimate() + _right->getCostEstimate() + costJoin;
+    return getSizeEstimate() + _left->getCostEstimate() +
+           _right->getCostEstimate() + costJoin;
   }
   // Normal case:
   return getSizeEstimate() +
