@@ -491,7 +491,7 @@ size_t Join::computeSizeEstimate() {
   double factor = _executionContext ? _executionContext->getCostFactor(
       "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") : 1;
   if (isFullScanDummy(_left) || isFullScanDummy(_right)) {
-    factor *= 10;
+    factor *= 2;
   }
   return std::max(size_t(1), static_cast<size_t>(
       factor *
