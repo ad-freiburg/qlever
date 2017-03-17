@@ -488,11 +488,12 @@ size_t Join::computeSizeEstimate() {
       _left->getSizeEstimate() / _left->getMultiplicity(_leftJoinCol)));
   size_t nofDistinctRight = std::max(size_t(1), static_cast<size_t>(
       _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol)));
-  double factor = _executionContext ? _executionContext->getCostFactor(
-      "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") : 1;
-  if (isFullScanDummy(_left) || isFullScanDummy(_right)) {
-    factor *= 2;
-  }
+  double factor = _executionContext ? (
+      (isFullScanDummy(_left) || isFullScanDummy(_right)) ?
+      _executionContext->getCostFactor(
+          "DUMMY_JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") :
+      _executionContext->getCostFactor(
+          "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR")) : 1;
   return std::max(size_t(1), static_cast<size_t>(
       factor *
       getMultiplicity(joinColInResult) *
