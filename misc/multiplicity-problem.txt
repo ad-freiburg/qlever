@@ -16,7 +16,7 @@ mults old: [1 2 500 500 1000 500²]
 
 estimate size: jc_mult_in_result:500 * min(A#d, B#d) = 500 * 2 = 1000
 
-That seems quite plausible. But how is the last mult so high?
+The size estimate seems plausible. But how is the last mult so high?
 
 We say the multiplicity is very high, because it is high already in B and
 it is possible that for each row in B, we get 500 rows in the result
@@ -28,11 +28,62 @@ Since we only expect two different elements to match, the number of kept
 rows in B is only estimated to be 2 (distinct in join col) * 1 (multiplicity
 of join col in B) = 2. Thus multiplicity should only be 1000!
 
+multiplicity = size/nof_distinct
+now, before the join we adjust the size for one side and thus also get new multiplicities.
+
+here, the left side is not adjusted, but the right side is only 1/500 of it's orig size.
+this changes multiplicities from
+1000/1000=1 1000/500=2 1000/2=500
+
+the join column is does not change in multiplicity, size and #distinct change equally:
+2/2=1
+the next column will also have the size lowered to 2, but the #distincts may or may not be lowered
+in the last column, the size is lowered ot 2 and the #distincts HAS to be lowered, either to 2 or possibly even to 1
+
+what happen's in B:
+We keep every 500th row.
+
+col 2 : we pick 2 out of 1000 rows with 2 different elements
+and the prob to pick the same is for the second pick:
+1/2
+
+col 3: we pick 2 out of 1000 and the prob to pick the same is 1/1000
+
+
 old formula for mult: m(old) * m(other_jc)
-proposed new formula for mult: distinct_in_jc * m(old)
 
-new mult: [2 4 1000 4 1000]
+for the join column, the old formula works out.
+why does it make sense?
+on the join column (and other than on other columns) the join can
+only reduce (or keep) the number of distinct elements.
+for the same element, there's always a cross product being build and
+rising multiplicities make sense.
 
+
+new formula:
+
+plausibility:
+A started with 1000 rows and
+distincts: 1000, 500, 2
+mult: 1, 2, 500
+B started with 1000 rows and
+distincts: 1000, 500, 2
+mult 1,2,500
+
+the result has 1000 rows and
+distinct:
+1000,500,2,1-2,1-2
+
+mults:
+1,2,500,500-1000,500-1000
+
+actually, probability distribution.
+heuristic:
+mult_new = size_new / min(#dist_res, #dist_before)
+
+this way we get:
+mults:
+1,2,500,500,500
 
 ---------------------------
 
@@ -48,9 +99,60 @@ mults old [500 1000 500² 2 4]
 
 size-est: 2 * 1000 = 2000
 
-mult new: [2 4 1000 2 4]
+old dists in A:
+1000,500,2
+ne dists estimated:
+
+2, 2, 2
+mult new: [1000 1000 1000 2 4]
+
+plausibility check:
+
+the result is expected to have 2000 rows.
+in the first column, we started with 1000 distinct elements, but went down to
+at most 2 because of the join. mult is, thus, at least 1000.
+
+
 
 ---------------------------
 
+new formula for multiplicity is:
 
-==> try the new formula for the multiplicity
+						size_new / min(dist_old, dist_jc_new) (if dist in jc changed)
+mult(new) =
+						mult(old) * mult_other_jc(old) (if dist unchanged)
+-------
+
+plausibility:
+
+---
+
+A: size: 1000 m: 1 2 500 [2]
+B: size: 1000 m: 1 2 500 [0]
+
+A #distinct = 1000 500 __2__
+B #distinct = __1000__ 500 2
+
+#dist_jc_new = 2
+
+size=2*500*1 = 1000
+
+mults: 1*1, 2*1, 500*1, 1000/2 1000/2
+
+---
+
+A: size: 1000 m: 1 2 500 [1]
+B: size: 1000 m: 1 2 500 [2]
+
+A #distinct = 1000 __500__ 2
+B #distinct = 1000 500 __2__
+
+#dist_jc_new = 2
+size = 2 * 500 * 2 = 2000
+
+mults= 2000/2 2000/2 2*500 2*1 2*2
+
+
+================
+
+try in experiments
