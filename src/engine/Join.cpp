@@ -714,6 +714,9 @@ void Join::computeSizeEstimateAndMultiplicities() {
 
   size_t nofDistinctInResult = std::min(nofDistinctLeft, nofDistinctRight);
 
+  double changeFactorLeft = nofDistinctInResult / nofDistinctLeft;
+  double changeFactorRight = nofDistinctInResult / nofDistinctRight;
+
   double corrFactor = _executionContext ? (
       (isFullScanDummy(_left) || isFullScanDummy(_right)) ?
       _executionContext->getCostFactor(
@@ -735,32 +738,19 @@ void Join::computeSizeEstimateAndMultiplicities() {
   for (size_t i = isFullScanDummy(_left) ? 1 : 0; i < _left->getResultWidth();
        ++i) {
     double m =
-        _left->getMultiplicity(i) * _right->getMultiplicity(_rightJoinCol);
-    // This new follows a new rough estimate. See misc/multiplicity_problem.txt
-    // Heuristic:
-    //  mult(new) = size_new / min(dist_old, dist_jc_new) (if dist in jc changed)
-    if (nofDistinctLeft > nofDistinctInResult) {
-      double distOld = _left->getSizeEstimate() / _left->getMultiplicity(i);
-      m = _sizeEstimate /
-          std::min(distOld, static_cast<double>(nofDistinctInResult));
-    }
+        _left->getMultiplicity(i) * changeFactorLeft *
+        _right->getMultiplicity(_rightJoinCol);
+    if (m > _sizeEstimate) { m = _sizeEstimate; }
     _multiplicities.emplace_back(m);
   }
-
   for (size_t i = 0; i < _right->getResultWidth(); ++i) {
     if (i == _rightJoinCol && !isFullScanDummy(_left)) {
       continue;
     }
     double m =
-        _right->getMultiplicity(i) * _left->getMultiplicity(_leftJoinCol);
-    // This new follows a new rough estimate. See misc/multiplicity_problem.txt
-    // Heuristic:
-    //  mult(new) = size_new / min(dist_old, dist_jc_new) (if dist in jc changed)
-    if (nofDistinctRight > nofDistinctInResult) {
-      double distOld = _right->getSizeEstimate() / _right->getMultiplicity(i);
-      m = _sizeEstimate /
-          std::min(distOld, static_cast<double>(nofDistinctInResult));
-    }
+        _right->getMultiplicity(i) * changeFactorRight *
+        _left->getMultiplicity(_leftJoinCol);
+    if (m > _sizeEstimate) { m = _sizeEstimate; }
     _multiplicities.emplace_back(m);
   }
   assert(_multiplicities.size() == getResultWidth());
