@@ -55,6 +55,8 @@ public:
 
   size_t computeSizeEstimate();
 
+  void computeSizeEstimateAndMultiplicities();
+
   virtual float getMultiplicity(size_t col);
 
 private:

@@ -797,3 +797,65 @@ void Join::doComputeJoinWithFullScanDummyRight(const NonDummyResultList& ndr,
   appendCrossProduct(joinItemFrom, joinItemEnd, jr.begin(), jr.end(), res);
 }
 
+
+// _____________________________________________________________________________
+void Join::computeSizeEstimateAndMultiplicities() {
+  _multiplicities.clear();
+  if (_left->getSizeEstimate() == 0
+      || _right->getSizeEstimate() == 0) {
+    for (size_t i = 0; i < getResultWidth(); ++i) {
+      _multiplicities.emplace_back(1);
+    }
+    return;
+  }
+
+  size_t nofDistinctLeft = std::max(size_t(1), static_cast<size_t>(
+      _left->getSizeEstimate() / _left->getMultiplicity(_leftJoinCol)));
+  size_t nofDistinctRight = std::max(size_t(1), static_cast<size_t>(
+      _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol)));
+
+  size_t nofDistinctInResult = std::min(nofDistinctLeft, nofDistinctRight);
+
+  // This new follows a new rough estimate. See misc/multiplicity_problem.txt
+  // Heuristic:
+  //
+  //				 		 size_new / min(dist_old, dist_jc_new) (if dist in jc changed)
+  //  mult(new) =
+  //             mult(old) * mult_other_jc(old) (if dist unchanged)
+  double factor = _executionContext ? (
+      (isFullScanDummy(_left) || isFullScanDummy(_right)) ?
+      _executionContext->getCostFactor(
+          "DUMMY_JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") :
+      _executionContext->getCostFactor(
+          "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR")) : 1;
+
+
+  double jcMultiplicityInResult = _left->getMultiplicity(_leftJoinCol) *
+                                  _right->getMultiplicity(_rightJoinCol);
+  _sizeEstimate = std::max(size_t(1), static_cast<size_t>(
+      factor * jcMultiplicityInResult * nofDistinctInResult));
+
+  LOG(TRACE) << "Estimated size as: " << _sizeEstimate << " := " << factor << " * " << jcMultiplicityInResult << " * " << nofDistinctInResult << std::endl;
+
+  for (size_t i = isFullScanDummy(_left) ? 1 : 0; i < _left->getResultWidth();
+       ++i) {
+    double m =
+        _left->getMultiplicity(i) * _right->getMultiplicity(_rightJoinCol);
+    if (m > _sizeEstimate) {
+      m = _sizeEstimate;
+    }
+    _multiplicities.emplace_back(m);
+  }
+
+  for (size_t i = 0; i < _right->getResultWidth(); ++i) {
+    if (i == _rightJoinCol && !isFullScanDummy(_left)) {
+      continue;
+    }
+    double m =
+        _right->getMultiplicity(i) * _left->getMultiplicity(_leftJoinCol);
+    _multiplicities.emplace_back(m);
+  }
+  assert(_multiplicities.size() == getResultWidth());
+}
+
+
