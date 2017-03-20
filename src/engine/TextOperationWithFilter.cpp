@@ -214,15 +214,10 @@ size_t TextOperationWithFilter::getSizeEstimate() {
       // NEW at 05 Dec 2016:
       // Estimate the size of the result like the equivalent text without filter
       // plus join.
-      double nofEntitiesSingleVar;
-      if (_executionContext) {
-        nofEntitiesSingleVar =
-            _executionContext->getIndex().getSizeEstimate(_words) *
-            std::min(float(_textLimit),
-                     _executionContext->getIndex().getAverageNofEntityContexts());
-      } else {
-        nofEntitiesSingleVar = 10000 * 0.8;
-      }
+      double nofEntitiesSingleVar =
+          _executionContext->getIndex().getSizeEstimate(_words) *
+          std::min(float(_textLimit),
+                   _executionContext->getIndex().getAverageNofEntityContexts());
 
       auto estNoFil = static_cast<size_t>(pow(nofEntitiesSingleVar, _nofVars));
 
@@ -238,8 +233,9 @@ size_t TextOperationWithFilter::getSizeEstimate() {
               "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") *
           joinColMultiplicity *
           std::min(nofDistinctFilter, estNoFil)));
+    } else {
+      _sizeEstimate = size_t(10000 * 0.8);
     }
-    _sizeEstimate = size_t(10000 * 0.8);
   }
   return _sizeEstimate;
 }
