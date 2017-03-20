@@ -118,41 +118,9 @@ at most 2 because of the join. mult is, thus, at least 1000.
 
 new formula for multiplicity is:
 
-						size_new / min(dist_old, dist_jc_new) (if dist in jc changed)
-mult(new) =
-						mult(old) * mult_other_jc(old) (if dist unchanged)
+
+mult(new) =	size_new / max(1.0, dist_old * (dist_jc_new/dist_jc_old)) (if dist in jc changed)
+mult(new) =	m_old * m_other_jc * corrFac (otherwise)
+
 -------
 
-plausibility:
-
----
-
-A: size: 1000 m: 1 2 500 [2]
-B: size: 1000 m: 1 2 500 [0]
-
-A #distinct = 1000 500 __2__
-B #distinct = __1000__ 500 2
-
-#dist_jc_new = 2
-
-size=2*500*1 = 1000
-
-mults: 1*1, 2*1, 500*1, 1000/2 1000/2
-
----
-
-A: size: 1000 m: 1 2 500 [1]
-B: size: 1000 m: 1 2 500 [2]
-
-A #distinct = 1000 __500__ 2
-B #distinct = 1000 500 __2__
-
-#dist_jc_new = 2
-size = 2 * 500 * 2 = 2000
-
-mults= 2000/2 2000/2 2*500 2*1 2*2
-
-
-================
-
-try in experiments
