@@ -40,7 +40,7 @@ public:
 
   virtual size_t getSizeEstimate() {
     if (!_sizeEstimateComputed) {
-      _sizeEstimate = computeSizeEstimate();
+      computeSizeEstimateAndMultiplicities();
       _sizeEstimateComputed = true;
     }
     return _sizeEstimate;
@@ -52,8 +52,6 @@ public:
   virtual bool knownEmptyResult() {
     return _left->knownEmptyResult() || _right->knownEmptyResult();
   }
-
-  size_t computeSizeEstimate();
 
   void computeSizeEstimateAndMultiplicities();
 
@@ -75,7 +73,7 @@ private:
 
   virtual void computeResult(ResultTable* result) const;
 
-  void computeMultiplicities();
+
 
   static bool isFullScanDummy(std::shared_ptr<QueryExecutionTree> tree) {
     return tree->getType() == QueryExecutionTree::SCAN &&
