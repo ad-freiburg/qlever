@@ -6,7 +6,6 @@
 #include <unordered_set>
 #include "./QueryExecutionTree.h"
 #include "./Join.h"
-#include "Sort.h"
 
 using std::string;
 
@@ -466,7 +465,6 @@ float Join::getMultiplicity(size_t col) {
     computeSizeEstimateAndMultiplicities();
     _sizeEstimateComputed = true;
   }
-  AD_CHECK_LT(col, _multiplicities.size());
   return _multiplicities[col];
 }
 
@@ -475,30 +473,26 @@ size_t Join::getCostEstimate() {
   float diskRandomAccessCost = _executionContext
                                ? _executionContext->getCostFactor(
           "DISK_RANDOM_ACCESS_COST") : 200000;
+  size_t costJoin;
   if (isFullScanDummy(_left)) {
     size_t nofDistinctTabJc = static_cast<size_t>(
         _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol));
     float averageScanSize = _left->getMultiplicity(_leftJoinCol);
 
-    size_t costJoin = nofDistinctTabJc *
-                      static_cast<size_t>(diskRandomAccessCost +
-                                          averageScanSize);
-    return _left->getCostEstimate() + _right->getCostEstimate() + costJoin;
-  }
-  if (isFullScanDummy(_right)) {
+    costJoin = nofDistinctTabJc * static_cast<size_t>(diskRandomAccessCost +
+                                                      averageScanSize);
+  } else if (isFullScanDummy(_right)) {
     size_t nofDistinctTabJc = static_cast<size_t>(
         _left->getSizeEstimate() / _left->getMultiplicity(_leftJoinCol));
     float averageScanSize = _right->getMultiplicity(_rightJoinCol);
-    size_t costJoin = nofDistinctTabJc *
-                      static_cast<size_t>(diskRandomAccessCost +
-                                          averageScanSize);
-    return getSizeEstimate() + _left->getCostEstimate() +
-           _right->getCostEstimate() + costJoin;
+    costJoin = nofDistinctTabJc * static_cast<size_t>(diskRandomAccessCost +
+                                                      averageScanSize);
+  } else {
+    // Normal case:
+    costJoin = _left->getSizeEstimate() + _right->getSizeEstimate();
   }
-  // Normal case:
-  return getSizeEstimate() +
-         _left->getSizeEstimate() + _left->getCostEstimate() +
-         _right->getSizeEstimate() + _right->getCostEstimate();
+  return getSizeEstimate() + _left->getCostEstimate() +
+         _right->getCostEstimate() + costJoin;
 }
 
 // _____________________________________________________________________________
@@ -720,13 +714,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
 
   size_t nofDistinctInResult = std::min(nofDistinctLeft, nofDistinctRight);
 
-  // This new follows a new rough estimate. See misc/multiplicity_problem.txt
-  // Heuristic:
-  //
-  //				 		 size_new / min(dist_old, dist_jc_new) (if dist in jc changed)
-  //  mult(new) =
-  //             mult(old) * mult_other_jc(old) (if dist unchanged)
-  double factor = _executionContext ? (
+  double corrFactor = _executionContext ? (
       (isFullScanDummy(_left) || isFullScanDummy(_right)) ?
       _executionContext->getCostFactor(
           "DUMMY_JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") :
@@ -737,16 +725,24 @@ void Join::computeSizeEstimateAndMultiplicities() {
   double jcMultiplicityInResult = _left->getMultiplicity(_leftJoinCol) *
                                   _right->getMultiplicity(_rightJoinCol);
   _sizeEstimate = std::max(size_t(1), static_cast<size_t>(
-      factor * jcMultiplicityInResult * nofDistinctInResult));
+      corrFactor * jcMultiplicityInResult * nofDistinctInResult));
 
-  LOG(TRACE) << "Estimated size as: " << _sizeEstimate << " := " << factor << " * " << jcMultiplicityInResult << " * " << nofDistinctInResult << std::endl;
+  LOG(TRACE) << "Estimated size as: " << _sizeEstimate << " := " << corrFactor
+             << " * " << jcMultiplicityInResult << " * " << nofDistinctInResult
+             << std::endl;
+
 
   for (size_t i = isFullScanDummy(_left) ? 1 : 0; i < _left->getResultWidth();
        ++i) {
     double m =
         _left->getMultiplicity(i) * _right->getMultiplicity(_rightJoinCol);
-    if (m > _sizeEstimate) {
-      m = _sizeEstimate;
+    // This new follows a new rough estimate. See misc/multiplicity_problem.txt
+    // Heuristic:
+    //  mult(new) = size_new / min(dist_old, dist_jc_new) (if dist in jc changed)
+    if (nofDistinctLeft > nofDistinctInResult) {
+      double distOld = _left->getSizeEstimate() / _left->getMultiplicity(i);
+      m = _sizeEstimate /
+          std::min(distOld, static_cast<double>(nofDistinctInResult));
     }
     _multiplicities.emplace_back(m);
   }
@@ -757,6 +753,14 @@ void Join::computeSizeEstimateAndMultiplicities() {
     }
     double m =
         _right->getMultiplicity(i) * _left->getMultiplicity(_leftJoinCol);
+    // This new follows a new rough estimate. See misc/multiplicity_problem.txt
+    // Heuristic:
+    //  mult(new) = size_new / min(dist_old, dist_jc_new) (if dist in jc changed)
+    if (nofDistinctRight > nofDistinctInResult) {
+      double distOld = _right->getSizeEstimate() / _right->getMultiplicity(i);
+      m = _sizeEstimate /
+          std::min(distOld, static_cast<double>(nofDistinctInResult));
+    }
     _multiplicities.emplace_back(m);
   }
   assert(_multiplicities.size() == getResultWidth());
