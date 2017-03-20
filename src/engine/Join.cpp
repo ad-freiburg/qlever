@@ -738,7 +738,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
   for (size_t i = isFullScanDummy(_left) ? 1 : 0; i < _left->getResultWidth();
        ++i) {
     double m =
-        _left->getMultiplicity(i) * changeFactorLeft *
+        std::max(1.0, _left->getMultiplicity(i) * changeFactorLeft) *
         _right->getMultiplicity(_rightJoinCol);
     if (m > _sizeEstimate) { m = _sizeEstimate; }
     _multiplicities.emplace_back(m);
@@ -748,7 +748,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
       continue;
     }
     double m =
-        _right->getMultiplicity(i) * changeFactorRight *
+        std::max(1.0, _right->getMultiplicity(i) * changeFactorRight) *
         _left->getMultiplicity(_leftJoinCol);
     if (m > _sizeEstimate) { m = _sizeEstimate; }
     _multiplicities.emplace_back(m);
