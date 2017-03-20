@@ -502,19 +502,26 @@ size_t Join::computeSizeEstimate() {
 
 // _____________________________________________________________________________
 void Join::computeMultiplicities() {
-  // This new follows a new rough estimate. See misc/multiplicity_problem.txt
-  // Heuristic:
-  //
-  //				 		 size_new / min(dist_old, dist_jc_new) (if dist in jc changed)
-  //  mult(new) =
-  //             mult(old) * mult_other_jc(old) (if dist unchanged)
   if (_executionContext) {
+    double factor = _executionContext ? (
+        (isFullScanDummy(_left) || isFullScanDummy(_right)) ?
+        _executionContext->getCostFactor(
+            "DUMMY_JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") :
+        _executionContext->getCostFactor(
+            "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR")) : 1;
+    // This new follows a new rough estimate. See misc/multiplicity_problem.txt
+    // Heuristic:
+    //
+    //				 		 size_new / min(dist_old, dist_jc_new) (if dist in jc changed)
+    //  mult(new) =
+    //             mult(old) * mult_other_jc(old) (if dist unchanged)
     size_t nofDistinctLeft = std::max(size_t(1), static_cast<size_t>(
         _left->getSizeEstimate() / _left->getMultiplicity(_leftJoinCol)));
     size_t nofDistinctRight = std::max(size_t(1), static_cast<size_t>(
         _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol)));
     double nofDistinctJc = static_cast<double>(std::min(nofDistinctLeft,
-                                                        nofDistinctRight));
+                                                        nofDistinctRight)) *
+                           factor;
 
     if (nofDistinctJc == nofDistinctLeft) {
       size_t i = isFullScanDummy(_left) ? 1 : 0;
