@@ -714,8 +714,8 @@ void Join::computeSizeEstimateAndMultiplicities() {
 
   size_t nofDistinctInResult = std::min(nofDistinctLeft, nofDistinctRight);
 
-  double changeFactorLeft = nofDistinctInResult / nofDistinctLeft;
-  double changeFactorRight = nofDistinctInResult / nofDistinctRight;
+  double changeFactorLeft = static_cast<double>(nofDistinctInResult) / nofDistinctLeft;
+  double changeFactorRight = static_cast<double>(nofDistinctInResult) / nofDistinctRight;
 
   double corrFactor = _executionContext ? (
       (isFullScanDummy(_left) || isFullScanDummy(_right)) ?
@@ -737,20 +737,26 @@ void Join::computeSizeEstimateAndMultiplicities() {
 
   for (size_t i = isFullScanDummy(_left) ? 1 : 0; i < _left->getResultWidth();
        ++i) {
-    double m =
-        std::max(1.0, _left->getMultiplicity(i) * changeFactorLeft) *
-        _right->getMultiplicity(_rightJoinCol);
-    if (m > _sizeEstimate) { m = _sizeEstimate; }
+    double oldMult = _left->getMultiplicity(i);
+    double m = oldMult * _right->getMultiplicity(_rightJoinCol);
+    if (nofDistinctLeft != nofDistinctInResult) {
+      double oldDist = _left->getSizeEstimate() / oldMult;
+      double newDist = std::max(1.0, oldDist * changeFactorLeft);
+      m = _sizeEstimate / newDist;
+    }
     _multiplicities.emplace_back(m);
   }
   for (size_t i = 0; i < _right->getResultWidth(); ++i) {
     if (i == _rightJoinCol && !isFullScanDummy(_left)) {
       continue;
     }
-    double m =
-        std::max(1.0, _right->getMultiplicity(i) * changeFactorRight) *
-        _left->getMultiplicity(_leftJoinCol);
-    if (m > _sizeEstimate) { m = _sizeEstimate; }
+    double oldMult = _right->getMultiplicity(i);
+    double m = oldMult * _left->getMultiplicity(_leftJoinCol);
+    if (nofDistinctRight != nofDistinctInResult) {
+      double oldDist = _right->getSizeEstimate() / oldMult;
+      double newDist = std::max(1.0, oldDist * changeFactorRight);
+      m = _sizeEstimate / newDist;
+    }
     _multiplicities.emplace_back(m);
   }
   assert(_multiplicities.size() == getResultWidth());
