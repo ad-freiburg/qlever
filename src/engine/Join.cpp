@@ -742,7 +742,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
     if (i != _leftJoinCol && nofDistinctLeft != nofDistinctInResult) {
       double oldDist = _left->getSizeEstimate() / oldMult;
       double newDist = std::max(1.0, oldDist * changeFactorLeft);
-      m = _sizeEstimate / newDist;
+      m = std::max(1.0, _sizeEstimate / newDist);
     }
     _multiplicities.emplace_back(m);
   }
@@ -755,7 +755,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
     if (i != _rightJoinCol && nofDistinctRight != nofDistinctInResult) {
       double oldDist = _right->getSizeEstimate() / oldMult;
       double newDist = std::max(1.0, oldDist * changeFactorRight);
-      m = _sizeEstimate / newDist;
+      m = std::max(1.0, _sizeEstimate / newDist);
     }
     _multiplicities.emplace_back(m);
   }
