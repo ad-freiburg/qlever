@@ -742,6 +742,17 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           tree.addContextVar(cvar);
           candidates[getPruningKey(plan, jcs[0][0])].emplace_back(plan);
         }
+        // Skip if we have two dummies
+        if (a[i]._qet.get()->getType() ==
+            QueryExecutionTree::OperationType::SCAN &&
+            a[i]._qet->getResultWidth() == 3 &&
+            b[j]._qet.get()->getType() ==
+            QueryExecutionTree::OperationType::SCAN &&
+            b[j]._qet->getResultWidth() == 3 ) {
+          continue;
+        }
+
+        // "NORMAL" CASE:
         // Check if a sub-result has to be re-sorted
         // TODO: replace with HashJoin maybe (or add variant to possible plans).
         std::shared_ptr<QueryExecutionTree> left(new QueryExecutionTree(_qec));

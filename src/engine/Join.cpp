@@ -738,7 +738,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
   for (size_t i = isFullScanDummy(_left) ? 1 : 0; i < _left->getResultWidth();
        ++i) {
     double oldMult = _left->getMultiplicity(i);
-    double m = oldMult * _right->getMultiplicity(_rightJoinCol);
+    double m = oldMult * _right->getMultiplicity(_rightJoinCol) * corrFactor;
     if (i != _leftJoinCol && nofDistinctLeft != nofDistinctInResult) {
       double oldDist = _left->getSizeEstimate() / oldMult;
       double newDist = std::max(1.0, oldDist * changeFactorLeft);
@@ -751,7 +751,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
       continue;
     }
     double oldMult = _right->getMultiplicity(i);
-    double m = oldMult * _left->getMultiplicity(_leftJoinCol);
+    double m = oldMult * _left->getMultiplicity(_leftJoinCol) * corrFactor;
     if (i != _rightJoinCol && nofDistinctRight != nofDistinctInResult) {
       double oldDist = _right->getSizeEstimate() / oldMult;
       double newDist = std::max(1.0, oldDist * changeFactorRight);
@@ -759,6 +759,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
     }
     _multiplicities.emplace_back(m);
   }
+
   assert(_multiplicities.size() == getResultWidth());
 }
 
