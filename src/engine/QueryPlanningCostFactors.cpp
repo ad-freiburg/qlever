@@ -12,10 +12,10 @@
 // _____________________________________________________________________________
 QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
   // Set default values
-  _factors["FILTER_PUNISH"] = 10.0;
+  _factors["FILTER_PUNISH"] = 2.0;
   _factors["NO_FILTER_PUNISH"] = 1.0;
   _factors["FILTER_SELECTIVITY"] = 0.1;
-  _factors["HASH_MAP_OPERATION_COST"] = 20.0;
+  _factors["HASH_MAP_OPERATION_COST"] = 50.0;
   _factors["JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR"] = 0.7;
   _factors["DUMMY_JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR"] = 1000.0;
   _factors["DISK_RANDOM_ACCESS_COST"] = 1000;
