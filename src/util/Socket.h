@@ -23,7 +23,7 @@ using std::string;
 
 namespace ad_utility {
 static const int MAX_NOF_CONNECTIONS = 500;
-static const int RECIEVE_BUFFER_SIZE = 10000;
+static const int RECIEVE_BUFFER_SIZE = 100000;
 
 //! Basic Socket class used by the server code of the semantic search.
 //! Wraps low-level socket calls should possibly be replaced by
@@ -34,11 +34,13 @@ public:
   // Default ctor.
   Socket() :
       _fd(-1) {
+    _buf = new char[RECIEVE_BUFFER_SIZE + 1];
   }
 
   // Destructor, close the socket if open.
   ~Socket() {
     if (isOpen()) ::close(_fd);
+    delete[] _buf;
   }
 
   //! Create the socket.
@@ -103,10 +105,9 @@ public:
 
   //! Recieve something.
   int recieve(std::string* data) const {
-    char buf[RECIEVE_BUFFER_SIZE + 1];
-    int status = ::recv(_fd, buf, RECIEVE_BUFFER_SIZE, 0);
+    int status = ::recv(_fd, _buf, RECIEVE_BUFFER_SIZE, 0);
     if (status > 0) {
-      *data = buf;
+      *data = _buf;
     }
     return status;
   }
@@ -147,6 +148,7 @@ public:
 private:
   sockaddr_in _address;
   int _fd;
+  char* _buf;;
 };
 }
 
