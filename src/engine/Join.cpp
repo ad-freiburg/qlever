@@ -715,11 +715,11 @@ void Join::computeSizeEstimateAndMultiplicities() {
   size_t nofDistinctInResult = std::min(nofDistinctLeft, nofDistinctRight);
 
   double adaptSizeLeft =
-      _left->getSizeEstimate() * static_cast<double>(nofDistinctInResult) /
-      nofDistinctLeft;
+      _left->getSizeEstimate() * (static_cast<double>(nofDistinctInResult) /
+      nofDistinctLeft);
   double adaptSizeRight =
-      _right->getSizeEstimate() * static_cast<double>(nofDistinctInResult) /
-      nofDistinctRight;
+      _right->getSizeEstimate() * (static_cast<double>(nofDistinctInResult) /
+      nofDistinctRight);
 
   double corrFactor = _executionContext ? (
       (isFullScanDummy(_left) || isFullScanDummy(_right)) ?
