@@ -1,5 +1,5 @@
-QLever
-=================
+# QLever
+
 
 This Readme sets you up to use the engine and to quickly build and query your own index.
 If you're interested in advanced topics, please check the following files (note that they aren't of perfect quality)
@@ -8,10 +8,10 @@ If you're interested in advanced topics, please check the following files (note 
 * [Query Planning](doc/query_planning.md)
 * [The Index (currently incomplete)](doc/index_layout.md)
 
-How to use
-==========
+# How to use
 
-##0. Requirements:
+
+## 0. Requirements:
 
 
 Make sure you use a 64bit Linux with:
@@ -32,7 +32,7 @@ If this sin't the case on your system run
     cd  sparsehash
     ./configure && make && sudo make install
 
-##1. Build:
+## 1. Build:
 
 
 a) Checkout this project:
@@ -62,7 +62,7 @@ d) Run ctest. All tests should pass:
     ctest
 
 
-##2. Creating an Index:
+## 2. Creating an Index:
 
 
 IMPORTANT:
@@ -105,8 +105,7 @@ All options can, of course, be combined. The full call with all permutations and
                                          
     ./IndexBuilderMain -a -l -i /path/to/myindex -n /path/to/input.nt -w /path/to/wordsfile -d /path/to/docsfile
 
-##3. Starting a Sever:
-
+## 3. Starting a Sever:
 
 a) Without text collection:
 
@@ -123,7 +122,7 @@ If you built an index using the -l and/or -a options, make sure to include it at
 
     ./ServerMain -i /path/to/myindex -p <PORT> -t -a -l
 
-##4. Running queries:
+## 4. Running queries:
 
     curl 'http://localhost:<PORT>/?query=SELECT ?x WHERE {?x <rel> ?y}'
 
@@ -131,13 +130,13 @@ or visit:
 
     http://localhost:<PORT>/index.html
     
-##5. Text Features
+## 5. Text Features
 
-###5.1 Input Data
+### 5.1 Input Data
 
 The following two input files are needed for full feature support:
 
-####a) Wordsfile
+#### a) Wordsfile
 
 A tab-separated file with one line per posting and following the format:
 
@@ -158,7 +157,7 @@ For example, for a sentence `He discovered penicillin, a drug.`, it could look l
 Note that some form of entity recognition / linking has been done.
 This file is used to build the text index from.
 
-####b) Docsfile
+#### b) Docsfile
 
 A tab-separated file with one line per original unit of text and following the format:
 
@@ -172,7 +171,7 @@ Note that this file is only used to display proper excerpts as evidence for text
 
 
 
-###5.2 Supported Queries
+### 5.2 Supported Queries
 
 
 Typical SPARQL queries can then be augmented. The features are best explained using examples:
@@ -235,10 +234,9 @@ Pure connections to variables (e.g. "Books with a description that mentions a pl
 
 
 
-How to obtain data to play around with
-======================================
+# How to obtain data to play around with
 
-#Use the tiny examples contained in the repository
+## Use the tiny examples contained in the repository
 
 
 These are tiny and there's nothing meaningful to discover.
@@ -279,7 +277,7 @@ Curl-versions (ready for copy&paste) of the queries:
 Again, there's not much to be done with this data.
 For a meaningful index, use the example data below.
 
-#Download prepared input files for a collection about scientists
+## Download prepared input files for a collection about scientists
 
 These files are of medium size (facts about scientists - only one hop from a scientist in a knowledge graph. Text are Wikipedia articles about scientists.)
 Includes a knowledge base as nt file, and a words- and docsfile as tsv. 
@@ -304,7 +302,7 @@ Curl-version (ready for copy&paste) of the query:
 
     SELECT ?x SCORE(?t) TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?x <in-text> ?t . ?t <in-text> \"relati*\" \} ORDER BY DESC(SCORE(?t))
 
-#Download prepared input for English Wikipedia text and a KB derived from Freebase
+## Download prepared input for English Wikipedia text and a KB derived from Freebase
 
 
 Includes a knowledge base as nt file, and a words- and docsfile as tsv.
@@ -330,17 +328,17 @@ Curl-version (ready for copy&paste) of the query:
 
     SELECT ?x SCORE(?t) TEXT(?t) WHERE \{ ?x <is-a> <Astronaut> . ?x <in-text> ?t . ?t <in-text> \"walk* moon\" \} ORDER BY DESC(SCORE(?t))
 
-#Use any knowledge base and text collection of your choice
+## Use any knowledge base and text collection of your choice
 
  
 Create the files similar to the three files provided as sample downloads for other data sets.
 Usually, knowledge base files do not have to be changed. Only words- and docsfile have to be produced.
 
 
-Convenience features
-=================
+# Convenience features
 
-#Statistics:
+
+## Statistics:
 
 
 You can get stats for the currently active index in the following way:
@@ -363,7 +361,7 @@ The names of a index is the name of the input nt file (and wordsfile for the tex
 Therefore, IndexbuilderMain takes two optional arguments: --text-index-name (-T) and --kb-index-name (-K).
 
 
-#Send vs Compute
+## Send vs Compute
 
 Currently, QLever does not compute partial results if there is a LIMIT modifier.
 However, strings (for entities and text excerpts) are only resolved for those items that are actually send.
@@ -375,8 +373,8 @@ Therefore an additional HTTP parameter "&send=<x>" can be used to only send x re
 **IMPORTANT: Unless you want to measure QLever's performance, using LIMIT (+ OFFSET for sequential loading) should be preferred in all applications. That way should be faster and standard SPARQL without downsides.** 
 
 
-Troubleshooting
-===============
+# Troubleshooting
+
 
 If you have problems, try to rebuild when compiling with -DCMAKE_BUILD_TYPE=Debug.
 In particular also rebuild the index. 
