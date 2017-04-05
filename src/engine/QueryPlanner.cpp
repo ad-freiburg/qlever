@@ -748,7 +748,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
             a[i]._qet->getResultWidth() == 3 &&
             b[j]._qet.get()->getType() ==
             QueryExecutionTree::OperationType::SCAN &&
-            b[j]._qet->getResultWidth() == 3 ) {
+            b[j]._qet->getResultWidth() == 3) {
           continue;
         }
 
@@ -948,8 +948,13 @@ void QueryPlanner::applyFiltersIfPossible(
   // Finally, the replace flag can be set to enforce that all filters are applied.
   // This should be done for the last row in the DPTab so that no filters are missed.
   for (size_t n = 0; n < row.size(); ++n) {
+    const auto& plan = row[n];
+    if (plan._qet->getType() == QueryExecutionTree::SCAN &&
+        plan._qet->getResultWidth() == 3) {
+      // Do not apply filters to dummies!
+      continue;
+    }
     for (size_t i = 0; i < filters.size(); ++i) {
-      const auto& plan = row[n];
       if (((plan._idsOfIncludedFilters >> i) & 1) != 0) {
         continue;
       }
