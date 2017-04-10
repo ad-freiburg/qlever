@@ -976,38 +976,26 @@ void QueryPlanner::applyFiltersIfPossible(
                                     filters[i]._rhs)));
           tree.setOperation(QueryExecutionTree::FILTER, filter);
         } else {
+          string compWith = filters[i]._rhs;
           Id entityId = 0;
           if (_qec) {
-            if (!ad_utility::isXsdValue(filters[i]._rhs)) {
-              if (!_qec->getIndex().getVocab().getId(filters[i]._rhs,
+            if (ad_utility::isXsdValue(filters[i]._rhs)) {
+              compWith = ad_utility::convertValueLiteralToIndexWord(compWith);
+            }
+            if (filters[i]._type == SparqlFilter::EQ ||
+                filters[i]._type == SparqlFilter::NE) {
+              if (!_qec->getIndex().getVocab().getId(compWith,
                                                      &entityId)) {
                 entityId = std::numeric_limits<size_t>::max() - 1;
               }
-            } else {
-              if (filters[i]._type == SparqlFilter::EQ ||
-                  filters[i]._type == SparqlFilter::NE) {
-                if (!_qec->getIndex().getVocab().getId(
-                    ad_utility::convertValueLiteralToIndexWord(filters[i]._rhs),
-                    &entityId)) {
-                  entityId = std::numeric_limits<size_t>::max() - 1;
-                }
-              } else if (filters[i]._type == SparqlFilter::GE) {
-                entityId = _qec->getIndex().getVocab().getValueIdForGE(
-                    ad_utility::convertValueLiteralToIndexWord(
-                        filters[i]._rhs));
-              } else if (filters[i]._type == SparqlFilter::GT) {
-                entityId = _qec->getIndex().getVocab().getValueIdForGT(
-                    ad_utility::convertValueLiteralToIndexWord(
-                        filters[i]._rhs));
-              } else if (filters[i]._type == SparqlFilter::LT) {
-                entityId = _qec->getIndex().getVocab().getValueIdForLT(
-                    ad_utility::convertValueLiteralToIndexWord(
-                        filters[i]._rhs));
-              } else if (filters[i]._type == SparqlFilter::LE) {
-                entityId = _qec->getIndex().getVocab().getValueIdForLE(
-                    ad_utility::convertValueLiteralToIndexWord(
-                        filters[i]._rhs));
-              }
+            } else if (filters[i]._type == SparqlFilter::GE) {
+              entityId = _qec->getIndex().getVocab().getValueIdForGE(compWith);
+            } else if (filters[i]._type == SparqlFilter::GT) {
+              entityId = _qec->getIndex().getVocab().getValueIdForGT(compWith);
+            } else if (filters[i]._type == SparqlFilter::LT) {
+              entityId = _qec->getIndex().getVocab().getValueIdForLT(compWith);
+            } else if (filters[i]._type == SparqlFilter::LE) {
+              entityId = _qec->getIndex().getVocab().getValueIdForLE(compWith);
             }
           }
           std::shared_ptr<Operation>
