@@ -303,7 +303,6 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
       if (pred == "prefix") {
         // Rewrite this filter into two ones that use >= and <.
         // First parse and try to get both function arguments.
-        // TODO: DO IT.
         AD_CHECK(lhs.size() > 0 && lhs[0] == '?');
         // Rhs has to be a literal.
         AD_CHECK(rhs.size() >= 2 && rhs[0] == '"');
