@@ -126,7 +126,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
         size_t end = inner.find(')', k);
         if (end == string::npos) {
           AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                   "Filter without closing paramthesis.");
+                   "Filter without closing parenthesis.");
         }
         filters.push_back(inner.substr(k, end - k + 1));
         size_t posOfDot = inner.find('.', end);
@@ -278,6 +278,55 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
   AD_CHECK(i != string::npos);
   size_t j = str.find(')', i + 1);
   AD_CHECK(j != string::npos);
+
+
+  // Handle filters with prefix predicates (langMatches, prefix, regex, etc)
+  if (i >= 1 && str[i - 1] != ' ') {
+    auto s = str.rfind(' ', i);
+    if (s != string::npos) {
+      s++;
+      auto pred = str.substr(s, i - s);
+      auto parts = ad_utility::split(str.substr(i + 1, j - i - 1), ',');
+      AD_CHECK(parts.size() == 2);
+      auto lhs = ad_utility::strip(parts[0], ' ');
+      auto rhs = ad_utility::strip(parts[1], ' ');
+      if (pred == "langMatches") {
+        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+                 "No filters with langMatches supported, yet.")
+      }
+      if (pred == "regex") {
+        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+                 "No filters with regex supported, yet. "
+                     "Try prefix(...) or comparisons with == instead"
+                     " if that satisfies your need.")
+      }
+      if (pred == "prefix") {
+        // Rewrite this filter into two ones that use >= and <.
+        // First parse and try to get both function arguments.
+        // TODO: DO IT.
+        AD_CHECK(lhs.size() > 0 && lhs[0] == '?');
+        // Rhs has to be a literal.
+        AD_CHECK(rhs.size() >= 2 && rhs[0] == '"');
+        SparqlFilter f1;
+        f1._lhs = lhs;
+        f1._rhs = rhs.substr(0, rhs.size() - 1);
+        f1._rhs += " ";
+        f1._type = SparqlFilter::GE;
+        SparqlFilter f2;
+        f2._lhs = lhs;
+        f2._type = SparqlFilter::LT;
+        string upper = rhs.substr(0, rhs.size() - 2);
+        upper += rhs[rhs.size() - 2] + 1;
+        upper += rhs.back();
+        f2._rhs = upper;
+        query._filters.emplace_back(f1);
+        query._filters.emplace_back(f2);
+        return;
+      }
+    }
+  }
+
+  // Handle filters with infix predicate (== != <= etc).
   string filter = str.substr(i + 1, j - i - 1);
   vector<string> tokens;
   size_t startP2 = 0;

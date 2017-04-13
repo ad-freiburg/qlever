@@ -113,10 +113,10 @@ public:
 
   Id getValueIdForLE(const string& indexWord) const {
     Id lb = lower_bound(indexWord);
-    if (_words[lb] != indexWord) {
+    if (_words[lb] != indexWord && lb > 0) {
       // If indexWord is not in the vocab, it may be that
       // we ended up one too high. We don't want this to match in LE.
-      // The one before is actually lower tahn index word but that's fine
+      // The one before is actually lower than index word but that's fine
       // b/c of the LE comparison.
       --lb;
     }
@@ -125,7 +125,7 @@ public:
 
   Id getValueIdForGT(const string& indexWord) const {
     Id lb = lower_bound(indexWord);
-    if (_words[lb] != indexWord) {
+    if (_words[lb] != indexWord && lb > 0) {
       // If indexWord is not in the vocab, lb points to the next value.
       // But if this happened, we know that there is nothing in between and it's
       // fine to use one lower

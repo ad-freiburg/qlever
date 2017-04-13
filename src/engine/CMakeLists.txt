@@ -25,4 +25,4 @@ add_library(engine
         TwoColumnJoin.cpp TwoColumnJoin.h
 )
 
-target_link_libraries(engine index)
+target_link_libraries(engine index parser)

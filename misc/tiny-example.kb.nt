@@ -13,6 +13,8 @@
 <Albert_Einstein>	<GivenName>	"Alberto"@cliche_it	.
 <Penicillin>	<is-a>	<Drug>	.
 <Penicillin>	<description>	"This is a rather long text. If the index is built with the -l option, it should be externalized into an on-disk vocabulary."	.
+<Penicillin>	<description>	"This is a short text."	.
+<Penicillin>	<description>	"Another short text."	.
 <Neil_Armstrong>	<is-a>	<Person>	.
 <Neil_Armstrong>	<is-a>	<Astronaut>	.
 <P1>	<is-a>	<Person>	.

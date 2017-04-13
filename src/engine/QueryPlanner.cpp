@@ -984,8 +984,7 @@ void QueryPlanner::applyFiltersIfPossible(
             }
             if (filters[i]._type == SparqlFilter::EQ ||
                 filters[i]._type == SparqlFilter::NE) {
-              if (!_qec->getIndex().getVocab().getId(compWith,
-                                                     &entityId)) {
+              if (!_qec->getIndex().getVocab().getId(compWith, &entityId)) {
                 entityId = std::numeric_limits<size_t>::max() - 1;
               }
             } else if (filters[i]._type == SparqlFilter::GE) {
