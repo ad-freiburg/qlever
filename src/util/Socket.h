@@ -109,6 +109,7 @@ public:
         LOG(DEBUG) << "Nof bytes send: " << nb << std::end;
       }
     }
+    return nb > 0;
   }
 
   //! Receive something.
