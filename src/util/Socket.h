@@ -18,6 +18,7 @@
 #include <sstream>
 #include <iostream>
 
+#include "./Log.h"
 
 using std::string;
 
