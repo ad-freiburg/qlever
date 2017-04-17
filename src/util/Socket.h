@@ -105,6 +105,10 @@ public:
 
   //! Receive something.
   int receive(std::string* data) const {
+    struct timeval timeout;
+    timeout.tv_sec = 2;
+    timeout.tv_usec = 0;
+    setsockopt(_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
     int status = ::recv(_fd, _buf, RECIEVE_BUFFER_SIZE, 0);
     if (status > 0) {
       *data = _buf;
