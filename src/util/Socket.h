@@ -100,7 +100,15 @@ public:
 
   //! Send some string.
   bool send(const std::string& data) const {
-    return ::send(_fd, data.c_str(), data.size(), MSG_NOSIGNAL) != -1;
+    auto nb = ::send(_fd, data.c_str(), data.size(), MSG_NOSIGNAL) != -1;
+    if (nb != data.size()) {
+      LOG(DEBUG) << "Could not send as much data as intended." << std::endl;
+      if (nb == -1) {
+        LOG(DEBUG) << "Errno: " << errno << std::endl;
+      } else {
+        LOG(DEBUG) << "Nof bytes send: " << nb << std::end;
+      }
+    }
   }
 
   //! Receive something.
