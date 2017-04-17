@@ -106,7 +106,7 @@ public:
       if (nb == -1) {
         LOG(DEBUG) << "Errno: " << errno << std::endl;
       } else {
-        LOG(DEBUG) << "Nof bytes send: " << nb << std::end;
+        LOG(DEBUG) << "Nof bytes send: " << nb << std::endl;
       }
     }
     return nb > 0;
