@@ -101,7 +101,7 @@ public:
 
   //! Send some string.
   bool send(const std::string& data) const {
-    auto nb = ::send(_fd, data.c_str(), data.size(), MSG_NOSIGNAL);
+    int nb = ::send(_fd, data.c_str(), data.size(), MSG_NOSIGNAL);
     if (nb != data.size()) {
       LOG(DEBUG) << "Could not send as much data as intended." << std::endl;
       if (nb == -1) {
