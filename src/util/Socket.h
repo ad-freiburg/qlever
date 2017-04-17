@@ -39,7 +39,7 @@ public:
 
   // Destructor, close the socket if open.
   ~Socket() {
-    if (isOpen()) ::close(_fd);
+    ::close(_fd);
     delete[] _buf;
   }
 
@@ -103,8 +103,8 @@ public:
     return ::send(_fd, data.c_str(), data.size(), MSG_NOSIGNAL) != -1;
   }
 
-  //! Recieve something.
-  int recieve(std::string* data) const {
+  //! Receive something.
+  int receive(std::string* data) const {
     int status = ::recv(_fd, _buf, RECIEVE_BUFFER_SIZE, 0);
     if (status > 0) {
       *data = _buf;

@@ -77,7 +77,15 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
   string contentType;
   LOG(DEBUG) << "Waiting for receive call to complete." << endl;
   string request;
-  client->recieve(&request);
+  auto status = client->receive(&request);
+  if (status == 0) {
+    LOG(DEBUG) << "Got empty request. Ignoring it." << std::endl;
+    return;
+  }
+  if (status == -1) {
+    LOG(DEBUG) << "Error receiving request. Errno: " << errno << std::endl;
+    return;
+  }
   //string request = client->getRequest();
   LOG(DEBUG) << "Got request from client." << endl;
 
