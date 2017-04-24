@@ -58,6 +58,8 @@ private:
   string createHttpResponse(const string& content,
                             const string& contentType) const;
 
+  string create404HttpResponse() const;
+
   string composeResponseJson(const ParsedQuery& query,
                              const QueryExecutionTree& qet,
                              size_t sendMax = MAX_NOF_ROWS_IN_RESULT) const;

@@ -110,9 +110,10 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
     if (file == "index.html" || file == "style.css" || file == "script.js") {
       serveFile(client, file);
       return;
-    }
-    if (indexOfQuest == string::npos) {
-      LOG(INFO) << "Ignoring request for file " << file << '\n';
+    } else if (file.size() > 0) {
+      LOG(INFO) << "Responding with 404 for file " << file << '\n';
+      auto bytesSent = client->send(create404HttpResponse());
+      LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
       return;
     }
 
@@ -266,6 +267,13 @@ string Server::createHttpResponse(const string& content,
      << "Connection: close\r\n" << "Content-Type: " << contentType
      << "; charset=" << "utf-8" << "\r\n"
      << "Access-Control-Allow-Origin: *" << "\r\n" << "\r\n" << content;
+  return os.str();
+}
+
+// _____________________________________________________________________________
+string Server::create404HttpResponse() const {
+  std::ostringstream os;
+  os << "HTTP/1.1 404 NOT FOUND\r\n" << "\r\n";
   return os.str();
 }
 
