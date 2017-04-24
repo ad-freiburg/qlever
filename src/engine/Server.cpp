@@ -279,7 +279,10 @@ string Server::createHttpResponse(const string& content,
 // _____________________________________________________________________________
 string Server::create404HttpResponse() const {
   std::ostringstream os;
-  os << "HTTP/1.1 404 NOT FOUND\r\n" << "\r\n";
+  os << "HTTP/1.1 404 Not Found\r\n"
+     << "Content-Length: 0\r\n"
+     << "Connection: close\r\n"
+     << "\r\n";
   return os.str();
 }
 
