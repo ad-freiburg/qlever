@@ -122,7 +122,11 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
 
       if (ad_utility::getLowercase(params["cmd"]) == "stats") {
         LOG(INFO) << "Supplying index stats..." << std::endl;
-        client->send(composeStatsJson());
+        auto statsJson = composeStatsJson();
+        contentType = "application/json";
+        string httpResponse = createHttpResponse(response, contentType);
+        auto bytesSent = client->send(httpResponse);
+        LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
         LOG(INFO) << "Sent stats to client." << std::endl;
         return;
       }
