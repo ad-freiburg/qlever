@@ -106,15 +106,17 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
     }
     // Use hardcoded white-listing for index.html and style.css
     // can be changed if more should ever be needed, for now keep it simple.
-    LOG(DEBUG) << "file: " << file << '\n';
-    if (file == "index.html" || file == "style.css" || file == "script.js") {
-      serveFile(client, file);
-      return;
-    } else if (file.size() > 0) {
-      LOG(INFO) << "Responding with 404 for file " << file << '\n';
-      auto bytesSent = client->send(create404HttpResponse());
-      LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
-      return;
+    if (file.size() > 0) {
+      LOG(DEBUG) << "file: " << file << '\n';
+      if (file == "index.html" || file == "style.css" || file == "script.js") {
+        serveFile(client, file);
+        return;
+      } else {
+        LOG(INFO) << "Responding with 404 for file " << file << '\n';
+        auto bytesSent = client->send(create404HttpResponse());
+        LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
+        return;
+      }
     }
 
     try {
@@ -124,7 +126,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
         LOG(INFO) << "Supplying index stats..." << std::endl;
         auto statsJson = composeStatsJson();
         contentType = "application/json";
-        string httpResponse = createHttpResponse(response, contentType);
+        string httpResponse = createHttpResponse(statsJson, contentType);
         auto bytesSent = client->send(httpResponse);
         LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
         LOG(INFO) << "Sent stats to client." << std::endl;
