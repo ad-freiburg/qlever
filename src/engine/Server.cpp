@@ -261,9 +261,9 @@ string Server::createQueryFromHttpParams(const ParamValueMap& params) const {
 string Server::createHttpResponse(const string& content,
                                   const string& contentType) const {
   std::ostringstream os;
-  os << "HTTP/1.0 200 OK\r\n" << "Content-Length: " << content.size() << "\r\n"
+  os << "HTTP/1.1 200 OK\r\n" << "Content-Length: " << content.size() << "\r\n"
      << "Connection: close\r\n" << "Content-Type: " << contentType
-     << "; charset=" << "UTF-8" << "\r\n"
+     << "; charset=" << "utf-8" << "\r\n"
      << "Access-Control-Allow-Origin: *" << "\r\n" << "\r\n" << content;
   return os.str();
 }

@@ -102,7 +102,7 @@ public:
   //! Send some string.
   bool send(const std::string& data) const {
     int nb = ::send(_fd, data.c_str(), data.size(), MSG_NOSIGNAL);
-    if (nb != data.size()) {
+    if (nb != static_cast<int>((data.size())) {
       LOG(DEBUG) << "Could not send as much data as intended." << std::endl;
       if (nb == -1) {
         LOG(DEBUG) << "Errno: " << errno << std::endl;
