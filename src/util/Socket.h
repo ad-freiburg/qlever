@@ -100,25 +100,27 @@ public:
   }
 
   //! Send some string.
-  bool send(const std::string& data) const {
+  int send(const std::string& data) const {
     LOG(TRACE) << "Called send() ... data: " << data << std::endl;
     LOG(TRACE) << "data.size(): " << data.size() << std::endl;
-    return send(data, 5);
+    return send(data.c_str(), data.size(), 5);
   }
 
   //! Send some string.
-  int send(const std::string& data, int timesRetry) const {
-    int nb = ::send(_fd, data.c_str(), data.size(), MSG_NOSIGNAL);
-    if (nb != static_cast<int>((data.size()))) {
+  int send(const char* data, size_t nofBytes, int timesRetry) const {
+    int nb = ::send(_fd, data, nofBytes, MSG_NOSIGNAL);
+    if (nb != static_cast<int>(nofBytes)) {
       LOG(DEBUG) << "Could not send as much data as intended." << std::endl;
       if (nb == -1) {
         LOG(DEBUG) << "Errno: " << errno << std::endl;
         if (errno == 11 && timesRetry > 0) {
           LOG(DEBUG) << "Retrying " << timesRetry-- << " times " << std::endl;
-          return send(data, timesRetry);
+          return send(data, nofBytes, timesRetry);
         }
       } else {
         LOG(DEBUG) << "Nof bytes sent: " << nb << std::endl;
+        LOG(DEBUG) << "Calling continuation..." << std::endl;
+        return nb + send(data + nb, nofBytes - nb, 5);
       }
     }
     return nb;
