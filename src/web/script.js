@@ -180,8 +180,9 @@ function processQuery(query) {
         res += "</table>";
         res += "<div>";
         $("#answer").html(res);
-    }).fail(function() {
-        console.log( "hi error" );
+    }).fail(function(jqXHR, textStatus, errorThrown ) {
+        console.log("textStatus: " + textStatus);
+        console.log("errorThrown: " + errorThrown);
     });
 }
 
