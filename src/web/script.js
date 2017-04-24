@@ -180,6 +180,8 @@ function processQuery(query) {
         res += "</table>";
         res += "<div>";
         $("#answer").html(res);
+    }).fail(function() {
+        console.log( "hi error" );
     });
 }
 

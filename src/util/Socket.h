@@ -59,10 +59,8 @@ public:
     }
     if (!isOpen()) return false;
     // Make sockets reusable immediately after closing
-    // Copied from CompletionServer code.
-    int rc; /* return code */
     int on = 1;
-    rc = setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
+    int rc = setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
     if (rc < 0) perror("! WARNING: setsockopt(SO_REUSEADDR) failed");
     return true;
   }
