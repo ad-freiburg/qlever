@@ -174,7 +174,8 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       response = composeResponseJson(query, e);
     }
     string httpResponse = createHttpResponse(response, contentType);
-    client->send(httpResponse);
+    auto bytesSent = client->send(httpResponse);
+    LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
   } else {
     LOG(INFO) << "Ignoring invalid request " << request << '\n';
   }
