@@ -101,6 +101,8 @@ public:
 
   //! Send some string.
   bool send(const std::string& data) const {
+    LOG(DEBUG) << "Called send() ... data: " << data << std::endl;
+    LOG(DEBUG) << "data.size()" << data.size() << std::endl;
     return send(data, 5);
   }
 
