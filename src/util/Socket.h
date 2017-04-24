@@ -101,13 +101,22 @@ public:
 
   //! Send some string.
   bool send(const std::string& data) const {
+    return send(data, 5);
+  }
+
+  //! Send some string.
+  bool send(const std::string& data, int timesRetry) const {
     int nb = ::send(_fd, data.c_str(), data.size(), MSG_NOSIGNAL);
     if (nb != static_cast<int>((data.size()))) {
       LOG(DEBUG) << "Could not send as much data as intended." << std::endl;
       if (nb == -1) {
         LOG(DEBUG) << "Errno: " << errno << std::endl;
+        if (errno == 11 && timesRetry > 0) {
+          LOG(DEBUG) << "Retrying " << timesRetry-- << " times " << std::endl;
+          return send(data, timesRetry);
+        }
       } else {
-        LOG(DEBUG) << "Nof bytes send: " << nb << std::endl;
+        LOG(DEBUG) << "Nof bytes sent: " << nb << std::endl;
       }
     }
     return nb > 0;
@@ -115,15 +124,29 @@ public:
 
   //! Receive something.
   int receive(std::string* data) const {
+    return receive(data, 5);
+  }
+
+  //! Receive something.
+  int receive(std::string* data, int timesRetry) const {
     struct timeval timeout;
     timeout.tv_sec = 2;
     timeout.tv_usec = 0;
     setsockopt(_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-    int status = ::recv(_fd, _buf, RECIEVE_BUFFER_SIZE, 0);
-    if (status > 0) {
+    int rv = ::recv(_fd, _buf, RECIEVE_BUFFER_SIZE, 0);
+    if (rv == -1) {
+      LOG(DEBUG) << "Errno: " << errno << std::endl;
+      if (errno == 11 && timesRetry > 0) {
+        LOG(DEBUG) << "Retrying " << timesRetry-- << " times " << std::endl;
+        return receive(data, timesRetry);
+      }
+    } else {
+      LOG(DEBUG) << "Nof bytes received: " << rv << std::endl;
+    }
+    if (rv > 0) {
       *data = _buf;
     }
-    return status;
+    return rv;
   }
 
   string getRequest() const {
