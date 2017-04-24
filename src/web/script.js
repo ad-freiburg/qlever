@@ -27,13 +27,9 @@ $(document).ready(function () {
     }
     $("#runbtn").click(function () {
         var q = encodeURIComponent($("#query").val());
-        console.log(q);
         var queryString = "?query=" + q;
         if ($("#clear").prop('checked')) {
-            console.log("With clearcache");
             queryString += "&cmd=clearcache";
-        } else {
-            console.log("Without clearcache");
         }
         queryString += "&send=100"
         var loc = window.location.href.substr(0, window.location.href.indexOf("?"));
