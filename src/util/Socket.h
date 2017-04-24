@@ -101,8 +101,8 @@ public:
 
   //! Send some string.
   bool send(const std::string& data) const {
-    LOG(DEBUG) << "Called send() ... data: " << data << std::endl;
-    LOG(DEBUG) << "data.size()" << data.size() << std::endl;
+    LOG(TRACE) << "Called send() ... data: " << data << std::endl;
+    LOG(TRACE) << "data.size(): " << data.size() << std::endl;
     return send(data, 5);
   }
 
@@ -121,7 +121,7 @@ public:
         LOG(DEBUG) << "Nof bytes sent: " << nb << std::endl;
       }
     }
-    return nb > 0;
+    return nb;
   }
 
   //! Receive something.
