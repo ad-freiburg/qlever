@@ -58,11 +58,16 @@ public:
       if (result < 0) return false;
     }
     if (!isOpen()) return false;
+    return true;
+  }
+
+  void makeResusableAfterClosinng() const {
     // Make sockets reusable immediately after closing
     int on = 1;
     int rc = setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
-    if (rc < 0) perror("! WARNING: setsockopt(SO_REUSEADDR) failed");
-    return true;
+    if (rc < 0) {
+      LOG(WARN) << "! WARNING: setsockopt(SO_REUSEADDR) failed" << std::endl;
+    }
   }
 
   //! Bind the socket to the given port.
@@ -158,7 +163,7 @@ public:
       auto recvsize = recv(_fd, buf, sizeof(buf) - 1, MSG_DONTWAIT);
 //      std::cout << "recvsize: " << recvsize << std::endl;
       if (recvsize == -1) {
- //       std::cout << "errno: " << errno << std::endl;
+        //       std::cout << "errno: " << errno << std::endl;
         if (errno != EAGAIN && errno != EWOULDBLOCK) { break; }
         else { continue; }
       } else if (recvsize == 0) { break; } // properly closed connection.
