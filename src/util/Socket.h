@@ -57,8 +57,7 @@ public:
                               sizeof(int));    /* length of option value */
       if (result < 0) return false;
     }
-    if (!isOpen()) return false;
-    return true;
+    return isOpen();
   }
 
   void makeResusableAfterClosinng() const {
