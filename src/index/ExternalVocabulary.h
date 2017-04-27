@@ -26,7 +26,7 @@ public:
 
   void initFromFile(const string& file);
 
-  //! Get the word with the given id (as lvalue)
+  //! Get the word with the given id (as rvalue)
   string operator[](Id id) const;
 
   //! Get the number of words in the vocabulary.
