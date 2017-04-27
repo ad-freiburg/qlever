@@ -30,6 +30,7 @@ string DocsDB::getTextExcerpt(Id cid) const {
   assert(to > from);
   size_t nofBytes = static_cast<size_t>(to - from);
   string line(nofBytes, '\0');
+  // TODO in C++17 we'll get non-const pointer std::string::data() use it the
   _dbFile.read(&line.front(), nofBytes, from);
   return line;
 }
