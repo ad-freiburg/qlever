@@ -21,19 +21,15 @@ void DocsDB::init(const string& fileName) {
 string DocsDB::getTextExcerpt(Id cid) const {
   off_t ft[2];
   off_t& from = ft[0];
-  from = 0;
   off_t& to = ft[1];
   off_t at = _startOfOffsets + cid * sizeof(off_t);
-  at += _dbFile.read(ft, 2 * sizeof(off_t), at);
+  at += _dbFile.read(ft, sizeof(ft), at);
   while(to == from) {
     at += _dbFile.read(&to, sizeof(off_t), at);
   }
   assert(to > from);
   size_t nofBytes = static_cast<size_t>(to - from);
-  char* buf = new char[nofBytes + 1];
-  _dbFile.read(buf, nofBytes, from);
-  buf[nofBytes] = 0;
-  string line = buf;
-  delete[] buf;
+  string line(nofBytes, '\0');
+  _dbFile.read(&line.front(), nofBytes, from);
   return line;
 }
