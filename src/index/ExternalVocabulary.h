@@ -26,7 +26,10 @@ public:
 
   void initFromFile(const string& file);
 
-  //! Get the word with the given id (as rvalue)
+  //! Get the word with the given id
+  //! (as non-reference, returning a cost ref is not possible, because the
+  //! string does not necessarily already exist in memory - unlike for an
+  //! internal vocabulary)
   string operator[](Id id) const;
 
   //! Get the number of words in the vocabulary.
