@@ -92,6 +92,7 @@ int main(int argc, char** argv) {
       q = SparqlParser::parse("SELECT ?x WHERE {?x <is-a> <Person>}");
     } else {
       q = SparqlParser::parse("PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE {?x fb:type.object.type fb:people.person }");
+      q.expandPrefixes();
     }
     QueryPlanner queryPlanner(&qec);
     auto qet = queryPlanner.createExecutionTree(q);
