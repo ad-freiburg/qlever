@@ -26,6 +26,7 @@ using std::cerr;
 // Available options.
 struct option options[] = {
     {"index", required_argument, NULL, 'i'},
+    {"freebase", no_argument, NULL, 'f'},
     {NULL, 0,                    NULL, 0}
 };
 
@@ -46,15 +47,19 @@ int main(int argc, char** argv) {
   ad_utility::Log::imbue(locWithNumberGrouping);
 
   string indexName = "";
+  bool freebase = false;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "i:", options, NULL);
+    int c = getopt_long(argc, argv, "i:f", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'i':
         indexName = optarg;
+        break;
+      case 'f':
+        freebase = true;
         break;
       default:
         cout << endl
@@ -82,7 +87,12 @@ int main(int argc, char** argv) {
 
     Engine engine;
     QueryExecutionContext qec(index, engine);
-    ParsedQuery q = SparqlParser::parse("SELECT ?x WHERE {?x <is-a> <Person>}");
+    ParsedQuery q;
+    if (!freebase) {
+      q = SparqlParser::parse("SELECT ?x WHERE {?x <is-a> <Person>}");
+    } else {
+      q = SparqlParser::parse("PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE {?x fb:type.object.type fb:people.person }");
+    }
     QueryPlanner queryPlanner(&qec);
     auto qet = queryPlanner.createExecutionTree(q);
     auto& res = qet.getResult();
