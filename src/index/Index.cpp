@@ -934,13 +934,19 @@ size_t Index::sizeEstimate(const string& sub, const string& pred,
 }
 
 // _____________________________________________________________________________
-void Index::writeAsciiListFile(string filename, const vector<Id>& ids) const {
+template<class T>
+void Index::writeAsciiListFile(const string& filename, const T& ids) const {
   std::ofstream f(filename.c_str());
   for (size_t i = 0; i < ids.size(); ++i) {
     f << ids[i] << ' ';
   }
   f.close();
 }
+template void Index::writeAsciiListFile<vector<Id>>(
+    const string& filename, const vector<Id>& ids) const;
+
+template void Index::writeAsciiListFile<vector<Score>>(
+    const string& filename, const vector<Score>& ids) const;
 
 // _____________________________________________________________________________
 bool Index::isLiteral(const string& object) {

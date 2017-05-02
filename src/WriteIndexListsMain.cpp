@@ -26,15 +26,15 @@ using std::cerr;
 // Available options.
 struct option options[] = {
     {"index", required_argument, NULL, 'i'},
-    {NULL, 0, NULL, 0}
+    {NULL, 0,                    NULL, 0}
 };
 
 // Main function.
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   cout.sync_with_stdio(false);
   std::cout << std::endl << EMPH_ON
-      << "WriteIndexListsMain, version " << __DATE__
-      << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
+            << "WriteIndexListsMain, version " << __DATE__
+            << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
 
   char* locale = setlocale(LC_CTYPE, "en_US.utf8");
   cout << "Set locale LC_CTYPE to: " << locale << endl;
@@ -58,9 +58,9 @@ int main(int argc, char **argv) {
         break;
       default:
         cout << endl
-            << "! ERROR in processing options (getopt returned '" << c
-            << "' = 0x" << std::setbase(16) << c << ")"
-            << endl << endl;
+             << "! ERROR in processing options (getopt returned '" << c
+             << "' = 0x" << std::setbase(16) << c << ")"
+             << endl << endl;
         exit(1);
     }
   }
@@ -75,12 +75,32 @@ int main(int argc, char **argv) {
     index.createFromOnDiskIndex(indexName);
     index.addTextFromOnDiskIndex();
 
-    index.dumpAsciiLists();
+    vector<string> lists;
+    lists.push_back("comp*");
+    bool decodeGapsAndFrequency = true;
+    index.dumpAsciiLists(lists, decodeGapsAndFrequency);
 
-  } catch (const std::exception &e) {
+    Engine engine;
+    QueryExecutionContext qec(index, engine);
+    ParsedQuery q = SparqlParser::parse("SELECT ?x WHERE {?x <is-a> <Person>}");
+    QueryPlanner queryPlanner(&qec);
+    auto qet = queryPlanner.createExecutionTree(q);
+    auto& res = qet.getResult();
+    AD_CHECK(res.size() > 0);
+    AD_CHECK(res._nofColumns == 1);
+    string personlistFile = indexName + ".list.persons";
+    std::vector<std::array<Id, 1>>& ids =
+        *static_cast<std::vector<std::array<Id, 1>>*>(res._fixedSizeData);
+    std::ofstream f(personlistFile.c_str());
+    for (size_t i = 0; i < ids.size(); ++i) {
+      f << ids[i][0] << ' ';
+    }
+    f.close();
+
+  } catch (const std::exception& e) {
     cout << string("Caught exceptions: ") + e.what();
     return 1;
-  } catch (ad_semsearch::Exception &e) {
+  } catch (ad_semsearch::Exception& e) {
     cout << e.getFullErrorMessage() << std::endl;
   }
 

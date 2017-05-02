@@ -222,7 +222,10 @@ public:
   }
 
   // Only for debug reasons and external encoding tests.
-  void dumpAsciiLists() const;
+  // Supply an empty vector to dump all lists above a size threshold.
+  void dumpAsciiLists(const vector<string>& lists, bool decodeGapsFreq) const;
+
+  void dumpAsciiLists(const TextBlockMetaData& tbmd) const;
 
   float getAverageNofEntityContexts() const {
     return _textMeta.getAverageNofEntityContexts();
@@ -399,7 +402,8 @@ private:
 
   friend class IndexTest_createFromOnDiskIndexTest_Test;
 
-  void writeAsciiListFile(string filename, const vector<Id>& ids) const;
+  template<class T>
+  void writeAsciiListFile(const string& filename, const T& ids) const;
 
   void getRhsForSingleLhs(const WidthTwoList& in, Id lhsId,
                           WidthOneList* result) const;

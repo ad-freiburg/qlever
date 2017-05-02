@@ -44,7 +44,7 @@ void Index::buildDocsDB(const string& docsFileName) {
     Id contextId = static_cast<Id>(atol(line.substr(0, tab).c_str()));
     line = line.substr(tab + 1);
     ofs << line;
-    while (currentContextId  < contextId) {
+    while (currentContextId < contextId) {
       offsets.push_back(currentOffset);
       currentContextId++;
     }
@@ -1002,188 +1002,224 @@ void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
 }
 
 // _____________________________________________________________________________
-void Index::dumpAsciiLists() const {
-  size_t nofBlocks = _textMeta.getBlockCount();
-  for (size_t i = 0; i < nofBlocks; ++i) {
-
-    TextBlockMetaData tbmd = _textMeta.getBlockById(i);
-    auto nofWordElems = tbmd._cl._nofElements;
-    if (nofWordElems < 1000000) continue;
-
-    if (tbmd._firstWordId > _textVocab.size()) return;
-    auto firstWord = wordIdToString(tbmd._firstWordId);
-    auto lastWord = wordIdToString(tbmd._lastWordId);
-    LOG(INFO) << "At block: " << i << std::endl;
-    LOG(INFO) << "This block is from " << firstWord << " to " << lastWord <<
-              std::endl;
-    string basename = _onDiskBase + ".list." + firstWord + "-" + lastWord;
-    size_t nofCodebookBytes;
-    {
-      string docIdsFn = basename + ".docids.noent.ascii";
-      string wordIdsFn = basename + ".wordids.noent.ascii";
-      string scoresFn = basename + ".scores.noent.ascii";
-      vector<Id> ids;
-
-      LOG(DEBUG) << "Reading non-entity docId list..." << std::endl;
-      auto nofElements = tbmd._cl._nofElements;
-      if (nofElements == 0) continue;
-      auto from = tbmd._cl._startContextlist;
-      auto nofBytes = static_cast<size_t>(tbmd._cl._startWordlist -
-                                          tbmd._cl._startContextlist);
-
-      ids.resize(nofElements + 250);
-      uint64_t* encodedD = new uint64_t[nofBytes / 8];
-      _textIndexFile.read(encodedD, nofBytes, from);
-      LOG(DEBUG) << "Decoding Simple8b code...\n";
-      ad_utility::Simple8bCode::decode(encodedD, nofElements, ids.data());
-      ids.resize(nofElements);
-      delete[] encodedD;
-      writeAsciiListFile(docIdsFn, ids);
-
-      if (tbmd._cl.hasMultipleWords()) {
-        LOG(DEBUG) << "Reading non-entity wordId list..." << std::endl;
-        from = tbmd._cl._startWordlist;
-        nofBytes = static_cast<size_t>(tbmd._cl._startScorelist -
-                                       tbmd._cl._startWordlist);
-
-        ids.clear();
-        ids.resize(nofElements + 250);
-        uint64_t* encodedW = new uint64_t[nofBytes / 8];
-        off_t current = from;
-        size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t),
-                                         current);
-        LOG(DEBUG) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
-        AD_CHECK_EQ(sizeof(off_t), ret);
-        current += ret;
-        Id* codebookW = new Id[nofCodebookBytes / sizeof(Id)];
-        ret = _textIndexFile.read(codebookW, nofCodebookBytes);
-        current += ret;
-        AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
-        ret = _textIndexFile.read(encodedW,
-                                  static_cast<size_t>(nofBytes -
-                                                      (current - from)));
-        current += ret;
-        AD_CHECK_EQ(size_t(current - from), nofBytes);
-        LOG(DEBUG) << "Decoding Simple8b code...\n";
-        ad_utility::Simple8bCode::decode(encodedW, nofElements, ids.data());
-        ids.resize(nofElements);;
-        delete[] encodedW;
-        delete[] codebookW;
-        writeAsciiListFile(wordIdsFn, ids);
+void Index::dumpAsciiLists(const vector<string>& lists, bool decGapsFreq) const {
+  if (lists.size() == 0) {
+    size_t nofBlocks = _textMeta.getBlockCount();
+    for (size_t i = 0; i < nofBlocks; ++i) {
+      TextBlockMetaData tbmd = _textMeta.getBlockById(i);
+      LOG(INFO) << "At block: " << i << std::endl;
+      auto nofWordElems = tbmd._cl._nofElements;
+      if (nofWordElems < 1000000) continue;
+      if (tbmd._firstWordId > _textVocab.size()) return;
+      if (decGapsFreq) {
+        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "not yet impl.");
+      } else {
+        dumpAsciiLists(tbmd);
       }
-      LOG(DEBUG) << "Reading non-entity score list..." << std::endl;
-      from = tbmd._cl._startScorelist;
-      nofBytes = static_cast<size_t>(tbmd._cl._lastByte + 1 -
-                                     tbmd._cl._startScorelist);
-      ids.clear();
-      ids.resize(nofElements + 250);
-      uint64_t* encodedS = new uint64_t[nofBytes / 8];
-      off_t current = from;
-      size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t),
-                                       current);
-      LOG(DEBUG) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
-      AD_CHECK_EQ(sizeof(off_t), ret);
-      current += ret;
-      Score* codebookS = new Score[nofCodebookBytes / sizeof(Score)];
-      ret = _textIndexFile.read(codebookS, nofCodebookBytes);
-      current += ret;
-      AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
-      ret = _textIndexFile.read(encodedS,
-                                static_cast<size_t>(nofBytes -
-                                                    (current - from)));
-      current += ret;
-      AD_CHECK_EQ(size_t(current - from), nofBytes);
-      LOG(DEBUG) << "Decoding Simple8b code...\n";
-      ad_utility::Simple8bCode::decode(encodedS, nofElements, ids.data());
-      ids.resize(nofElements);
-      delete[] encodedS;
-      delete[] codebookS;
-      writeAsciiListFile(scoresFn, ids);
     }
-    {
-      string eDocIdsFn = basename + ".docids.ent.ascii";
-      string eWordIdsFn = basename + ".wordids.ent.ascii";
-      string eScoresFn = basename + ".scores.ent.ascii";
-      vector<Id> ids;
-
-      auto nofElements = tbmd._entityCl._nofElements;
-      if (nofElements == 0) continue;
-      LOG(DEBUG) << "Reading entity docId list..." << std::endl;
-      auto from = tbmd._entityCl._startContextlist;
-      auto nofBytes = static_cast<size_t>(tbmd._entityCl._startWordlist -
-                                          tbmd._entityCl._startContextlist);
-      ids.clear();
-      ids.resize(nofElements + 250);
-      uint64_t* encodedD = new uint64_t[nofBytes / 8];
-      _textIndexFile.read(encodedD, nofBytes, from);
-      LOG(DEBUG) << "Decoding Simple8b code...\n";
-      ad_utility::Simple8bCode::decode(encodedD, nofElements, ids.data());
-      ids.resize(nofElements);
-      delete[] encodedD;
-      writeAsciiListFile(eDocIdsFn, ids);
-
-      if (tbmd._cl.hasMultipleWords()) {
-        LOG(DEBUG) << "Reading entity wordId list..." << std::endl;
-        from = tbmd._entityCl._startWordlist;
-        nofBytes = static_cast<size_t>(tbmd._entityCl._startScorelist -
-                                       tbmd._entityCl._startWordlist);
-
-        ids.clear();
-        ids.resize(nofElements + 250);
-        uint64_t* encodedW = new uint64_t[nofBytes / 8];
-        off_t current = from;
-        size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t),
-                                         current);
-        LOG(DEBUG) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
-        AD_CHECK_EQ(sizeof(off_t), ret);
-        current += ret;
-        Id* codebookW = new Id[nofCodebookBytes / sizeof(Id)];
-        ret = _textIndexFile.read(codebookW, nofCodebookBytes);
-        current += ret;
-        AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
-        ret = _textIndexFile.read(encodedW,
-                                  static_cast<size_t>(nofBytes -
-                                                      (current - from)));
-        current += ret;
-        AD_CHECK_EQ(size_t(current - from), nofBytes);
-        LOG(DEBUG) << "Decoding Simple8b code...\n";
-        ad_utility::Simple8bCode::decode(encodedW, nofElements, ids.data());
-        ids.resize(nofElements);;
-        delete[] encodedW;
-        delete[] codebookW;
-        writeAsciiListFile(eWordIdsFn, ids);
+  } else {
+    for (size_t i = 0; i < lists.size(); ++i) {
+      IdRange idRange;
+      _textVocab.getIdRangeForFullTextPrefix(lists[i], &idRange);
+      TextBlockMetaData tbmd = _textMeta.getBlockInfoByWordRange(idRange._first,
+                                                                 idRange._last);
+      if (decGapsFreq) {
+        vector<Id> eids;
+        vector<Id> cids;
+        vector<Score> scores;
+        getEntityPostingsForTerm(lists[i], cids, eids, scores);
+        auto firstWord = wordIdToString(tbmd._firstWordId);
+        auto lastWord = wordIdToString(tbmd._lastWordId);
+        string basename = _onDiskBase + ".list." + firstWord + "-" + lastWord;
+        string docIdsFn = basename + ".recIds.ent.ascii";
+        string wordIdsFn = basename + ".wordIds.ent.ascii";
+        string scoresFn = basename + ".scores.ent.ascii";
+        writeAsciiListFile(docIdsFn, cids);
+        writeAsciiListFile(wordIdsFn, eids);
+        writeAsciiListFile(scoresFn, scores);
+      } else {
+        dumpAsciiLists(tbmd);
       }
-      LOG(DEBUG) << "Reading entity score list..." << std::endl;
-      from = tbmd._entityCl._startScorelist;
-      nofBytes = static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
-                                     tbmd._entityCl._startScorelist);
+    }
+  };
+}
+
+//_ ____________________________________________________________________________
+void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
+  auto firstWord = wordIdToString(tbmd._firstWordId);
+  auto lastWord = wordIdToString(tbmd._lastWordId);
+  LOG(INFO) << "This block is from " << firstWord << " to " << lastWord <<
+            std::endl;
+  string basename = _onDiskBase + ".list." + firstWord + "-" + lastWord;
+  size_t nofCodebookBytes;
+  {
+    string docIdsFn = basename + ".docids.noent.ascii";
+    string wordIdsFn = basename + ".wordids.noent.ascii";
+    string scoresFn = basename + ".scores.noent.ascii";
+    vector<Id> ids;
+
+    LOG(DEBUG) << "Reading non-entity docId list..." << std::endl;
+    auto nofElements = tbmd._cl._nofElements;
+    if (nofElements == 0) return;
+
+    auto from = tbmd._cl._startContextlist;
+    auto nofBytes = static_cast<size_t>(tbmd._cl._startWordlist -
+                                        tbmd._cl._startContextlist);
+
+    ids.resize(nofElements + 250);
+    uint64_t* encodedD = new uint64_t[nofBytes / 8];
+    _textIndexFile.read(encodedD, nofBytes, from);
+    LOG(DEBUG) << "Decoding Simple8b code...\n";
+    ad_utility::Simple8bCode::decode(encodedD, nofElements, ids.data());
+    ids.resize(nofElements);
+    delete[] encodedD;
+    writeAsciiListFile(docIdsFn, ids);
+
+    if (tbmd._cl.hasMultipleWords()) {
+      LOG(DEBUG) << "Reading non-entity wordId list..." << std::endl;
+      from = tbmd._cl._startWordlist;
+      nofBytes = static_cast<size_t>(tbmd._cl._startScorelist -
+                                     tbmd._cl._startWordlist);
+
       ids.clear();
       ids.resize(nofElements + 250);
-      uint64_t* encodedS = new uint64_t[nofBytes / 8];
+      uint64_t* encodedW = new uint64_t[nofBytes / 8];
       off_t current = from;
       size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t),
                                        current);
       LOG(DEBUG) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
       AD_CHECK_EQ(sizeof(off_t), ret);
       current += ret;
-      Score* codebookS = new Score[nofCodebookBytes / sizeof(Score)];
-      ret = _textIndexFile.read(codebookS, nofCodebookBytes);
+      Id* codebookW = new Id[nofCodebookBytes / sizeof(Id)];
+      ret = _textIndexFile.read(codebookW, nofCodebookBytes);
       current += ret;
       AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
-      ret = _textIndexFile.read(encodedS,
+      ret = _textIndexFile.read(encodedW,
                                 static_cast<size_t>(nofBytes -
                                                     (current - from)));
       current += ret;
       AD_CHECK_EQ(size_t(current - from), nofBytes);
       LOG(DEBUG) << "Decoding Simple8b code...\n";
-      ad_utility::Simple8bCode::decode(encodedS, nofElements, ids.data());
+      ad_utility::Simple8bCode::decode(encodedW, nofElements, ids.data());
       ids.resize(nofElements);;
-      delete[] encodedS;
-      delete[] codebookS;
-      writeAsciiListFile(eScoresFn, ids);
+      delete[] encodedW;
+      delete[] codebookW;
+      writeAsciiListFile(wordIdsFn, ids);
     }
+    LOG(DEBUG) << "Reading non-entity score list..." << std::endl;
+    from = tbmd._cl._startScorelist;
+    nofBytes = static_cast<size_t>(tbmd._cl._lastByte + 1 -
+                                   tbmd._cl._startScorelist);
+    ids.clear();
+    ids.resize(nofElements + 250);
+    uint64_t* encodedS = new uint64_t[nofBytes / 8];
+    off_t current = from;
+    size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t),
+                                     current);
+    LOG(DEBUG) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
+    AD_CHECK_EQ(sizeof(off_t), ret);
+    current += ret;
+    Score* codebookS = new Score[nofCodebookBytes / sizeof(Score)];
+    ret = _textIndexFile.read(codebookS, nofCodebookBytes);
+    current += ret;
+    AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
+    ret = _textIndexFile.read(encodedS,
+                              static_cast<size_t>(nofBytes -
+                                                  (current - from)));
+    current += ret;
+    AD_CHECK_EQ(size_t(current - from), nofBytes);
+    LOG(DEBUG) << "Decoding Simple8b code...\n";
+    ad_utility::Simple8bCode::decode(encodedS, nofElements, ids.data());
+    ids.resize(nofElements);
+    delete[] encodedS;
+    delete[] codebookS;
+    writeAsciiListFile(scoresFn, ids);
+  }
+  {
+    string eDocIdsFn = basename + ".docids.ent.ascii";
+    string eWordIdsFn = basename + ".wordids.ent.ascii";
+    string eScoresFn = basename + ".scores.ent.ascii";
+    vector<Id> ids;
+
+    auto nofElements = tbmd._entityCl._nofElements;
+    if (nofElements == 0) return;
+    LOG(DEBUG) << "Reading entity docId list..." << std::endl;
+    auto from = tbmd._entityCl._startContextlist;
+    auto nofBytes = static_cast<size_t>(tbmd._entityCl._startWordlist -
+                                        tbmd._entityCl._startContextlist);
+    ids.clear();
+    ids.resize(nofElements + 250);
+    uint64_t* encodedD = new uint64_t[nofBytes / 8];
+    _textIndexFile.read(encodedD, nofBytes, from);
+    LOG(DEBUG) << "Decoding Simple8b code...\n";
+    ad_utility::Simple8bCode::decode(encodedD, nofElements, ids.data());
+    ids.resize(nofElements);
+    delete[] encodedD;
+    writeAsciiListFile(eDocIdsFn, ids);
+
+    if (tbmd._cl.hasMultipleWords()) {
+      LOG(DEBUG) << "Reading entity wordId list..." << std::endl;
+      from = tbmd._entityCl._startWordlist;
+      nofBytes = static_cast<size_t>(tbmd._entityCl._startScorelist -
+                                     tbmd._entityCl._startWordlist);
+
+      ids.clear();
+      ids.resize(nofElements + 250);
+      uint64_t* encodedW = new uint64_t[nofBytes / 8];
+      off_t current = from;
+      size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t),
+                                       current);
+      LOG(DEBUG) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
+      AD_CHECK_EQ(sizeof(off_t), ret);
+      current += ret;
+      Id* codebookW = new Id[nofCodebookBytes / sizeof(Id)];
+      ret = _textIndexFile.read(codebookW, nofCodebookBytes);
+      current += ret;
+      AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
+      ret = _textIndexFile.read(encodedW,
+                                static_cast<size_t>(nofBytes -
+                                                    (current - from)));
+      current += ret;
+      AD_CHECK_EQ(size_t(current - from), nofBytes);
+      LOG(DEBUG) << "Decoding Simple8b code...\n";
+      ad_utility::Simple8bCode::decode(encodedW, nofElements, ids.data());
+      ids.resize(nofElements);;
+      delete[] encodedW;
+      delete[] codebookW;
+      writeAsciiListFile(eWordIdsFn, ids);
+    }
+    LOG(DEBUG) << "Reading entity score list..." << std::endl;
+    from = tbmd._entityCl._startScorelist;
+    nofBytes = static_cast<size_t>(tbmd._entityCl._lastByte + 1 -
+                                   tbmd._entityCl._startScorelist);
+    ids.clear();
+    ids.resize(nofElements + 250);
+    uint64_t* encodedS = new uint64_t[nofBytes / 8];
+    off_t current = from;
+    size_t ret = _textIndexFile.read(&nofCodebookBytes, sizeof(off_t),
+                                     current);
+
+    LOG(DEBUG) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
+    AD_CHECK_EQ(sizeof(off_t), ret);
+    current += ret;
+    Score* codebookS = new Score[nofCodebookBytes / sizeof(Score)];
+    ret = _textIndexFile.read(codebookS, nofCodebookBytes);
+    current += ret;
+    AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
+    ret = _textIndexFile.read(encodedS,
+                              static_cast<size_t>(nofBytes -
+                                                  (current - from)));
+    current += ret;
+    AD_CHECK_EQ(size_t(current - from), nofBytes);
+    LOG(DEBUG) << "Decoding Simple8b code...\n";
+    ad_utility::Simple8bCode::decode(encodedS, nofElements, ids.data());
+    ids.resize(nofElements);;
+    delete[] encodedS;
+    delete[] codebookS;
+    writeAsciiListFile(eScoresFn, ids);
   }
 }
+
 
 // _____________________________________________________________________________
 size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
