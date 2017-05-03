@@ -81,7 +81,7 @@ int main(int argc, char** argv) {
     index.addTextFromOnDiskIndex();
 
     vector<string> lists;
-    lists.push_back("comp*");
+    lists.push_back("algo*");
     bool decodeGapsAndFrequency = true;
     index.dumpAsciiLists(lists, decodeGapsAndFrequency);
 
@@ -89,9 +89,9 @@ int main(int argc, char** argv) {
     QueryExecutionContext qec(index, engine);
     ParsedQuery q;
     if (!freebase) {
-      q = SparqlParser::parse("SELECT ?x WHERE {?x <is-a> <Person>}");
+      q = SparqlParser::parse("SELECT ?x WHERE {?x <is-a> <Scientist>}");
     } else {
-      q = SparqlParser::parse("PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE {?x fb:type.object.type fb:people.person }");
+      q = SparqlParser::parse("PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?p WHERE {?p fb:people.person.profession ?t . ?t fb:type.object.name.en \"Scientist\"}");
       q.expandPrefixes();
     }
     QueryPlanner queryPlanner(&qec);
