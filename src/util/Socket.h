@@ -23,7 +23,7 @@
 using std::string;
 
 namespace ad_utility {
-static const int MAX_NOF_CONNECTIONS = 500;
+static const int MAX_NOF_CONNECTIONS = 20;
 static const int RECIEVE_BUFFER_SIZE = 100000;
 
 //! Basic Socket class used by the server code of the semantic search.
@@ -77,13 +77,18 @@ public:
   //! Bind the socket to the given port.
   bool bind(const int port) {
     if (!isOpen()) return false;
+    struct addrinfo hints, * res;
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;  // use IPv4 or IPv6, whichever
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
 
-    _address.sin_family = AF_INET;
-    _address.sin_addr.s_addr = INADDR_ANY;
-    _address.sin_port = htons(port);
+    std::ostringstream os;
+    os << port;
+    getaddrinfo(NULL, os.str().c_str(), &hints, &res);
 
-    return ::bind(_fd, (struct sockaddr*) &_address,
-                  sizeof(_address)) != -1;
+    // bind it to the port we passed in to getaddrinfo():
+    return bind(_fd, res->ai_addr, res->ai_addrlen) != -1;
   }
 
   //! Make it a listening socket.
@@ -94,10 +99,11 @@ public:
 
   //! Accept a connection.
   bool acceptClient(Socket* other) {
-    int addressSize = sizeof(_address);
-    other->_fd = ::accept(_fd, reinterpret_cast<sockaddr*>(&_address),
-                          reinterpret_cast<socklen_t*>(&addressSize));
-
+    struct sockaddr_storage clientAddr;
+    socklen_t addrSize;
+    struct addrinfo hints, * res;
+    addrSize = sizeof(clientAddr);
+    other->_fd = ::accept(_fd, (struct sockaddr*) &clientAddr, &addrSize);
     return other->isOpen();
   }
 
@@ -194,7 +200,6 @@ public:
 //    }
 
 private:
-  sockaddr_in _address;
   int _fd;
   char* _buf;;
 };
