@@ -81,7 +81,7 @@ int main(int argc, char** argv) {
     index.addTextFromOnDiskIndex();
 
     vector<string> lists;
-    lists.push_back("comp*");
+    lists.push_back("algo*");
     bool decodeGapsAndFrequency = true;
     index.dumpAsciiLists(lists, decodeGapsAndFrequency);
 
@@ -89,9 +89,9 @@ int main(int argc, char** argv) {
     QueryExecutionContext qec(index, engine);
     ParsedQuery q;
     if (!freebase) {
-      q = SparqlParser::parse("SELECT ?x WHERE {?x <is-a> <Person>}");
+      q = SparqlParser::parse("SELECT ?x WHERE {?x <is-a> <Scientist>}");
     } else {
-      q = SparqlParser::parse("PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?x WHERE {?x fb:type.object.type fb:people.person }");
+      q = SparqlParser::parse("PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?p WHERE {?p fb:people.person.profession fb:m.06q2q}");
       q.expandPrefixes();
     }
     QueryPlanner queryPlanner(&qec);
@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
     auto& res = qet.getResult();
     AD_CHECK(res.size() > 0);
     AD_CHECK(res._nofColumns == 1);
-    string personlistFile = indexName + ".list.persons";
+    string personlistFile = indexName + ".list.scientists";
     std::vector<std::array<Id, 1>>& ids =
         *static_cast<std::vector<std::array<Id, 1>>*>(res._fixedSizeData);
     std::ofstream f(personlistFile.c_str());
