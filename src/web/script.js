@@ -147,7 +147,9 @@ function processQuery(query) {
             maxSend = parseInt(window.location.href.substr(sInd + 6))
         }
     }
-    $.getJSON("/" + query, function (result) {
+    var uri = "/" + query;
+    console.log("getJSON on URI: " +  uri);
+    $.getJSON(uri, function (result) {
         if (result.status == "ERROR") {
             displayError(result);
             return;
