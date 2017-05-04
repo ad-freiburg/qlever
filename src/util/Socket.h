@@ -102,7 +102,6 @@ public:
   bool acceptClient(Socket* other) {
     struct sockaddr_storage clientAddr;
     socklen_t addrSize;
-    struct addrinfo hints, * res;
     addrSize = sizeof(clientAddr);
     other->_fd = ::accept(_fd, (struct sockaddr*) &clientAddr, &addrSize);
     return other->isOpen();
