@@ -44,8 +44,8 @@ public:
     delete[] _buf;
   }
 
-  void close() {
-    ::close(_fd);
+  int close() {
+    return ::close(_fd);
   }
 
   //! Create the socket.

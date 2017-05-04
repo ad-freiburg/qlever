@@ -67,6 +67,7 @@ void Server::run() {
     // TODO(buchholb): Spawn a new thread here / use a ThreadPool / etc.
     LOG(INFO) << "Incoming connection, processing..." << std::endl;
     process(&client, &qec);
+    client.close();
   }
 }
 
