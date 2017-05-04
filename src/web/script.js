@@ -116,8 +116,14 @@ function displayError(result) {
     var disp = "<div id=\"err\">";
     disp += "Query: " + "<br/>" + result.query + "<br/>" + "<br/>" + "<br/>";
     disp += "Error Msg: " + "<br/>" + result.exception + "<br/>" + "<br/>";
-    $("#answer").html(disp);
+    disp += "</div>";
+    displayStatus(disp)
 }
+
+function displayStatus(str) {
+    $("#answer").html(str);
+}
+
 
 function processCsvQuery(query) {
     window.location.href = "/" + query + "&action=csv_export";
@@ -130,6 +136,7 @@ function processTsvQuery(query) {
 }
 
 function processQuery(query) {
+    displayStatus("Waiting for response...");
     maxSend = 0;
     var sInd = window.location.href.indexOf("&send=");
     if (sInd > 0) {
@@ -179,26 +186,41 @@ function processQuery(query) {
     }).fail(function(jqXHR, textStatus, errorThrown ) {
         console.log("textStatus: " + textStatus);
         console.log("errorThrown: " + errorThrown);
+        var disp = "<div id=\"err\">";
+        disp += "Connection problem in JQuery getJSON.";
+        disp += "</div>";
+        displayStatus(disp);
     });
+}
+
+function tsep(str) {
+    var spl = str.split('.');
+    var intP = spl[0];
+    var frac = spl.length > 1 ? '.' + spl[1] : '';
+    var regex = /(\d+)(\d{3})/;
+    while (regex.test(intP)) {
+        intP =intP.replace(regex, '$1' + ',' + '$2');
+    }
+    return intP + frac;
 }
 
 function handleStatsDisplay() {
     $.getJSON("/?cmd=stats", function (result) {
-        $("#kbname").html("KB index: <b>" + result.kbindex + "</b> ");
-        $("#textname").html("Text index: <b>" + result.textindex + "</b> ");
-        $("#ntriples").html("Number of triples: <b>" + result.noftriples + "</b> ");
-        $("#nrecords").html("Number of text records: <b>" + result.nofrecords + "</b> ");
-        $("#nwo").html("Number of word occurrences: <b>" + result.nofwordpostings + "</b> ");
-        $("#neo").html("Number of entity occurrences: <b>" + result.nofentitypostings + "</b> ");
+        $("#kbname").html("KB index: <b>" + tsep(result.kbindex) + "</b> ");
+        $("#textname").html("Text index: <b>" + tsep(result.textindex) + "</b> ");
+        $("#ntriples").html("Number of triples: <b>" + tsep(result.noftriples) + "</b> ");
+        $("#nrecords").html("Number of text records: <b>" + tsep(result.nofrecords) + "</b> ");
+        $("#nwo").html("Number of word occurrences: <b>" + tsep(result.nofwordpostings) + "</b> ");
+        $("#neo").html("Number of entity occurrences: <b>" + tsep(result.nofentitypostings) + "</b> ");
 
         if (result.permutations == "6") {
             $("#permstats").html("Registered <b>" + result.permutations
                 + "</b> permutations of the KB index."
                 + " &nbsp; #subjects: <b>"
-                + result.nofsubjects + "</b>"
+                + tsep(result.nofsubjects) + "</b>"
                 + " &nbsp; #predicates: <b>"
-                + result.nofpredicates + "</b>"
-                + " &nbsp; #objects: <b>" + result.nofobjects + "</b>");
+                + tsep(result.nofpredicates) + "</b>"
+                + " &nbsp; #objects: <b>" + tsep(result.nofobjects) + "</b>");
         } else {
             $("#permstats").html("Registered <b>" + result.permutations + "</b> permutations of the KB index.")
         }
