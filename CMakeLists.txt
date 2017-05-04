@@ -37,8 +37,8 @@ endif()
 set(LOG_LEVEL_INFO 3)
 set(LOG_LEVEL_DEBUG 4)
 set(LOG_LEVEL_TRACE 5)
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DLOGLEVEL=${LOG_LEVEL_DEBUG}")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DLOGLEVEL=${LOG_LEVEL_TRACE}")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DLOGLEVEL=${LOG_LEVEL_INFO}")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DLOGLEVEL=${LOG_LEVEL_DEBUG}")
 
 
 
@@ -79,6 +79,8 @@ add_subdirectory(test)
 configure_file(src/web/index.html index.html)
 configure_file(src/web/style.css style.css)
 configure_file(src/web/script.js script.js)
+configure_file(src/web/repro-con-reset.html repro-con-reset.html)
+configure_file(src/web/repro-con-reset.js repro-con-reset.js)
 
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
@@ -92,6 +94,9 @@ target_link_libraries (ServerMain engine)
 
 add_executable(WriteIndexListsMain src/WriteIndexListsMain.cpp)
 target_link_libraries (WriteIndexListsMain engine)
+
+add_executable(ReproduceConReset src/ReproduceConReset.cpp)
+target_link_libraries (ReproduceConReset engine)
 
 #add_executable(TextFilterComparison src/experiments/TextFilterComparison.cpp)
 #target_link_libraries (TextFilterComparison experiments)

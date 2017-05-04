@@ -44,6 +44,10 @@ public:
     delete[] _buf;
   }
 
+  void close() {
+    ::close(_fd);
+  }
+
   //! Create the socket.
   bool create(bool useTcpNoDelay = false) {
     _fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -57,10 +61,11 @@ public:
                               sizeof(int));    /* length of option value */
       if (result < 0) return false;
     }
+    makeResusableAfterClosing();
     return isOpen();
   }
 
-  void makeResusableAfterClosinng() const {
+  void makeResusableAfterClosing() const {
     // Make sockets reusable immediately after closing
     int on = 1;
     int rc = setsockopt(_fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on));
