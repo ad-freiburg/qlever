@@ -5,10 +5,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <getopt.h>
+#include <unistd.h>
 #include <string>
 #include <vector>
 #include <iomanip>
 #include <iostream>
+
 
 #include <sstream>
 #include <fstream>
@@ -123,6 +125,8 @@ int main(int argc, char** argv) {
         }
 
         if (data.find("json") != string::npos) {
+          LOG(DEBUG) << "sleep..." << std::endl;
+          usleep(1 * 1000 * 1000);
           LOG(DEBUG) << "Serving JSON..." << std::endl;
           string json = "{\n"
               "\"query\": \"PREFIX fb: <http://rdf.freebase.com/ns/>\\nSELECT ?n3 ?n1 ?predicate1 ?object ?predicate2 ?n2 WHERE {\\n   ?person1 fb:type.object.name.en \\\"Neil Armstrong\\\" .\\n   ?person2 fb:type.object.name.en \\\"Albert Einstein\\\" .\\n   ?person1 fb:type.object.name.en ?n1 .\\n   ?person2 fb:type.object.name.en ?n2 .\\n   ?person1 ?predicate1 ?object .\\n   ?person2 ?predicate2 ?object .\\n   ?object fb:type.object.name.en ?n3 .\\n   FILTER(?n3 >= \\\"Rele\\\")\\n}\\nLIMIT 1000\\nORDER BY ASC(?person1)\",\n"
