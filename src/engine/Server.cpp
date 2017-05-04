@@ -299,12 +299,12 @@ string Server::composeResponseJson(const ParsedQuery& query,
 
 
   std::ostringstream os;
-  os << "{\r\n"
+  os << "{\n"
      << "\"query\": \""
      << ad_utility::escapeForJson(query._originalString)
-     << "\",\r\n"
-     << "\"status\": \"OK\",\r\n"
-     << "\"resultsize\": \"" << resultSize << "\",\r\n";
+     << "\",\n"
+     << "\"status\": \"OK\",\n"
+     << "\"resultsize\": \"" << resultSize << "\",\n";
 
   os << "\"res\": ";
   size_t limit = MAX_NOF_ROWS_IN_RESULT;
@@ -319,14 +319,14 @@ string Server::composeResponseJson(const ParsedQuery& query,
   qet.writeResultToStreamAsJson(os, query._selectedVariables, limit, offset,
                                 maxSend);
   _requestProcessingTimer.stop();
-  os << ",\r\n";
+  os << ",\n";
 
-  os << "\"time\": {\r\n"
+  os << "\"time\": {\n"
      << "\"total\": \"" << _requestProcessingTimer.usecs() / 1000.0
-     << "ms\",\r\n"
-     << "\"computeResult\": \"" << compResultUsecs / 1000.0 << "ms\"\r\n"
-     << "}\r\n"
-     << "}\r\n";
+     << "ms\",\n"
+     << "\"computeResult\": \"" << compResultUsecs / 1000.0 << "ms\"\n"
+     << "}\n"
+     << "}\n";
 
   return os.str();
 }
@@ -356,24 +356,24 @@ string Server::composeResponseJson(
   std::ostringstream os;
   _requestProcessingTimer.stop();
 
-  os << "{\r\n"
+  os << "{\n"
      << "\"query\": \""
      << ad_utility::escapeForJson(query)
-     << "\",\r\n"
-     << "\"status\": \"ERROR\",\r\n"
-     << "\"resultsize\": \"0\",\r\n"
-     << "\"time\": {\r\n"
+     << "\",\n"
+     << "\"status\": \"ERROR\",\n"
+     << "\"resultsize\": \"0\",\n"
+     << "\"time\": {\n"
      << "\"total\": \"" << _requestProcessingTimer.msecs() / 1000.0
-     << "ms\",\r\n"
+     << "ms\",\n"
      << "\"computeResult\": \"" << _requestProcessingTimer.msecs() / 1000.0
-     << "ms\"\r\n"
-     << "},\r\n";
+     << "ms\"\n"
+     << "},\n";
 
 
   string msg = ad_utility::escapeForJson(exception.getFullErrorMessage());
 
-  os << "\"exception\": \"" << msg << "\"\r\n"
-     << "}\r\n";
+  os << "\"exception\": \"" << msg << "\"\n"
+     << "}\n";
 
   return os.str();
 }
@@ -384,24 +384,24 @@ string Server::composeResponseJson(const string& query,
   std::ostringstream os;
   _requestProcessingTimer.stop();
 
-  os << "{\r\n"
+  os << "{\n"
      << "\"query\": \""
      << ad_utility::escapeForJson(query)
-     << "\",\r\n"
-     << "\"status\": \"ERROR\",\r\n"
-     << "\"resultsize\": \"0\",\r\n"
-     << "\"time\": {\r\n"
+     << "\",\n"
+     << "\"status\": \"ERROR\",\n"
+     << "\"resultsize\": \"0\",\n"
+     << "\"time\": {\n"
      << "\"total\": \"" << _requestProcessingTimer.msecs()
-     << "ms\",\r\n"
+     << "ms\",\n"
      << "\"computeResult\": \"" << _requestProcessingTimer.msecs()
-     << "ms\"\r\n"
-     << "},\r\n";
+     << "ms\"\n"
+     << "},\n";
 
 
   string msg = ad_utility::escapeForJson(exception.what());
 
-  os << "\"Exception-Error-Message\": \"" << msg << "\"\r\n"
-     << "}\r\n";
+  os << "\"Exception-Error-Message\": \"" << msg << "\"\n"
+     << "}\n";
 
   return os.str();
 }
@@ -449,34 +449,34 @@ void Server::serveFile(Socket* client, const string& requestedFile) const {
 // _____________________________________________________________________________
 string Server::composeStatsJson() const {
   std::ostringstream os;
-  os << "{\r\n"
+  os << "{\n"
      << "\"kbindex\": \""
      << _index.getKbName()
-     << "\",\r\n"
+     << "\",\n"
      << "\"permutations\": \""
      << (_index.hasAllPermutations() ? "6" : "2")
-     << "\",\r\n";
+     << "\",\n";
   if (_index.hasAllPermutations()) {
-    os << "\"nofsubjects\": \"" << _index.getNofSubjects() << "\",\r\n";
-    os << "\"nofpredicates\": \"" << _index.getNofPredicates() << "\",\r\n";
-    os << "\"nofobjects\": \"" << _index.getNofObjects() << "\",\r\n";
+    os << "\"nofsubjects\": \"" << _index.getNofSubjects() << "\",\n";
+    os << "\"nofpredicates\": \"" << _index.getNofPredicates() << "\",\n";
+    os << "\"nofobjects\": \"" << _index.getNofObjects() << "\",\n";
   }
 
   os << "\"noftriples\": \""
      << _index.getNofTriples()
-     << "\",\r\n"
+     << "\",\n"
      << "\"textindex\": \""
      << _index.getTextName()
-     << "\",\r\n"
+     << "\",\n"
      << "\"nofrecords\": \""
      << _index.getNofTextRecords()
-      << "\",\r\n"
+      << "\",\n"
       << "\"nofwordpostings\": \""
       << _index.getNofWordPostings()
-      << "\",\r\n"
+      << "\",\n"
       << "\"nofentitypostings\": \""
       << _index.getNofEntityPostings()
-     << "\"\r\n"
-     << "}\r\n";
+     << "\"\n"
+     << "}\n";
   return os.str();
 }
