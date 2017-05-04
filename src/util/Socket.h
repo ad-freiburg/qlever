@@ -77,7 +77,8 @@ public:
   //! Bind the socket to the given port.
   bool bind(const int port) {
     if (!isOpen()) return false;
-    struct addrinfo hints, * res;
+    struct addrinfo hints;
+    struct addrinfo* res;
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;  // use IPv4 or IPv6, whichever
     hints.ai_socktype = SOCK_STREAM;
@@ -88,7 +89,7 @@ public:
     getaddrinfo(NULL, os.str().c_str(), &hints, &res);
 
     // bind it to the port we passed in to getaddrinfo():
-    return bind(_fd, res->ai_addr, res->ai_addrlen) != -1;
+    return ::bind(_fd, res->ai_addr, res->ai_addrlen) != -1;
   }
 
   //! Make it a listening socket.
