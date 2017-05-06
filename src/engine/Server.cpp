@@ -78,17 +78,10 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
   string contentType;
   LOG(DEBUG) << "Waiting for receive call to complete." << endl;
   string request;
-  auto status = client->receive(&request);
-  if (status == 0) {
-    LOG(DEBUG) << "Got empty request. Ignoring it." << std::endl;
-    return;
-  }
-  if (status == -1) {
-    LOG(DEBUG) << "Error receiving request. Errno: " << errno << std::endl;
-    return;
-  }
-  //string request = client->getRequest();
-  LOG(DEBUG) << "Got request from client." << endl;
+  string headers;
+  client->getHTTPRequest(request, headers);
+  LOG(DEBUG) << "Got request from client with size: " << request.size()
+             << " and headers with total size: " << headers << endl;
 
   size_t indexOfGET = request.find("GET");
   size_t indexOfHTTP = request.find("HTTP");
@@ -185,7 +178,10 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
     auto bytesSent = client->send(httpResponse);
     LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
   } else {
-    LOG(INFO) << "Ignoring invalid request " << request << '\n';
+    LOG(INFO) << "Got invalid request " << request << '\n';
+    LOG(INFO) << "Responding with 400 Bad Request.\n";
+    auto bytesSent = client->send(create400HttpResponse());
+    LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
   }
 }
 
@@ -281,6 +277,16 @@ string Server::createHttpResponse(const string& content,
 string Server::create404HttpResponse() const {
   std::ostringstream os;
   os << "HTTP/1.1 404 Not Found\r\n"
+     << "Content-Length: 0\r\n"
+     << "Connection: close\r\n"
+     << "\r\n";
+  return os.str();
+}
+
+// _____________________________________________________________________________
+string Server::create400HttpResponse() const {
+  std::ostringstream os;
+  os << "HTTP/1.1 400 Bad Request\r\n"
      << "Content-Length: 0\r\n"
      << "Connection: close\r\n"
      << "\r\n";
@@ -470,12 +476,12 @@ string Server::composeStatsJson() const {
      << "\",\n"
      << "\"nofrecords\": \""
      << _index.getNofTextRecords()
-      << "\",\n"
-      << "\"nofwordpostings\": \""
-      << _index.getNofWordPostings()
-      << "\",\n"
-      << "\"nofentitypostings\": \""
-      << _index.getNofEntityPostings()
+     << "\",\n"
+     << "\"nofwordpostings\": \""
+     << _index.getNofWordPostings()
+     << "\",\n"
+     << "\"nofentitypostings\": \""
+     << _index.getNofEntityPostings()
      << "\"\n"
      << "}\n";
   return os.str();

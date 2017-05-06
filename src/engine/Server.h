@@ -59,6 +59,7 @@ private:
                             const string& contentType) const;
 
   string create404HttpResponse() const;
+  string create400HttpResponse() const;
 
   string composeResponseJson(const ParsedQuery& query,
                              const QueryExecutionTree& qet,

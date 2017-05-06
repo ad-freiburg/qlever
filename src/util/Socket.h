@@ -24,7 +24,8 @@ using std::string;
 
 namespace ad_utility {
 static const int MAX_NOF_CONNECTIONS = 20;
-static const int RECIEVE_BUFFER_SIZE = 100000;
+static const int RECIEVE_BUFFER_SIZE = 10000;
+
 
 //! Basic Socket class used by the server code of the semantic search.
 //! Wraps low-level socket calls should possibly be replaced by
@@ -33,9 +34,8 @@ class Socket {
 public:
 
   // Default ctor.
-  Socket() :
-      _fd(-1) {
-    _buf = new char[RECIEVE_BUFFER_SIZE + 1];
+  Socket() : _fd(-1) {
+    _buf = new char[RECIEVE_BUFFER_SIZE];
   }
 
   // Destructor, close the socket if open.
@@ -99,12 +99,12 @@ public:
   }
 
   //! Accept a connection.
-  bool acceptClient(Socket* other) {
+  bool acceptClient(Socket* client) {
     struct sockaddr_storage clientAddr;
     socklen_t addrSize;
     addrSize = sizeof(clientAddr);
-    other->_fd = ::accept(_fd, (struct sockaddr*) &clientAddr, &addrSize);
-    return other->isOpen();
+    client->_fd = ::accept(_fd, (struct sockaddr*) &clientAddr, &addrSize);
+    return client->isOpen();
   }
 
   //! State if the socket's file descriptor is valid.
@@ -139,49 +139,43 @@ public:
     return nb;
   }
 
-  //! Receive something.
-  int receive(std::string* data) const {
-    return receive(data, 5);
-  }
-
-  //! Receive something.
-  int receive(std::string* data, int timesRetry) const {
-    struct timeval timeout;
-    timeout.tv_sec = 2;
-    timeout.tv_usec = 0;
-    setsockopt(_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
-    int rv = ::recv(_fd, _buf, RECIEVE_BUFFER_SIZE, 0);
-    if (rv == -1) {
-      LOG(DEBUG) << "Errno: " << errno << std::endl;
-      if (errno == 11 && timesRetry > 0) {
-        LOG(DEBUG) << "Retrying " << timesRetry-- << " times " << std::endl;
-        return receive(data, timesRetry);
-      }
-    } else {
-      LOG(DEBUG) << "Nof bytes received: " << rv << std::endl;
-    }
-    if (rv > 0) {
-      *data = _buf;
-    }
-    return rv;
-  }
-
-  string getRequest() const {
+  void getHTTPRequest(string& req, string& headers) const {
     std::ostringstream os;
-    char buf[512];
+    req.clear();
+    headers.clear();
     for (;;) {
-      auto recvsize = recv(_fd, buf, sizeof(buf) - 1, MSG_DONTWAIT);
-//      std::cout << "recvsize: " << recvsize << std::endl;
-      if (recvsize == -1) {
-        //       std::cout << "errno: " << errno << std::endl;
-        if (errno != EAGAIN && errno != EWOULDBLOCK) { break; }
-        else { continue; }
-      } else if (recvsize == 0) { break; } // properly closed connection.
-      // Append
-      buf[recvsize] = '\0';
-      os << buf;
+      auto rv = recv(_fd, _buf, RECIEVE_BUFFER_SIZE - 1, MSG_DONTWAIT);
+      if (rv == 0) { break; }
+      if (rv == -1) {
+        if (errno != EAGAIN && errno != EWOULDBLOCK) {
+          LOG(WARN) << "Error during recv, errno: " << errno << std::endl;
+          break;
+        }
+        continue;
+      } else {
+        // Append
+        _buf[rv] = '\0';
+        os << _buf;
+        if (req.size() == 0) {
+          auto posCRLF = os.str().find("\r\n");
+          if (posCRLF != string::npos) {
+            req = os.str().substr(0, posCRLF);
+            os.str(os.str().substr(posCRLF));
+          }
+        }
+        if (req.size() > 0) {
+          if (req.find("HTTP") == string::npos) {
+            LOG(WARN) << "Discarding invalid request: " << req << std::endl;
+            return;
+          }
+          auto posDoubleCRLF = os.str().find("\r\n\r\n");
+          if (posDoubleCRLF != string::npos) {
+            headers == os.str();
+            break;
+          }
+        }
+      }
     }
-    return os.str();
   }
 
   // Copied from online sources. Might be useful in the future.
