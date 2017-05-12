@@ -3,6 +3,7 @@
 // Author: Björn Buchhold <buchholb>
 
 #include "./ExternalVocabulary.h"
+#include "../util/Log.h"
 
 // _____________________________________________________________________________
 string ExternalVocabulary::operator[](Id id) const {
@@ -13,7 +14,7 @@ string ExternalVocabulary::operator[](Id id) const {
   at += _file.read(ft, sizeof(ft), at);
   assert(to > from);
   size_t nofBytes = static_cast<size_t>(to - from);
-  string word(nofBytes,'\0');
+  string word(nofBytes, '\0');
   // TODO in C++17 we'll get non-const pointer std::string::data() use it then
   _file.read(&word.front(), nofBytes, from);
   return word;
@@ -60,4 +61,6 @@ void ExternalVocabulary::initFromFile(const string& file) {
     off_t posLastOfft = _file.getLastOffset(&_startOfOffsets);
     _size = (posLastOfft - _startOfOffsets) / sizeof(off_t);
   }
+  LOG(INFO) << "Initialized external vocabulary. It contains " << _size
+            << "elements." << std::endl;
 }
