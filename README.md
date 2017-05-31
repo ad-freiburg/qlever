@@ -1,12 +1,11 @@
 # QLever
 
+QLever (pronounced "clever") is a query engine for efficient combined search on a knowledge base and a text corpus, in which named entities from the knowledge base have been identified.
+The query language is SPARQL extended by an `in-text` predicate, where `?x <in-text> ?t` means that the word or entity `?x` occurs in text record `?t`.
+Pure SPARQL is supported as well.
 
 This Readme sets you up to use the engine and to quickly build and query your own index.
-If you're interested in advanced topics, please check the following files (note that they aren't of perfect quality)
-
-* [List of Features (Not done yet!)](doc/features.md)
-* [Query Planning](doc/query_planning.md)
-* [The Index (currently incomplete)](doc/index_layout.md)
+If you're interested in advanced topics, we will link our research paper as soon as it is ready to be published.
 
 # How to use
 
