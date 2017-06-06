@@ -190,11 +190,11 @@ string getLowercaseUtf8(const string& orig) {
   std::mbstate_t state = std::mbstate_t();
   char buf[MB_CUR_MAX + 1];
   for (size_t i = 0; i < orig.size(); ++i) {
-    if ((orig[i] & (1<<7)) == 0) {
+    if ((orig[i] & (1 << 7)) == 0) {
       retVal += tolower(orig[i]);
     } else {
       wchar_t wChar;
-      size_t len = mbrtowc(&wChar, &orig[i], orig.size()-i, &state);
+      size_t len = mbrtowc(&wChar, &orig[i], orig.size() - i, &state);
       // If this assertion fails, there is an invalid multi-byte character.
       // However, this usually means that the locale is not utf8.
       // Note that the default locale is always C. Main classes need to set them
@@ -218,11 +218,11 @@ string getUppercaseUtf8(const string& orig) {
   std::mbstate_t state = std::mbstate_t();
   char buf[MB_CUR_MAX + 1];
   for (size_t i = 0; i < orig.size(); ++i) {
-    if ((orig[i] & (1 <<7)) == 0) {
+    if ((orig[i] & (1 << 7)) == 0) {
       retVal += toupper(orig[i]);
     } else {
       wchar_t wChar;
-      size_t len = mbrtowc(&wChar, &orig[i], orig.size()-i, &state);
+      size_t len = mbrtowc(&wChar, &orig[i], orig.size() - i, &state);
       // If this assertion fails, there is an invalid multi-byte character.
       // However, this usually means that the locale is not utf8.
       // Note that the default locale is always C. Main classes need to set them
@@ -247,7 +247,7 @@ inline string firstCharToUpperUtf8(const string& orig) {
   char buf[MB_CUR_MAX + 1];
   size_t i = 0;
   if (orig.size() > 0) {
-    if (orig[i] > 0) {
+    if ((orig[i] & (1 << 7)) == 0) {
       retVal += toupper(orig[i]);
       ++i;
     } else {
