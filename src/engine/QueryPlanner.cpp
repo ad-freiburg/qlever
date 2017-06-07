@@ -1109,8 +1109,8 @@ QueryPlanner::TripleGraph::identifyTextCliques() const {
                     contextVars.count(_nodeMap.find(i)->second->_triple._s));
       } else {
         AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                 "Dangling <in-text> relation for triple. "
-                     "Your query uses <in-text> but "
+                 "Dangling \"in-text\" relation for one or more triples. "
+                     "Your query uses \"in-text\" but "
                      "has no concrete word or entity associated with the "
                      "text variable. "
                      "If you have a classic relation called <in-text> "
