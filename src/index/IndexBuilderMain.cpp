@@ -59,6 +59,20 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
   stxxlConfig.writeLine(config.str());
 }
 
+void printOptions() {
+  cout << "Available Options:\n"
+       << "--tsv-file (-t): TSV file to build KB index from\n"
+      << "--ntriples-file (-n): NT file to build KB index from\n"
+      << "--index-basename (-i): (designated) name and path of the index to build\n"
+      << "--all-permutations (-a): build all 6 (not only 2) KB index permutations\n"
+      << "--on-disk-literals (-l): externalize parts of the KB vocab\n"
+      << "--words-by-contexts (-w): words-file to build text index from\n"
+      << "--docs-by-contexts (-d): docs-file to build text index from\n"
+      << "--kb-index-name (-K): assign a name to be displayed in the UI (default: name of nt-file)\n"
+      << "--text-index-name (-T): assign a name to be displayed in the UI (default: name of words-file)\n"
+      << std::endl;
+}
+
 // Main function.
 int main(int argc, char** argv) {
   std::cout << std::endl << EMPH_ON
@@ -139,6 +153,7 @@ int main(int argc, char** argv) {
 
   if (baseName.size() == 0) {
     cout << "Missing required argument --index-basename (-i)..." << endl;
+    printOptions();
     exit(1);
   }
 
@@ -147,6 +162,7 @@ int main(int argc, char** argv) {
     cout << "Missing required argument --tsv-file (-t) or "
         "--ntriples-file (-n) or --words-by-contexts (-w) "
         "or --docs-by-contexts (-d) ..." << endl;
+    printOptions();
     exit(1);
   }
 
