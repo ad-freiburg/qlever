@@ -1102,12 +1102,20 @@ QueryPlanner::TripleGraph::identifyTextCliques() const {
             i)->second->_triple._s].push_back(i);
         AD_CHECK_EQ(0,
                     contextVars.count(_nodeMap.find(i)->second->_triple._o));
-      }
-      if (contextVars.count(_nodeMap.find(i)->second->_triple._o) > 0) {
+      } else if (contextVars.count(_nodeMap.find(i)->second->_triple._o) > 0) {
         contextVarToTextNodesIds[_nodeMap.find(
             i)->second->_triple._o].push_back(i);
         AD_CHECK_EQ(0,
                     contextVars.count(_nodeMap.find(i)->second->_triple._s));
+      } else {
+        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                 "Dangling <in-text> relation for triple. "
+                     "Your query uses <in-text> but "
+                     "has no concrete word or entity associated with the "
+                     "text variable. "
+                     "If you have a classic relation called <in-text> "
+                     "in your KB, consider using a namespace or "
+                     "renaming the constant in QLever's code.");
       }
     }
   }
@@ -1353,15 +1361,6 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
 
   for (auto& n : oldNodeStorage) {
     if (removedNodeIds.count(n._id) == 0) {
-      if (n._triple._p == IN_CONTEXT_RELATION) {
-        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                 "Dangling <in-text> relation. Your query uses <in-text> but "
-                     "has no concrete word or entity associated with the "
-                     "text variable. "
-                     "If you have a classic relation called <in-text> "
-                     "in your KB, consider using a namespace or "
-                     "renaming the constant in QLever's code.")
-      }
       idMapOldToNew[n._id] = id;
       idMapNewToOld[id] = n._id;
       n._id = id++;
