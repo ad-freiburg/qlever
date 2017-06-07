@@ -82,6 +82,8 @@ void Join::computeResult(ResultTable* result) const {
   // Check if we can stop early.
   if (leftRes.size() == 0) {
     size_t resWidth = leftWidth + rightWidth - 1;
+    result->_nofColumns = resWidth;
+    result->_sortedBy = _leftJoinCol;
     if (resWidth == 1) {
       result->_fixedSizeData = new vector<array<Id, 1>>();
     } else if (resWidth == 2) {
