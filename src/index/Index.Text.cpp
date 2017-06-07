@@ -211,7 +211,9 @@ void Index::addContextToVector(
   for (Id blockId : touchedBlocks) {
     for (auto it = entities.begin(); it != entities.end(); ++it) {
       // Don't add an entity to its own block..
-      if (blockId == getEntityBlockId(it->first)) { continue; }
+      // FIX JUN 07 2017: DO add it. It's needed so that it is returned
+      // as a result itself.
+      // if (blockId == getEntityBlockId(it->first)) { continue; }
       writer << std::make_tuple(blockId, context, it->first, it->second, true);
     }
   }
