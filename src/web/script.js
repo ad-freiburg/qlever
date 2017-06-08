@@ -16,13 +16,13 @@ $(document).ready(function () {
                 ccInd = sInd;
             }
         }
+        var queryEscaped;
         if (ccInd > 0) {
-            $("#query").val(decodeURIComponent(
-                window.location.href.substr(ind, ccInd - ind)));
+                queryEscaped = window.location.href.substr(ind, ccInd - ind);
         } else {
-            $("#query").val(decodeURIComponent(
-                window.location.href.substr(ind)));
+                queryEscaped = window.location.href.substr(ind);
         }
+        $("#query").val(decodeURIComponent(queryEscaped.replace(/\+/g, '%20')));
         processQuery(window.location.href.substr(ind - 7));
     }
     $("#runbtn").click(function () {
