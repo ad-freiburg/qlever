@@ -4,6 +4,14 @@ QLever (pronounced "clever") is a query engine for efficient combined search on 
 The query language is SPARQL extended by an `in-text` predicate, where `?x <in-text> ?t` means that the word or entity `?x` occurs in text record `?t`.
 Pure SPARQL is supported as well.
 
+With this, it is possible to answer queries like the following one for astronauts who walked on the moon:
+
+    SELECT ?a TEXT(?t) SCORE(?t) WHERE {
+        ?a <is-a> <Astronaut> . 
+        ?a <in-text> ?t .
+        ?t <in-text> "walk* moon"
+    } ORDER BY DESC(SCORE(?t))
+    
 This Readme sets you up to use the engine and to quickly build and query your own index.
 If you're interested in advanced topics, we will link our research paper as soon as it is ready to be published.
 
