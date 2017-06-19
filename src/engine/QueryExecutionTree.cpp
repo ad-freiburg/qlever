@@ -173,7 +173,10 @@ void QueryExecutionTree::writeResultToStreamAsJson(
           pair<size_t, OutputType>(vc->second, outputType));
     }
   }
-  if (validIndices.size() == 0) { return; }
+  if (validIndices.size() == 0) {
+    out << "]";
+    return;
+  }
   if (res._nofColumns == 1) {
     auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
