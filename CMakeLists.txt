@@ -59,7 +59,7 @@ include_directories(${STXXL_INCLUDE_DIRS})
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
-message(STATUS "CXX_FLAGS_RELEASE are : " ${CMAKE_CXX_FLAGS_RELEASE})
+message(STATUS "CXX_FLAGS_RELEASE are : " ${CMAKE_CXX_FLAGS_DEBUG})
 message(STATUS "CXX_FLAGS_DEBUG are : " ${CMAKE_CXX_FLAGS_DEBUG})
 message(STATUS "IMPORTANT: Make sure you have selected the desired CMAKE_BUILD_TYPE")
 message(STATUS ---)

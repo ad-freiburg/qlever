@@ -56,6 +56,7 @@ void Join::computeResult(ResultTable* result) const {
   // avoid the computation of an non-empty subtree.
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
     size_t resWidth = leftWidth + rightWidth - 1;
+    result->_nofColumns = resWidth;
     if (resWidth == 1) {
       result->_fixedSizeData = new vector<array<Id, 1>>();
     } else if (resWidth == 2) {

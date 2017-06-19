@@ -43,8 +43,7 @@ public:
              _right->getSizeEstimate() + _right->getCostEstimate();
     }
     // PUNISH IF NO DIRECT JOIN IS AVAILABLE FOR FILTER
-    return (_left->getSizeEstimate() + _left->getCostEstimate() +
-            _right->getSizeEstimate() + _right->getCostEstimate()) * 1000;
+    return std::numeric_limits<size_t>::max() / 1000000;
   }
 
   virtual bool knownEmptyResult() {
