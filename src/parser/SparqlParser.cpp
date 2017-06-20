@@ -225,7 +225,7 @@ void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
   string o = str.substr(i, j - i);
   if (p == IN_CONTEXT_RELATION ||
       p.find(IN_CONTEXT_RELATION_NS) != string::npos) {
-    o = stripKeywordLiteral(o);
+    o = stripAndLowercaseKeywordLiteral(o);
   }
   SparqlTriple triple(s, p, o);
   // Quadratic in number of triples in query.
@@ -385,12 +385,12 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
 }
 
 // _____________________________________________________________________________
-string SparqlParser::stripKeywordLiteral(const string& lit) {
+string SparqlParser::stripAndLowercaseKeywordLiteral(const string& lit) {
   if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
     string stripped = ad_utility::strip(lit, '"');
     stripped.erase(std::remove(stripped.begin(), stripped.end(), '\''),
                    stripped.end());
-    return stripped;
+    return ad_utility::getLowercaseUtf8(stripped);
   }
   return lit;
 }
