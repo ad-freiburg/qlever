@@ -157,7 +157,8 @@ function processQuery(query) {
         var res = "<div id=\"res\">";
         // Time
         res += "<div id=\"time\">";
-        res += "Number of rows: " + result.resultsize + "<br/><br/>";
+        var nofRows = result.res.length;
+        res += "Number of rows (without LIMIT): " + result.resultsize + "<br/><br/>";
         res += "Time elapsed:<br>";
         res += "Total: " + result.time.total + "<br/>";
         res += "&nbsp;- Computation: " + result.time.computeResult + "<br/>";
@@ -166,7 +167,7 @@ function processQuery(query) {
             - parseInt(result.time.computeResult.replace(/ms/, ""))).toString()
             + "ms";
         res += "</div>";
-        if (maxSend > 0 && maxSend < parseInt(result.resultsize)) {
+        if (maxSend > 0 && maxSend <= nofRows && maxSend < parseInt(result.resultsize)) {
             res += "<div>Only transmitted " + maxSend.toString()
                 + " rows out of the " + result.resultsize
                 + " that were computed server-side. " +

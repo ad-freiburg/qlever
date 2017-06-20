@@ -388,8 +388,8 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
 string SparqlParser::stripAndLowercaseKeywordLiteral(const string& lit) {
   if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
     string stripped = ad_utility::strip(lit, '"');
-    stripped.erase(std::remove(stripped.begin(), stripped.end(), '\''),
-                   stripped.end());
+    //stripped.erase(std::remove(stripped.begin(), stripped.end(), '\''),
+    //               stripped.end());
     return ad_utility::getLowercaseUtf8(stripped);
   }
   return lit;
