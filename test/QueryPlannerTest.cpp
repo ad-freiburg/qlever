@@ -722,7 +722,7 @@ TEST(QueryExecutionTreeTest, testTextQuerySE) {
   try {
     ParsedQuery pq = SparqlParser::parse(
         "SELECT TEXT(?c) \n "
-            "WHERE  {?c <in-text> \"'search' 'engine'\"}");
+            "WHERE  {?c <in-text> \"search engine\"}");
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
@@ -818,7 +818,7 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
             "WHERE {"
             "?a <is-a> <Politician> . "
             "?a <in-text> ?c ."
-            "?c <in-text> \"'friend*'\" ."
+            "?c <in-text> \"friend*\" ."
             "?c <in-text> ?s ."
             "?s <is-a> <Scientist> ."
             "?s <in-text> ?c2 ."
