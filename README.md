@@ -13,7 +13,7 @@ With this, it is possible to answer queries like the following one for astronaut
     } ORDER BY DESC(SCORE(?t))
     
 This Readme sets you up to use the engine and to quickly build and query your own index.
-If you're interested in advanced topics, we will link our research paper as soon as it is ready to be published.
+If you're interested in advanced topics, we will link our research paper, which is currently still under review.
 
 # How to use
 
