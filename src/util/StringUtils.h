@@ -14,11 +14,13 @@
 #include <string>
 #include <sstream>
 #include <vector>
+#include <array>
 #include <grp.h>
-#include "./HashSet.h"
+#include <limits>
 
 using std::string;
 using std::vector;
+using std::array;
 
 namespace ad_utility {
 //! Utility functions for string. Can possibly be changed to
@@ -201,8 +203,9 @@ string getLowercaseUtf8(const string& orig) {
       // To utf8, even if the system's default is utf8 already.
       assert(len > 0 && len <= static_cast<size_t>(MB_CUR_MAX));
       i += len - 1;
-      size_t ret = wcrtomb(buf, static_cast<wchar_t>(towlower
-          (static_cast<wint_t>(wChar))), &state);
+      size_t ret = wcrtomb(
+          buf, static_cast<wchar_t>(towlower(static_cast<wint_t>(wChar))),
+          &state);
       assert(ret > 0 && ret <= static_cast<size_t>(MB_CUR_MAX));
       buf[ret] = 0;
       retVal += buf;
@@ -229,8 +232,9 @@ string getUppercaseUtf8(const string& orig) {
       // To utf8, even if the system's default is utf8 already.
       assert(len > 0 && len <= static_cast<size_t>(MB_CUR_MAX));
       i += len - 1;
-      size_t ret = wcrtomb(buf, static_cast<wchar_t>(towupper
-          (static_cast<wint_t>(wChar))), &state);
+      size_t ret = wcrtomb(
+          buf, static_cast<wchar_t>(towupper(static_cast<wint_t>(wChar))),
+          &state);
       assert(ret > 0 && ret <= static_cast<size_t>(MB_CUR_MAX));
       buf[ret] = 0;
       retVal += buf;
@@ -259,8 +263,9 @@ inline string firstCharToUpperUtf8(const string& orig) {
       // To utf8, even if the system's default is utf8 already.
       assert(len > 0 && len <= static_cast<size_t>(MB_CUR_MAX));
       i += len;
-      size_t ret = wcrtomb(buf, static_cast<wchar_t>(towupper
-          (static_cast<wint_t>(wChar))), &state);
+      size_t ret = wcrtomb(
+          buf, static_cast<wchar_t>(towupper(static_cast<wint_t>(wChar))),
+          &state);
       assert(ret > 0 && ret <= static_cast<size_t>(MB_CUR_MAX));
       buf[ret] = 0;
       retVal += buf;
@@ -383,16 +388,18 @@ vector<string> splitAny(const string& orig, const char *seps) {
 
 // _____________________________________________________________________________
 vector<string> splitAny(const string& orig, const string& seps) {
-  HashSet<char> chars;
+  // 256 bytes should fit on almost any stack
+  // note the {}, it initializes with 0 = false
+  array<bool, std::numeric_limits<unsigned char>::max() + 1> chars{};
   for (size_t i = 0; i < seps.size(); ++i) {
-    chars.insert(seps[i]);
+    chars[seps[i]] = true;
   }
   vector<string> result;
   if (orig.size() > 0) {
     size_t from = 0;
     size_t i = 0;
     while (i < orig.size()) {
-      if (chars.count(orig[i]) > 0) {
+      if (chars[orig[i]]) {
         if (from < i) {
           result.emplace_back(orig.substr(from, i - from));
         }
@@ -407,22 +414,42 @@ vector<string> splitAny(const string& orig, const string& seps) {
   return result;
 }
 
+// _____________________________________________________________________________
+template <typename J, typename S>
+J join(const vector<J>& to_join, const S& joiner) {
+  J res{};  // {} does zero initialization
+  auto it = to_join.begin();
+  for (; it != to_join.end() - 1; it++) {
+    res += *it;
+    res += joiner;
+  }
+  if (it != to_join.end()) {
+    res += *it;
+  }
+  return res;
+}
 
 // _____________________________________________________________________________
 inline string lstrip(const string& text, char c) {
   size_t i = 0;
-  while (i < text.size() && text[i] == c) { ++i; }
+  while (i < text.size() && text[i] == c) {
+    ++i;
+  }
   return text.substr(i);
 }
 
 // _____________________________________________________________________________
 inline string lstrip(const string& text, string s) {
-  ad_utility::HashSet<char> chars;
+  // 256 bytes should fit on almost any stack
+  // note the {}, it initializes with 0 = false
+  array<bool, std::numeric_limits<unsigned char>::max() + 1> chars{};
   for (size_t i = 0; i < s.size(); ++i) {
-    chars.insert(s[i]);
+    chars[s[i]] = true;
   }
   size_t i = 0;
-  while (i < text.size() && chars.count(text[i]) != 0) { ++i; }
+  while (i < text.size() && chars[text[i]]) {
+    ++i;
+  }
   return text.substr(i);
 }
 
@@ -434,18 +461,24 @@ inline string lstrip(const string& text, const char *s) {
 // _____________________________________________________________________________
 inline string rstrip(const string& text, char c) {
   size_t i = text.size();
-  while (i > 0 && text[i - 1] == c) { --i; }
+  while (i > 0 && text[i - 1] == c) {
+    --i;
+  }
   return text.substr(0, i);
 }
 
 // _____________________________________________________________________________
 inline string rstrip(const string& text, string s) {
-  ad_utility::HashSet<char> chars;
+  // 256 bytes should fit on almost any stack
+  // note the {}, it initializes with 0 = false
+  array<bool, std::numeric_limits<unsigned char>::max() + 1> chars{};
   for (size_t i = 0; i < s.size(); ++i) {
-    chars.insert(s[i]);
+    chars[s[i]] = true;
   }
   size_t i = text.size();
-  while (i > 0 && chars.count(text[i - 1]) != 0) { --i; }
+  while (i > 0 && chars[text[i - 1]]) {
+    --i;
+  }
   return text.substr(0, i);
 }
 
@@ -455,8 +488,14 @@ inline string rstrip(const string& text, const char *s) {
 }
 
 // _____________________________________________________________________________
-inline string strip(const string& text, char c) {
-  return rstrip(lstrip(text, c), c);
+inline std::string strip(const std::string& text, char c) {
+  auto left = text.begin();
+  auto right = text.end();  // right is of course exclusive
+  for (; left != text.end() && *left == c; left++)
+    ;
+  for (; right != text.begin() && *(right - 1) == c; right--)
+    ;
+  return std::string(left, right);
 }
 
 // _____________________________________________________________________________
