@@ -399,7 +399,7 @@ vector<string> splitAny(const string& orig, const string& seps) {
     size_t from = 0;
     size_t i = 0;
     while (i < orig.size()) {
-      if (chars[orig[i]]) {
+      if (chars[static_cast<unsigned char>(orig[i])]) {
         if (from < i) {
           result.emplace_back(orig.substr(from, i - from));
         }
@@ -447,7 +447,7 @@ inline string lstrip(const string& text, string s) {
     chars[s[i]] = true;
   }
   size_t i = 0;
-  while (i < text.size() && chars[text[i]]) {
+  while (i < text.size() && chars[static_cast<unsigned char>(text[i])]) {
     ++i;
   }
   return text.substr(i);
@@ -476,7 +476,7 @@ inline string rstrip(const string& text, string s) {
     chars[s[i]] = true;
   }
   size_t i = text.size();
-  while (i > 0 && chars[text[i - 1]]) {
+  while (i > 0 && chars[static_cast<unsigned char>(text[i - 1])]) {
     --i;
   }
   return text.substr(0, i);

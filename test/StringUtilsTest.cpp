@@ -112,6 +112,12 @@ TEST(StringUtilsTest, split) {
   ASSERT_EQ(size_t(1), v3.size());
   auto v4 = split(s3, ' ');
   ASSERT_EQ(size_t(3), v4.size());
+  // and with unicode
+  string s5 = u8"Spaß ❤ 漢字";
+  auto v5 = split(s5, ' ');
+  ASSERT_EQ(u8"Spaß", v5[0]);
+  ASSERT_EQ(u8"❤", v5[1]);
+  ASSERT_EQ(u8"漢字", v5[2]);
 }
 
 TEST(StringUtilsTest, join) {
@@ -171,6 +177,12 @@ TEST(StringUtilsTest, splitAny) {
 
   auto v8 = splitAny(s1, "sih\tt");
   ASSERT_EQ(size_t(0), v8.size());
+  // and with unicode
+  string s9 = u8"Spaß ❤\t漢字";
+  auto v9 = splitAny(s9, " \t");
+  ASSERT_EQ(u8"Spaß", v9[0]);
+  ASSERT_EQ(u8"❤", v9[1]);
+  ASSERT_EQ(u8"漢字", v9[2]);
 }
 
 TEST(StringUtilsTest, strip) {
@@ -189,6 +201,10 @@ TEST(StringUtilsTest, strip) {
   ASSERT_EQ("abc", strip(s5, 'x'));
 
   ASSERT_EQ("bc", strip("xxaxaxaxabcaaaxxx", "xa"));
+  // And with unicode
+  ASSERT_EQ(u8"äcaaaxxx", lstrip(u8"xxaxaxaxaäcaaaxxx", "xa"));
+  ASSERT_EQ(u8"äö", strip(u8"xxaxaxaxaäöaaaxxx", "xa"));
+  ASSERT_EQ("xxaxaxaxa♥", rstrip("xxaxaxaxa♥aaaxxx", "xa"));
 }
 }  // namespace
 
