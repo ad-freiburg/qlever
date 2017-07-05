@@ -133,6 +133,11 @@ TEST(StringUtilsTest, join) {
   auto joined2 = join(v2, "<SEP>");
   ASSERT_EQ("this<SEP>is<SEP>it", joined2);
 
+  // Empty list
+  std::vector<std::string> v_empty = {};
+  auto joined_empty = join(v_empty, "<SEP>");
+  ASSERT_EQ("", joined_empty);
+
   // Yay for templates, it also does (somewhat useless) math
   vector<uint16_t> v3 = {3, 4, 5, 6};
   auto joined3 = join(v3, 2);

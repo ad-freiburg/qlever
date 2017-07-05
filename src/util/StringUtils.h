@@ -419,11 +419,12 @@ template <typename J, typename S>
 J join(const vector<J>& to_join, const S& joiner) {
   J res{};  // {} does zero initialization
   auto it = to_join.begin();
-  for (; it != to_join.end() - 1; it++) {
-    res += *it;
-    res += joiner;
+  if(it == to_join.end()) {
+    return res;
   }
-  if (it != to_join.end()) {
+  res += *it++;
+  for (; it != to_join.end(); it++) {
+    res += joiner;
     res += *it;
   }
   return res;
