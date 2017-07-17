@@ -64,6 +64,9 @@ void Server::run() {
       LOG(ERROR) << "Socket error while trying to accept client" << std::endl;
       continue;
     }
+    // Setting Keep Alive on the socket helps detect vanished clients
+    // instead of blocking operations idefinitely
+    client.setKeepAlive(true);
     // TODO(buchholb): Spawn a new thread here / use a ThreadPool / etc.
     LOG(INFO) << "Incoming connection, processing..." << std::endl;
     process(&client, &qec);
