@@ -65,6 +65,15 @@ public:
     return isOpen();
   }
 
+  void setKeepAlive(bool keepAlive) const {
+    int keepAliveVal = (keepAlive) ? 1 : 0;
+    int rc = setsockopt(_fd, SOL_SOCKET,
+        SO_KEEPALIVE, &keepAliveVal, sizeof(keepAliveVal));
+    if (rc < 0) {
+      LOG(WARN) << "setsockopt(SO_KEEPALIVE) failed" << std::endl;
+    }
+  }
+
   void makeResusableAfterClosing() const {
     // Make sockets reusable immediately after closing
     int on = 1;
