@@ -301,6 +301,8 @@ string Server::composeResponseJson(const ParsedQuery& query,
                                    const QueryExecutionTree& qet,
                                    size_t maxSend) const {
 
+  // TODO(schnelle) we really should use a json library
+  // such as https://github.com/nlohmann/json
   const ResultTable& rt = qet.getResult();
   _requestProcessingTimer.stop();
   off_t compResultUsecs = _requestProcessingTimer.usecs();
@@ -314,6 +316,14 @@ string Server::composeResponseJson(const ParsedQuery& query,
      << "\",\n"
      << "\"status\": \"OK\",\n"
      << "\"resultsize\": \"" << resultSize << "\",\n";
+
+  os << "\"selected\": ";
+  if (query._selectedVariables.size()) {
+    os << "[\"" <<
+      ad_utility::join(query._selectedVariables, "\", \"") << "\"],\n";
+  } else {
+    os << "[],\n";
+  }
 
   os << "\"res\": ";
   size_t limit = MAX_NOF_ROWS_IN_RESULT;
