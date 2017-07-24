@@ -152,7 +152,7 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
         _textLimit,
         result->_varSizeData);
   }
-  result->_status = ResultTable::FINISHED;
+  result->finish();
   LOG(DEBUG) << "TextOperationWithFilter result computation done." << endl;
 }
 

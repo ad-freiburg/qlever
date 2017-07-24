@@ -34,17 +34,17 @@ public:
   shared_ptr<const ResultTable> getResult() const {
     LOG(TRACE) << "Get result from cache (possibly empty)" << endl;
     LOG(TRACE) << "Using key: \n" << asString() << endl;
-    shared_ptr<const ResultTable> result =
-        _executionContext->getCachedResultForQueryTree(asString());
-    if (!result) {
-      LOG(TRACE) << "Result from cache is null. Compute it." << endl;
-      ResultTable computed;
-      computeResult(&computed);
-      result = _executionContext->setAndGetCachedResultForQueryTree(
-          asString(), std::move(computed));
+    bool uncomputed = false;
+    shared_ptr<ResultTable> result =
+        _executionContext->getCachedResultForQueryTree(asString(), &uncomputed);
+    if (uncomputed) {
+      LOG(TRACE) << "Result from cache is uncomputed. Compute it." << endl;
+      // Passing the raw pointer here is ok as the result shared_ptr remains
+      // in scope
+      computeResult(result.get());
     }
-    LOG(TRACE) << "Result should be filled." << endl;
-    AD_CHECK_EQ(ResultTable::FINISHED, result->_status);
+    LOG(TRACE) << "Wait for result to be finished" << endl;
+    result->awaitFinished();
     return result;
   }
 

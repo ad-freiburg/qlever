@@ -31,14 +31,9 @@ public:
       _index(&index), _engine(&engine), _costFactors() {
   }
 
-  shared_ptr<const ResultTable> getCachedResultForQueryTree(
-      const string& queryAsString) {
-    return _subtreeCache[queryAsString];
-  }
-
-  shared_ptr<const ResultTable> setAndGetCachedResultForQueryTree(
-      const string& queryAsString, ResultTable result) {
-    return _subtreeCache.insert(queryAsString, std::move(result));
+  shared_ptr<ResultTable> getCachedResultForQueryTree(
+      const string& queryAsString, bool* uncomputed) {
+    return _subtreeCache.getOrCreate(queryAsString, uncomputed);
   }
 
   const Engine& getEngine() const {
@@ -62,7 +57,6 @@ public:
   };
 
  private:
-
   SubtreeCache _subtreeCache;
   const Index* _index;
   const Engine* _engine;

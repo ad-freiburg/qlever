@@ -27,8 +27,21 @@ TEST(LRUCacheTest, testTypicalusage) {
   // Non-existing elements must yield shared_ptr<const Value>(nullptr)
   // this bool converts to false
   ASSERT_FALSE(cache["non-existant"]);
-  // insert and immediate result retrieval
-  ASSERT_EQ(*cache.insert("new", "newvalue"), "newvalue");
+}
+// _____________________________________________________________________________
+TEST(LRUCacheTest, testGetOrCreate) {
+  LRUCache<string, string> cache(5);
+  cache.insert("1", "x");
+  cache.insert("2", "xx");
+  bool created = false;
+  ASSERT_EQ(*cache.getOrCreate("2", &created), "xx");
+  ASSERT_FALSE(created);
+  ASSERT_EQ(*cache.getOrCreate("4", &created), "");
+  ASSERT_TRUE(created);
+  created = false;
+  *cache.getOrCreate("4", &created) += "foo";
+  ASSERT_EQ(*cache.getOrCreate("4", &created), "foo");
+  ASSERT_FALSE(created);
 }
 
 // _____________________________________________________________________________

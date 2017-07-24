@@ -119,7 +119,7 @@ void TwoColumnJoin::computeResult(ResultTable* result) const {
                          &result->_varSizeData);
     }
 
-    result->_status = ResultTable::FINISHED;
+    result->finish();
     LOG(DEBUG) << "TwoColumnJoin result computation done." << endl;
     return;
   }

@@ -80,6 +80,6 @@ void Sort::computeResult(ResultTable* result) const {
     }
   }
   result->_sortedBy = _sortCol;
-  result->_status = ResultTable::FINISHED;
+  result->finish();
   LOG(DEBUG) << "Sort result computation done." << endl;
 }

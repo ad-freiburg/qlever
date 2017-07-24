@@ -43,7 +43,7 @@ void TextOperationWithoutFilter::computeResult(ResultTable* result) const {
   } else {
     computeResultMultVars(result);
   }
-  result->_status = ResultTable::FINISHED;
+  result->finish();
   LOG(DEBUG) << "TextOperationWithoutFilter result computation done." << endl;
 }
 

@@ -89,6 +89,6 @@ void OrderBy::computeResult(ResultTable* result) const {
   }
   result->_sortedBy = (_sortIndices[0].second ? result->_nofColumns + 1 :
                        _sortIndices[0].first);
-  result->_status = ResultTable::FINISHED;
+  result->finish();
   LOG(DEBUG) << "OrderBy result computation done." << endl;
 }

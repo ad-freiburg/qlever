@@ -7,19 +7,19 @@
 
 // _____________________________________________________________________________
 ResultTable::ResultTable() :
-    _status(ResultTable::OTHER),
     _nofColumns(0),
     _sortedBy(0),
     _varSizeData(),
-    _fixedSizeData(nullptr) {}
+    _fixedSizeData(nullptr),
+    _status(ResultTable::OTHER){}
 
 // _____________________________________________________________________________
 ResultTable::ResultTable(const ResultTable& other) :
-    _status(other._status),
     _nofColumns(other._nofColumns),
     _sortedBy(other._sortedBy),
     _varSizeData(other._varSizeData),
-    _fixedSizeData(nullptr) {
+    _fixedSizeData(nullptr), 
+    _status(other._status) {
   if (other._nofColumns <= 5) {
     if (other._nofColumns == 1) {
       _fixedSizeData = new vector<array<Id, 1>>;

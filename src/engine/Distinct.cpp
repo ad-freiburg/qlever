@@ -85,6 +85,6 @@ void Distinct::computeResult(ResultTable* result) const {
       break;
     }
   }
-  result->_status = ResultTable::FINISHED;
+  result->finish();
   LOG(DEBUG) << "Distinct result computation done." << endl;
 }

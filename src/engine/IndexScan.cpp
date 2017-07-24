@@ -143,7 +143,7 @@ void IndexScan::computePSOboundS(ResultTable* result) const {
   _executionContext->getIndex().scanPSO(
       _predicate, _subject,
       static_cast<vector<array<Id, 1>>*>(result->_fixedSizeData));
-  result->_status = ResultTable::FINISHED;
+  result->finish();
 }
 
 // _____________________________________________________________________________
@@ -154,7 +154,7 @@ void IndexScan::computePSOfreeS(ResultTable* result) const {
   _executionContext->getIndex().scanPSO(
       _predicate,
       static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
-  result->_status = ResultTable::FINISHED;
+  result->finish();
 }
 
 // _____________________________________________________________________________
@@ -165,7 +165,7 @@ void IndexScan::computePOSboundO(ResultTable* result) const {
   _executionContext->getIndex().scanPOS(
       _predicate, _object,
       static_cast<vector<array<Id, 1>>*>(result->_fixedSizeData));
-  result->_status = ResultTable::FINISHED;
+  result->finish();
 }
 
 // _____________________________________________________________________________
@@ -176,7 +176,7 @@ void IndexScan::computePOSfreeO(ResultTable* result) const {
   _executionContext->getIndex().scanPOS(
       _predicate,
       static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
-  result->_status = ResultTable::FINISHED;
+  result->finish();
 }
 
 // _____________________________________________________________________________
@@ -197,7 +197,7 @@ void IndexScan::computeSPOfreeP(ResultTable* result) const {
   _executionContext->getIndex().scanSPO(
       _subject,
       static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
-  result->_status = ResultTable::FINISHED;
+  result->finish();
 }
 
 // _____________________________________________________________________________
@@ -208,7 +208,7 @@ void IndexScan::computeSOPboundO(ResultTable* result) const {
   _executionContext->getIndex().scanSOP(
       _subject, _object,
       static_cast<vector<array<Id, 1>>*>(result->_fixedSizeData));
-  result->_status = ResultTable::FINISHED;
+  result->finish();
 }
 
 // _____________________________________________________________________________
@@ -219,7 +219,7 @@ void IndexScan::computeSOPfreeO(ResultTable* result) const {
   _executionContext->getIndex().scanSOP(
       _subject,
       static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
-  result->_status = ResultTable::FINISHED;
+  result->finish();
 }
 
 // _____________________________________________________________________________
@@ -230,7 +230,7 @@ void IndexScan::computeOPSfreeP(ResultTable* result) const {
   _executionContext->getIndex().scanOPS(
       _object,
       static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
-  result->_status = ResultTable::FINISHED;
+  result->finish();
 }
 
 // _____________________________________________________________________________
@@ -241,7 +241,7 @@ void IndexScan::computeOSPfreeS(ResultTable* result) const {
   _executionContext->getIndex().scanOSP(
       _object,
       static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
-  result->_status = ResultTable::FINISHED;
+  result->finish();
 }
 
 // _____________________________________________________________________________

@@ -407,7 +407,7 @@ void Filter::computeResult(ResultTable* result) const {
       break;
     }
   }
-  result->_status = ResultTable::FINISHED;
+  result->finish();
   LOG(DEBUG) << "Filter result computation done." << endl;
 }
 
@@ -754,6 +754,6 @@ void Filter::computeResultFixedValue(ResultTable* result) const {
       break;
     }
   }
-  result->_status = ResultTable::FINISHED;
+  result->finish();
   LOG(DEBUG) << "Filter result computation done." << endl;
 }
