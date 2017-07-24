@@ -61,11 +61,11 @@ string OptionalJoin::asString(size_t indent) const {
 template<int I, int J, int K>
 struct meta_for {
   void operator()(int i, int j, int k,
-                  const ResultTable& leftResult,
-                  const ResultTable& rightResult,
+                  shared_ptr<const ResultTable> leftResult,
+                  shared_ptr<const ResultTable> rightResult,
                   bool leftOptional, bool rightOptional,
                   const std::vector<std::array<size_t, 2>>& joinColumns,
-                  ResultTable *result,
+                  ResultTable* result,
                   int resultSize) const {
     if (I == i) {
       if (J == j) {
@@ -74,9 +74,9 @@ struct meta_for {
           Engine::optionalJoin<vector<array<Id, I>>,
                                vector<array<Id, J>>,
                                array<Id, K>, K>(*static_cast<vector<array<Id, I>>*>
-                                     (leftResult._fixedSizeData),
+                                     (leftResult->_fixedSizeData),
                                      *static_cast<vector<array<Id, J>>*>
-                                     (rightResult._fixedSizeData),
+                                     (rightResult->_fixedSizeData),
                                      leftOptional, rightOptional,
                                      joinColumns,
                                      static_cast<vector<array<Id, K>>*>
@@ -106,11 +106,11 @@ struct meta_for {
 template <int I, int K>
 struct meta_for<I, 6, K> {
   void operator()(int i, int j, int k,
-                  const ResultTable& leftResult,
-                  const ResultTable& rightResult,
+                  shared_ptr<const ResultTable> leftResult,
+                  shared_ptr<const ResultTable> rightResult,
                   bool leftOptional, bool rightOptional,
                   const std::vector<std::array<size_t, 2>>& joinColumns,
-                  ResultTable *result, int resultSize) const {
+                  ResultTable* result, int resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void) i;
     (void) j;
@@ -118,8 +118,8 @@ struct meta_for<I, 6, K> {
     Engine::optionalJoin<vector<array<Id, I>>,
         vector<vector<Id>>,
         vector<Id>, K>(*static_cast<vector<array<Id, I>>*>
-                       (leftResult._fixedSizeData),
-                       rightResult._varSizeData,
+                       (leftResult->_fixedSizeData),
+                       rightResult->_varSizeData,
                        leftOptional, rightOptional,
                        joinColumns,
                        &result->_varSizeData,
@@ -130,11 +130,11 @@ struct meta_for<I, 6, K> {
 template <int I, int J>
 struct meta_for<I, J, 6> {
   void operator()(int i, int j, int k,
-                  const ResultTable& leftResult,
-                  const ResultTable& rightResult,
+                  shared_ptr<const ResultTable> leftResult,
+                  shared_ptr<const ResultTable> rightResult,
                   bool leftOptional, bool rightOptional,
                   const std::vector<std::array<size_t, 2>>& joinColumns,
-                  ResultTable *result, int resultSize) const {
+                  ResultTable* result, int resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void) i;
     (void) j;
@@ -142,9 +142,9 @@ struct meta_for<I, J, 6> {
     Engine::optionalJoin<vector<array<Id, I>>,
         vector<array<Id, J>>,
         vector<Id>, 6>(*static_cast<vector<array<Id, I>>*>
-                       (leftResult._fixedSizeData),
+                       (leftResult->_fixedSizeData),
                        *static_cast<vector<array<Id, J>>*>
-                       (rightResult._fixedSizeData),
+                       (rightResult->_fixedSizeData),
                        leftOptional, rightOptional,
                        joinColumns,
                        &result->_varSizeData,
@@ -155,20 +155,20 @@ struct meta_for<I, J, 6> {
 template <int J>
 struct meta_for<6, J, 6> {
   void operator()(int i, int j, int k,
-                  const ResultTable& leftResult,
-                  const ResultTable& rightResult,
+                  shared_ptr<const ResultTable> leftResult,
+                  shared_ptr<const ResultTable> rightResult,
                   bool leftOptional, bool rightOptional,
                   const std::vector<std::array<size_t, 2>>& joinColumns,
-                  ResultTable *result, int resultSize) const {
+                  ResultTable* result, int resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void) i;
     (void) j;
     (void) k;
     Engine::optionalJoin<vector<vector<Id>>,
         vector<array<Id, J>>,
-        vector<Id>, 6>(leftResult._varSizeData,
+        vector<Id>, 6>(leftResult->_varSizeData,
                        *static_cast<vector<array<Id, J>>*>
-                       (rightResult._fixedSizeData),
+                       (rightResult->_fixedSizeData),
                        leftOptional, rightOptional,
                        joinColumns,
                        &result->_varSizeData,
@@ -179,19 +179,19 @@ struct meta_for<6, J, 6> {
 template <>
 struct meta_for<6, 6, 6> {
   void operator()(int i, int j, int k,
-                  const ResultTable& leftResult,
-                  const ResultTable& rightResult,
+                  shared_ptr<const ResultTable> leftResult,
+                  shared_ptr<const ResultTable> rightResult,
                   bool leftOptional, bool rightOptional,
                   const std::vector<std::array<size_t, 2>>& joinColumns,
-                  ResultTable *result, int resultSize) const {
+                  ResultTable* result, int resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void) i;
     (void) j;
     (void) k;
     Engine::optionalJoin<vector<vector<Id>>,
         vector<vector<Id>>,
-        vector<Id>, 6>(leftResult._varSizeData,
-                       rightResult._varSizeData,
+        vector<Id>, 6>(leftResult->_varSizeData,
+                       rightResult->_varSizeData,
                        leftOptional, rightOptional,
                        joinColumns,
                        &result->_varSizeData,
@@ -210,17 +210,17 @@ void OptionalJoin::computeResult(ResultTable* result) const {
 
   AD_CHECK_GE(result->_nofColumns, _joinColumns.size());
 
-  const auto& leftResult = _left->getResult();
-  const auto& rightResult = _right->getResult();
+  const auto leftResult = _left->getResult();
+  const auto rightResult = _right->getResult();
 
   LOG(DEBUG) << "Computing optional join between results of size "
-             << leftResult.size() << " and " << rightResult.size() << endl;
+             << leftResult->size() << " and " << rightResult->size() << endl;
   LOG(DEBUG) << "Left side optional: " << _leftOptional
              << " right side optional: " << _rightOptional << endl;
 
   // Calls Engine::optionalJoin with the right values for the array sizes.
-  meta_for<1, 1, 1>()(leftResult._nofColumns,
-                      rightResult._nofColumns,
+  meta_for<1, 1, 1>()(leftResult->_nofColumns,
+                      rightResult->_nofColumns,
                       result->_nofColumns,
                       leftResult,
                       rightResult,

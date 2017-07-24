@@ -306,10 +306,10 @@ string Server::composeResponseJson(const ParsedQuery& query,
 
   // TODO(schnelle) we really should use a json library
   // such as https://github.com/nlohmann/json
-  const ResultTable& rt = qet.getResult();
+  shared_ptr<const ResultTable> rt = qet.getResult();
   _requestProcessingTimer.stop();
   off_t compResultUsecs = _requestProcessingTimer.usecs();
-  size_t resultSize = rt.size();
+  size_t resultSize = rt->size();
 
 
   std::ostringstream os;

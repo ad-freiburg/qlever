@@ -71,8 +71,6 @@ void TwoColumnJoin::computeResult(ResultTable* result) const {
   AD_CHECK(!result->_fixedSizeData);
   LOG(DEBUG) << "TwoColumnJoin result computation..." << endl;
 
-
-
   // Deal with the case that one of the lists is width two and
   // with join columns 0 1. This means we can use the filter method.
   if ((_left->getResultWidth() == 2 && _jc1Left == 0 && _jc2Left == 1) ||
@@ -81,8 +79,8 @@ void TwoColumnJoin::computeResult(ResultTable* result) const {
                         _jc2Right == 1);
     const auto& v = rightFilter ? _left : _right;
     const auto& filter = *static_cast<vector<array<Id, 2>>*>(
-        rightFilter ? _right->getResult()._fixedSizeData
-                    : _left->getResult()._fixedSizeData);
+        rightFilter ? _right->getResult()->_fixedSizeData
+                    : _left->getResult()->_fixedSizeData);
     size_t jc1 = rightFilter ? _jc1Left : _jc1Right;
     size_t jc2 = rightFilter ? _jc2Left : _jc2Right;
     result->_sortedBy = jc1;
@@ -95,29 +93,29 @@ void TwoColumnJoin::computeResult(ResultTable* result) const {
     if (result->_nofColumns == 2) {
       using ResType = vector<array<Id, 2>>;
       result->_fixedSizeData = new ResType();
-      getEngine().filter(*static_cast<ResType*>(toFilter._fixedSizeData),
+      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData),
                          jc1, jc2, filter,
                          static_cast<ResType*>(result->_fixedSizeData));
     } else if (result->_nofColumns == 3) {
       using ResType = vector<array<Id, 3>>;
       result->_fixedSizeData = new ResType();
-      getEngine().filter(*static_cast<ResType*>(toFilter._fixedSizeData),
+      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData),
                          jc1, jc2, filter,
                          static_cast<ResType*>(result->_fixedSizeData));
     } else if (result->_nofColumns == 4) {
       using ResType = vector<array<Id, 4>>;
       result->_fixedSizeData = new ResType();
-      getEngine().filter(*static_cast<ResType*>(toFilter._fixedSizeData),
+      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData),
                          jc1, jc2, filter,
                          static_cast<ResType*>(result->_fixedSizeData));
     } else if (result->_nofColumns == 5) {
       using ResType = vector<array<Id, 5>>;
       result->_fixedSizeData = new ResType();
-      getEngine().filter(*static_cast<ResType*>(toFilter._fixedSizeData),
+      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData),
                          jc1, jc2, filter,
                          static_cast<ResType*>(result->_fixedSizeData));
     } else {
-      getEngine().filter(toFilter._varSizeData, jc1, jc2, filter,
+      getEngine().filter(toFilter->_varSizeData, jc1, jc2, filter,
                          &result->_varSizeData);
     }
 

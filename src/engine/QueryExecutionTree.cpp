@@ -97,7 +97,7 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
                                              size_t offset,
                                              char sep) const {
   // They may trigger computation (but does not have to).
-  const ResultTable& res = getResult();
+  shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   vector<pair<size_t, OutputType>> validIndices;
   for (auto var : selectVars) {
@@ -117,30 +117,30 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
     }
   }
   if (validIndices.size() == 0) { return; }
-  if (res._nofColumns == 1) {
-    auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
+  if (res->_nofColumns == 1) {
+    auto data = static_cast<vector<array<Id, 1>>*>(res->_fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTable(*data, sep, offset, upperBound, validIndices, out);
-  } else if (res._nofColumns == 2) {
-    auto data = static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
+  } else if (res->_nofColumns == 2) {
+    auto data = static_cast<vector<array<Id, 2>>*>(res->_fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTable(*data, sep, offset, upperBound, validIndices, out);
-  } else if (res._nofColumns == 3) {
-    auto data = static_cast<vector<array<Id, 3>>*>(res._fixedSizeData);
+  } else if (res->_nofColumns == 3) {
+    auto data = static_cast<vector<array<Id, 3>>*>(res->_fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTable(*data, sep, offset, upperBound, validIndices, out);
-  } else if (res._nofColumns == 4) {
-    auto data = static_cast<vector<array<Id, 4>>*>(res._fixedSizeData);
+  } else if (res->_nofColumns == 4) {
+    auto data = static_cast<vector<array<Id, 4>>*>(res->_fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTable(*data, sep, offset, upperBound, validIndices, out);
-  } else if (res._nofColumns == 5) {
-    auto data = static_cast<vector<array<Id, 5>>*>(res._fixedSizeData);
+  } else if (res->_nofColumns == 5) {
+    auto data = static_cast<vector<array<Id, 5>>*>(res->_fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTable(*data, sep, offset, upperBound, validIndices, out);
   } else {
     size_t upperBound = std::min<size_t>(offset + limit,
-                                         res._varSizeData.size());
-    writeTable(res._varSizeData, sep, offset, upperBound, validIndices, out);
+                                         res->_varSizeData.size());
+    writeTable(res->_varSizeData, sep, offset, upperBound, validIndices, out);
   }
   LOG(DEBUG) << "Done creating readable result.\n";
 }
@@ -154,7 +154,7 @@ void QueryExecutionTree::writeResultToStreamAsJson(
     size_t maxSend) const {
   out << "[\r\n";
   // They may trigger computation (but does not have to).
-  const ResultTable& res = getResult();
+  shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   vector<pair<size_t, OutputType>> validIndices;
   for (auto var : selectVars) {
@@ -177,30 +177,30 @@ void QueryExecutionTree::writeResultToStreamAsJson(
     out << "]";
     return;
   }
-  if (res._nofColumns == 1) {
-    auto data = static_cast<vector<array<Id, 1>>*>(res._fixedSizeData);
+  if (res->_nofColumns == 1) {
+    auto data = static_cast<vector<array<Id, 1>>*>(res->_fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, maxSend, out);
-  } else if (res._nofColumns == 2) {
-    auto data = static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
+  } else if (res->_nofColumns == 2) {
+    auto data = static_cast<vector<array<Id, 2>>*>(res->_fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, maxSend, out);
-  } else if (res._nofColumns == 3) {
-    auto data = static_cast<vector<array<Id, 3>>*>(res._fixedSizeData);
+  } else if (res->_nofColumns == 3) {
+    auto data = static_cast<vector<array<Id, 3>>*>(res->_fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, maxSend, out);
-  } else if (res._nofColumns == 4) {
-    auto data = static_cast<vector<array<Id, 4>>*>(res._fixedSizeData);
+  } else if (res->_nofColumns == 4) {
+    auto data = static_cast<vector<array<Id, 4>>*>(res->_fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, maxSend, out);
-  } else if (res._nofColumns == 5) {
-    auto data = static_cast<vector<array<Id, 5>>*>(res._fixedSizeData);
+  } else if (res->_nofColumns == 5) {
+    auto data = static_cast<vector<array<Id, 5>>*>(res->_fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, maxSend, out);
   } else {
     size_t upperBound = std::min<size_t>(offset + limit,
-                                         res._varSizeData.size());
-    writeJsonTable(res._varSizeData, offset, upperBound, validIndices, maxSend,
+                                         res->_varSizeData.size());
+    writeJsonTable(res->_varSizeData, offset, upperBound, validIndices, maxSend,
                    out);
   }
   out << "]";
@@ -221,7 +221,7 @@ size_t QueryExecutionTree::getSizeEstimate() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
     if (_qec) {
       if (_type == QueryExecutionTree::SCAN && getResultWidth() == 1) {
-        _sizeEstimate = getResult().size();
+        _sizeEstimate = getResult()->size();
       } else {
         _sizeEstimate = _rootOperation->getSizeEstimate();
       }

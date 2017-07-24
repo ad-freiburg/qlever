@@ -227,10 +227,11 @@ void processQuery(QueryExecutionContext& qec, const string& query,
   qet.writeResultToStream(cout, pq._selectedVariables, limit, offset);
   t.stop();
   std::cout << "\nDone. Time: " << t.usecs() / 1000.0 << " ms\n";
-  std::cout << "\nNumber of matches (no limit): " << qet.getResult().size() <<
+  size_t numMatches = qet.getResult()->size();
+  std::cout << "\nNumber of matches (no limit): " << numMatches <<
   "\n";
   size_t effectiveLimit = atoi(pq._limit.c_str()) > 0 ? 
-    atoi(pq._limit.c_str()) : qet.getResult().size();
+    atoi(pq._limit.c_str()) : numMatches;
   std::cout << "\nNumber of matches (limit): " <<
-  std::min(qet.getResult().size(), effectiveLimit) << "\n";
+  std::min(numMatches, effectiveLimit) << "\n";
 }

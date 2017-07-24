@@ -35,15 +35,15 @@ string Distinct::asString(size_t indent) const {
 // _____________________________________________________________________________
 void Distinct::computeResult(ResultTable* result) const {
   LOG(DEBUG) << "Getting sub-result for distinct result computation..." << endl;
-  const ResultTable& subRes = _subtree->getResult();
+  shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Distinct result computation..." << endl;
-  result->_nofColumns = subRes._nofColumns;
-  switch (subRes._nofColumns) {
+  result->_nofColumns = subRes->_nofColumns;
+  switch (subRes->_nofColumns) {
     case 1: {
       typedef array<Id, 1> RT;
       auto res = new vector<RT>();
       result->_fixedSizeData = res;
-      getEngine().distinct(*static_cast<vector<RT>*>(subRes._fixedSizeData),
+      getEngine().distinct(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                            _keepIndices, res);
       break;
     }
@@ -51,7 +51,7 @@ void Distinct::computeResult(ResultTable* result) const {
       typedef array<Id, 2> RT;
       auto res = new vector<RT>();
       result->_fixedSizeData = res;
-      getEngine().distinct(*static_cast<vector<RT>*>(subRes._fixedSizeData),
+      getEngine().distinct(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                            _keepIndices, res);
       break;
     }
@@ -59,7 +59,7 @@ void Distinct::computeResult(ResultTable* result) const {
       typedef array<Id, 3> RT;
       auto res = new vector<RT>();
       result->_fixedSizeData = res;
-      getEngine().distinct(*static_cast<vector<RT>*>(subRes._fixedSizeData),
+      getEngine().distinct(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                            _keepIndices, res);
       break;
     }
@@ -67,7 +67,7 @@ void Distinct::computeResult(ResultTable* result) const {
       typedef array<Id, 4> RT;
       auto res = new vector<RT>();
       result->_fixedSizeData = res;
-      getEngine().distinct(*static_cast<vector<RT>*>(subRes._fixedSizeData),
+      getEngine().distinct(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                            _keepIndices, res);
       break;
     }
@@ -75,12 +75,12 @@ void Distinct::computeResult(ResultTable* result) const {
       typedef array<Id, 5> RT;
       auto res = new vector<RT>();
       result->_fixedSizeData = res;
-      getEngine().distinct(*static_cast<vector<RT>*>(subRes._fixedSizeData),
+      getEngine().distinct(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                            _keepIndices, res);
       break;
     }
     default: {
-      getEngine().distinct(subRes._varSizeData, _keepIndices,
+      getEngine().distinct(subRes->_varSizeData, _keepIndices,
                            &result->_varSizeData);
       break;
     }

@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 2.8.4)
 project(SparqlEngineDraft)
 
-
-
 # Check compiler versions:
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   # Check version. If empty, warn. If too old, error out:
@@ -39,8 +37,8 @@ set(LOG_LEVEL_DEBUG 4)
 set(LOG_LEVEL_TRACE 5)
 set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DLOGLEVEL=${LOG_LEVEL_DEBUG}")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DLOGLEVEL=${LOG_LEVEL_DEBUG}")
-
-
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DLOGLEVEL=${LOG_LEVEL_DEBUG}")
+set(CMAKE_REQUIRED_FLAGS "-fsanitize=thread")
 
 
 ################################

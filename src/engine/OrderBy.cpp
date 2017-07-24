@@ -41,47 +41,47 @@ string OrderBy::asString(size_t indent) const {
 void OrderBy::computeResult(ResultTable* result) const {
   LOG(DEBUG) << "Gettign sub-result for OrderBy result computation..." << endl;
   AD_CHECK(_sortIndices.size() > 0);
-  const ResultTable& subRes = _subtree->getResult();
+  shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "OrderBy result computation..." << endl;
-  result->_nofColumns = subRes._nofColumns;
-  switch (subRes._nofColumns) {
+  result->_nofColumns = subRes->_nofColumns;
+  switch (subRes->_nofColumns) {
     case 1: {
       auto res = new vector<array<Id, 1>>();
       result->_fixedSizeData = res;
-      *res = *static_cast<vector<array<Id, 1>>*>(subRes._fixedSizeData);
+      *res = *static_cast<vector<array<Id, 1>>*>(subRes->_fixedSizeData);
       getEngine().sort(*res, OBComp<array<Id, 1>>(_sortIndices));
     }
       break;
     case 2: {
       auto res = new vector<array<Id, 2>>();
       result->_fixedSizeData = res;
-      *res = *static_cast<vector<array<Id, 2>>*>(subRes._fixedSizeData);
+      *res = *static_cast<vector<array<Id, 2>>*>(subRes->_fixedSizeData);
       getEngine().sort(*res, OBComp<array<Id, 2>>(_sortIndices));
       break;
     }
     case 3: {
       auto res = new vector<array<Id, 3>>();
       result->_fixedSizeData = res;
-      *res = *static_cast<vector<array<Id, 3>>*>(subRes._fixedSizeData);
+      *res = *static_cast<vector<array<Id, 3>>*>(subRes->_fixedSizeData);
       getEngine().sort(*res, OBComp<array<Id, 3>>(_sortIndices));
       break;
     }
     case 4: {
       auto res = new vector<array<Id, 4>>();
       result->_fixedSizeData = res;
-      *res = *static_cast<vector<array<Id, 4>>*>(subRes._fixedSizeData);
+      *res = *static_cast<vector<array<Id, 4>>*>(subRes->_fixedSizeData);
       getEngine().sort(*res, OBComp<array<Id, 4>>(_sortIndices));
       break;
     }
     case 5: {
       auto res = new vector<array<Id, 5>>();
       result->_fixedSizeData = res;
-      *res = *static_cast<vector<array<Id, 5>>*>(subRes._fixedSizeData);
+      *res = *static_cast<vector<array<Id, 5>>*>(subRes->_fixedSizeData);
       getEngine().sort(*res, OBComp<array<Id, 5>>(_sortIndices));
       break;
     }
     default: {
-      result->_varSizeData = subRes._varSizeData;
+      result->_varSizeData = subRes->_varSizeData;
       getEngine().sort(result->_varSizeData,
                        OBComp<vector<Id>>(_sortIndices));
       break;
