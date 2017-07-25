@@ -13,10 +13,8 @@
 
 using std::list;
 using std::pair;
-using std::mutex;
 using std::shared_ptr;
 using std::make_shared;
-using std::lock_guard;
 
 namespace ad_utility {
 //! Associative array for almost arbitrary keys and values that acts as a cache.
@@ -31,15 +29,17 @@ namespace ad_utility {
 //! as full-text-query cache where one might want to get the best fit of any
 //! entry that can be used to filter the desired result from.
 //!
-//! This implementation provides thread safety for the cache itself but does
-//! not enforce read-only access to the cached values. This is so that the
-//! values may be used to block threads on their completion.
+//! This implementation provides thread safety for the cache itself and also
+//! enforces read-only access for all operations which can't guarantee only
+//! one thread getting write access. It uses shared_ptrs so as to ensure
+//! that deletes do not free in-use memory.
 template <class Key, class Value,
           class AccessMap = ad_utility::HashMap<
-              Key, typename list<pair<Key, shared_ptr<Value>>>::iterator>>
+              Key, typename list<pair<Key, shared_ptr<const Value>>>::iterator>>
 class LRUCache {
 private:
-  typedef pair<Key, shared_ptr<Value>> Entry;
+  typedef pair<Key, shared_ptr<const Value>> Entry;
+  typedef pair<shared_ptr<Value>, shared_ptr<const Value>> EmplacePair;
   typedef list<Entry> EntryList;
 
 public:
@@ -47,22 +47,26 @@ public:
   explicit LRUCache(size_t capacity)
       : _capacity(capacity), _data(), _accessMap(), _lock() {}
 
-  //! Get a value or default construct a new one.
-  //! If the value does not exist in the cache, a
-  //! a default Value is constructed and created is set to true. 
-  //! otherwise created is set to false. Using a created paramter allows
-  //! a threaded call to check if it needs to initialize the value in a
-  //! race free way. If we didn't make that explicit a newly created value
-  //! by another thread could not be distinguished from one created by the
-  //! current thread.
-  //! TODO(schnelle) add test
-  shared_ptr<Value> getOrCreate(const Key &key, bool* created) {
-    lock_guard<mutex> lock(_lock);
+  // tryEmplace allows for race-free adding of items to the cache. Iff no item
+  // in the cache is associated with the key a new item is created and
+  // a writeable reference is returned as the first element of the result pair
+  // and it is the callers responsibility to synchronize access when writing to
+  // it. If there already was an item associated with the key the first element
+  // is shared_ptr<Value>(nullptr) and the second provides read-only access.
+  //
+  // The second element of the pair always returns a valid read-only reference,
+  // either to the just created element or an existing element.
+  //
+  // This needs to happen in a single operation because otherwise we may find
+  // an item in the cash now but it may already be deleted when trying to
+  // retrieve  it in another operation.
+  template <class... Args> EmplacePair tryEmplace(const Key& key, Args &&... args) {
+    std::lock_guard<std::mutex> lock(_lock);
     typename AccessMap::const_iterator mapIt = _accessMap.find(key);
     if (mapIt == _accessMap.end()) {
-      *created = true;
       // Insert without taking mutex recursively
-      _data.push_front(Entry(key, make_shared<Value>()));
+      shared_ptr<Value> emplaced = make_shared<Value>(std::forward<Args>(args)...);
+      _data.emplace_front(key, emplaced);
       _accessMap[key] = _data.begin();
       if (_data.size() > _capacity) {
         // Remove the last element.
@@ -73,21 +77,19 @@ public:
         _data.pop_back();
       }
       assert(_data.size() <= _capacity);
-    } else {
-      *created = false;
-      // Move it to the front.
-      typename EntryList::iterator listIt = mapIt->second;
-      _data.splice(_data.begin(), _data, listIt);
-      _accessMap[key] = _data.begin();
+      return EmplacePair(emplaced, emplaced);
     }
-    assert(_accessMap.find(key)->second == _data.begin());
-    return _data.begin()->second;
+    // Move it to the front.
+    typename EntryList::iterator listIt = mapIt->second;
+    _data.splice(_data.begin(), _data, listIt);
+    _accessMap[key] = _data.begin();
+    return EmplacePair(shared_ptr<Value>(nullptr), _data.begin()->second);
   }
 
   //! Lookup a read-only value without creating a new one if non exists
   //! instead shared_ptr<const Value>(nullptr) is returned in that case
   shared_ptr<const Value> operator[](const Key &key) {
-    lock_guard<mutex> lock(_lock);
+    std::lock_guard<std::mutex> lock(_lock);
     typename AccessMap::const_iterator mapIt = _accessMap.find(key);
     if (mapIt == _accessMap.end()) {
       // Returning a null pointer allows to easily check if the element
@@ -99,14 +101,13 @@ public:
     typename EntryList::iterator listIt = mapIt->second;
     _data.splice(_data.begin(), _data, listIt);
     _accessMap[key] = _data.begin();
-    assert(_accessMap.find(key)->second == _data.begin());
-    return _data.begin()->second;
+    return _data.front().second;
   }
 
   //! Insert a key value pair to the cache.
-  void insert(const Key &key, Value value) {
-    lock_guard<mutex> lock(_lock);
-    _data.push_front(Entry(key, make_shared<Value>(std::move(value))));
+  void insert(const Key& key, Value value) {
+    std::lock_guard<std::mutex> lock(_lock);
+    _data.emplace_front(key, make_shared<const Value>(std::move(value)));
     _accessMap[key] = _data.begin();
     if (_data.size() > _capacity) {
       // Remove the last element.
@@ -121,7 +122,7 @@ public:
 
   //! Set the capacity.
   void setCapacity(const size_t nofElements) {
-    lock_guard<mutex> lock(_lock);
+    std::lock_guard<std::mutex> lock(_lock);
     _capacity = nofElements;
     while (_data.size() > _capacity) {
       // Remove the last element.
@@ -136,13 +137,13 @@ public:
 
   //! Checks if there is an entry with the given key.
   bool contains(const Key &key) {
-    lock_guard<mutex> lock(_lock);
+    std::lock_guard<std::mutex> lock(_lock);
     return _accessMap.count(key) > 0;
   }
 
   //! Clear the cache
   void clear() {
-    lock_guard<mutex> lock(_lock);
+    std::lock_guard<std::mutex> lock(_lock);
     // Since we are using shared_ptr this does not free the underlying
     // memory if it is still accessible through a previously returned
     // shared_ptr
@@ -156,6 +157,6 @@ private:
   AccessMap _accessMap;
   // TODO(schnelle): Once we switch to C++17
   // this should be a shared_mutex
-  mutex _lock;
+  std::mutex _lock;
 };
 }

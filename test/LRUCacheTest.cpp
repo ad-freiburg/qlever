@@ -11,7 +11,7 @@ using std::string;
 
 namespace ad_utility {
 // _____________________________________________________________________________
-TEST(LRUCacheTest, testTypicalusage) {
+TEST(LRUCacheTest, testTypicalUsage) {
   LRUCache<string, string> cache(5);
   cache.insert("1", "x");
   cache.insert("2", "xx");
@@ -29,19 +29,19 @@ TEST(LRUCacheTest, testTypicalusage) {
   ASSERT_FALSE(cache["non-existant"]);
 }
 // _____________________________________________________________________________
-TEST(LRUCacheTest, testGetOrCreate) {
+TEST(LRUCacheTest, testTryEmplace) {
   LRUCache<string, string> cache(5);
   cache.insert("1", "x");
   cache.insert("2", "xx");
-  bool created = false;
-  ASSERT_EQ(*cache.getOrCreate("2", &created), "xx");
-  ASSERT_FALSE(created);
-  ASSERT_EQ(*cache.getOrCreate("4", &created), "");
-  ASSERT_TRUE(created);
-  created = false;
-  *cache.getOrCreate("4", &created) += "foo";
-  ASSERT_EQ(*cache.getOrCreate("4", &created), "foo");
-  ASSERT_FALSE(created);
+  // tryEmplace returns a pair of shared_ptr where the first is non-const and
+  // only non-null if it was freshly inserted. That in turn converts to false
+  // in bool context
+  ASSERT_FALSE(cache.tryEmplace("2", "foo").first);
+  ASSERT_EQ(*cache.tryEmplace("4", "bar").first, "bar");
+  auto emplaced = cache.tryEmplace("5", "foo").first;
+  ASSERT_TRUE(emplaced);
+  *emplaced += "bar";
+  ASSERT_EQ(*cache["5"], "foobar");
 }
 
 // _____________________________________________________________________________

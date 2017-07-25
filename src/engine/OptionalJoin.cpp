@@ -228,7 +228,7 @@ void OptionalJoin::computeResult(ResultTable* result) const {
                       _joinColumns,
                       result,
                       result->_nofColumns);
-  result->_status = ResultTable::FINISHED;
+  result->finish();
   LOG(DEBUG) << "OptionalJoin result computation done." << endl;
 }
 

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <utility>
 
 #include "../util/Exception.h"
 #include "../util/Log.h"
@@ -12,6 +13,7 @@
 
 using std::endl;
 using std::shared_ptr;
+using std::pair;
 
 class Operation {
 public:
@@ -32,20 +34,21 @@ public:
   // Use existing results if they are already available, otherwise
   // trigger computation.
   shared_ptr<const ResultTable> getResult() const {
-    LOG(TRACE) << "Get result from cache (possibly empty)" << endl;
+    LOG(TRACE) << "Try to atomically emplace a new empty ResultTable" << endl;
     LOG(TRACE) << "Using key: \n" << asString() << endl;
-    bool uncomputed = false;
-    shared_ptr<ResultTable> result =
-        _executionContext->getCachedResultForQueryTree(asString(), &uncomputed);
-    if (uncomputed) {
-      LOG(TRACE) << "Result from cache is uncomputed. Compute it." << endl;
+    // TODO(schnelle) with C++17 we can use nice decomposition here
+    pair<shared_ptr<ResultTable>, shared_ptr<const ResultTable>> emplacePair =
+        _executionContext->getQueryTreeCache().tryEmplace(asString());
+    if (emplacePair.first) {
+      LOG(DEBUG) << "We were the first to emplace, need to compute result" << endl;
       // Passing the raw pointer here is ok as the result shared_ptr remains
       // in scope
-      computeResult(result.get());
+      computeResult(emplacePair.first.get());
+      return emplacePair.first;
     }
-    LOG(TRACE) << "Wait for result to be finished" << endl;
-    result->awaitFinished();
-    return result;
+    LOG(INFO) << "Result already (being) computed" << endl;
+    emplacePair.second->awaitFinished();
+    return emplacePair.second;
   }
 
   //! Set the QueryExecutionContext for this particular element.

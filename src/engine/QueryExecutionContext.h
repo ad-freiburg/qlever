@@ -31,9 +31,8 @@ public:
       _index(&index), _engine(&engine), _costFactors() {
   }
 
-  shared_ptr<ResultTable> getCachedResultForQueryTree(
-      const string& queryAsString, bool* uncomputed) {
-    return _subtreeCache.getOrCreate(queryAsString, uncomputed);
+  SubtreeCache& getQueryTreeCache() {
+    return _subtreeCache;
   }
 
   const Engine& getEngine() const {
