@@ -42,6 +42,10 @@ set(CMAKE_REQUIRED_FLAGS "-fsanitize=thread")
 
 
 ################################
+# Threading
+################################
+find_package (Threads)
+################################
 # GTEST
 ################################
 add_subdirectory(third_party/googletest/googletest)
@@ -80,16 +84,16 @@ configure_file(src/web/script.js script.js)
 
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
-target_link_libraries(IndexBuilderMain index)
+target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(SparqlEngineMain src/SparqlEngineMain.cpp)
-target_link_libraries (SparqlEngineMain engine)
+target_link_libraries (SparqlEngineMain engine ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(ServerMain src/ServerMain.cpp)
-target_link_libraries (ServerMain engine)
+target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(WriteIndexListsMain src/WriteIndexListsMain.cpp)
-target_link_libraries (WriteIndexListsMain engine)
+target_link_libraries (WriteIndexListsMain engine ${CMAKE_THREAD_LIBS_INIT})
 
 
 #add_executable(TextFilterComparison src/experiments/TextFilterComparison.cpp)

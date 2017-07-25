@@ -24,10 +24,9 @@ using ad_utility::Socket;
 //! The HTTP Sever used.
 class Server {
 public:
-  explicit Server(const int port)
-      :
-      _serverSocket(), _port(port), _index(), _engine(), _initialized(false) {
-  }
+  explicit Server(const int port, const int numThreads)
+      : _numThreads(numThreads), _serverSocket(), _port(port), _index(),
+        _engine(), _initialized(false) {}
 
   typedef ad_utility::HashMap<string, string> ParamValueMap;
 
@@ -41,6 +40,7 @@ public:
   void run();
 
 private:
+  const int _numThreads;
   Socket _serverSocket;
   int _port;
   Index _index;
@@ -49,36 +49,37 @@ private:
 
   bool _initialized;
 
-  void process(Socket* client, QueryExecutionContext* qec) const;
+  void runAcceptLoop(QueryExecutionContext* qec);
 
-  void serveFile(Socket* client, const string& requestedFile) const;
+  void process(Socket *client, QueryExecutionContext *qec) const;
 
-  ParamValueMap parseHttpRequest(const string& request) const;
+  void serveFile(Socket *client, const string &requestedFile) const;
 
-  string createQueryFromHttpParams(const ParamValueMap& params) const;
+  ParamValueMap parseHttpRequest(const string &request) const;
 
-  string createHttpResponse(const string& content,
-                            const string& contentType) const;
+  string createQueryFromHttpParams(const ParamValueMap &params) const;
+
+  string createHttpResponse(const string &content,
+                            const string &contentType) const;
 
   string create404HttpResponse() const;
   string create400HttpResponse() const;
 
-  string composeResponseJson(const ParsedQuery& query,
-                             const QueryExecutionTree& qet,
+  string composeResponseJson(const ParsedQuery &query,
+                             const QueryExecutionTree &qet,
                              size_t sendMax = MAX_NOF_ROWS_IN_RESULT) const;
 
-  string composeResponseSepValues(const ParsedQuery& query,
-                                  const QueryExecutionTree& qet,
+  string composeResponseSepValues(const ParsedQuery &query,
+                                  const QueryExecutionTree &qet,
                                   char sep) const;
 
-  string composeResponseJson(const string& query,
-                             const ad_semsearch::Exception& e) const;
+  string composeResponseJson(const string &query,
+                             const ad_semsearch::Exception &e) const;
 
-  string composeResponseJson(const string& query,
-                             const ParseException& e) const;
+  string composeResponseJson(const string &query,
+                             const ParseException &e) const;
 
   string composeStatsJson() const;
-
 
   mutable ad_utility::Timer _requestProcessingTimer;
 };

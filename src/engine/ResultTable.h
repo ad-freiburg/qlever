@@ -70,7 +70,8 @@ public:
 
   bool isFinished() const {
     lock_guard<mutex> lk(_cond_var_m);
-    return _status == ResultTable::FINISHED;
+    bool tmp = _status == ResultTable::FINISHED;
+    return tmp;
   }
 
   void awaitFinished() const {

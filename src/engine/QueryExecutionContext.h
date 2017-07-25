@@ -28,7 +28,7 @@ public:
 
   QueryExecutionContext(const Index& index, const Engine& engine) :
       _subtreeCache(NOF_SUBTREES_TO_CACHE),
-      _index(&index), _engine(&engine), _costFactors() {
+      _index(index), _engine(engine), _costFactors() {
   }
 
   SubtreeCache& getQueryTreeCache() {
@@ -36,11 +36,11 @@ public:
   }
 
   const Engine& getEngine() const {
-    return *_engine;
+    return _engine;
   }
 
   const Index& getIndex() const {
-    return *_index;
+    return _index;
   }
 
   void clearCache() {
@@ -57,8 +57,8 @@ public:
 
  private:
   SubtreeCache _subtreeCache;
-  const Index* _index;
-  const Engine* _engine;
+  const Index& _index;
+  const Engine& _engine;
   QueryPlanningCostFactors _costFactors;
 };
 

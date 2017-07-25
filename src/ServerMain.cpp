@@ -32,6 +32,7 @@ struct option options[] = {
   {"all-permutations", no_argument,       NULL, 'a'},
   {"unopt-optional",   no_argument,       NULL, 'u'},
   {"help",             no_argument,       NULL, 'h'},
+  {"worker-threads",   required_argument, NULL, 'j'},
   {NULL,               0,                 NULL, 0}
 };
 
@@ -58,6 +59,8 @@ void printUsage(char *execName) {
        << "The port on which to run the web interface." << endl;
   cout << "  " << std::setw(20) << "t, text" << std::setw(1) << "    "
        << "Enables the usage of text." << endl;
+  cout << "  " << std::setw(20) << "j, worker-threads" << std::setw(1) << "    "
+       << "Sets the number of worker threads to use" << endl;
   cout << "  " << std::setw(20) << "u, unopt-optional" << std::setw(1) << "    "
        << "Always place optional joins at the root of the query execution tree."
        << endl;
@@ -82,11 +85,12 @@ int main(int argc, char** argv) {
   bool allPermutations = false;
   bool optimizeOptionals = true;
   int port = -1;
+  int numThreads = 1;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "i:p:tlauh", options, NULL);
+    int c = getopt_long(argc, argv, "i:p:j:tlauh", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'i':
@@ -103,6 +107,9 @@ int main(int argc, char** argv) {
         break;
       case 'a':
         allPermutations = true;
+        break;
+      case 'j':
+        numThreads = atoi(optarg);
         break;
       case 'u':
         optimizeOptionals = false;
@@ -137,7 +144,7 @@ int main(int argc, char** argv) {
   cout << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
-    Server server(port);
+    Server server(port, numThreads);
     server.initialize(index, text, allPermutations, onDiskLiterals,
                       optimizeOptionals);
     server.run();

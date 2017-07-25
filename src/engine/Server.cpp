@@ -6,6 +6,7 @@
 #include <vector>
 #include <sstream>
 #include <algorithm>
+#include <thread>
 
 #include "../util/StringUtils.h"
 #include "../util/Log.h"
@@ -45,14 +46,21 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
 
 // _____________________________________________________________________________
 void Server::run() {
+  QueryExecutionContext qec(_index, _engine);
+  std::vector<std::thread> threads;
+  for(int i = 0; i < _numThreads; ++i) {
+    threads.emplace_back(&Server::runAcceptLoop, this, &qec);
+  }
+  for(std::thread& worker: threads) {
+    worker.join();
+  }
+}
+// _____________________________________________________________________________
+void Server::runAcceptLoop(QueryExecutionContext* qec) {
   if (!_initialized) {
     LOG(ERROR) << "Cannot start an uninitialized server!" << std::endl;
     exit(1);
   }
-  // For now, only use one QueryExecutionContext at all time.
-  // This may be changed for some implementations of multi threading.
-  // Cache(s) are associated with this execution context.
-  QueryExecutionContext qec(_index, _engine);
 
   // Loop and wait for queries. Run forever, for now.
   while (true) {
@@ -62,17 +70,15 @@ void Server::run() {
       << std::endl;
 
     ad_utility::Socket client;
+    // Concurrent accept used to be problematic because of the Thundering Herd
+    // problem but this should be fixed on modern OSs
     bool success = _serverSocket.acceptClient(&client);
     if (!success) {
       LOG(ERROR) << "Socket error while trying to accept client" << std::endl;
       continue;
     }
-    // Setting Keep Alive on the socket helps detect vanished clients
-    // instead of blocking operations idefinitely
-    client.setKeepAlive(true);
-    // TODO(buchholb): Spawn a new thread here / use a ThreadPool / etc.
     LOG(INFO) << "Incoming connection, processing..." << std::endl;
-    process(&client, &qec);
+    process(&client, qec);
     client.close();
   }
 }

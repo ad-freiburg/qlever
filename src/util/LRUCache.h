@@ -62,6 +62,7 @@ public:
   // retrieve  it in another operation.
   template <class... Args> EmplacePair tryEmplace(const Key& key, Args &&... args) {
     std::lock_guard<std::mutex> lock(_lock);
+    EmplacePair result;
     typename AccessMap::const_iterator mapIt = _accessMap.find(key);
     if (mapIt == _accessMap.end()) {
       // Insert without taking mutex recursively
@@ -77,31 +78,36 @@ public:
         _data.pop_back();
       }
       assert(_data.size() <= _capacity);
-      return EmplacePair(emplaced, emplaced);
+      result = EmplacePair(emplaced, emplaced);
+      return result;
     }
     // Move it to the front.
     typename EntryList::iterator listIt = mapIt->second;
     _data.splice(_data.begin(), _data, listIt);
     _accessMap[key] = _data.begin();
-    return EmplacePair(shared_ptr<Value>(nullptr), _data.begin()->second);
+    result = EmplacePair(shared_ptr<Value>(nullptr), _data.begin()->second);
+    return result;
   }
 
   //! Lookup a read-only value without creating a new one if non exists
   //! instead shared_ptr<const Value>(nullptr) is returned in that case
   shared_ptr<const Value> operator[](const Key &key) {
     std::lock_guard<std::mutex> lock(_lock);
+    shared_ptr<const Value> result;
     typename AccessMap::const_iterator mapIt = _accessMap.find(key);
     if (mapIt == _accessMap.end()) {
       // Returning a null pointer allows to easily check if the element
       // existed and crash misuses.
-      return shared_ptr<Value>(nullptr);
+      result = shared_ptr<Value>(nullptr);
+      return result;
     }
 
     // Move it to the front.
     typename EntryList::iterator listIt = mapIt->second;
     _data.splice(_data.begin(), _data, listIt);
     _accessMap[key] = _data.begin();
-    return _data.front().second;
+    result = _data.front().second;
+    return result;
   }
 
   //! Insert a key value pair to the cache.
