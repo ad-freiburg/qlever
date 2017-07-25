@@ -189,8 +189,8 @@ class File {
     size_t read(void* targetBuffer, size_t nofBytesToRead,
         off_t seekOffsetFromStart) {
       assert(_file);
-      if (!seek(seekOffsetFromStart, SEEK_SET)) return 0;
-      return read(targetBuffer, nofBytesToRead);
+      return pread(fileno(_file), targetBuffer,
+          nofBytesToRead, seekOffsetFromStart);
     }
 
     //! Returns the number of bytes from the beginning
