@@ -17,6 +17,7 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+#include <cstring>
 
 #include "./Log.h"
 
@@ -38,9 +39,10 @@ public:
     _buf = new char[RECIEVE_BUFFER_SIZE];
   }
 
-  // Destructor, close the socket if open.
+  // Destructor, do not close the socket automatically as the fd could have
+  // already been reused by another thread if close was called explicitly.
+  // Users of this interface really should close sockets explicitly
   ~Socket() {
-    ::close(_fd);
     delete[] _buf;
   }
 
@@ -113,7 +115,7 @@ public:
     socklen_t addrSize;
     addrSize = sizeof(clientAddr);
     client->_fd = ::accept(_fd, (struct sockaddr*) &clientAddr, &addrSize);
-    return client->isOpen();
+    return client->_fd >= 0;
   }
 
   //! State if the socket's file descriptor is valid.
@@ -134,7 +136,7 @@ public:
     if (nb != static_cast<int>(nofBytes)) {
       LOG(DEBUG) << "Could not send as much data as intended." << std::endl;
       if (nb == -1) {
-        LOG(DEBUG) << "Errno: " << errno << std::endl;
+        LOG(DEBUG) << "Error: " << std::strerror(errno) << std::endl;
         if (errno == 11 && timesRetry > 0) {
           LOG(DEBUG) << "Retrying " << timesRetry-- << " times " << std::endl;
           return send(data, nofBytes, timesRetry);
@@ -162,7 +164,7 @@ public:
       if (rv == 0) { break; }
       if (rv == -1) {
         if (errno != EAGAIN && errno != EWOULDBLOCK) {
-          LOG(WARN) << "Error during recv, errno: " << errno << std::endl;
+          LOG(WARN) << "Error during recv, error: " << std::strerror(errno) << std::endl;
           break;
         }
         continue;

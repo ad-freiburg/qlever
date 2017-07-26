@@ -7,6 +7,7 @@
 #include <sstream>
 #include <algorithm>
 #include <thread>
+#include <cstring>
 
 #include "../util/StringUtils.h"
 #include "../util/Log.h"
@@ -74,7 +75,7 @@ void Server::runAcceptLoop(QueryExecutionContext* qec) {
     // problem but this should be fixed on modern OSs
     bool success = _serverSocket.acceptClient(&client);
     if (!success) {
-      LOG(ERROR) << "Socket error while trying to accept client" << std::endl;
+      LOG(ERROR) << "Socket error in acceot" << std::strerror(errno) << std::endl;
       continue;
     }
     LOG(INFO) << "Incoming connection, processing..." << std::endl;
@@ -458,6 +459,7 @@ void Server::serveFile(Socket* client, const string& requestedFile) const {
     } else if (ad_utility::endsWith(requestedFile, ".js")) {
       contentType = "application/javascript";
     }
+    in.close();
   }
 
   size_t contentLength = contentString.size();
