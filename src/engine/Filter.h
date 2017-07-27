@@ -50,7 +50,7 @@ class Filter : public Operation {
           return _subtree->getSizeEstimate() / 1000;
         }
         if (_type == SparqlFilter::FilterType::NE) {
-          return _subtree->getSizeEstimate() / 4;
+          return _subtree->getSizeEstimate();
         } else {
           return _subtree->getSizeEstimate() / 50;
         }
