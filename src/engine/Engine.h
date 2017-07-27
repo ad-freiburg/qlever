@@ -448,9 +448,9 @@ private:
     // Cannot just switch l1 and l2 around because the order of
     // items in the result tuples is important.
     if (l1.size() / l2.size() > GALLOP_THRESHOLD) {
-      doGallopInnerJoinRightSmall<E, N, I, M, J>(l1, l2, result);
+      doGallopInnerJoinLeftLarge<E, N, I, M, J>(l1, l2, result);
     } else if (l2.size() / l1.size() > GALLOP_THRESHOLD) {
-      doGallopInnerJoinLeftSmall<E, N, I, M, J>(l1, l2, result);
+      doGallopInnerJoinRightLarge<E, N, I, M, J>(l1, l2, result);
     } else {
       // Intersect both lists.
       size_t i = 0;
@@ -487,7 +487,7 @@ private:
   }
 
   template<typename E, size_t N, size_t I, size_t M, size_t J>
-  static void doGallopInnerJoinRightSmall(
+  static void doGallopInnerJoinRightLarge(
       const vector<array<E, N>>& l1, const vector<array<E, M>>& l2,
       vector<array<E, (N + M - 1)>>* result) {
     LOG(DEBUG) << "Galloping case.\n";
@@ -525,7 +525,7 @@ private:
   };
 
   template<typename E, size_t N, size_t I, size_t M, size_t J>
-  static void doGallopInnerJoinLeftSmall(
+  static void doGallopInnerJoinLeftLarge(
       const vector<array<E, N>>& l1, const vector<array<E, M>>& l2,
       vector<array<E, (N + M - 1)>>* result) {
     LOG(DEBUG) << "Galloping case.\n";

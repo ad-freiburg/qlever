@@ -42,7 +42,7 @@ string QueryExecutionTree::asString(size_t indent) {
          << indentStr << "  qet-width: "
          << getResultWidth()
          << " ";
-      if (LOGLEVEL >= DEBUG && _qec) {
+      if (LOGLEVEL >= TRACE && _qec) {
         os << " [estimated size: " << getSizeEstimate() << "]";
         os << " [multiplicities: ";
         for (size_t i = 0; i < getResultWidth(); ++i) {
