@@ -22,6 +22,9 @@ static const size_t USE_BLOCKS_INDEX_SIZE_TRESHOLD = 20 * 1000;
 
 static const size_t IN_CONTEXT_CARDINALITY_ESTIMATE = 1000 * 1000 * 1000;
 
+static const size_t GALLOP_THRESHOLD = 1000;
+
+
 static const char IN_CONTEXT_RELATION[] = "<in-text>";
 static const char IN_CONTEXT_RELATION_NS[] = ":in-text";
 static const char HAS_CONTEXT_RELATION[] = "<has-text>";

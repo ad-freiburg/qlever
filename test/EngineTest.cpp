@@ -46,6 +46,33 @@ TEST(EngineTest, joinTest) {
   ASSERT_EQ(4u, res[4][0]);
   ASSERT_EQ(1u, res[4][1]);
   ASSERT_EQ(2u, res[4][2]);
+
+  res.clear();
+  for (size_t i = 1; i <= 10000; ++i) {
+    b.push_back(array<Id, 2>{{4 + i, 2 + i}});
+  }
+  a.push_back(array<Id, 2>{{400000, 200000}});
+  b.push_back(array<Id, 2>{{400000, 200000}});
+  e.join(a, 0, b, 0, &res);
+  ASSERT_EQ(6u, res.size());
+
+  a.clear();
+  b.clear();
+  res.clear();
+
+  for (size_t i = 1; i <= 10000; ++i) {
+    a.push_back(array<Id, 2>{{4 + i, 2 + i}});
+  }
+  a.push_back(array<Id, 2>{{40000, 200000}});
+  b.push_back(array<Id, 2>{{40000, 200000}});
+
+  for (size_t i = 1; i <= 10000; ++i) {
+    a.push_back(array<Id, 2>{{40000 + i, 2 + i}});
+  }
+  a.push_back(array<Id, 2>{{4000001, 200000}});
+  b.push_back(array<Id, 2>{{4000001, 200000}});
+  e.join(a, 0, b, 0, &res);
+  ASSERT_EQ(2u, res.size());
 };
 
 int main(int argc, char** argv) {
