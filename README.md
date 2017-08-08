@@ -13,7 +13,12 @@ With this, it is possible to answer queries like the following one for astronaut
     } ORDER BY DESC(SCORE(?t))
     
 This Readme sets you up to use the engine and to quickly build and query your own index.
-If you're interested in advanced topics, we will link our research paper, which is currently still under review.
+
+## Research paper
+
+Hurray :tada:, our paper on QLever has been accepted to [CIKM 2017](http://cikm2017.org/)! Fortunately the publisher allows us to publish the paper on our own homepage and **we will do so as soon as the camera-ready version is done**.
+
+The paper describes the research behind QLever, how it works, and most importantly contains an evaluation where we compare QLever to state-of-the-art SPARQL engines. Query times are competitive and often faster on the pure SPARQL queries, and several orders of magnitude faster on the SPARQL+Text queries.
 
 # How to use
 
