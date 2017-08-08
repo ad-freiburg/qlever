@@ -7,9 +7,7 @@
 #include "./QueryExecutionTree.h"
 #include "TextOperationWithFilter.h"
 
-
 using std::string;
-
 
 // _____________________________________________________________________________
 size_t TextOperationWithFilter::getResultWidth() const {
@@ -51,7 +49,8 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
       result->_fixedSizeData = new vector<array<Id, 3>>;
       getExecutionContext()->getIndex().getFilteredECListForWords(
           _words,
-          *static_cast<vector<array<Id, 1>>*>(_filterResult->getResult()._fixedSizeData),
+          *static_cast<vector<array<Id,
+                                    1>>*>(_filterResult->getResult()._fixedSizeData),
           _nofVars,
           _textLimit,
           *reinterpret_cast<vector<array<Id, 3>>*>(result->_fixedSizeData));
@@ -59,7 +58,8 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
       result->_fixedSizeData = new vector<array<Id, 4>>;
       getExecutionContext()->getIndex().getFilteredECListForWords(
           _words,
-          *static_cast<vector<array<Id, 1>>*>(_filterResult->getResult()._fixedSizeData),
+          *static_cast<vector<array<Id,
+                                    1>>*>(_filterResult->getResult()._fixedSizeData),
           _nofVars,
           _textLimit,
           *reinterpret_cast<vector<array<Id, 4>>*>(result->_fixedSizeData));
@@ -67,14 +67,16 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
       result->_fixedSizeData = new vector<array<Id, 5>>;
       getExecutionContext()->getIndex().getFilteredECListForWords(
           _words,
-          *static_cast<vector<array<Id, 1>>*>(_filterResult->getResult()._fixedSizeData),
+          *static_cast<vector<array<Id,
+                                    1>>*>(_filterResult->getResult()._fixedSizeData),
           _nofVars,
           _textLimit,
           *reinterpret_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
     } else {
       getExecutionContext()->getIndex().getFilteredECListForWords(
           _words,
-          *static_cast<vector<array<Id, 1>>*>(_filterResult->getResult()._fixedSizeData),
+          *static_cast<vector<array<Id,
+                                    1>>*>(_filterResult->getResult()._fixedSizeData),
           _nofVars,
           _textLimit,
           result->_varSizeData);
@@ -85,7 +87,8 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
       result->_fixedSizeData = new vector<array<Id, 4>>;
       getExecutionContext()->getIndex().getFilteredECListForWords(
           _words,
-          *static_cast<vector<array<Id, 2>>*>(_filterResult->getResult()._fixedSizeData),
+          *static_cast<vector<array<Id,
+                                    2>>*>(_filterResult->getResult()._fixedSizeData),
           _filterColumn,
           _nofVars,
           _textLimit,
@@ -94,7 +97,8 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
       result->_fixedSizeData = new vector<array<Id, 5>>;
       getExecutionContext()->getIndex().getFilteredECListForWords(
           _words,
-          *static_cast<vector<array<Id, 2>>*>(_filterResult->getResult()._fixedSizeData),
+          *static_cast<vector<array<Id,
+                                    2>>*>(_filterResult->getResult()._fixedSizeData),
           _filterColumn,
           _nofVars,
           _textLimit,
@@ -102,7 +106,8 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
     } else {
       getExecutionContext()->getIndex().getFilteredECListForWords(
           _words,
-          *static_cast<vector<array<Id, 2>>*>(_filterResult->getResult()._fixedSizeData),
+          *static_cast<vector<array<Id,
+                                    2>>*>(_filterResult->getResult()._fixedSizeData),
           _filterColumn,
           _nofVars,
           _textLimit,
@@ -114,7 +119,8 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
       result->_fixedSizeData = new vector<array<Id, 5>>;
       getExecutionContext()->getIndex().getFilteredECListForWords(
           _words,
-          *static_cast<vector<array<Id, 3>>*>(_filterResult->getResult()._fixedSizeData),
+          *static_cast<vector<array<Id,
+                                    3>>*>(_filterResult->getResult()._fixedSizeData),
           _filterColumn,
           _nofVars,
           _textLimit,
@@ -122,7 +128,8 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
     } else {
       getExecutionContext()->getIndex().getFilteredECListForWords(
           _words,
-          *static_cast<vector<array<Id, 3>>*>(_filterResult->getResult()._fixedSizeData),
+          *static_cast<vector<array<Id,
+                                    3>>*>(_filterResult->getResult()._fixedSizeData),
           _filterColumn,
           _nofVars,
           _textLimit,
@@ -131,7 +138,8 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
   } else if (_filterResult->getResultWidth() == 4) {
     getExecutionContext()->getIndex().getFilteredECListForWords(
         _words,
-        *static_cast<vector<array<Id, 4>>*>(_filterResult->getResult()._fixedSizeData),
+        *static_cast<vector<array<Id,
+                                  4>>*>(_filterResult->getResult()._fixedSizeData),
         _filterColumn,
         _nofVars,
         _textLimit,
@@ -139,7 +147,8 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
   } else if (_filterResult->getResultWidth() == 5) {
     getExecutionContext()->getIndex().getFilteredECListForWords(
         _words,
-        *static_cast<vector<array<Id, 5>>*>(_filterResult->getResult()._fixedSizeData),
+        *static_cast<vector<array<Id,
+                                  5>>*>(_filterResult->getResult()._fixedSizeData),
         _filterColumn,
         _nofVars,
         _textLimit,
@@ -156,7 +165,6 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
   result->_status = ResultTable::FINISHED;
   LOG(DEBUG) << "TextOperationWithFilter result computation done." << endl;
 }
-
 
 // _____________________________________________________________________________
 float TextOperationWithFilter::getMultiplicity(size_t col) {
@@ -178,8 +186,8 @@ void TextOperationWithFilter::computeMultiplicities() {
       if (_executionContext) {
         nofEntitiesSingleVar =
             _executionContext->getIndex().getSizeEstimate(_words) *
-            std::min(float(_textLimit),
-                     _executionContext->getIndex().getAverageNofEntityContexts());
+                std::min(float(_textLimit),
+                         _executionContext->getIndex().getAverageNofEntityContexts());
       } else {
         nofEntitiesSingleVar = 10000 * 0.8;
       }
@@ -187,7 +195,12 @@ void TextOperationWithFilter::computeMultiplicities() {
           pow(nofEntitiesSingleVar, _nofVars - 1));
     }
 
-    assert(multiplicitiesNoFilter.size() > 2);
+    if (multiplicitiesNoFilter.size() <= 2) {
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+               "One (out of more) reasons for this problem is if you connected"
+                   " a text record variable to other variables with"
+                   " a non-text predicate (like in-text or has-text)");
+    }
 
     // Like joins
     float _leftJcM = multiplicitiesNoFilter[2];
@@ -216,14 +229,14 @@ size_t TextOperationWithFilter::getSizeEstimate() {
       // plus join.
       double nofEntitiesSingleVar =
           _executionContext->getIndex().getSizeEstimate(_words) *
-          std::min(float(_textLimit),
-                   _executionContext->getIndex().getAverageNofEntityContexts());
+              std::min(float(_textLimit),
+                       _executionContext->getIndex().getAverageNofEntityContexts());
 
       auto estNoFil = static_cast<size_t>(pow(nofEntitiesSingleVar, _nofVars));
 
       size_t nofDistinctFilter = static_cast<size_t>(
           _filterResult->getSizeEstimate() /
-          _filterResult->getMultiplicity(_filterColumn));
+              _filterResult->getMultiplicity(_filterColumn));
 
       float joinColMultiplicity = getMultiplicity(
           2 + (_nofVars - 1) + _filterColumn);
@@ -231,8 +244,8 @@ size_t TextOperationWithFilter::getSizeEstimate() {
       _sizeEstimate = std::max(size_t(1), static_cast<size_t>(
           _executionContext->getCostFactor(
               "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR") *
-          joinColMultiplicity *
-          std::min(nofDistinctFilter, estNoFil)));
+              joinColMultiplicity *
+              std::min(nofDistinctFilter, estNoFil)));
     } else {
       _sizeEstimate = size_t(10000 * 0.8);
     }
@@ -249,11 +262,12 @@ size_t TextOperationWithFilter::getCostEstimate() {
     return static_cast<size_t>(
         _executionContext->getCostFactor("FILTER_PUNISH") * (
             getSizeEstimate() * _nofVars +
-            _filterResult->getSizeEstimate() *
-            _executionContext->getCostFactor("HASH_MAP_OPERATION_COST") +
-            _filterResult->getCostEstimate()));
+                _filterResult->getSizeEstimate() *
+                    _executionContext->getCostFactor("HASH_MAP_OPERATION_COST")
+                +
+                    _filterResult->getCostEstimate()));
   } else {
     return _filterResult->getSizeEstimate() * 2 +
-           _filterResult->getCostEstimate();
+        _filterResult->getCostEstimate();
   }
 }

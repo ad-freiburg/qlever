@@ -731,7 +731,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
               vcmap[it->first] = colN++;
             }
           }
-          assert(colN == textPlan._qet.get()->getResultWidth() - 1);
           for (auto it = filterPlan._qet.get()->getVariableColumnMap().begin();
                it != filterPlan._qet.get()->getVariableColumnMap().end();
                ++it) {
@@ -1008,9 +1007,7 @@ void QueryPlanner::applyFiltersIfPossible(
 
         tree.setVariableColumns(plan._qet.get()->getVariableColumnMap());
         tree.setContextVars(plan._qet.get()->getContextVars());
-        if (replace ||
-            row[n]._qet.get()->getType()
-            != QueryExecutionTree::TEXT_WITHOUT_FILTER) {
+        if (replace) {
           row[n] = newPlan;
         } else {
           row.push_back(newPlan);
