@@ -2,6 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+//! CAREFUL, THIS FILE IS NOT USUALLY USED FOR QLEVER!
+//! It has been added to support various experiments evolving typical datasets
+//! e.g., for use in student projects.
 #include <stdlib.h>
 #include <getopt.h>
 #include <string>
