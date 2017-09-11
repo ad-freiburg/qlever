@@ -12,7 +12,7 @@ bifc_isql_port = "1113"
 bifc_inc_isql_port = "1114"
 virtuso_isql_user = "dba"
 rdf3x_run_binary = "/home/buchholb/rdf3x-0.3.8/bin/rdf3xquery"
-rdf3x_db = "/local/raid/ad/buchholb/eval/rdf3x/wikipedia-freebase.combined.db"
+rdf3x_db = "/local/raid/ad/buchholb/eval/rdf3x/wikipedia-fbeasy.contains.db"
 #my_index = "/local/raid/ad/buchholb/eval/wikipedia-fbeasy.withstopwords"
 my_index = "/local/raid/ad/buchholb/wikipedia-fbeasy/wikipedia-fbeasy"
 my_binary = "/home/buchholb/SparqlEngine/build/SparqlEngineMain"
@@ -91,7 +91,15 @@ def rewrite_for_rdf3x(q):
             e2 = c[c.find('!=') + 2: c.find(')')].strip()
             new_clauses.append(' FILTER(!(' + e1 + '=' + e2 + ')) ')
         else:
-            new_clauses.append(c)
+            if "<in-text>" in c:
+                s,p,o = c.strip().split(' ');
+                if "<word:" in s:
+                    p = "<contains-word>"
+                else:
+                    p = "<contains-entity>"
+                new_clauses.append(' '.join(['', o, p, s, '']))
+            else:
+                new_clauses.append(c)
     if 'OFFSET' in mod:
         print('Inexpressible in OFFSET clause in rdf3x: ' + mod, file=sys.stderr)
         return 'NOT POSSIBLE: ' + q.strip()

@@ -38,7 +38,7 @@ semse-np_republics-former-yugoslavia	SELECT ?x WHERE { ?x <is-a> <Country> . ?x 
 semse-np_revolutionaries-1959-cuba	SELECT ?x WHERE { ?x <is-a> <Revolutionary> . ?x <in-text> ?c . <word:cuba> <in-text> ?c . <word:1959> <in-text> ?c2 . ?x <in-text> ?c2 }
 semse-np_states-border-oklahoma	SELECT ?x WHERE { ?x <is-a> <US_State> . ?x <in-text> ?c . <word:border> <in-text> ?c . <Oklahoma> <in-text> ?c }
 semse-np_ten-ancient-greek-city-kingdoms-cyprus	SELECT ?x WHERE { ?x <is-a> <City/Town/Village> . ?x <in-text> ?c . <word:greek> <in-text> ?c . <word:ancient> <in-text> ?c . <word:cyprus> <in-text> ?c }
-semse-np_first-13-american-states	SELECT ?x ?val_d WHERE { ?x <is-a> <US_State> . ?x <Date_founded> ?val_d } ORDER BY ?val_d LIMIT 13
+semse-np_first-13-american-states	SELECT ?x ?vald WHERE { ?x <is-a> <US_State> . ?x <Date_founded> ?vald } ORDER BY ?vald LIMIT 13
 semse-np_four-companions-prophet	SELECT ?x WHERE { ?x <is-a> <Person> . ?x <in-text> ?c . <word:companions> <in-text> ?c . <word:prophet> <in-text> ?c }
 semse-np_twelves-tribes-israel	SELECT ?x WHERE { ?x <is-a> <Location> . ?x <in-text> ?c . <word:twelve> <in-text> ?c . <word:tribes> <in-text> ?c . <word:israel> <in-text> ?c }
 semse-np_books-paul-of-tarsus	SELECT ?x WHERE { ?x <is-a> <Book> . ?x <in-text> ?c . <word:paul> <in-text> ?c . <word:tarsus> <in-text> ?c }
