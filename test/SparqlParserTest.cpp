@@ -166,7 +166,7 @@ TEST(ParserTest, testFilterWithoutDot) {
           " ?0 fb:government.government_position_held.office_holder ?1 .\n"
           " FILTER (?1 != fb:m.0fkvn)\n"
           " FILTER (?1 != fb:m.0vmt)\n"
-          " FILTER (?1 != fb:m.018mts) \n"
+          "FILTER (?1 != fb:m.018mts) \n"
           "} LIMIT 300");
   pq.expandPrefixes();
   ASSERT_EQ(1u, pq._prefixes.size());

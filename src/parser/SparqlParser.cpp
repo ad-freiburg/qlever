@@ -129,12 +129,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
                    "Filter without closing parenthesis.");
         }
         filters.push_back(inner.substr(k, end - k + 1));
-        size_t posOfDot = inner.find('.', end);
-        size_t posOfSpace = inner.find(' ', end);
-        size_t posOfDelim = (posOfDot == string::npos ? posOfSpace : posOfDot);
-        if (posOfSpace != string::npos) {
-          posOfDelim = std::min(posOfDot, posOfSpace);
-        }
+        size_t posOfDelim = inner.find_first_of(". \t\n", end + 1);
         start = (posOfDelim == string::npos ? end + 1 : posOfDelim + 1);
         continue;
       }
