@@ -947,31 +947,30 @@ void QueryPlanner::applyFiltersIfPossible(
   // Finally, the replace flag can be set to enforce that all filters are applied.
   // This should be done for the last row in the DPTab so that no filters are missed.
   for (size_t n = 0; n < row.size(); ++n) {
-    const auto& plan = row[n];
-    if (plan._qet->getType() == QueryExecutionTree::SCAN &&
-        plan._qet->getResultWidth() == 3) {
+    if (row[n]._qet->getType() == QueryExecutionTree::SCAN &&
+        row[n]._qet->getResultWidth() == 3) {
       // Do not apply filters to dummies!
       continue;
     }
     for (size_t i = 0; i < filters.size(); ++i) {
-      if (((plan._idsOfIncludedFilters >> i) & 1) != 0) {
+      if (((row[n]._idsOfIncludedFilters >> i) & 1) != 0) {
         continue;
       }
-      if (plan._qet.get()->varCovered(filters[i]._lhs) &&
+      if (row[n]._qet.get()->varCovered(filters[i]._lhs) &&
           (!isVariable(filters[i]._rhs) ||
-           plan._qet.get()->varCovered(filters[i]._rhs))) {
+              row[n]._qet.get()->varCovered(filters[i]._rhs))) {
         // Apply this filter.
         SubtreePlan newPlan(_qec);
-        newPlan._idsOfIncludedFilters = plan._idsOfIncludedFilters;
+        newPlan._idsOfIncludedFilters = row[n]._idsOfIncludedFilters;
         newPlan._idsOfIncludedFilters |= (1 << i);
-        newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
+        newPlan._idsOfIncludedNodes = row[n]._idsOfIncludedNodes;
         auto& tree = *newPlan._qet.get();
         if (isVariable(filters[i]._rhs)) {
           std::shared_ptr<Operation>
-              filter(new Filter(_qec, plan._qet, filters[i]._type,
-                                plan._qet.get()->getVariableColumn(
+              filter(new Filter(_qec, row[n]._qet, filters[i]._type,
+                                row[n]._qet.get()->getVariableColumn(
                                     filters[i]._lhs),
-                                plan._qet.get()->getVariableColumn(
+                                row[n]._qet.get()->getVariableColumn(
                                     filters[i]._rhs)));
           tree.setOperation(QueryExecutionTree::FILTER, filter);
         } else {
@@ -997,16 +996,16 @@ void QueryPlanner::applyFiltersIfPossible(
             }
           }
           std::shared_ptr<Operation>
-              filter(new Filter(_qec, plan._qet, filters[i]._type,
-                                plan._qet.get()->getVariableColumn(
+              filter(new Filter(_qec, row[n]._qet, filters[i]._type,
+                                row[n]._qet.get()->getVariableColumn(
                                     filters[i]._lhs),
                                 std::numeric_limits<size_t>::max(),
                                 entityId));
           tree.setOperation(QueryExecutionTree::FILTER, filter);
         }
 
-        tree.setVariableColumns(plan._qet.get()->getVariableColumnMap());
-        tree.setContextVars(plan._qet.get()->getContextVars());
+        tree.setVariableColumns(row[n]._qet.get()->getVariableColumnMap());
+        tree.setContextVars(row[n]._qet.get()->getContextVars());
         if (replace) {
           row[n] = newPlan;
         } else {

@@ -156,6 +156,36 @@ TEST(ParserTest, testParse) {
 
 };
 
+TEST(ParserTest, testFilterWithoutDot) {
+  ParsedQuery pq = SparqlParser::parse(
+      "PREFIX fb: <http://rdf.freebase.com/ns/>\n"
+          "\n"
+          "SELECT DISTINCT ?1 WHERE {\n"
+          " fb:m.0fkvn fb:government.government_office_category.officeholders ?0 .\n"
+          " ?0 fb:government.government_position_held.jurisdiction_of_office fb:m.0vmt .\n"
+          " ?0 fb:government.government_position_held.office_holder ?1 .\n"
+          " FILTER (?1 != fb:m.0fkvn)\n"
+          " FILTER (?1 != fb:m.0vmt)\n"
+          " FILTER (?1 != fb:m.018mts) \n"
+          "} LIMIT 300");
+  pq.expandPrefixes();
+  ASSERT_EQ(1u, pq._prefixes.size());
+  ASSERT_EQ(1u, pq._selectedVariables.size());
+  ASSERT_EQ(3u, pq._whereClauseTriples.size());
+  ASSERT_EQ(3u, pq._filters.size());
+  ASSERT_EQ("?1", pq._filters[0]._lhs);
+  ASSERT_EQ("<http://rdf.freebase.com/ns/m.0fkvn>", pq._filters[0]._rhs);
+  ASSERT_EQ(SparqlFilter::FilterType::NE, pq._filters[0]._type);
+  ASSERT_EQ("?1", pq._filters[1]._lhs);
+  ASSERT_EQ("<http://rdf.freebase.com/ns/m.0vmt>", pq._filters[1]._rhs);
+  ASSERT_EQ(SparqlFilter::FilterType::NE, pq._filters[1]._type);
+  ASSERT_EQ("?1", pq._filters[2]._lhs);
+  ASSERT_EQ("<http://rdf.freebase.com/ns/m.018mts>", pq._filters[2]._rhs);
+  ASSERT_EQ(SparqlFilter::FilterType::NE, pq._filters[2]._type);
+}
+
+
+
 TEST(ParserTest, testExpandPrefixes) {
   ParsedQuery pq = SparqlParser::parse(
       "PREFIX : <http://rdf.myprefix.com/>\n"

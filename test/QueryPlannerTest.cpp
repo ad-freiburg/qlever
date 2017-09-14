@@ -903,6 +903,33 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
 }
 
 
+TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
+  try {
+    ParsedQuery pq = SparqlParser::parse(
+        "PREFIX fb: <http://rdf.freebase.com/ns/>\n"
+    "SELECT DISTINCT ?1 ?0 WHERE {\n"
+        "fb:m.0fkvn fb:government.government_office_category.officeholders ?0 .\n"
+        "?0 fb:government.government_position_held.jurisdiction_of_office fb:m.0vmt .\n"
+        "?0 fb:government.government_position_held.office_holder ?1 .\n"
+        "FILTER (?1 != fb:m.0fkvn) .\n"
+        "FILTER (?1 != fb:m.0vmt) .\n"
+        "FILTER (?1 != fb:m.018mts)"
+    "} LIMIT 300");
+    pq.expandPrefixes();
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_TRUE(qet.varCovered("?1"));
+    ASSERT_TRUE(qet.varCovered("?0"));
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

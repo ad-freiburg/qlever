@@ -122,7 +122,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
     size_t k = start;
     while (inner[k] == ' ' || inner[k] == '\t' || inner[k] == '\n') { ++k; }
     if (inner[k] == 'F') {
-      if (inner.substr(k, 6) == "FILTER") {
+      if (inner.substr(k, 6) == "FILTER" || inner.substr(k, 6) == "filter") {
         size_t end = inner.find(')', k);
         if (end == string::npos) {
           AD_THROW(ad_semsearch::Exception::BAD_QUERY,
@@ -130,7 +130,12 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
         }
         filters.push_back(inner.substr(k, end - k + 1));
         size_t posOfDot = inner.find('.', end);
-        start = (posOfDot == string::npos ? end + 1 : posOfDot + 1);
+        size_t posOfSpace = inner.find(' ', end);
+        size_t posOfDelim = (posOfDot == string::npos ? posOfSpace : posOfDot);
+        if (posOfSpace != string::npos) {
+          posOfDelim = std::min(posOfDot, posOfSpace);
+        }
+        start = (posOfDelim == string::npos ? end + 1 : posOfDelim + 1);
         continue;
       }
     }
