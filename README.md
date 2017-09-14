@@ -16,7 +16,7 @@ This Readme sets you up to use the engine and to quickly build and query your ow
 
 ## Research paper
 
-Our paper ["QLever: a Query Engine for Efficient SPARQL+Text Search"]((http://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf)) has been accepted to [CIKM 2017](http://cikm2017.org/) and will appear in the conference proceeding! Fortunately the publisher allows us to publish the paper on our homepage.
+Our paper [QLever: A Query Engine for Efficient SPARQL+Text Search]((http://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf)) has been accepted to [CIKM 2017](http://cikm2017.org/) and will appear in the conference proceeding! Fortunately the publisher allows us to publish the paper on our homepage.
 
 The paper describes the research behind QLever, how it works, and most importantly contains an evaluation where we compare QLever to state-of-the-art SPARQL engines. Query times are competitive and often faster on the pure SPARQL queries, and several orders of magnitude faster on the SPARQL+Text queries.
 
