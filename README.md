@@ -1,15 +1,15 @@
 # QLever
 
 QLever (pronounced "clever") is a query engine for efficient combined search on a knowledge base and a text corpus, in which named entities from the knowledge base have been identified.
-The query language is SPARQL extended by an `in-text` predicate, where `?x <in-text> ?t` means that the word or entity `?x` occurs in text record `?t`.
+The query language is SPARQL extended by two QLever-specific predicates `ql:contains-entity` and `ql:contains-word`, which can express the occurrence of an entity or word (the object of the predicate) in a text record (the subject of the predicate).
 Pure SPARQL is supported as well.
 
 With this, it is possible to answer queries like the following one for astronauts who walked on the moon:
 
     SELECT ?a TEXT(?t) SCORE(?t) WHERE {
         ?a <is-a> <Astronaut> . 
-        ?a <in-text> ?t .
-        ?t <in-text> "walk* moon"
+        ?t ql:contains-entity ?a .
+        ?t ql:contains-word "walk* moon"
     } ORDER BY DESC(SCORE(?t))
     
 This Readme sets you up to use the engine and to quickly build and query your own index.
@@ -192,12 +192,12 @@ A query for plants with edible leaves:
 
     SELECT ?plant WHERE { 
         ?plant <is-a> <Plant> . 
-        ?plant <in-text> ?t . 
-        ?t <in-text> "'edible' 'leaves'"
+        ?t ql:contains-entity ?plant . 
+        ?t ql:contains-word "'edible' 'leaves'"
     } 
     
-The special relation `<in-text>` to state that results for `?plant` have to occur in a text record `?t`.
-In records matching `?t`, there also have to be both words `edible` and `leaves`.
+The special predicate `ql:contains-entity` requires that results for `?plant` have to occur in a text record `?t`.
+In records matching `?t`, there also have to be both words `edible` and `leaves` as specified thorugh the `ql:contains-word` predicate.
 Note that the single quotes can also be omitted and will be in further examples.
 Single quotes are necessary to mark phrases (which are not supported yet, but may be in the future).
 
@@ -205,8 +205,8 @@ A query for Astronauts who walked on the moon:
 
     SELECT ?a TEXT(?t) SCORE(?t) WHERE {
         ?a <is-a> <Astronaut> . 
-        ?a <in-text> ?t .
-        ?t <in-text> "walk* moon"
+        ?t ql:contains-entity ?a .
+        ?t ql:contains-word "walk* moon"
     } ORDER BY DESC(SCORE(?t))
     TEXTLIMIT 2
     
@@ -219,29 +219,33 @@ Note the following features:
 
 An alternative query for astronauts who walked on the moon:
 
-    SELECT ?a TEXT(?t) SCORE(?t) WHERE {
-        ?a <is-a> <Astronaut> . 
-        ?a <in-text> ?t .
-        ?t <in-text> "walk* <Moon>"
-    } ORDER BY DESC(SCORE(?t))
+        SELECT ?a TEXT(?t) SCORE(?t) WHERE {
+            ?a <is-a> <Astronaut> . 
+            ?t ql:contains-entity ?a .
+            ?t ql:contains-word "walk*"
+            ?t ql:contains-entity <Moon> .
+        } ORDER BY DESC(SCORE(?t))
+        TEXTLIMIT 2
 
 This query doesn't search for an occurrence of the word moon but played where the entity `<Moon>` has been linked.
+For the sake of brevity, it is possible to treat the concrete URI `<Moon>` like word and include it in the `contains-word` triple.
+This can be convenient but should be avoided to keep queries readable: `?t ql:contains-word "walk* <Moon>"`
 
 
 Text / Knowledge-base data can be nested in queries. This allows queries like one for politicians that were friends with a scientist associated with the manhattan project:
 
     SELECT ?p TEXT(?t) ?s TEXT(?t2) WHERE {
         ?p <is-a> <Politician> .
-        ?p <in-text> ?t .
-        ?t <in-text> friend* .
-        ?t <in-text> ?s .
+        ?t ql:contains-entity ?p .
+        ?t ql:contains-word friend* .
+        ?t ql:contains-entity ?s .
         ?s <is-a> <Scientist> .
-        ?s <in-text> ?t2 .
-        ?t2 <in-text> "manhattan project"
+        ?t2 ql:contains-entity ?s .
+        ?t2 ql:contains-word "manhattan project"
     } ORDER BY DESC(SCORE(?t))
 
 
-For now, each text-record variable is required to have a triple `<in-text> ENTITY/WORD`. 
+For now, each text-record variable is required to have a triple `ql:contains-word/entity WORD/URI`. 
 Pure connections to variables (e.g. "Books with a description that mentions a plant.") are planned for the future.
 
 
@@ -263,8 +267,8 @@ If you build an index using these files and ask the query:
 
     SELECT ?x TEXT(?t) WHERE {
         ?x <is-a> <Scientist> .
-        ?x <in-text> ?t .
-        ?t <in-text> "penicillin"
+        ?t ql:contains-entity ?x .
+        ?t ql:contains-word "penicillin"
     }  ORDER BY DESC(SCORE(?t))
     
 You should find `<Alexander_Fleming>` and the textual evidence for that match.
@@ -273,8 +277,8 @@ You can also display his awards or find `<Albert_Einstein>` and his awards with 
 
     SELECT ?x ?award TEXT(?t) WHERE {
         ?x <is-a> <Scientist> .
-        ?x <in-text> ?t .
-        ?t <in-text> "theory rela*" .
+        ?t ql:contains-entity ?x .
+        ?x ql:contains-word "theory rela*" .
         ?x <Award_Won> ?award
     }  ORDER BY DESC(SCORE(?t))
 
@@ -282,9 +286,9 @@ have a look at the (really tiny) input files to get a feeling for how this works
 
 Curl-versions (ready for copy&paste) of the queries:
 
-    SELECT ?x TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?x <in-text> ?t . ?t <in-text> \"penicillin\" \} ORDER BY DESC(SCORE(?t))    
+    SELECT ?x TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?t ql:contains-entity ?x . ?t ql:contains-word \"penicillin\" \} ORDER BY DESC(SCORE(?t))    
 
-    SELECT ?x ?award TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?x <in-text> ?t . ?t <in-text> \"theory rela*\" . ?x <Award_Won> ?award \}  ORDER BY DESC(SCORE(?t))
+    SELECT ?x ?award TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?t ql:contains-entity ?x . ?t ql:contains-word \"theory rela*\" . ?x <Award_Won> ?award \}  ORDER BY DESC(SCORE(?t))
     
 Again, there's not much to be done with this data.
 For a meaningful index, use the example data below.
@@ -305,14 +309,14 @@ Here is a sample query to try and check if everything worked for you:
 
     SELECT ?x SCORE(?t) TEXT(?t) WHERE {
         ?x <is-a> <Scientist> .
-        ?x <in-text> ?t .
-        ?t <in-text> "relati*"
+        ?t ql:contains-entity ?x .
+        ?x ql:contains-word "relati*"
     }
     ORDER BY DESC(SCORE(?t))
 
 Curl-version (ready for copy&paste) of the query:
 
-    SELECT ?x SCORE(?t) TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?x <in-text> ?t . ?t <in-text> \"relati*\" \} ORDER BY DESC(SCORE(?t))
+    SELECT ?x SCORE(?t) TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?t ql:contains-entity ?x . ?t ql:contains-word \"relati*\" \} ORDER BY DESC(SCORE(?t))
 
 ## Download prepared input for English Wikipedia text and a KB derived from Freebase
 
@@ -331,14 +335,14 @@ Here is a sample query to try and check if everything worked for you:
 
     SELECT ?x SCORE(?t) TEXT(?t) WHERE {
         ?x <is-a> <Astronaut> .
-        ?x <in-text> ?t .
-        ?t <in-text> "walk* moon"
+        ?t ql:contains-entity ?x .
+        ?x ql:contains-word "walk* moon"
     }
     ORDER BY DESC(SCORE(?t))
 
 Curl-version (ready for copy&paste) of the query:
 
-    SELECT ?x SCORE(?t) TEXT(?t) WHERE \{ ?x <is-a> <Astronaut> . ?x <in-text> ?t . ?t <in-text> \"walk* moon\" \} ORDER BY DESC(SCORE(?t))
+    SELECT ?x SCORE(?t) TEXT(?t) WHERE \{ ?x <is-a> <Astronaut> . ?t ql:contains-entity ?x . ?t ql:contains-word \"walk* moon\" \} ORDER BY DESC(SCORE(?t))
 
 ## Use any knowledge base and text collection of your choice
 
