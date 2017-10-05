@@ -819,7 +819,7 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
             "?a <is-a> <Politician> . "
             "?c ql:contains-entity ?a ."
             "?c ql:contains-word \"friend*\" ."
-            "?s ql:contains-entity ?c ."
+            "?c ql:contains-entity ?s ."
             "?s <is-a> <Scientist> ."
             "?c2 ql:contains-entity ?s ."
             "?c2 ql:contains-word \"manhattan project\"}");
