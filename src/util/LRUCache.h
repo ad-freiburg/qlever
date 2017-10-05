@@ -15,7 +15,7 @@ using std::pair;
 
 namespace ad_utility {
 //! Associative array for almost arbitrary keys and values that acts as a cache.
-//! Hash a fixed capacity and applies a last recently used (LRU) strategy
+//! Hash a fixed capacity and applies a least recently used (LRU) strategy
 //! for removing elements once the capacity is exceeded.
 //! Keys have to be proper keys for the underlying AccessMap and value types
 //! have to provide a default constructor.

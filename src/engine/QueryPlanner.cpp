@@ -236,14 +236,12 @@ void QueryPlanner::getVarTripleMap(
     if (isVariable(t._o)) {
       varToTrip[t._o].push_back(t);
     }
-
-    if (t._p == IN_CONTEXT_RELATION) {
-      if (isVariable(t._s) || isWords(t._o)) {
-        contextVars.insert(t._s);
-      }
-      if (isVariable(t._o) || isWords(t._s)) {
-        contextVars.insert(t._o);
-      }
+    // TODO: Could use more refactoring.
+    // In Earlier versions there were no ql:contains... predicates but
+    // a symmetric <in-text> predicate. Therefore some parts are still more
+    // complex than need be.
+    if (t._p == CONTAINS_WORD_PREDICATE || t._p == CONTAINS_ENTITY_PREDICATE) {
+      contextVars.insert(t._s);
     }
   }
 }
@@ -1059,60 +1057,21 @@ size_t QueryPlanner::getTextLimit(const string& textLimitString) const {
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
   return _nodeMap.count(i) > 0 &&
-         (_nodeMap.find(i)->second->_triple._p == IN_CONTEXT_RELATION ||
-          _nodeMap.find(i)->second->_triple._p == HAS_CONTEXT_RELATION);
+         (_nodeMap.find(i)->second->_triple._p == CONTAINS_ENTITY_PREDICATE ||
+          _nodeMap.find(i)->second->_triple._p == CONTAINS_WORD_PREDICATE ||
+          _nodeMap.find(i)->second->_triple._p == INTERNAL_TEXT_MATCH_PREDICATE);
 }
 
 // _____________________________________________________________________________
 ad_utility::HashMap<string, vector<size_t>>
 QueryPlanner::TripleGraph::identifyTextCliques() const {
   ad_utility::HashMap<string, vector<size_t>> contextVarToTextNodesIds;
-  std::set<string> contextVars;
-  // Find all context vars.
+  // Fill contextVar -> triples map
   for (size_t i = 0; i < _adjLists.size(); ++i) {
     if (isTextNode(i)) {
-      if (!isVariable(_nodeMap.find(i)->second->_triple._s)) {
-        if (isVariable(_nodeMap.find(i)->second->_triple._o)) {
-          contextVars.insert(_nodeMap.find(i)->second->_triple._o);
-        } else {
-          AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                   "Triples need at least one variable.");
-        }
-      }
-      if (!isVariable(_nodeMap.find(i)->second->_triple._o)) {
-        if (isVariable(_nodeMap.find(i)->second->_triple._s)) {
-          contextVars.insert(_nodeMap.find(i)->second->_triple._s);
-        } else {
-          AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                   "Triples need at least one variable.");
-        }
-      }
-    }
-  }
-
-  // Iterate again and fill contextVar -> triples map
-  for (size_t i = 0; i < _adjLists.size(); ++i) {
-    if (isTextNode(i)) {
-      if (contextVars.count(_nodeMap.find(i)->second->_triple._s) > 0) {
-        contextVarToTextNodesIds[_nodeMap.find(
-            i)->second->_triple._s].push_back(i);
-        AD_CHECK_EQ(0,
-                    contextVars.count(_nodeMap.find(i)->second->_triple._o));
-      } else if (contextVars.count(_nodeMap.find(i)->second->_triple._o) > 0) {
-        contextVarToTextNodesIds[_nodeMap.find(
-            i)->second->_triple._o].push_back(i);
-        AD_CHECK_EQ(0,
-                    contextVars.count(_nodeMap.find(i)->second->_triple._s));
-      } else {
-        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                 "Dangling \"in-text\" relation for one or more triples. "
-                     "Your query uses \"in-text\" but "
-                     "has no concrete word or entity associated with the "
-                     "text variable. "
-                     "If you have a classic relation called <in-text> "
-                     "in your KB, consider using a namespace or "
-                     "renaming the constant in QLever's code.");
-      }
+      auto& triple = _nodeMap.find(i)->second->_triple;
+      auto& cvar = triple._s;
+      contextVarToTextNodesIds[cvar].push_back(i);
     }
   }
   return contextVarToTextNodesIds;
@@ -1301,6 +1260,12 @@ QueryPlanner::TripleGraph::TripleGraph() :
 
 // _____________________________________________________________________________
 void QueryPlanner::TripleGraph::collapseTextCliques() {
+  // TODO: Could use more refactoring.
+  // In Earlier versions there were no ql:contains... predicates but
+  // a symmetric <in-text> predicate. Therefore some parts are still more
+  // complex than need be.
+
+
   // Create a map from context var to triples it occurs in (the cliques).
   ad_utility::HashMap<string, vector<size_t>> cvarsToTextNodes(
       identifyTextCliques());

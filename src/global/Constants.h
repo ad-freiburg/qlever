@@ -20,15 +20,15 @@ static const size_t BUFFER_SIZE_DOCSFILE_LINE = 1024 * 1024 * 100;
 static const size_t DISTINCT_LHS_PER_BLOCK = 10 * 1000;
 static const size_t USE_BLOCKS_INDEX_SIZE_TRESHOLD = 20 * 1000;
 
-static const size_t IN_CONTEXT_CARDINALITY_ESTIMATE = 1000 * 1000 * 1000;
+static const size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1000 * 1000 * 1000;
 
 static const size_t GALLOP_THRESHOLD = 1000;
 
 
-static const char IN_CONTEXT_RELATION[] = "<in-text>";
-static const char IN_CONTEXT_RELATION_NS[] = ":in-text";
-static const char HAS_CONTEXT_RELATION[] = "<has-text>";
-static const char HAS_CONTEXT_RELATION_NS[] = ":has-text";
+static const char CONTAINS_ENTITY_PREDICATE[] = "<QLever-internal-function/contains-entity>";
+static const char CONTAINS_WORD_PREDICATE[] = "<QLever-internal-function/contains-word>";
+static const char CONTAINS_WORD_PREDICATE_NS[] = "ql:contains-word";
+static const char INTERNAL_TEXT_MATCH_PREDICATE[] = "<QLever-internal-function/text>";
 
 static const char VALUE_PREFIX[] = ":v:";
 static const char VALUE_DATE_PREFIX[] = ":v:date:";

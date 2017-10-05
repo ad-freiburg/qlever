@@ -76,6 +76,7 @@ string SparqlTriple::asString() const {
 // _____________________________________________________________________________
 void ParsedQuery::expandPrefixes() {
   ad_utility::HashMap<string, string> prefixMap;
+  prefixMap["ql"] = "<QLever-internal-function/>";
   for (const auto& p: _prefixes) {
     prefixMap[p._prefix] = p._uri;
   }

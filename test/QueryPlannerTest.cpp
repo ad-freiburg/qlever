@@ -182,14 +182,14 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
     {
       {
         ParsedQuery pq = SparqlParser::parse(
-            "SELECT ?x WHERE {?x <p> <X>. ?x <in-text> ?c. ?c <in-text> abc}");
+            "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c ql:contains-word abc}");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(pq);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-                "1 {s: ?x, p: <in-text>, o: ?c} : (0, 2)\n"
-                "2 {s: ?c, p: <in-text>, o: abc} : (1)",
+                "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : (0, 2)\n"
+                "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: abc} : (1)",
             tg.asString());
         tg.collapseTextCliques();
         ASSERT_EQ(
@@ -201,15 +201,15 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
       }
       {
         ParsedQuery pq = SparqlParser::parse(
-            "SELECT ?x WHERE {?x <p> <X>. ?x <in-text> ?c. ?c <in-text> abc . ?y <in-text> ?c}");
+            "SELECT ?x WHERE {?x <p> <X>. ?c <QLever-internal-function/contains-entity> ?x. ?c <QLever-internal-function/contains-word> abc . ?c ql:contains-entity ?y}");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(pq);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-                "1 {s: ?x, p: <in-text>, o: ?c} : (0, 2, 3)\n"
-                "2 {s: ?c, p: <in-text>, o: abc} : (1, 3)\n"
-                "3 {s: ?y, p: <in-text>, o: ?c} : (1, 2)",
+                "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : (0, 2, 3)\n"
+                "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: abc} : (1, 3)\n"
+                "3 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?y} : (1, 2)",
             tg.asString());
         tg.collapseTextCliques();
         ASSERT_EQ(
@@ -221,15 +221,15 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
       }
       {
         ParsedQuery pq = SparqlParser::parse(
-            "SELECT ?x WHERE {?x <p> <X>. ?x <in-text> ?c. ?c <in-text> abc . ?y <in-text> ?c. ?y <P2> <X2>}");
+            "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c ql:contains-word abc . ?c ql:contains-entity ?y. ?y <P2> <X2>}");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(pq);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-                "1 {s: ?x, p: <in-text>, o: ?c} : (0, 2, 3)\n"
-                "2 {s: ?c, p: <in-text>, o: abc} : (1, 3)\n"
-                "3 {s: ?y, p: <in-text>, o: ?c} : (1, 2, 4)\n"
+                "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : (0, 2, 3)\n"
+                "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: abc} : (1, 3)\n"
+                "3 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?y} : (1, 2, 4)\n"
                 "4 {s: ?y, p: <P2>, o: <X2>} : (3)",
             tg.asString());
         tg.collapseTextCliques();
@@ -244,17 +244,17 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
       }
       {
         ParsedQuery pq = SparqlParser::parse(
-            "SELECT ?x WHERE {?x <p> <X>. ?x <in-text> ?c. ?c <in-text> abc . ?y <in-text> ?c. ?y <in-text> ?c2. ?c2 <in-text> xx}");
+            "(SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?c2 ql:contains-entity ?y. ?c2 ql:contains-word \"xx\"})");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(pq);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-                "1 {s: ?x, p: <in-text>, o: ?c} : (0, 2, 3)\n"
-                "2 {s: ?c, p: <in-text>, o: abc} : (1, 3)\n"
-                "3 {s: ?y, p: <in-text>, o: ?c} : (1, 2, 4)\n"
-                "4 {s: ?y, p: <in-text>, o: ?c2} : (3, 5)\n"
-                "5 {s: ?c2, p: <in-text>, o: xx} : (4)",
+                "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : (0, 2, 3)\n"
+                "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: abc} : (1, 3)\n"
+                "3 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?y} : (1, 2, 4)\n"
+                "4 {s: ?c2, p: <QLever-internal-function/contains-entity>, o: ?y} : (3, 5)\n"
+                "5 {s: ?c2, p: <QLever-internal-function/contains-word>, o: xx} : (4)",
             tg.asString());
         tg.collapseTextCliques();
         ASSERT_EQ(
@@ -268,17 +268,17 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
       }
       {
         ParsedQuery pq = SparqlParser::parse(
-            "SELECT ?x WHERE {?x <p> <X>. ?x <in-text> ?c. ?c <in-text> abc . ?y <in-text> ?c. ?y <in-text> ?c2. ?c2 <in-text> xx. ?y <P2> <X2>}");
+            "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c ql:contains-word abc . ?c ql:contains-entity ?y. ?c2 ql:contains-entity ?y. ?c2 ql:contains-word xx. ?y <P2> <X2>}");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(pq);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-                "1 {s: ?x, p: <in-text>, o: ?c} : (0, 2, 3)\n"
-                "2 {s: ?c, p: <in-text>, o: abc} : (1, 3)\n"
-                "3 {s: ?y, p: <in-text>, o: ?c} : (1, 2, 4, 6)\n"
-                "4 {s: ?y, p: <in-text>, o: ?c2} : (3, 5, 6)\n"
-                "5 {s: ?c2, p: <in-text>, o: xx} : (4)\n"
+                "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : (0, 2, 3)\n"
+                "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: abc} : (1, 3)\n"
+                "3 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?y} : (1, 2, 4, 6)\n"
+                "4 {s: ?c2, p: <QLever-internal-function/contains-entity>, o: ?y} : (3, 5, 6)\n"
+                "5 {s: ?c2, p: <QLever-internal-function/contains-word>, o: xx} : (4)\n"
                 "6 {s: ?y, p: <P2>, o: <X2>} : (3, 4)",
             tg.asString());
         tg.collapseTextCliques();
@@ -686,8 +686,8 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
   try {
     ParsedQuery pq = SparqlParser::parse(
         "SELECT ?a \n "
-            "WHERE  {?a <is-a> <Plant> . ?a <in-text> ?c. "
-            "?c <in-text> \"edible leaves\"} TEXTLIMIT 5");
+            "WHERE  {?a <is-a> <Plant> . ?c ql:contains-entity ?a. "
+            "?c ql:contains-word \"edible leaves\"} TEXTLIMIT 5");
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryPlanner::TripleGraph tg = qp.createTripleGraph(pq);
@@ -722,7 +722,7 @@ TEST(QueryExecutionTreeTest, testTextQuerySE) {
   try {
     ParsedQuery pq = SparqlParser::parse(
         "SELECT TEXT(?c) \n "
-            "WHERE  {?c <in-text> \"search engine\"}");
+            "WHERE  {?c ql:contains-word \"search engine\"}");
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
@@ -746,8 +746,8 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
             "WHERE \t {"
             "?x :Place_of_birth ?y ."
             "?y :Contained_by :Europe ."
-            "?x :in-text ?c ."
-            "?c :in-text cocaine ."
+            "?c ql:contains-entity ?x ."
+            "?c ql:contains-word \"cocaine\" ."
             "}");
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
@@ -790,9 +790,9 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
         "PREFIX : <>"
             "SELECT ?x ?y WHERE {"
             "?x :is-a :Politician ."
-            "?x :in-text ?c ."
-            "?c :in-text friend* ."
-            "?y :in-text ?c ."
+            "?c ql:contains-entity ?x ."
+            "?c ql:contains-word \"friend*\" ."
+            "?c ql:contains-entity ?y ."
             "}");
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
@@ -817,12 +817,12 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
         "SELECT ?p ?s \n "
             "WHERE {"
             "?a <is-a> <Politician> . "
-            "?a <in-text> ?c ."
-            "?c <in-text> \"friend*\" ."
-            "?c <in-text> ?s ."
+            "?c ql:contains-entity ?a ."
+            "?c ql:contains-word \"friend*\" ."
+            "?s ql:contains-entity ?c ."
             "?s <is-a> <Scientist> ."
-            "?s <in-text> ?c2 ."
-            "?c2 <in-text> \"manhattan project\"}");
+            "?c2 ql:contains-entity ?s ."
+            "?c2 ql:contains-word \"manhattan project\"}");
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);

@@ -199,7 +199,8 @@ void TextOperationWithFilter::computeMultiplicities() {
       AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
                "One (out of more) reasons for this problem is if you connected"
                    " a text record variable to other variables with"
-                   " a non-text predicate (like in-text or has-text)");
+                   " a non-text predicate. "
+                   "One should always use ql:contains-entity for that.");
     }
 
     // Like joins

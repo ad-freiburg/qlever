@@ -223,8 +223,8 @@ void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
            str[j] != '\n') { ++j; }
   }
   string o = str.substr(i, j - i);
-  if (p == IN_CONTEXT_RELATION ||
-      p.find(IN_CONTEXT_RELATION_NS) != string::npos) {
+  if (p == CONTAINS_WORD_PREDICATE ||
+      p == CONTAINS_WORD_PREDICATE_NS) {
     o = stripAndLowercaseKeywordLiteral(o);
   }
   SparqlTriple triple(s, p, o);

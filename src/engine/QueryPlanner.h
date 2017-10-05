@@ -39,7 +39,7 @@ public:
       Node(size_t id, const string& cvar, const string& wordPart,
            const vector<SparqlTriple>& trips) :
           _id(id), _triple(cvar,
-                           IN_CONTEXT_RELATION,
+                           INTERNAL_TEXT_MATCH_PREDICATE,
                            wordPart),
           _variables(), _cvar(cvar), _wordPart(wordPart) {
         _variables.insert(cvar);

@@ -14,11 +14,21 @@ With this, it is possible to answer queries like the following one for astronaut
     
 This Readme sets you up to use the engine and to quickly build and query your own index.
 
+
 ## Research paper
 
 Our paper [QLever: A Query Engine for Efficient SPARQL+Text Search](http://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf) has been accepted to [CIKM 2017](http://cikm2017.org/) and will appear in the conference proceeding! Fortunately the publisher allows us to publish the paper on our homepage.
 
 The paper describes the research behind QLever, how it works, and most importantly contains an evaluation where we compare QLever to state-of-the-art SPARQL engines. Query times are competitive and often faster on the pure SPARQL queries, and several orders of magnitude faster on the SPARQL+Text queries.
+
+To reproduce our experimental evaluation, best use the according release (git tag). Since then, we have made several changes, including some to query syntax that has not be carried over to the input queries for our experiments.
+
+## CAVEAT!
+
+The latest version changed the syntax for text queries from a universal (and symmetric) ``<in-text>`` predicate to two explicit predicates ``ql:contains-entity`` and ``ql:contains-word``. 
+We found this style more intuitive and also used it in the CIKM'17 research paper. 
+Thus, old queries no longer work and need to be adjusted as described in this README.
+
 
 # How to use
 

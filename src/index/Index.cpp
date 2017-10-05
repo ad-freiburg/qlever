@@ -871,8 +871,8 @@ void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
 
 // _____________________________________________________________________________
 size_t Index::relationCardinality(const string& relationName) const {
-  if (relationName == IN_CONTEXT_RELATION) {
-    return IN_CONTEXT_CARDINALITY_ESTIMATE;
+  if (relationName == INTERNAL_TEXT_MATCH_PREDICATE) {
+    return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
   Id relId;
   if (_vocab.getId(relationName, &relId)) {
@@ -942,6 +942,7 @@ void Index::writeAsciiListFile(const string& filename, const T& ids) const {
   }
   f.close();
 }
+
 template void Index::writeAsciiListFile<vector<Id>>(
     const string& filename, const vector<Id>& ids) const;
 

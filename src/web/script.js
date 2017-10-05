@@ -114,8 +114,8 @@ function getShortStr(str, maxLength) {
 
 function displayError(result) {
     var disp = "<div id=\"err\">";
-    disp += "Query: " + "<br/>" + result.query + "<br/>" + "<br/>" + "<br/>";
-    disp += "Error Msg: " + "<br/>" + result.exception + "<br/>" + "<br/>";
+    disp += "Query: " + "<br/>" + htmlEscape(result.query) + "<br/>" + "<br/>" + "<br/>";
+    disp += "Error Msg: " + "<br/>" + htmlEscape(result.exception) + "<br/>" + "<br/>";
     disp += "</div>";
     displayStatus(disp)
 }
