@@ -320,7 +320,7 @@ Here is a sample query to try and check if everything worked for you:
     SELECT ?x SCORE(?t) TEXT(?t) WHERE {
         ?x <is-a> <Scientist> .
         ?t ql:contains-entity ?x .
-        ?x ql:contains-word "relati*"
+        ?t ql:contains-word "relati*"
     }
     ORDER BY DESC(SCORE(?t))
 
@@ -346,7 +346,7 @@ Here is a sample query to try and check if everything worked for you:
     SELECT ?x SCORE(?t) TEXT(?t) WHERE {
         ?x <is-a> <Astronaut> .
         ?t ql:contains-entity ?x .
-        ?x ql:contains-word "walk* moon"
+        ?t ql:contains-word "walk* moon"
     }
     ORDER BY DESC(SCORE(?t))
 
