@@ -232,7 +232,7 @@ An alternative query for astronauts who walked on the moon:
         SELECT ?a TEXT(?t) SCORE(?t) WHERE {
             ?a <is-a> <Astronaut> . 
             ?t ql:contains-entity ?a .
-            ?t ql:contains-word "walk*"
+            ?t ql:contains-word "walk*" .
             ?t ql:contains-entity <Moon> .
         } ORDER BY DESC(SCORE(?t))
         TEXTLIMIT 2
