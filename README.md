@@ -288,7 +288,7 @@ You can also display his awards or find `<Albert_Einstein>` and his awards with 
     SELECT ?x ?award TEXT(?t) WHERE {
         ?x <is-a> <Scientist> .
         ?t ql:contains-entity ?x .
-        ?x ql:contains-word "theory rela*" .
+        ?t ql:contains-word "theory rela*" .
         ?x <Award_Won> ?award
     }  ORDER BY DESC(SCORE(?t))
 
