@@ -1028,19 +1028,23 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     LOG(TRACE) << "Producing plans that unite " << k << " triples."
                << std::endl;;
     dpTab.emplace_back(vector<SubtreePlan>());
-    for (size_t i = 1; i <= k / 2; ++i) {
+    for (size_t i = 1; i * 2 <= k; ++i) {
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
       if (newPlans.size() == 0) {
-        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                 "Could not find a suitable execution tree. "
-                     "Likely cause: Queries that require joins of the full "
-                     "index with itself are not supported at the moment.");
+        continue;
       }
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(),
                           newPlans.end());
       applyFiltersIfPossible(dpTab.back(), filters, k == tg._nodeMap.size());
     }
+    if (dpTab[k - 1].size() == 0) {
+      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+               "Could not find a suitable execution tree. "
+                   "Likely cause: Queries that require joins of the full "
+                   "index with itself are not supported at the moment.");
+    }
   }
+
   LOG(TRACE) << "Fill DP table done." << std::endl;;
   return dpTab;
 }
