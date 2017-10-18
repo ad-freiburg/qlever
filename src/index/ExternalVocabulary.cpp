@@ -62,5 +62,5 @@ void ExternalVocabulary::initFromFile(const string& file) {
     _size = (posLastOfft - _startOfOffsets) / sizeof(off_t);
   }
   LOG(INFO) << "Initialized external vocabulary. It contains " << _size
-            << "elements." << std::endl;
+            << " elements." << std::endl;
 }
