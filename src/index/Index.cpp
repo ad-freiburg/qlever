@@ -857,7 +857,7 @@ void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
       } else {
         LOG(TRACE) << "Special case: extra scan of follow block!\n";
         pair<Id, off_t> follower;
-        _psoFile.read(&follower, sizeof(follower), followBlock.first);
+        indexFile.read(&follower, sizeof(follower), followBlock.first);
         nofBytes = static_cast<size_t>(follower.second - it->second);
       }
     }
