@@ -128,10 +128,33 @@ TEST(ConversionsTest, convertDateToIndexWord) {
 TEST(ConversionsTest, endToEndDate) {
   string in = "\"1990-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>";
   string in2 = "\"1990-01-01\"^^<http://www.w3.org/2001/XMLSchema#date>";
+  string in3 = "\"1990-01-01\"^^xsd:date";
+  string in4 = "\"1990-01-01T00:00:00\"^^xsd:dateTime";
   string indexW = ":v:date:0000000000000001990-01-01T00:00:00";
   ASSERT_EQ(indexW, convertValueLiteralToIndexWord(in));
   ASSERT_EQ(indexW, convertValueLiteralToIndexWord(in2));
+  ASSERT_EQ(indexW, convertValueLiteralToIndexWord(in3));
+  ASSERT_EQ(indexW, convertValueLiteralToIndexWord(in4));
   ASSERT_EQ(in, convertIndexWordToValueLiteral(indexW));
+}
+
+TEST(ConversionsTest, shortFormEquivalence) {
+  string in = "\"1230.7\"^^<http://www.w3.org/2001/XMLSchema#float>";
+  string in_short = "\"1230.7\"^^xsd:float";
+  string nin = "\"-1230.7\"^^<http://www.w3.org/2001/XMLSchema#float>";
+  string nin_short = "\"-1230.7\"^^xsd:float";
+  string in2 = "\"1000\"^^<http://www.w3.org/2001/XMLSchema#int>";
+  string in2_short = "\"1000\"^^xsd:int";
+  string nin2 = "\"-1000\"^^<http://www.w3.org/2001/XMLSchema#int>";
+  string nin2_short = "\"-1000\"^^xsd:int";
+  ASSERT_EQ(convertValueLiteralToIndexWord(in),
+            convertValueLiteralToIndexWord(in_short));
+  ASSERT_EQ(convertValueLiteralToIndexWord(nin),
+            convertValueLiteralToIndexWord(nin_short));
+  ASSERT_EQ(convertValueLiteralToIndexWord(in2),
+            convertValueLiteralToIndexWord(in2_short));
+  ASSERT_EQ(convertValueLiteralToIndexWord(nin2),
+            convertValueLiteralToIndexWord(nin2_short));
 }
 
 TEST(ConversionsTest, endToEndNumbers) {
