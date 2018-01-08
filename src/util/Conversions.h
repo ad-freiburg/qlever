@@ -96,7 +96,10 @@ string convertValueLiteralToIndexWord(const string& orig) {
                        orig.size() - (posOfHashTag + 2));
   } else {
     size_t posOfDoubleDot = orig.rfind(':');
-    assert(posOfDoubleDot != string::npos);
+    if (posOfDoubleDot == string::npos) {
+      AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+               "No ':' in non-URL ValueLiteral " + orig);
+    }
 
     // +1 for double dot
     type = orig.substr(posOfDoubleDot + 1,
@@ -513,7 +516,9 @@ inline string removeLeadingZeros(const string& orig) {
 
 // _____________________________________________________________________________
 bool isXsdValue(const string val) {
-  return val.size() > 0 && val[0] == '\"' && val.find("\"^^") != string::npos;
+  // starting the search for "^^ at position 1 makes sure it's not in the
+  // quotes as we already checked that the first char is the first quote
+  return val.size() > 0 && val[0] == '\"' && val.find("\"^^", 1) != string::npos;
 }
 }
 
