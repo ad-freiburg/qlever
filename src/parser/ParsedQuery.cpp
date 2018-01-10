@@ -34,12 +34,8 @@ string ParsedQuery::asString() const {
   os << "\n}";
 
   // WHERE
-  os << "\nWHERE: {";
-  for (size_t i = 0; i < _whereClauseTriples.size(); ++i) {
-    os << "\n\t" << _whereClauseTriples[i].asString();
-    if (i + 1 < _whereClauseTriples.size()) { os << ','; }
-  }
-  os << "\n}";
+  os << "\nWHERE: ";
+  _rootGraphPattern.toString(os);
 
   os << "\nLIMIT: " << (_limit.size() > 0 ? _limit : "no limit specified");
   os << "\nTEXTLIMIT: "
@@ -74,6 +70,34 @@ string SparqlTriple::asString() const {
 }
 
 // _____________________________________________________________________________
+string SparqlFilter::asString() const {
+  std::ostringstream os;
+  os << "FILTER(" << _lhs;
+  switch (_type) {
+  case EQ:
+    os << " < ";
+    break;
+  case NE:
+    os << " != ";
+    break;
+  case LT:
+    os << " < ";
+    break;
+  case LE:
+    os << " <= ";
+    break;
+  case GT:
+    os << " > ";
+    break;
+  case GE:
+    os << " >= ";
+    break;
+  }
+  os << _rhs << ")";
+  return os.str();
+}
+
+// _____________________________________________________________________________
 void ParsedQuery::expandPrefixes() {
   ad_utility::HashMap<string, string> prefixMap;
   prefixMap["ql"] = "<QLever-internal-function/>";
@@ -81,26 +105,36 @@ void ParsedQuery::expandPrefixes() {
     prefixMap[p._prefix] = p._uri;
   }
 
-  for (auto& trip: _whereClauseTriples) {
-    expandPrefix(trip._s, prefixMap);
-    expandPrefix(trip._p, prefixMap);
-    if (trip._p.find("in-context") != string::npos) {
-      auto tokens = ad_utility::split(trip._o, ' ');
-      trip._o = "";
-      for (size_t i = 0; i < tokens.size(); ++i) {
-        expandPrefix(tokens[i], prefixMap);
-        trip._o += tokens[i];
-        if (i + 1 < tokens.size()) { trip._o += " "; }
-      }
-    } else {
-      expandPrefix(trip._o, prefixMap);
+  vector<GraphPattern*> graphPatterns;
+  graphPatterns.push_back(&_rootGraphPattern);
+  // Traverse the graph pattern tree using dfs expanding the prefixes in every
+  // pattern.
+  while (!graphPatterns.empty()) {
+    GraphPattern *pattern = graphPatterns.back();
+    graphPatterns.pop_back();
+    for (GraphPattern *p : pattern->_children) {
+      graphPatterns.push_back(p);
     }
-  }
 
-
-  for (auto& f: _filters) {
-    expandPrefix(f._lhs, prefixMap);
-    expandPrefix(f._rhs, prefixMap);
+    for (auto& trip: pattern->_whereClauseTriples) {
+      expandPrefix(trip._s, prefixMap);
+      expandPrefix(trip._p, prefixMap);
+      if (trip._p.find("in-context") != string::npos) {
+        auto tokens = ad_utility::split(trip._o, ' ');
+        trip._o = "";
+        for (size_t i = 0; i < tokens.size(); ++i) {
+          expandPrefix(tokens[i], prefixMap);
+          trip._o += tokens[i];
+          if (i + 1 < tokens.size()) { trip._o += " "; }
+        }
+      } else {
+        expandPrefix(trip._o, prefixMap);
+      }
+    }
+    for (auto& f: pattern->_filters) {
+      expandPrefix(f._lhs, prefixMap);
+      expandPrefix(f._rhs, prefixMap);
+    }
   }
 }
 
@@ -130,4 +164,65 @@ void ParsedQuery::expandPrefix(
       }
     }
   }
+}
+
+// _____________________________________________________________________________
+ParsedQuery::GraphPattern::~GraphPattern() {
+  for (GraphPattern *child : _children) {
+    delete child;
+  }
+}
+
+
+// _____________________________________________________________________________
+ParsedQuery::GraphPattern::GraphPattern(GraphPattern &&other) :
+  _whereClauseTriples(std::move(other._whereClauseTriples)),
+  _filters(std::move(other._filters)),
+  _optional(other._optional),
+  _children(std::move(other._children)) {
+  other._children.clear();
+}
+
+// _____________________________________________________________________________
+ParsedQuery::GraphPattern::GraphPattern(const GraphPattern &other) :
+  _whereClauseTriples(other._whereClauseTriples),
+  _filters(other._filters),
+  _optional(other._optional) {
+  _children.reserve(other._children.size());
+  for (const GraphPattern *g : other._children) {
+    _children.push_back(new GraphPattern(*g));
+  }
+}
+
+// _____________________________________________________________________________
+ParsedQuery::GraphPattern& ParsedQuery::GraphPattern::operator=(const ParsedQuery::GraphPattern &other) {
+  _whereClauseTriples = std::vector<SparqlTriple>(other._whereClauseTriples);
+  _filters = std::vector<SparqlFilter>(other._filters);
+  _optional = other._optional;
+  _children.clear();
+  _children.reserve(other._children.size());
+  for (const GraphPattern *g : other._children) {
+    _children.push_back(new GraphPattern(*g));
+  }
+  return *this;
+}
+
+// _____________________________________________________________________________
+void ParsedQuery::GraphPattern::toString(std::ostringstream &os) const {
+  if (_optional) {
+    os << "\nOPTIONAL ";
+  }
+  os << "{\n";
+  for (size_t i = 0; i < _whereClauseTriples.size(); ++i) {
+    os << "\n\t" << _whereClauseTriples[i].asString();
+    if (i + 1 < _whereClauseTriples.size()) { os << ','; }
+  }
+  for (size_t i = 0; i < _filters.size(); ++i) {
+    os << "\n\t" << _filters[i].asString();
+    if (i + 1 < _filters.size()) { os << ','; }
+  }
+  for (GraphPattern *child : _children) {
+    child->toString(os);
+  }
+  os << "\n}";
 }

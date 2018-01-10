@@ -74,7 +74,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   // Cycles have to be avoided (by previously removing a triple and using it
   // as a filter later on).
 
-  finalTab = fillDpTab(tg, pq._filters);
+  finalTab = fillDpTab(tg, pq._rootGraphPattern._filters);
 
   // If there is an order by clause, add another row to the table and
   // just add an order by / sort to every previous result if needed.
@@ -226,7 +226,7 @@ void QueryPlanner::getVarTripleMap(
     const ParsedQuery& pq,
     ad_utility::HashMap<string, vector<SparqlTriple>>& varToTrip,
     ad_utility::HashSet<string>& contextVars) const {
-  for (auto& t: pq._whereClauseTriples) {
+  for (auto& t: pq._rootGraphPattern._whereClauseTriples) {
     if (isVariable(t._s)) {
       varToTrip[t._s].push_back(t);
     }
@@ -260,15 +260,15 @@ bool QueryPlanner::isWords(const string& elem) {
 QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     const ParsedQuery& query) const {
   TripleGraph tg;
-  if (query._whereClauseTriples.size() > 64) {
+  if (query._rootGraphPattern._whereClauseTriples.size() > 64) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "At most 64 triples allowed at the moment.");
   }
-  if (query._filters.size() > 64) {
+  if (query._rootGraphPattern._filters.size() > 64) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "At most 64 filters allowed at the moment.");
   }
-  for (auto& t : query._whereClauseTriples) {
+  for (auto& t : query._rootGraphPattern._whereClauseTriples) {
     // Add a node for the triple.
     tg._nodeStorage.emplace_back(
         TripleGraph::Node(tg._nodeStorage.size(), t));

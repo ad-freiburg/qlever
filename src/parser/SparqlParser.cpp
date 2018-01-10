@@ -19,22 +19,22 @@ ParsedQuery SparqlParser::parse(const string& query) {
   size_t i = query.find("SELECT");
   if (i == string::npos) {
     throw ParseException("Missing keyword \"SELECT\", "
-                             "currently only select queries are supported.");
+                         "currently only select queries are supported.");
   }
 
   size_t j = query.find("WHERE");
   if (j == string::npos) {
     throw ParseException("Missing keyword \"WHERE\", "
-                             "currently only select queries are supported.");
+                         "currently only select queries are supported.");
   }
 
   if (i >= j) {
     throw ParseException("Keyword \"WHERE\" "
-                             "found after keyword \"SELECT\". Invalid query.");
+                         "found after keyword \"SELECT\". Invalid query.");
   }
 
-  size_t k = query.find("}", j);
-  if (k == string::npos) {
+  size_t k = query.rfind("}");
+  if (k == string::npos || k < i) {
     throw ParseException("Missing \"}\" symbol after \"WHERE\".");
   }
 
@@ -101,9 +101,13 @@ void SparqlParser::parseSelect(const string& str, ParsedQuery& query) {
 }
 
 // _____________________________________________________________________________
-void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
+void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
+                              ParsedQuery::GraphPattern *currentPattern) {
+  if (currentPattern == nullptr) {
+    currentPattern = &query._rootGraphPattern;
+  }
   size_t i = str.find('{');
-  size_t j = str.find('}', i);
+  size_t j = str.rfind('}');
   assert(j != string::npos);
   if (i == string::npos) {
     throw ParseException("Need curly braces in where clause.");
@@ -121,7 +125,46 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
   while (start < inner.size()) {
     size_t k = start;
     while (inner[k] == ' ' || inner[k] == '\t' || inner[k] == '\n') { ++k; }
-    if (inner[k] == 'F') {
+    if (inner[k] == 'O' || inner[k] == 'o') {
+      if (inner.substr(k, 8) == "OPTIONAL"
+          || inner.substr(k, 8) == "optional") {
+        // find opening and closing brackets of optional part
+        size_t ob = inner.find('{', k);
+        size_t cb = ob;
+        int depth = 0;
+        size_t i;
+        for (i = ob + 1; i < inner.size(); i++) {
+          if (inner[i] == '{') {
+            depth++;
+          } if (inner[i] == '}') {
+            if (depth == 0) {
+              cb = i;
+              break;
+            } else {
+              depth--;
+            }
+          }
+        }
+        if (i == inner.size()) {
+          if (depth == 0) {
+            throw ParseException("Need curly braces in optional"
+                                 "clause.");
+          } else {
+            throw ParseException("Unbalanced curly braces.");
+          }
+        }
+        currentPattern->_children.push_back(new ParsedQuery::GraphPattern());
+        currentPattern->_children.back()->_optional = true;
+        // Recursively call parseWhere to parse the optional part.
+        parseWhere(inner.substr(ob, cb - ob + 1), query,
+                   currentPattern->_children.back());
+
+        // set start to the end of the optional part
+        start = cb + 1;
+        continue;
+      }
+    }
+    else if (inner[k] == 'F' || inner[k] == 'f') {
       if (inner.substr(k, 6) == "FILTER" || inner.substr(k, 6) == "filter") {
         size_t end = inner.find(')', k);
         if (end == string::npos) {
@@ -158,16 +201,17 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query) {
   for (const string& clause: clauses) {
     string c = ad_utility::strip(clause, ' ');
     if (c.size() > 0) {
-      addWhereTriple(c, query);
+      addWhereTriple(c, currentPattern);
     }
   }
   for (const string& filter: filters) {
-    addFilter(filter, query);
+    addFilter(filter, currentPattern);
   }
 }
 
 // _____________________________________________________________________________
-void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
+void SparqlParser::addWhereTriple(const string& str,
+                                  ParsedQuery::GraphPattern *pattern) {
   size_t i = 0;
   while (i < str.size() &&
          (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
@@ -227,16 +271,17 @@ void SparqlParser::addWhereTriple(const string& str, ParsedQuery& query) {
       p == CONTAINS_WORD_PREDICATE_NS) {
     o = stripAndLowercaseKeywordLiteral(o);
   }
+
   SparqlTriple triple(s, p, o);
   // Quadratic in number of triples in query.
   // Shouldn't be a problem here, though.
   // Could use a (hash)-set instead of vector.
-  if (std::find(query._whereClauseTriples.begin(),
-                query._whereClauseTriples.end(), triple) !=
-      query._whereClauseTriples.end()) {
+  if (std::find(pattern->_whereClauseTriples.begin(),
+                pattern->_whereClauseTriples.end(), triple) !=
+      pattern->_whereClauseTriples.end()) {
     LOG(INFO) << "Ignoring duplicate triple: " << str << std::endl;
   } else {
-    query._whereClauseTriples.push_back(triple);
+    pattern->_whereClauseTriples.push_back(triple);
   }
 }
 
@@ -273,7 +318,8 @@ void SparqlParser::parseSolutionModifiers(const string& str,
 }
 
 // _____________________________________________________________________________
-void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
+void SparqlParser::addFilter(const string& str,
+                             ParsedQuery::GraphPattern *pattern) {
   size_t i = str.find('(');
   AD_CHECK(i != string::npos);
   size_t j = str.find(')', i + 1);
@@ -297,8 +343,8 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
       if (pred == "regex") {
         AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
                  "No filters with regex supported, yet. "
-                     "Try prefix(...) or comparisons with == instead"
-                     " if that satisfies your need.")
+                 "Try prefix(...) or comparisons with == instead"
+                 " if that satisfies your need.")
       }
       if (pred == "prefix") {
         // Rewrite this filter into two ones that use >= and <.
@@ -318,8 +364,8 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
         upper += rhs[rhs.size() - 2] + 1;
         upper += rhs.back();
         f2._rhs = upper;
-        query._filters.emplace_back(f1);
-        query._filters.emplace_back(f2);
+        pattern->_filters.emplace_back(f1);
+        pattern->_filters.emplace_back(f2);
         return;
       }
     }
@@ -381,7 +427,7 @@ void SparqlParser::addFilter(const string& str, ParsedQuery& query) {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
              "Filter not supported yet: " + filter);
   }
-  query._filters.emplace_back(f);
+  pattern->_filters.emplace_back(f);
 }
 
 // _____________________________________________________________________________
