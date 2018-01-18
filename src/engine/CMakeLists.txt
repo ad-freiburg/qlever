@@ -23,6 +23,7 @@ add_library(engine
         ScanningJoin.cpp ScanningJoin.h
         QueryPlanningCostFactors.cpp QueryPlanningCostFactors.h
         TwoColumnJoin.cpp TwoColumnJoin.h
+        OptionalJoin.cpp OptionalJoin.h
 )
 
 target_link_libraries(engine index parser)

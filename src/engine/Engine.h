@@ -367,6 +367,91 @@ public:
     }
   }
 
+  template<typename A, typename B, typename E, int K>
+  static void optionalJoin(const A& a, const B& b,
+                           bool aOptional, bool bOptional,
+                           const vector<array<size_t, 2>> &jcls,
+                           vector<array<E, K>> *result) {
+    // check for trivial case
+    if (a.size() == 0 || b.size() == 0) {
+      return;
+    }
+
+    int jcls_a = 0;
+    int jcls_b = 0;
+    for (array<size_t, 2> jc : jcls) {
+      jcls_a |= (1 << jc[0]);
+      jcls_b |= (1 << jc[1]);
+    }
+    // avoid compiler warnings
+    (void) bOptional;
+    (void) aOptional;
+
+    // TODO improve this using sentinels etc.
+    size_t ia = 0, ib = 0;
+    while (ia < a.size() && ib < b.size()) {
+      for (const array<size_t, 2> &jc : jcls) {
+        if (a[ia][jc[0]] < b[ia][jc[1]]) {
+          if (bOptional) {
+            array<E, K> res;
+            unsigned int i = 0;
+            for (size_t col = 0; col < a[ia].size(); col++) {
+              res[i] = a[ia][col];
+              i++;
+            }
+            for (size_t col = 0; col < b[ib].size(); col++) {
+              if ((jcls_b & (1 << col)) == 0) {
+                res[i] = ID_NO_VALUE;
+                i++;
+              }
+            }
+            result->push_back(res);
+          }
+          ia++;
+          continue;
+        } else if (b[ia][jc[0]] < a[ia][jc[1]]) {
+          if (aOptional) {
+            array<E, K> res;
+            unsigned int i = 0;
+            for (size_t col = 0; col < a[ia].size(); col++) {
+              if ((jcls_a & (1 << col)) == 0) {
+                res[i] = ID_NO_VALUE;
+              } else {
+                res[i] = a[ia][col];
+              }
+              i++;
+            }
+            for (size_t col = 0; col < b[ib].size(); col++) {
+              if ((jcls_b & (1 << col)) == 0) {
+                res[i] = b[ib][col];
+                i++;
+              }
+            }
+            result->push_back(res);
+          }
+          ib++;
+          continue;
+        }
+      }
+      array<E, K> res;
+      unsigned int i = 0;
+      // TODO can we use compile time constant column widths
+      // (as template parameters) to allow for loop unrolling by the compiler?
+      for (size_t col = 0; col < a[ia].size(); col++) {
+        res[i] = a[ia][col];
+        i++;
+      }
+      for (size_t col = 0; col < b[ib].size(); col++) {
+        if ((jcls_b & (1 << col)) == 0) {
+          res[i] = a[ib][col];
+          i++;
+        }
+      }
+      result->push_back(res);
+    }
+  }
+
+
 private:
 
   template<typename E, size_t N, size_t I>
