@@ -121,6 +121,7 @@ TEST(EngineTest, optionalJoinTest) {
   ASSERT_EQ(3u, res[4][1]);
   ASSERT_EQ(1u, res[4][2]);
   ASSERT_EQ(1u, res[4][3]);
+  // TODO (florian) add test for cross product
 }
 
 int main(int argc, char** argv) {

@@ -377,6 +377,12 @@ public:
       return;
     }
 
+    // DEBUG output
+    std::cout << "Join columns: " << std::endl;
+    for (const array<size_t, 2> &jc : jcls) {
+      std::cout << jc[0] << " | " << jc[1] << std::endl;
+    }
+
     int jcls_a = 0;
     int jcls_b = 0;
     for (array<size_t, 2> jc : jcls) {
@@ -389,9 +395,22 @@ public:
     bool matched;
     while (ia < a.size() && ib < b.size()) {
       matched = true;
+
+      for (size_t col = 0; col < a[0].size(); col++) {
+        std::cout << a[ia][col] << ", ";
+      }
+      std::cout << " | ";
+      for (size_t col = 0; col < b[0].size(); col++) {
+        std::cout << b[ib][col] << ", ";
+      }
+      std::cout << std::endl;
+
+
       for (const array<size_t, 2> &jc : jcls) {
         if (a[ia][jc[0]] < b[ib][jc[1]]) {
           if (bOptional) {
+            std::cout << a[ia][jc[0]] << " has no match as " << b[ib][jc[1]]
+                      << " is larger already" << std::endl;
             array<E, K> res;
             for (size_t col = 0; col < a[ia].size(); col++) {
               res[col] = a[ia][col];
@@ -429,25 +448,54 @@ public:
           break;
         }
       }
-      if (matched) {
-        array<E, K> res;
-        unsigned int i = 0;
-        // TODO can we use compile time constant column widths
-        // (as template parameters) to allow for loop unrolling by the compiler?
-        for (size_t col = 0; col < a[ia].size(); col++) {
-          res[col] = a[ia][col];
-          i++;
-        }
-        for (size_t col = 0; col < b[ib].size(); col++) {
-          if ((jcls_b & (1 << col)) == 0) {
-            res[i] = b[ib][col];
+      while (matched && ia < a.size() && ib < b.size()) {
+        std::cout << "matched " << a[ia][jcls[0][0]] << " to " << b[ib][jcls[0][1]] << std::endl;
+        // used to reset ib if another cross product needs to be computed
+        size_t initIb = ib;
+
+        while (matched) {
+          array<E, K> res;
+          unsigned int i = 0;
+          for (size_t col = 0; col < a[ia].size(); col++) {
+            res[col] = a[ia][col];
             i++;
           }
+          for (size_t col = 0; col < b[ib].size(); col++) {
+            if ((jcls_b & (1 << col)) == 0) {
+              res[i] = b[ib][col];
+              i++;
+            }
+          }
+          result->push_back(res);
+          // TODO handle the creation of cross products properly
+          ib++;
+
+          // do the rows still match?
+          for (const array<size_t, 2> &jc : jcls) {
+            if (a[ia][jc[0]] < b[ib][jc[1]]) {
+              matched = false;
+              break;
+            } else if (b[ib][jc[1]] < a[ia][jc[0]]) {
+              matched = false;
+              break;
+            }
+          }
         }
-        result->push_back(res);
-        // TODO handle the creation of cross products properly
         ia++;
-        ib++;
+        // if this still matches, reset ib
+        matched = true;
+        for (const array<size_t, 2> &jc : jcls) {
+          if (a[ia][jc[0]] < b[initIb][jc[1]]) {
+            matched = false;
+            break;
+          } else if (b[initIb][jc[1]] < a[ia][jc[0]]) {
+            matched = false;
+            break;
+          }
+        }
+        if (matched) {
+          ib = initIb;
+        }
       }
     }
   }
