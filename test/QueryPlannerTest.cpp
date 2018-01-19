@@ -19,7 +19,7 @@ TEST(QueryPlannerTest, createTripleGraph) {
               "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y xxx:rel2 <http://abc.de>}");
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(pq);
+      auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
       ASSERT_EQ(
           "0 {s: ?x, p: <http://rdf.myprefix.com/myrel>, o: ?y} : (1, 2)\n"
               "1 {s: ?y, p: <http://rdf.myprefix.com/ns/myrel>, o: ?z} : (0, 2)\n"
@@ -32,7 +32,7 @@ TEST(QueryPlannerTest, createTripleGraph) {
           "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(pq);
+      auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
       ASSERT_EQ(
           "0 {s: ?x, p: ?p, o: <X>} : (1, 2)\n"
               "1 {s: ?x, p: ?p2, o: <Y>} : (0)\n"
@@ -46,7 +46,7 @@ TEST(QueryPlannerTest, createTripleGraph) {
               "?x <Author> <Anthony_Newman_(Author)> }");
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(pq);
+      auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
       ASSERT_EQ(
           "0 {s: ?x, p: <is-a>, o: <Book>} : (1)\n"
               "1 {s: ?x, p: <Author>, o: <Anthony_Newman_(Author)>} : (0)",
@@ -68,7 +68,7 @@ TEST(QueryPlannerTest, testCpyCtorWithKeepNodes) {
           "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(pq);
+      auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
       ASSERT_EQ(2u, tg._nodeMap.find(0)->second->_variables.size());
       ASSERT_EQ(2u, tg._nodeMap.find(1)->second->_variables.size());
       ASSERT_EQ(1u, tg._nodeMap.find(2)->second->_variables.size());
@@ -132,7 +132,7 @@ TEST(QueryPlannerTest, testBFSLeaveOut) {
           "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(pq);
+      auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
       ASSERT_EQ(3u, tg._adjLists.size());
       ad_utility::HashSet<size_t> lo;
       auto out = tg.bfsLeaveOut(0, lo);
@@ -153,7 +153,7 @@ TEST(QueryPlannerTest, testBFSLeaveOut) {
           "SELECT ?x WHERE {<A> <B> ?x. ?x <C> ?y. ?y <X> <Y>}");
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(pq);
+      auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
       ad_utility::HashSet<size_t> lo;
       auto out = tg.bfsLeaveOut(0, lo);
       ASSERT_EQ(3u, out.size());
@@ -185,7 +185,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c ql:contains-word abc}");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(pq);
+        auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
                 "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : (0, 2)\n"
@@ -204,7 +204,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             "SELECT ?x WHERE {?x <p> <X>. ?c <QLever-internal-function/contains-entity> ?x. ?c <QLever-internal-function/contains-word> abc . ?c ql:contains-entity ?y}");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(pq);
+        auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
                 "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : (0, 2, 3)\n"
@@ -224,7 +224,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c ql:contains-word abc . ?c ql:contains-entity ?y. ?y <P2> <X2>}");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(pq);
+        auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
                 "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : (0, 2, 3)\n"
@@ -247,7 +247,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             "(SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?c2 ql:contains-entity ?y. ?c2 ql:contains-word \"xx\"})");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(pq);
+        auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
                 "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : (0, 2, 3)\n"
@@ -271,7 +271,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c ql:contains-word abc . ?c ql:contains-entity ?y. ?c2 ql:contains-entity ?y. ?c2 ql:contains-word xx. ?y <P2> <X2>}");
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(pq);
+        auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
                 "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : (0, 2, 3)\n"
@@ -690,7 +690,7 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
             "?c ql:contains-word \"edible leaves\"} TEXTLIMIT 5");
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryPlanner::TripleGraph tg = qp.createTripleGraph(pq);
+    QueryPlanner::TripleGraph tg = qp.createTripleGraph(&pq._rootGraphPattern);
     ASSERT_EQ(1u, tg._nodeMap.find(0)->second->_variables.size());
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(

@@ -383,33 +383,28 @@ public:
       jcls_a |= (1 << jc[0]);
       jcls_b |= (1 << jc[1]);
     }
-    // avoid compiler warnings
-    (void) bOptional;
-    (void) aOptional;
 
     // TODO improve this using sentinels etc.
     size_t ia = 0, ib = 0;
+    bool matched;
     while (ia < a.size() && ib < b.size()) {
+      matched = true;
       for (const array<size_t, 2> &jc : jcls) {
-        if (a[ia][jc[0]] < b[ia][jc[1]]) {
+        if (a[ia][jc[0]] < b[ib][jc[1]]) {
           if (bOptional) {
             array<E, K> res;
-            unsigned int i = 0;
             for (size_t col = 0; col < a[ia].size(); col++) {
-              res[i] = a[ia][col];
-              i++;
+              res[col] = a[ia][col];
             }
-            for (size_t col = 0; col < b[ib].size(); col++) {
-              if ((jcls_b & (1 << col)) == 0) {
-                res[i] = ID_NO_VALUE;
-                i++;
-              }
+            for (size_t col = a[ia].size(); col < K; col++) {
+              res[col] = ID_NO_VALUE;
             }
             result->push_back(res);
           }
           ia++;
-          continue;
-        } else if (b[ia][jc[0]] < a[ia][jc[1]]) {
+          matched = false;
+          break;
+        } else if (b[ib][jc[1]] < a[ia][jc[0]]) {
           if (aOptional) {
             array<E, K> res;
             unsigned int i = 0;
@@ -430,24 +425,30 @@ public:
             result->push_back(res);
           }
           ib++;
-          continue;
+          matched = false;
+          break;
         }
       }
-      array<E, K> res;
-      unsigned int i = 0;
-      // TODO can we use compile time constant column widths
-      // (as template parameters) to allow for loop unrolling by the compiler?
-      for (size_t col = 0; col < a[ia].size(); col++) {
-        res[i] = a[ia][col];
-        i++;
-      }
-      for (size_t col = 0; col < b[ib].size(); col++) {
-        if ((jcls_b & (1 << col)) == 0) {
-          res[i] = a[ib][col];
+      if (matched) {
+        array<E, K> res;
+        unsigned int i = 0;
+        // TODO can we use compile time constant column widths
+        // (as template parameters) to allow for loop unrolling by the compiler?
+        for (size_t col = 0; col < a[ia].size(); col++) {
+          res[col] = a[ia][col];
           i++;
         }
+        for (size_t col = 0; col < b[ib].size(); col++) {
+          if ((jcls_b & (1 << col)) == 0) {
+            res[i] = b[ib][col];
+            i++;
+          }
+        }
+        result->push_back(res);
+        // TODO handle the creation of cross products properly
+        ia++;
+        ib++;
       }
-      result->push_back(res);
     }
   }
 

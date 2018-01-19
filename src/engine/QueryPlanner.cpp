@@ -10,6 +10,7 @@
 #include "OrderBy.h"
 #include "Distinct.h"
 #include "Filter.h"
+#include "OptionalJoin.h"
 #include "TextOperationWithoutFilter.h"
 #include "TextOperationWithFilter.h"
 #include "TwoColumnJoin.h"
@@ -21,94 +22,134 @@ QueryPlanner::QueryPlanner(QueryExecutionContext* qec) : _qec(qec) {}
 QueryExecutionTree QueryPlanner::createExecutionTree(
     const ParsedQuery& pq) const {
 
-  LOG(DEBUG) << "Creating execution plan.\n";
-  // Strategy:
-  // Create a graph.
-  // Each triple corresponds to a node, there is an edge between two nodes iff
-  // they share a variable.
 
-  TripleGraph tg = createTripleGraph(pq);
+  // create an execution plan for every subtree
+  std::vector<const ParsedQuery::GraphPattern*> patternsToProcess;
+  patternsToProcess.push_back(&pq._rootGraphPattern);
+  std::vector<SubtreePlan> patternPlans;
+  for (int i = 0; i < pq._numGraphPatterns; i++) {
+    // Using a loop instead of resize as there is no default constructor, and
+    // distinct _qet values are needed.
+    patternPlans.emplace_back(_qec);
+  }
+  LOG(DEBUG) << "Got " << patternPlans.size() << " subplans to create."
+             << std::endl;
 
-  // Each node/triple corresponds to a scan (more than one way possible),
-  // each edge corresponds to a possible join.
+  while (!patternsToProcess.empty()) {
+    const ParsedQuery::GraphPattern *pattern = patternsToProcess.back();
+    patternsToProcess.pop_back();
+    // queue all chlidrens for processing
+    patternsToProcess.insert(patternsToProcess.end(),
+                             pattern->_children.begin(),
+                             pattern->_children.end());
 
-  // Enumerate and judge possible query plans using a DP table.
-  // Each ExecutionTree for a sub-problem gives an estimate:
-  // There are estimates for cost and size ( and multiplicity per column).
-  // Start bottom up, i.e. with the scans for triples.
-  // Always merge two solutions from the table by picking one possible join.
-  // A join is possible, if there is an edge between the results.
-  // Therefore we keep track of all edges that touch a sub-result.
-  // When joining two sub-results, the results edges are those that belong
-  // to exactly one of the two input sub-trees.
-  // If two of them have the same target, only one out edge is created.
-  // All edges that are shared by both subtrees, are checked if they are covered
-  // by the join or if an extra filter/select is needed.
+    LOG(DEBUG) << "Creating execution plan.\n";
+    TripleGraph tg = createTripleGraph(pattern);
 
-  // The algorithm then creates all possible plans for 1 to n triples.
-  // To generate a plan for k triples, all subsets between i and k-i are
-  // joined.
+    LOG(TRACE) << "Collapse text cliques..." << std::endl;;
+    tg.collapseTextCliques();
+    LOG(TRACE) << "Collapse text cliques done." << std::endl;
+    vector<vector<SubtreePlan>> finalTab;
 
-  // Filters are now added to the mix when building execution plans.
-  // Without them, a plan has an execution tree and a set of
-  // covered triple nodes.
-  // With them, it also has a set of covered filters.
-  // A filter can be applied as soon as all variables that occur in the filter
-  // Are covered by the query. This is also always the place where this is done.
+    finalTab = fillDpTab(tg, pattern->_filters);
 
-  // Text operations form cliques (all triples connected via the context cvar).
-  // Detect them and turn them into nodes with stored word part and
-  // edges to connected variables.
-  LOG(TRACE) << "Collapse text cliques..." << std::endl;;
-  tg.collapseTextCliques();
-  LOG(TRACE) << "Collapse text cliques done." << std::endl;
-  vector<vector<SubtreePlan>> finalTab;
+    vector<SubtreePlan>& lastRow = finalTab.back();
+    AD_CHECK_GT(lastRow.size(), 0);
+    size_t minCost = lastRow[0].getCostEstimate();
+    size_t minInd = 0;
 
-  // Each text operation has two ways how it can be used.
-  // 1) As leave in the bottom row of the tab.
-  // According to the number of connected variables, the operation creates
-  // a cross product with n entities that can be used in subsequent joins.
-  // 2) as intermediate unary (downwards) nodes in the execution tree.
-  // This is a bit similar to sorts: they can be applied after each step
-  // and will filter on one variable.
-  // Cycles have to be avoided (by previously removing a triple and using it
-  // as a filter later on).
+    for (size_t i = 1; i < lastRow.size(); ++i) {
+      size_t thisCost = lastRow[i].getCostEstimate();
+      if (thisCost < minCost) {
+        minCost = lastRow[i].getCostEstimate();
+        minInd = i;
+      }
+    }
+    patternPlans[pattern->_id] = lastRow[minInd];
+  }
 
-  finalTab = fillDpTab(tg, pq._rootGraphPattern._filters);
+  // join the created trees using optional joins on all of their common
+  // variables
+  // Create an inverse topological ordering of all nodes with children
+  std::vector<const ParsedQuery::GraphPattern*> inverseTopo;
+  patternsToProcess.push_back(&pq._rootGraphPattern);
+  while (!patternsToProcess.empty()) {
+    const ParsedQuery::GraphPattern *pattern = patternsToProcess.back();
+    patternsToProcess.pop_back();
+    if (pattern->_children.size() > 0) {
+      // queue all children for processing
+      patternsToProcess.insert(patternsToProcess.end(),
+                               pattern->_children.begin(),
+                               pattern->_children.end());
+      inverseTopo.push_back(pattern);
+    }
+  }
+
+  LOG(DEBUG) << inverseTopo.size() << " of the nodes have children"
+             << std::endl;
+
+  if (!inverseTopo.empty()) {
+    for (int i = inverseTopo.size() - 1; i >= 0; i--) {
+      LOG(DEBUG) << "merging node with children using OptionalJoin."
+                 << std::endl;
+      const ParsedQuery::GraphPattern *pattern = inverseTopo[i];
+      // Init the joins by taking the parent and its first child, then
+      // succesively join with the next child.
+      // TODO the order of joins can be optimized
+      std::vector<SubtreePlan> plans;
+
+      plans.push_back(optionalJoin(patternPlans[pattern->_id],
+                                   patternPlans[pattern->_children[0]->_id]));
+
+      for (int j = 1; j < pattern->_children.size(); j++) {
+        SubtreePlan &plan1 = plans.back();
+        SubtreePlan &plan2 = patternPlans[pattern->_children[j]->_id];
+        plans.push_back(optionalJoin(plan1, plan2));
+      }
+      // Replace the old pattern with the new one that merges all children.
+      patternPlans[pattern->_id] = plans.back();
+    }
+  }
+  SubtreePlan final = patternPlans[0];
+
+  // Add global modifiers to the query
 
   // If there is an order by clause, add another row to the table and
   // just add an order by / sort to every previous result if needed.
   // If the ordering is perfect already, just copy the plan.
   if (pq._orderBy.size() > 0) {
-    finalTab.emplace_back(getOrderByRow(pq, finalTab));
-  }
-
-
-  vector<SubtreePlan>& lastRow = finalTab.back();
-  AD_CHECK_GT(lastRow.size(), 0);
-  size_t minCost = lastRow[0].getCostEstimate();
-  size_t minInd = 0;
-
-  for (size_t i = 1; i < lastRow.size(); ++i) {
-    size_t thisCost = lastRow[i].getCostEstimate();
-    if (thisCost < minCost) {
-      minCost = lastRow[i].getCostEstimate();
-      minInd = i;
+    // TODO (florian) use the optimized version once more for single GraphPattern querys
+    // finalTab.emplace_back(getOrderByRow(pq, finalTab));
+    SubtreePlan orderByPlan(_qec);
+    vector<pair<size_t, bool>> sortIndices;
+    for (auto& ord : pq._orderBy) {
+      sortIndices.emplace_back(
+          pair<size_t, bool>{
+              final._qet.get()->getVariableColumn(ord._key),
+              ord._desc});
     }
-  }
+    std::shared_ptr<Operation>
+        ob(new OrderBy(_qec, final._qet, sortIndices));
+    QueryExecutionTree &tree = *orderByPlan._qet.get();
+    tree.setVariableColumns(final._qet.get()->getVariableColumnMap());
+    tree.setOperation(QueryExecutionTree::ORDER_BY, ob);
+    tree.setContextVars(final._qet.get()->getContextVars());
 
+    final = orderByPlan;
+  }
+  std::cout << final._qet->asString() << std::endl;
 
   // A distinct modifier is applied in the end. This is very easy
   // but not necessarily optimal.
   // TODO: Adjust so that the optimal place for the operation is found.
   if (pq._distinct) {
-    QueryExecutionTree distinctTree(*lastRow[minInd]._qet.get());
+    QueryExecutionTree distinctTree(*final._qet.get());
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
     for (const auto& var : pq._selectedVariables) {
-      if (lastRow[minInd]._qet.get()->getVariableColumnMap().find(var) !=
-          lastRow[minInd]._qet.get()->getVariableColumnMap().end()) {
-        auto ind = lastRow[minInd]._qet.get()->getVariableColumnMap().find(
+      if (final._qet.get()->getVariableColumnMap().find(var) !=
+          final._qet.get()->getVariableColumnMap().end()) {
+        auto ind = final._qet.get()->getVariableColumnMap().find(
             var)->second;
         if (indDone.count(ind) == 0) {
           keepIndices.push_back(ind);
@@ -118,9 +159,9 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
                  ad_utility::startsWith(var, "TEXT(")) {
         auto varInd = var.find('?');
         auto cVar = var.substr(varInd, var.rfind(')') - varInd);
-        if (lastRow[minInd]._qet.get()->getVariableColumnMap().find(cVar) !=
-            lastRow[minInd]._qet.get()->getVariableColumnMap().end()) {
-          auto ind = lastRow[minInd]._qet.get()->getVariableColumnMap().find(
+        if (final._qet.get()->getVariableColumnMap().find(cVar) !=
+            final._qet.get()->getVariableColumnMap().end()) {
+          auto ind = final._qet.get()->getVariableColumnMap().find(
               cVar)->second;
           if (indDone.count(ind) == 0) {
             keepIndices.push_back(ind);
@@ -129,23 +170,23 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
         }
       }
     }
-    if (lastRow[minInd]._qet.get()->getType() == QueryExecutionTree::SORT ||
-        lastRow[minInd]._qet.get()->getType() == QueryExecutionTree::ORDER_BY ||
+    if (final._qet.get()->getType() == QueryExecutionTree::SORT ||
+        final._qet.get()->getType() == QueryExecutionTree::ORDER_BY ||
         std::find(keepIndices.begin(), keepIndices.end(),
-                  lastRow[minInd]._qet.get()->resultSortedOn())
+                  final._qet.get()->resultSortedOn())
         != keepIndices.end()) {
       std::shared_ptr<Operation>
-          distinct(new Distinct(_qec, lastRow[minInd]._qet, keepIndices));
+          distinct(new Distinct(_qec, final._qet, keepIndices));
       distinctTree.setOperation(QueryExecutionTree::DISTINCT, distinct);
     } else {
       if (keepIndices.size() == 1) {
         std::shared_ptr<QueryExecutionTree> tree(new QueryExecutionTree(_qec));
         std::shared_ptr<Operation>
-            sort(new Sort(_qec, lastRow[minInd]._qet, keepIndices[0]));
+            sort(new Sort(_qec, final._qet, keepIndices[0]));
         tree->setVariableColumns(
-            lastRow[minInd]._qet.get()->getVariableColumnMap());
+            final._qet.get()->getVariableColumnMap());
         tree->setOperation(QueryExecutionTree::SORT, sort);
-        tree->setContextVars(lastRow[minInd]._qet.get()->getContextVars());
+        tree->setContextVars(final._qet.get()->getContextVars());
         std::shared_ptr<Operation>
             distinct(new Distinct(_qec, tree, keepIndices));
         distinctTree.setOperation(QueryExecutionTree::DISTINCT, distinct);
@@ -156,11 +197,11 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
           obCols.emplace_back(std::make_pair(i, false));
         }
         std::shared_ptr<Operation>
-            ob(new OrderBy(_qec, lastRow[minInd]._qet, obCols));
+            ob(new OrderBy(_qec, final._qet, obCols));
         tree->setVariableColumns(
-            lastRow[minInd]._qet.get()->getVariableColumnMap());
+            final._qet.get()->getVariableColumnMap());
         tree->setOperation(QueryExecutionTree::ORDER_BY, ob);
-        tree->setContextVars(lastRow[minInd]._qet.get()->getContextVars());
+        tree->setContextVars(final._qet.get()->getContextVars());
         std::shared_ptr<Operation>
             distinct(new Distinct(_qec, tree, keepIndices));
         distinctTree.setOperation(QueryExecutionTree::DISTINCT, distinct);
@@ -170,9 +211,9 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
     return distinctTree;
   }
 
-  lastRow[minInd]._qet.get()->setTextLimit(getTextLimit(pq._textLimit));
+  final._qet.get()->setTextLimit(getTextLimit(pq._textLimit));
   LOG(DEBUG) << "Done creating execution plan.\n";
-  return *lastRow[minInd]._qet.get();
+  return *final._qet.get();
 }
 
 // _____________________________________________________________________________
@@ -258,17 +299,17 @@ bool QueryPlanner::isWords(const string& elem) {
 
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
-    const ParsedQuery& query) const {
+    const ParsedQuery::GraphPattern *pattern) const {
   TripleGraph tg;
-  if (query._rootGraphPattern._whereClauseTriples.size() > 64) {
+  if (pattern->_whereClauseTriples.size() > 64) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "At most 64 triples allowed at the moment.");
   }
-  if (query._rootGraphPattern._filters.size() > 64) {
+  if (pattern->_filters.size() > 64) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "At most 64 filters allowed at the moment.");
   }
-  for (auto& t : query._rootGraphPattern._whereClauseTriples) {
+  for (auto& t : pattern->_whereClauseTriples) {
     // Add a node for the triple.
     tg._nodeStorage.emplace_back(
         TripleGraph::Node(tg._nodeStorage.size(), t));
@@ -824,6 +865,49 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
   LOG(TRACE) << "Got " << prunedPlans.size() << " pruned plans from "
              << nofCandidates << " candidates.\n";
   return prunedPlans;
+}
+
+// _____________________________________________________________________________
+QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(const SubtreePlan &a,
+                                                     const SubtreePlan &b) const
+{
+  SubtreePlan plan(_qec);
+
+  std::vector<std::array<Id, 2>> jcs = getJoinColumns(a, b);
+
+  // a and b need to be ordered properly first
+  // TODO (florian) only sort if they are not sorted yet.
+  vector<pair<size_t, bool>> sortIndicesA;
+  vector<pair<size_t, bool>> sortIndicesB;
+  for (array<Id, 2> &jc : jcs) {
+    sortIndicesA.push_back(std::make_pair(jc[0], false));
+    sortIndicesB.push_back(std::make_pair(jc[1], false));
+  }
+
+  SubtreePlan orderByPlanA(_qec), orderByPlanB(_qec);
+
+  std::shared_ptr<Operation>
+      orderByA(new OrderBy(_qec, a._qet, sortIndicesA));
+  std::shared_ptr<Operation>
+      orderByB(new OrderBy(_qec, b._qet, sortIndicesB));
+
+  orderByPlanA._qet->setVariableColumns(a._qet->getVariableColumnMap());
+  orderByPlanA._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByA);
+  orderByPlanB._qet->setVariableColumns(b._qet->getVariableColumnMap());
+  orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
+
+  std::shared_ptr<Operation> join(
+        new OptionalJoin(_qec,
+                         orderByPlanA._qet,
+                         false,
+                         orderByPlanB._qet,
+                         true, jcs));
+  QueryExecutionTree& tree = *plan._qet.get();
+  tree.setVariableColumns(
+      static_cast<OptionalJoin*>(join.get())->getVariableColumns());
+  tree.setOperation(QueryExecutionTree::OPTIONAL_JOIN, join);
+
+  return plan;
 }
 
 // _____________________________________________________________________________

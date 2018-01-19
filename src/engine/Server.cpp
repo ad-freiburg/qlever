@@ -157,6 +157,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       QueryExecutionTree qet = qp.createExecutionTree(pq);
       LOG(INFO) << qet.asString() << std::endl;
 
+      // TODO (florian) ensure all of these handle ID_NO_VALUE properly
       if (ad_utility::getLowercase(params["action"]) == "csv_export") {
         // CSV export
         response = composeResponseSepValues(pq, qet, ',');

@@ -105,6 +105,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
                               ParsedQuery::GraphPattern *currentPattern) {
   if (currentPattern == nullptr) {
     currentPattern = &query._rootGraphPattern;
+    query._rootGraphPattern._id = 0;
   }
   size_t i = str.find('{');
   size_t j = str.rfind('}');
@@ -155,6 +156,8 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
         }
         currentPattern->_children.push_back(new ParsedQuery::GraphPattern());
         currentPattern->_children.back()->_optional = true;
+        currentPattern->_children.back()->_id = query._numGraphPatterns;
+        query._numGraphPatterns++;
         // Recursively call parseWhere to parse the optional part.
         parseWhere(inner.substr(ob, cb - ob + 1), query,
                    currentPattern->_children.back());

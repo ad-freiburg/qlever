@@ -107,7 +107,7 @@ public:
     void addAllNodes(uint64_t otherNodes);
   };
 
-  TripleGraph createTripleGraph(const ParsedQuery& query) const;
+  TripleGraph createTripleGraph(const ParsedQuery::GraphPattern *pattern) const;
 
   static ad_utility::HashMap<string, size_t>
   createVariableColumnsMapForTextOperation(
@@ -184,5 +184,7 @@ private:
   size_t getTextLimit(const string& textLimitString) const;
 
   SubtreePlan getTextLeafPlan(const TripleGraph::Node& node) const;
+
+  SubtreePlan optionalJoin(const SubtreePlan &a, const SubtreePlan &b) const;
 };
 

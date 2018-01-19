@@ -97,16 +97,18 @@ public:
     vector<SparqlTriple> _whereClauseTriples;
     vector<SparqlFilter> _filters;
     bool _optional;
+    size_t _id;
 
     vector<GraphPattern*> _children;
   };
 
 
-  ParsedQuery() : _reduced(false), _distinct(false) { }
+  ParsedQuery() : _numGraphPatterns(1), _reduced(false), _distinct(false) { }
 
   vector<SparqlPrefix> _prefixes;
   vector<string> _selectedVariables;
   GraphPattern _rootGraphPattern;
+  size_t _numGraphPatterns;
   vector<OrderKey> _orderBy;
   string _limit;
   string _textLimit;
