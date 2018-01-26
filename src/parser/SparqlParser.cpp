@@ -129,6 +129,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
     if (inner[k] == 'O' || inner[k] == 'o') {
       if (inner.substr(k, 8) == "OPTIONAL"
           || inner.substr(k, 8) == "optional") {
+        LOG(DEBUG) << "Found optional part\n";
         // find opening and closing brackets of optional part
         size_t ob = inner.find('{', k);
         size_t cb = ob;

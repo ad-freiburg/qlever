@@ -16,6 +16,7 @@
 using std::vector;
 using std::array;
 
+
 class Engine {
 public:
 
@@ -367,13 +368,83 @@ public:
     }
   }
 
-  template<typename A, typename B, typename E, int K>
+  template<typename R, int K>
+  static R newOptionalResult() {
+    return R();
+  }
+
+  template<int K>
+  static vector<Id> newOptionalResult() {
+    return vector<Id>(K);
+  }
+
+  /**
+   * @brief Joins two result tables on any number of columns, inserting the
+   *        special value ID_NO_VALUE for any entries marked as optional.
+   * @param a
+   * @param b
+   * @param aOptional
+   * @param bOptional
+   * @param jcls
+   * @param result
+   */
+  template<typename A, typename B, typename R, int K>
   static void optionalJoin(const A& a, const B& b,
                            bool aOptional, bool bOptional,
                            const vector<array<size_t, 2>> &jcls,
-                           vector<array<E, K>> *result) {
-    // check for trivial case
-    if (a.size() == 0 || b.size() == 0) {
+                           vector<R> *result) {
+    // check for trivial cases
+    if ((a.size() == 0 && b.size() == 0)
+        || (a.size() == 0 && !aOptional)
+        || (b.size() == 0 && !bOptional)) {
+      return;
+    }
+
+    int jcls_a = 0;
+    int jcls_b = 0;
+    for (array<size_t, 2> jc : jcls) {
+      jcls_a |= (1 << jc[0]);
+      jcls_b |= (1 << jc[1]);
+    }
+
+    // Deal with one of the two tables beeing both empty and optional
+    if (a.size() == 0 && aOptional) {
+      int sizeA = K - b[0].size() + jcls.size();
+      for (size_t ib = 0; ib < b.size(); ib++) {
+        R res = newOptionalResult<R, K>();
+        size_t i = 0;
+        for (size_t col = 0; col < sizeA; col++) {
+          res[col] = ID_NO_VALUE;
+          i++;
+          // if this is one of the join columns use the value in b
+          for (const array<size_t, 2>& a : jcls) {
+            if (a[0] == col) {
+              res[col] = b[ib][a[1]];
+              break;
+            }
+          }
+        }
+        for (size_t col = 0; col < b[ib].size(); col++) {
+          if ((jcls_b & (1 << col)) == 0) {
+            res[i] = b[ib][col];
+            i++;
+          }
+        }
+        result->push_back(res);
+      }
+      return;
+    }
+    else if (b.size() == 0 && bOptional) {
+      for (size_t ia = 0; ia < a.size(); ia++) {
+        R res = newOptionalResult<R, K>();
+        for (size_t col = 0; col < a[ia].size(); col++) {
+          res[col] = a[ia][col];
+        }
+        for (size_t col = a[ia].size(); col < K; col++) {
+          res[col] = ID_NO_VALUE;
+        }
+        result->push_back(res);
+      }
       return;
     }
 
@@ -383,12 +454,7 @@ public:
       std::cout << jc[0] << " | " << jc[1] << std::endl;
     }
 
-    int jcls_a = 0;
-    int jcls_b = 0;
-    for (array<size_t, 2> jc : jcls) {
-      jcls_a |= (1 << jc[0]);
-      jcls_b |= (1 << jc[1]);
-    }
+
 
     // TODO improve this using sentinels etc.
     size_t ia = 0, ib = 0;
@@ -405,13 +471,12 @@ public:
       }
       std::cout << std::endl;
 
-
       for (const array<size_t, 2> &jc : jcls) {
         if (a[ia][jc[0]] < b[ib][jc[1]]) {
           if (bOptional) {
             std::cout << a[ia][jc[0]] << " has no match as " << b[ib][jc[1]]
                       << " is larger already" << std::endl;
-            array<E, K> res;
+            R res = newOptionalResult<R, K>();
             for (size_t col = 0; col < a[ia].size(); col++) {
               res[col] = a[ia][col];
             }
@@ -425,12 +490,13 @@ public:
           break;
         } else if (b[ib][jc[1]] < a[ia][jc[0]]) {
           if (aOptional) {
-            array<E, K> res;
+            R res = newOptionalResult<R, K>();
             unsigned int i = 0;
             for (size_t col = 0; col < a[ia].size(); col++) {
               if ((jcls_a & (1 << col)) == 0) {
                 res[i] = ID_NO_VALUE;
               } else {
+                // TODO does this value exist?
                 res[i] = a[ia][col];
               }
               i++;
@@ -454,7 +520,7 @@ public:
         size_t initIb = ib;
 
         while (matched) {
-          array<E, K> res;
+          R res = newOptionalResult<R, K>();
           unsigned int i = 0;
           for (size_t col = 0; col < a[ia].size(); col++) {
             res[col] = a[ia][col];
@@ -467,7 +533,6 @@ public:
             }
           }
           result->push_back(res);
-          // TODO handle the creation of cross products properly
           ib++;
 
           // do the rows still match?
