@@ -93,7 +93,7 @@ TEST(EngineTest, optionalJoinTest) {
   jcls.push_back(array<size_t, 2>{{1, 2}});
   jcls.push_back(array<size_t, 2>{{2, 1}});
   e.optionalJoin<vector<array<Id, 3>>, vector<array<Id, 3>>, array<Id, 4>, 4>
-      (a, b, false, true, jcls, &res);
+      (a, b, false, true, jcls, &res, 4);
 
   ASSERT_EQ(5u, res.size());
 
@@ -122,6 +122,45 @@ TEST(EngineTest, optionalJoinTest) {
   ASSERT_EQ(1u, res[4][2]);
   ASSERT_EQ(1u, res[4][3]);
   // TODO (florian) add test for cross product
+
+  vector<vector<Id>> va;
+  va.push_back(vector<Id>{{1, 2, 3, 4, 5, 6}});
+  va.push_back(vector<Id>{{1, 2, 3, 7, 5, 6}});
+  va.push_back(vector<Id>{{7, 6, 5, 4, 3, 2}});
+
+  vector<array<Id, 3>> vb;
+  vb.push_back(array<Id, 3>{{2, 3, 4}});
+  vb.push_back(array<Id, 3>{{2, 3, 5}});
+  vb.push_back(array<Id, 3>{{6, 7, 4}});
+
+  vector<vector<Id>> vres;
+  jcls.clear();
+  jcls.push_back(array<size_t, 2>{{1, 0}});
+  jcls.push_back(array<size_t, 2>{{2, 1}});
+
+  // The template size parameter can be at most 6 (the maximum number
+  // of fixed size columns plus one).
+  e.optionalJoin<vector<vector<Id>>, vector<array<Id, 3>>, vector<Id>, 6>
+      (va, vb, true, false, jcls, &vres, 7);
+
+  ASSERT_EQ(5u, vres.size());
+  ASSERT_EQ(7u, vres[0].size());
+  ASSERT_EQ(7u, vres[1].size());
+  ASSERT_EQ(7u, vres[2].size());
+  ASSERT_EQ(7u, vres[3].size());
+  ASSERT_EQ(7u, vres[4].size());
+
+  vector<Id> r{1, 2, 3, 4, 5, 6, 4};
+  ASSERT_EQ(r, vres[0]);
+  r = {1, 2, 3, 4, 5, 6, 5};
+  ASSERT_EQ(r, vres[1]);
+  r = {1, 2, 3, 7, 5, 6, 4};
+  ASSERT_EQ(r, vres[2]);
+  r = {1, 2, 3, 7, 5, 6, 5};
+  ASSERT_EQ(r, vres[3]);
+  r = {ID_NO_VALUE, 6, 7, ID_NO_VALUE, ID_NO_VALUE, ID_NO_VALUE, 4};
+  ASSERT_EQ(r, vres[4]);
+
 }
 
 int main(int argc, char** argv) {
