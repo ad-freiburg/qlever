@@ -92,7 +92,7 @@ TEST(EngineTest, optionalJoinTest) {
   vector<array<size_t, 2>> jcls;
   jcls.push_back(array<size_t, 2>{{1, 2}});
   jcls.push_back(array<size_t, 2>{{2, 1}});
-  e.optionalJoin<vector<array<Id, 3>>, vector<array<Id, 3>>, Id, 4>
+  e.optionalJoin<vector<array<Id, 3>>, vector<array<Id, 3>>, array<Id, 4>, 4>
       (a, b, false, true, jcls, &res);
 
   ASSERT_EQ(5u, res.size());

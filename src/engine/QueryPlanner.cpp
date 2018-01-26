@@ -27,7 +27,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   std::vector<const ParsedQuery::GraphPattern*> patternsToProcess;
   patternsToProcess.push_back(&pq._rootGraphPattern);
   std::vector<SubtreePlan> patternPlans;
-  for (int i = 0; i < pq._numGraphPatterns; i++) {
+  for (size_t i = 0; i < pq._numGraphPatterns; i++) {
     // Using a loop instead of resize as there is no default constructor, and
     // distinct _qet values are needed.
     patternPlans.emplace_back(_qec);
@@ -52,6 +52,15 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
     vector<vector<SubtreePlan>> finalTab;
 
     finalTab = fillDpTab(tg, pattern->_filters);
+
+    // If there are no optional parsts have the optimizer handle the final
+    // order by clause.
+    if (patternPlans.size() == 1 && pq._orderBy.size() > 0) {
+      // If there is an order by clause, add another row to the table and
+      // just add an order by / sort to every previous result if needed.
+      // If the ordering is perfect already, just copy the plan.
+      finalTab.emplace_back(getOrderByRow(pq, finalTab));
+    }
 
     vector<SubtreePlan>& lastRow = finalTab.back();
     AD_CHECK_GT(lastRow.size(), 0);
@@ -101,7 +110,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
       plans.push_back(optionalJoin(patternPlans[pattern->_id],
                                    patternPlans[pattern->_children[0]->_id]));
 
-      for (int j = 1; j < pattern->_children.size(); j++) {
+      for (size_t j = 1; j < pattern->_children.size(); j++) {
         SubtreePlan &plan1 = plans.back();
         SubtreePlan &plan2 = patternPlans[pattern->_children[j]->_id];
         plans.push_back(optionalJoin(plan1, plan2));
@@ -114,10 +123,10 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
 
   // Add global modifiers to the query
 
-  // If there is an order by clause, add another row to the table and
-  // just add an order by / sort to every previous result if needed.
-  // If the ordering is perfect already, just copy the plan.
-  if (pq._orderBy.size() > 0) {
+  // If there are optional parts and the result should be ordered ad an order
+  // by clause after the current final operation. If there are no optional parts
+  // this has already been taken care of.
+  if (pq._orderBy.size() > 0 && patternPlans.size() > 1) {
     // TODO (florian) use the optimized version once more for single GraphPattern querys
     // finalTab.emplace_back(getOrderByRow(pq, finalTab));
     SubtreePlan orderByPlan(_qec);
