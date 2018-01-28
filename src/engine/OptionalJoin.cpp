@@ -67,7 +67,8 @@ struct meta_for {
                   const ResultTable &rightResult,
                   bool leftOptional, bool rightOptional,
                   const std::vector<std::array<size_t, 2>> &joinColumns,
-                  ResultTable *result) const {
+                  ResultTable *result,
+                  int resultSize) const {
     if (I == i) {
       if (J == j) {
         if (K == k) {
@@ -81,23 +82,24 @@ struct meta_for {
                                      leftOptional, rightOptional,
                                      joinColumns,
                                      static_cast<vector<array<Id, K>>*>
-                                     (result->_fixedSizeData));
+                                     (result->_fixedSizeData),
+                                     resultSize);
         } else {
           meta_for<I, J, K + 1>()(i, j, k, leftResult, rightResult,
                                   leftOptional, rightOptional, joinColumns,
-                                  result);
+                                  result, resultSize);
         }
       } else {
         meta_for<I, J + 1, K>()(i, j, k, leftResult, rightResult,
                                 leftOptional, rightOptional, joinColumns,
-                                result);
+                                result, resultSize);
       }
     } else {
       // K has to be at least as large as I (otherwise we couldn't store
       // all columns).
       meta_for<I + 1, J, K + 1>()(i, j, k, leftResult, rightResult,
                               leftOptional, rightOptional, joinColumns,
-                              result);
+                              result, resultSize);
     }
   }
 };
@@ -110,7 +112,7 @@ struct meta_for<I, 6, K> {
                   const ResultTable &rightResult,
                   bool leftOptional, bool rightOptional,
                   const std::vector<std::array<size_t, 2>> &joinColumns,
-                  ResultTable *result) const {
+                  ResultTable *result, int resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void) i;
     (void) j;
@@ -122,7 +124,8 @@ struct meta_for<I, 6, K> {
                        rightResult._varSizeData,
                        leftOptional, rightOptional,
                        joinColumns,
-                       &result->_varSizeData);
+                       &result->_varSizeData,
+                       resultSize);
   }
 };
 
@@ -133,7 +136,7 @@ struct meta_for<I, J, 6> {
                   const ResultTable &rightResult,
                   bool leftOptional, bool rightOptional,
                   const std::vector<std::array<size_t, 2>> &joinColumns,
-                  ResultTable *result) const {
+                  ResultTable *result, int resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void) i;
     (void) j;
@@ -146,7 +149,8 @@ struct meta_for<I, J, 6> {
                        (rightResult._fixedSizeData),
                        leftOptional, rightOptional,
                        joinColumns,
-                       &result->_varSizeData);
+                       &result->_varSizeData,
+                       resultSize);
   }
 };
 
@@ -157,7 +161,7 @@ struct meta_for<6, J, 6> {
                   const ResultTable &rightResult,
                   bool leftOptional, bool rightOptional,
                   const std::vector<std::array<size_t, 2>> &joinColumns,
-                  ResultTable *result) const {
+                  ResultTable *result, int resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void) i;
     (void) j;
@@ -169,7 +173,8 @@ struct meta_for<6, J, 6> {
                        (rightResult._fixedSizeData),
                        leftOptional, rightOptional,
                        joinColumns,
-                       &result->_varSizeData);
+                       &result->_varSizeData,
+                       resultSize);
   }
 };
 
@@ -180,7 +185,7 @@ struct meta_for<6, 6, 6> {
                   const ResultTable &rightResult,
                   bool leftOptional, bool rightOptional,
                   const std::vector<std::array<size_t, 2>> &joinColumns,
-                  ResultTable *result) const {
+                  ResultTable *result, int resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void) i;
     (void) j;
@@ -191,7 +196,8 @@ struct meta_for<6, 6, 6> {
                        rightResult._varSizeData,
                        leftOptional, rightOptional,
                        joinColumns,
-                       &result->_varSizeData);
+                       &result->_varSizeData,
+                       resultSize);
   }
 };
 
@@ -221,7 +227,8 @@ void OptionalJoin::computeResult(ResultTable* result) const {
                       rightResult,
                       _leftOptional, _rightOptional,
                       _joinColumns,
-                      result);
+                      result,
+                      result->_nofColumns);
   }
   result->_status = ResultTable::FINISHED;
   LOG(DEBUG) << "OptionalJoin result computation done." << endl;
