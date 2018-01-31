@@ -514,7 +514,6 @@ public:
       return;
     }
 
-    // TODO improve this using sentinels etc.
     size_t ia = 0, ib = 0;
     bool matched;
     while (ia < a.size() && ib < b.size()) {

@@ -34,9 +34,7 @@ public:
     _right->setTextLimit(limit);
   }
 
-  virtual size_t getSizeEstimate() {
-    return (_left->getSizeEstimate() + _right->getSizeEstimate()) / 10;
-  }
+  virtual size_t getSizeEstimate();
 
   virtual size_t getCostEstimate() {
     // This operation is currently only supposed to be used to join two optional

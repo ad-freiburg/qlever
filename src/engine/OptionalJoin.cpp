@@ -269,6 +269,19 @@ size_t OptionalJoin::resultSortedOn() const {
 
 // _____________________________________________________________________________
 float OptionalJoin::getMultiplicity(size_t col) {
-  // TODO properly implement multiplicities
-  return 0;
+  // TODO Properly implement multiplicities if they are needed. (Currently
+  //      they are not beeing used).
+  return 1;
+}
+
+size_t OptionalJoin::getSizeEstimate() {
+  if (_leftOptional && !_rightOptional) {
+    return _left->getSizeEstimate() + _right->getSizeEstimate() / 10;
+  } else if (_rightOptional && !_leftOptional) {
+    return _left->getSizeEstimate() / 10 + _right->getSizeEstimate();
+  } else if (_rightOptional && _leftOptional) {
+    size_t size = _left->getSizeEstimate() + _right->getSizeEstimate();
+    return size + size / 10;
+  }
+  return (_left->getSizeEstimate() + _right->getSizeEstimate()) / 10;
 }

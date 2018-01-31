@@ -121,7 +121,6 @@ TEST(EngineTest, optionalJoinTest) {
   ASSERT_EQ(3u, res[4][1]);
   ASSERT_EQ(1u, res[4][2]);
   ASSERT_EQ(1u, res[4][3]);
-  // TODO (florian) add test for cross product
 
   vector<vector<Id>> va;
   va.push_back(vector<Id>{{1, 2, 3, 4, 5, 6}});
