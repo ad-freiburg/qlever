@@ -215,12 +215,8 @@ void OptionalJoin::computeResult(ResultTable* result) const {
   const auto& leftResult = _left->getResult();
   const auto& rightResult = _right->getResult();
 
-  if (leftResult._nofColumns > 5 || rightResult._nofColumns > 5
-      || result->_nofColumns > 5) {
-      // TODO handle more than 5 columns
-  } else {
-    // Calls Engine::optionalJoin with the right values for the array sizes.
-    meta_for<1, 1, 1>()(leftResult._nofColumns,
+  // Calls Engine::optionalJoin with the right values for the array sizes.
+  meta_for<1, 1, 1>()(leftResult._nofColumns,
                       rightResult._nofColumns,
                       result->_nofColumns,
                       leftResult,
@@ -229,7 +225,6 @@ void OptionalJoin::computeResult(ResultTable* result) const {
                       _joinColumns,
                       result,
                       result->_nofColumns);
-  }
   result->_status = ResultTable::FINISHED;
   LOG(DEBUG) << "OptionalJoin result computation done." << endl;
 }
@@ -241,14 +236,20 @@ std::unordered_map<string, size_t> OptionalJoin::getVariableColumns() const {
   for (auto it = _right->getVariableColumnMap().begin();
        it != _right->getVariableColumnMap().end(); ++it) {
     size_t columnIndex = leftSize + it->second;
+    bool isJoinColumn = false;
     // Reduce the index for every column of _right that is beeing joined on,
     // and the index of which is smaller than the index of it.
     for (const std::array<size_t, 2> &a : _joinColumns) {
       if (a[1] < it->second) {
         columnIndex--;
+      } else if(a[1] == it->second) {
+        isJoinColumn = true;
+        break;
       }
     }
-    retVal[it->first] = columnIndex;
+    if (!isJoinColumn) {
+      retVal[it->first] = columnIndex;
+    }
   }
   return retVal;
 }
@@ -268,11 +269,6 @@ size_t OptionalJoin::resultSortedOn() const {
 
 // _____________________________________________________________________________
 float OptionalJoin::getMultiplicity(size_t col) {
-  /*if (_multiplicities.size() == 0) {
-    computeMultiplicities();
-  }
-  AD_CHECK_LT(col, _multiplicities.size());
-  return _multiplicities[col];*/
   // TODO properly implement multiplicities
   return 0;
 }

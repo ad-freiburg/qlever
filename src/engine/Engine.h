@@ -6,6 +6,7 @@
 #include <array>
 #include <vector>
 #include <algorithm>
+#include <iomanip>
 
 #include "../util/Log.h"
 #include "./IndexSequence.h"
@@ -368,23 +369,6 @@ public:
     }
   }
 
-
-  /**
-   * @brief Returns an object of the return type of optionalJoin and properly
-   *        handles the case of std::vector which needs to be resized for it to
-   *        contain resultSize elements.
-   * @param resultSize
-   * @return
-   */
-  /*template<typename R, int K>
-  static R newOptionalResult(int resultSize) {
-    if (std::is_same<R, vector<Id>>::value) {
-      return vector<Id>(resultSize);
-    } else {
-      return R();
-    }
-  }*/
-
   template<typename R, int K>
   struct newOptionalResult {
     R operator()(unsigned int resultSize) {
@@ -399,6 +383,63 @@ public:
       return vector<Id>(resultSize);
     }
   };
+
+
+ template<typename A, typename B, typename R>
+  static void createOptionalResult(const A a, const B b,
+                                size_t sizeA,
+                                bool aEmpty, bool bEmpty,
+                                int jcls_a, int jcls_b,
+                                const std::vector<size_t> &jclAToB,
+                                unsigned int resultSize,
+                                R &res) {
+    assert(!(aEmpty && bEmpty));
+    if (aEmpty) {
+      // Fill the columns of a with ID_NO_VALUE and the rest with b.
+      size_t i = 0;
+      for (size_t col = 0; col < sizeA; col++) {
+        if ((jcls_a & (1 << col)) == 0) {
+          res[col] = ID_NO_VALUE;
+        } else {
+          // if this is one of the join columns use the value in b
+          res[col] = (*b)[jclAToB[col]];
+        }
+        i++;
+      }
+      for (size_t col = 0; col < b->size(); col++) {
+        if ((jcls_b & (1 << col)) == 0) {
+          // only write the value if it is not one of the join columns in b
+          res[i] = (*b)[col];
+          i++;
+        }
+      }
+    } else if (bEmpty) {
+      // Fill the columns of b with ID_NO_VALUE and the rest with a
+      for (size_t col = 0; col < sizeA; col++) {
+        res[col] = (*a)[col];
+      }
+      for (size_t col = sizeA; col < resultSize; col++) {
+        res[col] = ID_NO_VALUE;
+      }
+    } else {
+      // Use the values from both a and b
+      unsigned int i = 0;
+      for (size_t col = 0; col < a->size(); col++) {
+        res[col] = (*a)[col];
+        i++;
+      }
+      for (size_t col = 0; col < b->size(); col++) {
+        if ((jcls_b & (1 << col)) == 0) {
+          res[i] = (*b)[col];
+          i++;
+        }
+      }
+    }
+    /*for (uint32_t i = 0; i < resultSize; i++) {
+      std::cout << std::setw(7) << res[i];
+    }
+    std::cout << std::setw(0) << std::endl;*/
+  }
 
   /**
    * @brief Joins two result tables on any number of columns, inserting the
@@ -430,29 +471,32 @@ public:
       jcls_b |= (1 << jc[1]);
     }
 
+    // When a is optional this is used to quickly determine which columns
+    // in which column of b the value of a joined column can be found.
+    std::vector<size_t> jclAToB;
+    if (aOptional) {
+      uint32_t maxJoinColA = 0;
+      for (const array<size_t, 2> &jc : jcls) {
+        if (jc[0] > maxJoinColA) {
+          maxJoinColA = jc[0];
+        }
+      }
+      jclAToB.resize(maxJoinColA + 1);
+      for (const array<size_t, 2> &jc : jcls) {
+        jclAToB[jc[0]] = jc[1];
+      }
+    }
+
     // Deal with one of the two tables beeing both empty and optional
     if (a.size() == 0 && aOptional) {
       size_t sizeA = resultSize - b[0].size() + jcls.size();
       for (size_t ib = 0; ib < b.size(); ib++) {
         R res = newOptionalResult<R, K>()(resultSize);
-        size_t i = 0;
-        for (size_t col = 0; col < sizeA; col++) {
-          res[col] = ID_NO_VALUE;
-          i++;
-          // if this is one of the join columns use the value in b
-          for (const array<size_t, 2>& jc : jcls) {
-            if (jc[0] == col) {
-              res[col] = b[ib][jc[1]];
-              break;
-            }
-          }
-        }
-        for (size_t col = 0; col < b[ib].size(); col++) {
-          if ((jcls_b & (1 << col)) == 0) {
-            res[i] = b[ib][col];
-            i++;
-          }
-        }
+        createOptionalResult(static_cast<typename A::value_type*>(0), &b[ib],
+                             sizeA,
+                             true, false,
+                             jcls_a, jcls_b,
+                             jclAToB, resultSize, res);
         result->push_back(res);
       }
       return;
@@ -460,52 +504,32 @@ public:
     else if (b.size() == 0 && bOptional) {
       for (size_t ia = 0; ia < a.size(); ia++) {
         R res = newOptionalResult<R, K>()(resultSize);
-        for (size_t col = 0; col < a[ia].size(); col++) {
-          res[col] = a[ia][col];
-        }
-        for (size_t col = a[ia].size(); col < resultSize; col++) {
-          res[col] = ID_NO_VALUE;
-        }
+        createOptionalResult(&a[ia], static_cast<typename B::value_type*>(0),
+                             a[ia].size(),
+                             false, true,
+                             jcls_a, jcls_b,
+                             jclAToB, resultSize, res);
         result->push_back(res);
       }
       return;
     }
-
-    // DEBUG output
-    /*std::cout << "Join columns: " << std::endl;
-    for (const array<size_t, 2> &jc : jcls) {
-      std::cout << jc[0] << " | " << jc[1] << std::endl;
-    }*/
 
     // TODO improve this using sentinels etc.
     size_t ia = 0, ib = 0;
     bool matched;
     while (ia < a.size() && ib < b.size()) {
       matched = true;
-
-      /*
-      for (size_t col = 0; col < a[0].size(); col++) {
-        std::cout << a[ia][col] << ", ";
-      }
-      std::cout << " | ";
-      for (size_t col = 0; col < b[0].size(); col++) {
-        std::cout << b[ib][col] << ", ";
-      }
-      std::cout << std::endl;*/
-
       for (const array<size_t, 2> &jc : jcls) {
         if (a[ia][jc[0]] < b[ib][jc[1]]) {
           if (bOptional) {
-            /*std::cout << a[ia][jc[0]] << " has no match as " << b[ib][jc[1]]
-                      << " is larger already" << std::endl;*/
             R res = newOptionalResult<R, K>()(resultSize);
-            for (size_t col = 0; col < a[ia].size(); col++) {
-              res[col] = a[ia][col];
-            }
-            for (size_t col = a[ia].size(); col < resultSize; col++) {
-              res[col] = ID_NO_VALUE;
-            }
+            createOptionalResult(&a[ia], static_cast<typename B::value_type*>(0),
+                                 a[ia].size(),
+                                 false, true,
+                                 jcls_a, jcls_b,
+                                 jclAToB, resultSize, res);
             result->push_back(res);
+
           }
           ia++;
           matched = false;
@@ -513,27 +537,11 @@ public:
         } else if (b[ib][jc[1]] < a[ia][jc[0]]) {
           if (aOptional) {
             R res = newOptionalResult<R, K>()(resultSize);
-            unsigned int i = 0;
-            for (size_t col = 0; col < a[ia].size(); col++) {
-              if ((jcls_a & (1 << col)) == 0) {
-                res[i] = ID_NO_VALUE;
-              } else {
-                // if this is one of the join columns use the value in b
-                for (const array<size_t, 2>& jc : jcls) {
-                  if (jc[0] == col) {
-                    res[col] = b[ib][jc[1]];
-                    break;
-                  }
-                }
-              }
-              i++;
-            }
-            for (size_t col = 0; col < b[ib].size(); col++) {
-              if ((jcls_b & (1 << col)) == 0) {
-                res[i] = b[ib][col];
-                i++;
-              }
-            }
+            createOptionalResult(static_cast<typename A::value_type*>(0), &b[ib],
+                                 a[ia].size(),
+                                 true, false,
+                                 jcls_a, jcls_b,
+                                 jclAToB, resultSize, res);
             result->push_back(res);
           }
           ib++;
@@ -541,87 +549,74 @@ public:
           break;
         }
       }
+      // Compute the cross product of the row in a and all matching
+      // rows in b.
       while (matched && ia < a.size() && ib < b.size()) {
-        /*std::cout << "matched " << a[ia][jcls[0][0]] << " to " << b[ib][jcls[0][1]] << std::endl;*/
         // used to reset ib if another cross product needs to be computed
         size_t initIb = ib;
 
         while (matched) {
           R res = newOptionalResult<R, K>()(resultSize);
-          unsigned int i = 0;
-          for (size_t col = 0; col < a[ia].size(); col++) {
-            res[col] = a[ia][col];
-            i++;
-          }
-          for (size_t col = 0; col < b[ib].size(); col++) {
-            if ((jcls_b & (1 << col)) == 0) {
-              res[i] = b[ib][col];
-              i++;
-            }
-          }
+          createOptionalResult(&a[ia], &b[ib],
+                               a[ia].size(),
+                               false, false,
+                               jcls_a, jcls_b,
+                               jclAToB, resultSize, res);
           result->push_back(res);
           ib++;
 
           // do the rows still match?
           for (const array<size_t, 2> &jc : jcls) {
-            if (a[ia][jc[0]] < b[ib][jc[1]]) {
-              matched = false;
-              break;
-            } else if (b[ib][jc[1]] < a[ia][jc[0]]) {
+            if (a[ia][jc[0]] != b[ib][jc[1]]) {
               matched = false;
               break;
             }
           }
         }
         ia++;
-        // if this still matches, reset ib
+        // Check if the next row in a also matches the initial row in b
         matched = true;
         for (const array<size_t, 2> &jc : jcls) {
-          if (a[ia][jc[0]] < b[initIb][jc[1]]) {
-            matched = false;
-            break;
-          } else if (b[initIb][jc[1]] < a[ia][jc[0]]) {
+          if (a[ia][jc[0]] != b[initIb][jc[1]]) {
             matched = false;
             break;
           }
         }
+        // If they match reset ib and compute another cross product
         if (matched) {
           ib = initIb;
-        } else if (aOptional) {
-          // before increasing a we need an entry for b.
-          ia--;
-          R res = newOptionalResult<R, K>()(resultSize);
-          unsigned int i = 0;
-          for (size_t col = 0; col < a[ia].size(); col++) {
-            if ((jcls_a & (1 << col)) == 0) {
-              res[i] = ID_NO_VALUE;
-            } else {
-              // if this is one of the join columns use the value in b
-              for (const array<size_t, 2>& jc : jcls) {
-                if (jc[0] == col) {
-                  res[col] = b[ib][jc[1]];
-                  break;
-                }
-              }
-            }
-            i++;
-          }
-          for (size_t col = 0; col < b[ib].size(); col++) {
-            if ((jcls_b & (1 << col)) == 0) {
-              res[i] = b[ib][col];
-              i++;
-            }
-          }
-          result->push_back(res);
-          ia++;
         }
+      }
+    }
+    // If the table of which we reached the end is optional, add all entries
+    // of the other table.
+    if (aOptional && ib < b.size()) {
+      while (ib < b.size()) {
+        R res = newOptionalResult<R, K>()(resultSize);
+        createOptionalResult(static_cast<typename A::value_type*>(0), &b[ib],
+                             a[0].size(),
+                             true, false,
+                             jcls_a, jcls_b,
+                             jclAToB, resultSize, res);
+        result->push_back(res);
+        ++ib;
+      }
+    }
+    if (bOptional && ia < a.size()) {
+      while (ia < a.size()) {
+        R res = newOptionalResult<R, K>()(resultSize);
+        createOptionalResult(&a[ia], static_cast<typename A::value_type*>(0),
+                             a[ia].size(),
+                             false, true,
+                             jcls_a, jcls_b,
+                             jclAToB, resultSize, res);
+        result->push_back(res);
+        ++ia;
       }
     }
   }
 
-
 private:
-
   template<typename E, size_t N, size_t I>
   static vector<array<E, N>> doFilterRelationWithSingleId(
       const vector<array<E, N>>& relation,

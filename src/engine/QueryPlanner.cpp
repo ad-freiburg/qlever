@@ -98,21 +98,31 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
              << std::endl;
 
   if (!inverseTopo.empty()) {
+    std::vector<ParsedQuery::GraphPattern*> sortedChildren;
     for (int i = inverseTopo.size() - 1; i >= 0; i--) {
-      LOG(DEBUG) << "merging node with children using OptionalJoin."
-                 << std::endl;
       const ParsedQuery::GraphPattern *pattern = inverseTopo[i];
+      sortedChildren.clear();
+      sortedChildren.insert(sortedChildren.end(),
+                            pattern->_children.begin(),
+                            pattern->_children.end());
       // Init the joins by taking the parent and its first child, then
       // succesively join with the next child.
-      // TODO the order of joins can be optimized
+      // ensure the children are sorted in ascending order
+      std::sort(sortedChildren.begin(), sortedChildren.end(),
+                [&patternPlans](const ParsedQuery::GraphPattern *p1,
+                   const ParsedQuery::GraphPattern *p2) -> bool {
+        return patternPlans[p1->_id].getSizeEstimate()
+             < patternPlans[p2->_id].getSizeEstimate();
+      });
+
       std::vector<SubtreePlan> plans;
 
       plans.push_back(optionalJoin(patternPlans[pattern->_id],
-                                   patternPlans[pattern->_children[0]->_id]));
+                                   patternPlans[sortedChildren[0]->_id]));
 
-      for (size_t j = 1; j < pattern->_children.size(); j++) {
+      for (size_t j = 1; j < sortedChildren.size(); j++) {
         SubtreePlan &plan1 = plans.back();
-        SubtreePlan &plan2 = patternPlans[pattern->_children[j]->_id];
+        SubtreePlan &plan2 = patternPlans[sortedChildren[j]->_id];
         plans.push_back(optionalJoin(plan1, plan2));
       }
       // Replace the old pattern with the new one that merges all children.
@@ -127,8 +137,6 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   // by clause after the current final operation. If there are no optional parts
   // this has already been taken care of.
   if (pq._orderBy.size() > 0 && patternPlans.size() > 1) {
-    // TODO (florian) use the optimized version once more for single GraphPattern querys
-    // finalTab.emplace_back(getOrderByRow(pq, finalTab));
     SubtreePlan orderByPlan(_qec);
     vector<pair<size_t, bool>> sortIndices;
     for (auto& ord : pq._orderBy) {
@@ -146,7 +154,6 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
 
     final = orderByPlan;
   }
-  std::cout << final._qet->asString() << std::endl;
 
   // A distinct modifier is applied in the end. This is very easy
   // but not necessarily optimal.
@@ -882,10 +889,15 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(const SubtreePlan &a,
 {
   SubtreePlan plan(_qec);
 
+
   std::vector<std::array<Id, 2>> jcs = getJoinColumns(a, b);
 
+  bool aSorted = jcs.size() == 1
+                 && a._qet->getRootOperation()->resultSortedOn() == jcs[0][0];
+  bool bSorted = jcs.size() == 1
+                 && b._qet->getRootOperation()->resultSortedOn() == jcs[0][1];
+
   // a and b need to be ordered properly first
-  // TODO (florian) only sort if they are not sorted yet.
   vector<pair<size_t, bool>> sortIndicesA;
   vector<pair<size_t, bool>> sortIndicesB;
   for (array<Id, 2> &jc : jcs) {
@@ -894,22 +906,25 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(const SubtreePlan &a,
   }
 
   SubtreePlan orderByPlanA(_qec), orderByPlanB(_qec);
-
   std::shared_ptr<Operation>
       orderByA(new OrderBy(_qec, a._qet, sortIndicesA));
   std::shared_ptr<Operation>
       orderByB(new OrderBy(_qec, b._qet, sortIndicesB));
 
-  orderByPlanA._qet->setVariableColumns(a._qet->getVariableColumnMap());
-  orderByPlanA._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByA);
-  orderByPlanB._qet->setVariableColumns(b._qet->getVariableColumnMap());
-  orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
+  if (!aSorted) {
+    orderByPlanA._qet->setVariableColumns(a._qet->getVariableColumnMap());
+    orderByPlanA._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByA);
+  }
+  if (!bSorted) {
+    orderByPlanB._qet->setVariableColumns(b._qet->getVariableColumnMap());
+    orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
+  }
 
   std::shared_ptr<Operation> join(
         new OptionalJoin(_qec,
-                         orderByPlanA._qet,
+                         aSorted ? a._qet : orderByPlanA._qet,
                          false,
-                         orderByPlanB._qet,
+                         bSorted ? b._qet : orderByPlanB._qet,
                          true, jcs));
   QueryExecutionTree& tree = *plan._qet.get();
   tree.setVariableColumns(
