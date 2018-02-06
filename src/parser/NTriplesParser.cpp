@@ -29,7 +29,8 @@ bool NTriplesParser::getLine(array<string, 3>& res) {
     size_t j = i + 1;
     while (j < line.size() && line[j] != '\t' && line[j] != ' ') { ++j; }
     assert(j < line.size());
-    if (!(line[i] == '<' && line[j - 1] == '>')) {
+    if (!((line[i] == '<' && line[j - 1] == '>')
+          || (i + 1 < line.size() && line[i] == '_' && line[i+  1] == ':'))) {
       AD_THROW(ad_semsearch::Exception::BAD_INPUT, "Illegal URI in : " + line);
     }
     res[0] = line.substr(i, j - i);
@@ -53,6 +54,10 @@ bool NTriplesParser::getLine(array<string, 3>& res) {
                  "Illegal URI in : " + line);
       }
       ++j;
+    } else if(line[i] == '_' && i + 1 < line.size() && line[i + 1] == ':') {
+      // Blank node
+      j = i + 1;
+      while (j < line.size() && line[j] != '\t' && line[j] != ' ') { ++j; }
     } else {
       // Literal
       j = line.find('\"', i + 1);
