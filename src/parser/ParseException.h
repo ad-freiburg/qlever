@@ -10,11 +10,12 @@ class ParseException : public std::exception {
 
 public:
 
-  ParseException(string _cause) : std::exception(), _cause(_cause) {
+  ParseException(string _cause) : std::exception(),
+    _cause(string("ParseException, cause: ") + _cause) {
   }
 
   virtual const char* what() const throw() {
-    return (string("ParseException, cause: ") +  _cause).c_str();
+    return _cause.c_str();
   }
 
 private:
