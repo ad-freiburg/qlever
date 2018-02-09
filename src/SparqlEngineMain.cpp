@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
       }
     }
   } catch (const std::exception& e) {
-    cout << string("Caught exceptions: ") + e.what();
+    cout << string("Caught exceptions: ") + e.what() << std::endl;
     return 1;
   } catch (ad_semsearch::Exception& e) {
     cout << e.getFullErrorMessage() << std::endl;
