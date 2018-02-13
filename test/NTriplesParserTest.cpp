@@ -56,6 +56,30 @@ TEST(NTriplesParserTest, getLineTest) {
       ASSERT_FALSE(p.getLine(a));
       remove("_testtmp.nt");
     }
+    // blank nodes
+    {
+      std::fstream f("_testtmp.nt", std::ios_base::out);
+      f << "<node1> <rel1> _:b.lank_node_id1 .\n"
+           "_:b.lank_node_id1\t<rel2> \"goat cheese.\" .\n"
+           "_:bla--nk_no.de_id.4 <relasd> _:b.lank_node_id1 .\n";
+      f.close();
+      NTriplesParser p("_testtmp.nt");
+      array<string, 3> a;
+      ASSERT_TRUE(p.getLine(a));
+      ASSERT_EQ("<node1>", a[0]);
+      ASSERT_EQ("<rel1>", a[1]);
+      ASSERT_EQ("_:b.lank_node_id1", a[2]);
+      ASSERT_TRUE(p.getLine(a));
+      ASSERT_EQ("_:b.lank_node_id1", a[0]);
+      ASSERT_EQ("<rel2>", a[1]);
+      ASSERT_EQ("\"goat cheese.\"", a[2]);
+      ASSERT_TRUE(p.getLine(a));
+      ASSERT_EQ("_:bla--nk_no.de_id.4", a[0]);
+      ASSERT_EQ("<relasd>", a[1]);
+      ASSERT_EQ("_:b.lank_node_id1", a[2]);
+      ASSERT_FALSE(p.getLine(a));
+      remove("_testtmp.nt");
+    }
   } catch (const ad_semsearch::Exception& e) {
     FAIL() << e.getFullErrorMessage();
   }
