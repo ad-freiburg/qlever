@@ -21,7 +21,7 @@ using std::flush;
 using std::cerr;
 
 #define EMPH_ON  "\033[1m"
-#define EMPH_OFF "\033[21m"
+#define EMPH_OFF "\033[22m"
 
 // Available options.
 struct option options[] = {
@@ -144,7 +144,7 @@ int main(int argc, char** argv) {
       }
     }
   } catch (const std::exception& e) {
-    cout << string("Caught exceptions: ") + e.what();
+    cout << string("Caught exceptions: ") + e.what() << std::endl;
     return 1;
   } catch (ad_semsearch::Exception& e) {
     cout << e.getFullErrorMessage() << std::endl;

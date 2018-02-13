@@ -23,7 +23,7 @@ using std::flush;
 using std::cerr;
 
 #define EMPH_ON  "\033[1m"
-#define EMPH_OFF "\033[21m"
+#define EMPH_OFF "\033[22m"
 
 // Available options.
 struct option options[] = {

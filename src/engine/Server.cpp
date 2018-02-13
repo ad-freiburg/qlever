@@ -84,7 +84,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
   string headers;
   client->getHTTPRequest(request, headers);
   LOG(DEBUG) << "Got request from client with size: " << request.size()
-             << " and headers with total size: " << headers << endl;
+             << " and headers with total size: " << headers.size() << endl;
 
   size_t indexOfGET = request.find("GET");
   size_t indexOfHTTP = request.find("HTTP");
