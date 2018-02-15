@@ -70,17 +70,41 @@ inline bool isXsdValue(const string val);
 
 // _____________________________________________________________________________
 string convertValueLiteralToIndexWord(const string& orig) {
+  /*
+   * Value literals can have one of two forms
+   * 0) "123"^^<http://www.w3.org/2001/XMLSchema#integer>
+   * 1) "123"^^xsd:integer
+   *
+   * TODO: This ignores the URI such that xsd:integer == foo:integer ==
+   * <http://baz#integer>
+   */
   assert(orig.size() > 0);
   assert(orig[0] == '\"');
-  assert(orig[orig.size() - 1] == '>');
-  size_t posOfSecondQuote = orig.find('\"', 1);
-  size_t posOfHashTag = orig.find('#');
+  string value;
+  string type;
+  size_t posOfSecondQuote = orig.rfind('\"');
   assert(posOfSecondQuote != string::npos);
-  assert(posOfHashTag != string::npos);
+  // -1 for the quote and since substr takes a length
+  // not an end position
+  value = orig.substr(1, posOfSecondQuote - 1);
+  if (orig[orig.size() - 1] == '>') {
+    size_t posOfHashTag = orig.rfind('#');
+    assert(posOfHashTag != string::npos);
 
-  string value = orig.substr(1, posOfSecondQuote - 1);
-  string type = orig.substr(posOfHashTag + 1,
-                            orig.size() - (posOfHashTag + 2));
+    // +2 for '>' and Hashtag
+    type = orig.substr(posOfHashTag + 1,
+                       orig.size() - (posOfHashTag + 2));
+  } else {
+    size_t posOfDoubleDot = orig.rfind(':');
+    if (posOfDoubleDot == string::npos) {
+      AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+               "No ':' in non-URL ValueLiteral " + orig);
+    }
+
+    // +1 for double dot
+    type = orig.substr(posOfDoubleDot + 1,
+                       orig.size() - (posOfDoubleDot + 1));
+  }
 
   if (type == "dateTime" || type == "gYear" || type == "gYearMonth"
       || type == "date") {
@@ -492,7 +516,9 @@ inline string removeLeadingZeros(const string& orig) {
 
 // _____________________________________________________________________________
 bool isXsdValue(const string val) {
-  return val.size() > 0 && val[0] == '\"' && val.find("\"^^") != string::npos;
+  // starting the search for "^^ at position 1 makes sure it's not in the
+  // quotes as we already checked that the first char is the first quote
+  return val.size() > 0 && val[0] == '\"' && val.find("\"^^", 1) != string::npos;
 }
 }
 
