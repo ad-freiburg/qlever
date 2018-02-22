@@ -34,6 +34,14 @@ public:
     _right->setTextLimit(limit);
   }
 
+  virtual bool knownEmptyResult() {
+    return (_left->knownEmptyResult() && !_leftOptional)
+        || (_right->knownEmptyResult() && !_rightOptional)
+        || (_left->knownEmptyResult() && _right->knownEmptyResult());
+  }
+
+  virtual float getMultiplicity(size_t col);
+
   virtual size_t getSizeEstimate();
 
   virtual size_t getCostEstimate() {
@@ -42,13 +50,9 @@ public:
     return std::numeric_limits<size_t>::max() / 1000000;
   }
 
-  virtual bool knownEmptyResult() {
-    return _left->knownEmptyResult() || _right->knownEmptyResult();
-  }
-
-  virtual float getMultiplicity(size_t col);
-
 private:
+  void computeSizeEstimateAndMultiplicities();
+
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
   bool _leftOptional;
@@ -57,6 +61,8 @@ private:
   std::vector<std::array<size_t, 2>> _joinColumns;
 
   vector<float> _multiplicities;
+  size_t _sizeEstimate;
+  bool _multiplicitiesComputed;
 
   virtual void computeResult(ResultTable* result) const;
 };

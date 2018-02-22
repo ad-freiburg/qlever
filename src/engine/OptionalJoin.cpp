@@ -14,7 +14,8 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
                            bool t2Optional,
                            const vector<array<size_t, 2>>& jcs) :
   Operation(qec),
-  _joinColumns(jcs) {
+  _joinColumns(jcs),
+  _multiplicitiesComputed(false) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CHECK_GT(jcs.size(), 0);
   if (t1->asString() < t2->asString()) {
@@ -269,13 +270,19 @@ size_t OptionalJoin::resultSortedOn() const {
 
 // _____________________________________________________________________________
 float OptionalJoin::getMultiplicity(size_t col) {
-  // TODO Properly implement multiplicities if they are needed. (Currently
-  //      they are not beeing used).
-  return 1;
+  if (!_multiplicitiesComputed) {
+    computeSizeEstimateAndMultiplicities();
+  }
+  return _multiplicities[col];
 }
 
 size_t OptionalJoin::getSizeEstimate() {
-  if (_leftOptional && !_rightOptional) {
+  if (!_multiplicitiesComputed) {
+    computeSizeEstimateAndMultiplicities();
+  }
+  return _sizeEstimate;
+
+  /*if (_leftOptional && !_rightOptional) {
     return _left->getSizeEstimate() + _right->getSizeEstimate() / 10;
   } else if (_rightOptional && !_leftOptional) {
     return _left->getSizeEstimate() / 10 + _right->getSizeEstimate();
@@ -283,5 +290,74 @@ size_t OptionalJoin::getSizeEstimate() {
     size_t size = _left->getSizeEstimate() + _right->getSizeEstimate();
     return size + size / 10;
   }
-  return (_left->getSizeEstimate() + _right->getSizeEstimate()) / 10;
+  return (_left->getSizeEstimate() + _right->getSizeEstimate()) / 10;*/
+}
+
+
+// _____________________________________________________________________________
+void OptionalJoin::computeSizeEstimateAndMultiplicities() {
+  // The number of distinct entries in the result is at most the minimum of
+  // the numbers of distinc entries in all join columns.
+  // The multiplicity in the result is approximated by the product of the
+  // maximum of the multiplicities of each side.
+
+
+  // compute the minimum number of distinct elements in the join columns
+  size_t numDistinctLeft = std::numeric_limits<size_t>::max();
+  size_t numDistinctRight = std::numeric_limits<size_t>::max();
+  for (size_t i = 0; i < _joinColumns.size(); i++) {
+    size_t dl = std::max(1.0f, _left->getSizeEstimate()
+                              * _left->getMultiplicity(_joinColumns[i][0]));
+    size_t dr = std::max(1.0f, _right->getSizeEstimate()
+                              * _right->getMultiplicity(_joinColumns[i][1]));
+    numDistinctLeft = std::min(numDistinctLeft, dl);
+    numDistinctRight = std::min(numDistinctRight, dr);
+  }
+  size_t numDistinctResult = std::min(numDistinctLeft, numDistinctRight);
+
+  // compute an estimate for the results multiplicity
+  float multLeft = 1;
+  float multRight = 1;
+  for (size_t i = 0; i < _joinColumns.size(); i++) {
+    multLeft = std::max(multLeft, _left->getMultiplicity(_joinColumns[i][0]));
+    multRight = std::max(multLeft, _left->getMultiplicity(_joinColumns[i][1]));
+  }
+  float multResult = multLeft * multRight;
+  // TODO(florian) handle size estimates for sides being optional properly
+  if (_leftOptional && _rightOptional) {
+    _sizeEstimate = (_left->getSizeEstimate() + _right->getSizeEstimate())
+                    * multResult;
+  } else if (_leftOptional) {
+    _sizeEstimate = _right->getSizeEstimate() * multResult;
+  } else if (_rightOptional) {
+    _sizeEstimate = _left->getSizeEstimate() * multResult;
+  } else {
+    _sizeEstimate = multResult * numDistinctResult;
+  }
+
+  // compute estimates for the multiplicities of the result columns
+  _multiplicities.clear();
+
+  // TODO(florian) improve the multiplicity estimation and handle optional sides
+  for (size_t i = 0; i < _left->getResultWidth(); i++) {
+    float mult = _left->getMultiplicity(i) * multRight;
+    _multiplicities.push_back(mult);
+  }
+
+  for (size_t i = 0; i < _right->getResultWidth(); i++) {
+    bool isJcl = false;
+    for (size_t j = 0; j < _joinColumns.size(); j++) {
+      if (_joinColumns[j][1] == i) {
+        isJcl = true;
+        break;
+      }
+    }
+    if (isJcl) {
+      continue;
+    }
+    float mult = _right->getMultiplicity(i) * multLeft;
+    _multiplicities.push_back(mult);
+  }
+
+  _multiplicitiesComputed = true;
 }
