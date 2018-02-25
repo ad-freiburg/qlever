@@ -63,7 +63,7 @@ void SparqlParser::parsePrologue(string str, ParsedQuery& query) {
 
 // _____________________________________________________________________________
 void SparqlParser::addPrefix(const string& str, ParsedQuery& query) {
-  auto parts = ad_utility::split(ad_utility::strip(str, ' '), ' ');
+  auto parts = ad_utility::splitWs(ad_utility::strip(str, ' '));
   if (parts.size() != 3) {
     throw ParseException(string("Invalid PREFIX statement: ") + str);
   }
@@ -73,12 +73,12 @@ void SparqlParser::addPrefix(const string& str, ParsedQuery& query) {
   }
   SparqlPrefix p{ad_utility::strip(parts[1], " :\t\n"), uri};
   query._prefixes.emplace_back(p);
-};
+}
 
 // _____________________________________________________________________________
 void SparqlParser::parseSelect(const string& str, ParsedQuery& query) {
   assert(ad_utility::startsWith(str, "SELECT"));
-  auto vars = ad_utility::split(str, ' ');
+  auto vars = ad_utility::splitWs(str);
   size_t i = 1;
   if (vars.size() > i && vars[i] == "DISTINCT") {
     ++i;

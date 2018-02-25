@@ -211,6 +211,45 @@ TEST(StringUtilsTest, strip) {
   ASSERT_EQ(u8"äö", strip(u8"xxaxaxaxaäöaaaxxx", "xa"));
   ASSERT_EQ("xxaxaxaxa♥", rstrip("xxaxaxaxa♥aaaxxx", "xa"));
 }
+
+
+TEST(StringUtilsTest, splitWs) {
+  string s1 = "  this\nis\t  \nit  ";
+  string s2 = "\n   \t  \n \t";
+  string s3 = "thisisit";
+  string s4 = "this is\nit";
+  string s5 = "a";
+  auto v1 = splitWs(s1);
+  ASSERT_EQ(size_t(3), v1.size());
+  ASSERT_EQ("this", v1[0]);
+  ASSERT_EQ("is", v1[1]);
+  ASSERT_EQ("it", v1[2]);
+
+  auto v2 = splitWs(s2);
+  ASSERT_EQ(size_t(0), v2.size());
+
+
+  auto v3 = splitWs(s3);
+  ASSERT_EQ(size_t(1), v3.size());
+  ASSERT_EQ("thisisit", v3[0]);
+
+  auto v4 = splitWs(s4);
+  ASSERT_EQ(size_t(3), v4.size());
+  ASSERT_EQ("this", v4[0]);
+  ASSERT_EQ("is", v4[1]);
+  ASSERT_EQ("it", v4[2]);
+
+  auto v5 = splitWs(s5);
+  ASSERT_EQ(size_t(1), v5.size());
+  ASSERT_EQ("a", v5[0]);
+
+  // and with unicode
+  string s6 = u8"Spaß \t ❤ \n漢字  ";
+  auto v6 = splitWs(s6);
+  ASSERT_EQ(u8"Spaß", v6[0]);
+  ASSERT_EQ(u8"❤", v6[1]);
+  ASSERT_EQ(u8"漢字", v6[2]);
+}
 }  // namespace
 
 
