@@ -214,6 +214,7 @@ TEST(StringUtilsTest, strip) {
 
 
 TEST(StringUtilsTest, splitWs) {
+  setlocale(LC_CTYPE, "en_US.utf8");
   string s1 = "  this\nis\t  \nit  ";
   string s2 = "\n   \t  \n \t";
   string s3 = "thisisit";
@@ -227,7 +228,6 @@ TEST(StringUtilsTest, splitWs) {
 
   auto v2 = splitWs(s2);
   ASSERT_EQ(size_t(0), v2.size());
-
 
   auto v3 = splitWs(s3);
   ASSERT_EQ(size_t(1), v3.size());
@@ -249,6 +249,14 @@ TEST(StringUtilsTest, splitWs) {
   ASSERT_EQ(u8"Spaß", v6[0]);
   ASSERT_EQ(u8"❤", v6[1]);
   ASSERT_EQ(u8"漢字", v6[2]);
+
+  // unicode code point 224 has a second byte (160), that equals the space
+  // character if the first bit is ignored
+  // (which may happen when casting char to int).
+  string s7 = u8"Test\u00e0test";
+  auto v7 = splitWs(s7);
+  ASSERT_EQ(1u, v7.size());
+  ASSERT_EQ(s7, v7[0]);
 }
 }  // namespace
 

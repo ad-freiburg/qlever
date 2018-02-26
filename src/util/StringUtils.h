@@ -7,8 +7,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <ctype.h>
 #include <iostream>
-#include <cctype>
 #include <clocale>
 #include <cstring>
 #include <cwchar>
@@ -392,12 +392,12 @@ vector<string> splitWs(const string &orig) {
     size_t start = 0;
     size_t pos = 0;
     while (pos < orig.size()) {
-      if (isspace(orig[pos])) {
+      if (orig[pos] >= 0 && ::isspace(orig[pos])) {
         if (start != pos) {
           result.emplace_back(orig.substr(start, pos - start));
         }
         // skip any whitespace
-        while (pos < orig.size() && isspace(orig[pos])) {
+        while (pos < orig.size() && orig[pos] >= 0 && ::isspace(orig[pos])) {
           pos++;
         }
         start = pos;
@@ -405,8 +405,8 @@ vector<string> splitWs(const string &orig) {
       pos++;
     }
     // avoid adding whitespace at the back of the string
-    if (!isspace(orig[orig.size() - 1])) {
-      result.emplace_back(orig.substr(start, pos - start));
+    if (!(orig[orig.size() - 1] >= 0 && ::isspace(orig[orig.size() - 1]))) {
+      result.emplace_back(orig.substr(start));
     }
   }
   return result;

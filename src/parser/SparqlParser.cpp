@@ -63,7 +63,7 @@ void SparqlParser::parsePrologue(string str, ParsedQuery& query) {
 
 // _____________________________________________________________________________
 void SparqlParser::addPrefix(const string& str, ParsedQuery& query) {
-  auto parts = ad_utility::splitWs(ad_utility::strip(str, ' '));
+  auto parts = ad_utility::splitWs(str);
   if (parts.size() != 3) {
     throw ParseException(string("Invalid PREFIX statement: ") + str);
   }
