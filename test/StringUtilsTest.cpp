@@ -80,7 +80,7 @@ TEST(StringUtilsTest, getLowercaseUtf8) {
   setlocale(LC_CTYPE, "en_US.utf8");
   ASSERT_EQ("schindler's list", getLowercaseUtf8("Schindler's List"));
   ASSERT_EQ("#+-_foo__bar++", getLowercaseUtf8("#+-_foo__Bar++"));
-  ASSERT_EQ("fôéßaéé", getLowercaseUtf8("FÔÉßaéÉ"));
+  ASSERT_EQ(u8"fôéßaéé", getLowercaseUtf8(u8"FÔÉßaéÉ"));
 }
 
 TEST(StringUtilsTest, firstCharToUpperUtf8) {
@@ -207,9 +207,9 @@ TEST(StringUtilsTest, strip) {
 
   ASSERT_EQ("bc", strip("xxaxaxaxabcaaaxxx", "xa"));
   // And with unicode
-  ASSERT_EQ(u8"äcaaaxxx", lstrip(u8"xxaxaxaxaäcaaaxxx", "xa"));
+  ASSERT_EQ(u8"äcaaaxxx", lstrip(u8"xxaxaxaxaäcaaaxxx", u8"xa"));
   ASSERT_EQ(u8"äö", strip(u8"xxaxaxaxaäöaaaxxx", "xa"));
-  ASSERT_EQ("xxaxaxaxa♥", rstrip("xxaxaxaxa♥aaaxxx", "xa"));
+  ASSERT_EQ(u8"xxaxaxaxa♥", rstrip(u8"xxaxaxaxa♥aaaxxx", u8"xa"));
 }
 
 
