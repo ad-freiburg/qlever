@@ -94,11 +94,13 @@ public:
     explicit SubtreePlan(QueryExecutionContext* qec)
         : _qet(new QueryExecutionTree(qec)),
           _idsOfIncludedNodes(0),
-          _idsOfIncludedFilters(0) {}
+          _idsOfIncludedFilters(0),
+          _isOptional(false) {}
 
     std::shared_ptr<QueryExecutionTree> _qet;
     uint64_t _idsOfIncludedNodes;
     uint64_t _idsOfIncludedFilters;
+    bool _isOptional;
 
     size_t getCostEstimate() const;
 
@@ -156,7 +158,10 @@ private:
       ad_utility::HashMap<string, vector<SparqlTriple>>& varToTrip,
       ad_utility::HashSet<string>& contextVars) const;
 
-  vector<SubtreePlan> seedWithScansAndText(const TripleGraph& tg) const;
+  vector<SubtreePlan> seedWithScansAndText(const TripleGraph& tg,
+                                           const vector<
+                                           QueryPlanner::SubtreePlan*>&
+                                           children) const;
 
   vector<SubtreePlan> merge(const vector<SubtreePlan>& a,
                             const vector<SubtreePlan>& b,
@@ -179,7 +184,9 @@ private:
                               bool replaceInsteadOfAddPlans) const;
 
   vector<vector<SubtreePlan>> fillDpTab(const TripleGraph& graph,
-                                        const vector<SparqlFilter>& fs) const;
+                                        const vector<SparqlFilter>& fs,
+                                        const vector<SubtreePlan*>& children)
+                                        const;
 
   size_t getTextLimit(const string& textLimitString) const;
 

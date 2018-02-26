@@ -929,6 +929,27 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
   }
 }
 
+TEST(QueryExecutionTreeTest, testSimpleOptional) {
+  try {
+    ParsedQuery pq = SparqlParser::parse(
+        "SELECT ?a ?b \n "
+            "WHERE  {?a <rel1> ?b . OPTIONAL { ?a <rel2> ?c }}");
+    pq.expandPrefixes();
+    QueryPlanner qp(nullptr);
+    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ("{\n  OPTIONAL_JOIN\n    {\n    SCAN PSO with P = \"<rel1>\"\n"
+              "    qet-width: 2 \n  }\n  join-columns: [0]\n  |X|\n    {\n    "
+              "SCAN PSO with P = \"<rel2>\"\n    qet-width: 2 \n  }\n  "
+              "join-columns: [0]\n\n  qet-width: 3 \n}", qet.asString());
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);

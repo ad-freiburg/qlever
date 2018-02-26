@@ -21,11 +21,21 @@ QueryPlanner::QueryPlanner(QueryExecutionContext* qec) : _qec(qec) {}
 // _____________________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(
     const ParsedQuery& pq) const {
-
-
-  // create an execution plan for every subtree
+  // Create a topological sorting of the tree where children are in the list
+  // after their parents.
   std::vector<const ParsedQuery::GraphPattern*> patternsToProcess;
-  patternsToProcess.push_back(&pq._rootGraphPattern);
+  std::vector<const ParsedQuery::GraphPattern*> childrenToAdd;
+  childrenToAdd.push_back(&pq._rootGraphPattern);
+  while (!childrenToAdd.empty()) {
+    const ParsedQuery::GraphPattern* pattern = childrenToAdd.back();
+    childrenToAdd.pop_back();
+    patternsToProcess.push_back(pattern);
+    childrenToAdd.insert(childrenToAdd.end(),
+                         pattern->_children.begin(),
+                         pattern->_children.end());
+  }
+
+
   std::vector<SubtreePlan> patternPlans;
   for (size_t i = 0; i < pq._numGraphPatterns; i++) {
     // Using a loop instead of resize as there is no default constructor, and
@@ -35,27 +45,29 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   LOG(DEBUG) << "Got " << patternPlans.size() << " subplans to create."
              << std::endl;
 
+  vector<SubtreePlan*> childPlans;
   while (!patternsToProcess.empty()) {
     const ParsedQuery::GraphPattern *pattern = patternsToProcess.back();
     patternsToProcess.pop_back();
-    // queue all chlidrens for processing
-    patternsToProcess.insert(patternsToProcess.end(),
-                             pattern->_children.begin(),
-                             pattern->_children.end());
 
     LOG(DEBUG) << "Creating execution plan.\n";
+    childPlans.clear();
+    for (const ParsedQuery::GraphPattern *child : pattern->_children) {
+      childPlans.push_back(&patternPlans[child->_id]);
+    }
+
     TripleGraph tg = createTripleGraph(pattern);
 
     LOG(TRACE) << "Collapse text cliques..." << std::endl;;
     tg.collapseTextCliques();
     LOG(TRACE) << "Collapse text cliques done." << std::endl;
     vector<vector<SubtreePlan>> finalTab;
-
-    finalTab = fillDpTab(tg, pattern->_filters);
+    finalTab = fillDpTab(tg, pattern->_filters, childPlans);
 
     // If there are no optional parsts have the optimizer handle the final
     // order by clause.
-    if (patternPlans.size() == 1 && pq._orderBy.size() > 0) {
+    // if (patternPlans.size() == 1 && pq._orderBy.size() > 0) {
+    if (pattern == &pq._rootGraphPattern && pq._orderBy.size() > 0) {
       // If there is an order by clause, add another row to the table and
       // just add an order by / sort to every previous result if needed.
       // If the ordering is perfect already, just copy the plan.
@@ -74,9 +86,11 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
         minInd = i;
       }
     }
+    lastRow[minInd]._isOptional = pattern->_optional;
     patternPlans[pattern->_id] = lastRow[minInd];
   }
 
+  /*
   // join the created trees using optional joins on all of their common
   // variables
   // Create an inverse topological ordering of all nodes with children
@@ -128,11 +142,13 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
       // Replace the old pattern with the new one that merges all children.
       patternPlans[pattern->_id] = plans.back();
     }
-  }
+  }*/
+
   SubtreePlan final = patternPlans[0];
 
   // Add global modifiers to the query
 
+  /*
   // If there are optional parts and the result should be ordered ad an order
   // by clause after the current final operation. If there are no optional parts
   // this has already been taken care of.
@@ -153,7 +169,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
     tree.setContextVars(final._qet.get()->getContextVars());
 
     final = orderByPlan;
-  }
+  }*/
 
   // A distinct modifier is applied in the end. This is very easy
   // but not necessarily optimal.
@@ -351,8 +367,19 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
 
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
-    const QueryPlanner::TripleGraph& tg) const {
+    const QueryPlanner::TripleGraph& tg,
+    const vector<QueryPlanner::SubtreePlan*>& children) const {
   vector<SubtreePlan> seeds;
+  // add all child plans as seeds
+  uint32_t idShift = tg._nodeMap.size();
+  for (SubtreePlan *plan : children) {
+    SubtreePlan newIdPlan = *plan;
+    // give the plan a unique id bit
+    newIdPlan._idsOfIncludedNodes = 1 << idShift;
+    newIdPlan._idsOfIncludedFilters = 0;
+    seeds.push_back(newIdPlan);
+    idShift ++;
+  }
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
     const TripleGraph::Node& node = *tg._nodeMap.find(i)->second;
     if (node._cvar.size() > 0) {
@@ -644,7 +671,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
       if (connected(a[i], b[j], tg)) {
         // Find join variable(s) / columns.
         auto jcs = getJoinColumns(a[i], b[j]);
-        if (jcs.size() > 2) {
+        if (jcs.size() > 2 && !a[i]._isOptional && !b[j]._isOptional) {
           LOG(WARN) << "Not considering possible join on "
                     << "three or more columns at once.\n";
           continue;
@@ -658,6 +685,21 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
                     << "two columns, if they involve text operations.\n";
           continue;
         }
+
+        if (a[i]._isOptional || b[j]._isOptional) {
+          // Join the two optional columns using an optional join
+          SubtreePlan plan = optionalJoin(a[i], b[j]);
+          plan._idsOfIncludedNodes = a[i]._idsOfIncludedNodes;
+          plan.addAllNodes(b[j]._idsOfIncludedNodes);
+          plan._idsOfIncludedFilters = a[i]._idsOfIncludedFilters;
+          plan._idsOfIncludedFilters |= b[j]._idsOfIncludedFilters;
+          // TODO(florian) double check the correctness of the sorted on column
+          candidates[getPruningKey(
+              plan,
+              plan._qet->resultSortedOn())].emplace_back(plan);
+          continue;
+        }
+
         if (jcs.size() == 2) {
           // SPECIAL CASE: Cyclic queries -> join on exactly two columns
 
@@ -923,9 +965,9 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(const SubtreePlan &a,
   std::shared_ptr<Operation> join(
         new OptionalJoin(_qec,
                          aSorted ? a._qet : orderByPlanA._qet,
-                         false,
+                         a._isOptional,
                          bSorted ? b._qet : orderByPlanB._qet,
-                         true, jcs));
+                         b._isOptional, jcs));
   QueryExecutionTree& tree = *plan._qet.get();
   tree.setVariableColumns(
       static_cast<OptionalJoin*>(join.get())->getVariableColumns());
@@ -977,6 +1019,12 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
   // Check if there is overlap.
   // If so, don't consider them as properly connected.
   if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) != 0) { return false; }
+
+  // TODO(florian) find a nicer way of testing for connection of optional
+  // parts
+  if (a._isOptional || b._isOptional) {
+    return getJoinColumns(a, b).size() > 0;
+  }
 
   for (size_t i = 0; i < 64; ++i) {
     if (((a._idsOfIncludedNodes >> i) & 1) == 0) { continue; }
@@ -1125,14 +1173,15 @@ void QueryPlanner::applyFiltersIfPossible(
 // _____________________________________________________________________________
 vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg,
-    const vector<SparqlFilter>& filters) const {
+    const vector<SparqlFilter>& filters,
+    const vector<QueryPlanner::SubtreePlan*>& children) const {
   LOG(TRACE) << "Fill DP table... (there are " << tg._nodeMap.size()
              << " triples to join)" << std::endl;;
   vector<vector<SubtreePlan>> dpTab;
-  dpTab.emplace_back(seedWithScansAndText(tg));
+  dpTab.emplace_back(seedWithScansAndText(tg, children));
   applyFiltersIfPossible(dpTab.back(), filters, tg._nodeMap.size() == 1);
 
-  for (size_t k = 2; k <= tg._nodeMap.size(); ++k) {
+  for (size_t k = 2; k <= tg._nodeMap.size() + children.size(); ++k) {
     LOG(TRACE) << "Producing plans that unite " << k << " triples."
                << std::endl;;
     dpTab.emplace_back(vector<SubtreePlan>());
