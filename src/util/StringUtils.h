@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <ctype.h>
 #include <iostream>
 #include <clocale>
 #include <cstring>
@@ -107,6 +108,9 @@ inline string rstrip(const string& text, const char *s);
 
 //! Splits a string at the separator, kinda like python.
 inline vector<string> split(const string& orig, const char sep);
+
+//! Splits a string at any maximum length sequence of whitespace
+inline vector<string> splitWs(const string& orig);
 
 //! Splits a string a any character inside the seps string.
 inline vector<string> splitAny(const string& orig, const char *seps);
@@ -377,6 +381,35 @@ vector<string> split(const string& orig, const char sep) {
       sepIndex = orig.find(sep, from);
     }
     result.emplace_back(orig.substr(from));
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+vector<string> splitWs(const string& orig) {
+  vector<string> result;
+  if (orig.size() > 0) {
+    size_t start = 0;
+    size_t pos = 0;
+    while (pos < orig.size()) {
+      if (::isspace(static_cast<unsigned char>(orig[pos]))) {
+        if (start != pos) {
+          result.emplace_back(orig.substr(start, pos - start));
+        }
+        // skip any whitespace
+        while (pos < orig.size()
+               && ::isspace(static_cast<unsigned char>(orig[pos]))) {
+          pos++;
+        }
+        start = pos;
+      }
+      pos++;
+    }
+    // avoid adding whitespace at the back of the string
+    // if (!::isspace(static_cast<unsigned char>(orig[orig.size() - 1]))) {
+    if (start != orig.size()) {
+      result.emplace_back(orig.substr(start));
+    }
   }
   return result;
 }
