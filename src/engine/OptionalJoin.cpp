@@ -281,16 +281,14 @@ size_t OptionalJoin::getSizeEstimate() {
     computeSizeEstimateAndMultiplicities();
   }
   return _sizeEstimate;
+}
 
-  /*if (_leftOptional && !_rightOptional) {
-    return _left->getSizeEstimate() + _right->getSizeEstimate() / 10;
-  } else if (_rightOptional && !_leftOptional) {
-    return _left->getSizeEstimate() / 10 + _right->getSizeEstimate();
-  } else if (_rightOptional && _leftOptional) {
-    size_t size = _left->getSizeEstimate() + _right->getSizeEstimate();
-    return size + size / 10;
-  }
-  return (_left->getSizeEstimate() + _right->getSizeEstimate()) / 10;*/
+size_t OptionalJoin::getCostEstimate() {
+  size_t costEstimate = getSizeEstimate() + _left->getSizeEstimate()
+                        + _right->getSizeEstimate();
+  // the join is 10% more expensive per join column
+  costEstimate *= (1 + (_joinColumns.size() - 1) * 0.1);
+  return _left->getCostEstimate() + _right->getCostEstimate() + costEstimate;
 }
 
 
@@ -323,7 +321,7 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
     multRight = std::max(multLeft, _left->getMultiplicity(_joinColumns[i][1]));
   }
   float multResult = multLeft * multRight;
-  // TODO(florian) handle size estimates for sides being optional properly
+
   if (_leftOptional && _rightOptional) {
     _sizeEstimate = (_left->getSizeEstimate() + _right->getSizeEstimate())
                     * multResult;

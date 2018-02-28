@@ -44,11 +44,7 @@ public:
 
   virtual size_t getSizeEstimate();
 
-  virtual size_t getCostEstimate() {
-    // This operation is currently only supposed to be used to join two optional
-    // results.
-    return std::numeric_limits<size_t>::max() / 1000000;
-  }
+  virtual size_t getCostEstimate();
 
 private:
   void computeSizeEstimateAndMultiplicities();
