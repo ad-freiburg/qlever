@@ -110,7 +110,7 @@ inline string rstrip(const string& text, const char *s);
 inline vector<string> split(const string& orig, const char sep);
 
 //! Splits a string at any maximum length sequence of whitespace
-inline vector<string> splitWs(const string &orig);
+inline vector<string> splitWs(const string& orig);
 
 //! Splits a string a any character inside the seps string.
 inline vector<string> splitAny(const string& orig, const char *seps);
@@ -386,18 +386,19 @@ vector<string> split(const string& orig, const char sep) {
 }
 
 // _____________________________________________________________________________
-vector<string> splitWs(const string &orig) {
+vector<string> splitWs(const string& orig) {
   vector<string> result;
   if (orig.size() > 0) {
     size_t start = 0;
     size_t pos = 0;
     while (pos < orig.size()) {
-      if (orig[pos] >= 0 && ::isspace(orig[pos])) {
+      if (::isspace(static_cast<unsigned char>(orig[pos]))) {
         if (start != pos) {
           result.emplace_back(orig.substr(start, pos - start));
         }
         // skip any whitespace
-        while (pos < orig.size() && orig[pos] >= 0 && ::isspace(orig[pos])) {
+        while (pos < orig.size()
+               && ::isspace(static_cast<unsigned char>(orig[pos]))) {
           pos++;
         }
         start = pos;
@@ -405,7 +406,8 @@ vector<string> splitWs(const string &orig) {
       pos++;
     }
     // avoid adding whitespace at the back of the string
-    if (!(orig[orig.size() - 1] >= 0 && ::isspace(orig[orig.size() - 1]))) {
+    // if (!::isspace(static_cast<unsigned char>(orig[orig.size() - 1]))) {
+    if (start != orig.size()) {
       result.emplace_back(orig.substr(start));
     }
   }
