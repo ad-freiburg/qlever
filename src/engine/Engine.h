@@ -566,7 +566,7 @@ public:
 
           // do the rows still match?
           for (const array<size_t, 2>& jc : jcls) {
-            if (a[ia][jc[0]] != b[ib][jc[1]]) {
+            if (ib == b.size() || a[ia][jc[0]] != b[ib][jc[1]]) {
               matched = false;
               break;
             }
@@ -576,7 +576,7 @@ public:
         // Check if the next row in a also matches the initial row in b
         matched = true;
         for (const array<size_t, 2>& jc : jcls) {
-          if (a[ia][jc[0]] != b[initIb][jc[1]]) {
+          if (ia == a.size() || a[ia][jc[0]] != b[initIb][jc[1]]) {
             matched = false;
             break;
           }

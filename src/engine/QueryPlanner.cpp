@@ -1026,7 +1026,7 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
     return getJoinColumns(a, b).size() > 0;
   }
 
-  for (size_t i = 0; i < 64; ++i) {
+  for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
     if (((a._idsOfIncludedNodes >> i) & 1) == 0) { continue; }
     auto& connectedNodes = tg._adjLists[i];
     for (auto targetNodeId : connectedNodes) {

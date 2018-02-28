@@ -38,25 +38,21 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
 string OptionalJoin::asString(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) { os << " "; }
-  os << "OPTIONAL_JOIN\n";
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
-  os << _left->asString(indent) << "\n";
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << "OPTIONAL_JOIN\n"
+     << _left->asString(indent) << " ";
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     os << _joinColumns[i][0] << (i < _joinColumns.size() - 1 ? " & " : "");
   };
   os << "]\n";
   for (size_t i = 0; i < indent; ++i) { os << " "; }
-  os << "|X|\n";
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
-  os << _right->asString(indent) << "\n";
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  os << "|X|\n"
+     << _right->asString(indent) << " ";
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     os << _joinColumns[i][1] << (i < _joinColumns.size() - 1 ? " & " : "");
   };
-  os << "]\n";
+  os << "]";
   return os.str();
 }
 
@@ -276,6 +272,7 @@ float OptionalJoin::getMultiplicity(size_t col) {
   return _multiplicities[col];
 }
 
+// _____________________________________________________________________________
 size_t OptionalJoin::getSizeEstimate() {
   if (!_multiplicitiesComputed) {
     computeSizeEstimateAndMultiplicities();
@@ -283,14 +280,14 @@ size_t OptionalJoin::getSizeEstimate() {
   return _sizeEstimate;
 }
 
+// _____________________________________________________________________________
 size_t OptionalJoin::getCostEstimate() {
   size_t costEstimate = getSizeEstimate() + _left->getSizeEstimate()
                         + _right->getSizeEstimate();
-  // the join is 10% more expensive per join column
-  costEstimate *= (1 + (_joinColumns.size() - 1) * 0.1);
+  // Make the join 7% more expensive per join column
+  costEstimate *= (1 + (_joinColumns.size() - 1) * 0.07);
   return _left->getCostEstimate() + _right->getCostEstimate() + costEstimate;
 }
-
 
 // _____________________________________________________________________________
 void OptionalJoin::computeSizeEstimateAndMultiplicities() {
@@ -305,20 +302,20 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
   size_t numDistinctRight = std::numeric_limits<size_t>::max();
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     size_t dl = std::max(1.0f, _left->getSizeEstimate()
-                              * _left->getMultiplicity(_joinColumns[i][0]));
+                              / _left->getMultiplicity(_joinColumns[i][0]));
     size_t dr = std::max(1.0f, _right->getSizeEstimate()
-                              * _right->getMultiplicity(_joinColumns[i][1]));
+                              / _right->getMultiplicity(_joinColumns[i][1]));
     numDistinctLeft = std::min(numDistinctLeft, dl);
     numDistinctRight = std::min(numDistinctRight, dr);
   }
   size_t numDistinctResult = std::min(numDistinctLeft, numDistinctRight);
 
   // compute an estimate for the results multiplicity
-  float multLeft = 1;
-  float multRight = 1;
+  float multLeft = std::numeric_limits<float>::max();
+  float multRight = std::numeric_limits<float>::max();
   for (size_t i = 0; i < _joinColumns.size(); i++) {
-    multLeft = std::max(multLeft, _left->getMultiplicity(_joinColumns[i][0]));
-    multRight = std::max(multLeft, _left->getMultiplicity(_joinColumns[i][1]));
+    multLeft = std::min(multLeft, _left->getMultiplicity(_joinColumns[i][0]));
+    multRight = std::min(multLeft, _left->getMultiplicity(_joinColumns[i][1]));
   }
   float multResult = multLeft * multRight;
 
@@ -338,7 +335,7 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
 
   // TODO(florian) improve the multiplicity estimation and handle optional sides
   for (size_t i = 0; i < _left->getResultWidth(); i++) {
-    float mult = _left->getMultiplicity(i) * multRight;
+    float mult = _left->getMultiplicity(i) * multResult;
     _multiplicities.push_back(mult);
   }
 
@@ -353,9 +350,8 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
     if (isJcl) {
       continue;
     }
-    float mult = _right->getMultiplicity(i) * multLeft;
+    float mult = _right->getMultiplicity(i) * multResult;
     _multiplicities.push_back(mult);
   }
-
   _multiplicitiesComputed = true;
 }
