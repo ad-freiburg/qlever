@@ -926,8 +926,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
 }
 
 // _____________________________________________________________________________
-QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(const SubtreePlan &a,
-                                                     const SubtreePlan &b) const
+QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(const SubtreePlan& a,
+                                                     const SubtreePlan& b) const
 {
   SubtreePlan plan(_qec);
 
@@ -942,7 +942,7 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(const SubtreePlan &a,
   // a and b need to be ordered properly first
   vector<pair<size_t, bool>> sortIndicesA;
   vector<pair<size_t, bool>> sortIndicesB;
-  for (array<Id, 2> &jc : jcs) {
+  for (array<Id, 2>& jc : jcs) {
     sortIndicesA.push_back(std::make_pair(jc[0], false));
     sortIndicesB.push_back(std::make_pair(jc[1], false));
   }

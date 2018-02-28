@@ -64,10 +64,10 @@ string OptionalJoin::asString(size_t indent) const {
 template<int I, int J, int K>
 struct meta_for {
   void operator()(int i, int j, int k,
-                  const ResultTable &leftResult,
-                  const ResultTable &rightResult,
+                  const ResultTable& leftResult,
+                  const ResultTable& rightResult,
                   bool leftOptional, bool rightOptional,
-                  const std::vector<std::array<size_t, 2>> &joinColumns,
+                  const std::vector<std::array<size_t, 2>>& joinColumns,
                   ResultTable *result,
                   int resultSize) const {
     if (I == i) {
@@ -109,10 +109,10 @@ struct meta_for {
 template <int I, int K>
 struct meta_for<I, 6, K> {
   void operator()(int i, int j, int k,
-                  const ResultTable &leftResult,
-                  const ResultTable &rightResult,
+                  const ResultTable& leftResult,
+                  const ResultTable& rightResult,
                   bool leftOptional, bool rightOptional,
-                  const std::vector<std::array<size_t, 2>> &joinColumns,
+                  const std::vector<std::array<size_t, 2>>& joinColumns,
                   ResultTable *result, int resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void) i;
@@ -133,10 +133,10 @@ struct meta_for<I, 6, K> {
 template <int I, int J>
 struct meta_for<I, J, 6> {
   void operator()(int i, int j, int k,
-                  const ResultTable &leftResult,
-                  const ResultTable &rightResult,
+                  const ResultTable& leftResult,
+                  const ResultTable& rightResult,
                   bool leftOptional, bool rightOptional,
-                  const std::vector<std::array<size_t, 2>> &joinColumns,
+                  const std::vector<std::array<size_t, 2>>& joinColumns,
                   ResultTable *result, int resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void) i;
@@ -158,10 +158,10 @@ struct meta_for<I, J, 6> {
 template <int J>
 struct meta_for<6, J, 6> {
   void operator()(int i, int j, int k,
-                  const ResultTable &leftResult,
-                  const ResultTable &rightResult,
+                  const ResultTable& leftResult,
+                  const ResultTable& rightResult,
                   bool leftOptional, bool rightOptional,
-                  const std::vector<std::array<size_t, 2>> &joinColumns,
+                  const std::vector<std::array<size_t, 2>>& joinColumns,
                   ResultTable *result, int resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void) i;
@@ -182,10 +182,10 @@ struct meta_for<6, J, 6> {
 template <>
 struct meta_for<6, 6, 6> {
   void operator()(int i, int j, int k,
-                  const ResultTable &leftResult,
-                  const ResultTable &rightResult,
+                  const ResultTable& leftResult,
+                  const ResultTable& rightResult,
                   bool leftOptional, bool rightOptional,
-                  const std::vector<std::array<size_t, 2>> &joinColumns,
+                  const std::vector<std::array<size_t, 2>>& joinColumns,
                   ResultTable *result, int resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void) i;
@@ -240,7 +240,7 @@ std::unordered_map<string, size_t> OptionalJoin::getVariableColumns() const {
     bool isJoinColumn = false;
     // Reduce the index for every column of _right that is beeing joined on,
     // and the index of which is smaller than the index of it.
-    for (const std::array<size_t, 2> &a : _joinColumns) {
+    for (const std::array<size_t, 2>& a : _joinColumns) {
       if (a[1] < it->second) {
         columnIndex--;
       } else if(a[1] == it->second) {

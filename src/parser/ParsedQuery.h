@@ -88,11 +88,11 @@ public:
     // deletes the patterns children.
     GraphPattern() { }
     // Move and copyconstructors to avoid double deletes on the trees children
-    GraphPattern(GraphPattern &&other);
-    GraphPattern(const GraphPattern &other);
-    GraphPattern& operator=(const GraphPattern &other);
+    GraphPattern(GraphPattern&& other);
+    GraphPattern(const GraphPattern& other);
+    GraphPattern& operator=(const GraphPattern& other);
     virtual ~GraphPattern();
-    void toString(std::ostringstream &os) const;
+    void toString(std::ostringstream& os) const;
 
     vector<SparqlTriple> _whereClauseTriples;
     vector<SparqlFilter> _filters;

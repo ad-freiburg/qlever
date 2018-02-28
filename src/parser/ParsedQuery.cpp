@@ -175,7 +175,7 @@ ParsedQuery::GraphPattern::~GraphPattern() {
 
 
 // _____________________________________________________________________________
-ParsedQuery::GraphPattern::GraphPattern(GraphPattern &&other) :
+ParsedQuery::GraphPattern::GraphPattern(GraphPattern&& other) :
   _whereClauseTriples(std::move(other._whereClauseTriples)),
   _filters(std::move(other._filters)),
   _optional(other._optional),
@@ -184,7 +184,7 @@ ParsedQuery::GraphPattern::GraphPattern(GraphPattern &&other) :
 }
 
 // _____________________________________________________________________________
-ParsedQuery::GraphPattern::GraphPattern(const GraphPattern &other) :
+ParsedQuery::GraphPattern::GraphPattern(const GraphPattern& other) :
   _whereClauseTriples(other._whereClauseTriples),
   _filters(other._filters),
   _optional(other._optional) {
@@ -195,7 +195,8 @@ ParsedQuery::GraphPattern::GraphPattern(const GraphPattern &other) :
 }
 
 // _____________________________________________________________________________
-ParsedQuery::GraphPattern& ParsedQuery::GraphPattern::operator=(const ParsedQuery::GraphPattern &other) {
+ParsedQuery::GraphPattern&
+ParsedQuery::GraphPattern::operator=(const ParsedQuery::GraphPattern& other) {
   _whereClauseTriples = std::vector<SparqlTriple>(other._whereClauseTriples);
   _filters = std::vector<SparqlFilter>(other._filters);
   _optional = other._optional;
@@ -208,7 +209,7 @@ ParsedQuery::GraphPattern& ParsedQuery::GraphPattern::operator=(const ParsedQuer
 }
 
 // _____________________________________________________________________________
-void ParsedQuery::GraphPattern::toString(std::ostringstream &os) const {
+void ParsedQuery::GraphPattern::toString(std::ostringstream& os) const {
   if (_optional) {
     os << "\nOPTIONAL ";
   }

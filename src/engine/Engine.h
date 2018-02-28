@@ -390,7 +390,7 @@ public:
                                 size_t sizeA,
                                 bool aEmpty, bool bEmpty,
                                 int jcls_a, int jcls_b,
-                                const std::vector<size_t> &jclAToB,
+                                const std::vector<size_t>& jclAToB,
                                 unsigned int resultSize,
                                 R &res) {
     assert(!(aEmpty && bEmpty));
@@ -454,7 +454,7 @@ public:
   template<typename A, typename B, typename R, int K>
   static void optionalJoin(const A& a, const B& b,
                            bool aOptional, bool bOptional,
-                           const vector<array<size_t, 2>> &jcls,
+                           const vector<array<size_t, 2>>& jcls,
                            vector<R> *result,
                            unsigned int resultSize) {
     // check for trivial cases
@@ -466,7 +466,7 @@ public:
 
     int jcls_a = 0;
     int jcls_b = 0;
-    for (array<size_t, 2> jc : jcls) {
+    for (const array<size_t, 2>& jc : jcls) {
       jcls_a |= (1 << jc[0]);
       jcls_b |= (1 << jc[1]);
     }
@@ -476,13 +476,13 @@ public:
     std::vector<size_t> jclAToB;
     if (aOptional) {
       uint32_t maxJoinColA = 0;
-      for (const array<size_t, 2> &jc : jcls) {
+      for (const array<size_t, 2>& jc : jcls) {
         if (jc[0] > maxJoinColA) {
           maxJoinColA = jc[0];
         }
       }
       jclAToB.resize(maxJoinColA + 1);
-      for (const array<size_t, 2> &jc : jcls) {
+      for (const array<size_t, 2>& jc : jcls) {
         jclAToB[jc[0]] = jc[1];
       }
     }
@@ -518,7 +518,7 @@ public:
     bool matched;
     while (ia < a.size() && ib < b.size()) {
       matched = true;
-      for (const array<size_t, 2> &jc : jcls) {
+      for (const array<size_t, 2>& jc : jcls) {
         if (a[ia][jc[0]] < b[ib][jc[1]]) {
           if (bOptional) {
             R res = newOptionalResult<R, K>()(resultSize);
@@ -565,7 +565,7 @@ public:
           ib++;
 
           // do the rows still match?
-          for (const array<size_t, 2> &jc : jcls) {
+          for (const array<size_t, 2>& jc : jcls) {
             if (a[ia][jc[0]] != b[ib][jc[1]]) {
               matched = false;
               break;
@@ -575,7 +575,7 @@ public:
         ia++;
         // Check if the next row in a also matches the initial row in b
         matched = true;
-        for (const array<size_t, 2> &jc : jcls) {
+        for (const array<size_t, 2>& jc : jcls) {
           if (a[ia][jc[0]] != b[initIb][jc[1]]) {
             matched = false;
             break;
