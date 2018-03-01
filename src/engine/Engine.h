@@ -435,10 +435,6 @@ public:
         }
       }
     }
-    /*for (uint32_t i = 0; i < resultSize; i++) {
-      std::cout << std::setw(7) << res[i];
-    }
-    std::cout << std::setw(0) << std::endl;*/
   }
 
   /**
@@ -471,7 +467,7 @@ public:
       jcls_b |= (1 << jc[1]);
     }
 
-    // When a is optional this is used to quickly determine which columns
+    // When a is optional this is used to quickly determine
     // in which column of b the value of a joined column can be found.
     std::vector<size_t> jclAToB;
     if (aOptional) {
@@ -514,11 +510,54 @@ public:
       return;
     }
 
+    // add sentinels
+    A& l1 = const_cast<A&>(a);
+    B& l2 = const_cast<B&>(b);
+    Id sentVal = std::numeric_limits<Id>::max() - 1;
+    auto v1 = l1[0];
+    auto v2 = l2[0];
+    for (size_t i = 0; i < v1.size(); i++) {
+      v1[i] = sentVal;
+    }
+    for (size_t i = 0; i < v2.size(); i++) {
+      v2[i] = sentVal;
+    }
+    l1.push_back(v1);
+    l2.push_back(v2);
+
+    bool matched = false;
     size_t ia = 0, ib = 0;
-    bool matched;
-    while (ia < a.size() && ib < b.size()) {
+    while (ia < a.size() - 1 && ib < b.size() - 1) {
+      // Join columns 0 are the primary sort columns
+      while (a[ia][jcls[0][0]] < b[ib][jcls[0][1]]) {
+        if (bOptional) {
+          R res = newOptionalResult<R, K>()(resultSize);
+          createOptionalResult(&a[ia], static_cast<typename B::value_type*>(0),
+                               a[ia].size(),
+                               false, true,
+                               jcls_a, jcls_b,
+                               jclAToB, resultSize, res);
+          result->push_back(res);
+        }
+        ia++;
+      }
+      while (b[ib][jcls[0][1]] < a[ia][jcls[0][0]]) {
+        if (aOptional) {
+          R res = newOptionalResult<R, K>()(resultSize);
+          createOptionalResult(static_cast<typename A::value_type*>(0), &b[ib],
+                               a[ia].size(),
+                               true, false,
+                               jcls_a, jcls_b,
+                               jclAToB, resultSize, res);
+          result->push_back(res);
+        }
+        ib++;
+      }
+
+      // check if the rest of the join columns also match
       matched = true;
-      for (const array<size_t, 2>& jc : jcls) {
+      for (size_t jclIndex = 1; jclIndex < jcls.size(); jclIndex++) {
+        const array<size_t, 2>& jc  = jcls[jclIndex];
         if (a[ia][jc[0]] < b[ib][jc[1]]) {
           if (bOptional) {
             R res = newOptionalResult<R, K>()(resultSize);
@@ -528,12 +567,12 @@ public:
                                  jcls_a, jcls_b,
                                  jclAToB, resultSize, res);
             result->push_back(res);
-
           }
           ia++;
           matched = false;
           break;
-        } else if (b[ib][jc[1]] < a[ia][jc[0]]) {
+        }
+        if (b[ib][jc[1]] < a[ia][jc[0]]) {
           if (aOptional) {
             R res = newOptionalResult<R, K>()(resultSize);
             createOptionalResult(static_cast<typename A::value_type*>(0), &b[ib],
@@ -548,6 +587,7 @@ public:
           break;
         }
       }
+
       // Compute the cross product of the row in a and all matching
       // rows in b.
       while (matched && ia < a.size() && ib < b.size()) {
@@ -587,6 +627,14 @@ public:
         }
       }
     }
+
+    // remove the sentinels
+    l1.pop_back();
+    l2.pop_back();
+    if (result->back()[jcls[0][0]] == sentVal) {
+      result->pop_back();
+    }
+
     // If the table of which we reached the end is optional, add all entries
     // of the other table.
     if (aOptional && ib < b.size()) {

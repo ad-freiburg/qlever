@@ -159,7 +159,6 @@ TEST(EngineTest, optionalJoinTest) {
   ASSERT_EQ(r, vres[3]);
   r = {ID_NO_VALUE, 6, 7, ID_NO_VALUE, ID_NO_VALUE, ID_NO_VALUE, 4};
   ASSERT_EQ(r, vres[4]);
-
 }
 
 int main(int argc, char** argv) {

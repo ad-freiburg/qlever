@@ -937,10 +937,19 @@ TEST(QueryExecutionTreeTest, testSimpleOptional) {
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ("{\n  OPTIONAL_JOIN\n    {\n    SCAN PSO with P = \"<rel1>\"\n"
-              "    qet-width: 2 \n  }\n  join-columns: [0]\n  |X|\n    {\n    "
-              "SCAN PSO with P = \"<rel2>\"\n    qet-width: 2 \n  }\n  "
-              "join-columns: [0]\n\n  qet-width: 3 \n}", qet.asString());
+    ASSERT_EQ("{\n"
+              "  OPTIONAL_JOIN\n"
+              "  {\n"
+              "    SCAN PSO with P = \"<rel1>\"\n"
+              "    qet-width: 2 \n"
+              "  } join-columns: [0]\n"
+              "  |X|\n"
+              "  {\n"
+              "    SCAN PSO with P = \"<rel2>\"\n"
+              "    qet-width: 2 \n"
+              "  } join-columns: [0]\n"
+              "  qet-width: 3 \n"
+              "}", qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
