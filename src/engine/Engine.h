@@ -385,14 +385,14 @@ public:
   };
 
 
- template<typename A, typename B, typename R>
-  static void createOptionalResult(const A a, const B b,
-                                size_t sizeA,
-                                bool aEmpty, bool bEmpty,
-                                int jcls_a, int jcls_b,
-                                const std::vector<size_t>& jclAToB,
-                                unsigned int resultSize,
-                                R &res) {
+ template<typename A, typename B, typename R, bool aEmpty, bool bEmpty>
+  static void createOptionalResult(const typename A::value_type* a,
+                                   const typename B::value_type* b,
+                                   size_t sizeA,
+                                   int jcls_a, int jcls_b,
+                                   const std::vector<size_t>& jclAToB,
+                                   unsigned int resultSize,
+                                   R& res) {
     assert(!(aEmpty && bEmpty));
     if (aEmpty) {
       // Fill the columns of a with ID_NO_VALUE and the rest with b.
@@ -488,11 +488,11 @@ public:
       size_t sizeA = resultSize - b[0].size() + jcls.size();
       for (size_t ib = 0; ib < b.size(); ib++) {
         R res = newOptionalResult<R, K>()(resultSize);
-        createOptionalResult(static_cast<typename A::value_type*>(0), &b[ib],
-                             sizeA,
-                             true, false,
-                             jcls_a, jcls_b,
-                             jclAToB, resultSize, res);
+        createOptionalResult<A, B, R, true, false>(
+              static_cast<typename A::value_type*>(0), &b[ib],
+              sizeA,
+              jcls_a, jcls_b,
+              jclAToB, resultSize, res);
         result->push_back(res);
       }
       return;
@@ -500,11 +500,11 @@ public:
     else if (b.size() == 0 && bOptional) {
       for (size_t ia = 0; ia < a.size(); ia++) {
         R res = newOptionalResult<R, K>()(resultSize);
-        createOptionalResult(&a[ia], static_cast<typename B::value_type*>(0),
-                             a[ia].size(),
-                             false, true,
-                             jcls_a, jcls_b,
-                             jclAToB, resultSize, res);
+        createOptionalResult<A, B, R, false, true>(
+              &a[ia], static_cast<typename B::value_type*>(0),
+              a[ia].size(),
+              jcls_a, jcls_b,
+              jclAToB, resultSize, res);
         result->push_back(res);
       }
       return;
@@ -532,11 +532,11 @@ public:
       while (a[ia][jcls[0][0]] < b[ib][jcls[0][1]]) {
         if (bOptional) {
           R res = newOptionalResult<R, K>()(resultSize);
-          createOptionalResult(&a[ia], static_cast<typename B::value_type*>(0),
-                               a[ia].size(),
-                               false, true,
-                               jcls_a, jcls_b,
-                               jclAToB, resultSize, res);
+          createOptionalResult<A, B, R, false, true>(
+                &a[ia], static_cast<typename B::value_type*>(0),
+                a[ia].size(),
+                jcls_a, jcls_b,
+                jclAToB, resultSize, res);
           result->push_back(res);
         }
         ia++;
@@ -544,11 +544,11 @@ public:
       while (b[ib][jcls[0][1]] < a[ia][jcls[0][0]]) {
         if (aOptional) {
           R res = newOptionalResult<R, K>()(resultSize);
-          createOptionalResult(static_cast<typename A::value_type*>(0), &b[ib],
-                               a[ia].size(),
-                               true, false,
-                               jcls_a, jcls_b,
-                               jclAToB, resultSize, res);
+          createOptionalResult<A, B, R, true, false>(
+                static_cast<typename A::value_type*>(0), &b[ib],
+                a[ia].size(),
+                jcls_a, jcls_b,
+                jclAToB, resultSize, res);
           result->push_back(res);
         }
         ib++;
@@ -561,11 +561,11 @@ public:
         if (a[ia][jc[0]] < b[ib][jc[1]]) {
           if (bOptional) {
             R res = newOptionalResult<R, K>()(resultSize);
-            createOptionalResult(&a[ia], static_cast<typename B::value_type*>(0),
-                                 a[ia].size(),
-                                 false, true,
-                                 jcls_a, jcls_b,
-                                 jclAToB, resultSize, res);
+            createOptionalResult<A, B, R, false, true>(
+                  &a[ia], static_cast<typename B::value_type*>(0),
+                  a[ia].size(),
+                  jcls_a, jcls_b,
+                  jclAToB, resultSize, res);
             result->push_back(res);
           }
           ia++;
@@ -575,11 +575,11 @@ public:
         if (b[ib][jc[1]] < a[ia][jc[0]]) {
           if (aOptional) {
             R res = newOptionalResult<R, K>()(resultSize);
-            createOptionalResult(static_cast<typename A::value_type*>(0), &b[ib],
-                                 a[ia].size(),
-                                 true, false,
-                                 jcls_a, jcls_b,
-                                 jclAToB, resultSize, res);
+            createOptionalResult<A, B, R, true, false>(
+                  static_cast<typename A::value_type*>(0), &b[ib],
+                  a[ia].size(),
+                  jcls_a, jcls_b,
+                  jclAToB, resultSize, res);
             result->push_back(res);
           }
           ib++;
@@ -596,11 +596,11 @@ public:
 
         while (matched) {
           R res = newOptionalResult<R, K>()(resultSize);
-          createOptionalResult(&a[ia], &b[ib],
-                               a[ia].size(),
-                               false, false,
-                               jcls_a, jcls_b,
-                               jclAToB, resultSize, res);
+          createOptionalResult<A, B, R, false, false>(
+                &a[ia], &b[ib],
+                a[ia].size(),
+                jcls_a, jcls_b,
+                jclAToB, resultSize, res);
           result->push_back(res);
           ib++;
 
@@ -640,11 +640,11 @@ public:
     if (aOptional && ib < b.size()) {
       while (ib < b.size()) {
         R res = newOptionalResult<R, K>()(resultSize);
-        createOptionalResult(static_cast<typename A::value_type*>(0), &b[ib],
-                             a[0].size(),
-                             true, false,
-                             jcls_a, jcls_b,
-                             jclAToB, resultSize, res);
+        createOptionalResult<A, B, R, true, false>(
+              static_cast<typename A::value_type*>(0), &b[ib],
+              a[0].size(),
+            jcls_a, jcls_b,
+            jclAToB, resultSize, res);
         result->push_back(res);
         ++ib;
       }
@@ -652,11 +652,11 @@ public:
     if (bOptional && ia < a.size()) {
       while (ia < a.size()) {
         R res = newOptionalResult<R, K>()(resultSize);
-        createOptionalResult(&a[ia], static_cast<typename A::value_type*>(0),
-                             a[ia].size(),
-                             false, true,
-                             jcls_a, jcls_b,
-                             jclAToB, resultSize, res);
+        createOptionalResult<A, B, R, false, true>(
+              &a[ia], static_cast<typename B::value_type*>(0),
+              a[ia].size(),
+              jcls_a, jcls_b,
+              jclAToB, resultSize, res);
         result->push_back(res);
         ++ia;
       }
