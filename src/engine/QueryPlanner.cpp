@@ -693,7 +693,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           plan.addAllNodes(b[j]._idsOfIncludedNodes);
           plan._idsOfIncludedFilters = a[i]._idsOfIncludedFilters;
           plan._idsOfIncludedFilters |= b[j]._idsOfIncludedFilters;
-          // TODO(florian) double check the correctness of the sorted on column
           candidates[getPruningKey(
               plan,
               plan._qet->resultSortedOn())].emplace_back(plan);
@@ -1020,8 +1019,6 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
   // If so, don't consider them as properly connected.
   if ((a._idsOfIncludedNodes & b._idsOfIncludedNodes) != 0) { return false; }
 
-  // TODO(florian) find a nicer way of testing for connection of optional
-  // parts
   if (a._isOptional || b._isOptional) {
     return getJoinColumns(a, b).size() > 0;
   }

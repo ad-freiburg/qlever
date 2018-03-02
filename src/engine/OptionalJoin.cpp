@@ -317,6 +317,14 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
     numDistinctRight = std::min(numDistinctRight, dr);
   }
   size_t numDistinctResult = std::min(numDistinctLeft, numDistinctRight);
+  // The number of distinct is at leat the number of distinct in a non optional
+  // column, if the other one is optional.
+  if (_leftOptional) {
+    numDistinctResult = std::max(numDistinctLeft, numDistinctResult);
+  }
+  if (_rightOptional) {
+    numDistinctRight = std::max(numDistinctRight, numDistinctResult);
+  }
 
   // compute an estimate for the results multiplicity
   float multLeft = std::numeric_limits<float>::max();
@@ -341,9 +349,8 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
   // compute estimates for the multiplicities of the result columns
   _multiplicities.clear();
 
-  // TODO(florian) improve the multiplicity estimation and handle optional sides
   for (size_t i = 0; i < _left->getResultWidth(); i++) {
-    float mult = _left->getMultiplicity(i) * multResult;
+    float mult = _left->getMultiplicity(i) * (multResult / multLeft);
     _multiplicities.push_back(mult);
   }
 
@@ -358,7 +365,7 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
     if (isJcl) {
       continue;
     }
-    float mult = _right->getMultiplicity(i) * multResult;
+    float mult = _right->getMultiplicity(i) * (multResult / multRight);
     _multiplicities.push_back(mult);
   }
   _multiplicitiesComputed = true;
