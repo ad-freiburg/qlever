@@ -556,7 +556,7 @@ public:
 
       // check if the rest of the join columns also match
       matched = true;
-      for (size_t jclIndex = 1; jclIndex < jcls.size(); jclIndex++) {
+      for (size_t jclIndex = 0; jclIndex < jcls.size(); jclIndex++) {
         const array<size_t, 2>& jc  = jcls[jclIndex];
         if (a[ia][jc[0]] < b[ib][jc[1]]) {
           if (bOptional) {

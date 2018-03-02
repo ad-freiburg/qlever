@@ -212,6 +212,11 @@ void OptionalJoin::computeResult(ResultTable* result) const {
   const auto& leftResult = _left->getResult();
   const auto& rightResult = _right->getResult();
 
+  LOG(DEBUG) << "Computing optional join between results of size "
+             << leftResult.size() << " and " << rightResult.size() << endl;
+  LOG(DEBUG) << "Left side optional: " << _leftOptional
+             << " right side optional: " << _rightOptional << endl;
+
   // Calls Engine::optionalJoin with the right values for the array sizes.
   meta_for<1, 1, 1>()(leftResult._nofColumns,
                       rightResult._nofColumns,
@@ -284,6 +289,9 @@ size_t OptionalJoin::getSizeEstimate() {
 size_t OptionalJoin::getCostEstimate() {
   size_t costEstimate = getSizeEstimate() + _left->getSizeEstimate()
                         + _right->getSizeEstimate();
+  // The optional join is about 3-7 times slower than a normal join, due to
+  // its increased complexity
+  costEstimate *= 4;
   // Make the join 7% more expensive per join column
   costEstimate *= (1 + (_joinColumns.size() - 1) * 0.07);
   return _left->getCostEstimate() + _right->getCostEstimate() + costEstimate;
