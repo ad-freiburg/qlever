@@ -25,27 +25,31 @@ bool NTriplesParser::getLine(array<string, 3>& res) {
   if (std::getline(_in, line)) {
     size_t i = 0;
     while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) { ++i; }
-    assert(i < line.size());
+    if (i >= line.size()) {
+      AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+               "Illegal whitespace only line");
+    }
     size_t j = i + 1;
     while (j < line.size() && line[j] != '\t' && line[j] != ' ') { ++j; }
-    assert(j < line.size());
-    if (!((line[i] == '<' && line[j - 1] == '>')
+    if (j >= line.size() || !((line[i] == '<' && line[j - 1] == '>')
           || (i + 1 < line.size() && line[i] == '_' && line[i + 1] == ':'))) {
       AD_THROW(ad_semsearch::Exception::BAD_INPUT, "Illegal URI in : " + line);
     }
     res[0] = line.substr(i, j - i);
     i = j;
     while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) { ++i; }
-    assert(i < line.size());
     j = i + 1;
     while (j < line.size() && line[j] != '\t' && line[j] != ' ') { ++j; }
-    if (!(line[i] == '<' && line[j - 1] == '>')) {
+    if (j >= line.size() || !(line[i] == '<' && line[j - 1] == '>')) {
       AD_THROW(ad_semsearch::Exception::BAD_INPUT, "Illegal URI in : " + line);
     }
     res[1] = line.substr(i, j - i);
     i = j;
     while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) { ++i; }
-    assert(i < line.size());
+    if (i >= line.size()) {
+      AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+               "Object not followed by space in : " + line);
+    }
     if (line[i] == '<') {
       // URI
       j = line.find('>', i + 1);
@@ -80,12 +84,11 @@ bool NTriplesParser::getLine(array<string, 3>& res) {
       ++j;
       while (j < line.size() && line[j] != ' ' && line[j] != '\t') { ++j; }
     }
-    assert(j < line.size());
-    res[2] = line.substr(i, j - i);
-    if (!(line[j] == ' ' || line[j] == '\t')) {
+    if (j >= line.size() || !(line[j] == ' ' || line[j] == '\t')) {
       AD_THROW(ad_semsearch::Exception::BAD_INPUT,
                "Object not followed by space in : " + line);
     }
+    res[2] = line.substr(i, j - i);
     return true;
   }
   return false;
