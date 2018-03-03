@@ -68,10 +68,11 @@ public:
   string asDebugString() const;
 
   const vector<vector<Id>> getDataAsVarSize() const {
-    vector<vector<Id>> res;
     if (_varSizeData.size() > 0) {
-      res = _varSizeData;
+      return _varSizeData;
     }
+
+    vector<vector<Id>> res;
     if (_nofColumns == 1) {
       const auto& data = *static_cast<vector<array<Id, 1>> *>(_fixedSizeData);
       for (size_t i = 0; i < data.size(); ++i) {
