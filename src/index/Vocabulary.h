@@ -8,7 +8,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
-#include <sparsehash/sparse_hash_map>
+#include <google/sparse_hash_map>
 
 #include "../util/Exception.h"
 #include "../util/StringUtils.h"
