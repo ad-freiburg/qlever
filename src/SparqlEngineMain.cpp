@@ -25,28 +25,62 @@ using std::cerr;
 
 // Available options.
 struct option options[] = {
-    {"queryfile",    required_argument, NULL, 'q'},
-    {"interactive",  no_argument,       NULL, 'I'},
-    {"index",        required_argument, NULL, 'i'},
-    {"text",         no_argument,       NULL, 't'},
-    {"cost-factors", required_argument, NULL, 'c'},
-    {"on-disk-literals",  no_argument,       NULL, 'l'},
-    {"all-permutations",  no_argument,       NULL, 'a'},
-    {NULL, 0,                          NULL, 0}
+  {"index",            required_argument, NULL, 'i'},
+  {"text",             no_argument,       NULL, 't'},
+  {"queryfile",        required_argument, NULL, 'q'},
+  {"interactive",      no_argument,       NULL, 'I'},
+  {"cost-factors",     required_argument, NULL, 'c'},
+  {"on-disk-literals", no_argument,       NULL, 'l'},
+  {"all-permutations", no_argument,       NULL, 'a'},
+  {"unopt-optional",   no_argument,       NULL, 'u'},
+  {"help",             no_argument,       NULL, 'h'},
+  {NULL,               0,                 NULL, 0}
 };
 
-void processQuery(QueryExecutionContext& qec, const string& query);
+void processQuery(QueryExecutionContext& qec, const string& query,
+                  bool optimizeOptionals);
+void printUsage(char *execName);
+
+void printUsage(char *execName) {
+  std::ios coutState(nullptr);
+  coutState.copyfmt(cout);
+  cout << std::setfill(' ') << std::left;
+
+  cout << "Usage: " << execName << " -i <index> [OPTIONS]"
+       << endl << endl;
+  cout << "Options" << endl;
+  cout << "  " << std::setw(20) << "a, all-permutations" << std::setw(1)
+       << "    "
+       << "Load all six permuations of the index instead of only two." << endl;
+  cout << "  " << std::setw(20) << "c, cost-factors" << std::setw(1)
+       << "    "
+       << "Path to a file containing cost factors." << endl;
+  cout << "  " << std::setw(20) << "h, help" << std::setw(1) << "    "
+       << "Show this help and exit." << endl;
+  cout << "  " << std::setw(20) << "i, index" << std::setw(1) << "    "
+       << "The location of the index files." << endl;
+  cout << "  " << std::setw(20) << "I, interactive" << std::setw(1)
+       << "    " << "Use stdin to read the queries." << endl;
+  cout << "  " << std::setw(20) << "l, on-disk-literals" << std::setw(1)
+       << "    "
+       << "Indicates that the literals can be found on disk with the index."
+       << endl;
+  cout << "  " << std::setw(20) << "q, queryfile" << std::setw(1)
+       << "    "
+       << "Path to a file containing one query per line." << endl;
+  cout << "  " << std::setw(20) << "t, text" << std::setw(1) << "    "
+       << "Enables the usage of text." << endl;
+  cout << "  " << std::setw(20) << "u, unopt-optional" << std::setw(1) << "    "
+       << "Always place optional joins at the root of the query execution tree."
+       << endl;
+  cout.copyfmt(coutState);
+}
+
 
 // Main function.
 int main(int argc, char** argv) {
   cout.sync_with_stdio(false);
-  std::cout << std::endl << EMPH_ON
-  << "SparqlEngineMain, version " << __DATE__
-  << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
-
   char* locale = setlocale(LC_CTYPE, "en_US.utf8");
-  cout << "Set locale LC_CTYPE to: " << locale << endl;
-
 
   //std::locale loc;
   //ad_utility::ReadableNumberFacet facet(1);
@@ -60,11 +94,12 @@ int main(int argc, char** argv) {
   bool interactive = false;
   bool onDiskLiterals = false;
   bool allPermutations = false;
+  bool optimizeOptionals = true;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "q:Ii:tc:la", options, NULL);
+    int c = getopt_long(argc, argv, "q:Ii:tc:lahu", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'q':
@@ -88,19 +123,33 @@ int main(int argc, char** argv) {
       case 'a':
         allPermutations = true;
         break;
+      case 'h':
+        printUsage(argv[0]);
+        exit(0);
+        break;
+      case 'u':
+        optimizeOptionals = false;
+        break;
       default:
         cout << endl
         << "! ERROR in processing options (getopt returned '" << c
         << "' = 0x" << std::setbase(16) << c << ")"
         << endl << endl;
+        printUsage(argv[0]);
         exit(1);
     }
   }
 
   if (indexName.size() == 0) {
-    cout << "Missing required argument --index (-i)..." << endl;
+    cerr << "Missing required argument --index (-i)..." << endl;
+    printUsage(argv[0]);
     exit(1);
   }
+
+  std::cout << std::endl << EMPH_ON
+  << "SparqlEngineMain, version " << __DATE__
+  << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
+  cout << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
     Engine engine;
@@ -134,13 +183,13 @@ int main(int argc, char** argv) {
           os << line << '\n';
         }
         if (os.str() == "") { return 0; }
-        processQuery(qec, os.str());
+        processQuery(qec, os.str(), optimizeOptionals);
       }
     } else {
       std::ifstream qf(queryfile);
       string line;
       while (std::getline(qf, line)) {
-        processQuery(qec, line);
+        processQuery(qec, line, optimizeOptionals);
       }
     }
   } catch (const std::exception& e) {
@@ -153,13 +202,14 @@ int main(int argc, char** argv) {
   return 0;
 }
 
-void processQuery(QueryExecutionContext& qec, const string& query) {
+void processQuery(QueryExecutionContext& qec, const string& query,
+                  bool optimizeOptionals) {
   ad_utility::Timer t;
   t.start();
   SparqlParser sp;
   ParsedQuery pq = sp.parse(query);
   pq.expandPrefixes();
-  QueryPlanner qp(&qec);
+  QueryPlanner qp(&qec, optimizeOptionals);
   ad_utility::Timer timer;
   timer.start();
   auto qet = qp.createExecutionTree(pq);
