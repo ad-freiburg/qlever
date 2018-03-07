@@ -929,33 +929,60 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
   }
 }
 
-TEST(QueryExecutionTreeTest, testSimpleOptional) {
-  try {
-    ParsedQuery pq = SparqlParser::parse(
-        "SELECT ?a ?b \n "
-            "WHERE  {?a <rel1> ?b . OPTIONAL { ?a <rel2> ?c }}");
-    pq.expandPrefixes();
-    QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_EQ("{\n"
-              "  OPTIONAL_JOIN\n"
-              "  {\n"
-              "    SCAN PSO with P = \"<rel1>\"\n"
-              "    qet-width: 2 \n"
-              "  } join-columns: [0]\n"
-              "  |X|\n"
-              "  {\n"
-              "    SCAN PSO with P = \"<rel2>\"\n"
-              "    qet-width: 2 \n"
-              "  } join-columns: [0]\n"
-              "  qet-width: 3 \n"
-              "}", qet.asString());
-  } catch (const ad_semsearch::Exception& e) {
-    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
-    FAIL() << e.getFullErrorMessage();
-  } catch (const std::exception& e) {
-    std::cout << "Caught: " << e.what() << std::endl;
-    FAIL() << e.what();
+TEST(QueryPlannerTest, testSimpleOptional) {
+  for (bool optimizeOptionals = true; optimizeOptionals;
+       optimizeOptionals = false) {
+    try {
+      QueryPlanner qp(nullptr, optimizeOptionals);
+
+      ParsedQuery pq = SparqlParser::parse(
+                         "SELECT ?a ?b \n "
+                         "WHERE  {?a <rel1> ?b . OPTIONAL { ?a <rel2> ?c }}");
+      pq.expandPrefixes();
+      QueryExecutionTree qet = qp.createExecutionTree(pq);
+      ASSERT_EQ("{\n"
+                "  OPTIONAL_JOIN\n"
+                "  {\n"
+                "    SCAN PSO with P = \"<rel1>\"\n"
+                "    qet-width: 2 \n"
+                "  } join-columns: [0]\n"
+                "  |X|\n"
+                "  {\n"
+                "    SCAN PSO with P = \"<rel2>\"\n"
+                "    qet-width: 2 \n"
+                "  } join-columns: [0]\n"
+                "  qet-width: 3 \n"
+                "}", qet.asString());
+
+      ParsedQuery pq2 = SparqlParser::parse("SELECT ?a ?b \n "
+                               "WHERE  {?a <rel1> ?b . "
+                               "OPTIONAL { ?a <rel2> ?c }} ORDER BY ?b");
+      pq2.expandPrefixes();
+      QueryExecutionTree qet2 = qp.createExecutionTree(pq2);
+      ASSERT_EQ("{\n"
+                "  SORT on column:1\n"
+                "  {\n"
+                "    OPTIONAL_JOIN\n"
+                "    {\n"
+                "      SCAN PSO with P = \"<rel1>\"\n"
+                "      qet-width: 2 \n"
+                "    } join-columns: [0]\n"
+                "    |X|\n"
+                "    {\n"
+                "      SCAN PSO with P = \"<rel2>\"\n"
+                "      qet-width: 2 \n"
+                "    } join-columns: [0]\n"
+                "    qet-width: 3 \n"
+                "  }\n"
+                "  qet-width: 3 \n"
+                "}", qet2.asString());
+    } catch (const ad_semsearch::Exception& e) {
+      std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+      FAIL() << e.getFullErrorMessage();
+    } catch (const std::exception& e) {
+      std::cout << "Caught: " << e.what() << std::endl;
+      FAIL() << e.what();
+    }
   }
 }
 

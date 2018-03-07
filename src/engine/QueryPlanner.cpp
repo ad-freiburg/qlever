@@ -16,7 +16,9 @@
 #include "TwoColumnJoin.h"
 
 // _____________________________________________________________________________
-QueryPlanner::QueryPlanner(QueryExecutionContext* qec) : _qec(qec) {}
+QueryPlanner::QueryPlanner(QueryExecutionContext* qec, bool optimizeOptionals) :
+  _qec(qec),
+  _optimizeOptionals(optimizeOptionals) {}
 
 // _____________________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(
@@ -52,27 +54,74 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
 
     LOG(DEBUG) << "Creating execution plan.\n";
     childPlans.clear();
-    for (const ParsedQuery::GraphPattern *child : pattern->_children) {
-      childPlans.push_back(&patternPlans[child->_id]);
+    if (_optimizeOptionals) {
+      for (const ParsedQuery::GraphPattern *child : pattern->_children) {
+        childPlans.push_back(&patternPlans[child->_id]);
+      }
     }
 
+    // Strategy:
+    // Create a graph.
+    // Each triple corresponds to a node, there is an edge between two nodes iff
+    // they share a variable.
+
     TripleGraph tg = createTripleGraph(pattern);
+
+    // Each node/triple corresponds to a scan (more than one way possible),
+    // each edge corresponds to a possible join.
+
+    // Enumerate and judge possible query plans using a DP table.
+    // Each ExecutionTree for a sub-problem gives an estimate:
+    // There are estimates for cost and size ( and multiplicity per column).
+    // Start bottom up, i.e. with the scans for triples.
+    // Always merge two solutions from the table by picking one possible join.
+    // A join is possible, if there is an edge between the results.
+    // Therefore we keep track of all edges that touch a sub-result.
+    // When joining two sub-results, the results edges are those that belong
+    // to exactly one of the two input sub-trees.
+    // If two of them have the same target, only one out edge is created.
+    // All edges that are shared by both subtrees, are checked if they are covered
+    // by the join or if an extra filter/select is needed.
+
+    // The algorithm then creates all possible plans for 1 to n triples.
+    // To generate a plan for k triples, all subsets between i and k-i are
+    // joined.
+
+    // Filters are now added to the mix when building execution plans.
+    // Without them, a plan has an execution tree and a set of
+    // covered triple nodes.
+    // With them, it also has a set of covered filters.
+    // A filter can be applied as soon as all variables that occur in the filter
+    // Are covered by the query. This is also always the place where this is done.
+
+    // Text operations form cliques (all triples connected via the context cvar).
+    // Detect them and turn them into nodes with stored word part and
+    // edges to connected variables.
+
 
     LOG(TRACE) << "Collapse text cliques..." << std::endl;;
     tg.collapseTextCliques();
     LOG(TRACE) << "Collapse text cliques done." << std::endl;
     vector<vector<SubtreePlan>> finalTab;
+
+    // Each text operation has two ways how it can be used.
+    // 1) As leave in the bottom row of the tab.
+    // According to the number of connected variables, the operation creates
+    // a cross product with n entities that can be used in subsequent joins.
+    // 2) as intermediate unary (downwards) nodes in the execution tree.
+    // This is a bit similar to sorts: they can be applied after each step
+    // and will filter on one variable.
+    // Cycles have to be avoided (by previously removing a triple and using it
+    // as a filter later on).
     finalTab = fillDpTab(tg, pattern->_filters, childPlans);
 
-    // If there are no optional parsts have the optimizer handle the final
-    // order by clause.
-    // if (patternPlans.size() == 1 && pq._orderBy.size() > 0) {
     if (pattern == &pq._rootGraphPattern && pq._orderBy.size() > 0) {
       // If there is an order by clause, add another row to the table and
       // just add an order by / sort to every previous result if needed.
       // If the ordering is perfect already, just copy the plan.
       finalTab.emplace_back(getOrderByRow(pq, finalTab));
     }
+
 
     vector<SubtreePlan>& lastRow = finalTab.back();
     AD_CHECK_GT(lastRow.size(), 0);
@@ -90,86 +139,62 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
     patternPlans[pattern->_id] = lastRow[minInd];
   }
 
-  /*
-  // join the created trees using optional joins on all of their common
-  // variables
-  // Create an inverse topological ordering of all nodes with children
-  std::vector<const ParsedQuery::GraphPattern*> inverseTopo;
-  patternsToProcess.push_back(&pq._rootGraphPattern);
-  while (!patternsToProcess.empty()) {
-    const ParsedQuery::GraphPattern *pattern = patternsToProcess.back();
-    patternsToProcess.pop_back();
-    if (pattern->_children.size() > 0) {
-      // queue all children for processing
-      patternsToProcess.insert(patternsToProcess.end(),
-                               pattern->_children.begin(),
-                               pattern->_children.end());
-      inverseTopo.push_back(pattern);
+  if (!_optimizeOptionals) {
+    // join the created trees using optional joins on all of their common
+    // variables
+    // Create an inverse topological ordering of all nodes with children
+    std::vector<const ParsedQuery::GraphPattern*> inverseTopo;
+    patternsToProcess.push_back(&pq._rootGraphPattern);
+    while (!patternsToProcess.empty()) {
+      const ParsedQuery::GraphPattern *pattern = patternsToProcess.back();
+      patternsToProcess.pop_back();
+      if (pattern->_children.size() > 0) {
+        // queue all children for processing
+        patternsToProcess.insert(patternsToProcess.end(),
+                                 pattern->_children.begin(),
+                                 pattern->_children.end());
+        inverseTopo.push_back(pattern);
+      }
+    }
+
+    LOG(DEBUG) << inverseTopo.size() << " of the nodes have children"
+               << std::endl;
+
+    if (!inverseTopo.empty()) {
+      std::vector<ParsedQuery::GraphPattern*> sortedChildren;
+      for (int i = inverseTopo.size() - 1; i >= 0; i--) {
+        const ParsedQuery::GraphPattern *pattern = inverseTopo[i];
+        sortedChildren.clear();
+        sortedChildren.insert(sortedChildren.end(),
+                              pattern->_children.begin(),
+                              pattern->_children.end());
+        // Init the joins by taking the parent and its first child, then
+        // succesively join with the next child.
+        // ensure the children are sorted in ascending order
+        std::sort(sortedChildren.begin(), sortedChildren.end(),
+                  [&patternPlans](const ParsedQuery::GraphPattern *p1,
+                  const ParsedQuery::GraphPattern *p2) -> bool {
+          return patternPlans[p1->_id].getSizeEstimate()
+              < patternPlans[p2->_id].getSizeEstimate();
+        });
+
+        std::vector<SubtreePlan> plans;
+
+        plans.push_back(optionalJoin(patternPlans[pattern->_id],
+                        patternPlans[sortedChildren[0]->_id]));
+
+        for (size_t j = 1; j < sortedChildren.size(); j++) {
+          SubtreePlan &plan1 = plans.back();
+          SubtreePlan &plan2 = patternPlans[sortedChildren[j]->_id];
+          plans.push_back(optionalJoin(plan1, plan2));
+        }
+        // Replace the old pattern with the new one that merges all children.
+        patternPlans[pattern->_id] = plans.back();
+      }
     }
   }
 
-  LOG(DEBUG) << inverseTopo.size() << " of the nodes have children"
-             << std::endl;
-
-  if (!inverseTopo.empty()) {
-    std::vector<ParsedQuery::GraphPattern*> sortedChildren;
-    for (int i = inverseTopo.size() - 1; i >= 0; i--) {
-      const ParsedQuery::GraphPattern *pattern = inverseTopo[i];
-      sortedChildren.clear();
-      sortedChildren.insert(sortedChildren.end(),
-                            pattern->_children.begin(),
-                            pattern->_children.end());
-      // Init the joins by taking the parent and its first child, then
-      // succesively join with the next child.
-      // ensure the children are sorted in ascending order
-      std::sort(sortedChildren.begin(), sortedChildren.end(),
-                [&patternPlans](const ParsedQuery::GraphPattern *p1,
-                   const ParsedQuery::GraphPattern *p2) -> bool {
-        return patternPlans[p1->_id].getSizeEstimate()
-             < patternPlans[p2->_id].getSizeEstimate();
-      });
-
-      std::vector<SubtreePlan> plans;
-
-      plans.push_back(optionalJoin(patternPlans[pattern->_id],
-                                   patternPlans[sortedChildren[0]->_id]));
-
-      for (size_t j = 1; j < sortedChildren.size(); j++) {
-        SubtreePlan &plan1 = plans.back();
-        SubtreePlan &plan2 = patternPlans[sortedChildren[j]->_id];
-        plans.push_back(optionalJoin(plan1, plan2));
-      }
-      // Replace the old pattern with the new one that merges all children.
-      patternPlans[pattern->_id] = plans.back();
-    }
-  }*/
-
   SubtreePlan final = patternPlans[0];
-
-  // Add global modifiers to the query
-
-  /*
-  // If there are optional parts and the result should be ordered ad an order
-  // by clause after the current final operation. If there are no optional parts
-  // this has already been taken care of.
-  if (pq._orderBy.size() > 0 && patternPlans.size() > 1) {
-    SubtreePlan orderByPlan(_qec);
-    vector<pair<size_t, bool>> sortIndices;
-    for (auto& ord : pq._orderBy) {
-      sortIndices.emplace_back(
-          pair<size_t, bool>{
-              final._qet.get()->getVariableColumn(ord._key),
-              ord._desc});
-    }
-    std::shared_ptr<Operation>
-        ob(new OrderBy(_qec, final._qet, sortIndices));
-    QueryExecutionTree &tree = *orderByPlan._qet.get();
-    tree.setVariableColumns(final._qet.get()->getVariableColumnMap());
-    tree.setOperation(QueryExecutionTree::ORDER_BY, ob);
-    tree.setContextVars(final._qet.get()->getContextVars());
-
-    final = orderByPlan;
-  }*/
 
   // A distinct modifier is applied in the end. This is very easy
   // but not necessarily optimal.

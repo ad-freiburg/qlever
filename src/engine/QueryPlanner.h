@@ -11,7 +11,8 @@ using std::vector;
 
 class QueryPlanner {
 public:
-  explicit QueryPlanner(QueryExecutionContext* qec);
+  explicit QueryPlanner(QueryExecutionContext* qec,
+                        bool optimizeOptionals = true);
 
   QueryExecutionTree createExecutionTree(const ParsedQuery& pq) const;
 
@@ -148,6 +149,11 @@ public:
 
 private:
   QueryExecutionContext* _qec;
+  /**
+   * @brief Controls if optional joins are added to the optimizer or always
+   *        done last.
+   */
+  bool _optimizeOptionals;
 
   static bool isVariable(const string& elem);
 
