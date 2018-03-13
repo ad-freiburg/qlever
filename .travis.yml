@@ -1,15 +1,22 @@
-language: cpp
+language: c++
+sudo: false
 
 compiler:
   - gcc
 
-before_install:
-    - sudo apt-get -qq update
-    - sudo apt-get install -y libsparsehash-dev
+addons:
+  apt:
+    packages:
+      - libsparsehash-dev
 
 before_script:
   - mkdir build
   - cd build
   - cmake ..
 
-script: make && make test
+script: make -j 3 && make test
+
+notifications:
+  email:
+    on_success: never
+    on_failure: always
