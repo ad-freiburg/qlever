@@ -1,7 +1,7 @@
 # QLever
 
 [![Build
-Status](https://travis-ci.org/niklas88/QLever.svg?branch=travisci)](https://travis-ci.org/niklas88/QLever)
+Status](https://travis-ci.org/ad-freiburg/QLever.svg?branch=master)](https://travis-ci.org/ad-freiburg/QLever)
 
 QLever (pronounced "clever") is a query engine for efficient combined search on a knowledge base and a text corpus, in which named entities from the knowledge base have been identified.
 The query language is SPARQL extended by two QLever-specific predicates `ql:contains-entity` and `ql:contains-word`, which can express the occurrence of an entity or word (the object of the predicate) in a text record (the subject of the predicate).
