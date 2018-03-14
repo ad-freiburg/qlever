@@ -159,16 +159,14 @@ TEST(ParserTest, testParse) {
            "  }\n"
            "}");
 
-    ASSERT_EQ(1, pq._rootGraphPattern._children.size());
+    ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
     ParsedQuery::GraphPattern *child = pq._rootGraphPattern._children[0];
-    ASSERT_EQ(1, child->_whereClauseTriples.size());
+    ASSERT_EQ(1u, child->_whereClauseTriples.size());
     ASSERT_EQ("?y", child->_whereClauseTriples[0]._s);
     ASSERT_EQ("<test2>", child->_whereClauseTriples[0]._p);
     ASSERT_EQ("?z", child->_whereClauseTriples[0]._o);
-    ASSERT_EQ(0, child->_filters.size());
+    ASSERT_EQ(0u, child->_filters.size());
     ASSERT_TRUE(child->_optional);
-
-    std::cout << std::endl << "nested optional test" << std::endl;
 
     pq = SparqlParser::parse(
            "SELECT ?x ?z WHERE {\n"
@@ -184,15 +182,15 @@ TEST(ParserTest, testParse) {
            "    }\n"
            "  }\n"
            "}");
-    ASSERT_EQ(1, pq._rootGraphPattern._children.size());
+    ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
     child = pq._rootGraphPattern._children[0];
-    ASSERT_EQ(2, child->_children.size());
+    ASSERT_EQ(2u, child->_children.size());
     ParsedQuery::GraphPattern *child2 = child->_children[0];
     ParsedQuery::GraphPattern *child3 = child->_children[1];
-    ASSERT_EQ(1, child2->_whereClauseTriples.size());
-    ASSERT_EQ(1, child2->_filters.size());
-    ASSERT_EQ(1, child3->_whereClauseTriples.size());
-    ASSERT_EQ(0, child3->_filters.size());
+    ASSERT_EQ(1u, child2->_whereClauseTriples.size());
+    ASSERT_EQ(1u, child2->_filters.size());
+    ASSERT_EQ(1u, child3->_whereClauseTriples.size());
+    ASSERT_EQ(0u, child3->_filters.size());
     ASSERT_TRUE(child->_optional);
     ASSERT_TRUE(child2->_optional);
     ASSERT_TRUE(child3->_optional);

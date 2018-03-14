@@ -389,8 +389,8 @@ public:
   static void createOptionalResult(const typename A::value_type* a,
                                    const typename B::value_type* b,
                                    size_t sizeA,
-                                   int jcls_a, int jcls_b,
-                                   const std::vector<size_t>& jclAToB,
+                                   int joinColumBitmap_a, int joinColumBitmap_b,
+                                   const std::vector<size_t>& joinColumAToB,
                                    unsigned int resultSize,
                                    R& res) {
     assert(!(aEmpty && bEmpty));
@@ -398,16 +398,16 @@ public:
       // Fill the columns of a with ID_NO_VALUE and the rest with b.
       size_t i = 0;
       for (size_t col = 0; col < sizeA; col++) {
-        if ((jcls_a & (1 << col)) == 0) {
+        if ((joinColumBitmap_a & (1 << col)) == 0) {
           res[col] = ID_NO_VALUE;
         } else {
           // if this is one of the join columns use the value in b
-          res[col] = (*b)[jclAToB[col]];
+          res[col] = (*b)[joinColumAToB[col]];
         }
         i++;
       }
       for (size_t col = 0; col < b->size(); col++) {
-        if ((jcls_b & (1 << col)) == 0) {
+        if ((joinColumBitmap_b & (1 << col)) == 0) {
           // only write the value if it is not one of the join columns in b
           res[i] = (*b)[col];
           i++;
@@ -429,7 +429,7 @@ public:
         i++;
       }
       for (size_t col = 0; col < b->size(); col++) {
-        if ((jcls_b & (1 << col)) == 0) {
+        if ((joinColumBitmap_b & (1 << col)) == 0) {
           res[i] = (*b)[col];
           i++;
         }
@@ -444,13 +444,13 @@ public:
    * @param b
    * @param aOptional
    * @param bOptional
-   * @param jcls
+   * @param joinColumns
    * @param result
    */
   template<typename A, typename B, typename R, int K>
   static void optionalJoin(const A& a, const B& b,
                            bool aOptional, bool bOptional,
-                           const vector<array<size_t, 2>>& jcls,
+                           const vector<array<size_t, 2>>& joinColumns,
                            vector<R> *result,
                            unsigned int resultSize) {
     // check for trivial cases
@@ -460,39 +460,39 @@ public:
       return;
     }
 
-    int jcls_a = 0;
-    int jcls_b = 0;
-    for (const array<size_t, 2>& jc : jcls) {
-      jcls_a |= (1 << jc[0]);
-      jcls_b |= (1 << jc[1]);
+    int joinColumBitmap_a = 0;
+    int joinColumBitmap_b = 0;
+    for (const array<size_t, 2>& jc : joinColumns) {
+      joinColumBitmap_a |= (1 << jc[0]);
+      joinColumBitmap_b |= (1 << jc[1]);
     }
 
     // When a is optional this is used to quickly determine
     // in which column of b the value of a joined column can be found.
-    std::vector<size_t> jclAToB;
+    std::vector<size_t> joinColumAToB;
     if (aOptional) {
       uint32_t maxJoinColA = 0;
-      for (const array<size_t, 2>& jc : jcls) {
+      for (const array<size_t, 2>& jc : joinColumns) {
         if (jc[0] > maxJoinColA) {
           maxJoinColA = jc[0];
         }
       }
-      jclAToB.resize(maxJoinColA + 1);
-      for (const array<size_t, 2>& jc : jcls) {
-        jclAToB[jc[0]] = jc[1];
+      joinColumAToB.resize(maxJoinColA + 1);
+      for (const array<size_t, 2>& jc : joinColumns) {
+        joinColumAToB[jc[0]] = jc[1];
       }
     }
 
     // Deal with one of the two tables beeing both empty and optional
     if (a.size() == 0 && aOptional) {
-      size_t sizeA = resultSize - b[0].size() + jcls.size();
+      size_t sizeA = resultSize - b[0].size() + joinColumns.size();
       for (size_t ib = 0; ib < b.size(); ib++) {
         R res = newOptionalResult<R, K>()(resultSize);
         createOptionalResult<A, B, R, true, false>(
-              static_cast<typename A::value_type*>(0), &b[ib],
+              nullptr, &b[ib],
               sizeA,
-              jcls_a, jcls_b,
-              jclAToB, resultSize, res);
+              joinColumBitmap_a, joinColumBitmap_b,
+              joinColumAToB, resultSize, res);
         result->push_back(res);
       }
       return;
@@ -501,16 +501,17 @@ public:
       for (size_t ia = 0; ia < a.size(); ia++) {
         R res = newOptionalResult<R, K>()(resultSize);
         createOptionalResult<A, B, R, false, true>(
-              &a[ia], static_cast<typename B::value_type*>(0),
+              &a[ia], nullptr,
               a[ia].size(),
-              jcls_a, jcls_b,
-              jclAToB, resultSize, res);
+              joinColumBitmap_a, joinColumBitmap_b,
+              joinColumAToB, resultSize, res);
         result->push_back(res);
       }
       return;
     }
 
-    // add sentinels
+    // Cast away constness so we can add sentinels that will be removed
+    // in the end and create and add those sentinels.
     A& l1 = const_cast<A&>(a);
     B& l2 = const_cast<B&>(b);
     Id sentVal = std::numeric_limits<Id>::max() - 1;
@@ -529,26 +530,26 @@ public:
     size_t ia = 0, ib = 0;
     while (ia < a.size() - 1 && ib < b.size() - 1) {
       // Join columns 0 are the primary sort columns
-      while (a[ia][jcls[0][0]] < b[ib][jcls[0][1]]) {
+      while (a[ia][joinColumns[0][0]] < b[ib][joinColumns[0][1]]) {
         if (bOptional) {
           R res = newOptionalResult<R, K>()(resultSize);
           createOptionalResult<A, B, R, false, true>(
-                &a[ia], static_cast<typename B::value_type*>(0),
+                &a[ia], nullptr,
                 a[ia].size(),
-                jcls_a, jcls_b,
-                jclAToB, resultSize, res);
+                joinColumBitmap_a, joinColumBitmap_b,
+                joinColumAToB, resultSize, res);
           result->push_back(res);
         }
         ia++;
       }
-      while (b[ib][jcls[0][1]] < a[ia][jcls[0][0]]) {
+      while (b[ib][joinColumns[0][1]] < a[ia][joinColumns[0][0]]) {
         if (aOptional) {
           R res = newOptionalResult<R, K>()(resultSize);
           createOptionalResult<A, B, R, true, false>(
-                static_cast<typename A::value_type*>(0), &b[ib],
+                nullptr, &b[ib],
                 a[ia].size(),
-                jcls_a, jcls_b,
-                jclAToB, resultSize, res);
+                joinColumBitmap_a, joinColumBitmap_b,
+                joinColumAToB, resultSize, res);
           result->push_back(res);
         }
         ib++;
@@ -556,30 +557,32 @@ public:
 
       // check if the rest of the join columns also match
       matched = true;
-      for (size_t jclIndex = 0; jclIndex < jcls.size(); jclIndex++) {
-        const array<size_t, 2>& jc  = jcls[jclIndex];
-        if (a[ia][jc[0]] < b[ib][jc[1]]) {
+      for (size_t joinColIndex = 0;
+           joinColIndex < joinColumns.size();
+           joinColIndex++) {
+        const array<size_t, 2>& joinColumn  = joinColumns[joinColIndex];
+        if (a[ia][joinColumn[0]] < b[ib][joinColumn[1]]) {
           if (bOptional) {
             R res = newOptionalResult<R, K>()(resultSize);
             createOptionalResult<A, B, R, false, true>(
-                  &a[ia], static_cast<typename B::value_type*>(0),
+                  &a[ia], nullptr,
                   a[ia].size(),
-                  jcls_a, jcls_b,
-                  jclAToB, resultSize, res);
+                  joinColumBitmap_a, joinColumBitmap_b,
+                  joinColumAToB, resultSize, res);
             result->push_back(res);
           }
           ia++;
           matched = false;
           break;
         }
-        if (b[ib][jc[1]] < a[ia][jc[0]]) {
+        if (b[ib][joinColumn[1]] < a[ia][joinColumn[0]]) {
           if (aOptional) {
             R res = newOptionalResult<R, K>()(resultSize);
             createOptionalResult<A, B, R, true, false>(
-                  static_cast<typename A::value_type*>(0), &b[ib],
+                  nullptr, &b[ib],
                   a[ia].size(),
-                  jcls_a, jcls_b,
-                  jclAToB, resultSize, res);
+                  joinColumBitmap_a, joinColumBitmap_b,
+                  joinColumAToB, resultSize, res);
             result->push_back(res);
           }
           ib++;
@@ -599,13 +602,13 @@ public:
           createOptionalResult<A, B, R, false, false>(
                 &a[ia], &b[ib],
                 a[ia].size(),
-                jcls_a, jcls_b,
-                jclAToB, resultSize, res);
+                joinColumBitmap_a, joinColumBitmap_b,
+                joinColumAToB, resultSize, res);
           result->push_back(res);
           ib++;
 
           // do the rows still match?
-          for (const array<size_t, 2>& jc : jcls) {
+          for (const array<size_t, 2>& jc : joinColumns) {
             if (ib == b.size() || a[ia][jc[0]] != b[ib][jc[1]]) {
               matched = false;
               break;
@@ -615,7 +618,7 @@ public:
         ia++;
         // Check if the next row in a also matches the initial row in b
         matched = true;
-        for (const array<size_t, 2>& jc : jcls) {
+        for (const array<size_t, 2>& jc : joinColumns) {
           if (ia == a.size() || a[ia][jc[0]] != b[initIb][jc[1]]) {
             matched = false;
             break;
@@ -631,7 +634,7 @@ public:
     // remove the sentinels
     l1.pop_back();
     l2.pop_back();
-    if (result->back()[jcls[0][0]] == sentVal) {
+    if (result->back()[joinColumns[0][0]] == sentVal) {
       result->pop_back();
     }
 
@@ -641,10 +644,10 @@ public:
       while (ib < b.size()) {
         R res = newOptionalResult<R, K>()(resultSize);
         createOptionalResult<A, B, R, true, false>(
-              static_cast<typename A::value_type*>(0), &b[ib],
+              nullptr, &b[ib],
               a[0].size(),
-            jcls_a, jcls_b,
-            jclAToB, resultSize, res);
+            joinColumBitmap_a, joinColumBitmap_b,
+            joinColumAToB, resultSize, res);
         result->push_back(res);
         ++ib;
       }
@@ -653,10 +656,10 @@ public:
       while (ia < a.size()) {
         R res = newOptionalResult<R, K>()(resultSize);
         createOptionalResult<A, B, R, false, true>(
-              &a[ia], static_cast<typename B::value_type*>(0),
+              &a[ia], nullptr,
               a[ia].size(),
-              jcls_a, jcls_b,
-              jclAToB, resultSize, res);
+              joinColumBitmap_a, joinColumBitmap_b,
+              joinColumAToB, resultSize, res);
         result->push_back(res);
         ++ia;
       }

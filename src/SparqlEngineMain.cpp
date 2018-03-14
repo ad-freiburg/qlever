@@ -71,7 +71,7 @@ void printUsage(char *execName) {
   cout << "  " << std::setw(20) << "t, text" << std::setw(1) << "    "
        << "Enables the usage of text." << endl;
   cout << "  " << std::setw(20) << "u, unopt-optional" << std::setw(1) << "    "
-       << "Always place optional joins at the root of the query execution tree."
+       << "Always execute optional joins last."
        << endl;
   cout.copyfmt(coutState);
 }

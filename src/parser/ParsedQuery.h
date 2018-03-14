@@ -92,7 +92,7 @@ public:
     GraphPattern(const GraphPattern& other);
     GraphPattern& operator=(const GraphPattern& other);
     virtual ~GraphPattern();
-    void toString(std::ostringstream& os) const;
+    void toString(std::ostringstream& os, int indentation = 0) const;
 
     vector<SparqlTriple> _whereClauseTriples;
     vector<SparqlFilter> _filters;

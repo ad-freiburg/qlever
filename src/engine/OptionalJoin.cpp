@@ -1,6 +1,7 @@
 // Copyright 2016, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//         Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
 #include "./OptionalJoin.h"
 

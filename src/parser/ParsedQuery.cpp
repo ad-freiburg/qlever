@@ -34,8 +34,8 @@ string ParsedQuery::asString() const {
   os << "\n}";
 
   // WHERE
-  os << "\nWHERE: ";
-  _rootGraphPattern.toString(os);
+  os << "\nWHERE: \n";
+  _rootGraphPattern.toString(os, 1);
 
   os << "\nLIMIT: " << (_limit.size() > 0 ? _limit : "no limit specified");
   os << "\nTEXTLIMIT: "
@@ -209,21 +209,38 @@ ParsedQuery::GraphPattern::operator=(const ParsedQuery::GraphPattern& other) {
 }
 
 // _____________________________________________________________________________
-void ParsedQuery::GraphPattern::toString(std::ostringstream& os) const {
+void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
+                                         int indentation) const {
+  for (int j = 1; j < indentation; ++j) os << "  ";
   if (_optional) {
-    os << "\nOPTIONAL ";
+    os << "OPTIONAL ";
   }
-  os << "{\n";
-  for (size_t i = 0; i < _whereClauseTriples.size(); ++i) {
-    os << "\n\t" << _whereClauseTriples[i].asString();
-    if (i + 1 < _whereClauseTriples.size()) { os << ','; }
+  os << "{";
+  for (size_t i = 0; i + 1 < _whereClauseTriples.size(); ++i) {
+    os << "\n";
+    for (int j = 0; j < indentation; ++j) os << "  ";
+    os << _whereClauseTriples[i].asString() << ',';
   }
-  for (size_t i = 0; i < _filters.size(); ++i) {
-    os << "\n\t" << _filters[i].asString();
-    if (i + 1 < _filters.size()) { os << ','; }
+  if (_whereClauseTriples.size() > 0) {
+    os << "\n";
+    for (int j = 0; j < indentation; ++j) os << "  ";
+    os << _whereClauseTriples.back().asString();
+  }
+  for (size_t i = 0; i + 1 < _filters.size(); ++i) {
+    os << "\n";
+    for (int j = 0; j < indentation; ++j) os << "  ";
+    os << _filters[i].asString() << ',';
+  }
+  if (_filters.size() > 0) {
+    os << "\n";
+    for (int j = 0; j < indentation; ++j) os << "  ";
+    os << _filters.back().asString();
   }
   for (GraphPattern *child : _children) {
-    child->toString(os);
+    os << "\n";
+    child->toString(os, indentation + 1);
   }
-  os << "\n}";
+  os << "\n";
+  for (int j = 1; j < indentation; ++j) os << "  ";
+  os <<"}";
 }
