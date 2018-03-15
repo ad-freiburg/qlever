@@ -11,7 +11,8 @@ using std::vector;
 
 class QueryPlanner {
 public:
-  explicit QueryPlanner(QueryExecutionContext* qec);
+  explicit QueryPlanner(QueryExecutionContext* qec,
+                        bool optimizeOptionals = true);
 
   QueryExecutionTree createExecutionTree(const ParsedQuery& pq) const;
 
@@ -94,11 +95,13 @@ public:
     explicit SubtreePlan(QueryExecutionContext* qec)
         : _qet(new QueryExecutionTree(qec)),
           _idsOfIncludedNodes(0),
-          _idsOfIncludedFilters(0) {}
+          _idsOfIncludedFilters(0),
+          _isOptional(false) {}
 
     std::shared_ptr<QueryExecutionTree> _qet;
     uint64_t _idsOfIncludedNodes;
     uint64_t _idsOfIncludedFilters;
+    bool _isOptional;
 
     size_t getCostEstimate() const;
 
@@ -107,7 +110,7 @@ public:
     void addAllNodes(uint64_t otherNodes);
   };
 
-  TripleGraph createTripleGraph(const ParsedQuery& query) const;
+  TripleGraph createTripleGraph(const ParsedQuery::GraphPattern *pattern) const;
 
   static ad_utility::HashMap<string, size_t>
   createVariableColumnsMapForTextOperation(
@@ -146,6 +149,11 @@ public:
 
 private:
   QueryExecutionContext* _qec;
+  /**
+   * @brief Controls if optional joins are added to the optimizer or always
+   *        done last.
+   */
+  bool _optimizeOptionals;
 
   static bool isVariable(const string& elem);
 
@@ -156,7 +164,10 @@ private:
       ad_utility::HashMap<string, vector<SparqlTriple>>& varToTrip,
       ad_utility::HashSet<string>& contextVars) const;
 
-  vector<SubtreePlan> seedWithScansAndText(const TripleGraph& tg) const;
+  vector<SubtreePlan> seedWithScansAndText(const TripleGraph& tg,
+                                           const vector<
+                                           QueryPlanner::SubtreePlan*>&
+                                           children) const;
 
   vector<SubtreePlan> merge(const vector<SubtreePlan>& a,
                             const vector<SubtreePlan>& b,
@@ -179,10 +190,14 @@ private:
                               bool replaceInsteadOfAddPlans) const;
 
   vector<vector<SubtreePlan>> fillDpTab(const TripleGraph& graph,
-                                        const vector<SparqlFilter>& fs) const;
+                                        const vector<SparqlFilter>& fs,
+                                        const vector<SubtreePlan*>& children)
+                                        const;
 
   size_t getTextLimit(const string& textLimitString) const;
 
   SubtreePlan getTextLeafPlan(const TripleGraph::Node& node) const;
+
+  SubtreePlan optionalJoin(const SubtreePlan& a, const SubtreePlan& b) const;
 };
 

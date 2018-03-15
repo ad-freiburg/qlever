@@ -6,6 +6,7 @@
 #include <array>
 #include <vector>
 #include <algorithm>
+#include <iomanip>
 
 #include "../util/Log.h"
 #include "./IndexSequence.h"
@@ -15,6 +16,7 @@
 
 using std::vector;
 using std::array;
+
 
 class Engine {
 public:
@@ -367,8 +369,305 @@ public:
     }
   }
 
-private:
+  template<typename R, int K>
+  struct newOptionalResult {
+    R operator()(unsigned int resultSize) {
+      (void) resultSize;
+      return R();
+    }
+  };
 
+  template<int K>
+  struct newOptionalResult<std::vector<Id>, K> {
+    std::vector<Id> operator()(unsigned int resultSize) {
+      return vector<Id>(resultSize);
+    }
+  };
+
+
+ template<typename A, typename B, typename R, bool aEmpty, bool bEmpty>
+  static void createOptionalResult(const typename A::value_type* a,
+                                   const typename B::value_type* b,
+                                   size_t sizeA,
+                                   int joinColumnBitmap_a,
+                                   int joinColumnBitmap_b,
+                                   const std::vector<size_t>& joinColumnAToB,
+                                   unsigned int resultSize,
+                                   R& res) {
+    assert(!(aEmpty && bEmpty));
+    if (aEmpty) {
+      // Fill the columns of a with ID_NO_VALUE and the rest with b.
+      size_t i = 0;
+      for (size_t col = 0; col < sizeA; col++) {
+        if ((joinColumnBitmap_a & (1 << col)) == 0) {
+          res[col] = ID_NO_VALUE;
+        } else {
+          // if this is one of the join columns use the value in b
+          res[col] = (*b)[joinColumnAToB[col]];
+        }
+        i++;
+      }
+      for (size_t col = 0; col < b->size(); col++) {
+        if ((joinColumnBitmap_b & (1 << col)) == 0) {
+          // only write the value if it is not one of the join columns in b
+          res[i] = (*b)[col];
+          i++;
+        }
+      }
+    } else if (bEmpty) {
+      // Fill the columns of b with ID_NO_VALUE and the rest with a
+      for (size_t col = 0; col < sizeA; col++) {
+        res[col] = (*a)[col];
+      }
+      for (size_t col = sizeA; col < resultSize; col++) {
+        res[col] = ID_NO_VALUE;
+      }
+    } else {
+      // Use the values from both a and b
+      unsigned int i = 0;
+      for (size_t col = 0; col < a->size(); col++) {
+        res[col] = (*a)[col];
+        i++;
+      }
+      for (size_t col = 0; col < b->size(); col++) {
+        if ((joinColumnBitmap_b & (1 << col)) == 0) {
+          res[i] = (*b)[col];
+          i++;
+        }
+      }
+    }
+  }
+
+  /**
+   * @brief Joins two result tables on any number of columns, inserting the
+   *        special value ID_NO_VALUE for any entries marked as optional.
+   * @param a
+   * @param b
+   * @param aOptional
+   * @param bOptional
+   * @param joinColumns
+   * @param result
+   */
+  template<typename A, typename B, typename R, int K>
+  static void optionalJoin(const A& a, const B& b,
+                           bool aOptional, bool bOptional,
+                           const vector<array<size_t, 2>>& joinColumns,
+                           vector<R> *result,
+                           unsigned int resultSize) {
+    // check for trivial cases
+    if ((a.size() == 0 && b.size() == 0)
+        || (a.size() == 0 && !aOptional)
+        || (b.size() == 0 && !bOptional)) {
+      return;
+    }
+
+    int joinColumnBitmap_a = 0;
+    int joinColumnBitmap_b = 0;
+    for (const array<size_t, 2>& jc : joinColumns) {
+      joinColumnBitmap_a |= (1 << jc[0]);
+      joinColumnBitmap_b |= (1 << jc[1]);
+    }
+
+    // When a is optional this is used to quickly determine
+    // in which column of b the value of a joined column can be found.
+    std::vector<size_t> joinColumnAToB;
+    if (aOptional) {
+      uint32_t maxJoinColA = 0;
+      for (const array<size_t, 2>& jc : joinColumns) {
+        if (jc[0] > maxJoinColA) {
+          maxJoinColA = jc[0];
+        }
+      }
+      joinColumnAToB.resize(maxJoinColA + 1);
+      for (const array<size_t, 2>& jc : joinColumns) {
+        joinColumnAToB[jc[0]] = jc[1];
+      }
+    }
+
+    // Deal with one of the two tables beeing both empty and optional
+    if (a.size() == 0 && aOptional) {
+      size_t sizeA = resultSize - b[0].size() + joinColumns.size();
+      for (size_t ib = 0; ib < b.size(); ib++) {
+        R res = newOptionalResult<R, K>()(resultSize);
+        createOptionalResult<A, B, R, true, false>(
+              nullptr, &b[ib],
+              sizeA,
+              joinColumnBitmap_a, joinColumnBitmap_b,
+              joinColumnAToB, resultSize, res);
+        result->push_back(res);
+      }
+      return;
+    }
+    else if (b.size() == 0 && bOptional) {
+      for (size_t ia = 0; ia < a.size(); ia++) {
+        R res = newOptionalResult<R, K>()(resultSize);
+        createOptionalResult<A, B, R, false, true>(
+              &a[ia], nullptr,
+              a[ia].size(),
+              joinColumnBitmap_a, joinColumnBitmap_b,
+              joinColumnAToB, resultSize, res);
+        result->push_back(res);
+      }
+      return;
+    }
+
+    // Cast away constness so we can add sentinels that will be removed
+    // in the end and create and add those sentinels.
+    A& l1 = const_cast<A&>(a);
+    B& l2 = const_cast<B&>(b);
+    Id sentVal = std::numeric_limits<Id>::max() - 1;
+    auto v1 = l1[0];
+    auto v2 = l2[0];
+    for (size_t i = 0; i < v1.size(); i++) {
+      v1[i] = sentVal;
+    }
+    for (size_t i = 0; i < v2.size(); i++) {
+      v2[i] = sentVal;
+    }
+    l1.push_back(v1);
+    l2.push_back(v2);
+
+    bool matched = false;
+    size_t ia = 0, ib = 0;
+    while (ia < a.size() - 1 && ib < b.size() - 1) {
+      // Join columns 0 are the primary sort columns
+      while (a[ia][joinColumns[0][0]] < b[ib][joinColumns[0][1]]) {
+        if (bOptional) {
+          R res = newOptionalResult<R, K>()(resultSize);
+          createOptionalResult<A, B, R, false, true>(
+                &a[ia], nullptr,
+                a[ia].size(),
+                joinColumnBitmap_a, joinColumnBitmap_b,
+                joinColumnAToB, resultSize, res);
+          result->push_back(res);
+        }
+        ia++;
+      }
+      while (b[ib][joinColumns[0][1]] < a[ia][joinColumns[0][0]]) {
+        if (aOptional) {
+          R res = newOptionalResult<R, K>()(resultSize);
+          createOptionalResult<A, B, R, true, false>(
+                nullptr, &b[ib],
+                a[ia].size(),
+                joinColumnBitmap_a, joinColumnBitmap_b,
+                joinColumnAToB, resultSize, res);
+          result->push_back(res);
+        }
+        ib++;
+      }
+
+      // check if the rest of the join columns also match
+      matched = true;
+      for (size_t joinColIndex = 0;
+           joinColIndex < joinColumns.size();
+           joinColIndex++) {
+        const array<size_t, 2>& joinColumn  = joinColumns[joinColIndex];
+        if (a[ia][joinColumn[0]] < b[ib][joinColumn[1]]) {
+          if (bOptional) {
+            R res = newOptionalResult<R, K>()(resultSize);
+            createOptionalResult<A, B, R, false, true>(
+                  &a[ia], nullptr,
+                  a[ia].size(),
+                  joinColumnBitmap_a, joinColumnBitmap_b,
+                  joinColumnAToB, resultSize, res);
+            result->push_back(res);
+          }
+          ia++;
+          matched = false;
+          break;
+        }
+        if (b[ib][joinColumn[1]] < a[ia][joinColumn[0]]) {
+          if (aOptional) {
+            R res = newOptionalResult<R, K>()(resultSize);
+            createOptionalResult<A, B, R, true, false>(
+                  nullptr, &b[ib],
+                  a[ia].size(),
+                  joinColumnBitmap_a, joinColumnBitmap_b,
+                  joinColumnAToB, resultSize, res);
+            result->push_back(res);
+          }
+          ib++;
+          matched = false;
+          break;
+        }
+      }
+
+      // Compute the cross product of the row in a and all matching
+      // rows in b.
+      while (matched && ia < a.size() && ib < b.size()) {
+        // used to reset ib if another cross product needs to be computed
+        size_t initIb = ib;
+
+        while (matched) {
+          R res = newOptionalResult<R, K>()(resultSize);
+          createOptionalResult<A, B, R, false, false>(
+                &a[ia], &b[ib],
+                a[ia].size(),
+                joinColumnBitmap_a, joinColumnBitmap_b,
+                joinColumnAToB, resultSize, res);
+          result->push_back(res);
+          ib++;
+
+          // do the rows still match?
+          for (const array<size_t, 2>& jc : joinColumns) {
+            if (ib == b.size() || a[ia][jc[0]] != b[ib][jc[1]]) {
+              matched = false;
+              break;
+            }
+          }
+        }
+        ia++;
+        // Check if the next row in a also matches the initial row in b
+        matched = true;
+        for (const array<size_t, 2>& jc : joinColumns) {
+          if (ia == a.size() || a[ia][jc[0]] != b[initIb][jc[1]]) {
+            matched = false;
+            break;
+          }
+        }
+        // If they match reset ib and compute another cross product
+        if (matched) {
+          ib = initIb;
+        }
+      }
+    }
+
+    // remove the sentinels
+    l1.pop_back();
+    l2.pop_back();
+    if (result->back()[joinColumns[0][0]] == sentVal) {
+      result->pop_back();
+    }
+
+    // If the table of which we reached the end is optional, add all entries
+    // of the other table.
+    if (aOptional && ib < b.size()) {
+      while (ib < b.size()) {
+        R res = newOptionalResult<R, K>()(resultSize);
+        createOptionalResult<A, B, R, true, false>(
+              nullptr, &b[ib],
+              a[0].size(),
+            joinColumnBitmap_a, joinColumnBitmap_b,
+            joinColumnAToB, resultSize, res);
+        result->push_back(res);
+        ++ib;
+      }
+    }
+    if (bOptional && ia < a.size()) {
+      while (ia < a.size()) {
+        R res = newOptionalResult<R, K>()(resultSize);
+        createOptionalResult<A, B, R, false, true>(
+              &a[ia], nullptr,
+              a[ia].size(),
+              joinColumnBitmap_a, joinColumnBitmap_b,
+              joinColumnAToB, resultSize, res);
+        result->push_back(res);
+        ++ia;
+      }
+    }
+  }
+
+private:
   template<typename E, size_t N, size_t I>
   static vector<array<E, N>> doFilterRelationWithSingleId(
       const vector<array<E, N>>& relation,

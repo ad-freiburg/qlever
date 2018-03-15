@@ -34,7 +34,8 @@ public:
   // Initialize the server.
   void initialize(const string& ontologyBaseName, bool useText,
                   bool allPermutations = false,
-                  bool onDiskLiterals = false);
+                  bool onDiskLiterals = false,
+                  bool optimizeOptionals = true);
 
   //! Loop, wait for requests and trigger processing.
   void run();
@@ -44,6 +45,7 @@ private:
   int _port;
   Index _index;
   Engine _engine;
+  bool _optimizeOptionals;
 
   bool _initialized;
 

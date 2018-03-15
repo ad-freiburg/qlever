@@ -803,6 +803,8 @@ void Index::scanOPS(Id object, Index::WidthTwoList* result) const {
 string Index::idToString(Id id) const {
   if (id < _vocab.size()) {
     return _vocab[id];
+  } else if (id == ID_NO_VALUE) {
+    return "";
   } else {
     id -= _vocab.size();
     AD_CHECK(id < _vocab.getExternalVocab().size())

@@ -17,11 +17,13 @@ public:
 private:
   static void parsePrologue(string str, ParsedQuery& query);
   static void parseSelect(string const& str, ParsedQuery& query);
-  static void parseWhere(string const& str, ParsedQuery& query);
+  static void parseWhere(string const& str, ParsedQuery& query,
+                         ParsedQuery::GraphPattern *currentPattern = nullptr);
   static void parseSolutionModifiers(const string& str, ParsedQuery& query);
   static void addPrefix(const string& str, ParsedQuery& query);
-  static void addWhereTriple(const string& str, ParsedQuery& query);
-  static void addFilter(const string& str, ParsedQuery& query);
+  static void addWhereTriple(const string& str,
+                             ParsedQuery::GraphPattern *pattern);
+  static void addFilter(const string& str, ParsedQuery::GraphPattern *pattern);
 
   static string stripAndLowercaseKeywordLiteral(const string& lit);
 };

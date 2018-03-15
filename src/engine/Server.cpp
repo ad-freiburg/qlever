@@ -16,8 +16,11 @@
 
 // _____________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
-                        bool allPermutations, bool onDiskLiterals) {
+                        bool allPermutations, bool onDiskLiterals,
+                        bool optimizeOptionals) {
   LOG(INFO) << "Initializing server..." << std::endl;
+
+  _optimizeOptionals = optimizeOptionals;
 
   // Init the index.
   _index.createFromOnDiskIndex(ontologyBaseName, allPermutations,
@@ -153,7 +156,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       // QueryGraph qg(qec);
       // qg.createFromParsedQuery(pq);
       // const QueryExecutionTree& qet = qg.getExecutionTree();
-      QueryPlanner qp(qec);
+      QueryPlanner qp(qec, _optimizeOptionals);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
       LOG(INFO) << qet.asString() << std::endl;
 

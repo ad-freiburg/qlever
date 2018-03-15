@@ -35,6 +35,7 @@ public:
     TEXT_WITHOUT_FILTER = 8,
     TEXT_WITH_FILTER = 9,
     TWO_COL_JOIN = 10,
+    OPTIONAL_JOIN = 11
   };
 
   enum OutputType {

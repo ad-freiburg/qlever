@@ -71,6 +71,8 @@ public:
     GE = 6
   };
 
+  string asString() const;
+
   FilterType _type;
   string _lhs;
   string _rhs;
@@ -79,13 +81,34 @@ public:
 // A parsed SPARQL query. To be extended.
 class ParsedQuery {
 public:
+  // Groups triplets and filters. Represents a node in a tree (as graph patterns
+  // are recursive).
+  class GraphPattern {
+  public:
+    // deletes the patterns children.
+    GraphPattern() { }
+    // Move and copyconstructors to avoid double deletes on the trees children
+    GraphPattern(GraphPattern&& other);
+    GraphPattern(const GraphPattern& other);
+    GraphPattern& operator=(const GraphPattern& other);
+    virtual ~GraphPattern();
+    void toString(std::ostringstream& os, int indentation = 0) const;
 
-  ParsedQuery() : _reduced(false), _distinct(false) { }
+    vector<SparqlTriple> _whereClauseTriples;
+    vector<SparqlFilter> _filters;
+    bool _optional;
+    size_t _id;
+
+    vector<GraphPattern*> _children;
+  };
+
+
+  ParsedQuery() : _numGraphPatterns(1), _reduced(false), _distinct(false) { }
 
   vector<SparqlPrefix> _prefixes;
   vector<string> _selectedVariables;
-  vector<SparqlTriple> _whereClauseTriples;
-  vector<SparqlFilter> _filters;
+  GraphPattern _rootGraphPattern;
+  size_t _numGraphPatterns;
   vector<OrderKey> _orderBy;
   string _limit;
   string _textLimit;
