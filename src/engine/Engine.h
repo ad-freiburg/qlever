@@ -389,8 +389,9 @@ public:
   static void createOptionalResult(const typename A::value_type* a,
                                    const typename B::value_type* b,
                                    size_t sizeA,
-                                   int joinColumBitmap_a, int joinColumBitmap_b,
-                                   const std::vector<size_t>& joinColumAToB,
+                                   int joinColumnBitmap_a,
+                                   int joinColumnBitmap_b,
+                                   const std::vector<size_t>& joinColumnAToB,
                                    unsigned int resultSize,
                                    R& res) {
     assert(!(aEmpty && bEmpty));
@@ -398,16 +399,16 @@ public:
       // Fill the columns of a with ID_NO_VALUE and the rest with b.
       size_t i = 0;
       for (size_t col = 0; col < sizeA; col++) {
-        if ((joinColumBitmap_a & (1 << col)) == 0) {
+        if ((joinColumnBitmap_a & (1 << col)) == 0) {
           res[col] = ID_NO_VALUE;
         } else {
           // if this is one of the join columns use the value in b
-          res[col] = (*b)[joinColumAToB[col]];
+          res[col] = (*b)[joinColumnAToB[col]];
         }
         i++;
       }
       for (size_t col = 0; col < b->size(); col++) {
-        if ((joinColumBitmap_b & (1 << col)) == 0) {
+        if ((joinColumnBitmap_b & (1 << col)) == 0) {
           // only write the value if it is not one of the join columns in b
           res[i] = (*b)[col];
           i++;
@@ -429,7 +430,7 @@ public:
         i++;
       }
       for (size_t col = 0; col < b->size(); col++) {
-        if ((joinColumBitmap_b & (1 << col)) == 0) {
+        if ((joinColumnBitmap_b & (1 << col)) == 0) {
           res[i] = (*b)[col];
           i++;
         }
@@ -460,16 +461,16 @@ public:
       return;
     }
 
-    int joinColumBitmap_a = 0;
-    int joinColumBitmap_b = 0;
+    int joinColumnBitmap_a = 0;
+    int joinColumnBitmap_b = 0;
     for (const array<size_t, 2>& jc : joinColumns) {
-      joinColumBitmap_a |= (1 << jc[0]);
-      joinColumBitmap_b |= (1 << jc[1]);
+      joinColumnBitmap_a |= (1 << jc[0]);
+      joinColumnBitmap_b |= (1 << jc[1]);
     }
 
     // When a is optional this is used to quickly determine
     // in which column of b the value of a joined column can be found.
-    std::vector<size_t> joinColumAToB;
+    std::vector<size_t> joinColumnAToB;
     if (aOptional) {
       uint32_t maxJoinColA = 0;
       for (const array<size_t, 2>& jc : joinColumns) {
@@ -477,9 +478,9 @@ public:
           maxJoinColA = jc[0];
         }
       }
-      joinColumAToB.resize(maxJoinColA + 1);
+      joinColumnAToB.resize(maxJoinColA + 1);
       for (const array<size_t, 2>& jc : joinColumns) {
-        joinColumAToB[jc[0]] = jc[1];
+        joinColumnAToB[jc[0]] = jc[1];
       }
     }
 
@@ -491,8 +492,8 @@ public:
         createOptionalResult<A, B, R, true, false>(
               nullptr, &b[ib],
               sizeA,
-              joinColumBitmap_a, joinColumBitmap_b,
-              joinColumAToB, resultSize, res);
+              joinColumnBitmap_a, joinColumnBitmap_b,
+              joinColumnAToB, resultSize, res);
         result->push_back(res);
       }
       return;
@@ -503,8 +504,8 @@ public:
         createOptionalResult<A, B, R, false, true>(
               &a[ia], nullptr,
               a[ia].size(),
-              joinColumBitmap_a, joinColumBitmap_b,
-              joinColumAToB, resultSize, res);
+              joinColumnBitmap_a, joinColumnBitmap_b,
+              joinColumnAToB, resultSize, res);
         result->push_back(res);
       }
       return;
@@ -536,8 +537,8 @@ public:
           createOptionalResult<A, B, R, false, true>(
                 &a[ia], nullptr,
                 a[ia].size(),
-                joinColumBitmap_a, joinColumBitmap_b,
-                joinColumAToB, resultSize, res);
+                joinColumnBitmap_a, joinColumnBitmap_b,
+                joinColumnAToB, resultSize, res);
           result->push_back(res);
         }
         ia++;
@@ -548,8 +549,8 @@ public:
           createOptionalResult<A, B, R, true, false>(
                 nullptr, &b[ib],
                 a[ia].size(),
-                joinColumBitmap_a, joinColumBitmap_b,
-                joinColumAToB, resultSize, res);
+                joinColumnBitmap_a, joinColumnBitmap_b,
+                joinColumnAToB, resultSize, res);
           result->push_back(res);
         }
         ib++;
@@ -567,8 +568,8 @@ public:
             createOptionalResult<A, B, R, false, true>(
                   &a[ia], nullptr,
                   a[ia].size(),
-                  joinColumBitmap_a, joinColumBitmap_b,
-                  joinColumAToB, resultSize, res);
+                  joinColumnBitmap_a, joinColumnBitmap_b,
+                  joinColumnAToB, resultSize, res);
             result->push_back(res);
           }
           ia++;
@@ -581,8 +582,8 @@ public:
             createOptionalResult<A, B, R, true, false>(
                   nullptr, &b[ib],
                   a[ia].size(),
-                  joinColumBitmap_a, joinColumBitmap_b,
-                  joinColumAToB, resultSize, res);
+                  joinColumnBitmap_a, joinColumnBitmap_b,
+                  joinColumnAToB, resultSize, res);
             result->push_back(res);
           }
           ib++;
@@ -602,8 +603,8 @@ public:
           createOptionalResult<A, B, R, false, false>(
                 &a[ia], &b[ib],
                 a[ia].size(),
-                joinColumBitmap_a, joinColumBitmap_b,
-                joinColumAToB, resultSize, res);
+                joinColumnBitmap_a, joinColumnBitmap_b,
+                joinColumnAToB, resultSize, res);
           result->push_back(res);
           ib++;
 
@@ -646,8 +647,8 @@ public:
         createOptionalResult<A, B, R, true, false>(
               nullptr, &b[ib],
               a[0].size(),
-            joinColumBitmap_a, joinColumBitmap_b,
-            joinColumAToB, resultSize, res);
+            joinColumnBitmap_a, joinColumnBitmap_b,
+            joinColumnAToB, resultSize, res);
         result->push_back(res);
         ++ib;
       }
@@ -658,8 +659,8 @@ public:
         createOptionalResult<A, B, R, false, true>(
               &a[ia], nullptr,
               a[ia].size(),
-              joinColumBitmap_a, joinColumBitmap_b,
-              joinColumAToB, resultSize, res);
+              joinColumnBitmap_a, joinColumnBitmap_b,
+              joinColumnAToB, resultSize, res);
         result->push_back(res);
         ++ia;
       }
