@@ -681,7 +681,7 @@ public:
     size_t posInput = 0;
     size_t posPattern = 0;
     size_t subject;
-    while (posPattern < input->size()) {
+    while (posInput < input->size()) {
       subject = (*input)[posInput][subjectColumn];
       // Find the next candidates for entries in has-relation and has-pattern
       // for the subject id.
@@ -717,9 +717,9 @@ public:
           posRelation++;
         }
       } else {
-        AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE, "No pattern or has-relation entry found for entity " + std::to_string(subject));
+        LOG(WARN) << "No pattern or has-relation entry found for entity " << std::to_string(subject) << std::endl;
       }
-      posPattern++;
+      posInput++;
     }
     result->reserve(predicateCounts.size());
     for (const auto& it : predicateCounts) {

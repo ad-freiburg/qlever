@@ -351,6 +351,7 @@ void Index::createPatterns(const string& fileName,
   Id currentRel;
   currentRel = vec[0][0];
   bool isValidPattern = true;
+  size_t numInvalidPatterns = 0;
   for (ExtVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if ((*reader)[0] != currentRel || reader.empty()) {
       currentRel = (*reader)[0];
@@ -362,6 +363,8 @@ void Index::createPatterns(const string& fileName,
         } else {
           (*it).second++;
         }
+      } else {
+        numInvalidPatterns++;
       }
       isValidPattern = true;
       // std::memset(pattern.data(), 0, sizeof(Id) * Pattern::MAX_NUM_RELATIONS);
@@ -390,10 +393,15 @@ void Index::createPatterns(const string& fileName,
   }
   LOG(INFO) << "Counted patterns and found " << patternCounts.size()
             << " distinct patterns." << std::endl;
+  LOG(INFO) << "Discarded " << numInvalidPatterns << " patterns because they "
+               "were to large." << std::endl;
 
   // stores patterns sorted by their number of occurences
   size_t actualNumPatterns
       = patternCounts.size() < maxNumPatterns ? patternCounts.size() : maxNumPatterns;
+  LOG(INFO) << "Using " << actualNumPatterns << " of the "
+            << patternCounts.size() << " patterns that were found in the data."
+            << std::endl;
   std::vector<std::pair<Pattern, size_t>> sortedPatterns;
   sortedPatterns.reserve(actualNumPatterns);
   for (auto &it : patternCounts) {
@@ -434,6 +442,8 @@ void Index::createPatterns(const string& fileName,
   std::vector<std::array<Id, 2>> entityPatterns;
   std::vector<std::array<Id, 2>> entityHasRelation;
 
+  size_t numEntitiesWithPatterns = 0;
+  size_t numEntitiesWithoutPatterns = 0;
   pattern.setSize(0);
   currentRel = vec[0][0];
   patternIndex = 0;
@@ -448,11 +458,13 @@ void Index::createPatterns(const string& fileName,
         it = patternSet.end();
       }
       if (it == patternSet.end()) {
+        numEntitiesWithoutPatterns++;
         // The pattern does not exist, use the has-relation predicate instead
         for (size_t i = 0; i < patternIndex; i++) {
           entityHasRelation.push_back(std::array<Id, 2> {currentRel, pattern[i]});
         }
       } else {
+        numEntitiesWithPatterns++;
         // The pattern does exist, add an entry to the has-pattern predicate
         entityPatterns.push_back(std::array<Id, 2> {currentRel, it->second});
       }
@@ -480,17 +492,23 @@ void Index::createPatterns(const string& fileName,
     it = patternSet.end();
   }
   if (it == patternSet.end()) {
+    numEntitiesWithoutPatterns++;
     // The pattern does not exist, use the has-relation predicate instead
     for (size_t i = 0; i < patternIndex; i++) {
       entityHasRelation.push_back(std::array<Id, 2> {currentRel, pattern[i]});
     }
   } else {
+    numEntitiesWithPatterns++;
     // The pattern does exist, add an entry to the has-pattern predicate
     entityPatterns.push_back(std::array<Id, 2> {currentRel, it->second});
   }
 
   LOG(DEBUG) << "Number of entity-has-pattern entries: " << entityPatterns.size() << std::endl;
   LOG(DEBUG) << "Number of entity-has-relation entries: " << entityHasRelation.size() << std::endl;
+
+  LOG(INFO) << numEntitiesWithPatterns << " of the databases entities have been assigned a pattern." << std::endl;
+  LOG(INFO) << numEntitiesWithoutPatterns << " of the databases entities have not been assigned a pattern." << std::endl;
+  LOG(DEBUG) << "Total number of entities: " << (numEntitiesWithoutPatterns + numEntitiesWithPatterns) << std::endl;
 
   // ensure neither of the relations is empty
   if (entityPatterns.size() == 0) {
