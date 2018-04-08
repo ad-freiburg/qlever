@@ -27,16 +27,18 @@ using std::cerr;
 
 // Available options.
 struct option options[] = {
-    {"tsv-file",          required_argument, NULL, 't'},
-    {"ntriples-file",     required_argument, NULL, 'n'},
-    {"index-basename",    required_argument, NULL, 'i'},
-    {"words-by-contexts", required_argument, NULL, 'w'},
-    {"docs-by-contexts",  required_argument, NULL, 'd'},
-    {"all-permutations",  no_argument,       NULL, 'a'},
-    {"on-disk-literals",  no_argument,       NULL, 'l'},
-    {"text-index-name",   required_argument, NULL, 'T'},
-    {"kb-index-name",     required_argument, NULL, 'K'},
-    {NULL, 0,                                NULL, 0}
+  {"all-permutations",  no_argument,       NULL, 'a'},
+  {"docs-by-contexts",  required_argument, NULL, 'd'},
+  {"help",              required_argument, NULL, 'h'},
+  {"index-basename",    required_argument, NULL, 'i'},
+  {"kb-index-name",     required_argument, NULL, 'K'},
+  {"on-disk-literals",  no_argument,       NULL, 'l'},
+  {"ntriples-file",     required_argument, NULL, 'n'},
+  {"patterns",          no_argument,       NULL, 'p'},
+  {"tsv-file",          required_argument, NULL, 't'},
+  {"text-index-name",   required_argument, NULL, 'T'},
+  {"words-by-contexts", required_argument, NULL, 'w'},
+  {NULL,                0,                 NULL, 0}
 };
 
 string getStxxlDiskFileName(const string& location, const string& tail) {
@@ -59,28 +61,47 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
   stxxlConfig.writeLine(config.str());
 }
 
-void printOptions() {
-  cout << "Available Options:\n"
-       << "--tsv-file (-t): TSV file to build KB index from\n"
-      << "--ntriples-file (-n): NT file to build KB index from\n"
-      << "--index-basename (-i): (designated) name and path of the index to build\n"
-      << "--all-permutations (-a): build all 6 (not only 2) KB index permutations\n"
-      << "--on-disk-literals (-l): externalize parts of the KB vocab\n"
-      << "--words-by-contexts (-w): words-file to build text index from\n"
-      << "--docs-by-contexts (-d): docs-file to build text index from\n"
-      << "--kb-index-name (-K): assign a name to be displayed in the UI (default: name of nt-file)\n"
-      << "--text-index-name (-T): assign a name to be displayed in the UI (default: name of words-file)\n"
-      << std::endl;
+void printUsage(char *execName) {
+  std::ios coutState(nullptr);
+  coutState.copyfmt(cout);
+  cout << std::setfill(' ') << std::left;
+
+  cout << "Usage: " << execName << " -i <index> [OPTIONS]"
+       << endl << endl;
+  cout << "Options" << endl;
+  cout << "  " << std::setw(20) << "a, all-permutations" << std::setw(1)
+       << "    " << "Build all 6 (not only 2) KB index permutations." << endl;
+  cout << "  " << std::setw(20) << "d, docs-by-contexts" << std::setw(1)
+       << "    " << "docs-file to build text index from." << endl;
+  cout << "  " << std::setw(20) << "h, help" << std::setw(1)
+       << "    " << "Print this help and exit." << endl;
+  cout << "  " << std::setw(20) << "i, index-basename" << std::setw(1)
+       << "    " << "(designated) name and path of the index to build." << endl;
+  cout << "  " << std::setw(20) << "K, kb-index-name" << std::setw(1)
+       << "    "
+       << "Assign a name to be displayed in the UI (default: name of nt-file)"
+       << endl;
+  cout << "  " << std::setw(20) << "l, on-disk-literals" << std::setw(1)
+       << "    " << "Externalize parts of the KB vocab." << endl;
+  cout << "  " << std::setw(20) << "n, ntriples-file" << std::setw(1)
+       << "    " << "NT file to build KB index from." << endl;
+  cout << "  " << std::setw(20) << "p, patterns" << std::setw(1)
+       << "    "
+       << "Detect and store relation patterns for fast ql:has-relation queries."
+       << endl;
+  cout << "  " << std::setw(20) << "t, tsv-file" << std::setw(1)
+       << "    " << "TSV file to build KB index from." << endl;
+  cout << "  " << std::setw(20) << "T, text-index-name" << std::setw(1)
+       << "    " << "Assign a name to be displayed in the UI "
+                    "(default: name of words-file)." << endl;
+  cout << "  " << std::setw(20) << "w, words-by-contexts" << std::setw(1)
+       << "    " << "words-file to build text index from." << endl;
+  cout.copyfmt(coutState);
 }
 
 // Main function.
 int main(int argc, char** argv) {
-  std::cout << std::endl << EMPH_ON
-            << "IndexBuilderMain, version " << __DATE__
-            << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
-
   char* locale = setlocale(LC_CTYPE, "en_US.utf8");
-  cout << "Set locale LC_CTYPE to: " << locale << endl;
 
   std::locale loc;
   ad_utility::ReadableNumberFacet facet(1);
@@ -96,10 +117,11 @@ int main(int argc, char** argv) {
   string kbIndexName;
   bool allPermutations = false;
   bool onDiskLiterals = false;
+  bool usePatterns = false;
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:", options, NULL);
+    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:ph", options, NULL);
     if (c == -1) { break; }
     switch (c) {
       case 't':
@@ -107,6 +129,10 @@ int main(int argc, char** argv) {
         break;
       case 'n':
         ntFile = optarg;
+        break;
+      case 'h':
+        printUsage(argv[0]);
+        return 0;
         break;
       case 'i':
         baseName = optarg;
@@ -128,6 +154,9 @@ int main(int argc, char** argv) {
         break;
       case 'K':
         kbIndexName = optarg;
+        break;
+    case 'p':
+        usePatterns = true;
         break;
       default:
         cout << endl
@@ -153,7 +182,7 @@ int main(int argc, char** argv) {
 
   if (baseName.size() == 0) {
     cout << "Missing required argument --index-basename (-i)..." << endl;
-    printOptions();
+    printUsage(argv[0]);
     exit(1);
   }
 
@@ -162,10 +191,14 @@ int main(int argc, char** argv) {
     cout << "Missing required argument --tsv-file (-t) or "
         "--ntriples-file (-n) or --words-by-contexts (-w) "
         "or --docs-by-contexts (-d) ..." << endl;
-    printOptions();
+    printUsage(argv[0]);
     exit(1);
   }
 
+  std::cout << std::endl << EMPH_ON
+            << "IndexBuilderMain, version " << __DATE__
+            << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
+  cout << "Set locale LC_CTYPE to: " << locale << endl;
   LOG(DEBUG) << "Configuring STXXL..." << std::endl;
   string stxxlFileName;
   size_t posOfLastSlash = baseName.rfind('/');
@@ -179,6 +212,7 @@ int main(int argc, char** argv) {
     Index index;
     index.setKbName(kbIndexName);
     index.setTextName(textIndexName);
+    index.setUsePatterns(usePatterns);
     if (ntFile.size() > 0) {
       index.createFromNTriplesFile(ntFile, baseName, allPermutations,
                                    onDiskLiterals);

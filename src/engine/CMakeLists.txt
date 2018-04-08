@@ -24,6 +24,7 @@ add_library(engine
         QueryPlanningCostFactors.cpp QueryPlanningCostFactors.h
         TwoColumnJoin.cpp TwoColumnJoin.h
         OptionalJoin.cpp OptionalJoin.h
+        CountAvailablePredicates.cpp CountAvailablePredicates.h
 )
 
 target_link_libraries(engine index parser)

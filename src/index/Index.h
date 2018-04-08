@@ -15,6 +15,7 @@
 #include "./TextMetaData.h"
 #include "./DocsDB.h"
 #include "../engine/ResultTable.h"
+#include "../global/Pattern.h"
 
 
 using std::string;
@@ -35,7 +36,7 @@ public:
 
   Index(const Index&) = delete;
 
-  Index() = default;
+  Index();
 
   // Creates an index from a TSV file.
   // Will write vocabulary and on-disk index data.
@@ -132,7 +133,9 @@ public:
   void scanOPS(Id object, WidthTwoList* result) const;
   void scanOSP(Id object, WidthTwoList* result) const;
 
-
+  void scanHasPattern(WidthTwoList* result) const;
+  void scanHasRelation(WidthTwoList *result) const;
+  const std::vector<Pattern>& getPatterns() const;
 
   // Get multiplicities with given var (SCAN for 2 cols)
   vector<float> getPSOMultiplicities(const string& key) const;
@@ -235,6 +238,8 @@ public:
 
   void setTextName(const string& name);
 
+  void setUsePatterns(bool usePatterns);
+
   const string& getTextName() const { return _textMeta.getName(); }
 
   const string& getKbName() const { return _psoMeta.getName(); }
@@ -293,6 +298,11 @@ private:
   mutable ad_utility::File _ospFile;
   mutable ad_utility::File _opsFile;
   mutable ad_utility::File _textIndexFile;
+  mutable ad_utility::File _patternsFile;
+  bool _usePatterns;
+  size_t _maxNumPatterns;
+  IndexMetaData _patternsMeta;
+  std::vector<Pattern> _patterns;
 
   size_t
   passTsvFileForVocabulary(const string& tsvFile, bool onDiskLiterals = false);
@@ -316,6 +326,18 @@ private:
                                 IndexMetaData& meta,
                                 size_t c0,
                                 size_t c1, size_t c2);
+
+  /**
+   * @brief Creates the data required for the "pattern-trick" used for fast
+   *        ql:has-relation evaluation when selection relation counts.
+   * @param fileName The name of the file in which the data should be stored
+   * @param vec The vectors of triples in spo order.
+   */
+  static void createPatterns(const string& fileName,
+                             const ExtVec& vec,
+                             IndexMetaData &meta,
+                             std::vector<Pattern> &patterns,
+                             size_t maxNumPatterns);
 
   void createTextIndex(const string& filename, const TextVec& vec);
 
@@ -399,8 +421,8 @@ private:
 
   // FRIEND TESTS
   friend class IndexTest_createFromTsvTest_Test;
-
   friend class IndexTest_createFromOnDiskIndexTest_Test;
+  friend class CreatePatternsFixture_createPatterns_Test;
 
   template<class T>
   void writeAsciiListFile(const string& filename, const T& ids) const;

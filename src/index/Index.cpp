@@ -5,12 +5,19 @@
 #include <cmath>
 #include <algorithm>
 #include <stxxl/algorithm>
+#include <stxxl/map>
+#include <unordered_set>
 #include "../parser/TsvParser.h"
 #include "./Index.h"
 #include "../parser/NTriplesParser.h"
 #include "../util/Conversions.h"
 
 using std::array;
+
+// _____________________________________________________________________________
+Index::Index() :
+  _usePatterns(false),
+  _maxNumPatterns(30000) { }
 
 // _____________________________________________________________________________
 void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
@@ -46,6 +53,10 @@ void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
     stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
     createPermutation(indexFilename + ".spo", v, _spoMeta, 0, 1, 2);
+    if (_usePatterns) {
+      LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
+      createPatterns(indexFilename + ".patterns", v, _patternsMeta, _patterns, _maxNumPatterns);
+    }
     // SOP permutation
     LOG(INFO) << "Sorting for SOP permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortBySOP(), STXXL_MEMORY_TO_USE);
@@ -61,6 +72,11 @@ void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
     stxxl::sort(begin(v), end(v), SortByOPS(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
     createPermutation(indexFilename + ".ops", v, _opsMeta, 2, 1, 0);
+  } else if (_usePatterns) {
+    LOG(INFO) << "Sorting for pattern creation..." << std::endl;
+    stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
+    LOG(INFO) << "Sort done." << std::endl;
+    createPatterns(indexFilename + ".patterns", v, _patternsMeta, _patterns, _maxNumPatterns);
   }
   openFileHandles();
 }
@@ -98,6 +114,10 @@ void Index::createFromNTriplesFile(const string& ntFile,
     stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
     createPermutation(indexFilename + ".spo", v, _spoMeta, 0, 1, 2);
+    if (_usePatterns) {
+      LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
+      createPatterns(indexFilename + ".patterns", v, _patternsMeta, _patterns, _maxNumPatterns);
+    }
     // SOP permutation
     LOG(INFO) << "Sorting for SOP permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortBySOP(), STXXL_MEMORY_TO_USE);
@@ -113,6 +133,11 @@ void Index::createFromNTriplesFile(const string& ntFile,
     stxxl::sort(begin(v), end(v), SortByOPS(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
     createPermutation(indexFilename + ".ops", v, _opsMeta, 2, 1, 0);
+  } else if (_usePatterns) {
+    LOG(INFO) << "Sorting for pattern creation..." << std::endl;
+    stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
+    LOG(INFO) << "Sort done." << std::endl;
+    createPatterns(indexFilename + ".patterns", v, _patternsMeta, _patterns, _maxNumPatterns);
   }
   openFileHandles();
 }
@@ -289,6 +314,226 @@ void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
   out.write(&startOfMeta, sizeof(startOfMeta));
   out.close();
   LOG(INFO) << "Permutation done.\n";
+}
+
+// _____________________________________________________________________________
+void Index::createPatterns(const string& fileName,
+                           const ExtVec& vec,
+                           IndexMetaData &meta,
+                           std::vector<Pattern> &patterns,
+                           size_t maxNumPatterns) {
+  if (vec.size() == 0) {
+    LOG(WARN) << "Attempt to write an empty index!" << std::endl;
+    return;
+  }
+
+  /*struct ComparePatternsGreater {
+    bool operator () (const Pattern& a, const Pattern& b) const {
+      return a[0] > b[0];
+    }
+    static Pattern max_value() {
+      return Pattern {std::numeric_limits<Id>::max()};
+    }
+  };*/
+
+  // typedef stxxl::map<Pattern, size_t, ComparePatternsGreater, 4096, 4096> PatternsCountMap;
+  typedef std::map<Pattern, size_t, std::greater<Pattern>> PatternsCountMap;
+
+
+  LOG(INFO) << "Creating patterns file..." << std::endl;
+  PatternsCountMap patternCounts;//(4096 * 16, 4096 * 16);
+
+  // determine the most common patterns
+  Pattern pattern;
+  pattern._length = 0;
+
+  size_t patternIndex = 0;
+  Id currentRel;
+  currentRel = vec[0][0];
+  bool isValidPattern = true;
+  for (ExtVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
+    if ((*reader)[0] != currentRel || reader.empty()) {
+      currentRel = (*reader)[0];
+      if (isValidPattern) {
+        pattern.setSize(patternIndex);
+        auto it = patternCounts.find(pattern);
+        if (it == patternCounts.end()) {
+          patternCounts.insert(std::pair<Pattern, size_t>(pattern, size_t(1)));
+        } else {
+          (*it).second++;
+        }
+      }
+      isValidPattern = true;
+      // std::memset(pattern.data(), 0, sizeof(Id) * Pattern::MAX_NUM_RELATIONS);
+      pattern.setSize(0);
+      patternIndex = 0;
+    }
+    if (patternIndex < Pattern::MAX_NUM_RELATIONS) {
+      // don't list predicates twice
+      if (patternIndex == 0 || pattern[patternIndex - 1] != ((*reader)[1])) {
+        pattern[patternIndex] = ((*reader)[1]);
+        patternIndex++;
+      }
+    } else {
+      isValidPattern = false;
+    }
+  }
+  // process the last entry
+  if (isValidPattern) {
+    pattern.setSize(patternIndex);
+    auto it = patternCounts.find(pattern);
+    if (it == patternCounts.end()) {
+      patternCounts.insert(std::pair<Pattern, size_t>(pattern, size_t(1)));
+    } else {
+      (*it).second++;
+    }
+  }
+  LOG(INFO) << "Counted patterns and found " << patternCounts.size()
+            << " distinct patterns." << std::endl;
+
+  // stores patterns sorted by their number of occurences
+  size_t actualNumPatterns
+      = patternCounts.size() < maxNumPatterns ? patternCounts.size() : maxNumPatterns;
+  std::vector<std::pair<Pattern, size_t>> sortedPatterns;
+  sortedPatterns.reserve(actualNumPatterns);
+  for (auto &it : patternCounts) {
+    if (sortedPatterns.size() < maxNumPatterns) {
+      sortedPatterns.push_back(it);
+    } else {
+      if (it.second > sortedPatterns.back().second) {
+        // The new element is larger than the smallest element in the vector.
+        // Insert it into the correct position in the vector using binary search.
+        sortedPatterns.pop_back();
+        auto sortedIt
+            = std::lower_bound(sortedPatterns.begin(),
+                               sortedPatterns.end(), it,
+                               [](const std::pair<Pattern, size_t>& p1,
+                               const std::pair<Pattern, size_t>& p2 ) -> bool {
+                                 return p1.second > p2.second;
+                               });
+        sortedPatterns.insert(sortedIt, it);
+      }
+    }
+  }
+
+  // store the actual patterns
+  patterns.reserve(sortedPatterns.size());
+  for (auto it : sortedPatterns) {
+    patterns.push_back(it.first);
+  }
+
+  std::unordered_map<Pattern, Id> patternSet;
+  patternSet.reserve(sortedPatterns.size());
+  for (size_t i = 0; i < sortedPatterns.size(); i++) {
+    patternSet.insert(std::pair<Pattern, Id>(sortedPatterns[0].first, i));
+  }
+
+  // Associate entities with patterns if possible, store has-relation otherwise
+  // stxxl::VECTOR_GENERATOR<std::pair<Id, Id>>::result entityPatterns;
+  // stxxl::VECTOR_GENERATOR<std::pair<Id, Id>>::result entityHasRelation;
+  std::vector<std::array<Id, 2>> entityPatterns;
+  std::vector<std::array<Id, 2>> entityHasRelation;
+
+  pattern.setSize(0);
+  currentRel = vec[0][0];
+  patternIndex = 0;
+  // Create the has-relation and has-pattern predicates
+  for (ExtVec::bufreader_type reader2(vec); !reader2.empty(); ++reader2) {
+    if ((*reader2)[0] != currentRel) {
+      std::unordered_map<Pattern, Id>::iterator it;
+      if (isValidPattern) {
+        pattern.setSize(patternIndex);
+        it = patternSet.find(pattern);
+      } else {
+        it = patternSet.end();
+      }
+      if (it == patternSet.end()) {
+        // The pattern does not exist, use the has-relation predicate instead
+        for (size_t i = 0; i < patternIndex; i++) {
+          entityHasRelation.push_back(std::array<Id, 2> {currentRel, pattern[i]});
+        }
+      } else {
+        // The pattern does exist, add an entry to the has-pattern predicate
+        entityPatterns.push_back(std::array<Id, 2> {currentRel, it->second});
+      }
+      pattern.setSize(0);
+      currentRel = (*reader2)[0];
+      patternIndex = 0;
+      isValidPattern = true;
+    }
+    if (patternIndex < Pattern::MAX_NUM_RELATIONS) {
+      // don't list predicates twice
+      if (patternIndex == 0 || pattern[patternIndex - 1] != ((*reader2)[1])) {
+        pattern[patternIndex] = ((*reader2)[1]);
+        patternIndex++;
+      }
+    } else {
+      isValidPattern = false;
+    }
+  }
+  // process the last element
+  std::unordered_map<Pattern, Id>::iterator it;
+  if (isValidPattern) {
+    pattern.setSize(patternIndex);
+    it = patternSet.find(pattern);
+  } else {
+    it = patternSet.end();
+  }
+  if (it == patternSet.end()) {
+    // The pattern does not exist, use the has-relation predicate instead
+    for (size_t i = 0; i < patternIndex; i++) {
+      entityHasRelation.push_back(std::array<Id, 2> {currentRel, pattern[i]});
+    }
+  } else {
+    // The pattern does exist, add an entry to the has-pattern predicate
+    entityPatterns.push_back(std::array<Id, 2> {currentRel, it->second});
+  }
+
+  LOG(DEBUG) << "Number of entity-has-pattern entries: " << entityPatterns.size() << std::endl;
+  LOG(DEBUG) << "Number of entity-has-relation entries: " << entityHasRelation.size() << std::endl;
+
+  // ensure neither of the relations is empty
+  if (entityPatterns.size() == 0) {
+    entityPatterns.push_back(std::array<Id, 2>{ID_NO_VALUE, ID_NO_VALUE});
+  }
+  if (entityHasRelation.size() == 0) {
+    entityHasRelation.push_back(std::array<Id, 2>{ID_NO_VALUE, ID_NO_VALUE});
+  }
+
+  // Store all data in the file
+  ad_utility::File file(fileName.c_str(), "w");
+  off_t afterRelations = 0;
+  off_t afterPatterns = 0;
+  // write the has-pattern and has-relation relations into the file
+  auto md1 = writeRel(file, afterRelations, Id(0), entityPatterns, true);
+  meta.add(md1.first, md1.second);
+  afterRelations = meta.getOffsetAfter();
+  auto md2 = writeRel(file, afterRelations, Id(1), entityHasRelation, false);
+  meta.add(md2.first, md2.second);
+  afterRelations = meta.getOffsetAfter();
+
+  file.write(&actualNumPatterns, sizeof(size_t));
+
+  size_t patternsPartSize = sizeof(size_t);
+  // Write the patterns into the file. The format used is: 16 bits for the
+  // pattern length, then the pattern as a series of Ids.
+  uint16_t patternLength;
+  for (size_t patternId = 0; patternId < sortedPatterns.size(); patternId++) {
+    patternLength = sortedPatterns[patternId].first.size();
+    file.write(&patternLength, sizeof(uint16_t));
+    file.write(sortedPatterns[patternId].first._data, sizeof(Id) * patternLength);
+    patternsPartSize += sizeof(uint16_t) + sizeof(Id) * patternLength;
+  }
+  afterPatterns = afterRelations + patternsPartSize;
+
+  // write the meta data into the file
+  file << meta;
+
+  // the last part of the file contains offset information for the varius parts
+  file.write(&afterRelations, sizeof(off_t));
+  file.write(&afterPatterns, sizeof(off_t));
+  file.close();
+  LOG(INFO) << "Done creating patterns file." << std::endl;
 }
 
 // _____________________________________________________________________________
@@ -486,6 +731,33 @@ Index::createFromOnDiskIndex(const string& onDiskBase, bool allPermutations,
     LOG(INFO) << "Registered OPS permutation: " << _opsMeta.statistics()
               << std::endl;
   }
+  if (_usePatterns) {
+    // patterns
+    _patternsFile.open(string(_onDiskBase + ".index.patterns").c_str(), "r");
+    AD_CHECK(_patternsFile.isOpen());
+    metaTo = _patternsFile.getLastOffset(&metaFrom);
+    // A second offset is stored at the end of the file
+    metaTo -= sizeof(off_t);
+    buf = new unsigned char [metaTo - metaFrom];
+    _patternsFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
+    _patternsMeta.createFromByteBuffer(buf);
+    delete[] buf;
+    off_t patternsFrom;
+    // read the offset of the patterns beginnig
+    _patternsFile.read(&patternsFrom, sizeof(off_t), metaTo);
+    buf = new unsigned char [metaFrom - patternsFrom];
+    _patternsFile.read(buf, static_cast<size_t>(metaFrom - patternsFrom), patternsFrom);
+    // parse the patterns
+    size_t numPatterns;
+    memcpy(&numPatterns, buf, sizeof(size_t));
+    size_t pos = sizeof(size_t);
+    size_t bufflen = static_cast<size_t>(metaFrom - patternsFrom);
+    Pattern p;
+    while (pos < bufflen) {
+      pos += p.fromBuffer(buf + pos);
+      _patterns.push_back(p);
+    }
+  }
 }
 
 // _____________________________________________________________________________
@@ -509,6 +781,9 @@ void Index::openFileHandles() {
   }
   if (ad_utility::File::exists(_onDiskBase + ".index.ops")) {
     _opsFile.open((_onDiskBase + ".index.ops").c_str(), "r");
+  }
+  if (ad_utility::File::exists(_onDiskBase + ".index.patterns")) {
+    _patternsFile.open((_onDiskBase + ".index.patterns").c_str(), "r");
   }
   AD_CHECK(_psoFile.isOpen());
   AD_CHECK(_posFile.isOpen());
@@ -797,6 +1072,33 @@ void Index::scanOPS(Id object, Index::WidthTwoList* result) const {
     _opsFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
                   rmd._startFullIndex);
   }
+}
+
+// _____________________________________________________________________________
+void Index::scanHasPattern(WidthTwoList* result) const {
+  if (_patternsMeta.relationExists(0)) {
+    const FullRelationMetaData& rmd = _patternsMeta.getRmd(0)._rmdPairs;
+    result->reserve(rmd.getNofElements() + 2);
+    result->resize(rmd.getNofElements());
+    _opsFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
+                  rmd._startFullIndex);
+  }
+}
+
+// _____________________________________________________________________________
+void Index::scanHasRelation(WidthTwoList *result) const {
+  if (_patternsMeta.relationExists(1)) {
+    const FullRelationMetaData& rmd = _patternsMeta.getRmd(1)._rmdPairs;
+    result->reserve(rmd.getNofElements() + 2);
+    result->resize(rmd.getNofElements());
+    _opsFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
+                  rmd._startFullIndex);
+  }
+}
+
+// _____________________________________________________________________________
+const std::vector<Pattern>& Index::getPatterns() const {
+  return _patterns;
 }
 
 // _____________________________________________________________________________
@@ -1137,4 +1439,10 @@ void Index::setKbName(const string& name) {
   _sopMeta.setName(name);
   _ospMeta.setName(name);
   _opsMeta.setName(name);
+  _patternsMeta.setName(name);
+}
+
+// _____________________________________________________________________________
+void Index::setUsePatterns(bool usePatterns) {
+  _usePatterns = usePatterns;
 }

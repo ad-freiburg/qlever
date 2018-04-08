@@ -161,6 +161,41 @@ TEST(EngineTest, optionalJoinTest) {
   ASSERT_EQ(r, vres[4]);
 }
 
+TEST(EngineTest, patternTrickTest) {
+  std::vector<std::array<Id, 1>> input = {{0}, {1}, {2}, {3}, {4}, {6}, {7}};
+  vector<array<Id, 2>> result;
+  vector<array<Id, 2>> hasPattern = {{0, 0}, {3, 1}, {4, 0}};
+  vector<array<Id, 2>> hasRelation = {{1, 0}, {1, 3}, {2, 0}, {5, 0}, {5, 3}, {6, 3}, {6, 4}, {7, 4}, {7, 2}, {8, 3}};
+  // first entry of the pattern is its length
+  vector<Pattern> patterns = {{3, 0, 2, 3}, {5, 1, 3, 4, 2}};
+
+  Engine::computePatternTrick<std::array<Id, 1>>(&input, &result, &hasPattern,
+                                                 &hasRelation, patterns, 0);
+
+  std::sort(result.begin(), result.end(), [](const array<Id, 2>& i1, const array<Id, 2>&i2) -> bool {
+    return i1[0] < i2[0];
+  });
+  ASSERT_EQ(6, result.size());
+
+  ASSERT_EQ(0, result[0][0]);
+  ASSERT_EQ(4, result[0][1]);
+
+  ASSERT_EQ(1, result[0][0]);
+  ASSERT_EQ(1, result[0][1]);
+
+  ASSERT_EQ(2, result[0][0]);
+  ASSERT_EQ(4, result[0][1]);
+
+  ASSERT_EQ(3, result[0][0]);
+  ASSERT_EQ(5, result[0][1]);
+
+  ASSERT_EQ(4, result[0][0]);
+  ASSERT_EQ(3, result[0][1]);
+
+  ASSERT_EQ(5, result[0][0]);
+  ASSERT_EQ(1, result[0][1]);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

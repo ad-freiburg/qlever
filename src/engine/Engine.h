@@ -7,12 +7,14 @@
 #include <vector>
 #include <algorithm>
 #include <iomanip>
+#include <unordered_map>
 
 #include "../util/Log.h"
 #include "./IndexSequence.h"
 #include "../global/Id.h"
 #include "../util/Exception.h"
 #include "../global/Constants.h"
+#include "../global/Pattern.h"
 
 using std::vector;
 using std::array;
@@ -664,6 +666,64 @@ public:
         result->push_back(res);
         ++ia;
       }
+    }
+  }
+
+
+  template<typename A>
+  static void computePatternTrick(const vector<A>* input, vector<array<Id, 2>>* result,
+                                  const vector<array<Id, 2>>* hasPattern,
+                                  const vector<array<Id, 2>>* hasRelation,
+                                  const vector<Pattern>& patterns,
+                                  size_t subjectColumn) {
+    std::unordered_map<Id, size_t> predicateCounts;
+    size_t posRelation = 0;
+    size_t posInput = 0;
+    size_t posPattern = 0;
+    size_t subject;
+    while (posPattern < input->size()) {
+      subject = (*input)[posInput][subjectColumn];
+      // Find the next candidates for entries in has-relation and has-pattern
+      // for the subject id.
+      while ((*hasPattern)[posPattern][0] < subject) {
+        posPattern++;
+      }
+      while ((*hasRelation)[posRelation][0] < subject) {
+        posRelation++;
+      }
+
+      if ((*hasPattern)[posPattern][0] == subject) {
+        // TODO(florian) Should we count patterns first, then multiply?
+        // The subject matches a pattern
+        const Pattern& pattern = patterns[(*hasPattern)[posPattern][1]];
+        for (size_t i = 0; i < pattern.size(); i++) {
+          auto it = predicateCounts.find(pattern[i]);
+          if (it == predicateCounts.end()) {
+            predicateCounts.insert(std::make_pair(pattern[i], 1));
+          } else {
+            it->second++;
+          }
+        }
+        posPattern++;
+      } else if ((*hasRelation)[posRelation][0] == subject) {
+        // The subject does not match a pattern
+        while ((*hasRelation)[posRelation][0] == subject) {
+          auto it = predicateCounts.find(hasRelation->at(posRelation)[1]);
+          if (it == predicateCounts.end()) {
+            predicateCounts.insert(std::make_pair((*hasRelation)[posRelation][1], 1));
+          } else {
+            it->second++;
+          }
+          posRelation++;
+        }
+      } else {
+        AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE, "No pattern or has-relation entry found for entity " + std::to_string(subject));
+      }
+      posPattern++;
+    }
+    result->reserve(predicateCounts.size());
+    for (const auto& it : predicateCounts) {
+      result->push_back(array<Id, 2>{it.first, it.second});
     }
   }
 

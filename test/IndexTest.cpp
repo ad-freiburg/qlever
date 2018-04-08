@@ -330,7 +330,82 @@ TEST(IndexTest, createFromTsvTest) {
     remove("_testindex.index.pos");
   }
 
+}
+
+// used to ensure all files will be deleted even if the test fails
+class CreatePatternsFixture : public testing::Test {
+public:
+  CreatePatternsFixture() {
+    string location = "./";
+    string tail = "";
+    stxxlFileName = getStxxlDiskFileName(location, tail);
+    writeStxxlConfigFile(location, tail);
+  }
+
+  virtual ~CreatePatternsFixture() {
+    remove("_testtmppatterns.tsv");
+    std::remove(stxxlFileName.c_str());
+    remove("_testindex.index.pso");
+    remove("_testindex.index.pos");
+    remove("_testindex.index.patterns");
+    remove("stxxl.log");
+    remove("stxxl.errorlog");
+  }
+
+  string stxxlFileName;
 };
+
+TEST_F(CreatePatternsFixture, createPatterns) {
+
+
+  {
+    LOG(DEBUG) << "Testing createPatterns with tsv file..." << std::endl;
+    std::fstream f("_testtmppatterns.tsv", std::ios_base::out);
+
+    f << "a\tb\tc\t.\n"
+         "a\tb\tc2\t.\n"
+         "a\tb2\tc\t.\n"
+         "a2\tb2\tc2\t.\n"
+         "a2\td\tc2\t.";
+    f.close();
+
+    Index index;
+    index.setUsePatterns(true);
+    index._maxNumPatterns = 1;
+    index.createFromTsvFile("_testtmppatterns.tsv", "_testindex", false);
+
+    ASSERT_TRUE(index._patternsMeta.relationExists(0));
+    ASSERT_TRUE(index._patternsMeta.relationExists(1));
+    ASSERT_TRUE(index._patternsMeta.getRmd(0).isFunctional());
+    ASSERT_EQ(1u, index._patternsMeta.getRmd(0).getNofElements());
+    ASSERT_EQ(2u, index._patternsMeta.getRmd(1).getNofElements());
+    ASSERT_EQ(1u, index._patterns.size());
+    Pattern p;
+    p.setSize(2);
+    p[0] = 3;
+    p[1] = 6;
+    ASSERT_EQ(p, index._patterns[0]);
+  }
+  {
+    LOG(DEBUG) << "Testing createPatterns with existing index..." << std::endl;
+    Index index;
+    index.setUsePatterns(true);
+    index._maxNumPatterns = 1;
+    index.createFromOnDiskIndex("_testindex");
+
+    ASSERT_TRUE(index._patternsMeta.relationExists(0));
+    ASSERT_TRUE(index._patternsMeta.relationExists(1));
+    ASSERT_TRUE(index._patternsMeta.getRmd(0).isFunctional());
+    ASSERT_EQ(1u, index._patternsMeta.getRmd(0).getNofElements());
+    ASSERT_EQ(2u, index._patternsMeta.getRmd(1).getNofElements());
+    ASSERT_EQ(1u, index._patterns.size());
+    Pattern p;
+    p.setSize(2);
+    p[0] = 3;
+    p[1] = 6;
+    ASSERT_EQ(p, index._patterns[0]);
+  }
+}
 
 TEST(IndexTest, createFromOnDiskIndexTest) {
   string location = "./";
