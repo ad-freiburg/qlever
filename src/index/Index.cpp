@@ -103,11 +103,11 @@ void Index::createFromNTriplesFile(const string& ntFile,
   v.resize(size_t(last - v.begin()));
   LOG(INFO) << "Done: unique." << std::endl;
   LOG(INFO) << "Size after: " << v.size() << std::endl;
-  /*createPermutation(indexFilename + ".pso", v, _psoMeta, 1, 0, 2);
+  createPermutation(indexFilename + ".pso", v, _psoMeta, 1, 0, 2);
   LOG(INFO) << "Sorting for POS permutation..." << std::endl;;
   stxxl::sort(begin(v), end(v), SortByPOS(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;;
-  createPermutation(indexFilename + ".pos", v, _posMeta, 1, 2, 0);*/
+  createPermutation(indexFilename + ".pos", v, _posMeta, 1, 2, 0);
   if (allPermutations) {
     // SPO permutation
     LOG(INFO) << "Sorting for SPO permutation..." << std::endl;

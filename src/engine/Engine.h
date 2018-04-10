@@ -677,6 +677,7 @@ public:
                                   const vector<Pattern>& patterns,
                                   size_t subjectColumn) {
     std::unordered_map<Id, size_t> predicateCounts;
+    std::unordered_map<size_t, size_t> patternCounts;
     size_t posRelation = 0;
     size_t posInput = 0;
     size_t posPattern = 0;
@@ -695,15 +696,7 @@ public:
       if ((*hasPattern)[posPattern][0] == subject) {
         // TODO(florian) Should we count patterns first, then multiply?
         // The subject matches a pattern
-        const Pattern& pattern = patterns[(*hasPattern)[posPattern][1]];
-        for (size_t i = 0; i < pattern.size(); i++) {
-          auto it = predicateCounts.find(pattern[i]);
-          if (it == predicateCounts.end()) {
-            predicateCounts.insert(std::make_pair(pattern[i], 1));
-          } else {
-            it->second++;
-          }
-        }
+        patternCounts[(*hasPattern)[posPattern][1]]++;
         posPattern++;
       } else if ((*hasRelation)[posRelation][0] == subject) {
         // The subject does not match a pattern
@@ -720,6 +713,12 @@ public:
         LOG(WARN) << "No pattern or has-relation entry found for entity " << std::to_string(subject) << std::endl;
       }
       posInput++;
+    }
+    for (const auto& it : patternCounts) {
+      const Pattern& pattern = patterns[it.first];
+      for (size_t i = 0; i < pattern.size(); i++) {
+        predicateCounts[pattern[i]] += it.second;
+      }
     }
     result->reserve(predicateCounts.size());
     for (const auto& it : predicateCounts) {
