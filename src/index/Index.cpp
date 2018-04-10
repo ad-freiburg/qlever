@@ -17,7 +17,7 @@ using std::array;
 // _____________________________________________________________________________
 Index::Index() :
   _usePatterns(false),
-  _maxNumPatterns(30000) { }
+  _maxNumPatterns(6000000) { }
 
 // _____________________________________________________________________________
 void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
@@ -103,11 +103,11 @@ void Index::createFromNTriplesFile(const string& ntFile,
   v.resize(size_t(last - v.begin()));
   LOG(INFO) << "Done: unique." << std::endl;
   LOG(INFO) << "Size after: " << v.size() << std::endl;
-  createPermutation(indexFilename + ".pso", v, _psoMeta, 1, 0, 2);
+  /*createPermutation(indexFilename + ".pso", v, _psoMeta, 1, 0, 2);
   LOG(INFO) << "Sorting for POS permutation..." << std::endl;;
   stxxl::sort(begin(v), end(v), SortByPOS(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;;
-  createPermutation(indexFilename + ".pos", v, _posMeta, 1, 2, 0);
+  createPermutation(indexFilename + ".pos", v, _posMeta, 1, 2, 0);*/
   if (allPermutations) {
     // SPO permutation
     LOG(INFO) << "Sorting for SPO permutation..." << std::endl;
@@ -337,7 +337,7 @@ void Index::createPatterns(const string& fileName,
   };*/
 
   // typedef stxxl::map<Pattern, size_t, ComparePatternsGreater, 4096, 4096> PatternsCountMap;
-  typedef std::map<Pattern, size_t, std::greater<Pattern>> PatternsCountMap;
+  typedef std::unordered_map<Pattern, size_t, std::hash<Pattern>> PatternsCountMap;
 
 
   LOG(INFO) << "Creating patterns file..." << std::endl;
@@ -352,10 +352,16 @@ void Index::createPatterns(const string& fileName,
   currentRel = vec[0][0];
   bool isValidPattern = true;
   size_t numInvalidPatterns = 0;
+  size_t numValidPatterns = 0;
+  // DEGBUG CODE
+  std::map<size_t, size_t> predicateCounts;
+
   for (ExtVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
-    if ((*reader)[0] != currentRel || reader.empty()) {
+    if ((*reader)[0] != currentRel) {
       currentRel = (*reader)[0];
+      predicateCounts[patternIndex]++;
       if (isValidPattern) {
+        numValidPatterns++;
         pattern.setSize(patternIndex);
         auto it = patternCounts.find(pattern);
         if (it == patternCounts.end()) {
@@ -367,7 +373,6 @@ void Index::createPatterns(const string& fileName,
         numInvalidPatterns++;
       }
       isValidPattern = true;
-      // std::memset(pattern.data(), 0, sizeof(Id) * Pattern::MAX_NUM_RELATIONS);
       pattern.setSize(0);
       patternIndex = 0;
     }
@@ -379,6 +384,8 @@ void Index::createPatterns(const string& fileName,
       }
     } else {
       isValidPattern = false;
+      // used to generate proper counts of the pattern sizes
+      patternIndex++;
     }
   }
   // process the last entry
@@ -393,8 +400,19 @@ void Index::createPatterns(const string& fileName,
   }
   LOG(INFO) << "Counted patterns and found " << patternCounts.size()
             << " distinct patterns." << std::endl;
-  LOG(INFO) << "Discarded " << numInvalidPatterns << " patterns because they "
-               "were to large." << std::endl;
+  LOG(INFO) << "Patterns where found for " << numValidPatterns << " entities."
+            << std::endl;
+  LOG(INFO) << "Discarded the patterns of " << numInvalidPatterns << " entities"
+               " because they were to large." << std::endl;
+
+  // DEBUG CODE
+  // write out the mapping from predicate counts to number of occurences
+  ad_utility::File df((fileName + ".debug").c_str(), "w");
+  for (auto it : predicateCounts) {
+    string s = std::to_string(it.first) + "\t" + std::to_string(it.second) + "\n";
+    df.write(s.c_str(), s.size());
+  }
+  df.close();
 
   // stores patterns sorted by their number of occurences
   size_t actualNumPatterns
@@ -407,6 +425,15 @@ void Index::createPatterns(const string& fileName,
   for (auto &it : patternCounts) {
     if (sortedPatterns.size() < maxNumPatterns) {
       sortedPatterns.push_back(it);
+      if (sortedPatterns.size() == maxNumPatterns) {
+        LOG(DEBUG) << "Sorting patterns after initial insertions." << std::endl;
+        // actuall sort the sorted patterns
+        std::sort(sortedPatterns.begin(), sortedPatterns.end(),
+                  [](const std::pair<Pattern, size_t>& first,
+                     const std::pair<Pattern, size_t>& second) -> bool {
+          return first.second > second.second;
+        });
+      }
     } else {
       if (it.second > sortedPatterns.back().second) {
         // The new element is larger than the smallest element in the vector.
@@ -423,6 +450,17 @@ void Index::createPatterns(const string& fileName,
       }
     }
   }
+  if (sortedPatterns.size() < maxNumPatterns) {
+    LOG(DEBUG) << "Sorting patterns after all insertions." << std::endl;
+    // actuall sort the sorted patterns
+    std::sort(sortedPatterns.begin(), sortedPatterns.end(),
+              [](const std::pair<Pattern, size_t>& first,
+                 const std::pair<Pattern, size_t>& second) -> bool {
+      return first.second > second.second;
+    });
+  }
+
+  LOG(DEBUG) << "Number of sorted patterns: " << sortedPatterns.size() << std::endl;
 
   // store the actual patterns
   patterns.reserve(sortedPatterns.size());
@@ -433,17 +471,20 @@ void Index::createPatterns(const string& fileName,
   std::unordered_map<Pattern, Id> patternSet;
   patternSet.reserve(sortedPatterns.size());
   for (size_t i = 0; i < sortedPatterns.size(); i++) {
-    patternSet.insert(std::pair<Pattern, Id>(sortedPatterns[0].first, i));
+    patternSet.insert(std::pair<Pattern, Id>(sortedPatterns[i].first, i));
   }
+
+  LOG(DEBUG) << "Pattern set size: " << patternSet.size() << std::endl;
 
   // Associate entities with patterns if possible, store has-relation otherwise
   // stxxl::VECTOR_GENERATOR<std::pair<Id, Id>>::result entityPatterns;
   // stxxl::VECTOR_GENERATOR<std::pair<Id, Id>>::result entityHasRelation;
-  std::vector<std::array<Id, 2>> entityPatterns;
+  std::vector<std::array<Id, 2>> entityHasPattern;
   std::vector<std::array<Id, 2>> entityHasRelation;
 
   size_t numEntitiesWithPatterns = 0;
   size_t numEntitiesWithoutPatterns = 0;
+  size_t numInvalidEntities = 0;
   pattern.setSize(0);
   currentRel = vec[0][0];
   patternIndex = 0;
@@ -456,6 +497,7 @@ void Index::createPatterns(const string& fileName,
         it = patternSet.find(pattern);
       } else {
         it = patternSet.end();
+        numInvalidEntities++;
       }
       if (it == patternSet.end()) {
         numEntitiesWithoutPatterns++;
@@ -466,7 +508,7 @@ void Index::createPatterns(const string& fileName,
       } else {
         numEntitiesWithPatterns++;
         // The pattern does exist, add an entry to the has-pattern predicate
-        entityPatterns.push_back(std::array<Id, 2> {currentRel, it->second});
+        entityHasPattern.push_back(std::array<Id, 2> {currentRel, it->second});
       }
       pattern.setSize(0);
       currentRel = (*reader2)[0];
@@ -500,19 +542,20 @@ void Index::createPatterns(const string& fileName,
   } else {
     numEntitiesWithPatterns++;
     // The pattern does exist, add an entry to the has-pattern predicate
-    entityPatterns.push_back(std::array<Id, 2> {currentRel, it->second});
+    entityHasPattern.push_back(std::array<Id, 2> {currentRel, it->second});
   }
 
-  LOG(DEBUG) << "Number of entity-has-pattern entries: " << entityPatterns.size() << std::endl;
+  LOG(DEBUG) << "Number of entity-has-pattern entries: " << entityHasPattern.size() << std::endl;
   LOG(DEBUG) << "Number of entity-has-relation entries: " << entityHasRelation.size() << std::endl;
 
   LOG(INFO) << numEntitiesWithPatterns << " of the databases entities have been assigned a pattern." << std::endl;
   LOG(INFO) << numEntitiesWithoutPatterns << " of the databases entities have not been assigned a pattern." << std::endl;
+  LOG(INFO) << "Of these " << numInvalidEntities << " would have to large a pattern." << std::endl;
   LOG(DEBUG) << "Total number of entities: " << (numEntitiesWithoutPatterns + numEntitiesWithPatterns) << std::endl;
 
   // ensure neither of the relations is empty
-  if (entityPatterns.size() == 0) {
-    entityPatterns.push_back(std::array<Id, 2>{ID_NO_VALUE, ID_NO_VALUE});
+  if (entityHasPattern.size() == 0) {
+    entityHasPattern.push_back(std::array<Id, 2>{ID_NO_VALUE, ID_NO_VALUE});
   }
   if (entityHasRelation.size() == 0) {
     entityHasRelation.push_back(std::array<Id, 2>{ID_NO_VALUE, ID_NO_VALUE});
@@ -523,7 +566,7 @@ void Index::createPatterns(const string& fileName,
   off_t afterRelations = 0;
   off_t afterPatterns = 0;
   // write the has-pattern and has-relation relations into the file
-  auto md1 = writeRel(file, afterRelations, Id(0), entityPatterns, true);
+  auto md1 = writeRel(file, afterRelations, Id(0), entityHasPattern, true);
   meta.add(md1.first, md1.second);
   afterRelations = meta.getOffsetAfter();
   auto md2 = writeRel(file, afterRelations, Id(1), entityHasRelation, false);

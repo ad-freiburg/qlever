@@ -3,10 +3,13 @@
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
 #pragma once
+#include <cstdint>
+#include <cstdlib>
+#include <string>
 
 // TODO(florian): tidy up the pattern class
 struct Pattern {
-  static constexpr int MAX_NUM_RELATIONS = 32;
+  static constexpr size_t MAX_NUM_RELATIONS = 64;
 
   Id& operator[](const size_t pos) {
     return _data[pos];
@@ -41,10 +44,22 @@ struct Pattern {
   }
 
   bool operator<(const Pattern &other) const {
+    if (_length == 0) {
+      return true;
+    }
+    if (other._length == 0) {
+      return false;
+    }
     return _data[0] < other._data[0];
   }
 
   bool operator>(const Pattern &other) const {
+    if (other._length == 0) {
+      return true;
+    }
+    if (_length == 0) {
+      return false;
+    }
     return _data[0] > other._data[0];
   }
 
@@ -77,7 +92,7 @@ namespace std {
 template <>
 struct hash<Pattern> {
   std::size_t operator()(const Pattern& p) const {
-    string s = string(reinterpret_cast<const char*>(p._data), sizeof(p._data));
+    string s = string(reinterpret_cast<const char*>(p._data), sizeof(Id) * p.size());
     return hash<string>()(s);
   }
 };
