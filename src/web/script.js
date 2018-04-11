@@ -1,7 +1,13 @@
 /**
  * Created by buchholb on 3/31/15.
  */
+
+// Hannah 10-04-2018: Explicit prefix for URLs
+var urlPrefix = window.location.pathname;
+console.log(urlPrefix);
+
 $(document).ready(function () {
+
     handleStatsDisplay();
     var ind = window.location.href.indexOf("?query=");
     if (ind > 0) {
@@ -126,12 +132,12 @@ function displayStatus(str) {
 
 
 function processCsvQuery(query) {
-    window.location.href = "/" + query + "&action=csv_export";
+    window.location.href = urlPrefix + query + "&action=csv_export";
     return false;
 }
 
 function processTsvQuery(query) {
-    window.location.href = "/" + query + "&action=tsv_export";
+    window.location.href = urlPrefix + query + "&action=tsv_export";
     return false;
 }
 
@@ -147,7 +153,7 @@ function processQuery(query) {
             maxSend = parseInt(window.location.href.substr(sInd + 6))
         }
     }
-    var uri = "/" + query;
+    var uri = urlPrefix + query;
     console.log("getJSON on URI: " +  uri);
     $.getJSON(uri, function (result) {
         if (result.status == "ERROR") {
@@ -208,7 +214,7 @@ function tsep(str) {
 }
 
 function handleStatsDisplay() {
-    $.getJSON("/?cmd=stats", function (result) {
+    $.getJSON(urlPrefix + "?cmd=stats", function (result) {
         $("#kbname").html("KB index: <b>" + tsep(result.kbindex) + "</b> ");
         $("#textname").html("Text index: <b>" + tsep(result.textindex) + "</b> ");
         $("#ntriples").html("Number of triples: <b>" + tsep(result.noftriples) + "</b> ");
