@@ -37,7 +37,6 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
                          pattern->_children.end());
   }
 
-
   std::vector<SubtreePlan> patternPlans;
   for (size_t i = 0; i < pq._numGraphPatterns; i++) {
     // Using a loop instead of resize as there is no default constructor, and
@@ -51,6 +50,10 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   while (!patternsToProcess.empty()) {
     const ParsedQuery::GraphPattern *pattern = patternsToProcess.back();
     patternsToProcess.pop_back();
+
+    // TODO(florian) if HAS_RELATION_PREDIACTE appears in the root graph pattern
+    // and deal with it accordingly
+
 
     LOG(DEBUG) << "Creating execution plan.\n";
     childPlans.clear();

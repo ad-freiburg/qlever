@@ -44,6 +44,23 @@ ParsedQuery SparqlParser::parse(const string& query) {
 
   parseSolutionModifiers(ad_utility::strip(query.substr(k + 1), " \n\t"),
                          result);
+
+  if (result._groupByVariables.size() > 0) {
+    // Check if all selected variables are either aggregated or
+    // part of the group by statement.
+    for (const string& var : result._selectedVariables) {
+      if (var[0] == '?') {
+        if (std::find(result._groupByVariables.begin(),
+                      result._groupByVariables.end(),
+                      var) == result._groupByVariables.end()) {
+          throw ParseException("Variable " + var + " is selected but not "
+                               "aggregated despite the result not being"
+                               "grouped by " + var + ".");
+        }
+      }
+    }
+  }
+  result.parseAliases();
   return result;
 }
 
@@ -78,7 +95,40 @@ void SparqlParser::addPrefix(const string& str, ParsedQuery& query) {
 // _____________________________________________________________________________
 void SparqlParser::parseSelect(const string& str, ParsedQuery& query) {
   assert(ad_utility::startsWith(str, "SELECT"));
-  auto vars = ad_utility::splitWs(str);
+  // split the string on whitespace but leave aliases intact
+  std::vector<string> vars;
+  size_t start = 0;
+  size_t pos = 0;
+  bool inAlias = false;
+  int bracketDepth = 0;
+  while (pos < str.size()) {
+    if (!inAlias && ::isspace(static_cast<unsigned char>(str[pos]))) {
+      if (start != pos) {
+        vars.emplace_back(str.substr(start, pos - start));
+      }
+      // skip any whitespace
+      while (pos < str.size()
+             && ::isspace(static_cast<unsigned char>(str[pos]))) {
+        pos++;
+      }
+      start = pos;
+    }
+    if (str[pos] == '(') {
+      bracketDepth++;
+      inAlias = true;
+    } else if (str[pos] == ')') {
+      bracketDepth--;
+      if (bracketDepth == 0) {
+        inAlias = false;
+      }
+    }
+    pos++;
+  }
+  // avoid adding whitespace at the back of the string
+  if (start != str.size()) {
+    vars.emplace_back(str.substr(start));
+  }
+
   size_t i = 1;
   if (vars.size() > i && vars[i] == "DISTINCT") {
     ++i;
@@ -91,7 +141,8 @@ void SparqlParser::parseSelect(const string& str, ParsedQuery& query) {
   for (; i < vars.size(); ++i) {
     if (ad_utility::startsWith(vars[i], "?") ||
         ad_utility::startsWith(vars[i], "SCORE(") ||
-        ad_utility::startsWith(vars[i], "TEXT(")) {
+        ad_utility::startsWith(vars[i], "TEXT(") ||
+        vars[i][0] == '(') {
       query._selectedVariables.push_back(vars[i]);
     } else {
       throw ParseException(string("Invalid variable in select clause: \"") +
@@ -292,7 +343,7 @@ void SparqlParser::addWhereTriple(const string& str,
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(const string& str,
                                           ParsedQuery& query) {
-  auto tokens = ad_utility::splitAny(str, " \n\t");
+  auto tokens = ad_utility::splitWs(str);
   for (size_t i = 0; i < tokens.size(); ++i) {
     if (tokens[i] == "ORDER"
         && i < tokens.size() - 2
@@ -301,7 +352,8 @@ void SparqlParser::parseSolutionModifiers(const string& str,
       while (i + 1 < tokens.size()
              && tokens[i + 1] != "LIMIT"
              && tokens[i + 1] != "OFFSET"
-             && tokens[i + 1] != "TEXTLIMIT") {
+             && tokens[i + 1] != "TEXTLIMIT"
+             && tokens[i + 1] != "GROUP") {
         query._orderBy.emplace_back(OrderKey(tokens[i + 1]));
         ++i;
       }
@@ -317,6 +369,15 @@ void SparqlParser::parseSolutionModifiers(const string& str,
     if (tokens[i] == "OFFSET" && i < tokens.size() - 1) {
       query._offset = tokens[i + 1];
       ++i;
+    }
+    if (tokens[i] == "GROUP"
+        && i < tokens.size() - 2
+        && tokens[i + 1] == "BY") {
+      i += 2;
+      while (i < tokens.size() && tokens[i][0] == '?') {
+        query._groupByVariables.push_back(tokens[i]);
+        i++;
+      }
     }
   }
 }

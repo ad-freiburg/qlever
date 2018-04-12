@@ -5,6 +5,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 #include "../util/StringUtils.h"
 #include "../util/HashMap.h"
@@ -102,6 +103,13 @@ public:
     vector<GraphPattern*> _children;
   };
 
+  struct Alias {
+    string _varName;
+    bool _isAggregate;
+    // The mapping from the original var to the new one
+    string _function;
+  };
+
 
   ParsedQuery() : _numGraphPatterns(1), _reduced(false), _distinct(false) { }
 
@@ -110,14 +118,18 @@ public:
   GraphPattern _rootGraphPattern;
   size_t _numGraphPatterns;
   vector<OrderKey> _orderBy;
+  vector<string> _groupByVariables;
   string _limit;
   string _textLimit;
   string _offset;
   bool _reduced;
   bool _distinct;
   string _originalString;
+  // TODO use densehash
+  std::unordered_map<string, Alias> _aliases;
 
   void expandPrefixes();
+  void parseAliases();
 
   string asString() const;
 

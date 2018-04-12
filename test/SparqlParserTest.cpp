@@ -394,6 +394,20 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_EQ("<Scott%2C%20Ridley>", pq._rootGraphPattern._whereClauseTriples[1]._o);
 }
 
+
+TEST(ParserTest, testGroupByAndAlias) {
+  ParsedQuery pq = SparqlParser::parse("SELECT (COUNT(?a) as ?count) WHERE { ?b <rel> ?a } GROUP BY ?b");
+  ASSERT_EQ(1, pq._selectedVariables.size());
+  ASSERT_EQ("?count", pq._selectedVariables[0]);
+  ASSERT_EQ(1, pq._aliases.size());
+  ASSERT_NE(pq._aliases.end(), pq._aliases.find("?a"));
+  ASSERT_EQ("?count", pq._aliases["?a"]._varName);
+  ASSERT_EQ(true, pq._aliases["?a"]._isAggregate);
+  ASSERT_EQ("COUNT(?a) as ?count", pq._aliases["?a"]._function);
+  ASSERT_EQ(1, pq._groupByVariables.size());
+  ASSERT_EQ("?b", pq._groupByVariables[0]);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

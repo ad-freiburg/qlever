@@ -8,6 +8,7 @@
 
 #include "../util/StringUtils.h"
 #include "ParsedQuery.h"
+#include "ParseException.h"
 
 
 using std::string;
@@ -161,6 +162,60 @@ void ParsedQuery::expandPrefix(
         item = item.substr(0, from) +
                prefixUri.substr(0, prefixUri.size() - 1)
                + item.substr(i + 1) + '>';
+      }
+    }
+  }
+}
+
+
+void ParsedQuery::parseAliases() {
+  for (size_t i = 0; i < _selectedVariables.size(); i++) {
+    const std::string& var = _selectedVariables[i];
+    if (var[0] == '(') {
+      std::string inner = var.substr(1, var.size() - 2);
+      if (ad_utility::startsWith(inner, "COUNT")
+          || ad_utility::startsWith(inner, "GROUP_CONCAT")
+          || ad_utility::startsWith(inner, "FIRST")
+          || ad_utility::startsWith(inner, "LAST")
+          || ad_utility::startsWith(inner, "SAMPLE")
+          || ad_utility::startsWith(inner, "MIN")
+          || ad_utility::startsWith(inner, "MAX")
+          || ad_utility::startsWith(inner, "SUM")
+          || ad_utility::startsWith(inner, "AVG")) {
+        Alias a;
+        a._isAggregate = true;
+        size_t pos = inner.find("as");
+        if (pos == std::string::npos) {
+          throw ParseException("Alias " + var + " is malformed.");
+        }
+        std::string newVarName = inner.substr(pos + 2, var.size() - pos - 2);
+        newVarName = ad_utility::strip(newVarName, " \t\n");
+        a._varName = newVarName;
+        a._function = inner;
+
+        // find the second opening bracket
+        pos = inner.find('(', 1);
+        pos++;
+        while (pos < inner.size()
+               && ::std::isspace(static_cast<unsigned char>(inner[pos]))) {
+          pos++;
+        }
+        size_t start = pos;
+        while (pos < inner.size()
+               && !::std::isspace(static_cast<unsigned char>(inner[pos]))) {
+          pos++;
+        }
+        if (pos == start || pos >= inner.size()) {
+          throw ParseException("Alias " + var + " is malformed.");
+        }
+
+        string oldVar = inner.substr(start, pos - start - 1);
+        _aliases[oldVar] = a;
+        // Replace the variable in the selected variables array with the aliased
+        // name.
+        _selectedVariables[i] = newVarName;
+      } else {
+        throw ParseException("Unknown or malformed alias: " + var);
       }
     }
   }
