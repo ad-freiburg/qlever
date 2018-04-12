@@ -29,7 +29,7 @@ using std::cerr;
 struct option options[] = {
   {"all-permutations",  no_argument,       NULL, 'a'},
   {"docs-by-contexts",  required_argument, NULL, 'd'},
-  {"help",              required_argument, NULL, 'h'},
+  {"help",              no_argument,       NULL, 'h'},
   {"index-basename",    required_argument, NULL, 'i'},
   {"kb-index-name",     required_argument, NULL, 'K'},
   {"on-disk-literals",  no_argument,       NULL, 'l'},
