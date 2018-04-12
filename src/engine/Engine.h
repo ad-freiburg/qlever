@@ -710,7 +710,7 @@ public:
           posRelation++;
         }
       } else {
-        LOG(WARN) << "No pattern or has-relation entry found for entity " << std::to_string(subject) << std::endl;
+        LOG(TRACE) << "No pattern or has-relation entry found for entity " << std::to_string(subject) << std::endl;
       }
       posInput++;
     }

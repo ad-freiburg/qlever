@@ -1141,8 +1141,8 @@ void Index::scanHasPattern(WidthTwoList* result) const {
     const FullRelationMetaData& rmd = _patternsMeta.getRmd(0)._rmdPairs;
     result->reserve(rmd.getNofElements() + 2);
     result->resize(rmd.getNofElements());
-    _opsFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                  rmd._startFullIndex);
+    _patternsFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
+                       rmd._startFullIndex);
   }
 }
 
@@ -1152,8 +1152,8 @@ void Index::scanHasRelation(WidthTwoList *result) const {
     const FullRelationMetaData& rmd = _patternsMeta.getRmd(1)._rmdPairs;
     result->reserve(rmd.getNofElements() + 2);
     result->resize(rmd.getNofElements());
-    _opsFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                  rmd._startFullIndex);
+    _patternsFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
+                       rmd._startFullIndex);
   }
 }
 

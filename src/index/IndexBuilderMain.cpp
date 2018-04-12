@@ -34,7 +34,7 @@ struct option options[] = {
   {"kb-index-name",     required_argument, NULL, 'K'},
   {"on-disk-literals",  no_argument,       NULL, 'l'},
   {"ntriples-file",     required_argument, NULL, 'n'},
-  {"patterns",          no_argument,       NULL, 'p'},
+  {"patterns",          no_argument,       NULL, 'P'},
   {"tsv-file",          required_argument, NULL, 't'},
   {"text-index-name",   required_argument, NULL, 'T'},
   {"words-by-contexts", required_argument, NULL, 'w'},
@@ -85,7 +85,7 @@ void printUsage(char *execName) {
        << "    " << "Externalize parts of the KB vocab." << endl;
   cout << "  " << std::setw(20) << "n, ntriples-file" << std::setw(1)
        << "    " << "NT file to build KB index from." << endl;
-  cout << "  " << std::setw(20) << "p, patterns" << std::setw(1)
+  cout << "  " << std::setw(20) << "P, patterns" << std::setw(1)
        << "    "
        << "Detect and store relation patterns for fast ql:has-relation queries."
        << endl;
@@ -121,7 +121,7 @@ int main(int argc, char** argv) {
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:ph", options, NULL);
+    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:Ph", options, NULL);
     if (c == -1) { break; }
     switch (c) {
       case 't':
@@ -155,7 +155,7 @@ int main(int argc, char** argv) {
       case 'K':
         kbIndexName = optarg;
         break;
-    case 'p':
+    case 'P':
         usePatterns = true;
         break;
       default:

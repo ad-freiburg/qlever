@@ -37,13 +37,8 @@ public:
     TEXT_WITHOUT_FILTER = 8,
     TEXT_WITH_FILTER = 9,
     TWO_COL_JOIN = 10,
-    OPTIONAL_JOIN = 11
-  };
-
-  enum OutputType {
-    KB = 0,
-    VERBATIM = 1,
-    TEXT = 2
+    OPTIONAL_JOIN = 11,
+    COUNT_AVAILABLE_PREDICATES = 12
   };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
@@ -151,7 +146,7 @@ private:
   template<typename Row>
   void writeJsonTable(const vector<Row>& data, size_t from,
                       size_t upperBound,
-                      const vector<pair<size_t, OutputType>>& validIndices,
+                      const vector<pair<size_t, ResultTable::ResultType>>& validIndices,
                       size_t maxSend,
                       std::ostream& out) const {
     std::ostringstream throwaway;
@@ -161,7 +156,7 @@ private:
       os << "[\"";
       for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
         switch (validIndices[j].second) {
-          case KB: {
+          case ResultTable::ResultType::KB: {
             string entity = _qec->getIndex().idToString(
                 row[validIndices[j].first]);
             if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
@@ -170,10 +165,10 @@ private:
             os << ad_utility::escapeForJson(entity) << "\",\"";
             break;
           }
-          case VERBATIM:
+        case ResultTable::ResultType::VERBATIM:
             os << row[validIndices[j].first] << "\",\"";
             break;
-          case TEXT:
+          case ResultTable::ResultType::TEXT:
             os << ad_utility::escapeForJson(
                 _qec->getIndex().getTextExcerpt(row[validIndices[j].first]))
                 << "\",\"";
@@ -183,7 +178,7 @@ private:
         }
       }
       switch (validIndices[validIndices.size() - 1].second) {
-        case KB: {
+        case ResultTable::ResultType::KB: {
           string entity = _qec->getIndex()
               .idToString(row[validIndices[validIndices.size() - 1].first]);
           if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
@@ -192,10 +187,10 @@ private:
           os << ad_utility::escapeForJson(entity) << "\"]";
           break;
         }
-        case VERBATIM:
+        case ResultTable::ResultType::VERBATIM:
           os << row[validIndices[validIndices.size() - 1].first] << "\"]";
           break;
-        case TEXT:
+        case ResultTable::ResultType::TEXT:
           os << ad_utility::escapeForJson(
               _qec->getIndex().getTextExcerpt(
                   row[validIndices[validIndices.size() - 1].first]))
@@ -212,13 +207,13 @@ private:
   template<typename Row>
   void writeTable(const vector<Row>& data, char sep, size_t from,
                   size_t upperBound,
-                  const vector<pair<size_t, OutputType>>& validIndices,
+                  const vector<pair<size_t, ResultTable::ResultType>>& validIndices,
                   std::ostream& out) const {
     for (size_t i = from; i < upperBound; ++i) {
       const auto& row = data[i];
       for (size_t j = 0; j < validIndices.size(); ++j) {
         switch (validIndices[j].second) {
-          case KB: {
+          case ResultTable::ResultType::KB: {
             string entity = _qec->getIndex().idToString(
                 row[validIndices[j].first]);
             if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
@@ -228,10 +223,10 @@ private:
             }
             break;
           }
-          case VERBATIM:
+          case ResultTable::ResultType::VERBATIM:
             out << row[validIndices[j].first] << "\",\"";
             break;
-          case TEXT:
+          case ResultTable::ResultType::TEXT:
             out << _qec->getIndex().getTextExcerpt(
                 row[validIndices[j].first]);
             break;

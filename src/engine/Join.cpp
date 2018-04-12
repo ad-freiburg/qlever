@@ -57,6 +57,8 @@ void Join::computeResult(ResultTable* result) const {
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
     size_t resWidth = leftWidth + rightWidth - 1;
     result->_nofColumns = resWidth;
+    result->_resultTypes.resize(result->_nofColumns);
+    result->_sortedBy = _leftJoinCol;
     if (resWidth == 1) {
       result->_fixedSizeData = new vector<array<Id, 1>>();
     } else if (resWidth == 2) {
@@ -84,6 +86,7 @@ void Join::computeResult(ResultTable* result) const {
   if (leftRes->size() == 0) {
     size_t resWidth = leftWidth + rightWidth - 1;
     result->_nofColumns = resWidth;
+    result->_resultTypes.resize(result->_nofColumns);
     result->_sortedBy = _leftJoinCol;
     if (resWidth == 1) {
       result->_fixedSizeData = new vector<array<Id, 1>>();
@@ -108,6 +111,15 @@ void Join::computeResult(ResultTable* result) const {
   AD_CHECK(!result->_fixedSizeData);
 
   result->_nofColumns = leftWidth + rightWidth - 1;
+  result->_resultTypes.reserve(result->_nofColumns);
+  result->_resultTypes.insert(result->_resultTypes.end(),
+                              leftRes._resultTypes.begin(),
+                              leftRes._resultTypes.end());
+  for (size_t i = 0; i < rightRes._nofColumns; i++) {
+    if (i != _rightJoinCol) {
+      result->_resultTypes.push_back(rightRes._resultTypes[i]);
+    }
+  }
   result->_sortedBy = _leftJoinCol;
 
   if (leftWidth == 1) {
@@ -506,6 +518,12 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
     result->_nofColumns = _right->getResultWidth() + 2;
     result->_sortedBy = 2 + _rightJoinCol;
     shared_ptr<const ResultTable> nonDummyRes = _right->getRootOperation()->getResult();
+    result->_resultTypes.reserve(result->_nofColumns);
+    result->_resultTypes.push_back(ResultTable::ResultType::KB);
+    result->_resultTypes.push_back(ResultTable::ResultType::KB);
+    result->_resultTypes.insert(result->_resultTypes.end(),
+                                nonDummyRes->_resultTypes.begin(),
+                                nonDummyRes->_resultTypes.end());
 
     if (_right->getResultWidth() == 1) {
       const Index::WidthOneList& r = *static_cast<Index::WidthOneList*>(
@@ -546,6 +564,12 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
     result->_sortedBy = _leftJoinCol;
 
     shared_ptr<const ResultTable> nonDummyRes = _left->getRootOperation()->getResult();
+    result->_resultTypes.reserve(result->_nofColumns);
+    result->_resultTypes.insert(result->_resultTypes.end(),
+                                nonDummyRes->_resultTypes.begin(),
+                                nonDummyRes->_resultTypes.end());
+    result->_resultTypes.push_back(ResultTable::ResultType::KB);
+    result->_resultTypes.push_back(ResultTable::ResultType::KB);
     if (_left->getResultWidth() == 1) {
       const Index::WidthOneList& r = *static_cast<Index::WidthOneList*>(
           nonDummyRes->_fixedSizeData);

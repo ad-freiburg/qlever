@@ -44,6 +44,7 @@ void TextOperationWithFilter::computeResult(ResultTable* result) const {
   AD_CHECK_GE(_nofVars, 1);
   result->_nofColumns = 1 + _filterResult->getResultWidth() + _nofVars;
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
+  // TODO(florian): add result types
   if (_filterResult->getResultWidth() == 1) {
     AD_CHECK_GE(result->_nofColumns, 3);
     if (result->_nofColumns == 3) {

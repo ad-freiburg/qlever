@@ -138,6 +138,7 @@ void IndexScan::computeResult(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computePSOboundS(ResultTable* result) const {
   result->_nofColumns = 1;
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 1>>();
   _executionContext->getIndex().scanPSO(
@@ -149,6 +150,8 @@ void IndexScan::computePSOboundS(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computePSOfreeS(ResultTable* result) const {
   result->_nofColumns = 2;
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 2>>();
   _executionContext->getIndex().scanPSO(
@@ -160,6 +163,7 @@ void IndexScan::computePSOfreeS(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computePOSboundO(ResultTable* result) const {
   result->_nofColumns = 1;
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 1>>();
   _executionContext->getIndex().scanPOS(
@@ -171,6 +175,8 @@ void IndexScan::computePOSboundO(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computePOSfreeO(ResultTable* result) const {
   result->_nofColumns = 2;
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 2>>();
   _executionContext->getIndex().scanPOS(
@@ -192,6 +198,8 @@ size_t IndexScan::computeSizeEstimate() const {
 // _____________________________________________________________________________
 void IndexScan::computeSPOfreeP(ResultTable* result) const {
   result->_nofColumns = 2;
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 2>>();
   _executionContext->getIndex().scanSPO(
@@ -203,6 +211,7 @@ void IndexScan::computeSPOfreeP(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computeSOPboundO(ResultTable* result) const {
   result->_nofColumns = 1;
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 1>>();
   _executionContext->getIndex().scanSOP(
@@ -214,6 +223,8 @@ void IndexScan::computeSOPboundO(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computeSOPfreeO(ResultTable* result) const {
   result->_nofColumns = 2;
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 2>>();
   _executionContext->getIndex().scanSOP(
@@ -225,6 +236,8 @@ void IndexScan::computeSOPfreeO(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computeOPSfreeP(ResultTable* result) const {
   result->_nofColumns = 2;
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 2>>();
   _executionContext->getIndex().scanOPS(
@@ -236,6 +249,8 @@ void IndexScan::computeOPSfreeP(ResultTable* result) const {
 // _____________________________________________________________________________
 void IndexScan::computeOSPfreeS(ResultTable* result) const {
   result->_nofColumns = 2;
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 2>>();
   _executionContext->getIndex().scanOSP(

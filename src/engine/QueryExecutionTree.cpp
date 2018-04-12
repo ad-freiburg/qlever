@@ -99,21 +99,16 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  vector<pair<size_t, OutputType>> validIndices;
+  vector<pair<size_t, ResultTable::ResultType>> validIndices;
   for (auto var : selectVars) {
-    OutputType outputType = OutputType::KB;
-    if (ad_utility::startsWith(var, "SCORE(") || isContextvar(var)) {
-      outputType = OutputType::VERBATIM;
-    }
     if (ad_utility::startsWith(var, "TEXT(")) {
-      outputType = OutputType::TEXT;
       var = var.substr(5, var.rfind(')') - 5);
     }
-
-    if (getVariableColumnMap().find(var) != getVariableColumnMap().end()) {
+    auto it = getVariableColumnMap().find(var);
+    if (it != getVariableColumnMap().end()) {
       validIndices.push_back(
-          pair<size_t, OutputType>(getVariableColumnMap().find(var)->second,
-                                   outputType));
+            pair<size_t, ResultTable::ResultType>(it->second,
+                                                  res.getResultType(it->second)));
     }
   }
   if (validIndices.size() == 0) { return; }
@@ -156,21 +151,16 @@ void QueryExecutionTree::writeResultToStreamAsJson(
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  vector<pair<size_t, OutputType>> validIndices;
+  vector<pair<size_t, ResultTable::ResultType>> validIndices;
   for (auto var : selectVars) {
-    OutputType outputType = OutputType::KB;
-    if (ad_utility::startsWith(var, "SCORE(") || isContextvar(var)) {
-      outputType = OutputType::VERBATIM;
-    }
     if (ad_utility::startsWith(var, "TEXT(")) {
-      outputType = OutputType::TEXT;
       var = var.substr(5, var.rfind(')') - 5);
     }
-
     auto vc = getVariableColumnMap().find(var);
     if (vc != getVariableColumnMap().end()) {
       validIndices.push_back(
-          pair<size_t, OutputType>(vc->second, outputType));
+          pair<size_t, ResultTable::ResultType>(vc->second,
+                                                res.getResultType(vc->second)));
     }
   }
   if (validIndices.size() == 0) {

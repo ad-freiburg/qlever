@@ -14,7 +14,7 @@ public:
   explicit QueryPlanner(QueryExecutionContext* qec,
                         bool optimizeOptionals = true);
 
-  QueryExecutionTree createExecutionTree(const ParsedQuery& pq) const;
+  QueryExecutionTree createExecutionTree(ParsedQuery& pq) const;
 
   class TripleGraph {
   public:

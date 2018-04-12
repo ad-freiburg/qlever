@@ -34,7 +34,8 @@ public:
   void initialize(const string& ontologyBaseName, bool useText,
                   bool allPermutations = false,
                   bool onDiskLiterals = false,
-                  bool optimizeOptionals = true);
+                  bool optimizeOptionals = true,
+                  bool usePatterns = false);
 
   //! Loop, wait for requests and trigger processing.
   void run();

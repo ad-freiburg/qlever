@@ -19,14 +19,26 @@ using std::lock_guard;
 
 class ResultTable {
 public:
-  enum Status { FINISHED = 0, OTHER = 1 };
+  enum Status {
+    FINISHED = 0,
+    OTHER = 1
+  };
 
+  enum class ResultType {
+    KB,
+    VERBATIM,
+    TEXT
+  };
+
+  Status _status;
   size_t _nofColumns;
   // A value >= _nofColumns indicates unsorted data
   size_t _sortedBy;
 
   vector<vector<Id>> _varSizeData;
   void *_fixedSizeData;
+
+  vector<ResultType> _resultTypes;
 
   ResultTable();
 
@@ -122,10 +134,18 @@ public:
     return res;
   }
 
+  ResultType getResultType(unsigned int col) const {
+    if (col < _resultTypes.size()) {
+      return _resultTypes[col];
+    }
+    return ResultType::KB;
+  }
+
 private:
   // See this SO answer for why mutable is ok here
   // https://stackoverflow.com/questions/3239905/c-mutex-and-const-correctness
   mutable condition_variable _cond_var;
   mutable mutex _cond_var_m;
   Status _status;
+
 };

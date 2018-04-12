@@ -45,9 +45,14 @@ class CountAvailablePredicates : public Operation {
 
   virtual size_t getCostEstimate();
 
+  void setVarNames(const std::string& predicateVarName,
+                   const std::string& countVarName);
+
 private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   size_t _subjectColumnIndex;
+  std::string _predicateVarName;
+  std::string _countVarName;
 
   virtual void computeResult(ResultTable* result) const;
 };

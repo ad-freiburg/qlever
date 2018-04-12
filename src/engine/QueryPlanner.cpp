@@ -11,9 +11,11 @@
 #include "Distinct.h"
 #include "Filter.h"
 #include "OptionalJoin.h"
+#include "CountAvailablePredicates.h"
 #include "TextOperationWithoutFilter.h"
 #include "TextOperationWithFilter.h"
 #include "TwoColumnJoin.h"
+#include "../parser/ParseException.h"
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec, bool optimizeOptionals) :
@@ -22,7 +24,7 @@ QueryPlanner::QueryPlanner(QueryExecutionContext* qec, bool optimizeOptionals) :
 
 // _____________________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(
-    const ParsedQuery& pq) const {
+    ParsedQuery& pq) const {
   // Create a topological sorting of the tree where children are in the list
   // after their parents.
   std::vector<const ParsedQuery::GraphPattern*> patternsToProcess;
@@ -46,14 +48,37 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   LOG(DEBUG) << "Got " << patternPlans.size() << " subplans to create."
              << std::endl;
 
+  // look for ql:has-relation to determine if the pattern trick should be used
+  bool usePatternTrick = false;
+  SparqlTriple patternTrickTriple("", "", "");
+  for (size_t i = 0; i < pq._rootGraphPattern._whereClauseTriples.size(); i++) {
+    const SparqlTriple& t = pq._rootGraphPattern._whereClauseTriples[i];
+    LOG(DEBUG) << "_p: " << t._p << endl;
+    if (t._p == HAS_RELATION_PREDIACTE) {
+      if (pq._groupByVariables.size() == 1
+          && pq._groupByVariables[0] == t._o
+          && pq._aliases.size() == 1
+          && pq._aliases.find(t._o) != pq._aliases.end()
+          && pq._aliases.find(t._o)->second._isAggregate
+          && ad_utility::startsWith(pq._aliases.find(t._o)->second._function, "COUNT")
+          && pq._selectedVariables.size() == 2) {
+        LOG(DEBUG) << "Using the pattern trick to answer the query." << endl;
+        usePatternTrick = true;
+        patternTrickTriple = t;
+        // remove the triple from the graph
+        pq._rootGraphPattern._whereClauseTriples.erase(
+              pq._rootGraphPattern._whereClauseTriples.begin() + i);
+      } else {
+        throw ParseException("ql:has-relation may currently only be used when "
+                             "grouping by its object and counting the same.");
+      }
+    }
+  }
+
   vector<SubtreePlan*> childPlans;
   while (!patternsToProcess.empty()) {
     const ParsedQuery::GraphPattern *pattern = patternsToProcess.back();
     patternsToProcess.pop_back();
-
-    // TODO(florian) if HAS_RELATION_PREDIACTE appears in the root graph pattern
-    // and deal with it accordingly
-
 
     LOG(DEBUG) << "Creating execution plan.\n";
     childPlans.clear();
@@ -198,6 +223,54 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
   }
 
   SubtreePlan final = patternPlans[0];
+
+  if (usePatternTrick) {
+    // Determine the column containing the subjects for which we are interested
+    // in their predicates.
+    auto it = final._qet.get()->getVariableColumnMap().find(patternTrickTriple._s);
+    if (it == final._qet.get()->getVariableColumnMap().end()) {
+      AD_THROW(ad_semsearch::Exception::BAD_QUERY, "The root operation of the"
+                                                   "query excecution tree does"
+                                                   "not contain a column for"
+                                                   "variable "
+                                                   + patternTrickTriple._s
+                                                   + " required by the pattern"
+                                                     "trick.");
+    }
+    size_t subjectColumn = it->second;
+
+    bool isSorted =
+        final._qet->getRootOperation()->resultSortedOn() == subjectColumn;
+    // a and b need to be ordered properly first
+    vector<pair<size_t, bool>> sortIndices = {
+      std::make_pair(subjectColumn, false)
+    };
+
+    SubtreePlan orderByPlan(_qec);
+    std::shared_ptr<Operation>
+        orderByOp(new OrderBy(_qec, final._qet, sortIndices));
+
+    if (isSorted) {
+      orderByPlan._qet->setVariableColumns(final._qet->getVariableColumnMap());
+      orderByPlan._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByOp);
+    }
+    SubtreePlan patternTrickPlan(_qec);
+    std::shared_ptr<Operation> countPred(
+          new CountAvailablePredicates(_qec,
+                                       isSorted ? final._qet : orderByPlan._qet,
+                                       subjectColumn));
+
+    static_cast<CountAvailablePredicates*>(countPred.get())
+        ->setVarNames(patternTrickTriple._o,
+                      pq._aliases[patternTrickTriple._o]._varName);
+    QueryExecutionTree& tree = *patternTrickPlan._qet.get();
+    tree.setVariableColumns(
+        static_cast<CountAvailablePredicates*>(countPred.get())->getVariableColumns());
+    tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES, countPred);
+
+
+    final = patternTrickPlan;
+  }
 
   // A distinct modifier is applied in the end. This is very easy
   // but not necessarily optimal.

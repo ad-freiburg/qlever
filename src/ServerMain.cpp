@@ -27,6 +27,7 @@ using std::cerr;
 struct option options[] = {
   {"index",            required_argument, NULL, 'i'},
   {"port",             required_argument, NULL, 'p'},
+  {"patterns",         no_argument,       NULL, 'P'},
   {"text",             no_argument,       NULL, 't'},
   {"on-disk-literals", no_argument,       NULL, 'l'},
   {"all-permutations", no_argument,       NULL, 'a'},
@@ -57,6 +58,10 @@ void printUsage(char *execName) {
        << endl;
   cout << "  " << std::setw(20) << "p, port" << std::setw(1) << "    "
        << "The port on which to run the web interface." << endl;
+  cout << "  " << std::setw(20) << "P, patterns" << std::setw(1)
+       << "    "
+       << "Use relation patterns for fast ql:has-relation queries."
+       << endl;
   cout << "  " << std::setw(20) << "t, text" << std::setw(1) << "    "
        << "Enables the usage of text." << endl;
   cout << "  " << std::setw(20) << "j, worker-threads" << std::setw(1) << "    "
@@ -86,11 +91,12 @@ int main(int argc, char** argv) {
   bool optimizeOptionals = true;
   int port = -1;
   int numThreads = 1;
+  bool usePatterns = false;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "i:p:j:tlauh", options, NULL);
+    int c = getopt_long(argc, argv, "i:p:j:tlauhP", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'i':
@@ -98,6 +104,9 @@ int main(int argc, char** argv) {
         break;
       case 'p':
         port = atoi(optarg);
+        break;
+      case 'P':
+        usePatterns = true;
         break;
       case 't':
         text = true;
@@ -146,7 +155,7 @@ int main(int argc, char** argv) {
   try {
     Server server(port, numThreads);
     server.initialize(index, text, allPermutations, onDiskLiterals,
-                      optimizeOptionals);
+                      optimizeOptionals, usePatterns);
     server.run();
   } catch(const ad_semsearch::Exception& e) {
     LOG(ERROR) << e.getFullErrorMessage() << '\n';

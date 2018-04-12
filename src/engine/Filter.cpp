@@ -65,6 +65,9 @@ void Filter::computeResult(ResultTable* result) const {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Filter result computation..." << endl;
   result->_nofColumns = subRes->_nofColumns;
+  result->_resultTypes.insert(result->_resultTypes.end(),
+                              subRes->_resultTypes.begin(),
+                              subRes->_resultTypes.end());
   size_t l = _lhsInd;
   size_t r = _rhsInd;
   if (r == std::numeric_limits<size_t>::max()) {

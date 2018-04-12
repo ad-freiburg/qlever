@@ -25,15 +25,16 @@ using std::cerr;
 
 // Available options.
 struct option options[] = {
-  {"index",            required_argument, NULL, 'i'},
-  {"text",             no_argument,       NULL, 't'},
-  {"queryfile",        required_argument, NULL, 'q'},
-  {"interactive",      no_argument,       NULL, 'I'},
-  {"cost-factors",     required_argument, NULL, 'c'},
-  {"on-disk-literals", no_argument,       NULL, 'l'},
   {"all-permutations", no_argument,       NULL, 'a'},
-  {"unopt-optional",   no_argument,       NULL, 'u'},
+  {"cost-factors",     required_argument, NULL, 'c'},
   {"help",             no_argument,       NULL, 'h'},
+  {"index",            required_argument, NULL, 'i'},
+  {"interactive",      no_argument,       NULL, 'I'},
+  {"on-disk-literals", no_argument,       NULL, 'l'},
+  {"patterns",         no_argument,       NULL, 'P'},
+  {"queryfile",        required_argument, NULL, 'q'},
+  {"text",             no_argument,       NULL, 't'},
+  {"unopt-optional",   no_argument,       NULL, 'u'},
   {NULL,               0,                 NULL, 0}
 };
 
@@ -65,6 +66,10 @@ void printUsage(char *execName) {
        << "    "
        << "Indicates that the literals can be found on disk with the index."
        << endl;
+  cout << "  " << std::setw(20) << "P, patterns" << std::setw(1)
+       << "    "
+       << "Use relation patterns for fast ql:has-relation queries."
+       << endl;
   cout << "  " << std::setw(20) << "q, queryfile" << std::setw(1)
        << "    "
        << "Path to a file containing one query per line." << endl;
@@ -95,11 +100,12 @@ int main(int argc, char** argv) {
   bool onDiskLiterals = false;
   bool allPermutations = false;
   bool optimizeOptionals = true;
+  bool usePatterns = false;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "q:Ii:tc:lahu", options, NULL);
+    int c = getopt_long(argc, argv, "q:Ii:tc:lahuP", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'q':
@@ -130,6 +136,9 @@ int main(int argc, char** argv) {
       case 'u':
         optimizeOptionals = false;
         break;
+      case 'P':
+        usePatterns = true;
+        break;
       default:
         cout << endl
         << "! ERROR in processing options (getopt returned '" << c
@@ -154,6 +163,7 @@ int main(int argc, char** argv) {
   try {
     Engine engine;
     Index index;
+    index.setUsePatterns(usePatterns);
     index.createFromOnDiskIndex(indexName, allPermutations, onDiskLiterals);
     if (text) {
       index.addTextFromOnDiskIndex();
