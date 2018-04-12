@@ -373,9 +373,9 @@ void SparqlParser::parseSolutionModifiers(const string& str,
     if (tokens[i] == "GROUP"
         && i < tokens.size() - 2
         && tokens[i + 1] == "BY") {
-      i += 2;
-      while (i < tokens.size() && tokens[i][0] == '?') {
-        query._groupByVariables.push_back(tokens[i]);
+      i++;
+      while (i + 1 < tokens.size() && tokens[i + 1][0] == '?') {
+        query._groupByVariables.push_back(tokens[i + 1]);
         i++;
       }
     }

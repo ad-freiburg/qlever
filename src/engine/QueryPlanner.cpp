@@ -143,7 +143,9 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
     // as a filter later on).
     finalTab = fillDpTab(tg, pattern->_filters, childPlans);
 
-    if (pattern == &pq._rootGraphPattern && pq._orderBy.size() > 0) {
+    // If any form of grouping is used (e.g. the pattern trick) sorting
+    // has to be done after the grouping.
+    if (pattern == &pq._rootGraphPattern && pq._orderBy.size() > 0 && !usePatternTrick) {
       // If there is an order by clause, add another row to the table and
       // just add an order by / sort to every previous result if needed.
       // If the ordering is perfect already, just copy the plan.
@@ -268,9 +270,27 @@ QueryExecutionTree QueryPlanner::createExecutionTree(
         static_cast<CountAvailablePredicates*>(countPred.get())->getVariableColumns());
     tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES, countPred);
 
-
     final = patternTrickPlan;
+
+    // Add the order by operation
+    if (pq._orderBy.size() > 0) {
+      SubtreePlan plan(_qec);
+      auto& tree = *plan._qet.get();
+      vector<pair<size_t, bool>> sortIndices;
+      for (auto& ord : pq._orderBy) {
+        sortIndices.emplace_back(
+              pair<size_t, bool>{
+                final._qet.get()->getVariableColumn(ord._key),
+                ord._desc});
+      }
+      std::shared_ptr<Operation> ob(new OrderBy(_qec, final._qet, sortIndices));
+      tree.setVariableColumns(final._qet.get()->getVariableColumnMap());
+      tree.setOperation(QueryExecutionTree::ORDER_BY, ob);
+      tree.setContextVars(final._qet.get()->getContextVars());
+      final = plan;
+    }
   }
+  std::cout << "Plan after pattern trick: " << endl << final._qet->asString() << endl;
 
   // A distinct modifier is applied in the end. This is very easy
   // but not necessarily optimal.

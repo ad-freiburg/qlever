@@ -392,6 +392,18 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_EQ("?movie", pq._rootGraphPattern._whereClauseTriples[1]._s);
   ASSERT_EQ("<directed-by>", pq._rootGraphPattern._whereClauseTriples[1]._p);
   ASSERT_EQ("<Scott%2C%20Ridley>", pq._rootGraphPattern._whereClauseTriples[1]._o);
+
+  pq = SparqlParser::parse(
+         "SELECT ?r (COUNT(?r) as ?count) WHERE {"
+         "?a <http://schema.org/name> ?b ."
+         "?a ql:has-relation ?r }"
+         "GROUP BY ?r "
+         "ORDER BY ?count");
+  ASSERT_EQ(1u, pq._groupByVariables.size());
+  ASSERT_EQ(1u, pq._orderBy.size());
+  ASSERT_EQ("?r", pq._groupByVariables[0]);
+  ASSERT_EQ("?count", pq._orderBy[0]._key);
+  ASSERT_EQ(false, pq._orderBy[0]._desc);
 }
 
 
