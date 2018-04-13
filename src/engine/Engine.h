@@ -759,31 +759,33 @@ public:
                                   const vector<array<Id, 2>>* hasRelation,
                                   const vector<Pattern>& patterns,
                                   size_t subjectColumn) {
-    if (hasPattern->size() / result->size() > GALLOP_THRESHOLD
-        && hasRelation->size() / result->size() > GALLOP_THRESHOLD) {
-      LOG(DEBUG) << "Using galloping search for both relations during the"
-                    "pattern trick join." << std::endl;
-      computePatternTrickImpl<A, true, true>(input, result, hasPattern,
-                                             hasRelation, patterns,
-                                             subjectColumn);
-    } else if (hasPattern->size() / result->size() > GALLOP_THRESHOLD) {
-      LOG(DEBUG)<< "Using galloping search for has-pattern during the"
-                   "pattern trick join." << std::endl;
-      computePatternTrickImpl<A, true, false>(input, result, hasPattern,
-                                              hasRelation, patterns,
-                                              subjectColumn);
-    } else if (hasRelation->size() / result->size() > GALLOP_THRESHOLD) {
-      LOG(DEBUG) << "Using galloping search for has-relation during the"
-                    "pattern trick join." << std::endl;
-      computePatternTrickImpl<A, false, true>(input, result, hasPattern,
-                                              hasRelation, patterns,
-                                              subjectColumn);
-    } else {
-      LOG(DEBUG) << "Using zipper join for both relations during the pattern"
-                    "trick join." << std::endl;
-      computePatternTrickImpl<A, false, false>(input, result, hasPattern,
+    if (input->size() > 0) {
+      if (hasPattern->size() / input->size() > GALLOP_THRESHOLD
+          && hasRelation->size() / input->size() > GALLOP_THRESHOLD) {
+        LOG(DEBUG) << "Using galloping search for both relations during the"
+                      "pattern trick join." << std::endl;
+        computePatternTrickImpl<A, true, true>(input, result, hasPattern,
                                                hasRelation, patterns,
                                                subjectColumn);
+      } else if (hasPattern->size() / input->size() > GALLOP_THRESHOLD) {
+        LOG(DEBUG)<< "Using galloping search for has-pattern during the"
+                     "pattern trick join." << std::endl;
+        computePatternTrickImpl<A, true, false>(input, result, hasPattern,
+                                                hasRelation, patterns,
+                                                subjectColumn);
+      } else if (hasRelation->size() / input->size() > GALLOP_THRESHOLD) {
+        LOG(DEBUG) << "Using galloping search for has-relation during the"
+                      "pattern trick join." << std::endl;
+        computePatternTrickImpl<A, false, true>(input, result, hasPattern,
+                                                hasRelation, patterns,
+                                                subjectColumn);
+      } else {
+        LOG(DEBUG) << "Using zipper join for both relations during the pattern"
+                      "trick join." << std::endl;
+        computePatternTrickImpl<A, false, false>(input, result, hasPattern,
+                                                 hasRelation, patterns,
+                                                 subjectColumn);
+      }
     }
   }
 
