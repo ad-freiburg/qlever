@@ -28,4 +28,4 @@ add_library(engine
         GroupBy.cpp GroupBy.h
 )
 
-target_link_libraries(engine index parser profiler)
+target_link_libraries(engine index parser)
