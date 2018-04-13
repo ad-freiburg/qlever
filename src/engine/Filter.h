@@ -58,6 +58,8 @@ class Filter : public Operation {
            _subtree->getCostEstimate();
   }
 
+  void setRightHandSideString(std::string s) { _rhsString = s; }
+
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
 
   virtual bool knownEmptyResult() { return _subtree->knownEmptyResult(); }
@@ -72,6 +74,7 @@ class Filter : public Operation {
   size_t _lhsInd;
   size_t _rhsInd;
   Id _rhsId;
+  std::string _rhsString;
 
   virtual void computeResult(ResultTable* result) const;
 

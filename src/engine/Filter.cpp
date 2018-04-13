@@ -56,6 +56,9 @@ string Filter::asString(size_t indent) const {
     case SparqlFilter::GE:
       os << " <= ";
       break;
+    case SparqlFilter::LANG_MATCHES:
+      os << " LANG_MATCHES ";
+      break;
   }
   if (_rhsInd != std::numeric_limits<size_t>::max()) {
     os << "col " << _rhsInd;
@@ -117,6 +120,11 @@ void Filter::computeResult(ResultTable* result) const {
                              [&l, &r](const RT& e) { return e[l] >= e[r]; },
                              res);
           break;
+        case SparqlFilter::LANG_MATCHES:
+          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+                   "Language filtering with a dynamic right side has not yet "
+                   "been implemented.");
+          break;
       }
       break;
     }
@@ -154,6 +162,11 @@ void Filter::computeResult(ResultTable* result) const {
           getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                              [&l, &r](const RT& e) { return e[l] >= e[r]; },
                              res);
+          break;
+        case SparqlFilter::LANG_MATCHES:
+          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+                   "Language filtering with a dynamic right side has not yet "
+                   "been implemented.");
           break;
       }
       break;
@@ -193,6 +206,11 @@ void Filter::computeResult(ResultTable* result) const {
                              [&l, &r](const RT& e) { return e[l] >= e[r]; },
                              res);
           break;
+        case SparqlFilter::LANG_MATCHES:
+          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+                   "Language filtering with a dynamic right side has not yet "
+                   "been implemented.");
+          break;
       }
       break;
     }
@@ -230,6 +248,11 @@ void Filter::computeResult(ResultTable* result) const {
           getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                              [&l, &r](const RT& e) { return e[l] >= e[r]; },
                              res);
+          break;
+        case SparqlFilter::LANG_MATCHES:
+          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+                   "Language filtering with a dynamic right side has not yet "
+                   "been implemented.");
           break;
       }
       break;
@@ -269,6 +292,11 @@ void Filter::computeResult(ResultTable* result) const {
                              [&l, &r](const RT& e) { return e[l] >= e[r]; },
                              res);
           break;
+        case SparqlFilter::LANG_MATCHES:
+          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+                   "Language filtering with a dynamic right side has not yet "
+                   "been implemented.");
+          break;
       }
       break;
     }
@@ -304,6 +332,11 @@ void Filter::computeResult(ResultTable* result) const {
           getEngine().filter(subRes->_varSizeData,
                              [&l, &r](const RT& e) { return e[l] >= e[r]; },
                              &result->_varSizeData);
+          break;
+        case SparqlFilter::LANG_MATCHES:
+          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+                   "Language filtering with a dynamic right side has not yet "
+                   "been implemented.");
           break;
       }
       break;
@@ -350,6 +383,15 @@ void Filter::computeResultFixedValue(ResultTable* result) const {
           getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                              [&l, &r](const RT& e) { return e[l] >= r; }, res);
           break;
+        case SparqlFilter::LANG_MATCHES:
+          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                             [this, &l](const RT& e) {
+                               return ad_utility::endsWith(
+                                   getIndex().idToString(e[l]),
+                                   this->_rhsString);
+                             },
+                             res);
+          break;
       }
       break;
     }
@@ -381,6 +423,15 @@ void Filter::computeResultFixedValue(ResultTable* result) const {
         case SparqlFilter::GE:
           getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                              [&l, &r](const RT& e) { return e[l] >= r; }, res);
+          break;
+        case SparqlFilter::LANG_MATCHES:
+          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                             [this, &l](const RT& e) {
+                               return ad_utility::endsWith(
+                                   getIndex().idToString(e[l]),
+                                   this->_rhsString);
+                             },
+                             res);
           break;
       }
       break;
@@ -414,6 +465,15 @@ void Filter::computeResultFixedValue(ResultTable* result) const {
           getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                              [&l, &r](const RT& e) { return e[l] >= r; }, res);
           break;
+        case SparqlFilter::LANG_MATCHES:
+          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                             [this, &l](const RT& e) {
+                               return ad_utility::endsWith(
+                                   getIndex().idToString(e[l]),
+                                   this->_rhsString);
+                             },
+                             res);
+          break;
       }
       break;
     }
@@ -446,6 +506,15 @@ void Filter::computeResultFixedValue(ResultTable* result) const {
           getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                              [&l, &r](const RT& e) { return e[l] >= r; }, res);
           break;
+        case SparqlFilter::LANG_MATCHES:
+          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                             [this, &l](const RT& e) {
+                               return ad_utility::endsWith(
+                                   getIndex().idToString(e[l]),
+                                   this->_rhsString);
+                             },
+                             res);
+          break;
       }
       break;
     }
@@ -477,6 +546,15 @@ void Filter::computeResultFixedValue(ResultTable* result) const {
         case SparqlFilter::GE:
           getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                              [&l, &r](const RT& e) { return e[l] >= r; }, res);
+          break;
+        case SparqlFilter::LANG_MATCHES:
+          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                             [this, &l](const RT& e) {
+                               return ad_utility::endsWith(
+                                   getIndex().idToString(e[l]),
+                                   this->_rhsString);
+                             },
+                             res);
           break;
       }
       break;
@@ -512,6 +590,15 @@ void Filter::computeResultFixedValue(ResultTable* result) const {
         case SparqlFilter::GE:
           getEngine().filter(subRes->_varSizeData,
                              [&l, &r](const RT& e) { return e[l] >= r; },
+                             &result->_varSizeData);
+          break;
+        case SparqlFilter::LANG_MATCHES:
+          getEngine().filter(subRes->_varSizeData,
+                             [this, &l](const RT& e) {
+                               return ad_utility::endsWith(
+                                   getIndex().idToString(e[l]),
+                                   this->_rhsString);
+                             },
                              &result->_varSizeData);
           break;
       }

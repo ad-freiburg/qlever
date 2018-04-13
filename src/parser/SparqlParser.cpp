@@ -227,8 +227,21 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
       }
     } else if (inner[k] == 'F' || inner[k] == 'f') {
       if (inner.substr(k, 6) == "FILTER" || inner.substr(k, 6) == "filter") {
-        size_t end = inner.find(')', k);
-        if (end == string::npos) {
+        // find the final closing bracket
+        size_t end = k;
+        size_t bracketDepth = 0;
+        while (end < inner.size()) {
+          if (inner[end] == '(') {
+            bracketDepth++;
+          } else if (inner[end] == ')') {
+            bracketDepth--;
+            if (bracketDepth == 0) {
+              break;
+            }
+          }
+          end++;
+        }
+        if (end == string::npos || end == inner.size()) {
           AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                    "Filter without closing parenthesis.");
         }
@@ -410,7 +423,7 @@ void SparqlParser::addFilter(const string& str,
                              ParsedQuery::GraphPattern* pattern) {
   size_t i = str.find('(');
   AD_CHECK(i != string::npos);
-  size_t j = str.find(')', i + 1);
+  size_t j = str.rfind(')');
   AD_CHECK(j != string::npos);
 
   // Handle filters with prefix predicates (langMatches, prefix, regex, etc)
@@ -421,11 +434,24 @@ void SparqlParser::addFilter(const string& str,
       auto pred = str.substr(s, i - s);
       auto parts = ad_utility::split(str.substr(i + 1, j - i - 1), ',');
       AD_CHECK(parts.size() == 2);
-      auto lhs = ad_utility::strip(parts[0], ' ');
-      auto rhs = ad_utility::strip(parts[1], ' ');
+      std::string lhs = ad_utility::strip(parts[0], ' ');
+      std::string rhs = ad_utility::strip(parts[1], ' ');
       if (pred == "langMatches") {
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                 "No filters with langMatches supported, yet.")
+        if (!ad_utility::startsWith(lhs, "lang(")) {
+          AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                   "langMatches filters"
+                   "are only supported"
+                   "when used with the "
+                   "lang function.");
+        }
+        std::string lvar = lhs.substr(5, lhs.size() - 6);
+        std::cout << "lvar:" << lvar << std::endl;
+        SparqlFilter f;
+        f._type = SparqlFilter::LANG_MATCHES;
+        f._lhs = lvar;
+        f._rhs = rhs.substr(1, rhs.size() - 2);
+        pattern->_filters.emplace_back(f);
+        return;
       }
       if (pred == "regex") {
         AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,

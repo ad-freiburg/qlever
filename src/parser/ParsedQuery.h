@@ -59,7 +59,15 @@ class OrderKey {
 
 class SparqlFilter {
  public:
-  enum FilterType { EQ = 0, NE = 1, LT = 2, LE = 3, GT = 5, GE = 6 };
+  enum FilterType {
+    EQ = 0,
+    NE = 1,
+    LT = 2,
+    LE = 3,
+    GT = 5,
+    GE = 6,
+    LANG_MATCHES = 7
+  };
 
   string asString() const;
 
