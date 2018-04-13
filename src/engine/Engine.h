@@ -721,7 +721,6 @@ public:
       }
 
       if ((*hasPattern)[posPattern][0] == subject) {
-        // TODO(florian) Should we count patterns first, then multiply?
         // The subject matches a pattern
         patternCounts[(*hasPattern)[posPattern][1]]++;
         posPattern++;
