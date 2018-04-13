@@ -239,6 +239,7 @@ public:
   void setTextName(const string& name);
 
   void setUsePatterns(bool usePatterns);
+  void setHoldPatternsInMemory(bool holdPatternsInMemory);
 
   const string& getTextName() const { return _textMeta.getName(); }
 
@@ -300,9 +301,12 @@ private:
   mutable ad_utility::File _textIndexFile;
   mutable ad_utility::File _patternsFile;
   bool _usePatterns;
+  bool _holdPatternsInMemory;
   size_t _maxNumPatterns;
   IndexMetaData _patternsMeta;
   std::vector<Pattern> _patterns;
+  WidthTwoList _hasRelation;
+  WidthTwoList _hasPattern;
 
   size_t
   passTsvFileForVocabulary(const string& tsvFile, bool onDiskLiterals = false);

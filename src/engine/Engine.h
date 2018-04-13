@@ -15,6 +15,7 @@
 #include "../util/Exception.h"
 #include "../global/Constants.h"
 #include "../global/Pattern.h"
+#include "../util/HashMap.h"
 
 using std::vector;
 using std::array;
@@ -670,14 +671,14 @@ public:
   }
 
 
-  template<typename A>
-  static void computePatternTrick(const vector<A>* input, vector<array<Id, 2>>* result,
+  template<typename A, int patternsLarge, int relationsLarge>
+  static void computePatternTrickImpl(const vector<A>* input, vector<array<Id, 2>>* result,
                                   const vector<array<Id, 2>>* hasPattern,
                                   const vector<array<Id, 2>>* hasRelation,
                                   const vector<Pattern>& patterns,
                                   size_t subjectColumn) {
-    std::unordered_map<Id, size_t> predicateCounts;
-    std::unordered_map<size_t, size_t> patternCounts;
+    ad_utility::HashMap<Id, size_t> predicateCounts;
+    ad_utility::HashMap<size_t, size_t> patternCounts;
     size_t posRelation = 0;
     size_t posInput = 0;
     size_t posPattern = 0;
@@ -686,11 +687,37 @@ public:
       subject = (*input)[posInput][subjectColumn];
       // Find the next candidates for entries in has-relation and has-pattern
       // for the subject id.
-      while ((*hasPattern)[posPattern][0] < subject) {
-        posPattern++;
+      if (patternsLarge) {
+        if ((*hasPattern)[posPattern][0] < subject) {
+          array<Id, 2> val;
+          val[0] = subject;
+          posPattern = std::lower_bound(hasPattern->begin() + posPattern,
+                                        hasPattern->end(), val,
+                                        [](const array<Id, 2>& l,
+                                        const array<Id, 2>& r) -> bool {
+                                          return l[0] < r[0];
+                                        }) - hasPattern->begin();
+        }
+      } else {
+        while ((*hasPattern)[posPattern][0] < subject) {
+          posPattern++;
+        }
       }
-      while ((*hasRelation)[posRelation][0] < subject) {
-        posRelation++;
+      if (relationsLarge) {
+        if ((*hasRelation)[posRelation][0] < subject) {
+          array<Id, 2> val;
+          val[0] = subject;
+          posRelation = std::lower_bound(hasRelation->begin() + posRelation,
+                                         hasRelation->end(), val,
+                                         [](const array<Id, 2>& l,
+                                         const array<Id, 2>& r) -> bool {
+                                           return l[0] < r[0];
+                                         }) - hasRelation->begin();
+        }
+      } else {
+        while ((*hasRelation)[posRelation][0] < subject) {
+          posRelation++;
+        }
       }
 
       if ((*hasPattern)[posPattern][0] == subject) {
@@ -703,7 +730,7 @@ public:
         while ((*hasRelation)[posRelation][0] == subject) {
           auto it = predicateCounts.find(hasRelation->at(posRelation)[1]);
           if (it == predicateCounts.end()) {
-            predicateCounts.insert(std::make_pair((*hasRelation)[posRelation][1], 1));
+            predicateCounts[(*hasRelation)[posRelation][1]] =  1;
           } else {
             it->second++;
           }
@@ -725,6 +752,41 @@ public:
       result->push_back(array<Id, 2>{it.first, it.second});
     }
   }
+
+  template<typename A>
+  static void computePatternTrick(const vector<A>* input, vector<array<Id, 2>>* result,
+                                  const vector<array<Id, 2>>* hasPattern,
+                                  const vector<array<Id, 2>>* hasRelation,
+                                  const vector<Pattern>& patterns,
+                                  size_t subjectColumn) {
+    if (hasPattern->size() / result->size() > GALLOP_THRESHOLD
+        && hasRelation->size() / result->size() > GALLOP_THRESHOLD) {
+      LOG(DEBUG) << "Using galloping search for both relations during the"
+                    "pattern trick join." << std::endl;
+      computePatternTrickImpl<A, true, true>(input, result, hasPattern,
+                                             hasRelation, patterns,
+                                             subjectColumn);
+    } else if (hasPattern->size() / result->size() > GALLOP_THRESHOLD) {
+      LOG(DEBUG)<< "Using galloping search for has-pattern during the"
+                   "pattern trick join." << std::endl;
+      computePatternTrickImpl<A, true, false>(input, result, hasPattern,
+                                              hasRelation, patterns,
+                                              subjectColumn);
+    } else if (hasRelation->size() / result->size() > GALLOP_THRESHOLD) {
+      LOG(DEBUG) << "Using galloping search for has-relation during the"
+                    "pattern trick join." << std::endl;
+      computePatternTrickImpl<A, false, true>(input, result, hasPattern,
+                                              hasRelation, patterns,
+                                              subjectColumn);
+    } else {
+      LOG(DEBUG) << "Using zipper join for both relations during the pattern"
+                    "trick join." << std::endl;
+      computePatternTrickImpl<A, false, false>(input, result, hasPattern,
+                                               hasRelation, patterns,
+                                               subjectColumn);
+    }
+  }
+
 
 private:
   template<typename E, size_t N, size_t I>

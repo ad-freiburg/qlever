@@ -17,6 +17,7 @@ using std::array;
 // _____________________________________________________________________________
 Index::Index() :
   _usePatterns(false),
+  _holdPatternsInMemory(false),
   _maxNumPatterns(6000000) { }
 
 // _____________________________________________________________________________
@@ -818,6 +819,21 @@ Index::createFromOnDiskIndex(const string& onDiskBase, bool allPermutations,
       pos += p.fromBuffer(buf + pos);
       _patterns.push_back(p);
     }
+    if (_holdPatternsInMemory) {
+      const FullRelationMetaData& rmdR = _patternsMeta.getRmd(0)._rmdPairs;
+      _hasPattern.reserve(rmdR.getNofElements() + 2);
+      _hasPattern.resize(rmdR.getNofElements());
+      _patternsFile.read(_hasPattern.data(),
+                         rmdR.getNofElements() * 2 * sizeof(Id),
+                         rmdR._startFullIndex);
+
+      const FullRelationMetaData& rmdP = _patternsMeta.getRmd(1)._rmdPairs;
+      _hasRelation.reserve(rmdP.getNofElements() + 2);
+      _hasRelation.resize(rmdP.getNofElements());
+      _patternsFile.read(_hasRelation.data(),
+                         rmdP.getNofElements() * 2 * sizeof(Id),
+                         rmdP._startFullIndex);
+    }
   }
 }
 
@@ -1137,7 +1153,12 @@ void Index::scanOPS(Id object, Index::WidthTwoList* result) const {
 
 // _____________________________________________________________________________
 void Index::scanHasPattern(WidthTwoList* result) const {
-  if (_patternsMeta.relationExists(0)) {
+  if (_holdPatternsInMemory) {
+    result->reserve(_hasPattern.size() + 2);
+    result->resize(_hasPattern.size());
+    std::memcpy(result->data(), _hasPattern.data(),
+                _hasPattern.size() * 2 * sizeof(Id));
+  } else if (_patternsMeta.relationExists(0)) {
     const FullRelationMetaData& rmd = _patternsMeta.getRmd(0)._rmdPairs;
     result->reserve(rmd.getNofElements() + 2);
     result->resize(rmd.getNofElements());
@@ -1148,7 +1169,12 @@ void Index::scanHasPattern(WidthTwoList* result) const {
 
 // _____________________________________________________________________________
 void Index::scanHasRelation(WidthTwoList *result) const {
-  if (_patternsMeta.relationExists(1)) {
+  if (_holdPatternsInMemory) {
+    result->reserve(_hasRelation.size() + 2);
+    result->resize(_hasRelation.size());
+    std::memcpy(result->data(), _hasRelation.data(),
+                _hasRelation.size() * 2 * sizeof(Id));
+  } else if (_patternsMeta.relationExists(1)) {
     const FullRelationMetaData& rmd = _patternsMeta.getRmd(1)._rmdPairs;
     result->reserve(rmd.getNofElements() + 2);
     result->resize(rmd.getNofElements());
@@ -1506,4 +1532,9 @@ void Index::setKbName(const string& name) {
 // _____________________________________________________________________________
 void Index::setUsePatterns(bool usePatterns) {
   _usePatterns = usePatterns;
+}
+
+// _____________________________________________________________________________
+void Index::setHoldPatternsInMemory(bool holdPatternsInMemory) {
+  _holdPatternsInMemory = holdPatternsInMemory;
 }

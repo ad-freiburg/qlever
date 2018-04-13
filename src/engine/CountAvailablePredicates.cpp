@@ -5,8 +5,6 @@
 
 #include "CountAvailablePredicates.h"
 
-
-
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext *qec,
                                                    std::shared_ptr<QueryExecutionTree> subtree,
@@ -114,47 +112,47 @@ void CountAvailablePredicates::computeResult(ResultTable* result) const {
 
   if (result->_nofColumns > 5) {
     Engine::computePatternTrick<vector<Id>>(&subresult._varSizeData,
-                                            static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-                                            static_cast<vector<array<Id, 2>>*>(hasPattern._fixedSizeData),
-                                            static_cast<vector<array<Id, 2>>*>(hasRelation._fixedSizeData),
-                                            patterns,
-                                            _subjectColumnIndex);
+                                    static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
+                                    static_cast<vector<array<Id, 2>>*>(hasPattern._fixedSizeData),
+                                    static_cast<vector<array<Id, 2>>*>(hasRelation._fixedSizeData),
+                                    patterns,
+                                    _subjectColumnIndex);
   } else {
     if (subresult._nofColumns == 1) {
       Engine::computePatternTrick<array<Id, 1>>(static_cast<vector<array<Id, 1>>*>(subresult._fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(hasPattern._fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(hasRelation._fixedSizeData),
-                                                patterns,
-                                                _subjectColumnIndex);
+                                        static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
+                                        static_cast<vector<array<Id, 2>>*>(hasPattern._fixedSizeData),
+                                        static_cast<vector<array<Id, 2>>*>(hasRelation._fixedSizeData),
+                                        patterns,
+                                        _subjectColumnIndex);
     } else if (subresult._nofColumns == 2) {
       Engine::computePatternTrick<array<Id, 2>>(static_cast<vector<array<Id, 2>>*>(subresult._fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(hasPattern._fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(hasRelation._fixedSizeData),
-                                                patterns,
-                                                _subjectColumnIndex);
+                                        static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
+                                        static_cast<vector<array<Id, 2>>*>(hasPattern._fixedSizeData),
+                                        static_cast<vector<array<Id, 2>>*>(hasRelation._fixedSizeData),
+                                        patterns,
+                                        _subjectColumnIndex);
     } else if (subresult._nofColumns == 3) {
       Engine::computePatternTrick<array<Id, 3>>(static_cast<vector<array<Id, 3>>*>(subresult._fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(hasPattern._fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(hasRelation._fixedSizeData),
-                                                patterns,
-                                                _subjectColumnIndex);
+                                        static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
+                                        static_cast<vector<array<Id, 2>>*>(hasPattern._fixedSizeData),
+                                        static_cast<vector<array<Id, 2>>*>(hasRelation._fixedSizeData),
+                                        patterns,
+                                        _subjectColumnIndex);
     } else if (subresult._nofColumns == 4) {
       Engine::computePatternTrick<array<Id, 4>>(static_cast<vector<array<Id, 4>>*>(subresult._fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(hasPattern._fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(hasRelation._fixedSizeData),
-                                                patterns,
-                                                _subjectColumnIndex);
+                                        static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
+                                        static_cast<vector<array<Id, 2>>*>(hasPattern._fixedSizeData),
+                                        static_cast<vector<array<Id, 2>>*>(hasRelation._fixedSizeData),
+                                        patterns,
+                                        _subjectColumnIndex);
     } else if (subresult._nofColumns == 5) {
       Engine::computePatternTrick<array<Id, 5>>(static_cast<vector<array<Id, 5>>*>(subresult._fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(hasPattern._fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(hasRelation._fixedSizeData),
-                                                patterns,
-                                                _subjectColumnIndex);
+                                        static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
+                                        static_cast<vector<array<Id, 2>>*>(hasPattern._fixedSizeData),
+                                        static_cast<vector<array<Id, 2>>*>(hasRelation._fixedSizeData),
+                                        patterns,
+                                        _subjectColumnIndex);
     }
   }
 }
