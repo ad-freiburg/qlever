@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 2.8.4)
-project(SparqlEngineDraft)
+project(QLever C CXX)
 
 # Check compiler versions:
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
