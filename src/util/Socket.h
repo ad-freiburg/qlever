@@ -148,12 +148,17 @@ public:
     return nb;
   }
 
+  /*
+   * TODO(schnelle) this legacy code (even after cleanup) needs to go, we
+   * really really should use a proper HTTP library. This only works because
+   * browsers are used to dealing with weird servers.
+   * */
   void getHTTPRequest(string& req, string& headers) const {
-    std::ostringstream os;
     req.clear();
     headers.clear();
+    string data;
     for (;;) {
-      auto rv = recv(_fd, _buf, RECIEVE_BUFFER_SIZE - 1, MSG_DONTWAIT);
+      auto rv = recv(_fd, _buf, RECIEVE_BUFFER_SIZE, 0 /*blocking*/);
       if (rv == 0) { break; }
       if (rv == -1) {
         if (errno != EAGAIN && errno != EWOULDBLOCK) {
@@ -162,24 +167,29 @@ public:
         }
         continue;
       } else {
-        // Append
-        _buf[rv] = '\0';
-        os << _buf;
+        // Gather data
+        data.append(_buf, rv);
+        LOG(DEBUG) << rv << " bytes received" << std::endl;
         if (req.size() == 0) {
-          auto posCRLF = os.str().find("\r\n");
+          // We haven't received the GET|POST|PUT /path HTTP/1.1 line yet
+          auto posCRLF = data.find("\r\n");
           if (posCRLF != string::npos) {
-            req = os.str().substr(0, posCRLF);
-            os.str(os.str().substr(posCRLF));
+            // so there it is
+            req = data.substr(0, posCRLF);
+            LOG(DEBUG) << "Request Line: '" << req << "'" << std::endl;
+            data.erase(0, posCRLF);
           }
-        }
+        } 
         if (req.size() > 0) {
           if (req.find("HTTP") == string::npos) {
-            LOG(WARN) << "Discarding invalid request: " << req << std::endl;
             return;
           }
-          auto posDoubleCRLF = os.str().find("\r\n\r\n");
+          // we already have the "request line" so what follows are headers
+          auto posDoubleCRLF = data.find("\r\n\r\n");
           if (posDoubleCRLF != string::npos) {
-            headers == os.str();
+            headers = data;
+            data.clear();
+            LOG(DEBUG) << "Headers: "<< std::endl << "'" << req << "'" << std::endl;
             break;
           }
         }
@@ -187,20 +197,6 @@ public:
     }
   }
 
-  // Copied from online sources. Might be useful in the future.
-//    void setNonBlocking(const bool val)
-//    {
-//      int opts = fcntl(_fd, F_GETFL);
-//      if (opts < 0)
-//      {
-//        return;
-//      }
-//
-//      if (val) opts = (opts | O_NONBLOCK);
-//      else opts = (opts & ~O_NONBLOCK);
-//
-//      fcntl(_fd, F_SETFL, opts);
-//    }
 
 private:
   int _fd;
