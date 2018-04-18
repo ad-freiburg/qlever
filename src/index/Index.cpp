@@ -17,8 +17,7 @@ using std::array;
 // _____________________________________________________________________________
 Index::Index() :
   _usePatterns(false),
-  _holdPatternsInMemory(false),
-  _maxNumPatterns(6000000) { }
+  _maxNumPatterns(std::numeric_limits<PatternID>::max() - 2) { }
 
 // _____________________________________________________________________________
 void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
@@ -56,7 +55,8 @@ void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
     createPermutation(indexFilename + ".spo", v, _spoMeta, 0, 1, 2);
     if (_usePatterns) {
       LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
-      createPatterns(indexFilename + ".patterns", v, _patternsMeta, _patterns, _maxNumPatterns);
+      createPatterns(indexFilename + ".patterns", v, _hasRelation, _hasPattern,
+                     _patterns, _maxNumPatterns);
     }
     // SOP permutation
     LOG(INFO) << "Sorting for SOP permutation..." << std::endl;
@@ -77,7 +77,8 @@ void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
     LOG(INFO) << "Sorting for pattern creation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPatterns(indexFilename + ".patterns", v, _patternsMeta, _patterns, _maxNumPatterns);
+    createPatterns(indexFilename + ".patterns", v, _hasRelation, _hasPattern,
+                   _patterns, _maxNumPatterns);
   }
   openFileHandles();
 }
@@ -117,7 +118,8 @@ void Index::createFromNTriplesFile(const string& ntFile,
     createPermutation(indexFilename + ".spo", v, _spoMeta, 0, 1, 2);
     if (_usePatterns) {
       LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
-      createPatterns(indexFilename + ".patterns", v, _patternsMeta, _patterns, _maxNumPatterns);
+      createPatterns(indexFilename + ".patterns", v, _hasRelation, _hasPattern,
+                     _patterns, _maxNumPatterns);
     }
     // SOP permutation
     LOG(INFO) << "Sorting for SOP permutation..." << std::endl;
@@ -138,7 +140,8 @@ void Index::createFromNTriplesFile(const string& ntFile,
     LOG(INFO) << "Sorting for pattern creation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPatterns(indexFilename + ".patterns", v, _patternsMeta, _patterns, _maxNumPatterns);
+    createPatterns(indexFilename + ".patterns", v, _hasRelation, _hasPattern,
+                   _patterns, _maxNumPatterns);
   }
   openFileHandles();
 }
@@ -320,33 +323,22 @@ void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
 // _____________________________________________________________________________
 void Index::createPatterns(const string& fileName,
                            const ExtVec& vec,
-                           IndexMetaData &meta,
-                           std::vector<Pattern> &patterns,
+                           CompactStringVector<Id, Id> &hasRelation,
+                           std::vector<PatternID> &hasPattern,
+                           CompactStringVector<size_t, Id> &patterns,
                            size_t maxNumPatterns) {
   if (vec.size() == 0) {
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
     return;
   }
-
-  /*struct ComparePatternsGreater {
-    bool operator () (const Pattern& a, const Pattern& b) const {
-      return a[0] > b[0];
-    }
-    static Pattern max_value() {
-      return Pattern {std::numeric_limits<Id>::max()};
-    }
-  };*/
-
-  // typedef stxxl::map<Pattern, size_t, ComparePatternsGreater, 4096, 4096> PatternsCountMap;
-  typedef std::unordered_map<Pattern, size_t, std::hash<Pattern>> PatternsCountMap;
-
+  IndexMetaData meta;
+  typedef std::unordered_map<Pattern, size_t> PatternsCountMap;
 
   LOG(INFO) << "Creating patterns file..." << std::endl;
   PatternsCountMap patternCounts;//(4096 * 16, 4096 * 16);
 
   // determine the most common patterns
   Pattern pattern;
-  pattern._length = 0;
 
   size_t patternIndex = 0;
   Id currentRel;
@@ -363,7 +355,6 @@ void Index::createPatterns(const string& fileName,
       predicateCounts[patternIndex]++;
       if (isValidPattern) {
         numValidPatterns++;
-        pattern.setSize(patternIndex);
         auto it = patternCounts.find(pattern);
         if (it == patternCounts.end()) {
           patternCounts.insert(std::pair<Pattern, size_t>(pattern, size_t(1)));
@@ -374,24 +365,17 @@ void Index::createPatterns(const string& fileName,
         numInvalidPatterns++;
       }
       isValidPattern = true;
-      pattern.setSize(0);
+      pattern.clear();
       patternIndex = 0;
     }
-    if (patternIndex < Pattern::MAX_NUM_RELATIONS) {
-      // don't list predicates twice
-      if (patternIndex == 0 || pattern[patternIndex - 1] != ((*reader)[1])) {
-        pattern[patternIndex] = ((*reader)[1]);
-        patternIndex++;
-      }
-    } else {
-      isValidPattern = false;
-      // used to generate proper counts of the pattern sizes
+    // don't list predicates twice
+    if (patternIndex == 0 || pattern[patternIndex - 1] != ((*reader)[1])) {
+      pattern.push_back((*reader)[1]);
       patternIndex++;
     }
   }
   // process the last entry
   if (isValidPattern) {
-    pattern.setSize(patternIndex);
     auto it = patternCounts.find(pattern);
     if (it == patternCounts.end()) {
       patternCounts.insert(std::pair<Pattern, size_t>(pattern, size_t(1)));
@@ -464,10 +448,12 @@ void Index::createPatterns(const string& fileName,
   LOG(DEBUG) << "Number of sorted patterns: " << sortedPatterns.size() << std::endl;
 
   // store the actual patterns
-  patterns.reserve(sortedPatterns.size());
-  for (auto it : sortedPatterns) {
-    patterns.push_back(it.first);
+  std::vector<std::vector<Id>> buffer;
+  buffer.reserve(sortedPatterns.size());
+  for (const auto &p : sortedPatterns) {
+    buffer.push_back(p.first._data);
   }
+  patterns.build(buffer);
 
   std::unordered_map<Pattern, Id> patternSet;
   patternSet.reserve(sortedPatterns.size());
@@ -486,7 +472,7 @@ void Index::createPatterns(const string& fileName,
   size_t numEntitiesWithPatterns = 0;
   size_t numEntitiesWithoutPatterns = 0;
   size_t numInvalidEntities = 0;
-  pattern.setSize(0);
+  pattern.clear();
   currentRel = vec[0][0];
   patternIndex = 0;
   // Create the has-relation and has-pattern predicates
@@ -494,7 +480,6 @@ void Index::createPatterns(const string& fileName,
     if ((*reader2)[0] != currentRel) {
       std::unordered_map<Pattern, Id>::iterator it;
       if (isValidPattern) {
-        pattern.setSize(patternIndex);
         it = patternSet.find(pattern);
       } else {
         it = patternSet.end();
@@ -511,25 +496,20 @@ void Index::createPatterns(const string& fileName,
         // The pattern does exist, add an entry to the has-pattern predicate
         entityHasPattern.push_back(std::array<Id, 2> {currentRel, it->second});
       }
-      pattern.setSize(0);
+      pattern.clear();
       currentRel = (*reader2)[0];
       patternIndex = 0;
       isValidPattern = true;
     }
-    if (patternIndex < Pattern::MAX_NUM_RELATIONS) {
-      // don't list predicates twice
-      if (patternIndex == 0 || pattern[patternIndex - 1] != ((*reader2)[1])) {
-        pattern[patternIndex] = ((*reader2)[1]);
-        patternIndex++;
-      }
-    } else {
-      isValidPattern = false;
+    // don't list predicates twice
+    if (patternIndex == 0 || pattern[patternIndex - 1] != ((*reader2)[1])) {
+      pattern.push_back((*reader2)[1]);
+      patternIndex++;
     }
   }
   // process the last element
   std::unordered_map<Pattern, Id>::iterator it;
   if (isValidPattern) {
-    pattern.setSize(patternIndex);
     it = patternSet.find(pattern);
   } else {
     it = patternSet.end();
@@ -574,18 +554,7 @@ void Index::createPatterns(const string& fileName,
   meta.add(md2.first, md2.second);
   afterRelations = meta.getOffsetAfter();
 
-  file.write(&actualNumPatterns, sizeof(size_t));
-
-  size_t patternsPartSize = sizeof(size_t);
-  // Write the patterns into the file. The format used is: 16 bits for the
-  // pattern length, then the pattern as a series of Ids.
-  uint16_t patternLength;
-  for (size_t patternId = 0; patternId < sortedPatterns.size(); patternId++) {
-    patternLength = sortedPatterns[patternId].first.size();
-    file.write(&patternLength, sizeof(uint16_t));
-    file.write(sortedPatterns[patternId].first._data, sizeof(Id) * patternLength);
-    patternsPartSize += sizeof(uint16_t) + sizeof(Id) * patternLength;
-  }
+  size_t patternsPartSize = patterns.write(file);
   afterPatterns = afterRelations + patternsPartSize;
 
   // write the meta data into the file
@@ -595,6 +564,40 @@ void Index::createPatterns(const string& fileName,
   file.write(&afterRelations, sizeof(off_t));
   file.write(&afterPatterns, sizeof(off_t));
   file.close();
+
+  hasPattern.resize(entityHasPattern.back()[0] + 1);
+  // hasRelation.resize(entityHasRelation.back()[0] + 1);
+
+  // create the has-relation and has-pattern lookup vectors
+  size_t pos = 0;
+  for (size_t i = 0; i < entityHasPattern.size(); i++) {
+    while (entityHasPattern[i][0] > pos) {
+      hasPattern[pos] = NO_PATTERN;
+      pos++;
+    }
+    hasPattern[pos] = entityHasPattern[i][1];
+    pos++;
+  }
+
+  pos = 0;
+  vector<vector<Id>> hasRelationTmp;
+  if (!(entityHasRelation.size() == 1 && entityHasRelation[0][0] == ID_NO_VALUE)) {
+    for (size_t i = 0; i < entityHasRelation.size(); i++) {
+      Id current = entityHasRelation[i][0];
+      while (current > pos) {
+        hasRelationTmp.emplace_back();
+        pos++;
+      }
+      hasRelationTmp.emplace_back();
+      while (i < entityHasRelation.size() && entityHasRelation[i][0] == current) {
+        hasRelationTmp.back().push_back(entityHasRelation[i][1]);
+        i++;
+      }
+      pos++;
+    }
+  }
+  hasRelation.build(hasRelationTmp);
+
   LOG(INFO) << "Done creating patterns file." << std::endl;
 }
 
@@ -794,6 +797,9 @@ Index::createFromOnDiskIndex(const string& onDiskBase, bool allPermutations,
               << std::endl;
   }
   if (_usePatterns) {
+    IndexMetaData _patternsMeta;
+    ad_utility::File _patternsFile;
+
     // patterns
     _patternsFile.open(string(_onDiskBase + ".index.patterns").c_str(), "r");
     AD_CHECK(_patternsFile.isOpen());
@@ -804,36 +810,71 @@ Index::createFromOnDiskIndex(const string& onDiskBase, bool allPermutations,
     _patternsFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
     _patternsMeta.createFromByteBuffer(buf);
     delete[] buf;
-    off_t patternsFrom;
     // read the offset of the patterns beginnig
+    off_t patternsFrom;
     _patternsFile.read(&patternsFrom, sizeof(off_t), metaTo);
-    buf = new unsigned char [metaFrom - patternsFrom];
-    _patternsFile.read(buf, static_cast<size_t>(metaFrom - patternsFrom), patternsFrom);
-    // parse the patterns
-    size_t numPatterns;
-    memcpy(&numPatterns, buf, sizeof(size_t));
-    size_t pos = sizeof(size_t);
-    size_t bufflen = static_cast<size_t>(metaFrom - patternsFrom);
-    Pattern p;
-    while (pos < bufflen) {
-      pos += p.fromBuffer(buf + pos);
-      _patterns.push_back(p);
-    }
-    if (_holdPatternsInMemory) {
-      const FullRelationMetaData& rmdR = _patternsMeta.getRmd(0)._rmdPairs;
-      _hasPattern.reserve(rmdR.getNofElements() + 2);
-      _hasPattern.resize(rmdR.getNofElements());
-      _patternsFile.read(_hasPattern.data(),
-                         rmdR.getNofElements() * 2 * sizeof(Id),
-                         rmdR._startFullIndex);
+    _patterns.load(_patternsFile, patternsFrom);
+    // load the has pattern and has relation relations
+    const FullRelationMetaData& rmdP = _patternsMeta.getRmd(0)._rmdPairs;
+    const FullRelationMetaData& rmdR = _patternsMeta.getRmd(1)._rmdPairs;
+    WidthTwoList buffer;
 
-      const FullRelationMetaData& rmdP = _patternsMeta.getRmd(1)._rmdPairs;
-      _hasRelation.reserve(rmdP.getNofElements() + 2);
-      _hasRelation.resize(rmdP.getNofElements());
-      _patternsFile.read(_hasRelation.data(),
-                         rmdP.getNofElements() * 2 * sizeof(Id),
-                         rmdP._startFullIndex);
+    size_t numElems = std::max(rmdR.getNofElements(), rmdP.getNofElements());
+    buffer.resize(numElems);
+    // determine the highest entity id
+    size_t maxIdRel = 0, maxIdPat = 0;
+    if (rmdR.getNofElements() > 0) {
+      _patternsFile.read(&maxIdRel,
+                         sizeof(Id),
+                         rmdR._startFullIndex
+                         + ((rmdR.getNofElements() - 1) * 2 * sizeof(Id)));
     }
+    if (rmdP.getNofElements() > 0) {
+      _patternsFile.read(&maxIdPat,
+                         sizeof(Id),
+                         rmdP._startFullIndex
+                         + ((rmdP.getNofElements() - 1) * 2 * sizeof(Id)));
+    }
+
+
+    _patternsFile.read(buffer.data(),
+                       rmdP.getNofElements() * 2 * sizeof(Id),
+                       rmdP._startFullIndex);
+    _hasPattern.resize(maxIdPat + 1);
+    size_t pos = 0;
+    for (size_t i = 0; i < rmdP.getNofElements(); i++) {
+      while (buffer[i][0] > pos) {
+        _hasPattern[pos] = NO_PATTERN;
+        pos++;
+      }
+      _hasPattern[pos] = buffer[i][1];
+      pos++;
+    }
+
+
+    _patternsFile.read(buffer.data(),
+                       rmdR.getNofElements() * 2 * sizeof(Id),
+                       rmdR._startFullIndex);
+
+    pos = 0;
+    vector<vector<Id>> hasRelationTmp;
+
+    if (!(rmdR.getNofElements() == 1 && buffer[0][0] == ID_NO_VALUE)) {
+      for (size_t i = 0; i < rmdR.getNofElements(); i++) {
+        Id current = buffer[i][0];
+        while (current > pos) {
+          hasRelationTmp.emplace_back();
+          pos++;
+        }
+        hasRelationTmp.emplace_back();
+        while (i < rmdR.getNofElements() && buffer[i][0] == current) {
+          hasRelationTmp.back().push_back(buffer[i][1]);
+          i++;
+        }
+        pos++;
+      }
+    }
+    _hasRelation.build(hasRelationTmp);
   }
 }
 
@@ -858,9 +899,6 @@ void Index::openFileHandles() {
   }
   if (ad_utility::File::exists(_onDiskBase + ".index.ops")) {
     _opsFile.open((_onDiskBase + ".index.ops").c_str(), "r");
-  }
-  if (ad_utility::File::exists(_onDiskBase + ".index.patterns")) {
-    _patternsFile.open((_onDiskBase + ".index.patterns").c_str(), "r");
   }
   AD_CHECK(_psoFile.isOpen());
   AD_CHECK(_posFile.isOpen());
@@ -1152,39 +1190,17 @@ void Index::scanOPS(Id object, Index::WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanHasPattern(WidthTwoList* result) const {
-  if (_holdPatternsInMemory) {
-    result->reserve(_hasPattern.size() + 2);
-    result->resize(_hasPattern.size());
-    std::memcpy(result->data(), _hasPattern.data(),
-                _hasPattern.size() * 2 * sizeof(Id));
-  } else if (_patternsMeta.relationExists(0)) {
-    const FullRelationMetaData& rmd = _patternsMeta.getRmd(0)._rmdPairs;
-    result->reserve(rmd.getNofElements() + 2);
-    result->resize(rmd.getNofElements());
-    _patternsFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                       rmd._startFullIndex);
-  }
+const vector<PatternID>& Index::getHasPattern() const {
+  return _hasPattern;
 }
 
 // _____________________________________________________________________________
-void Index::scanHasRelation(WidthTwoList *result) const {
-  if (_holdPatternsInMemory) {
-    result->reserve(_hasRelation.size() + 2);
-    result->resize(_hasRelation.size());
-    std::memcpy(result->data(), _hasRelation.data(),
-                _hasRelation.size() * 2 * sizeof(Id));
-  } else if (_patternsMeta.relationExists(1)) {
-    const FullRelationMetaData& rmd = _patternsMeta.getRmd(1)._rmdPairs;
-    result->reserve(rmd.getNofElements() + 2);
-    result->resize(rmd.getNofElements());
-    _patternsFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                       rmd._startFullIndex);
-  }
+const CompactStringVector<Id, Id>& Index::getHasRelation() const {
+  return _hasRelation;
 }
 
 // _____________________________________________________________________________
-const std::vector<Pattern>& Index::getPatterns() const {
+const CompactStringVector<size_t, Id>& Index::getPatterns() const {
   return _patterns;
 }
 
@@ -1526,7 +1542,6 @@ void Index::setKbName(const string& name) {
   _sopMeta.setName(name);
   _ospMeta.setName(name);
   _opsMeta.setName(name);
-  _patternsMeta.setName(name);
 }
 
 // _____________________________________________________________________________
@@ -1534,7 +1549,3 @@ void Index::setUsePatterns(bool usePatterns) {
   _usePatterns = usePatterns;
 }
 
-// _____________________________________________________________________________
-void Index::setHoldPatternsInMemory(bool holdPatternsInMemory) {
-  _holdPatternsInMemory = holdPatternsInMemory;
-}

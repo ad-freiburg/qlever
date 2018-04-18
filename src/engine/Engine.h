@@ -671,120 +671,53 @@ public:
   }
 
 
-  template<typename A, int patternsLarge, int relationsLarge>
-  static void computePatternTrickImpl(const vector<A>* input, vector<array<Id, 2>>* result,
-                                  const vector<array<Id, 2>>* hasPattern,
-                                  const vector<array<Id, 2>>* hasRelation,
-                                  const vector<Pattern>& patterns,
+  template<typename A>
+  static void computePatternTrick(const vector<A>* input, vector<array<Id, 2>>* result,
+                                  const vector<PatternID>& hasPattern,
+                                  const CompactStringVector<Id, Id>& hasRelation,
+                                  const CompactStringVector<size_t, Id>& patterns,
                                   size_t subjectColumn) {
     ad_utility::HashMap<Id, size_t> predicateCounts;
     ad_utility::HashMap<size_t, size_t> patternCounts;
-    size_t posRelation = 0;
     size_t posInput = 0;
-    size_t posPattern = 0;
     size_t subject;
     while (posInput < input->size()) {
       subject = (*input)[posInput][subjectColumn];
-      // Find the next candidates for entries in has-relation and has-pattern
-      // for the subject id.
-      if (patternsLarge) {
-        if ((*hasPattern)[posPattern][0] < subject) {
-          array<Id, 2> val;
-          val[0] = subject;
-          posPattern = std::lower_bound(hasPattern->begin() + posPattern,
-                                        hasPattern->end(), val,
-                                        [](const array<Id, 2>& l,
-                                        const array<Id, 2>& r) -> bool {
-                                          return l[0] < r[0];
-                                        }) - hasPattern->begin();
-        }
-      } else {
-        while ((*hasPattern)[posPattern][0] < subject) {
-          posPattern++;
-        }
-      }
-      if (relationsLarge) {
-        if ((*hasRelation)[posRelation][0] < subject) {
-          array<Id, 2> val;
-          val[0] = subject;
-          posRelation = std::lower_bound(hasRelation->begin() + posRelation,
-                                         hasRelation->end(), val,
-                                         [](const array<Id, 2>& l,
-                                         const array<Id, 2>& r) -> bool {
-                                           return l[0] < r[0];
-                                         }) - hasRelation->begin();
-        }
-      } else {
-        while ((*hasRelation)[posRelation][0] < subject) {
-          posRelation++;
-        }
-      }
-
-      if ((*hasPattern)[posPattern][0] == subject) {
+      if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
         // The subject matches a pattern
-        patternCounts[(*hasPattern)[posPattern][1]]++;
-        posPattern++;
-      } else if ((*hasRelation)[posRelation][0] == subject) {
+        patternCounts[hasPattern[subject]]++;
+      } else if (subject < hasRelation.size()){
         // The subject does not match a pattern
-        while ((*hasRelation)[posRelation][0] == subject) {
-          auto it = predicateCounts.find(hasRelation->at(posRelation)[1]);
-          if (it == predicateCounts.end()) {
-            predicateCounts[(*hasRelation)[posRelation][1]] =  1;
-          } else {
-            it->second++;
+
+        std::pair<Id*, size_t> relations = hasRelation[subject];
+        if (relations.second > 0) {
+          for (size_t i = 0; i < relations.second; i++) {
+            auto it = predicateCounts.find(relations.first[i]);
+            if (it == predicateCounts.end()) {
+              predicateCounts[relations.first[i]] =  1;
+            } else {
+              it->second++;
+            }
           }
-          posRelation++;
+        } else {
+           LOG(TRACE) << "No pattern or has-relation entry found for entity "
+                      << std::to_string(subject) << std::endl;
         }
       } else {
-        LOG(TRACE) << "No pattern or has-relation entry found for entity " << std::to_string(subject) << std::endl;
+        LOG(TRACE) << "Subject " << subject << " does not appear to be an entity "
+                      "(its id is to high)." << std::endl;
       }
       posInput++;
     }
     for (const auto& it : patternCounts) {
-      const Pattern& pattern = patterns[it.first];
-      for (size_t i = 0; i < pattern.size(); i++) {
-        predicateCounts[pattern[i]] += it.second;
+      std::pair<Id*, size_t> pattern = patterns[it.first];
+      for (size_t i = 0; i < pattern.second; i++) {
+        predicateCounts[pattern.first[i]] += it.second;
       }
     }
     result->reserve(predicateCounts.size());
     for (const auto& it : predicateCounts) {
       result->push_back(array<Id, 2>{it.first, it.second});
-    }
-  }
-
-  template<typename A>
-  static void computePatternTrick(const vector<A>* input, vector<array<Id, 2>>* result,
-                                  const vector<array<Id, 2>>* hasPattern,
-                                  const vector<array<Id, 2>>* hasRelation,
-                                  const vector<Pattern>& patterns,
-                                  size_t subjectColumn) {
-    if (input->size() > 0) {
-      if (hasPattern->size() / input->size() > GALLOP_THRESHOLD
-          && hasRelation->size() / input->size() > GALLOP_THRESHOLD) {
-        LOG(DEBUG) << "Using galloping search for both relations during the"
-                      "pattern trick join." << std::endl;
-        computePatternTrickImpl<A, true, true>(input, result, hasPattern,
-                                               hasRelation, patterns,
-                                               subjectColumn);
-      } else if (hasPattern->size() / input->size() > GALLOP_THRESHOLD) {
-        LOG(DEBUG)<< "Using galloping search for has-pattern during the"
-                     "pattern trick join." << std::endl;
-        computePatternTrickImpl<A, true, false>(input, result, hasPattern,
-                                                hasRelation, patterns,
-                                                subjectColumn);
-      } else if (hasRelation->size() / input->size() > GALLOP_THRESHOLD) {
-        LOG(DEBUG) << "Using galloping search for has-relation during the"
-                      "pattern trick join." << std::endl;
-        computePatternTrickImpl<A, false, true>(input, result, hasPattern,
-                                                hasRelation, patterns,
-                                                subjectColumn);
-      } else {
-        LOG(DEBUG) << "Using zipper join for both relations during the pattern"
-                      "trick join." << std::endl;
-        computePatternTrickImpl<A, false, false>(input, result, hasPattern,
-                                                 hasRelation, patterns,
-                                                 subjectColumn);
-      }
     }
   }
 

@@ -133,9 +133,9 @@ public:
   void scanOPS(Id object, WidthTwoList* result) const;
   void scanOSP(Id object, WidthTwoList* result) const;
 
-  void scanHasPattern(WidthTwoList* result) const;
-  void scanHasRelation(WidthTwoList *result) const;
-  const std::vector<Pattern>& getPatterns() const;
+  const vector<PatternID>& getHasPattern() const;
+  const CompactStringVector<Id, Id>& getHasRelation() const;
+  const CompactStringVector<size_t, Id>& getPatterns() const;
 
   // Get multiplicities with given var (SCAN for 2 cols)
   vector<float> getPSOMultiplicities(const string& key) const;
@@ -239,7 +239,6 @@ public:
   void setTextName(const string& name);
 
   void setUsePatterns(bool usePatterns);
-  void setHoldPatternsInMemory(bool holdPatternsInMemory);
 
   const string& getTextName() const { return _textMeta.getName(); }
 
@@ -299,14 +298,11 @@ private:
   mutable ad_utility::File _ospFile;
   mutable ad_utility::File _opsFile;
   mutable ad_utility::File _textIndexFile;
-  mutable ad_utility::File _patternsFile;
   bool _usePatterns;
-  bool _holdPatternsInMemory;
   size_t _maxNumPatterns;
-  IndexMetaData _patternsMeta;
-  std::vector<Pattern> _patterns;
-  WidthTwoList _hasRelation;
-  WidthTwoList _hasPattern;
+  CompactStringVector<size_t, Id> _patterns;
+  std::vector<PatternID> _hasPattern;
+  CompactStringVector<Id, Id> _hasRelation;
 
   size_t
   passTsvFileForVocabulary(const string& tsvFile, bool onDiskLiterals = false);
@@ -339,8 +335,9 @@ private:
    */
   static void createPatterns(const string& fileName,
                              const ExtVec& vec,
-                             IndexMetaData &meta,
-                             std::vector<Pattern> &patterns,
+                             CompactStringVector<Id, Id> &hasRelation,
+                             std::vector<PatternID> &hasPattern,
+                             CompactStringVector<size_t, Id> &patterns,
                              size_t maxNumPatterns);
 
   void createTextIndex(const string& filename, const TextVec& vec);

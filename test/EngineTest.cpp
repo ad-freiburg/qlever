@@ -164,14 +164,26 @@ TEST(EngineTest, optionalJoinTest) {
 TEST(EngineTest, patternTrickTest) {
   std::vector<std::array<Id, 1>> input = {{0}, {1}, {2}, {3}, {4}, {6}, {7}};
   vector<array<Id, 2>> result;
-  vector<array<Id, 2>> hasPattern = {{0, 0}, {3, 1}, {4, 0}};
-  vector<array<Id, 2>> hasRelation = {{1, 0}, {1, 3}, {2, 0}, {5, 0}, {5, 3}, {6, 3}, {6, 4}, {7, 4}, {7, 2}, {8, 3}};
-  // first entry of the pattern is its length
-  vector<Pattern> patterns = {{3, 0, 2, 3}, {5, 1, 3, 4, 2, 0}};
+  vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
+  vector<vector<Id>> hasRelationSrc = {
+    {},
+    {0, 3},
+    {0},
+    {},
+    {},
+    {0, 3},
+    {3, 4},
+    {2, 4},
+    {3}
+  };
+  vector<vector<Id>> patternsSrc = {{0, 2, 3}, {1, 3, 4, 2, 0}};
+
+  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
+  CompactStringVector<size_t, Id> patterns(patternsSrc);
 
   try {
-    Engine::computePatternTrick<std::array<Id, 1>>(&input, &result, &hasPattern,
-                                                   &hasRelation, patterns, 0);
+    Engine::computePatternTrick<std::array<Id, 1>>(&input, &result, hasPattern,
+                                                   hasRelation, patterns, 0);
   } catch (ad_semsearch::Exception e) {
     std::cout << e.getErrorMessage() << std::endl << e.getErrorDetails() << std::endl;
     ASSERT_TRUE(false);
@@ -180,22 +192,22 @@ TEST(EngineTest, patternTrickTest) {
   std::sort(result.begin(), result.end(), [](const array<Id, 2>& i1, const array<Id, 2>&i2) -> bool {
     return i1[0] < i2[0];
   });
-  ASSERT_EQ(5, result.size());
+  ASSERT_EQ(5u, result.size());
 
-  ASSERT_EQ(0, result[0][0]);
-  ASSERT_EQ(5, result[0][1]);
+  ASSERT_EQ(0u, result[0][0]);
+  ASSERT_EQ(5u, result[0][1]);
 
-  ASSERT_EQ(1, result[1][0]);
-  ASSERT_EQ(1, result[1][1]);
+  ASSERT_EQ(1u, result[1][0]);
+  ASSERT_EQ(1u, result[1][1]);
 
-  ASSERT_EQ(2, result[2][0]);
-  ASSERT_EQ(4, result[2][1]);
+  ASSERT_EQ(2u, result[2][0]);
+  ASSERT_EQ(4u, result[2][1]);
 
-  ASSERT_EQ(3, result[3][0]);
-  ASSERT_EQ(5, result[3][1]);
+  ASSERT_EQ(3u, result[3][0]);
+  ASSERT_EQ(5u, result[3][1]);
 
-  ASSERT_EQ(4, result[4][0]);
-  ASSERT_EQ(3, result[4][1]);
+  ASSERT_EQ(4u, result[4][0]);
+  ASSERT_EQ(3u, result[4][1]);
 }
 
 int main(int argc, char** argv) {

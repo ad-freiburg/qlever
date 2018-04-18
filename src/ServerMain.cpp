@@ -30,7 +30,6 @@ struct option options[] = {
   {"index",            required_argument, NULL, 'i'},
   {"worker-threads",   required_argument, NULL, 'j'},
   {"on-disk-literals", no_argument,       NULL, 'l'},
-  {"patterns-in-mem",  no_argument,       NULL, 'm'},
   {"port",             required_argument, NULL, 'p'},
   {"patterns",         no_argument,       NULL, 'P'},
   {"text",             no_argument,       NULL, 't'},
@@ -56,10 +55,6 @@ void printUsage(char *execName) {
   cout << "  " << std::setw(20) << "l, on-disk-literals" << std::setw(1)
        << "    "
        << "Indicates that the literals can be found on disk with the index."
-       << endl;
-  cout << "  " << std::setw(20) << "m, patterns-in-mem" << std::setw(1)
-       << "    "
-       << "Load the has-relation and has-pattern relation into memory."
        << endl;
   cout << "  " << std::setw(20) << "p, port" << std::setw(1) << "    "
        << "The port on which to run the web interface." << endl;
@@ -97,7 +92,6 @@ int main(int argc, char** argv) {
   int port = -1;
   int numThreads = 1;
   bool usePatterns = false;
-  bool holdPatternRelationsInMemory = false;
 
   optind = 1;
   // Process command line arguments.
@@ -133,9 +127,6 @@ int main(int argc, char** argv) {
         printUsage(argv[0]);
         exit(0);
         break;
-      case 'm':
-        holdPatternRelationsInMemory = true;
-        break;
       default:
         cout << endl
              << "! ERROR in processing options (getopt returned '" << c
@@ -164,8 +155,7 @@ int main(int argc, char** argv) {
   try {
     Server server(port, numThreads);
     server.initialize(index, text, allPermutations, onDiskLiterals,
-                      optimizeOptionals, usePatterns,
-                      holdPatternRelationsInMemory);
+                      optimizeOptionals, usePatterns);
     server.run();
   } catch(const ad_semsearch::Exception& e) {
     LOG(ERROR) << e.getFullErrorMessage() << '\n';

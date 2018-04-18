@@ -35,8 +35,7 @@ public:
                   bool allPermutations = false,
                   bool onDiskLiterals = false,
                   bool optimizeOptionals = true,
-                  bool usePatterns = false,
-                  bool holdPatternRelationsInMemory = false);
+                  bool usePatterns = false);
 
   //! Loop, wait for requests and trigger processing.
   void run();

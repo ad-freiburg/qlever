@@ -6,6 +6,7 @@
 #include <fstream>
 #include <gtest/gtest.h>
 #include "../src/index/Index.h"
+#include "../src/global/Pattern.h"
 
 
 string getStxxlDiskFileName(const string& location, const string& tail) {
@@ -356,8 +357,6 @@ public:
 };
 
 TEST_F(CreatePatternsFixture, createPatterns) {
-
-
   {
     LOG(DEBUG) << "Testing createPatterns with tsv file..." << std::endl;
     std::fstream f("_testtmppatterns.tsv", std::ios_base::out);
@@ -374,17 +373,18 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     index._maxNumPatterns = 1;
     index.createFromTsvFile("_testtmppatterns.tsv", "_testindex", false);
 
-    ASSERT_TRUE(index._patternsMeta.relationExists(0));
-    ASSERT_TRUE(index._patternsMeta.relationExists(1));
-    ASSERT_TRUE(index._patternsMeta.getRmd(0).isFunctional());
-    ASSERT_EQ(1u, index._patternsMeta.getRmd(0).getNofElements());
-    ASSERT_EQ(2u, index._patternsMeta.getRmd(1).getNofElements());
+    ASSERT_EQ(2u, index.getHasPattern().size());
+    ASSERT_EQ(1u, index.getHasRelation().size());
     ASSERT_EQ(1u, index._patterns.size());
     Pattern p;
-    p.setSize(2);
-    p[0] = 3;
-    p[1] = 6;
-    ASSERT_EQ(p, index._patterns[0]);
+    p.push_back(3);
+    p.push_back(6);
+    std::pair<Id*, size_t> ip = index._patterns[0];
+    for (size_t i = 0; i < ip.second; i++) {
+      ASSERT_EQ(p[i], ip.first[i]);
+    }
+    ASSERT_EQ(0, index.getHasPattern()[1]);
+    ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
   }
   {
     LOG(DEBUG) << "Testing createPatterns with existing index..." << std::endl;
@@ -393,17 +393,17 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     index._maxNumPatterns = 1;
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_TRUE(index._patternsMeta.relationExists(0));
-    ASSERT_TRUE(index._patternsMeta.relationExists(1));
-    ASSERT_TRUE(index._patternsMeta.getRmd(0).isFunctional());
-    ASSERT_EQ(1u, index._patternsMeta.getRmd(0).getNofElements());
-    ASSERT_EQ(2u, index._patternsMeta.getRmd(1).getNofElements());
+    ASSERT_EQ(2u, index.getHasPattern().size());
+    ASSERT_EQ(1u, index.getHasRelation().size());
     ASSERT_EQ(1u, index._patterns.size());
     Pattern p;
-    p.setSize(2);
-    p[0] = 3;
-    p[1] = 6;
-    ASSERT_EQ(p, index._patterns[0]);
+    p.push_back(3);
+    p.push_back(6);    std::pair<Id*, size_t> ip = index._patterns[0];
+    for (size_t i = 0; i < ip.second; i++) {
+      ASSERT_EQ(p[i], ip.first[i]);
+    }
+    ASSERT_EQ(0, index.getHasPattern()[1]);
+    ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
   }
 }
 

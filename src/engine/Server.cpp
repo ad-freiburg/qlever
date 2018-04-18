@@ -20,14 +20,12 @@
 void Server::initialize(const string& ontologyBaseName, bool useText,
                         bool allPermutations, bool onDiskLiterals,
                         bool optimizeOptionals,
-                        bool usePatterns,
-                        bool holdPatternRelationsInMemory) {
+                        bool usePatterns) {
   LOG(INFO) << "Initializing server..." << std::endl;
 
   _optimizeOptionals = optimizeOptionals;
 
   _index.setUsePatterns(usePatterns);
-  _index.setHoldPatternsInMemory(holdPatternRelationsInMemory);
 
   // Init the index.
   _index.createFromOnDiskIndex(ontologyBaseName, allPermutations,
