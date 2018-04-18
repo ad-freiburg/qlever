@@ -189,7 +189,7 @@ public:
           if (posDoubleCRLF != string::npos) {
             headers = data;
             data.clear();
-            LOG(DEBUG) << "Headers: "<< std::endl << "'" << req << "'" << std::endl;
+            LOG(DEBUG) << "Headers: "<< std::endl << "'" << headers << "'" << std::endl;
             break;
           }
         }
