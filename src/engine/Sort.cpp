@@ -37,6 +37,10 @@ void Sort::computeResult(ResultTable* result) const {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Sort result computation..." << endl;
   result->_nofColumns = subRes->_nofColumns;
+  result->_resultTypes.insert(
+        result->_resultTypes.end(),
+        subRes->_resultTypes.begin(),
+        subRes->_resultTypes.end());
   switch (subRes->_nofColumns) {
     case 1: {
       auto res = new vector<array<Id, 1>>();

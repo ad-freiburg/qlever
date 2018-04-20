@@ -204,14 +204,35 @@ void OptionalJoin::computeResult(ResultTable* result) const {
   AD_CHECK(result);
   AD_CHECK(!result->_fixedSizeData);
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
+  // TODO(florian) compute the result types
 
   result->_sortedBy = resultSortedOn();
   result->_nofColumns = getResultWidth();
+
 
   AD_CHECK_GE(result->_nofColumns, _joinColumns.size());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
+
+
+  // compute the result types
+  result->_resultTypes.reserve(result->_nofColumns);
+  result->_resultTypes.insert(result->_resultTypes.end(),
+                              leftResult._resultTypes.begin(),
+                              leftResult._resultTypes.end());
+  for (size_t col = 0; col < rightResult._nofColumns; col++) {
+    bool isJoinColumn = false;
+    for (const std::array<size_t, 2>& a : _joinColumns) {
+      if(a[1] == col) {
+        isJoinColumn = true;
+        break;
+      }
+    }
+    if (!isJoinColumn) {
+      result->_resultTypes.push_back(rightResult._resultTypes[col]);
+    }
+  }
 
   LOG(DEBUG) << "Computing optional join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;

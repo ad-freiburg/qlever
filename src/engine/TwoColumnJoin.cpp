@@ -78,17 +78,29 @@ void TwoColumnJoin::computeResult(ResultTable* result) const {
     bool rightFilter = (_right->getResultWidth() == 2 && _jc1Right == 0 &&
                         _jc2Right == 1);
     const auto& v = rightFilter ? _left : _right;
+    const auto leftResult = _left->getResult();
+    const auto rightResult = _right->getResult();
     const auto& filter = *static_cast<vector<array<Id, 2>>*>(
-        rightFilter ? _right->getResult()->_fixedSizeData
-                    : _left->getResult()->_fixedSizeData);
+        rightFilter ? rightResult->_fixedSizeData
+                    : leftResult->_fixedSizeData);
     size_t jc1 = rightFilter ? _jc1Left : _jc1Right;
     size_t jc2 = rightFilter ? _jc2Left : _jc2Right;
     result->_sortedBy = jc1;
     result->_nofColumns = v->getResultWidth();
+    result->_resultTypes.reserve(result->_nofColumns);
+    result->_resultTypes.insert(
+          result->_resultTypes.end(),
+          leftResult._resultTypes.begin(),
+          leftResult._resultTypes.end());
+    for (size_t col = 0; col < rightResult._nofColumns; col++) {
+      if (col != _jc1Right && col != _jc2Right) {
+        result->_resultTypes.push_back(rightResult._resultTypes[col]);
+      }
+    }
 
     AD_CHECK_GE(result->_nofColumns, 2);
 
-    const auto& toFilter = v->getResult();
+    const auto& toFilter = rightFilter ? leftResult : rightResult;
 
     if (result->_nofColumns == 2) {
       using ResType = vector<array<Id, 2>>;

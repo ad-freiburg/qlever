@@ -52,6 +52,8 @@ void TextOperationWithoutFilter::computeResult(ResultTable* result) const {
 void TextOperationWithoutFilter::computeResultNoVar(ResultTable* result) const {
   result->_nofColumns = 2;
   result->_fixedSizeData = new vector<array<Id, 2>>;
+  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
+  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
   getExecutionContext()->getIndex().getContextListForWords(
       _words,
       reinterpret_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
@@ -62,6 +64,9 @@ void TextOperationWithoutFilter::computeResultOneVar(
     ResultTable* result) const {
   result->_nofColumns = 3;
   result->_fixedSizeData = new vector<array<Id, 3>>;
+  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
+  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
+  result->_resultTypes.push_back(ResultTable::ResultType::KB);
   getExecutionContext()->getIndex().getECListForWords(
       _words,
       _textLimit,
@@ -74,6 +79,10 @@ void TextOperationWithoutFilter::computeResultMultVars(
   if (_nofVars == 2) {
     result->_fixedSizeData = new vector<array<Id, 4>>;
     result->_nofColumns = 4;
+    result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
+    result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
+    result->_resultTypes.push_back(ResultTable::ResultType::KB);
+    result->_resultTypes.push_back(ResultTable::ResultType::KB);
     getExecutionContext()->getIndex().getECListForWords(
         _words,
         _nofVars,
@@ -82,6 +91,11 @@ void TextOperationWithoutFilter::computeResultMultVars(
   } else if (_nofVars == 3) {
     result->_fixedSizeData = new vector<array<Id, 5>>;
     result->_nofColumns = 5;
+    result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
+    result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
+    result->_resultTypes.push_back(ResultTable::ResultType::KB);
+    result->_resultTypes.push_back(ResultTable::ResultType::KB);
+    result->_resultTypes.push_back(ResultTable::ResultType::KB);
     getExecutionContext()->getIndex().getECListForWords(
         _words,
         _nofVars,
@@ -89,6 +103,12 @@ void TextOperationWithoutFilter::computeResultMultVars(
         *reinterpret_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
   } else {
     result->_nofColumns = _nofVars + 2;
+    result->_resultTypes.reserve(result->_nofColumns);
+    result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
+    result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
+    for (int i = 2; i < result->_nofColumns; i++) {
+      result->_resultTypes.push_back(ResultTable::ResultType::KB);
+    }
     getExecutionContext()->getIndex().getECListForWords(
         _words,
         _nofVars,
