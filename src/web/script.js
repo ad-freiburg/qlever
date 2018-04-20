@@ -2,8 +2,8 @@
  * Created by buchholb on 3/31/15.
  */
 
-// Hannah 10-04-2018: Explicit prefix for URLs
-var urlPrefix = window.location.pathname;
+var urlFullPath = window.location.pathname
+var urlPrefix = urlFullPath.substring(0, urlFullPath.lastIndexOf('/')+1);
 console.log(urlPrefix);
 
 $(document).ready(function () {
