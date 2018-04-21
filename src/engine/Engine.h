@@ -681,8 +681,14 @@ public:
     ad_utility::HashMap<size_t, size_t> patternCounts;
     size_t posInput = 0;
     size_t subject;
+    size_t lastSubject = ID_NO_VALUE;
     while (posInput < input->size()) {
+      while ((*input)[posInput][subjectColumn] == lastSubject
+             && posInput < input->size()) {
+        posInput++;
+      }
       subject = (*input)[posInput][subjectColumn];
+      lastSubject = subject;
       if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
         // The subject matches a pattern
         patternCounts[hasPattern[subject]]++;
