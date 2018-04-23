@@ -47,6 +47,10 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
 
 // _____________________________________________________________________________
 void Server::run() {
+  if (!_initialized) {
+    LOG(ERROR) << "Cannot start an uninitialized server!" << std::endl;
+    exit(1);
+  }
   QueryExecutionContext qec(_index, _engine);
   std::vector<std::thread> threads;
   for(int i = 0; i < _numThreads; ++i) {
@@ -58,11 +62,6 @@ void Server::run() {
 }
 // _____________________________________________________________________________
 void Server::runAcceptLoop(QueryExecutionContext* qec) {
-  if (!_initialized) {
-    LOG(ERROR) << "Cannot start an uninitialized server!" << std::endl;
-    exit(1);
-  }
-
   // Loop and wait for queries. Run forever, for now.
   while (true) {
     // Wait for new query
@@ -78,6 +77,7 @@ void Server::runAcceptLoop(QueryExecutionContext* qec) {
       LOG(ERROR) << "Socket error in acceot" << std::strerror(errno) << std::endl;
       continue;
     }
+    client.setKeepAlive(true);
     LOG(INFO) << "Incoming connection, processing..." << std::endl;
     process(&client, qec);
     client.close();
