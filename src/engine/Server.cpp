@@ -6,6 +6,8 @@
 #include <vector>
 #include <sstream>
 #include <algorithm>
+#include <thread>
+#include <cstring>
 
 #include "../util/StringUtils.h"
 #include "../util/Log.h"
@@ -49,11 +51,17 @@ void Server::run() {
     LOG(ERROR) << "Cannot start an uninitialized server!" << std::endl;
     exit(1);
   }
-  // For now, only use one QueryExecutionContext at all time.
-  // This may be changed for some implementations of multi threading.
-  // Cache(s) are associated with this execution context.
   QueryExecutionContext qec(_index, _engine);
-
+  std::vector<std::thread> threads;
+  for(int i = 0; i < _numThreads; ++i) {
+    threads.emplace_back(&Server::runAcceptLoop, this, &qec);
+  }
+  for(std::thread& worker: threads) {
+    worker.join();
+  }
+}
+// _____________________________________________________________________________
+void Server::runAcceptLoop(QueryExecutionContext* qec) {
   // Loop and wait for queries. Run forever, for now.
   while (true) {
     // Wait for new query
@@ -62,17 +70,16 @@ void Server::run() {
       << std::endl;
 
     ad_utility::Socket client;
+    // Concurrent accept used to be problematic because of the Thundering Herd
+    // problem but this should be fixed on modern OSs
     bool success = _serverSocket.acceptClient(&client);
     if (!success) {
-      LOG(ERROR) << "Socket error while trying to accept client" << std::endl;
+      LOG(ERROR) << "Socket error in acceot" << std::strerror(errno) << std::endl;
       continue;
     }
-    // Setting Keep Alive on the socket helps detect vanished clients
-    // instead of blocking operations idefinitely
     client.setKeepAlive(true);
-    // TODO(buchholb): Spawn a new thread here / use a ThreadPool / etc.
     LOG(INFO) << "Incoming connection, processing..." << std::endl;
-    process(&client, &qec);
+    process(&client, qec);
     client.close();
   }
 }
@@ -306,10 +313,10 @@ string Server::composeResponseJson(const ParsedQuery& query,
 
   // TODO(schnelle) we really should use a json library
   // such as https://github.com/nlohmann/json
-  const ResultTable& rt = qet.getResult();
+  shared_ptr<const ResultTable> rt = qet.getResult();
   _requestProcessingTimer.stop();
   off_t compResultUsecs = _requestProcessingTimer.usecs();
-  size_t resultSize = rt.size();
+  size_t resultSize = rt->size();
 
 
   std::ostringstream os;
@@ -452,6 +459,7 @@ void Server::serveFile(Socket* client, const string& requestedFile) const {
     } else if (ad_utility::endsWith(requestedFile, ".js")) {
       contentType = "application/javascript";
     }
+    in.close();
   }
 
   size_t contentLength = contentString.size();

@@ -99,12 +99,12 @@ int main(int argc, char** argv) {
     }
     QueryPlanner queryPlanner(&qec);
     auto qet = queryPlanner.createExecutionTree(q);
-    auto& res = qet.getResult();
-    AD_CHECK(res.size() > 0);
-    AD_CHECK(res._nofColumns == 1);
+    const auto res = qet.getResult();
+    AD_CHECK(res->size() > 0);
+    AD_CHECK(res->_nofColumns == 1);
     string personlistFile = indexName + ".list.scientists";
     std::vector<std::array<Id, 1>>& ids =
-        *static_cast<std::vector<std::array<Id, 1>>*>(res._fixedSizeData);
+        *static_cast<std::vector<std::array<Id, 1>>*>(res->_fixedSizeData);
     std::ofstream f(personlistFile.c_str());
     for (size_t i = 0; i < ids.size(); ++i) {
       f << ids[i][0] << ' ';

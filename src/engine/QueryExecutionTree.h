@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <memory>
 #include <bits/unordered_set.h>
 #include "./QueryExecutionContext.h"
 #include "./Operation.h"
@@ -14,6 +15,7 @@
 
 
 using std::string;
+using std::shared_ptr;
 
 // A query execution tree.
 // Processed bottom up, this gives an ordering to the operations
@@ -86,7 +88,7 @@ public:
     return _rootOperation->getResultWidth();
   }
 
-  const ResultTable& getResult() const {
+  shared_ptr<const ResultTable> getResult() const {
     return _rootOperation->getResult();
   }
 

@@ -6,6 +6,7 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 #include "../util/LRUCache.h"
 #include "../util/Log.h"
 #include "./ResultTable.h"
@@ -16,6 +17,7 @@
 
 using std::string;
 using std::vector;
+using std::shared_ptr;
 
 typedef ad_utility::LRUCache<string, ResultTable> SubtreeCache;
 
@@ -26,20 +28,19 @@ public:
 
   QueryExecutionContext(const Index& index, const Engine& engine) :
       _subtreeCache(NOF_SUBTREES_TO_CACHE),
-      _index(&index), _engine(&engine), _costFactors() {
+      _index(index), _engine(engine), _costFactors() {
   }
 
-  ResultTable* getCachedResultForQueryTree(
-      const string& queryAsString) {
-    return &_subtreeCache[queryAsString];
+  SubtreeCache& getQueryTreeCache() {
+    return _subtreeCache;
   }
 
   const Engine& getEngine() const {
-    return *_engine;
+    return _engine;
   }
 
   const Index& getIndex() const {
-    return *_index;
+    return _index;
   }
 
   void clearCache() {
@@ -55,10 +56,9 @@ public:
   };
 
  private:
-
   SubtreeCache _subtreeCache;
-  const Index* _index;
-  const Engine* _engine;
+  const Index& _index;
+  const Engine& _engine;
   QueryPlanningCostFactors _costFactors;
 };
 

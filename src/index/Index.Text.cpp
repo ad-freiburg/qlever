@@ -983,11 +983,12 @@ void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
   AD_CHECK_EQ(sizeof(off_t), ret);
   current += ret;
   T* codebook = new T[nofCodebookBytes / sizeof(T)];
-  ret = _textIndexFile.read(codebook, nofCodebookBytes);
+  ret = _textIndexFile.read(codebook, nofCodebookBytes, current);
   current += ret;
   AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
   ret = _textIndexFile.read(encoded,
-                            static_cast<size_t>(nofBytes - (current - from)));
+                            static_cast<size_t>(nofBytes - (current - from)),
+                            current);
   current += ret;
   AD_CHECK_EQ(size_t(current - from), nofBytes);
   LOG(DEBUG) << "Decoding Simple8b code...\n";
@@ -1093,12 +1094,13 @@ void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
       AD_CHECK_EQ(sizeof(off_t), ret);
       current += ret;
       Id* codebookW = new Id[nofCodebookBytes / sizeof(Id)];
-      ret = _textIndexFile.read(codebookW, nofCodebookBytes);
+      ret = _textIndexFile.read(codebookW, nofCodebookBytes, current);
       current += ret;
       AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
       ret = _textIndexFile.read(encodedW,
                                 static_cast<size_t>(nofBytes -
-                                                    (current - from)));
+                                                    (current - from)),
+                                current);
       current += ret;
       AD_CHECK_EQ(size_t(current - from), nofBytes);
       LOG(DEBUG) << "Decoding Simple8b code...\n";
@@ -1122,12 +1124,13 @@ void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
     AD_CHECK_EQ(sizeof(off_t), ret);
     current += ret;
     Score* codebookS = new Score[nofCodebookBytes / sizeof(Score)];
-    ret = _textIndexFile.read(codebookS, nofCodebookBytes);
+    ret = _textIndexFile.read(codebookS, nofCodebookBytes, current);
     current += ret;
     AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
     ret = _textIndexFile.read(encodedS,
                               static_cast<size_t>(nofBytes -
-                                                  (current - from)));
+                                                  (current - from)),
+                              current);
     current += ret;
     AD_CHECK_EQ(size_t(current - from), nofBytes);
     LOG(DEBUG) << "Decoding Simple8b code...\n";
@@ -1175,12 +1178,13 @@ void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
       AD_CHECK_EQ(sizeof(off_t), ret);
       current += ret;
       Id* codebookW = new Id[nofCodebookBytes / sizeof(Id)];
-      ret = _textIndexFile.read(codebookW, nofCodebookBytes);
+      ret = _textIndexFile.read(codebookW, nofCodebookBytes, current);
       current += ret;
       AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
       ret = _textIndexFile.read(encodedW,
                                 static_cast<size_t>(nofBytes -
-                                                    (current - from)));
+                                                    (current - from)),
+                                current);
       current += ret;
       AD_CHECK_EQ(size_t(current - from), nofBytes);
       LOG(DEBUG) << "Decoding Simple8b code...\n";
@@ -1205,12 +1209,13 @@ void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
     AD_CHECK_EQ(sizeof(off_t), ret);
     current += ret;
     Score* codebookS = new Score[nofCodebookBytes / sizeof(Score)];
-    ret = _textIndexFile.read(codebookS, nofCodebookBytes);
+    ret = _textIndexFile.read(codebookS, nofCodebookBytes, current);
     current += ret;
     AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
     ret = _textIndexFile.read(encodedS,
                               static_cast<size_t>(nofBytes -
-                                                  (current - from)));
+                                                  (current - from)),
+                              current);
     current += ret;
     AD_CHECK_EQ(size_t(current - from), nofBytes);
     LOG(DEBUG) << "Decoding Simple8b code...\n";

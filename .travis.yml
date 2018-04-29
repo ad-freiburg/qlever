@@ -1,5 +1,6 @@
 language: c++
 sudo: false
+dist: trusty
 
 compiler:
   - gcc
@@ -8,13 +9,16 @@ addons:
   apt:
     packages:
       - libsparsehash-dev
+      - cmake
 
 before_script:
   - mkdir build
   - cd build
   - cmake ..
 
-script: make -j 3 && make test
+script: 
+  - make -j 3 
+  - make test
 
 notifications:
   email:
