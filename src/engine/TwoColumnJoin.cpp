@@ -90,11 +90,11 @@ void TwoColumnJoin::computeResult(ResultTable* result) const {
     result->_resultTypes.reserve(result->_nofColumns);
     result->_resultTypes.insert(
           result->_resultTypes.end(),
-          leftResult._resultTypes.begin(),
-          leftResult._resultTypes.end());
-    for (size_t col = 0; col < rightResult._nofColumns; col++) {
+          leftResult->_resultTypes.begin(),
+          leftResult->_resultTypes.end());
+    for (size_t col = 0; col < rightResult->_nofColumns; col++) {
       if (col != _jc1Right && col != _jc2Right) {
-        result->_resultTypes.push_back(rightResult._resultTypes[col]);
+        result->_resultTypes.push_back(rightResult->_resultTypes[col]);
       }
     }
 

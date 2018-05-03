@@ -39,8 +39,8 @@ void Distinct::computeResult(ResultTable* result) const {
   LOG(DEBUG) << "Distinct result computation..." << endl;
   result->_nofColumns = subRes->_nofColumns;
   result->_resultTypes.insert(result->_resultTypes.end(),
-                              subRes._resultTypes.begin(),
-                              subRes._resultTypes.end());
+                              subRes->_resultTypes.begin(),
+                              subRes->_resultTypes.end());
   switch (subRes->_nofColumns) {
     case 1: {
       typedef array<Id, 1> RT;

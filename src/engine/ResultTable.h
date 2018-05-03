@@ -30,7 +30,6 @@ public:
     TEXT
   };
 
-  Status _status;
   size_t _nofColumns;
   // A value >= _nofColumns indicates unsorted data
   size_t _sortedBy;

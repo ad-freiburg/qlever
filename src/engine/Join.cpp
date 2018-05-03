@@ -113,11 +113,11 @@ void Join::computeResult(ResultTable* result) const {
   result->_nofColumns = leftWidth + rightWidth - 1;
   result->_resultTypes.reserve(result->_nofColumns);
   result->_resultTypes.insert(result->_resultTypes.end(),
-                              leftRes._resultTypes.begin(),
-                              leftRes._resultTypes.end());
-  for (size_t i = 0; i < rightRes._nofColumns; i++) {
+                              leftRes->_resultTypes.begin(),
+                              leftRes->_resultTypes.end());
+  for (size_t i = 0; i < rightRes->_nofColumns; i++) {
     if (i != _rightJoinCol) {
-      result->_resultTypes.push_back(rightRes._resultTypes[i]);
+      result->_resultTypes.push_back(rightRes->_resultTypes[i]);
     }
   }
   result->_sortedBy = _leftJoinCol;

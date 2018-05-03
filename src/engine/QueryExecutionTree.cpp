@@ -108,7 +108,7 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
     if (it != getVariableColumnMap().end()) {
       validIndices.push_back(
             pair<size_t, ResultTable::ResultType>(it->second,
-                                                  res.getResultType(it->second)));
+                                                  res->getResultType(it->second)));
     }
   }
   if (validIndices.size() == 0) { return; }
@@ -160,7 +160,7 @@ void QueryExecutionTree::writeResultToStreamAsJson(
     if (vc != getVariableColumnMap().end()) {
       validIndices.push_back(
           pair<size_t, ResultTable::ResultType>(vc->second,
-                                                res.getResultType(vc->second)));
+                                                res->getResultType(vc->second)));
     }
   }
   if (validIndices.size() == 0) {
