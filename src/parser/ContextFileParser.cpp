@@ -2,21 +2,17 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <cassert>
-#include "../util/StringUtils.h"
 #include "./ContextFileParser.h"
+#include <cassert>
 #include "../util/Exception.h"
-
-
-// _____________________________________________________________________________
-ContextFileParser::ContextFileParser(const string& contextFile) :
-    _in(contextFile), _lastCId(0) {
-}
+#include "../util/StringUtils.h"
 
 // _____________________________________________________________________________
-ContextFileParser::~ContextFileParser() {
-  _in.close();
-}
+ContextFileParser::ContextFileParser(const string& contextFile)
+    : _in(contextFile), _lastCId(0) {}
+
+// _____________________________________________________________________________
+ContextFileParser::~ContextFileParser() { _in.close(); }
 
 // _____________________________________________________________________________
 bool ContextFileParser::getLine(ContextFileParser::Line& line) {
@@ -29,9 +25,9 @@ bool ContextFileParser::getLine(ContextFileParser::Line& line) {
     size_t k = l.find('\t', j + 2);
     assert(k != string::npos);
     line._isEntity = (l[i + 1] == '1');
-    line._word = (line._isEntity ?
-                  l.substr(0, i) : ad_utility::getLowercaseUtf8(
-            l.substr(0, i)));
+    line._word =
+        (line._isEntity ? l.substr(0, i)
+                        : ad_utility::getLowercaseUtf8(l.substr(0, i)));
     line._contextId = static_cast<Id>(atol(l.substr(j + 1, k - j - 1).c_str()));
     line._score = static_cast<Score>(atol(l.substr(k + 1).c_str()));
 #ifndef NDEBUG

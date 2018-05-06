@@ -6,7 +6,6 @@
 #include <cstdio>
 #include "../src/index/Vocabulary.h"
 
-
 TEST(VocabularyTest, getIdForWordTest) {
   Vocabulary v;
   v.push_back("a");
@@ -87,9 +86,7 @@ TEST(VocabularyTest, createFromSetTest) {
   ASSERT_FALSE(v.getId("foo", &id));
 };
 
-
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-

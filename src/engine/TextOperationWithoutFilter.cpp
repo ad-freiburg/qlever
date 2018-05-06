@@ -2,13 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "TextOperationWithoutFilter.h"
 #include <sstream>
 #include "./QueryExecutionTree.h"
-#include "TextOperationWithoutFilter.h"
-
 
 using std::string;
-
 
 // _____________________________________________________________________________
 size_t TextOperationWithoutFilter::getResultWidth() const {
@@ -18,17 +16,24 @@ size_t TextOperationWithoutFilter::getResultWidth() const {
 
 // _____________________________________________________________________________
 TextOperationWithoutFilter::TextOperationWithoutFilter(
-    QueryExecutionContext* qec, const string& words,
-    size_t nofVars, size_t textLimit) :
-    Operation(qec), _words(words), _nofVars(nofVars), _textLimit(textLimit),
-    _sizeEstimate(std::numeric_limits<size_t>::max()) {}
+    QueryExecutionContext* qec, const string& words, size_t nofVars,
+    size_t textLimit)
+    : Operation(qec),
+      _words(words),
+      _nofVars(nofVars),
+      _textLimit(textLimit),
+      _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 
 // _____________________________________________________________________________
 string TextOperationWithoutFilter::asString(size_t indent) const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
-  os << "TEXT OPERATION WITHOUT FILTER:" << " co-occurrence with words: \"" <<
-     _words << "\" and " << _nofVars << " variables";;
+  for (size_t i = 0; i < indent; ++i) {
+    os << " ";
+  }
+  os << "TEXT OPERATION WITHOUT FILTER:"
+     << " co-occurrence with words: \"" << _words << "\" and " << _nofVars
+     << " variables";
+  ;
   os << " with textLimit = " << _textLimit;
   return os.str();
 }
@@ -55,8 +60,7 @@ void TextOperationWithoutFilter::computeResultNoVar(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
   getExecutionContext()->getIndex().getContextListForWords(
-      _words,
-      reinterpret_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
+      _words, reinterpret_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
 }
 
 // _____________________________________________________________________________
@@ -68,8 +72,7 @@ void TextOperationWithoutFilter::computeResultOneVar(
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   getExecutionContext()->getIndex().getECListForWords(
-      _words,
-      _textLimit,
+      _words, _textLimit,
       *reinterpret_cast<vector<array<Id, 3>>*>(result->_fixedSizeData));
 }
 
@@ -84,9 +87,7 @@ void TextOperationWithoutFilter::computeResultMultVars(
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     getExecutionContext()->getIndex().getECListForWords(
-        _words,
-        _nofVars,
-        _textLimit,
+        _words, _nofVars, _textLimit,
         *reinterpret_cast<vector<array<Id, 4>>*>(result->_fixedSizeData));
   } else if (_nofVars == 3) {
     result->_fixedSizeData = new vector<array<Id, 5>>;
@@ -97,9 +98,7 @@ void TextOperationWithoutFilter::computeResultMultVars(
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     getExecutionContext()->getIndex().getECListForWords(
-        _words,
-        _nofVars,
-        _textLimit,
+        _words, _nofVars, _textLimit,
         *reinterpret_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
   } else {
     result->_nofColumns = _nofVars + 2;
@@ -110,10 +109,7 @@ void TextOperationWithoutFilter::computeResultMultVars(
       result->_resultTypes.push_back(ResultTable::ResultType::KB);
     }
     getExecutionContext()->getIndex().getECListForWords(
-        _words,
-        _nofVars,
-        _textLimit,
-        result->_varSizeData);
+        _words, _nofVars, _textLimit, result->_varSizeData);
   }
 }
 
@@ -138,8 +134,8 @@ size_t TextOperationWithoutFilter::getSizeEstimate() {
 size_t TextOperationWithoutFilter::getCostEstimate() {
   if (_executionContext) {
     return static_cast<size_t>(
-        _executionContext->getCostFactor("NO_FILTER_PUNISH") * (
-            getSizeEstimate() * _nofVars));
+        _executionContext->getCostFactor("NO_FILTER_PUNISH") *
+        (getSizeEstimate() * _nofVars));
   } else {
     return getSizeEstimate() * _nofVars;
   }

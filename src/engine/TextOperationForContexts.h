@@ -17,18 +17,17 @@ using std::vector;
 
 class TextOperationForContexts : public Operation {
  public:
+  TextOperationForContexts(
+      QueryExecutionContext* qec, const string& words,
+      const vector<pair<std::shared_ptr<QueryExecutionTree>, size_t>>& subtrees,
+      size_t textLimit);
 
   TextOperationForContexts(QueryExecutionContext* qec, const string& words,
-                           const vector<pair<std::shared_ptr<QueryExecutionTree>,
-                                             size_t>>& subtrees,
-                           size_t textLimit);
-
-  TextOperationForContexts(QueryExecutionContext* qec, const string& words,
-                           size_t textLimit) :
-      TextOperationForContexts(qec, words,
-                               vector<pair<std::shared_ptr<QueryExecutionTree>,
-                                           size_t>>(),
-                               textLimit) { }
+                           size_t textLimit)
+      : TextOperationForContexts(
+            qec, words,
+            vector<pair<std::shared_ptr<QueryExecutionTree>, size_t>>(),
+            textLimit) {}
 
   virtual string asString(size_t indent = 0) const;
 
@@ -40,7 +39,7 @@ class TextOperationForContexts : public Operation {
 
   virtual void setTextLimit(size_t limit) {
     _textLimit = limit;
-    for (auto& st: _subtrees) {
+    for (auto& st : _subtrees) {
       st.first->setTextLimit(limit);
     }
   }

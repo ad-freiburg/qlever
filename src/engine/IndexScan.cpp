@@ -2,28 +2,30 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <string>
-#include <sstream>
 #include "./IndexScan.h"
+#include <sstream>
+#include <string>
 
 using std::string;
 
 // _____________________________________________________________________________
 string IndexScan::asString(size_t indent) const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) { os << ' ';}
+  for (size_t i = 0; i < indent; ++i) {
+    os << ' ';
+  }
   switch (_type) {
     case PSO_BOUND_S:
-      os << "SCAN PSO with P = \"" << _predicate << "\", S = \"" << _subject <<
-         "\"";
+      os << "SCAN PSO with P = \"" << _predicate << "\", S = \"" << _subject
+         << "\"";
       break;
     case POS_BOUND_O:
-      os << "SCAN POS with P = \"" << _predicate << "\", O = \"" << _object <<
-         "\"";
+      os << "SCAN POS with P = \"" << _predicate << "\", O = \"" << _object
+         << "\"";
       break;
     case SOP_BOUND_O:
-      os << "SCAN SOP with S = \"" << _subject << "\", O = \"" << _object <<
-         "\"";
+      os << "SCAN SOP with S = \"" << _subject << "\", O = \"" << _object
+         << "\"";
       break;
     case PSO_FREE_S:
       os << "SCAN PSO with P = \"" << _predicate << "\"";
@@ -86,8 +88,8 @@ size_t IndexScan::getResultWidth() const {
     case FULL_INDEX_SCAN_OSP:
     case FULL_INDEX_SCAN_OPS:
       return 3;
-    default: AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-                      "Should be unreachable.");
+    default:
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Should be unreachable.");
   }
 }
 
@@ -129,8 +131,8 @@ void IndexScan::computeResult(ResultTable* result) const {
     case FULL_INDEX_SCAN_OSP:
     case FULL_INDEX_SCAN_OPS:
       AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-      "Asked to execute a scan for the full index. "
-          "This should never happen.");
+               "Asked to execute a scan for the full index. "
+               "This should never happen.");
   }
   LOG(DEBUG) << "IndexScan result computation done.\n";
 }
@@ -155,8 +157,7 @@ void IndexScan::computePSOfreeS(ResultTable* result) const {
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 2>>();
   _executionContext->getIndex().scanPSO(
-      _predicate,
-      static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
+      _predicate, static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
   result->finish();
 }
 
@@ -180,8 +181,7 @@ void IndexScan::computePOSfreeO(ResultTable* result) const {
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 2>>();
   _executionContext->getIndex().scanPOS(
-      _predicate,
-      static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
+      _predicate, static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
   result->finish();
 }
 
@@ -203,8 +203,7 @@ void IndexScan::computeSPOfreeP(ResultTable* result) const {
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 2>>();
   _executionContext->getIndex().scanSPO(
-      _subject,
-      static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
+      _subject, static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
   result->finish();
 }
 
@@ -228,8 +227,7 @@ void IndexScan::computeSOPfreeO(ResultTable* result) const {
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 2>>();
   _executionContext->getIndex().scanSOP(
-      _subject,
-      static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
+      _subject, static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
   result->finish();
 }
 
@@ -241,8 +239,7 @@ void IndexScan::computeOPSfreeP(ResultTable* result) const {
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 2>>();
   _executionContext->getIndex().scanOPS(
-      _object,
-      static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
+      _object, static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
   result->finish();
 }
 
@@ -254,8 +251,7 @@ void IndexScan::computeOSPfreeS(ResultTable* result) const {
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 2>>();
   _executionContext->getIndex().scanOSP(
-      _object,
-      static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
+      _object, static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
   result->finish();
 }
 
@@ -317,13 +313,3 @@ void IndexScan::determineMultiplicities() {
   }
   assert(_multiplicity.size() >= 1 || _multiplicity.size() <= 3);
 }
-
-
-
-
-
-
-
-
-
-

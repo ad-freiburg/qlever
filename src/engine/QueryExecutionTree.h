@@ -3,26 +3,23 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
-#include <memory>
-#include <bits/unordered_set.h>
-#include "./QueryExecutionContext.h"
-#include "./Operation.h"
 #include "../util/Conversions.h"
 #include "../util/HashSet.h"
+#include "./Operation.h"
+#include "./QueryExecutionContext.h"
 
-
-using std::string;
 using std::shared_ptr;
+using std::string;
 
 // A query execution tree.
 // Processed bottom up, this gives an ordering to the operations
 // needed to solve a query.
 class QueryExecutionTree {
-
-public:
+ public:
   explicit QueryExecutionTree(QueryExecutionContext* qec);
 
   enum OperationType {
@@ -45,21 +42,15 @@ public:
 
   string asString(size_t indent = 0);
 
-  QueryExecutionContext* getQec() const {
-    return _qec;
-  }
+  QueryExecutionContext* getQec() const { return _qec; }
 
   const std::unordered_map<string, size_t>& getVariableColumnMap() const {
     return _variableColumnMap;
   }
 
-  std::shared_ptr<Operation> getRootOperation() const {
-    return _rootOperation;
-  }
+  std::shared_ptr<Operation> getRootOperation() const { return _rootOperation; }
 
-  const OperationType& getType() const {
-    return _type;
-  }
+  const OperationType& getType() const { return _type; }
 
   bool isEmpty() const {
     return _type == OperationType::UNDEFINED || !_rootOperation;
@@ -79,19 +70,15 @@ public:
     return _contextVars;
   }
 
-  size_t getResultWidth() const {
-    return _rootOperation->getResultWidth();
-  }
+  size_t getResultWidth() const { return _rootOperation->getResultWidth(); }
 
   shared_ptr<const ResultTable> getResult() const {
     return _rootOperation->getResult();
   }
 
-  void writeResultToStream(std::ostream& out,
-                           const vector<string>& selectVars,
+  void writeResultToStream(std::ostream& out, const vector<string>& selectVars,
                            size_t limit = MAX_NOF_ROWS_IN_RESULT,
-                           size_t offset = 0,
-                           char sep = '\t') const;
+                           size_t offset = 0, char sep = '\t') const;
 
   void writeResultToStreamAsJson(std::ostream& out,
                                  const vector<string>& selectVars,
@@ -99,16 +86,13 @@ public:
                                  size_t offset = 0,
                                  size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
 
-
   size_t resultSortedOn() const { return _rootOperation->resultSortedOn(); }
 
   bool isContextvar(const string& var) const {
     return _contextVars.count(var) > 0;
   }
 
-  void addContextVar(const string& var) {
-    _contextVars.insert(var);
-  }
+  void addContextVar(const string& var) { _contextVars.insert(var); }
 
   void setTextLimit(size_t limit) {
     _rootOperation->setTextLimit(limit);
@@ -127,28 +111,28 @@ public:
 
   size_t getDistinctEstimate(size_t col) const {
     return static_cast<size_t>(_rootOperation->getSizeEstimate() /
-           _rootOperation->getMultiplicity(col));
+                               _rootOperation->getMultiplicity(col));
   }
 
   bool varCovered(string var) const;
 
   bool knownEmptyResult();
 
-private:
-  QueryExecutionContext* _qec;   // No ownership
+ private:
+  QueryExecutionContext* _qec;  // No ownership
   std::unordered_map<string, size_t> _variableColumnMap;
-  std::shared_ptr<Operation> _rootOperation;  // Owned child. Will be deleted at deconstruction.
+  std::shared_ptr<Operation>
+      _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
   std::unordered_set<string> _contextVars;
   string _asString;
   size_t _sizeEstimate;
 
-  template<typename Row>
-  void writeJsonTable(const vector<Row>& data, size_t from,
-                      size_t upperBound,
-                      const vector<pair<size_t, ResultTable::ResultType>>& validIndices,
-                      size_t maxSend,
-                      std::ostream& out) const {
+  template <typename Row>
+  void writeJsonTable(
+      const vector<Row>& data, size_t from, size_t upperBound,
+      const vector<pair<size_t, ResultTable::ResultType>>& validIndices,
+      size_t maxSend, std::ostream& out) const {
     std::ostringstream throwaway;
     for (size_t i = from; i < upperBound; ++i) {
       const auto& row = data[i];
@@ -157,30 +141,31 @@ private:
       for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
         switch (validIndices[j].second) {
           case ResultTable::ResultType::KB: {
-            string entity = _qec->getIndex().idToString(
-                row[validIndices[j].first]);
+            string entity =
+                _qec->getIndex().idToString(row[validIndices[j].first]);
             if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
               entity = ad_utility::convertIndexWordToValueLiteral(entity);
             }
             os << ad_utility::escapeForJson(entity) << "\",\"";
             break;
           }
-        case ResultTable::ResultType::VERBATIM:
+          case ResultTable::ResultType::VERBATIM:
             os << row[validIndices[j].first] << "\",\"";
             break;
           case ResultTable::ResultType::TEXT:
-            os << ad_utility::escapeForJson(
-                _qec->getIndex().getTextExcerpt(row[validIndices[j].first]))
-                << "\",\"";
+            os << ad_utility::escapeForJson(_qec->getIndex().getTextExcerpt(
+                      row[validIndices[j].first]))
+               << "\",\"";
             break;
-          default: AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-                            "Cannot deduce output type.");
+          default:
+            AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+                     "Cannot deduce output type.");
         }
       }
       switch (validIndices[validIndices.size() - 1].second) {
         case ResultTable::ResultType::KB: {
-          string entity = _qec->getIndex()
-              .idToString(row[validIndices[validIndices.size() - 1].first]);
+          string entity = _qec->getIndex().idToString(
+              row[validIndices[validIndices.size() - 1].first]);
           if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
             entity = ad_utility::convertIndexWordToValueLiteral(entity);
           }
@@ -191,31 +176,33 @@ private:
           os << row[validIndices[validIndices.size() - 1].first] << "\"]";
           break;
         case ResultTable::ResultType::TEXT:
-          os << ad_utility::escapeForJson(
-              _qec->getIndex().getTextExcerpt(
-                  row[validIndices[validIndices.size() - 1].first]))
-              << "\"]";
+          os << ad_utility::escapeForJson(_qec->getIndex().getTextExcerpt(
+                    row[validIndices[validIndices.size() - 1].first]))
+             << "\"]";
           break;
-        default: AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-                          "Cannot deduce output type.");
+        default:
+          AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+                   "Cannot deduce output type.");
       }
-      if (i + 1 < upperBound && i + 1 < maxSend + from) { os << ", "; }
+      if (i + 1 < upperBound && i + 1 < maxSend + from) {
+        os << ", ";
+      }
       os << "\r\n";
     }
   }
 
-  template<typename Row>
-  void writeTable(const vector<Row>& data, char sep, size_t from,
-                  size_t upperBound,
-                  const vector<pair<size_t, ResultTable::ResultType>>& validIndices,
-                  std::ostream& out) const {
+  template <typename Row>
+  void writeTable(
+      const vector<Row>& data, char sep, size_t from, size_t upperBound,
+      const vector<pair<size_t, ResultTable::ResultType>>& validIndices,
+      std::ostream& out) const {
     for (size_t i = from; i < upperBound; ++i) {
       const auto& row = data[i];
       for (size_t j = 0; j < validIndices.size(); ++j) {
         switch (validIndices[j].second) {
           case ResultTable::ResultType::KB: {
-            string entity = _qec->getIndex().idToString(
-                row[validIndices[j].first]);
+            string entity =
+                _qec->getIndex().idToString(row[validIndices[j].first]);
             if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
               out << ad_utility::convertIndexWordToValueLiteral(entity);
             } else {
@@ -227,11 +214,11 @@ private:
             out << row[validIndices[j].first] << "\",\"";
             break;
           case ResultTable::ResultType::TEXT:
-            out << _qec->getIndex().getTextExcerpt(
-                row[validIndices[j].first]);
+            out << _qec->getIndex().getTextExcerpt(row[validIndices[j].first]);
             break;
-          default: AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-                            "Cannot deduce output type.");
+          default:
+            AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+                     "Cannot deduce output type.");
         }
         out << (j + 1 < validIndices.size() ? sep : '\n');
       }

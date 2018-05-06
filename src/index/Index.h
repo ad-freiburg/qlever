@@ -3,33 +3,32 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <string>
 #include <array>
 #include <fstream>
-#include <vector>
+#include <string>
 #include <stxxl/vector>
-#include "./Vocabulary.h"
-#include "./IndexMetaData.h"
-#include "./StxxlSortFunctors.h"
-#include "../util/File.h"
-#include "./TextMetaData.h"
-#include "./DocsDB.h"
+#include <vector>
 #include "../engine/ResultTable.h"
 #include "../global/Pattern.h"
+#include "../util/File.h"
+#include "./DocsDB.h"
+#include "./IndexMetaData.h"
+#include "./StxxlSortFunctors.h"
+#include "./TextMetaData.h"
+#include "./Vocabulary.h"
 
-
-using std::string;
 using std::array;
-using std::vector;
+using std::string;
 using std::tuple;
+using std::vector;
 
 class Index {
-public:
+ public:
   typedef stxxl::VECTOR_GENERATOR<array<Id, 3>>::result ExtVec;
   // Block Id, Context Id, Word Id, Score, entity
-  typedef stxxl::VECTOR_GENERATOR<tuple<Id, Id, Id, Score, bool>>::result TextVec;
+  typedef stxxl::VECTOR_GENERATOR<tuple<Id, Id, Id, Score, bool>>::result
+      TextVec;
   typedef std::tuple<Id, Id, Score> Posting;
-
 
   // Forbid copy and assignment
   Index& operator=(const Index&) = delete;
@@ -71,14 +70,9 @@ public:
   // Checks if the index is ready for use, i.e. it is properly intitialized.
   bool ready() const;
 
-  const Vocabulary& getVocab() const {
-    return _vocab;
-  };
+  const Vocabulary& getVocab() const { return _vocab; };
 
-  const Vocabulary& getTextVocab() const {
-    return _textVocab;
-  };
-
+  const Vocabulary& getTextVocab() const { return _textVocab; };
 
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---
@@ -89,7 +83,6 @@ public:
   typedef vector<array<Id, 4>> WidthFourList;
   typedef vector<array<Id, 5>> WidthFiveList;
   typedef vector<vector<Id>> VarWidthList;
-
 
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
@@ -107,16 +100,16 @@ public:
 
   void scanPSO(const string& predicate, WidthTwoList* result) const;
 
-  void scanPSO(const string& predicate, const string& subject, WidthOneList*
-  result) const;
+  void scanPSO(const string& predicate, const string& subject,
+               WidthOneList* result) const;
 
   void scanPOS(const string& predicate, WidthTwoList* result) const;
 
-  void scanPOS(const string& predicate, const string& object, WidthOneList*
-  result) const;
+  void scanPOS(const string& predicate, const string& object,
+               WidthOneList* result) const;
 
-  void scanSOP(const string& subject, const string& object, WidthOneList*
-  result) const;
+  void scanSOP(const string& subject, const string& object,
+               WidthOneList* result) const;
 
   void scanSPO(const string& subject, WidthTwoList* result) const;
 
@@ -160,44 +153,38 @@ public:
 
   size_t getSizeEstimate(const string& words) const;
 
-  void
-  getContextListForWords(const string& words, WidthTwoList* result) const;
+  void getContextListForWords(const string& words, WidthTwoList* result) const;
 
   void getECListForWords(const string& words, size_t limit,
                          WidthThreeList& result) const;
 
   // With two or more variables.
-  template<typename ResultList>
+  template <typename ResultList>
   void getECListForWords(const string& words, size_t nofVars, size_t limit,
                          ResultList& result) const;
 
   // With filtering. Needs many template instantiations but
   // only nofVars truly makes a difference. Others are just data types
   // of result tables.
-  template<typename FilterTable, typename ResultList>
-  void
-  getFilteredECListForWords(const string& words, const FilterTable& filter,
-                            size_t filterColumn, size_t nofVars,
-                            size_t limit,
-                            ResultList& result) const;
+  template <typename FilterTable, typename ResultList>
+  void getFilteredECListForWords(const string& words, const FilterTable& filter,
+                                 size_t filterColumn, size_t nofVars,
+                                 size_t limit, ResultList& result) const;
 
   // Special cast with a width-one filter.
-  template<typename ResultList>
+  template <typename ResultList>
   void getFilteredECListForWords(const string& words,
-                                 const WidthOneList& filter,
-                                 size_t nofVars, size_t limit,
-                                 ResultList& result) const;
+                                 const WidthOneList& filter, size_t nofVars,
+                                 size_t limit, ResultList& result) const;
 
-  void getContextEntityScoreListsForWords(const string& words,
-                                          vector<Id>& cids,
+  void getContextEntityScoreListsForWords(const string& words, vector<Id>& cids,
                                           vector<Id>& eids,
                                           vector<Score>& scores) const;
 
-  template<size_t I>
+  template <size_t I>
   void getECListForWordsAndSingleSub(const string& words,
                                      const vector<array<Id, I>>& subres,
-                                     size_t subResMainCol,
-                                     size_t limit,
+                                     size_t subResMainCol, size_t limit,
                                      vector<array<Id, 3 + I>>& res) const;
 
   void getECListForWordsAndTwoW1Subs(const string& words,
@@ -209,20 +196,15 @@ public:
   void getECListForWordsAndSubtrees(
       const string& words,
       const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
-      size_t limit,
-      vector<vector<Id>>& res) const;
-
+      size_t limit, vector<vector<Id>>& res) const;
 
   void getWordPostingsForTerm(const string& term, vector<Id>& cids,
                               vector<Score>& scores) const;
 
   void getEntityPostingsForTerm(const string& term, vector<Id>& cids,
-                                vector<Id>& eids,
-                                vector<Score>& scores) const;
+                                vector<Id>& eids, vector<Score>& scores) const;
 
-  string getTextExcerpt(Id cid) const {
-    return _docsDB.getTextExcerpt(cid);
-  }
+  string getTextExcerpt(Id cid) const { return _docsDB.getTextExcerpt(cid); }
 
   // Only for debug reasons and external encoding tests.
   // Supply an empty vector to dump all lists above a size threshold.
@@ -248,7 +230,9 @@ public:
 
   size_t getNofTextRecords() const { return _textMeta.getNofTextRecords(); }
   size_t getNofWordPostings() const { return _textMeta.getNofWordPostings(); }
-  size_t getNofEntityPostings() const { return _textMeta.getNofEntityPostings(); }
+  size_t getNofEntityPostings() const {
+    return _textMeta.getNofEntityPostings();
+  }
 
   size_t getNofSubjects() const {
     if (hasAllPermutations()) {
@@ -256,8 +240,8 @@ public:
     } else {
       AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
                "Can only get # distinct subjects if all 6 permutations "
-                   "have been registered on sever start (and index build time) "
-                   "with the -a option.")
+               "have been registered on sever start (and index build time) "
+               "with the -a option.")
     }
   }
 
@@ -267,8 +251,8 @@ public:
     } else {
       AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
                "Can only get # distinct subjects if all 6 permutations "
-                   "have been registered on sever start (and index build time) "
-                   "with the -a option.")
+               "have been registered on sever start (and index build time) "
+               "with the -a option.")
     }
   }
 
@@ -276,8 +260,7 @@ public:
 
   bool hasAllPermutations() const { return _spoFile.isOpen(); }
 
-
-private:
+ private:
   string _onDiskBase;
   Vocabulary _vocab;
   Vocabulary _textVocab;
@@ -304,15 +287,14 @@ private:
   std::vector<PatternID> _hasPattern;
   CompactStringVector<Id, Id> _hasRelation;
 
-  size_t
-  passTsvFileForVocabulary(const string& tsvFile, bool onDiskLiterals = false);
+  size_t passTsvFileForVocabulary(const string& tsvFile,
+                                  bool onDiskLiterals = false);
 
   void passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data,
                                bool onDiskLiterals = false);
 
-  size_t
-  passNTriplesFileForVocabulary(const string& ntFile,
-                                bool onDiskLiterals = false);
+  size_t passNTriplesFileForVocabulary(const string& ntFile,
+                                       bool onDiskLiterals = false);
 
   void passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data,
                                     bool onDiskLiterals = false);
@@ -321,11 +303,9 @@ private:
 
   void passContextFileIntoVector(const string& contextFile, TextVec& vec);
 
-  static void createPermutation(const string& fileName,
-                                const ExtVec& vec,
-                                IndexMetaData& meta,
-                                size_t c0,
-                                size_t c1, size_t c2);
+  static void createPermutation(const string& fileName, const ExtVec& vec,
+                                IndexMetaData& meta, size_t c0, size_t c1,
+                                size_t c2);
 
   /**
    * @brief Creates the data required for the "pattern-trick" used for fast
@@ -333,11 +313,10 @@ private:
    * @param fileName The name of the file in which the data should be stored
    * @param vec The vectors of triples in spo order.
    */
-  static void createPatterns(const string& fileName,
-                             const ExtVec& vec,
-                             CompactStringVector<Id, Id> &hasRelation,
-                             std::vector<PatternID> &hasPattern,
-                             CompactStringVector<size_t, Id> &patterns,
+  static void createPatterns(const string& fileName, const ExtVec& vec,
+                             CompactStringVector<Id, Id>& hasRelation,
+                             std::vector<PatternID>& hasPattern,
+                             CompactStringVector<size_t, Id>& patterns,
                              size_t maxNumPatterns);
 
   void createTextIndex(const string& filename, const TextVec& vec);
@@ -346,49 +325,44 @@ private:
                                     const vector<Posting>& postings,
                                     bool skipWordlistIfAllTheSame);
 
-  static pair<FullRelationMetaData, BlockBasedRelationMetaData>
-  writeRel(ad_utility::File& out, off_t currentOffset,
-           Id relId, const vector<array<Id, 2>>& data,
-           bool functional);
+  static pair<FullRelationMetaData, BlockBasedRelationMetaData> writeRel(
+      ad_utility::File& out, off_t currentOffset, Id relId,
+      const vector<array<Id, 2>>& data, bool functional);
 
   static void writeFunctionalRelation(
       const vector<array<Id, 2>>& data,
       pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd);
 
   static void writeNonFunctionalRelation(
-      ad_utility::File& out,
-      const vector<array<Id, 2>>& data,
+      ad_utility::File& out, const vector<array<Id, 2>>& data,
       pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd);
 
   void openFileHandles();
 
   void openTextFileHandle();
 
-  void scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
-                              Id lhsId, ad_utility::File& indexFile,
+  void scanFunctionalRelation(const pair<off_t, size_t>& blockOff, Id lhsId,
+                              ad_utility::File& indexFile,
                               WidthOneList* result) const;
 
   void scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                  const pair<off_t, size_t>& followBlock,
                                  Id lhsId, ad_utility::File& indexFile,
-                                 off_t upperBound,
-                                 WidthOneList* result) const;
+                                 off_t upperBound, WidthOneList* result) const;
 
   void addContextToVector(TextVec::bufwriter_type& writer, Id context,
                           const ad_utility::HashMap<Id, Score>& words,
                           const ad_utility::HashMap<Id, Score>& entities);
 
-  template<typename T>
+  template <typename T>
   void readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
                         vector<T>& result) const;
 
-  template<typename T>
+  template <typename T>
   void readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
                          vector<T>& result) const;
 
-
   size_t getIndexOfBestSuitedElTerm(const vector<string>& terms) const;
-
 
   void calculateBlockBoundaries();
 
@@ -401,7 +375,7 @@ private:
   //! Writes a list of elements (have to be able to be cast to unit64_t)
   //! to file.
   //! Returns the number of bytes written.
-  template<class Numeric>
+  template <class Numeric>
   size_t writeList(Numeric* data, size_t nofElements,
                    ad_utility::File& file) const;
 
@@ -411,21 +385,19 @@ private:
   typedef vector<Score> ScoreCodebook;
 
   //! Creates codebooks for lists that are supposed to be entropy encoded.
-  void
-  createCodebooks(const vector<Posting>& postings, IdCodeMap& wordCodemap,
-                  IdCodebook& wordCodebook, ScoreCodeMap& scoreCodemap,
-                  ScoreCodebook& scoreCodebook) const;
+  void createCodebooks(const vector<Posting>& postings, IdCodeMap& wordCodemap,
+                       IdCodebook& wordCodebook, ScoreCodeMap& scoreCodemap,
+                       ScoreCodebook& scoreCodebook) const;
 
-  template<class T>
-  size_t writeCodebook(const vector<T>& codebook,
-                       ad_utility::File& file) const;
+  template <class T>
+  size_t writeCodebook(const vector<T>& codebook, ad_utility::File& file) const;
 
   // FRIEND TESTS
   friend class IndexTest_createFromTsvTest_Test;
   friend class IndexTest_createFromOnDiskIndexTest_Test;
   friend class CreatePatternsFixture_createPatterns_Test;
 
-  template<class T>
+  template <class T>
   void writeAsciiListFile(const string& filename, const T& ids) const;
 
   void getRhsForSingleLhs(const WidthTwoList& in, Id lhsId,

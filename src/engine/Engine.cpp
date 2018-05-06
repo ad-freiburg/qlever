@@ -2,13 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./Engine.h"
 #include <algorithm>
 #include "../util/Exception.h"
-#include "./Engine.h"
-
 
 // _____________________________________________________________________________
-template<typename E, size_t N>
+template <typename E, size_t N>
 vector<array<E, N>> Engine::filterRelationWithSingleId(
     const vector<array<E, N>>& relation, E entityId, size_t checkColumn) {
   // AD_CHECK_LT(checkColumn, N);
@@ -37,18 +36,17 @@ vector<array<E, N>> Engine::filterRelationWithSingleId(
       return doFilterRelationWithSingleId<E, N, 10>(relation, entityId);
     default:
       AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-          "Not supporting a filter column with index > 10 at the moment");
+               "Not supporting a filter column with index > 10 at the moment");
   }
 }
 
-template<typename E, size_t N, size_t M>
-void Engine::join(
-    const vector<array<E, N>>& a,
-    size_t joinColumn1,
-    const vector<array<E, M>>& b,
-    size_t joinColumn2,
-    vector<array<E, (N + M - 1)>>* result) {
-  if (a.size() == 0 || b.size() == 0) { return; }
+template <typename E, size_t N, size_t M>
+void Engine::join(const vector<array<E, N>>& a, size_t joinColumn1,
+                  const vector<array<E, M>>& b, size_t joinColumn2,
+                  vector<array<E, (N + M - 1)>>* result) {
+  if (a.size() == 0 || b.size() == 0) {
+    return;
+  }
   if (joinColumn1 == 0) {
     if (joinColumn2 == 0) {
       doJoin<E, N, 0, M, 0>(a, b, result);
@@ -111,7 +109,7 @@ void Engine::join(
     }
   } else {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-        "Currently only join column indexes for 0 to 4 are supported");
+             "Currently only join column indexes for 0 to 4 are supported");
   }
 }
 
@@ -142,107 +140,62 @@ template vector<array<Id, 9>> Engine::filterRelationWithSingleId(
 template vector<array<Id, 10>> Engine::filterRelationWithSingleId(
     const vector<array<Id, 10>>& relation, Id entityId, size_t checkColumn);
 
-template void Engine::join(
-    const vector<array<Id, 1>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 1>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 1>>* result);
+template void Engine::join(const vector<array<Id, 1>>& a, size_t joinColumn1,
+                           const vector<array<Id, 1>>& b, size_t joinColumn2,
+                           vector<array<Id, 1>>* result);
 
-template void Engine::join(
-    const vector<array<Id, 2>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 1>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 2>>* result);
+template void Engine::join(const vector<array<Id, 2>>& a, size_t joinColumn1,
+                           const vector<array<Id, 1>>& b, size_t joinColumn2,
+                           vector<array<Id, 2>>* result);
 
-template void Engine::join(
-    const vector<array<Id, 1>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 2>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 2>>* result);
+template void Engine::join(const vector<array<Id, 1>>& a, size_t joinColumn1,
+                           const vector<array<Id, 2>>& b, size_t joinColumn2,
+                           vector<array<Id, 2>>* result);
 
-template void Engine::join(
-    const vector<array<Id, 1>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 3>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 3>>* result);
+template void Engine::join(const vector<array<Id, 1>>& a, size_t joinColumn1,
+                           const vector<array<Id, 3>>& b, size_t joinColumn2,
+                           vector<array<Id, 3>>* result);
 
-template void Engine::join(
-    const vector<array<Id, 3>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 1>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 3>>* result);
+template void Engine::join(const vector<array<Id, 3>>& a, size_t joinColumn1,
+                           const vector<array<Id, 1>>& b, size_t joinColumn2,
+                           vector<array<Id, 3>>* result);
 
-template void Engine::join(
-    const vector<array<Id, 2>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 2>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 3>>* result);
+template void Engine::join(const vector<array<Id, 2>>& a, size_t joinColumn1,
+                           const vector<array<Id, 2>>& b, size_t joinColumn2,
+                           vector<array<Id, 3>>* result);
 
-template void Engine::join(
-    const vector<array<Id, 4>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 1>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 4>>* result);
+template void Engine::join(const vector<array<Id, 4>>& a, size_t joinColumn1,
+                           const vector<array<Id, 1>>& b, size_t joinColumn2,
+                           vector<array<Id, 4>>* result);
 
-template void Engine::join(
-    const vector<array<Id, 1>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 4>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 4>>* result);
+template void Engine::join(const vector<array<Id, 1>>& a, size_t joinColumn1,
+                           const vector<array<Id, 4>>& b, size_t joinColumn2,
+                           vector<array<Id, 4>>* result);
 
-template void Engine::join(
-    const vector<array<Id, 3>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 2>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 4>>* result);
+template void Engine::join(const vector<array<Id, 3>>& a, size_t joinColumn1,
+                           const vector<array<Id, 2>>& b, size_t joinColumn2,
+                           vector<array<Id, 4>>* result);
 
-template void Engine::join(
-    const vector<array<Id, 2>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 3>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 4>>* result);
+template void Engine::join(const vector<array<Id, 2>>& a, size_t joinColumn1,
+                           const vector<array<Id, 3>>& b, size_t joinColumn2,
+                           vector<array<Id, 4>>* result);
 
-template void Engine::join(
-    const vector<array<Id, 3>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 3>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 5>>* result);
+template void Engine::join(const vector<array<Id, 3>>& a, size_t joinColumn1,
+                           const vector<array<Id, 3>>& b, size_t joinColumn2,
+                           vector<array<Id, 5>>* result);
 
-template void Engine::join(
-    const vector<array<Id, 5>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 1>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 5>>* result);
+template void Engine::join(const vector<array<Id, 5>>& a, size_t joinColumn1,
+                           const vector<array<Id, 1>>& b, size_t joinColumn2,
+                           vector<array<Id, 5>>* result);
 
-template void Engine::join(
-    const vector<array<Id, 1>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 5>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 5>>* result);
+template void Engine::join(const vector<array<Id, 1>>& a, size_t joinColumn1,
+                           const vector<array<Id, 5>>& b, size_t joinColumn2,
+                           vector<array<Id, 5>>* result);
 
-template void Engine::join(
-    const vector<array<Id, 2>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 4>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 5>>* result);
+template void Engine::join(const vector<array<Id, 2>>& a, size_t joinColumn1,
+                           const vector<array<Id, 4>>& b, size_t joinColumn2,
+                           vector<array<Id, 5>>* result);
 
-template void Engine::join(
-    const vector<array<Id, 4>>& a,
-    size_t joinColumn1,
-    const vector<array<Id, 2>>& b,
-    size_t joinColumn2,
-    vector<array<Id, 5>>* result);
+template void Engine::join(const vector<array<Id, 4>>& a, size_t joinColumn1,
+                           const vector<array<Id, 2>>& b, size_t joinColumn2,
+                           vector<array<Id, 5>>* result);

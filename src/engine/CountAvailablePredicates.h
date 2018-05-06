@@ -3,15 +3,15 @@
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 #pragma once
 
-#include <utility>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "../global/Pattern.h"
+#include "../parser/ParsedQuery.h"
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
-#include "../parser/ParsedQuery.h"
-#include "../global/Pattern.h"
 
 using std::string;
 using std::vector;
@@ -25,9 +25,8 @@ using std::vector;
 // predicate. This operation requires the use of the usePatterns option both
 // when building as well as when loading the index.
 class CountAvailablePredicates : public Operation {
-  public:
-
-  CountAvailablePredicates(QueryExecutionContext *qec,
+ public:
+  CountAvailablePredicates(QueryExecutionContext* qec,
                            std::shared_ptr<QueryExecutionTree> subtree,
                            size_t subjectColumnIndex);
 
@@ -39,13 +38,9 @@ class CountAvailablePredicates : public Operation {
 
   std::unordered_map<string, size_t> getVariableColumns() const;
 
-  virtual void setTextLimit(size_t limit) {
-    _subtree->setTextLimit(limit);
-  }
+  virtual void setTextLimit(size_t limit) { _subtree->setTextLimit(limit); }
 
-  virtual bool knownEmptyResult() {
-    return _subtree->knownEmptyResult();
-  }
+  virtual bool knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
   virtual float getMultiplicity(size_t col);
 
@@ -56,7 +51,7 @@ class CountAvailablePredicates : public Operation {
   void setVarNames(const std::string& predicateVarName,
                    const std::string& countVarName);
 
-private:
+ private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   size_t _subjectColumnIndex;
   std::string _predicateVarName;

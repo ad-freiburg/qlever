@@ -6,7 +6,6 @@
 #include <string>
 #include "../src/util/LRUCache.h"
 
-
 using std::string;
 
 namespace ad_utility {
@@ -88,9 +87,9 @@ TEST(LRUCacheTest, testDecreasingCapacity) {
   ASSERT_EQ(*cache["9"], "x");
   ASSERT_EQ(*cache["10"], "x");
 }
-}
+}  // namespace ad_utility
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

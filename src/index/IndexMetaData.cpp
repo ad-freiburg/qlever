@@ -2,34 +2,33 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <stdio.h>
-#include <cmath>
-#include <algorithm>
 #include "./IndexMetaData.h"
+#include <stdio.h>
+#include <algorithm>
+#include <cmath>
 #include "../util/ReadableNumberFact.h"
 
 // _____________________________________________________________________________
-IndexMetaData::IndexMetaData() : _offsetAfter(0), _nofTriples(0), _name() {
-}
+IndexMetaData::IndexMetaData() : _offsetAfter(0), _nofTriples(0), _name() {}
 
 // _____________________________________________________________________________
 void IndexMetaData::add(const FullRelationMetaData& rmd,
                         const BlockBasedRelationMetaData& bRmd) {
   _data[rmd._relId] = rmd;
-  off_t afterExpected = rmd.hasBlocks() ? bRmd._offsetAfter :
-                        static_cast<off_t>(rmd._startFullIndex +
+  off_t afterExpected =
+      rmd.hasBlocks() ? bRmd._offsetAfter
+                      : static_cast<off_t>(rmd._startFullIndex +
                                            rmd.getNofBytesForFulltextIndex());
   if (rmd.hasBlocks()) {
     _blockData[rmd._relId] = bRmd;
   }
-  if (afterExpected > _offsetAfter) { _offsetAfter = afterExpected; }
+  if (afterExpected > _offsetAfter) {
+    _offsetAfter = afterExpected;
+  }
 }
-
 
 // _____________________________________________________________________________
-off_t IndexMetaData::getOffsetAfter() const {
-  return _offsetAfter;
-}
+off_t IndexMetaData::getOffsetAfter() const { return _offsetAfter; }
 
 // _____________________________________________________________________________
 void IndexMetaData::createFromByteBuffer(unsigned char* buf) {
@@ -117,15 +116,14 @@ string IndexMetaData::statistics() const {
   size_t totalPairIndexBytes = totalElements * 2 * sizeof(Id);
   os << "# Elements:  " << totalElements << '\n';
   os << "# Blocks:    " << totalBlocks << "\n\n";
-  os << "Theoretical size of Id triples: "
-     << totalElements * 3 * sizeof(Id) << " bytes \n";
-  os << "Size of pair index:             "
-     << totalPairIndexBytes << " bytes \n";
+  os << "Theoretical size of Id triples: " << totalElements * 3 * sizeof(Id)
+     << " bytes \n";
+  os << "Size of pair index:             " << totalPairIndexBytes
+     << " bytes \n";
   os << "Total Size:                     " << totalBytes << " bytes \n";
   os << "-------------------------------------------------------------------\n";
   return os.str();
 }
-
 
 // _____________________________________________________________________________
 size_t IndexMetaData::getNofBlocksForRelation(const Id id) const {
@@ -149,22 +147,20 @@ size_t IndexMetaData::getTotalBytesForRelation(
 }
 
 // _____________________________________________________________________________
-size_t IndexMetaData::getNofDistinctC1() const {
-  return _data.size();
-}
+size_t IndexMetaData::getNofDistinctC1() const { return _data.size(); }
 
 // _____________________________________________________________________________
-FullRelationMetaData::FullRelationMetaData() :
-    _relId(0), _startFullIndex(0), _typeMultAndNofElements(0) {
-}
+FullRelationMetaData::FullRelationMetaData()
+    : _relId(0), _startFullIndex(0), _typeMultAndNofElements(0) {}
 
 // _____________________________________________________________________________
 FullRelationMetaData::FullRelationMetaData(Id relId, off_t startFullIndex,
-                                           size_t nofElements,
-                                           double col1Mult, double col2Mult,
-                                           bool isFunctional, bool hasBlocks) :
-    _relId(relId), _startFullIndex(startFullIndex),
-    _typeMultAndNofElements(nofElements) {
+                                           size_t nofElements, double col1Mult,
+                                           double col2Mult, bool isFunctional,
+                                           bool hasBlocks)
+    : _relId(relId),
+      _startFullIndex(startFullIndex),
+      _typeMultAndNofElements(nofElements) {
   assert(col1Mult >= 1);
   assert(col2Mult >= 1);
   double c1ml = log2(col1Mult);
@@ -196,7 +192,6 @@ bool FullRelationMetaData::hasBlocks() const {
 size_t FullRelationMetaData::getNofElements() const {
   return size_t(_typeMultAndNofElements & NOF_ELEMENTS_MASK);
 }
-
 
 // _____________________________________________________________________________
 void FullRelationMetaData::setIsFunctional(bool isFunctional) {
@@ -242,15 +237,12 @@ uint8_t FullRelationMetaData::getCol2LogMultiplicity() const {
   return uint8_t((_typeMultAndNofElements & 0x0000FF0000000000) >> 40);
 }
 
-
 // _____________________________________________________________________________
 pair<off_t, size_t> BlockBasedRelationMetaData::getBlockStartAndNofBytesForLhs(
     Id lhs) const {
-
-  auto it = std::lower_bound(_blocks.begin(), _blocks.end(), lhs,
-                             [](const BlockMetaData& a, Id lhs) {
-                               return a._firstLhs < lhs;
-                             });
+  auto it = std::lower_bound(
+      _blocks.begin(), _blocks.end(), lhs,
+      [](const BlockMetaData& a, Id lhs) { return a._firstLhs < lhs; });
 
   // Go back one block unless perfect lhs match.
   if (it == _blocks.end() || it->_firstLhs > lhs) {
@@ -271,11 +263,9 @@ pair<off_t, size_t> BlockBasedRelationMetaData::getBlockStartAndNofBytesForLhs(
 // _____________________________________________________________________________
 pair<off_t, size_t> BlockBasedRelationMetaData::getFollowBlockForLhs(
     Id lhs) const {
-
-  auto it = std::lower_bound(_blocks.begin(), _blocks.end(), lhs,
-                             [](const BlockMetaData& a, Id lhs) {
-                               return a._firstLhs < lhs;
-                             });
+  auto it = std::lower_bound(
+      _blocks.begin(), _blocks.end(), lhs,
+      [](const BlockMetaData& a, Id lhs) { return a._firstLhs < lhs; });
 
   // Go back one block unless perfect lhs match.
   if (it == _blocks.end() || it->_firstLhs > lhs) {
@@ -302,11 +292,10 @@ pair<off_t, size_t> BlockBasedRelationMetaData::getFollowBlockForLhs(
 // _____________________________________________________________________________
 FullRelationMetaData& FullRelationMetaData::createFromByteBuffer(
     unsigned char* buffer) {
-
   _relId = *reinterpret_cast<Id*>(buffer);
   _startFullIndex = *reinterpret_cast<off_t*>(buffer + sizeof(_relId));
-  _typeMultAndNofElements = *reinterpret_cast<uint64_t*>(
-      buffer + sizeof(Id) + sizeof(off_t));
+  _typeMultAndNofElements =
+      *reinterpret_cast<uint64_t*>(buffer + sizeof(Id) + sizeof(off_t));
   return *this;
 }
 
@@ -325,12 +314,10 @@ BlockBasedRelationMetaData& BlockBasedRelationMetaData::createFromByteBuffer(
   return *this;
 }
 
-
 // _____________________________________________________________________________
 size_t FullRelationMetaData::bytesRequired() const {
-  return sizeof(_relId)
-         + sizeof(_startFullIndex)
-         + sizeof(_typeMultAndNofElements);
+  return sizeof(_relId) + sizeof(_startFullIndex) +
+         sizeof(_typeMultAndNofElements);
 }
 
 // _____________________________________________________________________________
@@ -341,21 +328,15 @@ off_t FullRelationMetaData::getStartOfLhs() const {
 
 // _____________________________________________________________________________
 size_t BlockBasedRelationMetaData::bytesRequired() const {
-  return sizeof(_startRhs)
-         + sizeof(_offsetAfter)
-         + sizeof(size_t)
-         + _blocks.size() * sizeof(BlockMetaData);
+  return sizeof(_startRhs) + sizeof(_offsetAfter) + sizeof(size_t) +
+         _blocks.size() * sizeof(BlockMetaData);
 }
 
 // _____________________________________________________________________________
-BlockBasedRelationMetaData::BlockBasedRelationMetaData() :
-    _startRhs(0), _offsetAfter(0), _blocks() {}
+BlockBasedRelationMetaData::BlockBasedRelationMetaData()
+    : _startRhs(0), _offsetAfter(0), _blocks() {}
 
 // _____________________________________________________________________________
 BlockBasedRelationMetaData::BlockBasedRelationMetaData(
-    off_t startRhs,
-    off_t offsetAfter,
-    const vector<BlockMetaData>& blocks) :
-    _startRhs(startRhs), _offsetAfter(offsetAfter), _blocks(blocks) {}
-
-
+    off_t startRhs, off_t offsetAfter, const vector<BlockMetaData>& blocks)
+    : _startRhs(startRhs), _offsetAfter(offsetAfter), _blocks(blocks) {}

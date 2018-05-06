@@ -2,95 +2,86 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <stdlib.h>
 #include <getopt.h>
-#include <string>
+#include <libgen.h>
+#include <stdlib.h>
 #include <iomanip>
 #include <iostream>
-#include <libgen.h>
+#include <string>
 
-#include "util/ReadableNumberFact.h"
-#include "parser/SparqlParser.h"
-#include "util/Timer.h"
 #include "engine/QueryPlanner.h"
+#include "parser/SparqlParser.h"
+#include "util/ReadableNumberFact.h"
+#include "util/Timer.h"
 
-using std::string;
+using std::cerr;
 using std::cout;
 using std::endl;
 using std::flush;
-using std::cerr;
+using std::string;
 
-#define EMPH_ON  "\033[1m"
+#define EMPH_ON "\033[1m"
 #define EMPH_OFF "\033[22m"
 
 // Available options.
-struct option options[] = {
-  {"all-permutations", no_argument,       NULL, 'a'},
-  {"cost-factors",     required_argument, NULL, 'c'},
-  {"help",             no_argument,       NULL, 'h'},
-  {"index",            required_argument, NULL, 'i'},
-  {"interactive",      no_argument,       NULL, 'I'},
-  {"on-disk-literals", no_argument,       NULL, 'l'},
-  {"patterns",         no_argument,       NULL, 'P'},
-  {"queryfile",        required_argument, NULL, 'q'},
-  {"text",             no_argument,       NULL, 't'},
-  {"unopt-optional",   no_argument,       NULL, 'u'},
-  {NULL,               0,                 NULL, 0}
-};
+struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
+                           {"cost-factors", required_argument, NULL, 'c'},
+                           {"help", no_argument, NULL, 'h'},
+                           {"index", required_argument, NULL, 'i'},
+                           {"interactive", no_argument, NULL, 'I'},
+                           {"on-disk-literals", no_argument, NULL, 'l'},
+                           {"patterns", no_argument, NULL, 'P'},
+                           {"queryfile", required_argument, NULL, 'q'},
+                           {"text", no_argument, NULL, 't'},
+                           {"unopt-optional", no_argument, NULL, 'u'},
+                           {NULL, 0, NULL, 0}};
 
 void processQuery(QueryExecutionContext& qec, const string& query,
                   bool optimizeOptionals);
-void printUsage(char *execName);
+void printUsage(char* execName);
 
-void printUsage(char *execName) {
+void printUsage(char* execName) {
   std::ios coutState(nullptr);
   coutState.copyfmt(cout);
   cout << std::setfill(' ') << std::left;
 
-  cout << "Usage: " << execName << " -i <index> [OPTIONS]"
-       << endl << endl;
+  cout << "Usage: " << execName << " -i <index> [OPTIONS]" << endl << endl;
   cout << "Options" << endl;
   cout << "  " << std::setw(20) << "a, all-permutations" << std::setw(1)
        << "    "
        << "Load all six permuations of the index instead of only two." << endl;
-  cout << "  " << std::setw(20) << "c, cost-factors" << std::setw(1)
-       << "    "
+  cout << "  " << std::setw(20) << "c, cost-factors" << std::setw(1) << "    "
        << "Path to a file containing cost factors." << endl;
   cout << "  " << std::setw(20) << "h, help" << std::setw(1) << "    "
        << "Show this help and exit." << endl;
   cout << "  " << std::setw(20) << "i, index" << std::setw(1) << "    "
        << "The location of the index files." << endl;
-  cout << "  " << std::setw(20) << "I, interactive" << std::setw(1)
-       << "    " << "Use stdin to read the queries." << endl;
+  cout << "  " << std::setw(20) << "I, interactive" << std::setw(1) << "    "
+       << "Use stdin to read the queries." << endl;
   cout << "  " << std::setw(20) << "l, on-disk-literals" << std::setw(1)
        << "    "
        << "Indicates that the literals can be found on disk with the index."
        << endl;
-  cout << "  " << std::setw(20) << "P, patterns" << std::setw(1)
-       << "    "
-       << "Use relation patterns for fast ql:has-relation queries."
-       << endl;
-  cout << "  " << std::setw(20) << "q, queryfile" << std::setw(1)
-       << "    "
+  cout << "  " << std::setw(20) << "P, patterns" << std::setw(1) << "    "
+       << "Use relation patterns for fast ql:has-relation queries." << endl;
+  cout << "  " << std::setw(20) << "q, queryfile" << std::setw(1) << "    "
        << "Path to a file containing one query per line." << endl;
   cout << "  " << std::setw(20) << "t, text" << std::setw(1) << "    "
        << "Enables the usage of text." << endl;
   cout << "  " << std::setw(20) << "u, unopt-optional" << std::setw(1) << "    "
-       << "Always execute optional joins last."
-       << endl;
+       << "Always execute optional joins last." << endl;
   cout.copyfmt(coutState);
 }
-
 
 // Main function.
 int main(int argc, char** argv) {
   cout.sync_with_stdio(false);
   char* locale = setlocale(LC_CTYPE, "en_US.utf8");
 
-  //std::locale loc;
-  //ad_utility::ReadableNumberFacet facet(1);
-  //std::locale locWithNumberGrouping(loc, &facet);
-  //ad_utility::Log::imbue(locWithNumberGrouping);
+  // std::locale loc;
+  // ad_utility::ReadableNumberFacet facet(1);
+  // std::locale locWithNumberGrouping(loc, &facet);
+  // ad_utility::Log::imbue(locWithNumberGrouping);
 
   string queryfile;
   string indexName = "";
@@ -141,9 +132,9 @@ int main(int argc, char** argv) {
         break;
       default:
         cout << endl
-        << "! ERROR in processing options (getopt returned '" << c
-        << "' = 0x" << std::setbase(16) << c << ")"
-        << endl << endl;
+             << "! ERROR in processing options (getopt returned '" << c
+             << "' = 0x" << std::setbase(16) << c << ")" << endl
+             << endl;
         printUsage(argv[0]);
         exit(1);
     }
@@ -155,9 +146,10 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  std::cout << std::endl << EMPH_ON
-  << "SparqlEngineMain, version " << __DATE__
-  << " " << __TIME__ << EMPH_OFF << std::endl << std::endl;
+  std::cout << std::endl
+            << EMPH_ON << "SparqlEngineMain, version " << __DATE__ << " "
+            << __TIME__ << EMPH_OFF << std::endl
+            << std::endl;
   cout << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
@@ -192,7 +184,9 @@ int main(int argc, char** argv) {
           }
           os << line << '\n';
         }
-        if (os.str() == "") { return 0; }
+        if (os.str() == "") {
+          return 0;
+        }
         processQuery(qec, os.str(), optimizeOptionals);
       }
     } else {
@@ -238,10 +232,9 @@ void processQuery(QueryExecutionContext& qec, const string& query,
   t.stop();
   std::cout << "\nDone. Time: " << t.usecs() / 1000.0 << " ms\n";
   size_t numMatches = qet.getResult()->size();
-  std::cout << "\nNumber of matches (no limit): " << numMatches <<
-  "\n";
-  size_t effectiveLimit = atoi(pq._limit.c_str()) > 0 ? 
-    atoi(pq._limit.c_str()) : numMatches;
-  std::cout << "\nNumber of matches (limit): " <<
-  std::min(numMatches, effectiveLimit) << "\n";
+  std::cout << "\nNumber of matches (no limit): " << numMatches << "\n";
+  size_t effectiveLimit =
+      atoi(pq._limit.c_str()) > 0 ? atoi(pq._limit.c_str()) : numMatches;
+  std::cout << "\nNumber of matches (limit): "
+            << std::min(numMatches, effectiveLimit) << "\n";
 }

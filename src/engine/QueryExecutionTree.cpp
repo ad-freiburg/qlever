@@ -2,16 +2,16 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <string>
-#include <sstream>
-#include <algorithm>
 #include "./QueryExecutionTree.h"
+#include <algorithm>
+#include <sstream>
+#include <string>
+#include "./Distinct.h"
+#include "./Filter.h"
 #include "./IndexScan.h"
 #include "./Join.h"
-#include "./Sort.h"
 #include "./OrderBy.h"
-#include "./Filter.h"
-#include "./Distinct.h"
+#include "./Sort.h"
 #include "TextOperationForContexts.h"
 #include "TextOperationWithFilter.h"
 #include "TextOperationWithoutFilter.h"
@@ -20,28 +20,27 @@
 using std::string;
 
 // _____________________________________________________________________________
-QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* qec) :
-    _qec(qec),
-    _variableColumnMap(),
-    _rootOperation(nullptr),
-    _type(OperationType::UNDEFINED),
-    _contextVars(),
-    _asString(),
-    _sizeEstimate(std::numeric_limits<size_t>::max()) {
-}
+QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* qec)
+    : _qec(qec),
+      _variableColumnMap(),
+      _rootOperation(nullptr),
+      _type(OperationType::UNDEFINED),
+      _contextVars(),
+      _asString(),
+      _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 
 // _____________________________________________________________________________
 string QueryExecutionTree::asString(size_t indent) {
   string indentStr;
-  for (size_t i = 0; i < indent; ++i) { indentStr += " "; }
+  for (size_t i = 0; i < indent; ++i) {
+    indentStr += " ";
+  }
   if (_asString.size() == 0) {
     if (_rootOperation) {
       std::ostringstream os;
-      os << indentStr
-         << "{\n" << _rootOperation->asString(indent + 2) << "\n"
-         << indentStr << "  qet-width: "
-         << getResultWidth()
-         << " ";
+      os << indentStr << "{\n"
+         << _rootOperation->asString(indent + 2) << "\n"
+         << indentStr << "  qet-width: " << getResultWidth() << " ";
       if (LOGLEVEL >= TRACE && _qec) {
         os << " [estimated size: " << getSizeEstimate() << "]";
         os << " [multiplicities: ";
@@ -89,12 +88,10 @@ void QueryExecutionTree::setVariableColumns(
   _variableColumnMap = map;
 }
 
-
 // _____________________________________________________________________________
 void QueryExecutionTree::writeResultToStream(std::ostream& out,
                                              const vector<string>& selectVars,
-                                             size_t limit,
-                                             size_t offset,
+                                             size_t limit, size_t offset,
                                              char sep) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
@@ -106,12 +103,13 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
     }
     auto it = getVariableColumnMap().find(var);
     if (it != getVariableColumnMap().end()) {
-      validIndices.push_back(
-            pair<size_t, ResultTable::ResultType>(it->second,
-                                                  res->getResultType(it->second)));
+      validIndices.push_back(pair<size_t, ResultTable::ResultType>(
+          it->second, res->getResultType(it->second)));
     }
   }
-  if (validIndices.size() == 0) { return; }
+  if (validIndices.size() == 0) {
+    return;
+  }
   if (res->_nofColumns == 1) {
     auto data = static_cast<vector<array<Id, 1>>*>(res->_fixedSizeData);
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
@@ -133,8 +131,8 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeTable(*data, sep, offset, upperBound, validIndices, out);
   } else {
-    size_t upperBound = std::min<size_t>(offset + limit,
-                                         res->_varSizeData.size());
+    size_t upperBound =
+        std::min<size_t>(offset + limit, res->_varSizeData.size());
     writeTable(res->_varSizeData, sep, offset, upperBound, validIndices, out);
   }
   LOG(DEBUG) << "Done creating readable result.\n";
@@ -142,11 +140,8 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
 
 // _____________________________________________________________________________
 void QueryExecutionTree::writeResultToStreamAsJson(
-    std::ostream& out,
-    const vector<string>& selectVars,
-    size_t limit,
-    size_t offset,
-    size_t maxSend) const {
+    std::ostream& out, const vector<string>& selectVars, size_t limit,
+    size_t offset, size_t maxSend) const {
   out << "[\r\n";
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
@@ -158,9 +153,8 @@ void QueryExecutionTree::writeResultToStreamAsJson(
     }
     auto vc = getVariableColumnMap().find(var);
     if (vc != getVariableColumnMap().end()) {
-      validIndices.push_back(
-          pair<size_t, ResultTable::ResultType>(vc->second,
-                                                res->getResultType(vc->second)));
+      validIndices.push_back(pair<size_t, ResultTable::ResultType>(
+          vc->second, res->getResultType(vc->second)));
     }
   }
   if (validIndices.size() == 0) {
@@ -188,8 +182,8 @@ void QueryExecutionTree::writeResultToStreamAsJson(
     size_t upperBound = std::min<size_t>(offset + limit, data->size());
     writeJsonTable(*data, offset, upperBound, validIndices, maxSend, out);
   } else {
-    size_t upperBound = std::min<size_t>(offset + limit,
-                                         res->_varSizeData.size());
+    size_t upperBound =
+        std::min<size_t>(offset + limit, res->_varSizeData.size());
     writeJsonTable(res->_varSizeData, offset, upperBound, validIndices, maxSend,
                    out);
   }
@@ -226,9 +220,7 @@ size_t QueryExecutionTree::getSizeEstimate() {
 }
 
 // _____________________________________________________________________________
-bool QueryExecutionTree::knownEmptyResult() {
-  return getSizeEstimate() == 0;
-}
+bool QueryExecutionTree::knownEmptyResult() { return getSizeEstimate() == 0; }
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::varCovered(string var) const {

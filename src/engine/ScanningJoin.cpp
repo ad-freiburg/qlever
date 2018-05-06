@@ -5,18 +5,17 @@
 #include "./ScanningJoin.h"
 
 // _____________________________________________________________________________
-ScanningJoin::ScanningJoin(
-    QueryExecutionContext* qec,
-    const QueryExecutionTree& subtree,
-    size_t subtreeJoinCol,
-    IndexScan::ScanType scanType) : IndexScan(qec, scanType) {
+ScanningJoin::ScanningJoin(QueryExecutionContext* qec,
+                           const QueryExecutionTree& subtree,
+                           size_t subtreeJoinCol, IndexScan::ScanType scanType)
+    : IndexScan(qec, scanType) {
   _subtree = new QueryExecutionTree(subtree);
   _subtreeJoinCol = subtreeJoinCol;
 }
 
 // _____________________________________________________________________________
-ScanningJoin::ScanningJoin(const ScanningJoin& other) : IndexScan(
-    other._executionContext, other._type) {
+ScanningJoin::ScanningJoin(const ScanningJoin& other)
+    : IndexScan(other._executionContext, other._type) {
   _subtree = new QueryExecutionTree(*other._subtree);
   _subtreeJoinCol = other._subtreeJoinCol;
 }
@@ -34,15 +33,13 @@ ScanningJoin& ScanningJoin::operator=(const ScanningJoin& other) {
 }
 
 // _____________________________________________________________________________
-ScanningJoin::~ScanningJoin() {
-  delete _subtree;
-}
+ScanningJoin::~ScanningJoin() { delete _subtree; }
 
 // _____________________________________________________________________________
 string ScanningJoin::asString() const {
   std::ostringstream os;
-  os << "SCANNING JOIN for the result of " << _subtree << " on col " <<
-  _subtreeJoinCol << " and the equivalent of: " << IndexScan::asString();
+  os << "SCANNING JOIN for the result of " << _subtree << " on col "
+     << _subtreeJoinCol << " and the equivalent of: " << IndexScan::asString();
   return os.str();
 }
 
@@ -56,16 +53,3 @@ void ScanningJoin::computeResult(ResultTable* result) const {
   AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
   IndexScan::computeResult(result);
 }
-
-
-
-
-
-
-
-
-
-
-
-
-

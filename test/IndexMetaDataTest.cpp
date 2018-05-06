@@ -4,9 +4,8 @@
 
 #include <gtest/gtest.h>
 #include <fstream>
-#include "../src/util/File.h"
 #include "../src/index/IndexMetaData.h"
-
+#include "../src/util/File.h"
 
 TEST(FullRelationMetaDataTest, testFunctionAndBlockFlagging) {
   FullRelationMetaData rmd(0, 0, 5, 1, 1, false, false);
@@ -51,7 +50,6 @@ TEST(FullRelationMetaDataTest, testFunctionAndBlockFlagging) {
   ASSERT_TRUE(rmd.isFunctional());
   ASSERT_EQ(1u, rmd.getCol1LogMultiplicity());
   ASSERT_EQ(200u, rmd.getCol2LogMultiplicity());
-
 
   FullRelationMetaData rmd2(0, 0, 5, 1, 1, true, true);
   rmd2.setIsFunctional(true);
@@ -113,8 +111,8 @@ TEST(RelationMetaDataTest, writeReadTest) {
     f.close();
 
     ad_utility::File in("_testtmp.rmd", "r");
-    unsigned char* buf = new unsigned char[rmdF.bytesRequired() +
-                                           rmdB.bytesRequired()];
+    unsigned char* buf =
+        new unsigned char[rmdF.bytesRequired() + rmdB.bytesRequired()];
     in.read(buf, rmdF.bytesRequired() + rmdB.bytesRequired());
     FullRelationMetaData rmdF2;
     rmdF2.createFromByteBuffer(buf);
@@ -164,9 +162,8 @@ TEST(IndexMetaDataTest, writeReadTest2) {
     f.close();
 
     ad_utility::File in("_testtmp.imd", "r");
-    size_t imdBytes =
-        2 * sizeof(size_t) + sizeof(off_t) +
-        (rmdF.bytesRequired() + rmdB.bytesRequired()) * 2;
+    size_t imdBytes = 2 * sizeof(size_t) + sizeof(off_t) +
+                      (rmdF.bytesRequired() + rmdB.bytesRequired()) * 2;
     unsigned char* buf = new unsigned char[imdBytes];
     in.read(buf, imdBytes);
     IndexMetaData imd2;
@@ -212,7 +209,6 @@ TEST(IndexMetaDataTest, writeReadTest2) {
     FAIL() << e.what();
   }
 }
-
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);

@@ -2,32 +2,27 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./Distinct.h"
 #include <sstream>
 #include "./QueryExecutionTree.h"
-#include "./Distinct.h"
-
 
 using std::string;
 
 // _____________________________________________________________________________
-size_t Distinct::getResultWidth() const {
-  return _subtree->getResultWidth();
-}
+size_t Distinct::getResultWidth() const { return _subtree->getResultWidth(); }
 
 // _____________________________________________________________________________
 Distinct::Distinct(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
-                   const vector<size_t>& keepIndices) :
-    Operation(qec),
-    _subtree(subtree),
-    _keepIndices(keepIndices) {
-}
-
+                   const vector<size_t>& keepIndices)
+    : Operation(qec), _subtree(subtree), _keepIndices(keepIndices) {}
 
 // _____________________________________________________________________________
 string Distinct::asString(size_t indent) const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  for (size_t i = 0; i < indent; ++i) {
+    os << " ";
+  }
   os << "Distinct " << _subtree->asString(indent);
   return os.str();
 }

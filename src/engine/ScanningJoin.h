@@ -8,9 +8,7 @@
 #include "./IndexScan.h"
 #include "./QueryExecutionTree.h"
 
-
 using std::list;
-
 
 // Special operation that replaces a join between a (usually very small
 // in terms of #rows) result and the result of a (usually very large) scan
@@ -30,17 +28,11 @@ class ScanningJoin : public IndexScan {
 
   virtual size_t getResultWidth() const;
 
-  virtual size_t resultSortedOn() const {
-    return _subtreeJoinCol;
-  }
+  virtual size_t resultSortedOn() const { return _subtreeJoinCol; }
 
-  virtual void setTextLimit(size_t limit) {
-    _subtree->setTextLimit(limit);
-  }
+  virtual void setTextLimit(size_t limit) { _subtree->setTextLimit(limit); }
 
-  virtual size_t getSizeEstimate() {
-    return _subtree->getSizeEstimate();
-  }
+  virtual size_t getSizeEstimate() { return _subtree->getSizeEstimate(); }
 
   virtual float getMultiplicity(size_t col) {
     return _subtree->getMultiplicity(col);
@@ -54,7 +46,7 @@ class ScanningJoin : public IndexScan {
     return _subtree->knownEmptyResult() || IndexScan::knownEmptyResult();
   }
 
-private:
+ private:
   QueryExecutionTree* _subtree;
   size_t _subtreeJoinCol;
   virtual void computeResult(ResultTable* result) const;

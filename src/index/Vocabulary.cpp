@@ -2,24 +2,21 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
-#include <iostream>
 #include <fstream>
+#include <iostream>
 
 #include "../util/File.h"
-#include "./Vocabulary.h"
-#include "../util/HashSet.h"
 #include "../util/HashMap.h"
+#include "../util/HashSet.h"
+#include "./Vocabulary.h"
 
 using std::string;
 
 // _____________________________________________________________________________
-Vocabulary::Vocabulary() {
-}
+Vocabulary::Vocabulary() {}
 
 // _____________________________________________________________________________
-Vocabulary::~Vocabulary() {
-}
-
+Vocabulary::~Vocabulary() {}
 
 // _____________________________________________________________________________
 void Vocabulary::readFromFile(const string& fileName,
@@ -91,10 +88,12 @@ void Vocabulary::externalizeLiterals(const string& fileName) {
 
 // _____________________________________________________________________________
 bool Vocabulary::shouldBeExternalized(const string& word) {
-  if (word.size() > 100) { return true; }
+  if (word.size() > 100) {
+    return true;
+  }
   string lang = getLanguage(word);
   if (lang != "") {
-    return (lang != "en"); // && lang != "en_gb" && lang != "en_us" &&
+    return (lang != "en");  // && lang != "en_gb" && lang != "en_us" &&
     // lang != "de" && lang != "es" && lang != "fr");
   }
   return false;
@@ -111,4 +110,3 @@ string Vocabulary::getLanguage(const string& literal) {
   }
   return "";
 }
-

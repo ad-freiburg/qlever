@@ -4,14 +4,14 @@
 #pragma once
 
 #include <array>
-#include <string>
 #include <fstream>
+#include <string>
 
-using std::string;
 using std::array;
+using std::string;
 
 class TsvParser {
-public:
+ public:
   explicit TsvParser(const string& tsvFile);
   ~TsvParser();
   // Don't allow copy & assignment
@@ -22,7 +22,6 @@ public:
   // Returns true if something was stored.
   bool getLine(array<string, 3>&);
 
-
-private:
+ private:
   std::ifstream _in;
 };

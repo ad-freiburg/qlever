@@ -4,23 +4,19 @@
 #pragma once
 
 #include <list>
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
-#include "./IndexScan.h"
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
+#include "./IndexScan.h"
+#include "./Operation.h"
+#include "./QueryExecutionTree.h"
 
 using std::list;
 
 class Join : public Operation {
-public:
-
-  Join(QueryExecutionContext* qec,
-       std::shared_ptr<QueryExecutionTree> t1,
-       std::shared_ptr<QueryExecutionTree> t2,
-       size_t t1JoinCol,
-       size_t t2JoinCol,
-       bool keepJoinColumn = true);
+ public:
+  Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
+       std::shared_ptr<QueryExecutionTree> t2, size_t t1JoinCol,
+       size_t t2JoinCol, bool keepJoinColumn = true);
 
   virtual string asString(size_t indent = 0) const;
 
@@ -48,7 +44,6 @@ public:
 
   virtual size_t getCostEstimate();
 
-
   virtual bool knownEmptyResult() {
     return _left->knownEmptyResult() || _right->knownEmptyResult();
   }
@@ -57,7 +52,7 @@ public:
 
   virtual float getMultiplicity(size_t col);
 
-private:
+ private:
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
@@ -73,8 +68,6 @@ private:
 
   virtual void computeResult(ResultTable* result) const;
 
-
-
   static bool isFullScanDummy(std::shared_ptr<QueryExecutionTree> tree) {
     return tree->getType() == QueryExecutionTree::SCAN &&
            tree->getResultWidth() == 3;
@@ -87,19 +80,19 @@ private:
   ScanMethodType getScanMethod(
       std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const;
 
-  template<typename NonDummyResultList, typename ResultList>
+  template <typename NonDummyResultList, typename ResultList>
   void doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& v,
                                           ResultList* r) const;
 
-  template<typename NonDummyResultList, typename ResultList>
+  template <typename NonDummyResultList, typename ResultList>
   void doComputeJoinWithFullScanDummyRight(const NonDummyResultList& v,
                                            ResultList* r) const;
 
   // In Header to avoid numerous instantiations.
-  template<typename LhsIt, typename RhsIt>
+  template <typename LhsIt, typename RhsIt>
   void appendCrossProduct(LhsIt lbeg, LhsIt lend, RhsIt rbeg, RhsIt rend,
                           vector<vector<Id>>* res) const {
-    for (auto it=lbeg;it != lend; ++it) {
+    for (auto it = lbeg; it != lend; ++it) {
       for (auto itt = rbeg; itt != rend; ++itt) {
         const auto& l = *it;
         const auto& r = *itt;
@@ -109,10 +102,10 @@ private:
       }
     }
   };
-  template<typename LhsIt, typename RhsIt, size_t Width>
+  template <typename LhsIt, typename RhsIt, size_t Width>
   void appendCrossProduct(LhsIt lbeg, LhsIt lend, RhsIt rbeg, RhsIt rend,
                           vector<array<Id, Width>>* res) const {
-    for (auto it=lbeg;it != lend; ++it) {
+    for (auto it = lbeg; it != lend; ++it) {
       for (auto itt = rbeg; itt != rend; ++itt) {
         const auto& l = *it;
         const auto& r = *itt;

@@ -5,36 +5,34 @@
 #include "CountAvailablePredicates.h"
 
 // _____________________________________________________________________________
-CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext *qec,
-                                                   std::shared_ptr<QueryExecutionTree> subtree,
-                                                   size_t subjectColumnIndex) :
-  Operation(qec),
-  _subtree(subtree),
-  _subjectColumnIndex(subjectColumnIndex),
-  _predicateVarName("predicate"),
-  _countVarName("cont") { }
-
+CountAvailablePredicates::CountAvailablePredicates(
+    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
+    size_t subjectColumnIndex)
+    : Operation(qec),
+      _subtree(subtree),
+      _subjectColumnIndex(subjectColumnIndex),
+      _predicateVarName("predicate"),
+      _countVarName("cont") {}
 
 // _____________________________________________________________________________
 string CountAvailablePredicates::asString(size_t indent) const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  for (size_t i = 0; i < indent; ++i) {
+    os << " ";
+  }
   os << "COUNT_AVAILABLE_PREDICATES (col " << _subjectColumnIndex << ")\n"
      << _subtree->asString(indent);
   return os.str();
 }
 
 // _____________________________________________________________________________
-size_t CountAvailablePredicates::getResultWidth() const {
-  return 2;
-}
+size_t CountAvailablePredicates::getResultWidth() const { return 2; }
 
 // _____________________________________________________________________________
 size_t CountAvailablePredicates::resultSortedOn() const {
   // The result is not sorted on any column.
   return std::numeric_limits<size_t>::max();
 }
-
 
 // _____________________________________________________________________________
 void CountAvailablePredicates::setVarNames(const std::string& predicateVarName,
@@ -86,7 +84,8 @@ size_t CountAvailablePredicates::getCostEstimate() {
 
 // _____________________________________________________________________________
 void CountAvailablePredicates::computeResult(ResultTable* result) const {
-  // TODO(florian): make the loading of the has-pattern and has-relation relations cachable
+  // TODO(florian): make the loading of the has-pattern and has-relation
+  // relations cachable
 
   result->_nofColumns = 2;
   result->_sortedBy = 0;
@@ -94,55 +93,46 @@ void CountAvailablePredicates::computeResult(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
 
-  const std::vector<PatternID>& hasPattern = _executionContext->getIndex().getHasPattern();
-  const CompactStringVector<Id, Id>& hasRelation = _executionContext->getIndex().getHasRelation();
-  const CompactStringVector<size_t, Id>& patterns = _executionContext->getIndex().getPatterns();
+  const std::vector<PatternID>& hasPattern =
+      _executionContext->getIndex().getHasPattern();
+  const CompactStringVector<Id, Id>& hasRelation =
+      _executionContext->getIndex().getHasRelation();
+  const CompactStringVector<size_t, Id>& patterns =
+      _executionContext->getIndex().getPatterns();
 
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
 
   if (result->_nofColumns > 5) {
-    Engine::computePatternTrick<vector<Id>>(&subresult->_varSizeData,
-                                            static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-                                            hasPattern,
-                                            hasRelation,
-                                            patterns,
-                                            _subjectColumnIndex);
+    Engine::computePatternTrick<vector<Id>>(
+        &subresult->_varSizeData,
+        static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData), hasPattern,
+        hasRelation, patterns, _subjectColumnIndex);
   } else {
     if (subresult->_nofColumns == 1) {
-      Engine::computePatternTrick<array<Id, 1>>(static_cast<vector<array<Id, 1>>*>(subresult->_fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-                                                hasPattern,
-                                                hasRelation,
-                                                patterns,
-                                                _subjectColumnIndex);
+      Engine::computePatternTrick<array<Id, 1>>(
+          static_cast<vector<array<Id, 1>>*>(subresult->_fixedSizeData),
+          static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
+          hasPattern, hasRelation, patterns, _subjectColumnIndex);
     } else if (subresult->_nofColumns == 2) {
-      Engine::computePatternTrick<array<Id, 2>>(static_cast<vector<array<Id, 2>>*>(subresult->_fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-                                                hasPattern,
-                                                hasRelation,
-                                                patterns,
-                                                _subjectColumnIndex);
+      Engine::computePatternTrick<array<Id, 2>>(
+          static_cast<vector<array<Id, 2>>*>(subresult->_fixedSizeData),
+          static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
+          hasPattern, hasRelation, patterns, _subjectColumnIndex);
     } else if (subresult->_nofColumns == 3) {
-      Engine::computePatternTrick<array<Id, 3>>(static_cast<vector<array<Id, 3>>*>(subresult->_fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-                                                hasPattern,
-                                                hasRelation,
-                                                patterns,
-                                                _subjectColumnIndex);
+      Engine::computePatternTrick<array<Id, 3>>(
+          static_cast<vector<array<Id, 3>>*>(subresult->_fixedSizeData),
+          static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
+          hasPattern, hasRelation, patterns, _subjectColumnIndex);
     } else if (subresult->_nofColumns == 4) {
-      Engine::computePatternTrick<array<Id, 4>>(static_cast<vector<array<Id, 4>>*>(subresult->_fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-                                                hasPattern,
-                                                hasRelation,
-                                                patterns,
-                                                _subjectColumnIndex);
+      Engine::computePatternTrick<array<Id, 4>>(
+          static_cast<vector<array<Id, 4>>*>(subresult->_fixedSizeData),
+          static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
+          hasPattern, hasRelation, patterns, _subjectColumnIndex);
     } else if (subresult->_nofColumns == 5) {
-      Engine::computePatternTrick<array<Id, 5>>(static_cast<vector<array<Id, 5>>*>(subresult->_fixedSizeData),
-                                                static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-                                                hasPattern,
-                                                hasRelation,
-                                                patterns,
-                                                _subjectColumnIndex);
+      Engine::computePatternTrick<array<Id, 5>>(
+          static_cast<vector<array<Id, 5>>*>(subresult->_fixedSizeData),
+          static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
+          hasPattern, hasRelation, patterns, _subjectColumnIndex);
     }
   }
   result->finish();

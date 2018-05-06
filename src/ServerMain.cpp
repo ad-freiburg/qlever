@@ -2,48 +2,46 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
-#include <stdlib.h>
-#include <stdio.h>
 #include <getopt.h>
-#include <string>
-#include <vector>
+#include <stdio.h>
+#include <stdlib.h>
 #include <iomanip>
 #include <iostream>
+#include <string>
+#include <vector>
 
 #include "engine/Server.h"
 #include "util/ReadableNumberFact.h"
 
-using std::string;
-using std::vector;
+using std::cerr;
 using std::cout;
 using std::endl;
 using std::flush;
-using std::cerr;
+using std::string;
+using std::vector;
 
-#define EMPH_ON  "\033[1m"
+#define EMPH_ON "\033[1m"
 #define EMPH_OFF "\033[22m"
 
 // Available options.
-struct option options[] = {
-  {"all-permutations", no_argument,       NULL, 'a'},
-  {"help",             no_argument,       NULL, 'h'},
-  {"index",            required_argument, NULL, 'i'},
-  {"worker-threads",   required_argument, NULL, 'j'},
-  {"on-disk-literals", no_argument,       NULL, 'l'},
-  {"port",             required_argument, NULL, 'p'},
-  {"patterns",         no_argument,       NULL, 'P'},
-  {"text",             no_argument,       NULL, 't'},
-  {"unopt-optional",   no_argument,       NULL, 'u'},
-  {NULL,               0,                 NULL, 0}
-};
+struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
+                           {"help", no_argument, NULL, 'h'},
+                           {"index", required_argument, NULL, 'i'},
+                           {"worker-threads", required_argument, NULL, 'j'},
+                           {"on-disk-literals", no_argument, NULL, 'l'},
+                           {"port", required_argument, NULL, 'p'},
+                           {"patterns", no_argument, NULL, 'P'},
+                           {"text", no_argument, NULL, 't'},
+                           {"unopt-optional", no_argument, NULL, 'u'},
+                           {NULL, 0, NULL, 0}};
 
-void printUsage(char *execName) {
+void printUsage(char* execName) {
   std::ios coutState(nullptr);
   coutState.copyfmt(cout);
   cout << std::setfill(' ') << std::left;
 
-  cout << "Usage: " << execName << " -p <PORT> -i <index> [OPTIONS]"
-       << endl << endl;
+  cout << "Usage: " << execName << " -p <PORT> -i <index> [OPTIONS]" << endl
+       << endl;
   cout << "Options" << endl;
   cout << "  " << std::setw(20) << "a, all-permutations" << std::setw(1)
        << "    "
@@ -58,10 +56,8 @@ void printUsage(char *execName) {
        << endl;
   cout << "  " << std::setw(20) << "p, port" << std::setw(1) << "    "
        << "The port on which to run the web interface." << endl;
-  cout << "  " << std::setw(20) << "P, patterns" << std::setw(1)
-       << "    "
-       << "Use relation patterns for fast ql:has-relation queries."
-       << endl;
+  cout << "  " << std::setw(20) << "P, patterns" << std::setw(1) << "    "
+       << "Use relation patterns for fast ql:has-relation queries." << endl;
   cout << "  " << std::setw(20) << "t, text" << std::setw(1) << "    "
        << "Enables the usage of text." << endl;
   cout << "  " << std::setw(20) << "j, worker-threads" << std::setw(1) << "    "
@@ -80,7 +76,6 @@ int main(int argc, char** argv) {
   ad_utility::ReadableNumberFacet facet(1);
   std::locale locWithNumberGrouping(loc, &facet);
   ad_utility::Log::imbue(locWithNumberGrouping);
-
 
   // Init variables that may or may not be
   // filled / set depending on the options.
@@ -130,8 +125,9 @@ int main(int argc, char** argv) {
       default:
         cout << endl
              << "! ERROR in processing options (getopt returned '" << c
-             << "' = 0x" << std::setbase(16) << static_cast<int> (c) << ")"
-             << endl << endl;
+             << "' = 0x" << std::setbase(16) << static_cast<int>(c) << ")"
+             << endl
+             << endl;
         printUsage(argv[0]);
         exit(1);
     }
@@ -148,8 +144,10 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  cout << endl << EMPH_ON << "ServerMain, version " << __DATE__
-       << " " << __TIME__<< EMPH_OFF << endl << endl;
+  cout << endl
+       << EMPH_ON << "ServerMain, version " << __DATE__ << " " << __TIME__
+       << EMPH_OFF << endl
+       << endl;
   cout << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
@@ -157,7 +155,7 @@ int main(int argc, char** argv) {
     server.initialize(index, text, allPermutations, onDiskLiterals,
                       optimizeOptionals, usePatterns);
     server.run();
-  } catch(const ad_semsearch::Exception& e) {
+  } catch (const ad_semsearch::Exception& e) {
     LOG(ERROR) << e.getFullErrorMessage() << '\n';
     return 1;
   }

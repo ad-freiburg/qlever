@@ -3,65 +3,59 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include "../global/Id.h"
-#include "../util/Exception.h"
 #include <array>
 #include <condition_variable>
 #include <mutex>
 #include <vector>
+#include "../global/Id.h"
+#include "../util/Exception.h"
 
-using std::vector;
 using std::array;
 using std::condition_variable;
+using std::lock_guard;
 using std::mutex;
 using std::unique_lock;
-using std::lock_guard;
+using std::vector;
 
 class ResultTable {
-public:
-  enum Status {
-    FINISHED = 0,
-    OTHER = 1
-  };
+ public:
+  enum Status { FINISHED = 0, OTHER = 1 };
 
-  enum class ResultType {
-    KB,
-    VERBATIM,
-    TEXT
-  };
+  enum class ResultType { KB, VERBATIM, TEXT };
 
   size_t _nofColumns;
   // A value >= _nofColumns indicates unsorted data
   size_t _sortedBy;
 
   vector<vector<Id>> _varSizeData;
-  void *_fixedSizeData;
+  void* _fixedSizeData;
 
   vector<ResultType> _resultTypes;
 
   ResultTable();
 
-  ResultTable(const ResultTable &);
+  ResultTable(const ResultTable&);
 
-  ResultTable(ResultTable &&other) noexcept : _nofColumns(0),
-                                              _sortedBy(0),
-                                              _varSizeData(),
-                                              _fixedSizeData(nullptr),
-                                              _status(ResultTable::OTHER){
+  ResultTable(ResultTable&& other) noexcept
+      : _nofColumns(0),
+        _sortedBy(0),
+        _varSizeData(),
+        _fixedSizeData(nullptr),
+        _status(ResultTable::OTHER) {
     swap(*this, other);
   }
 
-  ResultTable &operator=(ResultTable other) {
-    swap(*this, other);
-    return *this;
-  }
-
-  ResultTable &operator=(ResultTable &&other) noexcept {
+  ResultTable& operator=(ResultTable other) {
     swap(*this, other);
     return *this;
   }
 
-  friend void swap(ResultTable &a, ResultTable &b) noexcept {
+  ResultTable& operator=(ResultTable&& other) noexcept {
+    swap(*this, other);
+    return *this;
+  }
+
+  friend void swap(ResultTable& a, ResultTable& b) noexcept {
     using std::swap;
     swap(a._status, b._status);
     swap(a._nofColumns, b._nofColumns);
@@ -71,7 +65,6 @@ public:
   }
 
   virtual ~ResultTable();
-
 
   void finish() {
     lock_guard<mutex> lk(_cond_var_m);
@@ -103,28 +96,28 @@ public:
 
     vector<vector<Id>> res;
     if (_nofColumns == 1) {
-      const auto &data = *static_cast<vector<array<Id, 1>> *>(_fixedSizeData);
+      const auto& data = *static_cast<vector<array<Id, 1>>*>(_fixedSizeData);
       for (size_t i = 0; i < data.size(); ++i) {
         res.emplace_back(vector<Id>{{data[i][0]}});
       }
     } else if (_nofColumns == 2) {
-      const auto &data = *static_cast<vector<array<Id, 2>> *>(_fixedSizeData);
+      const auto& data = *static_cast<vector<array<Id, 2>>*>(_fixedSizeData);
       for (size_t i = 0; i < data.size(); ++i) {
         res.emplace_back(vector<Id>{{data[i][0], data[i][1]}});
       }
     } else if (_nofColumns == 3) {
-      const auto &data = *static_cast<vector<array<Id, 3>> *>(_fixedSizeData);
+      const auto& data = *static_cast<vector<array<Id, 3>>*>(_fixedSizeData);
       for (size_t i = 0; i < data.size(); ++i) {
         res.emplace_back(vector<Id>{{data[i][0], data[i][1], data[i][2]}});
       }
     } else if (_nofColumns == 4) {
-      const auto &data = *static_cast<vector<array<Id, 4>> *>(_fixedSizeData);
+      const auto& data = *static_cast<vector<array<Id, 4>>*>(_fixedSizeData);
       for (size_t i = 0; i < data.size(); ++i) {
         res.emplace_back(
             vector<Id>{{data[i][0], data[i][1], data[i][2], data[i][3]}});
       }
     } else if (_nofColumns == 5) {
-      const auto &data = *static_cast<vector<array<Id, 5>> *>(_fixedSizeData);
+      const auto& data = *static_cast<vector<array<Id, 5>>*>(_fixedSizeData);
       for (size_t i = 0; i < data.size(); ++i) {
         res.emplace_back(vector<Id>{
             {data[i][0], data[i][1], data[i][2], data[i][3], data[i][4]}});
@@ -140,11 +133,10 @@ public:
     return ResultType::KB;
   }
 
-private:
+ private:
   // See this SO answer for why mutable is ok here
   // https://stackoverflow.com/questions/3239905/c-mutex-and-const-correctness
   mutable condition_variable _cond_var;
   mutable mutex _cond_var_m;
   Status _status;
-
 };

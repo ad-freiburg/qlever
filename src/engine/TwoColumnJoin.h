@@ -10,10 +10,8 @@
 
 using std::list;
 
-
 class TwoColumnJoin : public Operation {
-public:
-
+ public:
   TwoColumnJoin(QueryExecutionContext* qec,
                 std::shared_ptr<QueryExecutionTree> t1,
                 std::shared_ptr<QueryExecutionTree> t2,
@@ -52,7 +50,7 @@ public:
 
   virtual float getMultiplicity(size_t col);
 
-private:
+ private:
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 

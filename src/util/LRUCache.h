@@ -4,17 +4,17 @@
 
 #pragma once
 
-#include "./HashMap.h"
 #include <assert.h>
 #include <list>
 #include <memory>
 #include <mutex>
 #include <utility>
+#include "./HashMap.h"
 
 using std::list;
+using std::make_shared;
 using std::pair;
 using std::shared_ptr;
-using std::make_shared;
 
 namespace ad_utility {
 //! Associative array for almost arbitrary keys and values that acts as a cache.
@@ -37,12 +37,12 @@ template <class Key, class Value,
           class AccessMap = ad_utility::HashMap<
               Key, typename list<pair<Key, shared_ptr<const Value>>>::iterator>>
 class LRUCache {
-private:
+ private:
   typedef pair<Key, shared_ptr<const Value>> Entry;
   typedef pair<shared_ptr<Value>, shared_ptr<const Value>> EmplacePair;
   typedef list<Entry> EntryList;
 
-public:
+ public:
   //! Typical constructor. A default value may be added in time.
   explicit LRUCache(size_t capacity)
       : _capacity(capacity), _data(), _accessMap(), _lock() {}
@@ -60,13 +60,15 @@ public:
   // This needs to happen in a single operation because otherwise we may find
   // an item in the cash now but it may already be deleted when trying to
   // retrieve  it in another operation.
-  template <class... Args> EmplacePair tryEmplace(const Key& key, Args &&... args) {
+  template <class... Args>
+  EmplacePair tryEmplace(const Key& key, Args&&... args) {
     std::lock_guard<std::mutex> lock(_lock);
     EmplacePair result;
     typename AccessMap::const_iterator mapIt = _accessMap.find(key);
     if (mapIt == _accessMap.end()) {
       // Insert without taking mutex recursively
-      shared_ptr<Value> emplaced = make_shared<Value>(std::forward<Args>(args)...);
+      shared_ptr<Value> emplaced =
+          make_shared<Value>(std::forward<Args>(args)...);
       _data.emplace_front(key, emplaced);
       _accessMap[key] = _data.begin();
       if (_data.size() > _capacity) {
@@ -91,7 +93,7 @@ public:
 
   //! Lookup a read-only value without creating a new one if non exists
   //! instead shared_ptr<const Value>(nullptr) is returned in that case
-  shared_ptr<const Value> operator[](const Key &key) {
+  shared_ptr<const Value> operator[](const Key& key) {
     std::lock_guard<std::mutex> lock(_lock);
     shared_ptr<const Value> result;
     typename AccessMap::const_iterator mapIt = _accessMap.find(key);
@@ -142,7 +144,7 @@ public:
   }
 
   //! Checks if there is an entry with the given key.
-  bool contains(const Key &key) {
+  bool contains(const Key& key) {
     std::lock_guard<std::mutex> lock(_lock);
     return _accessMap.count(key) > 0;
   }
@@ -157,7 +159,7 @@ public:
     _accessMap.clear();
   }
 
-private:
+ private:
   size_t _capacity;
   EntryList _data;
   AccessMap _accessMap;
@@ -165,4 +167,4 @@ private:
   // this should be a shared_mutex
   std::mutex _lock;
 };
-}
+}  // namespace ad_utility

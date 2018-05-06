@@ -9,20 +9,24 @@
 using std::pair;
 using std::vector;
 
-template<typename E>
+template <typename E>
 class OBComp {
-public:
-  OBComp(const vector<pair<size_t, bool>>& sortIndices) :
-      _sortIndices(sortIndices) { }
+ public:
+  OBComp(const vector<pair<size_t, bool>>& sortIndices)
+      : _sortIndices(sortIndices) {}
 
   bool operator()(const E& a, const E& b) const {
     for (auto& entry : _sortIndices) {
-      if (a[entry.first] < b[entry.first]) { return !entry.second; }
-      if (a[entry.first] > b[entry.first]) { return entry.second; }
+      if (a[entry.first] < b[entry.first]) {
+        return !entry.second;
+      }
+      if (a[entry.first] > b[entry.first]) {
+        return entry.second;
+      }
     }
     return a[0] < b[0];
   }
 
-private:
+ private:
   vector<pair<size_t, bool>> _sortIndices;
 };

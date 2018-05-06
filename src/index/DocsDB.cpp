@@ -2,8 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <algorithm>
 #include "DocsDB.h"
+#include <algorithm>
 #include "../global/Constants.h"
 
 // _____________________________________________________________________________
@@ -24,7 +24,7 @@ string DocsDB::getTextExcerpt(Id cid) const {
   off_t& to = ft[1];
   off_t at = _startOfOffsets + cid * sizeof(off_t);
   at += _dbFile.read(ft, sizeof(ft), at);
-  while(to == from) {
+  while (to == from) {
     at += _dbFile.read(&to, sizeof(off_t), at);
   }
   assert(to > from);

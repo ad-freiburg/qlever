@@ -6,13 +6,12 @@
 
 using std::string;
 
-
 // _____________________________________________________________________________
 TwoColumnJoin::TwoColumnJoin(QueryExecutionContext* qec,
                              std::shared_ptr<QueryExecutionTree> t1,
                              std::shared_ptr<QueryExecutionTree> t2,
-                             const vector<array<size_t, 2>>& jcs) : Operation(
-    qec) {
+                             const vector<array<size_t, 2>>& jcs)
+    : Operation(qec) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CHECK_EQ(jcs.size(), 2);
   if (t1->asString() < t2->asString()) {
@@ -50,17 +49,29 @@ TwoColumnJoin::TwoColumnJoin(QueryExecutionContext* qec,
 // _____________________________________________________________________________
 string TwoColumnJoin::asString(size_t indent) const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  for (size_t i = 0; i < indent; ++i) {
+    os << " ";
+  }
   os << "TWO_COLUMN_JOIN\n";
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  for (size_t i = 0; i < indent; ++i) {
+    os << " ";
+  }
   os << _left->asString(indent) << "\n";
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  for (size_t i = 0; i < indent; ++i) {
+    os << " ";
+  }
   os << "join-columns: [" << _jc1Left << " & " << _jc2Left << "]\n";
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  for (size_t i = 0; i < indent; ++i) {
+    os << " ";
+  }
   os << "|X|\n";
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  for (size_t i = 0; i < indent; ++i) {
+    os << " ";
+  }
   os << _right->asString(indent) << "\n";
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  for (size_t i = 0; i < indent; ++i) {
+    os << " ";
+  }
   os << "join-columns: [" << _jc1Right << " & " << _jc2Right << "]";
   return os.str();
 }
@@ -75,23 +86,21 @@ void TwoColumnJoin::computeResult(ResultTable* result) const {
   // with join columns 0 1. This means we can use the filter method.
   if ((_left->getResultWidth() == 2 && _jc1Left == 0 && _jc2Left == 1) ||
       (_right->getResultWidth() == 2 && _jc1Right == 0 && _jc2Right == 1)) {
-    bool rightFilter = (_right->getResultWidth() == 2 && _jc1Right == 0 &&
-                        _jc2Right == 1);
+    bool rightFilter =
+        (_right->getResultWidth() == 2 && _jc1Right == 0 && _jc2Right == 1);
     const auto& v = rightFilter ? _left : _right;
     const auto leftResult = _left->getResult();
     const auto rightResult = _right->getResult();
     const auto& filter = *static_cast<vector<array<Id, 2>>*>(
-        rightFilter ? rightResult->_fixedSizeData
-                    : leftResult->_fixedSizeData);
+        rightFilter ? rightResult->_fixedSizeData : leftResult->_fixedSizeData);
     size_t jc1 = rightFilter ? _jc1Left : _jc1Right;
     size_t jc2 = rightFilter ? _jc2Left : _jc2Right;
     result->_sortedBy = jc1;
     result->_nofColumns = v->getResultWidth();
     result->_resultTypes.reserve(result->_nofColumns);
-    result->_resultTypes.insert(
-          result->_resultTypes.end(),
-          leftResult->_resultTypes.begin(),
-          leftResult->_resultTypes.end());
+    result->_resultTypes.insert(result->_resultTypes.end(),
+                                leftResult->_resultTypes.begin(),
+                                leftResult->_resultTypes.end());
     for (size_t col = 0; col < rightResult->_nofColumns; col++) {
       if (col != _jc1Right && col != _jc2Right) {
         result->_resultTypes.push_back(rightResult->_resultTypes[col]);
@@ -105,26 +114,26 @@ void TwoColumnJoin::computeResult(ResultTable* result) const {
     if (result->_nofColumns == 2) {
       using ResType = vector<array<Id, 2>>;
       result->_fixedSizeData = new ResType();
-      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData),
-                         jc1, jc2, filter,
+      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData), jc1,
+                         jc2, filter,
                          static_cast<ResType*>(result->_fixedSizeData));
     } else if (result->_nofColumns == 3) {
       using ResType = vector<array<Id, 3>>;
       result->_fixedSizeData = new ResType();
-      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData),
-                         jc1, jc2, filter,
+      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData), jc1,
+                         jc2, filter,
                          static_cast<ResType*>(result->_fixedSizeData));
     } else if (result->_nofColumns == 4) {
       using ResType = vector<array<Id, 4>>;
       result->_fixedSizeData = new ResType();
-      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData),
-                         jc1, jc2, filter,
+      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData), jc1,
+                         jc2, filter,
                          static_cast<ResType*>(result->_fixedSizeData));
     } else if (result->_nofColumns == 5) {
       using ResType = vector<array<Id, 5>>;
       result->_fixedSizeData = new ResType();
-      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData),
-                         jc1, jc2, filter,
+      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData), jc1,
+                         jc2, filter,
                          static_cast<ResType*>(result->_fixedSizeData));
     } else {
       getEngine().filter(toFilter->_varSizeData, jc1, jc2, filter,
@@ -172,9 +181,7 @@ size_t TwoColumnJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-size_t TwoColumnJoin::resultSortedOn() const {
-  return _jc1Left;
-}
+size_t TwoColumnJoin::resultSortedOn() const { return _jc1Left; }
 
 // _____________________________________________________________________________
 float TwoColumnJoin::getMultiplicity(size_t col) {

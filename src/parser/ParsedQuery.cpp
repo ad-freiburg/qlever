@@ -2,14 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <string>
 #include <sstream>
+#include <string>
 #include <vector>
 
 #include "../util/StringUtils.h"
-#include "ParsedQuery.h"
 #include "ParseException.h"
-
+#include "ParsedQuery.h"
 
 using std::string;
 using std::vector;
@@ -22,7 +21,9 @@ string ParsedQuery::asString() const {
   os << "PREFIX: {";
   for (size_t i = 0; i < _prefixes.size(); ++i) {
     os << "\n\t" << _prefixes[i].asString();
-    if (i + 1 < _prefixes.size()) { os << ','; }
+    if (i + 1 < _prefixes.size()) {
+      os << ',';
+    }
   }
   os << "\n}";
 
@@ -30,7 +31,9 @@ string ParsedQuery::asString() const {
   os << "\nSELECT: {\n\t";
   for (size_t i = 0; i < _selectedVariables.size(); ++i) {
     os << _selectedVariables[i];
-    if (i + 1 < _selectedVariables.size()) { os << ", "; }
+    if (i + 1 < _selectedVariables.size()) {
+      os << ", ";
+    }
   }
   os << "\n}";
 
@@ -75,24 +78,24 @@ string SparqlFilter::asString() const {
   std::ostringstream os;
   os << "FILTER(" << _lhs;
   switch (_type) {
-  case EQ:
-    os << " < ";
-    break;
-  case NE:
-    os << " != ";
-    break;
-  case LT:
-    os << " < ";
-    break;
-  case LE:
-    os << " <= ";
-    break;
-  case GT:
-    os << " > ";
-    break;
-  case GE:
-    os << " >= ";
-    break;
+    case EQ:
+      os << " < ";
+      break;
+    case NE:
+      os << " != ";
+      break;
+    case LT:
+      os << " < ";
+      break;
+    case LE:
+      os << " <= ";
+      break;
+    case GT:
+      os << " > ";
+      break;
+    case GE:
+      os << " >= ";
+      break;
   }
   os << _rhs << ")";
   return os.str();
@@ -102,7 +105,7 @@ string SparqlFilter::asString() const {
 void ParsedQuery::expandPrefixes() {
   ad_utility::HashMap<string, string> prefixMap;
   prefixMap["ql"] = "<QLever-internal-function/>";
-  for (const auto& p: _prefixes) {
+  for (const auto& p : _prefixes) {
     prefixMap[p._prefix] = p._uri;
   }
 
@@ -111,13 +114,13 @@ void ParsedQuery::expandPrefixes() {
   // Traverse the graph pattern tree using dfs expanding the prefixes in every
   // pattern.
   while (!graphPatterns.empty()) {
-    GraphPattern *pattern = graphPatterns.back();
+    GraphPattern* pattern = graphPatterns.back();
     graphPatterns.pop_back();
-    for (GraphPattern *p : pattern->_children) {
+    for (GraphPattern* p : pattern->_children) {
       graphPatterns.push_back(p);
     }
 
-    for (auto& trip: pattern->_whereClauseTriples) {
+    for (auto& trip : pattern->_whereClauseTriples) {
       expandPrefix(trip._s, prefixMap);
       expandPrefix(trip._p, prefixMap);
       if (trip._p.find("in-context") != string::npos) {
@@ -126,13 +129,15 @@ void ParsedQuery::expandPrefixes() {
         for (size_t i = 0; i < tokens.size(); ++i) {
           expandPrefix(tokens[i], prefixMap);
           trip._o += tokens[i];
-          if (i + 1 < tokens.size()) { trip._o += " "; }
+          if (i + 1 < tokens.size()) {
+            trip._o += " ";
+          }
         }
       } else {
         expandPrefix(trip._o, prefixMap);
       }
     }
-    for (auto& f: pattern->_filters) {
+    for (auto& f : pattern->_filters) {
       expandPrefix(f._lhs, prefixMap);
       expandPrefix(f._rhs, prefixMap);
     }
@@ -141,8 +146,7 @@ void ParsedQuery::expandPrefixes() {
 
 // _____________________________________________________________________________
 void ParsedQuery::expandPrefix(
-    string& item,
-    const ad_utility::HashMap<string, string>& prefixMap) {
+    string& item, const ad_utility::HashMap<string, string>& prefixMap) {
   if (!ad_utility::startsWith(item, "?") &&
       !ad_utility::startsWith(item, "<")) {
     size_t i = item.find(':');
@@ -156,32 +160,31 @@ void ParsedQuery::expandPrefix(
         prefixMap.count(item.substr(from, i - from)) > 0) {
       string prefixUri = prefixMap.find(item.substr(from, i - from))->second;
       if (from == 0) {
-        item = prefixUri.substr(0, prefixUri.size() - 1)
-               + item.substr(i + 1) + '>';
+        item = prefixUri.substr(0, prefixUri.size() - 1) + item.substr(i + 1) +
+               '>';
       } else {
         item = item.substr(0, from) +
-               prefixUri.substr(0, prefixUri.size() - 1)
-               + item.substr(i + 1) + '>';
+               prefixUri.substr(0, prefixUri.size() - 1) + item.substr(i + 1) +
+               '>';
       }
     }
   }
 }
-
 
 void ParsedQuery::parseAliases() {
   for (size_t i = 0; i < _selectedVariables.size(); i++) {
     const std::string& var = _selectedVariables[i];
     if (var[0] == '(') {
       std::string inner = var.substr(1, var.size() - 2);
-      if (ad_utility::startsWith(inner, "COUNT")
-          || ad_utility::startsWith(inner, "GROUP_CONCAT")
-          || ad_utility::startsWith(inner, "FIRST")
-          || ad_utility::startsWith(inner, "LAST")
-          || ad_utility::startsWith(inner, "SAMPLE")
-          || ad_utility::startsWith(inner, "MIN")
-          || ad_utility::startsWith(inner, "MAX")
-          || ad_utility::startsWith(inner, "SUM")
-          || ad_utility::startsWith(inner, "AVG")) {
+      if (ad_utility::startsWith(inner, "COUNT") ||
+          ad_utility::startsWith(inner, "GROUP_CONCAT") ||
+          ad_utility::startsWith(inner, "FIRST") ||
+          ad_utility::startsWith(inner, "LAST") ||
+          ad_utility::startsWith(inner, "SAMPLE") ||
+          ad_utility::startsWith(inner, "MIN") ||
+          ad_utility::startsWith(inner, "MAX") ||
+          ad_utility::startsWith(inner, "SUM") ||
+          ad_utility::startsWith(inner, "AVG")) {
         Alias a;
         a._isAggregate = true;
         size_t pos = inner.find("as");
@@ -196,13 +199,13 @@ void ParsedQuery::parseAliases() {
         // find the second opening bracket
         pos = inner.find('(', 1);
         pos++;
-        while (pos < inner.size()
-               && ::std::isspace(static_cast<unsigned char>(inner[pos]))) {
+        while (pos < inner.size() &&
+               ::std::isspace(static_cast<unsigned char>(inner[pos]))) {
           pos++;
         }
         size_t start = pos;
-        while (pos < inner.size()
-               && !::std::isspace(static_cast<unsigned char>(inner[pos]))) {
+        while (pos < inner.size() &&
+               !::std::isspace(static_cast<unsigned char>(inner[pos]))) {
           pos++;
         }
         if (pos == start || pos >= inner.size()) {
@@ -223,41 +226,40 @@ void ParsedQuery::parseAliases() {
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPattern::~GraphPattern() {
-  for (GraphPattern *child : _children) {
+  for (GraphPattern* child : _children) {
     delete child;
   }
 }
 
-
 // _____________________________________________________________________________
-ParsedQuery::GraphPattern::GraphPattern(GraphPattern&& other) :
-  _whereClauseTriples(std::move(other._whereClauseTriples)),
-  _filters(std::move(other._filters)),
-  _optional(other._optional),
-  _children(std::move(other._children)) {
+ParsedQuery::GraphPattern::GraphPattern(GraphPattern&& other)
+    : _whereClauseTriples(std::move(other._whereClauseTriples)),
+      _filters(std::move(other._filters)),
+      _optional(other._optional),
+      _children(std::move(other._children)) {
   other._children.clear();
 }
 
 // _____________________________________________________________________________
-ParsedQuery::GraphPattern::GraphPattern(const GraphPattern& other) :
-  _whereClauseTriples(other._whereClauseTriples),
-  _filters(other._filters),
-  _optional(other._optional) {
+ParsedQuery::GraphPattern::GraphPattern(const GraphPattern& other)
+    : _whereClauseTriples(other._whereClauseTriples),
+      _filters(other._filters),
+      _optional(other._optional) {
   _children.reserve(other._children.size());
-  for (const GraphPattern *g : other._children) {
+  for (const GraphPattern* g : other._children) {
     _children.push_back(new GraphPattern(*g));
   }
 }
 
 // _____________________________________________________________________________
-ParsedQuery::GraphPattern&
-ParsedQuery::GraphPattern::operator=(const ParsedQuery::GraphPattern& other) {
+ParsedQuery::GraphPattern& ParsedQuery::GraphPattern::operator=(
+    const ParsedQuery::GraphPattern& other) {
   _whereClauseTriples = std::vector<SparqlTriple>(other._whereClauseTriples);
   _filters = std::vector<SparqlFilter>(other._filters);
   _optional = other._optional;
   _children.clear();
   _children.reserve(other._children.size());
-  for (const GraphPattern *g : other._children) {
+  for (const GraphPattern* g : other._children) {
     _children.push_back(new GraphPattern(*g));
   }
   return *this;
@@ -291,11 +293,11 @@ void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
     for (int j = 0; j < indentation; ++j) os << "  ";
     os << _filters.back().asString();
   }
-  for (GraphPattern *child : _children) {
+  for (GraphPattern* child : _children) {
     os << "\n";
     child->toString(os, indentation + 1);
   }
   os << "\n";
   for (int j = 1; j < indentation; ++j) os << "  ";
-  os <<"}";
+  os << "}";
 }

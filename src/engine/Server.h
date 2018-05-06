@@ -7,12 +7,12 @@
 #include <string>
 #include <vector>
 
+#include "../engine/Engine.h"
+#include "../index/Index.h"
+#include "../parser/ParseException.h"
+#include "../parser/SparqlParser.h"
 #include "../util/Socket.h"
 #include "../util/Timer.h"
-#include "../parser/SparqlParser.h"
-#include "../index/Index.h"
-#include "../engine/Engine.h"
-#include "../parser/ParseException.h"
 #include "./QueryExecutionContext.h"
 #include "./QueryExecutionTree.h"
 
@@ -23,24 +23,26 @@ using ad_utility::Socket;
 
 //! The HTTP Sever used.
 class Server {
-public:
+ public:
   explicit Server(const int port, const int numThreads)
-      : _numThreads(numThreads), _serverSocket(), _port(port), _index(),
-        _engine(), _initialized(false) {}
+      : _numThreads(numThreads),
+        _serverSocket(),
+        _port(port),
+        _index(),
+        _engine(),
+        _initialized(false) {}
 
   typedef ad_utility::HashMap<string, string> ParamValueMap;
 
   // Initialize the server.
   void initialize(const string& ontologyBaseName, bool useText,
-                  bool allPermutations = false,
-                  bool onDiskLiterals = false,
-                  bool optimizeOptionals = true,
-                  bool usePatterns = false);
+                  bool allPermutations = false, bool onDiskLiterals = false,
+                  bool optimizeOptionals = true, bool usePatterns = false);
 
   //! Loop, wait for requests and trigger processing.
   void run();
 
-private:
+ private:
   const int _numThreads;
   Socket _serverSocket;
   int _port;
@@ -52,33 +54,33 @@ private:
 
   void runAcceptLoop(QueryExecutionContext* qec);
 
-  void process(Socket *client, QueryExecutionContext *qec) const;
+  void process(Socket* client, QueryExecutionContext* qec) const;
 
-  void serveFile(Socket *client, const string &requestedFile) const;
+  void serveFile(Socket* client, const string& requestedFile) const;
 
-  ParamValueMap parseHttpRequest(const string &request) const;
+  ParamValueMap parseHttpRequest(const string& request) const;
 
-  string createQueryFromHttpParams(const ParamValueMap &params) const;
+  string createQueryFromHttpParams(const ParamValueMap& params) const;
 
-  string createHttpResponse(const string &content,
-                            const string &contentType) const;
+  string createHttpResponse(const string& content,
+                            const string& contentType) const;
 
   string create404HttpResponse() const;
   string create400HttpResponse() const;
 
-  string composeResponseJson(const ParsedQuery &query,
-                             const QueryExecutionTree &qet,
+  string composeResponseJson(const ParsedQuery& query,
+                             const QueryExecutionTree& qet,
                              size_t sendMax = MAX_NOF_ROWS_IN_RESULT) const;
 
-  string composeResponseSepValues(const ParsedQuery &query,
-                                  const QueryExecutionTree &qet,
+  string composeResponseSepValues(const ParsedQuery& query,
+                                  const QueryExecutionTree& qet,
                                   char sep) const;
 
-  string composeResponseJson(const string &query,
-                             const ad_semsearch::Exception &e) const;
+  string composeResponseJson(const string& query,
+                             const ad_semsearch::Exception& e) const;
 
-  string composeResponseJson(const string &query,
-                             const ParseException &e) const;
+  string composeResponseJson(const string& query,
+                             const ParseException& e) const;
 
   string composeStatsJson() const;
 

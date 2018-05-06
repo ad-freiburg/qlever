@@ -2,12 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./QueryPlanningCostFactors.h"
 #include <fstream>
-#include "../util/StringUtils.h"
 #include "../util/Exception.h"
 #include "../util/Log.h"
-#include "./QueryPlanningCostFactors.h"
-
+#include "../util/StringUtils.h"
 
 // _____________________________________________________________________________
 QueryPlanningCostFactors::QueryPlanningCostFactors() : _factors() {
@@ -28,10 +27,9 @@ void QueryPlanningCostFactors::readFromFile(const string& fileName) {
   while (std::getline(in, line)) {
     auto v = ad_utility::split(line, '\t');
     AD_CHECK_EQ(v.size(), 2);
-    LOG(INFO) << "Setting cost factor: " << v[0] << " from " 
-              << _factors[v[0]] << " to " << atof(v[1].c_str()) << '\n';
+    LOG(INFO) << "Setting cost factor: " << v[0] << " from " << _factors[v[0]]
+              << " to " << atof(v[1].c_str()) << '\n';
     _factors[v[0]] = atof(v[1].c_str());
-
   }
 }
 
@@ -39,6 +37,3 @@ void QueryPlanningCostFactors::readFromFile(const string& fileName) {
 double QueryPlanningCostFactors::getCostFactor(const string& key) const {
   return _factors.find(key)->second;
 }
-
-
-

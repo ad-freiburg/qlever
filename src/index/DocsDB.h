@@ -3,18 +3,18 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <vector>
 #include <string>
 #include <utility>
+#include <vector>
 #include "../global/Id.h"
 #include "../util/File.h"
 
-using std::vector;
 using std::pair;
 using std::string;
+using std::vector;
 
 class DocsDB {
-public:
+ public:
   void init(const string& fileName);
   string getTextExcerpt(Id cid) const;
 
@@ -22,4 +22,3 @@ public:
   off_t _startOfOffsets;
   size_t _size;
 };
-
