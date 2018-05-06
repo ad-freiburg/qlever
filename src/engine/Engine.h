@@ -7,7 +7,6 @@
 #include <vector>
 #include <algorithm>
 #include <iomanip>
-#include <unordered_map>
 
 #include "../util/Log.h"
 #include "./IndexSequence.h"
@@ -672,35 +671,36 @@ public:
 
 
   template<typename A>
-  static void computePatternTrick(const vector<A>* input, vector<array<Id, 2>>* result,
+  static void computePatternTrick(const vector<A>* input,
+                                  vector<array<Id, 2>>* result,
                                   const vector<PatternID>& hasPattern,
                                   const CompactStringVector<Id, Id>& hasRelation,
                                   const CompactStringVector<size_t, Id>& patterns,
-                                  size_t subjectColumn) {
+                                  const size_t subjectColumn) {
     ad_utility::HashMap<Id, size_t> predicateCounts;
     ad_utility::HashMap<size_t, size_t> patternCounts;
     size_t posInput = 0;
-    size_t subject;
     size_t lastSubject = ID_NO_VALUE;
     while (posInput < input->size()) {
       while ((*input)[posInput][subjectColumn] == lastSubject
              && posInput < input->size()) {
         posInput++;
       }
-      subject = (*input)[posInput][subjectColumn];
+      size_t subject = (*input)[posInput][subjectColumn];
       lastSubject = subject;
       if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
         // The subject matches a pattern
         patternCounts[hasPattern[subject]]++;
       } else if (subject < hasRelation.size()){
         // The subject does not match a pattern
-
-        std::pair<Id*, size_t> relations = hasRelation[subject];
-        if (relations.second > 0) {
-          for (size_t i = 0; i < relations.second; i++) {
-            auto it = predicateCounts.find(relations.first[i]);
+        size_t numPredicates;
+        Id* predicateData;
+        std::tie(predicateData, numPredicates) = hasRelation[subject];
+        if (numPredicates > 0) {
+          for (size_t i = 0; i < numPredicates; i++) {
+            auto it = predicateCounts.find(predicateData[i]);
             if (it == predicateCounts.end()) {
-              predicateCounts[relations.first[i]] =  1;
+              predicateCounts[predicateData[i]] =  1;
             } else {
               it->second++;
             }
@@ -723,7 +723,7 @@ public:
     }
     result->reserve(predicateCounts.size());
     for (const auto& it : predicateCounts) {
-      result->push_back(array<Id, 2>{it.first, it.second});
+      result->push_back(array<Id, 2>{it.first, static_cast<Id>(it.second)});
     }
   }
 

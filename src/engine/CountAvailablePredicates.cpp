@@ -1,6 +1,5 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 
 #include "CountAvailablePredicates.h"
@@ -32,7 +31,8 @@ size_t CountAvailablePredicates::getResultWidth() const {
 
 // _____________________________________________________________________________
 size_t CountAvailablePredicates::resultSortedOn() const {
-  return -1;
+  // The result is not sorted on any column.
+  return std::numeric_limits<size_t>::max();
 }
 
 
@@ -57,7 +57,12 @@ float CountAvailablePredicates::getMultiplicity(size_t col) {
   if (col == 0) {
     return 1;
   } else {
-    // TODO(florian): track the multiplicity of the counts column, if there is a benefit to that
+    // As this operation is currently only intended to be used as the last or
+    // second to last (with an OrderBy aftwerards) operation in a
+    // QueryExecutionTree the multiplicity of its columns is not needed.
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+             "CountAvailablePredicates has no implementation for the"
+             "multiplicity of columns other than the first.");
     return 1;
   }
 }
@@ -65,7 +70,7 @@ float CountAvailablePredicates::getMultiplicity(size_t col) {
 // _____________________________________________________________________________
 size_t CountAvailablePredicates::getSizeEstimate() {
   // There is no easy way of computing the size estimate, but it should also
-  // not be used, as this operation should not be used withing the optimizer.
+  // not be used, as this operation should not be used within the optimizer.
   return _subtree->getSizeEstimate();
 }
 

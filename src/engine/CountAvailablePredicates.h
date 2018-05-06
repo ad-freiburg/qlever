@@ -16,6 +16,14 @@
 using std::string;
 using std::vector;
 
+// This Operation takes a ResultTable with at least one column containing ids,
+// and a column index referring to such a column. It then creates a ResultTable
+// containing two columns, the first one filled with the ids of all predicates
+// for which there is an entry in the index with one of the entities in the
+// specified input column as its subject. The second output column contains a
+// count of how many of the input entities fulfill that requirement for that
+// predicate. This operation requires the use of the usePatterns option both
+// when building as well as when loading the index.
 class CountAvailablePredicates : public Operation {
   public:
 

@@ -25,7 +25,6 @@ add_library(engine
         TwoColumnJoin.cpp TwoColumnJoin.h
         OptionalJoin.cpp OptionalJoin.h
         CountAvailablePredicates.cpp CountAvailablePredicates.h
-        GroupBy.cpp GroupBy.h
 )
 
 target_link_libraries(engine index parser)
