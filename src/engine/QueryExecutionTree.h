@@ -35,7 +35,8 @@ class QueryExecutionTree {
     TEXT_WITH_FILTER = 9,
     TWO_COL_JOIN = 10,
     OPTIONAL_JOIN = 11,
-    COUNT_AVAILABLE_PREDICATES = 12
+    COUNT_AVAILABLE_PREDICATES = 12,
+    GROUP_BY = 13
   };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
