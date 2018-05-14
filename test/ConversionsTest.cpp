@@ -201,7 +201,66 @@ TEST(ConversionsTest, endToEndNumbers) {
   ASSERT_EQ(in9, convertIndexWordToValueLiteral(indexWords[12]));
 }
 
-int main(int argc, char** argv) {
+
+TEST(ConversionsTest, convertIndexWordToFloatValue) {
+  string zero = "0.0";
+  string pos = "0.339";
+  string pos2 = "1.7";
+  string pos3 = "2.0";
+  string pos4 = "2.0000009999";
+  string pos5 = "2.9999";
+  string pos6 = "111000.05";
+  string neg = "-0.0005002";
+  string neg2 = "-0.005002";
+  string neg3 = "-2023.414";
+  string neg4 = "-3023.414";
+  string extra = "0.001";
+  string extra2 = "-0.001";
+  string extra3 = "-0.10001";
+  string extra4 = "-0.100001";
+
+  vector<string> indexWords;
+  indexWords.push_back(convertFloatToIndexWord(zero, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(pos, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(pos2, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(pos3, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(pos4, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(pos5, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(pos6, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(neg, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(neg2, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(neg3, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(neg4, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(extra, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(extra2, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(extra3, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(extra4, 10, 20));
+
+
+  ASSERT_FLOAT_EQ(0, convertIndexWordToFloatValue(indexWords[0]));
+  ASSERT_FLOAT_EQ(0.339, convertIndexWordToFloatValue(indexWords[1]));
+  ASSERT_FLOAT_EQ(1.7, convertIndexWordToFloatValue(indexWords[2]));
+  ASSERT_FLOAT_EQ(2.0, convertIndexWordToFloatValue(indexWords[3]));
+  ASSERT_FLOAT_EQ(2.0000009999, convertIndexWordToFloatValue(indexWords[4]));
+  ASSERT_FLOAT_EQ(2.9999, convertIndexWordToFloatValue(indexWords[5]));
+  ASSERT_FLOAT_EQ(111000.05, convertIndexWordToFloatValue(indexWords[6]));
+  ASSERT_FLOAT_EQ(-0.0005002, convertIndexWordToFloatValue(indexWords[7]));
+  ASSERT_FLOAT_EQ(-0.005002, convertIndexWordToFloatValue(indexWords[8]));
+  ASSERT_FLOAT_EQ(-2023.414, convertIndexWordToFloatValue(indexWords[9]));
+  ASSERT_FLOAT_EQ(-3023.414, convertIndexWordToFloatValue(indexWords[10]));
+  ASSERT_FLOAT_EQ(0.001, convertIndexWordToFloatValue(indexWords[11]));
+  ASSERT_FLOAT_EQ(-0.001, convertIndexWordToFloatValue(indexWords[12]));
+  ASSERT_FLOAT_EQ(-0.10001, convertIndexWordToFloatValue(indexWords[13]));
+  ASSERT_FLOAT_EQ(-0.100001, convertIndexWordToFloatValue(indexWords[14]));
+  ASSERT_FLOAT_EQ(0, convertIndexWordToFloatValue(
+      convertFloatToIndexWord("0", 5, 5)));
+  ASSERT_FLOAT_EQ(1, convertIndexWordToFloatValue(
+      convertFloatToIndexWord("1", 5, 5)));
+  ASSERT_FLOAT_EQ(-1, convertIndexWordToFloatValue(
+      convertFloatToIndexWord("-1", 5, 5)));
+}
+
+int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

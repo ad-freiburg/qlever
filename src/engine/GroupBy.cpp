@@ -3,6 +3,8 @@
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
 #include "GroupBy.h"
+#include "../util/Conversions.h"
+#include "../index/Index.h"
 
 GroupBy::GroupBy(QueryExecutionContext *qec,
                  std::shared_ptr<QueryExecutionTree> subtree,
@@ -97,10 +99,10 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
 
   // The returned columns are all groupByVariables followed by aggregrates
   for (std::string var : sortedGroupByVars) {
-    cols.push_back({inVarColMap[var], true});
+    cols.push_back({inVarColMap[var], false});
   }
   for (const ParsedQuery::Alias& a : aliases) {
-    cols.push_back({inVarColMap[a._varName], true});
+    cols.push_back({inVarColMap[a._varName], false});
   }
   return cols;
 }
@@ -112,6 +114,7 @@ std::unordered_map<string, size_t> GroupBy::getVariableColumns() const {
 
 float GroupBy::getMultiplicity(size_t col) {
   //TODO(Florian): stub
+  (void)col;
   return 0;
 }
 
@@ -139,9 +142,11 @@ struct resizeIfVec<vector<C>, C> {
 
 template<typename A, typename R>
 void doGroupBy(const vector<A>* input,
+               const vector<ResultTable::ResultType>& inputTypes,
                const vector<size_t>& groupByCols,
                const vector<GroupBy::Aggregate>& aggregates,
-               vector<R>* result) {
+               vector<R>* result,
+               const Index& index) {
   if (input->size() == 0) {
     return;
   }
@@ -168,9 +173,37 @@ void doGroupBy(const vector<A>* input,
       blockEnd = pos - 1;
       for (const GroupBy::Aggregate &a : aggregates) {
         switch (a._type) {
-        case GroupBy::AggregateType::AVG:
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "Average aggregation is not yet implemented.");
+        case GroupBy::AggregateType::AVG: {
+          float res = 0;
+          if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+            for (size_t i = blockStart; i <= blockEnd; i++) {
+              res += (*input)[i][a._inCol];
+            }
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+            for (size_t i = blockStart; i <= blockEnd; i++) {
+              // interpret the first sizeof(float) bytes of the entry as a float.
+              res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
+            }
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+            res = std::numeric_limits<float>::quiet_NaN();
+          } else {
+            for (size_t i = blockStart; i <= blockEnd; i++) {
+              // load the string, parse it as an xsd::int or float
+              std::string entity = index.idToString((*input)[i][a._inCol]);
+              if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+                res = std::numeric_limits<float>::quiet_NaN();
+                break;
+              } else {
+                res += ad_utility::convertIndexWordToFloatValue(entity.substr(0, entity.size() - 1));
+              }
+            }
+          }
+          res /= (blockEnd - blockStart + 1);
+
+          resultRow[a._outCol] = 0;
+          *reinterpret_cast<float*>(&resultRow[a._outCol]) = res;
           break;
+        }
         case GroupBy::AggregateType::COUNT:
           resultRow[a._outCol] = blockEnd - blockStart + 1;
           break;
@@ -217,7 +250,34 @@ void doGroupBy(const vector<A>* input,
     for (const GroupBy::Aggregate &a : aggregates) {
       switch (a._type) {
       case GroupBy::AggregateType::AVG:
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "Average aggregation is not yet implemented.");
+        float res;
+        if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+          for (size_t i = blockStart; i <= blockEnd; i++) {
+            res += (*input)[i][a._inCol];
+          }
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+          for (size_t i = blockStart; i <= blockEnd; i++) {
+            // interpret the first sizeof(float) bytes of the entry as a float.
+            res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
+          }
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+          res = std::numeric_limits<float>::quiet_NaN();
+        } else {
+          for (size_t i = blockStart; i <= blockEnd; i++) {
+            // load the string, parse it as an xsd::int or float
+            std::string entity = index.idToString((*input)[i][a._inCol]);
+            if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+              res = std::numeric_limits<float>::quiet_NaN();
+              break;
+            } else {
+              res += ad_utility::convertIndexWordToFloatValue(entity.substr(0, entity.size() - 1));
+            }
+          }
+        }
+        res /= (blockEnd - blockStart + 1);
+
+        resultRow[a._outCol] = 0;
+        *reinterpret_cast<float*>(&resultRow[a._outCol]) = res;
         break;
       case GroupBy::AggregateType::COUNT:
         resultRow[a._outCol] = blockEnd - blockStart + 1;
@@ -261,32 +321,40 @@ template<int InputColCount, int ResultColCount>
 struct callDoGroupBy {
   static void call(int inputColCount, int resultColCount,
                    std::shared_ptr<const ResultTable> subresult,
+                   const vector<ResultTable::ResultType>& inputTypes,
                    const vector<size_t>& groupByCols,
                    const vector<GroupBy::Aggregate>& aggregates,
-                   ResultTable* result) {
+                   ResultTable* result,
+                   const Index& index) {
     if (InputColCount == inputColCount) {
       if (resultColCount == ResultColCount) {
         result->_fixedSizeData = new vector<array<Id, ResultColCount>>();
         doGroupBy<array<Id, InputColCount>, array<Id, ResultColCount>>(
               static_cast<vector<array<Id, InputColCount>>*>(subresult->_fixedSizeData),
+              inputTypes,
               groupByCols,
               aggregates,
-              static_cast<vector<array<Id, ResultColCount>>*>(result->_fixedSizeData));
+              static_cast<vector<array<Id, ResultColCount>>*>(result->_fixedSizeData),
+              index);
       } else {
         callDoGroupBy<InputColCount, ResultColCount + 1>::call(inputColCount,
                                                                resultColCount,
                                                                subresult,
+                                                               inputTypes,
                                                                groupByCols,
                                                                aggregates,
-                                                               result);
+                                                               result,
+                                                               index);
       }
     } else {
       callDoGroupBy<InputColCount + 1, ResultColCount>::call(inputColCount,
                                                              resultColCount,
                                                              subresult,
+                                                             inputTypes,
                                                              groupByCols,
                                                              aggregates,
-                                                             result);
+                                                             result,
+                                                             index);
     }
   }
 };
@@ -295,23 +363,29 @@ template<int ResultColCount>
 struct callDoGroupBy<6, ResultColCount> {
   static void call(int inputColCount, int resultColCount,
                    std::shared_ptr<const ResultTable> subresult,
+                   const vector<ResultTable::ResultType>& inputTypes,
                    const vector<size_t>& groupByCols,
                    const vector<GroupBy::Aggregate>& aggregates,
-                   ResultTable* result) {
+                   ResultTable* result,
+                   const Index& index) {
     if (resultColCount == ResultColCount) {
       result->_fixedSizeData = new vector<array<Id, ResultColCount>>();
       doGroupBy<vector<Id>, array<Id, ResultColCount>>(
             &subresult->_varSizeData,
+            inputTypes,
             groupByCols,
             aggregates,
-            static_cast<vector<array<Id, ResultColCount>>*>(result->_fixedSizeData));
+            static_cast<vector<array<Id, ResultColCount>>*>(result->_fixedSizeData),
+            index);
     } else {
       callDoGroupBy<6, ResultColCount + 1>::call(inputColCount,
                                                  resultColCount,
                                                  subresult,
+                                                 inputTypes,
                                                  groupByCols,
                                                  aggregates,
-                                                 result);
+                                                 result,
+                                                 index);
     }
   }
 };
@@ -320,17 +394,21 @@ template<int InputColCount>
 struct callDoGroupBy<InputColCount, 6> {
   static void call(int inputColCount, int resultColCount,
                    std::shared_ptr<const ResultTable> subresult,
+                   const vector<ResultTable::ResultType>& inputTypes,
                    const vector<size_t>& groupByCols,
                    const vector<GroupBy::Aggregate>& aggregates,
-                   ResultTable* result) {
+                   ResultTable* result,
+                   const Index& index) {
     // avoid the quite numerous warnings about unused parameters
     (void) inputColCount;
     (void) resultColCount;
     doGroupBy<array<Id, InputColCount>, vector<Id>>(
           static_cast<vector<array<Id, InputColCount>>*>(subresult->_fixedSizeData),
+          inputTypes,
           groupByCols,
           aggregates,
-          &result->_varSizeData);
+          &result->_varSizeData,
+          index);
   }
 };
 
@@ -338,17 +416,21 @@ template<>
 struct callDoGroupBy<6, 6> {
   static void call(int inputColCount, int resultColCount,
                    std::shared_ptr<const ResultTable> subresult,
+                   const vector<ResultTable::ResultType>& inputTypes,
                    const vector<size_t>& groupByCols,
                    const vector<GroupBy::Aggregate>& aggregates,
-                   ResultTable* result) {
+                   ResultTable* result,
+                   const Index& index) {
     // avoid the quite numerous warnings about unused parameters
     (void) inputColCount;
     (void) resultColCount;
     doGroupBy<vector<Id>, vector<Id>>(
           &subresult->_varSizeData,
+          inputTypes,
           groupByCols,
           aggregates,
-          &result->_varSizeData);
+          &result->_varSizeData,
+          index);
   }
 };
 
@@ -357,13 +439,6 @@ void GroupBy::computeResult(ResultTable* result) const {
 
   result->_sortedBy = resultSortedOn();
   result->_nofColumns = getResultWidth();
-
-  // TODO(florian): return correct result types for other aggregates such as
-  // COUNT.
-  result->_resultTypes.resize(result->_nofColumns);
-  for (int i = 0; i < result->_nofColumns; i++) {
-    result->_resultTypes[i] = ResultTable::ResultType::KB;
-  }
 
   std::vector<Aggregate> aggregates;
   aggregates.reserve(_aliases.size() + _groupByVariables.size());
@@ -492,16 +567,53 @@ void GroupBy::computeResult(ResultTable* result) const {
     }
   }
 
+  std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
+
+  // populate the result type vector
+  result->_resultTypes.resize(result->_nofColumns);
+  for (size_t i = 0; i < result->_nofColumns; i++) {
+    switch (aggregates[i]._type) {
+      case AggregateType::AVG:
+        result->_resultTypes[i] = ResultTable::ResultType::FLOAT;
+        break;
+    case AggregateType::COUNT:
+      result->_resultTypes[i] = ResultTable::ResultType::VERBATIM;
+      break;
+    case AggregateType::GROUP_CONCAT:
+      result->_resultTypes[i] = ResultTable::ResultType::STRING;
+      break;
+    case AggregateType::MAX:
+      result->_resultTypes[i] = subresult->getResultType(aggregates[i]._inCol);
+      break;
+    case AggregateType::MIN:
+      result->_resultTypes[i] = subresult->getResultType(aggregates[i]._inCol);
+      break;
+    case AggregateType::SAMPLE:
+      result->_resultTypes[i] = subresult->getResultType(aggregates[i]._inCol);
+      break;
+    case AggregateType::SUM:
+      result->_resultTypes[i] = ResultTable::ResultType::FLOAT;
+      break;
+      default:
+        result->_resultTypes[i] = ResultTable::ResultType::KB;
+    }
+  }
+
   std::vector<size_t> groupByCols;
   groupByCols.reserve(_groupByVariables.size());
   for (const string& var : _groupByVariables) {
     groupByCols.push_back(subtreeVarCols[var]);
   }
 
-  std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
+  std::vector<ResultTable::ResultType> inputResultTypes;
+  inputResultTypes.reserve(subresult->_nofColumns);
+  for (size_t i = 0; i < subresult->_nofColumns; i++) {
+    inputResultTypes.push_back(subresult->getResultType(i));
+  }
 
   callDoGroupBy<1, 1>::call(subresult->_nofColumns, aggregates.size(), subresult,
-                            groupByCols, aggregates, result);
+                            inputResultTypes, groupByCols, aggregates, result,
+                            getIndex());
 
   std::cout << "Group by result size " << result->size() << std::endl;
 

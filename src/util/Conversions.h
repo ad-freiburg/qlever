@@ -14,6 +14,8 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <iostream>
+#include <cmath>
 
 #include "../global/Constants.h"
 #include "./Exception.h"
@@ -47,6 +49,9 @@ inline string convertFloatToIndexWord(const string& value,
 
 //! Converts like this: "PP0*2E0*1234 to "12.34 and M-0*1E9*876 to -0.123".
 inline string convertIndexWordToFloat(const string& indexWord);
+
+//! Converts like this: "PP0*2E0*1234 to "12.34 and M-0*1E9*876 to -0.123".
+inline float convertIndexWordToFloatValue(const string& indexWord);
 
 //! Brings a date to the format:
 //! return string(VALUE_DATE_PREFIX) + year + month + day +
@@ -345,6 +350,50 @@ string convertIndexWordToFloat(const string& indexWord) {
     }
   }
   return os.str();
+}
+
+// _____________________________________________________________________________
+float convertIndexWordToFloatValue(const string& indexWord) {
+  size_t prefixLength = std::char_traits<char>::length(VALUE_FLOAT_PREFIX);
+  AD_CHECK_GT(indexWord.size(), prefixLength);
+  string number = indexWord.substr(prefixLength);
+  // Handle the special case 0.0
+  if (number == "N0") {
+    return 0;
+  }
+  assert(number.size() >= 5);
+  bool negaMantissa = number[0] == 'M';
+  bool negaExponent = number[1] == 'M' || number[1] == '-';
+
+  size_t posOfE = number.find('E');
+  assert(posOfE != string::npos && posOfE > 0 && posOfE < number.size() - 1);
+
+  string exponentString = (
+      (negaMantissa == negaExponent) ?
+      number.substr(2, posOfE - 2) :
+      getBase10ComplementOfIntegerString(number.substr(2, posOfE - 2)));
+  long absExponent = static_cast<size_t> (atoi(exponentString.c_str()));
+  string mantissa = (!negaMantissa ? number.substr(posOfE + 1)
+                                   : getBase10ComplementOfIntegerString(
+          number.substr(posOfE + 1)));
+  size_t mStart, mStop;
+  for (mStart = 0; mStart < mantissa.size() && mantissa[mStart] == '0'; mStart++);
+  for (mStop = mantissa.size() - 1; mStop > mStart && mantissa[mStop] == '0'; mStop--);
+  long absMantissa = stol(mantissa.substr(mStart, mStop - mStart + 1));
+  unsigned int mantissaLog = std::log10(absMantissa);
+  if (negaMantissa) {
+    if (negaExponent) {
+      return -absMantissa * std::pow(10, -absExponent - mantissaLog);
+    } else {
+      return -absMantissa * std::pow(10, absExponent - mantissaLog);
+    }
+  } else {
+    if (negaExponent) {
+      return absMantissa * std::pow(10, -absExponent - mantissaLog);
+    } else {
+      return absMantissa * std::pow(10, absExponent - mantissaLog);
+    }
+  }
 }
 
 // _____________________________________________________________________________

@@ -286,7 +286,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     // Then run the actual group by
     SubtreePlan groupByPlan(_qec);
     std::shared_ptr<Operation> groupBy(new GroupBy(
-                                         _qec, final._qet,
+                                         _qec, orderByPlan._qet,
                                          pq._groupByVariables, pq._aliases));
     QueryExecutionTree& tree = *groupByPlan._qet.get();
     tree.setVariableColumns(
@@ -295,7 +295,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
 
 
 
-    final = orderByPlan;
+    final = groupByPlan;
   }
 
   if (!pq._groupByVariables.empty()) {
