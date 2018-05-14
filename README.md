@@ -408,3 +408,70 @@ Therefore an additional HTTP parameter "&send=<x>" can be used to only send x re
 If you have problems, try to rebuild when compiling with -DCMAKE_BUILD_TYPE=Debug.
 In particular also rebuild the index. 
 The release build assumes machine written words- and docsfiles and omits sanity checks for the sake of speed.
+
+## Excessive RAM usage
+
+QLever uses an on-disk index and is usually able to operate with pretty low RAM
+usage. However, there are data layouts that currently lead to an excessive
+amount of memory being used. A future release should take care of that. There
+are two scenarios where this can happen.
+
+### High RAM usage during index construction
+
+While building an index, QLever does need more memory than when running. Part of
+this required memory is what is described below for runtime memory usage.
+However, in addition not all memory seems to be freed as soon as possible. This
+needs further investitation. For now, there is an easy workaround to build
+KB and text index in two steps (two calls of IndexBuilderMain) or to pre-build
+the index on a server with lots of available resources. 
+
+In general, not building all 6 permutations helps a lot. If this is enough (e.g.
+for emulating the Brococli search engine), this reduces RAM very significantly.
+
+
+### High RAM usage during runtime
+
+Firstly, note that even very large text corpora have little impact on
+memory usage. Larger KBs are much more problematic.
+There are two things that can contribute to high RAM usage (and large startup
+times) during runtime:
+
+1) The size of the KB vocabulary. Using the -l flag while building the index and
+starting the server causes long and rarely used strings to be externalized to
+disk. This saves a significant amount of memory at little to no time cost for
+typical queries. The strategy can be modified to be more aggressive (currently
+by editing directly in the code during index construction)
+
+2) Building all 6 permutations over large KBs (or generelly having a
+permutation, where the primary ordering element takes many different values).
+
+Typically, the problem happens for OPS and OSP permutations over KBs with many
+different objects, especially string literals. As of now (release for CIKM
+2017), the index keeps some meta data in RAM for each main element of the
+permutation. For the two "main" permutation,  PSO and POS, this is very
+reasonnable and resembles what is done in the Broccoli search engine. Having a
+few bytes (32 + extra bytes for blocks inside relations, which aren't the main problem anymore) 
+for each of a few hundred thousand predicates is no problem, even for the largest KBs. However, having the same meta data for
+several hundreds of millions of objects (500M for Freebase, require twice, for
+OSP and OPS, plus 2 times 125M subjects) quickly adds up beyond acceptable numbers.
+
+Workarounds:
+
+* Removing unnecessary objects (e.g. literals in unused languages) helps a lot,
+but is no very "clean".
+
+* Reduce ID size and switch from 64 to 32bit IDs. However this would only yield save a
+low portion of memory since it doesn't effect pointers byte offsets into index
+files.
+
+* There is a branch called six\_permut\_smaller\_memory\_footprint, that tackles the
+  problem in general but is not finished yet. In short, the idea is to store the
+  meta data within the on-disk index and make it configurable which lists to
+  load into RAM on startup (PSO and POS probably being the sensible default, but
+  sometimes also having SPO can be a nice addition). Whatever isn't loaded into
+  RAM has to be read form disk at query time if it is actually needed. 
+  In particle, however, query planning has to respect which meta data is available in RAM and special care has to be taken for queries involving ?s ?p ?o triples. This is the reason why the change sn't trivial.
+  The branch also adds another readme, PERFORMANCE\_TUNING.md with more
+  detailed information about the trade-offs. However, this file also isn't finished,
+  yet.
+
