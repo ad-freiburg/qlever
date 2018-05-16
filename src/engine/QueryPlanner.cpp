@@ -54,13 +54,19 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     const SparqlTriple& t = pq._rootGraphPattern._whereClauseTriples[i];
     LOG(DEBUG) << "_p: " << t._p << endl;
     if (t._p == HAS_RELATION_PREDIACTE) {
-      if (pq._groupByVariables.size() == 1 && pq._groupByVariables[0] == t._o &&
-          pq._aliases.size() == 1 &&
-          pq._aliases.find(t._o) != pq._aliases.end() &&
-          pq._aliases.find(t._o)->second._isAggregate &&
-          ad_utility::startsWith(pq._aliases.find(t._o)->second._function,
-                                 "COUNT") &&
-          pq._selectedVariables.size() == 2) {
+      const ParsedQuery::Alias* countAlias = nullptr;
+      for (const ParsedQuery::Alias& a : pq._aliases) {
+        if (a._inVarName == t._o
+            && a._isAggregate
+            && ad_utility::startsWith(a._function, "COUNT")) {
+          countAlias = &a;
+        }
+      }
+      if (pq._groupByVariables.size() == 1
+          && countAlias != nullptr
+          && pq._groupByVariables[0] == t._o
+          && pq._aliases.size() == 1
+          && pq._selectedVariables.size() == 2) {
         LOG(DEBUG) << "Using the pattern trick to answer the query." << endl;
         usePatternTrick = true;
         patternTrickTriple = t;
@@ -263,7 +269,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
 
     static_cast<CountAvailablePredicates*>(countPred.get())
         ->setVarNames(patternTrickTriple._o,
-                      pq._aliases[patternTrickTriple._o]._varName);
+                      pq._aliases[0]._outVarName);
     QueryExecutionTree& tree = *patternTrickPlan._qet.get();
     tree.setVariableColumns(
         static_cast<CountAvailablePredicates*>(countPred.get())

@@ -40,7 +40,7 @@ class GroupBy : public Operation {
   GroupBy(QueryExecutionContext *qec,
           std::shared_ptr<QueryExecutionTree> subtree,
           const vector<string>& groupByVariables,
-          const std::unordered_map<std::string, ParsedQuery::Alias>& aliases);
+          const std::vector<ParsedQuery::Alias>& aliases);
 
   virtual string asString(size_t indent = 0) const;
 
@@ -70,7 +70,7 @@ class GroupBy : public Operation {
   static vector<pair<size_t, bool>> computeSortColumns(
       std::shared_ptr<QueryExecutionTree> subtree,
       const vector<string>& groupByVariables,
-      const std::unordered_map<std::string, ParsedQuery::Alias>& aliases);
+      const std::vector<ParsedQuery::Alias>& aliases);
 
 private:
   std::shared_ptr<QueryExecutionTree> _subtree;

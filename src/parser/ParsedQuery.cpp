@@ -193,7 +193,7 @@ void ParsedQuery::parseAliases() {
         }
         std::string newVarName = inner.substr(pos + 2, var.size() - pos - 2);
         newVarName = ad_utility::strip(newVarName, " \t\n");
-        a._varName = newVarName;
+        a._outVarName = newVarName;
         a._function = inner;
 
         // find the second opening bracket
@@ -212,8 +212,8 @@ void ParsedQuery::parseAliases() {
           throw ParseException("Alias " + var + " is malformed.");
         }
 
-        string oldVar = inner.substr(start, pos - start - 1);
-        _aliases[oldVar] = a;
+        a._inVarName = inner.substr(start, pos - start - 1);
+        _aliases.push_back(a);
         // Replace the variable in the selected variables array with the aliased
         // name.
         _selectedVariables[i] = newVarName;

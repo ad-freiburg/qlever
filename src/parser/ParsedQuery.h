@@ -93,7 +93,8 @@ class ParsedQuery {
   };
 
   struct Alias {
-    string _varName;
+    string _inVarName;
+    string _outVarName;
     bool _isAggregate;
     // The mapping from the original var to the new one
     string _function;
@@ -113,8 +114,7 @@ class ParsedQuery {
   bool _reduced;
   bool _distinct;
   string _originalString;
-  // TODO use densehash
-  std::unordered_map<string, Alias> _aliases;
+  std::vector<Alias> _aliases;
 
   void expandPrefixes();
   void parseAliases();

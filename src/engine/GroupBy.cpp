@@ -9,20 +9,20 @@
 GroupBy::GroupBy(QueryExecutionContext *qec,
                  std::shared_ptr<QueryExecutionTree> subtree,
                  const vector<string>& groupByVariables,
-                 const std::unordered_map<std::string, ParsedQuery::Alias>& aliases) :
+                 const std::vector<ParsedQuery::Alias>& aliases) :
   Operation(qec),
   _subtree(subtree),
   _groupByVariables(groupByVariables) {
 
   _aliases.reserve(aliases.size());
-  for (auto it : aliases) {
-    if (it.second._isAggregate) {
-      _aliases.push_back(it.second);
+  for (const ParsedQuery::Alias &a: aliases) {
+    if (a._isAggregate) {
+      _aliases.push_back(a);
     }
   }
   std::sort(_aliases.begin(), _aliases.end(),
             [](const ParsedQuery::Alias& a1, const ParsedQuery::Alias& a2) {
-    return a1._varName < a2._varName;
+    return a1._outVarName < a2._outVarName;
   });
 
   // sort the groupByVariables to ensure the cache key is order invariant
@@ -35,7 +35,7 @@ GroupBy::GroupBy(QueryExecutionContext *qec,
     colIndex++;
   }
   for (const ParsedQuery::Alias& a : _aliases) {
-    _varColMap[a._varName] = colIndex;
+    _varColMap[a._outVarName] = colIndex;
     colIndex++;
   }
 }
@@ -68,22 +68,22 @@ size_t GroupBy::resultSortedOn() const {
 vector<pair<size_t, bool>> GroupBy::computeSortColumns(
     std::shared_ptr<QueryExecutionTree> subtree,
     const vector<string>& groupByVariables,
-    const std::unordered_map<std::string, ParsedQuery::Alias>& aliasMap) {
+    const std::vector<ParsedQuery::Alias>& aliases) {
   // Create sorted lists of the aliases and the group by variables to determine
   // the output column order, on which the sorting depends. Then populate
   // the vector of columns which should be sorted by using the subtrees
   // variable column map.
 
-  std::vector<ParsedQuery::Alias> aliases;
-  aliases.reserve(aliases.size());
-  for (auto it : aliasMap) {
-    if (it.second._isAggregate) {
-      aliases.push_back(it.second);
+  std::vector<ParsedQuery::Alias> sortedAliases;
+  sortedAliases.reserve(aliases.size());
+  for (const ParsedQuery::Alias &a : aliases) {
+    if (a._isAggregate) {
+      sortedAliases.push_back(a);
     }
   }
-  std::sort(aliases.begin(), aliases.end(),
+  std::sort(sortedAliases.begin(), sortedAliases.end(),
             [](const ParsedQuery::Alias& a1, const ParsedQuery::Alias& a2) {
-    return a1._varName < a2._varName;
+    return a1._outVarName < a2._outVarName;
   });
 
   std::vector<std::string> sortedGroupByVars;
@@ -101,8 +101,8 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
   for (std::string var : sortedGroupByVars) {
     cols.push_back({inVarColMap[var], false});
   }
-  for (const ParsedQuery::Alias& a : aliases) {
-    cols.push_back({inVarColMap[a._varName], false});
+  for (const ParsedQuery::Alias& a : sortedAliases) {
+    cols.push_back({inVarColMap[a._outVarName], false});
   }
   return cols;
 }
@@ -210,18 +210,91 @@ void doGroupBy(const vector<A>* input,
         case GroupBy::AggregateType::GROUP_CONCAT:
           AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "Group concatenation aggregation is not yet implemented.");
           break;
-        case GroupBy::AggregateType::MAX:
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "Maximum aggregation is not yet implemented.");
+        case GroupBy::AggregateType::MAX: {
+          if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+            Id res = std::numeric_limits<Id>::lowest();
+            for (size_t i = blockStart; i <= blockEnd; i++) {
+              res = std::max(res, (*input)[i][a._inCol]);
+            }
+            resultRow[a._outCol] = res;
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+            float res = std::numeric_limits<float>::lowest();
+            for (size_t i = blockStart; i <= blockEnd; i++) {
+              // interpret the first sizeof(float) bytes of the entry as a float.
+              res = std::max(res, *reinterpret_cast<const float*>(&(*input)[i][a._inCol]));
+            }
+            resultRow[a._outCol] = 0;
+            std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+            resultRow[a._outCol] = ID_NO_VALUE;
+          } else {
+            Id res = std::numeric_limits<Id>::lowest();
+            for (size_t i = blockStart; i <= blockEnd; i++) {
+              res = std::max(res, (*input)[i][a._inCol]);
+            }
+            resultRow[a._outCol] = res;
+          }
           break;
-        case GroupBy::AggregateType::MIN:
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "Minimum aggregation is not yet implemented.");
+        }
+        case GroupBy::AggregateType::MIN: {
+          if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+            Id res = std::numeric_limits<Id>::max();
+            for (size_t i = blockStart; i <= blockEnd; i++) {
+              res = std::min(res, (*input)[i][a._inCol]);
+            }
+            resultRow[a._outCol] = res;
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+            float res = std::numeric_limits<float>::max();
+            for (size_t i = blockStart; i <= blockEnd; i++) {
+              // interpret the first sizeof(float) bytes of the entry as a float.
+              res = std::min(res, *reinterpret_cast<const float*>(&(*input)[i][a._inCol]));
+            }
+            resultRow[a._outCol] = 0;
+            std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+            resultRow[a._outCol] = ID_NO_VALUE;
+          } else {
+            Id res = std::numeric_limits<Id>::max();
+            for (size_t i = blockStart; i <= blockEnd; i++) {
+              res = std::min(res, (*input)[i][a._inCol]);
+            }
+            resultRow[a._outCol] = res;
+          }
           break;
+        }
         case GroupBy::AggregateType::SAMPLE:
           resultRow[a._outCol] = (*input)[blockEnd][a._inCol];
           break;
-        case GroupBy::AggregateType::SUM:
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "Sum aggregation is not yet implemented.");
+        case GroupBy::AggregateType::SUM: {
+          float res = 0;
+          if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+            for (size_t i = blockStart; i <= blockEnd; i++) {
+              res += (*input)[i][a._inCol];
+            }
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+            for (size_t i = blockStart; i <= blockEnd; i++) {
+              // interpret the first sizeof(float) bytes of the entry as a float.
+              res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
+            }
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+            res = std::numeric_limits<float>::quiet_NaN();
+          } else {
+            for (size_t i = blockStart; i <= blockEnd; i++) {
+              // load the string, parse it as an xsd::int or float
+              std::string entity = index.idToString((*input)[i][a._inCol]);
+              if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+                res = std::numeric_limits<float>::quiet_NaN();
+                break;
+              } else {
+                res += ad_utility::convertIndexWordToFloatValue(entity.substr(0, entity.size() - 1));
+              }
+            }
+          }
+
+          resultRow[a._outCol] = 0;
+          *reinterpret_cast<float*>(&resultRow[a._outCol]) = res;
           break;
+        }
         case GroupBy::AggregateType::FIRST:
           // This does the same as sample, as the non grouping rows have no
           // inherent order.
@@ -285,18 +358,91 @@ void doGroupBy(const vector<A>* input,
       case GroupBy::AggregateType::GROUP_CONCAT:
         AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "Group concatenation aggregation is not yet implemented.");
         break;
-      case GroupBy::AggregateType::MAX:
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "Maximum aggregation is not yet implemented.");
+      case GroupBy::AggregateType::MAX: {
+        if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+          Id res = std::numeric_limits<Id>::lowest();
+          for (size_t i = blockStart; i <= blockEnd; i++) {
+            res = std::max(res, (*input)[i][a._inCol]);
+          }
+          resultRow[a._outCol] = res;
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+          float res = std::numeric_limits<float>::lowest();
+          for (size_t i = blockStart; i <= blockEnd; i++) {
+            // interpret the first sizeof(float) bytes of the entry as a float.
+            res = std::max(res, *reinterpret_cast<const float*>(&(*input)[i][a._inCol]));
+          }
+          resultRow[a._outCol] = 0;
+          std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+          resultRow[a._outCol] = ID_NO_VALUE;
+        } else {
+          Id res = std::numeric_limits<Id>::lowest();
+          for (size_t i = blockStart; i <= blockEnd; i++) {
+            res = std::max(res, (*input)[i][a._inCol]);
+          }
+          resultRow[a._outCol] = res;
+        }
         break;
-      case GroupBy::AggregateType::MIN:
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "Minimum aggregation is not yet implemented.");
+      }
+      case GroupBy::AggregateType::MIN: {
+        if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+          Id res = std::numeric_limits<Id>::max();
+          for (size_t i = blockStart; i <= blockEnd; i++) {
+            res = std::min(res, (*input)[i][a._inCol]);
+          }
+          resultRow[a._outCol] = res;
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+          float res = std::numeric_limits<float>::max();
+          for (size_t i = blockStart; i <= blockEnd; i++) {
+            // interpret the first sizeof(float) bytes of the entry as a float.
+            res = std::min(res, *reinterpret_cast<const float*>(&(*input)[i][a._inCol]));
+          }
+          resultRow[a._outCol] = 0;
+          std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+          resultRow[a._outCol] = ID_NO_VALUE;
+        } else {
+          Id res = std::numeric_limits<Id>::max();
+          for (size_t i = blockStart; i <= blockEnd; i++) {
+            res = std::min(res, (*input)[i][a._inCol]);
+          }
+          resultRow[a._outCol] = res;
+        }
         break;
+      }
       case GroupBy::AggregateType::SAMPLE:
         resultRow[a._outCol] = (*input)[blockEnd][a._inCol];
         break;
-      case GroupBy::AggregateType::SUM:
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "Sum aggregation is not yet implemented.");
+      case GroupBy::AggregateType::SUM: {
+        float res = 0;
+        if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+          for (size_t i = blockStart; i <= blockEnd; i++) {
+            res += (*input)[i][a._inCol];
+          }
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+          for (size_t i = blockStart; i <= blockEnd; i++) {
+            // interpret the first sizeof(float) bytes of the entry as a float.
+            res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
+          }
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+          res = std::numeric_limits<float>::quiet_NaN();
+        } else {
+          for (size_t i = blockStart; i <= blockEnd; i++) {
+            // load the string, parse it as an xsd::int or float
+            std::string entity = index.idToString((*input)[i][a._inCol]);
+            if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+              res = std::numeric_limits<float>::quiet_NaN();
+              break;
+            } else {
+              res += ad_utility::convertIndexWordToFloatValue(entity.substr(0, entity.size() - 1));
+            }
+          }
+        }
+
+        resultRow[a._outCol] = 0;
+        *reinterpret_cast<float*>(&resultRow[a._outCol]) = res;
         break;
+      }
       case GroupBy::AggregateType::FIRST:
         // This does the same as sample, as the non grouping rows have no
         // inherent order.
@@ -562,7 +708,7 @@ void GroupBy::computeResult(ResultTable* result) const {
         return;
       }
       aggregates.back()._inCol = inIt->second;
-      aggregates.back()._outCol = _varColMap.find(alias._varName)->second;
+      aggregates.back()._outCol = _varColMap.find(alias._outVarName)->second;
 
     }
   }
