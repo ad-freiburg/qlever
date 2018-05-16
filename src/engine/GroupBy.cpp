@@ -171,7 +171,9 @@ void doGroupBy(const vector<A>* input,
       result->emplace_back();
       R& resultRow = result->back();
       // does nothing for arrays, resizes vectors
-      resizeIfVec<R, typename R::value_type>::resize(resultRow, aggregates.size());
+      resizeIfVec<R, typename R::value_type>::resize(resultRow,
+                                                     groupByCols.size()
+                                                     +  aggregates.size());
       blockEnd = pos - 1;
       for (const GroupBy::Aggregate &a : aggregates) {
         switch (a._type) {
@@ -215,17 +217,17 @@ void doGroupBy(const vector<A>* input,
           std::string *delim = reinterpret_cast<string*>(a._userData);
           if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
            for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-             out << std::to_string((*input)[i][a._inCol]) << *delim;
+             out << (*input)[i][a._inCol] << *delim;
            }
-           out << std::to_string((*input)[blockEnd][a._inCol]);
+           out << (*input)[blockEnd][a._inCol];
           } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
             float f;
             for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
               std::memcpy(&f, &(*input)[i][a._inCol], sizeof(float));
-              out << std::to_string(f) << *delim;
+              out << f << *delim;
             }
             std::memcpy(&f, &(*input)[blockEnd][a._inCol], sizeof(float));
-            out << std::to_string(f);
+            out << f;
           } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
             for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
               out << index.getTextExcerpt((*input)[i][a._inCol]) << *delim;
@@ -368,11 +370,13 @@ void doGroupBy(const vector<A>* input,
     result->emplace_back();
     R& resultRow = result->back();
     // does nothing for arrays, resizes vectors
-    resizeIfVec<R, typename R::value_type>::resize(resultRow, aggregates.size());
+    resizeIfVec<R, typename R::value_type>::resize(resultRow,
+                                                   groupByCols.size()
+                                                   +  aggregates.size());
     for (const GroupBy::Aggregate &a : aggregates) {
       switch (a._type) {
-      case GroupBy::AggregateType::AVG:
-        float res;
+      case GroupBy::AggregateType::AVG: {
+        float res = 0;
         if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
             res += (*input)[i][a._inCol];
@@ -402,6 +406,7 @@ void doGroupBy(const vector<A>* input,
         resultRow[a._outCol] = 0;
         *reinterpret_cast<float*>(&resultRow[a._outCol]) = res;
         break;
+      }
       case GroupBy::AggregateType::COUNT:
         resultRow[a._outCol] = blockEnd - blockStart + 1;
         break;
@@ -410,17 +415,17 @@ void doGroupBy(const vector<A>* input,
         std::string *delim = reinterpret_cast<string*>(a._userData);
         if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
          for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-           out << std::to_string((*input)[i][a._inCol]) << *delim;
+           out << (*input)[i][a._inCol] << *delim;
          }
-         out << std::to_string((*input)[blockEnd][a._inCol]);
+         out << (*input)[blockEnd][a._inCol];
         } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
           float f;
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
             std::memcpy(&f, &(*input)[i][a._inCol], sizeof(float));
-            out << std::to_string(f) << *delim;
+            out << f << *delim;
           }
           std::memcpy(&f, &(*input)[blockEnd][a._inCol], sizeof(float));
-          out << std::to_string(f);
+          out << f;
         } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
             out << index.getTextExcerpt((*input)[i][a._inCol]) << *delim;

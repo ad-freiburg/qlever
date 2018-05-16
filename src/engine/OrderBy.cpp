@@ -46,6 +46,7 @@ void OrderBy::computeResult(ResultTable* result) const {
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
+  result->_localVocab = subRes->_localVocab;
   switch (subRes->_nofColumns) {
     case 1: {
       auto res = new vector<array<Id, 1>>();

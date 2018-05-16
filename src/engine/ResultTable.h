@@ -42,6 +42,8 @@ public:
   vector<ResultType> _resultTypes;
   // This vector is used to store generated strings (such as the GROUP_CONCAT
   // results) which are used in the output with the ResultType::STRING type.
+  // WARNING: Currently only operations that can run after a GroupBy copy
+  //          the _localVocab of a subresult.
   vector<string> _localVocab;
 
   ResultTable();

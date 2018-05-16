@@ -80,3 +80,14 @@ private:
 
   virtual void computeResult(ResultTable* result) const;
 };
+
+// This method is declared here solely for unit testing purposes
+template<typename A, typename R>
+void doGroupBy(const vector<A>* input,
+               const vector<ResultTable::ResultType>& inputTypes,
+               const vector<size_t>& groupByCols,
+               const vector<GroupBy::Aggregate>& aggregates,
+               vector<R>* result,
+               const ResultTable* inTable,
+               ResultTable* outTable,
+               const Index& index);
