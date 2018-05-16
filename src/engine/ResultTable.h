@@ -40,6 +40,9 @@ public:
   void* _fixedSizeData;
 
   vector<ResultType> _resultTypes;
+  // This vector is used to store generated strings (such as the GROUP_CONCAT
+  // results) which are used in the output with the ResultType::STRING type.
+  vector<string> _localVocab;
 
   ResultTable();
 
@@ -68,6 +71,15 @@ public:
   void awaitFinished() const {
     unique_lock<mutex> lk(_cond_var_m);
     _cond_var.wait(lk, [&] { return _status == ResultTable::FINISHED; });
+  }
+
+  std::string idToString(Id id) const {
+    if (id < _localVocab.size()) {
+      return _localVocab[id];
+    } else if (id == ID_NO_VALUE) {
+      return "";
+    }
+    return "ID OUT OF RANGE";
   }
 
   size_t size() const;

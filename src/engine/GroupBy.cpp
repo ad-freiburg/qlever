@@ -146,11 +146,13 @@ void doGroupBy(const vector<A>* input,
                const vector<size_t>& groupByCols,
                const vector<GroupBy::Aggregate>& aggregates,
                vector<R>* result,
+               const ResultTable* inTable,
+               ResultTable* outTable,
                const Index& index) {
   if (input->size() == 0) {
     return;
   }
-
+  (void) outTable;
   std::vector<std::pair<size_t, Id>> currentGroupBlock;
   for (size_t col : groupByCols) {
     currentGroupBlock.push_back(std::pair<size_t, Id>(col, (*input)[0][col]));
@@ -184,7 +186,8 @@ void doGroupBy(const vector<A>* input,
               // interpret the first sizeof(float) bytes of the entry as a float.
               res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
             }
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
+                     || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
             res = std::numeric_limits<float>::quiet_NaN();
           } else {
             for (size_t i = blockStart; i <= blockEnd; i++) {
@@ -207,9 +210,52 @@ void doGroupBy(const vector<A>* input,
         case GroupBy::AggregateType::COUNT:
           resultRow[a._outCol] = blockEnd - blockStart + 1;
           break;
-        case GroupBy::AggregateType::GROUP_CONCAT:
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "Group concatenation aggregation is not yet implemented.");
+        case GroupBy::AggregateType::GROUP_CONCAT: {
+          std::ostringstream out;
+          std::string *delim = reinterpret_cast<string*>(a._userData);
+          if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+             out << std::to_string((*input)[i][a._inCol]) << *delim;
+           }
+           out << std::to_string((*input)[blockEnd][a._inCol]);
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+            float f;
+            for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+              std::memcpy(&f, &(*input)[i][a._inCol], sizeof(float));
+              out << std::to_string(f) << *delim;
+            }
+            std::memcpy(&f, &(*input)[blockEnd][a._inCol], sizeof(float));
+            out << std::to_string(f);
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+            for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+              out << index.getTextExcerpt((*input)[i][a._inCol]) << *delim;
+            }
+            out << index.getTextExcerpt((*input)[blockEnd][a._inCol]);
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::STRING){
+            for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+              out << inTable->idToString((*input)[i][a._inCol]) << *delim;
+            }
+            out << inTable->idToString((*input)[blockEnd][a._inCol]);
+          } else {
+            for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+              std::string entity = index.idToString((*input)[i][a._inCol]);
+              if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
+                out << ad_utility::convertIndexWordToValueLiteral(entity) << *delim;
+              } else {
+                out << entity << *delim;
+              }
+            }
+            std::string entity = index.idToString((*input)[blockEnd][a._inCol]);
+            if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
+              out << ad_utility::convertIndexWordToValueLiteral(entity);
+            } else {
+              out << entity;
+            }
+          }
+          resultRow[a._outCol] = outTable->_localVocab.size();
+          outTable->_localVocab.push_back(out.str());
           break;
+        }
         case GroupBy::AggregateType::MAX: {
           if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
             Id res = std::numeric_limits<Id>::lowest();
@@ -225,7 +271,8 @@ void doGroupBy(const vector<A>* input,
             }
             resultRow[a._outCol] = 0;
             std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
+                     || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
             resultRow[a._outCol] = ID_NO_VALUE;
           } else {
             Id res = std::numeric_limits<Id>::lowest();
@@ -251,7 +298,8 @@ void doGroupBy(const vector<A>* input,
             }
             resultRow[a._outCol] = 0;
             std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
+                     || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
             resultRow[a._outCol] = ID_NO_VALUE;
           } else {
             Id res = std::numeric_limits<Id>::max();
@@ -276,7 +324,8 @@ void doGroupBy(const vector<A>* input,
               // interpret the first sizeof(float) bytes of the entry as a float.
               res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
             }
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
+                     || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
             res = std::numeric_limits<float>::quiet_NaN();
           } else {
             for (size_t i = blockStart; i <= blockEnd; i++) {
@@ -333,7 +382,8 @@ void doGroupBy(const vector<A>* input,
             // interpret the first sizeof(float) bytes of the entry as a float.
             res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
           }
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
+                   || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
           res = std::numeric_limits<float>::quiet_NaN();
         } else {
           for (size_t i = blockStart; i <= blockEnd; i++) {
@@ -355,9 +405,53 @@ void doGroupBy(const vector<A>* input,
       case GroupBy::AggregateType::COUNT:
         resultRow[a._outCol] = blockEnd - blockStart + 1;
         break;
-      case GroupBy::AggregateType::GROUP_CONCAT:
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "Group concatenation aggregation is not yet implemented.");
+      case GroupBy::AggregateType::GROUP_CONCAT: {
+        std::ostringstream out;
+        std::string *delim = reinterpret_cast<string*>(a._userData);
+        if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+         for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+           out << std::to_string((*input)[i][a._inCol]) << *delim;
+         }
+         out << std::to_string((*input)[blockEnd][a._inCol]);
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+          float f;
+          for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+            std::memcpy(&f, &(*input)[i][a._inCol], sizeof(float));
+            out << std::to_string(f) << *delim;
+          }
+          std::memcpy(&f, &(*input)[blockEnd][a._inCol], sizeof(float));
+          out << std::to_string(f);
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+          for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+            out << index.getTextExcerpt((*input)[i][a._inCol]) << *delim;
+          }
+          out << index.getTextExcerpt((*input)[blockEnd][a._inCol]);
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::STRING){
+          for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+            out << inTable->idToString((*input)[i][a._inCol]) << *delim;
+          }
+          out << inTable->idToString((*input)[blockEnd][a._inCol]);
+        } else {
+          for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+            std::string entity = index.idToString((*input)[i][a._inCol]);
+            if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
+              out << ad_utility::convertIndexWordToValueLiteral(entity) << *delim;
+            } else {
+              out << entity << *delim;
+            }
+            out << *delim;
+          }
+          std::string entity = index.idToString((*input)[blockEnd][a._inCol]);
+          if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
+            out << ad_utility::convertIndexWordToValueLiteral(entity);
+          } else {
+            out << entity;
+          }
+        }
+        resultRow[a._outCol] = outTable->_localVocab.size();
+        outTable->_localVocab.push_back(out.str());
         break;
+      }
       case GroupBy::AggregateType::MAX: {
         if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
           Id res = std::numeric_limits<Id>::lowest();
@@ -373,7 +467,8 @@ void doGroupBy(const vector<A>* input,
           }
           resultRow[a._outCol] = 0;
           std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
+                   || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
           resultRow[a._outCol] = ID_NO_VALUE;
         } else {
           Id res = std::numeric_limits<Id>::lowest();
@@ -399,7 +494,8 @@ void doGroupBy(const vector<A>* input,
           }
           resultRow[a._outCol] = 0;
           std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
+                   || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
           resultRow[a._outCol] = ID_NO_VALUE;
         } else {
           Id res = std::numeric_limits<Id>::max();
@@ -424,7 +520,8 @@ void doGroupBy(const vector<A>* input,
             // interpret the first sizeof(float) bytes of the entry as a float.
             res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
           }
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
+                   || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
           res = std::numeric_limits<float>::quiet_NaN();
         } else {
           for (size_t i = blockStart; i <= blockEnd; i++) {
@@ -471,6 +568,7 @@ struct callDoGroupBy {
                    const vector<size_t>& groupByCols,
                    const vector<GroupBy::Aggregate>& aggregates,
                    ResultTable* result,
+                   ResultTable* outTable,
                    const Index& index) {
     if (InputColCount == inputColCount) {
       if (resultColCount == ResultColCount) {
@@ -481,6 +579,8 @@ struct callDoGroupBy {
               groupByCols,
               aggregates,
               static_cast<vector<array<Id, ResultColCount>>*>(result->_fixedSizeData),
+              subresult.get(),
+              outTable,
               index);
       } else {
         callDoGroupBy<InputColCount, ResultColCount + 1>::call(inputColCount,
@@ -490,6 +590,7 @@ struct callDoGroupBy {
                                                                groupByCols,
                                                                aggregates,
                                                                result,
+                                                               outTable,
                                                                index);
       }
     } else {
@@ -500,6 +601,7 @@ struct callDoGroupBy {
                                                              groupByCols,
                                                              aggregates,
                                                              result,
+                                                             outTable,
                                                              index);
     }
   }
@@ -513,6 +615,7 @@ struct callDoGroupBy<6, ResultColCount> {
                    const vector<size_t>& groupByCols,
                    const vector<GroupBy::Aggregate>& aggregates,
                    ResultTable* result,
+                   ResultTable* outTable,
                    const Index& index) {
     if (resultColCount == ResultColCount) {
       result->_fixedSizeData = new vector<array<Id, ResultColCount>>();
@@ -522,6 +625,8 @@ struct callDoGroupBy<6, ResultColCount> {
             groupByCols,
             aggregates,
             static_cast<vector<array<Id, ResultColCount>>*>(result->_fixedSizeData),
+            subresult.get(),
+            outTable,
             index);
     } else {
       callDoGroupBy<6, ResultColCount + 1>::call(inputColCount,
@@ -531,6 +636,7 @@ struct callDoGroupBy<6, ResultColCount> {
                                                  groupByCols,
                                                  aggregates,
                                                  result,
+                                                 outTable,
                                                  index);
     }
   }
@@ -544,6 +650,7 @@ struct callDoGroupBy<InputColCount, 6> {
                    const vector<size_t>& groupByCols,
                    const vector<GroupBy::Aggregate>& aggregates,
                    ResultTable* result,
+                   ResultTable* outTable,
                    const Index& index) {
     // avoid the quite numerous warnings about unused parameters
     (void) inputColCount;
@@ -554,6 +661,8 @@ struct callDoGroupBy<InputColCount, 6> {
           groupByCols,
           aggregates,
           &result->_varSizeData,
+          subresult.get(),
+          outTable,
           index);
   }
 };
@@ -566,6 +675,7 @@ struct callDoGroupBy<6, 6> {
                    const vector<size_t>& groupByCols,
                    const vector<GroupBy::Aggregate>& aggregates,
                    ResultTable* result,
+                   ResultTable* outTable,
                    const Index& index) {
     // avoid the quite numerous warnings about unused parameters
     (void) inputColCount;
@@ -576,6 +686,8 @@ struct callDoGroupBy<6, 6> {
           groupByCols,
           aggregates,
           &result->_varSizeData,
+          subresult.get(),
+          outTable,
           index);
   }
 };
@@ -664,8 +776,8 @@ void GroupBy::computeResult(ResultTable* result) const {
             if (stopConcat > startConcat && stopConcat != std::string::npos
                 && startConcat != std::string::npos) {
               aggregates.back()._userData
-                  = new std::string(alias._function.substr(startConcat + 1,
-                                                           stopConcat - startConcat - 1));
+                  = new std::string(concatString.substr(startConcat + 1,
+                                                        stopConcat - startConcat - 1));
             } else {
               LOG(WARN) << "Unable to parse the delimiter in GROUP_CONCAT"
                            "aggregrate " << alias._function;
@@ -759,6 +871,7 @@ void GroupBy::computeResult(ResultTable* result) const {
 
   callDoGroupBy<1, 1>::call(subresult->_nofColumns, aggregates.size(), subresult,
                             inputResultTypes, groupByCols, aggregates, result,
+                            result,
                             getIndex());
 
   std::cout << "Group by result size " << result->size() << std::endl;
