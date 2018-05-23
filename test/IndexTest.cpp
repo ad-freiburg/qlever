@@ -380,7 +380,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     for (size_t i = 0; i < ip.second; i++) {
       ASSERT_EQ(p[i], ip.first[i]);
     }
-    ASSERT_EQ(0, index.getHasPattern()[1]);
+    ASSERT_EQ(0u, index.getHasPattern()[1]);
     ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
   }
   {
@@ -400,7 +400,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     for (size_t i = 0; i < ip.second; i++) {
       ASSERT_EQ(p[i], ip.first[i]);
     }
-    ASSERT_EQ(0, index.getHasPattern()[1]);
+    ASSERT_EQ(0u, index.getHasPattern()[1]);
     ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
   }
 }

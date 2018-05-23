@@ -14,45 +14,6 @@ ResultTable::ResultTable()
       _status(ResultTable::OTHER) {}
 
 // _____________________________________________________________________________
-ResultTable::ResultTable(const ResultTable& other)
-    : _nofColumns(other._nofColumns),
-      _sortedBy(other._sortedBy),
-      _varSizeData(other._varSizeData),
-      _fixedSizeData(nullptr),
-      _status(other._status) {
-  if (other._nofColumns <= 5) {
-    if (other._nofColumns == 1) {
-      _fixedSizeData = new vector<array<Id, 1>>;
-      *static_cast<vector<array<Id, 1>>*>(_fixedSizeData) =
-          *static_cast<vector<array<Id, 1>>*>(other._fixedSizeData);
-    }
-    if (other._nofColumns == 2) {
-      _fixedSizeData = new vector<array<Id, 2>>;
-      *static_cast<vector<array<Id, 2>>*>(_fixedSizeData) =
-          *static_cast<vector<array<Id, 2>>*>(other._fixedSizeData);
-    }
-    if (other._nofColumns == 3) {
-      _fixedSizeData = new vector<array<Id, 3>>;
-      *static_cast<vector<array<Id, 3>>*>(_fixedSizeData) =
-          *static_cast<vector<array<Id, 3>>*>(other._fixedSizeData);
-    }
-    if (other._nofColumns == 4) {
-      _fixedSizeData = new vector<array<Id, 4>>;
-      *static_cast<vector<array<Id, 4>>*>(_fixedSizeData) =
-          *static_cast<vector<array<Id, 4>>*>(other._fixedSizeData);
-    }
-    if (other._nofColumns == 5) {
-      _fixedSizeData = new vector<array<Id, 5>>;
-      *static_cast<vector<array<Id, 5>>*>(_fixedSizeData) =
-          *static_cast<vector<array<Id, 5>>*>(other._fixedSizeData);
-    }
-  } else {
-    assert(!other._fixedSizeData);
-    _fixedSizeData = nullptr;
-  }
-}
-
-// _____________________________________________________________________________
 void ResultTable::clear() {
   if (_fixedSizeData) {
     if (_nofColumns == 1) {
