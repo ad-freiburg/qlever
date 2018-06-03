@@ -5,25 +5,25 @@
 #pragma once
 
 #include <assert.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <errno.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <iostream>
 #include <string>
 #include <vector>
-#include <iostream>
 
+#include "../global/Constants.h"
 #include "./Exception.h"
 #include "./StringUtils.h"
-#include "../global/Constants.h"
 
+using std::cerr;
+using std::cout;
+using std::endl;
 using std::string;
 using std::vector;
-using std::cout;
-using std::cerr;
-using std::endl;
 
 namespace ad_utility {
 //! Convert a value literal to an index word.
@@ -92,8 +92,7 @@ string convertValueLiteralToIndexWord(const string& orig) {
     assert(posOfHashTag != string::npos);
 
     // +2 for '>' and Hashtag
-    type = orig.substr(posOfHashTag + 1,
-                       orig.size() - (posOfHashTag + 2));
+    type = orig.substr(posOfHashTag + 1, orig.size() - (posOfHashTag + 2));
   } else {
     size_t posOfDoubleDot = orig.rfind(':');
     if (posOfDoubleDot == string::npos) {
@@ -102,12 +101,11 @@ string convertValueLiteralToIndexWord(const string& orig) {
     }
 
     // +1 for double dot
-    type = orig.substr(posOfDoubleDot + 1,
-                       orig.size() - (posOfDoubleDot + 1));
+    type = orig.substr(posOfDoubleDot + 1, orig.size() - (posOfDoubleDot + 1));
   }
 
-  if (type == "dateTime" || type == "gYear" || type == "gYearMonth"
-      || type == "date") {
+  if (type == "dateTime" || type == "gYear" || type == "gYearMonth" ||
+      type == "date") {
     return convertDateToIndexWord(value);
   } else {
     // No longer convert to int. instead always convert to float and
@@ -117,16 +115,15 @@ string convertValueLiteralToIndexWord(const string& orig) {
       // return convertIntegerToIndexWord(
       //    value,
       //    ad_semsearch::DEFAULT_NOF_VALUE_INTEGER_DIGITS);
-      return convertFloatToIndexWord(
-          value + ".0",
-          DEFAULT_NOF_VALUE_EXPONENT_DIGITS,
-          DEFAULT_NOF_VALUE_MANTISSA_DIGITS) + "I";
+      return convertFloatToIndexWord(value + ".0",
+                                     DEFAULT_NOF_VALUE_EXPONENT_DIGITS,
+                                     DEFAULT_NOF_VALUE_MANTISSA_DIGITS) +
+             "I";
     }
     if (type == "float") {
-      return convertFloatToIndexWord(
-          value,
-          DEFAULT_NOF_VALUE_EXPONENT_DIGITS,
-          DEFAULT_NOF_VALUE_MANTISSA_DIGITS) + "F";
+      return convertFloatToIndexWord(value, DEFAULT_NOF_VALUE_EXPONENT_DIGITS,
+                                     DEFAULT_NOF_VALUE_MANTISSA_DIGITS) +
+             "F";
     }
   }
   return orig;
@@ -146,15 +143,15 @@ string convertIndexWordToValueLiteral(const string& indexWord) {
   if (startsWith(indexWord, VALUE_FLOAT_PREFIX)) {
     if (endsWith(indexWord, "F")) {
       std::ostringstream os;
-      os << "\"" << convertIndexWordToFloat(
-          indexWord.substr(0, indexWord.size() - 1)) << "\""
-         << XSD_FLOAT_SUFFIX;
+      os << "\""
+         << convertIndexWordToFloat(indexWord.substr(0, indexWord.size() - 1))
+         << "\"" << XSD_FLOAT_SUFFIX;
       return os.str();
     }
     if (endsWith(indexWord, "I")) {
       std::ostringstream os;
-      string asFloat = convertIndexWordToFloat(
-          indexWord.substr(0, indexWord.size() - 1));
+      string asFloat =
+          convertIndexWordToFloat(indexWord.substr(0, indexWord.size() - 1));
       os << "\"" << asFloat.substr(0, asFloat.find('.')) << "\""
          << XSD_INT_SUFFIX;
       return os.str();
@@ -164,8 +161,7 @@ string convertIndexWordToValueLiteral(const string& indexWord) {
 }
 
 // _____________________________________________________________________________
-string convertFloatToIndexWord(const string& orig,
-                               size_t nofExponentDigits,
+string convertFloatToIndexWord(const string& orig, size_t nofExponentDigits,
                                size_t nofMantissaDigits) {
   // Need a copy to modify.
   string value(orig);
@@ -180,7 +176,6 @@ string convertFloatToIndexWord(const string& orig,
     return string(VALUE_FLOAT_PREFIX) + "N0";
   }
 
-
   std::ostringstream os;
   os << VALUE_FLOAT_PREFIX;
 
@@ -193,7 +188,7 @@ string convertFloatToIndexWord(const string& orig,
 
   // Get the exponent.
   assert(posOfDot >= 1);
-  int exponent = static_cast<int> (posOfDot) - 1;
+  int exponent = static_cast<int>(posOfDot) - 1;
 
   if (posOfDot <= 1) {
     if (value[0] == '0') {
@@ -255,8 +250,8 @@ string convertFloatToIndexWord(const string& orig,
   os << mant.str().substr(0, DEFAULT_NOF_VALUE_MANTISSA_DIGITS);
   // Padding for mantissa. Necessary because we append something
   // to restore the original type.
-  for (size_t i = mant.str().size();
-       i < DEFAULT_NOF_VALUE_MANTISSA_DIGITS; ++i) {
+  for (size_t i = mant.str().size(); i < DEFAULT_NOF_VALUE_MANTISSA_DIGITS;
+       ++i) {
     if (!negaMantissa) {
       os << '0';
     } else {
@@ -265,7 +260,6 @@ string convertFloatToIndexWord(const string& orig,
   }
   return os.str();
 }
-
 
 // _____________________________________________________________________________
 string convertIndexWordToFloat(const string& indexWord) {
@@ -283,14 +277,15 @@ string convertIndexWordToFloat(const string& indexWord) {
   size_t posOfE = number.find('E');
   assert(posOfE != string::npos && posOfE > 0 && posOfE < number.size() - 1);
 
-  string exponentString = (
-      (negaMantissa == negaExponent) ?
-      number.substr(2, posOfE - 2) :
-      getBase10ComplementOfIntegerString(number.substr(2, posOfE - 2)));
-  size_t absExponent = static_cast<size_t> (atoi(exponentString.c_str()));
-  string mantissa = (!negaMantissa ? number.substr(posOfE + 1)
-                                   : getBase10ComplementOfIntegerString(
-          number.substr(posOfE + 1)));
+  string exponentString =
+      ((negaMantissa == negaExponent)
+           ? number.substr(2, posOfE - 2)
+           : getBase10ComplementOfIntegerString(number.substr(2, posOfE - 2)));
+  size_t absExponent = static_cast<size_t>(atoi(exponentString.c_str()));
+  string mantissa =
+      (!negaMantissa
+           ? number.substr(posOfE + 1)
+           : getBase10ComplementOfIntegerString(number.substr(posOfE + 1)));
 
   std::ostringstream os;
   if (negaMantissa) {
@@ -352,7 +347,6 @@ string convertIndexWordToFloat(const string& indexWord) {
   return os.str();
 }
 
-
 // _____________________________________________________________________________
 string normalizeDate(const string& orig) {
   string value(orig);
@@ -376,26 +370,23 @@ string normalizeDate(const string& orig) {
     size_t posOfFirstCol = string::npos;
 
     // Avoid finding a in timezone info, e.g. "T10-03:00"
-    if (posOfT + 3 < value.size()
-        && value[posOfT + 3] != '-'
-        && value[posOfT + 3] != '+') {
+    if (posOfT + 3 < value.size() && value[posOfT + 3] != '-' &&
+        value[posOfT + 3] != '+') {
       posOfFirstCol = value.find(':');
     }
     size_t posOfSecondCol = string::npos;
     // Only look for a second colon if there is a first colon
     // and avoid finding a second colon in timezone info, e.g. "T10:00-03:00"
-    if (posOfFirstCol != string::npos
-        && posOfFirstCol + 3 < value.size()
-        && value[posOfFirstCol + 3] != '-'
-        && value[posOfFirstCol + 3] != '+') {
+    if (posOfFirstCol != string::npos && posOfFirstCol + 3 < value.size() &&
+        value[posOfFirstCol + 3] != '-' && value[posOfFirstCol + 3] != '+') {
       posOfSecondCol = value.find(':', posOfFirstCol + 1);
     }
     if (posOfSecondCol != string::npos) {
       assert(posOfSecondCol + 3 <= value.size());
       // Time has hours minutes and seconds.
       hour = value.substr(posOfT + 1, posOfFirstCol - (posOfT + 1));
-      minute = value.substr(posOfFirstCol + 1,
-                            posOfSecondCol - (posOfFirstCol + 1));
+      minute =
+          value.substr(posOfFirstCol + 1, posOfSecondCol - (posOfFirstCol + 1));
       second = value.substr(posOfSecondCol + 1, 2);
       // We ignore possible milliseconds that follow.
     } else if (posOfFirstCol != string::npos) {
@@ -462,14 +453,14 @@ string normalizeDate(const string& orig) {
          VALUE_DATE_TIME_SEPARATOR + hour + ":" + minute + ":" + second;
 }
 
-
 // _____________________________________________________________________________
 string convertDateToIndexWord(const string& value) {
   std::ostringstream os;
   string norm = normalizeDate(value);
   if (norm[0] == '-') {
-    os << '-' << getBase10ComplementOfIntegerString(
-        norm.substr(1, DEFAULT_NOF_DATE_YEAR_DIGITS - 1));
+    os << '-'
+       << getBase10ComplementOfIntegerString(
+              norm.substr(1, DEFAULT_NOF_DATE_YEAR_DIGITS - 1));
     os << norm.substr(DEFAULT_NOF_DATE_YEAR_DIGITS);
   } else {
     os << norm;
@@ -482,9 +473,9 @@ string convertIndexWordToDate(const string& indexWord) {
   size_t prefixLength = std::char_traits<char>::length(VALUE_DATE_PREFIX);
   std::ostringstream os;
   if (indexWord[prefixLength] == '-') {
-    os << '-' << getBase10ComplementOfIntegerString(
-        indexWord.substr(prefixLength + 1,
-                         DEFAULT_NOF_DATE_YEAR_DIGITS - 1));
+    os << '-'
+       << getBase10ComplementOfIntegerString(indexWord.substr(
+              prefixLength + 1, DEFAULT_NOF_DATE_YEAR_DIGITS - 1));
     os << indexWord.substr(prefixLength + DEFAULT_NOF_DATE_YEAR_DIGITS);
   } else {
     os << indexWord.substr(prefixLength);
@@ -506,7 +497,9 @@ inline string removeLeadingZeros(const string& orig) {
   std::ostringstream os;
   size_t i = 0;
   for (; i < orig.size(); ++i) {
-    if (orig[i] != '0') { break; }
+    if (orig[i] != '0') {
+      break;
+    }
   }
   for (; i < orig.size(); ++i) {
     os << orig[i];
@@ -518,7 +511,7 @@ inline string removeLeadingZeros(const string& orig) {
 bool isXsdValue(const string val) {
   // starting the search for "^^ at position 1 makes sure it's not in the
   // quotes as we already checked that the first char is the first quote
-  return val.size() > 0 && val[0] == '\"' && val.find("\"^^", 1) != string::npos;
+  return val.size() > 0 && val[0] == '\"' &&
+         val.find("\"^^", 1) != string::npos;
 }
-}
-
+}  // namespace ad_utility

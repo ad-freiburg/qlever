@@ -24,18 +24,24 @@ static const size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1000 * 1000 * 1000;
 
 static const size_t GALLOP_THRESHOLD = 1000;
 
-
-static const char CONTAINS_ENTITY_PREDICATE[] = "<QLever-internal-function/contains-entity>";
-static const char CONTAINS_WORD_PREDICATE[] = "<QLever-internal-function/contains-word>";
+static const char CONTAINS_ENTITY_PREDICATE[] =
+    "<QLever-internal-function/contains-entity>";
+static const char CONTAINS_WORD_PREDICATE[] =
+    "<QLever-internal-function/contains-word>";
 static const char CONTAINS_WORD_PREDICATE_NS[] = "ql:contains-word";
-static const char INTERNAL_TEXT_MATCH_PREDICATE[] = "<QLever-internal-function/text>";
+static const char INTERNAL_TEXT_MATCH_PREDICATE[] =
+    "<QLever-internal-function/text>";
+static const char HAS_RELATION_PREDIACTE[] =
+    "<QLever-internal-function/has-relation>";
 
 static const char VALUE_PREFIX[] = ":v:";
 static const char VALUE_DATE_PREFIX[] = ":v:date:";
 static const char VALUE_FLOAT_PREFIX[] = ":v:float:";
-static const char XSD_DATETIME_SUFFIX[] = "^^<http://www.w3.org/2001/XMLSchema#dateTime>";
+static const char XSD_DATETIME_SUFFIX[] =
+    "^^<http://www.w3.org/2001/XMLSchema#dateTime>";
 static const char XSD_INT_SUFFIX[] = "^^<http://www.w3.org/2001/XMLSchema#int>";
-static const char XSD_FLOAT_SUFFIX[] = "^^<http://www.w3.org/2001/XMLSchema#float>";
+static const char XSD_FLOAT_SUFFIX[] =
+    "^^<http://www.w3.org/2001/XMLSchema#float>";
 static const char VALUE_DATE_TIME_SEPARATOR[] = "T";
 static const int DEFAULT_NOF_VALUE_INTEGER_DIGITS = 50;
 static const int DEFAULT_NOF_VALUE_EXPONENT_DIGITS = 20;

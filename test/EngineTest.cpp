@@ -2,11 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include <gtest/gtest.h>
 #include <cstdio>
 #include <fstream>
-#include <gtest/gtest.h>
 #include "../src/engine/Engine.h"
-
 
 TEST(EngineTest, joinTest) {
   Engine e;
@@ -23,7 +22,6 @@ TEST(EngineTest, joinTest) {
   b.push_back(array<Id, 2>{{4, 2}});
   vector<array<Id, 3>> res;
   e.join(a, 0, b, 0, &res);
-
 
   ASSERT_EQ(1u, res[0][0]);
   ASSERT_EQ(1u, res[0][1]);
@@ -92,8 +90,8 @@ TEST(EngineTest, optionalJoinTest) {
   vector<array<size_t, 2>> jcls;
   jcls.push_back(array<size_t, 2>{{1, 2}});
   jcls.push_back(array<size_t, 2>{{2, 1}});
-  e.optionalJoin<vector<array<Id, 3>>, vector<array<Id, 3>>, array<Id, 4>, 4>
-      (a, b, false, true, jcls, &res, 4);
+  e.optionalJoin<vector<array<Id, 3>>, vector<array<Id, 3>>, array<Id, 4>, 4>(
+      a, b, false, true, jcls, &res, 4);
 
   ASSERT_EQ(5u, res.size());
 
@@ -139,8 +137,8 @@ TEST(EngineTest, optionalJoinTest) {
 
   // The template size parameter can be at most 6 (the maximum number
   // of fixed size columns plus one).
-  e.optionalJoin<vector<vector<Id>>, vector<array<Id, 3>>, vector<Id>, 6>
-      (va, vb, true, false, jcls, &vres, 7);
+  e.optionalJoin<vector<vector<Id>>, vector<array<Id, 3>>, vector<Id>, 6>(
+      va, vb, true, false, jcls, &vres, 7);
 
   ASSERT_EQ(5u, vres.size());
   ASSERT_EQ(7u, vres[0].size());
@@ -161,8 +159,49 @@ TEST(EngineTest, optionalJoinTest) {
   ASSERT_EQ(r, vres[4]);
 }
 
+TEST(EngineTest, patternTrickTest) {
+  std::vector<std::array<Id, 1>> input = {{0}, {1}, {2}, {3}, {4}, {6}, {7}};
+  vector<array<Id, 2>> result;
+  vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
+  vector<vector<Id>> hasRelationSrc = {{},     {0, 3}, {0},    {}, {},
+                                       {0, 3}, {3, 4}, {2, 4}, {3}};
+  vector<vector<Id>> patternsSrc = {{0, 2, 3}, {1, 3, 4, 2, 0}};
+
+  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
+  CompactStringVector<size_t, Id> patterns(patternsSrc);
+
+  try {
+    Engine::computePatternTrick<std::array<Id, 1>>(&input, &result, hasPattern,
+                                                   hasRelation, patterns, 0);
+  } catch (ad_semsearch::Exception e) {
+    std::cout << e.getErrorMessage() << std::endl
+              << e.getErrorDetails() << std::endl;
+    ASSERT_TRUE(false);
+  }
+
+  std::sort(result.begin(), result.end(),
+            [](const array<Id, 2>& i1, const array<Id, 2>& i2) -> bool {
+              return i1[0] < i2[0];
+            });
+  ASSERT_EQ(5u, result.size());
+
+  ASSERT_EQ(0u, result[0][0]);
+  ASSERT_EQ(5u, result[0][1]);
+
+  ASSERT_EQ(1u, result[1][0]);
+  ASSERT_EQ(1u, result[1][1]);
+
+  ASSERT_EQ(2u, result[2][0]);
+  ASSERT_EQ(4u, result[2][1]);
+
+  ASSERT_EQ(3u, result[3][0]);
+  ASSERT_EQ(5u, result[3][1]);
+
+  ASSERT_EQ(4u, result[4][0]);
+  ASSERT_EQ(3u, result[4][1]);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-

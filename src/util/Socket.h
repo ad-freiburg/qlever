@@ -4,20 +4,20 @@
 
 #pragma once
 
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <arpa/inet.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <stdio.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 
-#include <string>
-#include <sstream>
-#include <iostream>
 #include <cstring>
+#include <iostream>
+#include <sstream>
+#include <string>
 
 #include "./Log.h"
 
@@ -27,40 +27,32 @@ namespace ad_utility {
 static const int MAX_NOF_CONNECTIONS = 20;
 static const int RECIEVE_BUFFER_SIZE = 10000;
 
-
 //! Basic Socket class used by the server code of the semantic search.
 //! Wraps low-level socket calls should possibly be replaced by
 //! different implementations and wrap them instead.
 class Socket {
-public:
-
+ public:
   // Default ctor.
-  Socket() : _fd(-1) {
-    _buf = new char[RECIEVE_BUFFER_SIZE];
-  }
+  Socket() : _fd(-1) { _buf = new char[RECIEVE_BUFFER_SIZE]; }
 
   // Destructor, do not close the socket automatically as the fd could have
   // already been reused by another thread if close was called explicitly.
   // Users of this interface really should close sockets explicitly
-  ~Socket() {
-    delete[] _buf;
-  }
+  ~Socket() { delete[] _buf; }
 
-  int close() {
-    return ::close(_fd);
-  }
+  int close() { return ::close(_fd); }
 
   //! Create the socket.
   bool create(bool useTcpNoDelay = false) {
     _fd = socket(AF_INET, SOCK_STREAM, 0);
     if (useTcpNoDelay) {
       int flag = 1;
-      int result = setsockopt(_fd,            /* socket affected */
-                              IPPROTO_TCP,     /* set option at TCP level */
-                              TCP_NODELAY,     /* name of option */
-                              (char*) &flag,  /* the cast is historical
-                                                         cruft */
-                              sizeof(int));    /* length of option value */
+      int result = setsockopt(_fd,          /* socket affected */
+                              IPPROTO_TCP,  /* set option at TCP level */
+                              TCP_NODELAY,  /* name of option */
+                              (char*)&flag, /* the cast is historical
+                                                       cruft */
+                              sizeof(int)); /* length of option value */
       if (result < 0) return false;
     }
     makeResusableAfterClosing();
@@ -69,8 +61,8 @@ public:
 
   void setKeepAlive(bool keepAlive) const {
     int keepAliveVal = (keepAlive) ? 1 : 0;
-    int rc = setsockopt(_fd, SOL_SOCKET,
-        SO_KEEPALIVE, &keepAliveVal, sizeof(keepAliveVal));
+    int rc = setsockopt(_fd, SOL_SOCKET, SO_KEEPALIVE, &keepAliveVal,
+                        sizeof(keepAliveVal));
     if (rc < 0) {
       LOG(WARN) << "setsockopt(SO_KEEPALIVE) failed" << std::endl;
     }
@@ -93,7 +85,7 @@ public:
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_UNSPEC;  // use IPv4 or IPv6, whichever
     hints.ai_socktype = SOCK_STREAM;
-    hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
+    hints.ai_flags = AI_PASSIVE;  // fill in my IP for me
 
     std::ostringstream os;
     os << port;
@@ -114,14 +106,12 @@ public:
     struct sockaddr_storage clientAddr;
     socklen_t addrSize;
     addrSize = sizeof(clientAddr);
-    client->_fd = ::accept(_fd, (struct sockaddr*) &clientAddr, &addrSize);
+    client->_fd = ::accept(_fd, (struct sockaddr*)&clientAddr, &addrSize);
     return client->_fd >= 0;
   }
 
   //! State if the socket's file descriptor is valid.
-  bool isOpen() const {
-    return _fd != -1;
-  }
+  bool isOpen() const { return _fd != -1; }
 
   //! Send some string.
   int send(const std::string& data) const {
@@ -161,10 +151,13 @@ public:
     string data;
     for (;;) {
       auto rv = recv(_fd, _buf, RECIEVE_BUFFER_SIZE, 0 /*blocking*/);
-      if (rv == 0) { break; }
+      if (rv == 0) {
+        break;
+      }
       if (rv == -1) {
         if (errno != EAGAIN && errno != EWOULDBLOCK) {
-          LOG(WARN) << "Error during recv, error: " << std::strerror(errno) << std::endl;
+          LOG(WARN) << "Error during recv, error: " << std::strerror(errno)
+                    << std::endl;
           break;
         }
         continue;
@@ -181,7 +174,7 @@ public:
             LOG(DEBUG) << "Request Line: '" << req << "'" << std::endl;
             data.erase(0, posCRLF);
           }
-        } 
+        }
         if (req.size() > 0) {
           if (req.find("HTTP") == string::npos) {
             return;
@@ -191,7 +184,8 @@ public:
           if (posDoubleCRLF != string::npos) {
             headers = data;
             data.clear();
-            LOG(DEBUG) << "Headers: "<< std::endl << "'" << headers << "'" << std::endl;
+            LOG(DEBUG) << "Headers: " << std::endl
+                       << "'" << headers << "'" << std::endl;
             break;
           }
         }
@@ -199,11 +193,9 @@ public:
     }
   }
 
-
-private:
+ private:
   int _fd;
-  char* _buf;;
+  char* _buf;
+  ;
 };
-}
-
-
+}  // namespace ad_utility

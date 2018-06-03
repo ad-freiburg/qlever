@@ -2,19 +2,16 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./TsvParser.h"
 #include <cassert>
 #include <iostream>
-#include "./TsvParser.h"
 #include "../util/Log.h"
 
 // _____________________________________________________________________________
-TsvParser::TsvParser(const string& tsvFile) : _in(tsvFile) {
-}
+TsvParser::TsvParser(const string& tsvFile) : _in(tsvFile) {}
 
 // _____________________________________________________________________________
-TsvParser::~TsvParser() {
-  _in.close();
-}
+TsvParser::~TsvParser() { _in.close(); }
 
 // _____________________________________________________________________________
 bool TsvParser::getLine(array<string, 3>& res) {

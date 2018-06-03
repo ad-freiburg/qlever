@@ -3,9 +3,9 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+#include <algorithm>
 #include <string>
 #include <vector>
-#include <algorithm>
 #include "../src/util/StringUtils.h"
 
 using std::string;
@@ -212,7 +212,6 @@ TEST(StringUtilsTest, strip) {
   ASSERT_EQ(u8"xxaxaxaxa♥", rstrip(u8"xxaxaxaxa♥aaaxxx", u8"xa"));
 }
 
-
 TEST(StringUtilsTest, splitWs) {
   setlocale(LC_CTYPE, "en_US.utf8");
   string s1 = "  this\nis\t  \nit  ";
@@ -258,8 +257,7 @@ TEST(StringUtilsTest, splitWs) {
   ASSERT_EQ(1u, v7.size());
   ASSERT_EQ(s7, v7[0]);
 }
-}  // namespace
-
+}  // namespace ad_utility
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);

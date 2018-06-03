@@ -4,44 +4,48 @@
 
 #pragma once
 
-#include <time.h>
 #include <sys/timeb.h>
-#include <locale>
-#include <string>
-#include <sstream>
+#include <time.h>
 #include <iostream>
+#include <locale>
+#include <sstream>
+#include <string>
 
 #include "./StringUtils.h"
 
-#ifndef  LOGLEVEL
-#define  LOGLEVEL 3
+#ifndef LOGLEVEL
+#define LOGLEVEL 3
 #endif
 
-#define  LOG(x) if (x > LOGLEVEL) ; else ad_utility::Log::getLog<x>() // NOLINT
-#define  AD_POS_IN_CODE '[' <<  ad_utility::getLastPartOfString(__FILE__, '/') << ':' << __LINE__ << "] " // NOLINT
+#define LOG(x)      \
+  if (x > LOGLEVEL) \
+    ;               \
+  else              \
+    ad_utility::Log::getLog<x>()  // NOLINT
+#define AD_POS_IN_CODE                                                     \
+  '[' << ad_utility::getLastPartOfString(__FILE__, '/') << ':' << __LINE__ \
+      << "] "  // NOLINT
 
-#define  TRACE 5
-#define  DEBUG 4
-#define  INFO 3
-#define  WARN 2
-#define  ERROR 1
-#define  FATAL 0
+#define TRACE 5
+#define DEBUG 4
+#define INFO 3
+#define WARN 2
+#define ERROR 1
+#define FATAL 0
 
 using std::string;
 
 namespace ad_utility {
 //! Log
 class Log {
-public:
-  template<unsigned char LEVEL>
+ public:
+  template <unsigned char LEVEL>
   static std::ostream& getLog() {
     return std::cout << ad_utility::Log::getTimeStamp() << "\t- "
-        << ad_utility::Log::getLevel<LEVEL>();
+                     << ad_utility::Log::getLevel<LEVEL>();
   }
 
-  static void imbue(const std::locale& locale) {
-    std::cout.imbue(locale);
-  }
+  static void imbue(const std::locale& locale) { std::cout.imbue(locale); }
 
   static string getTimeStamp() {
     struct timeb timebuffer;
@@ -60,7 +64,7 @@ public:
     return os.str();
   }
 
-  template<unsigned char LEVEL>
+  template <unsigned char LEVEL>
   static string getLevel() {
     if (LEVEL == TRACE) {
       return "TRACE: ";
@@ -82,4 +86,4 @@ public:
     }
   }
 };
-}
+}  // namespace ad_utility

@@ -3,22 +3,17 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <string>
 #include <exception>
+#include <string>
 
 class ParseException : public std::exception {
+ public:
+  ParseException(std::string _cause)
+      : std::exception(),
+        _cause(std::string("ParseException, cause: ") + _cause) {}
 
-public:
+  virtual const char* what() const throw() { return _cause.c_str(); }
 
-  ParseException(string _cause) : std::exception(),
-    _cause(string("ParseException, cause: ") + _cause) {
-  }
-
-  virtual const char* what() const throw() {
-    return _cause.c_str();
-  }
-
-private:
-  string _cause;
+ private:
+  std::string _cause;
 };
-

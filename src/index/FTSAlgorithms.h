@@ -3,26 +3,23 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <vector>
 #include <array>
+#include <vector>
 
-
-#include "../global/Id.h"
-#include "./Vocabulary.h"
 #include "../engine/IndexSequence.h"
 #include "../engine/ResultTable.h"
+#include "../global/Id.h"
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
+#include "./Vocabulary.h"
 
-
-using std::vector;
 using std::array;
+using std::vector;
 
 using ad_utility::HashSet;
 
-
 class FTSAlgorithms {
-public:
+ public:
   typedef vector<array<Id, 1>> WidthOneList;
   typedef vector<array<Id, 2>> WidthTwoList;
   typedef vector<array<Id, 3>> WidthThreeList;
@@ -31,13 +28,13 @@ public:
   typedef vector<vector<Id>> VarWidthList;
 
   // Copied from boost without adding the dependency
-  template<class T>
+  template <class T>
   static inline void hash_combine(std::size_t& seed, const T& v) {
     std::hash<T> hasher;
     seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
   }
 
-  template<typename It>
+  template <typename It>
   static inline size_t hash_range(It first, It last) {
     size_t seed = 0;
     for (; first != last; ++first) {
@@ -47,7 +44,7 @@ public:
   }
 
   class IdPairHash {
-  public:
+   public:
     size_t operator()(const std::pair<Id, Id>& p) const {
       std::hash<Id> hasher;
       size_t seed = hasher(p.first);
@@ -57,7 +54,7 @@ public:
   };
 
   class IdTripleHash {
-  public:
+   public:
     size_t operator()(const std::tuple<Id, Id, Id>& t) const {
       std::hash<Id> hasher;
       size_t seed = hasher(std::get<0>(t));
@@ -67,17 +64,16 @@ public:
     }
   };
 
-
   class IdVectorHash {
-  public:
+   public:
     size_t operator()(const vector<Id>& v) const {
       return hash_range(std::begin(v), std::end(v));
     }
   };
 
-  template<typename T>
+  template <typename T>
   class IterableHash {
-  public:
+   public:
     size_t operator()(const T& iterable) const {
       return hash_range(std::begin(iterable), std::end(iterable));
     }
@@ -93,8 +89,8 @@ public:
                         const vector<Id>& eBlockCids,
                         const vector<Id>& eBlockWids,
                         const vector<Score>& eBlockScores,
-                        vector<Id>& resultCids,
-                        vector<Id>& resultEids, vector<Score>& resultScores);
+                        vector<Id>& resultCids, vector<Id>& resultEids,
+                        vector<Score>& resultScores);
 
   static void intersectTwoPostingLists(const vector<Id>& cids1,
                                        const vector<Score>& scores1,
@@ -104,66 +100,55 @@ public:
                                        vector<Score>& resultScores);
 
   static void getTopKByScores(const vector<Id>& cids,
-                              const vector<Score>& scores,
-                              size_t k, WidthOneList* result);
+                              const vector<Score>& scores, size_t k,
+                              WidthOneList* result);
 
   static void aggScoresAndTakeTopKContexts(const vector<Id>& cids,
                                            const vector<Id>& eids,
                                            const vector<Score>& scores,
-                                           size_t k,
-                                           WidthThreeList& result);
+                                           size_t k, WidthThreeList& result);
 
-  static void multVarsAggScoresAndTakeTopKContexts(
-      const vector<Id>& cids,
-      const vector<Id>& eids,
-      const vector<Score>& scores,
-      size_t nofVars,
-      size_t k,
-      WidthFourList& result);
+  static void multVarsAggScoresAndTakeTopKContexts(const vector<Id>& cids,
+                                                   const vector<Id>& eids,
+                                                   const vector<Score>& scores,
+                                                   size_t nofVars, size_t k,
+                                                   WidthFourList& result);
 
-  static void multVarsAggScoresAndTakeTopKContexts(
-      const vector<Id>& cids,
-      const vector<Id>& eids,
-      const vector<Score>& scores,
-      size_t nofVars,
-      size_t k,
-      WidthFiveList& result);
+  static void multVarsAggScoresAndTakeTopKContexts(const vector<Id>& cids,
+                                                   const vector<Id>& eids,
+                                                   const vector<Score>& scores,
+                                                   size_t nofVars, size_t k,
+                                                   WidthFiveList& result);
 
-  static void multVarsAggScoresAndTakeTopKContexts(
-      const vector<Id>& cids,
-      const vector<Id>& eids,
-      const vector<Score>& scores,
-      size_t nofVars,
-      size_t k,
-      VarWidthList& result);
+  static void multVarsAggScoresAndTakeTopKContexts(const vector<Id>& cids,
+                                                   const vector<Id>& eids,
+                                                   const vector<Score>& scores,
+                                                   size_t nofVars, size_t k,
+                                                   VarWidthList& result);
 
   // Special case with only top-1 context(s).
-  static void multVarsAggScoresAndTakeTopContext(
-      const vector<Id>& cids,
-      const vector<Id>& eids,
-      const vector<Score>& scores,
-      size_t nofVars,
-      WidthFourList& result);
+  static void multVarsAggScoresAndTakeTopContext(const vector<Id>& cids,
+                                                 const vector<Id>& eids,
+                                                 const vector<Score>& scores,
+                                                 size_t nofVars,
+                                                 WidthFourList& result);
 
   // Special case with only top-1 context(s).
-  static void multVarsAggScoresAndTakeTopContext(
-      const vector<Id>& cids,
-      const vector<Id>& eids,
-      const vector<Score>& scores,
-      size_t nofVars,
-      WidthFiveList& result);
+  static void multVarsAggScoresAndTakeTopContext(const vector<Id>& cids,
+                                                 const vector<Id>& eids,
+                                                 const vector<Score>& scores,
+                                                 size_t nofVars,
+                                                 WidthFiveList& result);
 
   // Special case with only top-1 context(s).
-  static void multVarsAggScoresAndTakeTopContext(
-      const vector<Id>& cids,
-      const vector<Id>& eids,
-      const vector<Score>& scores,
-      size_t nofVars,
-      VarWidthList& result);
+  static void multVarsAggScoresAndTakeTopContext(const vector<Id>& cids,
+                                                 const vector<Id>& eids,
+                                                 const vector<Score>& scores,
+                                                 size_t nofVars,
+                                                 VarWidthList& result);
 
-  template<typename Row>
-  static void aggScoresAndTakeTopKContexts(vector<Row>& nonAggRes,
-                                           size_t k,
+  template <typename Row>
+  static void aggScoresAndTakeTopKContexts(vector<Row>& nonAggRes, size_t k,
                                            vector<Row>& res);
 
   // Special case where k == 1.
@@ -172,7 +157,6 @@ public:
                                          const vector<Score>& scores,
                                          WidthThreeList& result);
 
-
   // K-way intersect whereas there may be word ids / entity ids
   // parallel to the last list in the vectors.
   // That list (param: eids) can be given or null.
@@ -180,25 +164,19 @@ public:
   // will contain word/entity for the matching contexts.
   static void intersectKWay(const vector<vector<Id>>& cidVecs,
                             const vector<vector<Score>>& scoreVecs,
-                            vector<Id>* eids,
-                            vector<Id>& resCids,
-                            vector<Id>& resEids,
-                            vector<Score>& resScores);
-
+                            vector<Id>* eids, vector<Id>& resCids,
+                            vector<Id>& resEids, vector<Score>& resScores);
 
   // Constructs the cross-product between entity postings of this
   // context and matching subtree result tuples.
-  template<size_t I>
+  template <size_t I>
   static inline void appendCrossProduct(
-      const vector<Id>& cids,
-      const vector<Id>& eids,
-      const vector<Score>& scores,
-      size_t from,
-      size_t toExclusive,
+      const vector<Id>& cids, const vector<Id>& eids,
+      const vector<Score>& scores, size_t from, size_t toExclusive,
       const ad_utility::HashMap<Id, vector<array<Id, I>>>& subRes,
       vector<array<Id, 3 + I>>& res) {
-    LOG(TRACE) << "Append cross-product called for a context with " <<
-               toExclusive - from << " postings.\n";
+    LOG(TRACE) << "Append cross-product called for a context with "
+               << toExclusive - from << " postings.\n";
     vector<array<Id, I>> contextSubRes;
     for (size_t i = from; i < toExclusive; ++i) {
       auto it = subRes.find(eids[i]);
@@ -210,32 +188,29 @@ public:
     }
     for (size_t i = from; i < toExclusive; ++i) {
       for (auto& tup : contextSubRes) {
-        res.emplace_back(concatTupleOld(eids[i],
-                                        static_cast<Id>(scores[i]),
-                                        cids[i],
-                                        tup,
-                                        GenSeq<I>()));
+        res.emplace_back(concatTupleOld(eids[i], static_cast<Id>(scores[i]),
+                                        cids[i], tup, GenSeq<I>()));
       }
     }
   }
 
-  template<size_t... I>
+  template <size_t... I>
   static inline array<Id, 3 + sizeof...(I)> concatTuple(
       const array<Id, 2>& l, Id cid, const array<Id, sizeof...(I)>& r,
       IndexSequence<I...>) {
     return array<Id, 3 + sizeof...(I)>{{l[0], l[1], cid, r[I]...}};
   }
 
-  template<size_t... I>
+  template <size_t... I>
   static inline array<Id, 3 + sizeof...(I)> concatTupleOld(
       Id eid, Id score, Id cid, const array<Id, sizeof...(I)>& r,
       IndexSequence<I...>) {
     return array<Id, 3 + sizeof...(I)>{{eid, score, cid, r[I]...}};
   }
 
-  template<typename InTup, size_t I>
-  static inline void fillTuple(
-      Id cid, Id score, const InTup& in, array<Id, I>& out) {
+  template <typename InTup, size_t I>
+  static inline void fillTuple(Id cid, Id score, const InTup& in,
+                               array<Id, I>& out) {
     out[0] = cid;
     out[1] = score;
     size_t n = 2;
@@ -244,32 +219,31 @@ public:
     }
   }
 
-  template<typename InTup>
-  static inline void fillTuple(
-      Id cid, Id score, const InTup& in, vector<Id>& out) {
+  template <typename InTup>
+  static inline void fillTuple(Id cid, Id score, const InTup& in,
+                               vector<Id>& out) {
     out.reserve(in.size() + 2);
     out.push_back(cid);
     out.push_back(score);
     out.insert(std::end(out), std::begin(in), std::end(in));
   }
 
-  template<size_t I>
-  static inline void fillThreeTuple(
-      Id cid, Id score, Id eid, array<Id, I>& out) {
+  template <size_t I>
+  static inline void fillThreeTuple(Id cid, Id score, Id eid,
+                                    array<Id, I>& out) {
     out[0] = cid;
     out[1] = score;
     out[2] = eid;
   }
 
-  static inline void fillThreeTuple(
-      Id cid, Id score, Id eid, vector<Id>& out) {
+  static inline void fillThreeTuple(Id cid, Id score, Id eid, vector<Id>& out) {
     out.resize(3);
     out[0] = cid;
     out[1] = score;
     out[2] = eid;
   }
 
-  template<typename Iter1, typename Iter2, size_t I>
+  template <typename Iter1, typename Iter2, size_t I>
   static inline void fillTuple(Id cid, Id score, Iter1 keyBegin, Iter1 keyEnd,
                                Iter2 fBegin, Iter2 fEnd, array<Id, I>& out) {
     out[0] = cid;
@@ -286,7 +260,7 @@ public:
     assert(n == I);
   }
 
-  template<typename Iter, size_t I>
+  template <typename Iter, size_t I>
   static inline void fillTuple(Id cid, Id score, Iter keyBegin, Iter keyEnd,
                                Id eid, array<Id, I>& out) {
     out[0] = cid;
@@ -300,7 +274,7 @@ public:
     assert(n == I);
   }
 
-  template<typename Iter>
+  template <typename Iter>
   static inline void fillTuple(Id cid, Id score, Iter keyBegin, Iter keyEnd,
                                Id eid, vector<Id>& out) {
     out.push_back(cid);
@@ -312,7 +286,7 @@ public:
     out.push_back(eid);
   }
 
-  template<typename Iter1, typename Iter2>
+  template <typename Iter1, typename Iter2>
   static inline void fillTuple(Id cid, Id score, Iter1 keyBegin, Iter1 keyEnd,
                                Iter2 fBegin, Iter2 fEnd, vector<Id>& out) {
     out.push_back(cid);
@@ -321,61 +295,42 @@ public:
     out.insert(out.end(), fBegin, fEnd);
   }
 
-  static void appendCrossProduct(
-      const vector<Id>& cids,
-      const vector<Id>& eids,
-      const vector<Score>& scores,
-      size_t from,
-      size_t toExclusive,
-      const ad_utility::HashSet<Id>& subRes1,
-      const ad_utility::HashSet<Id>& subRes2,
-      vector<array<Id, 5>>& res);
+  static void appendCrossProduct(const vector<Id>& cids, const vector<Id>& eids,
+                                 const vector<Score>& scores, size_t from,
+                                 size_t toExclusive,
+                                 const ad_utility::HashSet<Id>& subRes1,
+                                 const ad_utility::HashSet<Id>& subRes2,
+                                 vector<array<Id, 5>>& res);
 
   static void appendCrossProduct(
-      const vector<Id>& cids,
-      const vector<Id>& eids,
-      const vector<Score>& scores,
-      size_t from,
-      size_t toExclusive,
+      const vector<Id>& cids, const vector<Id>& eids,
+      const vector<Score>& scores, size_t from, size_t toExclusive,
       const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>&,
       vector<vector<Id>>& res);
 
-  template<typename FilterTab, typename ResultTab>
+  template <typename FilterTab, typename ResultTab>
   static void oneVarFilterAggScoresAndTakeTopKContexts(
-      const vector<Id>& cids,
-      const vector<Id>& eids,
+      const vector<Id>& cids, const vector<Id>& eids,
       const vector<Score>& scores,
-      const ad_utility::HashMap<Id, FilterTab>& fMap,
-      size_t k,
+      const ad_utility::HashMap<Id, FilterTab>& fMap, size_t k,
       ResultTab& result);
 
-  template<typename ResultList>
+  template <typename ResultList>
   static void oneVarFilterAggScoresAndTakeTopKContexts(
-      const vector<Id>& cids,
-      const vector<Id>& eids,
-      const vector<Score>& scores,
-      const ad_utility::HashSet<Id>& fSet,
-      size_t k,
-      ResultList& result);
+      const vector<Id>& cids, const vector<Id>& eids,
+      const vector<Score>& scores, const ad_utility::HashSet<Id>& fSet,
+      size_t k, ResultList& result);
 
-  template<typename FilterTab, typename ResultTab>
+  template <typename FilterTab, typename ResultTab>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
-      const vector<Id>& cids,
-      const vector<Id>& eids,
+      const vector<Id>& cids, const vector<Id>& eids,
       const vector<Score>& scores,
-      const ad_utility::HashMap<Id, FilterTab>& fMap,
-      size_t nofVars,
-      size_t k,
+      const ad_utility::HashMap<Id, FilterTab>& fMap, size_t nofVars, size_t k,
       ResultTab& result);
 
-  template<typename ResultTab>
+  template <typename ResultTab>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
-      const vector<Id>& cids,
-      const vector<Id>& eids,
-      const vector<Score>& scores,
-      const ad_utility::HashSet<Id>& fSet,
-      size_t nofVars,
-      size_t k,
-      ResultTab& result);
+      const vector<Id>& cids, const vector<Id>& eids,
+      const vector<Score>& scores, const ad_utility::HashSet<Id>& fSet,
+      size_t nofVars, size_t k, ResultTab& result);
 };
-

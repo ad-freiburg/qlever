@@ -2,11 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <utility>
-#include <map>
-#include <cmath>
-#include <set>
 #include "./FTSAlgorithms.h"
+#include <cmath>
+#include <map>
+#include <set>
+#include <utility>
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
 
@@ -21,8 +21,8 @@ void FTSAlgorithms::filterByRange(const IdRange& idRange,
                                   vector<Score>& resultScores) {
   AD_CHECK(blockCids.size() == blockWids.size());
   AD_CHECK(blockCids.size() == blockScores.size());
-  LOG(DEBUG) << "Filtering " << blockCids.size() <<
-             " elements by ID range...\n";
+  LOG(DEBUG) << "Filtering " << blockCids.size()
+             << " elements by ID range...\n";
 
   resultCids.resize(blockCids.size() + 2);
   resultScores.resize(blockCids.size() + 2);
@@ -39,8 +39,8 @@ void FTSAlgorithms::filterByRange(const IdRange& idRange,
   resultScores.resize(nofResultElements);
 
   AD_CHECK(resultCids.size() == resultScores.size());
-  LOG(DEBUG) << "Filtering by ID range done. Result has " <<
-             resultCids.size() << " elements.\n";
+  LOG(DEBUG) << "Filtering by ID range done. Result has " << resultCids.size()
+             << " elements.\n";
 }
 
 // _____________________________________________________________________________
@@ -48,8 +48,7 @@ void FTSAlgorithms::intersect(const vector<Id>& matchingContexts,
                               const vector<Id>& eBlockCids,
                               const vector<Id>& eBlockWids,
                               const vector<Score>& eBlockScores,
-                              vector<Id>& resultCids,
-                              vector<Id>& resultEids,
+                              vector<Id>& resultCids, vector<Id>& resultEids,
                               vector<Score>& resultScores) {
   LOG(DEBUG) << "Intersection to filter the entity postings from a block "
              << "so that only matching ones remain\n";
@@ -88,8 +87,12 @@ void FTSAlgorithms::intersect(const vector<Id>& matchingContexts,
   size_t n = 0;
 
   while (l1[i] < sent1) {
-    while (l1[i] < l2[j]) { ++i; }
-    while (l2[j] < l1[i]) { ++j; }
+    while (l1[i] < l2[j]) {
+      ++i;
+    }
+    while (l2[j] < l1[i]) {
+      ++j;
+    }
     while (l1[i] == l2[j]) {
       // Make sure we get all matching elements from the entity list (l2)
       // that match the current context.
@@ -121,8 +124,8 @@ void FTSAlgorithms::intersectTwoPostingLists(const vector<Id>& cids1,
                                              const vector<Score>& scores2,
                                              vector<Id>& resultCids,
                                              vector<Score>& resultScores) {
-  LOG(DEBUG) << "Intersection of words lists of sizes " << cids1.size() <<
-             " and " << cids2.size() << '\n';
+  LOG(DEBUG) << "Intersection of words lists of sizes " << cids1.size()
+             << " and " << cids2.size() << '\n';
   resultCids.reserve(cids1.size() + 2);
   resultScores.reserve(cids1.size() + 2);
   resultCids.resize(cids1.size());
@@ -154,8 +157,12 @@ void FTSAlgorithms::intersectTwoPostingLists(const vector<Id>& cids1,
   size_t n = 0;
 
   while (l1[i] < sent1) {
-    while (l1[i] < l2[j]) { ++i; }
-    while (l2[j] < l1[i]) { ++j; }
+    while (l1[i] < l2[j]) {
+      ++i;
+    }
+    while (l2[j] < l1[i]) {
+      ++j;
+    }
     while (l1[i] == l2[j]) {
       resultCids[n] = l2[j];
       resultScores[n++] = s1[i] + s2[j];
@@ -178,8 +185,7 @@ void FTSAlgorithms::intersectTwoPostingLists(const vector<Id>& cids1,
 // _____________________________________________________________________________
 void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
                                   const vector<vector<Score>>& scoreVecs,
-                                  vector<Id>* lastListEids,
-                                  vector<Id>& resCids,
+                                  vector<Id>* lastListEids, vector<Id>& resCids,
                                   vector<Id>& resEids,
                                   vector<Score>& resScores) {
   size_t k = cidVecs.size();
@@ -192,8 +198,8 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
     for (const auto& l : cidVecs) {
       os << l.size() << ' ';
     }
-    LOG(DEBUG) << "K-way intersection of " << k << " lists of sizes: " <<
-               os.str() << '\n';
+    LOG(DEBUG) << "K-way intersection of " << k
+               << " lists of sizes: " << os.str() << '\n';
   }
 
   const bool entityMode = lastListEids != nullptr;
@@ -203,8 +209,12 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
     minSize = lastListEids->size();
   } else {
     for (size_t i = 0; i < cidVecs.size(); ++i) {
-      if (cidVecs[i].size() == 0) { return; }
-      if (cidVecs[i].size() < minSize) { minSize = cidVecs[i].size(); }
+      if (cidVecs[i].size() == 0) {
+        return;
+      }
+      if (cidVecs[i].size() < minSize) {
+        minSize = cidVecs[i].size();
+      }
     }
   }
 
@@ -233,33 +243,38 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
   vector<size_t> nextIndices;
   nextIndices.resize(cidVecs.size(), 0);
   Id currentContext = cidVecs[k - 1][0];
-  size_t currentList = k - 1; // Has the fewest different contexts. Start here.
+  size_t currentList = k - 1;  // Has the fewest different contexts. Start here.
   size_t streak = 0;
   size_t n = 0;
   while (true) {  // break when one list cannot advance
     size_t thisListSize = cidVecs[currentList].size();
-    if (nextIndices[currentList] == thisListSize) { break; }
+    if (nextIndices[currentList] == thisListSize) {
+      break;
+    }
     while (cidVecs[currentList][nextIndices[currentList]] < currentContext) {
       nextIndices[currentList] += 1;
-      if (nextIndices[currentList] == thisListSize) { break; }
+      if (nextIndices[currentList] == thisListSize) {
+        break;
+      }
     }
-    if (nextIndices[currentList] == thisListSize) { break; }
+    if (nextIndices[currentList] == thisListSize) {
+      break;
+    }
     Id atId = cidVecs[currentList][nextIndices[currentList]];
     if (atId == currentContext) {
       if (++streak == k) {
         Score s = 0;
         for (size_t i = 0; i < k - 1; ++i) {
-          s += scoreVecs[i][(i == currentList ?
-                             nextIndices[i] : nextIndices[i] - 1)];
+          s += scoreVecs[i][(i == currentList ? nextIndices[i]
+                                              : nextIndices[i] - 1)];
         }
         if (entityMode) {
           // If entities are involved, there may be multiple postings
           // for one context. Handle all matching the current context.
-          size_t matchInEL = (k - 1 == currentList ?
-                                   nextIndices[k - 1] :
-                                   nextIndices[k - 1] - 1);
+          size_t matchInEL = (k - 1 == currentList ? nextIndices[k - 1]
+                                                   : nextIndices[k - 1] - 1);
           while (matchInEL < cidVecs[k - 1].size() &&
-              cidVecs[k - 1][matchInEL] == currentContext) {
+                 cidVecs[k - 1][matchInEL] == currentContext) {
             resCids[n] = currentContext;
             resEids[n] = (*lastListEids)[matchInEL];
             resScores[n++] = s + scoreVecs[k - 1][matchInEL];
@@ -268,9 +283,10 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
           nextIndices[k - 1] = matchInEL;
         } else {
           resCids[n] = currentContext;
-          resScores[n++] = s + scoreVecs[k - 1][(k - 1 == currentList ?
-                                                 nextIndices[k - 1] :
-                                                 nextIndices[k - 1] - 1)];
+          resScores[n++] =
+              s +
+              scoreVecs[k - 1][(k - 1 == currentList ? nextIndices[k - 1]
+                                                     : nextIndices[k - 1] - 1)];
         }
         // Optimization: The last list will feature the fewest different
         // contexts. After a match, always advance in that list
@@ -282,20 +298,22 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
       currentContext = atId;
     }
     nextIndices[currentList++] += 1;
-    if (currentList == k) { currentList = 0; }  // wrap around
+    if (currentList == k) {
+      currentList = 0;
+    }  // wrap around
   }
-
 
   resCids.resize(n);
   resScores.resize(n);
-  if (entityMode) { resEids.resize(n); }
+  if (entityMode) {
+    resEids.resize(n);
+  }
   LOG(DEBUG) << "Intersection done. Size: " << resCids.size() << "\n";
 }
 
 // _____________________________________________________________________________
 void FTSAlgorithms::getTopKByScores(const vector<Id>& cids,
-                                    const vector<Score>& scores,
-                                    size_t k,
+                                    const vector<Score>& scores, size_t k,
                                     WidthOneList* result) {
   AD_CHECK_EQ(cids.size(), scores.size());
   k = std::min(k, cids.size());
@@ -307,10 +325,9 @@ void FTSAlgorithms::getTopKByScores(const vector<Id>& cids,
     indices[i] = i;
   }
   LOG(DEBUG) << "Doing the partial sort...\n";
-  std::partial_sort(indices.begin(), indices.begin() + k, indices.end(),
-                    [&scores](size_t a, size_t b) {
-                      return scores[a] > scores[b];
-                    });
+  std::partial_sort(
+      indices.begin(), indices.begin() + k, indices.end(),
+      [&scores](size_t a, size_t b) { return scores[a] > scores[b]; });
   LOG(DEBUG) << "Packing the final WidthOneList of cIds...\n";
   result->reserve(k + 2);
   result->resize(k);
@@ -370,31 +387,24 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
     Id entityScore = static_cast<Id>(it->second.first);
     ScoreToContext& stc = it->second.second;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
-      result.emplace_back(array<Id, 3>{{
-                                           itt->second,
-                                           entityScore,
-                                           eid
-                                       }});
+      result.emplace_back(array<Id, 3>{{itt->second, entityScore, eid}});
     }
   }
-  LOG(DEBUG) << "Done. There are " << result.size() <<
-             " entity-score-context tuples now.\n";
-
+  LOG(DEBUG) << "Done. There are " << result.size()
+             << " entity-score-context tuples now.\n";
 
   // The result is NOT sorted due to the usage of maps.
   // Resorting the result is a separate operation now.
   // Benefit 1) it's not always necessary to sort.
   // Benefit 2) The result size can be MUCH smaller than n.
-  LOG(DEBUG) << "Done. There are " << result.size() <<
-             " entity-score-context tuples now.\n";
+  LOG(DEBUG) << "Done. There are " << result.size()
+             << " entity-score-context tuples now.\n";
 }
 
 // _____________________________________________________________________________
-template<typename Row>
-void FTSAlgorithms::aggScoresAndTakeTopKContexts(
-    vector<Row>& nonAggRes, size_t k,
-    vector<Row>& res) {
-
+template <typename Row>
+void FTSAlgorithms::aggScoresAndTakeTopKContexts(vector<Row>& nonAggRes,
+                                                 size_t k, vector<Row>& res) {
   AD_CHECK(res.size() == 0);
   LOG(DEBUG) << "Aggregating scores from a list of size " << nonAggRes.size()
              << " while keeping the top " << k << " contexts each.\n";
@@ -449,21 +459,18 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(
     }
   }
 
-  LOG(DEBUG) << "Done. There are " << res.size() <<
-             " entity-score-context tuples now.\n";
+  LOG(DEBUG) << "Done. There are " << res.size()
+             << " entity-score-context tuples now.\n";
 }
 
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts(
-    vector<array<Id, 4>>& nonAggRes, size_t k,
-    vector<array<Id, 4>>& res);
+    vector<array<Id, 4>>& nonAggRes, size_t k, vector<array<Id, 4>>& res);
 
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts(
-    vector<array<Id, 5>>& nonAggRes, size_t k,
-    vector<array<Id, 5>>& res);
+    vector<array<Id, 5>>& nonAggRes, size_t k, vector<array<Id, 5>>& res);
 
 template void FTSAlgorithms::aggScoresAndTakeTopKContexts(
-    vector<vector<Id>>& nonAggRes, size_t k,
-    vector<vector<Id>>& res);
+    vector<vector<Id>>& nonAggRes, size_t k, vector<vector<Id>>& res);
 
 // _____________________________________________________________________________
 void FTSAlgorithms::aggScoresAndTakeTopContext(const vector<Id>& cids,
@@ -491,22 +498,21 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(const vector<Id>& cids,
   result.resize(map.size());
   size_t n = 0;
   for (auto it = map.begin(); it != map.end(); ++it) {
-    result[n++] = array<Id, 3>{{
-                                   it->second.second.first,
-                                   static_cast<Id>(it->second.first),
-                                   it->first
-                               }};
+    result[n++] = array<Id, 3>{{it->second.second.first,
+                                static_cast<Id>(it->second.first), it->first}};
   }
   AD_CHECK_EQ(n, result.size());
-  LOG(DEBUG) << "Done. There are " << result.size() <<
-             " context-score-entity tuples now.\n";
+  LOG(DEBUG) << "Done. There are " << result.size()
+             << " context-score-entity tuples now.\n";
 }
 
 // _____________________________________________________________________________
 void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
     size_t nofVars, size_t kLimit, VarWidthList& result) {
-  if (cids.size() == 0) { return; }
+  if (cids.size() == 0) {
+    return;
+  }
   if (kLimit == 1) {
     multVarsAggScoresAndTakeTopContext(cids, eids, scores, nofVars, result);
   } else {
@@ -516,8 +522,8 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     // an appropriate hash function.
     // Use a set (ordered) and keep it at size k for the context scores
     // This achieves O(n log k)
-    LOG(DEBUG) << "Heap-using case with " << kLimit <<
-               " contexts per entity...\n";
+    LOG(DEBUG) << "Heap-using case with " << kLimit
+               << " contexts per entity...\n";
     using ScoreToContext = std::set<pair<Score, Id>>;
     using ScoreAndStC = pair<Score, ScoreToContext>;
     using AggMap = ad_utility::HashMap<vector<Id>, ScoreAndStC, IdVectorHash>;
@@ -534,8 +540,8 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
         // cscore += scores[i];
       } else {
         // Calculate a cross product and add/update the map
-        size_t nofPossibilities = static_cast<size_t>(pow(
-            entitiesInContext.size(), nofVars));
+        size_t nofPossibilities =
+            static_cast<size_t>(pow(entitiesInContext.size(), nofVars));
         for (size_t j = 0; j < nofPossibilities; ++j) {
           vector<Id> key;
           key.reserve(nofVars);
@@ -569,8 +575,8 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     }
     // Deal with the last context
     // Calculate a cross product and add/update the map
-    size_t nofPossibilities = static_cast<size_t>(pow(
-        entitiesInContext.size(), nofVars));
+    size_t nofPossibilities =
+        static_cast<size_t>(pow(entitiesInContext.size(), nofVars));
     for (size_t j = 0; j < nofPossibilities; ++j) {
       vector<Id> key;
       key.reserve(nofVars);
@@ -602,16 +608,15 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
       for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
         vector<Id> row;
         row.reserve(2 + nofVars);
-        row.push_back(itt->second); // Context Id
-        row.push_back(static_cast<Id>(it->second.first)); // entity Score
+        row.push_back(itt->second);                        // Context Id
+        row.push_back(static_cast<Id>(it->second.first));  // entity Score
         for (size_t k = 0; k < nofVars; ++k) {
-          row.push_back(it->first[k]); // eid
+          row.push_back(it->first[k]);  // eid
         }
         result.emplace_back(row);
       }
     }
-    LOG(DEBUG) << "Done. There are " << result.size() <<
-               " tuples now.\n";
+    LOG(DEBUG) << "Done. There are " << result.size() << " tuples now.\n";
   }
 }
 
@@ -628,20 +633,17 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     // an appropriate hash function.
     // Use a set (ordered) and keep it at size k for the context scores
     // This achieves O(n log k)
-    LOG(DEBUG) << "Heap-using case with " << kLimit <<
-               " contexts per entity...\n";
+    LOG(DEBUG) << "Heap-using case with " << kLimit
+               << " contexts per entity...\n";
 
     using ScoreToContext = std::set<pair<Score, Id>>;
     using ScoreAndStC = pair<Score, ScoreToContext>;
-    using AggMap = ad_utility::HashMap<std::pair<Id, Id>, ScoreAndStC, IdPairHash>;
-    AggMap map(
-        std::make_pair(
-            std::numeric_limits<Id>::max(),
-            std::numeric_limits<Id>::max()),
-        std::make_pair(
-            std::numeric_limits<Id>::max() - 1,
-            std::numeric_limits<Id>::max() - 1)
-    );
+    using AggMap =
+        ad_utility::HashMap<std::pair<Id, Id>, ScoreAndStC, IdPairHash>;
+    AggMap map(std::make_pair(std::numeric_limits<Id>::max(),
+                              std::numeric_limits<Id>::max()),
+               std::make_pair(std::numeric_limits<Id>::max() - 1,
+                              std::numeric_limits<Id>::max() - 1));
     vector<Id> entitiesInContext;
     Id currentCid = cids[0];
     Score cscore = scores[0];
@@ -654,8 +656,8 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
         // Calculate a cross product and add/update the map
         for (size_t j = 0; j < entitiesInContext.size(); ++j) {
           for (size_t k = 0; k < entitiesInContext.size(); ++k) {
-            auto key = std::make_pair(entitiesInContext[j],
-                                      entitiesInContext[k]);
+            auto key =
+                std::make_pair(entitiesInContext[j], entitiesInContext[k]);
             if (map.count(key) == 0) {
               ScoreToContext inner;
               inner.insert(std::make_pair(cscore, currentCid));
@@ -684,8 +686,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     // Calculate a cross product and add/update the map
     for (size_t j = 0; j < entitiesInContext.size(); ++j) {
       for (size_t k = 0; k < entitiesInContext.size(); ++k) {
-        auto key = std::make_pair(entitiesInContext[j],
-                                  entitiesInContext[k]);
+        auto key = std::make_pair(entitiesInContext[j], entitiesInContext[k]);
         if (map.count(key) == 0) {
           ScoreToContext inner;
           inner.insert(std::make_pair(cscore, currentCid));
@@ -708,16 +709,13 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     for (auto it = map.begin(); it != map.end(); ++it) {
       ScoreToContext& stc = it->second.second;
       for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
-        result.emplace_back(array<Id, 4>{{
-                                             itt->second,
-                                             static_cast<Id>(it->second.first),
-                                             it->first.first,
-                                             it->first.second
-                                         }});
+        result.emplace_back(
+            array<Id, 4>{{itt->second, static_cast<Id>(it->second.first),
+                          it->first.first, it->first.second}});
       }
     }
-    LOG(DEBUG) << "Done. There are " << result.size() <<
-               " context-score-entity-entity tuples now.\n";
+    LOG(DEBUG) << "Done. There are " << result.size()
+               << " context-score-entity-entity tuples now.\n";
   }
 }
 
@@ -735,23 +733,19 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     // an appropriate hash function.
     // Use a set (ordered) and keep it at size k for the context scores
     // This achieves O(n log k)
-    LOG(DEBUG) << "Heap-using case with " << kLimit <<
-               " contexts per entity...\n";
+    LOG(DEBUG) << "Heap-using case with " << kLimit
+               << " contexts per entity...\n";
 
     using ScoreToContext = std::set<pair<Score, Id>>;
     using ScoreAndStC = pair<Score, ScoreToContext>;
-    using AggMap = ad_utility::HashMap<std::tuple<Id, Id, Id>,
-        ScoreAndStC, IdTripleHash>;
-    auto emptyKey = std::make_tuple(
-        std::numeric_limits<Id>::max(),
-        std::numeric_limits<Id>::max(),
-        std::numeric_limits<Id>::max()
-    );
-    auto deletedKey = std::make_tuple(
-        std::numeric_limits<Id>::max() - 1,
-        std::numeric_limits<Id>::max() - 1,
-        std::numeric_limits<Id>::max() - 1
-    );
+    using AggMap =
+        ad_utility::HashMap<std::tuple<Id, Id, Id>, ScoreAndStC, IdTripleHash>;
+    auto emptyKey = std::make_tuple(std::numeric_limits<Id>::max(),
+                                    std::numeric_limits<Id>::max(),
+                                    std::numeric_limits<Id>::max());
+    auto deletedKey = std::make_tuple(std::numeric_limits<Id>::max() - 1,
+                                      std::numeric_limits<Id>::max() - 1,
+                                      std::numeric_limits<Id>::max() - 1);
     AggMap map(emptyKey, deletedKey);
     vector<Id> entitiesInContext;
     Id currentCid = cids[0];
@@ -766,9 +760,9 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
         for (size_t j = 0; j < entitiesInContext.size(); ++j) {
           for (size_t k = 0; k < entitiesInContext.size(); ++k) {
             for (size_t l = 0; l < entitiesInContext.size(); ++l) {
-              auto key = std::make_tuple(entitiesInContext[j],
-                                         entitiesInContext[k],
-                                         entitiesInContext[l]);
+              auto key =
+                  std::make_tuple(entitiesInContext[j], entitiesInContext[k],
+                                  entitiesInContext[l]);
               if (map.count(key) == 0) {
                 ScoreToContext inner;
                 inner.insert(std::make_pair(cscore, currentCid));
@@ -799,8 +793,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     for (size_t j = 0; j < entitiesInContext.size(); ++j) {
       for (size_t k = 0; k < entitiesInContext.size(); ++k) {
         for (size_t l = 0; l < entitiesInContext.size(); ++l) {
-          auto key = std::make_tuple(entitiesInContext[j],
-                                     entitiesInContext[k],
+          auto key = std::make_tuple(entitiesInContext[j], entitiesInContext[k],
                                      entitiesInContext[l]);
           if (map.count(key) == 0) {
             ScoreToContext inner;
@@ -826,27 +819,21 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     for (auto it = map.begin(); it != map.end(); ++it) {
       ScoreToContext& stc = it->second.second;
       for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
-        result.emplace_back(array<Id, 5>{{
-                                             itt->second,
-                                             static_cast<Id>(it->second.first),
-                                             std::get<0>(it->first),
-                                             std::get<1>(it->first),
-                                             std::get<2>(it->first)
-                                         }});
+        result.emplace_back(
+            array<Id, 5>{{itt->second, static_cast<Id>(it->second.first),
+                          std::get<0>(it->first), std::get<1>(it->first),
+                          std::get<2>(it->first)}});
       }
     }
-    LOG(DEBUG) << "Done. There are " << result.size() <<
-               " context-score-entity-entity tuples now.\n";
+    LOG(DEBUG) << "Done. There are " << result.size()
+               << " context-score-entity-entity tuples now.\n";
   }
 }
 
 // _____________________________________________________________________________
 void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
-    const vector<Id>& cids,
-    const vector<Id>& eids,
-    const vector<Score>& scores,
-    size_t nofVars,
-    FTSAlgorithms::WidthFourList& result) {
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofVars, FTSAlgorithms::WidthFourList& result) {
   LOG(DEBUG) << "Special case with 1 contexts per entity...\n";
   if (cids.size() == 0) return;
   AD_CHECK_EQ(nofVars, 2);
@@ -854,16 +841,12 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   // For each context build a cross product of width 2.
   // Store them in a map, use a pair of id's as key and
   // an appropriate hash function.
-  using AggMap = ad_utility::HashMap<pair<Id, Id>,
-      pair<Score, pair<Id, Score>>, IdPairHash>;
-  auto emptyKey = std::make_pair(
-      std::numeric_limits<Id>::max(),
-      std::numeric_limits<Id>::max()
-  );
-  auto deletedKey = std::make_pair(
-      std::numeric_limits<Id>::max() - 1,
-      std::numeric_limits<Id>::max() - 1
-  );
+  using AggMap = ad_utility::HashMap<pair<Id, Id>, pair<Score, pair<Id, Score>>,
+                                     IdPairHash>;
+  auto emptyKey = std::make_pair(std::numeric_limits<Id>::max(),
+                                 std::numeric_limits<Id>::max());
+  auto deletedKey = std::make_pair(std::numeric_limits<Id>::max() - 1,
+                                   std::numeric_limits<Id>::max() - 1);
   AggMap map(emptyKey, deletedKey);
   vector<Id> entitiesInContext;
   Id currentCid = cids[0];
@@ -876,8 +859,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
       // Calculate a cross product and add/update the map
       for (size_t j = 0; j < entitiesInContext.size(); ++j) {
         for (size_t k = 0; k < entitiesInContext.size(); ++k) {
-          auto key = std::make_pair(entitiesInContext[j],
-                                    entitiesInContext[k]);
+          auto key = std::make_pair(entitiesInContext[j], entitiesInContext[k]);
           if (map.count(key) == 0) {
             map[key] = std::make_pair(1, std::make_pair(currentCid, cscore));
           } else {
@@ -916,28 +898,21 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   result.resize(map.size());
   size_t n = 0;
 
-
   // Iterate over the map and populate the result.
   for (auto it = map.begin(); it != map.end(); ++it) {
-    result[n++] = array<Id, 4>{{
-                                   it->second.second.first,
-                                   static_cast<Id>(it->second.first),
-                                   it->first.first,
-                                   it->first.second
-                               }};
+    result[n++] = array<Id, 4>{{it->second.second.first,
+                                static_cast<Id>(it->second.first),
+                                it->first.first, it->first.second}};
   }
   AD_CHECK_EQ(n, result.size());
-  LOG(DEBUG) << "Done. There are " << result.size() <<
-             " context-score-entity-entity tuples now.\n";
+  LOG(DEBUG) << "Done. There are " << result.size()
+             << " context-score-entity-entity tuples now.\n";
 }
 
 // _____________________________________________________________________________
 void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
-    const vector<Id>& cids,
-    const vector<Id>& eids,
-    const vector<Score>& scores,
-    size_t nofVars,
-    FTSAlgorithms::WidthFiveList& result) {
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofVars, FTSAlgorithms::WidthFiveList& result) {
   LOG(DEBUG) << "Special case with 1 contexts per entity...\n";
   AD_CHECK_EQ(nofVars, 3);
   // Go over contexts.
@@ -945,19 +920,15 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   // Store them in a map, use a pair of id's as key and
   // an appropriate hash function.
 
-
-  using AggMap = ad_utility::HashMap<std::tuple<Id, Id, Id>,
-      pair<Score, pair<Id, Score>>, IdTripleHash>;
-  auto emptyKey = std::make_tuple(
-      std::numeric_limits<Id>::max(),
-      std::numeric_limits<Id>::max(),
-      std::numeric_limits<Id>::max()
-  );
-  auto deletedKey = std::make_tuple(
-      std::numeric_limits<Id>::max() - 1,
-      std::numeric_limits<Id>::max() - 1,
-      std::numeric_limits<Id>::max() - 1
-  );
+  using AggMap =
+      ad_utility::HashMap<std::tuple<Id, Id, Id>, pair<Score, pair<Id, Score>>,
+                          IdTripleHash>;
+  auto emptyKey = std::make_tuple(std::numeric_limits<Id>::max(),
+                                  std::numeric_limits<Id>::max(),
+                                  std::numeric_limits<Id>::max());
+  auto deletedKey = std::make_tuple(std::numeric_limits<Id>::max() - 1,
+                                    std::numeric_limits<Id>::max() - 1,
+                                    std::numeric_limits<Id>::max() - 1);
   AggMap map(emptyKey, deletedKey);
   vector<Id> entitiesInContext;
   Id currentCid = cids[0];
@@ -971,12 +942,11 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
       for (size_t j = 0; j < entitiesInContext.size(); ++j) {
         for (size_t k = 0; k < entitiesInContext.size(); ++k) {
           for (size_t l = 0; l < entitiesInContext.size(); ++l) {
-            auto key = std::make_tuple(entitiesInContext[j],
-                                       entitiesInContext[k],
-                                       entitiesInContext[l]);
+            auto key =
+                std::make_tuple(entitiesInContext[j], entitiesInContext[k],
+                                entitiesInContext[l]);
             if (map.count(key) == 0) {
-              map[key] = std::make_pair(1,
-                                        std::make_pair(currentCid, cscore));
+              map[key] = std::make_pair(1, std::make_pair(currentCid, cscore));
             } else {
               auto& val = map[key];
               // val.first += scores[i];
@@ -998,8 +968,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   for (size_t j = 0; j < entitiesInContext.size(); ++j) {
     for (size_t k = 0; k < entitiesInContext.size(); ++k) {
       for (size_t l = 0; l < entitiesInContext.size(); ++l) {
-        auto key = std::make_tuple(entitiesInContext[j],
-                                   entitiesInContext[k],
+        auto key = std::make_tuple(entitiesInContext[j], entitiesInContext[k],
                                    entitiesInContext[l]);
         if (map.count(key) == 0) {
           map[key] = std::make_pair(1, std::make_pair(currentCid, cscore));
@@ -1018,36 +987,30 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   result.resize(map.size());
   size_t n = 0;
 
-
   // Iterate over the map and populate the result.
   for (auto it = map.begin(); it != map.end(); ++it) {
-    result[n++] = array<Id, 5>{{
-                                   it->second.second.first,
-                                   static_cast<Id>(it->second.first),
-                                   std::get<0>(it->first),
-                                   std::get<1>(it->first),
-                                   std::get<2>(it->first)
-                               }};
+    result[n++] =
+        array<Id, 5>{{it->second.second.first,
+                      static_cast<Id>(it->second.first), std::get<0>(it->first),
+                      std::get<1>(it->first), std::get<2>(it->first)}};
   }
   AD_CHECK_EQ(n, result.size());
-  LOG(DEBUG) << "Done. There are " << result.size() <<
-             " context-score-entity-entity-entity tuples now.\n";
+  LOG(DEBUG) << "Done. There are " << result.size()
+             << " context-score-entity-entity-entity tuples now.\n";
 }
 
 // _____________________________________________________________________________
 void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
-    const vector<Id>& cids,
-    const vector<Id>& eids,
-    const vector<Score>& scores,
-    size_t nofVars,
-    FTSAlgorithms::VarWidthList& result) {
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofVars, FTSAlgorithms::VarWidthList& result) {
   LOG(DEBUG) << "Special case with 1 contexts per entity...\n";
   // Go over contexts.
   // For each context build a cross product of width 2.
   // Store them in a map, use a pair of id's as key and
   // an appropriate hash function.
-  using AggMap = ad_utility::HashMap<std::vector<Id>,
-      pair<Score, pair<Id, Score>>, IdVectorHash>;
+  using AggMap =
+      ad_utility::HashMap<std::vector<Id>, pair<Score, pair<Id, Score>>,
+                          IdVectorHash>;
   vector<Id> emptyKey = {{std::numeric_limits<Id>::max()}};
   vector<Id> deletedKey = {{std::numeric_limits<Id>::max() - 1}};
   AggMap map(emptyKey, deletedKey);
@@ -1061,8 +1024,8 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
       // cscore = std::max(cscore, scores[i]);
     } else {
       // Calculate a cross product and add/update the map
-      size_t nofPossibilities = static_cast<size_t>(pow(
-          entitiesInContext.size(), nofVars));
+      size_t nofPossibilities =
+          static_cast<size_t>(pow(entitiesInContext.size(), nofVars));
       for (size_t j = 0; j < nofPossibilities; ++j) {
         vector<Id> key;
         key.reserve(nofVars);
@@ -1089,8 +1052,8 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
     }
   }
   // Deal with the last context
-  size_t nofPossibilities = static_cast<size_t>(pow(
-      entitiesInContext.size(), nofVars));
+  size_t nofPossibilities =
+      static_cast<size_t>(pow(entitiesInContext.size(), nofVars));
   for (size_t j = 0; j < nofPossibilities; ++j) {
     vector<Id> key;
     key.reserve(nofVars);
@@ -1114,7 +1077,6 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   result.resize(map.size());
   size_t n = 0;
 
-
   // Iterate over the map and populate the result.
   for (auto it = map.begin(); it != map.end(); ++it) {
     vector<Id> row;
@@ -1127,22 +1089,16 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
     result[n++] = row;
   }
   AD_CHECK_EQ(n, result.size());
-  LOG(DEBUG) << "Done. There are " << result.size() <<
-             " tuples now.\n";
+  LOG(DEBUG) << "Done. There are " << result.size() << " tuples now.\n";
 }
 
-
 // _____________________________________________________________________________
-void FTSAlgorithms::appendCrossProduct(const vector<Id>& cids,
-                                       const vector<Id>& eids,
-                                       const vector<Score>& scores,
-                                       size_t from,
-                                       size_t toExclusive,
-                                       const ad_utility::HashSet<Id>& subRes1,
-                                       const ad_utility::HashSet<Id>& subRes2,
-                                       vector<array<Id, 5>>& res) {
-  LOG(TRACE) << "Append cross-product called for a context with " <<
-             toExclusive - from << " postings.\n";
+void FTSAlgorithms::appendCrossProduct(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t from, size_t toExclusive, const ad_utility::HashSet<Id>& subRes1,
+    const ad_utility::HashSet<Id>& subRes2, vector<array<Id, 5>>& res) {
+  LOG(TRACE) << "Append cross-product called for a context with "
+             << toExclusive - from << " postings.\n";
   vector<Id> contextSubRes1;
   vector<Id> contextSubRes2;
   ad_utility::HashSet<Id> done;
@@ -1161,13 +1117,8 @@ void FTSAlgorithms::appendCrossProduct(const vector<Id>& cids,
   for (size_t i = from; i < toExclusive; ++i) {
     for (size_t j = 0; j < contextSubRes1.size(); ++j) {
       for (size_t k = 0; k < contextSubRes2.size(); ++k) {
-        res.emplace_back(array<Id, 5>{{
-                                          eids[i],
-                                          scores[i],
-                                          cids[i],
-                                          contextSubRes1[j],
-                                          contextSubRes2[k]
-                                      }});
+        res.emplace_back(array<Id, 5>{{eids[i], scores[i], cids[i],
+                                       contextSubRes1[j], contextSubRes2[k]}});
       }
     }
   }
@@ -1175,14 +1126,10 @@ void FTSAlgorithms::appendCrossProduct(const vector<Id>& cids,
 
 // _____________________________________________________________________________
 void FTSAlgorithms::appendCrossProduct(
-    const vector<Id>& cids,
-    const vector<Id>& eids,
-    const vector<Score>& scores,
-    size_t from,
-    size_t toExclusive,
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t from, size_t toExclusive,
     const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResMaps,
     vector<vector<Id>>& res) {
-
   vector<vector<vector<Id>>> subResMatches;
   subResMatches.resize(subResMaps.size());
   ad_utility::HashSet<Id> distinctEids;
@@ -1231,21 +1178,20 @@ void FTSAlgorithms::appendCrossProduct(
 }
 
 // _____________________________________________________________________________
-template<typename FilterTab, typename ResultTab>
+template <typename FilterTab, typename ResultTab>
 void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
-    const vector<Id>& cids,
-    const vector<Id>& eids,
-    const vector<Score>& scores,
-    const ad_utility::HashMap<Id, FilterTab>& fMap,
-    size_t k,
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashMap<Id, FilterTab>& fMap, size_t k,
     ResultTab& result) {
   AD_CHECK_EQ(cids.size(), eids.size());
   AD_CHECK_EQ(cids.size(), scores.size());
   LOG(DEBUG) << "Going from an entity, context and score list of size: "
-             << cids.size() <<
-             " elements to a table with filtered distinct entities "
+             << cids.size()
+             << " elements to a table with filtered distinct entities "
              << "and at most " << k << " contexts per entity.\n";
-  if (cids.size() == 0 || fMap.size() == 0) { return; }
+  if (cids.size() == 0 || fMap.size() == 0) {
+    return;
+  }
   // TODO: add code to speed up for k==1
 
   // Use a set (ordered) and keep it at size k for the context scores
@@ -1290,8 +1236,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
       }
     }
   }
-  LOG(DEBUG) << "Done. There are " << result.size() <<
-             " tuples now.\n";
+  LOG(DEBUG) << "Done. There are " << result.size() << " tuples now.\n";
 };
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
@@ -1325,22 +1270,20 @@ template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     FTSAlgorithms::VarWidthList&);
 
 // _____________________________________________________________________________
-template<typename ResultList>
+template <typename ResultList>
 void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
-    const vector<Id>& cids,
-    const vector<Id>& eids,
-    const vector<Score>& scores,
-    const ad_utility::HashSet<Id>& fSet,
-    size_t k,
-    ResultList& result) {
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashSet<Id>& fSet, size_t k, ResultList& result) {
   AD_CHECK_EQ(cids.size(), eids.size());
   AD_CHECK_EQ(cids.size(), scores.size());
   LOG(DEBUG) << "Going from an entity, context and score list of size: "
-             << cids.size() <<
-             " elements to a table with filtered distinct entities "
+             << cids.size()
+             << " elements to a table with filtered distinct entities "
              << "and at most " << k << " contexts per entity.\n";
 
-  if (cids.size() == 0 || fSet.size() == 0) { return; }
+  if (cids.size() == 0 || fSet.size() == 0) {
+    return;
+  }
 
   // TODO: add code to speed up for k==1
 
@@ -1384,14 +1327,12 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
       result.emplace_back(row);
     }
   }
-  LOG(DEBUG) << "Done. There are " << result.size() <<
-             " tuples now.\n";
+  LOG(DEBUG) << "Done. There are " << result.size() << " tuples now.\n";
 };
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const ad_utility::HashSet<Id>&, size_t,
-    FTSAlgorithms::WidthThreeList&);
+    const ad_utility::HashSet<Id>&, size_t, FTSAlgorithms::WidthThreeList&);
 
 // Extra functions that should never get called but are needed
 // for the compiler:
@@ -1412,18 +1353,15 @@ template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const ad_utility::HashSet<Id>&, size_t,
-    FTSAlgorithms::WidthFourList&);
+    const ad_utility::HashSet<Id>&, size_t, FTSAlgorithms::WidthFourList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const ad_utility::HashSet<Id>&, size_t,
-    FTSAlgorithms::WidthFiveList&);
+    const ad_utility::HashSet<Id>&, size_t, FTSAlgorithms::WidthFiveList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const ad_utility::HashSet<Id>&, size_t,
-    FTSAlgorithms::VarWidthList&);
+    const ad_utility::HashSet<Id>&, size_t, FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
@@ -1441,23 +1379,21 @@ template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
     FTSAlgorithms::VarWidthList&);
 
 // _____________________________________________________________________________
-template<typename FilterTab, typename ResultTab>
+template <typename FilterTab, typename ResultTab>
 void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
-    const vector<Id>& cids,
-    const vector<Id>& eids,
-    const vector<Score>& scores,
-    const ad_utility::HashMap<Id, FilterTab>& fMap,
-    size_t nofVars,
-    size_t kLimit,
-    ResultTab& result) {
-  if (cids.size() == 0 || fMap.size() == 0) { return; }
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashMap<Id, FilterTab>& fMap, size_t nofVars,
+    size_t kLimit, ResultTab& result) {
+  if (cids.size() == 0 || fMap.size() == 0) {
+    return;
+  }
   // Go over contexts.
   // For each context build a cross product with one part being from the filter.
   // Store them in a map, use a pair of id's as key and
   // an appropriate hash function.
   // Use a set (ordered) and keep it at size kLimit for the context scores.
-  LOG(DEBUG) << "Heap-using case with " << kLimit <<
-             " contexts per entity...\n";
+  LOG(DEBUG) << "Heap-using case with " << kLimit
+             << " contexts per entity...\n";
   using ScoreToContext = std::set<pair<Score, Id>>;
   using ScoreAndStC = pair<Score, ScoreToContext>;
   using AggMap = ad_utility::HashMap<vector<Id>, ScoreAndStC, IdVectorHash>;
@@ -1479,9 +1415,9 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     } else {
       if (filteredEntitiesInContext.size() > 0) {
         // Calculate a cross product and add/update the map
-        size_t nofPossibilities = filteredEntitiesInContext.size() *
-                                  static_cast<size_t>(pow(
-                                      entitiesInContext.size(), nofVars - 1));
+        size_t nofPossibilities =
+            filteredEntitiesInContext.size() *
+            static_cast<size_t>(pow(entitiesInContext.size(), nofVars - 1));
         for (size_t j = 0; j < nofPossibilities; ++j) {
           vector<Id> key;
           key.reserve(nofVars);
@@ -1524,9 +1460,9 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   // Deal with the last context
   if (filteredEntitiesInContext.size() > 0) {
     // Calculate a cross product and add/update the map
-    size_t nofPossibilities = filteredEntitiesInContext.size() *
-                              static_cast<size_t>(pow(
-                                  entitiesInContext.size(), nofVars - 1));
+    size_t nofPossibilities =
+        filteredEntitiesInContext.size() *
+        static_cast<size_t>(pow(entitiesInContext.size(), nofVars - 1));
     for (size_t j = 0; j < nofPossibilities; ++j) {
       vector<Id> key;
       key.reserve(nofVars);
@@ -1568,16 +1504,13 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
       for (auto& fRow : filterRows) {
         RowType rRow;
         fillTuple(itt->second, rscore, keyEids.begin() + 1, keyEids.end(),
-                  fRow.begin(),
-                  fRow.end(), rRow);
+                  fRow.begin(), fRow.end(), rRow);
         result.emplace_back(rRow);
       }
     }
   }
-  LOG(DEBUG) << "Done. There are " << result.size() <<
-             " tuples now.\n";
+  LOG(DEBUG) << "Done. There are " << result.size() << " tuples now.\n";
 }
-
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
@@ -1616,23 +1549,23 @@ template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const ad_utility::HashMap<Id, FTSAlgorithms::WidthThreeList>&, size_t, size_t,
-    FTSAlgorithms::WidthFiveList&);
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthThreeList>&, size_t,
+    size_t, FTSAlgorithms::WidthFiveList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const ad_utility::HashMap<Id, FTSAlgorithms::WidthThreeList>&, size_t, size_t,
-    FTSAlgorithms::VarWidthList&);
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthThreeList>&, size_t,
+    size_t, FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const ad_utility::HashMap<Id, FTSAlgorithms::WidthFourList>&, size_t, size_t,
-    FTSAlgorithms::VarWidthList&);
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthFourList>&, size_t,
+    size_t, FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
-    const ad_utility::HashMap<Id, FTSAlgorithms::WidthFiveList>&, size_t, size_t,
-    FTSAlgorithms::VarWidthList&);
+    const ad_utility::HashMap<Id, FTSAlgorithms::WidthFiveList>&, size_t,
+    size_t, FTSAlgorithms::VarWidthList&);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     const vector<Id>&, const vector<Id>&, const vector<Score>&,
@@ -1640,23 +1573,21 @@ template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     FTSAlgorithms::VarWidthList&);
 
 // _____________________________________________________________________________
-template<typename ResultTab>
+template <typename ResultTab>
 void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
-    const vector<Id>& cids,
-    const vector<Id>& eids,
-    const vector<Score>& scores,
-    const ad_utility::HashSet<Id>& fSet,
-    size_t nofVars,
-    size_t kLimit,
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashSet<Id>& fSet, size_t nofVars, size_t kLimit,
     ResultTab& result) {
-  if (cids.size() == 0 || fSet.size() == 0) { return; }
+  if (cids.size() == 0 || fSet.size() == 0) {
+    return;
+  }
   // Go over contexts.
   // For each context build a cross product with one part being from the filter.
   // Store them in a map, use a pair of id's as key and
   // an appropriate hash function.
   // Use a set (ordered) and keep it at size kLimit for the context scores.
-  LOG(DEBUG) << "Heap-using case with " << kLimit <<
-             " contexts per entity...\n";
+  LOG(DEBUG) << "Heap-using case with " << kLimit
+             << " contexts per entity...\n";
   using ScoreToContext = std::set<pair<Score, Id>>;
   using ScoreAndStC = pair<Score, ScoreToContext>;
   using AggMap = ad_utility::HashMap<vector<Id>, ScoreAndStC, IdVectorHash>;
@@ -1678,9 +1609,9 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
     } else {
       if (filteredEntitiesInContext.size() > 0) {
         // Calculate a cross product and add/update the map
-        size_t nofPossibilities = filteredEntitiesInContext.size() *
-                                  static_cast<size_t>(pow(
-                                      entitiesInContext.size(), nofVars - 1));
+        size_t nofPossibilities =
+            filteredEntitiesInContext.size() *
+            static_cast<size_t>(pow(entitiesInContext.size(), nofVars - 1));
         for (size_t j = 0; j < nofPossibilities; ++j) {
           vector<Id> key;
           key.reserve(nofVars);
@@ -1723,9 +1654,9 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   // Deal with the last context
   if (filteredEntitiesInContext.size() > 0) {
     // Calculate a cross product and add/update the map
-    size_t nofPossibilities = filteredEntitiesInContext.size() *
-                              static_cast<size_t>(pow(
-                                  entitiesInContext.size(), nofVars - 1));
+    size_t nofPossibilities =
+        filteredEntitiesInContext.size() *
+        static_cast<size_t>(pow(entitiesInContext.size(), nofVars - 1));
     for (size_t j = 0; j < nofPossibilities; ++j) {
       vector<Id> key;
       key.reserve(nofVars);
@@ -1769,8 +1700,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
       result.emplace_back(rRow);
     }
   }
-  LOG(DEBUG) << "Done. There are " << result.size() <<
-             " tuples now.\n";
+  LOG(DEBUG) << "Done. There are " << result.size() << " tuples now.\n";
 }
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(

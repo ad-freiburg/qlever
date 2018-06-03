@@ -2,50 +2,58 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./NTriplesParser.h"
 #include <cassert>
 #include <iostream>
 #include "../util/Exception.h"
-#include "./NTriplesParser.h"
 #include "../util/Log.h"
 
 using ad_utility::lstrip;
 
 // _____________________________________________________________________________
-NTriplesParser::NTriplesParser(const string& file) : _in(file) {
-}
+NTriplesParser::NTriplesParser(const string& file) : _in(file) {}
 
 // _____________________________________________________________________________
-NTriplesParser::~NTriplesParser() {
-  _in.close();
-}
+NTriplesParser::~NTriplesParser() { _in.close(); }
 
 // _____________________________________________________________________________
 bool NTriplesParser::getLine(array<string, 3>& res) {
   string line;
   if (std::getline(_in, line)) {
     size_t i = 0;
-    while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) { ++i; }
+    while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) {
+      ++i;
+    }
     if (i >= line.size()) {
       AD_THROW(ad_semsearch::Exception::BAD_INPUT,
                "Illegal whitespace only line");
     }
     size_t j = i + 1;
-    while (j < line.size() && line[j] != '\t' && line[j] != ' ') { ++j; }
-    if (j >= line.size() || !((line[i] == '<' && line[j - 1] == '>')
-          || (i + 1 < line.size() && line[i] == '_' && line[i + 1] == ':'))) {
+    while (j < line.size() && line[j] != '\t' && line[j] != ' ') {
+      ++j;
+    }
+    if (j >= line.size() ||
+        !((line[i] == '<' && line[j - 1] == '>') ||
+          (i + 1 < line.size() && line[i] == '_' && line[i + 1] == ':'))) {
       AD_THROW(ad_semsearch::Exception::BAD_INPUT, "Illegal URI in : " + line);
     }
     res[0] = line.substr(i, j - i);
     i = j;
-    while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) { ++i; }
+    while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) {
+      ++i;
+    }
     j = i + 1;
-    while (j < line.size() && line[j] != '\t' && line[j] != ' ') { ++j; }
+    while (j < line.size() && line[j] != '\t' && line[j] != ' ') {
+      ++j;
+    }
     if (j >= line.size() || !(line[i] == '<' && line[j - 1] == '>')) {
       AD_THROW(ad_semsearch::Exception::BAD_INPUT, "Illegal URI in : " + line);
     }
     res[1] = line.substr(i, j - i);
     i = j;
-    while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) { ++i; }
+    while (i < line.size() && (line[i] == ' ' || line[i] == '\t')) {
+      ++i;
+    }
     if (i >= line.size()) {
       AD_THROW(ad_semsearch::Exception::BAD_INPUT,
                "Object not followed by space in : " + line);
@@ -58,10 +66,12 @@ bool NTriplesParser::getLine(array<string, 3>& res) {
                  "Illegal URI in : " + line);
       }
       ++j;
-    } else if(line[i] == '_' && i + 1 < line.size() && line[i + 1] == ':') {
+    } else if (line[i] == '_' && i + 1 < line.size() && line[i + 1] == ':') {
       // Blank node
       j = i + 1;
-      while (j < line.size() && line[j] != '\t' && line[j] != ' ') { ++j; }
+      while (j < line.size() && line[j] != '\t' && line[j] != ' ') {
+        ++j;
+      }
     } else {
       // Literal
       j = line.find('\"', i + 1);
@@ -82,7 +92,9 @@ bool NTriplesParser::getLine(array<string, 3>& res) {
                  "Illegal literal in : " + line);
       }
       ++j;
-      while (j < line.size() && line[j] != ' ' && line[j] != '\t') { ++j; }
+      while (j < line.size() && line[j] != ' ' && line[j] != '\t') {
+        ++j;
+      }
     }
     if (j >= line.size() || !(line[j] == ' ' || line[j] == '\t')) {
       AD_THROW(ad_semsearch::Exception::BAD_INPUT,

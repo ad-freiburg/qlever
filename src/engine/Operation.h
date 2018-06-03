@@ -12,16 +12,16 @@
 #include "./ResultTable.h"
 
 using std::endl;
-using std::shared_ptr;
 using std::pair;
+using std::shared_ptr;
 
 class Operation {
-public:
+ public:
   // Default Constructor.
   Operation() : _executionContext(NULL) {}
 
   // Typical Constructor.
-  explicit Operation(QueryExecutionContext *executionContext)
+  explicit Operation(QueryExecutionContext* executionContext)
       : _executionContext(executionContext) {}
 
   // Destructor.
@@ -40,7 +40,8 @@ public:
     pair<shared_ptr<ResultTable>, shared_ptr<const ResultTable>> emplacePair =
         _executionContext->getQueryTreeCache().tryEmplace(asString());
     if (emplacePair.first) {
-      LOG(DEBUG) << "We were the first to emplace, need to compute result" << endl;
+      LOG(DEBUG) << "We were the first to emplace, need to compute result"
+                 << endl;
       // Passing the raw pointer here is ok as the result shared_ptr remains
       // in scope
       computeResult(emplacePair.first.get());
@@ -52,13 +53,13 @@ public:
   }
 
   //! Set the QueryExecutionContext for this particular element.
-  void setQueryExecutionContext(QueryExecutionContext *executionContext) {
+  void setQueryExecutionContext(QueryExecutionContext* executionContext) {
     _executionContext = executionContext;
   }
 
-  const Index &getIndex() const { return _executionContext->getIndex(); }
+  const Index& getIndex() const { return _executionContext->getIndex(); }
 
-  const Engine &getEngine() const { return _executionContext->getEngine(); }
+  const Engine& getEngine() const { return _executionContext->getEngine(); }
 
   // Get a unique, not ambiguous string representation for a subtree.
   // This should possible act like an ID for each subtree.
@@ -71,16 +72,16 @@ public:
   virtual float getMultiplicity(size_t col) = 0;
   virtual bool knownEmptyResult() = 0;
 
-protected:
-  QueryExecutionContext *getExecutionContext() const {
+ protected:
+  QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
   }
 
   // The QueryExecutionContext for this particular element.
   // No ownership.
-  QueryExecutionContext *_executionContext;
+  QueryExecutionContext* _executionContext;
 
-private:
+ private:
   //! Compute the result of the query-subtree rooted at this element..
   //! Computes both, an EntityList and a HitList.
   virtual void computeResult(ResultTable* result) const = 0;

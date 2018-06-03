@@ -5,31 +5,30 @@
 #include <sstream>
 
 #include "./Comparators.h"
-#include "./QueryExecutionTree.h"
 #include "./OrderBy.h"
+#include "./QueryExecutionTree.h"
 
 using std::string;
 
 // _____________________________________________________________________________
-size_t OrderBy::getResultWidth() const {
-  return _subtree->getResultWidth();
-}
+size_t OrderBy::getResultWidth() const { return _subtree->getResultWidth(); }
 
 // _____________________________________________________________________________
 OrderBy::OrderBy(QueryExecutionContext* qec,
                  std::shared_ptr<QueryExecutionTree> subtree,
-                 const vector<pair<size_t, bool>>& sortIndices) :
-    Operation(qec),
-    _subtree(subtree),
-    _sortIndices(sortIndices) {
-}
+                 const vector<pair<size_t, bool>>& sortIndices)
+    : Operation(qec), _subtree(subtree), _sortIndices(sortIndices) {}
 
 // _____________________________________________________________________________
 string OrderBy::asString(size_t indent) const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  for (size_t i = 0; i < indent; ++i) {
+    os << " ";
+  }
   os << "OrderBy " << _subtree->asString(indent) << "\n";
-  for (size_t i = 0; i < indent; ++i) { os << " "; }
+  for (size_t i = 0; i < indent; ++i) {
+    os << " ";
+  }
   os << "order on ";
   for (auto ind : _sortIndices) {
     os << (ind.second ? "desc(" : "asc(") << ind.first << ") ";
@@ -44,14 +43,16 @@ void OrderBy::computeResult(ResultTable* result) const {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "OrderBy result computation..." << endl;
   result->_nofColumns = subRes->_nofColumns;
+  result->_resultTypes.insert(result->_resultTypes.end(),
+                              subRes->_resultTypes.begin(),
+                              subRes->_resultTypes.end());
   switch (subRes->_nofColumns) {
     case 1: {
       auto res = new vector<array<Id, 1>>();
       result->_fixedSizeData = res;
       *res = *static_cast<vector<array<Id, 1>>*>(subRes->_fixedSizeData);
       getEngine().sort(*res, OBComp<array<Id, 1>>(_sortIndices));
-    }
-      break;
+    } break;
     case 2: {
       auto res = new vector<array<Id, 2>>();
       result->_fixedSizeData = res;
@@ -82,13 +83,12 @@ void OrderBy::computeResult(ResultTable* result) const {
     }
     default: {
       result->_varSizeData = subRes->_varSizeData;
-      getEngine().sort(result->_varSizeData,
-                       OBComp<vector<Id>>(_sortIndices));
+      getEngine().sort(result->_varSizeData, OBComp<vector<Id>>(_sortIndices));
       break;
     }
   }
-  result->_sortedBy = (_sortIndices[0].second ? result->_nofColumns + 1 :
-                       _sortIndices[0].first);
+  result->_sortedBy = (_sortIndices[0].second ? result->_nofColumns + 1
+                                              : _sortIndices[0].first);
   result->finish();
   LOG(DEBUG) << "OrderBy result computation done." << endl;
 }

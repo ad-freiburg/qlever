@@ -12,17 +12,21 @@
 using std::vector;
 
 class ContextListMetaData {
-public:
-  ContextListMetaData() : _nofElements(), _startContextlist(0),
-                          _startWordlist(0), _startScorelist(0),
-                          _lastByte(0) {
-  }
+ public:
+  ContextListMetaData()
+      : _nofElements(),
+        _startContextlist(0),
+        _startWordlist(0),
+        _startScorelist(0),
+        _lastByte(0) {}
 
-  ContextListMetaData(size_t nofElements, off_t startCl,
-                      off_t startWl, off_t startSl, off_t lastByte) :
-      _nofElements(nofElements), _startContextlist(startCl),
-      _startWordlist(startWl), _startScorelist(startSl),
-      _lastByte(lastByte) {}
+  ContextListMetaData(size_t nofElements, off_t startCl, off_t startWl,
+                      off_t startSl, off_t lastByte)
+      : _nofElements(nofElements),
+        _startContextlist(startCl),
+        _startWordlist(startWl),
+        _startScorelist(startSl),
+        _lastByte(lastByte) {}
 
   size_t _nofElements;
   off_t _startContextlist;
@@ -30,9 +34,7 @@ public:
   off_t _startScorelist;
   off_t _lastByte;
 
-  bool hasMultipleWords() const {
-    return _startScorelist > _startWordlist;
-  }
+  bool hasMultipleWords() const { return _startScorelist > _startWordlist; }
 
   // Restores meta data from raw memory.
   // Needed when registering an index on startup.
@@ -50,14 +52,16 @@ ad_utility::File& operator<<(ad_utility::File& f,
                              const ContextListMetaData& md);
 
 class TextBlockMetaData {
-public:
+ public:
   TextBlockMetaData() : _firstWordId(), _lastWordId(), _cl(), _entityCl() {}
 
   TextBlockMetaData(Id firstWordId, Id lastWordId,
                     const ContextListMetaData& cl,
-                    const ContextListMetaData& entityCl) :
-      _firstWordId(firstWordId), _lastWordId(lastWordId),
-      _cl(cl), _entityCl(entityCl) {}
+                    const ContextListMetaData& entityCl)
+      : _firstWordId(firstWordId),
+        _lastWordId(lastWordId),
+        _cl(cl),
+        _entityCl(entityCl) {}
 
   Id _firstWordId;
   Id _lastWordId;
@@ -79,7 +83,7 @@ public:
 ad_utility::File& operator<<(ad_utility::File& f, const TextBlockMetaData& md);
 
 class TextMetaData {
-public:
+ public:
   //! Get the corresponding block meta data for some word or entity Id range.
   //! Currently assumes that the range lies in a single block.
   const TextBlockMetaData& getBlockInfoByWordRange(const Id lower,
@@ -101,64 +105,37 @@ public:
 
   off_t getOffsetAfter();
 
-  const TextBlockMetaData& getBlockById(size_t id) const {
-    return _blocks[id];
-  }
+  const TextBlockMetaData& getBlockById(size_t id) const { return _blocks[id]; }
 
-  size_t getNofEntities() const {
-    return _nofEntities;
-  }
+  size_t getNofEntities() const { return _nofEntities; }
 
-  void setNofEntities(size_t nofEntities) {
-    _nofEntities = nofEntities;
-  }
+  void setNofEntities(size_t nofEntities) { _nofEntities = nofEntities; }
 
-  size_t getNofEntityContexts() const {
-    return _nofEntityContexts;
-  }
+  size_t getNofEntityContexts() const { return _nofEntityContexts; }
 
-  void setNofEntityContexts(size_t n) {
-    _nofEntityContexts = n;
-  }
+  void setNofEntityContexts(size_t n) { _nofEntityContexts = n; }
 
-  size_t getNofTextRecords() const {
-    return _nofTextRecords;
-  }
+  size_t getNofTextRecords() const { return _nofTextRecords; }
 
-  void setNofTextRecords(size_t n) {
-    _nofTextRecords = n;
-  }
+  void setNofTextRecords(size_t n) { _nofTextRecords = n; }
 
-  size_t getNofWordPostings() const {
-    return _nofWordPostings;
-  }
+  size_t getNofWordPostings() const { return _nofWordPostings; }
 
-  void setNofWordPostings(size_t n) {
-    _nofWordPostings = n;
-  }
+  void setNofWordPostings(size_t n) { _nofWordPostings = n; }
 
-  size_t getNofEntityPostings() const {
-    return _nofEntityPostings;
-  }
+  size_t getNofEntityPostings() const { return _nofEntityPostings; }
 
-  void setNofEntityPostings(size_t n) {
-    _nofEntityPostings = n;
-  }
+  void setNofEntityPostings(size_t n) { _nofEntityPostings = n; }
 
-  const string& getName() const {
-    return _name;
-  }
+  const string& getName() const { return _name; }
 
-  void setName(const string& name) {
-    _name = name;
-  }
-
+  void setName(const string& name) { _name = name; }
 
   float getAverageNofEntityContexts() const {
     return float(_nofEntityContexts) / _nofEntities;
   };
 
-private:
+ private:
   vector<Id> _blockUpperBoundWordIds;
   vector<Id> _blockUpperBoundEntityIds;
   size_t _nofEntities;

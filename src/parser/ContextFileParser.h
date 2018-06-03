@@ -4,16 +4,15 @@
 
 #pragma once
 
-#include <string>
 #include <fstream>
+#include <string>
 
 #include "../global/Id.h"
 
 using std::string;
 
 class ContextFileParser {
-public:
-
+ public:
   struct Line {
     string _word;
     bool _isEntity;
@@ -31,8 +30,7 @@ public:
   // Returns true if something was stored.
   bool getLine(Line&);
 
-private:
+ private:
   std::ifstream _in;
   Id _lastCId;
 };
-

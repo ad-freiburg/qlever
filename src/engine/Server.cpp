@@ -2,27 +2,28 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
-#include <string>
-#include <vector>
-#include <sstream>
 #include <algorithm>
-#include <thread>
 #include <cstring>
+#include <sstream>
+#include <string>
+#include <thread>
+#include <vector>
 
-#include "../util/StringUtils.h"
-#include "../util/Log.h"
 #include "../parser/ParseException.h"
+#include "../util/Log.h"
+#include "../util/StringUtils.h"
 #include "./Server.h"
 #include "QueryPlanner.h"
-
 
 // _____________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
                         bool allPermutations, bool onDiskLiterals,
-                        bool optimizeOptionals) {
+                        bool optimizeOptionals, bool usePatterns) {
   LOG(INFO) << "Initializing server..." << std::endl;
 
   _optimizeOptionals = optimizeOptionals;
+
+  _index.setUsePatterns(usePatterns);
 
   // Init the index.
   _index.createFromOnDiskIndex(ontologyBaseName, allPermutations,
@@ -32,11 +33,11 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
   }
 
   // Init the server socket.
-  bool ret = _serverSocket.create() && _serverSocket.bind(_port)
-             && _serverSocket.listen();
+  bool ret = _serverSocket.create() && _serverSocket.bind(_port) &&
+             _serverSocket.listen();
   if (!ret) {
-    LOG(ERROR)
-      << "Failed to create socket on port " << _port << "." << std::endl;
+    LOG(ERROR) << "Failed to create socket on port " << _port << "."
+               << std::endl;
     exit(1);
   }
 
@@ -53,10 +54,10 @@ void Server::run() {
   }
   QueryExecutionContext qec(_index, _engine);
   std::vector<std::thread> threads;
-  for(int i = 0; i < _numThreads; ++i) {
+  for (int i = 0; i < _numThreads; ++i) {
     threads.emplace_back(&Server::runAcceptLoop, this, &qec);
   }
-  for(std::thread& worker: threads) {
+  for (std::thread& worker : threads) {
     worker.join();
   }
 }
@@ -65,16 +66,16 @@ void Server::runAcceptLoop(QueryExecutionContext* qec) {
   // Loop and wait for queries. Run forever, for now.
   while (true) {
     // Wait for new query
-    LOG(INFO)
-      << "---------- WAITING FOR QUERY AT PORT \"" << _port << "\" ... "
-      << std::endl;
+    LOG(INFO) << "---------- WAITING FOR QUERY AT PORT \"" << _port << "\" ... "
+              << std::endl;
 
     ad_utility::Socket client;
     // Concurrent accept used to be problematic because of the Thundering Herd
     // problem but this should be fixed on modern OSs
     bool success = _serverSocket.acceptClient(&client);
     if (!success) {
-      LOG(ERROR) << "Socket error in acceot" << std::strerror(errno) << std::endl;
+      LOG(ERROR) << "Socket error in acceot" << std::strerror(errno)
+                 << std::endl;
       continue;
     }
     client.setKeepAlive(true);
@@ -151,7 +152,8 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
 #ifdef ALLOW_SHUTDOWN
       if (ad_utility::getLowercase(params["cmd"]) == "shutdown") {
         LOG(INFO) << "Shutdown triggered by HTTP request "
-        << "(deactivate by compiling without -DALLOW_SHUTDOWN)" << std::endl;
+                  << "(deactivate by compiling without -DALLOW_SHUTDOWN)"
+                  << std::endl;
         exit(0);
       }
 #endif
@@ -170,12 +172,14 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       if (ad_utility::getLowercase(params["action"]) == "csv_export") {
         // CSV export
         response = composeResponseSepValues(pq, qet, ',');
-        contentType = "text/csv\r\n"
+        contentType =
+            "text/csv\r\n"
             "Content-Disposition: attachment;filename=export.csv";
       } else if (ad_utility::getLowercase(params["action"]) == "tsv_export") {
         // TSV export
         response = composeResponseSepValues(pq, qet, '\t');
-        contentType = "text/tsv\r\n"
+        contentType =
+            "text/tsv\r\n"
             "Content-Disposition: attachment;filename=export.tsv";
       } else {
         // Normal case: JSON response
@@ -212,18 +216,18 @@ Server::ParamValueMap Server::parseHttpRequest(
   if (indexOfGET == httpRequest.npos || indexOfHTTP == httpRequest.npos) {
     AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
              "Invalid request. Only supporting proper HTTP GET requests!\n" +
-             httpRequest);
+                 httpRequest);
   }
 
-  string request = httpRequest.substr(indexOfGET + 3,
-                                      indexOfHTTP - (indexOfGET + 3));
+  string request =
+      httpRequest.substr(indexOfGET + 3, indexOfHTTP - (indexOfGET + 3));
 
   size_t index = request.find("?");
   if (index == request.npos) {
     AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
              "Invalid request. At least one parameters is "
-                 "required for meaningful queries!\n"
-             + httpRequest);
+             "required for meaningful queries!\n" +
+                 httpRequest);
   }
   size_t next = request.find('&', index + 1);
   while (next != request.npos) {
@@ -251,9 +255,8 @@ Server::ParamValueMap Server::parseHttpRequest(
   }
   string param = ad_utility::getLowercaseUtf8(
       request.substr(index + 1, posOfEq - (index + 1)));
-  string value = ad_utility::decodeUrl(request.substr(posOfEq + 1,
-                                                      request.size() - 1 -
-                                                      (posOfEq + 1)));
+  string value = ad_utility::decodeUrl(
+      request.substr(posOfEq + 1, request.size() - 1 - (posOfEq + 1)));
   if (params.count(param) > 0) {
     AD_THROW(ad_semsearch::Exception::BAD_REQUEST, "Duplicate HTTP parameter.");
   }
@@ -279,10 +282,16 @@ string Server::createQueryFromHttpParams(const ParamValueMap& params) const {
 string Server::createHttpResponse(const string& content,
                                   const string& contentType) const {
   std::ostringstream os;
-  os << "HTTP/1.1 200 OK\r\n" << "Content-Length: " << content.size() << "\r\n"
-     << "Connection: close\r\n" << "Content-Type: " << contentType
-     << "; charset=" << "utf-8" << "\r\n"
-     << "Access-Control-Allow-Origin: *" << "\r\n" << "\r\n" << content;
+  os << "HTTP/1.1 200 OK\r\n"
+     << "Content-Length: " << content.size() << "\r\n"
+     << "Connection: close\r\n"
+     << "Content-Type: " << contentType << "; charset="
+     << "utf-8"
+     << "\r\n"
+     << "Access-Control-Allow-Origin: *"
+     << "\r\n"
+     << "\r\n"
+     << content;
   return os.str();
 }
 
@@ -310,7 +319,6 @@ string Server::create400HttpResponse() const {
 string Server::composeResponseJson(const ParsedQuery& query,
                                    const QueryExecutionTree& qet,
                                    size_t maxSend) const {
-
   // TODO(schnelle) we really should use a json library
   // such as https://github.com/nlohmann/json
   shared_ptr<const ResultTable> rt = qet.getResult();
@@ -318,19 +326,17 @@ string Server::composeResponseJson(const ParsedQuery& query,
   off_t compResultUsecs = _requestProcessingTimer.usecs();
   size_t resultSize = rt->size();
 
-
   std::ostringstream os;
   os << "{\n"
-     << "\"query\": \""
-     << ad_utility::escapeForJson(query._originalString)
+     << "\"query\": \"" << ad_utility::escapeForJson(query._originalString)
      << "\",\n"
      << "\"status\": \"OK\",\n"
      << "\"resultsize\": \"" << resultSize << "\",\n";
 
   os << "\"selected\": ";
   if (query._selectedVariables.size()) {
-    os << "[\"" <<
-      ad_utility::join(query._selectedVariables, "\", \"") << "\"],\n";
+    os << "[\"" << ad_utility::join(query._selectedVariables, "\", \"")
+       << "\"],\n";
   } else {
     os << "[],\n";
   }
@@ -351,8 +357,7 @@ string Server::composeResponseJson(const ParsedQuery& query,
   os << ",\n";
 
   os << "\"time\": {\n"
-     << "\"total\": \"" << _requestProcessingTimer.usecs() / 1000.0
-     << "ms\",\n"
+     << "\"total\": \"" << _requestProcessingTimer.usecs() / 1000.0 << "ms\",\n"
      << "\"computeResult\": \"" << compResultUsecs / 1000.0 << "ms\"\n"
      << "}\n"
      << "}\n";
@@ -380,24 +385,19 @@ string Server::composeResponseSepValues(const ParsedQuery& query,
 
 // _____________________________________________________________________________
 string Server::composeResponseJson(
-    const string& query,
-    const ad_semsearch::Exception& exception) const {
+    const string& query, const ad_semsearch::Exception& exception) const {
   std::ostringstream os;
   _requestProcessingTimer.stop();
 
   os << "{\n"
-     << "\"query\": \""
-     << ad_utility::escapeForJson(query)
-     << "\",\n"
+     << "\"query\": \"" << ad_utility::escapeForJson(query) << "\",\n"
      << "\"status\": \"ERROR\",\n"
      << "\"resultsize\": \"0\",\n"
      << "\"time\": {\n"
-     << "\"total\": \"" << _requestProcessingTimer.msecs() / 1000.0
-     << "ms\",\n"
+     << "\"total\": \"" << _requestProcessingTimer.msecs() / 1000.0 << "ms\",\n"
      << "\"computeResult\": \"" << _requestProcessingTimer.msecs() / 1000.0
      << "ms\"\n"
      << "},\n";
-
 
   string msg = ad_utility::escapeForJson(exception.getFullErrorMessage());
 
@@ -414,18 +414,13 @@ string Server::composeResponseJson(const string& query,
   _requestProcessingTimer.stop();
 
   os << "{\n"
-     << "\"query\": \""
-     << ad_utility::escapeForJson(query)
-     << "\",\n"
+     << "\"query\": \"" << ad_utility::escapeForJson(query) << "\",\n"
      << "\"status\": \"ERROR\",\n"
      << "\"resultsize\": \"0\",\n"
      << "\"time\": {\n"
-     << "\"total\": \"" << _requestProcessingTimer.msecs()
-     << "ms\",\n"
-     << "\"computeResult\": \"" << _requestProcessingTimer.msecs()
-     << "ms\"\n"
+     << "\"total\": \"" << _requestProcessingTimer.msecs() << "ms\",\n"
+     << "\"computeResult\": \"" << _requestProcessingTimer.msecs() << "ms\"\n"
      << "},\n";
-
 
   string msg = ad_utility::escapeForJson(exception.what());
 
@@ -480,11 +475,8 @@ void Server::serveFile(Socket* client, const string& requestedFile) const {
 string Server::composeStatsJson() const {
   std::ostringstream os;
   os << "{\n"
-     << "\"kbindex\": \""
-     << _index.getKbName()
-     << "\",\n"
-     << "\"permutations\": \""
-     << (_index.hasAllPermutations() ? "6" : "2")
+     << "\"kbindex\": \"" << _index.getKbName() << "\",\n"
+     << "\"permutations\": \"" << (_index.hasAllPermutations() ? "6" : "2")
      << "\",\n";
   if (_index.hasAllPermutations()) {
     os << "\"nofsubjects\": \"" << _index.getNofSubjects() << "\",\n";
@@ -492,21 +484,11 @@ string Server::composeStatsJson() const {
     os << "\"nofobjects\": \"" << _index.getNofObjects() << "\",\n";
   }
 
-  os << "\"noftriples\": \""
-     << _index.getNofTriples()
-     << "\",\n"
-     << "\"textindex\": \""
-     << _index.getTextName()
-     << "\",\n"
-     << "\"nofrecords\": \""
-     << _index.getNofTextRecords()
-     << "\",\n"
-     << "\"nofwordpostings\": \""
-     << _index.getNofWordPostings()
-     << "\",\n"
-     << "\"nofentitypostings\": \""
-     << _index.getNofEntityPostings()
-     << "\"\n"
+  os << "\"noftriples\": \"" << _index.getNofTriples() << "\",\n"
+     << "\"textindex\": \"" << _index.getTextName() << "\",\n"
+     << "\"nofrecords\": \"" << _index.getNofTextRecords() << "\",\n"
+     << "\"nofwordpostings\": \"" << _index.getNofWordPostings() << "\",\n"
+     << "\"nofentitypostings\": \"" << _index.getNofEntityPostings() << "\"\n"
      << "}\n";
   return os.str();
 }

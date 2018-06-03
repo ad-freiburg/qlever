@@ -4,13 +4,13 @@
 #pragma once
 
 #include <string>
-#include "./Operation.h"
 #include "../util/Conversions.h"
+#include "./Operation.h"
 
 using std::string;
 
 class IndexScan : public Operation {
-public:
+ public:
   enum ScanType {
     PSO_BOUND_S = 0,
     POS_BOUND_O = 1,
@@ -31,20 +31,16 @@ public:
 
   virtual string asString(size_t indent = 0) const;
 
-  IndexScan(QueryExecutionContext* qec, ScanType type) :
-      Operation(qec), _type(type),
-      _sizeEstimate(std::numeric_limits<size_t>::max()) {
-  }
+  IndexScan(QueryExecutionContext* qec, ScanType type)
+      : Operation(qec),
+        _type(type),
+        _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 
   virtual ~IndexScan() {}
 
-  void setSubject(const string& subject) {
-    _subject = subject;
-  }
+  void setSubject(const string& subject) { _subject = subject; }
 
-  void setPredicate(const string& predicate) {
-    _predicate = predicate;
-  }
+  void setPredicate(const string& predicate) { _predicate = predicate; }
 
   void setObject(const string& object) {
     if (!ad_utility::isXsdValue(object)) {
@@ -69,9 +65,7 @@ public:
     return _sizeEstimate;
   }
 
-  virtual size_t getCostEstimate() {
-    return getSizeEstimate();
-  }
+  virtual size_t getCostEstimate() { return getSizeEstimate(); }
 
   void determineMultiplicities();
 
@@ -83,19 +77,13 @@ public:
     return _multiplicity[col];
   }
 
-  void precomputeSizeEstimate() {
-    _sizeEstimate = computeSizeEstimate();
-  }
+  void precomputeSizeEstimate() { _sizeEstimate = computeSizeEstimate(); }
 
-  virtual bool knownEmptyResult() {
-    return getSizeEstimate() == 0;
-  }
+  virtual bool knownEmptyResult() { return getSizeEstimate() == 0; }
 
-  ScanType getType() const {
-    return _type;
-  }
+  ScanType getType() const { return _type; }
 
-protected:
+ protected:
   ScanType _type;
   string _subject;
   string _predicate;
@@ -125,4 +113,3 @@ protected:
 
   size_t computeSizeEstimate() const;
 };
-

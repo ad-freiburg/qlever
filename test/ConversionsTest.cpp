@@ -17,7 +17,6 @@ TEST(ConversionsTest, getBase10ComplementOfIntegerString) {
   ASSERT_EQ("898989", getBase10ComplementOfIntegerString("101010"));
 }
 
-
 TEST(ConversionsTest, convertFloatToIndexWord) {
   string zero = "0.0";
   string pos = "0.339";
@@ -52,7 +51,6 @@ TEST(ConversionsTest, convertFloatToIndexWord) {
   indexWords.push_back(convertFloatToIndexWord(extra3, 10, 20));
   indexWords.push_back(convertFloatToIndexWord(extra4, 10, 20));
 
-
   std::sort(indexWords.begin(), indexWords.end());
 
   ASSERT_EQ(neg4, convertIndexWordToFloat(indexWords[0]));
@@ -71,12 +69,10 @@ TEST(ConversionsTest, convertFloatToIndexWord) {
   ASSERT_EQ(pos5, convertIndexWordToFloat(indexWords[13]));
   ASSERT_EQ(pos6, convertIndexWordToFloat(indexWords[14]));
 
-  ASSERT_EQ("0.0", convertIndexWordToFloat(
-      convertFloatToIndexWord("0", 5, 5)));
-  ASSERT_EQ("1.0", convertIndexWordToFloat(
-      convertFloatToIndexWord("1", 5, 5)));
-  ASSERT_EQ("-1.0", convertIndexWordToFloat(
-      convertFloatToIndexWord("-1", 5, 5)));
+  ASSERT_EQ("0.0", convertIndexWordToFloat(convertFloatToIndexWord("0", 5, 5)));
+  ASSERT_EQ("1.0", convertIndexWordToFloat(convertFloatToIndexWord("1", 5, 5)));
+  ASSERT_EQ("-1.0",
+            convertIndexWordToFloat(convertFloatToIndexWord("-1", 5, 5)));
 }
 
 TEST(ConversionsTest, convertDateToIndexWord) {
@@ -126,7 +122,8 @@ TEST(ConversionsTest, convertDateToIndexWord) {
 }
 
 TEST(ConversionsTest, endToEndDate) {
-  string in = "\"1990-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>";
+  string in =
+      "\"1990-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>";
   string in2 = "\"1990-01-01\"^^<http://www.w3.org/2001/XMLSchema#date>";
   string in3 = "\"1990-01-01\"^^xsd:date";
   string in4 = "\"1990-01-01T00:00:00\"^^xsd:dateTime";
@@ -204,7 +201,7 @@ TEST(ConversionsTest, endToEndNumbers) {
   ASSERT_EQ(in9, convertIndexWordToValueLiteral(indexWords[12]));
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }

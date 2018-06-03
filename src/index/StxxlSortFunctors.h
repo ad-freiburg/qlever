@@ -23,9 +23,7 @@ struct SortByPSO {
   }
 
   // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() {
-    return array<Id, 3>{{0, 0, 0}};
-  }
+  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
 
   // max sentinel = value which is strictly larger that any input element
   static array<Id, 3> max_value() {
@@ -47,9 +45,7 @@ struct SortByPOS {
   }
 
   // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() {
-    return array<Id, 3>{{0, 0, 0}};
-  }
+  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
 
   // max sentinel = value which is strictly larger that any input element
   static array<Id, 3> max_value() {
@@ -71,9 +67,7 @@ struct SortBySPO {
   }
 
   // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() {
-    return array<Id, 3>{{0, 0, 0}};
-  }
+  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
 
   // max sentinel = value which is strictly larger that any input element
   static array<Id, 3> max_value() {
@@ -95,9 +89,7 @@ struct SortBySOP {
   }
 
   // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() {
-    return array<Id, 3>{{0, 0, 0}};
-  }
+  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
 
   // max sentinel = value which is strictly larger that any input element
   static array<Id, 3> max_value() {
@@ -119,9 +111,7 @@ struct SortByOSP {
   }
 
   // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() {
-    return array<Id, 3>{{0, 0, 0}};
-  }
+  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
 
   // max sentinel = value which is strictly larger that any input element
   static array<Id, 3> max_value() {
@@ -143,9 +133,7 @@ struct SortByOPS {
   }
 
   // min sentinel = value which is strictly smaller that any input element
-  static array<Id, 3> min_value() {
-    return array<Id, 3>{{0, 0, 0}};
-  }
+  static array<Id, 3> min_value() { return array<Id, 3>{{0, 0, 0}}; }
 
   // max sentinel = value which is strictly larger that any input element
   static array<Id, 3> max_value() {

@@ -4,18 +4,16 @@
 #pragma once
 
 #include <array>
-#include <vector>
 #include <utility>
+#include <vector>
 
 #include "../global/Id.h"
 #include "../util/File.h"
 #include "../util/HashMap.h"
-#include "../util/HashMap.h"
-
 
 using std::array;
-using std::vector;
 using std::pair;
+using std::vector;
 
 // Check index_layout.md for explanations (expected comments).
 // Removed comments here so that not two places had to be kept up-to-date.
@@ -26,7 +24,7 @@ static const uint64_t NOF_ELEMENTS_MASK = 0x000000FFFFFFFFFF;
 static const uint64_t MAX_NOF_ELEMENTS = NOF_ELEMENTS_MASK;
 
 class BlockMetaData {
-public:
+ public:
   BlockMetaData() : _firstLhs(0), _startOffset(0) {}
 
   BlockMetaData(Id lhs, off_t start) : _firstLhs(lhs), _startOffset(start) {}
@@ -36,15 +34,14 @@ public:
 };
 
 class FullRelationMetaData {
-public:
+ public:
   FullRelationMetaData();
 
   FullRelationMetaData(Id relId, off_t startFullIndex, size_t nofElements,
-                       double col1Mult, double col2Mult,
-                       bool isFunctional, bool hasBlocks);
+                       double col1Mult, double col2Mult, bool isFunctional,
+                       bool hasBlocks);
 
   size_t getNofBytesForFulltextIndex() const;
-
 
   // Returns true if there is exactly one RHS for each LHS in the relation
   bool isFunctional() const;
@@ -64,7 +61,6 @@ public:
 
   size_t getNofElements() const;
 
-
   // Restores meta data from raw memory.
   // Needed when registering an index on startup.
   FullRelationMetaData& createFromByteBuffer(unsigned char* buffer);
@@ -80,7 +76,7 @@ public:
   friend ad_utility::File& operator<<(ad_utility::File& f,
                                       const FullRelationMetaData& rmd);
 
-private:
+ private:
   // first byte: type
   // second byte: log(col1Multiplicity)
   // third byte: log(col2Multiplicity)
@@ -97,7 +93,7 @@ inline ad_utility::File& operator<<(ad_utility::File& f,
 }
 
 class BlockBasedRelationMetaData {
-public:
+ public:
   BlockBasedRelationMetaData();
 
   BlockBasedRelationMetaData(off_t startRhs, off_t offsetAfter,
@@ -143,32 +139,22 @@ inline ad_utility::File& operator<<(ad_utility::File& f,
 }
 
 class RelationMetaData {
-public:
+ public:
+  explicit RelationMetaData(const FullRelationMetaData& rmdPairs)
+      : _rmdPairs(rmdPairs), _rmdBlocks(nullptr) {}
 
-  explicit RelationMetaData(const FullRelationMetaData& rmdPairs) :
-      _rmdPairs(rmdPairs),
-      _rmdBlocks(nullptr) {}
-
-  off_t getStartOfLhs() const {
-    return _rmdPairs.getStartOfLhs();
-  }
+  off_t getStartOfLhs() const { return _rmdPairs.getStartOfLhs(); }
 
   size_t getNofBytesForFulltextIndex() const {
     return _rmdPairs.getNofBytesForFulltextIndex();
   }
 
   // Returns true if there is exactly one RHS for each LHS in the relation
-  bool isFunctional() const {
-    return _rmdPairs.isFunctional();
-  }
+  bool isFunctional() const { return _rmdPairs.isFunctional(); }
 
-  bool hasBlocks() const {
-    return _rmdPairs.hasBlocks();
-  }
+  bool hasBlocks() const { return _rmdPairs.hasBlocks(); }
 
-  size_t getNofElements() const {
-    return _rmdPairs.getNofElements();
-  }
+  size_t getNofElements() const { return _rmdPairs.getNofElements(); }
 
   uint8_t getCol1LogMultiplicity() const {
     return _rmdPairs.getCol1LogMultiplicity();
@@ -189,11 +175,11 @@ inline ad_utility::File& operator<<(ad_utility::File& f,
 }
 
 class IndexMetaData {
-public:
+ public:
   IndexMetaData();
 
-  void
-  add(const FullRelationMetaData& rmd, const BlockBasedRelationMetaData& bRmd);
+  void add(const FullRelationMetaData& rmd,
+           const BlockBasedRelationMetaData& bRmd);
 
   off_t getOffsetAfter() const;
 
@@ -213,7 +199,7 @@ public:
 
   size_t getNofDistinctC1() const;
 
-private:
+ private:
   off_t _offsetAfter;
   size_t _nofTriples;
   string _name;

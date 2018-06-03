@@ -2,14 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include <gtest/gtest.h>
 #include <cstdio>
 #include <fstream>
 #include <iostream>
-#include <gtest/gtest.h>
 
 #include "../src/parser/NTriplesParser.h"
 #include "../src/util/Exception.h"
-
 
 TEST(NTriplesParserTest, getLineTest) {
   try {
@@ -17,7 +16,7 @@ TEST(NTriplesParserTest, getLineTest) {
     {
       std::fstream f("_testtmp.nt", std::ios_base::out);
       f << "<a>\t<b>\t<c>\t.\n"
-          "<a2>\t<b2>\t<c2>\t.";
+           "<a2>\t<b2>\t<c2>\t.";
       f.close();
       NTriplesParser p("_testtmp.nt");
       array<string, 3> a;
@@ -36,8 +35,8 @@ TEST(NTriplesParserTest, getLineTest) {
     {
       std::fstream f("_testtmp.nt", std::ios_base::out);
       f << "<foo>\t<bar>\t<c>\t.\n"
-          "<foo>    <Äö>\t\"this is some text. It goes\ton!\"\t.\n"
-          "<a> <b> \"123\"^^<http://foo.bar/a> .\n";
+           "<foo>    <Äö>\t\"this is some text. It goes\ton!\"\t.\n"
+           "<a> <b> \"123\"^^<http://foo.bar/a> .\n";
       f.close();
       NTriplesParser p("_testtmp.nt");
       array<string, 3> a;
@@ -85,9 +84,7 @@ TEST(NTriplesParserTest, getLineTest) {
   }
 };
 
-
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-

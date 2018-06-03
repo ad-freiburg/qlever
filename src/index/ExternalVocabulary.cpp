@@ -27,9 +27,13 @@ Id ExternalVocabulary::binarySearchInVocab(const string& word) const {
   while (lower < upper) {
     Id i = (lower + upper) / 2;
     string w = (*this)[i];
-    if (w < word) { lower = i + 1; }
-    else if (w > word) { upper = i - 1; }
-    else if (w == word) { return i; }
+    if (w < word) {
+      lower = i + 1;
+    } else if (w > word) {
+      upper = i - 1;
+    } else if (w == word) {
+      return i;
+    }
   }
   return lower;
 }

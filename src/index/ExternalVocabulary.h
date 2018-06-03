@@ -6,8 +6,8 @@
 
 #include <string>
 #include <vector>
-#include "../util/File.h"
 #include "../global/Id.h"
+#include "../util/File.h"
 
 using std::string;
 using std::vector;
@@ -21,7 +21,7 @@ using std::vector;
 //! To obtain an ID for a term, do a binary search where each random access
 //! uses the steps described above.
 class ExternalVocabulary {
-public:
+ public:
   void buildFromVector(const vector<string>& v, const string& fileName);
 
   void initFromFile(const string& file);
@@ -33,9 +33,7 @@ public:
   string operator[](Id id) const;
 
   //! Get the number of words in the vocabulary.
-  size_t size() const {
-    return _size;
-  }
+  size_t size() const { return _size; }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -44,7 +42,7 @@ public:
     return *id < _size && (*this)[*id] == word;
   }
 
-private:
+ private:
   mutable ad_utility::File _file;
   off_t _startOfOffsets;
   size_t _size;

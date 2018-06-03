@@ -7,17 +7,16 @@
 #include <string>
 #include "../util/HashMap.h"
 
-
 using std::string;
-
 
 // Simple container for cost factors.
 // Comes with default values, that can be set and read from a file
 class QueryPlanningCostFactors {
-public:
+ public:
   QueryPlanningCostFactors();
   void readFromFile(const string& fileName);
   double getCostFactor(const string& key) const;
-private:
+
+ private:
   ad_utility::HashMap<string, double> _factors;
 };

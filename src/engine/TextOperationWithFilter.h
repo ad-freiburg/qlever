@@ -16,8 +16,7 @@ using std::pair;
 using std::vector;
 
 class TextOperationWithFilter : public Operation {
-public:
-
+ public:
   TextOperationWithFilter(QueryExecutionContext* qec, const string& words,
                           size_t nofVars,
                           std::shared_ptr<QueryExecutionTree> filterResult,
@@ -42,13 +41,9 @@ public:
   virtual size_t getSizeEstimate();
   virtual size_t getCostEstimate();
 
-  const string& getWordPart() const {
-    return _words;
-  }
+  const string& getWordPart() const { return _words; }
 
-  size_t getNofVars() const {
-    return _nofVars;
-  }
+  size_t getNofVars() const { return _nofVars; }
 
   virtual bool knownEmptyResult() {
     return _filterResult->knownEmptyResult() ||
@@ -58,7 +53,7 @@ public:
 
   virtual float getMultiplicity(size_t col);
 
-private:
+ private:
   string _words;
   size_t _nofVars;
   size_t _textLimit;

@@ -4,24 +4,24 @@
 
 #pragma once
 
-#include <stdint.h>
-#include <stdlib.h>
 #include <assert.h>
 #include <ctype.h>
-#include <iostream>
+#include <grp.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <array>
 #include <clocale>
 #include <cstring>
 #include <cwchar>
-#include <string>
-#include <sstream>
-#include <vector>
-#include <array>
-#include <grp.h>
+#include <iostream>
 #include <limits>
+#include <sstream>
+#include <string>
+#include <vector>
 
+using std::array;
 using std::string;
 using std::vector;
-using std::array;
 
 namespace ad_utility {
 //! Utility functions for string. Can possibly be changed to
@@ -31,7 +31,7 @@ namespace ad_utility {
 //! Safe startWith function. Returns true iff prefix is a
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
-inline bool startsWith(const string& text, const char *prefix,
+inline bool startsWith(const string& text, const char* prefix,
                        size_t patternSize);
 
 //! Safe startWith function. Returns true iff prefix is a
@@ -42,12 +42,12 @@ inline bool startsWith(const string& text, const string& prefix);
 //! Safe startWith function. Returns true iff prefix is a
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
-inline bool startsWith(const string& text, const char *prefix);
+inline bool startsWith(const string& text, const char* prefix);
 
 //! Safe endsWith function. Returns true iff suffix is a
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
-inline bool endsWith(const string& text, const char *suffix,
+inline bool endsWith(const string& text, const char* suffix,
                      size_t patternSize);
 
 //! Safe endsWith function. Returns true iff suffix is a
@@ -58,7 +58,7 @@ inline bool endsWith(const string& text, const string& suffix);
 //! Safe endsWith function. Returns true iff suffix is a
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
-inline bool endsWith(const string& text, const char *suffix);
+inline bool endsWith(const string& text, const char* suffix);
 
 //! Case transformations. Should be thread safe.
 inline string getLowercase(const string& orig);
@@ -85,7 +85,7 @@ inline string escapeForJson(const string& orig);
 //! Strips any sequence of characters in s from the left and right of the text.
 inline string strip(const string& text, const string& s);
 
-inline string strip(const string& text, const char *s);
+inline string strip(const string& text, const char* s);
 
 //! Strips any sequence of c from the left and right of the text.
 inline string strip(const string& text, char c);
@@ -95,16 +95,14 @@ inline string lstrip(const string& text, char c);
 
 inline string lstrip(const string& text, string s);
 
-inline string lstrip(const string& text, const char *s);
-
+inline string lstrip(const string& text, const char* s);
 
 //! Strips any sequence of c from the tight of the text.
 inline string rstrip(const string& text, char c);
 
 inline string rstrip(const string& text, string s);
 
-inline string rstrip(const string& text, const char *s);
-
+inline string rstrip(const string& text, const char* s);
 
 //! Splits a string at the separator, kinda like python.
 inline vector<string> split(const string& orig, const char sep);
@@ -113,7 +111,7 @@ inline vector<string> split(const string& orig, const char sep);
 inline vector<string> splitWs(const string& orig);
 
 //! Splits a string a any character inside the seps string.
-inline vector<string> splitAny(const string& orig, const char *seps);
+inline vector<string> splitAny(const string& orig, const char* seps);
 
 inline vector<string> splitAny(const string& orig, const string& seps);
 
@@ -124,7 +122,7 @@ inline string decodeUrl(const string& orig);
 // *****************************************************************************
 
 // ____________________________________________________________________________
-bool startsWith(const string& text, const char *prefix, size_t prefixSize) {
+bool startsWith(const string& text, const char* prefix, size_t prefixSize) {
   if (prefixSize > text.size()) {
     return false;
   }
@@ -142,12 +140,12 @@ bool startsWith(const string& text, const string& prefix) {
 }
 
 // ____________________________________________________________________________
-bool startsWith(const string& text, const char *prefix) {
+bool startsWith(const string& text, const char* prefix) {
   return startsWith(text, prefix, std::char_traits<char>::length(prefix));
 }
 
 // ____________________________________________________________________________
-bool endsWith(const string& text, const char *suffix, size_t suffixSize) {
+bool endsWith(const string& text, const char* suffix, size_t suffixSize) {
   if (suffixSize > text.size()) {
     return false;
   }
@@ -165,7 +163,7 @@ bool endsWith(const string& text, const string& suffix) {
 }
 
 // ____________________________________________________________________________
-bool endsWith(const string& text, const char *suffix) {
+bool endsWith(const string& text, const char* suffix) {
   return endsWith(text, suffix, std::char_traits<char>::length(suffix));
 }
 
@@ -397,8 +395,8 @@ vector<string> splitWs(const string& orig) {
           result.emplace_back(orig.substr(start, pos - start));
         }
         // skip any whitespace
-        while (pos < orig.size()
-               && ::isspace(static_cast<unsigned char>(orig[pos]))) {
+        while (pos < orig.size() &&
+               ::isspace(static_cast<unsigned char>(orig[pos]))) {
           pos++;
         }
         start = pos;
@@ -415,7 +413,7 @@ vector<string> splitWs(const string& orig) {
 }
 
 // _____________________________________________________________________________
-vector<string> splitAny(const string& orig, const char *seps) {
+vector<string> splitAny(const string& orig, const char* seps) {
   return splitAny(orig, string(seps));
 }
 
@@ -452,7 +450,7 @@ template <typename J, typename S>
 J join(const vector<J>& to_join, const S& joiner) {
   J res{};  // {} does zero initialization
   auto it = to_join.begin();
-  if(it == to_join.end()) {
+  if (it == to_join.end()) {
     return res;
   }
   res += *it++;
@@ -488,7 +486,7 @@ inline string lstrip(const string& text, string s) {
 }
 
 // _____________________________________________________________________________
-inline string lstrip(const string& text, const char *s) {
+inline string lstrip(const string& text, const char* s) {
   return lstrip(text, string(s));
 }
 
@@ -517,7 +515,7 @@ inline string rstrip(const string& text, string s) {
 }
 
 // _____________________________________________________________________________
-inline string rstrip(const string& text, const char *s) {
+inline string rstrip(const string& text, const char* s) {
   return rstrip(text, string(s));
 }
 
@@ -533,7 +531,7 @@ inline std::string strip(const std::string& text, char c) {
 }
 
 // _____________________________________________________________________________
-string strip(const string& text, const char *s) {
+string strip(const string& text, const char* s) {
   return strip(text, string(s));
 }
 
@@ -578,4 +576,4 @@ string decodeUrl(const string& url) {
   return decoded;
 }
 
-}
+}  // namespace ad_utility

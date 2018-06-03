@@ -10,15 +10,14 @@
 using std::vector;
 
 class QueryPlanner {
-public:
+ public:
   explicit QueryPlanner(QueryExecutionContext* qec,
                         bool optimizeOptionals = true);
 
-  QueryExecutionTree createExecutionTree(const ParsedQuery& pq) const;
+  QueryExecutionTree createExecutionTree(ParsedQuery& pq) const;
 
   class TripleGraph {
-  public:
-
+   public:
     TripleGraph();
 
     TripleGraph(const TripleGraph& other);
@@ -28,26 +27,38 @@ public:
     TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
 
     class Node {
-    public:
-      Node(size_t id, const SparqlTriple& t) : _id(id), _triple(t),
-                                               _variables(), _cvar(),
-                                               _wordPart() {
-        if (isVariable(t._s)) { _variables.insert(t._s); }
-        if (isVariable(t._p)) { _variables.insert(t._p); }
-        if (isVariable(t._o)) { _variables.insert(t._o); }
+     public:
+      Node(size_t id, const SparqlTriple& t)
+          : _id(id), _triple(t), _variables(), _cvar(), _wordPart() {
+        if (isVariable(t._s)) {
+          _variables.insert(t._s);
+        }
+        if (isVariable(t._p)) {
+          _variables.insert(t._p);
+        }
+        if (isVariable(t._o)) {
+          _variables.insert(t._o);
+        }
       }
 
       Node(size_t id, const string& cvar, const string& wordPart,
-           const vector<SparqlTriple>& trips) :
-          _id(id), _triple(cvar,
-                           INTERNAL_TEXT_MATCH_PREDICATE,
-                           wordPart),
-          _variables(), _cvar(cvar), _wordPart(wordPart) {
+           const vector<SparqlTriple>& trips)
+          : _id(id),
+            _triple(cvar, INTERNAL_TEXT_MATCH_PREDICATE, wordPart),
+            _variables(),
+            _cvar(cvar),
+            _wordPart(wordPart) {
         _variables.insert(cvar);
-        for (const auto& t: trips) {
-          if (isVariable(t._s)) { _variables.insert(t._s); }
-          if (isVariable(t._p)) { _variables.insert(t._p); }
-          if (isVariable(t._o)) { _variables.insert(t._o); }
+        for (const auto& t : trips) {
+          if (isVariable(t._s)) {
+            _variables.insert(t._s);
+          }
+          if (isVariable(t._p)) {
+            _variables.insert(t._p);
+          }
+          if (isVariable(t._o)) {
+            _variables.insert(t._o);
+          }
         }
       }
 
@@ -79,19 +90,18 @@ public:
 
     bool isPureTextQuery();
 
-  private:
+   private:
     vector<pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
         const vector<SparqlFilter>& origFilters,
-        ad_utility::HashMap<string,
-            vector<size_t>>& contextVarTotextNodes) const;
+        ad_utility::HashMap<string, vector<size_t>>& contextVarTotextNodes)
+        const;
 
-    vector<SparqlFilter> pickFilters(
-        const vector<SparqlFilter>& origFilters,
-        const vector<size_t>& nodes) const;
+    vector<SparqlFilter> pickFilters(const vector<SparqlFilter>& origFilters,
+                                     const vector<size_t>& nodes) const;
   };
 
   class SubtreePlan {
-  public:
+   public:
     explicit SubtreePlan(QueryExecutionContext* qec)
         : _qet(new QueryExecutionTree(qec)),
           _idsOfIncludedNodes(0),
@@ -110,44 +120,39 @@ public:
     void addAllNodes(uint64_t otherNodes);
   };
 
-  TripleGraph createTripleGraph(const ParsedQuery::GraphPattern *pattern) const;
+  TripleGraph createTripleGraph(const ParsedQuery::GraphPattern* pattern) const;
 
   static ad_utility::HashMap<string, size_t>
   createVariableColumnsMapForTextOperation(
-      const string& contextVar,
-      const string& entityVar,
+      const string& contextVar, const string& entityVar,
       const ad_utility::HashSet<string>& freeVars,
       const vector<pair<QueryExecutionTree, size_t>>& subtrees);
 
   static ad_utility::HashMap<string, size_t>
   createVariableColumnsMapForTextOperation(
-      const string& contextVar,
-      const string& entityVar,
+      const string& contextVar, const string& entityVar,
       const vector<pair<QueryExecutionTree, size_t>>& subtrees) {
     return createVariableColumnsMapForTextOperation(
         contextVar, entityVar, ad_utility::HashSet<string>(), subtrees);
   };
 
   static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(
-      const string& contextVar,
-      const string& entityVar) {
+  createVariableColumnsMapForTextOperation(const string& contextVar,
+                                           const string& entityVar) {
     return createVariableColumnsMapForTextOperation(
-        contextVar, entityVar,
-        vector<pair<QueryExecutionTree, size_t>>());
+        contextVar, entityVar, vector<pair<QueryExecutionTree, size_t>>());
   }
 
   static ad_utility::HashMap<string, size_t>
   createVariableColumnsMapForTextOperation(
-      const string& contextVar,
-      const string& entityVar,
+      const string& contextVar, const string& entityVar,
       const ad_utility::HashSet<string>& freeVars) {
     return createVariableColumnsMapForTextOperation(
         contextVar, entityVar, freeVars,
         vector<pair<QueryExecutionTree, size_t>>());
   };
 
-private:
+ private:
   QueryExecutionContext* _qec;
   /**
    * @brief Controls if optional joins are added to the optimizer or always
@@ -164,24 +169,22 @@ private:
       ad_utility::HashMap<string, vector<SparqlTriple>>& varToTrip,
       ad_utility::HashSet<string>& contextVars) const;
 
-  vector<SubtreePlan> seedWithScansAndText(const TripleGraph& tg,
-                                           const vector<
-                                           QueryPlanner::SubtreePlan*>&
-                                           children) const;
+  vector<SubtreePlan> seedWithScansAndText(
+      const TripleGraph& tg,
+      const vector<QueryPlanner::SubtreePlan*>& children) const;
 
   vector<SubtreePlan> merge(const vector<SubtreePlan>& a,
                             const vector<SubtreePlan>& b,
                             const TripleGraph& tg) const;
 
   vector<SubtreePlan> getOrderByRow(
-      const ParsedQuery& pq,
-      const vector<vector<SubtreePlan>>& dpTab) const;
+      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 
   bool connected(const SubtreePlan& a, const SubtreePlan& b,
                  const TripleGraph& graph) const;
 
-  vector<array<size_t, 2>> getJoinColumns(
-      const SubtreePlan& a, const SubtreePlan& b) const;
+  vector<array<size_t, 2>> getJoinColumns(const SubtreePlan& a,
+                                          const SubtreePlan& b) const;
 
   string getPruningKey(const SubtreePlan& plan, size_t orderedOnCol) const;
 
@@ -189,10 +192,9 @@ private:
                               const vector<SparqlFilter>& filters,
                               bool replaceInsteadOfAddPlans) const;
 
-  vector<vector<SubtreePlan>> fillDpTab(const TripleGraph& graph,
-                                        const vector<SparqlFilter>& fs,
-                                        const vector<SubtreePlan*>& children)
-                                        const;
+  vector<vector<SubtreePlan>> fillDpTab(
+      const TripleGraph& graph, const vector<SparqlFilter>& fs,
+      const vector<SubtreePlan*>& children) const;
 
   size_t getTextLimit(const string& textLimitString) const;
 
@@ -200,4 +202,3 @@ private:
 
   SubtreePlan optionalJoin(const SubtreePlan& a, const SubtreePlan& b) const;
 };
-

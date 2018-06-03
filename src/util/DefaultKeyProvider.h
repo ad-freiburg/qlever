@@ -4,37 +4,37 @@
 
 #pragma once
 
-#include <string>
 #include <limits>
+#include <string>
 
 using std::string;
 
-namespace { // NOLINT
-template<class KeyType>
+namespace {  // NOLINT
+template <class KeyType>
 class DefaultKeyProvider {
-  public:
-    static const KeyType DEFAULT_EMPTY_KEY;
-    static const KeyType DEFAULT_DELETED_KEY;
+ public:
+  static const KeyType DEFAULT_EMPTY_KEY;
+  static const KeyType DEFAULT_DELETED_KEY;
 };
 
-template<>
+template <>
 class DefaultKeyProvider<string> {
-  public:
-    static const string DEFAULT_EMPTY_KEY;
-    static const string DEFAULT_DELETED_KEY;
+ public:
+  static const string DEFAULT_EMPTY_KEY;
+  static const string DEFAULT_DELETED_KEY;
 };
 
 const string DefaultKeyProvider<string>::DEFAULT_EMPTY_KEY =
-    "__adutils_default_empty_key"; // NOLINT
+    "__adutils_default_empty_key";  // NOLINT
 
-const string DefaultKeyProvider<string>::DEFAULT_DELETED_KEY = // NOLINT
+const string DefaultKeyProvider<string>::DEFAULT_DELETED_KEY =  // NOLINT
     "__adutils_default_deleted_key";
 
-template<class KeyType>
+template <class KeyType>
 const KeyType DefaultKeyProvider<KeyType>::DEFAULT_EMPTY_KEY =
     std::numeric_limits<KeyType>::max();
 
-template<class KeyType>
+template <class KeyType>
 const KeyType DefaultKeyProvider<KeyType>::DEFAULT_DELETED_KEY =
     std::numeric_limits<KeyType>::max() - 1;
-}
+}  // namespace

@@ -2,13 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-
-#include "../util/StringUtils.h"
 #include "./SparqlParser.h"
-#include "./ParseException.h"
-#include "../util/Exception.h"
 #include "../global/Constants.h"
+#include "../util/Exception.h"
 #include "../util/Log.h"
+#include "../util/StringUtils.h"
+#include "./ParseException.h"
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parse(const string& query) {
@@ -18,19 +17,22 @@ ParsedQuery SparqlParser::parse(const string& query) {
   // Split prologue
   size_t i = query.find("SELECT");
   if (i == string::npos) {
-    throw ParseException("Missing keyword \"SELECT\", "
-                         "currently only select queries are supported.");
+    throw ParseException(
+        "Missing keyword \"SELECT\", "
+        "currently only select queries are supported.");
   }
 
   size_t j = query.find("WHERE");
   if (j == string::npos) {
-    throw ParseException("Missing keyword \"WHERE\", "
-                         "currently only select queries are supported.");
+    throw ParseException(
+        "Missing keyword \"WHERE\", "
+        "currently only select queries are supported.");
   }
 
   if (i >= j) {
-    throw ParseException("Keyword \"WHERE\" "
-                         "found after keyword \"SELECT\". Invalid query.");
+    throw ParseException(
+        "Keyword \"WHERE\" "
+        "found after keyword \"SELECT\". Invalid query.");
   }
 
   size_t k = query.rfind("}");
@@ -44,6 +46,25 @@ ParsedQuery SparqlParser::parse(const string& query) {
 
   parseSolutionModifiers(ad_utility::strip(query.substr(k + 1), " \n\t"),
                          result);
+
+  if (result._groupByVariables.size() > 0) {
+    // Check if all selected variables are either aggregated or
+    // part of the group by statement.
+    for (const string& var : result._selectedVariables) {
+      if (var[0] == '?') {
+        if (std::find(result._groupByVariables.begin(),
+                      result._groupByVariables.end(),
+                      var) == result._groupByVariables.end()) {
+          throw ParseException("Variable " + var +
+                               " is selected but not "
+                               "aggregated despite the result not being"
+                               "grouped by " +
+                               var + ".");
+        }
+      }
+    }
+  }
+  result.parseAliases();
   return result;
 }
 
@@ -78,7 +99,40 @@ void SparqlParser::addPrefix(const string& str, ParsedQuery& query) {
 // _____________________________________________________________________________
 void SparqlParser::parseSelect(const string& str, ParsedQuery& query) {
   assert(ad_utility::startsWith(str, "SELECT"));
-  auto vars = ad_utility::splitWs(str);
+  // split the string on whitespace but leave aliases intact
+  std::vector<string> vars;
+  size_t start = 0;
+  size_t pos = 0;
+  bool inAlias = false;
+  int bracketDepth = 0;
+  while (pos < str.size()) {
+    if (!inAlias && ::isspace(static_cast<unsigned char>(str[pos]))) {
+      if (start != pos) {
+        vars.emplace_back(str.substr(start, pos - start));
+      }
+      // skip any whitespace
+      while (pos < str.size() &&
+             ::isspace(static_cast<unsigned char>(str[pos]))) {
+        pos++;
+      }
+      start = pos;
+    }
+    if (str[pos] == '(') {
+      bracketDepth++;
+      inAlias = true;
+    } else if (str[pos] == ')') {
+      bracketDepth--;
+      if (bracketDepth == 0) {
+        inAlias = false;
+      }
+    }
+    pos++;
+  }
+  // avoid adding whitespace at the back of the string
+  if (start != str.size()) {
+    vars.emplace_back(str.substr(start));
+  }
+
   size_t i = 1;
   if (vars.size() > i && vars[i] == "DISTINCT") {
     ++i;
@@ -91,7 +145,7 @@ void SparqlParser::parseSelect(const string& str, ParsedQuery& query) {
   for (; i < vars.size(); ++i) {
     if (ad_utility::startsWith(vars[i], "?") ||
         ad_utility::startsWith(vars[i], "SCORE(") ||
-        ad_utility::startsWith(vars[i], "TEXT(")) {
+        ad_utility::startsWith(vars[i], "TEXT(") || vars[i][0] == '(') {
       query._selectedVariables.push_back(vars[i]);
     } else {
       throw ParseException(string("Invalid variable in select clause: \"") +
@@ -102,7 +156,7 @@ void SparqlParser::parseSelect(const string& str, ParsedQuery& query) {
 
 // _____________________________________________________________________________
 void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
-                              ParsedQuery::GraphPattern *currentPattern) {
+                              ParsedQuery::GraphPattern* currentPattern) {
   if (currentPattern == nullptr) {
     currentPattern = &query._rootGraphPattern;
     query._rootGraphPattern._id = 0;
@@ -125,10 +179,12 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
   bool insideLiteral = false;
   while (start < inner.size()) {
     size_t k = start;
-    while (inner[k] == ' ' || inner[k] == '\t' || inner[k] == '\n') { ++k; }
+    while (inner[k] == ' ' || inner[k] == '\t' || inner[k] == '\n') {
+      ++k;
+    }
     if (inner[k] == 'O' || inner[k] == 'o') {
-      if (inner.substr(k, 8) == "OPTIONAL"
-          || inner.substr(k, 8) == "optional") {
+      if (inner.substr(k, 8) == "OPTIONAL" ||
+          inner.substr(k, 8) == "optional") {
         LOG(DEBUG) << "Found optional part\n";
         // find opening and closing brackets of optional part
         size_t ob = inner.find('{', k);
@@ -138,7 +194,8 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
         for (i = ob + 1; i < inner.size(); i++) {
           if (inner[i] == '{') {
             depth++;
-          } if (inner[i] == '}') {
+          }
+          if (inner[i] == '}') {
             if (depth == 0) {
               cb = i;
               break;
@@ -149,8 +206,9 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
         }
         if (i == inner.size()) {
           if (depth == 0) {
-            throw ParseException("Need curly braces in optional"
-                                 "clause.");
+            throw ParseException(
+                "Need curly braces in optional"
+                "clause.");
           } else {
             throw ParseException("Unbalanced curly braces.");
           }
@@ -167,8 +225,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
         start = cb + 1;
         continue;
       }
-    }
-    else if (inner[k] == 'F' || inner[k] == 'f') {
+    } else if (inner[k] == 'F' || inner[k] == 'f') {
       if (inner.substr(k, 6) == "FILTER" || inner.substr(k, 6) == "filter") {
         size_t end = inner.find(')', k);
         if (end == string::npos) {
@@ -187,44 +244,59 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
           clauses.emplace_back(inner.substr(start, k - start));
           break;
         }
-        if (inner[k] == '<') { insideUri = true; }
-        if (inner[k] == '\"') { insideLiteral = true; }
-        if (inner[k] == ':') { insideNsThing = true; }
+        if (inner[k] == '<') {
+          insideUri = true;
+        }
+        if (inner[k] == '\"') {
+          insideLiteral = true;
+        }
+        if (inner[k] == ':') {
+          insideNsThing = true;
+        }
       } else {
-        if (insideUri && inner[k] == '>') { insideUri = false; }
-        if (insideLiteral && inner[k] == '\"') { insideLiteral = false; }
+        if (insideUri && inner[k] == '>') {
+          insideUri = false;
+        }
+        if (insideLiteral && inner[k] == '\"') {
+          insideLiteral = false;
+        }
         if (insideNsThing && (inner[k] == ' ' || inner[k] == '\t')) {
           insideNsThing = false;
         }
       }
       ++k;
     }
-    if (k == inner.size()) { clauses.emplace_back(inner.substr(start)); }
+    if (k == inner.size()) {
+      clauses.emplace_back(inner.substr(start));
+    }
     start = k + 1;
   }
-  for (const string& clause: clauses) {
+  for (const string& clause : clauses) {
     string c = ad_utility::strip(clause, ' ');
     if (c.size() > 0) {
       addWhereTriple(c, currentPattern);
     }
   }
-  for (const string& filter: filters) {
+  for (const string& filter : filters) {
     addFilter(filter, currentPattern);
   }
 }
 
 // _____________________________________________________________________________
 void SparqlParser::addWhereTriple(const string& str,
-                                  ParsedQuery::GraphPattern *pattern) {
+                                  ParsedQuery::GraphPattern* pattern) {
   size_t i = 0;
   while (i < str.size() &&
-         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
+         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) {
+    ++i;
+  }
   if (i == str.size()) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
   }
   size_t j = i + 1;
-  while (j < str.size() && str[j] != '\t' && str[j] != ' ' &&
-         str[j] != '\n') { ++j; }
+  while (j < str.size() && str[j] != '\t' && str[j] != ' ' && str[j] != '\n') {
+    ++j;
+  }
   if (j == str.size()) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
   }
@@ -232,18 +304,23 @@ void SparqlParser::addWhereTriple(const string& str,
   string s = str.substr(i, j - i);
   i = j;
   while (i < str.size() &&
-         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
+         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) {
+    ++i;
+  }
   if (i == str.size()) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
   }
   j = i + 1;
-  while (j < str.size() && str[j] != '\t' && str[j] != ' ' &&
-         str[j] != '\n') { ++j; }
+  while (j < str.size() && str[j] != '\t' && str[j] != ' ' && str[j] != '\n') {
+    ++j;
+  }
   string p = str.substr(i, j - i);
 
   i = j;
   while (i < str.size() &&
-         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) { ++i; }
+         (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) {
+    ++i;
+  }
   if (i == str.size()) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Illegal triple: " + str);
   }
@@ -268,11 +345,12 @@ void SparqlParser::addWhereTriple(const string& str,
       j = i + 1;
     }
     while (j < str.size() && str[j] != ' ' && str[j] != '\t' &&
-           str[j] != '\n') { ++j; }
+           str[j] != '\n') {
+      ++j;
+    }
   }
   string o = str.substr(i, j - i);
-  if (p == CONTAINS_WORD_PREDICATE ||
-      p == CONTAINS_WORD_PREDICATE_NS) {
+  if (p == CONTAINS_WORD_PREDICATE || p == CONTAINS_WORD_PREDICATE_NS) {
     o = stripAndLowercaseKeywordLiteral(o);
   }
 
@@ -281,8 +359,8 @@ void SparqlParser::addWhereTriple(const string& str,
   // Shouldn't be a problem here, though.
   // Could use a (hash)-set instead of vector.
   if (std::find(pattern->_whereClauseTriples.begin(),
-                pattern->_whereClauseTriples.end(), triple) !=
-      pattern->_whereClauseTriples.end()) {
+                pattern->_whereClauseTriples.end(),
+                triple) != pattern->_whereClauseTriples.end()) {
     LOG(INFO) << "Ignoring duplicate triple: " << str << std::endl;
   } else {
     pattern->_whereClauseTriples.push_back(triple);
@@ -292,16 +370,14 @@ void SparqlParser::addWhereTriple(const string& str,
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(const string& str,
                                           ParsedQuery& query) {
-  auto tokens = ad_utility::splitAny(str, " \n\t");
+  auto tokens = ad_utility::splitWs(str);
   for (size_t i = 0; i < tokens.size(); ++i) {
-    if (tokens[i] == "ORDER"
-        && i < tokens.size() - 2
-        && tokens[i + 1] == "BY") {
+    if (tokens[i] == "ORDER" && i < tokens.size() - 2 &&
+        tokens[i + 1] == "BY") {
       i += 1;
-      while (i + 1 < tokens.size()
-             && tokens[i + 1] != "LIMIT"
-             && tokens[i + 1] != "OFFSET"
-             && tokens[i + 1] != "TEXTLIMIT") {
+      while (i + 1 < tokens.size() && tokens[i + 1] != "LIMIT" &&
+             tokens[i + 1] != "OFFSET" && tokens[i + 1] != "TEXTLIMIT" &&
+             tokens[i + 1] != "GROUP") {
         query._orderBy.emplace_back(OrderKey(tokens[i + 1]));
         ++i;
       }
@@ -318,17 +394,24 @@ void SparqlParser::parseSolutionModifiers(const string& str,
       query._offset = tokens[i + 1];
       ++i;
     }
+    if (tokens[i] == "GROUP" && i < tokens.size() - 2 &&
+        tokens[i + 1] == "BY") {
+      i++;
+      while (i + 1 < tokens.size() && tokens[i + 1][0] == '?') {
+        query._groupByVariables.push_back(tokens[i + 1]);
+        i++;
+      }
+    }
   }
 }
 
 // _____________________________________________________________________________
 void SparqlParser::addFilter(const string& str,
-                             ParsedQuery::GraphPattern *pattern) {
+                             ParsedQuery::GraphPattern* pattern) {
   size_t i = str.find('(');
   AD_CHECK(i != string::npos);
   size_t j = str.find(')', i + 1);
   AD_CHECK(j != string::npos);
-
 
   // Handle filters with prefix predicates (langMatches, prefix, regex, etc)
   if (i >= 1 && str[i - 1] != ' ') {
@@ -380,16 +463,16 @@ void SparqlParser::addFilter(const string& str,
   vector<string> tokens;
   size_t startP2 = 0;
   for (size_t si = 0; si < filter.size(); ++si) {
-    if (filter[si] == '=' || filter[si] == '!' || filter[si] == '<'
-        || filter[si] == '>') {
+    if (filter[si] == '=' || filter[si] == '!' || filter[si] == '<' ||
+        filter[si] == '>') {
       if (startP2 == 0) {
         tokens.push_back(ad_utility::strip(filter.substr(0, si), " \t"));
         startP2 = si;
       }
     } else {
       if (startP2 > 0) {
-        tokens.push_back(ad_utility::strip(filter.substr(startP2, si - startP2),
-                                           " \t"));
+        tokens.push_back(
+            ad_utility::strip(filter.substr(startP2, si - startP2), " \t"));
         tokens.push_back(ad_utility::strip(filter.substr(si), " \t"));
         break;
       }
@@ -438,7 +521,7 @@ void SparqlParser::addFilter(const string& str,
 string SparqlParser::stripAndLowercaseKeywordLiteral(const string& lit) {
   if (lit.size() > 2 && lit[0] == '"' && lit.back() == '"') {
     string stripped = ad_utility::strip(lit, '"');
-    //stripped.erase(std::remove(stripped.begin(), stripped.end(), '\''),
+    // stripped.erase(std::remove(stripped.begin(), stripped.end(), '\''),
     //               stripped.end());
     return ad_utility::getLowercaseUtf8(stripped);
   }

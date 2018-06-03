@@ -3,22 +3,20 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./TextMetaData.h"
-#include "../util/ReadableNumberFact.h"
 #include "../global/Constants.h"
+#include "../util/ReadableNumberFact.h"
 
 // _____________________________________________________________________________
 const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
-    const Id lower,
-    const Id upper) const {
+    const Id lower, const Id upper) const {
   AD_CHECK_GE(upper, lower);
   assert(_blocks.size() > 0);
-  assert(_blocks.size() == _blockUpperBoundWordIds.size()
-                           + _blockUpperBoundEntityIds.size());
+  assert(_blocks.size() ==
+         _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());
 
   // Binary search in the sorted _blockUpperBoundWordIds vector.
   vector<Id>::const_iterator it = std::lower_bound(
-      _blockUpperBoundWordIds.begin(), _blockUpperBoundWordIds.end(),
-      lower);
+      _blockUpperBoundWordIds.begin(), _blockUpperBoundWordIds.end(), lower);
 
   // If the word would be behind all that, return the last block
   if (it == _blockUpperBoundWordIds.end()) {
@@ -28,7 +26,7 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
   if (upper > *it) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "The ID Range seems to exceed the range possible "
-                 "given to the current min prefix size.");
+             "given to the current min prefix size.");
   }
 
   // Use the info to retrieve an index.
@@ -41,13 +39,12 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
 // _____________________________________________________________________________
 bool TextMetaData::existsTextBlockForEntityId(const Id eid) const {
   assert(_blocks.size() > 0);
-  assert(_blocks.size() == _blockUpperBoundWordIds.size()
-                           + _blockUpperBoundEntityIds.size());
+  assert(_blocks.size() ==
+         _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());
 
   // Binary search in the sorted _blockUpperBoundWordIds vector.
   vector<Id>::const_iterator it = std::lower_bound(
-      _blockUpperBoundEntityIds.begin(), _blockUpperBoundEntityIds.end(),
-      eid);
+      _blockUpperBoundEntityIds.begin(), _blockUpperBoundEntityIds.end(), eid);
 
   return (*it == eid);
 }
@@ -56,32 +53,28 @@ bool TextMetaData::existsTextBlockForEntityId(const Id eid) const {
 const TextBlockMetaData& TextMetaData::getBlockInfoByEntityId(
     const Id eid) const {
   assert(_blocks.size() > 0);
-  assert(_blocks.size() == _blockUpperBoundWordIds.size()
-                           + _blockUpperBoundEntityIds.size());
+  assert(_blocks.size() ==
+         _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());
 
   // Binary search in the sorted _blockUpperBoundWordIds vector.
   vector<Id>::const_iterator it = std::lower_bound(
-      _blockUpperBoundEntityIds.begin(), _blockUpperBoundEntityIds.end(),
-      eid);
+      _blockUpperBoundEntityIds.begin(), _blockUpperBoundEntityIds.end(), eid);
 
   assert(*it == eid);
 
   // Use the info to retrieve an index.
-  size_t index = static_cast<size_t>(it - _blockUpperBoundEntityIds.begin())
-                 + _blockUpperBoundWordIds.size();
+  size_t index = static_cast<size_t>(it - _blockUpperBoundEntityIds.begin()) +
+                 _blockUpperBoundWordIds.size();
   assert(eid == _blocks[index]._lastWordId);
   assert(eid == _blocks[index]._firstWordId);
   return _blocks[index];
 }
 
 // _____________________________________________________________________________
-size_t TextMetaData::getBlockCount() const {
-  return _blocks.size();
-}
+size_t TextMetaData::getBlockCount() const { return _blocks.size(); }
 
 // _____________________________________________________________________________
-ad_utility::File& operator<<(ad_utility::File& f,
-                             const TextMetaData& md) {
+ad_utility::File& operator<<(ad_utility::File& f, const TextMetaData& md) {
   auto buf = md.getBlockCount();
   f.write(&buf, sizeof(md.getBlockCount()));
   for (const auto& b : md._blocks) {
@@ -138,8 +131,7 @@ TextMetaData& TextMetaData::createFromByteBuffer(unsigned char* buffer) {
 }
 
 // _____________________________________________________________________________
-ad_utility::File& operator<<(ad_utility::File& f,
-                             const TextBlockMetaData& md) {
+ad_utility::File& operator<<(ad_utility::File& f, const TextBlockMetaData& md) {
   f.write(&md._firstWordId, sizeof(md._firstWordId));
   f.write(&md._lastWordId, sizeof(md._lastWordId));
   f << md._cl << md._entityCl;
@@ -225,8 +217,8 @@ string TextMetaData::statistics() const {
     totalBytesSls += 1 + ecl._lastByte - ecl._startScorelist;
   }
   os << "-------------------------------------------------------------------\n";
-  os << "# Elements: " <<
-     totalElementsClassicLists + totalElementsEntityLists << '\n';
+  os << "# Elements: " << totalElementsClassicLists + totalElementsEntityLists
+     << '\n';
   os << "  thereof:\n";
   os << "    Elements in classic lists: " << totalElementsClassicLists << '\n';
   os << "    Elements in entity lists:  " << totalElementsEntityLists << '\n';
@@ -236,8 +228,7 @@ string TextMetaData::statistics() const {
   os << "    Average contexts / entity: " << getAverageNofEntityContexts()
      << '\n';
   os << "-------------------------------------------------------------------\n";
-  os << "# Bytes: " <<
-     totalBytesClassicLists + totalBytesEntityLists << '\n';
+  os << "# Bytes: " << totalBytesClassicLists + totalBytesEntityLists << '\n';
   os << "  thereof:\n";
   os << "    Bytes in classic lists: " << totalBytesClassicLists << '\n';
   os << "    Bytes in entity lists:  " << totalBytesEntityLists << '\n';
@@ -249,9 +240,10 @@ string TextMetaData::statistics() const {
   os << "-------------------------------------------------------------------\n";
   os << "\n";
   os << "-------------------------------------------------------------------\n";
-  os << "Theoretical (naiive) size: " <<
-     (totalElementsClassicLists + totalElementsEntityLists) *
-     (2 * sizeof(Id) + sizeof(Score)) << '\n';
+  os << "Theoretical (naiive) size: "
+     << (totalElementsClassicLists + totalElementsEntityLists) *
+            (2 * sizeof(Id) + sizeof(Score))
+     << '\n';
   os << "-------------------------------------------------------------------\n";
   return os.str();
 }
