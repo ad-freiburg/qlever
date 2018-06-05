@@ -63,6 +63,9 @@ class Vocabulary {
 
   //! Write the vocabulary to a file.
   void writeToFile(const string& fileName) const;
+  //! Write to binary file to prepare the merging. Format:
+  // 4 Bytes strlen, then character bytes, then 8 bytes zeros for global id
+  void writeToBinaryFileForMerging(const string& fileName) const;
 
   //! Append a word to the vocabulary. Wraps the std::vector method.
   void push_back(const string& word) { _words.push_back(word); }
@@ -150,6 +153,9 @@ class Vocabulary {
   google::sparse_hash_map<string, Id> asMap();
 
   void externalizeLiterals(const string& fileName);
+  void externalizeLiteralsFromTextFile(const string& textFileName, const string& outFileName) {
+    _externalLiterals.buildFromTextFile(textFileName, outFileName);
+  }
 
   const ExternalVocabulary& getExternalVocab() const {
     return _externalLiterals;

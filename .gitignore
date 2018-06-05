@@ -31,3 +31,6 @@ e2e_data/*
 
 # Local aux files (IDE, etc)
 .idea
+
+# vim files
+.swp

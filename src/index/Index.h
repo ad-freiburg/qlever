@@ -15,6 +15,7 @@
 #include "./IndexMetaData.h"
 #include "./StxxlSortFunctors.h"
 #include "./TextMetaData.h"
+#include "./ConstantsIndexCreation.h"
 #include "./Vocabulary.h"
 
 using std::array;
@@ -268,6 +269,7 @@ class Index {
 
  private:
   string _onDiskBase;
+  bool _onDiskLiterals = false;
   Vocabulary _vocab;
   Vocabulary _textVocab;
   IndexMetaData _psoMeta;
@@ -299,11 +301,22 @@ class Index {
   void passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data,
                                bool onDiskLiterals = false);
 
+  // Create Vocabulary and directly write it to disk. Create ExtVec which can be
+  // used for creating permutations
+  // Member _vocab will be empty after this because it is not needed for index
+  // creation once the ExtVec is set up and it would be a waste of RAM
+  ExtVec createExtVecAndVocabFromNTriples(const string& ntFile, 
+    					  const string& onDiskBase,
+					  bool onDiskLiterals);
+
+  // ___________________________________________________________________
   size_t passNTriplesFileForVocabulary(const string& ntFile,
-                                       bool onDiskLiterals = false);
+                                       bool onDiskLiterals = false,
+                                       size_t linesPerPartial = 100000000);
 
   void passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data,
-                                    bool onDiskLiterals = false);
+                                    bool onDiskLiterals = false,
+                                    size_t linesPerPartial = 100000000);
 
   size_t passContextFileForVocabulary(const string& contextFile);
 
