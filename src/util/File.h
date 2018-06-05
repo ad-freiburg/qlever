@@ -96,9 +96,7 @@ class File {
   // read from current file pointer position
   // returns the number of bytes read
   size_t readFromBeginning(void* targetBuffer, size_t nofBytesToRead) {
-    assert(_file);
-    seek(0, SEEK_SET);
-    return fread(targetBuffer, (size_t)1, nofBytesToRead, _file);
+    return read(targetBuffer, nofBytesToRead, (off_t)0);
   }
 
   // read from current file pointer position
@@ -174,17 +172,26 @@ class File {
     assert((seekOrigin == SEEK_SET) || (seekOrigin == SEEK_CUR) ||
            (seekOrigin == SEEK_END));
     assert(_file);
-    return (fseeko(_file, seekOffset, seekOrigin) == 0);
+    return fseeko(_file, seekOffset, seekOrigin) == 0;
   }
 
-  //! Move file pointer to desired position
-  //! (offset from file beginning) and start reading from there
-  //! returns number of bytes read
-  size_t read(void* targetBuffer, size_t nofBytesToRead,
-              off_t seekOffsetFromStart) {
+  //! Read nofBytesToRead bytes  from file starting at the given offset
+  //! returns the number of bytes read or the error returned by pread()
+  //! which is < 0
+  size_t read(void* targetBuffer, size_t nofBytesToRead, off_t offset) {
     assert(_file);
-    return pread(fileno(_file), targetBuffer, nofBytesToRead,
-                 seekOffsetFromStart);
+    const int fd = fileno(_file);
+    size_t bytesRead = 0;
+    uint8_t* to = static_cast<uint8_t*>(targetBuffer);
+    while (bytesRead < nofBytesToRead) {
+      const ssize_t ret = pread(fd, to + bytesRead, nofBytesToRead - bytesRead,
+                                offset + bytesRead);
+      if (ret < 0) {
+        return ret;
+      }
+      bytesRead += ret;
+    }
+    return bytesRead;
   }
 
   //! Returns the number of bytes from the beginning
@@ -207,68 +214,13 @@ class File {
     return sizeOfFile;
   }
 
-  //! Returns the last part of the file as off_t.
-  off_t getTrailingOffT() {
-    assert(_file);
-    off_t lastOffset;
-    // seek to end of file
-    seek((off_t)0, SEEK_END);
-    off_t sizeOfFile = tell();
-
-    // now seek to end of file - sizeof(off_t)
-#ifdef NDEBUG
-    seek(sizeOfFile - sizeof(off_t), SEEK_SET);
-    // Assign the result of ftello to the unset lastOffset to get rid
-    // of warnings. This isn't really meaningful.
-    lastOffset = ftello(_file);
-#else
-    bool seekReturn = seek(sizeOfFile - sizeof(off_t), SEEK_SET);
-    assert(seekReturn);
-    const off_t lastOffsetOffset = ftello(_file);
-    assert(lastOffsetOffset == (off_t)(sizeOfFile - sizeof(off_t)));
-    assert(lastOffsetOffset > (off_t)0);
-#endif
-
-    // now read the last off_t
-#ifdef NDEBUG
-    read(&lastOffset, sizeof(off_t));
-#else
-    size_t readReturn = read(&lastOffset, sizeof(off_t));
-    assert(readReturn == (size_t)sizeof(off_t));
-    assert(lastOffset > 0);
-#endif
-
-    return lastOffset;
-  }
-
   // returns the byte offset of the last off_t
   // the off_t itself is passed back by reference
   off_t getLastOffset(off_t* lastOffset) {
     assert(_file);
-
-    // seek to end of file
-    seek((off_t)0, SEEK_END);
-    off_t sizeOfFile = tell();
-    assert(sizeOfFile > 0);
-
-    // now seek to end of file - sizeof(off_t)
-#ifdef NDEBUG
-    seek(sizeOfFile - sizeof(off_t), SEEK_SET);
-#else
-    bool seekReturn = seek(sizeOfFile - sizeof(off_t), SEEK_SET);
-    assert(seekReturn);
-#endif
-    const off_t lastOffsetOffset = ftello(_file);
-    assert(lastOffsetOffset == (off_t)(sizeOfFile - sizeof(off_t)));
-
-    // now read the last off_t
-#ifdef NDEBUG
-    read(lastOffset, sizeof(off_t));
-#else
-    size_t readReturn = read(lastOffset, sizeof(off_t));
-    assert(readReturn == (size_t)sizeof(off_t));
-    assert(lastOffset != nullptr);
-#endif
+    // read the last off_t
+    const off_t lastOffsetOffset = sizeOfFile() - sizeof(off_t);
+    read(lastOffset, sizeof(off_t), lastOffsetOffset);
 
     return lastOffsetOffset;
   }

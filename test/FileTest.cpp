@@ -150,12 +150,6 @@ TEST_F(FileTest, testReadIntoVector) {
   ASSERT_EQ("line2", lines2[1]);
 }
 
-TEST_F(FileTest, testGetTrailingOffT) {
-  File objUnderTest("_tmp_testFileBinary", "r");
-  off_t off = objUnderTest.getTrailingOffT();
-  ASSERT_EQ(off_t(3), off);
-}
-
 }  // namespace ad_utility
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
