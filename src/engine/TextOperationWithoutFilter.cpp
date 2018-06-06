@@ -105,7 +105,7 @@ void TextOperationWithoutFilter::computeResultMultVars(
     result->_resultTypes.reserve(result->_nofColumns);
     result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
     result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-    for (int i = 2; i < result->_nofColumns; i++) {
+    for (size_t i = 2; i < result->_nofColumns; i++) {
       result->_resultTypes.push_back(ResultTable::ResultType::KB);
     }
     getExecutionContext()->getIndex().getECListForWords(

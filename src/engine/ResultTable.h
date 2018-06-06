@@ -34,35 +34,13 @@ class ResultTable {
 
   ResultTable();
 
-  ResultTable(const ResultTable&);
+  ResultTable(const ResultTable& other) = delete;
 
-  ResultTable(ResultTable&& other) noexcept
-      : _nofColumns(0),
-        _sortedBy(0),
-        _varSizeData(),
-        _fixedSizeData(nullptr),
-        _status(ResultTable::OTHER) {
-    swap(*this, other);
-  }
+  ResultTable(ResultTable&& other) = delete;
 
-  ResultTable& operator=(ResultTable other) {
-    swap(*this, other);
-    return *this;
-  }
+  ResultTable& operator=(ResultTable other) = delete;
 
-  ResultTable& operator=(ResultTable&& other) noexcept {
-    swap(*this, other);
-    return *this;
-  }
-
-  friend void swap(ResultTable& a, ResultTable& b) noexcept {
-    using std::swap;
-    swap(a._status, b._status);
-    swap(a._nofColumns, b._nofColumns);
-    swap(a._sortedBy, b._sortedBy);
-    swap(a._varSizeData, b._varSizeData);
-    swap(a._fixedSizeData, b._fixedSizeData);
-  }
+  ResultTable& operator=(ResultTable&& other) = delete;
 
   virtual ~ResultTable();
 
