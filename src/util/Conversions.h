@@ -125,7 +125,7 @@ string convertValueLiteralToIndexWord(const string& orig) {
                                      DEFAULT_NOF_VALUE_MANTISSA_DIGITS) +
              "I";
     }
-    if (type == "float") {
+    if (type == "float" || type == "decimal") {
       return convertFloatToIndexWord(value, DEFAULT_NOF_VALUE_EXPONENT_DIGITS,
                                      DEFAULT_NOF_VALUE_MANTISSA_DIGITS) +
              "F";

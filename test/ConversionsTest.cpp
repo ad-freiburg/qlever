@@ -169,6 +169,9 @@ TEST(ConversionsTest, endToEndNumbers) {
   string in8 = "\"1230.999\"^^<http://www.w3.org/2001/XMLSchema#float>";
   string in9 = "\"1230.99901\"^^<http://www.w3.org/2001/XMLSchema#float>";
 
+  string nin5 = "\"-42.42421\"^^<http://www.w3.org/2001/XMLSchema#decimal>";
+  string nout5 = "\"-42.42421\"^^<http://www.w3.org/2001/XMLSchema#float>";
+
   vector<string> indexWords;
   indexWords.push_back(convertValueLiteralToIndexWord(in));
   indexWords.push_back(convertValueLiteralToIndexWord(in2));
@@ -183,6 +186,7 @@ TEST(ConversionsTest, endToEndNumbers) {
   indexWords.push_back(convertValueLiteralToIndexWord(nin2));
   indexWords.push_back(convertValueLiteralToIndexWord(nin3));
   indexWords.push_back(convertValueLiteralToIndexWord(nin4));
+  indexWords.push_back(convertValueLiteralToIndexWord(nin5));
 
   std::sort(indexWords.begin(), indexWords.end());
 
@@ -190,15 +194,16 @@ TEST(ConversionsTest, endToEndNumbers) {
   ASSERT_EQ(nin, convertIndexWordToValueLiteral(indexWords[1]));
   ASSERT_EQ(nin2, convertIndexWordToValueLiteral(indexWords[2]));
   ASSERT_EQ(nin3, convertIndexWordToValueLiteral(indexWords[3]));
-  ASSERT_EQ(in3, convertIndexWordToValueLiteral(indexWords[4]));
-  ASSERT_EQ(in2, convertIndexWordToValueLiteral(indexWords[5]));
-  ASSERT_EQ(in, convertIndexWordToValueLiteral(indexWords[6]));
-  ASSERT_EQ(in4, convertIndexWordToValueLiteral(indexWords[7]));
-  ASSERT_EQ(in5, convertIndexWordToValueLiteral(indexWords[8]));
-  ASSERT_EQ(in6, convertIndexWordToValueLiteral(indexWords[9]));
-  ASSERT_EQ(in7, convertIndexWordToValueLiteral(indexWords[10]));
-  ASSERT_EQ(in8, convertIndexWordToValueLiteral(indexWords[11]));
-  ASSERT_EQ(in9, convertIndexWordToValueLiteral(indexWords[12]));
+  ASSERT_EQ(nout5, convertIndexWordToValueLiteral(indexWords[4]));
+  ASSERT_EQ(in3, convertIndexWordToValueLiteral(indexWords[5]));
+  ASSERT_EQ(in2, convertIndexWordToValueLiteral(indexWords[6]));
+  ASSERT_EQ(in, convertIndexWordToValueLiteral(indexWords[7]));
+  ASSERT_EQ(in4, convertIndexWordToValueLiteral(indexWords[8]));
+  ASSERT_EQ(in5, convertIndexWordToValueLiteral(indexWords[9]));
+  ASSERT_EQ(in6, convertIndexWordToValueLiteral(indexWords[10]));
+  ASSERT_EQ(in7, convertIndexWordToValueLiteral(indexWords[11]));
+  ASSERT_EQ(in8, convertIndexWordToValueLiteral(indexWords[12]));
+  ASSERT_EQ(in9, convertIndexWordToValueLiteral(indexWords[13]));
 }
 
 
