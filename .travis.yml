@@ -1,7 +1,6 @@
-language: c++
+language: generic
 sudo: false
 dist: trusty
-
 
 addons:
   apt:
@@ -13,8 +12,8 @@ addons:
       - libsparsehash-dev
       - cmake
 
-compiler:
-  - gcc-5
+env:
+  - CC=gcc-5 CXX=g++-5
 
 before_script:
   - $CXX --version
