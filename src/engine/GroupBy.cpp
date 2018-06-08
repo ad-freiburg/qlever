@@ -3,6 +3,8 @@
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
 #include "GroupBy.h"
+
+#include "../util/HashSet.h"
 #include "../util/Conversions.h"
 #include "../index/Index.h"
 
@@ -73,6 +75,11 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
   // the output column order, on which the sorting depends. Then populate
   // the vector of columns which should be sorted by using the subtrees
   // variable column map.
+  vector<pair<size_t, bool>> cols;
+  if (groupByVariables.empty()) {
+    // the entire input is a single group, no sorting needs to be done
+    return cols;
+  }
 
   std::vector<ParsedQuery::Alias> sortedAliases;
   sortedAliases.reserve(aliases.size());
@@ -95,7 +102,7 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
 
 
   std::unordered_map<string, size_t> inVarColMap = subtree->getVariableColumnMap();
-  vector<pair<size_t, bool>> cols;
+
 
   // The returned columns are all groupByVariables followed by aggregrates
   for (std::string var : sortedGroupByVars) {
@@ -141,6 +148,379 @@ struct resizeIfVec<vector<C>, C> {
 };
 
 template<typename A, typename R>
+void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
+                  size_t blockEnd, const vector<A>* input,
+                  const vector<ResultTable::ResultType>& inputTypes,
+                  R& resultRow,
+                  const ResultTable* inTable,
+                  ResultTable* outTable,
+                  const Index& index,
+                  ad_utility::HashSet<size_t>& distinctHashSet) {
+  if (a._distinct && distinctHashSet.size() < blockEnd - blockStart) {
+    // TODO(florian): This may not be very efficient
+    distinctHashSet.resize(blockEnd - blockStart);
+  }
+  switch (a._type) {
+  case GroupBy::AggregateType::AVG: {
+    float res = 0;
+    if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+      if (a._distinct) {
+        for (size_t i = blockStart; i <= blockEnd; i++) {
+          const auto it = distinctHashSet.find((*input)[i][a._inCol]);
+          if (it == distinctHashSet.end()) {
+            distinctHashSet.insert((*input)[i][a._inCol]);
+            res += (*input)[i][a._inCol];
+          }
+        }
+        distinctHashSet.clear();
+      } else {
+        for (size_t i = blockStart; i <= blockEnd; i++) {
+          res += (*input)[i][a._inCol];
+        }
+      }
+    } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+      if (a._distinct) {
+        for (size_t i = blockStart; i <= blockEnd; i++) {
+          const auto it = distinctHashSet.find((*input)[i][a._inCol]);
+          if (it == distinctHashSet.end()) {
+            distinctHashSet.insert((*input)[i][a._inCol]);
+            res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
+          }
+        }
+        distinctHashSet.clear();
+      } else {
+        for (size_t i = blockStart; i <= blockEnd; i++) {
+          res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
+        }
+      }
+    } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
+               || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
+      res = std::numeric_limits<float>::quiet_NaN();
+    } else {
+      if (a._distinct) {
+        for (size_t i = blockStart; i <= blockEnd; i++) {
+          const auto it = distinctHashSet.find((*input)[i][a._inCol]);
+          if (it == distinctHashSet.end()) {
+            distinctHashSet.insert((*input)[i][a._inCol]);
+            // load the string, parse it as an xsd::int or float
+            std::string entity = index.idToString((*input)[i][a._inCol]);
+            if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+              res = std::numeric_limits<float>::quiet_NaN();
+              break;
+            } else {
+              res += ad_utility::convertIndexWordToFloatValue(entity.substr(0, entity.size() - 1));
+            }
+          }
+        }
+        distinctHashSet.clear();
+      } else {
+        for (size_t i = blockStart; i <= blockEnd; i++) {
+          // load the string, parse it as an xsd::int or float
+          std::string entity = index.idToString((*input)[i][a._inCol]);
+          if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+            res = std::numeric_limits<float>::quiet_NaN();
+            break;
+          } else {
+            res += ad_utility::convertIndexWordToFloatValue(entity.substr(0, entity.size() - 1));
+          }
+        }
+      }
+    }
+    res /= (blockEnd - blockStart + 1);
+
+    resultRow[a._outCol] = 0;
+    *reinterpret_cast<float*>(&resultRow[a._outCol]) = res;
+    break;
+  }
+  case GroupBy::AggregateType::COUNT:
+    if (a._distinct) {
+      size_t count = 0;
+      for (size_t i = blockStart; i <= blockEnd; i++) {
+        const auto it = distinctHashSet.find((*input)[i][a._inCol]);
+        if (it == distinctHashSet.end()) {
+          count++;
+          distinctHashSet.insert((*input)[i][a._inCol]);
+        }
+      }
+      resultRow[a._outCol] = count;
+      distinctHashSet.clear();
+    } else {
+      resultRow[a._outCol] = blockEnd - blockStart + 1;
+    }
+    break;
+  case GroupBy::AggregateType::GROUP_CONCAT: {
+    std::ostringstream out;
+    std::string *delim = reinterpret_cast<string*>(a._userData);
+    if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+      if (a._distinct) {
+        for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+          const auto it = distinctHashSet.find((*input)[i][a._inCol]);
+          if (it == distinctHashSet.end()) {
+            distinctHashSet.insert((*input)[i][a._inCol]);
+            out << (*input)[i][a._inCol] << *delim;
+          }
+        }
+        const auto it = distinctHashSet.find((*input)[blockEnd][a._inCol]);
+        if (it == distinctHashSet.end()) {
+          out << (*input)[blockEnd][a._inCol] << *delim;
+        }
+        distinctHashSet.clear();
+      } else {
+        for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+          out << (*input)[i][a._inCol] << *delim;
+        }
+        out << (*input)[blockEnd][a._inCol];
+      }
+    } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+      float f;
+      if (a._distinct) {
+        for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+          const auto it = distinctHashSet.find((*input)[i][a._inCol]);
+          if (it == distinctHashSet.end()) {
+            distinctHashSet.insert((*input)[i][a._inCol]);
+            std::memcpy(&f, &(*input)[i][a._inCol], sizeof(float));
+            out << f << *delim;
+          }
+        }
+        const auto it = distinctHashSet.find((*input)[blockEnd][a._inCol]);
+        if (it == distinctHashSet.end()) {
+          std::memcpy(&f, &(*input)[blockEnd][a._inCol], sizeof(float));
+          out << f;
+        }
+        distinctHashSet.clear();
+      } else {
+        for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+          std::memcpy(&f, &(*input)[i][a._inCol], sizeof(float));
+          out << f << *delim;
+        }
+        std::memcpy(&f, &(*input)[blockEnd][a._inCol], sizeof(float));
+        out << f;
+      }
+    } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
+      if (a._distinct) {
+        for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+          const auto it = distinctHashSet.find((*input)[i][a._inCol]);
+          if (it == distinctHashSet.end()) {
+            distinctHashSet.insert((*input)[i][a._inCol]);
+            out << index.getTextExcerpt((*input)[i][a._inCol]) << *delim;
+          }
+        }
+        const auto it = distinctHashSet.find((*input)[blockEnd][a._inCol]);
+        if (it == distinctHashSet.end()) {
+          out << index.getTextExcerpt((*input)[blockEnd][a._inCol]);
+        }
+        distinctHashSet.clear();
+      } else {
+        for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+          out << index.getTextExcerpt((*input)[i][a._inCol]) << *delim;
+        }
+        out << index.getTextExcerpt((*input)[blockEnd][a._inCol]);
+      }
+    } else if (inputTypes[a._inCol] == ResultTable::ResultType::STRING){
+      if (a._distinct) {
+        for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+          const auto it = distinctHashSet.find((*input)[i][a._inCol]);
+          if (it == distinctHashSet.end()) {
+            distinctHashSet.insert((*input)[i][a._inCol]);
+            out << inTable->idToString((*input)[i][a._inCol]) << *delim;
+          }
+        }
+        const auto it = distinctHashSet.find((*input)[blockEnd][a._inCol]);
+        if (it == distinctHashSet.end()) {
+          out << inTable->idToString((*input)[blockEnd][a._inCol]);
+        }
+        distinctHashSet.clear();
+      } else {
+        for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+          out << inTable->idToString((*input)[i][a._inCol]) << *delim;
+        }
+        out << inTable->idToString((*input)[blockEnd][a._inCol]);
+      }
+    } else {
+      if (a._distinct) {
+        for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+          const auto it = distinctHashSet.find((*input)[i][a._inCol]);
+          if (it == distinctHashSet.end()) {
+            distinctHashSet.insert((*input)[i][a._inCol]);
+            std::string entity = index.idToString((*input)[i][a._inCol]);
+            if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
+              out << ad_utility::convertIndexWordToValueLiteral(entity) << *delim;
+            } else {
+              out << entity << *delim;
+            }
+          }
+        }
+        const auto it = distinctHashSet.find((*input)[blockEnd][a._inCol]);
+        if (it == distinctHashSet.end()) {
+          std::string entity = index.idToString((*input)[blockEnd][a._inCol]);
+          if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
+            out << ad_utility::convertIndexWordToValueLiteral(entity);
+          } else {
+            out << entity;
+          }
+        }
+        distinctHashSet.clear();
+      } else {
+        for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+          std::string entity = index.idToString((*input)[i][a._inCol]);
+          if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
+            out << ad_utility::convertIndexWordToValueLiteral(entity) << *delim;
+          } else {
+            out << entity << *delim;
+          }
+        }
+        std::string entity = index.idToString((*input)[blockEnd][a._inCol]);
+        if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
+          out << ad_utility::convertIndexWordToValueLiteral(entity);
+        } else {
+          out << entity;
+        }
+      }
+    }
+    resultRow[a._outCol] = outTable->_localVocab.size();
+    outTable->_localVocab.push_back(out.str());
+    break;
+  }
+  case GroupBy::AggregateType::MAX: {
+    if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+      Id res = std::numeric_limits<Id>::lowest();
+      for (size_t i = blockStart; i <= blockEnd; i++) {
+        res = std::max(res, (*input)[i][a._inCol]);
+      }
+      resultRow[a._outCol] = res;
+    } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+      float res = std::numeric_limits<float>::lowest();
+      for (size_t i = blockStart; i <= blockEnd; i++) {
+        // interpret the first sizeof(float) bytes of the entry as a float.
+        res = std::max(res, *reinterpret_cast<const float*>(&(*input)[i][a._inCol]));
+      }
+      resultRow[a._outCol] = 0;
+      std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
+    } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
+               || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
+      resultRow[a._outCol] = ID_NO_VALUE;
+    } else {
+      Id res = std::numeric_limits<Id>::lowest();
+      for (size_t i = blockStart; i <= blockEnd; i++) {
+        res = std::max(res, (*input)[i][a._inCol]);
+      }
+      resultRow[a._outCol] = res;
+    }
+    break;
+  }
+  case GroupBy::AggregateType::MIN: {
+    if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+      Id res = std::numeric_limits<Id>::max();
+      for (size_t i = blockStart; i <= blockEnd; i++) {
+        res = std::min(res, (*input)[i][a._inCol]);
+      }
+      resultRow[a._outCol] = res;
+    } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+      float res = std::numeric_limits<float>::max();
+      for (size_t i = blockStart; i <= blockEnd; i++) {
+        // interpret the first sizeof(float) bytes of the entry as a float.
+        res = std::min(res, *reinterpret_cast<const float*>(&(*input)[i][a._inCol]));
+      }
+      resultRow[a._outCol] = 0;
+      std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
+    } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
+               || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
+      resultRow[a._outCol] = ID_NO_VALUE;
+    } else {
+      Id res = std::numeric_limits<Id>::max();
+      for (size_t i = blockStart; i <= blockEnd; i++) {
+        res = std::min(res, (*input)[i][a._inCol]);
+      }
+      resultRow[a._outCol] = res;
+    }
+    break;
+  }
+  case GroupBy::AggregateType::SAMPLE:
+    resultRow[a._outCol] = (*input)[blockEnd][a._inCol];
+    break;
+  case GroupBy::AggregateType::SUM: {
+    float res = 0;
+    if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
+      if (a._distinct) {
+        for (size_t i = blockStart; i <= blockEnd; i++) {
+          const auto it = distinctHashSet.find((*input)[i][a._inCol]);
+          if (it == distinctHashSet.end()) {
+            distinctHashSet.insert((*input)[i][a._inCol]);
+            res += (*input)[i][a._inCol];
+          }
+        }
+        distinctHashSet.clear();
+      } else {
+        for (size_t i = blockStart; i <= blockEnd; i++) {
+          res += (*input)[i][a._inCol];
+        }
+      }
+    } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+      if (a._distinct) {
+        for (size_t i = blockStart; i <= blockEnd; i++) {
+          const auto it = distinctHashSet.find((*input)[i][a._inCol]);
+          if (it == distinctHashSet.end()) {
+            distinctHashSet.insert((*input)[i][a._inCol]);
+             res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
+          }
+        }
+        distinctHashSet.clear();
+      } else {
+        for (size_t i = blockStart; i <= blockEnd; i++) {
+           res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
+        }
+      }
+    } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
+               || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
+      res = std::numeric_limits<float>::quiet_NaN();
+    } else {
+      if (a._distinct) {
+        for (size_t i = blockStart; i <= blockEnd; i++) {
+          const auto it = distinctHashSet.find((*input)[i][a._inCol]);
+          if (it == distinctHashSet.end()) {
+            distinctHashSet.insert((*input)[i][a._inCol]);
+            // load the string, parse it as an xsd::int or float
+            std::string entity = index.idToString((*input)[i][a._inCol]);
+            if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+              res = std::numeric_limits<float>::quiet_NaN();
+              break;
+            } else {
+              res += ad_utility::convertIndexWordToFloatValue(entity.substr(0, entity.size() - 1));
+            }
+          }
+        }
+        distinctHashSet.clear();
+      } else {
+        for (size_t i = blockStart; i <= blockEnd; i++) {
+          // load the string, parse it as an xsd::int or float
+          std::string entity = index.idToString((*input)[i][a._inCol]);
+          if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+            res = std::numeric_limits<float>::quiet_NaN();
+            break;
+          } else {
+            res += ad_utility::convertIndexWordToFloatValue(entity.substr(0, entity.size() - 1));
+          }
+        }
+      }
+    }
+    resultRow[a._outCol] = 0;
+    *reinterpret_cast<float*>(&resultRow[a._outCol]) = res;
+    break;
+  }
+  case GroupBy::AggregateType::FIRST:
+    // This does the same as sample, as the non grouping rows have no
+    // inherent order.
+    resultRow[a._outCol] = (*input)[blockStart][a._inCol];
+    break;
+  case GroupBy::AggregateType::LAST:
+    // This does the same as sample, as the non grouping rows have no
+    // inherent order.
+    resultRow[a._outCol] = (*input)[blockEnd][a._inCol];
+    break;
+  }
+}
+
+template<typename A, typename R>
 void doGroupBy(const vector<A>* input,
                const vector<ResultTable::ResultType>& inputTypes,
                const vector<size_t>& groupByCols,
@@ -152,8 +532,26 @@ void doGroupBy(const vector<A>* input,
   if (input->size() == 0) {
     return;
   }
-  (void) outTable;
+  ad_utility::HashSet<size_t> distinctHashSet;
+
+  if (groupByCols.empty()) {
+    // The entire input is a single group
+    size_t blockStart = 0;
+    size_t blockEnd = input->size();
+    result->emplace_back();
+    R& resultRow = result->back();
+    // does nothing for arrays, resizes vectors
+    resizeIfVec<R, typename R::value_type>::resize(resultRow,
+                                                   aggregates.size());
+    for (const GroupBy::Aggregate &a : aggregates) {
+      processGroup<A, R>(a, blockStart, blockEnd, input, inputTypes, resultRow,
+                        inTable, outTable, index, distinctHashSet);
+    }
+    return;
+  }
+
   std::vector<std::pair<size_t, Id>> currentGroupBlock;
+  // TODO(florian): optimize this for empty groupByCols
   for (size_t col : groupByCols) {
     currentGroupBlock.push_back(std::pair<size_t, Id>(col, (*input)[0][col]));
   }
@@ -176,187 +574,8 @@ void doGroupBy(const vector<A>* input,
                                                      +  aggregates.size());
       blockEnd = pos - 1;
       for (const GroupBy::Aggregate &a : aggregates) {
-        switch (a._type) {
-        case GroupBy::AggregateType::AVG: {
-          float res = 0;
-          if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
-            for (size_t i = blockStart; i <= blockEnd; i++) {
-              res += (*input)[i][a._inCol];
-            }
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
-            for (size_t i = blockStart; i <= blockEnd; i++) {
-              // interpret the first sizeof(float) bytes of the entry as a float.
-              res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
-            }
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
-                     || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
-            res = std::numeric_limits<float>::quiet_NaN();
-          } else {
-            for (size_t i = blockStart; i <= blockEnd; i++) {
-              // load the string, parse it as an xsd::int or float
-              std::string entity = index.idToString((*input)[i][a._inCol]);
-              if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
-                res = std::numeric_limits<float>::quiet_NaN();
-                break;
-              } else {
-                res += ad_utility::convertIndexWordToFloatValue(entity.substr(0, entity.size() - 1));
-              }
-            }
-          }
-          res /= (blockEnd - blockStart + 1);
-
-          resultRow[a._outCol] = 0;
-          *reinterpret_cast<float*>(&resultRow[a._outCol]) = res;
-          break;
-        }
-        case GroupBy::AggregateType::COUNT:
-          resultRow[a._outCol] = blockEnd - blockStart + 1;
-          break;
-        case GroupBy::AggregateType::GROUP_CONCAT: {
-          std::ostringstream out;
-          std::string *delim = reinterpret_cast<string*>(a._userData);
-          if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
-           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-             out << (*input)[i][a._inCol] << *delim;
-           }
-           out << (*input)[blockEnd][a._inCol];
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
-            float f;
-            for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-              std::memcpy(&f, &(*input)[i][a._inCol], sizeof(float));
-              out << f << *delim;
-            }
-            std::memcpy(&f, &(*input)[blockEnd][a._inCol], sizeof(float));
-            out << f;
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
-            for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-              out << index.getTextExcerpt((*input)[i][a._inCol]) << *delim;
-            }
-            out << index.getTextExcerpt((*input)[blockEnd][a._inCol]);
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::STRING){
-            for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-              out << inTable->idToString((*input)[i][a._inCol]) << *delim;
-            }
-            out << inTable->idToString((*input)[blockEnd][a._inCol]);
-          } else {
-            for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-              std::string entity = index.idToString((*input)[i][a._inCol]);
-              if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
-                out << ad_utility::convertIndexWordToValueLiteral(entity) << *delim;
-              } else {
-                out << entity << *delim;
-              }
-            }
-            std::string entity = index.idToString((*input)[blockEnd][a._inCol]);
-            if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
-              out << ad_utility::convertIndexWordToValueLiteral(entity);
-            } else {
-              out << entity;
-            }
-          }
-          resultRow[a._outCol] = outTable->_localVocab.size();
-          outTable->_localVocab.push_back(out.str());
-          break;
-        }
-        case GroupBy::AggregateType::MAX: {
-          if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
-            Id res = std::numeric_limits<Id>::lowest();
-            for (size_t i = blockStart; i <= blockEnd; i++) {
-              res = std::max(res, (*input)[i][a._inCol]);
-            }
-            resultRow[a._outCol] = res;
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
-            float res = std::numeric_limits<float>::lowest();
-            for (size_t i = blockStart; i <= blockEnd; i++) {
-              // interpret the first sizeof(float) bytes of the entry as a float.
-              res = std::max(res, *reinterpret_cast<const float*>(&(*input)[i][a._inCol]));
-            }
-            resultRow[a._outCol] = 0;
-            std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
-                     || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
-            resultRow[a._outCol] = ID_NO_VALUE;
-          } else {
-            Id res = std::numeric_limits<Id>::lowest();
-            for (size_t i = blockStart; i <= blockEnd; i++) {
-              res = std::max(res, (*input)[i][a._inCol]);
-            }
-            resultRow[a._outCol] = res;
-          }
-          break;
-        }
-        case GroupBy::AggregateType::MIN: {
-          if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
-            Id res = std::numeric_limits<Id>::max();
-            for (size_t i = blockStart; i <= blockEnd; i++) {
-              res = std::min(res, (*input)[i][a._inCol]);
-            }
-            resultRow[a._outCol] = res;
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
-            float res = std::numeric_limits<float>::max();
-            for (size_t i = blockStart; i <= blockEnd; i++) {
-              // interpret the first sizeof(float) bytes of the entry as a float.
-              res = std::min(res, *reinterpret_cast<const float*>(&(*input)[i][a._inCol]));
-            }
-            resultRow[a._outCol] = 0;
-            std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
-                     || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
-            resultRow[a._outCol] = ID_NO_VALUE;
-          } else {
-            Id res = std::numeric_limits<Id>::max();
-            for (size_t i = blockStart; i <= blockEnd; i++) {
-              res = std::min(res, (*input)[i][a._inCol]);
-            }
-            resultRow[a._outCol] = res;
-          }
-          break;
-        }
-        case GroupBy::AggregateType::SAMPLE:
-          resultRow[a._outCol] = (*input)[blockEnd][a._inCol];
-          break;
-        case GroupBy::AggregateType::SUM: {
-          float res = 0;
-          if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
-            for (size_t i = blockStart; i <= blockEnd; i++) {
-              res += (*input)[i][a._inCol];
-            }
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
-            for (size_t i = blockStart; i <= blockEnd; i++) {
-              // interpret the first sizeof(float) bytes of the entry as a float.
-              res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
-            }
-          } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
-                     || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
-            res = std::numeric_limits<float>::quiet_NaN();
-          } else {
-            for (size_t i = blockStart; i <= blockEnd; i++) {
-              // load the string, parse it as an xsd::int or float
-              std::string entity = index.idToString((*input)[i][a._inCol]);
-              if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
-                res = std::numeric_limits<float>::quiet_NaN();
-                break;
-              } else {
-                res += ad_utility::convertIndexWordToFloatValue(entity.substr(0, entity.size() - 1));
-              }
-            }
-          }
-
-          resultRow[a._outCol] = 0;
-          *reinterpret_cast<float*>(&resultRow[a._outCol]) = res;
-          break;
-        }
-        case GroupBy::AggregateType::FIRST:
-          // This does the same as sample, as the non grouping rows have no
-          // inherent order.
-          resultRow[a._outCol] = (*input)[blockStart][a._inCol];
-          break;
-        case GroupBy::AggregateType::LAST:
-          // This does the same as sample, as the non grouping rows have no
-          // inherent order.
-          resultRow[a._outCol] = (*input)[blockEnd][a._inCol];
-          break;
-        }
+        processGroup<A, R>(a, blockStart, blockEnd, input, inputTypes, resultRow,
+                          inTable, outTable, index, distinctHashSet);
       }
       // setup for processing the next block
       blockStart = pos;
@@ -374,188 +593,8 @@ void doGroupBy(const vector<A>* input,
                                                    groupByCols.size()
                                                    +  aggregates.size());
     for (const GroupBy::Aggregate &a : aggregates) {
-      switch (a._type) {
-      case GroupBy::AggregateType::AVG: {
-        float res = 0;
-        if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
-          for (size_t i = blockStart; i <= blockEnd; i++) {
-            res += (*input)[i][a._inCol];
-          }
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
-          for (size_t i = blockStart; i <= blockEnd; i++) {
-            // interpret the first sizeof(float) bytes of the entry as a float.
-            res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
-          }
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
-                   || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
-          res = std::numeric_limits<float>::quiet_NaN();
-        } else {
-          for (size_t i = blockStart; i <= blockEnd; i++) {
-            // load the string, parse it as an xsd::int or float
-            std::string entity = index.idToString((*input)[i][a._inCol]);
-            if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
-              res = std::numeric_limits<float>::quiet_NaN();
-              break;
-            } else {
-              res += ad_utility::convertIndexWordToFloatValue(entity.substr(0, entity.size() - 1));
-            }
-          }
-        }
-        res /= (blockEnd - blockStart + 1);
-
-        resultRow[a._outCol] = 0;
-        *reinterpret_cast<float*>(&resultRow[a._outCol]) = res;
-        break;
-      }
-      case GroupBy::AggregateType::COUNT:
-        resultRow[a._outCol] = blockEnd - blockStart + 1;
-        break;
-      case GroupBy::AggregateType::GROUP_CONCAT: {
-        std::ostringstream out;
-        std::string *delim = reinterpret_cast<string*>(a._userData);
-        if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
-         for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-           out << (*input)[i][a._inCol] << *delim;
-         }
-         out << (*input)[blockEnd][a._inCol];
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
-          float f;
-          for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-            std::memcpy(&f, &(*input)[i][a._inCol], sizeof(float));
-            out << f << *delim;
-          }
-          std::memcpy(&f, &(*input)[blockEnd][a._inCol], sizeof(float));
-          out << f;
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
-          for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-            out << index.getTextExcerpt((*input)[i][a._inCol]) << *delim;
-          }
-          out << index.getTextExcerpt((*input)[blockEnd][a._inCol]);
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::STRING){
-          for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-            out << inTable->idToString((*input)[i][a._inCol]) << *delim;
-          }
-          out << inTable->idToString((*input)[blockEnd][a._inCol]);
-        } else {
-          for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-            std::string entity = index.idToString((*input)[i][a._inCol]);
-            if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
-              out << ad_utility::convertIndexWordToValueLiteral(entity) << *delim;
-            } else {
-              out << entity << *delim;
-            }
-            out << *delim;
-          }
-          std::string entity = index.idToString((*input)[blockEnd][a._inCol]);
-          if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
-            out << ad_utility::convertIndexWordToValueLiteral(entity);
-          } else {
-            out << entity;
-          }
-        }
-        resultRow[a._outCol] = outTable->_localVocab.size();
-        outTable->_localVocab.push_back(out.str());
-        break;
-      }
-      case GroupBy::AggregateType::MAX: {
-        if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
-          Id res = std::numeric_limits<Id>::lowest();
-          for (size_t i = blockStart; i <= blockEnd; i++) {
-            res = std::max(res, (*input)[i][a._inCol]);
-          }
-          resultRow[a._outCol] = res;
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
-          float res = std::numeric_limits<float>::lowest();
-          for (size_t i = blockStart; i <= blockEnd; i++) {
-            // interpret the first sizeof(float) bytes of the entry as a float.
-            res = std::max(res, *reinterpret_cast<const float*>(&(*input)[i][a._inCol]));
-          }
-          resultRow[a._outCol] = 0;
-          std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
-                   || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
-          resultRow[a._outCol] = ID_NO_VALUE;
-        } else {
-          Id res = std::numeric_limits<Id>::lowest();
-          for (size_t i = blockStart; i <= blockEnd; i++) {
-            res = std::max(res, (*input)[i][a._inCol]);
-          }
-          resultRow[a._outCol] = res;
-        }
-        break;
-      }
-      case GroupBy::AggregateType::MIN: {
-        if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
-          Id res = std::numeric_limits<Id>::max();
-          for (size_t i = blockStart; i <= blockEnd; i++) {
-            res = std::min(res, (*input)[i][a._inCol]);
-          }
-          resultRow[a._outCol] = res;
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
-          float res = std::numeric_limits<float>::max();
-          for (size_t i = blockStart; i <= blockEnd; i++) {
-            // interpret the first sizeof(float) bytes of the entry as a float.
-            res = std::min(res, *reinterpret_cast<const float*>(&(*input)[i][a._inCol]));
-          }
-          resultRow[a._outCol] = 0;
-          std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
-                   || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
-          resultRow[a._outCol] = ID_NO_VALUE;
-        } else {
-          Id res = std::numeric_limits<Id>::max();
-          for (size_t i = blockStart; i <= blockEnd; i++) {
-            res = std::min(res, (*input)[i][a._inCol]);
-          }
-          resultRow[a._outCol] = res;
-        }
-        break;
-      }
-      case GroupBy::AggregateType::SAMPLE:
-        resultRow[a._outCol] = (*input)[blockEnd][a._inCol];
-        break;
-      case GroupBy::AggregateType::SUM: {
-        float res = 0;
-        if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
-          for (size_t i = blockStart; i <= blockEnd; i++) {
-            res += (*input)[i][a._inCol];
-          }
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
-          for (size_t i = blockStart; i <= blockEnd; i++) {
-            // interpret the first sizeof(float) bytes of the entry as a float.
-            res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
-          }
-        } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT
-                   || inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
-          res = std::numeric_limits<float>::quiet_NaN();
-        } else {
-          for (size_t i = blockStart; i <= blockEnd; i++) {
-            // load the string, parse it as an xsd::int or float
-            std::string entity = index.idToString((*input)[i][a._inCol]);
-            if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
-              res = std::numeric_limits<float>::quiet_NaN();
-              break;
-            } else {
-              res += ad_utility::convertIndexWordToFloatValue(entity.substr(0, entity.size() - 1));
-            }
-          }
-        }
-
-        resultRow[a._outCol] = 0;
-        *reinterpret_cast<float*>(&resultRow[a._outCol]) = res;
-        break;
-      }
-      case GroupBy::AggregateType::FIRST:
-        // This does the same as sample, as the non grouping rows have no
-        // inherent order.
-        resultRow[a._outCol] = (*input)[blockStart][a._inCol];
-        break;
-      case GroupBy::AggregateType::LAST:
-        // This does the same as sample, as the non grouping rows have no
-        // inherent order.
-        resultRow[a._outCol] = (*input)[blockEnd][a._inCol];
-        break;
-      }
+      processGroup<A, R>(a, blockStart, blockEnd, input, inputTypes, resultRow,
+                        inTable, outTable, index, distinctHashSet);
     }
   }
 }
@@ -735,6 +774,7 @@ void GroupBy::computeResult(ResultTable* result) const {
     aggregates.back()._inCol = it->second;
     aggregates.back()._outCol = _varColMap.find(var)->second;
     aggregates.back()._userData = nullptr;
+    aggregates.back()._distinct = false;
   }
 
   // parse the aggregate aliases
@@ -769,10 +809,22 @@ void GroupBy::computeResult(ResultTable* result) const {
         if (varStop > varStart && varStop != std::string::npos
             && varStart != std::string::npos) {
           // found a matching pair of brackets
+          // look for a distinct keyword
+
+          if (alias._function.find("DISTINCT") != std::string::npos
+              || alias._function.find("distinct") != std::string::npos) {
+            aggregates.back()._distinct = true;
+          } else {
+            aggregates.back()._distinct = false;
+          }
+
           if (delimitorPos != std::string::npos) {
             // found a delimiter, need to look for a separator assignment
             inVarName = alias._function.substr(varStart + 1,
                                                delimitorPos - varStart - 1);
+            if (aggregates.back()._distinct) {
+              inVarName = ad_utility::strip(inVarName, " \t").substr(8);
+            }
             std::string concatString = alias._function.substr(delimitorPos + 1,
                                                               varStop - delimitorPos - 1);
             concatString = ad_utility::strip(concatString, " ");
@@ -792,6 +844,9 @@ void GroupBy::computeResult(ResultTable* result) const {
             // found no delimiter, using the default separator ' '
             inVarName = alias._function.substr(varStart + 1,
                                                varStop - varStart - 1);
+            if (aggregates.back()._distinct) {
+              inVarName = ad_utility::strip(inVarName, " \t").substr(8);
+            }
             aggregates.back()._userData = new std::string(" ");
           }
 
@@ -801,11 +856,20 @@ void GroupBy::computeResult(ResultTable* result) const {
         size_t varStop = alias._function.rfind(')');
         if (varStop > varStart && varStop != std::string::npos
             && varStart != std::string::npos) {
+          if (alias._function.find("DISTINCT") != std::string::npos
+              || alias._function.find("distinct") != std::string::npos) {
+            aggregates.back()._distinct = true;
+          } else {
+            aggregates.back()._distinct = false;
+          }
           inVarName = alias._function.substr(varStart + 1,
                                              varStop - varStart - 1);
+          if (aggregates.back()._distinct) {
+            inVarName = ad_utility::strip(inVarName, " \t").substr(8);
+          }
         }
       }
-      inVarName = ad_utility::strip(inVarName, " ");
+      inVarName = ad_utility::strip(inVarName, " \t");
       auto inIt = subtreeVarCols.find(inVarName);
       if (inIt == subtreeVarCols.end()) {
         LOG(WARN) << "The aggregate alias " << alias._function << " refers to "
@@ -836,9 +900,9 @@ void GroupBy::computeResult(ResultTable* result) const {
   result->_resultTypes.resize(result->_nofColumns);
   for (size_t i = 0; i < result->_nofColumns; i++) {
     switch (aggregates[i]._type) {
-      case AggregateType::AVG:
-        result->_resultTypes[i] = ResultTable::ResultType::FLOAT;
-        break;
+    case AggregateType::AVG:
+      result->_resultTypes[i] = ResultTable::ResultType::FLOAT;
+      break;
     case AggregateType::COUNT:
       result->_resultTypes[i] = ResultTable::ResultType::VERBATIM;
       break;
@@ -857,8 +921,8 @@ void GroupBy::computeResult(ResultTable* result) const {
     case AggregateType::SUM:
       result->_resultTypes[i] = ResultTable::ResultType::FLOAT;
       break;
-      default:
-        result->_resultTypes[i] = ResultTable::ResultType::KB;
+    default:
+      result->_resultTypes[i] = ResultTable::ResultType::KB;
     }
   }
 
@@ -878,8 +942,6 @@ void GroupBy::computeResult(ResultTable* result) const {
                             inputResultTypes, groupByCols, aggregates, result,
                             result,
                             getIndex());
-
-  std::cout << "Group by result size " << result->size() << std::endl;
 
   // Free the user data used by GROUP_CONCAT aggregates.
   for (Aggregate& a : aggregates) {

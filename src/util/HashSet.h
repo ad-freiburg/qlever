@@ -64,6 +64,8 @@ class HashSet {
 
   size_t size() const { return _impl.size(); }
 
+  void resize(size_t size) { return _impl.resize(size); }
+
   void clear() { _impl.clear(); }
 
  private:

@@ -35,6 +35,7 @@ class GroupBy : public Operation {
     size_t _inCol, _outCol;
     // Used to store the string necessary for the group concat aggregate.
     void* _userData;
+    bool _distinct;
   };
 
   GroupBy(QueryExecutionContext *qec,
@@ -65,7 +66,8 @@ class GroupBy : public Operation {
   virtual size_t getCostEstimate();
 
   /**
-   * @return The columns on which the input data should be sorted.
+   * @return The columns on which the input data should be sorted or an empty
+   *         list if no particular order is required for the grouping.
    */
   static vector<pair<size_t, bool>> computeSortColumns(
       std::shared_ptr<QueryExecutionTree> subtree,

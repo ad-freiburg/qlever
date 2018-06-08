@@ -204,6 +204,9 @@ class QueryExecutionTree {
         default: AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
                           "Cannot deduce output type.");
       }
+      if (i + 1 < upperBound && i + 1 < maxSend + from) {
+        os << ", ";
+      }
       os << "\r\n";
     }
   }

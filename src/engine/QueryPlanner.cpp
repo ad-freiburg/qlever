@@ -81,6 +81,17 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     }
   }
 
+  bool doGrouping = pq._groupByVariables.size() > 0 || usePatternTrick;
+  if (!doGrouping) {
+    // if there is no group by statement, but
+    for (const ParsedQuery::Alias& a : pq._aliases) {
+      if (a._isAggregate) {
+        doGrouping = true;
+        break;
+      }
+    }
+  }
+
   vector<SubtreePlan*> childPlans;
   while (!patternsToProcess.empty()) {
     const ParsedQuery::GraphPattern* pattern = patternsToProcess.back();
@@ -153,7 +164,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     // If any form of grouping is used (e.g. the pattern trick) sorting
     // has to be done after the grouping.
     if (pattern == &pq._rootGraphPattern && pq._orderBy.size() > 0
-        && pq._groupByVariables.empty()) {
+        && !doGrouping) {
       // If there is an order by clause, add another row to the table and
       // just add an order by / sort to every previous result if needed.
       // If the ordering is perfect already, just copy the plan.
@@ -279,32 +290,33 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
 
     final = patternTrickPlan;
     std::cout << "Plan after pattern trick: " << endl << final._qet->asString() << endl;
-  } else if (!pq._groupByVariables.empty()) {
+  } else if (doGrouping) {
     // First order the result to match the ordering needed by the group by
     // operation.
+    std::vector<std::pair<size_t, bool>> sortColumns = GroupBy::computeSortColumns(final._qet, pq._groupByVariables, pq._aliases);
+
     SubtreePlan orderByPlan(_qec);
-    std::shared_ptr<Operation> orderBy(new OrderBy(_qec, final._qet,
-         GroupBy::computeSortColumns(final._qet, pq._groupByVariables, pq._aliases)));
-    QueryExecutionTree& orderByTree = *orderByPlan._qet.get();
-    orderByTree.setVariableColumns(final._qet->getVariableColumnMap());
-    orderByTree.setOperation(QueryExecutionTree::ORDER_BY, orderBy);
+
+    std::shared_ptr<Operation> orderBy(new OrderBy(_qec, final._qet, sortColumns));
+    if (!sortColumns.empty()) {
+      QueryExecutionTree& orderByTree = *orderByPlan._qet.get();
+      orderByTree.setVariableColumns(final._qet->getVariableColumnMap());
+      orderByTree.setOperation(QueryExecutionTree::ORDER_BY, orderBy);
+    }
 
     // Then run the actual group by
     SubtreePlan groupByPlan(_qec);
     std::shared_ptr<Operation> groupBy(new GroupBy(
-                                         _qec, orderByPlan._qet,
+                                         _qec, sortColumns.empty() ? final._qet : orderByPlan._qet,
                                          pq._groupByVariables, pq._aliases));
     QueryExecutionTree& tree = *groupByPlan._qet.get();
     tree.setVariableColumns(
         static_cast<GroupBy*>(groupBy.get())->getVariableColumns());
     tree.setOperation(QueryExecutionTree::GROUP_BY, groupBy);
-
-
-
     final = groupByPlan;
   }
 
-  if (!pq._groupByVariables.empty()) {
+  if (doGrouping) {
     // Add the order by operation
     if (pq._orderBy.size() > 0) {
       SubtreePlan plan(_qec);
