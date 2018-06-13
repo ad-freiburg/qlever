@@ -175,7 +175,6 @@ void OptionalJoin::computeResult(ResultTable* result) const {
   AD_CHECK(result);
   AD_CHECK(!result->_fixedSizeData);
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
-  // TODO(florian) compute the result types
 
   result->_sortedBy = resultSortedOn();
   result->_nofColumns = getResultWidth();

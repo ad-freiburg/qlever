@@ -346,6 +346,9 @@ class Engine {
     }
   }
 
+  /**
+   * @brief This struct creates a result row of the correct size
+   */
   template <typename R, int K>
   struct newOptionalResult {
     R operator()(unsigned int resultSize) {
@@ -354,6 +357,10 @@ class Engine {
     }
   };
 
+  /**
+   * @brief This struct creates a result row of the correct size, resizing
+   *        the vector as requried.
+   */
   template <int K>
   struct newOptionalResult<std::vector<Id>, K> {
     std::vector<Id> operator()(unsigned int resultSize) {
@@ -361,6 +368,19 @@ class Engine {
     }
   };
 
+  /**
+   * @brief Takes a row from each of the input tables and creates a result row
+   * @param a A row from table a.
+   * @param b A row from table b.
+   * @param sizeA The size of a row in table a.
+   * @param joinColumnBitmap_a A bitmap in which a bit is 1 if the corresponding
+   *                           column is a join column
+   * @param joinColumnBitmap_b A bitmap in which a bit is 1 if the corresponding
+   *                           column is a join column
+   * @param joinColumnAToB Maps join columns in a to their counterparts in b
+   * @param resultSize the size of the result row
+   * @param res the result row
+   */
   template <typename A, typename B, typename R, bool aEmpty, bool bEmpty>
   static void createOptionalResult(const typename A::value_type* a,
                                    const typename B::value_type* b,
@@ -619,6 +639,18 @@ class Engine {
     }
   }
 
+  /**
+   * @brief Computes all relations that have one of input[inputCol]'s entities
+   *        as a subject and counts the number of their occurrences.
+   * @param input The input table of entity ids
+   * @param result A table with two columns, one for predicate ids,
+   *               one for counts
+   * @param hasPattern A mapping from entity ids to pattern ids (or NO_PATTERN)
+   * @param hasRelation A mapping from entity ids to sets of relations
+   * @param patterns A mapping from pattern ids to patterns
+   * @param subjectColumn The column containing the entities for which the
+   *                      relations should be counted.
+   */
   template <typename A>
   static void computePatternTrick(
       const vector<A>* input, vector<array<Id, 2>>* result,

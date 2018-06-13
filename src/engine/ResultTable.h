@@ -18,19 +18,10 @@ using std::unique_lock;
 using std::vector;
 
 class ResultTable {
-public:
-  enum Status {
-    FINISHED = 0,
-    OTHER = 1
-  };
+ public:
+  enum Status { FINISHED = 0, OTHER = 1 };
 
-  enum class ResultType {
-    KB,
-    VERBATIM,
-    TEXT,
-    FLOAT,
-    STRING
-  };
+  enum class ResultType { KB, VERBATIM, TEXT, FLOAT, STRING };
 
   size_t _nofColumns;
   // A value >= _nofColumns indicates unsorted data

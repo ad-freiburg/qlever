@@ -189,7 +189,8 @@ void ParsedQuery::parseAliases() {
         a._isAggregate = true;
         size_t pos = inner.find("as");
         if (pos == std::string::npos) {
-          throw ParseException("Alias " + var + " is malformed: keyword as is missing.");
+          throw ParseException("Alias " + var +
+                               " is malformed: keyword as is missing.");
         }
         std::string newVarName = inner.substr(pos + 2, var.size() - pos - 2);
         newVarName = ad_utility::strip(newVarName, " \t\n");
@@ -203,8 +204,8 @@ void ParsedQuery::parseAliases() {
                ::std::isspace(static_cast<unsigned char>(inner[pos]))) {
           pos++;
         }
-        if (inner.compare(pos, 8, "DISTINCT") == 0
-            || inner.compare(pos, 8, "distinct") == 0) {
+        if (inner.compare(pos, 8, "DISTINCT") == 0 ||
+            inner.compare(pos, 8, "distinct") == 0) {
           // skip the distinct and any space after it
           pos += 8;
           while (pos < inner.size() &&
@@ -218,7 +219,9 @@ void ParsedQuery::parseAliases() {
           pos++;
         }
         if (pos == start || pos >= inner.size()) {
-          throw ParseException("Alias " + var + " is malformed: no input variable given (e.g. COUNT(?a))");
+          throw ParseException(
+              "Alias " + var +
+              " is malformed: no input variable given (e.g. COUNT(?a))");
         }
 
         a._inVarName = inner.substr(start, pos - start - 1);

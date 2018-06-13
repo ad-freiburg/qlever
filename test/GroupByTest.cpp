@@ -3,21 +3,24 @@
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
 #include <gtest/gtest.h>
-#include "../src/engine/GroupBy.h"
 #include <cstdio>
+#include "../src/engine/GroupBy.h"
 
+// This fixture is used to create an Index for the tests.
+// The full index creation is required for initialization of the vocabularies.
 class GroupByTest : public ::testing::Test {
-public:
+ public:
   GroupByTest() {
     // Create the index. The full index creation is run here to allow for
     // loading a docsDb file, which is not otherwise accessible
     std::string docsFileContent = "0\tExert 1\n1\tExert 2\n2\tExert3";
-    std::string wordsFileContent = "Exert\t0\t0\t0\n"
-                                   "1\t0\t0\t0\n"
-                                   "Exert\t1\t0\t0\n"
-                                   "2\t1\t0\t0\n"
-                                   "Exert\t2\t0\t0\n"
-                                   "3\t2\t0\t0\n";
+    std::string wordsFileContent =
+        "Exert\t0\t0\t0\n"
+        "1\t0\t0\t0\n"
+        "Exert\t1\t0\t0\n"
+        "2\t1\t0\t0\n"
+        "Exert\t2\t0\t0\n"
+        "3\t2\t0\t0\n";
     std::string ntFileContent = "<a>\t<b>\t<c>\t.";
     ad_utility::File docsFile("group_by_test.documents", "w");
     ad_utility::File wordsFile("group_by_test.words", "w");
@@ -36,14 +39,16 @@ public:
       _index.buildDocsDB("group_by_test.documents");
 
       _index.addTextFromOnDiskIndex();
-    } catch (const ad_semsearch::Exception &e) {
-      std::cout << "semsearch exception: " << e.getErrorMessage() << e.getErrorDetails() << std::endl;
-    } catch (std::exception &e) {
+    } catch (const ad_semsearch::Exception& e) {
+      std::cout << "semsearch exception: " << e.getErrorMessage()
+                << e.getErrorDetails() << std::endl;
+    } catch (std::exception& e) {
       std::cout << "std exception" << e.what() << std::endl;
     }
   }
 
   virtual ~GroupByTest() {
+    // delete all files created during index creation
     std::remove("group_by_test.documents");
     std::remove("group_by_test.words");
     std::remove("group_by_test.text.vocabulary");
@@ -59,8 +64,8 @@ public:
 };
 
 TEST_F(GroupByTest, doGroupBy) {
-  using std::vector;
   using std::string;
+  using std::vector;
 
   // There are 7 different aggregates, of which 5 (all apart from SAMPLE and
   // COUNT) react different to the 5 different ResultTypes.
@@ -86,28 +91,23 @@ TEST_F(GroupByTest, doGroupBy) {
   inTable._localVocab.push_back("<local2>");
   inTable._localVocab.push_back("<local3>");
 
-
   vector<vector<Id>> inputData;
   // The input data types are
   //                   KB, KB, VERBATIM, TEXT, FLOAT,           STRING
-  inputData.push_back({0,  3,  123   ,   0,    floatBuffers[0], 0});
-  inputData.push_back({0,  4,  0     ,   1,    floatBuffers[1], 1});
+  inputData.push_back({0, 3, 123, 0, floatBuffers[0], 0});
+  inputData.push_back({0, 4, 0, 1, floatBuffers[1], 1});
 
-  inputData.push_back({1,  5,  41223 ,   2,    floatBuffers[2], 2});
-  inputData.push_back({1,  6,  123   ,   0,    floatBuffers[0], 0});
-  inputData.push_back({1,  6,  123   ,   0,    floatBuffers[0], 0});
+  inputData.push_back({1, 5, 41223, 2, floatBuffers[2], 2});
+  inputData.push_back({1, 6, 123, 0, floatBuffers[0], 0});
+  inputData.push_back({1, 6, 123, 0, floatBuffers[0], 0});
 
-  inputData.push_back({2,  7,  0     ,   1,    floatBuffers[1], 1});
-  inputData.push_back({2,  8,  41223 ,   2,    floatBuffers[2], 2});
+  inputData.push_back({2, 7, 0, 1, floatBuffers[1], 1});
+  inputData.push_back({2, 8, 41223, 2, floatBuffers[2], 2});
 
   std::vector<ResultTable::ResultType> inputTypes = {
-    ResultTable::ResultType::KB,
-    ResultTable::ResultType::KB,
-    ResultTable::ResultType::VERBATIM,
-    ResultTable::ResultType::TEXT,
-    ResultTable::ResultType::FLOAT,
-    ResultTable::ResultType::STRING
-  };
+      ResultTable::ResultType::KB,       ResultTable::ResultType::KB,
+      ResultTable::ResultType::VERBATIM, ResultTable::ResultType::TEXT,
+      ResultTable::ResultType::FLOAT,    ResultTable::ResultType::STRING};
 
   /*
     COUNT,
@@ -124,37 +124,36 @@ TEST_F(GroupByTest, doGroupBy) {
   std::vector<size_t> groupByCols = {0};
   std::string delim1(", ");
   std::vector<GroupBy::Aggregate> aggregates = {
-    // type                                in out userdata
-    {GroupBy::AggregateType::COUNT,        1, 1,   nullptr},
+      // type                                in out userdata
+      {GroupBy::AggregateType::COUNT, 1, 1, nullptr},
 
-    {GroupBy::AggregateType::GROUP_CONCAT, 1, 2,   &delim1},
-    {GroupBy::AggregateType::GROUP_CONCAT, 2, 3,   &delim1},
-    {GroupBy::AggregateType::GROUP_CONCAT, 3, 4,   &delim1},
-    {GroupBy::AggregateType::GROUP_CONCAT, 4, 5,   &delim1},
-    {GroupBy::AggregateType::GROUP_CONCAT, 5, 6,   &delim1},
+      {GroupBy::AggregateType::GROUP_CONCAT, 1, 2, &delim1},
+      {GroupBy::AggregateType::GROUP_CONCAT, 2, 3, &delim1},
+      {GroupBy::AggregateType::GROUP_CONCAT, 3, 4, &delim1},
+      {GroupBy::AggregateType::GROUP_CONCAT, 4, 5, &delim1},
+      {GroupBy::AggregateType::GROUP_CONCAT, 5, 6, &delim1},
 
-    {GroupBy::AggregateType::SAMPLE,       1, 7,   nullptr},
+      {GroupBy::AggregateType::SAMPLE, 1, 7, nullptr},
 
-    {GroupBy::AggregateType::MIN,          1, 8,   nullptr},
-    {GroupBy::AggregateType::MIN,          2, 9,   nullptr},
-    {GroupBy::AggregateType::MIN,          3, 10,  nullptr},
-    {GroupBy::AggregateType::MIN,          4, 11,  nullptr},
+      {GroupBy::AggregateType::MIN, 1, 8, nullptr},
+      {GroupBy::AggregateType::MIN, 2, 9, nullptr},
+      {GroupBy::AggregateType::MIN, 3, 10, nullptr},
+      {GroupBy::AggregateType::MIN, 4, 11, nullptr},
 
-    {GroupBy::AggregateType::MAX,          1, 12,  nullptr},
-    {GroupBy::AggregateType::MAX,          2, 13,  nullptr},
-    {GroupBy::AggregateType::MAX,          3, 14,  nullptr},
-    {GroupBy::AggregateType::MAX,          4, 15,  nullptr},
+      {GroupBy::AggregateType::MAX, 1, 12, nullptr},
+      {GroupBy::AggregateType::MAX, 2, 13, nullptr},
+      {GroupBy::AggregateType::MAX, 3, 14, nullptr},
+      {GroupBy::AggregateType::MAX, 4, 15, nullptr},
 
-    {GroupBy::AggregateType::SUM,          1, 16,  nullptr},
-    {GroupBy::AggregateType::SUM,          2, 17,  nullptr},
-    {GroupBy::AggregateType::SUM,          3, 18,  nullptr},
-    {GroupBy::AggregateType::SUM,          4, 19,  nullptr},
+      {GroupBy::AggregateType::SUM, 1, 16, nullptr},
+      {GroupBy::AggregateType::SUM, 2, 17, nullptr},
+      {GroupBy::AggregateType::SUM, 3, 18, nullptr},
+      {GroupBy::AggregateType::SUM, 4, 19, nullptr},
 
-    {GroupBy::AggregateType::AVG,          1, 20,  nullptr},
-    {GroupBy::AggregateType::AVG,          2, 21,  nullptr},
-    {GroupBy::AggregateType::AVG,          3, 22,  nullptr},
-    {GroupBy::AggregateType::AVG,          4, 23,  nullptr}
-  };
+      {GroupBy::AggregateType::AVG, 1, 20, nullptr},
+      {GroupBy::AggregateType::AVG, 2, 21, nullptr},
+      {GroupBy::AggregateType::AVG, 3, 22, nullptr},
+      {GroupBy::AggregateType::AVG, 4, 23, nullptr}};
 
   ResultTable outTable;
 
@@ -292,5 +291,4 @@ TEST_F(GroupByTest, doGroupBy) {
   ASSERT_FLOAT_EQ(408.3333333333333, buffer);
   std::memcpy(&buffer, &outTable._varSizeData[2][23], sizeof(float));
   ASSERT_FLOAT_EQ(616.5, buffer);
-
 }

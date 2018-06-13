@@ -166,11 +166,14 @@ class QueryExecutionTree {
             break;
           }
           case ResultTable::ResultType::STRING: {
-            os << ad_utility::escapeForJson(res->idToString(row[validIndices[j].first])) << "\",\"";
+            os << ad_utility::escapeForJson(
+                      res->idToString(row[validIndices[j].first]))
+               << "\",\"";
             break;
           }
-          default: AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-                            "Cannot deduce output type.");
+          default:
+            AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+                     "Cannot deduce output type.");
         }
       }
       switch (validIndices[validIndices.size() - 1].second) {
@@ -193,16 +196,20 @@ class QueryExecutionTree {
           break;
         case ResultTable::ResultType::FLOAT: {
           float f;
-          std::memcpy(&f, &row[validIndices[validIndices.size() - 1].first], sizeof(float));
+          std::memcpy(&f, &row[validIndices[validIndices.size() - 1].first],
+                      sizeof(float));
           os << f << "\"]";
           break;
         }
         case ResultTable::ResultType::STRING: {
-          os << ad_utility::escapeForJson(res->idToString(row[validIndices[validIndices.size() - 1].first])) << "\"]";
+          os << ad_utility::escapeForJson(res->idToString(
+                    row[validIndices[validIndices.size() - 1].first]))
+             << "\"]";
           break;
         }
-        default: AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-                          "Cannot deduce output type.");
+        default:
+          AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+                   "Cannot deduce output type.");
       }
       if (i + 1 < upperBound && i + 1 < maxSend + from) {
         os << ", ";
@@ -247,8 +254,9 @@ class QueryExecutionTree {
             out << res->idToString(row[validIndices[j].first]);
             break;
           }
-          default: AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
-                            "Cannot deduce output type.");
+          default:
+            AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+                     "Cannot deduce output type.");
         }
         out << (j + 1 < validIndices.size() ? sep : '\n');
       }

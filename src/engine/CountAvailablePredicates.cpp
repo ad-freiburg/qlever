@@ -84,9 +84,6 @@ size_t CountAvailablePredicates::getCostEstimate() {
 
 // _____________________________________________________________________________
 void CountAvailablePredicates::computeResult(ResultTable* result) const {
-  // TODO(florian): make the loading of the has-pattern and has-relation
-  // relations cachable
-
   result->_nofColumns = 2;
   result->_sortedBy = 0;
   result->_fixedSizeData = new vector<array<Id, 2>>();
