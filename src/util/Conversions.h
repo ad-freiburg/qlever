@@ -169,7 +169,13 @@ string convertIndexWordToValueLiteral(const string& indexWord) {
 string convertFloatToIndexWord(const string& orig, size_t nofExponentDigits,
                                size_t nofMantissaDigits) {
   // Need a copy to modify.
-  string value(orig);
+  string value;
+  // ignore a + in the beginning of the number
+  if (orig.size() > 0 && orig[0] == '+') {
+    value = orig.substr(1);
+  } else {
+    value = orig;
+  }
   size_t posOfDot = value.find('.');
   if (posOfDot == string::npos) {
     return convertFloatToIndexWord(value + ".0", nofExponentDigits,
@@ -177,7 +183,7 @@ string convertFloatToIndexWord(const string& orig, size_t nofExponentDigits,
   }
 
   // Treat the special case 0.0
-  if (value == "0.0") {
+  if (value == "0.0" || value == "-0.0") {
     return string(VALUE_FLOAT_PREFIX) + "N0";
   }
 

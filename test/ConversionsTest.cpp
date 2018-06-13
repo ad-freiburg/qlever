@@ -209,6 +209,8 @@ TEST(ConversionsTest, endToEndNumbers) {
 
 TEST(ConversionsTest, convertIndexWordToFloatValue) {
   string zero = "0.0";
+  string zero1 = "+0.0";
+  string zero2 = "-0.0";
   string pos = "0.339";
   string pos2 = "1.7";
   string pos3 = "2.0";
@@ -226,9 +228,12 @@ TEST(ConversionsTest, convertIndexWordToFloatValue) {
 
   vector<string> indexWords;
   indexWords.push_back(convertFloatToIndexWord(zero, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(zero1, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(zero2, 10, 20));
   indexWords.push_back(convertFloatToIndexWord(pos, 10, 20));
   indexWords.push_back(convertFloatToIndexWord(pos2, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(pos3, 10, 20));
+  // decimal and float xsd types may start with a +
+  indexWords.push_back(convertFloatToIndexWord("+" + pos3, 10, 20));
   indexWords.push_back(convertFloatToIndexWord(pos4, 10, 20));
   indexWords.push_back(convertFloatToIndexWord(pos5, 10, 20));
   indexWords.push_back(convertFloatToIndexWord(pos6, 10, 20));
@@ -241,22 +246,25 @@ TEST(ConversionsTest, convertIndexWordToFloatValue) {
   indexWords.push_back(convertFloatToIndexWord(extra3, 10, 20));
   indexWords.push_back(convertFloatToIndexWord(extra4, 10, 20));
 
+  int i = 0;
+  ASSERT_FLOAT_EQ(0, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(0, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(0, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(0.339, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(1.7, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(2.0, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(2.0000009999, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(2.9999, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(111000.05, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(-0.0005002, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(-0.005002, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(-2023.414, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(-3023.414, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(0.001, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(-0.001, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(-0.10001, convertIndexWordToFloatValue(indexWords[i])); i++;
+  ASSERT_FLOAT_EQ(-0.100001, convertIndexWordToFloatValue(indexWords[i])); i++;
 
-  ASSERT_FLOAT_EQ(0, convertIndexWordToFloatValue(indexWords[0]));
-  ASSERT_FLOAT_EQ(0.339, convertIndexWordToFloatValue(indexWords[1]));
-  ASSERT_FLOAT_EQ(1.7, convertIndexWordToFloatValue(indexWords[2]));
-  ASSERT_FLOAT_EQ(2.0, convertIndexWordToFloatValue(indexWords[3]));
-  ASSERT_FLOAT_EQ(2.0000009999, convertIndexWordToFloatValue(indexWords[4]));
-  ASSERT_FLOAT_EQ(2.9999, convertIndexWordToFloatValue(indexWords[5]));
-  ASSERT_FLOAT_EQ(111000.05, convertIndexWordToFloatValue(indexWords[6]));
-  ASSERT_FLOAT_EQ(-0.0005002, convertIndexWordToFloatValue(indexWords[7]));
-  ASSERT_FLOAT_EQ(-0.005002, convertIndexWordToFloatValue(indexWords[8]));
-  ASSERT_FLOAT_EQ(-2023.414, convertIndexWordToFloatValue(indexWords[9]));
-  ASSERT_FLOAT_EQ(-3023.414, convertIndexWordToFloatValue(indexWords[10]));
-  ASSERT_FLOAT_EQ(0.001, convertIndexWordToFloatValue(indexWords[11]));
-  ASSERT_FLOAT_EQ(-0.001, convertIndexWordToFloatValue(indexWords[12]));
-  ASSERT_FLOAT_EQ(-0.10001, convertIndexWordToFloatValue(indexWords[13]));
-  ASSERT_FLOAT_EQ(-0.100001, convertIndexWordToFloatValue(indexWords[14]));
   ASSERT_FLOAT_EQ(0, convertIndexWordToFloatValue(
       convertFloatToIndexWord("0", 5, 5)));
   ASSERT_FLOAT_EQ(1, convertIndexWordToFloatValue(
