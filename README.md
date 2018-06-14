@@ -261,7 +261,17 @@ Text / Knowledge-base data can be nested in queries. This allows queries like on
 For now, each text-record variable is required to have a triple `ql:contains-word/entity WORD/URI`. 
 Pure connections to variables (e.g. "Books with a description that mentions a plant.") are planned for the future.
 
+Group by is supported, but aggregate aliases may currently only be used within the SELECT part of the query:
 
+    SELECT ?profession (AVG(?height) as ?avg) WHERE {
+      ?a <is-a> ?profession .
+      ?a <Height> ?height .
+    }
+    GROUP BY ?profession
+    ORDER BY ?avg
+
+Supported aggregates are `MIN, MAX, AVG, GROUP_CONCAT, SAMPLE, COUNT, SUM`. All of the aggreagates support `DISTINCT`, e.g. `(GROUP_CONCAT(DISTINCT ?a) as ?b)`.
+Group concat also supports a custom separator: `(GROUP_CONCAT(?a ; separator=" ; ") as ?concat)`. Xsd types float, decimal and integer are recognized as numbers, other types or unbound variables (e.g. no entries for an optional part) in one of the aggregates that need to interpret the variable (e.g. AVG) lead to either no result or nan. MAX with an unbound variable will always return the unbound variable.
 
 # How to obtain data to play around with
 
