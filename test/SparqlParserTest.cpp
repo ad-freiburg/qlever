@@ -417,7 +417,7 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_EQ(1u, pq._orderBy.size());
   ASSERT_EQ("?r", pq._groupByVariables[0]);
   ASSERT_EQ("?count", pq._orderBy[0]._key);
-  ASSERT_EQ(false, pq._orderBy[0]._desc);
+  ASSERT_FALSE(pq._orderBy[0]._desc);
 }
 
 TEST(ParserTest, testGroupByAndAlias) {
