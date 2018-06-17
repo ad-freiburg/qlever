@@ -440,7 +440,7 @@ TEST(ParserTest, testGroupByAndAlias) {
   ASSERT_EQ(1u, pq._aliases.size());
   ASSERT_EQ("?a", pq._aliases[0]._inVarName);
   ASSERT_EQ("?count", pq._aliases[0]._outVarName);
-  ASSERT_EQ(true, pq._aliases[0]._isAggregate);
+  ASSERT_TRUE(pq._aliases[0]._isAggregate);
   ASSERT_EQ("COUNT(?a) as ?count", pq._aliases[0]._function);
   ASSERT_EQ(1u, pq._groupByVariables.size());
   ASSERT_EQ("?b", pq._groupByVariables[0]);

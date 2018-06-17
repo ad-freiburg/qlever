@@ -47,10 +47,10 @@ inline string convertFloatToIndexWord(const string& value,
                                       size_t nofMantissaDigits);
 
 //! Converts like this: "PP0*2E0*1234 to "12.34 and M-0*1E9*876 to -0.123".
-inline string convertIndexWordToFloat(const string& indexWord);
+inline string convertIndexWordToFloatString(const string& indexWord);
 
 //! Converts like this: "PP0*2E0*1234 to "12.34 and M-0*1E9*876 to -0.123".
-inline float convertIndexWordToFloatValue(const string& indexWord);
+inline float convertIndexWordToFloat(const string& indexWord);
 
 //! Brings a date to the format:
 //! return string(VALUE_DATE_PREFIX) + year + month + day +
@@ -148,14 +148,14 @@ string convertIndexWordToValueLiteral(const string& indexWord) {
     if (endsWith(indexWord, "F")) {
       std::ostringstream os;
       os << "\""
-         << convertIndexWordToFloat(indexWord.substr(0, indexWord.size() - 1))
+         << convertIndexWordToFloatString(indexWord.substr(0, indexWord.size() - 1))
          << "\"" << XSD_FLOAT_SUFFIX;
       return os.str();
     }
     if (endsWith(indexWord, "I")) {
       std::ostringstream os;
       string asFloat =
-          convertIndexWordToFloat(indexWord.substr(0, indexWord.size() - 1));
+          convertIndexWordToFloatString(indexWord.substr(0, indexWord.size() - 1));
       os << "\"" << asFloat.substr(0, asFloat.find('.')) << "\""
          << XSD_INT_SUFFIX;
       return os.str();
@@ -272,7 +272,7 @@ string convertFloatToIndexWord(const string& orig, size_t nofExponentDigits,
 }
 
 // _____________________________________________________________________________
-string convertIndexWordToFloat(const string& indexWord) {
+string convertIndexWordToFloatString(const string& indexWord) {
   size_t prefixLength = std::char_traits<char>::length(VALUE_FLOAT_PREFIX);
   AD_CHECK_GT(indexWord.size(), prefixLength);
   string number = indexWord.substr(prefixLength);
@@ -358,7 +358,7 @@ string convertIndexWordToFloat(const string& indexWord) {
 }
 
 // _____________________________________________________________________________
-float convertIndexWordToFloatValue(const string& indexWord) {
+float convertIndexWordToFloat(const string& indexWord) {
   size_t prefixLength = std::char_traits<char>::length(VALUE_FLOAT_PREFIX);
   AD_CHECK_GT(indexWord.size(), prefixLength);
   string number = indexWord.substr(prefixLength);

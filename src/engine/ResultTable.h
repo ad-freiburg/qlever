@@ -21,7 +21,22 @@ class ResultTable {
  public:
   enum Status { FINISHED = 0, OTHER = 1 };
 
-  enum class ResultType { KB, VERBATIM, TEXT, FLOAT, STRING };
+  /**
+   * @brief Describes the type of a columns data
+   */
+  enum class ResultType {
+    // An entry in the knowledgebase
+    KB,
+    // An unsigned integer (size_t)
+    VERBATIM,
+    // An entry in the text index
+    TEXT,
+    // A 32 bit float, stored in the first 4 bytes of the entry. The last four
+    // bytes have to be zero.
+    FLOAT,
+    // An entry in the ResultTable _localVocab
+    STRING
+  };
 
   size_t _nofColumns;
   // A value >= _nofColumns indicates unsorted data

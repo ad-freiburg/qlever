@@ -54,7 +54,7 @@ target_link_libraries(GroupByTest gtest_main engine -pthread)
 
 add_library(tests
             SparqlParserTest
-      			StringUtilsTest
+            StringUtilsTest
             LRUCacheTest
             Simple8bTest
             FileTest
@@ -67,6 +67,6 @@ add_library(tests
             FTSAlgorithmsTest
             QueryPlannerTest
             ConversionsTest
-			      SparsehashTest
+            SparsehashTest
             GroupByTest
             )

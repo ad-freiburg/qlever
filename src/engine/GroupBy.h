@@ -40,6 +40,8 @@ class GroupBy : public Operation {
     AggregateType _type;
     size_t _inCol, _outCol;
     // Used to store the string necessary for the group concat aggregate.
+    // A void pointer is used to allow for storing arbitrary data should any
+    // other aggregate need custom data in the future.
     void* _userData;
     bool _distinct;
   };

@@ -53,26 +53,26 @@ TEST(ConversionsTest, convertFloatToIndexWord) {
 
   std::sort(indexWords.begin(), indexWords.end());
 
-  ASSERT_EQ(neg4, convertIndexWordToFloat(indexWords[0]));
-  ASSERT_EQ(neg3, convertIndexWordToFloat(indexWords[1]));
-  ASSERT_EQ(extra3, convertIndexWordToFloat(indexWords[2]));
-  ASSERT_EQ(extra4, convertIndexWordToFloat(indexWords[3]));
-  ASSERT_EQ(neg2, convertIndexWordToFloat(indexWords[4]));
-  ASSERT_EQ(extra2, convertIndexWordToFloat(indexWords[5]));
-  ASSERT_EQ(neg, convertIndexWordToFloat(indexWords[6]));
-  ASSERT_EQ(zero, convertIndexWordToFloat(indexWords[7]));
-  ASSERT_EQ(extra, convertIndexWordToFloat(indexWords[8]));
-  ASSERT_EQ(pos, convertIndexWordToFloat(indexWords[9]));
-  ASSERT_EQ(pos2, convertIndexWordToFloat(indexWords[10]));
-  ASSERT_EQ(pos3, convertIndexWordToFloat(indexWords[11]));
-  ASSERT_EQ(pos4, convertIndexWordToFloat(indexWords[12]));
-  ASSERT_EQ(pos5, convertIndexWordToFloat(indexWords[13]));
-  ASSERT_EQ(pos6, convertIndexWordToFloat(indexWords[14]));
+  ASSERT_EQ(neg4, convertIndexWordToFloatString(indexWords[0]));
+  ASSERT_EQ(neg3, convertIndexWordToFloatString(indexWords[1]));
+  ASSERT_EQ(extra3, convertIndexWordToFloatString(indexWords[2]));
+  ASSERT_EQ(extra4, convertIndexWordToFloatString(indexWords[3]));
+  ASSERT_EQ(neg2, convertIndexWordToFloatString(indexWords[4]));
+  ASSERT_EQ(extra2, convertIndexWordToFloatString(indexWords[5]));
+  ASSERT_EQ(neg, convertIndexWordToFloatString(indexWords[6]));
+  ASSERT_EQ(zero, convertIndexWordToFloatString(indexWords[7]));
+  ASSERT_EQ(extra, convertIndexWordToFloatString(indexWords[8]));
+  ASSERT_EQ(pos, convertIndexWordToFloatString(indexWords[9]));
+  ASSERT_EQ(pos2, convertIndexWordToFloatString(indexWords[10]));
+  ASSERT_EQ(pos3, convertIndexWordToFloatString(indexWords[11]));
+  ASSERT_EQ(pos4, convertIndexWordToFloatString(indexWords[12]));
+  ASSERT_EQ(pos5, convertIndexWordToFloatString(indexWords[13]));
+  ASSERT_EQ(pos6, convertIndexWordToFloatString(indexWords[14]));
 
-  ASSERT_EQ("0.0", convertIndexWordToFloat(convertFloatToIndexWord("0", 5, 5)));
-  ASSERT_EQ("1.0", convertIndexWordToFloat(convertFloatToIndexWord("1", 5, 5)));
+  ASSERT_EQ("0.0", convertIndexWordToFloatString(convertFloatToIndexWord("0", 5, 5)));
+  ASSERT_EQ("1.0", convertIndexWordToFloatString(convertFloatToIndexWord("1", 5, 5)));
   ASSERT_EQ("-1.0",
-            convertIndexWordToFloat(convertFloatToIndexWord("-1", 5, 5)));
+            convertIndexWordToFloatString(convertFloatToIndexWord("-1", 5, 5)));
 }
 
 TEST(ConversionsTest, convertDateToIndexWord) {
@@ -206,7 +206,7 @@ TEST(ConversionsTest, endToEndNumbers) {
   ASSERT_EQ(in9, convertIndexWordToValueLiteral(indexWords[13]));
 }
 
-TEST(ConversionsTest, convertIndexWordToFloatValue) {
+TEST(ConversionsTest, convertIndexWordToFloat) {
   // Ensure that 0, +0, and -0 are all 0
   string zero = "0.0";
   string zero1 = "+0.0";
@@ -247,47 +247,47 @@ TEST(ConversionsTest, convertIndexWordToFloatValue) {
   indexWords.push_back(convertFloatToIndexWord(extra4, 10, 20));
 
   int i = 0;
-  ASSERT_FLOAT_EQ(0, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(0, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(0, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(0, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(0, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(0, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(0.339, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(0.339, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(1.7, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(1.7, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(2.0, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(2.0, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(2.0000009999, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(2.0000009999, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(2.9999, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(2.9999, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(111000.05, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(111000.05, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(-0.0005002, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(-0.0005002, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(-0.005002, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(-0.005002, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(-2023.414, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(-2023.414, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(-3023.414, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(-3023.414, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(0.001, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(0.001, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(-0.001, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(-0.001, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(-0.10001, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(-0.10001, convertIndexWordToFloat(indexWords[i]));
   i++;
-  ASSERT_FLOAT_EQ(-0.100001, convertIndexWordToFloatValue(indexWords[i]));
+  ASSERT_FLOAT_EQ(-0.100001, convertIndexWordToFloat(indexWords[i]));
   i++;
 
   ASSERT_FLOAT_EQ(
-      0, convertIndexWordToFloatValue(convertFloatToIndexWord("0", 5, 5)));
+      0, convertIndexWordToFloat(convertFloatToIndexWord("0", 5, 5)));
   ASSERT_FLOAT_EQ(
-      1, convertIndexWordToFloatValue(convertFloatToIndexWord("1", 5, 5)));
+      1, convertIndexWordToFloat(convertFloatToIndexWord("1", 5, 5)));
   ASSERT_FLOAT_EQ(
-      -1, convertIndexWordToFloatValue(convertFloatToIndexWord("-1", 5, 5)));
+      -1, convertIndexWordToFloat(convertFloatToIndexWord("-1", 5, 5)));
 }
 
 int main(int argc, char** argv) {

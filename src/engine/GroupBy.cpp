@@ -15,6 +15,8 @@ GroupBy::GroupBy(QueryExecutionContext* qec,
     : Operation(qec), _subtree(subtree), _groupByVariables(groupByVariables) {
   _aliases.reserve(aliases.size());
   for (const ParsedQuery::Alias& a : aliases) {
+    // Only aggregate aliases need to be processed by GruopBy, other aliases
+    // will be processed seperately.
     if (a._isAggregate) {
       _aliases.push_back(a);
     }
@@ -81,6 +83,7 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
       sortedAliases.push_back(a);
     }
   }
+  // sort the aliases to ensure the cache key is order invariant
   std::sort(sortedAliases.begin(), sortedAliases.end(),
             [](const ParsedQuery::Alias& a1, const ParsedQuery::Alias& a2) {
               return a1._outVarName < a2._outVarName;
@@ -189,18 +192,22 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           }
         }
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+        // used to store the id value of the entry interpreted as a float
+        float tmpF;
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
             const auto it = distinctHashSet.find((*input)[i][a._inCol]);
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert((*input)[i][a._inCol]);
-              res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
+              std::memcpy(&tmpF, &(*input)[i][a._inCol], sizeof(float));
+              res += tmpF;
             }
           }
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i <= blockEnd; i++) {
-            res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
+            std::memcpy(&tmpF, &(*input)[i][a._inCol], sizeof(float));
+            res += tmpF;
           }
         }
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT ||
@@ -218,7 +225,9 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
                 res = std::numeric_limits<float>::quiet_NaN();
                 break;
               } else {
-                res += ad_utility::convertIndexWordToFloatValue(
+                // Remove the trailing character indicating if the value
+                // is an integer or a float.
+                res += ad_utility::convertIndexWordToFloat(
                     entity.substr(0, entity.size() - 1));
               }
             }
@@ -232,7 +241,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
               res = std::numeric_limits<float>::quiet_NaN();
               break;
             } else {
-              res += ad_utility::convertIndexWordToFloatValue(
+              res += ad_utility::convertIndexWordToFloat(
                   entity.substr(0, entity.size() - 1));
             }
           }
@@ -241,7 +250,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       res /= (blockEnd - blockStart + 1);
 
       resultRow[a._outCol] = 0;
-      *reinterpret_cast<float*>(&resultRow[a._outCol]) = res;
+      std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
       break;
     }
     case GroupBy::AggregateType::COUNT:
@@ -404,10 +413,12 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
         resultRow[a._outCol] = res;
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
         float res = std::numeric_limits<float>::lowest();
+        // used to store the id value of the entry interpreted as a float
+        float tmpF;
         for (size_t i = blockStart; i <= blockEnd; i++) {
           // interpret the first sizeof(float) bytes of the entry as a float.
-          res = std::max(
-              res, *reinterpret_cast<const float*>(&(*input)[i][a._inCol]));
+          std::memcpy(&tmpF, &(*input)[i][a._inCol], sizeof(float));
+          res = std::max(res, tmpF);
         }
         resultRow[a._outCol] = 0;
         std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
@@ -432,10 +443,12 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
         resultRow[a._outCol] = res;
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
         float res = std::numeric_limits<float>::max();
+        // used to store the id value of the entry interpreted as a float
+        float tmpF;
         for (size_t i = blockStart; i <= blockEnd; i++) {
           // interpret the first sizeof(float) bytes of the entry as a float.
-          res = std::min(
-              res, *reinterpret_cast<const float*>(&(*input)[i][a._inCol]));
+          std::memcpy(&tmpF, &(*input)[i][a._inCol], sizeof(float));
+          res = std::min(res, tmpF);
         }
         resultRow[a._outCol] = 0;
         std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
@@ -472,18 +485,22 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           }
         }
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
+        // used to store the id value of the entry interpreted as a float
+        float tmpF;
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
             const auto it = distinctHashSet.find((*input)[i][a._inCol]);
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert((*input)[i][a._inCol]);
-              res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
+              std::memcpy(&tmpF, &(*input)[i][a._inCol], sizeof(float));
+              res += tmpF;
             }
           }
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i <= blockEnd; i++) {
-            res += *reinterpret_cast<const float*>(&(*input)[i][a._inCol]);
+            std::memcpy(&tmpF, &(*input)[i][a._inCol], sizeof(float));
+            res += tmpF;
           }
         }
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT ||
@@ -501,7 +518,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
                 res = std::numeric_limits<float>::quiet_NaN();
                 break;
               } else {
-                res += ad_utility::convertIndexWordToFloatValue(
+                res += ad_utility::convertIndexWordToFloat(
                     entity.substr(0, entity.size() - 1));
               }
             }
@@ -515,14 +532,14 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
               res = std::numeric_limits<float>::quiet_NaN();
               break;
             } else {
-              res += ad_utility::convertIndexWordToFloatValue(
+              res += ad_utility::convertIndexWordToFloat(
                   entity.substr(0, entity.size() - 1));
             }
           }
         }
       }
       resultRow[a._outCol] = 0;
-      *reinterpret_cast<float*>(&resultRow[a._outCol]) = res;
+      std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
       break;
     }
     case GroupBy::AggregateType::FIRST:
