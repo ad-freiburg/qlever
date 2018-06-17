@@ -117,7 +117,7 @@ float GroupBy::getMultiplicity(size_t col) {
   // group by should currently not be used in the optimizer
   AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
            "GroupBy does not yet compute multiplicities.");
-  (void) col;
+  (void)col;
   return 1;
 }
 

@@ -148,14 +148,15 @@ string convertIndexWordToValueLiteral(const string& indexWord) {
     if (endsWith(indexWord, "F")) {
       std::ostringstream os;
       os << "\""
-         << convertIndexWordToFloatString(indexWord.substr(0, indexWord.size() - 1))
+         << convertIndexWordToFloatString(
+                indexWord.substr(0, indexWord.size() - 1))
          << "\"" << XSD_FLOAT_SUFFIX;
       return os.str();
     }
     if (endsWith(indexWord, "I")) {
       std::ostringstream os;
-      string asFloat =
-          convertIndexWordToFloatString(indexWord.substr(0, indexWord.size() - 1));
+      string asFloat = convertIndexWordToFloatString(
+          indexWord.substr(0, indexWord.size() - 1));
       os << "\"" << asFloat.substr(0, asFloat.find('.')) << "\""
          << XSD_INT_SUFFIX;
       return os.str();

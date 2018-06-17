@@ -1,17 +1,22 @@
-language: c++
+language: generic
 sudo: false
 dist: trusty
 
-compiler:
-  - gcc
-
 addons:
   apt:
+    sources:
+      - ubuntu-toolchain-r-test
     packages:
+      - gcc-5
+      - g++-5
       - libsparsehash-dev
       - cmake
 
+env:
+  - CC=gcc-5 CXX=g++-5
+
 before_script:
+  - $CXX --version
   - mkdir build
   - cd build
   - cmake ..

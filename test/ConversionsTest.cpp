@@ -69,8 +69,10 @@ TEST(ConversionsTest, convertFloatToIndexWord) {
   ASSERT_EQ(pos5, convertIndexWordToFloatString(indexWords[13]));
   ASSERT_EQ(pos6, convertIndexWordToFloatString(indexWords[14]));
 
-  ASSERT_EQ("0.0", convertIndexWordToFloatString(convertFloatToIndexWord("0", 5, 5)));
-  ASSERT_EQ("1.0", convertIndexWordToFloatString(convertFloatToIndexWord("1", 5, 5)));
+  ASSERT_EQ("0.0",
+            convertIndexWordToFloatString(convertFloatToIndexWord("0", 5, 5)));
+  ASSERT_EQ("1.0",
+            convertIndexWordToFloatString(convertFloatToIndexWord("1", 5, 5)));
   ASSERT_EQ("-1.0",
             convertIndexWordToFloatString(convertFloatToIndexWord("-1", 5, 5)));
 }
@@ -282,12 +284,12 @@ TEST(ConversionsTest, convertIndexWordToFloat) {
   ASSERT_FLOAT_EQ(-0.100001, convertIndexWordToFloat(indexWords[i]));
   i++;
 
-  ASSERT_FLOAT_EQ(
-      0, convertIndexWordToFloat(convertFloatToIndexWord("0", 5, 5)));
-  ASSERT_FLOAT_EQ(
-      1, convertIndexWordToFloat(convertFloatToIndexWord("1", 5, 5)));
-  ASSERT_FLOAT_EQ(
-      -1, convertIndexWordToFloat(convertFloatToIndexWord("-1", 5, 5)));
+  ASSERT_FLOAT_EQ(0,
+                  convertIndexWordToFloat(convertFloatToIndexWord("0", 5, 5)));
+  ASSERT_FLOAT_EQ(1,
+                  convertIndexWordToFloat(convertFloatToIndexWord("1", 5, 5)));
+  ASSERT_FLOAT_EQ(-1,
+                  convertIndexWordToFloat(convertFloatToIndexWord("-1", 5, 5)));
 }
 
 int main(int argc, char** argv) {

@@ -4,7 +4,7 @@
 Status](https://travis-ci.org/ad-freiburg/QLever.svg?branch=master)](https://travis-ci.org/ad-freiburg/QLever)
 
 QLever (pronounced "clever") is a query engine for efficient combined search on a knowledge base and a text corpus, in which named entities from the knowledge base have been identified.
-The query language is SPARQL extended by two QLever-specific predicates `ql:contains-entity` and `ql:contains-word`, which can express the occurrence of an entity or word (the object of the predicate) in a text record (the subject of the predicate).
+The query language is SPARQL extended by three QLever-specific predicates `ql:contains-entity`, `ql:contains-word` and `ql:has-relation`. `ql:contains-entity` and `ql:contains-word` can express the occurrence of an entity or word (the object of the predicate) in a text record (the subject of the predicate). `ql:has-relation` can be used to efficiently count available predicates for a set of entities.
 Pure SPARQL is supported as well.
 
 With this, it is possible to answer queries like the following one for astronauts who walked on the moon:
@@ -117,6 +117,10 @@ The full call will look like this:
 If you want support for SPARQL queries with predicate variables  (perfectly normal for SPARQL but rarely used in semantic text queries), use an optional argument -a to build all permutations:
 
     ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -a -w 
+
+To generate a patterns file and include support for ql:has-relations:
+
+    ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt --patterns
 
 If you want some literals to be written to an on disk vocabulary (by default this concerns literals longer than 50 chars and literals in less frequent lagnuages), add an topional parameter -l. This is useful for large knowledge bases that included texts (descriptions etc) as literals and thus consume lots of memory on startup without this option.
 
@@ -260,6 +264,20 @@ Text / Knowledge-base data can be nested in queries. This allows queries like on
 
 For now, each text-record variable is required to have a triple `ql:contains-word/entity WORD/URI`. 
 Pure connections to variables (e.g. "Books with a description that mentions a plant.") are planned for the future.
+
+To obtain a list of available relations and their counts `ql:has-relation` can be used if the index was build with the `--patterns` option, and the server was started with the `--patterns` option:
+
+    SELECT ?relations (COUNT(?relations) as ?count) WHERE {
+      ?s <is-a> <Scientist> .
+      ?t2 ql:contains-entity ?s .
+      ?t2 ql:contains-word "manhattan project" .
+      ?s ql:has-relation ?relations .
+    }
+    GROUP BY ?relations
+    ORDER BY DESC(?count)
+
+As of yet using ql:has-relation in any other form of query (apart from adding more triples in the WHERE part) ist not supported.
+In particular ql:has-relation can not be used as a normal predicate to add all available relations to the current solution.
 
 Group by is supported, but aggregate aliases may currently only be used within the SELECT part of the query:
 
