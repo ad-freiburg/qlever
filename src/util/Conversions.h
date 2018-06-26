@@ -11,6 +11,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <cmath>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -46,7 +47,10 @@ inline string convertFloatToIndexWord(const string& value,
                                       size_t nofMantissaDigits);
 
 //! Converts like this: "PP0*2E0*1234 to "12.34 and M-0*1E9*876 to -0.123".
-inline string convertIndexWordToFloat(const string& indexWord);
+inline string convertIndexWordToFloatString(const string& indexWord);
+
+//! Converts like this: "PP0*2E0*1234 to "12.34 and M-0*1E9*876 to -0.123".
+inline float convertIndexWordToFloat(const string& indexWord);
 
 //! Brings a date to the format:
 //! return string(VALUE_DATE_PREFIX) + year + month + day +
@@ -120,7 +124,7 @@ string convertValueLiteralToIndexWord(const string& orig) {
                                      DEFAULT_NOF_VALUE_MANTISSA_DIGITS) +
              "I";
     }
-    if (type == "float") {
+    if (type == "float" || type == "decimal") {
       return convertFloatToIndexWord(value, DEFAULT_NOF_VALUE_EXPONENT_DIGITS,
                                      DEFAULT_NOF_VALUE_MANTISSA_DIGITS) +
              "F";
@@ -144,14 +148,15 @@ string convertIndexWordToValueLiteral(const string& indexWord) {
     if (endsWith(indexWord, "F")) {
       std::ostringstream os;
       os << "\""
-         << convertIndexWordToFloat(indexWord.substr(0, indexWord.size() - 1))
+         << convertIndexWordToFloatString(
+                indexWord.substr(0, indexWord.size() - 1))
          << "\"" << XSD_FLOAT_SUFFIX;
       return os.str();
     }
     if (endsWith(indexWord, "I")) {
       std::ostringstream os;
-      string asFloat =
-          convertIndexWordToFloat(indexWord.substr(0, indexWord.size() - 1));
+      string asFloat = convertIndexWordToFloatString(
+          indexWord.substr(0, indexWord.size() - 1));
       os << "\"" << asFloat.substr(0, asFloat.find('.')) << "\""
          << XSD_INT_SUFFIX;
       return os.str();
@@ -164,7 +169,13 @@ string convertIndexWordToValueLiteral(const string& indexWord) {
 string convertFloatToIndexWord(const string& orig, size_t nofExponentDigits,
                                size_t nofMantissaDigits) {
   // Need a copy to modify.
-  string value(orig);
+  string value;
+  // ignore a + in the beginning of the number
+  if (orig.size() > 0 && orig[0] == '+') {
+    value = orig.substr(1);
+  } else {
+    value = orig;
+  }
   size_t posOfDot = value.find('.');
   if (posOfDot == string::npos) {
     return convertFloatToIndexWord(value + ".0", nofExponentDigits,
@@ -172,7 +183,7 @@ string convertFloatToIndexWord(const string& orig, size_t nofExponentDigits,
   }
 
   // Treat the special case 0.0
-  if (value == "0.0") {
+  if (value == "0.0" || value == "-0.0") {
     return string(VALUE_FLOAT_PREFIX) + "N0";
   }
 
@@ -262,7 +273,7 @@ string convertFloatToIndexWord(const string& orig, size_t nofExponentDigits,
 }
 
 // _____________________________________________________________________________
-string convertIndexWordToFloat(const string& indexWord) {
+string convertIndexWordToFloatString(const string& indexWord) {
   size_t prefixLength = std::char_traits<char>::length(VALUE_FLOAT_PREFIX);
   AD_CHECK_GT(indexWord.size(), prefixLength);
   string number = indexWord.substr(prefixLength);
@@ -345,6 +356,55 @@ string convertIndexWordToFloat(const string& indexWord) {
     }
   }
   return os.str();
+}
+
+// _____________________________________________________________________________
+float convertIndexWordToFloat(const string& indexWord) {
+  size_t prefixLength = std::char_traits<char>::length(VALUE_FLOAT_PREFIX);
+  AD_CHECK_GT(indexWord.size(), prefixLength);
+  string number = indexWord.substr(prefixLength);
+  // Handle the special case 0.0
+  if (number == "N0") {
+    return 0;
+  }
+  assert(number.size() >= 5);
+  bool negaMantissa = number[0] == 'M';
+  bool negaExponent = number[1] == 'M' || number[1] == '-';
+
+  size_t posOfE = number.find('E');
+  assert(posOfE != string::npos && posOfE > 0 && posOfE < number.size() - 1);
+
+  string exponentString =
+      ((negaMantissa == negaExponent)
+           ? number.substr(2, posOfE - 2)
+           : getBase10ComplementOfIntegerString(number.substr(2, posOfE - 2)));
+  long absExponent = static_cast<size_t>(atoi(exponentString.c_str()));
+  string mantissa =
+      (!negaMantissa
+           ? number.substr(posOfE + 1)
+           : getBase10ComplementOfIntegerString(number.substr(posOfE + 1)));
+  size_t mStart, mStop;
+  for (mStart = 0; mStart < mantissa.size() && mantissa[mStart] == '0';
+       mStart++)
+    ;
+  for (mStop = mantissa.size() - 1; mStop > mStart && mantissa[mStop] == '0';
+       mStop--)
+    ;
+  long absMantissa = stol(mantissa.substr(mStart, mStop - mStart + 1));
+  unsigned int mantissaLog = std::log10(absMantissa);
+  if (negaMantissa) {
+    if (negaExponent) {
+      return -absMantissa * std::pow(10, -absExponent - mantissaLog);
+    } else {
+      return -absMantissa * std::pow(10, absExponent - mantissaLog);
+    }
+  } else {
+    if (negaExponent) {
+      return absMantissa * std::pow(10, -absExponent - mantissaLog);
+    } else {
+      return absMantissa * std::pow(10, absExponent - mantissaLog);
+    }
+  }
 }
 
 // _____________________________________________________________________________

@@ -41,7 +41,6 @@ string TextOperationWithoutFilter::asString(size_t indent) const {
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResult(ResultTable* result) const {
   LOG(DEBUG) << "TextOperationWithoutFilter result computation..." << endl;
-  // TODO(florian): add result types
   if (_nofVars == 0) {
     computeResultNoVar(result);
   } else if (_nofVars == 1) {

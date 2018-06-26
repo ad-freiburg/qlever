@@ -204,7 +204,13 @@ class Index {
   void getEntityPostingsForTerm(const string& term, vector<Id>& cids,
                                 vector<Id>& eids, vector<Score>& scores) const;
 
-  string getTextExcerpt(Id cid) const { return _docsDB.getTextExcerpt(cid); }
+  string getTextExcerpt(Id cid) const {
+    if (cid == ID_NO_VALUE) {
+      return std::string();
+    } else {
+      return _docsDB.getTextExcerpt(cid);
+    }
+  }
 
   // Only for debug reasons and external encoding tests.
   // Supply an empty vector to dump all lists above a size threshold.

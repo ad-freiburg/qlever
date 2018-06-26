@@ -35,7 +35,8 @@ class QueryExecutionTree {
     TEXT_WITH_FILTER = 9,
     TWO_COL_JOIN = 10,
     OPTIONAL_JOIN = 11,
-    COUNT_AVAILABLE_PREDICATES = 12
+    COUNT_AVAILABLE_PREDICATES = 12,
+    GROUP_BY = 13
   };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
@@ -134,6 +135,7 @@ class QueryExecutionTree {
       const vector<pair<size_t, ResultTable::ResultType>>& validIndices,
       size_t maxSend, std::ostream& out) const {
     std::ostringstream throwaway;
+    shared_ptr<const ResultTable> res = getResult();
     for (size_t i = from; i < upperBound; ++i) {
       const auto& row = data[i];
       auto& os = (i < (maxSend + from) ? out : throwaway);
@@ -157,6 +159,18 @@ class QueryExecutionTree {
                       row[validIndices[j].first]))
                << "\",\"";
             break;
+          case ResultTable::ResultType::FLOAT: {
+            float f;
+            std::memcpy(&f, &row[validIndices[j].first], sizeof(float));
+            os << f << "\",\"";
+            break;
+          }
+          case ResultTable::ResultType::STRING: {
+            os << ad_utility::escapeForJson(
+                      res->idToString(row[validIndices[j].first]))
+               << "\",\"";
+            break;
+          }
           default:
             AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
                      "Cannot deduce output type.");
@@ -180,6 +194,19 @@ class QueryExecutionTree {
                     row[validIndices[validIndices.size() - 1].first]))
              << "\"]";
           break;
+        case ResultTable::ResultType::FLOAT: {
+          float f;
+          std::memcpy(&f, &row[validIndices[validIndices.size() - 1].first],
+                      sizeof(float));
+          os << f << "\"]";
+          break;
+        }
+        case ResultTable::ResultType::STRING: {
+          os << ad_utility::escapeForJson(res->idToString(
+                    row[validIndices[validIndices.size() - 1].first]))
+             << "\"]";
+          break;
+        }
         default:
           AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
                    "Cannot deduce output type.");
@@ -196,6 +223,7 @@ class QueryExecutionTree {
       const vector<Row>& data, char sep, size_t from, size_t upperBound,
       const vector<pair<size_t, ResultTable::ResultType>>& validIndices,
       std::ostream& out) const {
+    shared_ptr<const ResultTable> res = getResult();
     for (size_t i = from; i < upperBound; ++i) {
       const auto& row = data[i];
       for (size_t j = 0; j < validIndices.size(); ++j) {
@@ -211,11 +239,21 @@ class QueryExecutionTree {
             break;
           }
           case ResultTable::ResultType::VERBATIM:
-            out << row[validIndices[j].first] << "\",\"";
+            out << row[validIndices[j].first];
             break;
           case ResultTable::ResultType::TEXT:
             out << _qec->getIndex().getTextExcerpt(row[validIndices[j].first]);
             break;
+          case ResultTable::ResultType::FLOAT: {
+            float f;
+            std::memcpy(&f, &row[validIndices[j].first], sizeof(float));
+            out << f;
+            break;
+          }
+          case ResultTable::ResultType::STRING: {
+            out << res->idToString(row[validIndices[j].first]);
+            break;
+          }
           default:
             AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
                      "Cannot deduce output type.");

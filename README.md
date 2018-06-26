@@ -279,6 +279,18 @@ To obtain a list of available relations and their counts `ql:has-relation` can b
 As of yet using ql:has-relation in any other form of query (apart from adding more triples in the WHERE part) ist not supported.
 In particular ql:has-relation can not be used as a normal predicate to add all available relations to the current solution.
 
+Group by is supported, but aggregate aliases may currently only be used within the SELECT part of the query:
+
+    SELECT ?profession (AVG(?height) as ?avg) WHERE {
+      ?a <is-a> ?profession .
+      ?a <Height> ?height .
+    }
+    GROUP BY ?profession
+    ORDER BY ?avg
+
+Supported aggregates are `MIN, MAX, AVG, GROUP_CONCAT, SAMPLE, COUNT, SUM`. All of the aggreagates support `DISTINCT`, e.g. `(GROUP_CONCAT(DISTINCT ?a) as ?b)`.
+Group concat also supports a custom separator: `(GROUP_CONCAT(?a ; separator=" ; ") as ?concat)`. Xsd types float, decimal and integer are recognized as numbers, other types or unbound variables (e.g. no entries for an optional part) in one of the aggregates that need to interpret the variable (e.g. AVG) lead to either no result or nan. MAX with an unbound variable will always return the unbound variable.
+
 # How to obtain data to play around with
 
 ## Use the tiny examples contained in the repository

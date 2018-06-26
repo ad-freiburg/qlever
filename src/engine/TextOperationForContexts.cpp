@@ -55,8 +55,6 @@ void TextOperationForContexts::computeResult(ResultTable* result) const {
   LOG(DEBUG) << "TextOperationForContexts result computation..." << endl;
   if (_subtrees.size() == 0) {
     result->_nofColumns = 2;
-    // TODO(florian): check if these column types for text operations are
-    // actually correct.
     result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
     result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
     result->_fixedSizeData = new vector<array<Id, 2>>;

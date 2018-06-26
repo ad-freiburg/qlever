@@ -21,7 +21,22 @@ class ResultTable {
  public:
   enum Status { FINISHED = 0, OTHER = 1 };
 
-  enum class ResultType { KB, VERBATIM, TEXT };
+  /**
+   * @brief Describes the type of a columns data
+   */
+  enum class ResultType {
+    // An entry in the knowledgebase
+    KB,
+    // An unsigned integer (size_t)
+    VERBATIM,
+    // An entry in the text index
+    TEXT,
+    // A 32 bit float, stored in the first 4 bytes of the entry. The last four
+    // bytes have to be zero.
+    FLOAT,
+    // An entry in the ResultTable _localVocab
+    STRING
+  };
 
   size_t _nofColumns;
   // A value >= _nofColumns indicates unsorted data
@@ -31,6 +46,11 @@ class ResultTable {
   void* _fixedSizeData;
 
   vector<ResultType> _resultTypes;
+  // This vector is used to store generated strings (such as the GROUP_CONCAT
+  // results) which are used in the output with the ResultType::STRING type.
+  // WARNING: Currently only operations that can run after a GroupBy copy
+  //          the _localVocab of a subresult.
+  vector<string> _localVocab;
 
   ResultTable();
 
@@ -59,6 +79,15 @@ class ResultTable {
   void awaitFinished() const {
     unique_lock<mutex> lk(_cond_var_m);
     _cond_var.wait(lk, [&] { return _status == ResultTable::FINISHED; });
+  }
+
+  std::string idToString(Id id) const {
+    if (id < _localVocab.size()) {
+      return _localVocab[id];
+    } else if (id == ID_NO_VALUE) {
+      return "";
+    }
+    return "ID OUT OF RANGE";
   }
 
   size_t size() const;

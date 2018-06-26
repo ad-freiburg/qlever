@@ -90,6 +90,9 @@ TEST(EngineTest, optionalJoinTest) {
   vector<array<size_t, 2>> jcls;
   jcls.push_back(array<size_t, 2>{{1, 2}});
   jcls.push_back(array<size_t, 2>{{2, 1}});
+
+  // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
+  // a have to equal those of column 2 of b and vice versa).
   e.optionalJoin<vector<array<Id, 3>>, vector<array<Id, 3>>, array<Id, 4>, 4>(
       a, b, false, true, jcls, &res, 4);
 
@@ -120,6 +123,7 @@ TEST(EngineTest, optionalJoinTest) {
   ASSERT_EQ(1u, res[4][2]);
   ASSERT_EQ(1u, res[4][3]);
 
+  // Test the optional join with variable sized data.
   vector<vector<Id>> va;
   va.push_back(vector<Id>{{1, 2, 3, 4, 5, 6}});
   va.push_back(vector<Id>{{1, 2, 3, 7, 5, 6}});
@@ -160,13 +164,22 @@ TEST(EngineTest, optionalJoinTest) {
 }
 
 TEST(EngineTest, patternTrickTest) {
+  // The input table containing entity ids
   std::vector<std::array<Id, 1>> input = {{0}, {1}, {2}, {3}, {4}, {6}, {7}};
+  // Used to store the result.
   vector<array<Id, 2>> result;
+  // Maps entities to their patterns. If an entity id is higher than the lists
+  // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
+  // The has relation relation, which is used when an entity does not have a
+  // pattern
   vector<vector<Id>> hasRelationSrc = {{},     {0, 3}, {0},    {}, {},
                                        {0, 3}, {3, 4}, {2, 4}, {3}};
+  // Maps pattern ids to patterns
   vector<vector<Id>> patternsSrc = {{0, 2, 3}, {1, 3, 4, 2, 0}};
 
+  // These are used to store the relations and patterns in contiguous blocks
+  // of memory.
   CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
   CompactStringVector<size_t, Id> patterns(patternsSrc);
 
@@ -174,6 +187,7 @@ TEST(EngineTest, patternTrickTest) {
     Engine::computePatternTrick<std::array<Id, 1>>(&input, &result, hasPattern,
                                                    hasRelation, patterns, 0);
   } catch (ad_semsearch::Exception e) {
+    // More verbose output in the case of an exception occuring.
     std::cout << e.getErrorMessage() << std::endl
               << e.getErrorDetails() << std::endl;
     ASSERT_TRUE(false);

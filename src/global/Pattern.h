@@ -17,7 +17,13 @@ typedef uint32_t PatternID;
 
 static const PatternID NO_PATTERN = std::numeric_limits<PatternID>::max();
 
-// TODO(florian): tidy up the pattern class
+/**
+ * @brief This represents a set of relations of a single entity.
+ *        (e.g. a set of books that all have an author and a title).
+ *        This information can then be used to efficiently count the relations
+ *        that a set of entities has (e.g. for autocompletion of relations
+ *        while writing a query).
+ */
 struct Pattern {
   Id& operator[](const size_t pos) { return _data[pos]; }
 
@@ -73,27 +79,17 @@ struct Pattern {
 
   void clear() { _data.clear(); }
 
-  /**
-   * @brief fromBuffer
-   * @param buf
-   * @return The number of bytes read
-   */
-  /*size_t fromBuffer(const unsigned char *buf) {
-    std::memcpy(&_length, buf, sizeof(uint16_t));
-    for (uint16_t i = 0; i < _length; i++) {
-      std::memcpy(_data + i, buf + sizeof(uint16_t) + i * sizeof(Id),
-  sizeof(Id));
-    }
-    return sizeof(uint16_t) + _length * sizeof(Id);
-  }*/
-
-  // Id _data[MAX_NUM_RELATIONS];
   std::vector<Id> _data;
 };
 
 // The type of the index used to access the data, and the type of the data
 // stored in the strings.
 template <typename IndexT, typename DataT>
+/**
+ * @brief Stores a list of variable length data of a single type (e.g.
+ *        c-style strings). The data is stored in a single contiguous block
+ *        of memory.
+ */
 class CompactStringVector {
  public:
   CompactStringVector()
@@ -109,6 +105,10 @@ class CompactStringVector {
 
   virtual ~CompactStringVector() { delete[] _data; }
 
+  /**
+   * @brief Fills this CompactStringVector with data.
+   * @param The data from which to build the vector.
+   */
   void build(const std::vector<std::vector<DataT>>& data) {
     _size = data.size();
     _indexEnd = (_size + 1) * sizeof(IndexT);
@@ -152,6 +152,11 @@ class CompactStringVector {
 
   size_t size() const { return _size; }
 
+  /**
+   * @brief Stores the vector in the file at the current seek position.
+   * @param The file to write into
+   * @return The number of bytes written.
+   */
   size_t write(ad_utility::File& file) {
     file.write(&_size, sizeof(size_t));
     file.write(&_dataSize, sizeof(size_t));
