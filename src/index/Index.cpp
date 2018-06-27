@@ -160,11 +160,6 @@ void Index::createFromNTriplesFile(const string& ntFile,
                    _patterns, _maxNumPatterns);
   }
   openFileHandles();
-  // we have deleted the vocabulary in the process to save ram, so now we have
-  // to reload it,
-  _vocab = Vocabulary();
-  _vocab.readFromFile(onDiskBase + ".vocabulary",
-                      onDiskLiterals ? onDiskBase + ".literals-index" : "");
 }
 
 // _____________________________________________________________________________
@@ -1591,6 +1586,16 @@ void Index::setKbName(const string& name) {
   _sopMeta.setName(name);
   _ospMeta.setName(name);
   _opsMeta.setName(name);
+}
+
+// ____________________________________________________________________________
+void Index::setOnDiskLiterals(bool onDiskLiterals) {
+  _onDiskLiterals = onDiskLiterals;
+}
+
+// ____________________________________________________________________________
+void Index::setOnDiskBase(const std::string& onDiskBase) {
+  _onDiskBase = onDiskBase;
 }
 
 // _____________________________________________________________________________

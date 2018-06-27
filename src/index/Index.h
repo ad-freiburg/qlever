@@ -228,6 +228,10 @@ class Index {
   void setTextName(const string& name);
 
   void setUsePatterns(bool usePatterns);
+  
+  void setOnDiskLiterals(bool onDiskLiterals);
+
+  void setOnDiskBase(const std::string& onDiskBase);
 
   const string& getTextName() const { return _textMeta.getName(); }
 

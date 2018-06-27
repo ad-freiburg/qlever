@@ -124,7 +124,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
   // write using vector_bufwriter
 
 
-  // we have deleted the vocabulary in the process to save ram, so now we have
+  // we have deleted the vocabulary during the index creation to save ram, so now we have
   // to reload it,
   LOG(INFO) << "Loading vocabulary from disk (needed for correct Ids in text index)\n";
   _vocab = Vocabulary();
