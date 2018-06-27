@@ -107,7 +107,7 @@ TEST_F(GroupByTest, doGroupBy) {
   std::vector<ResultTable::ResultType> inputTypes = {
       ResultTable::ResultType::KB,       ResultTable::ResultType::KB,
       ResultTable::ResultType::VERBATIM, ResultTable::ResultType::TEXT,
-      ResultTable::ResultType::FLOAT,    ResultTable::ResultType::STRING};
+      ResultTable::ResultType::FLOAT,    ResultTable::ResultType::LOCAL_VOCAB};
 
   /*
     COUNT,
