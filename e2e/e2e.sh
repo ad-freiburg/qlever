@@ -22,7 +22,9 @@ fi
 
 
 mkdir -p "e2e_data"
-if [ ! -d "e2e_data/scientist-collection/" ]; then
+# Can't check for the scientist-collection directory because
+# Travis' caching creates it
+if [ ! -e "e2e_data/scientist-collection/scientists.nt" ]; then
 	# Why the hell is this a ZIP that can't easily be decompressed from stdin?!?
 	wget -O "e2e_data/scientist-collection.zip" \
 		"http://filicudi.informatik.uni-freiburg.de/bjoern-data/scientist-collection.zip"
