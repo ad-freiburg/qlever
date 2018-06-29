@@ -5,12 +5,12 @@ function bail {
 	exit 1
 }
 
-function cleanup {
+function cleanup_server {
 	echo "The Server Log follows:"
 	cat "build/server_log.txt"
 	# Killing 0 sends the signal to all processes in the current
 	# process group
-	kill $(jobs -p)
+	kill $SERVER_PID
 }
 
 # Travis CI is super cool but also uses ancient OS images
@@ -44,9 +44,10 @@ cd build && ./IndexBuilderMain -a -l -i "../$INDEX" \
 (
 cd build && ./ServerMain -i "../$INDEX" -p 9099 -t -a -l &> server_log.txt
 ) &
+SERVER_PID=$!
 
 # Setup the kill switch so it gets called whatever way we exit
-trap cleanup EXIT
+trap cleanup_server EXIT
 echo "Waiting for ServerMain to launch and open port"
 while ! curl --max-time 1 --output /dev/null --silent http://localhost:9099/; do
 	sleep 1
