@@ -10,11 +10,23 @@ from typing import Dict, Any, List
 import json
 import yaml
 
-def eprint(*args, **kwargs):
+class bcol:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+def eprint(*args, col=bcol.FAIL, **kwargs):
     """
     Like print but to stderr
     """
+    sys.stderr.write(col)
     print(*args, file=sys.stderr, **kwargs)
+    print(bcol.ENDC, file=sys.stderr)
 
 def exec_query(endpoint_url: str, sparql: str,
                max_send: int = 4096) -> Dict[str, Any]:
@@ -179,7 +191,6 @@ def main() -> None:
                     continue
 
                 if not solution_checks(solution, result):
-                    eprint('Solution checks failed')
                     error_detected = True
                     continue
 

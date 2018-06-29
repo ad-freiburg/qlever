@@ -32,13 +32,15 @@ fi;
 INDEX="e2e_data/scientists-index"
 
 # Delete and rebuild the index
-rm -f "$INDEX.*"
-(
-cd build && ./IndexBuilderMain -a -l -i "../$INDEX" \
-	-n "../e2e_data/scientist-collection/scientists.nt" \
-	-w "../e2e_data/scientist-collection/scientists.wordsfile.tsv" \
-	-d "../e2e_data/scientist-collection/scientists.docsfile.tsv"
-) || bail "Building Index failed"
+if [ "$1" != "no-index" ]; then
+	rm -f "$INDEX.*"
+	(
+	cd build && ./IndexBuilderMain -a -l -i "../$INDEX" \
+		-n "../e2e_data/scientist-collection/scientists.nt" \
+		-w "../e2e_data/scientist-collection/scientists.wordsfile.tsv" \
+		-d "../e2e_data/scientist-collection/scientists.docsfile.tsv"
+	) || bail "Building Index failed"
+fi
 
 # Launch the Server using the freshly baked index
 (
