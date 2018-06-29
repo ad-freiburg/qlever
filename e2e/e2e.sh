@@ -22,11 +22,11 @@ fi
 
 
 mkdir -p "e2e_data"
-if [ ! -e "e2e_data/scientists-collection.zip" ]; then
+if [ ! -d "e2e_data/scientist-collection/" ]; then
 	# Why the hell is this a ZIP that can't easily be decompressed from stdin?!?
-	wget -O "e2e_data/scientists-collection.zip" \
+	wget -O "e2e_data/scientist-collection.zip" \
 		"http://filicudi.informatik.uni-freiburg.de/bjoern-data/scientist-collection.zip"
-	unzip "e2e_data/scientists-collection.zip" -d "e2e_data"
+	unzip "e2e_data/scientist-collection.zip" -d "e2e_data"
 fi;
 
 INDEX="e2e_data/scientists-index"

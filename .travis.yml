@@ -16,6 +16,10 @@ addons:
       - cmake
       - netcat
 
+cache:
+  directories:
+    - e2e_data/scientist-collection/
+
 env:
   - CC=gcc-5 CXX=g++-5
 
