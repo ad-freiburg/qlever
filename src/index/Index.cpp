@@ -420,13 +420,10 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
   bool isValidPattern = true;
   size_t numInvalidPatterns = 0;
   size_t numValidPatterns = 0;
-  // DEGBUG CODE
-  std::map<size_t, size_t> predicateCounts;
 
   for (ExtVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if ((*reader)[0] != currentRel) {
       currentRel = (*reader)[0];
-      predicateCounts[patternIndex]++;
       if (isValidPattern) {
         numValidPatterns++;
         auto it = patternCounts.find(pattern);
@@ -465,16 +462,6 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
             << " entities"
                " because they were to large."
             << std::endl;
-
-  // DEBUG CODE
-  // write out the mapping from predicate counts to number of occurences
-  ad_utility::File df((fileName + ".debug").c_str(), "w");
-  for (auto it : predicateCounts) {
-    string s =
-        std::to_string(it.first) + "\t" + std::to_string(it.second) + "\n";
-    df.write(s.c_str(), s.size());
-  }
-  df.close();
 
   // stores patterns sorted by their number of occurences
   size_t actualNumPatterns = patternCounts.size() < maxNumPatterns

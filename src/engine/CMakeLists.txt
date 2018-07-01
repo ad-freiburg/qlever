@@ -26,6 +26,7 @@ add_library(engine
         OptionalJoin.cpp OptionalJoin.h
         CountAvailablePredicates.cpp CountAvailablePredicates.h
         GroupBy.cpp GroupBy.h
+        HasRelationScan.cpp HasRelationScan.h
 )
 
 target_link_libraries(engine index parser)
