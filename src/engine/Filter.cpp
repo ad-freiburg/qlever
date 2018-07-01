@@ -49,6 +49,7 @@ string Filter::asString(size_t indent) const {
       break;
     case SparqlFilter::LE:
       os << " <= ";
+      break;
     case SparqlFilter::GT:
       os << " > ";
       break;

@@ -290,8 +290,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
     SubtreePlan groupByPlan(_qec);
-    std::shared_ptr<Operation> groupBy(
-        new GroupBy(_qec, pq._groupByVariables, pq._aliases));
+    std::shared_ptr<Operation> groupBy =
+        std::make_shared<GroupBy>(_qec, pq._groupByVariables, pq._aliases);
     QueryExecutionTree& groupByTree = *groupByPlan._qet.get();
 
     // Then compute the sort columns
@@ -302,8 +302,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
         !(sortColumns.size() == 1 &&
           final._qet->resultSortedOn() == sortColumns[0].first)) {
       // Create an order by operation as required by the group by
-      std::shared_ptr<Operation> orderBy(
-          new OrderBy(_qec, final._qet, sortColumns));
+      std::shared_ptr<Operation> orderBy =
+          std::make_shared<OrderBy>(_qec, final._qet, sortColumns);
       SubtreePlan orderByPlan(_qec);
       QueryExecutionTree& orderByTree = *orderByPlan._qet.get();
       orderByTree.setVariableColumns(final._qet->getVariableColumnMap());
