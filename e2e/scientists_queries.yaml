@@ -50,16 +50,16 @@ queries:
   - query: scientists-married-to-scientists
     solutions:
       - type: no-text
-        # Note this has everyone?! twice, once for each direction
         sparql: |
           SELECT ?x ?y WHERE {
               ?x <is-a> <Scientist> .
               ?x <Spouse_(or_domestic_partner)> ?y .
               ?y <is-a> <Scientist> .
+              FILTER(?x < ?y) .
           } ORDER BY ASC(?x)
         checks:
           - num_cols: 2
-          - num_rows: 194
+          - num_rows: 97
           - selected: ["?x", "?y"]
           - contains_row: ["<Albert_Einstein>", "<Mileva_Marić>"]
   - query: scientists-count-group-by-place-of-birth
