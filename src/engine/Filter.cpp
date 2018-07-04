@@ -57,13 +57,15 @@ string Filter::asString(size_t indent) const {
       os << " <= ";
       break;
     case SparqlFilter::LANG_MATCHES:
-      os << " LANG_MATCHES ";
+      os << " LANG_MATCHES " << _rhsString;
       break;
   }
-  if (_rhsInd != std::numeric_limits<size_t>::max()) {
-    os << "col " << _rhsInd;
-  } else {
-    os << "entity Id " << _rhsId;
+  if (_type != SparqlFilter::LANG_MATCHES) {
+    if (_rhsInd != std::numeric_limits<size_t>::max()) {
+      os << "col " << _rhsInd;
+    } else {
+      os << "entity Id " << _rhsId;
+    }
   }
 
   return os.str();
