@@ -9,10 +9,9 @@
 #include "../util/HashSet.h"
 
 GroupBy::GroupBy(QueryExecutionContext* qec,
-                 std::shared_ptr<QueryExecutionTree> subtree,
                  const vector<string>& groupByVariables,
                  const std::vector<ParsedQuery::Alias>& aliases)
-    : Operation(qec), _subtree(subtree), _groupByVariables(groupByVariables) {
+    : Operation(qec), _subtree(nullptr), _groupByVariables(groupByVariables) {
   _aliases.reserve(aliases.size());
   for (const ParsedQuery::Alias& a : aliases) {
     // Only aggregate aliases need to be processed by GruopBy, other aliases
@@ -41,6 +40,10 @@ GroupBy::GroupBy(QueryExecutionContext* qec,
   }
 }
 
+void GroupBy::setSubtree(std::shared_ptr<QueryExecutionTree> subtree) {
+  _subtree = subtree;
+}
+
 string GroupBy::asString(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
@@ -63,47 +66,21 @@ size_t GroupBy::getResultWidth() const { return _varColMap.size(); }
 size_t GroupBy::resultSortedOn() const { return -1; }
 
 vector<pair<size_t, bool>> GroupBy::computeSortColumns(
-    std::shared_ptr<QueryExecutionTree> subtree,
-    const vector<string>& groupByVariables,
-    const std::vector<ParsedQuery::Alias>& aliases) {
-  // Create sorted lists of the aliases and the group by variables to determine
-  // the output column order, on which the sorting depends. Then populate
-  // the vector of columns which should be sorted by using the subtrees
-  // variable column map.
+    std::shared_ptr<QueryExecutionTree> inputTree) {
   vector<pair<size_t, bool>> cols;
-  if (groupByVariables.empty()) {
+  if (_groupByVariables.empty()) {
     // the entire input is a single group, no sorting needs to be done
     return cols;
   }
 
-  std::vector<ParsedQuery::Alias> sortedAliases;
-  sortedAliases.reserve(aliases.size());
-  for (const ParsedQuery::Alias& a : aliases) {
-    if (a._isAggregate) {
-      sortedAliases.push_back(a);
-    }
-  }
-  // sort the aliases to ensure the cache key is order invariant
-  std::sort(sortedAliases.begin(), sortedAliases.end(),
-            [](const ParsedQuery::Alias& a1, const ParsedQuery::Alias& a2) {
-              return a1._outVarName < a2._outVarName;
-            });
-
-  std::vector<std::string> sortedGroupByVars;
-  sortedGroupByVars.insert(sortedGroupByVars.end(), groupByVariables.begin(),
-                           groupByVariables.end());
-
-  // sort the groupByVariables to ensure the cache key is order invariant
-  std::sort(sortedGroupByVars.begin(), sortedGroupByVars.end());
-
   std::unordered_map<string, size_t> inVarColMap =
-      subtree->getVariableColumnMap();
+      inputTree->getVariableColumnMap();
 
   // The returned columns are all groupByVariables followed by aggregrates
-  for (std::string var : sortedGroupByVars) {
+  for (std::string var : _groupByVariables) {
     cols.push_back({inVarColMap[var], false});
   }
-  for (const ParsedQuery::Alias& a : sortedAliases) {
+  for (const ParsedQuery::Alias& a : _aliases) {
     cols.push_back({inVarColMap[a._outVarName], false});
   }
   return cols;
@@ -211,7 +188,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           }
         }
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT ||
-                 inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
+                 inputTypes[a._inCol] == ResultTable::ResultType::LOCAL_VOCAB) {
         res = std::numeric_limits<float>::quiet_NaN();
       } else {
         if (a._distinct) {
@@ -337,7 +314,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           }
           out << index.getTextExcerpt((*input)[blockEnd][a._inCol]);
         }
-      } else if (inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
+      } else if (inputTypes[a._inCol] == ResultTable::ResultType::LOCAL_VOCAB) {
         if (a._distinct) {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
             const auto it = distinctHashSet.find((*input)[i][a._inCol]);
@@ -423,7 +400,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
         resultRow[a._outCol] = 0;
         std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT ||
-                 inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
+                 inputTypes[a._inCol] == ResultTable::ResultType::LOCAL_VOCAB) {
         resultRow[a._outCol] = ID_NO_VALUE;
       } else {
         Id res = std::numeric_limits<Id>::lowest();
@@ -453,7 +430,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
         resultRow[a._outCol] = 0;
         std::memcpy(&resultRow[a._outCol], &res, sizeof(float));
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT ||
-                 inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
+                 inputTypes[a._inCol] == ResultTable::ResultType::LOCAL_VOCAB) {
         resultRow[a._outCol] = ID_NO_VALUE;
       } else {
         Id res = std::numeric_limits<Id>::max();
@@ -504,7 +481,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           }
         }
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT ||
-                 inputTypes[a._inCol] == ResultTable::ResultType::STRING) {
+                 inputTypes[a._inCol] == ResultTable::ResultType::LOCAL_VOCAB) {
         res = std::numeric_limits<float>::quiet_NaN();
       } else {
         if (a._distinct) {
@@ -901,7 +878,7 @@ void GroupBy::computeResult(ResultTable* result) const {
         result->_resultTypes[i] = ResultTable::ResultType::VERBATIM;
         break;
       case AggregateType::GROUP_CONCAT:
-        result->_resultTypes[i] = ResultTable::ResultType::STRING;
+        result->_resultTypes[i] = ResultTable::ResultType::LOCAL_VOCAB;
         break;
       case AggregateType::MAX:
         result->_resultTypes[i] =

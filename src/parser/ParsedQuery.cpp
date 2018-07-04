@@ -189,8 +189,11 @@ void ParsedQuery::parseAliases() {
         a._isAggregate = true;
         size_t pos = inner.find("as");
         if (pos == std::string::npos) {
-          throw ParseException("Alias " + var +
-                               " is malformed: keyword as is missing.");
+          pos = inner.find("AS");
+          if (pos == std::string::npos) {
+            throw ParseException("Alias " + var +
+                                 " is malformed: keyword as is missing.");
+          }
         }
         std::string newVarName = inner.substr(pos + 2, var.size() - pos - 2);
         newVarName = ad_utility::strip(newVarName, " \t\n");

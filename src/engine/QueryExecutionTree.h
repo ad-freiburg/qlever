@@ -165,7 +165,7 @@ class QueryExecutionTree {
             os << f << "\",\"";
             break;
           }
-          case ResultTable::ResultType::STRING: {
+          case ResultTable::ResultType::LOCAL_VOCAB: {
             os << ad_utility::escapeForJson(
                       res->idToString(row[validIndices[j].first]))
                << "\",\"";
@@ -201,7 +201,7 @@ class QueryExecutionTree {
           os << f << "\"]";
           break;
         }
-        case ResultTable::ResultType::STRING: {
+        case ResultTable::ResultType::LOCAL_VOCAB: {
           os << ad_utility::escapeForJson(res->idToString(
                     row[validIndices[validIndices.size() - 1].first]))
              << "\"]";
@@ -250,7 +250,7 @@ class QueryExecutionTree {
             out << f;
             break;
           }
-          case ResultTable::ResultType::STRING: {
+          case ResultTable::ResultType::LOCAL_VOCAB: {
             out << res->idToString(row[validIndices[j].first]);
             break;
           }

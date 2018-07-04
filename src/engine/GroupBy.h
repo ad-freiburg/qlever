@@ -46,9 +46,18 @@ class GroupBy : public Operation {
     bool _distinct;
   };
 
-  GroupBy(QueryExecutionContext* qec,
-          std::shared_ptr<QueryExecutionTree> subtree,
-          const vector<string>& groupByVariables,
+  /**
+   * @brief This constructor does not take a subtree as an argument to allow
+   *        for creating the GroupBy operation before the OrderBy operation
+   *        that is required by this GroupBy. This prevents having to compute
+   *        the order of the aggregate aliases twice and group by columns
+   *        in two places. The subtree must be set by calling setSubtree
+   *        before calling computeResult
+   * @param qec
+   * @param groupByVariables
+   * @param aliases
+   */
+  GroupBy(QueryExecutionContext* qec, const vector<string>& groupByVariables,
           const std::vector<ParsedQuery::Alias>& aliases);
 
   virtual string asString(size_t indent = 0) const;
@@ -70,15 +79,22 @@ class GroupBy : public Operation {
   virtual size_t getCostEstimate();
 
   /**
+   * @brief To allow for creating a OrderBy Operation after the GroupBy
+   *        the subtree is not an argument to the constructor, as it is with
+   *        other operations. Instead it needs to be set using this function.
+   * @param subtree The QueryExecutionTree that contains the operations creating
+   *                this operations input.
+   */
+  void setSubtree(std::shared_ptr<QueryExecutionTree> subtree);
+
+  /**
    * @return The columns on which the input data should be sorted or an empty
    *         list if no particular order is required for the grouping.
-   *         The columns need to be known before the GroupBy Operation can be
-   *         created, as the groupBy requires its parent operation on creation.
+   * @param inputTree The QueryExecutionTree that contains the operations
+   *                  creating the sorting operation inputs.
    */
-  static vector<pair<size_t, bool>> computeSortColumns(
-      std::shared_ptr<QueryExecutionTree> subtree,
-      const vector<string>& groupByVariables,
-      const std::vector<ParsedQuery::Alias>& aliases);
+  vector<pair<size_t, bool>> computeSortColumns(
+      std::shared_ptr<QueryExecutionTree> inputTree);
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;

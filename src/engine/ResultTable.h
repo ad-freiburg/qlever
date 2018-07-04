@@ -29,13 +29,13 @@ class ResultTable {
     KB,
     // An unsigned integer (size_t)
     VERBATIM,
-    // An entry in the text index
+    // A byte offset in the text index
     TEXT,
     // A 32 bit float, stored in the first 4 bytes of the entry. The last four
     // bytes have to be zero.
     FLOAT,
-    // An entry in the ResultTable _localVocab
-    STRING
+    // An entry in the ResultTable's _localVocab
+    LOCAL_VOCAB
   };
 
   size_t _nofColumns;
