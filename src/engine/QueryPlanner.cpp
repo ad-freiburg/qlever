@@ -56,7 +56,10 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
       const ParsedQuery::Alias* countAlias = nullptr;
       for (const ParsedQuery::Alias& a : pq._aliases) {
         if (a._inVarName == t._o && a._isAggregate &&
-            ad_utility::startsWith(a._function, "COUNT")) {
+            a._function.find("DISTINCT") == std::string::npos &&
+            a._function.find("distinct") == std::string::npos &&
+            (ad_utility::startsWith(a._function, "COUNT") ||
+             ad_utility::startsWith(a._function, "count"))) {
           countAlias = &a;
         }
       }
