@@ -99,7 +99,8 @@ quickly test if something is horribly broken.
 
 **Note**: This does not include compilation and unit tests, though these are
 also run on Travis CI. Refer to the previous section for Unit Tests and
-compilation. Also this does assume
+compilation. Also this does assume that the build uses the `./build` directory
+as described in the [Build](#1-build) section.
 
 To do a full End-to-End Test run *(from the project root)*
 

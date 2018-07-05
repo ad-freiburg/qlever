@@ -7,12 +7,13 @@ import sys
 import urllib.parse
 import urllib.request
 from typing import Dict, Any, List
+from enum import Enum
 import json
 import yaml
 
-class BCol:
+class Color:
     """
-    Enum class for storing ANSI Color Codes
+    Enum-like class for storing ANSI Color Codes
     """
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -23,13 +24,14 @@ class BCol:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
 
-def eprint(*args, color=BCol.FAIL, **kwargs):
+
+def eprint(*args, color=Color.FAIL, **kwargs):
     """
     Like print but to stderr
     """
     sys.stderr.write(color)
     print(*args, file=sys.stderr, **kwargs)
-    print(BCol.ENDC, file=sys.stderr)
+    print(Color.ENDC, file=sys.stderr)
 
 def exec_query(endpoint_url: str, sparql: str,
                max_send: int = 4096) -> Dict[str, Any]:
@@ -172,8 +174,8 @@ def main() -> None:
             for solution in solutions:
                 solution_type = solution['type']
                 solution_sparql = solution['sparql']
-                print(BCol.HEADER+'Trying: ', query_name,
-                      '(%s)' % solution_type + BCol.ENDC)
+                print(Color.HEADER+'Trying: ', query_name,
+                      '(%s)' % solution_type + Color.ENDC)
                 print('SPARQL:')
                 print(solution_sparql)
                 result = exec_query(endpoint_url, solution_sparql)
@@ -199,10 +201,10 @@ def main() -> None:
                     continue
 
     if error_detected:
-        print(BCol.FAIL+'Query tool found errors!'+BCol.ENDC)
+        print(Color.FAIL+'Query tool found errors!'+Color.ENDC)
         sys.exit(2)
 
-    print(BCol.OKGREEN+'Query tool did not find errors, search harder!'+BCol.ENDC)
+    print(Color.OKGREEN+'Query tool did not find errors, search harder!'+Color.ENDC)
 
 
 
