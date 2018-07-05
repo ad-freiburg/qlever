@@ -1,0 +1,111 @@
+---
+name: scientists
+queries:
+  - query: relativ-star-scientists
+    solutions:
+      - type: text
+        sparql: |
+          SELECT ?x SCORE(?t) TEXT(?t) WHERE {
+              ?x <is-a> <Scientist> .
+              ?t ql:contains-entity ?x .
+              ?t ql:contains-word "relati*"
+          }
+          ORDER BY DESC(SCORE(?t))
+        checks:
+          - num_cols: 3
+          - num_rows: 1653
+          - selected: ["?x", "SCORE(?t)", "TEXT(?t)"]
+            # null cells are ignored
+          - contains_row: ["<Albert_Einstein>", null, null]
+          - contains_row: ["<Luís_Lindley_Cintra>", null, null] # Test Unicode
+  - query: algo-star-female-scientists
+    solutions:
+      - type: text
+        sparql: |
+          SELECT ?x WHERE {
+              ?x <is-a> <Scientist> .
+              ?x <Gender> <Female> .
+              ?t ql:contains-entity ?x .
+              ?t ql:contains-word "algo*"
+          }
+          ORDER BY DESC(SCORE(?t))
+        checks:
+          - num_cols: 1
+          - num_rows: 11
+          - selected: ["?x"]
+          - contains_row: ["<Grete_Hermann>"]
+  - query: scientists-from-new-york
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?x WHERE {
+              ?x <is-a> <Scientist> .
+              ?x <Place_of_birth> <New_York_City>
+          }
+        checks:
+          - num_cols: 1
+          - num_rows: 280
+          - selected: ["?x"]
+          - contains_row: ["<Andrew_S._Tanenbaum>"]
+  - query: scientists-married-to-scientists
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?x ?y WHERE {
+              ?x <is-a> <Scientist> .
+              ?x <Spouse_(or_domestic_partner)> ?y .
+              ?y <is-a> <Scientist> .
+              FILTER(?x < ?y) .
+          } ORDER BY ASC(?x)
+        checks:
+          - num_cols: 2
+          - num_rows: 97
+          - selected: ["?x", "?y"]
+          - contains_row: ["<Albert_Einstein>", "<Mileva_Marić>"]
+  - query: scientists-count-group-by-place-of-birth
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT (COUNT(?x) as ?count) ?place WHERE {
+              ?x <is-a> <Scientist> .
+              ?x <Place_of_birth> ?place .
+          }
+          GROUP BY ?place
+          ORDER BY DESC(?count)
+        checks:
+          - num_cols: 2
+          # -num_rows: 5295 # greater than current limit
+          - selected: ["?count", "?place"]
+          - contains_row: [280, "<New_York_City>"]
+  - query: group-by-profession-average-height
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT (AVG(?height) as ?avg) ?profession WHERE {
+              ?x <is-a> ?profession .
+              ?x <Height> ?height .
+          }
+          GROUP BY ?profession
+          ORDER BY DESC(?avg)
+        checks:
+          - num_cols: 2
+          - num_rows: 312
+          - selected: ["?avg", "?profession"]
+          - contains_row: [null, "<Architect>"]
+  - query: group-by-gender-average-height
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT (AVG(?height) as ?avg) ?gender WHERE {
+              ?x <is-a> <Person> .
+              ?x <Gender> ?gender .
+              ?x <Height> ?height .
+          }
+          GROUP BY ?gender
+          ORDER BY DESC(?avg)
+        checks:
+          - num_rows: 2
+          - num_cols: 2
+          - selected: ["?avg", "?gender"]
+          # Float values are only compared to limited precision
+          - res: [[1.8, "<Male>"], [1.7, "<Female>"]]

@@ -5,12 +5,20 @@ dist: trusty
 addons:
   apt:
     sources:
+      - deadsnakes
       - ubuntu-toolchain-r-test
     packages:
       - gcc-5
       - g++-5
       - libsparsehash-dev
+      - python3.6
+      - python3-yaml
       - cmake
+      - netcat
+
+cache:
+  directories:
+    - e2e_data/scientist-collection/
 
 env:
   - CC=gcc-5 CXX=g++-5
@@ -21,9 +29,11 @@ before_script:
   - cd build
   - cmake ..
 
-script: 
-  - make -j 3 
+script:
+  - make -j 3
   - make test
+  - cd ..
+  - e2e/e2e.sh
 
 notifications:
   email:

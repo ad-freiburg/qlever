@@ -10,11 +10,11 @@ Pure SPARQL is supported as well.
 With this, it is possible to answer queries like the following one for astronauts who walked on the moon:
 
     SELECT ?a TEXT(?t) SCORE(?t) WHERE {
-        ?a <is-a> <Astronaut> . 
+        ?a <is-a> <Astronaut> .
         ?t ql:contains-entity ?a .
         ?t ql:contains-word "walk* moon"
     } ORDER BY DESC(SCORE(?t))
-    
+
 This Readme sets you up to use the engine and to quickly build and query your own index.
 
 
@@ -28,8 +28,8 @@ To reproduce our experimental evaluation, best use the according release (git ta
 
 ## CAVEAT!
 
-The latest version changed the syntax for text queries from a universal (and symmetric) ``<in-text>`` predicate to two explicit predicates ``ql:contains-entity`` and ``ql:contains-word``. 
-We found this style more intuitive and also used it in the CIKM'17 research paper. 
+The latest version changed the syntax for text queries from a universal (and symmetric) ``<in-text>`` predicate to two explicit predicates ``ql:contains-entity`` and ``ql:contains-word``.
+We found this style more intuitive and also used it in the CIKM'17 research paper.
 Thus, old queries no longer work and need to be adjusted as described in this README.
 
 
@@ -45,9 +45,10 @@ Make sure you use a 64bit Linux with:
 * g++ 4.8 or higher
 * CMake 2.8.4 or higher
 * google-sparsehash
+* python3 + python3-yaml (for End-to-End Tests)
 
-Other compilers (and OS) are not supported, yet. 
-So far no major problems are known. 
+Other compilers (and OS) are not supported, yet.
+So far no major problems are known.
 Support for more platforms would be a highly appreciated contribution.
 
 You also have to have google sparsehash installed.
@@ -59,33 +60,55 @@ If this isn't the case on your system, run:
 
 ## 1. Build:
 
-
 a) Checkout this project:
 
     git clone https://github.com/Buchhold/QLever.git --recursive
 
-Don't forget --recursive so that submodules will be updated. 
+Don't forget --recursive so that submodules will be updated.
 For old versions of git, that do not support this parameter, you can do:
 
     git clone https://github.com/Buchhold/QLever.git
     cd QLever
     git submodule init
     git submodule update
-    
 
-b) Go to a folder where you want to build the binaries.
-Don't do this directly in QLever
 
-    cd /path/to/YOUR_FOLDER
+b) Go to a folder where you want to build the binaries.  Usually this is done
+with a separate `build` subfolder. This is also assumed by the `e2e/e2e.sh`
+script.
 
-c) Build the project (Optional: add -DPERFTOOLS_PROFILER=True/False and -DALLOW_SHUTDOWN=True/False)
+    mkdir build && cd build
 
-    cmake /path/to/QLever/ -DCMAKE_BUILD_TYPE=Release; make -j
+c) Build the project (Optional: add `-DPERFTOOLS_PROFILER=True/False` and `-DALLOW_SHUTDOWN=True/False`)
+
+    cmake -DCMAKE_BUILD_TYPE=Release .. && make -j
 
 d) Run ctest. All tests should pass:
 
     ctest
 
+### 1.1 Running End-to-End Tests
+
+QLever includes a simple mechanism for testing the entire system from
+from building an index to running queries in a single command.
+
+
+In fact this End-to-End Test is run on Travis CI for every commit and Pull
+Request. It is also useful for local development however since it allows you to
+quickly test if something is horribly broken.
+
+**Note**: This does not include compilation and unit tests, though these are
+also run on Travis CI. Refer to the previous section for Unit Tests and
+compilation. Also this does assume that the build uses the `./build` directory
+as described in the [Build](#1-build) section.
+
+To do a full End-to-End Test run *(from the project root)*
+
+    e2e/e2e.sh
+
+If you want to skip creation of the index run
+
+    e2e/e2e.sh no-index
 
 ## 2. Creating an Index:
 
@@ -94,7 +117,7 @@ IMPORTANT:
 THERE HAS TO BE SUFFICIENT DISK SPACE UNDER THE PATH YOU CHOOSE FOR YOUR INDEX!
 FOR NOW - ALL FILES HAVE TO BE UTF-8 ENCODED!
 
-    You can use the files described and linked later in this document: 
+    You can use the files described and linked later in this document:
     "How to obtain data to play around with"
 
 a) from an NTriples file (currently no blank nodes allowed):
@@ -105,18 +128,18 @@ Note that the string passed to -i is the base name of various index files produc
 
 b) from a TSV File (no spaces / tabs in spo):
 
-    ./IndexBuilderMain -i /path/to/myindex -t /path/to/input.tsv 
+    ./IndexBuilderMain -i /path/to/myindex -t /path/to/input.tsv
 
 To include a text collection, the wordsfile (see below for the required format) has to be passed with -w.
 To support text snippets, a docsfile (see below for the required format)has to be passed with -d
 
 The full call will look like this:
 
-    ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -w /path/to/wordsfile -d /path/to/docsfile 
-    
+    ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -w /path/to/wordsfile -d /path/to/docsfile
+
 If you want support for SPARQL queries with predicate variables  (perfectly normal for SPARQL but rarely used in semantic text queries), use an optional argument -a to build all permutations:
 
-    ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -a -w 
+    ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -a -w
 
 To generate a patterns file and include support for ql:has-relations:
 
@@ -125,13 +148,13 @@ To generate a patterns file and include support for ql:has-relations:
 If you want some literals to be written to an on disk vocabulary (by default this concerns literals longer than 50 chars and literals in less frequent lagnuages), add an topional parameter -l. This is useful for large knowledge bases that included texts (descriptions etc) as literals and thus consume lots of memory on startup without this option.
 
     ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -l
-    
+
 You can also add a text index to an existing knowledge base index by ommitting -n and -t parameters (for KB input)
 
     ./IndexBuilderMain -i /path/to/myindex -w /path/to/wordsfile -d /path/to/docsfile
-    
+
 All options can, of course, be combined. The full call with all permutations and literals on disk will look like this:
-                                         
+
     ./IndexBuilderMain -a -l -i /path/to/myindex -n /path/to/input.nt -w /path/to/wordsfile -d /path/to/docsfile
 
 ## 3. Starting a Sever:
@@ -158,7 +181,7 @@ If you built an index using the -l and/or -a options, make sure to include it at
 or visit:
 
     http://localhost:<PORT>/index.html
-    
+
 ## 5. Text Features
 
 ### 5.1 Input Data
@@ -170,7 +193,7 @@ The following two input files are needed for full feature support:
 A tab-separated file with one line per posting and following the format:
 
     word    isEntity    recordId   score
-        
+
 For example, for a sentence `He discovered penicillin, a drug.`, it could look like this:
 
     He                  0   0   1
@@ -191,14 +214,12 @@ This file is used to build the text index from.
 A tab-separated file with one line per original unit of text and following the format:
 
     max_record_id  text
-    
+
 For example, for the sentence above:
 
     1   He discovered penicillin, a drug.
-    
+
 Note that this file is only used to display proper excerpts as evidence for texttual matches.
-
-
 
 ### 5.2 Supported Queries
 
@@ -207,12 +228,12 @@ Typical SPARQL queries can then be augmented. The features are best explained us
 
 A query for plants with edible leaves:
 
-    SELECT ?plant WHERE { 
-        ?plant <is-a> <Plant> . 
-        ?t ql:contains-entity ?plant . 
+    SELECT ?plant WHERE {
+        ?plant <is-a> <Plant> .
+        ?t ql:contains-entity ?plant .
         ?t ql:contains-word "'edible' 'leaves'"
-    } 
-    
+    }
+
 The special predicate `ql:contains-entity` requires that results for `?plant` have to occur in a text record `?t`.
 In records matching `?t`, there also have to be both words `edible` and `leaves` as specified thorugh the `ql:contains-word` predicate.
 Note that the single quotes can also be omitted and will be in further examples.
@@ -221,12 +242,12 @@ Single quotes are necessary to mark phrases (which are not supported yet, but ma
 A query for Astronauts who walked on the moon:
 
     SELECT ?a TEXT(?t) SCORE(?t) WHERE {
-        ?a <is-a> <Astronaut> . 
+        ?a <is-a> <Astronaut> .
         ?t ql:contains-entity ?a .
         ?t ql:contains-word "walk* moon"
     } ORDER BY DESC(SCORE(?t))
     TEXTLIMIT 2
-    
+
 Note the following features:
 
 * A star `*` can be used to search for a prefix as done in the keyword `walk*`. Note that there is a min prefix size depending on settings at index build-time.
@@ -237,7 +258,7 @@ Note the following features:
 An alternative query for astronauts who walked on the moon:
 
         SELECT ?a TEXT(?t) SCORE(?t) WHERE {
-            ?a <is-a> <Astronaut> . 
+            ?a <is-a> <Astronaut> .
             ?t ql:contains-entity ?a .
             ?t ql:contains-word "walk*" .
             ?t ql:contains-entity <Moon> .
@@ -262,7 +283,7 @@ Text / Knowledge-base data can be nested in queries. This allows queries like on
     } ORDER BY DESC(SCORE(?t))
 
 
-For now, each text-record variable is required to have a triple `ql:contains-word/entity WORD/URI`. 
+For now, each text-record variable is required to have a triple `ql:contains-word/entity WORD/URI`.
 Pure connections to variables (e.g. "Books with a description that mentions a plant.") are planned for the future.
 
 To obtain a list of available relations and their counts `ql:has-relation` can be used if the index was build with the `--patterns` option, and the server was started with the `--patterns` option:
@@ -302,7 +323,7 @@ They are fine for setting up a working sever within seconds and getting comforta
     QLever/misc/tiny-example.kb.nt
     QLever/misc/tiny-example.wordsfile.tsv
     QLever/misc/tiny-example.docsfile.tsv
-    
+
 Note that we left out stopwords (unlike in the docsfile) to demonstrate how this can be done if desired.
 If you build an index using these files and ask the query:
 
@@ -311,7 +332,7 @@ If you build an index using these files and ask the query:
         ?t ql:contains-entity ?x .
         ?t ql:contains-word "penicillin"
     }  ORDER BY DESC(SCORE(?t))
-    
+
 You should find `<Alexander_Fleming>` and the textual evidence for that match.
 
 You can also display his awards or find `<Albert_Einstein>` and his awards with the following query:
@@ -327,17 +348,17 @@ have a look at the (really tiny) input files to get a feeling for how this works
 
 Curl-versions (ready for copy&paste) of the queries:
 
-    SELECT ?x TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?t ql:contains-entity ?x . ?t ql:contains-word \"penicillin\" \} ORDER BY DESC(SCORE(?t))    
+    SELECT ?x TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?t ql:contains-entity ?x . ?t ql:contains-word \"penicillin\" \} ORDER BY DESC(SCORE(?t))
 
     SELECT ?x ?award TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?t ql:contains-entity ?x . ?t ql:contains-word \"theory rela*\" . ?x <Award_Won> ?award \}  ORDER BY DESC(SCORE(?t))
-    
+
 Again, there's not much to be done with this data.
 For a meaningful index, use the example data below.
 
 ## Download prepared input files for a collection about scientists
 
 These files are of medium size (facts about scientists - only one hop from a scientist in a knowledge graph. Text are Wikipedia articles about scientists.)
-Includes a knowledge base as nt file, and a words- and docsfile as tsv. 
+Includes a knowledge base as nt file, and a words- and docsfile as tsv.
 
 [scientist-collection.zip](http://filicudi.informatik.uni-freiburg.de/bjoern-data/scientist-collection.zip):
 
@@ -363,7 +384,7 @@ Curl-version (ready for copy&paste) of the query:
 
 
 Includes a knowledge base as nt file, and a words- and docsfile as tsv.
-Text and facts are basically equivalent to the [Broccoli](http://broccoli.cs.uni-freiburg.de) search engine. 
+Text and facts are basically equivalent to the [Broccoli](http://broccoli.cs.uni-freiburg.de) search engine.
 
 [wikipedia-freebase.zip](http://filicudi.informatik.uni-freiburg.de/bjoern-data/wikipedia-freebase.zip):
 
@@ -387,7 +408,7 @@ Curl-version (ready for copy&paste) of the query:
 
 ## Use any knowledge base and text collection of your choice
 
- 
+
 Create the files similar to the three files provided as sample downloads for other data sets.
 Usually, knowledge base files do not have to be changed. Only words- and docsfile have to be produced.
 
@@ -401,7 +422,7 @@ Usually, knowledge base files do not have to be changed. Only words- and docsfil
 You can get stats for the currently active index in the following way:
 
     <server>:<port>/?cmd=stats
-    
+
 This query will yield a JSON response that features:
 
 * The name of the KB index
@@ -426,15 +447,15 @@ Furthermore, in a UI, it is usually beneficial to get less than all result rows 
 
 While it is recommended for applications to specify a LIMIT, some experiments want to measure the time to produce the full result but not block the UI.
 Therefore an additional HTTP parameter "&send=<x>" can be used to only send x result rows but to compute the fully readable result for everything according to LIMIT.
- 
-**IMPORTANT: Unless you want to measure QLever's performance, using LIMIT (+ OFFSET for sequential loading) should be preferred in all applications. That way should be faster and standard SPARQL without downsides.** 
+
+**IMPORTANT: Unless you want to measure QLever's performance, using LIMIT (+ OFFSET for sequential loading) should be preferred in all applications. That way should be faster and standard SPARQL without downsides.**
 
 
 # Troubleshooting
 
 
 If you have problems, try to rebuild when compiling with -DCMAKE_BUILD_TYPE=Debug.
-In particular also rebuild the index. 
+In particular also rebuild the index.
 The release build assumes machine written words- and docsfiles and omits sanity checks for the sake of speed.
 
 ## Excessive RAM usage
@@ -451,7 +472,7 @@ this required memory is what is described below for runtime memory usage.
 However, in addition not all memory seems to be freed as soon as possible. This
 needs further investitation. For now, there is an easy workaround to build
 KB and text index in two steps (two calls of IndexBuilderMain) or to pre-build
-the index on a server with lots of available resources. 
+the index on a server with lots of available resources.
 
 In general, not building all 6 permutations helps a lot. If this is enough (e.g.
 for emulating the Brococli search engine), this reduces RAM very significantly.
@@ -478,7 +499,7 @@ different objects, especially string literals. As of now (release for CIKM
 2017), the index keeps some meta data in RAM for each main element of the
 permutation. For the two "main" permutation,  PSO and POS, this is very
 reasonnable and resembles what is done in the Broccoli search engine. Having a
-few bytes (32 + extra bytes for blocks inside relations, which aren't the main problem anymore) 
+few bytes (32 + extra bytes for blocks inside relations, which aren't the main problem anymore)
 for each of a few hundred thousand predicates is no problem, even for the largest KBs. However, having the same meta data for
 several hundreds of millions of objects (500M for Freebase, require twice, for
 OSP and OPS, plus 2 times 125M subjects) quickly adds up beyond acceptable numbers.
@@ -497,7 +518,7 @@ files.
   meta data within the on-disk index and make it configurable which lists to
   load into RAM on startup (PSO and POS probably being the sensible default, but
   sometimes also having SPO can be a nice addition). Whatever isn't loaded into
-  RAM has to be read form disk at query time if it is actually needed. 
+  RAM has to be read form disk at query time if it is actually needed.
   In particle, however, query planning has to respect which meta data is available in RAM and special care has to be taken for queries involving ?s ?p ?o triples. This is the reason why the change sn't trivial.
   The branch also adds another readme, PERFORMANCE\_TUNING.md with more
   detailed information about the trade-offs. However, this file also isn't finished,

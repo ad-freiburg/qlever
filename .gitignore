@@ -1,3 +1,5 @@
+# End-to-End data
+e2e_data/*
 # Compiled Object files
 *.slo
 *.lo
