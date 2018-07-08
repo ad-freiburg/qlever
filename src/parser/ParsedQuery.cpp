@@ -96,6 +96,9 @@ string SparqlFilter::asString() const {
     case GE:
       os << " >= ";
       break;
+    case LANG_MATCHES:
+      os << " LANG_MATCHES ";
+      break;
   }
   os << _rhs << ")";
   return os.str();
@@ -176,25 +179,26 @@ void ParsedQuery::parseAliases() {
     const std::string& var = _selectedVariables[i];
     if (var[0] == '(') {
       std::string inner = var.substr(1, var.size() - 2);
-      if (ad_utility::startsWith(inner, "COUNT") ||
-          ad_utility::startsWith(inner, "GROUP_CONCAT") ||
-          ad_utility::startsWith(inner, "FIRST") ||
-          ad_utility::startsWith(inner, "LAST") ||
-          ad_utility::startsWith(inner, "SAMPLE") ||
-          ad_utility::startsWith(inner, "MIN") ||
-          ad_utility::startsWith(inner, "MAX") ||
-          ad_utility::startsWith(inner, "SUM") ||
-          ad_utility::startsWith(inner, "AVG")) {
+      std::string lowerInner = ad_utility::getLowercaseUtf8(inner);
+      if (ad_utility::startsWith(lowerInner, "count") ||
+          ad_utility::startsWith(lowerInner, "group_concat") ||
+          ad_utility::startsWith(lowerInner, "first") ||
+          ad_utility::startsWith(lowerInner, "last") ||
+          ad_utility::startsWith(lowerInner, "sample") ||
+          ad_utility::startsWith(lowerInner, "min") ||
+          ad_utility::startsWith(lowerInner, "max") ||
+          ad_utility::startsWith(lowerInner, "sum") ||
+          ad_utility::startsWith(lowerInner, "avg")) {
         Alias a;
         a._isAggregate = true;
-        size_t pos = inner.find("as");
+        size_t pos = lowerInner.find(" as ");
         if (pos == std::string::npos) {
-          pos = inner.find("AS");
-          if (pos == std::string::npos) {
-            throw ParseException("Alias " + var +
-                                 " is malformed: keyword as is missing.");
-          }
+          throw ParseException("Alias " + var +
+                               " is malformed: keyword 'as' is missing or not "
+                               "surrounded by spaces.");
         }
+        // skip the leading space of the 'as'
+        pos++;
         std::string newVarName = inner.substr(pos + 2, var.size() - pos - 2);
         newVarName = ad_utility::strip(newVarName, " \t\n");
         a._outVarName = newVarName;
@@ -207,8 +211,7 @@ void ParsedQuery::parseAliases() {
                ::std::isspace(static_cast<unsigned char>(inner[pos]))) {
           pos++;
         }
-        if (inner.compare(pos, 8, "DISTINCT") == 0 ||
-            inner.compare(pos, 8, "distinct") == 0) {
+        if (lowerInner.compare(pos, 8, "distinct") == 0) {
           // skip the distinct and any space after it
           pos += 8;
           while (pos < inner.size() &&

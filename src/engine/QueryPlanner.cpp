@@ -1248,10 +1248,10 @@ void QueryPlanner::applyFiltersIfPossible(
         newPlan._idsOfIncludedNodes = row[n]._idsOfIncludedNodes;
         auto& tree = *newPlan._qet.get();
         if (isVariable(filters[i]._rhs)) {
-          std::shared_ptr<Operation> filter(new Filter(
+          std::shared_ptr<Operation> filter = std::make_shared<Filter>(
               _qec, row[n]._qet, filters[i]._type,
               row[n]._qet.get()->getVariableColumn(filters[i]._lhs),
-              row[n]._qet.get()->getVariableColumn(filters[i]._rhs)));
+              row[n]._qet.get()->getVariableColumn(filters[i]._rhs));
           tree.setOperation(QueryExecutionTree::FILTER, filter);
         } else {
           string compWith = filters[i]._rhs;
