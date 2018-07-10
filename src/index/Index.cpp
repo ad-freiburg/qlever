@@ -88,7 +88,7 @@ void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
 // _____________________________________________________________________________________________
 Index::ExtVec Index::createExtVecAndVocabFromNTriples(const string& ntFile, 
     					       const string& onDiskBase,
-					       bool onDiskLiterals) {
+					       bool onDiskLiterals, bool keepTempFiles) {
   size_t nofLines = passNTriplesFileForVocabulary(ntFile, onDiskLiterals, NUM_TRIPLES_PER_PARTIAL_VOCAB);
   if (onDiskLiterals) {
     _vocab.externalizeLiteralsFromTextFile(onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME, 
@@ -98,18 +98,35 @@ Index::ExtVec Index::createExtVecAndVocabFromNTriples(const string& ntFile,
   _vocab = Vocabulary();
   ExtVec v(nofLines);
   passNTriplesFileIntoIdVector(ntFile, v, onDiskLiterals, NUM_TRIPLES_PER_PARTIAL_VOCAB);
+
+  if (!keepTempFiles) {
+    // remove temporary files only used during index creation
+    LOG(INFO) << "Removing temporary files (partial vocabulary and external text file...\n";
+    string removeCommand1 = "rm " + onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME;
+    bool w1 = system(removeCommand1.c_str());
+    string removeCommand2 = "rm " + onDiskBase + PARTIAL_VOCAB_FILE_NAME + "*";
+    bool w2 = system(removeCommand2.c_str());
+    if (w1 || w2) {
+      LOG(INFO) << "Warning. Deleting of temporary files probably not successful\n";
+    } else {
+      LOG(INFO) << "Done.\n";
+    }
+  } else {
+    LOG(INFO) << "Keeping temporary files (partial vocabulary and external text file...\n";
+  }
   return v;
 }
    							
 // _____________________________________________________________________________
 void Index::createFromNTriplesFile(const string& ntFile,
                                    const string& onDiskBase,
-                                   bool allPermutations, bool onDiskLiterals) {
+                                   bool allPermutations, bool onDiskLiterals,
+				   bool keepTempFiles) {
   _onDiskBase = onDiskBase;
   _onDiskLiterals = onDiskLiterals;
   string indexFilename = _onDiskBase + ".index";
 
-  ExtVec v = createExtVecAndVocabFromNTriples(ntFile, onDiskBase, onDiskLiterals);
+  ExtVec v = createExtVecAndVocabFromNTriples(ntFile, onDiskBase, onDiskLiterals, keepTempFiles);
   LOG(INFO) << "Sorting for PSO permutation..." << std::endl;
   stxxl::sort(begin(v), end(v), SortByPSO(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;

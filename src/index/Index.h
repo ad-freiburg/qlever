@@ -48,8 +48,8 @@ class Index {
   // Will write vocabulary and on-disk index data.
   // Also ends up with fully functional in-memory metadata.
   void createFromNTriplesFile(const string& ntFile, const string& onDiskBase,
-                              bool allPermutations,
-                              bool onDiskLiterals = false);
+                              bool allPermutations, bool onDiskLiterals = false,
+			      bool keepTempFiles = false);
 
   // Creates an index object from an on disk index
   // that has previously been constructed.
@@ -311,7 +311,7 @@ class Index {
   // creation once the ExtVec is set up and it would be a waste of RAM
   ExtVec createExtVecAndVocabFromNTriples(const string& ntFile, 
     					  const string& onDiskBase,
-					  bool onDiskLiterals);
+					  bool onDiskLiterals, bool keepTempFiles);
 
   // ___________________________________________________________________
   size_t passNTriplesFileForVocabulary(const string& ntFile,

@@ -2,6 +2,7 @@
 #include <string>
 #include <fstream>
 #include <cstdlib>
+#include <iostream>
 #include <ctime>
 
 #include "../src/index/ConstantsIndexCreation.h"
@@ -43,7 +44,10 @@ protected:
     // create random subdirectory in /tmp
     std::string tempPath = "/tmp/";
     _basePath = tempPath + _basePath + "/";
-    system(("mkdir -p " + _basePath).c_str());
+    if (system(("mkdir -p " + _basePath).c_str())) {
+      // system should return 0 on success
+      std::cerr << "Could not create subfolder of tmp for test. this might lead to test failures\n";
+    }
 
     // make paths abolute under created tmp directory
     _path0 = _basePath + _path0;
