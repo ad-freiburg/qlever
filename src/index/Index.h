@@ -15,6 +15,7 @@
 #include "./IndexMetaData.h"
 #include "./StxxlSortFunctors.h"
 #include "./TextMetaData.h"
+#include "./ConstantsIndexCreation.h"
 #include "./Vocabulary.h"
 
 using std::array;
@@ -40,22 +41,19 @@ class Index {
   // Creates an index from a TSV file.
   // Will write vocabulary and on-disk index data.
   // Also ends up with fully functional in-memory metadata.
-  void createFromTsvFile(const string& tsvFile, const string& onDiskBase,
-                         bool allPermutations, bool onDiskLiterals = false);
+  void createFromTsvFile(const string& tsvFile,
+                         bool allPermutations);
 
   // Creates an index from a file in NTriples format.
   // Will write vocabulary and on-disk index data.
   // Also ends up with fully functional in-memory metadata.
-  void createFromNTriplesFile(const string& ntFile, const string& onDiskBase,
-                              bool allPermutations,
-                              bool onDiskLiterals = false);
+  void createFromNTriplesFile(const string& ntFile,
+                              bool allPermutations);
 
   // Creates an index object from an on disk index
   // that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
-  void createFromOnDiskIndex(const string& onDiskBase,
-                             bool allPermutations = false,
-                             bool onDiskLiterals = false);
+  void createFromOnDiskIndex(const string& onDiskBase, bool allPermutations = false);
 
   // Adds a text index to a fully initialized KB index.
   // Reads a context file and builds the index for the first time.
@@ -227,6 +225,12 @@ class Index {
   void setTextName(const string& name);
 
   void setUsePatterns(bool usePatterns);
+  
+  void setOnDiskLiterals(bool onDiskLiterals);
+
+  void setKeepTempFiles(bool keepTempFiles);
+
+  void setOnDiskBase(const std::string& onDiskBase);
 
   const string& getTextName() const { return _textMeta.getName(); }
 
@@ -268,6 +272,8 @@ class Index {
 
  private:
   string _onDiskBase;
+  bool _onDiskLiterals = false;
+  bool _keepTempFiles = false;
   Vocabulary _vocab;
   Vocabulary _textVocab;
   IndexMetaData _psoMeta;
@@ -293,17 +299,22 @@ class Index {
   std::vector<PatternID> _hasPattern;
   CompactStringVector<Id, Id> _hasRelation;
 
-  size_t passTsvFileForVocabulary(const string& tsvFile,
-                                  bool onDiskLiterals = false);
+  size_t passTsvFileForVocabulary(const string& tsvFile);
 
-  void passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data,
-                               bool onDiskLiterals = false);
+  void passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data);
 
+  // Create Vocabulary and directly write it to disk. Create ExtVec which can be
+  // used for creating permutations
+  // Member _vocab will be empty after this because it is not needed for index
+  // creation once the ExtVec is set up and it would be a waste of RAM
+  ExtVec createExtVecAndVocabFromNTriples(const string& ntFile);
+
+  // ___________________________________________________________________
   size_t passNTriplesFileForVocabulary(const string& ntFile,
-                                       bool onDiskLiterals = false);
+                                       size_t linesPerPartial = 100000000);
 
   void passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data,
-                                    bool onDiskLiterals = false);
+                                    size_t linesPerPartial = 100000000);
 
   size_t passContextFileForVocabulary(const string& contextFile);
 

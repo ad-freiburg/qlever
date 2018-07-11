@@ -26,8 +26,8 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
   _index.setUsePatterns(usePatterns);
 
   // Init the index.
-  _index.createFromOnDiskIndex(ontologyBaseName, allPermutations,
-                               onDiskLiterals);
+  _index.setOnDiskLiterals(onDiskLiterals);
+  _index.createFromOnDiskIndex(ontologyBaseName, allPermutations);
   if (useText) {
     _index.addTextFromOnDiskIndex();
   }

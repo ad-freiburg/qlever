@@ -36,6 +36,8 @@ struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
                            {"tsv-file", required_argument, NULL, 't'},
                            {"text-index-name", required_argument, NULL, 'T'},
                            {"words-by-contexts", required_argument, NULL, 'w'},
+                           {"add-text-index", no_argument, NULL, 'A'},
+			   {"keep-temporary-files", no_argument, NULL, 'k'},
                            {NULL, 0, NULL, 0}};
 
 string getStxxlDiskFileName(const string& location, const string& tail) {
@@ -96,6 +98,13 @@ void printUsage(char* execName) {
   cout << "  " << std::setw(20) << "w, words-by-contexts" << std::setw(1)
        << "    "
        << "words-file to build text index from." << endl;
+  cout << "  " << std::setw(20) << "A, add-text-index" << std::setw(1)
+       << "    "
+       << "Add text index to already existing kb-index" << endl;
+  cout << "  " << std::setw(20) << "k, keep-temporary-files" << std::setw(1)
+       << "    "
+       << "Keep Temporary Files from IndexCreation (normally only for debugging)" 
+       << endl;
   cout.copyfmt(coutState);
 }
 
@@ -118,10 +127,12 @@ int main(int argc, char** argv) {
   bool allPermutations = false;
   bool onDiskLiterals = false;
   bool usePatterns = false;
+  bool onlyAddTextIndex = false;
+  bool keepTemporaryFiles = false;
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:Ph", options, NULL);
+    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:PhAk", options, NULL);
     if (c == -1) {
       break;
     }
@@ -159,6 +170,12 @@ int main(int argc, char** argv) {
         break;
       case 'P':
         usePatterns = true;
+        break;
+      case 'A':
+        onlyAddTextIndex = true;
+        break;
+      case 'k':
+        keepTemporaryFiles = true;
         break;
       default:
         cout << endl
@@ -217,14 +234,23 @@ int main(int argc, char** argv) {
     index.setKbName(kbIndexName);
     index.setTextName(textIndexName);
     index.setUsePatterns(usePatterns);
-    if (ntFile.size() > 0) {
-      index.createFromNTriplesFile(ntFile, baseName, allPermutations,
-                                   onDiskLiterals);
-    } else if (tsvFile.size() > 0) {
-      index.createFromTsvFile(tsvFile, baseName, allPermutations,
-                              onDiskLiterals);
-    } else {
-      index.createFromOnDiskIndex(baseName, allPermutations, onDiskLiterals);
+    // TODO(j.kalmbach): onDiskLiterals is now  redundant in all other functions, probably
+    // remove it, same for onDiskBase
+    index.setOnDiskLiterals(onDiskLiterals);
+    index.setOnDiskBase(baseName);
+    index.setKeepTempFiles(keepTemporaryFiles);
+    if (!onlyAddTextIndex) {
+      // if onlyAddTextIndex is true, we do not want to construct an index, but
+      // assume that it  already exists (especially we need a valid vocabulary
+      // for  text  index  creation)
+
+      if (ntFile.size() > 0) {
+	index.createFromNTriplesFile(ntFile, allPermutations);
+      } else if (tsvFile.size() > 0) {
+	index.createFromTsvFile(tsvFile, allPermutations);
+      } else {
+	index.createFromOnDiskIndex(baseName, allPermutations);
+      }
     }
 
     if (wordsfile.size() > 0) {

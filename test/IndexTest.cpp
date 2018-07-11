@@ -51,7 +51,8 @@ TEST(IndexTest, createFromTsvTest) {
     f.close();
 
     Index index;
-    index.createFromTsvFile("_testtmp2.tsv", "_testindex", false);
+    index.setOnDiskBase("_testindex");
+    index.createFromTsvFile("_testtmp2.tsv", false);
 
     ASSERT_TRUE(index._psoMeta.relationExists(2));
     ASSERT_TRUE(index._psoMeta.relationExists(3));
@@ -146,7 +147,8 @@ TEST(IndexTest, createFromTsvTest) {
     f.close();
 
     Index index;
-    index.createFromTsvFile("_testtmp2.tsv", "_testindex", false);
+    index.setOnDiskBase("_testindex");
+    index.createFromTsvFile("_testtmp2.tsv", false);
 
     ASSERT_TRUE(index._psoMeta.relationExists(7));
     ASSERT_FALSE(index._psoMeta.relationExists(1));
@@ -368,7 +370,8 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     Index index;
     index.setUsePatterns(true);
     index._maxNumPatterns = 1;
-    index.createFromTsvFile("_testtmppatterns.tsv", "_testindex", false);
+    index.setOnDiskBase("_testindex");
+    index.createFromTsvFile("_testtmppatterns.tsv", false);
 
     ASSERT_EQ(2u, index.getHasPattern().size());
     ASSERT_EQ(1u, index.getHasRelation().size());
@@ -428,7 +431,8 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
 
   {
     Index indexPrim;
-    indexPrim.createFromTsvFile("_testtmp3.tsv", "_testindex2", false);
+    indexPrim.setOnDiskBase("_testindex2");
+    indexPrim.createFromTsvFile("_testtmp3.tsv", false);
   }
 
   Index index;
@@ -478,7 +482,8 @@ TEST(IndexTest, scanTest) {
   f.close();
   {
     Index index;
-    index.createFromTsvFile("_testtmp2.tsv", "_testindex", false);
+    index.setOnDiskBase("_testindex");
+    index.createFromTsvFile("_testtmp2.tsv", false);
 
     Index::WidthOneList wol;
     Index::WidthTwoList wtl;
@@ -556,7 +561,8 @@ TEST(IndexTest, scanTest) {
 
   {
     Index index;
-    index.createFromTsvFile("_testtmp2.tsv", "_testindex", false);
+    index.setOnDiskBase("_testindex");
+    index.createFromTsvFile("_testtmp2.tsv", false);
 
     Index::WidthOneList wol;
     Index::WidthTwoList wtl;

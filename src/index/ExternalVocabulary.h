@@ -23,6 +23,7 @@ using std::vector;
 class ExternalVocabulary {
  public:
   void buildFromVector(const vector<string>& v, const string& fileName);
+  void buildFromTextFile(const string& textFileName, const string& outFileName); 
 
   void initFromFile(const string& file);
 

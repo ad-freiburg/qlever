@@ -11,6 +11,7 @@
 #include "../parser/NTriplesParser.h"
 #include "../parser/TsvParser.h"
 #include "../util/Conversions.h"
+#include "./VocabularyGenerator.h"
 
 using std::array;
 
@@ -20,17 +21,16 @@ Index::Index()
       _maxNumPatterns(std::numeric_limits<PatternID>::max() - 2) {}
 
 // _____________________________________________________________________________
-void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
-                              bool allPermutations, bool onDiskLiterals) {
-  _onDiskBase = onDiskBase;
+void Index::createFromTsvFile(const string& tsvFile,
+                              bool allPermutations) {
   string indexFilename = _onDiskBase + ".index";
-  size_t nofLines = passTsvFileForVocabulary(tsvFile, onDiskLiterals);
+  size_t nofLines = passTsvFileForVocabulary(tsvFile);
   ExtVec v(nofLines);
-  passTsvFileIntoIdVector(tsvFile, v, onDiskLiterals);
-  if (onDiskLiterals) {
+  passTsvFileIntoIdVector(tsvFile, v);
+  if (_onDiskLiterals) {
     _vocab.externalizeLiterals(_onDiskBase + ".literals-index");
   }
-  _vocab.writeToFile(onDiskBase + ".vocabulary");
+  _vocab.writeToFile(_onDiskBase + ".vocabulary");
   // PSO permutation
   LOG(INFO) << "Sorting for PSO permutation..." << std::endl;
   stxxl::sort(begin(v), end(v), SortByPSO(), STXXL_MEMORY_TO_USE);
@@ -84,19 +84,45 @@ void Index::createFromTsvFile(const string& tsvFile, const string& onDiskBase,
   openFileHandles();
 }
 
+// _____________________________________________________________________________________________
+Index::ExtVec Index::createExtVecAndVocabFromNTriples(const string& ntFile) {
+  size_t nofLines = passNTriplesFileForVocabulary(ntFile, NUM_TRIPLES_PER_PARTIAL_VOCAB);
+  if (_onDiskLiterals) {
+    _vocab.externalizeLiteralsFromTextFile(_onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME, 
+	                                   _onDiskBase + ".literals-index");
+  }
+  // clear vocabulary to save ram (only information from partial binary files used from now on).
+  _vocab = Vocabulary();
+  ExtVec v(nofLines);
+  passNTriplesFileIntoIdVector(ntFile, v, NUM_TRIPLES_PER_PARTIAL_VOCAB);
+
+  if (!_keepTempFiles) {
+    // remove temporary files only used during index creation
+    LOG(INFO) << "Removing temporary files (partial vocabulary and external text file...\n";
+
+    // TODO: using system and rm is not really elegant nor portable.
+    // use std::filesystem as soon as QLever is ported to C++17
+    string removeCommand1 = "rm -- " + _onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME;
+    bool w1 = system(removeCommand1.c_str());
+    string removeCommand2 = "rm -- " + _onDiskBase + PARTIAL_VOCAB_FILE_NAME + "*";
+    bool w2 = system(removeCommand2.c_str());
+    if (w1 || w2) {
+      LOG(INFO) << "Warning. Deleting of temporary files probably not successful\n";
+    } else {
+      LOG(INFO) << "Done.\n";
+    }
+  } else {
+    LOG(INFO) << "Keeping temporary files (partial vocabulary and external text file...\n";
+  }
+  return v;
+}
+   							
 // _____________________________________________________________________________
 void Index::createFromNTriplesFile(const string& ntFile,
-                                   const string& onDiskBase,
-                                   bool allPermutations, bool onDiskLiterals) {
-  _onDiskBase = onDiskBase;
+                                   bool allPermutations) {
   string indexFilename = _onDiskBase + ".index";
-  size_t nofLines = passNTriplesFileForVocabulary(ntFile, onDiskLiterals);
-  ExtVec v(nofLines);
-  passNTriplesFileIntoIdVector(ntFile, v, onDiskLiterals);
-  if (onDiskLiterals) {
-    _vocab.externalizeLiterals(onDiskBase + ".literals-index");
-  }
-  _vocab.writeToFile(onDiskBase + ".vocabulary");
+
+  ExtVec v = createExtVecAndVocabFromNTriples(ntFile);
   LOG(INFO) << "Sorting for PSO permutation..." << std::endl;
   stxxl::sort(begin(v), end(v), SortByPSO(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
@@ -150,8 +176,7 @@ void Index::createFromNTriplesFile(const string& ntFile,
 }
 
 // _____________________________________________________________________________
-size_t Index::passTsvFileForVocabulary(const string& tsvFile,
-                                       bool onDiskLiterals) {
+size_t Index::passTsvFileForVocabulary(const string& tsvFile) {
   LOG(INFO) << "Making pass over TsvFile " << tsvFile << " for vocabulary."
             << std::endl;
   array<string, 3> spo;
@@ -162,7 +187,7 @@ size_t Index::passTsvFileForVocabulary(const string& tsvFile,
     if (ad_utility::isXsdValue(spo[2])) {
       spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
     }
-    if (onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
+    if (_onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
       spo[2] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[2];
     }
     items.insert(spo[0]);
@@ -179,8 +204,7 @@ size_t Index::passTsvFileForVocabulary(const string& tsvFile,
 }
 
 // _____________________________________________________________________________
-void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data,
-                                    bool onDiskLiterals) {
+void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data) {
   LOG(INFO) << "Making pass over TsvFile " << tsvFile
             << " and creating stxxl vector.\n";
   array<string, 3> spo;
@@ -193,7 +217,7 @@ void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data,
     if (ad_utility::isXsdValue(spo[2])) {
       spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
     }
-    if (onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
+    if (_onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
       spo[2] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[2];
     }
     writer << array<Id, 3>{{vocabMap.find(spo[0])->second,
@@ -210,58 +234,110 @@ void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data,
 
 // _____________________________________________________________________________
 size_t Index::passNTriplesFileForVocabulary(const string& ntFile,
-                                            bool onDiskLiterals) {
-  LOG(INFO) << "Making pass over NTriples " << ntFile << " for vocabulary."
-            << std::endl;
-  array<string, 3> spo;
+                                            size_t linesPerPartial) {
+  array<string, 3> spo; 
   NTriplesParser p(ntFile);
   ad_utility::HashSet<string> items;
-  size_t i = 0;
+  size_t i = 0; 
+  size_t numFiles = 0; 
   while (p.getLine(spo)) {
     if (ad_utility::isXsdValue(spo[2])) {
       spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
     }
-    if (onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
+    if (_onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
       spo[2] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[2];
+    }    
+    
+    // Duplicated in pass for Id Vector, externalize to function
+    for (size_t k = 0; k < 3; ++k) {
+      items.insert(spo[k]);
     }
-    items.insert(spo[0]);
-    items.insert(spo[1]);
-    items.insert(spo[2]);
+
     ++i;
     if (i % 10000000 == 0) {
       LOG(INFO) << "Lines processed: " << i << '\n';
     }
+
+    if (i % linesPerPartial == 0) {
+      LOG(INFO) << "Lines processed: " << i << '\n';
+      string partialFilename = _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
+      Vocabulary vocab;
+      vocab.createFromSet(items);
+      LOG(INFO) << "writing partial vocabular to " << partialFilename << std::endl;
+      vocab.writeToBinaryFileForMerging(partialFilename);
+      LOG(INFO) << "Done\n";
+      items.clear();
+      numFiles++;
+    }
   }
+  // write Remainder
+  //
+  LOG(INFO) << "Lines processed: " << i << '\n';
+  if (items.size() > 0) {
+    // write remainder
+    string partialFilename = _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
+    LOG(INFO) << "writing partial vocabular to " << partialFilename << std::endl;
+    Vocabulary vocab;
+    vocab.createFromSet(items);
+    vocab.writeToBinaryFileForMerging(partialFilename);
+    items.clear();
+    numFiles++;
+  }
+  LOG(INFO) << "Merging vocabulary\n";
+  mergeVocabulary(_onDiskBase, numFiles);
   LOG(INFO) << "Pass done.\n";
-  _vocab.createFromSet(items);
-  items.clear();
   return i;
 }
 
 // _____________________________________________________________________________
 void Index::passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data,
-                                         bool onDiskLiterals) {
+                                         size_t linesPerPartial) {
   LOG(INFO) << "Making pass over NTriples " << ntFile
             << " and creating stxxl vector.\n";
   array<string, 3> spo;
   NTriplesParser p(ntFile);
-  google::sparse_hash_map<string, Id> vocabMap = _vocab.asMap();
+  std::string vocabFilename(_onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(0));
+  LOG(INFO) << "Reading partial vocab from " << vocabFilename << " ...\n";
+  google::sparse_hash_map<string, Id> vocabMap = vocabMapFromPartialIndexedFile(vocabFilename);
+  LOG(INFO) << "done reading partial vocab\n"; 
   size_t i = 0;
+  size_t numFiles = 0;
   // write using vector_bufwriter
   ExtVec::bufwriter_type writer(data);
   while (p.getLine(spo)) {
     if (ad_utility::isXsdValue(spo[2])) {
       spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
     }
-    if (onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
+    if (_onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
       spo[2] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[2];
     }
-    writer << array<Id, 3>{{vocabMap.find(spo[0])->second,
-                            vocabMap.find(spo[1])->second,
-                            vocabMap.find(spo[2])->second}};
+
+    // Duplicated in pass for Id Vector, externalize to function
+    bool broken = false;
+    for (size_t k = 0; k < 3; ++k) {
+      if (vocabMap.find(spo[k]) == vocabMap.end()) {
+        LOG(INFO) << "not found in partial Vocab: " << spo[k] << '\n';
+        broken = true;
+      }
+    }
+    if (broken) continue;
+    writer << array<Id, 3>{{
+                               vocabMap.find(spo[0])->second,
+                               vocabMap.find(spo[1])->second,
+                               vocabMap.find(spo[2])->second
+                           }};
     ++i;
-    if (i % 10000000 == 0) {
+    if (i % 100000 == 0) {
       LOG(INFO) << "Lines processed: " << i << '\n';
+    }
+
+    if (i % linesPerPartial == 0) {
+      numFiles++;
+      LOG(INFO) << "Lines processed: " << i << '\n';
+      vocabFilename = _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
+      LOG(INFO) << "Reading partial vocab from " << vocabFilename << " ...\n";
+      vocabMap = vocabMapFromPartialIndexedFile(vocabFilename);
+      LOG(INFO) << "done reading partial vocab\n";
     }
   }
   writer.finish();
@@ -737,11 +813,10 @@ void Index::writeNonFunctionalRelation(
 }
 
 // _____________________________________________________________________________
-void Index::createFromOnDiskIndex(const string& onDiskBase,
-                                  bool allPermutations, bool onDiskLiterals) {
-  _onDiskBase = onDiskBase;
-  _vocab.readFromFile(onDiskBase + ".vocabulary",
-                      onDiskLiterals ? onDiskBase + ".literals-index" : "");
+void Index::createFromOnDiskIndex(const string& onDiskBase, bool allPermutations) {
+  setOnDiskBase(onDiskBase);
+  _vocab.readFromFile(_onDiskBase + ".vocabulary",
+                      _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
   _psoFile.open(string(_onDiskBase + ".index.pso").c_str(), "r");
   _posFile.open(string(_onDiskBase + ".index.pos").c_str(), "r");
   AD_CHECK(_psoFile.isOpen() && _posFile.isOpen());
@@ -1340,6 +1415,7 @@ size_t Index::sizeEstimate(const string& sub, const string& pred,
 template <class T>
 void Index::writeAsciiListFile(const string& filename, const T& ids) const {
   std::ofstream f(filename.c_str());
+
   for (size_t i = 0; i < ids.size(); ++i) {
     f << ids[i] << ' ';
   }
@@ -1520,6 +1596,21 @@ void Index::setKbName(const string& name) {
   _sopMeta.setName(name);
   _ospMeta.setName(name);
   _opsMeta.setName(name);
+}
+
+// ____________________________________________________________________________
+void Index::setOnDiskLiterals(bool onDiskLiterals) {
+  _onDiskLiterals = onDiskLiterals;
+}
+
+// ____________________________________________________________________________
+void Index::setOnDiskBase(const std::string& onDiskBase) {
+  _onDiskBase = onDiskBase;
+}
+
+// ____________________________________________________________________________
+void Index::setKeepTempFiles(bool keepTempFiles) {
+  _keepTempFiles = keepTempFiles;
 }
 
 // _____________________________________________________________________________

@@ -52,6 +52,23 @@ void Vocabulary::writeToFile(const string& fileName) const {
 }
 
 // _____________________________________________________________________________
+void Vocabulary::writeToBinaryFileForMerging(const string& fileName) const {
+  LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
+  std::ofstream out(fileName.c_str(), std::ios_base::out | std::ios_base::binary);
+  AD_CHECK(out.is_open());
+  for (size_t i = 0; i < _words.size(); ++i) {
+    // 32 bits should be enough for len of string
+    uint32_t len = _words[i].size();
+    size_t zeros = 0;
+    out.write((char*)&len, sizeof(len));
+    out.write(_words[i].c_str(), len);
+    out.write((char*)&zeros, sizeof(zeros));
+  }
+  out.close();
+  LOG(INFO) << "Done writing vocabulary to file.\n";
+}
+
+// _____________________________________________________________________________
 void Vocabulary::createFromSet(const ad_utility::HashSet<string>& set) {
   LOG(INFO) << "Creating vocabulary from set ...\n";
   _words.clear();

@@ -3,6 +3,9 @@
 // Author: Björn Buchhold <buchholb>
 
 #include "./ExternalVocabulary.h"
+
+#include <fstream>
+
 #include "../util/Log.h"
 
 // _____________________________________________________________________________
@@ -54,6 +57,28 @@ void ExternalVocabulary::buildFromVector(const vector<string>& v,
   _file.write(offsets.data(), offsets.size() * sizeof(off_t));
   _file.close();
   initFromFile(fileName);
+}
+
+// _____________________________________________________________________________
+void ExternalVocabulary::buildFromTextFile(const string& textFileName,
+                                         const string& outFileName) {
+  _file.open(outFileName.c_str(), "w");
+  std::ifstream infile(textFileName);
+  AD_CHECK(infile.is_open());
+  vector<off_t> offsets;
+  off_t currentOffset = 0;
+  _size = 0;
+  std::string word;
+  while (std::getline(infile, word)) {
+    offsets.push_back(currentOffset);
+    currentOffset += _file.write(word.data(), word.size());
+    _size++;
+  }
+  _startOfOffsets = currentOffset;
+  offsets.push_back(_startOfOffsets);
+  _file.write(offsets.data(), offsets.size() * sizeof(off_t));
+  _file.close();
+  initFromFile(outFileName);
 }
 
 // _____________________________________________________________________________
