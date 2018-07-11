@@ -38,8 +38,8 @@ protected:
     _path0 = std::string(PARTIAL_VOCAB_FILE_NAME + std::to_string(0));
     _path1 =  std::string(PARTIAL_VOCAB_FILE_NAME + std::to_string(1));
     // those names can be random
-    _pathExp0 = std::string(".partialVocabExp0");
-    _pathExp1  = std::string(".partialVocabExp1");
+    _pathExp0 = std::string(".partial-vocabulary-expected0");
+    _pathExp1  = std::string(".partial-vocabulary-expected1");
 
     // create random subdirectory in /tmp
     std::string tempPath = "/tmp/";

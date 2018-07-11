@@ -58,7 +58,7 @@ target_link_libraries(VocabularyGeneratorTest gtest_main index
 
 add_library(tests
             SparqlParserTest
-	    StringUtilsTest
+            StringUtilsTest
             LRUCacheTest
             Simple8bTest
             FileTest
@@ -73,5 +73,5 @@ add_library(tests
             ConversionsTest
             SparsehashTest
             GroupByTest
-	    VocabularyGeneratorTest
+            VocabularyGeneratorTest
 )

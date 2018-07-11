@@ -156,7 +156,8 @@ int main(int argc, char** argv) {
     Engine engine;
     Index index;
     index.setUsePatterns(usePatterns);
-    index.createFromOnDiskIndex(indexName, allPermutations, onDiskLiterals);
+    index.setOnDiskLiterals(onDiskLiterals);
+    index.createFromOnDiskIndex(indexName, allPermutations);
     if (text) {
       index.addTextFromOnDiskIndex();
     }

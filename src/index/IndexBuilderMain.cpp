@@ -238,19 +238,18 @@ int main(int argc, char** argv) {
     // remove it, same for onDiskBase
     index.setOnDiskLiterals(onDiskLiterals);
     index.setOnDiskBase(baseName);
+    index.setKeepTempFiles(keepTemporaryFiles);
     if (!onlyAddTextIndex) {
       // if onlyAddTextIndex is true, we do not want to construct an index, but
       // assume that it  already exists (especially we need a valid vocabulary
       // for  text  index  creation)
 
       if (ntFile.size() > 0) {
-	index.createFromNTriplesFile(ntFile, baseName, allPermutations,
-				     onDiskLiterals, keepTemporaryFiles);
+	index.createFromNTriplesFile(ntFile, allPermutations);
       } else if (tsvFile.size() > 0) {
-	index.createFromTsvFile(tsvFile, baseName, allPermutations,
-				onDiskLiterals);
+	index.createFromTsvFile(tsvFile, allPermutations);
       } else {
-	index.createFromOnDiskIndex(baseName, allPermutations, onDiskLiterals);
+	index.createFromOnDiskIndex(baseName, allPermutations);
       }
     }
 

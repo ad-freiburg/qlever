@@ -24,8 +24,6 @@ class PairCompare {
 void mergeVocabulary(const std::string& basename, size_t numFiles) {
   
   std::vector<std::fstream> infiles;
-  // currently only one word is buffered, no matter how big the bufferSize is
-  // TODO: buffer, or throw the buffer out
   std::ofstream outfile(basename + ".vocabulary");
   AD_CHECK(outfile.is_open());
   std::ofstream outfileExternal(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
@@ -68,8 +66,12 @@ void mergeVocabulary(const std::string& basename, size_t numFiles) {
         outfileExternal << top.first << std::endl;
       }
 
-      // write id to partial vocabulary
+      // according to the standard, flush() or seek() must be called before
+      // switching from read to write. And this is indeed necessary for gcc to
+      // avoid nasty bugs. 
+      // We seek to the current position to avoid them
       infiles[top.second].seekp(infiles[top.second].tellp());
+      // write id to partial vocabulary
       infiles[top.second].write((char*)&totalWritten, sizeof(totalWritten));
       totalWritten++;
     } else {
@@ -78,6 +80,7 @@ void mergeVocabulary(const std::string& basename, size_t numFiles) {
       // we already have increased total written, so for the duplicate
       // we have to subtract one again
       size_t minusOne = totalWritten - 1;
+      // seek to current position when switching from read to write
       infiles[top.second].seekp(infiles[top.second].tellg());
       infiles[top.second].write((char*)&minusOne, sizeof(minusOne));
     }
@@ -88,6 +91,7 @@ void mergeVocabulary(const std::string& basename, size_t numFiles) {
     size_t i = top.second;
     endOfFile[top.second] = true;
     uint32_t len;
+    // seek to current position whe switching from write to read
     infiles[top.second].seekg(infiles[top.second].tellp());
     if (infiles[i].read((char*)&len, sizeof(len))) {
       std::string word(len, '\0');
