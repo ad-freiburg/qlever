@@ -5,10 +5,18 @@ add_library(index
         VocabularyGenerator.h VocabularyGenerator.cpp
         ConstantsIndexCreation.h
         ExternalVocabulary.h ExternalVocabulary.cpp
-        IndexMetaData.h IndexMetaData.cpp
+        IndexMetaData.h IndexMetaDataImpl.h
+        MetaDataTypes.h MetaDataTypes.cpp
+        MetaDataHandler.h
         StxxlSortFunctors.h
         TextMetaData.cpp TextMetaData.h
         DocsDB.cpp DocsDB.h
         FTSAlgorithms.cpp FTSAlgorithms.h)
 
 target_link_libraries(index parser ${STXXL_LIBRARIES})
+
+add_library(metaConverter
+            MetaDataConverter.cpp MetaDataConverter.h)
+
+target_link_libraries(metaConverter index)
+

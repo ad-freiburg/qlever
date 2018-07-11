@@ -103,6 +103,8 @@ target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT})
 add_executable(WriteIndexListsMain src/WriteIndexListsMain.cpp)
 target_link_libraries (WriteIndexListsMain engine ${CMAKE_THREAD_LIBS_INIT})
 
+add_executable(MetaDataConverterMain src/MetaDataConverterMain.cpp)
+target_link_libraries (MetaDataConverterMain metaConverter ${CMAKE_THREAD_LIBS_INIT})
 
 #add_executable(TextFilterComparison src/experiments/TextFilterComparison.cpp)
 #target_link_libraries (TextFilterComparison experiments)
@@ -126,3 +128,4 @@ add_test(QueryPlannerTest test/QueryPlannerTest)
 add_test(ConversionsTest test/ConversionsTest)
 add_test(SparsehashTest test/SparsehashTest)
 add_test(VocabularyGeneratorTest test/VocabularyGeneratorTest)
+add_test(MmapVectorTest test/MmapVectorTest)

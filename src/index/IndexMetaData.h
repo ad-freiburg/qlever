@@ -7,9 +7,16 @@
 #include <utility>
 #include <vector>
 
+#include <stdio.h>
+#include <algorithm>
+#include <cmath>
 #include "../global/Id.h"
 #include "../util/File.h"
 #include "../util/HashMap.h"
+#include "../util/MmapVector.h"
+#include "../util/ReadableNumberFact.h"
+#include "./MetaDataHandler.h"
+#include "./MetaDataTypes.h"
 
 using std::array;
 using std::pair;
@@ -18,166 +25,29 @@ using std::vector;
 // Check index_layout.md for explanations (expected comments).
 // Removed comments here so that not two places had to be kept up-to-date.
 
-static const uint64_t IS_FUNCTIONAL_MASK = 0x0100000000000000;
-static const uint64_t HAS_BLOCKS_MASK = 0x0200000000000000;
-static const uint64_t NOF_ELEMENTS_MASK = 0x000000FFFFFFFFFF;
-static const uint64_t MAX_NOF_ELEMENTS = NOF_ELEMENTS_MASK;
-
-class BlockMetaData {
- public:
-  BlockMetaData() : _firstLhs(0), _startOffset(0) {}
-
-  BlockMetaData(Id lhs, off_t start) : _firstLhs(lhs), _startOffset(start) {}
-
-  Id _firstLhs;
-  off_t _startOffset;
-};
-
-class FullRelationMetaData {
- public:
-  FullRelationMetaData();
-
-  FullRelationMetaData(Id relId, off_t startFullIndex, size_t nofElements,
-                       double col1Mult, double col2Mult, bool isFunctional,
-                       bool hasBlocks);
-
-  size_t getNofBytesForFulltextIndex() const;
-
-  // Returns true if there is exactly one RHS for each LHS in the relation
-  bool isFunctional() const;
-
-  bool hasBlocks() const;
-
-  // Handle the fact that those properties are encoded in the same
-  // size_t as the number of elements.
-  void setIsFunctional(bool isFunctional);
-
-  void setHasBlocks(bool hasBlocks);
-
-  void setCol1LogMultiplicity(uint8_t mult);
-  void setCol2LogMultiplicity(uint8_t mult);
-  uint8_t getCol1LogMultiplicity() const;
-  uint8_t getCol2LogMultiplicity() const;
-
-  size_t getNofElements() const;
-
-  // Restores meta data from raw memory.
-  // Needed when registering an index on startup.
-  FullRelationMetaData& createFromByteBuffer(unsigned char* buffer);
-
-  // The size this object will require when serialized to file.
-  size_t bytesRequired() const;
-
-  off_t getStartOfLhs() const;
-
-  Id _relId;
-  off_t _startFullIndex;
-
-  friend ad_utility::File& operator<<(ad_utility::File& f,
-                                      const FullRelationMetaData& rmd);
-
- private:
-  // first byte: type
-  // second byte: log(col1Multiplicity)
-  // third byte: log(col2Multiplicity)
-  // other 5 bytes: the nof elements.
-  uint64_t _typeMultAndNofElements;
-};
-
-inline ad_utility::File& operator<<(ad_utility::File& f,
-                                    const FullRelationMetaData& rmd) {
-  f.write(&rmd._relId, sizeof(rmd._relId));
-  f.write(&rmd._startFullIndex, sizeof(rmd._startFullIndex));
-  f.write(&rmd._typeMultAndNofElements, sizeof(rmd._typeMultAndNofElements));
-  return f;
-}
-
-class BlockBasedRelationMetaData {
- public:
-  BlockBasedRelationMetaData();
-
-  BlockBasedRelationMetaData(off_t startRhs, off_t offsetAfter,
-                             const vector<BlockMetaData>& blocks);
-
-  // The size this object will require when serialized to file.
-  size_t bytesRequired() const;
-
-  // Restores meta data from raw memory.
-  // Needed when registering an index on startup.
-  BlockBasedRelationMetaData& createFromByteBuffer(unsigned char* buffer);
-
-  // Takes a LHS and returns the offset into the file at which the
-  // corresponding block can be read as well as the nof bytes to read.
-  // If the relation is functional, this offset will be located in the
-  // range of the FullIndex, otherwise it will be reference into the lhs list.
-  // Reading nofBytes from the offset will yield a block which contains
-  // the desired lhs if such a block exists at all.
-  // If the lhs does not exists at all, this will only be clear after reading
-  // said block.
-  pair<off_t, size_t> getBlockStartAndNofBytesForLhs(Id lhs) const;
-
-  // Gets the block after the one returned by getBlockStartAndNofBytesForLhs.
-  // This is necessary for finding rhs upper bounds for the last item in a
-  // block.
-  // If this is equal to the block returned by getBlockStartAndNofBytesForLhs,
-  // it means it is the last block and the offsetAfter can be used.
-  pair<off_t, size_t> getFollowBlockForLhs(Id lhs) const;
-
-  off_t _startRhs;
-  off_t _offsetAfter;
-  vector<BlockMetaData> _blocks;
-};
-
-inline ad_utility::File& operator<<(ad_utility::File& f,
-                                    const BlockBasedRelationMetaData& rmd) {
-  f.write(&rmd._startRhs, sizeof(rmd._startRhs));
-  f.write(&rmd._offsetAfter, sizeof(rmd._offsetAfter));
-  auto nofBlocks = rmd._blocks.size();
-  f.write(&nofBlocks, sizeof(nofBlocks));
-  f.write(rmd._blocks.data(), nofBlocks * sizeof(BlockMetaData));
-  return f;
-}
-
-class RelationMetaData {
- public:
-  explicit RelationMetaData(const FullRelationMetaData& rmdPairs)
-      : _rmdPairs(rmdPairs), _rmdBlocks(nullptr) {}
-
-  off_t getStartOfLhs() const { return _rmdPairs.getStartOfLhs(); }
-
-  size_t getNofBytesForFulltextIndex() const {
-    return _rmdPairs.getNofBytesForFulltextIndex();
-  }
-
-  // Returns true if there is exactly one RHS for each LHS in the relation
-  bool isFunctional() const { return _rmdPairs.isFunctional(); }
-
-  bool hasBlocks() const { return _rmdPairs.hasBlocks(); }
-
-  size_t getNofElements() const { return _rmdPairs.getNofElements(); }
-
-  uint8_t getCol1LogMultiplicity() const {
-    return _rmdPairs.getCol1LogMultiplicity();
-  }
-
-  uint8_t getCol2LogMultiplicity() const {
-    return _rmdPairs.getCol2LogMultiplicity();
-  }
-
-  const FullRelationMetaData& _rmdPairs;
-  const BlockBasedRelationMetaData* _rmdBlocks;
-};
-
-inline ad_utility::File& operator<<(ad_utility::File& f,
-                                    const RelationMetaData& rmd) {
-  f << rmd._rmdPairs << *rmd._rmdBlocks;
-  return f;
-}
-
+// Templated MetaData. The datatype wrappers defined in MetaDataHandler.h
+// all meet the requirements of MapType
+// TODO(C++20): When concepts are available, MapType is a Concept!
+template <class MapType>
 class IndexMetaData {
  public:
-  IndexMetaData();
+  // some MapTypes (the dense ones using stxxl or mmap) require additional calls
+  // to setup() before being fully initialized
+  IndexMetaData() = default;
 
+  // pass all arguments that are needed for initialization to the underlying
+  // implementation of MapType _data
+  template <typename... dataArgs>
+  void setup(dataArgs&&... args) {
+    _data.setup(std::forward<dataArgs>(args)...);
+  }
+
+  // persistentRMD == true means we do not need to add rmd to _data
+  // but assume that it is already contained in _data (for persistent
+  // metaData implementations. Must be a compile time parameter because we have
+  // to avoid instantation of member function set() for readonly MapTypes (e.g.
+  // based on MmapVectorView
+  template<bool persistentRMD = false>
   void add(const FullRelationMetaData& rmd,
            const BlockBasedRelationMetaData& bRmd);
 
@@ -185,7 +55,46 @@ class IndexMetaData {
 
   const RelationMetaData getRmd(Id relId) const;
 
-  void createFromByteBuffer(unsigned char* buf);
+  // Persistent meta data MapTypes (called MmapBased here) have to be separated
+  // from RAM-based (e.g. hashMap based sparse) ones at compile time, this is
+  // done in the following block
+  using MetaWrapperMmap =
+      MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>;
+  using MetaWrapperMmapView =
+      MetaDataWrapperDense<ad_utility::MmapVectorView<FullRelationMetaData>>;
+  template <typename T>
+  struct IsMmapBased {
+    static const bool value = std::is_same<MetaWrapperMmap, T>::value ||
+                              std::is_same<MetaWrapperMmapView, T>::value;
+  };
+  // compile time information whether this instatiation if MMapBased or not
+  static constexpr bool _isMmapBased = IsMmapBased<MapType>::value;
+
+  void createFromByteBuffer(unsigned char* buf) {
+    if constexpr (_isMmapBased) {
+      return createFromByteBufferMmap(buf);
+    } else {
+      return createFromByteBufferSparse(buf);
+    }
+  }
+
+  // dispatched functions for createFromByteBuffer
+  void createFromByteBufferMmap(unsigned char* buf);
+  void createFromByteBufferSparse(unsigned char* buf);
+
+  // Write to a file that will be overwritten/created
+  void writeToFile(const std::string& filename) const;
+
+  // Write to the end of an already existing file.
+  // Will move file pointer to the end of the file
+  void appendToFile(ad_utility::File* file) const;
+
+  // read from a file at path specified by filename
+  void readFromFile(const std::string& filename);
+
+  // read from file that already must opened and has
+  // valid metadata at its end
+  void readFromFile(ad_utility::File* file);
 
   bool relationExists(Id relId) const;
 
@@ -200,19 +109,51 @@ class IndexMetaData {
   size_t getNofDistinctC1() const;
 
  private:
-  off_t _offsetAfter;
+  off_t _offsetAfter = 0;
   size_t _nofTriples;
-  string _name;
 
-  ad_utility::HashMap<Id, FullRelationMetaData> _data;
+  string _name;
+  string _filename;
+
+  MapType _data;
   ad_utility::HashMap<Id, BlockBasedRelationMetaData> _blockData;
 
-  friend ad_utility::File& operator<<(ad_utility::File& f,
-                                      const IndexMetaData& rmd);
+  // friend declaration for external converter function with ugly types
+  using IndexMetaDataHmap = IndexMetaData<MetaDataWrapperHashMap>;
+  using IndexMetaDataMmap = IndexMetaData<
+      MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>>;
+  friend IndexMetaDataMmap convertHmapMetaDataToMmap(const IndexMetaDataHmap&,
+                                                     const std::string&, bool);
+
+  // this way all instantations will be friends with each other,
+  // but this should not be an issue.
+  template <class U>
+  friend inline ad_utility::File& operator<<(ad_utility::File& f,
+                                      const IndexMetaData<U>& rmd);
 
   size_t getNofBlocksForRelation(const Id relId) const;
 
   size_t getTotalBytesForRelation(const FullRelationMetaData& frmd) const;
 };
 
-ad_utility::File& operator<<(ad_utility::File& f, const IndexMetaData& imd);
+// ____________________________________________________________________________
+template <class MapType>
+ad_utility::File& operator<<(ad_utility::File& f,
+                             const IndexMetaData<MapType>& imd);
+
+// aliases for easier use in Index class
+using MetaWrapperMmap =
+    MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>;
+using MetaWrapperMmapView =
+    MetaDataWrapperDense<ad_utility::MmapVectorView<FullRelationMetaData>>;
+using IndexMetaDataHmap = IndexMetaData<MetaDataWrapperHashMap>;
+using IndexMetaDataMmap = IndexMetaData<
+    MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>>;
+using IndexMetaDataMmapView = IndexMetaData<
+    MetaDataWrapperDense<ad_utility::MmapVectorView<FullRelationMetaData>>>;
+
+// constants for Magic Numbers to separate different types of MetaData;
+const size_t MAGIC_NUMBER_MMAP_META_DATA = static_cast<size_t>(-1);
+const size_t MAGIC_NUMBER_SPARSE_META_DATA = static_cast<size_t>(-2);
+
+#include "./IndexMetaDataImpl.h"

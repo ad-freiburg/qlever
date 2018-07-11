@@ -58,6 +58,9 @@ target_link_libraries(VocabularyGeneratorTest gtest_main index ${CMAKE_THREAD_LI
 add_executable(HasPredicateScanTest HasPredicateScanTest.cpp)
 target_link_libraries(HasPredicateScanTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
 
+add_executable(MmapVectorTest MmapVectorTest.cpp)
+target_link_libraries(MmapVectorTest gtest_main -pthread)
+
 add_library(tests
             SparqlParserTest
             StringUtilsTest
@@ -77,4 +80,5 @@ add_library(tests
             GroupByTest
             VocabularyGeneratorTest
             HasPredicateScanTest
+            MmapVectorTest
             )

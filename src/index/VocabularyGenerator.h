@@ -18,7 +18,8 @@ using std::string;
 // through Vocabulary class
 // Writes file "externalTextFile" which can be used to directly write external
 // Literals
-void mergeVocabulary(const std::string& basename, size_t numFiles);
+// Returns the number of total Words merged
+size_t mergeVocabulary(const std::string& basename, size_t numFiles);
 
 // __________________________________________________________________________________________
 // read the words and indices from the file and create hash map from it.

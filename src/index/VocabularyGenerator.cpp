@@ -23,7 +23,7 @@ class PairCompare {
   }
 };
 // ___________________________________________________________________
-void mergeVocabulary(const std::string& basename, size_t numFiles) {
+size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
   std::vector<std::fstream> infiles;
   std::ofstream outfile(basename + ".vocabulary");
   AD_CHECK(outfile.is_open());
@@ -103,6 +103,7 @@ void mergeVocabulary(const std::string& basename, size_t numFiles) {
       queue.push(std::make_pair(word, i));
     }
   }
+  return totalWritten;
 }
 
 // ____________________________________________________________________________________________
