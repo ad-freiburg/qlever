@@ -52,6 +52,30 @@ class HasRelationScan : public Operation {
   void setSubtreeSubjectColumn(size_t colIndex);
   ScanType getType() const;
 
+  const std::string& getObject() const;
+
+  // These are made static and public mainly for easier testing
+  static void computeFreeS(ResultTable* result, size_t objectId,
+                           const std::vector<PatternID>& hasPattern,
+                           const CompactStringVector<Id, Id>& hasRelation,
+                           const CompactStringVector<size_t, Id>& patterns);
+
+  static void computeFreeO(ResultTable* result, size_t subjectId,
+                           const std::vector<PatternID>& hasPattern,
+                           const CompactStringVector<Id, Id>& hasRelation,
+                           const CompactStringVector<size_t, Id>& patterns);
+
+  static void computeFullScan(ResultTable* result,
+                              const std::vector<PatternID>& hasPattern,
+                              const CompactStringVector<Id, Id>& hasRelation,
+                              const CompactStringVector<size_t, Id>& patterns);
+
+  static void computeSubqueryS(
+      ResultTable* result, const std::shared_ptr<QueryExecutionTree> _subtree,
+      const size_t subtreeColIndex, const std::vector<PatternID>& hasPattern,
+      const CompactStringVector<Id, Id>& hasRelation,
+      const CompactStringVector<size_t, Id>& patterns);
+
  private:
   ScanType _type;
   std::shared_ptr<QueryExecutionTree> _subtree;
@@ -61,8 +85,4 @@ class HasRelationScan : public Operation {
   std::string _object;
 
   virtual void computeResult(ResultTable* result) const;
-  void computeFreeS(ResultTable* result) const;
-  void computeFreeO(ResultTable* result) const;
-  void computeFullScan(ResultTable* result) const;
-  void computeSubqueryS(ResultTable* result) const;
 };

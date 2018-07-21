@@ -9,6 +9,7 @@
 #include "Distinct.h"
 #include "Filter.h"
 #include "GroupBy.h"
+#include "HasRelationScan.h"
 #include "IndexScan.h"
 #include "Join.h"
 #include "OptionalJoin.h"
@@ -17,7 +18,6 @@
 #include "TextOperationWithFilter.h"
 #include "TextOperationWithoutFilter.h"
 #include "TwoColumnJoin.h"
-#include "HasRelationScan.h"
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec, bool optimizeOptionals)
@@ -553,17 +553,25 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           if (isVariable(node._triple._s)) {
             std::shared_ptr<Operation> scan(
                 new HasRelationScan(_qec, HasRelationScan::ScanType::FREE_S));
-            static_cast<HasRelationScan*>(scan.get())->setSubject(node._triple._s);
-            static_cast<HasRelationScan*>(scan.get())->setObject(node._triple._o);
-            tree.setOperation(QueryExecutionTree::OperationType::HAS_RELATION_SCAN, scan);
-            tree.setVariableColumns(static_cast<HasRelationScan*>(scan.get())->getVariableColumns());
+            static_cast<HasRelationScan*>(scan.get())
+                ->setSubject(node._triple._s);
+            static_cast<HasRelationScan*>(scan.get())
+                ->setObject(node._triple._o);
+            tree.setOperation(
+                QueryExecutionTree::OperationType::HAS_RELATION_SCAN, scan);
+            tree.setVariableColumns(static_cast<HasRelationScan*>(scan.get())
+                                        ->getVariableColumns());
           } else if (isVariable(node._triple._o)) {
             std::shared_ptr<Operation> scan(
                 new HasRelationScan(_qec, HasRelationScan::ScanType::FREE_O));
-            static_cast<HasRelationScan*>(scan.get())->setSubject(node._triple._s);
-            static_cast<HasRelationScan*>(scan.get())->setObject(node._triple._o);
-            tree.setOperation(QueryExecutionTree::OperationType::HAS_RELATION_SCAN, scan);
-            tree.setVariableColumns(static_cast<HasRelationScan*>(scan.get())->getVariableColumns());
+            static_cast<HasRelationScan*>(scan.get())
+                ->setSubject(node._triple._s);
+            static_cast<HasRelationScan*>(scan.get())
+                ->setObject(node._triple._o);
+            tree.setOperation(
+                QueryExecutionTree::OperationType::HAS_RELATION_SCAN, scan);
+            tree.setVariableColumns(static_cast<HasRelationScan*>(scan.get())
+                                        ->getVariableColumns());
           }
         } else if (isVariable(node._triple._s)) {
           std::shared_ptr<Operation> scan(
@@ -596,11 +604,14 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           plan._idsOfIncludedNodes |= (1 << i);
           auto& tree = *plan._qet.get();
           std::shared_ptr<Operation> scan(
-                new HasRelationScan(_qec, HasRelationScan::ScanType::FULL_SCAN));
-          static_cast<HasRelationScan*>(scan.get())->setSubject(node._triple._s);
+              new HasRelationScan(_qec, HasRelationScan::ScanType::FULL_SCAN));
+          static_cast<HasRelationScan*>(scan.get())
+              ->setSubject(node._triple._s);
           static_cast<HasRelationScan*>(scan.get())->setObject(node._triple._o);
-          tree.setOperation(QueryExecutionTree::OperationType::HAS_RELATION_SCAN, scan);
-          tree.setVariableColumns(static_cast<HasRelationScan*>(scan.get())->getVariableColumns());
+          tree.setOperation(
+              QueryExecutionTree::OperationType::HAS_RELATION_SCAN, scan);
+          tree.setVariableColumns(
+              static_cast<HasRelationScan*>(scan.get())->getVariableColumns());
           seeds.push_back(plan);
         } else if (!isVariable(node._triple._p)) {
           {
@@ -1005,27 +1016,31 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
         // If the join column correspods the the has-relation scans
         // subject column we can use a specialized join that avoids
         // loading the full has-relation predicate.
-        /*if (a[i]._qet.get()->getType() ==
+        if (a[i]._qet.get()->getType() ==
                 QueryExecutionTree::OperationType::HAS_RELATION_SCAN ||
             b[j]._qet.get()->getType() ==
                 QueryExecutionTree::OperationType::HAS_RELATION_SCAN) {
           bool replaceJoin = false;
 
-          std::shared_ptr<QueryExecutionTree> hasRelationScan(new QueryExecutionTree(_qec));
-          std::shared_ptr<QueryExecutionTree> other(new QueryExecutionTree(_qec));
+          std::shared_ptr<QueryExecutionTree> hasRelationScan(
+              new QueryExecutionTree(_qec));
+          std::shared_ptr<QueryExecutionTree> other(
+              new QueryExecutionTree(_qec));
           if (a[i]._qet.get()->getType() ==
-              QueryExecutionTree::OperationType::HAS_RELATION_SCAN
-              && jcs[0][0] == 0) {
-            const HasRelationScan* op = static_cast<HasRelationScan*>(a[i]._qet->getRootOperation().get());
+                  QueryExecutionTree::OperationType::HAS_RELATION_SCAN &&
+              jcs[0][0] == 0) {
+            const HasRelationScan* op = static_cast<HasRelationScan*>(
+                a[i]._qet->getRootOperation().get());
             if (op->getType() == HasRelationScan::ScanType::FULL_SCAN) {
               hasRelationScan = a[i]._qet;
               other = b[j]._qet;
               replaceJoin = true;
             }
           } else if (b[j]._qet.get()->getType() ==
-                     QueryExecutionTree::OperationType::HAS_RELATION_SCAN
-                     && jcs[0][1] == 0) {
-            const HasRelationScan* op = static_cast<HasRelationScan*>(b[j]._qet->getRootOperation().get());
+                         QueryExecutionTree::OperationType::HAS_RELATION_SCAN &&
+                     jcs[0][1] == 0) {
+            const HasRelationScan* op = static_cast<HasRelationScan*>(
+                b[j]._qet->getRootOperation().get());
             if (op->getType() == HasRelationScan::ScanType::FULL_SCAN) {
               other = a[i]._qet;
               hasRelationScan = b[j]._qet;
@@ -1035,23 +1050,31 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           if (replaceJoin) {
             SubtreePlan plan(_qec);
             auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> scan(
-                new HasRelationScan(_qec, HasRelationScan::ScanType::SUBQUERY_S));
-            tree.setVariableColumns(
-                static_cast<HasRelationScan*>(scan.get())->getVariableColumns());
+            std::shared_ptr<Operation> scan(new HasRelationScan(
+                _qec, HasRelationScan::ScanType::SUBQUERY_S));
             // TODO(florian): this still crashes when used
             static_cast<HasRelationScan*>(scan.get())->setSubtree(other);
-            static_cast<HasRelationScan*>(scan.get())->setSubtreeSubjectColumn(jcs[0][1]);
+            static_cast<HasRelationScan*>(scan.get())
+                ->setSubtreeSubjectColumn(jcs[0][1]);
+            static_cast<HasRelationScan*>(scan.get())
+                ->setObject(static_cast<HasRelationScan*>(
+                                hasRelationScan->getRootOperation().get())
+                                ->getObject());
+            tree.setVariableColumns(static_cast<HasRelationScan*>(scan.get())
+                                        ->getVariableColumns());
             // tree.setContextVars(static_cast<HasRelationScan*>(scan.get())->getContextVars());
             tree.setOperation(QueryExecutionTree::HAS_RELATION_SCAN, scan);
             plan._idsOfIncludedNodes = a[i]._idsOfIncludedNodes;
             plan.addAllNodes(b[j]._idsOfIncludedNodes);
             plan._idsOfIncludedFilters = a[i]._idsOfIncludedFilters;
             plan._idsOfIncludedFilters |= b[j]._idsOfIncludedFilters;
-            candidates[getPruningKey(plan, static_cast<HasRelationScan*>(scan.get())->resultSortedOn())].emplace_back(plan);
+            candidates[getPruningKey(plan,
+                                     static_cast<HasRelationScan*>(scan.get())
+                                         ->resultSortedOn())]
+                .emplace_back(plan);
             continue;
           }
-        }*/
+        }
 
         // "NORMAL" CASE:
         // Check if a sub-result has to be re-sorted
