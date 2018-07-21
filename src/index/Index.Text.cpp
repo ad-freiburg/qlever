@@ -123,10 +123,10 @@ void Index::passContextFileIntoVector(const string& contextFile,
   size_t i = 0;
   // write using vector_bufwriter
 
-
-  // we have deleted the vocabulary during the index creation to save ram, so now we have
-  // to reload it,
-  LOG(INFO) << "Loading vocabulary from disk (needed for correct Ids in text index)\n";
+  // we have deleted the vocabulary during the index creation to save ram, so
+  // now we have to reload it,
+  LOG(INFO) << "Loading vocabulary from disk (needed for correct Ids in text "
+               "index)\n";
   _vocab = Vocabulary();
   _vocab.readFromFile(_onDiskBase + ".vocabulary",
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");

@@ -37,7 +37,7 @@ struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
                            {"text-index-name", required_argument, NULL, 'T'},
                            {"words-by-contexts", required_argument, NULL, 'w'},
                            {"add-text-index", no_argument, NULL, 'A'},
-			   {"keep-temporary-files", no_argument, NULL, 'k'},
+                           {"keep-temporary-files", no_argument, NULL, 'k'},
                            {NULL, 0, NULL, 0}};
 
 string getStxxlDiskFileName(const string& location, const string& tail) {
@@ -98,13 +98,13 @@ void printUsage(char* execName) {
   cout << "  " << std::setw(20) << "w, words-by-contexts" << std::setw(1)
        << "    "
        << "words-file to build text index from." << endl;
-  cout << "  " << std::setw(20) << "A, add-text-index" << std::setw(1)
-       << "    "
+  cout << "  " << std::setw(20) << "A, add-text-index" << std::setw(1) << "    "
        << "Add text index to already existing kb-index" << endl;
-  cout << "  " << std::setw(20) << "k, keep-temporary-files" << std::setw(1)
-       << "    "
-       << "Keep Temporary Files from IndexCreation (normally only for debugging)" 
-       << endl;
+  cout
+      << "  " << std::setw(20) << "k, keep-temporary-files" << std::setw(1)
+      << "    "
+      << "Keep Temporary Files from IndexCreation (normally only for debugging)"
+      << endl;
   cout.copyfmt(coutState);
 }
 
@@ -234,8 +234,8 @@ int main(int argc, char** argv) {
     index.setKbName(kbIndexName);
     index.setTextName(textIndexName);
     index.setUsePatterns(usePatterns);
-    // TODO(j.kalmbach): onDiskLiterals is now  redundant in all other functions, probably
-    // remove it, same for onDiskBase
+    // TODO(j.kalmbach): onDiskLiterals is now  redundant in all other
+    // functions, probably remove it, same for onDiskBase
     index.setOnDiskLiterals(onDiskLiterals);
     index.setOnDiskBase(baseName);
     index.setKeepTempFiles(keepTemporaryFiles);
@@ -245,11 +245,11 @@ int main(int argc, char** argv) {
       // for  text  index  creation)
 
       if (ntFile.size() > 0) {
-	index.createFromNTriplesFile(ntFile, allPermutations);
+        index.createFromNTriplesFile(ntFile, allPermutations);
       } else if (tsvFile.size() > 0) {
-	index.createFromTsvFile(tsvFile, allPermutations);
+        index.createFromTsvFile(tsvFile, allPermutations);
       } else {
-	index.createFromOnDiskIndex(baseName, allPermutations);
+        index.createFromOnDiskIndex(baseName, allPermutations);
       }
     }
 

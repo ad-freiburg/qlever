@@ -61,7 +61,7 @@ void ExternalVocabulary::buildFromVector(const vector<string>& v,
 
 // _____________________________________________________________________________
 void ExternalVocabulary::buildFromTextFile(const string& textFileName,
-                                         const string& outFileName) {
+                                           const string& outFileName) {
   _file.open(outFileName.c_str(), "w");
   std::ifstream infile(textFileName);
   AD_CHECK(infile.is_open());

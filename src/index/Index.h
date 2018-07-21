@@ -11,11 +11,11 @@
 #include "../engine/ResultTable.h"
 #include "../global/Pattern.h"
 #include "../util/File.h"
+#include "./ConstantsIndexCreation.h"
 #include "./DocsDB.h"
 #include "./IndexMetaData.h"
 #include "./StxxlSortFunctors.h"
 #include "./TextMetaData.h"
-#include "./ConstantsIndexCreation.h"
 #include "./Vocabulary.h"
 
 using std::array;
@@ -41,19 +41,18 @@ class Index {
   // Creates an index from a TSV file.
   // Will write vocabulary and on-disk index data.
   // Also ends up with fully functional in-memory metadata.
-  void createFromTsvFile(const string& tsvFile,
-                         bool allPermutations);
+  void createFromTsvFile(const string& tsvFile, bool allPermutations);
 
   // Creates an index from a file in NTriples format.
   // Will write vocabulary and on-disk index data.
   // Also ends up with fully functional in-memory metadata.
-  void createFromNTriplesFile(const string& ntFile,
-                              bool allPermutations);
+  void createFromNTriplesFile(const string& ntFile, bool allPermutations);
 
   // Creates an index object from an on disk index
   // that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
-  void createFromOnDiskIndex(const string& onDiskBase, bool allPermutations = false);
+  void createFromOnDiskIndex(const string& onDiskBase,
+                             bool allPermutations = false);
 
   // Adds a text index to a fully initialized KB index.
   // Reads a context file and builds the index for the first time.
@@ -242,7 +241,7 @@ class Index {
   void setTextName(const string& name);
 
   void setUsePatterns(bool usePatterns);
-  
+
   void setOnDiskLiterals(bool onDiskLiterals);
 
   void setKeepTempFiles(bool keepTempFiles);
