@@ -127,6 +127,23 @@ class Index {
   const vector<PatternID>& getHasPattern() const;
   const CompactStringVector<Id, Id>& getHasRelation() const;
   const CompactStringVector<size_t, Id>& getPatterns() const;
+  /**
+   * @return The multiplicity of the Entites column (0) of the full has-relation
+   *         relation after unrolling the patterns.
+   */
+  double getHasRelationMultiplicityEntities() const;
+
+  /**
+   * @return The multiplicity of the Predicates column (0) of the full
+   * has-relation relation after unrolling the patterns.
+   */
+  double getHasRelationMultiplicityPredicates() const;
+
+  /**
+   * @return The size of the full has-relation relation after unrolling the
+   *         patterns.
+   */
+  size_t getHasRelationFullSize() const;
 
   // Get multiplicities with given var (SCAN for 2 cols)
   vector<float> getPSOMultiplicities(const string& key) const;
@@ -293,10 +310,25 @@ class Index {
   mutable ad_utility::File _ospFile;
   mutable ad_utility::File _opsFile;
   mutable ad_utility::File _textIndexFile;
+
+  // Pattern trick data
+  static const uint32_t PATTERNS_FILE_VERSION;
   bool _usePatterns;
   size_t _maxNumPatterns;
+  double _fullHasRelationMultiplicityEntities;
+  double _fullHasRelationMultiplicityPredicates;
+  size_t _fullHasRelationSize;
+  /**
+   * @brief Maps pattern ids to sets of predicate ids.
+   */
   CompactStringVector<size_t, Id> _patterns;
+  /**
+   * @brief Maps entity ids to pattern ids.
+   */
   std::vector<PatternID> _hasPattern;
+  /**
+   * @brief Maps entity ids to sets of predicate ids
+   */
   CompactStringVector<Id, Id> _hasRelation;
 
   size_t passTsvFileForVocabulary(const string& tsvFile);
@@ -334,6 +366,9 @@ class Index {
                              CompactStringVector<Id, Id>& hasRelation,
                              std::vector<PatternID>& hasPattern,
                              CompactStringVector<size_t, Id>& patterns,
+                             double& fullHasRelationMultiplicityEntities,
+                             double& fullHasRelationMultiplicityPredicates,
+                             size_t& fullHasRelationSize,
                              size_t maxNumPatterns);
 
   void createTextIndex(const string& filename, const TextVec& vec);

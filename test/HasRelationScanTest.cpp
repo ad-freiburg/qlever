@@ -147,7 +147,7 @@ TEST(HasRelationScan, fullScan) {
 
   // Query for all relations
   HasRelationScan::computeFullScan(&resultTable, hasPattern, hasRelation,
-                                   patterns);
+                                   patterns, 16);
   std::vector<array<Id, 2>> result =
       *static_cast<vector<array<Id, 2>>*>(resultTable._fixedSizeData);
 

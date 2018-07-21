@@ -109,18 +109,29 @@ bool HasRelationScan::knownEmptyResult() {
 float HasRelationScan::getMultiplicity(size_t col) {
   switch (_type) {
     case ScanType::FREE_S:
-      // TODO track multiplicity
-      return 1;
+      if (col == 0) {
+        return getIndex().getHasRelationMultiplicityEntities();
+      }
+      break;
     case ScanType::FREE_O:
-      return 1;
+      if (col == 0) {
+        return getIndex().getHasRelationMultiplicityPredicates();
+      }
+      break;
     case ScanType::FULL_SCAN:
-      return 1;
+      if (col == 0) {
+        return getIndex().getHasRelationMultiplicityEntities();
+      } else if (col == 1) {
+        return getIndex().getHasRelationMultiplicityPredicates();
+      }
+      break;
     case ScanType::SUBQUERY_S:
       if (col < getResultWidth() - 1) {
-        return _subtree->getMultiplicity(col);
+        return _subtree->getMultiplicity(col) *
+               getIndex().getHasRelationMultiplicityPredicates();
       } else {
-        // TODO track multiplicity
-        return _subtree->getMultiplicity(_subtreeColIndex);
+        return _subtree->getMultiplicity(_subtreeColIndex) *
+               getIndex().getHasRelationMultiplicityPredicates();
       }
       break;
   }
@@ -189,7 +200,8 @@ void HasRelationScan::computeResult(ResultTable* result) const {
     } break;
     case ScanType::FULL_SCAN:
       HasRelationScan::computeFullScan(result, hasPattern, hasRelation,
-                                       patterns);
+                                       patterns,
+                                       getIndex().getHasRelationFullSize());
       break;
     case ScanType::SUBQUERY_S:
       HasRelationScan::computeSubqueryS(result, _subtree, _subtreeColIndex,
@@ -268,12 +280,13 @@ void HasRelationScan::computeFreeO(
 void HasRelationScan::computeFullScan(
     ResultTable* result, const std::vector<PatternID>& hasPattern,
     const CompactStringVector<Id, Id>& hasRelation,
-    const CompactStringVector<size_t, Id>& patterns) {
+    const CompactStringVector<size_t, Id>& patterns, size_t resultSize) {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   std::vector<std::array<Id, 2>>* fixedSizeData =
       new std::vector<std::array<Id, 2>>();
   result->_fixedSizeData = fixedSizeData;
+  fixedSizeData->reserve(resultSize);
 
   size_t id = 0;
   while (id < hasPattern.size() || id < hasRelation.size()) {

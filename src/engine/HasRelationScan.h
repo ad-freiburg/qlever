@@ -68,7 +68,8 @@ class HasRelationScan : public Operation {
   static void computeFullScan(ResultTable* result,
                               const std::vector<PatternID>& hasPattern,
                               const CompactStringVector<Id, Id>& hasRelation,
-                              const CompactStringVector<size_t, Id>& patterns);
+                              const CompactStringVector<size_t, Id>& patterns,
+                              size_t resultSize);
 
   static void computeSubqueryS(
       ResultTable* result, const std::shared_ptr<QueryExecutionTree> _subtree,
