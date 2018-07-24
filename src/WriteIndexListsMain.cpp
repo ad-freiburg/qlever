@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
             << __TIME__ << EMPH_OFF << std::endl
             << std::endl;
 
-  char* locale = setlocale(LC_CTYPE, "en_US.utf8");
+  char* locale = setlocale(LC_CTYPE, "");
   cout << "Set locale LC_CTYPE to: " << locale << endl;
 
   std::locale loc;
