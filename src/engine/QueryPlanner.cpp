@@ -551,8 +551,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         if (node._triple._p == HAS_RELATION_PREDIACTE) {
           // Add a has relation scan instead of a normal IndexScan
           if (isVariable(node._triple._s)) {
-            std::shared_ptr<Operation> scan(
-                new HasRelationScan(_qec, HasRelationScan::ScanType::FREE_S));
+            std::shared_ptr<Operation> scan = std::make_shared<HasRelationScan>(
+                _qec, HasRelationScan::ScanType::FREE_S);
             static_cast<HasRelationScan*>(scan.get())
                 ->setSubject(node._triple._s);
             static_cast<HasRelationScan*>(scan.get())
@@ -562,8 +562,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             tree.setVariableColumns(static_cast<HasRelationScan*>(scan.get())
                                         ->getVariableColumns());
           } else if (isVariable(node._triple._o)) {
-            std::shared_ptr<Operation> scan(
-                new HasRelationScan(_qec, HasRelationScan::ScanType::FREE_O));
+            std::shared_ptr<Operation> scan = std::make_shared<HasRelationScan>(
+                _qec, HasRelationScan::ScanType::FREE_O);
             static_cast<HasRelationScan*>(scan.get())
                 ->setSubject(node._triple._s);
             static_cast<HasRelationScan*>(scan.get())
@@ -1012,8 +1012,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           continue;
         }
 
-        // Check if one of the two operations is a HAS_RELATION_SCAN .
-        // If the join column correspods the the has-relation scans
+        // Check if one of the two operations is a HAS_RELATION_SCAN.
+        // If the join column corresponds to the has-relation scan's
         // subject column we can use a specialized join that avoids
         // loading the full has-relation predicate.
         if (a[i]._qet.get()->getType() ==
@@ -1022,10 +1022,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
                 QueryExecutionTree::OperationType::HAS_RELATION_SCAN) {
           bool replaceJoin = false;
 
-          std::shared_ptr<QueryExecutionTree> hasRelationScan(
-              new QueryExecutionTree(_qec));
-          std::shared_ptr<QueryExecutionTree> other(
-              new QueryExecutionTree(_qec));
+          std::shared_ptr<QueryExecutionTree> hasRelationScan =
+              std::make_shared<QueryExecutionTree>(_qec);
+          std::shared_ptr<QueryExecutionTree> other =
+              std::make_shared<QueryExecutionTree>(_qec);
           if (a[i]._qet.get()->getType() ==
                   QueryExecutionTree::OperationType::HAS_RELATION_SCAN &&
               jcs[0][0] == 0) {
@@ -1050,9 +1050,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           if (replaceJoin) {
             SubtreePlan plan(_qec);
             auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> scan(new HasRelationScan(
-                _qec, HasRelationScan::ScanType::SUBQUERY_S));
-            // TODO(florian): this still crashes when used
+            std::shared_ptr<Operation> scan = std::make_shared<HasRelationScan>(
+                _qec, HasRelationScan::ScanType::SUBQUERY_S);
             static_cast<HasRelationScan*>(scan.get())->setSubtree(other);
             static_cast<HasRelationScan*>(scan.get())
                 ->setSubtreeSubjectColumn(jcs[0][1]);
@@ -1062,7 +1061,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
                                 ->getObject());
             tree.setVariableColumns(static_cast<HasRelationScan*>(scan.get())
                                         ->getVariableColumns());
-            // tree.setContextVars(static_cast<HasRelationScan*>(scan.get())->getContextVars());
             tree.setOperation(QueryExecutionTree::HAS_RELATION_SCAN, scan);
             plan._idsOfIncludedNodes = a[i]._idsOfIncludedNodes;
             plan.addAllNodes(b[j]._idsOfIncludedNodes);

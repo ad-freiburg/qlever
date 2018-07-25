@@ -25,7 +25,6 @@ string HasRelationScan::asString(size_t indent) const {
     os << " ";
   }
   switch (_type) {
-    // TODO(florian): these are not good cache keys
     case ScanType::FREE_S:
       os << "HAS_RELATION_SCAN with O = " << _object;
       break;
@@ -139,19 +138,32 @@ float HasRelationScan::getMultiplicity(size_t col) {
 }
 
 size_t HasRelationScan::getSizeEstimate() {
-  // TODO: these size estimates only work if all predicates are functional
   switch (_type) {
     case ScanType::FREE_S:
-      return getIndex().getHasPattern().size() +
-             getIndex().getHasRelation().size();
+      return static_cast<size_t>(
+          getIndex().getHasRelationMultiplicityEntities());
     case ScanType::FREE_O:
-      return getIndex().getHasPattern().size() +
-             getIndex().getHasRelation().size();
+      return static_cast<size_t>(
+          getIndex().getHasRelationMultiplicityPredicates());
     case ScanType::FULL_SCAN:
-      return getIndex().getHasPattern().size() +
-             getIndex().getHasRelation().size();
+      return getIndex().getHasRelationFullSize();
     case ScanType::SUBQUERY_S:
-      return _subtree->getSizeEstimate();
+
+      size_t nofDistinctLeft = std::max(
+          size_t(1),
+          static_cast<size_t>(_subtree->getSizeEstimate() /
+                              _subtree->getMultiplicity(_subtreeColIndex)));
+      size_t nofDistinctRight = std::max(
+          size_t(1), static_cast<size_t>(
+                         getIndex().getHasRelationFullSize() /
+                         getIndex().getHasRelationMultiplicityPredicates()));
+      size_t nofDistinctInResult = std::min(nofDistinctLeft, nofDistinctRight);
+
+      double jcMultiplicityInResult =
+          _subtree->getMultiplicity(_subtreeColIndex) *
+          getIndex().getHasRelationMultiplicityPredicates();
+      return std::max(size_t(1), static_cast<size_t>(jcMultiplicityInResult *
+                                                     nofDistinctInResult));
   }
   return 0;
 }
@@ -221,7 +233,7 @@ void HasRelationScan::computeFreeS(
       new std::vector<std::array<Id, 1>>();
   result->_fixedSizeData = fixedSizeData;
 
-  size_t id = 0;
+  Id id = 0;
   while (id < hasPattern.size() || id < hasRelation.size()) {
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
       // add the pattern
@@ -311,6 +323,11 @@ void HasRelationScan::computeFullScan(
   }
 }
 
+/**
+ * @brief This struct resizes std::containers if they are vectors,
+ *        allowing for nicer templated code that can handle both result vectors
+ *        of vectors and vectors of arrays.
+ */
 template <typename T, typename C>
 struct resizeIfVec {
   static void resize(T& t, int size) {
@@ -382,6 +399,7 @@ struct CallComputeSubqueryS {
                    const CompactStringVector<size_t, Id>& patterns) {
     if (InputColCount == inputColCount) {
       if (InputColCount < 5) {
+        // Both the input and the result use _fixedSizeData
         result->_fixedSizeData = new vector<array<Id, InputColCount + 1>>();
         doComputeSubqueryS<std::array<Id, InputColCount>,
                            std::array<Id, InputColCount + 1>>(
@@ -392,6 +410,7 @@ struct CallComputeSubqueryS {
                 result->_fixedSizeData),
             hasPattern, hasRelation, patterns);
       } else {
+        // The input uses _fixedSizeData, but the output uses _varSizeData
         doComputeSubqueryS<std::array<Id, InputColCount>, std::vector<Id>>(
             static_cast<vector<array<Id, InputColCount>>*>(
                 input->_fixedSizeData),
@@ -415,7 +434,7 @@ struct CallComputeSubqueryS<6> {
                    const CompactStringVector<size_t, Id>& patterns) {
     // avoid unused warnings from the compiler
     (void)inputColCount;
-    // call doComputeSubqueryS with variable sized data
+    // Both the input and the result use _varSizeData
     doComputeSubqueryS<std::vector<Id>, std::vector<Id>>(
         &input->_varSizeData, inputSubjectColumn, &result->_varSizeData,
         hasPattern, hasRelation, patterns);

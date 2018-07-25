@@ -675,6 +675,8 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
   LOG(DEBUG) << "Number of entity-has-relation entries: "
              << entityHasRelation.size() << std::endl;
 
+  LOG(INFO) << "Found " << patterns.size() << " distinct patterns."
+            << std::endl;
   LOG(INFO) << numEntitiesWithPatterns
             << " of the databases entities have been assigned a pattern."
             << std::endl;
@@ -714,9 +716,9 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
   file.write(entityHasPattern.data(), sizeof(Id) * numHasPatterns * 2);
 
   // write the entityHasRelation vector
-  size_t numHasRelation = entityHasRelation.size();
-  file.write(&numHasRelation, sizeof(size_t));
-  file.write(entityHasRelation.data(), sizeof(Id) * numHasRelation * 2);
+  size_t numHasRelations = entityHasRelation.size();
+  file.write(&numHasRelations, sizeof(size_t));
+  file.write(entityHasRelation.data(), sizeof(Id) * numHasRelations * 2);
 
   // write the patterns
   patterns.write(file);
@@ -945,7 +947,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
               << std::endl;
   }
   if (_usePatterns) {
-    // Store all data in the file
+    // Read the pattern info from the patterns file
     std::string patternsFilePath = _onDiskBase + ".index.patterns";
     ad_utility::File patternsFile;
     patternsFile.open(patternsFilePath.c_str(), "r");
