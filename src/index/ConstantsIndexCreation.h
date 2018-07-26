@@ -7,9 +7,9 @@
 
 // Constants which are only used during index creation
 
-// here we store all the literals in a text file, which will be externalized. This file is only
-// temporary since the final extneralized literals format is binary and will be
-// created from this file
+// here we store all the literals in a text file, which will be externalized.
+// This file is only temporary since the final extneralized literals format is
+// binary and will be created from this file
 const std::string EXTERNAL_LITS_TEXT_FILE_NAME = ".externalized-text";
 
 // How many lines are parsed at once during index creation.

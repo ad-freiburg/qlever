@@ -36,7 +36,8 @@ class QueryExecutionTree {
     TWO_COL_JOIN = 10,
     OPTIONAL_JOIN = 11,
     COUNT_AVAILABLE_PREDICATES = 12,
-    GROUP_BY = 13
+    GROUP_BY = 13,
+    HAS_RELATION_SCAN = 14
   };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);

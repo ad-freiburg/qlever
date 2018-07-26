@@ -11,11 +11,11 @@
 #include "../engine/ResultTable.h"
 #include "../global/Pattern.h"
 #include "../util/File.h"
+#include "./ConstantsIndexCreation.h"
 #include "./DocsDB.h"
 #include "./IndexMetaData.h"
 #include "./StxxlSortFunctors.h"
 #include "./TextMetaData.h"
-#include "./ConstantsIndexCreation.h"
 #include "./Vocabulary.h"
 
 using std::array;
@@ -41,19 +41,18 @@ class Index {
   // Creates an index from a TSV file.
   // Will write vocabulary and on-disk index data.
   // Also ends up with fully functional in-memory metadata.
-  void createFromTsvFile(const string& tsvFile,
-                         bool allPermutations);
+  void createFromTsvFile(const string& tsvFile, bool allPermutations);
 
   // Creates an index from a file in NTriples format.
   // Will write vocabulary and on-disk index data.
   // Also ends up with fully functional in-memory metadata.
-  void createFromNTriplesFile(const string& ntFile,
-                              bool allPermutations);
+  void createFromNTriplesFile(const string& ntFile, bool allPermutations);
 
   // Creates an index object from an on disk index
   // that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
-  void createFromOnDiskIndex(const string& onDiskBase, bool allPermutations = false);
+  void createFromOnDiskIndex(const string& onDiskBase,
+                             bool allPermutations = false);
 
   // Adds a text index to a fully initialized KB index.
   // Reads a context file and builds the index for the first time.
@@ -127,6 +126,23 @@ class Index {
   const vector<PatternID>& getHasPattern() const;
   const CompactStringVector<Id, Id>& getHasRelation() const;
   const CompactStringVector<size_t, Id>& getPatterns() const;
+  /**
+   * @return The multiplicity of the Entites column (0) of the full has-relation
+   *         relation after unrolling the patterns.
+   */
+  double getHasRelationMultiplicityEntities() const;
+
+  /**
+   * @return The multiplicity of the Predicates column (0) of the full
+   * has-relation relation after unrolling the patterns.
+   */
+  double getHasRelationMultiplicityPredicates() const;
+
+  /**
+   * @return The size of the full has-relation relation after unrolling the
+   *         patterns.
+   */
+  size_t getHasRelationFullSize() const;
 
   // Get multiplicities with given var (SCAN for 2 cols)
   vector<float> getPSOMultiplicities(const string& key) const;
@@ -225,7 +241,7 @@ class Index {
   void setTextName(const string& name);
 
   void setUsePatterns(bool usePatterns);
-  
+
   void setOnDiskLiterals(bool onDiskLiterals);
 
   void setKeepTempFiles(bool keepTempFiles);
@@ -293,10 +309,25 @@ class Index {
   mutable ad_utility::File _ospFile;
   mutable ad_utility::File _opsFile;
   mutable ad_utility::File _textIndexFile;
+
+  // Pattern trick data
+  static const uint32_t PATTERNS_FILE_VERSION;
   bool _usePatterns;
   size_t _maxNumPatterns;
+  double _fullHasRelationMultiplicityEntities;
+  double _fullHasRelationMultiplicityPredicates;
+  size_t _fullHasRelationSize;
+  /**
+   * @brief Maps pattern ids to sets of predicate ids.
+   */
   CompactStringVector<size_t, Id> _patterns;
+  /**
+   * @brief Maps entity ids to pattern ids.
+   */
   std::vector<PatternID> _hasPattern;
+  /**
+   * @brief Maps entity ids to sets of predicate ids
+   */
   CompactStringVector<Id, Id> _hasRelation;
 
   size_t passTsvFileForVocabulary(const string& tsvFile);
@@ -334,6 +365,9 @@ class Index {
                              CompactStringVector<Id, Id>& hasRelation,
                              std::vector<PatternID>& hasPattern,
                              CompactStringVector<size_t, Id>& patterns,
+                             double& fullHasRelationMultiplicityEntities,
+                             double& fullHasRelationMultiplicityPredicates,
+                             size_t& fullHasRelationSize,
                              size_t maxNumPatterns);
 
   void createTextIndex(const string& filename, const TextVec& vec);

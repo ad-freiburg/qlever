@@ -385,6 +385,9 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     }
     ASSERT_EQ(0u, index.getHasPattern()[1]);
     ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
+
+    ASSERT_FLOAT_EQ(4.0 / 2, index.getHasRelationMultiplicityEntities());
+    ASSERT_FLOAT_EQ(4.0 / 3, index.getHasRelationMultiplicityPredicates());
   }
   {
     LOG(DEBUG) << "Testing createPatterns with existing index..." << std::endl;
@@ -405,6 +408,9 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     }
     ASSERT_EQ(0u, index.getHasPattern()[1]);
     ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
+
+    ASSERT_FLOAT_EQ(4.0 / 2, index.getHasRelationMultiplicityEntities());
+    ASSERT_FLOAT_EQ(4.0 / 3, index.getHasRelationMultiplicityPredicates());
   }
 }
 

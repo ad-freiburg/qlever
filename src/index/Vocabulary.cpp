@@ -54,7 +54,8 @@ void Vocabulary::writeToFile(const string& fileName) const {
 // _____________________________________________________________________________
 void Vocabulary::writeToBinaryFileForMerging(const string& fileName) const {
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
-  std::ofstream out(fileName.c_str(), std::ios_base::out | std::ios_base::binary);
+  std::ofstream out(fileName.c_str(),
+                    std::ios_base::out | std::ios_base::binary);
   AD_CHECK(out.is_open());
   for (size_t i = 0; i < _words.size(); ++i) {
     // 32 bits should be enough for len of string

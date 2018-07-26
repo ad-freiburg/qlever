@@ -1,0 +1,269 @@
+// Copyright 2018, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+
+#include <gtest/gtest.h>
+#include <algorithm>
+#include <cstdio>
+#include "../src/engine/HasRelationScan.h"
+
+// used to test HasRelationScan with a subtree
+class DummyOperation : public Operation {
+ public:
+  DummyOperation(QueryExecutionContext* ctx) : Operation(ctx) {}
+  virtual void computeResult(ResultTable* result) const {
+    result->_nofColumns = 2;
+    result->_resultTypes.push_back(ResultTable::ResultType::KB);
+    result->_resultTypes.push_back(ResultTable::ResultType::KB);
+    result->_fixedSizeData = new vector<array<Id, 2>>();
+    for (size_t i = 0; i < 10; i++) {
+      static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData)
+          ->push_back({{10 - i, 2 * i}});
+    }
+    result->finish();
+  }
+
+  virtual string asString(size_t indent = 0) const {
+    (void)indent;
+    return "dummy";
+  }
+
+  virtual size_t getResultWidth() const { return 2; }
+
+  virtual size_t resultSortedOn() const { return 1; }
+
+  virtual void setTextLimit(size_t limit) { (void)limit; }
+
+  virtual size_t getCostEstimate() { return 10; }
+
+  virtual size_t getSizeEstimate() { return 10; }
+
+  virtual float getMultiplicity(size_t col) {
+    (void)col;
+    return 1;
+  }
+
+  virtual bool knownEmptyResult() { return false; }
+};
+
+TEST(HasRelationScan, freeS) {
+  // Used to store the result.
+  ResultTable resultTable;
+  // Maps entities to their patterns. If an entity id is higher than the lists
+  // length the hasRelation relation is used instead.
+  vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
+  // The has relation relation, which is used when an entity does not have a
+  // pattern
+  vector<vector<Id>> hasRelationSrc = {{},     {0, 3}, {0},    {}, {},
+                                       {0, 3}, {3, 4}, {2, 4}, {3}};
+  // Maps pattern ids to patterns
+  vector<vector<Id>> patternsSrc = {{0, 2, 3}, {1, 3, 4, 2, 0}};
+
+  // These are used to store the relations and patterns in contiguous blocks
+  // of memory.
+  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
+  CompactStringVector<size_t, Id> patterns(patternsSrc);
+
+  // Find all entities that are in a triple with predicate 3
+  HasRelationScan::computeFreeS(&resultTable, 3, hasPattern, hasRelation,
+                                patterns);
+  std::vector<array<Id, 1>> result =
+      *static_cast<vector<array<Id, 1>>*>(resultTable._fixedSizeData);
+
+  // the result set does not guarantee any sorting so we have to sort manually
+  std::sort(
+      result.begin(), result.end(),
+      [](const array<Id, 1>& a, const array<Id, 1>& b) { return a[0] < b[0]; });
+
+  // three entties with a pattern and four entities without one are in the
+  // relation
+  ASSERT_EQ(7u, result.size());
+  ASSERT_EQ(0u, result[0][0]);
+  ASSERT_EQ(1u, result[1][0]);
+  ASSERT_EQ(3u, result[2][0]);
+  ASSERT_EQ(4u, result[3][0]);
+  ASSERT_EQ(5u, result[4][0]);
+  ASSERT_EQ(6u, result[5][0]);
+  ASSERT_EQ(8u, result[6][0]);
+}
+
+TEST(HasRelationScan, freeO) {
+  // Used to store the result.
+  ResultTable resultTable;
+  // Maps entities to their patterns. If an entity id is higher than the lists
+  // length the hasRelation relation is used instead.
+  vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
+  // The has relation relation, which is used when an entity does not have a
+  // pattern
+  vector<vector<Id>> hasRelationSrc = {{},     {0, 3}, {0},    {}, {},
+                                       {0, 3}, {3, 4}, {2, 4}, {3}};
+  // Maps pattern ids to patterns
+  vector<vector<Id>> patternsSrc = {{0, 2, 3}, {1, 3, 4, 2, 0}};
+
+  // These are used to store the relations and patterns in contiguous blocks
+  // of memory.
+  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
+  CompactStringVector<size_t, Id> patterns(patternsSrc);
+
+  // Find all predicates for entity 3 (pattern 1)
+  HasRelationScan::computeFreeO(&resultTable, 3, hasPattern, hasRelation,
+                                patterns);
+  std::vector<array<Id, 1>> result =
+      *static_cast<vector<array<Id, 1>>*>(resultTable._fixedSizeData);
+
+  ASSERT_EQ(5u, result.size());
+  ASSERT_EQ(1u, result[0][0]);
+  ASSERT_EQ(3u, result[1][0]);
+  ASSERT_EQ(4u, result[2][0]);
+  ASSERT_EQ(2u, result[3][0]);
+  ASSERT_EQ(0u, result[4][0]);
+
+  // Find all predicates for entity 6 (has-relation entry 6)
+  HasRelationScan::computeFreeO(&resultTable, 6, hasPattern, hasRelation,
+                                patterns);
+  result = *static_cast<vector<array<Id, 1>>*>(resultTable._fixedSizeData);
+
+  ASSERT_EQ(2u, result.size());
+  ASSERT_EQ(3u, result[0][0]);
+  ASSERT_EQ(4u, result[1][0]);
+}
+
+TEST(HasRelationScan, fullScan) {
+  // Used to store the result.
+  ResultTable resultTable;
+  // Maps entities to their patterns. If an entity id is higher than the lists
+  // length the hasRelation relation is used instead.
+  vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
+  // The has relation relation, which is used when an entity does not have a
+  // pattern
+  vector<vector<Id>> hasRelationSrc = {{}, {0, 3}, {0}, {}, {}, {0, 3}};
+  // Maps pattern ids to patterns
+  vector<vector<Id>> patternsSrc = {{0, 2, 3}, {1, 3, 4, 2, 0}};
+
+  // These are used to store the relations and patterns in contiguous blocks
+  // of memory.
+  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
+  CompactStringVector<size_t, Id> patterns(patternsSrc);
+
+  // Query for all relations
+  HasRelationScan::computeFullScan(&resultTable, hasPattern, hasRelation,
+                                   patterns, 16);
+  std::vector<array<Id, 2>> result =
+      *static_cast<vector<array<Id, 2>>*>(resultTable._fixedSizeData);
+
+  ASSERT_EQ(16u, result.size());
+
+  // check the entity ids
+  ASSERT_EQ(0u, result[0][0]);
+  ASSERT_EQ(0u, result[1][0]);
+  ASSERT_EQ(0u, result[2][0]);
+  ASSERT_EQ(1u, result[3][0]);
+  ASSERT_EQ(1u, result[4][0]);
+  ASSERT_EQ(2u, result[5][0]);
+  ASSERT_EQ(3u, result[6][0]);
+  ASSERT_EQ(3u, result[7][0]);
+  ASSERT_EQ(3u, result[8][0]);
+  ASSERT_EQ(3u, result[9][0]);
+  ASSERT_EQ(3u, result[10][0]);
+  ASSERT_EQ(4u, result[11][0]);
+  ASSERT_EQ(4u, result[12][0]);
+  ASSERT_EQ(4u, result[13][0]);
+  ASSERT_EQ(5u, result[14][0]);
+  ASSERT_EQ(5u, result[15][0]);
+
+  // check the predicate ids
+  ASSERT_EQ(0u, result[0][1]);
+  ASSERT_EQ(2u, result[1][1]);
+  ASSERT_EQ(3u, result[2][1]);
+  ASSERT_EQ(0u, result[3][1]);
+  ASSERT_EQ(3u, result[4][1]);
+  ASSERT_EQ(0u, result[5][1]);
+  ASSERT_EQ(1u, result[6][1]);
+  ASSERT_EQ(3u, result[7][1]);
+  ASSERT_EQ(4u, result[8][1]);
+  ASSERT_EQ(2u, result[9][1]);
+  ASSERT_EQ(0u, result[10][1]);
+  ASSERT_EQ(0u, result[11][1]);
+  ASSERT_EQ(2u, result[12][1]);
+  ASSERT_EQ(3u, result[13][1]);
+  ASSERT_EQ(0u, result[14][1]);
+  ASSERT_EQ(3u, result[15][1]);
+}
+
+TEST(HasRelationScan, subtreeS) {
+  // Used to store the result.
+  ResultTable resultTable;
+  // Maps entities to their patterns. If an entity id is higher than the lists
+  // length the hasRelation relation is used instead.
+  vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
+  // The has relation relation, which is used when an entity does not have a
+  // pattern
+  vector<vector<Id>> hasRelationSrc = {{},     {0, 3}, {0},    {}, {},
+                                       {0, 3}, {3, 4}, {2, 4}, {3}};
+  // Maps pattern ids to patterns
+  vector<vector<Id>> patternsSrc = {{0, 2, 3}, {1, 3, 4, 2, 0}};
+
+  // These are used to store the relations and patterns in contiguous blocks
+  // of memory.
+  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
+  CompactStringVector<size_t, Id> patterns(patternsSrc);
+
+  Index index;
+  Engine engine;
+  QueryExecutionContext ctx(index, engine);
+
+  // create the subtree operation
+  std::shared_ptr<QueryExecutionTree> subtree =
+      std::make_shared<QueryExecutionTree>(&ctx);
+  std::shared_ptr<Operation> operation = std::make_shared<DummyOperation>(&ctx);
+
+  subtree->setOperation(QueryExecutionTree::OperationType::HAS_RELATION_SCAN,
+                        operation);
+
+  HasRelationScan::computeSubqueryS(&resultTable, subtree, 1, hasPattern,
+                                    hasRelation, patterns);
+
+  std::vector<array<Id, 3>> result =
+      *static_cast<vector<array<Id, 3>>*>(resultTable._fixedSizeData);
+
+  // the sum of the count of every second entities relations
+  ASSERT_EQ(10u, result.size());
+
+  // check for the first column
+
+  // check for the entity ids
+  ASSERT_EQ(10u, result[0][0]);
+  ASSERT_EQ(10u, result[1][0]);
+  ASSERT_EQ(10u, result[2][0]);
+  ASSERT_EQ(9u, result[3][0]);
+  ASSERT_EQ(8u, result[4][0]);
+  ASSERT_EQ(8u, result[5][0]);
+  ASSERT_EQ(8u, result[6][0]);
+  ASSERT_EQ(7u, result[7][0]);
+  ASSERT_EQ(7u, result[8][0]);
+  ASSERT_EQ(6u, result[9][0]);
+
+  // check for the entity ids
+  ASSERT_EQ(0u, result[0][1]);
+  ASSERT_EQ(0u, result[1][1]);
+  ASSERT_EQ(0u, result[2][1]);
+  ASSERT_EQ(2u, result[3][1]);
+  ASSERT_EQ(4u, result[4][1]);
+  ASSERT_EQ(4u, result[5][1]);
+  ASSERT_EQ(4u, result[6][1]);
+  ASSERT_EQ(6u, result[7][1]);
+  ASSERT_EQ(6u, result[8][1]);
+  ASSERT_EQ(8u, result[9][1]);
+
+  // check for the predicate ids
+  ASSERT_EQ(0u, result[0][2]);
+  ASSERT_EQ(2u, result[1][2]);
+  ASSERT_EQ(3u, result[2][2]);
+  ASSERT_EQ(0u, result[3][2]);
+  ASSERT_EQ(0u, result[4][2]);
+  ASSERT_EQ(2u, result[5][2]);
+  ASSERT_EQ(3u, result[6][2]);
+  ASSERT_EQ(3u, result[7][2]);
+  ASSERT_EQ(4u, result[8][2]);
+  ASSERT_EQ(3u, result[9][2]);
+}

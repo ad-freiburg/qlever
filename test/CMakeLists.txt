@@ -53,8 +53,10 @@ add_executable(GroupByTest GroupByTest.cpp)
 target_link_libraries(GroupByTest gtest_main engine -pthread)
 
 add_executable(VocabularyGeneratorTest VocabularyGeneratorTest.cpp)
-target_link_libraries(VocabularyGeneratorTest gtest_main index 
-                      -pthread)
+target_link_libraries(VocabularyGeneratorTest gtest_main index -pthread)
+
+add_executable(HasRelationScanTest HasRelationScanTest.cpp)
+target_link_libraries(HasRelationScanTest gtest_main engine -pthread)
 
 add_library(tests
             SparqlParserTest
@@ -74,4 +76,5 @@ add_library(tests
             SparsehashTest
             GroupByTest
             VocabularyGeneratorTest
-)
+            HasRelationScanTest
+            )

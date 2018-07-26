@@ -3,26 +3,27 @@
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
 #include "./VocabularyGenerator.h"
-#include <unordered_set>
-#include <vector>
-#include <queue>
-#include <string>
-#include <utility>
 #include <fstream>
 #include <iostream>
+#include <queue>
+#include <string>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
-#include "./ConstantsIndexCreation.h"
-#include "../util/Log.h"
 #include "../util/Exception.h"
+#include "../util/Log.h"
+#include "./ConstantsIndexCreation.h"
 
 class PairCompare {
  public:
-  bool operator()(const std::pair<std::string, size_t>& p1, const std::pair<std::string, size_t>& p2) {
-    return p1.first > p2.first;}
+  bool operator()(const std::pair<std::string, size_t>& p1,
+                  const std::pair<std::string, size_t>& p2) {
+    return p1.first > p2.first;
+  }
 };
 // ___________________________________________________________________
 void mergeVocabulary(const std::string& basename, size_t numFiles) {
-  
   std::vector<std::fstream> infiles;
   std::ofstream outfile(basename + ".vocabulary");
   AD_CHECK(outfile.is_open());
@@ -34,7 +35,8 @@ void mergeVocabulary(const std::string& basename, size_t numFiles) {
   std::priority_queue<pair_T, std::vector<pair_T>, PairCompare> queue;
 
   for (size_t i = 0; i < numFiles; i++) {
-    infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME + std::to_string(i), std::ios_base::in | std::ios_base::out);
+    infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME + std::to_string(i),
+                         std::ios_base::in | std::ios_base::out);
     AD_CHECK(infiles.back().is_open());
     endOfFile[i] = true;
 
@@ -46,7 +48,6 @@ void mergeVocabulary(const std::string& basename, size_t numFiles) {
       endOfFile[i] = false;
     }
   }
-
 
   std::string lastWritten = "";
   size_t totalWritten = 0;
@@ -68,7 +69,7 @@ void mergeVocabulary(const std::string& basename, size_t numFiles) {
 
       // according to the standard, flush() or seek() must be called before
       // switching from read to write. And this is indeed necessary for gcc to
-      // avoid nasty bugs. 
+      // avoid nasty bugs.
       // We seek to the current position to avoid them
       infiles[top.second].seekp(infiles[top.second].tellp());
       // write id to partial vocabulary
@@ -86,7 +87,9 @@ void mergeVocabulary(const std::string& basename, size_t numFiles) {
     }
 
     // add next word from the same infile to the priority queue
-    if (endOfFile[top.second]) { continue;} // file is exhausted, nothing to add
+    if (endOfFile[top.second]) {
+      continue;
+    }  // file is exhausted, nothing to add
 
     size_t i = top.second;
     endOfFile[top.second] = true;
@@ -103,7 +106,8 @@ void mergeVocabulary(const std::string& basename, size_t numFiles) {
 }
 
 // ____________________________________________________________________________________________
-google::sparse_hash_map<string, Id> vocabMapFromPartialIndexedFile(const string& partialFile) {
+google::sparse_hash_map<string, Id> vocabMapFromPartialIndexedFile(
+    const string& partialFile) {
   std::ifstream file(partialFile, std::ios_base::binary);
   AD_CHECK(file.is_open());
   google::sparse_hash_map<string, Id> vocabMap;
@@ -117,4 +121,3 @@ google::sparse_hash_map<string, Id> vocabMapFromPartialIndexedFile(const string&
   }
   return vocabMap;
 }
-

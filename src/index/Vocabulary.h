@@ -153,7 +153,8 @@ class Vocabulary {
   google::sparse_hash_map<string, Id> asMap();
 
   void externalizeLiterals(const string& fileName);
-  void externalizeLiteralsFromTextFile(const string& textFileName, const string& outFileName) {
+  void externalizeLiteralsFromTextFile(const string& textFileName,
+                                       const string& outFileName) {
     _externalLiterals.buildFromTextFile(textFileName, outFileName);
   }
 

@@ -424,7 +424,7 @@ string Server::composeResponseJson(const string& query,
 
   string msg = ad_utility::escapeForJson(exception.what());
 
-  os << "\"Exception-Error-Message\": \"" << msg << "\"\n"
+  os << "\"exception\": \"" << msg << "\"\n"
      << "}\n";
 
   return os.str();
