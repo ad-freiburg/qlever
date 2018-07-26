@@ -8,7 +8,7 @@
 #include "../src/parser/ContextFileParser.h"
 
 TEST(ContextFileParserTest, getLineTest) {
-  char* locale = setlocale(LC_CTYPE, "en_US.utf8");
+  char* locale = setlocale(LC_CTYPE, "");
   std::cout << "Set locale LC_CTYPE to: " << locale << std::endl;
 
   std::fstream f("_testtmp.contexts.tsv", std::ios_base::out);

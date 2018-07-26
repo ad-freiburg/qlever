@@ -70,7 +70,7 @@ void printUsage(char* execName) {
 
 // Main function.
 int main(int argc, char** argv) {
-  char* locale = setlocale(LC_CTYPE, "en_US.utf8");
+  char* locale = setlocale(LC_CTYPE, "");
 
   std::locale loc;
   ad_utility::ReadableNumberFacet facet(1);

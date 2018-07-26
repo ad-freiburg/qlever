@@ -77,14 +77,14 @@ TEST(StringUtilsTest, endsWith) {
 }
 
 TEST(StringUtilsTest, getLowercaseUtf8) {
-  setlocale(LC_CTYPE, "en_US.utf8");
+  setlocale(LC_CTYPE, "");
   ASSERT_EQ("schindler's list", getLowercaseUtf8("Schindler's List"));
   ASSERT_EQ("#+-_foo__bar++", getLowercaseUtf8("#+-_foo__Bar++"));
   ASSERT_EQ(u8"fôéßaéé", getLowercaseUtf8(u8"FÔÉßaéÉ"));
 }
 
 TEST(StringUtilsTest, firstCharToUpperUtf8) {
-  setlocale(LC_CTYPE, "en_US.utf8");
+  setlocale(LC_CTYPE, "");
   ASSERT_EQ("Foo", firstCharToUpperUtf8("foo"));
   ASSERT_EQ("Foo", firstCharToUpperUtf8("Foo"));
   ASSERT_EQ("#foo", firstCharToUpperUtf8("#foo"));
@@ -213,7 +213,7 @@ TEST(StringUtilsTest, strip) {
 }
 
 TEST(StringUtilsTest, splitWs) {
-  setlocale(LC_CTYPE, "en_US.utf8");
+  setlocale(LC_CTYPE, "");
   string s1 = "  this\nis\t  \nit  ";
   string s2 = "\n   \t  \n \t";
   string s3 = "thisisit";
