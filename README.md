@@ -34,43 +34,103 @@ Thus, old queries no longer work and need to be adjusted as described in this RE
 
 
 # How to use
+There are two ways to use QLever on Linux systems.
 
+* Variant **a** is to use `docker` for building and running it *(recommended)*
+* Variant **b** is to use QLever directly on the host
 
-## 0. Requirements:
-
-
-Make sure you use a 64bit Linux with:
-
-* git
-* g++ 4.8 or higher
-* CMake 2.8.4 or higher
-* google-sparsehash
-* python3 + python3-yaml (for End-to-End Tests)
-
-Other compilers (and OS) are not supported, yet.
-So far no major problems are known.
-Support for more platforms would be a highly appreciated contribution.
-
-You also have to have google sparsehash installed.
-If this isn't the case on your system, run:
-
-    git clone https://github.com/sparsehash/sparsehash.git
-    cd  sparsehash
-    ./configure && make && sudo make install
-
-## 1. Build:
+## Get the code
+This requires `git` to be installed
 
 a) Checkout this project:
 
-    git clone https://github.com/Buchhold/QLever.git --recursive
+    git clone --recursive https://github.com/Buchhold/QLever.git
 
-Don't forget --recursive so that submodules will be updated.
+Don't forget `--recursive` so that submodules will be updated.
 For old versions of git, that do not support this parameter, you can do:
 
     git clone https://github.com/Buchhold/QLever.git
     cd QLever
     git submodule init
     git submodule update
+
+## Running QLever inside `docker`
+### 0a. Requirements:
+A 64 bit host system (32 bit systems can't deal with `mmap` on > 4 GB files or
+allocate enough RAM for larger KBs)
+
+* docker 17.05 or newer (needs multi-stage builds)
+
+### 1a. Build the container
+
+Inside the the repositories root folder run
+
+    docker build -t qlever-<name> .
+
+where `<name>` is a name chosen by convention to match the dataset or variant
+you're building for.
+
+### 2a. Create or reuse an index
+
+When running with user namespaces you may need to make the index folder accessible
+to e.g. the "nobody" user
+
+    chmod -R o+rw ./index
+
+For an existing index copy it into the ./index folder and make sure to either
+name it so that all files start with `index`  or set `-e INDEX_PREFIX=<prefix>`
+during docker run where `<prefix>` is the part of the index file names before
+the first `.`.
+
+To build a new index run a bash inside the container as follows
+
+    docker run -it --rm \
+               -v "<absolute_path_to_input>:/input" \
+               -v "$(pwd)/index:/index" --entrypoint "bash" qlever-<name>
+
+Then inside the container follow the instructions for [creating an
+index](#2-creating-an-index) where the path to the index inside the container
+is now `/index`.
+(*Note: you don't actually need `./` as the executables are in the
+`$PATH`*)
+
+### 3. Running the QLever container
+
+To run a QLever container use the following command, replacing `<name>` with
+the name chosen during `docker build`.
+
+    docker run -it -p 7001:7001 -v "$(pwd)/index:/index" --name qlever-<name> qlever-<name> <ServerMain args>
+
+where `<ServerMain args>` are arguments (except for port and index prefix)
+which are always included. If none are supplied `-t -a -l` is used. If you want
+the container to run in the background and restart automatically replace `-it`
+with `-d --restart=unless-stopped`
+
+## Running QLever on a Linux host
+### 0b. Requirements:
+
+Make sure you use a 64 bit Linux with:
+
+* g++ 5.x or higher
+* CMake 2.8.4 or higher
+* libsparsehash-dev (google-sparsehash)
+* python3 + python3-yaml (for End-to-End Tests)
+
+Other compilers (and OS) are not supported, yet.
+So far no major problems are known.
+Support for more platforms would be a highly appreciated contribution.
+
+You also have to have google sparsehash installed. On Ubuntu 16.04 and newer
+the `libsparsehash-dev` package works.
+
+If this isn't the case on your system, run:
+
+    git clone https://github.com/sparsehash/sparsehash.git
+    cd  sparsehash
+    ./configure && make && sudo make install
+
+### 1b. Build and run on the host:
+
 
 
 b) Go to a folder where you want to build the binaries.  Usually this is done
@@ -87,7 +147,7 @@ d) Run ctest. All tests should pass:
 
     ctest
 
-### 1.1 Running End-to-End Tests
+#### 1.1 Running End-to-End Tests
 
 QLever includes a simple mechanism for testing the entire system from
 from building an index to running queries in a single command.
@@ -112,15 +172,16 @@ If you want to skip creation of the index run
 
 ## 2. Creating an Index:
 
+**IMPORTANT:
+THERE HAS TO BE SUFFICIENT DISK SPACE UNDER THE PATH YOU CHOOSE FOR YOUR
+INDEX**
 
-IMPORTANT:
-THERE HAS TO BE SUFFICIENT DISK SPACE UNDER THE PATH YOU CHOOSE FOR YOUR INDEX!
-FOR NOW - ALL FILES HAVE TO BE UTF-8 ENCODED!
+*ALL FILES HAVE TO BE UTF-8 ENCODED!*
 
-    You can use the files described and linked later in this document:
-    "How to obtain data to play around with"
+You can use the files described and linked later in this document:
+(How to obtain data to play around with)[#how-to-obtain-data-to-play-around-with]
 
-a) from an NTriples file (currently no blank nodes allowed):
+a) from an NTriples file:
 
 Note that the string passed to -i is the base name of various index files produced.
 
