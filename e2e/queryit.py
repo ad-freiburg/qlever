@@ -127,6 +127,30 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
                 eprint("contains_row check failed:\n" +
                        "\tdid not find %r" % gold_row)
                 return False
+        elif check.startswith('order_'):
+            try:
+                direction, var = value['dir'], value['var']
+                col_type = check.split('_')[1]
+                col_idx = result['selected'].index(var)
+                for row_idx in range(1, len(res)):
+                    previous = res[row_idx - 1][col_idx]
+                    current = res[row_idx][col_idx]
+                    if col_type == 'numeric':
+                        previous_value = float(previous)
+                        current_value = float(current)
+                    elif col_type == 'string':
+                        previous_value = previous
+                        current_value = current
+                    if direction.lower() == 'asc' and previous_value > current_value:
+                        eprint('order_numeric check failed:\n\tnot ascending')
+                        return False
+                    if direction.lower() == 'desc' and previous_value < current_value:
+                        eprint('order_numeric check failed:\n\tnot descending')
+                        return False
+            except ValueError as ex:
+                eprint('order_numeric check failed:\n\t' + str(ex))
+                return False
+
 
 
     return True
