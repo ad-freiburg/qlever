@@ -81,7 +81,7 @@ queries:
           - selected: ["?count", "?place"]
           - contains_row: [280, "<New_York_City>"]
           - order_numeric: {"dir": "DESC", "var": "?count"}
-  - query: scientists-order-by-aggregate
+  - query: scientists-order-by-aggregate-count
     solutions:
       - type: no-text
         sparql: |
@@ -93,10 +93,26 @@ queries:
           ORDER BY DESC((COUNT(?x) as ?count))
         checks:
           - num_cols: 1
-          # -num_rows: 5295 # greater than current limit
+          - num_rows: 1 
           - selected: ["?place"]
-          - res: [["<United_States_of_America>"]] 
           - order_numeric: {"dir": "DESC", "var": "?count"}
+  - query: scientists-order-by-aggregate-avg
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?profession ?avg WHERE  {
+            ?x <is-a> <Scientist> .
+            ?x <Profession> ?profession .
+            ?x <Height> ?height .
+          }
+          GROUP BY ?profession
+          ORDER BY ASC((AVG(?height) as ?avg))
+          LIMIT 1
+        checks:
+          - num_cols: 1 
+          - num_rows: 1 
+          - selected: ["?profession"]
+          - order_numeric: {"dir": "ASC", "var": "?count"}
   - query: group-by-profession-average-height
     solutions:
       - type: no-text

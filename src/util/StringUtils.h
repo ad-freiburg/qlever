@@ -111,7 +111,7 @@ inline vector<string> split(const string& orig, const char sep);
 inline vector<string> splitWs(const string& orig);
 
 //! Splits a string at any maximum length sequence of whitespace, ignoring
-//! whitespace withing an escaped sequence. Left char begins an escaped
+//! whitespace within an escaped sequence. Left char begins an escaped
 //! sequence right ends it. If left == right the char toggles an escaped
 //! sequence, otherwise the depth of opening chars is tracked and whitespace
 //! is ignored as long as that depth is larger than 0.
@@ -412,7 +412,6 @@ vector<string> splitWs(const string& orig) {
       pos++;
     }
     // avoid adding whitespace at the back of the string
-    // if (!::isspace(static_cast<unsigned char>(orig[orig.size() - 1]))) {
     if (start != orig.size()) {
       result.emplace_back(orig.substr(start));
     }
@@ -451,7 +450,6 @@ inline vector<string> splitWsWithEscape(const string& orig, const char left,
       pos++;
     }
     // avoid adding whitespace at the back of the string
-    // if (!::isspace(static_cast<unsigned char>(orig[orig.size() - 1]))) {
     if (start != orig.size()) {
       result.emplace_back(orig.substr(start));
     }

@@ -178,8 +178,8 @@ void ParsedQuery::parseAliases() {
   for (size_t i = 0; i < _selectedVariables.size(); i++) {
     const std::string& var = _selectedVariables[i];
     if (var[0] == '(') {
+      // remove the leading and trailing bracket
       std::string inner = var.substr(1, var.size() - 2);
-
       // Replace the variable in the selected variables array with the aliased
       // name.
       _selectedVariables[i] = parseAlias(inner);
@@ -188,6 +188,7 @@ void ParsedQuery::parseAliases() {
   for (size_t i = 0; i < _orderBy.size(); i++) {
     OrderKey& key = _orderBy[i];
     if (key._key[0] == '(') {
+      // remove the leading and trailing bracket
       std::string inner = key._key.substr(1, key._key.size() - 2);
       // Preserve the descending or ascending order but change the key name.
       key._key = parseAlias(inner);
