@@ -9,6 +9,7 @@
 
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
+#include "ParseException.h"
 
 using std::string;
 using std::vector;
@@ -43,14 +44,67 @@ class OrderKey {
  public:
   OrderKey(const string& key, bool desc) : _key(key), _desc(desc) {}
   explicit OrderKey(const string& textual) {
-    _desc = ad_utility::startsWith(textual, "DESC");
-    bool scoreModifier = textual.find("SCORE") != string::npos;
-    size_t i = textual.find('?');
-    if (i != string::npos) {
-      _key = ad_utility::rstrip(textual.substr(i), ')');
-      if (scoreModifier) {
-        _key = string("SCORE(") + _key + ")";
+    std::string lower = ad_utility::getLowercaseUtf8(textual);
+    size_t pos = 0;
+    _desc = ad_utility::startsWith(lower, "desc(");
+    // skip the 'desc('
+    if (_desc) {
+      pos += 5;
+      // skip any whitespace after the opening bracket
+      while (pos < textual.size() &&
+             ::isspace(static_cast<unsigned char>(textual[pos]))) {
+        pos++;
       }
+    }
+    // skip 'asc('
+    if (ad_utility::startsWith(lower, "asc(")) {
+      pos += 4;
+      // skip any whitespace after the opening bracket
+      while (pos < textual.size() &&
+             ::isspace(static_cast<unsigned char>(textual[pos]))) {
+        pos++;
+      }
+    }
+    if (lower[pos] == '(') {
+      // key is an alias
+      size_t bracketDepth = 1;
+      size_t end = pos + 1;
+      while (bracketDepth > 0 && end < textual.size()) {
+        if (lower[end] == '(') {
+          bracketDepth++;
+        } else if (lower[end] == ')') {
+          bracketDepth--;
+        }
+        end++;
+      }
+      if (bracketDepth != 0) {
+        throw ParseException("Unbalanced brackets in alias order by key: " +
+                             textual);
+      }
+      _key = textual.substr(pos, end - pos);
+    } else if (lower[pos] == 's') {
+      // key is a text score
+      if (!ad_utility::startsWith(lower.substr(pos), "score(")) {
+        throw ParseException("Expected keyword score in order by key: " +
+                             textual);
+      }
+      pos += 6;
+      size_t end = pos + 1;
+      // look for the first space or closing bracket character
+      while (end < textual.size() && textual[end] != ')' &&
+             !::isspace(static_cast<unsigned char>(textual[end]))) {
+        end++;
+      }
+      _key = "SCORE(" + textual.substr(pos, end - pos) + ")";
+    } else if (lower[pos] == '?') {
+      // key is simple variable
+      size_t end = pos + 1;
+      // look for the first space or closing bracket character
+      while (end < textual.size() && textual[end] != ')' &&
+             !::isspace(static_cast<unsigned char>(textual[end]))) {
+        end++;
+      }
+      _key = textual.substr(pos, end - pos);
     }
   }
   string _key;
@@ -132,4 +186,11 @@ class ParsedQuery {
  private:
   static void expandPrefix(
       string& item, const ad_utility::HashMap<string, string>& prefixMap);
+
+  /**
+   * @brief Parses the given alias and adds it to the list of _aliases.
+   * @param alias The inner part of the alias (without the surrounding brackets)
+   * @return The new name of the variable after the aliasing was completed
+   */
+  std::string parseAlias(const std::string& alias);
 };

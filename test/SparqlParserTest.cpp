@@ -430,6 +430,27 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_EQ("?r", pq._groupByVariables[0]);
   ASSERT_EQ("?count", pq._orderBy[0]._key);
   ASSERT_FALSE(pq._orderBy[0]._desc);
+
+  // Test for an alias in the order by statement
+  pq = SparqlParser::parse(
+      "SELECT DISTINCT ?x ?y WHERE \t {?x :myrel ?y}\n"
+      "ORDER BY DESC((COUNT(?x) as ?count)) LIMIT 10 OFFSET 15");
+  pq.expandPrefixes();
+  ASSERT_EQ(0u, pq._prefixes.size());
+  ASSERT_EQ(2u, pq._selectedVariables.size());
+  ASSERT_EQ(1u, pq._rootGraphPattern._whereClauseTriples.size());
+  ASSERT_EQ("10", pq._limit);
+  ASSERT_EQ("15", pq._offset);
+  ASSERT_EQ(1u, pq._orderBy.size());
+  ASSERT_EQ("?count", pq._orderBy[0]._key);
+  ASSERT_TRUE(pq._orderBy[0]._desc);
+  ASSERT_EQ(1u, pq._aliases.size());
+  ASSERT_TRUE(pq._aliases[0]._isAggregate);
+  ASSERT_EQ("?x", pq._aliases[0]._inVarName);
+  ASSERT_EQ("?count", pq._aliases[0]._outVarName);
+  ASSERT_EQ("COUNT(?x) as ?count", pq._aliases[0]._function);
+  ASSERT_TRUE(pq._distinct);
+  ASSERT_FALSE(pq._reduced);
 }
 
 TEST(ParserTest, testGroupByAndAlias) {

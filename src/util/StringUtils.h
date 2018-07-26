@@ -110,6 +110,14 @@ inline vector<string> split(const string& orig, const char sep);
 //! Splits a string at any maximum length sequence of whitespace
 inline vector<string> splitWs(const string& orig);
 
+//! Splits a string at any maximum length sequence of whitespace, ignoring
+//! whitespace withing an escaped sequence. Left char begins an escaped
+//! sequence right ends it. If left == right the char toggles an escaped
+//! sequence, otherwise the depth of opening chars is tracked and whitespace
+//! is ignored as long as that depth is larger than 0.
+inline vector<string> splitWsWithEscape(const string& orig, const char left,
+                                        const char right);
+
 //! Splits a string a any character inside the seps string.
 inline vector<string> splitAny(const string& orig, const char* seps);
 
@@ -400,6 +408,45 @@ vector<string> splitWs(const string& orig) {
           pos++;
         }
         start = pos;
+      }
+      pos++;
+    }
+    // avoid adding whitespace at the back of the string
+    // if (!::isspace(static_cast<unsigned char>(orig[orig.size() - 1]))) {
+    if (start != orig.size()) {
+      result.emplace_back(orig.substr(start));
+    }
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+inline vector<string> splitWsWithEscape(const string& orig, const char left,
+                                        const char right) {
+  vector<string> result;
+  if (orig.size() > 0) {
+    size_t start = 0;
+    size_t pos = 0;
+    int depth = 0;
+    while (pos < orig.size()) {
+      if (depth <= 0 && ::isspace(static_cast<unsigned char>(orig[pos]))) {
+        if (start != pos) {
+          result.emplace_back(orig.substr(start, pos - start));
+        }
+        // skip any whitespace
+        while (pos < orig.size() &&
+               ::isspace(static_cast<unsigned char>(orig[pos]))) {
+          pos++;
+        }
+        start = pos;
+      }
+      if (orig[pos] == left) {
+        depth++;
+        if (left == right) {
+          depth %= 2;
+        }
+      } else if (orig[pos] == right) {
+        depth--;
       }
       pos++;
     }
