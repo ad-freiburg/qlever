@@ -92,8 +92,8 @@ void CountAvailablePredicates::computeResult(ResultTable* result) const {
 
   const std::vector<PatternID>& hasPattern =
       _executionContext->getIndex().getHasPattern();
-  const CompactStringVector<Id, Id>& hasRelation =
-      _executionContext->getIndex().getHasRelation();
+  const CompactStringVector<Id, Id>& hasPredicate =
+      _executionContext->getIndex().getHasPredicate();
   const CompactStringVector<size_t, Id>& patterns =
       _executionContext->getIndex().getPatterns();
 
@@ -103,33 +103,33 @@ void CountAvailablePredicates::computeResult(ResultTable* result) const {
     Engine::computePatternTrick<vector<Id>>(
         &subresult->_varSizeData,
         static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData), hasPattern,
-        hasRelation, patterns, _subjectColumnIndex);
+        hasPredicate, patterns, _subjectColumnIndex);
   } else {
     if (subresult->_nofColumns == 1) {
       Engine::computePatternTrick<array<Id, 1>>(
           static_cast<vector<array<Id, 1>>*>(subresult->_fixedSizeData),
           static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-          hasPattern, hasRelation, patterns, _subjectColumnIndex);
+          hasPattern, hasPredicate, patterns, _subjectColumnIndex);
     } else if (subresult->_nofColumns == 2) {
       Engine::computePatternTrick<array<Id, 2>>(
           static_cast<vector<array<Id, 2>>*>(subresult->_fixedSizeData),
           static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-          hasPattern, hasRelation, patterns, _subjectColumnIndex);
+          hasPattern, hasPredicate, patterns, _subjectColumnIndex);
     } else if (subresult->_nofColumns == 3) {
       Engine::computePatternTrick<array<Id, 3>>(
           static_cast<vector<array<Id, 3>>*>(subresult->_fixedSizeData),
           static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-          hasPattern, hasRelation, patterns, _subjectColumnIndex);
+          hasPattern, hasPredicate, patterns, _subjectColumnIndex);
     } else if (subresult->_nofColumns == 4) {
       Engine::computePatternTrick<array<Id, 4>>(
           static_cast<vector<array<Id, 4>>*>(subresult->_fixedSizeData),
           static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-          hasPattern, hasRelation, patterns, _subjectColumnIndex);
+          hasPattern, hasPredicate, patterns, _subjectColumnIndex);
     } else if (subresult->_nofColumns == 5) {
       Engine::computePatternTrick<array<Id, 5>>(
           static_cast<vector<array<Id, 5>>*>(subresult->_fixedSizeData),
           static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-          hasPattern, hasRelation, patterns, _subjectColumnIndex);
+          hasPattern, hasPredicate, patterns, _subjectColumnIndex);
     }
   }
   result->finish();

@@ -57,10 +57,10 @@ void Index::createFromTsvFile(const string& tsvFile, bool allPermutations) {
     createPermutation(indexFilename + ".spo", v, _spoMeta, 0, 1, 2);
     if (_usePatterns) {
       LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
-      createPatterns(indexFilename + ".patterns", v, _hasRelation, _hasPattern,
-                     _patterns, _fullHasRelationMultiplicityEntities,
-                     _fullHasRelationMultiplicityPredicates,
-                     _fullHasRelationSize, _maxNumPatterns);
+      createPatterns(indexFilename + ".patterns", v, _hasPredicate, _hasPattern,
+                     _patterns, _fullHasPredicateMultiplicityEntities,
+                     _fullHasPredicateMultiplicityPredicates,
+                     _fullHasPredicateSize, _maxNumPatterns);
     }
     // SOP permutation
     LOG(INFO) << "Sorting for SOP permutation..." << std::endl;
@@ -81,10 +81,10 @@ void Index::createFromTsvFile(const string& tsvFile, bool allPermutations) {
     LOG(INFO) << "Sorting for pattern creation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPatterns(indexFilename + ".patterns", v, _hasRelation, _hasPattern,
-                   _patterns, _fullHasRelationMultiplicityEntities,
-                   _fullHasRelationMultiplicityPredicates, _fullHasRelationSize,
-                   _maxNumPatterns);
+    createPatterns(indexFilename + ".patterns", v, _hasPredicate, _hasPattern,
+                   _patterns, _fullHasPredicateMultiplicityEntities,
+                   _fullHasPredicateMultiplicityPredicates,
+                   _fullHasPredicateSize, _maxNumPatterns);
   }
   openFileHandles();
 }
@@ -159,10 +159,10 @@ void Index::createFromNTriplesFile(const string& ntFile, bool allPermutations) {
     createPermutation(indexFilename + ".spo", v, _spoMeta, 0, 1, 2);
     if (_usePatterns) {
       LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
-      createPatterns(indexFilename + ".patterns", v, _hasRelation, _hasPattern,
-                     _patterns, _fullHasRelationMultiplicityEntities,
-                     _fullHasRelationMultiplicityPredicates,
-                     _fullHasRelationSize, _maxNumPatterns);
+      createPatterns(indexFilename + ".patterns", v, _hasPredicate, _hasPattern,
+                     _patterns, _fullHasPredicateMultiplicityEntities,
+                     _fullHasPredicateMultiplicityPredicates,
+                     _fullHasPredicateSize, _maxNumPatterns);
     }
     // SOP permutation
     LOG(INFO) << "Sorting for SOP permutation..." << std::endl;
@@ -183,10 +183,10 @@ void Index::createFromNTriplesFile(const string& ntFile, bool allPermutations) {
     LOG(INFO) << "Sorting for pattern creation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPatterns(indexFilename + ".patterns", v, _hasRelation, _hasPattern,
-                   _patterns, _fullHasRelationMultiplicityEntities,
-                   _fullHasRelationMultiplicityPredicates, _fullHasRelationSize,
-                   _maxNumPatterns);
+    createPatterns(indexFilename + ".patterns", v, _hasPredicate, _hasPattern,
+                   _patterns, _fullHasPredicateMultiplicityEntities,
+                   _fullHasPredicateMultiplicityPredicates,
+                   _fullHasPredicateSize, _maxNumPatterns);
   }
   openFileHandles();
 }
@@ -418,12 +418,13 @@ void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
 
 // _____________________________________________________________________________
 void Index::createPatterns(const string& fileName, const ExtVec& vec,
-                           CompactStringVector<Id, Id>& hasRelation,
+                           CompactStringVector<Id, Id>& hasPredicate,
                            std::vector<PatternID>& hasPattern,
                            CompactStringVector<size_t, Id>& patterns,
-                           double& fullHasRelationMultiplicityEntities,
-                           double& fullHasRelationMultiplicityPredicates,
-                           size_t& fullHasRelationSize, size_t maxNumPatterns) {
+                           double& fullHasPredicateMultiplicityEntities,
+                           double& fullHasPredicateMultiplicityPredicates,
+                           size_t& fullHasPredicateSize,
+                           size_t maxNumPatterns) {
   if (vec.size() == 0) {
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
     return;
@@ -553,10 +554,8 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
   LOG(DEBUG) << "Pattern set size: " << patternSet.size() << std::endl;
 
   // Associate entities with patterns if possible, store has-relation otherwise
-  // stxxl::VECTOR_GENERATOR<std::pair<Id, Id>>::result entityPatterns;
-  // stxxl::VECTOR_GENERATOR<std::pair<Id, Id>>::result entityHasRelation;
   std::vector<std::array<Id, 2>> entityHasPattern;
-  std::vector<std::array<Id, 2>> entityHasRelation;
+  std::vector<std::array<Id, 2>> entityHasPredicate;
 
   size_t numEntitiesWithPatterns = 0;
   size_t numEntitiesWithoutPatterns = 0;
@@ -565,9 +564,9 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
   // store how many entries there are in the full has-relation relation (after
   // resolving all patterns) and how may distinct elements there are (for the
   // multiplicity;
-  fullHasRelationSize = 0;
-  size_t fullHasRelationEntitiesDistinctSize = 0;
-  size_t fullHasRelationPredicatesDistinctSize = 0;
+  fullHasPredicateSize = 0;
+  size_t fullHasPredicateEntitiesDistinctSize = 0;
+  size_t fullHasPredicatePredicatesDistinctSize = 0;
   // This vector stores if the pattern was already counted toward the distinct
   // has relation predicates size.
   std::vector<bool> haveCountedPattern(patternSet.size());
@@ -583,7 +582,7 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
   for (ExtVec::bufreader_type reader2(vec); !reader2.empty(); ++reader2) {
     if ((*reader2)[0] != currentRel) {
       // we have arrived at a new entity;
-      fullHasRelationEntitiesDistinctSize++;
+      fullHasPredicateEntitiesDistinctSize++;
       std::unordered_map<Pattern, Id>::iterator it;
       if (isValidPattern) {
         it = patternSet.find(pattern);
@@ -591,19 +590,19 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
         it = patternSet.end();
         numInvalidEntities++;
       }
-      // increase the hasrelationsize here as every predicate is only
+      // increase the haspredicate size here as every predicate is only
       // listed once per entity (otherwise it woul always be the same as
       // vec.size()
-      fullHasRelationSize += pattern.size();
+      fullHasPredicateSize += pattern.size();
       if (it == patternSet.end()) {
         numEntitiesWithoutPatterns++;
         // The pattern does not exist, use the has-relation predicate instead
         for (size_t i = 0; i < patternIndex; i++) {
           if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
             predicateHashSet.insert(pattern[i]);
-            fullHasRelationPredicatesDistinctSize++;
+            fullHasPredicatePredicatesDistinctSize++;
           }
-          entityHasRelation.push_back(
+          entityHasPredicate.push_back(
               std::array<Id, 2>{currentRel, pattern[i]});
         }
       } else {
@@ -616,7 +615,7 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
           for (size_t i = 0; i < patternIndex; i++) {
             if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
               predicateHashSet.insert(pattern[i]);
-              fullHasRelationPredicatesDistinctSize++;
+              fullHasPredicatePredicatesDistinctSize++;
             }
           }
         }
@@ -633,8 +632,8 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
     }
   }
   // process the last element
-  fullHasRelationSize += pattern.size();
-  fullHasRelationEntitiesDistinctSize++;
+  fullHasPredicateSize += pattern.size();
+  fullHasPredicateEntitiesDistinctSize++;
   std::unordered_map<Pattern, Id>::iterator it;
   if (isValidPattern) {
     it = patternSet.find(pattern);
@@ -645,10 +644,10 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
     numEntitiesWithoutPatterns++;
     // The pattern does not exist, use the has-relation predicate instead
     for (size_t i = 0; i < patternIndex; i++) {
-      entityHasRelation.push_back(std::array<Id, 2>{currentRel, pattern[i]});
+      entityHasPredicate.push_back(std::array<Id, 2>{currentRel, pattern[i]});
       if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
         predicateHashSet.insert(pattern[i]);
-        fullHasRelationPredicatesDistinctSize++;
+        fullHasPredicatePredicatesDistinctSize++;
       }
     }
   } else {
@@ -658,22 +657,22 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
     for (size_t i = 0; i < patternIndex; i++) {
       if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
         predicateHashSet.insert(pattern[i]);
-        fullHasRelationPredicatesDistinctSize++;
+        fullHasPredicatePredicatesDistinctSize++;
       }
     }
   }
 
-  fullHasRelationMultiplicityEntities =
-      fullHasRelationSize /
-      static_cast<double>(fullHasRelationEntitiesDistinctSize);
-  fullHasRelationMultiplicityPredicates =
-      fullHasRelationSize /
-      static_cast<double>(fullHasRelationPredicatesDistinctSize);
+  fullHasPredicateMultiplicityEntities =
+      fullHasPredicateSize /
+      static_cast<double>(fullHasPredicateEntitiesDistinctSize);
+  fullHasPredicateMultiplicityPredicates =
+      fullHasPredicateSize /
+      static_cast<double>(fullHasPredicatePredicatesDistinctSize);
 
   LOG(DEBUG) << "Number of entity-has-pattern entries: "
              << entityHasPattern.size() << std::endl;
   LOG(DEBUG) << "Number of entity-has-relation entries: "
-             << entityHasRelation.size() << std::endl;
+             << entityHasPredicate.size() << std::endl;
 
   LOG(INFO) << "Found " << patterns.size() << " distinct patterns."
             << std::endl;
@@ -690,11 +689,11 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
              << (numEntitiesWithoutPatterns + numEntitiesWithPatterns)
              << std::endl;
 
-  LOG(DEBUG) << "Full has relation size: " << fullHasRelationSize << std::endl;
+  LOG(DEBUG) << "Full has relation size: " << fullHasPredicateSize << std::endl;
   LOG(DEBUG) << "Full has relation entity multiplicity: "
-             << fullHasRelationMultiplicityEntities << std::endl;
+             << fullHasPredicateMultiplicityEntities << std::endl;
   LOG(DEBUG) << "Full has relation predicate multiplicity: "
-             << fullHasRelationMultiplicityPredicates << std::endl;
+             << fullHasPredicateMultiplicityPredicates << std::endl;
 
   // Store all data in the file
   ad_utility::File file(fileName.c_str(), "w");
@@ -706,19 +705,19 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
   unsigned char firstByte = 255;
   file.write(&firstByte, sizeof(char));
   file.write(&PATTERNS_FILE_VERSION, sizeof(uint32_t));
-  file.write(&fullHasRelationMultiplicityEntities, sizeof(double));
-  file.write(&fullHasRelationMultiplicityPredicates, sizeof(double));
-  file.write(&fullHasRelationSize, sizeof(size_t));
+  file.write(&fullHasPredicateMultiplicityEntities, sizeof(double));
+  file.write(&fullHasPredicateMultiplicityPredicates, sizeof(double));
+  file.write(&fullHasPredicateSize, sizeof(size_t));
 
   // write the entityHasPatterns vector
   size_t numHasPatterns = entityHasPattern.size();
   file.write(&numHasPatterns, sizeof(size_t));
   file.write(entityHasPattern.data(), sizeof(Id) * numHasPatterns * 2);
 
-  // write the entityHasRelation vector
-  size_t numHasRelations = entityHasRelation.size();
-  file.write(&numHasRelations, sizeof(size_t));
-  file.write(entityHasRelation.data(), sizeof(Id) * numHasRelations * 2);
+  // write the entityHasPredicate vector
+  size_t numHasPredicatess = entityHasPredicate.size();
+  file.write(&numHasPredicatess, sizeof(size_t));
+  file.write(entityHasPredicate.data(), sizeof(Id) * numHasPredicatess * 2);
 
   // write the patterns
   patterns.write(file);
@@ -740,24 +739,24 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
     }
   }
 
-  vector<vector<Id>> hasRelationTmp;
-  if (entityHasRelation.size() > 0) {
-    hasRelationTmp.resize(entityHasRelation.back()[0] + 1);
+  vector<vector<Id>> hasPredicateTmp;
+  if (entityHasPredicate.size() > 0) {
+    hasPredicateTmp.resize(entityHasPredicate.back()[0] + 1);
     size_t pos = 0;
-    for (size_t i = 0; i < entityHasRelation.size(); i++) {
-      Id current = entityHasRelation[i][0];
+    for (size_t i = 0; i < entityHasPredicate.size(); i++) {
+      Id current = entityHasPredicate[i][0];
       while (current > pos) {
         pos++;
       }
-      while (i < entityHasRelation.size() &&
-             entityHasRelation[i][0] == current) {
-        hasRelationTmp.back().push_back(entityHasRelation[i][1]);
+      while (i < entityHasPredicate.size() &&
+             entityHasPredicate[i][0] == current) {
+        hasPredicateTmp.back().push_back(entityHasPredicate[i][1]);
         i++;
       }
       pos++;
     }
   }
-  hasRelation.build(hasRelationTmp);
+  hasPredicate.build(hasPredicateTmp);
 }
 
 // _____________________________________________________________________________
@@ -970,13 +969,13 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
           << " or start the query engine without pattern support." << std::endl;
       throw std::runtime_error(oss.str());
     } else {
-      patternsFile.read(&_fullHasRelationMultiplicityEntities, sizeof(double),
+      patternsFile.read(&_fullHasPredicateMultiplicityEntities, sizeof(double),
                         off);
       off += sizeof(double);
-      patternsFile.read(&_fullHasRelationMultiplicityPredicates, sizeof(double),
-                        off);
+      patternsFile.read(&_fullHasPredicateMultiplicityPredicates,
+                        sizeof(double), off);
       off += sizeof(double);
-      patternsFile.read(&_fullHasRelationSize, sizeof(size_t), off);
+      patternsFile.read(&_fullHasPredicateSize, sizeof(size_t), off);
       off += sizeof(size_t);
 
       // read the entity has patterns vector
@@ -989,13 +988,13 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
       off += hasPatternSize * sizeof(Id) * 2;
 
       // read the entity has relation vector
-      size_t hasRelationSize;
-      patternsFile.read(&hasRelationSize, sizeof(size_t), off);
+      size_t hasPredicateSize;
+      patternsFile.read(&hasPredicateSize, sizeof(size_t), off);
       off += sizeof(size_t);
-      std::vector<array<Id, 2>> entityHasRelation(hasRelationSize);
-      patternsFile.read(entityHasRelation.data(),
-                        hasRelationSize * sizeof(Id) * 2, off);
-      off += hasRelationSize * sizeof(Id) * 2;
+      std::vector<array<Id, 2>> entityHasPredicate(hasPredicateSize);
+      patternsFile.read(entityHasPredicate.data(),
+                        hasPredicateSize * sizeof(Id) * 2, off);
+      off += hasPredicateSize * sizeof(Id) * 2;
 
       // read the patterns
       _patterns.load(patternsFile, off);
@@ -1014,24 +1013,24 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
         }
       }
 
-      vector<vector<Id>> hasRelationTmp;
-      if (entityHasRelation.size() > 0) {
-        hasRelationTmp.resize(entityHasRelation.back()[0] + 1);
+      vector<vector<Id>> hasPredicateTmp;
+      if (entityHasPredicate.size() > 0) {
+        hasPredicateTmp.resize(entityHasPredicate.back()[0] + 1);
         size_t pos = 0;
-        for (size_t i = 0; i < entityHasRelation.size(); i++) {
-          Id current = entityHasRelation[i][0];
+        for (size_t i = 0; i < entityHasPredicate.size(); i++) {
+          Id current = entityHasPredicate[i][0];
           while (current > pos) {
             pos++;
           }
-          while (i < entityHasRelation.size() &&
-                 entityHasRelation[i][0] == current) {
-            hasRelationTmp.back().push_back(entityHasRelation[i][1]);
+          while (i < entityHasPredicate.size() &&
+                 entityHasPredicate[i][0] == current) {
+            hasPredicateTmp.back().push_back(entityHasPredicate[i][1]);
             i++;
           }
           pos++;
         }
       }
-      _hasRelation.build(hasRelationTmp);
+      _hasPredicate.build(hasPredicateTmp);
     }
   }
 }
@@ -1349,30 +1348,49 @@ void Index::scanOPS(Id object, Index::WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
-const vector<PatternID>& Index::getHasPattern() const { return _hasPattern; }
+void Index::throwExceptionIfNoPatterns() const {
+  if (!_usePatterns) {
+    AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+             "The requested feature requires a loaded patterns file (Use the "
+             "-P or --patterns option when running the executable).");
+  }
+}
 
 // _____________________________________________________________________________
-const CompactStringVector<Id, Id>& Index::getHasRelation() const {
-  return _hasRelation;
+const vector<PatternID>& Index::getHasPattern() const {
+  throwExceptionIfNoPatterns();
+  return _hasPattern;
+}
+
+// _____________________________________________________________________________
+const CompactStringVector<Id, Id>& Index::getHasPredicate() const {
+  throwExceptionIfNoPatterns();
+  return _hasPredicate;
 }
 
 // _____________________________________________________________________________
 const CompactStringVector<size_t, Id>& Index::getPatterns() const {
+  throwExceptionIfNoPatterns();
   return _patterns;
 }
 
 // _____________________________________________________________________________
-double Index::getHasRelationMultiplicityEntities() const {
-  return _fullHasRelationMultiplicityEntities;
+double Index::getHasPredicateMultiplicityEntities() const {
+  throwExceptionIfNoPatterns();
+  return _fullHasPredicateMultiplicityEntities;
 }
 
 // _____________________________________________________________________________
-double Index::getHasRelationMultiplicityPredicates() const {
-  return _fullHasRelationMultiplicityPredicates;
+double Index::getHasPredicateMultiplicityPredicates() const {
+  throwExceptionIfNoPatterns();
+  return _fullHasPredicateMultiplicityPredicates;
 }
 
 // _____________________________________________________________________________
-size_t Index::getHasRelationFullSize() const { return _fullHasRelationSize; }
+size_t Index::getHasPredicateFullSize() const {
+  throwExceptionIfNoPatterns();
+  return _fullHasPredicateSize;
+}
 
 // _____________________________________________________________________________
 string Index::idToString(Id id) const {

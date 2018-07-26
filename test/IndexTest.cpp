@@ -374,7 +374,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     index.createFromTsvFile("_testtmppatterns.tsv", false);
 
     ASSERT_EQ(2u, index.getHasPattern().size());
-    ASSERT_EQ(1u, index.getHasRelation().size());
+    ASSERT_EQ(1u, index.getHasPredicate().size());
     ASSERT_EQ(1u, index._patterns.size());
     Pattern p;
     p.push_back(3);
@@ -386,8 +386,8 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     ASSERT_EQ(0u, index.getHasPattern()[1]);
     ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
 
-    ASSERT_FLOAT_EQ(4.0 / 2, index.getHasRelationMultiplicityEntities());
-    ASSERT_FLOAT_EQ(4.0 / 3, index.getHasRelationMultiplicityPredicates());
+    ASSERT_FLOAT_EQ(4.0 / 2, index.getHasPredicateMultiplicityEntities());
+    ASSERT_FLOAT_EQ(4.0 / 3, index.getHasPredicateMultiplicityPredicates());
   }
   {
     LOG(DEBUG) << "Testing createPatterns with existing index..." << std::endl;
@@ -397,7 +397,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     index.createFromOnDiskIndex("_testindex");
 
     ASSERT_EQ(2u, index.getHasPattern().size());
-    ASSERT_EQ(1u, index.getHasRelation().size());
+    ASSERT_EQ(1u, index.getHasPredicate().size());
     ASSERT_EQ(1u, index._patterns.size());
     Pattern p;
     p.push_back(3);
@@ -409,8 +409,8 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     ASSERT_EQ(0u, index.getHasPattern()[1]);
     ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
 
-    ASSERT_FLOAT_EQ(4.0 / 2, index.getHasRelationMultiplicityEntities());
-    ASSERT_FLOAT_EQ(4.0 / 3, index.getHasRelationMultiplicityPredicates());
+    ASSERT_FLOAT_EQ(4.0 / 2, index.getHasPredicateMultiplicityEntities());
+    ASSERT_FLOAT_EQ(4.0 / 3, index.getHasPredicateMultiplicityPredicates());
   }
 }
 

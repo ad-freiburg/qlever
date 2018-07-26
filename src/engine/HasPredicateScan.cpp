@@ -2,16 +2,16 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
-#include "HasRelationScan.h"
+#include "HasPredicateScan.h"
 
 template <typename A, typename R>
 void doComputeSubqueryS(const std::vector<A>* input,
                         const size_t inputSubjectColumn, std::vector<R>* result,
                         const std::vector<PatternID>& hasPattern,
-                        const CompactStringVector<Id, Id>& hasRelation,
+                        const CompactStringVector<Id, Id>& hasPredicate,
                         const CompactStringVector<size_t, Id>& patterns);
 
-HasRelationScan::HasRelationScan(QueryExecutionContext* qec, ScanType type)
+HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec, ScanType type)
     : Operation(qec),
       _type(type),
       _subtree(nullptr),
@@ -19,7 +19,7 @@ HasRelationScan::HasRelationScan(QueryExecutionContext* qec, ScanType type)
       _subject(),
       _object() {}
 
-string HasRelationScan::asString(size_t indent) const {
+string HasPredicateScan::asString(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
@@ -41,7 +41,7 @@ string HasRelationScan::asString(size_t indent) const {
   return os.str();
 }
 
-size_t HasRelationScan::getResultWidth() const {
+size_t HasPredicateScan::getResultWidth() const {
   switch (_type) {
     case ScanType::FREE_S:
       return 1;
@@ -55,7 +55,7 @@ size_t HasRelationScan::getResultWidth() const {
   return -1;
 }
 
-size_t HasRelationScan::resultSortedOn() const {
+size_t HasPredicateScan::resultSortedOn() const {
   switch (_type) {
     case ScanType::FREE_S:
       // is the lack of sorting here a problem?
@@ -70,7 +70,8 @@ size_t HasRelationScan::resultSortedOn() const {
   return -1;
 }
 
-std::unordered_map<string, size_t> HasRelationScan::getVariableColumns() const {
+std::unordered_map<string, size_t> HasPredicateScan::getVariableColumns()
+    const {
   std::unordered_map<string, size_t> varCols;
   switch (_type) {
     case ScanType::FREE_S:
@@ -91,13 +92,13 @@ std::unordered_map<string, size_t> HasRelationScan::getVariableColumns() const {
   return varCols;
 }
 
-void HasRelationScan::setTextLimit(size_t limit) {
+void HasPredicateScan::setTextLimit(size_t limit) {
   if (_type == ScanType::SUBQUERY_S) {
     _subtree->setTextLimit(limit);
   }
 }
 
-bool HasRelationScan::knownEmptyResult() {
+bool HasPredicateScan::knownEmptyResult() {
   if (_type == ScanType::SUBQUERY_S) {
     return _subtree->knownEmptyResult();
   } else {
@@ -105,48 +106,48 @@ bool HasRelationScan::knownEmptyResult() {
   }
 }
 
-float HasRelationScan::getMultiplicity(size_t col) {
+float HasPredicateScan::getMultiplicity(size_t col) {
   switch (_type) {
     case ScanType::FREE_S:
       if (col == 0) {
-        return getIndex().getHasRelationMultiplicityEntities();
+        return getIndex().getHasPredicateMultiplicityEntities();
       }
       break;
     case ScanType::FREE_O:
       if (col == 0) {
-        return getIndex().getHasRelationMultiplicityPredicates();
+        return getIndex().getHasPredicateMultiplicityPredicates();
       }
       break;
     case ScanType::FULL_SCAN:
       if (col == 0) {
-        return getIndex().getHasRelationMultiplicityEntities();
+        return getIndex().getHasPredicateMultiplicityEntities();
       } else if (col == 1) {
-        return getIndex().getHasRelationMultiplicityPredicates();
+        return getIndex().getHasPredicateMultiplicityPredicates();
       }
       break;
     case ScanType::SUBQUERY_S:
       if (col < getResultWidth() - 1) {
         return _subtree->getMultiplicity(col) *
-               getIndex().getHasRelationMultiplicityPredicates();
+               getIndex().getHasPredicateMultiplicityPredicates();
       } else {
         return _subtree->getMultiplicity(_subtreeColIndex) *
-               getIndex().getHasRelationMultiplicityPredicates();
+               getIndex().getHasPredicateMultiplicityPredicates();
       }
       break;
   }
   return 1;
 }
 
-size_t HasRelationScan::getSizeEstimate() {
+size_t HasPredicateScan::getSizeEstimate() {
   switch (_type) {
     case ScanType::FREE_S:
       return static_cast<size_t>(
-          getIndex().getHasRelationMultiplicityEntities());
+          getIndex().getHasPredicateMultiplicityEntities());
     case ScanType::FREE_O:
       return static_cast<size_t>(
-          getIndex().getHasRelationMultiplicityPredicates());
+          getIndex().getHasPredicateMultiplicityPredicates());
     case ScanType::FULL_SCAN:
-      return getIndex().getHasRelationFullSize();
+      return getIndex().getHasPredicateFullSize();
     case ScanType::SUBQUERY_S:
 
       size_t nofDistinctLeft = std::max(
@@ -155,20 +156,20 @@ size_t HasRelationScan::getSizeEstimate() {
                               _subtree->getMultiplicity(_subtreeColIndex)));
       size_t nofDistinctRight = std::max(
           size_t(1), static_cast<size_t>(
-                         getIndex().getHasRelationFullSize() /
-                         getIndex().getHasRelationMultiplicityPredicates()));
+                         getIndex().getHasPredicateFullSize() /
+                         getIndex().getHasPredicateMultiplicityPredicates()));
       size_t nofDistinctInResult = std::min(nofDistinctLeft, nofDistinctRight);
 
       double jcMultiplicityInResult =
           _subtree->getMultiplicity(_subtreeColIndex) *
-          getIndex().getHasRelationMultiplicityPredicates();
+          getIndex().getHasPredicateMultiplicityPredicates();
       return std::max(size_t(1), static_cast<size_t>(jcMultiplicityInResult *
                                                      nofDistinctInResult));
   }
   return 0;
 }
 
-size_t HasRelationScan::getCostEstimate() {
+size_t HasPredicateScan::getCostEstimate() {
   // TODO: these size estimates only work if all predicates are functional
   switch (_type) {
     case ScanType::FREE_S:
@@ -183,12 +184,13 @@ size_t HasRelationScan::getCostEstimate() {
   return 0;
 }
 
-void HasRelationScan::computeResult(ResultTable* result) const {
+void HasPredicateScan::computeResult(ResultTable* result) const {
   result->_nofColumns = getResultWidth();
   result->_sortedBy = resultSortedOn();
 
   const std::vector<PatternID>& hasPattern = getIndex().getHasPattern();
-  const CompactStringVector<Id, Id>& hasRelation = getIndex().getHasRelation();
+  const CompactStringVector<Id, Id>& hasPredicate =
+      getIndex().getHasPredicate();
   const CompactStringVector<size_t, Id>& patterns = getIndex().getPatterns();
 
   switch (_type) {
@@ -198,8 +200,8 @@ void HasRelationScan::computeResult(ResultTable* result) const {
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
                  "The predicate '" + _object + "' is not in the vocabulary.");
       }
-      HasRelationScan::computeFreeS(result, objectId, hasPattern, hasRelation,
-                                    patterns);
+      HasPredicateScan::computeFreeS(result, objectId, hasPattern, hasPredicate,
+                                     patterns);
     } break;
     case ScanType::FREE_O: {
       Id subjectId;
@@ -207,26 +209,26 @@ void HasRelationScan::computeResult(ResultTable* result) const {
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
                  "The subject " + _subject + " is not in the vocabulary.");
       }
-      HasRelationScan::computeFreeO(result, subjectId, hasPattern, hasRelation,
-                                    patterns);
+      HasPredicateScan::computeFreeO(result, subjectId, hasPattern,
+                                     hasPredicate, patterns);
     } break;
     case ScanType::FULL_SCAN:
-      HasRelationScan::computeFullScan(result, hasPattern, hasRelation,
-                                       patterns,
-                                       getIndex().getHasRelationFullSize());
+      HasPredicateScan::computeFullScan(result, hasPattern, hasPredicate,
+                                        patterns,
+                                        getIndex().getHasPredicateFullSize());
       break;
     case ScanType::SUBQUERY_S:
-      HasRelationScan::computeSubqueryS(result, _subtree, _subtreeColIndex,
-                                        hasPattern, hasRelation, patterns);
+      HasPredicateScan::computeSubqueryS(result, _subtree, _subtreeColIndex,
+                                         hasPattern, hasPredicate, patterns);
       break;
   }
   result->finish();
 }
 
-void HasRelationScan::computeFreeS(
+void HasPredicateScan::computeFreeS(
     ResultTable* result, size_t objectId,
     const std::vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasRelation,
+    const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   std::vector<std::array<Id, 1>>* fixedSizeData =
@@ -234,7 +236,7 @@ void HasRelationScan::computeFreeS(
   result->_fixedSizeData = fixedSizeData;
 
   Id id = 0;
-  while (id < hasPattern.size() || id < hasRelation.size()) {
+  while (id < hasPattern.size() || id < hasPredicate.size()) {
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
       // add the pattern
       size_t numPredicates;
@@ -245,11 +247,11 @@ void HasRelationScan::computeFreeS(
           fixedSizeData->push_back({{id}});
         }
       }
-    } else if (id < hasRelation.size()) {
+    } else if (id < hasPredicate.size()) {
       // add the relations
       size_t numPredicates;
       Id* predicateData;
-      std::tie(predicateData, numPredicates) = hasRelation[id];
+      std::tie(predicateData, numPredicates) = hasPredicate[id];
       for (size_t i = 0; i < numPredicates; i++) {
         if (predicateData[i] == objectId) {
           fixedSizeData->push_back({{id}});
@@ -260,10 +262,10 @@ void HasRelationScan::computeFreeS(
   }
 }
 
-void HasRelationScan::computeFreeO(
+void HasPredicateScan::computeFreeO(
     ResultTable* result, size_t subjectId,
     const std::vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasRelation,
+    const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   std::vector<std::array<Id, 1>>* fixedSizeData =
@@ -278,20 +280,20 @@ void HasRelationScan::computeFreeO(
     for (size_t i = 0; i < numPredicates; i++) {
       fixedSizeData->push_back({{patternData[i]}});
     }
-  } else if (subjectId < hasRelation.size()) {
+  } else if (subjectId < hasPredicate.size()) {
     // add the relations
     size_t numPredicates;
     Id* predicateData;
-    std::tie(predicateData, numPredicates) = hasRelation[subjectId];
+    std::tie(predicateData, numPredicates) = hasPredicate[subjectId];
     for (size_t i = 0; i < numPredicates; i++) {
       fixedSizeData->push_back({{predicateData[i]}});
     }
   }
 }
 
-void HasRelationScan::computeFullScan(
+void HasPredicateScan::computeFullScan(
     ResultTable* result, const std::vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasRelation,
+    const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns, size_t resultSize) {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -301,7 +303,7 @@ void HasRelationScan::computeFullScan(
   fixedSizeData->reserve(resultSize);
 
   size_t id = 0;
-  while (id < hasPattern.size() || id < hasRelation.size()) {
+  while (id < hasPattern.size() || id < hasPredicate.size()) {
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
       // add the pattern
       size_t numPredicates;
@@ -310,11 +312,11 @@ void HasRelationScan::computeFullScan(
       for (size_t i = 0; i < numPredicates; i++) {
         fixedSizeData->push_back({{id, patternData[i]}});
       }
-    } else if (id < hasRelation.size()) {
+    } else if (id < hasPredicate.size()) {
       // add the relations
       size_t numPredicates;
       Id* predicateData;
-      std::tie(predicateData, numPredicates) = hasRelation[id];
+      std::tie(predicateData, numPredicates) = hasPredicate[id];
       for (size_t i = 0; i < numPredicates; i++) {
         fixedSizeData->push_back({{id, predicateData[i]}});
       }
@@ -345,7 +347,7 @@ template <typename A, typename R>
 void doComputeSubqueryS(const std::vector<A>* input,
                         const size_t inputSubjectColumn, std::vector<R>* result,
                         const std::vector<PatternID>& hasPattern,
-                        const CompactStringVector<Id, Id>& hasRelation,
+                        const CompactStringVector<Id, Id>& hasPredicate,
                         const CompactStringVector<size_t, Id>& patterns) {
   for (size_t i = 0; i < input->size(); i++) {
     const A& inputRow = (*input)[i];
@@ -364,11 +366,11 @@ void doComputeSubqueryS(const std::vector<A>* input,
         row[inputRow.size()] = patternData[i];
         result->push_back(row);
       }
-    } else if (id < hasRelation.size()) {
+    } else if (id < hasPredicate.size()) {
       // add the relations
       size_t numPredicates;
       Id* predicateData;
-      std::tie(predicateData, numPredicates) = hasRelation[id];
+      std::tie(predicateData, numPredicates) = hasPredicate[id];
       for (size_t i = 0; i < numPredicates; i++) {
         R row;
         resizeIfVec<R, Id>::resize(row, inputRow.size() + 1);
@@ -395,7 +397,7 @@ struct CallComputeSubqueryS {
   static void call(int inputColCount, const ResultTable* input,
                    const size_t inputSubjectColumn, ResultTable* result,
                    const std::vector<PatternID>& hasPattern,
-                   const CompactStringVector<Id, Id>& hasRelation,
+                   const CompactStringVector<Id, Id>& hasPredicate,
                    const CompactStringVector<size_t, Id>& patterns) {
     if (InputColCount == inputColCount) {
       if (InputColCount < 5) {
@@ -408,19 +410,19 @@ struct CallComputeSubqueryS {
             inputSubjectColumn,
             static_cast<vector<array<Id, InputColCount + 1>>*>(
                 result->_fixedSizeData),
-            hasPattern, hasRelation, patterns);
+            hasPattern, hasPredicate, patterns);
       } else {
         // The input uses _fixedSizeData, but the output uses _varSizeData
         doComputeSubqueryS<std::array<Id, InputColCount>, std::vector<Id>>(
             static_cast<vector<array<Id, InputColCount>>*>(
                 input->_fixedSizeData),
-            inputSubjectColumn, &result->_varSizeData, hasPattern, hasRelation,
+            inputSubjectColumn, &result->_varSizeData, hasPattern, hasPredicate,
             patterns);
       }
     } else {
       CallComputeSubqueryS<InputColCount + 1>::call(
           inputColCount, input, inputSubjectColumn, result, hasPattern,
-          hasRelation, patterns);
+          hasPredicate, patterns);
     }
   }
 };
@@ -430,21 +432,21 @@ struct CallComputeSubqueryS<6> {
   static void call(int inputColCount, const ResultTable* input,
                    const size_t inputSubjectColumn, ResultTable* result,
                    const std::vector<PatternID>& hasPattern,
-                   const CompactStringVector<Id, Id>& hasRelation,
+                   const CompactStringVector<Id, Id>& hasPredicate,
                    const CompactStringVector<size_t, Id>& patterns) {
     // avoid unused warnings from the compiler
     (void)inputColCount;
     // Both the input and the result use _varSizeData
     doComputeSubqueryS<std::vector<Id>, std::vector<Id>>(
         &input->_varSizeData, inputSubjectColumn, &result->_varSizeData,
-        hasPattern, hasRelation, patterns);
+        hasPattern, hasPredicate, patterns);
   }
 };
 
-void HasRelationScan::computeSubqueryS(
+void HasPredicateScan::computeSubqueryS(
     ResultTable* result, const std::shared_ptr<QueryExecutionTree> subtree,
     const size_t subtreeColIndex, const std::vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasRelation,
+    const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
   std::shared_ptr<const ResultTable> subresult = subtree->getResult();
 
@@ -455,23 +457,25 @@ void HasRelationScan::computeSubqueryS(
 
   CallComputeSubqueryS<1>::call(subresult->_nofColumns, subresult.get(),
                                 subtreeColIndex, result, hasPattern,
-                                hasRelation, patterns);
+                                hasPredicate, patterns);
 }
 
-void HasRelationScan::setSubject(const std::string& subject) {
+void HasPredicateScan::setSubject(const std::string& subject) {
   _subject = subject;
 }
 
-void HasRelationScan::setObject(const std::string& object) { _object = object; }
+void HasPredicateScan::setObject(const std::string& object) {
+  _object = object;
+}
 
-const std::string& HasRelationScan::getObject() const { return _object; }
+const std::string& HasPredicateScan::getObject() const { return _object; }
 
-void HasRelationScan::setSubtree(std::shared_ptr<QueryExecutionTree> subtree) {
+void HasPredicateScan::setSubtree(std::shared_ptr<QueryExecutionTree> subtree) {
   _subtree = subtree;
 }
 
-void HasRelationScan::setSubtreeSubjectColumn(size_t colIndex) {
+void HasPredicateScan::setSubtreeSubjectColumn(size_t colIndex) {
   _subtreeColIndex = colIndex;
 }
 
-HasRelationScan::ScanType HasRelationScan::getType() const { return _type; }
+HasPredicateScan::ScanType HasPredicateScan::getType() const { return _type; }

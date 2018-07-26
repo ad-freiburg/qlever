@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <cstdio>
-#include "../src/engine/HasRelationScan.h"
+#include "../src/engine/HasPredicateScan.h"
 
 // used to test HasRelationScan with a subtree
 class DummyOperation : public Operation {
@@ -46,7 +46,7 @@ class DummyOperation : public Operation {
   virtual bool knownEmptyResult() { return false; }
 };
 
-TEST(HasRelationScan, freeS) {
+TEST(HasPredicateScan, freeS) {
   // Used to store the result.
   ResultTable resultTable;
   // Maps entities to their patterns. If an entity id is higher than the lists
@@ -65,8 +65,8 @@ TEST(HasRelationScan, freeS) {
   CompactStringVector<size_t, Id> patterns(patternsSrc);
 
   // Find all entities that are in a triple with predicate 3
-  HasRelationScan::computeFreeS(&resultTable, 3, hasPattern, hasRelation,
-                                patterns);
+  HasPredicateScan::computeFreeS(&resultTable, 3, hasPattern, hasRelation,
+                                 patterns);
   std::vector<array<Id, 1>> result =
       *static_cast<vector<array<Id, 1>>*>(resultTable._fixedSizeData);
 
@@ -87,7 +87,7 @@ TEST(HasRelationScan, freeS) {
   ASSERT_EQ(8u, result[6][0]);
 }
 
-TEST(HasRelationScan, freeO) {
+TEST(HasPredicateScan, freeO) {
   // Used to store the result.
   ResultTable resultTable;
   // Maps entities to their patterns. If an entity id is higher than the lists
@@ -106,8 +106,8 @@ TEST(HasRelationScan, freeO) {
   CompactStringVector<size_t, Id> patterns(patternsSrc);
 
   // Find all predicates for entity 3 (pattern 1)
-  HasRelationScan::computeFreeO(&resultTable, 3, hasPattern, hasRelation,
-                                patterns);
+  HasPredicateScan::computeFreeO(&resultTable, 3, hasPattern, hasRelation,
+                                 patterns);
   std::vector<array<Id, 1>> result =
       *static_cast<vector<array<Id, 1>>*>(resultTable._fixedSizeData);
 
@@ -119,8 +119,8 @@ TEST(HasRelationScan, freeO) {
   ASSERT_EQ(0u, result[4][0]);
 
   // Find all predicates for entity 6 (has-relation entry 6)
-  HasRelationScan::computeFreeO(&resultTable, 6, hasPattern, hasRelation,
-                                patterns);
+  HasPredicateScan::computeFreeO(&resultTable, 6, hasPattern, hasRelation,
+                                 patterns);
   result = *static_cast<vector<array<Id, 1>>*>(resultTable._fixedSizeData);
 
   ASSERT_EQ(2u, result.size());
@@ -128,7 +128,7 @@ TEST(HasRelationScan, freeO) {
   ASSERT_EQ(4u, result[1][0]);
 }
 
-TEST(HasRelationScan, fullScan) {
+TEST(HasPredicateScan, fullScan) {
   // Used to store the result.
   ResultTable resultTable;
   // Maps entities to their patterns. If an entity id is higher than the lists
@@ -146,8 +146,8 @@ TEST(HasRelationScan, fullScan) {
   CompactStringVector<size_t, Id> patterns(patternsSrc);
 
   // Query for all relations
-  HasRelationScan::computeFullScan(&resultTable, hasPattern, hasRelation,
-                                   patterns, 16);
+  HasPredicateScan::computeFullScan(&resultTable, hasPattern, hasRelation,
+                                    patterns, 16);
   std::vector<array<Id, 2>> result =
       *static_cast<vector<array<Id, 2>>*>(resultTable._fixedSizeData);
 
@@ -190,7 +190,7 @@ TEST(HasRelationScan, fullScan) {
   ASSERT_EQ(3u, result[15][1]);
 }
 
-TEST(HasRelationScan, subtreeS) {
+TEST(HasPredicateScan, subtreeS) {
   // Used to store the result.
   ResultTable resultTable;
   // Maps entities to their patterns. If an entity id is higher than the lists
@@ -220,8 +220,8 @@ TEST(HasRelationScan, subtreeS) {
   subtree->setOperation(QueryExecutionTree::OperationType::HAS_RELATION_SCAN,
                         operation);
 
-  HasRelationScan::computeSubqueryS(&resultTable, subtree, 1, hasPattern,
-                                    hasRelation, patterns);
+  HasPredicateScan::computeSubqueryS(&resultTable, subtree, 1, hasPattern,
+                                     hasRelation, patterns);
 
   std::vector<array<Id, 3>> result =
       *static_cast<vector<array<Id, 3>>*>(resultTable._fixedSizeData);
