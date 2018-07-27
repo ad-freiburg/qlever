@@ -97,6 +97,17 @@ queries:
           - selected: ["?avg", "?profession"]
           - contains_row: [null, "<Architect>"]
           - order_numeric: {"dir": "DESC", "var": "?avg"}
+  - query: person-order-by-height
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?person ?height WHERE {
+              ?person <is-a> <Person> .
+              ?person <Height> ?height .
+          }
+          ORDER BY DESC(?height)
+        checks:
+          - order_numeric: {"dir": "DESC", "var": "?height"}
   - query: group-by-gender-average-height
     solutions:
       - type: no-text
