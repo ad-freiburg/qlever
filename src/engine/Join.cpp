@@ -2,9 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./Join.h"
 #include <sstream>
 #include <unordered_set>
+#include "./Join.h"
 #include "./QueryExecutionTree.h"
 
 using std::string;
@@ -580,7 +580,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
 // _____________________________________________________________________________
 Join::ScanMethodType Join::getScanMethod(
     std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const {
-  void (Index::*scanMethod)(Id, Index::WidthTwoList*) const;
+  ScanMethodType scanMethod;
   IndexScan& scan =
       *static_cast<IndexScan*>(fullScanDummyTree->getRootOperation().get());
   switch (scan.getType()) {
@@ -613,15 +613,13 @@ Join::ScanMethodType Join::getScanMethod(
 template <typename NonDummyResultList, typename ResultList>
 void Join::doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& ndr,
                                               ResultList* res) const {
-  LOG(TRACE) << "Dummy on right side, other join op size: " << ndr.size()
+  LOG(TRACE) << "Dummy on left side, other join op size: " << ndr.size()
              << endl;
   if (ndr.size() == 0) {
     return;
   }
-  // Get the scan method (depends on type of dummy tree), use a function ptr.
-  typedef void (Index::*Scan)(Id, Index::WidthTwoList*) const;
   const auto* index = &getIndex();
-  Scan scan = getScanMethod(_left);
+  const ScanMethodType scan = getScanMethod(_left);
   // Iterate through non-dummy.
   Id currentJoinId = ndr[0][_rightJoinCol];
   auto joinItemFrom = ndr.begin();
@@ -663,7 +661,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const NonDummyResultList& ndr,
     return;
   }
   // Get the scan method (depends on type of dummy tree), use a function ptr.
-  void (Index::*scan)(Id, Index::WidthTwoList*) const = getScanMethod(_right);
+  const ScanMethodType scan = getScanMethod(_right);
   const auto* index = &getIndex();
   // Iterate through non-dummy.
   Id currentJoinId = ndr[0][_leftJoinCol];
