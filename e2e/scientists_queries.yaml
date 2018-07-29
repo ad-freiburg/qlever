@@ -85,34 +85,34 @@ queries:
     solutions:
       - type: no-text
         sparql: |
-          SELECT ?place ?count WHERE {
+          SELECT ?place (COUNT(?x) as ?count2) WHERE {
               ?x <is-a> <Scientist> .
               ?x <Place_of_birth> ?place .
           }
           GROUP BY ?place
           ORDER BY DESC((COUNT(?x) as ?count))
         checks:
-          - num_cols: 1
-          - num_rows: 1 
-          - selected: ["?place"]
-          - order_numeric: {"dir": "DESC", "var": "?count"}
+          - num_cols: 2
+          # The query returns to many rows, the current limit is 4096
+          # - num_rows: 5295 
+          - selected: ["?place", "?count2"]
+          - order_numeric: {"dir": "DESC", "var": "?count2"}
   - query: scientists-order-by-aggregate-avg
     solutions:
       - type: no-text
         sparql: |
-          SELECT ?profession ?avg WHERE  {
+          SELECT ?profession (AVG(?height) as ?avg2) WHERE  {
             ?x <is-a> <Scientist> .
             ?x <Profession> ?profession .
             ?x <Height> ?height .
           }
           GROUP BY ?profession
           ORDER BY ASC((AVG(?height) as ?avg))
-          LIMIT 1
         checks:
-          - num_cols: 1 
-          - num_rows: 1 
-          - selected: ["?profession"]
-          - order_numeric: {"dir": "ASC", "var": "?count"}
+          - num_cols: 2 
+          - num_rows: 209 
+          - selected: ["?profession", "?avg2"]
+          - order_numeric: {"dir": "ASC", "var": "?avg2"}
   - query: group-by-profession-average-height
     solutions:
       - type: no-text
