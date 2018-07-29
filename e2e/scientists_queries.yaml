@@ -18,11 +18,12 @@ queries:
             # null cells are ignored
           - contains_row: ["<Albert_Einstein>", null, null]
           - contains_row: ["<Luís_Lindley_Cintra>", null, null] # Test Unicode
+          - order_numeric: {"dir" : "DESC", "var": "SCORE(?t)"}
   - query: algo-star-female-scientists
     solutions:
       - type: text
         sparql: |
-          SELECT ?x WHERE {
+          SELECT ?x SCORE(?t) WHERE {
               ?x <is-a> <Scientist> .
               ?x <Gender> <Female> .
               ?t ql:contains-entity ?x .
@@ -30,10 +31,11 @@ queries:
           }
           ORDER BY DESC(SCORE(?t))
         checks:
-          - num_cols: 1
+          - num_cols: 2
           - num_rows: 11
-          - selected: ["?x"]
+          - selected: ["?x", "SCORE(?t)"]
           - contains_row: ["<Grete_Hermann>"]
+          - order_numeric: {"dir": "DESC", "var" : "SCORE(?t)"}
   - query: scientists-from-new-york
     solutions:
       - type: no-text
@@ -62,6 +64,7 @@ queries:
           - num_rows: 97
           - selected: ["?x", "?y"]
           - contains_row: ["<Albert_Einstein>", "<Mileva_Marić>"]
+          - order_string: {"dir": "ASC", "var": "?x"}
   - query: scientists-count-group-by-place-of-birth
     solutions:
       - type: no-text
@@ -77,6 +80,7 @@ queries:
           # -num_rows: 5295 # greater than current limit
           - selected: ["?count", "?place"]
           - contains_row: [280, "<New_York_City>"]
+          - order_numeric: {"dir": "DESC", "var": "?count"}
   - query: group-by-profession-average-height
     solutions:
       - type: no-text
@@ -92,6 +96,18 @@ queries:
           - num_rows: 312
           - selected: ["?avg", "?profession"]
           - contains_row: [null, "<Architect>"]
+          - order_numeric: {"dir": "DESC", "var": "?avg"}
+  - query: person-order-by-height
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?person ?height WHERE {
+              ?person <is-a> <Person> .
+              ?person <Height> ?height .
+          }
+          ORDER BY DESC(?height)
+        checks:
+          - order_numeric: {"dir": "DESC", "var": "?height"}
   - query: group-by-gender-average-height
     solutions:
       - type: no-text
@@ -109,6 +125,7 @@ queries:
           - selected: ["?avg", "?gender"]
           # Float values are only compared to limited precision
           - res: [[1.8, "<Male>"], [1.7, "<Female>"]]
+          - order_numeric: {"dir": "DESC", "var": "?avg"}
   - query : pattern-trick
     solutions:
       - type: no-text
@@ -124,7 +141,8 @@ queries:
           - num_cols: 2
           - selected: ["?r", "?count"]
           - contains_row: ["<Religion>", 1185]
-  - query : has-relation-full 
+          - order_numeric: {"dir": "DESC", "var": "?count"}
+  - query : has-relation-full
     solutions:
       - type: no-text
         sparql: |
@@ -133,7 +151,7 @@ queries:
           }
         checks:
           # The number o rows is greater than the current limit of 4096.
-          # - num_rows: 168444 
+          # - num_rows: 168444
           - num_cols: 2
           - selected: ["?entity", "?relation"]
           - contains_row: ["<Alan_Fersht>", "<Leader_of>"]

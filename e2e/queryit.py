@@ -81,6 +81,16 @@ def test_row(gold_row: List[Any],
             return False
     return True
 
+def quotes_inner(quoted: str) -> str:
+    """
+    For a string containing a quoted part returns the inner part
+    """
+    left_quote = quoted.find('"')
+    right_quote = quoted.rfind('"')
+    if right_quote < 0:
+        right_quote = len(quoted)
+    return quoted[left_quote+1:right_quote]
+
 def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
     """
     Test if the named result check holds. Returns True if it does
@@ -127,6 +137,30 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
                 eprint("contains_row check failed:\n" +
                        "\tdid not find %r" % gold_row)
                 return False
+        elif check.startswith('order_'):
+            try:
+                direction, var = value['dir'], value['var']
+                col_type = check.split('_')[1]
+                col_idx = result['selected'].index(var)
+                for row_idx in range(1, len(res)):
+                    previous = res[row_idx - 1][col_idx]
+                    current = res[row_idx][col_idx]
+                    if col_type == 'numeric':
+                        previous_value = float(quotes_inner(previous))
+                        current_value = float(quotes_inner(current))
+                    elif col_type == 'string':
+                        previous_value = previous
+                        current_value = current
+                    if direction.lower() == 'asc' and previous_value > current_value:
+                        eprint('order_numeric check failed:\n\tnot ascending')
+                        return False
+                    if direction.lower() == 'desc' and previous_value < current_value:
+                        eprint('order_numeric check failed:\n\tnot descending')
+                        return False
+            except ValueError as ex:
+                eprint('order_numeric check failed:\n\t' + str(ex))
+                return False
+
 
 
     return True
