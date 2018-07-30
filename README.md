@@ -36,7 +36,7 @@ Thus, old queries no longer work and need to be adjusted as described in this RE
 # How to use
 There are two ways to use QLever on Linux systems.
 
-* Variant **a** is to use `docker` for building and running it *(recommended)*
+* Variant **a** is to use `docker` for building and running as a container *(recommended)*
 * Variant **b** is to use QLever directly on the host
 
 ## Get the code
@@ -54,14 +54,14 @@ For old versions of git, that do not support this parameter, you can do:
     git submodule init
     git submodule update
 
-## Running QLever inside `docker`
-### 0a. Requirements:
+## a) Running QLever inside a `docker` container
+### 0. Requirements:
 A 64 bit host system (32 bit systems can't deal with `mmap` on > 4 GB files or
 allocate enough RAM for larger KBs)
 
 * docker 17.05 or newer (needs multi-stage builds)
 
-### 1a. Build the container
+### 1. Build the container
 
 Inside the the repositories root folder run
 
@@ -70,14 +70,21 @@ Inside the the repositories root folder run
 where `<name>` is a name chosen by convention to match the dataset or variant
 you're building for.
 
-### 2a. Create or reuse an index
-
-When running with user namespaces you may need to make the index folder accessible
-to e.g. the "nobody" user
+### 2. Create or reuse an index
+#### Allow QLever to access the `/index` and `/input` volumes
+When running **with user namespaces** you may need to make the index folder
+accessible to the user the QLever process is mapped to on the host (e.g. nobody,
+see `/etc/subuid`)
 
     chmod -R o+rw ./index
 
-For an existing index copy it into the ./index folder and make sure to either
+When running **without user namespaces**, the container will use a user with UID
+1000 which on desktop Linux is almost always the first real user.  If your UID
+is not 1000 add `-u "$(id -u):$(id -g)"` to `docker run` to let QLever
+execute as the current user.
+
+#### Use an existing index or create a new one
+For an existing index, copy it into the ./index folder and make sure to either
 name it so that all files start with `index`  or set `-e INDEX_PREFIX=<prefix>`
 during docker run where `<prefix>` is the part of the index file names before
 the first `.`.
@@ -87,6 +94,7 @@ To build a new index run a bash inside the container as follows
     docker run -it --rm \
                -v "<absolute_path_to_input>:/input" \
                -v "$(pwd)/index:/index" --entrypoint "bash" qlever-<name>
+
 
 Then inside the container follow the instructions for [creating an
 index](#2-creating-an-index) where the path to the index inside the container
@@ -99,15 +107,15 @@ is now `/index`.
 To run a QLever container use the following command, replacing `<name>` with
 the name chosen during `docker build`.
 
-    docker run -it -p 7001:7001 -v "$(pwd)/index:/index" --name qlever-<name> qlever-<name> <ServerMain args>
+    docker run -it -p 7001:7001 -v "$(pwd)/index:/index" -e INDEX_PREFIX=<prefix> --name qlever-<name> qlever-<name> <ServerMain args>
 
 where `<ServerMain args>` are arguments (except for port and index prefix)
 which are always included. If none are supplied `-t -a -l` is used. If you want
 the container to run in the background and restart automatically replace `-it`
 with `-d --restart=unless-stopped`
 
-## Running QLever on a Linux host
-### 0b. Requirements:
+## b) Running QLever on a Linux host
+### 0. Requirements:
 
 Make sure you use a 64 bit Linux with:
 
@@ -129,38 +137,38 @@ If this isn't the case on your system, run:
     cd  sparsehash
     ./configure && make && sudo make install
 
-### 1b. Build and run on the host:
+### 1. Build and run on the host:
 
-
-
-b) Go to a folder where you want to build the binaries.  Usually this is done
+Go to a folder where you want to build the binaries.  Usually this is done
 with a separate `build` subfolder. This is also assumed by the `e2e/e2e.sh`
 script.
 
     mkdir build && cd build
 
-c) Build the project (Optional: add `-DPERFTOOLS_PROFILER=True/False` and `-DALLOW_SHUTDOWN=True/False`)
+Build the project (Optional: add `-DPERFTOOLS_PROFILER=True/False` and `-DALLOW_SHUTDOWN=True/False`)
 
     cmake -DCMAKE_BUILD_TYPE=Release .. && make -j
 
-d) Run ctest. All tests should pass:
+Run ctest. All tests should pass:
 
     ctest
 
-#### 1.1 Running End-to-End Tests
+### 2. Running End-to-End Tests
 
 QLever includes a simple mechanism for testing the entire system from
 from building an index to running queries in a single command.
-
 
 In fact this End-to-End Test is run on Travis CI for every commit and Pull
 Request. It is also useful for local development however since it allows you to
 quickly test if something is horribly broken.
 
+
 **Note**: This does not include compilation and unit tests, though these are
 also run on Travis CI. Refer to the previous section for Unit Tests and
-compilation. Also this does assume that the build uses the `./build` directory
-as described in the [Build](#1-build) section.
+compilation.
+Also this does assume that the build uses the `./build` directory
+as described in the [Build](#1-build) section. Currently the end-to-end tests
+are not part of the `docker` image.
 
 To do a full End-to-End Test run *(from the project root)*
 

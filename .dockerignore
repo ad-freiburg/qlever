@@ -1,2 +1,4 @@
 Dockerfile
 index/*
+e2e_data/*
+build/*
