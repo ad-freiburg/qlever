@@ -646,7 +646,7 @@ class Engine {
    * @param result A table with two columns, one for predicate ids,
    *               one for counts
    * @param hasPattern A mapping from entity ids to pattern ids (or NO_PATTERN)
-   * @param hasRelation A mapping from entity ids to sets of relations
+   * @param hasPredicate A mapping from entity ids to sets of relations
    * @param patterns A mapping from pattern ids to patterns
    * @param subjectColumn The column containing the entities for which the
    *                      relations should be counted.
@@ -655,7 +655,7 @@ class Engine {
   static void computePatternTrick(
       const vector<A>* input, vector<array<Id, 2>>* result,
       const vector<PatternID>& hasPattern,
-      const CompactStringVector<Id, Id>& hasRelation,
+      const CompactStringVector<Id, Id>& hasPredicate,
       const CompactStringVector<size_t, Id>& patterns,
       const size_t subjectColumn) {
     ad_utility::HashMap<Id, size_t> predicateCounts;
@@ -672,11 +672,11 @@ class Engine {
       if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
         // The subject matches a pattern
         patternCounts[hasPattern[subject]]++;
-      } else if (subject < hasRelation.size()) {
+      } else if (subject < hasPredicate.size()) {
         // The subject does not match a pattern
         size_t numPredicates;
         Id* predicateData;
-        std::tie(predicateData, numPredicates) = hasRelation[subject];
+        std::tie(predicateData, numPredicates) = hasPredicate[subject];
         if (numPredicates > 0) {
           for (size_t i = 0; i < numPredicates; i++) {
             auto it = predicateCounts.find(predicateData[i]);

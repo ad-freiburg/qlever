@@ -81,6 +81,38 @@ queries:
           - selected: ["?count", "?place"]
           - contains_row: [280, "<New_York_City>"]
           - order_numeric: {"dir": "DESC", "var": "?count"}
+  - query: scientists-order-by-aggregate-count
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?place (COUNT(?x) as ?count2) WHERE {
+              ?x <is-a> <Scientist> .
+              ?x <Place_of_birth> ?place .
+          }
+          GROUP BY ?place
+          ORDER BY DESC((COUNT(?x) as ?count))
+        checks:
+          - num_cols: 2
+          # The query returns to many rows, the current limit is 4096
+          # - num_rows: 5295 
+          - selected: ["?place", "?count2"]
+          - order_numeric: {"dir": "DESC", "var": "?count2"}
+  - query: scientists-order-by-aggregate-avg
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?profession (AVG(?height) as ?avg2) WHERE  {
+            ?x <is-a> <Scientist> .
+            ?x <Profession> ?profession .
+            ?x <Height> ?height .
+          }
+          GROUP BY ?profession
+          ORDER BY ASC((AVG(?height) as ?avg))
+        checks:
+          - num_cols: 2 
+          - num_rows: 209 
+          - selected: ["?profession", "?avg2"]
+          - order_numeric: {"dir": "ASC", "var": "?avg2"}
   - query: group-by-profession-average-height
     solutions:
       - type: no-text
@@ -132,7 +164,7 @@ queries:
         sparql: |
           SELECT ?r (COUNT(?r) as ?count) WHERE {
             ?a <is-a> <Scientist> .
-            ?a ql:has-relation ?r .
+            ?a ql:has-predicate ?r .
           }
           GROUP BY ?r
           ORDER BY DESC(?count)
@@ -142,12 +174,12 @@ queries:
           - selected: ["?r", "?count"]
           - contains_row: ["<Religion>", 1185]
           - order_numeric: {"dir": "DESC", "var": "?count"}
-  - query : has-relation-full
+  - query : has-predicate-full 
     solutions:
       - type: no-text
         sparql: |
           SELECT ?entity ?relation WHERE {
-            ?entity ql:has-relation ?relation .
+            ?entity ql:has-predicate ?relation .
           }
         checks:
           # The number o rows is greater than the current limit of 4096.
@@ -155,13 +187,13 @@ queries:
           - num_cols: 2
           - selected: ["?entity", "?relation"]
           - contains_row: ["<Alan_Fersht>", "<Leader_of>"]
-  - query : has-relation-subquery-subject
+  - query : has-predicate-subquery-subject
     solutions:
       - type: no-text
         sparql: |
           SELECT ?entity ?r WHERE {
             ?entity <is-a> <Profession> .
-            ?entity ql:has-relation ?r.
+            ?entity ql:has-predicate ?r.
           }
         checks:
           - num_rows: 760

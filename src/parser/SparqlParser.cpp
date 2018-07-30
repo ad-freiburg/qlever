@@ -185,7 +185,6 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
     if (inner[k] == 'O' || inner[k] == 'o') {
       if (inner.substr(k, 8) == "OPTIONAL" ||
           inner.substr(k, 8) == "optional") {
-        LOG(DEBUG) << "Found optional part\n";
         // find opening and closing brackets of optional part
         size_t ob = inner.find('{', k);
         size_t cb = ob;
@@ -383,7 +382,9 @@ void SparqlParser::addWhereTriple(const string& str,
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(const string& str,
                                           ParsedQuery& query) {
-  auto tokens = ad_utility::splitWs(str);
+  // Split the string at any whitespace but ignoe whitespace inside brackets
+  // to allow for alias parsing.
+  auto tokens = ad_utility::splitWsWithEscape(str, '(', ')');
   for (size_t i = 0; i < tokens.size(); ++i) {
     if (tokens[i] == "ORDER" && i < tokens.size() - 2 &&
         tokens[i + 1] == "BY") {

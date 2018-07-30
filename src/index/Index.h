@@ -124,25 +124,25 @@ class Index {
   void scanOSP(Id object, WidthTwoList* result) const;
 
   const vector<PatternID>& getHasPattern() const;
-  const CompactStringVector<Id, Id>& getHasRelation() const;
+  const CompactStringVector<Id, Id>& getHasPredicate() const;
   const CompactStringVector<size_t, Id>& getPatterns() const;
   /**
    * @return The multiplicity of the Entites column (0) of the full has-relation
    *         relation after unrolling the patterns.
    */
-  double getHasRelationMultiplicityEntities() const;
+  double getHasPredicateMultiplicityEntities() const;
 
   /**
    * @return The multiplicity of the Predicates column (0) of the full
    * has-relation relation after unrolling the patterns.
    */
-  double getHasRelationMultiplicityPredicates() const;
+  double getHasPredicateMultiplicityPredicates() const;
 
   /**
    * @return The size of the full has-relation relation after unrolling the
    *         patterns.
    */
-  size_t getHasRelationFullSize() const;
+  size_t getHasPredicateFullSize() const;
 
   // Get multiplicities with given var (SCAN for 2 cols)
   vector<float> getPSOMultiplicities(const string& key) const;
@@ -314,9 +314,9 @@ class Index {
   static const uint32_t PATTERNS_FILE_VERSION;
   bool _usePatterns;
   size_t _maxNumPatterns;
-  double _fullHasRelationMultiplicityEntities;
-  double _fullHasRelationMultiplicityPredicates;
-  size_t _fullHasRelationSize;
+  double _fullHasPredicateMultiplicityEntities;
+  double _fullHasPredicateMultiplicityPredicates;
+  size_t _fullHasPredicateSize;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
@@ -328,7 +328,7 @@ class Index {
   /**
    * @brief Maps entity ids to sets of predicate ids
    */
-  CompactStringVector<Id, Id> _hasRelation;
+  CompactStringVector<Id, Id> _hasPredicate;
 
   size_t passTsvFileForVocabulary(const string& tsvFile);
 
@@ -362,12 +362,12 @@ class Index {
    * @param vec The vectors of triples in spo order.
    */
   static void createPatterns(const string& fileName, const ExtVec& vec,
-                             CompactStringVector<Id, Id>& hasRelation,
+                             CompactStringVector<Id, Id>& hasPredicate,
                              std::vector<PatternID>& hasPattern,
                              CompactStringVector<size_t, Id>& patterns,
-                             double& fullHasRelationMultiplicityEntities,
-                             double& fullHasRelationMultiplicityPredicates,
-                             size_t& fullHasRelationSize,
+                             double& fullHasPredicateMultiplicityEntities,
+                             double& fullHasPredicateMultiplicityPredicates,
+                             size_t& fullHasPredicateSize,
                              size_t maxNumPatterns);
 
   void createTextIndex(const string& filename, const TextVec& vec);
@@ -457,4 +457,11 @@ class Index {
   bool isLiteral(const string& object);
 
   bool shouldBeExternalized(const string& object);
+
+  /**
+   * @brief Throws an exception if no patterns are loaded. Should be called from
+   *        whithin any index method that returns data requiring the patterns
+   *        file.
+   */
+  void throwExceptionIfNoPatterns() const;
 };

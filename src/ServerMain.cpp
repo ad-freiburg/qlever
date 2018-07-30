@@ -57,7 +57,7 @@ void printUsage(char* execName) {
   cout << "  " << std::setw(20) << "p, port" << std::setw(1) << "    "
        << "The port on which to run the web interface." << endl;
   cout << "  " << std::setw(20) << "P, patterns" << std::setw(1) << "    "
-       << "Use relation patterns for fast ql:has-relation queries." << endl;
+       << "Use predicate patterns to enable ql:has-predicate queries." << endl;
   cout << "  " << std::setw(20) << "t, text" << std::setw(1) << "    "
        << "Enables the usage of text." << endl;
   cout << "  " << std::setw(20) << "j, worker-threads" << std::setw(1) << "    "

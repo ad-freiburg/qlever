@@ -13,7 +13,7 @@
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
 
-class HasRelationScan : public Operation {
+class HasPredicateScan : public Operation {
  public:
   enum class ScanType {
     // Given a constant predicate, return all subjects
@@ -26,7 +26,7 @@ class HasRelationScan : public Operation {
     SUBQUERY_S
   };
 
-  HasRelationScan(QueryExecutionContext* qec, ScanType type);
+  HasPredicateScan(QueryExecutionContext* qec, ScanType type);
 
   virtual string asString(size_t indent = 0) const;
 
@@ -57,24 +57,24 @@ class HasRelationScan : public Operation {
   // These are made static and public mainly for easier testing
   static void computeFreeS(ResultTable* result, size_t objectId,
                            const std::vector<PatternID>& hasPattern,
-                           const CompactStringVector<Id, Id>& hasRelation,
+                           const CompactStringVector<Id, Id>& hasPredicate,
                            const CompactStringVector<size_t, Id>& patterns);
 
   static void computeFreeO(ResultTable* result, size_t subjectId,
                            const std::vector<PatternID>& hasPattern,
-                           const CompactStringVector<Id, Id>& hasRelation,
+                           const CompactStringVector<Id, Id>& hasPredicate,
                            const CompactStringVector<size_t, Id>& patterns);
 
   static void computeFullScan(ResultTable* result,
                               const std::vector<PatternID>& hasPattern,
-                              const CompactStringVector<Id, Id>& hasRelation,
+                              const CompactStringVector<Id, Id>& hasPredicate,
                               const CompactStringVector<size_t, Id>& patterns,
                               size_t resultSize);
 
   static void computeSubqueryS(
       ResultTable* result, const std::shared_ptr<QueryExecutionTree> _subtree,
       const size_t subtreeColIndex, const std::vector<PatternID>& hasPattern,
-      const CompactStringVector<Id, Id>& hasRelation,
+      const CompactStringVector<Id, Id>& hasPredicate,
       const CompactStringVector<size_t, Id>& patterns);
 
  private:

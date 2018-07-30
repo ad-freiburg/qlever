@@ -86,7 +86,8 @@ void printUsage(char* execName) {
   cout << "  " << std::setw(20) << "n, ntriples-file" << std::setw(1) << "    "
        << "NT file to build KB index from." << endl;
   cout << "  " << std::setw(20) << "P, patterns" << std::setw(1) << "    "
-       << "Detect and store relation patterns for fast ql:has-relation queries."
+       << "Detect and store prediate patterns to enable ql:has-predicate "
+          "queries."
        << endl;
   cout << "  " << std::setw(20) << "t, tsv-file" << std::setw(1) << "    "
        << "TSV file to build KB index from." << endl;

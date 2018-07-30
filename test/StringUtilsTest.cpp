@@ -257,6 +257,29 @@ TEST(StringUtilsTest, splitWs) {
   ASSERT_EQ(1u, v7.size());
   ASSERT_EQ(s7, v7[0]);
 }
+
+TEST(StringUtilsTest, splitWsWithEscape) {
+  setlocale(LC_CTYPE, "");
+  // Test for splitting with a different opening and closing character
+  string s1 = " a1 \t (this is() one) two (\t\na)()";
+  auto v1 = splitWsWithEscape(s1, '(', ')');
+  ASSERT_EQ(4u, v1.size());
+  ASSERT_EQ("a1", v1[0]);
+  ASSERT_EQ("(this is() one)", v1[1]);
+  ASSERT_EQ("two", v1[2]);
+  ASSERT_EQ("(\t\na)()", v1[3]);
+
+  // Test for splitting with the same opening and closing character
+  string s2 = " a1 \t 'this is' ' two' three '\t\na'' a'";
+  auto v2 = splitWsWithEscape(s2, '\'', '\'');
+  ASSERT_EQ(5u, v2.size());
+  ASSERT_EQ("a1", v2[0]);
+  ASSERT_EQ("'this is'", v2[1]);
+  ASSERT_EQ("' two'", v2[2]);
+  ASSERT_EQ("three", v2[3]);
+  ASSERT_EQ("'\t\na'' a'", v2[4]);
+}
+
 }  // namespace ad_utility
 
 int main(int argc, char** argv) {

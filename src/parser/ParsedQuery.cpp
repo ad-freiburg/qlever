@@ -178,68 +178,84 @@ void ParsedQuery::parseAliases() {
   for (size_t i = 0; i < _selectedVariables.size(); i++) {
     const std::string& var = _selectedVariables[i];
     if (var[0] == '(') {
+      // remove the leading and trailing bracket
       std::string inner = var.substr(1, var.size() - 2);
-      std::string lowerInner = ad_utility::getLowercaseUtf8(inner);
-      if (ad_utility::startsWith(lowerInner, "count") ||
-          ad_utility::startsWith(lowerInner, "group_concat") ||
-          ad_utility::startsWith(lowerInner, "first") ||
-          ad_utility::startsWith(lowerInner, "last") ||
-          ad_utility::startsWith(lowerInner, "sample") ||
-          ad_utility::startsWith(lowerInner, "min") ||
-          ad_utility::startsWith(lowerInner, "max") ||
-          ad_utility::startsWith(lowerInner, "sum") ||
-          ad_utility::startsWith(lowerInner, "avg")) {
-        Alias a;
-        a._isAggregate = true;
-        size_t pos = lowerInner.find(" as ");
-        if (pos == std::string::npos) {
-          throw ParseException("Alias " + var +
-                               " is malformed: keyword 'as' is missing or not "
-                               "surrounded by spaces.");
-        }
-        // skip the leading space of the 'as'
-        pos++;
-        std::string newVarName = inner.substr(pos + 2, var.size() - pos - 2);
-        newVarName = ad_utility::strip(newVarName, " \t\n");
-        a._outVarName = newVarName;
-        a._function = inner;
-
-        // find the second opening bracket
-        pos = inner.find('(', 1);
-        pos++;
-        while (pos < inner.size() &&
-               ::std::isspace(static_cast<unsigned char>(inner[pos]))) {
-          pos++;
-        }
-        if (lowerInner.compare(pos, 8, "distinct") == 0) {
-          // skip the distinct and any space after it
-          pos += 8;
-          while (pos < inner.size() &&
-                 ::std::isspace(static_cast<unsigned char>(inner[pos]))) {
-            pos++;
-          }
-        }
-        size_t start = pos;
-        while (pos < inner.size() &&
-               !::std::isspace(static_cast<unsigned char>(inner[pos]))) {
-          pos++;
-        }
-        if (pos == start || pos >= inner.size()) {
-          throw ParseException(
-              "Alias " + var +
-              " is malformed: no input variable given (e.g. COUNT(?a))");
-        }
-
-        a._inVarName = inner.substr(start, pos - start - 1);
-        _aliases.push_back(a);
-        // Replace the variable in the selected variables array with the aliased
-        // name.
-        _selectedVariables[i] = newVarName;
-      } else {
-        throw ParseException("Unknown or malformed alias: " + var);
-      }
+      // Replace the variable in the selected variables array with the aliased
+      // name.
+      _selectedVariables[i] = parseAlias(inner);
     }
   }
+  for (size_t i = 0; i < _orderBy.size(); i++) {
+    OrderKey& key = _orderBy[i];
+    if (key._key[0] == '(') {
+      // remove the leading and trailing bracket
+      std::string inner = key._key.substr(1, key._key.size() - 2);
+      // Preserve the descending or ascending order but change the key name.
+      key._key = parseAlias(inner);
+    }
+  }
+}
+
+// _____________________________________________________________________________
+std::string ParsedQuery::parseAlias(const std::string& alias) {
+  std::string newVarName = "";
+  std::string lowerInner = ad_utility::getLowercaseUtf8(alias);
+  if (ad_utility::startsWith(lowerInner, "count") ||
+      ad_utility::startsWith(lowerInner, "group_concat") ||
+      ad_utility::startsWith(lowerInner, "first") ||
+      ad_utility::startsWith(lowerInner, "last") ||
+      ad_utility::startsWith(lowerInner, "sample") ||
+      ad_utility::startsWith(lowerInner, "min") ||
+      ad_utility::startsWith(lowerInner, "max") ||
+      ad_utility::startsWith(lowerInner, "sum") ||
+      ad_utility::startsWith(lowerInner, "avg")) {
+    Alias a;
+    a._isAggregate = true;
+    size_t pos = lowerInner.find(" as ");
+    if (pos == std::string::npos) {
+      throw ParseException("Alias (" + alias +
+                           ") is malformed: keyword 'as' is missing or not "
+                           "surrounded by spaces.");
+    }
+    // skip the leading space of the 'as'
+    pos++;
+    newVarName = alias.substr(pos + 2);
+    newVarName = ad_utility::strip(newVarName, " \t\n");
+    a._outVarName = newVarName;
+    a._function = alias;
+
+    // find the second opening bracket
+    pos = alias.find('(', 1);
+    pos++;
+    while (pos < alias.size() &&
+           ::std::isspace(static_cast<unsigned char>(alias[pos]))) {
+      pos++;
+    }
+    if (lowerInner.compare(pos, 8, "distinct") == 0) {
+      // skip the distinct and any space after it
+      pos += 8;
+      while (pos < alias.size() &&
+             ::std::isspace(static_cast<unsigned char>(alias[pos]))) {
+        pos++;
+      }
+    }
+    size_t start = pos;
+    while (pos < alias.size() &&
+           !::std::isspace(static_cast<unsigned char>(alias[pos]))) {
+      pos++;
+    }
+    if (pos == start || pos >= alias.size()) {
+      throw ParseException(
+          "Alias (" + alias +
+          ") is malformed: no input variable given (e.g. COUNT(?a))");
+    }
+
+    a._inVarName = alias.substr(start, pos - start - 1);
+    _aliases.push_back(a);
+  } else {
+    throw ParseException("Unknown or malformed alias: (" + alias + ")");
+  }
+  return newVarName;
 }
 
 // _____________________________________________________________________________
