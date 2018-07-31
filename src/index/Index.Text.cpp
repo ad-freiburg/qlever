@@ -33,7 +33,7 @@ void Index::buildDocsDB(const string& docsFileName) {
   std::ofstream ofs(_onDiskBase + ".text.docsDB", std::ios_base::out);
   // To avoid excessive use of RAM,
   // we write the offsets to and stxxl:vector first;
-  typedef stxxl::VECTOR_GENERATOR<off_t>::result OffVec;
+  typedef stxxl::vector<off_t> OffVec;
   OffVec offsets;
   off_t currentOffset = 0;
   Id currentContextId = 0;

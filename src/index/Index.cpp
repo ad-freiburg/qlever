@@ -2,7 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./Index.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -10,11 +9,13 @@
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_set>
+
 #include "../parser/NTriplesParser.h"
 #include "../parser/TsvParser.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
 #include "./PrefixHeuristic.h"
+#include "./Index.h"
 #include "./VocabularyGenerator.h"
 
 using std::array;
