@@ -6,12 +6,14 @@
 #include <algorithm>
 #include <cmath>
 #include <optional>
+#include <cstdio>
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_set>
 #include "../parser/NTriplesParser.h"
 #include "../parser/TsvParser.h"
 #include "../util/Conversions.h"
+#include "./PrefixHeuristic.h"
 #include "./VocabularyGenerator.h"
 
 using std::array;
@@ -26,6 +28,8 @@ Index::Index()
 // _____________________________________________________________________________________________
 template <class Parser>
 Index::ExtVec Index::createExtVecAndVocab(const string& filename) {
+  initializeVocabularySettingsBuild();
+
   auto linesAndWords =
       passFileForVocabulary<Parser>(filename, NUM_TRIPLES_PER_PARTIAL_VOCAB);
   size_t nofLines = linesAndWords.nofLines;
@@ -39,8 +43,9 @@ Index::ExtVec Index::createExtVecAndVocab(const string& filename) {
         _onDiskBase + ".literals-index");
   }
   // clear vocabulary to save ram (only information from partial binary files
-  // used from now on).
-  _vocab = Vocabulary();
+  // used from now on). This will preserve information about externalized
+  // Prefixes etc.
+  _vocab.clear();
   ExtVec idTriples(nofLines);
   passFileIntoIdVector<Parser>(filename, idTriples,
                                NUM_TRIPLES_PER_PARTIAL_VOCAB);
@@ -75,25 +80,46 @@ Index::ExtVec Index::createExtVecAndVocab(const string& filename) {
 template <class Parser>
 void Index::createFromFile(const string& filename, bool allPermutations) {
   string indexFilename = _onDiskBase + ".index";
+  _configurationJson["external-literals"] = _onDiskLiterals;
 
   ExtVec idTriples = createExtVecAndVocab<Parser>(filename);
 
+  // if we have no compression, this will also copy the whole vocabulary.
+  // but since we expect compression to be the default case, this  should not
+  // hurt
+  string vocabFile = _onDiskBase + ".vocabulary";
+  string vocabFileTmp = _onDiskBase + ".vocabularyTmp";
+  std::vector<string> prefixes;
+  if (_vocabPrefixCompressed) {
+    prefixes = calculatePrefixes(vocabFile, NUM_COMPRESSION_PREFIXES, 1);
+  }
+  _configurationJson["prefixes"] =
+      Vocabulary<CompressedString>::prefixCompressFile(vocabFile, vocabFileTmp,
+                                                       prefixes);
+  // TODO<joka921> maybe move this to its own function
+  if (std::rename(vocabFileTmp.c_str(), vocabFile.c_str())) {
+    LOG(INFO) << "Error: Rename the prefixed vocab file " << vocabFileTmp
+              << " to " << vocabFile << " set errno to " << errno
+              << ". Terminating...\n";
+    AD_CHECK(false);
+  }
   // also perform unique for first permutation
   createPermutation<IndexMetaDataHmap>(&idTriples, Permutation::Pso, true);
   createPermutation<IndexMetaDataHmap>(&idTriples, Permutation::Pos);
   if (allPermutations) {
-    createPermutation<IndexMetaDataHmap>(&idTriples, Permutation::Spo);
+    createPermutation<IndexMetaDataMmap>(&idTriples, Permutation::Spo);
     if (_usePatterns) {
       // vector already sorted correctly
       createPatterns(true, &idTriples);
     }
-    createPermutation<IndexMetaDataHmap>(&idTriples, Permutation::Sop);
+    createPermutation<IndexMetaDataMmap>(&idTriples, Permutation::Sop);
     createPermutation<IndexMetaDataMmap>(&idTriples, Permutation::Osp);
     createPermutation<IndexMetaDataMmap>(&idTriples, Permutation::Ops);
   } else if (_usePatterns) {
     // vector is not yet sorted
     createPatterns(false, &idTriples);
   }
+  writeConfigurationFile();
 }
 
 // explicit instantiations
@@ -112,14 +138,7 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
   size_t i = 0;
   size_t numFiles = 0;
   while (p.getLine(spo)) {
-    if (ad_utility::isXsdValue(spo[2])) {
-      spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
-    }
-    if (_onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
-      spo[2] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[2];
-    }
-
-    // Duplicated in pass for Id Vector, externalize to function
+    tripleToInternalRepresentation(&spo);
     for (size_t k = 0; k < 3; ++k) {
       items.insert(spo[k]);
     }
@@ -133,7 +152,7 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
       LOG(INFO) << "Lines processed: " << i << '\n';
       string partialFilename =
           _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
-      Vocabulary vocab;
+      Vocabulary<string> vocab;
       vocab.createFromSet(items);
       LOG(INFO) << "writing partial vocabular to " << partialFilename
                 << std::endl;
@@ -152,7 +171,7 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
         _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
     LOG(INFO) << "writing partial vocabular to " << partialFilename
               << std::endl;
-    Vocabulary vocab;
+    Vocabulary<string> vocab;
     vocab.createFromSet(items);
     vocab.writeToBinaryFileForMerging(partialFilename);
     items.clear();
@@ -185,14 +204,8 @@ void Index::passFileIntoIdVector(const string& filename, ExtVec& data,
   // write using vector_bufwriter
   ExtVec::bufwriter_type writer(data);
   while (p.getLine(spo)) {
-    if (ad_utility::isXsdValue(spo[2])) {
-      spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
-    }
-    if (_onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
-      spo[2] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[2];
-    }
+    tripleToInternalRepresentation(&spo);
 
-    // Duplicated in pass for Id Vector, externalize to function
     bool broken = false;
     for (size_t k = 0; k < 3; ++k) {
       if (vocabMap.find(spo[k]) == vocabMap.end()) {
@@ -270,6 +283,8 @@ void Index::createPermutationImpl(const string& fileName,
   }
 
   LOG(INFO) << "Done creating index permutation." << std::endl;
+  LOG(INFO) << "Calculating statistics for this permutation.\n";
+  metaData.calculateExpensiveStatistics();
   LOG(INFO) << "Writing statistics for this permutation:\n"
             << metaData.statistics() << std::endl;
 
@@ -789,6 +804,7 @@ void Index::writeNonFunctionalRelation(
 void Index::createFromOnDiskIndex(const string& onDiskBase,
                                   bool allPermutations) {
   setOnDiskBase(onDiskBase);
+  readConfigurationFile();
   _vocab.readFromFile(_onDiskBase + ".vocabulary",
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
   auto psoName = string(_onDiskBase + ".index.pso");
@@ -806,10 +822,17 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
   LOG(INFO) << "Registered POS permutation: " << _posMeta.statistics()
             << std::endl;
   if (allPermutations) {
+    // TODO<joka921> also refactor this, similar to createFromFile
+    LOG(INFO) << "Setting up MmapBasedPermutations\n";
+    _spoMeta.setup(onDiskBase + ".index.spo" + MMAP_FILE_SUFFIX,
+                   ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
+    _sopMeta.setup(onDiskBase + ".index.sop" + MMAP_FILE_SUFFIX,
+                   ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
     _opsMeta.setup(onDiskBase + ".index.ops" + MMAP_FILE_SUFFIX,
                    ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
     _ospMeta.setup(onDiskBase + ".index.osp" + MMAP_FILE_SUFFIX,
                    ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
+    LOG(INFO) << "Done\n";
     // TODO<joka921>: Refactor (upcoming PR): there is so  so much code
     // duplication in here
     auto spoName = string(_onDiskBase + ".index.spo");
@@ -1424,12 +1447,12 @@ template void Index::writeAsciiListFile<vector<Score>>(
 
 // _____________________________________________________________________________
 bool Index::isLiteral(const string& object) {
-  return object.size() > 0 && object[0] == '\"';
+  return Vocabulary<string>::isLiteral(object);
 }
 
 // _____________________________________________________________________________
 bool Index::shouldBeExternalized(const string& object) {
-  return Vocabulary::shouldBeExternalized(object);
+  return _vocab.shouldBeExternalized(object);
 }
 
 // _____________________________________________________________________________
@@ -1609,3 +1632,72 @@ void Index::setKeepTempFiles(bool keepTempFiles) {
 
 // _____________________________________________________________________________
 void Index::setUsePatterns(bool usePatterns) { _usePatterns = usePatterns; }
+
+// ____________________________________________________________________________
+void Index::setSettingsFile(const std::string& filename) {
+  _settingsFileName = filename;
+}
+
+// ____________________________________________________________________________
+void Index::setPrefixCompression(bool compressed) {
+  _vocabPrefixCompressed = compressed;
+}
+
+// ____________________________________________________________________________
+void Index::writeConfigurationFile() const {
+  std::ofstream f(_onDiskBase + CONFIGURATION_FILE);
+  AD_CHECK(f.is_open());
+  f << _configurationJson;
+}
+
+// ___________________________________________________________________________
+void Index::readConfigurationFile() {
+  std::ifstream f(_onDiskBase + CONFIGURATION_FILE);
+  AD_CHECK(f.is_open());
+  f >> _configurationJson;
+  if (_configurationJson.find("external-literals") !=
+      _configurationJson.end()) {
+    _onDiskLiterals = _configurationJson["external-literals"];
+  }
+
+  if (_configurationJson.find("prefixes") != _configurationJson.end()) {
+    _vocab.initializeRestartPrefixes(_configurationJson["prefixes"]);
+  }
+
+  if (_configurationJson.find("prefixes-external") !=
+      _configurationJson.end()) {
+    _vocab.initializeExternalizePrefixes(
+        _configurationJson["prefixes-external"]);
+  }
+}
+
+// ___________________________________________________________________________
+void Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
+  auto& spo = *triplePtr;
+  size_t upperBound = 3;
+  if (ad_utility::isXsdValue(spo[2])) {
+    spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
+    upperBound = 2;
+  }
+  for (size_t k = 0; k < upperBound; ++k) {
+    if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k])) {
+      spo[k] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[k];
+    }
+  }
+}
+
+// ___________________________________________________________________________
+void Index::initializeVocabularySettingsBuild() {
+  if (_settingsFileName == "") {
+    return;
+  }
+  std::ifstream f(_settingsFileName);
+  AD_CHECK(f.is_open());
+  json j;
+  f >> j;
+
+  if (j.find("prefixes-external") != j.end()) {
+    _vocab.initializeExternalizePrefixes(j["prefixes-external"]);
+    _configurationJson["prefixes-external"] = j["prefixes-external"];
+  }
+}

@@ -62,6 +62,9 @@ inline bool endsWith(const string& text, const string& suffix);
 //! will return false. Case sensitive.
 inline bool endsWith(const string& text, const char* suffix);
 
+//! Returns the longest prefix that the two arguments have in common
+inline string commonPrefix(const string& a, const string& b);
+
 //! Case transformations. Should be thread safe.
 inline string getLowercase(const string& orig);
 
@@ -186,6 +189,19 @@ bool endsWith(const string& text, const string& suffix) {
 // ____________________________________________________________________________
 bool endsWith(const string& text, const char* suffix) {
   return endsWith(text, suffix, std::char_traits<char>::length(suffix));
+}
+
+// ____________________________________________________________________________
+string commonPrefix(const string& a, const string& b) {
+  size_t maxIdx = std::min(a.size(), b.size());
+  size_t i = 0;
+  while (i < maxIdx) {
+    if (a[i] != b[i]) {
+      break;
+    }
+    ++i;
+  }
+  return a.substr(0, i);
 }
 
 // ____________________________________________________________________________
@@ -611,3 +627,20 @@ string decodeUrl(const string& url) {
 }
 
 }  // namespace ad_utility
+
+// these overloads are missing in the STL
+inline std::string operator+(const std::string& a, std::string_view b) {
+  std::string res;
+  res.resize(a.size() + b.size());
+  std::memcpy(res.data(), a.data(), a.size());
+  std::memcpy(res.data() + a.size(), b.data(), b.size());
+  return res;
+}
+
+inline std::string operator+(char c, std::string_view b) {
+  std::string res;
+  res.resize(1 + b.size());
+  res[0] = c;
+  std::memcpy(res.data() + 1, b.data(), b.size());
+  return res;
+}

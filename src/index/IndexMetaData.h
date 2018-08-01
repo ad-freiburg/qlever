@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <algorithm>
 #include <cmath>
+#include <google/sparse_hash_map>
 #include "../global/Id.h"
 #include "../util/File.h"
 #include "../util/HashMap.h"
@@ -22,6 +23,21 @@
 using std::array;
 using std::pair;
 using std::vector;
+
+// simple ReturnValue struct
+struct VersionInfo {
+  size_t _version;
+  size_t _nOfBytes;
+};
+
+// read from a buffer and advance it
+// helper function for IndexMetaData::createFromByteBuffer
+template <class T>
+T readFromBuf(unsigned char** buf) {
+  T res = *reinterpret_cast<T*>(*buf);
+  *buf += sizeof(T);
+  return res;
+}
 
 // Check index_layout.md for explanations (expected comments).
 // Removed comments here so that not two places had to be kept up-to-date.
@@ -71,17 +87,13 @@ class IndexMetaData {
   // compile time information whether this instatiation if MMapBased or not
   static constexpr bool _isMmapBased = IsMmapBased<MapType>::value;
 
-  void createFromByteBuffer(unsigned char* buf) {
-    if constexpr (_isMmapBased) {
-      return createFromByteBufferMmap(buf);
-    } else {
-      return createFromByteBufferSparse(buf);
-    }
-  }
-
-  // dispatched functions for createFromByteBuffer
-  void createFromByteBufferMmap(unsigned char* buf);
-  void createFromByteBufferSparse(unsigned char* buf);
+  // parse and get the version tag of this MetaData.
+  // Also verifies that it matches the MapType parameter
+  // No version tag will lead to version = V_NO_VERSION
+  // Also returns the number of bytes that the version info was stored in so
+  // that createFromByteBuffer can continue at the correct position.
+  VersionInfo parseMagicNumberAndVersioning(unsigned char* buf);
+  void createFromByteBuffer(unsigned char* buf);
 
   // Write to a file that will be overwritten/created
   void writeToFile(const std::string& filename) const;
@@ -99,6 +111,9 @@ class IndexMetaData {
 
   bool relationExists(Id relId) const;
 
+  // calculate and save statistics that are expensive to calculate so we only
+  // have to do this during the index build and not at server startup
+  void calculateExpensiveStatistics();
   string statistics() const;
 
   size_t getNofTriples() const { return _nofTriples; }
@@ -118,13 +133,18 @@ class IndexMetaData {
 
   MapType _data;
   ad_utility::HashMap<Id, BlockBasedRelationMetaData> _blockData;
+  size_t _totalElements = 0;
+  size_t _totalBytes = 0;
+  size_t _totalBlocks = 0;
 
   // friend declaration for external converter function with ugly types
-  using IndexMetaDataHmap = IndexMetaData<MetaDataWrapperHashMap>;
+  //  using IndexMetaDataHmap = IndexMetaData<MetaDataWrapperHashMap>;
+  using IndexMetaDataHmapSparse = IndexMetaData<MetaDataWrapperHashMap<
+      google::sparse_hash_map<Id, FullRelationMetaData>>>;
   using IndexMetaDataMmap = IndexMetaData<
       MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>>;
-  friend IndexMetaDataMmap convertHmapMetaDataToMmap(const IndexMetaDataHmap&,
-                                                     const std::string&, bool);
+  friend IndexMetaDataMmap convertHmapMetaDataToMmap(
+      const IndexMetaDataHmapSparse&, const std::string&, bool);
 
   // this way all instantations will be friends with each other,
   // but this should not be an issue.
@@ -147,7 +167,12 @@ using MetaWrapperMmap =
     MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>;
 using MetaWrapperMmapView =
     MetaDataWrapperDense<ad_utility::MmapVectorView<FullRelationMetaData>>;
-using IndexMetaDataHmap = IndexMetaData<MetaDataWrapperHashMap>;
+using MetaDataWrapperHashMapSparse =
+    MetaDataWrapperHashMap<google::sparse_hash_map<Id, FullRelationMetaData>>;
+using IndexMetaDataHmap = IndexMetaData<
+    MetaDataWrapperHashMap<ad_utility::HashMap<Id, FullRelationMetaData>>>;
+using IndexMetaDataHmapSparse = IndexMetaData<
+    MetaDataWrapperHashMap<google::sparse_hash_map<Id, FullRelationMetaData>>>;
 using IndexMetaDataMmap = IndexMetaData<
     MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>>;
 using IndexMetaDataMmapView = IndexMetaData<
@@ -158,5 +183,15 @@ const uint64_t MAGIC_NUMBER_MMAP_META_DATA =
     std::numeric_limits<uint64_t>::max();
 const uint64_t MAGIC_NUMBER_SPARSE_META_DATA =
     std::numeric_limits<uint64_t>::max() - 1;
+const uint64_t MAGIC_NUMBER_MMAP_META_DATA_VERSION =
+    std::numeric_limits<uint64_t>::max() - 2;
+const uint64_t MAGIC_NUMBER_SPARSE_META_DATA_VERSION =
+    std::numeric_limits<uint64_t>::max() - 3;
+
+// constants for meta data versions in case the format is changed again
+constexpr uint64_t V_NO_VERSION = 0;  // this is  a dummy
+constexpr uint64_t V_BLOCK_LIST_AND_STATISTICS = 1;
+
+constexpr uint64_t V_CURRENT = V_BLOCK_LIST_AND_STATISTICS;
 
 #include "./IndexMetaDataImpl.h"

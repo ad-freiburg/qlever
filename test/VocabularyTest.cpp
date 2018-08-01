@@ -2,26 +2,34 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
+#include "../src/index/Vocabulary.h"
 #include <gtest/gtest.h>
 #include <cstdio>
-#include "../src/index/Vocabulary.h"
+#include <nlohmann/json.hpp>
+#include <vector>
+
+using json = nlohmann::json;
+using std::string;
 
 TEST(VocabularyTest, getIdForWordTest) {
-  Vocabulary v;
-  v.push_back("a");
-  v.push_back("ab");
-  v.push_back("ba");
-  v.push_back("car");
-  Id id;
-  ASSERT_TRUE(v.getId("ba", &id));
-  ASSERT_EQ(Id(2), id);
-  ASSERT_TRUE(v.getId("a", &id));
-  ASSERT_EQ(Id(0), id);
-  ASSERT_FALSE(v.getId("foo", &id));
+  std::vector<Vocabulary<string>> vec(2);
+
+  for (auto& v : vec) {
+    v.push_back("a");
+    v.push_back("ab");
+    v.push_back("ba");
+    v.push_back("car");
+    Id id;
+    ASSERT_TRUE(v.getId("ba", &id));
+    ASSERT_EQ(Id(2), id);
+    ASSERT_TRUE(v.getId("a", &id));
+    ASSERT_EQ(Id(0), id);
+    ASSERT_FALSE(v.getId("foo", &id));
+  }
 };
 
 TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
-  Vocabulary v;
+  Vocabulary<string> v;
   v.push_back("wordA0");
   v.push_back("wordA1");
   v.push_back("wordB2");
@@ -54,7 +62,7 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
 }
 
 TEST(VocabularyTest, readWriteTest) {
-  Vocabulary v;
+  Vocabulary<string> v;
   v.push_back("wordA0");
   v.push_back("wordA1");
   v.push_back("wordB2");
@@ -76,7 +84,7 @@ TEST(VocabularyTest, createFromSetTest) {
   s.insert("ab");
   s.insert("ba");
   s.insert("car");
-  Vocabulary v;
+  Vocabulary<string> v;
   v.createFromSet(s);
   Id id;
   ASSERT_TRUE(v.getId("ba", &id));

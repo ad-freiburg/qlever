@@ -37,99 +37,76 @@ off_t IndexMetaData<MapType>::getOffsetAfter() const {
   return _offsetAfter;
 }
 
-// _____________________________________________________________________________
-template <class MapType>
-void IndexMetaData<MapType>::createFromByteBufferSparse(unsigned char* buf) {
-  size_t nofBytesDone = 0;
-  // read magic number
-  uint64_t magicNumber = *reinterpret_cast<uint64_t*>(buf);
-  if (magicNumber == MAGIC_NUMBER_MMAP_META_DATA) {
-    LOG(INFO)
-        << "ERROR: magic number of MetaData indicates that we are trying "
-           "to construct from  mmap-based meta data. This is not valid "
-           "for sparse meta data formats. Please use ./MetaDataConverterMain "
-           "to convert old indices without rebuilding them (See README.md). "
-           "Terminating...\n";
-    AD_CHECK(false);
-  } else if (magicNumber == MAGIC_NUMBER_SPARSE_META_DATA) {
-    // read valid magic number, skip it
-    nofBytesDone += sizeof(magicNumber);
-  } else {
-    LOG(INFO)
-        << "WARNING: No valid magic number found for meta data, this is "
-           "probably "
-           "an older index build. We should still be able to construct "
-           "the meta data though. Please consider using "
-           "./MetaDataConverterMain "
-           "to convert old indices without rebuilding them (See README.md).\n";
-  }
-  size_t nameLength = *reinterpret_cast<size_t*>(buf + nofBytesDone);
-  nofBytesDone += sizeof(size_t);
-  _name.assign(reinterpret_cast<char*>(buf + nofBytesDone), nameLength);
-  nofBytesDone += nameLength;
-  size_t nofRelations = *reinterpret_cast<size_t*>(buf + nofBytesDone);
-  nofBytesDone += sizeof(size_t);
-  _offsetAfter = *reinterpret_cast<off_t*>(buf + nofBytesDone);
-  nofBytesDone += sizeof(off_t);
-  _nofTriples = 0;
-  for (size_t i = 0; i < nofRelations; ++i) {
-    FullRelationMetaData rmd;
-    rmd.createFromByteBuffer(buf + nofBytesDone);
-    _nofTriples += rmd.getNofElements();
-    nofBytesDone += rmd.bytesRequired();
-    if (rmd.hasBlocks()) {
-      BlockBasedRelationMetaData bRmd;
-      bRmd.createFromByteBuffer(buf + nofBytesDone);
-      nofBytesDone += bRmd.bytesRequired();
-      add(rmd, bRmd);
-    } else {
-      add(rmd, BlockBasedRelationMetaData());
-    }
-  }
-}
-
-// _____________________________________________________________________________
 // specialization for MMapBased Arrays which only read
 // block-based data from Memory
 template <class MapType>
-void IndexMetaData<MapType>::createFromByteBufferMmap(unsigned char* buf) {
+void IndexMetaData<MapType>::createFromByteBuffer(unsigned char* buf) {
   // read magic number
-  uint64_t magicNumber = *reinterpret_cast<uint64_t*>(buf);
-  if (magicNumber != MAGIC_NUMBER_MMAP_META_DATA) {
-    LOG(INFO) << "ERROR: No or wrong magic number found in persistent "
-                 "mmap-based meta data. "
-                 "Please use ./MetaDataConverterMain "
-                 "to convert old indices without rebuilding them (See "
-                 "README.md).Terminating...\n";
-    AD_CHECK(false);
+  auto v = parseMagicNumberAndVersioning(buf);
+  auto version = v._version;
+  buf += v._nOfBytes;
+
+  size_t nameLength = readFromBuf<size_t>(&buf);
+  _name.assign(reinterpret_cast<char*>(buf), nameLength);
+  buf += nameLength;
+
+  size_t nofRelations = readFromBuf<size_t>(&buf);
+  if constexpr (_isMmapBased) {
+    _data.setSize(nofRelations);
   }
-  size_t nofBytesDone = sizeof(MAGIC_NUMBER_MMAP_META_DATA);
-  size_t nameLength = *reinterpret_cast<size_t*>(buf + nofBytesDone);
-  nofBytesDone += sizeof(size_t);
-  _name.assign(reinterpret_cast<char*>(buf + nofBytesDone), nameLength);
-  nofBytesDone += nameLength;
-  // skip nOfRelations, since this information is already stored in
-  // _data  (_data is persistently set during index creation, because this is
-  // the Mmap based specialization
-  nofBytesDone += sizeof(size_t);
-  _offsetAfter = *reinterpret_cast<off_t*>(buf + nofBytesDone);
-  nofBytesDone += sizeof(off_t);
+  _offsetAfter = readFromBuf<off_t>(&buf);
   _nofTriples = 0;
 
   // look for blockData in the already existing mmaped vector
-  for (auto it = _data.cbegin(); it != _data.cend(); ++it) {
-    const FullRelationMetaData& rmd = (*it).second;
-    _nofTriples += rmd.getNofElements();
-    if (rmd.hasBlocks()) {
-      BlockBasedRelationMetaData bRmd;
-      bRmd.createFromByteBuffer(buf + nofBytesDone);
-      nofBytesDone += bRmd.bytesRequired();
-      // we do not need to add the meta data since it is already in _data
-      // because of the persisten MMap file
-      add<true>(rmd, bRmd);
-    } else {
-      add<true>(rmd, BlockBasedRelationMetaData());
+  if constexpr (!_isMmapBased) {
+    for (size_t i = 0; i < nofRelations; ++i) {
+      FullRelationMetaData rmd;
+      rmd.createFromByteBuffer(buf);
+      _nofTriples += rmd.getNofElements();
+      buf += rmd.bytesRequired();
+      if (rmd.hasBlocks()) {
+        BlockBasedRelationMetaData bRmd;
+        bRmd.createFromByteBuffer(buf);
+        buf += bRmd.bytesRequired();
+        add(rmd, bRmd);
+      } else {
+        add(rmd, BlockBasedRelationMetaData());
+      }
     }
+  } else {
+    if (version < V_BLOCK_LIST_AND_STATISTICS) {
+      for (auto it = _data.cbegin(); it != _data.cend(); ++it) {
+        const FullRelationMetaData& rmd = (*it).second;
+        _nofTriples += rmd.getNofElements();
+        if (rmd.hasBlocks()) {
+          BlockBasedRelationMetaData bRmd;
+          bRmd.createFromByteBuffer(buf);
+          buf += bRmd.bytesRequired();
+          // we do not need to add the meta data since it is already in _data
+          // because of the persisten MMap file
+          add<true>(rmd, bRmd);
+        } else {
+          add<true>(rmd, BlockBasedRelationMetaData());
+        }
+      }
+      calculateExpensiveStatistics();
+    } else {
+      size_t numBlockData = readFromBuf<size_t>(&buf);
+      for (size_t i = 0; i < numBlockData; ++i) {
+        Id id = readFromBuf<Id>(&buf);
+        BlockBasedRelationMetaData bRmd;
+        bRmd.createFromByteBuffer(buf);
+        buf += bRmd.bytesRequired();
+        // we do not need to add the meta data since it is already in _data
+        // because of the persisten MMap file
+        add<true>(_data.getAsserted(id), bRmd);
+      }
+    }
+  }
+  if (version >= V_BLOCK_LIST_AND_STATISTICS) {
+    _totalElements = readFromBuf<size_t>(&buf);
+    _totalBytes = readFromBuf<size_t>(&buf);
+    _totalBlocks = readFromBuf<size_t>(&buf);
   }
 }
 // _____________________________________________________________________________
@@ -155,31 +132,43 @@ ad_utility::File& operator<<(ad_utility::File& f,
                              const IndexMetaData<MapType>& imd) {
   // first write magic number
   if constexpr (imd._isMmapBased) {
-    f.write(&MAGIC_NUMBER_MMAP_META_DATA, sizeof(MAGIC_NUMBER_MMAP_META_DATA));
+    f.write(&MAGIC_NUMBER_MMAP_META_DATA_VERSION,
+            sizeof(MAGIC_NUMBER_MMAP_META_DATA_VERSION));
+    // write version for MMAP based
   } else {
-    f.write(&MAGIC_NUMBER_SPARSE_META_DATA,
-            sizeof(MAGIC_NUMBER_SPARSE_META_DATA));
+    f.write(&MAGIC_NUMBER_SPARSE_META_DATA_VERSION,
+            sizeof(MAGIC_NUMBER_SPARSE_META_DATA_VERSION));
   }
+  f.write(&V_CURRENT, sizeof(V_CURRENT));
   size_t nameLength = imd._name.size();
   f.write(&nameLength, sizeof(nameLength));
   f.write(imd._name.data(), nameLength);
   size_t nofElements = imd._data.size();
   f.write(&nofElements, sizeof(nofElements));
   f.write(&imd._offsetAfter, sizeof(imd._offsetAfter));
-  for (auto it = imd._data.cbegin(); it != imd._data.cend(); ++it) {
-    const auto el = *it;
-    // when we are MmapBased, the _data member is already persistent on disk, so
-    // we do not write it here
-    if constexpr (!imd._isMmapBased) {
+  if constexpr (!imd._isMmapBased) {
+    for (auto it = imd._data.cbegin(); it != imd._data.cend(); ++it) {
+      const auto el = *it;
       f << el.second;
-    }
 
-    if (el.second.hasBlocks()) {
-      auto itt = imd._blockData.find(el.second._relId);
-      AD_CHECK(itt != imd._blockData.end());
-      f << itt->second;
+      if (el.second.hasBlocks()) {
+        auto itt = imd._blockData.find(el.second._relId);
+        AD_CHECK(itt != imd._blockData.end());
+        f << itt->second;
+      }
+    }
+  } else {
+    size_t numBlockData = imd._blockData.size();
+    f.write(&numBlockData, sizeof(numBlockData));
+    for (const auto& [id, blockData] : imd._blockData) {
+      f.write(&id, sizeof(id));
+      f << blockData;
     }
   }
+  f.write(&imd._totalElements, sizeof(imd._totalElements));
+  f.write(&imd._totalBytes, sizeof(&imd._totalBytes));
+  f.write(&imd._totalBlocks, sizeof(&imd._totalBlocks));
+
   return f;
 }
 
@@ -237,23 +226,16 @@ string IndexMetaData<MapType>::statistics() const {
   os << "----------------------------------\n\n";
   os << "# Relations (_data.size()): " << _data.size() << '\n';
   os << "# Block Data: " << _blockData.size() << '\n';
-  size_t totalElements = 0;
-  size_t totalBytes = 0;
-  size_t totalBlocks = 0;
-  for (auto it = _data.cbegin(); it != _data.cend(); ++it) {
-    auto el = *it;
-    totalElements += el.second.getNofElements();
-    totalBytes += getTotalBytesForRelation(el.second);
-    totalBlocks += getNofBlocksForRelation(el.first);
-  }
-  size_t totalPairIndexBytes = totalElements * 2 * sizeof(Id);
-  os << "# Elements:  " << totalElements << '\n';
-  os << "# Blocks:    " << totalBlocks << "\n\n";
-  os << "Theoretical size of Id triples: " << totalElements * 3 * sizeof(Id)
+
+  size_t totalPairIndexBytes = _totalElements * 2 * sizeof(Id);
+
+  os << "# Elements:  " << _totalElements << '\n';
+  os << "# Blocks:    " << _totalBlocks << "\n\n";
+  os << "Theoretical size of Id triples: " << _totalElements * 3 * sizeof(Id)
      << " bytes \n";
   os << "Size of pair index:             " << totalPairIndexBytes
      << " bytes \n";
-  os << "Total Size:                     " << totalBytes << " bytes \n";
+  os << "Total Size:                     " << _totalBytes << " bytes \n";
   os << "-------------------------------------------------------------------\n";
   return os.str();
 }
@@ -286,3 +268,87 @@ template <class MapType>
 size_t IndexMetaData<MapType>::getNofDistinctC1() const {
   return _data.size();
 }
+
+// __________________________________________________________________
+template <class MapType>
+void IndexMetaData<MapType>::calculateExpensiveStatistics() {
+  _totalElements = 0;
+  _totalBytes = 0;
+  _totalBlocks = 0;
+  for (auto it = _data.cbegin(); it != _data.cend(); ++it) {
+    auto el = *it;
+    _totalElements += el.second.getNofElements();
+    _totalBytes += getTotalBytesForRelation(el.second);
+    _totalBlocks += getNofBlocksForRelation(el.first);
+  }
+}
+
+// ___________________________________________________________________
+template <class MapType>
+VersionInfo IndexMetaData<MapType>::parseMagicNumberAndVersioning(
+    unsigned char* buf) {
+  uint64_t magicNumber = *reinterpret_cast<uint64_t*>(buf);
+  size_t nOfBytes = 0;
+  bool hasVersion = false;
+  if constexpr (!_isMmapBased) {
+    if (magicNumber == MAGIC_NUMBER_MMAP_META_DATA ||
+        magicNumber == MAGIC_NUMBER_MMAP_META_DATA_VERSION) {
+      LOG(INFO)
+          << "ERROR: magic number of MetaData indicates that we are trying "
+             "to construct a hashMap based IndexMetaData from  mmap-based meta "
+             "data. This is not validx."
+             "Please use ./MetaDataConverterMain"
+             "to convert old indices without rebuilding them (See README.md). "
+             "Terminating...\n";
+      AD_CHECK(false);
+    } else if (magicNumber == MAGIC_NUMBER_SPARSE_META_DATA) {
+      hasVersion = false;
+      nOfBytes = sizeof(uint64_t);
+    } else if (magicNumber == MAGIC_NUMBER_SPARSE_META_DATA_VERSION) {
+      hasVersion = true;
+      nOfBytes = sizeof(uint64_t);
+    } else {
+      // no magic number found
+      hasVersion = false;
+      nOfBytes = 0;
+    }
+  } else {  // this _isMmapBased
+    if (magicNumber == MAGIC_NUMBER_MMAP_META_DATA) {
+      hasVersion = false;
+      nOfBytes = sizeof(uint64_t);
+    } else if (magicNumber == MAGIC_NUMBER_MMAP_META_DATA_VERSION) {
+      hasVersion = true;
+      nOfBytes = sizeof(uint64_t);
+    } else {
+      LOG(INFO) << "ERROR: No or wrong magic number found in persistent "
+                   "mmap-based meta data. "
+                   "Please use ./MetaDataConverterMain "
+                   "to convert old indices without rebuilding them (See "
+                   "README.md).Terminating...\n";
+      AD_CHECK(false);
+    }
+  }
+
+  VersionInfo res;
+  res._nOfBytes = nOfBytes;
+  if (!hasVersion) {
+    res._version = V_NO_VERSION;
+  } else {
+    res._version = *reinterpret_cast<uint64_t*>(buf + res._nOfBytes);
+    res._nOfBytes += sizeof(uint64_t);
+  }
+  if (res._version < V_CURRENT) {
+    LOG(INFO)
+        << "WARNING: your IndexMetaData seems to have an old format (version "
+           "tag < V_CURRENT). Please consider using ./MetaDataConverterMain to "
+           "benefit from improvements in the index structure.\n";
+
+  } else if (res._version > V_CURRENT) {
+    LOG(INFO) << "ERROR: version tag does not match any actual version (> "
+                 "V_CURRENT). Your IndexMetaData is probably corrupted. "
+                 "Terminating\n";
+    AD_CHECK(false);
+  }
+  return res;
+}
+

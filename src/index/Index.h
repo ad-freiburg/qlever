@@ -21,11 +21,13 @@
 #include "./StxxlSortFunctors.h"
 #include "./TextMetaData.h"
 #include "./Vocabulary.h"
+#include <nlohmann/json.hpp>
 
 using std::array;
 using std::string;
 using std::tuple;
 using std::vector;
+using json = nlohmann::json;
 
 // a simple struct for better naming
 struct LinesAndWords {
@@ -75,9 +77,9 @@ class Index {
   // Checks if the index is ready for use, i.e. it is properly intitialized.
   bool ready() const;
 
-  const Vocabulary& getVocab() const { return _vocab; };
+  const auto& getVocab() const { return _vocab; };
 
-  const Vocabulary& getTextVocab() const { return _textVocab; };
+  const auto& getTextVocab() const { return _textVocab; };
 
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---
@@ -257,6 +259,10 @@ class Index {
   void setKeepTempFiles(bool keepTempFiles);
 
   void setOnDiskBase(const std::string& onDiskBase);
+ 
+  void setSettingsFile(const std::string& filename);
+
+  void setPrefixCompression(bool compressed);
 
   const string& getTextName() const { return _textMeta.getName(); }
 
@@ -298,19 +304,19 @@ class Index {
 
  private:
   string _onDiskBase;
+  string _settingsFileName;
   bool _onDiskLiterals = false;
   bool _keepTempFiles = false;
-  Vocabulary _vocab;
+  json _configurationJson;
+  Vocabulary<CompressedString> _vocab;
   size_t _totalVocabularySize = 0;
-  Vocabulary _textVocab;
-  // TODO<joka921>(but not for this PR): changing the (semi-dense) _spo and
-  // _sopMeta to Mmap based Meta Data could even save more RAM. Maybe we could
-  // also use dynamic dispatching at runtime to check which meta data was used
-  // during the Index build
+  bool _vocabPrefixCompressed = false;
+  Vocabulary<std::string> _textVocab;
+
   IndexMetaDataHmap _psoMeta;
   IndexMetaDataHmap _posMeta;
-  IndexMetaDataHmap _spoMeta;
-  IndexMetaDataHmap _sopMeta;
+  IndexMetaDataMmapView _spoMeta;
+  IndexMetaDataMmapView _sopMeta;
   IndexMetaDataMmapView _ospMeta;
   IndexMetaDataMmapView _opsMeta;
   TextMetaData _textMeta;
@@ -487,6 +493,7 @@ class Index {
   bool isLiteral(const string& object);
 
   bool shouldBeExternalized(const string& object);
+  void tripleToInternalRepresentation(array<string, 3>* spo);
 
   /**
    * @brief Throws an exception if no patterns are loaded. Should be called from
@@ -494,4 +501,11 @@ class Index {
    *        file.
    */
   void throwExceptionIfNoPatterns() const;
+
+  // TODO<joka921> better names
+  void writeConfigurationFile() const;
+  void readConfigurationFile();
+
+  // initialize the index-build-time settings for the vocabulary
+  void initializeVocabularySettingsBuild();
 };

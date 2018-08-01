@@ -9,7 +9,7 @@
 using ad_utility::MmapVector;
 using MmapHandler = MetaDataWrapperDense<MmapVector<FullRelationMetaData>>;
 // _______________________________________________________________________
-MmapHandler convertHmapHandlerToMmap(const MetaDataWrapperHashMap& hmap,
+MmapHandler convertHmapHandlerToMmap(const MetaDataWrapperHashMapSparse& hmap,
                                      const std::string& filename);
 
 // _______________________________________________________________________
@@ -33,7 +33,10 @@ void convertHmapBasedPermutatationToMmap(const string& permutIn,
 // permutIn is read, permutOut is (over)written.
 void addMagicNumberToSparseMetaDataPermutation(const string& permutIn,
                                                const string& permutOut);
-
+// TODO: comment
+// ______________________________________________________________________
+void addBlockListToMmapMetaDataPermutation(const string& permutIn,
+                                           const string& permutOut);
 // Copy the permutation data from oldPermutation to newPermutation and add the
 // meta data
 template <class MetaData>

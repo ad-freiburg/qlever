@@ -1,7 +1,7 @@
 
 add_library(index
         Index.h Index.cpp Index.Text.cpp
-        Vocabulary.h Vocabulary.cpp
+        Vocabulary.h VocabularyImpl.h
         VocabularyGenerator.h VocabularyGenerator.cpp
         ConstantsIndexCreation.h
         ExternalVocabulary.h ExternalVocabulary.cpp
@@ -11,7 +11,8 @@ add_library(index
         StxxlSortFunctors.h
         TextMetaData.cpp TextMetaData.h
         DocsDB.cpp DocsDB.h
-        FTSAlgorithms.cpp FTSAlgorithms.h)
+        FTSAlgorithms.cpp FTSAlgorithms.h
+        PrefixHeuristic.cpp PrefixHeuristic.h)
 
 target_link_libraries(index parser ${STXXL_LIBRARIES})
 
