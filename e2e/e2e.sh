@@ -41,7 +41,7 @@ INDEX="e2e_data/scientists-index"
 if [ "$1" != "no-index" ]; then
 	rm -f "$INDEX.*"
 	pushd "./build"
-	./IndexBuilderMain -a -l -i "../$INDEX" \
+	./IndexBuilderMain -a -l -c -i "../$INDEX" \
 		-n "../e2e_data/scientist-collection/scientists.nt" \
 		-w "../e2e_data/scientist-collection/scientists.wordsfile.tsv" \
 		-d "../e2e_data/scientist-collection/scientists.docsfile.tsv" \

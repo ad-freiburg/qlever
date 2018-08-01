@@ -5,12 +5,13 @@
 
 #include "./MetaDataConverter.h"
 #include <string>
+#include "../global/Constants.h"
 #include "./IndexMetaData.h"
 
 using std::string;
 
 // Conversion function for old binary indices
-MmapHandler convertHmapHandlerToMmap(const MetaDataWrapperHashMap& hmap,
+MmapHandler convertHmapHandlerToMmap(const MetaDataWrapperHashMapSparse& hmap,
                                      const std::string& filename) {
   // first we need the maximal Id of the hashMap
   size_t maxId = 0;
@@ -28,7 +29,7 @@ MmapHandler convertHmapHandlerToMmap(const MetaDataWrapperHashMap& hmap,
 }
 
 // _______________________________________________________________________
-IndexMetaDataMmap convertHmapMetaDataToMmap(const IndexMetaDataHmap& hmap,
+IndexMetaDataMmap convertHmapMetaDataToMmap(const IndexMetaDataHmapSparse& hmap,
                                             const std::string& filename,
                                             bool verify) {
   IndexMetaDataMmap res;
@@ -60,7 +61,7 @@ IndexMetaDataMmap convertHmapMetaDataToMmap(const IndexMetaDataHmap& hmap,
 void convertHmapBasedPermutatationToMmap(const string& permutIn,
                                          const string& permutOut,
                                          const string& mmap, bool verify) {
-  IndexMetaDataHmap h;
+  IndexMetaDataHmapSparse h;
   h.readFromFile(permutIn);
   IndexMetaDataMmap m = convertHmapMetaDataToMmap(h, mmap, verify);
   writeNewPermutation(permutIn, permutOut, m);
@@ -69,9 +70,19 @@ void convertHmapBasedPermutatationToMmap(const string& permutIn,
 // _________________________________________________________________________
 void addMagicNumberToSparseMetaDataPermutation(const string& permutIn,
                                                const string& permutOut) {
-  IndexMetaDataHmap h;
+  IndexMetaDataHmapSparse h;
   h.readFromFile(permutIn);
   writeNewPermutation(permutIn, permutOut, h);
+}
+
+// _________________________________________________________________________
+void addBlockListToMmapMetaDataPermutation(const string& permutIn,
+                                           const string& permutOut) {
+  IndexMetaDataMmap m;
+  m.setup(permutIn + MMAP_FILE_SUFFIX, ad_utility::ReuseTag(),
+          ad_utility::AccessPattern::Random);
+  m.readFromFile(permutIn);
+  writeNewPermutation(permutIn, permutOut, m);
 }
 
 // ________________________________________________________________________

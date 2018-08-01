@@ -27,6 +27,9 @@ class ExternalVocabulary {
 
   void initFromFile(const string& file);
 
+  // close the underlying file and uninitialize this vocabulary for further use
+  void clear() { _file.close(); }
+
   //! Get the word with the given id
   //! (as non-reference, returning a cost ref is not possible, because the
   //! string does not necessarily already exist in memory - unlike for an

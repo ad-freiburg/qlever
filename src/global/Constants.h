@@ -51,3 +51,12 @@ static const int DEFAULT_NOF_VALUE_MANTISSA_DIGITS = 30;
 static const int DEFAULT_NOF_DATE_YEAR_DIGITS = 19;
 
 static const std::string MMAP_FILE_SUFFIX = ".meta-mmap";
+static const std::string CONFIGURATION_FILE = ".configuration";
+
+static constexpr size_t MIN_COMPRESSION_PREFIX = 128;
+static constexpr size_t NUM_COMPRESSION_PREFIXES = 127;
+// if this is the first character of a compressed string, this means that no
+// compression has been applied to  a word
+static const char NO_PREFIX_CHAR =
+    MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES;
+

@@ -78,7 +78,8 @@ TEST_F(GroupByTest, doGroupBy) {
   }
 
   // add some words to the index's vocabulary
-  Vocabulary& vocab = const_cast<Vocabulary&>(_index.getVocab());
+  Vocabulary<CompressedString>& vocab =
+      const_cast<Vocabulary<CompressedString>&>(_index.getVocab());
   vocab.push_back("<entity1>");
   vocab.push_back("<entity2>");
   vocab.push_back("<entity3>");

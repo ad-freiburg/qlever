@@ -22,6 +22,7 @@ class PairCompare {
     return p1.first > p2.first;
   }
 };
+
 // ___________________________________________________________________
 size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
   std::vector<std::fstream> infiles;
@@ -31,7 +32,7 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
   AD_CHECK(outfileExternal.is_open());
   std::vector<bool> endOfFile(numFiles, false);
 
-  using pair_T = std::pair<std::string, size_t>;
+  using pair_T = std::pair<string, size_t>;
   std::priority_queue<pair_T, std::vector<pair_T>, PairCompare> queue;
 
   for (size_t i = 0; i < numFiles; i++) {
