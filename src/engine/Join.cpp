@@ -2,9 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./Join.h"
 #include <sstream>
 #include <unordered_set>
-#include "./Join.h"
 #include "./QueryExecutionTree.h"
 
 using std::string;

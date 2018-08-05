@@ -50,35 +50,40 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
   // look for ql:has-predicate to determine if the pattern trick should be used
   bool usePatternTrick = false;
   SparqlTriple patternTrickTriple("", "", "");
-  for (size_t i = 0; i < pq._rootGraphPattern._whereClauseTriples.size(); i++) {
-    const SparqlTriple& t = pq._rootGraphPattern._whereClauseTriples[i];
-    if (t._p == HAS_RELATION_PREDIACTE) {
-      const ParsedQuery::Alias* countAlias = nullptr;
-      for (const ParsedQuery::Alias& a : pq._aliases) {
-        if (a._inVarName == t._o && a._isAggregate &&
-            a._function.find("DISTINCT") == std::string::npos &&
-            a._function.find("distinct") == std::string::npos &&
-            (ad_utility::startsWith(a._function, "COUNT") ||
-             ad_utility::startsWith(a._function, "count"))) {
-          countAlias = &a;
+  // Check if the query has the right number of variables for aliases, select
+  // and group by.
+  if (pq._groupByVariables.size() == 1 && pq._aliases.size() == 1 &&
+      pq._selectedVariables.size() == 2) {
+    const ParsedQuery::Alias& alias = pq._aliases.back();
+    // Check if the alias is a non distinct count alias
+    if (alias._isAggregate &&
+        alias._function.find("DISTINCT") == std::string::npos &&
+        alias._function.find("distinct") == std::string::npos &&
+        (ad_utility::startsWith(alias._function, "COUNT") ||
+         ad_utility::startsWith(alias._function, "count"))) {
+      // look for a HAS_RELATION_PREDICATE triple
+      for (size_t i = 0; i < pq._rootGraphPattern._whereClauseTriples.size();
+           i++) {
+        const SparqlTriple& t = pq._rootGraphPattern._whereClauseTriples[i];
+        if (t._p == HAS_PREDICATE_PREDICATE && alias._inVarName == t._o &&
+            pq._groupByVariables[0] == t._o &&
+            pq._selectedVariables[0] == t._o &&
+            pq._selectedVariables[1] == alias._outVarName) {
+          LOG(DEBUG) << "Using the pattern trick to answer the query." << endl;
+          usePatternTrick = true;
+          patternTrickTriple = t;
+          // remove the triple from the graph
+          pq._rootGraphPattern._whereClauseTriples.erase(
+              pq._rootGraphPattern._whereClauseTriples.begin() + i);
         }
-      }
-      if (pq._groupByVariables.size() == 1 && countAlias != nullptr &&
-          pq._groupByVariables[0] == t._o && pq._aliases.size() == 1 &&
-          pq._selectedVariables.size() == 2) {
-        LOG(DEBUG) << "Using the pattern trick to answer the query." << endl;
-        usePatternTrick = true;
-        patternTrickTriple = t;
-        // remove the triple from the graph
-        pq._rootGraphPattern._whereClauseTriples.erase(
-            pq._rootGraphPattern._whereClauseTriples.begin() + i);
       }
     }
   }
 
   bool doGrouping = pq._groupByVariables.size() > 0 || usePatternTrick;
   if (!doGrouping) {
-    // if there is no group by statement, but
+    // if there is no group by statement, but an aggregate alias is used
+    // somewhere do grouping anyways.
     for (const ParsedQuery::Alias& a : pq._aliases) {
       if (a._isAggregate) {
         doGrouping = true;
@@ -166,19 +171,25 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     }
 
     vector<SubtreePlan>& lastRow = finalTab.back();
-    AD_CHECK_GT(lastRow.size(), 0);
-    size_t minCost = lastRow[0].getCostEstimate();
-    size_t minInd = 0;
-
-    for (size_t i = 1; i < lastRow.size(); ++i) {
-      size_t thisCost = lastRow[i].getCostEstimate();
-      if (thisCost < minCost) {
-        minCost = lastRow[i].getCostEstimate();
-        minInd = i;
-      }
+    if (!usePatternTrick) {
+      // when the pattern trick is in use there is one triple that is not
+      // part of the triple graph, so the lastRow can be empty
+      AD_CHECK_GT(lastRow.size(), 0);
     }
-    lastRow[minInd]._isOptional = pattern->_optional;
-    patternPlans[pattern->_id] = lastRow[minInd];
+    if (lastRow.size() > 0) {
+      size_t minCost = lastRow[0].getCostEstimate();
+      size_t minInd = 0;
+
+      for (size_t i = 1; i < lastRow.size(); ++i) {
+        size_t thisCost = lastRow[i].getCostEstimate();
+        if (thisCost < minCost) {
+          minCost = lastRow[i].getCostEstimate();
+          minInd = i;
+        }
+      }
+      lastRow[minInd]._isOptional = pattern->_optional;
+      patternPlans[pattern->_id] = lastRow[minInd];
+    }
   }
 
   if (!_optimizeOptionals) {
@@ -238,52 +249,69 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
   SubtreePlan final = patternPlans[0];
 
   if (usePatternTrick) {
-    // Determine the column containing the subjects for which we are interested
-    // in their predicates.
-    auto it =
-        final._qet.get()->getVariableColumnMap().find(patternTrickTriple._s);
-    if (it == final._qet.get()->getVariableColumnMap().end()) {
-      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-               "The root operation of the"
-               "query excecution tree does"
-               "not contain a column for"
-               "variable " +
-                   patternTrickTriple._s +
-                   " required by the pattern"
-                   "trick.");
+    if (final._qet->getRootOperation() != nullptr) {
+      // Determine the column containing the subjects for which we are
+      // interested in their predicates.
+      auto it =
+          final._qet.get()->getVariableColumnMap().find(patternTrickTriple._s);
+      if (it == final._qet.get()->getVariableColumnMap().end()) {
+        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                 "The root operation of the "
+                 "query excecution tree does "
+                 "not contain a column for "
+                 "variable " +
+                     patternTrickTriple._s +
+                     " required by the pattern "
+                     "trick.");
+      }
+      size_t subjectColumn = it->second;
+      bool isSorted =
+          final._qet->getRootOperation()->resultSortedOn() == subjectColumn;
+      // a and b need to be ordered properly first
+      vector<pair<size_t, bool>> sortIndices = {
+          std::make_pair(subjectColumn, false)};
+
+      SubtreePlan orderByPlan(_qec);
+      std::shared_ptr<Operation> orderByOp(
+          new OrderBy(_qec, final._qet, sortIndices));
+
+      if (isSorted) {
+        orderByPlan._qet->setVariableColumns(
+            final._qet->getVariableColumnMap());
+        orderByPlan._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByOp);
+      }
+      SubtreePlan patternTrickPlan(_qec);
+      std::shared_ptr<Operation> countPred(new CountAvailablePredicates(
+          _qec, isSorted ? final._qet : orderByPlan._qet, subjectColumn));
+
+      static_cast<CountAvailablePredicates*>(countPred.get())
+          ->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName);
+      QueryExecutionTree& tree = *patternTrickPlan._qet.get();
+      tree.setVariableColumns(
+          static_cast<CountAvailablePredicates*>(countPred.get())
+              ->getVariableColumns());
+      tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
+                        countPred);
+
+      final = patternTrickPlan;
+      std::cout << "Plan after pattern trick: " << endl
+                << final._qet->asString() << endl;
+    } else {
+      // Use the pattern trick without a subtree
+      SubtreePlan patternTrickPlan(_qec);
+      std::shared_ptr<Operation> countPred(new CountAvailablePredicates(_qec));
+
+      static_cast<CountAvailablePredicates*>(countPred.get())
+          ->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName);
+      QueryExecutionTree& tree = *patternTrickPlan._qet.get();
+      tree.setVariableColumns(
+          static_cast<CountAvailablePredicates*>(countPred.get())
+              ->getVariableColumns());
+      tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
+                        countPred);
+
+      final = patternTrickPlan;
     }
-    size_t subjectColumn = it->second;
-
-    bool isSorted =
-        final._qet->getRootOperation()->resultSortedOn() == subjectColumn;
-    // a and b need to be ordered properly first
-    vector<pair<size_t, bool>> sortIndices = {
-        std::make_pair(subjectColumn, false)};
-
-    SubtreePlan orderByPlan(_qec);
-    std::shared_ptr<Operation> orderByOp(
-        new OrderBy(_qec, final._qet, sortIndices));
-
-    if (isSorted) {
-      orderByPlan._qet->setVariableColumns(final._qet->getVariableColumnMap());
-      orderByPlan._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByOp);
-    }
-    SubtreePlan patternTrickPlan(_qec);
-    std::shared_ptr<Operation> countPred(new CountAvailablePredicates(
-        _qec, isSorted ? final._qet : orderByPlan._qet, subjectColumn));
-
-    static_cast<CountAvailablePredicates*>(countPred.get())
-        ->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName);
-    QueryExecutionTree& tree = *patternTrickPlan._qet.get();
-    tree.setVariableColumns(
-        static_cast<CountAvailablePredicates*>(countPred.get())
-            ->getVariableColumns());
-    tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
-                      countPred);
-
-    final = patternTrickPlan;
-    std::cout << "Plan after pattern trick: " << endl
-              << final._qet->asString() << endl;
   } else if (doGrouping) {
     // Create a group by operation to determine on which columns the input
     // needs to be sorted
@@ -548,7 +576,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         SubtreePlan plan(_qec);
         plan._idsOfIncludedNodes |= (1 << i);
         auto& tree = *plan._qet.get();
-        if (node._triple._p == HAS_RELATION_PREDIACTE) {
+        if (node._triple._p == HAS_PREDICATE_PREDICATE) {
           // Add a has relation scan instead of a normal IndexScan
           if (isVariable(node._triple._s)) {
             std::shared_ptr<Operation> scan =
@@ -600,7 +628,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         seeds.push_back(plan);
       } else if (node._variables.size() == 2) {
         // Add plans for both possible scan directions.
-        if (node._triple._p == HAS_RELATION_PREDIACTE) {
+        if (node._triple._p == HAS_PREDICATE_PREDICATE) {
           // Add a has relation scan instead of a normal IndexScan
           SubtreePlan plan(_qec);
           plan._idsOfIncludedNodes |= (1 << i);
