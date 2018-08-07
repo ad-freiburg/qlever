@@ -72,6 +72,12 @@ add_subdirectory(third_party/stxxl)
 # apply STXXL CXXFLAGS
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
 
+################################
+# RE2
+################################
+add_subdirectory(third_party/re2)
+include_directories(third_party/re2)
+
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
 message(STATUS "CXX_FLAGS_RELEASE are : " ${CMAKE_CXX_FLAGS_RELEASE})
@@ -114,6 +120,12 @@ target_link_libraries (MetaDataConverterMain metaConverter ${CMAKE_THREAD_LIBS_I
 add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
 target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
 
+add_executable(TurtleParserMain src/TurtleParserMain.cpp)
+target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(Bzip2WrapperMain src/parser/Bzip2WrapperMain.cpp)
+target_link_libraries(Bzip2WrapperMain -lbz2)
+
 #add_executable(TextFilterComparison src/experiments/TextFilterComparison.cpp)
 #target_link_libraries (TextFilterComparison experiments)
 
@@ -137,3 +149,5 @@ add_test(ConversionsTest test/ConversionsTest)
 add_test(SparsehashTest test/SparsehashTest)
 add_test(VocabularyGeneratorTest test/VocabularyGeneratorTest)
 add_test(MmapVectorTest test/MmapVectorTest)
+add_test(TokenTest test/TokenTest)
+add_test(TurtleParserTest test/TurtleParserTest)

@@ -133,6 +133,8 @@ template void Index::createFromFile<TsvParser>(const string& filename,
                                                bool allPermutations);
 template void Index::createFromFile<NTriplesParser>(const string& filename,
                                                     bool allPermutations);
+template void Index::createFromFile<TurtleParser>(const string& filename,
+                                                  bool allPermutations);
 
 // _____________________________________________________________________________
 template <class Parser>
