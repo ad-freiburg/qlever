@@ -72,3 +72,9 @@ target_link_libraries(MmapVectorTest gtest_main -pthread)
 
 add_executable(UnionTest UnionTest.cpp)
 target_link_libraries(UnionTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(TokenTest TokenTest.cpp)
+target_link_libraries(TokenTest parser re2 gtest_main -pthread)
+
+add_executable(TurtleParserTest TurtleParserTest.cpp)
+target_link_libraries(TurtleParserTest parser re2 gtest_main -pthread)
