@@ -112,12 +112,20 @@ TEST(StringUtilsTest, split) {
   ASSERT_EQ(size_t(1), v3.size());
   auto v4 = split(s3, ' ');
   ASSERT_EQ(size_t(3), v4.size());
-  // and with unicode
-  string s5 = u8"Spaß ❤ 漢字";
+  // Splitting at every char
+  string s5 = "   ";
   auto v5 = split(s5, ' ');
-  ASSERT_EQ(u8"Spaß", v5[0]);
-  ASSERT_EQ(u8"❤", v5[1]);
-  ASSERT_EQ(u8"漢字", v5[2]);
+  // In between all and at the start and end
+  ASSERT_EQ(s5.size() + 1, v5.size());
+  for (const auto& val : v5) {
+    ASSERT_EQ(val, "");
+  }
+  // and with unicode
+  string s6 = u8"Spaß ❤ 漢字";
+  auto v6 = split(s6, ' ');
+  ASSERT_EQ(u8"Spaß", v6[0]);
+  ASSERT_EQ(u8"❤", v6[1]);
+  ASSERT_EQ(u8"漢字", v6[2]);
 }
 
 TEST(StringUtilsTest, join) {
@@ -196,14 +204,31 @@ TEST(StringUtilsTest, strip) {
   string s3("abc  ");
   string s4("   abc");
   string s5("xxabcxx");
+  string s6(" ");
+  string s7("    ");
+  string s8("");
 
   ASSERT_EQ("abc", strip(s1, ' '));
   ASSERT_EQ("abc", strip(s2, ' '));
+
   ASSERT_NE("abc", lstrip(s3, ' '));
   ASSERT_EQ("abc", rstrip(s3, ' '));
   ASSERT_NE("abc", rstrip(s4, ' '));
+
   ASSERT_NE("abc", strip(s5, ' '));
   ASSERT_EQ("abc", strip(s5, 'x'));
+
+  ASSERT_EQ("", strip(s6, ' '));
+  ASSERT_EQ("", strip(s7, ' '));
+  ASSERT_EQ("", strip(s8, ' '));
+
+  ASSERT_EQ("", rstrip(s6, ' '));
+  ASSERT_EQ("", rstrip(s7, ' '));
+  ASSERT_EQ("", rstrip(s8, ' '));
+
+  ASSERT_EQ("", lstrip(s6, ' '));
+  ASSERT_EQ("", lstrip(s7, ' '));
+  ASSERT_EQ("", lstrip(s8, ' '));
 
   ASSERT_EQ("bc", strip("xxaxaxaxabcaaaxxx", "xa"));
   // And with unicode

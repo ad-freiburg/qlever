@@ -568,9 +568,9 @@ inline string rstrip(const string& text, const char* s) {
 inline std::string strip(const std::string& text, char c) {
   auto left = text.begin();
   auto right = text.end();  // right is of course exclusive
-  for (; left != text.end() && *left == c; left++)
+  for (; left < right && *left == c; left++)
     ;
-  for (; right != text.begin() && *(right - 1) == c; right--)
+  for (; right > left && *(right - 1) == c; right--)
     ;
   return std::string(left, right);
 }
