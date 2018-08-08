@@ -8,7 +8,7 @@ FROM base as builder
 RUN apt-get update && apt-get install -y build-essential cmake libsparsehash-dev
 COPY . /app/
 WORKDIR /app/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release .. && make -j $(nproc)
+RUN cmake -DCMAKE_BUILD_TYPE=Release .. && make -j $(nproc) && make test
 
 FROM base as runtime
 WORKDIR /app
