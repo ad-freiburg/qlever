@@ -196,6 +196,16 @@ TEST(StringUtilsTest, splitAny) {
   ASSERT_EQ(u8"Spaß", v9[0]);
   ASSERT_EQ(u8"❤", v9[1]);
   ASSERT_EQ(u8"漢字", v9[2]);
+
+  // and with a string specifying seperators
+  string s10 = "semicolon;or,comma,separating;data";
+  string seps = ",;";
+  auto v10 = splitAny(s10, seps);
+  ASSERT_EQ("semicolon", v10[0]);
+  ASSERT_EQ("or", v10[1]);
+  ASSERT_EQ("comma", v10[2]);
+  ASSERT_EQ("separating", v10[3]);
+  ASSERT_EQ("data", v10[4]);
 }
 
 TEST(StringUtilsTest, strip) {
