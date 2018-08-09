@@ -8,8 +8,8 @@ addons:
       - deadsnakes
       - ubuntu-toolchain-r-test
     packages:
-      - gcc-5
-      - g++-5
+      - gcc-7
+      - g++-7
       - libsparsehash-dev
       - python3.6
       - python3-yaml
@@ -21,7 +21,7 @@ cache:
     - e2e_data/scientist-collection/
 
 env:
-  - CC=gcc-5 CXX=g++-5
+  - CC=gcc-7 CXX=g++-7
 
 before_script:
   - $CXX --version
