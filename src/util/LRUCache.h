@@ -163,8 +163,11 @@ class LRUCache {
   size_t _capacity;
   EntryList _data;
   AccessMap _accessMap;
-  // TODO(schnelle): Once we switch to C++17
-  // this should be a shared_mutex
+  // TODO(schnelle): It would be nice to use std::shared_mutex to only exclude
+  // multiple writers.
+  // Sadly there is currently no easy way to upgrade a shared_lock to an
+  // exclusive lock. Thus using a shared_lock here would conflict with moving to
+  // the front of the queue in operator[]
   std::mutex _lock;
 };
 }  // namespace ad_utility

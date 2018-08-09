@@ -36,20 +36,19 @@ class Operation {
   shared_ptr<const ResultTable> getResult() const {
     LOG(TRACE) << "Try to atomically emplace a new empty ResultTable" << endl;
     LOG(TRACE) << "Using key: \n" << asString() << endl;
-    // TODO(schnelle) with C++17 we can use nice decomposition here
-    pair<shared_ptr<ResultTable>, shared_ptr<const ResultTable>> emplacePair =
+    auto [newResult, existingResult] =
         _executionContext->getQueryTreeCache().tryEmplace(asString());
-    if (emplacePair.first) {
+    if (newResult) {
       LOG(DEBUG) << "We were the first to emplace, need to compute result"
                  << endl;
       // Passing the raw pointer here is ok as the result shared_ptr remains
       // in scope
-      computeResult(emplacePair.first.get());
-      return emplacePair.first;
+      computeResult(newResult.get());
+      return newResult;
     }
     LOG(INFO) << "Result already (being) computed" << endl;
-    emplacePair.second->awaitFinished();
-    return emplacePair.second;
+    existingResult->awaitFinished();
+    return existingResult;
   }
 
   //! Set the QueryExecutionContext for this particular element.
