@@ -147,7 +147,7 @@ script.
 
 Build the project (Optional: add `-DPERFTOOLS_PROFILER=True/False` and `-DALLOW_SHUTDOWN=True/False`)
 
-    cmake -DCMAKE_BUILD_TYPE=Release .. && make -j
+    cmake -DCMAKE_BUILD_TYPE=Release .. && make -j $(nproc)
 
 Run ctest. All tests should pass:
 
