@@ -18,8 +18,7 @@ string ExternalVocabulary::operator[](Id id) const {
   assert(to > from);
   size_t nofBytes = static_cast<size_t>(to - from);
   string word(nofBytes, '\0');
-  // TODO in C++17 we'll get non-const pointer std::string::data() use it then
-  _file.read(&word.front(), nofBytes, from);
+  _file.read(word.data(), nofBytes, from);
   return word;
 }
 
