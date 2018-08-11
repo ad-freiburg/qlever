@@ -31,8 +31,8 @@ struct TurtleToken {
         Integer(L"[+-]?[0-9]+"),
         Decimal(L"[+-]?[0-9]*\\.[0-9]+"),
         PnCharsBase(PnCharsBaseString),
-        Comment(CommentString),
-        WsMultiple(WsMultipleString) {}
+        WsMultiple(WsMultipleString),
+        Comment(CommentString) {}
 
   const wregex TurtlePrefix;
   const wregex SparqlPrefix;
@@ -118,6 +118,8 @@ class Tokenizer {
 
   void skipWhitespaceAndComments();
 
+  const TurtleToken _tokens;
+
  private:
   void skipWhitespace() {
     auto [success, ws] = getNextToken(_tokens.WsMultiple);
@@ -135,7 +137,6 @@ class Tokenizer {
   WstringIt _begin;
   WstringIt _current;
   WstringIt _end;
-  const TurtleToken _tokens;
 };
 
 // ______________________________________________________
