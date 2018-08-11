@@ -22,6 +22,11 @@ class TurtleParser {
   bool iriref();
   bool predicateObjectList();
   bool blankNodePropertyList();
+  bool objectList();
+  bool object();
+  bool verb();
+  bool predicateSpecialA();
+  bool predicate();
 
   bool skip(const std::wregex& reg);
 

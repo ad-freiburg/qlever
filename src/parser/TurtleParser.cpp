@@ -5,6 +5,8 @@
 
 #include "./TurtleParser.h"
 
+// TODO: always disambiguate if we indeed take the longest match
+
 // _______________________________________________________________
 bool TurtleParser::statement() {
   return ((directive() || triples()) && skip(_tokens.Dot));
@@ -67,6 +69,51 @@ bool TurtleParser::triples() {
     } else {
       return false;
     }
+  }
+}
+
+// __________________________________________________
+bool TurtleParser::predicateObjectList() {
+  if (verb() && objectList()) {
+    while (skip(_tokens.Semicolon)) {
+      if (verb()) {
+        if (!objectList()) {
+          // TODO: this is actually a parse error
+          return false;
+        }
+      }
+    }
+    return true;
+  } else {
+    return false;
+  }
+}
+
+// _____________________________________________________
+bool TurtleParser::objectList() {
+  if (object()) {
+    while (skip(_tokens.Comma)) {
+      if (!object()) {
+        // TODO parse Error
+        return false;
+      }
+    }
+    return true;
+  } else {
+    return false;
+  }
+}
+
+// ______________________________________________________
+bool TurtleParser::verb() { return predicate() || predicateSpecialA(); }
+
+// ___________________________________________________________________
+bool TurtleParser::predicateSpecialA() {
+  if (auto [success, word] = _tok.getNextToken(_tokens.A); success) {
+    _activePredicate = L"http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    return true;
+  } else {
+    return false;
   }
 }
 

@@ -17,6 +17,7 @@ struct TurtleToken {
         SparqlPrefix(L"PREFIX"),
         TurtleBase(L"@base"),
         SparqlBase(L"BASE"),
+
         Dot(L"\\."),
         Comma(L","),
         Semicolon(L";"),
@@ -24,6 +25,7 @@ struct TurtleToken {
         CloseSquared(L"\\]"),
         OpenRound(L"\\("),
         CloseRound(L"\\)"),
+        A(L"a"),
 
         True(L"true"),
         False(L"false"),
@@ -46,6 +48,7 @@ struct TurtleToken {
   const wregex CloseSquared;
   const wregex OpenRound;
   const wregex CloseRound;
+  const wregex A;
 
   const wregex True;
   const wregex False;
