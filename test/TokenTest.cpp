@@ -20,5 +20,13 @@ TEST(TokenTest, Numbers) {
   ASSERT_TRUE(std::regex_match(L"\u00dd", t.PnCharsBase));
   ASSERT_TRUE(std::regex_search(L"\u00DD", t.PnCharsBase));
   ASSERT_TRUE(std::regex_search(L"\u00De", t.PnCharsBase));
-  ASSERT_FALSE(std::regex_search(L"\u00D0", t.PnCharsBase));
+  ASSERT_FALSE(std::regex_search(L"\u00D7", t.PnCharsBase));
 }
+
+TEST(TokenizerTest, Compilation) {
+  std::wstring s(L"    #comment of some way\n  start");
+  Tokenizer<std::wstring::const_iterator> tok(s.begin(), s.end());
+  tok.skipWhitespaceAndComments();
+  ASSERT_EQ(tok._current - tok._begin, 27);
+}
+
