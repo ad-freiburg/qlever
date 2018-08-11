@@ -7,14 +7,18 @@
 #include "../src/parser/Tokenizer.h"
 
 using std::string;
+using std::wstring;
 TEST(TokenTest, Numbers) {
   TurtleToken t;
 
-  string integer = "+235632";
-  string decimal = "-235632.23";
+  wstring integer = L"+235632";
+  wstring decimal = L"-235632.23";
   ASSERT_TRUE(std::regex_match(integer, t.Integer));
   ASSERT_TRUE(std::regex_match(decimal, t.Decimal));
   ASSERT_FALSE(std::regex_match(integer, t.Decimal));
-
-  ASSERT_TRUE(true);
+  ASSERT_TRUE(std::regex_match(L"A", t.PnCharsBase));
+  ASSERT_TRUE(std::regex_match(L"\u00dd", t.PnCharsBase));
+  ASSERT_TRUE(std::regex_search(L"\u00DD", t.PnCharsBase));
+  ASSERT_TRUE(std::regex_search(L"\u00De", t.PnCharsBase));
+  ASSERT_FALSE(std::regex_search(L"\u00D0", t.PnCharsBase));
 }
