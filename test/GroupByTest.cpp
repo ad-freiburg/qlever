@@ -35,7 +35,7 @@ class GroupByTest : public ::testing::Test {
       _index.setKbName("group_by_test");
       _index.setTextName("group_by_test");
       _index.setOnDiskBase("group_ty_test");
-      _index.createFromNTriplesFile("group_by_test.nt", false);
+      _index.createFromFile<NTriplesParser>("group_by_test.nt", false);
       _index.addTextFromContextFile("group_by_test.words");
       _index.buildDocsDB("group_by_test.documents");
 

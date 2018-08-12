@@ -246,9 +246,9 @@ int main(int argc, char** argv) {
       // for  text  index  creation)
 
       if (ntFile.size() > 0) {
-        index.createFromNTriplesFile(ntFile, allPermutations);
+        index.createFromFile<NTriplesParser>(ntFile, allPermutations);
       } else if (tsvFile.size() > 0) {
-        index.createFromTsvFile(tsvFile, allPermutations);
+        index.createFromFile<TsvParser>(tsvFile, allPermutations);
       } else {
         index.createFromOnDiskIndex(baseName, allPermutations);
       }
