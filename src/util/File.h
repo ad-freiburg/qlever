@@ -47,6 +47,10 @@ class File {
     open(filename, mode);
   }
 
+  File(const string& filename, const char* mode) : _name(filename) {
+    open(filename, mode);
+  }
+
   //! Copy constructor.
   //! Does not copy the file in the file system!
   File(const File& orig) {
@@ -71,6 +75,11 @@ class File {
     }
     _name = filename;
     return true;
+  }
+
+  // overload  for c++ strings
+  bool open(const string& filename, const char* mode) {
+    return open(filename.c_str(), mode);
   }
 
   //! checks if the file is open.

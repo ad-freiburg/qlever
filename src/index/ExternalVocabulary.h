@@ -46,7 +46,7 @@ class ExternalVocabulary {
  private:
   mutable ad_utility::File _file;
   off_t _startOfOffsets;
-  size_t _size;
+  size_t _size = 0;
 
   Id binarySearchInVocab(const string& word) const;
 };

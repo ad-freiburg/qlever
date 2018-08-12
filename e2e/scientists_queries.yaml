@@ -94,7 +94,7 @@ queries:
         checks:
           - num_cols: 2
           # The query returns to many rows, the current limit is 4096
-          # - num_rows: 5295 
+          # - num_rows: 5295
           - selected: ["?place", "?count2"]
           - order_numeric: {"dir": "DESC", "var": "?count2"}
   - query: scientists-order-by-aggregate-avg
@@ -109,8 +109,8 @@ queries:
           GROUP BY ?profession
           ORDER BY ASC((AVG(?height) as ?avg))
         checks:
-          - num_cols: 2 
-          - num_rows: 209 
+          - num_cols: 2
+          - num_rows: 209
           - selected: ["?profession", "?avg2"]
           - order_numeric: {"dir": "ASC", "var": "?avg2"}
   - query: group-by-profession-average-height
@@ -174,7 +174,7 @@ queries:
           - selected: ["?r", "?count"]
           - contains_row: ["<Religion>", 1185]
           - order_numeric: {"dir": "DESC", "var": "?count"}
-  - query : has-predicate-full 
+  - query : has-predicate-full
     solutions:
       - type: no-text
         sparql: |
@@ -200,3 +200,20 @@ queries:
           - num_cols: 2
           - selected: ["?entity", "?r"]
           - contains_row: ["<Geographer>", "<Profession>"]
+  - query : full-osp-scan
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT DISTINCT ?p WHERE {
+            ?x <is-a> <Scientist> .
+            ?y <is-a> <Scientist> .
+            ?x ?p ?y .
+          }
+        checks:
+          - num_rows: 17
+          - num_cols: 1
+          - selected: ["?p"]
+          - contains_row: ["<Academic_advisor>"]
+          - contains_row: ["<Named_after>"]
+          - contains_row: ["<Influenced_By>"]
+          - contains_row: ["<Production_staff>"]

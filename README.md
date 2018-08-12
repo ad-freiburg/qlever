@@ -380,6 +380,24 @@ Group by is supported, but aggregate aliases may currently only be used within t
 Supported aggregates are `MIN, MAX, AVG, GROUP_CONCAT, SAMPLE, COUNT, SUM`. All of the aggreagates support `DISTINCT`, e.g. `(GROUP_CONCAT(DISTINCT ?a) as ?b)`.
 Group concat also supports a custom separator: `(GROUP_CONCAT(?a ; separator=" ; ") as ?concat)`. Xsd types float, decimal and integer are recognized as numbers, other types or unbound variables (e.g. no entries for an optional part) in one of the aggregates that need to interpret the variable (e.g. AVG) lead to either no result or nan. MAX with an unbound variable will always return the unbound variable.
 
+# 6. Converting Old Indices For Current QLever Versions
+
+We have recently updated the way the index meta data (offsets of relations
+within the permutations) is stored. Old index builds with 6 permutations will
+not work directly with the recent QLever version while 2 permutation indices
+will work but throw a warning at runtime. We have provided a converter which
+allows to only modify the meta data without having to rebuild the index. Just
+run `./MetaDataConverterMain <index-prefix>` . This will not automatically
+overwrite the old index but copy the permutations and create new files with the
+suffix `.converted` (e.g. `<index-prefix>.index.ops.converted` These suffixes
+have to be removed manually in order to use the converted index (rename to
+`<index-prefix>.index.ops` in our example). Please consider creating backups of
+the "original" index files before overwriting them like this.  them. Please note
+that for 6 permutations the converter also builds new files
+`<index-prefix>.index.xxx.meta-mmap` where parts of the meta data of OPS and OSP
+permutations will be stored.
+
+
 # How to obtain data to play around with
 
 ## Use the tiny examples contained in the repository
@@ -526,29 +544,11 @@ If you have problems, try to rebuild when compiling with -DCMAKE_BUILD_TYPE=Debu
 In particular also rebuild the index.
 The release build assumes machine written words- and docsfiles and omits sanity checks for the sake of speed.
 
-## Excessive RAM usage
+## High RAM Usage During Runtime
 
 QLever uses an on-disk index and is usually able to operate with pretty low RAM
 usage. However, there are data layouts that currently lead to an excessive
-amount of memory being used. A future release should take care of that. There
-are two scenarios where this can happen.
-
-### High RAM usage during index construction
-
-While building an index, QLever does need more memory than when running. Part of
-this required memory is what is described below for runtime memory usage.
-However, in addition not all memory seems to be freed as soon as possible. This
-needs further investitation. For now, there is an easy workaround to build
-KB and text index in two steps (two calls of IndexBuilderMain) or to pre-build
-the index on a server with lots of available resources.
-
-In general, not building all 6 permutations helps a lot. If this is enough (e.g.
-for emulating the Brococli search engine), this reduces RAM very significantly.
-
-
-### High RAM usage during runtime
-
-Firstly, note that even very large text corpora have little impact on
+amount of memory being used. Firstly, note that even very large text corpora have little impact on
 memory usage. Larger KBs are much more problematic.
 There are two things that can contribute to high RAM usage (and large startup
 times) during runtime:
@@ -561,16 +561,11 @@ by editing directly in the code during index construction)
 
 2) Building all 6 permutations over large KBs (or generelly having a
 permutation, where the primary ordering element takes many different values).
-
-Typically, the problem happens for OPS and OSP permutations over KBs with many
-different objects, especially string literals. As of now (release for CIKM
-2017), the index keeps some meta data in RAM for each main element of the
-permutation. For the two "main" permutation,  PSO and POS, this is very
-reasonnable and resembles what is done in the Broccoli search engine. Having a
-few bytes (32 + extra bytes for blocks inside relations, which aren't the main problem anymore)
-for each of a few hundred thousand predicates is no problem, even for the largest KBs. However, having the same meta data for
-several hundreds of millions of objects (500M for Freebase, require twice, for
-OSP and OPS, plus 2 times 125M subjects) quickly adds up beyond acceptable numbers.
+To handle this issue, the meta data of OPS and OSP are not loaded into RAM but
+read from disk. This saves a lot of RAM with only little impact on the speed of
+the query execution. We will evaluate if it's  worth to also externalize SPO and
+SOP permutations in this way to further reduce the RAM usage or to let the user
+decide which permutations shall be stored in which format.
 
 Workarounds:
 
@@ -580,15 +575,3 @@ but is no very "clean".
 * Reduce ID size and switch from 64 to 32bit IDs. However this would only yield save a
 low portion of memory since it doesn't effect pointers byte offsets into index
 files.
-
-* There is a branch called six\_permut\_smaller\_memory\_footprint, that tackles the
-  problem in general but is not finished yet. In short, the idea is to store the
-  meta data within the on-disk index and make it configurable which lists to
-  load into RAM on startup (PSO and POS probably being the sensible default, but
-  sometimes also having SPO can be a nice addition). Whatever isn't loaded into
-  RAM has to be read form disk at query time if it is actually needed.
-  In particle, however, query planning has to respect which meta data is available in RAM and special care has to be taken for queries involving ?s ?p ?o triples. This is the reason why the change sn't trivial.
-  The branch also adds another readme, PERFORMANCE\_TUNING.md with more
-  detailed information about the trade-offs. However, this file also isn't finished,
-  yet.
-

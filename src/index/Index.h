@@ -23,6 +23,12 @@ using std::string;
 using std::tuple;
 using std::vector;
 
+// a simple struct for better naming
+struct LinesAndWords {
+  size_t nofLines;
+  size_t nofWords;
+};
+
 class Index {
  public:
   typedef stxxl::VECTOR_GENERATOR<array<Id, 3>>::result ExtVec;
@@ -291,13 +297,18 @@ class Index {
   bool _onDiskLiterals = false;
   bool _keepTempFiles = false;
   Vocabulary _vocab;
+  size_t _totalVocabularySize = 0;
   Vocabulary _textVocab;
-  IndexMetaData _psoMeta;
-  IndexMetaData _posMeta;
-  IndexMetaData _spoMeta;
-  IndexMetaData _sopMeta;
-  IndexMetaData _ospMeta;
-  IndexMetaData _opsMeta;
+  // TODO<joka921>(but not for this PR): changing the (semi-dense) _spo and
+  // _sopMeta to Mmap based Meta Data could even save more RAM. Maybe we could
+  // also use dynamic dispatching at runtime to check which meta data was used
+  // during the Index build
+  IndexMetaDataHmap _psoMeta;
+  IndexMetaDataHmap _posMeta;
+  IndexMetaDataHmap _spoMeta;
+  IndexMetaDataHmap _sopMeta;
+  IndexMetaDataMmapView _ospMeta;
+  IndexMetaDataMmapView _opsMeta;
   TextMetaData _textMeta;
   DocsDB _docsDB;
   vector<Id> _blockBoundaries;
@@ -341,8 +352,8 @@ class Index {
   ExtVec createExtVecAndVocabFromNTriples(const string& ntFile);
 
   // ___________________________________________________________________
-  size_t passNTriplesFileForVocabulary(const string& ntFile,
-                                       size_t linesPerPartial = 100000000);
+  LinesAndWords passNTriplesFileForVocabulary(
+      const string& ntFile, size_t linesPerPartial = 100000000);
 
   void passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data,
                                     size_t linesPerPartial = 100000000);
@@ -351,9 +362,10 @@ class Index {
 
   void passContextFileIntoVector(const string& contextFile, TextVec& vec);
 
-  static void createPermutation(const string& fileName, const ExtVec& vec,
-                                IndexMetaData& meta, size_t c0, size_t c1,
-                                size_t c2);
+  // no need for explicit instatiation since this function is private
+  template <class MetaData>
+  void createPermutation(const string& fileName, const ExtVec& vec,
+                         MetaData& meta, size_t c0, size_t c1, size_t c2);
 
   /**
    * @brief Creates the data required for the "pattern-trick" used for fast

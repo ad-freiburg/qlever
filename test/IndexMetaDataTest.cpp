@@ -141,7 +141,7 @@ TEST(RelationMetaDataTest, writeReadTest) {
   }
 }
 
-TEST(IndexMetaDataTest, writeReadTest2) {
+TEST(IndexMetaDataTest, writeReadTest2Hmap) {
   try {
     vector<BlockMetaData> bs;
     off_t afterFI = 6 * 2 * sizeof(Id);
@@ -153,7 +153,7 @@ TEST(IndexMetaDataTest, writeReadTest2) {
     BlockBasedRelationMetaData rmdB(afterLhs, afterRhs, bs);
     FullRelationMetaData rmdF2(rmdF);
     rmdF2._relId = 2;
-    IndexMetaData imd;
+    IndexMetaDataHmap imd;
     imd.add(rmdF, rmdB);
     imd.add(rmdF2, rmdB);
 
@@ -162,11 +162,87 @@ TEST(IndexMetaDataTest, writeReadTest2) {
     f.close();
 
     ad_utility::File in("_testtmp.imd", "r");
-    size_t imdBytes = 2 * sizeof(size_t) + sizeof(off_t) +
+    size_t imdBytes = 3 * sizeof(size_t) + sizeof(off_t) +
                       (rmdF.bytesRequired() + rmdB.bytesRequired()) * 2;
     unsigned char* buf = new unsigned char[imdBytes];
     in.read(buf, imdBytes);
-    IndexMetaData imd2;
+    IndexMetaDataHmap imd2;
+    imd2.createFromByteBuffer(buf);
+    delete[] buf;
+    remove("_testtmp.rmd");
+
+    ASSERT_EQ(rmdF._relId, imd2.getRmd(1)._rmdPairs._relId);
+    ASSERT_EQ(rmdF._startFullIndex, imd2.getRmd(1)._rmdPairs._startFullIndex);
+    ASSERT_EQ(rmdB._startRhs, imd2.getRmd(1)._rmdBlocks->_startRhs);
+    ASSERT_EQ(rmdB._offsetAfter, imd2.getRmd(1)._rmdBlocks->_offsetAfter);
+    ASSERT_EQ(rmdF.getNofElements(), imd2.getRmd(1)._rmdPairs.getNofElements());
+    ASSERT_EQ(rmdB._blocks.size(), imd2.getRmd(1)._rmdBlocks->_blocks.size());
+    ASSERT_EQ(rmdB._blocks[0]._firstLhs,
+              imd2.getRmd(1)._rmdBlocks->_blocks[0]._firstLhs);
+    ASSERT_EQ(rmdB._blocks[0]._startOffset,
+              imd2.getRmd(1)._rmdBlocks->_blocks[0]._startOffset);
+    ASSERT_EQ(rmdB._blocks[1]._firstLhs,
+              imd2.getRmd(1)._rmdBlocks->_blocks[1]._firstLhs);
+    ASSERT_EQ(rmdB._blocks[1]._startOffset,
+              imd2.getRmd(1)._rmdBlocks->_blocks[1]._startOffset);
+
+    ASSERT_EQ(rmdF2._relId, imd2.getRmd(2)._rmdPairs._relId);
+    ASSERT_EQ(rmdF2._startFullIndex, imd2.getRmd(2)._rmdPairs._startFullIndex);
+    ASSERT_EQ(rmdB._startRhs, imd2.getRmd(2)._rmdBlocks->_startRhs);
+    ASSERT_EQ(rmdB._offsetAfter, imd2.getRmd(2)._rmdBlocks->_offsetAfter);
+    ASSERT_EQ(rmdF2.getNofElements(),
+              imd2.getRmd(2)._rmdPairs.getNofElements());
+    ASSERT_EQ(rmdB._blocks.size(), imd2.getRmd(2)._rmdBlocks->_blocks.size());
+    ASSERT_EQ(rmdB._blocks[0]._firstLhs,
+              imd2.getRmd(2)._rmdBlocks->_blocks[0]._firstLhs);
+    ASSERT_EQ(rmdB._blocks[0]._startOffset,
+              imd2.getRmd(2)._rmdBlocks->_blocks[0]._startOffset);
+    ASSERT_EQ(rmdB._blocks[1]._firstLhs,
+              imd2.getRmd(2)._rmdBlocks->_blocks[1]._firstLhs);
+    ASSERT_EQ(rmdB._blocks[1]._startOffset,
+              imd2.getRmd(2)._rmdBlocks->_blocks[1]._startOffset);
+  } catch (const ad_semsearch::Exception& e) {
+    std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
+    FAIL() << e.getFullErrorMessage();
+  } catch (const std::exception& e) {
+    std::cout << "Caught: " << e.what() << std::endl;
+    FAIL() << e.what();
+  }
+}
+
+TEST(IndexMetaDataTest, writeReadTest2Mmap) {
+  try {
+    vector<BlockMetaData> bs;
+    off_t afterFI = 6 * 2 * sizeof(Id);
+    off_t afterLhs = afterFI + 4 * (sizeof(Id) + sizeof(off_t));
+    off_t afterRhs = afterLhs + 6 * sizeof(Id);
+    bs.push_back(BlockMetaData(10, afterFI));
+    bs.push_back(BlockMetaData(16, afterFI + 2 * (sizeof(Id) + sizeof(off_t))));
+    FullRelationMetaData rmdF(1, 0, 6, 1, 1, false, true);
+    BlockBasedRelationMetaData rmdB(afterLhs, afterRhs, bs);
+    FullRelationMetaData rmdF2(rmdF);
+    rmdF2._relId = 2;
+    // The index MetaData does not have an explicit clear, so we
+    // force destruction to close and reopen the mmap-File
+    {
+      IndexMetaDataMmap imd;
+      // size of 3 would suffice, but we also want to simulate the sparseness
+      imd.setup(5, FullRelationMetaData::empty, "_testtmp.imd.mmap");
+      imd.add(rmdF, rmdB);
+      imd.add(rmdF2, rmdB);
+
+      ad_utility::File f("_testtmp.imd", "w");
+      f << imd;
+      f.close();
+    }
+
+    ad_utility::File in("_testtmp.imd", "r");
+    size_t imdBytes = 3 * sizeof(size_t) + sizeof(off_t) +
+                      (rmdF.bytesRequired() + rmdB.bytesRequired()) * 2;
+    unsigned char* buf = new unsigned char[imdBytes];
+    in.read(buf, imdBytes);
+    IndexMetaDataMmap imd2;
+    imd2.setup("_testtmp.imd.mmap", ad_utility::ReuseTag());
     imd2.createFromByteBuffer(buf);
     delete[] buf;
     remove("_testtmp.rmd");

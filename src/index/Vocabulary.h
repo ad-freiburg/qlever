@@ -78,6 +78,11 @@ class Vocabulary {
   //! Get the number of words in the vocabulary.
   size_t size() const { return _words.size(); }
 
+  //! Get the number of words plus the number of externalized words
+  size_t totalVocabularySize() const {
+    return _words.size() + _externalLiterals.size();
+  }
+
   //! Reserve space for the given number of words.
   void reserve(unsigned int n) { _words.reserve(n); }
 

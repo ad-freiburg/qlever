@@ -50,6 +50,13 @@ void Index::createFromTsvFile(const string& tsvFile, bool allPermutations) {
   LOG(INFO) << "Sort done." << std::endl;
   createPermutation(indexFilename + ".pos", v, _posMeta, 1, 2, 0);
   if (allPermutations) {
+    IndexMetaDataMmap opsMetaTmp;
+    IndexMetaDataMmap ospMetaTmp;
+
+    opsMetaTmp.setup(_totalVocabularySize, FullRelationMetaData::empty,
+                     _onDiskBase + ".index.ops" + MMAP_FILE_SUFFIX);
+    ospMetaTmp.setup(_totalVocabularySize, FullRelationMetaData::empty,
+                     _onDiskBase + ".index.osp" + MMAP_FILE_SUFFIX);
     // SPO permutation
     LOG(INFO) << "Sorting for SPO permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
@@ -71,12 +78,12 @@ void Index::createFromTsvFile(const string& tsvFile, bool allPermutations) {
     LOG(INFO) << "Sorting for OSP permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortByOSP(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".osp", v, _ospMeta, 2, 0, 1);
+    createPermutation(indexFilename + ".osp", v, ospMetaTmp, 2, 0, 1);
     // OPS permutation
     LOG(INFO) << "Sorting for OPS permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortByOPS(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".ops", v, _opsMeta, 2, 1, 0);
+    createPermutation(indexFilename + ".ops", v, opsMetaTmp, 2, 1, 0);
   } else if (_usePatterns) {
     LOG(INFO) << "Sorting for pattern creation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
@@ -91,8 +98,13 @@ void Index::createFromTsvFile(const string& tsvFile, bool allPermutations) {
 
 // _____________________________________________________________________________________________
 Index::ExtVec Index::createExtVecAndVocabFromNTriples(const string& ntFile) {
-  size_t nofLines =
+  auto linesAndWords =
       passNTriplesFileForVocabulary(ntFile, NUM_TRIPLES_PER_PARTIAL_VOCAB);
+  size_t nofLines = linesAndWords.nofLines;
+  // first save the total number of words, this is needed to initialize the
+  // dense IndexMetaData variants
+  _totalVocabularySize = linesAndWords.nofWords;
+
   if (_onDiskLiterals) {
     _vocab.externalizeLiteralsFromTextFile(
         _onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME,
@@ -146,12 +158,23 @@ void Index::createFromNTriplesFile(const string& ntFile, bool allPermutations) {
   LOG(INFO) << "Size after: " << v.size() << std::endl;
   createPermutation(indexFilename + ".pso", v, _psoMeta, 1, 0, 2);
   LOG(INFO) << "Sorting for POS permutation..." << std::endl;
-  ;
   stxxl::sort(begin(v), end(v), SortByPOS(), STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
-  ;
   createPermutation(indexFilename + ".pos", v, _posMeta, 1, 2, 0);
   if (allPermutations) {
+    // the members _opsMeta and _ospMeta are Readonly, so we have to construct
+    // Writeable temporaries here to setup the MMap files
+    // TODO<joka921>(when refactoring this whole file):
+    // we currently split IndexBuilding and using completely, so we could only
+    // give a type to createPermutation and not an actual MetaData
+    // (currently the built indexes can not be used right away without a further
+    // call to createFromOnDiskIndex)
+    IndexMetaDataMmap opsMetaTmp;
+    IndexMetaDataMmap ospMetaTmp;
+    opsMetaTmp.setup(_totalVocabularySize, FullRelationMetaData::empty,
+                     _onDiskBase + ".index.ops" + MMAP_FILE_SUFFIX);
+    ospMetaTmp.setup(_totalVocabularySize, FullRelationMetaData::empty,
+                     _onDiskBase + ".index.osp" + MMAP_FILE_SUFFIX);
     // SPO permutation
     LOG(INFO) << "Sorting for SPO permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
@@ -173,12 +196,12 @@ void Index::createFromNTriplesFile(const string& ntFile, bool allPermutations) {
     LOG(INFO) << "Sorting for OSP permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortByOSP(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".osp", v, _ospMeta, 2, 0, 1);
+    createPermutation(indexFilename + ".osp", v, ospMetaTmp, 2, 0, 1);
     // OPS permutation
     LOG(INFO) << "Sorting for OPS permutation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortByOPS(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".ops", v, _opsMeta, 2, 1, 0);
+    createPermutation(indexFilename + ".ops", v, opsMetaTmp, 2, 1, 0);
   } else if (_usePatterns) {
     LOG(INFO) << "Sorting for pattern creation..." << std::endl;
     stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
@@ -216,6 +239,10 @@ size_t Index::passTsvFileForVocabulary(const string& tsvFile) {
   }
   LOG(INFO) << "Pass done.\n";
   _vocab.createFromSet(items);
+  // TODO<joka921>: completely merge TSV and NTrIPLEs parsing. This is just for
+  // making
+  // the tests work
+  _totalVocabularySize = items.size();
   return i;
 }
 
@@ -249,8 +276,8 @@ void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data) {
 }
 
 // _____________________________________________________________________________
-size_t Index::passNTriplesFileForVocabulary(const string& ntFile,
-                                            size_t linesPerPartial) {
+LinesAndWords Index::passNTriplesFileForVocabulary(const string& ntFile,
+                                                   size_t linesPerPartial) {
   array<string, 3> spo;
   NTriplesParser p(ntFile);
   ad_utility::HashSet<string> items;
@@ -304,9 +331,11 @@ size_t Index::passNTriplesFileForVocabulary(const string& ntFile,
     numFiles++;
   }
   LOG(INFO) << "Merging vocabulary\n";
-  mergeVocabulary(_onDiskBase, numFiles);
+  LinesAndWords res;
+  res.nofWords = mergeVocabulary(_onDiskBase, numFiles);
   LOG(INFO) << "Pass done.\n";
-  return i;
+  res.nofLines = i;
+  return res;
 }
 
 // _____________________________________________________________________________
@@ -366,8 +395,9 @@ void Index::passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data,
 }
 
 // _____________________________________________________________________________
+template <class MetaData>
 void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
-                              IndexMetaData& metaData, size_t c0, size_t c1,
+                              MetaData& metaData, size_t c0, size_t c1,
                               size_t c2) {
   if (vec.size() == 0) {
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
@@ -408,10 +438,9 @@ void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
   LOG(INFO) << "Writing statistics for this permutation:\n"
             << metaData.statistics() << std::endl;
 
-  LOG(INFO) << "Writing Meta data to index file...\n";
-  out << metaData;
-  off_t startOfMeta = metaData.getOffsetAfter();
-  out.write(&startOfMeta, sizeof(startOfMeta));
+  LOG(INFO) << "Writing Meta data to file...\n";
+
+  metaData.appendToFile(&out);
   out.close();
   LOG(INFO) << "Permutation done.\n";
 }
@@ -429,7 +458,7 @@ void Index::createPatterns(const string& fileName, const ExtVec& vec,
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
     return;
   }
-  IndexMetaData meta;
+  IndexMetaDataHmap meta;
   typedef std::unordered_map<Pattern, size_t> PatternsCountMap;
 
   LOG(INFO) << "Creating patterns file..." << std::endl;
@@ -885,63 +914,51 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
   setOnDiskBase(onDiskBase);
   _vocab.readFromFile(_onDiskBase + ".vocabulary",
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
-  _psoFile.open(string(_onDiskBase + ".index.pso").c_str(), "r");
-  _posFile.open(string(_onDiskBase + ".index.pos").c_str(), "r");
+  auto psoName = string(_onDiskBase + ".index.pso");
+  _psoFile.open(psoName, "r");
+  auto posName = string(_onDiskBase + ".index.pos");
+  _posFile.open(posName, "r");
   AD_CHECK(_psoFile.isOpen() && _posFile.isOpen());
   // PSO
-  off_t metaFrom;
-  off_t metaTo = _psoFile.getLastOffset(&metaFrom);
-  unsigned char* buf = new unsigned char[metaTo - metaFrom];
-  _psoFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
-  _psoMeta.createFromByteBuffer(buf);
-  delete[] buf;
+
+  _psoMeta.readFromFile(&_psoFile);
   LOG(INFO) << "Registered PSO permutation: " << _psoMeta.statistics()
             << std::endl;
   // POS
-  metaTo = _posFile.getLastOffset(&metaFrom);
-  buf = new unsigned char[metaTo - metaFrom];
-  _posFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
-  _posMeta.createFromByteBuffer(buf);
-  delete[] buf;
+  _posMeta.readFromFile(&_posFile);
   LOG(INFO) << "Registered POS permutation: " << _posMeta.statistics()
             << std::endl;
   if (allPermutations) {
-    _spoFile.open(string(_onDiskBase + ".index.spo").c_str(), "r");
-    _sopFile.open(string(_onDiskBase + ".index.sop").c_str(), "r");
-    _ospFile.open(string(_onDiskBase + ".index.osp").c_str(), "r");
-    _opsFile.open(string(_onDiskBase + ".index.ops").c_str(), "r");
+    _opsMeta.setup(onDiskBase + ".index.ops" + MMAP_FILE_SUFFIX,
+                   ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
+    _ospMeta.setup(onDiskBase + ".index.osp" + MMAP_FILE_SUFFIX,
+                   ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
+    // TODO<joka921>: Refactor (upcoming PR): there is so  so much code
+    // duplication in here
+    auto spoName = string(_onDiskBase + ".index.spo");
+    _spoFile.open(spoName, "r");
+    auto sopName = string(_onDiskBase + ".index.sop");
+    _sopFile.open(sopName, "r");
+    auto ospName = string(_onDiskBase + ".index.osp");
+    _ospFile.open(ospName, "r");
+    auto opsName = string(_onDiskBase + ".index.ops");
+    _opsFile.open(opsName, "r");
     AD_CHECK(_spoFile.isOpen() && _sopFile.isOpen() && _ospFile.isOpen() &&
              _opsFile.isOpen());
     // SPO
-    metaTo = _spoFile.getLastOffset(&metaFrom);
-    buf = new unsigned char[metaTo - metaFrom];
-    _spoFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
-    _spoMeta.createFromByteBuffer(buf);
-    delete[] buf;
+    _spoMeta.readFromFile(&_spoFile);
     LOG(INFO) << "Registered SPO permutation: " << _spoMeta.statistics()
               << std::endl;
     // SOP
-    metaTo = _sopFile.getLastOffset(&metaFrom);
-    buf = new unsigned char[metaTo - metaFrom];
-    _sopFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
-    _sopMeta.createFromByteBuffer(buf);
-    delete[] buf;
+    _sopMeta.readFromFile(&_sopFile);
     LOG(INFO) << "Registered SOP permutation: " << _sopMeta.statistics()
               << std::endl;
     // OSP
-    metaTo = _ospFile.getLastOffset(&metaFrom);
-    buf = new unsigned char[metaTo - metaFrom];
-    _ospFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
-    _ospMeta.createFromByteBuffer(buf);
-    delete[] buf;
+      _ospMeta.readFromFile(&_ospFile);
     LOG(INFO) << "Registered OSP permutation: " << _ospMeta.statistics()
               << std::endl;
     // OPS
-    metaTo = _opsFile.getLastOffset(&metaFrom);
-    buf = new unsigned char[metaTo - metaFrom];
-    _opsFile.read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
-    _opsMeta.createFromByteBuffer(buf);
-    delete[] buf;
+      _opsMeta.readFromFile(&_opsFile);
     LOG(INFO) << "Registered OPS permutation: " << _opsMeta.statistics()
               << std::endl;
   }
