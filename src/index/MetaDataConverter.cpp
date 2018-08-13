@@ -63,7 +63,7 @@ void convertHmapBasedPermutatationToMmap(const string& permutIn,
   IndexMetaDataHmap h;
   h.readFromFile(permutIn);
   IndexMetaDataMmap m = convertHmapMetaDataToMmap(h, mmap, verify);
-  writeNewPermutation(permutIn, permutOut, h);
+  writeNewPermutation(permutIn, permutOut, m);
 }
 
 // _________________________________________________________________________
