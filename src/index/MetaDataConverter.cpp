@@ -63,7 +63,7 @@ void convertHmapBasedPermutatationToMmap(const string& permutIn,
   IndexMetaDataHmap h;
   h.readFromFile(permutIn);
   IndexMetaDataMmap m = convertHmapMetaDataToMmap(h, mmap, verify);
-  writeNewPermutation(permutIn, permutOut, h);
+  writeNewPermutation(permutIn, permutOut, m);
 }
 
 // _________________________________________________________________________
@@ -90,18 +90,18 @@ void writeNewPermutation(const string& oldPermutation,
   // copied
   off_t metaFrom;
   oldFile.getLastOffset(&metaFrom);
-  oldFile.seek(0, SEEK_SET);
-  newFile.seek(0, SEEK_SET);
+  AD_CHECK(oldFile.seek(0, SEEK_SET));
+  AD_CHECK(newFile.seek(0, SEEK_SET));
 
   // always copy in chunks of BufferSize
   auto remainingBytes = static_cast<size_t>(metaFrom);
   unsigned char* buf = new unsigned char[BufferSize];
   while (remainingBytes >= BufferSize) {
-    oldFile.read(buf, BufferSize, SEEK_CUR);
+    oldFile.read(buf, BufferSize);
     newFile.write(buf, BufferSize);
     remainingBytes -= BufferSize;
   }
-  oldFile.read(buf, remainingBytes, SEEK_CUR);
+  oldFile.read(buf, remainingBytes);
   newFile.write(buf, remainingBytes);
   delete[] buf;
   metaData.appendToFile(&newFile);
