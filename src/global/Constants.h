@@ -33,7 +33,7 @@ static const char CONTAINS_WORD_PREDICATE[] =
 static const char CONTAINS_WORD_PREDICATE_NS[] = "ql:contains-word";
 static const char INTERNAL_TEXT_MATCH_PREDICATE[] =
     "<QLever-internal-function/text>";
-static const char HAS_RELATION_PREDIACTE[] =
+static const char HAS_PREDICATE_PREDICATE[] =
     "<QLever-internal-function/has-predicate>";
 
 static const char VALUE_PREFIX[] = ":v:";

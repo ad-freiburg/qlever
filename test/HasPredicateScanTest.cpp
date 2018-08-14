@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 #include <algorithm>
 #include <cstdio>
+#include "../src/engine/CountAvailablePredicates.h"
 #include "../src/engine/HasPredicateScan.h"
 
 // used to test HasRelationScan with a subtree
@@ -266,4 +267,84 @@ TEST(HasPredicateScan, subtreeS) {
   ASSERT_EQ(3u, result[7][2]);
   ASSERT_EQ(4u, result[8][2]);
   ASSERT_EQ(3u, result[9][2]);
+}
+
+TEST(CountAvailablePredicates, patternTrickTest) {
+  // The input table containing entity ids
+  std::vector<std::array<Id, 1>> input = {{0}, {1}, {2}, {3}, {4}, {6}, {7}};
+  // Used to store the result.
+  vector<array<Id, 2>> result;
+  // Maps entities to their patterns. If an entity id is higher than the lists
+  // length the hasRelation relation is used instead.
+  vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
+  // The has relation relation, which is used when an entity does not have a
+  // pattern
+  vector<vector<Id>> hasRelationSrc = {{},     {0, 3}, {0},    {}, {},
+                                       {0, 3}, {3, 4}, {2, 4}, {3}};
+  // Maps pattern ids to patterns
+  vector<vector<Id>> patternsSrc = {{0, 2, 3}, {1, 3, 4, 2, 0}};
+
+  // These are used to store the relations and patterns in contiguous blocks
+  // of memory.
+  CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
+  CompactStringVector<size_t, Id> patterns(patternsSrc);
+
+  try {
+    CountAvailablePredicates::computePatternTrick<std::array<Id, 1>>(
+        &input, &result, hasPattern, hasRelation, patterns, 0);
+  } catch (ad_semsearch::Exception e) {
+    // More verbose output in the case of an exception occuring.
+    std::cout << e.getErrorMessage() << std::endl
+              << e.getErrorDetails() << std::endl;
+    ASSERT_TRUE(false);
+  }
+
+  std::sort(result.begin(), result.end(),
+            [](const array<Id, 2>& i1, const array<Id, 2>& i2) -> bool {
+              return i1[0] < i2[0];
+            });
+  ASSERT_EQ(5u, result.size());
+
+  ASSERT_EQ(0u, result[0][0]);
+  ASSERT_EQ(5u, result[0][1]);
+
+  ASSERT_EQ(1u, result[1][0]);
+  ASSERT_EQ(1u, result[1][1]);
+
+  ASSERT_EQ(2u, result[2][0]);
+  ASSERT_EQ(4u, result[2][1]);
+
+  ASSERT_EQ(3u, result[3][0]);
+  ASSERT_EQ(5u, result[3][1]);
+
+  ASSERT_EQ(4u, result[4][0]);
+  ASSERT_EQ(3u, result[4][1]);
+
+  // Test the pattern trick for all entities
+  result.clear();
+  try {
+    CountAvailablePredicates::computePatternTrickAllEntities(
+        &result, hasPattern, hasRelation, patterns);
+  } catch (ad_semsearch::Exception e) {
+    // More verbose output in the case of an exception occuring.
+    std::cout << e.getErrorMessage() << std::endl
+              << e.getErrorDetails() << std::endl;
+    ASSERT_TRUE(false);
+  }
+  ASSERT_EQ(5u, result.size());
+
+  ASSERT_EQ(0u, result[0][0]);
+  ASSERT_EQ(6u, result[0][1]);
+
+  ASSERT_EQ(1u, result[1][0]);
+  ASSERT_EQ(1u, result[1][1]);
+
+  ASSERT_EQ(2u, result[2][0]);
+  ASSERT_EQ(4u, result[2][1]);
+
+  ASSERT_EQ(3u, result[3][0]);
+  ASSERT_EQ(7u, result[3][1]);
+
+  ASSERT_EQ(4u, result[4][0]);
+  ASSERT_EQ(3u, result[4][1]);
 }
