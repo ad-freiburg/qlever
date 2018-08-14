@@ -10,7 +10,7 @@ CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec)
       _subtree(nullptr),
       _subjectColumnIndex(0),
       _predicateVarName("predicate"),
-      _countVarName("cont") {}
+      _countVarName("count") {}
 
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(
@@ -20,7 +20,7 @@ CountAvailablePredicates::CountAvailablePredicates(
       _subtree(subtree),
       _subjectColumnIndex(subjectColumnIndex),
       _predicateVarName("predicate"),
-      _countVarName("cont") {}
+      _countVarName("count") {}
 
 // _____________________________________________________________________________
 string CountAvailablePredicates::asString(size_t indent) const {
