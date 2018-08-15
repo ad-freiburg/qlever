@@ -5,8 +5,13 @@ ENV LC_ALL C.UTF-8
 ENV LC_CTYPE C.UTF-8
 
 FROM base as builder
-RUN apt-get update && apt-get install -y build-essential cmake libsparsehash-dev
+RUN apt-get update && apt-get install -y build-essential clang-format cmake libsparsehash-dev
 COPY . /app/
+
+# Check formatting with the .clang-format project style
+WORKDIR /app/
+RUN misc/format-check.sh
+
 WORKDIR /app/build/
 RUN cmake -DCMAKE_BUILD_TYPE=Release .. && make -j $(nproc) && make test
 
