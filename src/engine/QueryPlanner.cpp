@@ -1374,6 +1374,7 @@ void QueryPlanner::applyFiltersIfPossible(
         newPlan._idsOfIncludedFilters = row[n]._idsOfIncludedFilters;
         newPlan._idsOfIncludedFilters |= (1 << i);
         newPlan._idsOfIncludedNodes = row[n]._idsOfIncludedNodes;
+        newPlan._isOptional = row[n]._isOptional;
         auto& tree = *newPlan._qet.get();
         if (isVariable(filters[i]._rhs)) {
           std::shared_ptr<Operation> filter = std::make_shared<Filter>(
@@ -1434,7 +1435,6 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const vector<QueryPlanner::SubtreePlan*>& children) const {
   LOG(TRACE) << "Fill DP table... (there are " << tg._nodeMap.size()
              << " triples to join)" << std::endl;
-  ;
   vector<vector<SubtreePlan>> dpTab;
   dpTab.emplace_back(seedWithScansAndText(tg, children));
   applyFiltersIfPossible(dpTab.back(), filters, tg._nodeMap.size() == 1);
@@ -1442,7 +1442,6 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   for (size_t k = 2; k <= tg._nodeMap.size() + children.size(); ++k) {
     LOG(TRACE) << "Producing plans that unite " << k << " triples."
                << std::endl;
-    ;
     dpTab.emplace_back(vector<SubtreePlan>());
     for (size_t i = 1; i * 2 <= k; ++i) {
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
@@ -1461,7 +1460,6 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   }
 
   LOG(TRACE) << "Fill DP table done." << std::endl;
-  ;
   return dpTab;
 }
 
