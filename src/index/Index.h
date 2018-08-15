@@ -10,10 +10,13 @@
 #include <vector>
 #include "../engine/ResultTable.h"
 #include "../global/Pattern.h"
+#include "../parser/NTriplesParser.h"
+#include "../parser/TsvParser.h"
 #include "../util/File.h"
 #include "./ConstantsIndexCreation.h"
 #include "./DocsDB.h"
 #include "./IndexMetaData.h"
+#include "./Permutations.h"
 #include "./StxxlSortFunctors.h"
 #include "./TextMetaData.h"
 #include "./Vocabulary.h"
@@ -44,15 +47,13 @@ class Index {
 
   Index();
 
-  // Creates an index from a TSV file.
+  // Creates an index from a file. Parameter Parser must be able to split the
+  // file's format into triples.
   // Will write vocabulary and on-disk index data.
-  // Also ends up with fully functional in-memory metadata.
-  void createFromTsvFile(const string& tsvFile, bool allPermutations);
-
-  // Creates an index from a file in NTriples format.
-  // Will write vocabulary and on-disk index data.
-  // Also ends up with fully functional in-memory metadata.
-  void createFromNTriplesFile(const string& ntFile, bool allPermutations);
+  // !! The index can not directly be used after this call, but has to be setup
+  // by createFromOnDiskIndex after this call.
+  template <class Parser>
+  void createFromFile(const string& filename, bool allPermutations);
 
   // Creates an index object from an on disk index
   // that has previously been constructed.
@@ -349,14 +350,17 @@ class Index {
   // used for creating permutations
   // Member _vocab will be empty after this because it is not needed for index
   // creation once the ExtVec is set up and it would be a waste of RAM
-  ExtVec createExtVecAndVocabFromNTriples(const string& ntFile);
+  template <class Parser>
+  ExtVec createExtVecAndVocab(const string& ntFile);
 
   // ___________________________________________________________________
-  LinesAndWords passNTriplesFileForVocabulary(
-      const string& ntFile, size_t linesPerPartial = 100000000);
+  template <class Parser>
+  LinesAndWords passFileForVocabulary(const string& ntFile,
+                                      size_t linesPerPartial = 100000000);
 
-  void passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data,
-                                    size_t linesPerPartial = 100000000);
+  template <class Parser>
+  void passFileIntoIdVector(const string& filename, ExtVec& data,
+                            size_t linesPerPartial = 100000000);
 
   size_t passContextFileForVocabulary(const string& contextFile);
 
@@ -364,8 +368,14 @@ class Index {
 
   // no need for explicit instatiation since this function is private
   template <class MetaData>
-  void createPermutation(const string& fileName, const ExtVec& vec,
-                         MetaData& meta, size_t c0, size_t c1, size_t c2);
+  void createPermutationImpl(const string& fileName, const ExtVec& vec,
+                             size_t c0, size_t c1, size_t c2);
+
+  // wrapper for createPermutation that saves a lot of code duplications
+  template <class MetaData, class Comparator>
+  void createPermutation(ExtVec* vec,
+                         Permutation::PermutationImpl<Comparator> permutation,
+                         bool performUnique = false);
 
   /**
    * @brief Creates the data required for the "pattern-trick" used for fast
@@ -373,14 +383,19 @@ class Index {
    * @param fileName The name of the file in which the data should be stored
    * @param vec The vectors of triples in spo order.
    */
-  static void createPatterns(const string& fileName, const ExtVec& vec,
-                             CompactStringVector<Id, Id>& hasPredicate,
-                             std::vector<PatternID>& hasPattern,
-                             CompactStringVector<size_t, Id>& patterns,
-                             double& fullHasPredicateMultiplicityEntities,
-                             double& fullHasPredicateMultiplicityPredicates,
-                             size_t& fullHasPredicateSize,
-                             size_t maxNumPatterns);
+  static void createPatternsImpl(const string& fileName, const ExtVec& vec,
+                                 CompactStringVector<Id, Id>& hasPredicate,
+                                 std::vector<PatternID>& hasPattern,
+                                 CompactStringVector<size_t, Id>& patterns,
+                                 double& fullHasPredicateMultiplicityEntities,
+                                 double& fullHasPredicateMultiplicityPredicates,
+                                 size_t& fullHasPredicateSize,
+                                 size_t maxNumPatterns);
+
+  // wrap the static function using the internal member variables
+  // the bool indicates wether the ExtVec has to be sorted before the pattern
+  // creation
+  void createPatterns(bool vecAlreadySorted, ExtVec* idTriples);
 
   void createTextIndex(const string& filename, const TextVec& vec);
 

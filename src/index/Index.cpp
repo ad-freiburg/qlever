@@ -22,84 +22,12 @@ Index::Index()
     : _usePatterns(false),
       _maxNumPatterns(std::numeric_limits<PatternID>::max() - 2) {}
 
-// _____________________________________________________________________________
-void Index::createFromTsvFile(const string& tsvFile, bool allPermutations) {
-  string indexFilename = _onDiskBase + ".index";
-  size_t nofLines = passTsvFileForVocabulary(tsvFile);
-  ExtVec v(nofLines);
-  passTsvFileIntoIdVector(tsvFile, v);
-  if (_onDiskLiterals) {
-    _vocab.externalizeLiterals(_onDiskBase + ".literals-index");
-  }
-  _vocab.writeToFile(_onDiskBase + ".vocabulary");
-  // PSO permutation
-  LOG(INFO) << "Sorting for PSO permutation..." << std::endl;
-  stxxl::sort(begin(v), end(v), SortByPSO(), STXXL_MEMORY_TO_USE);
-  LOG(INFO) << "Sort done." << std::endl;
-  LOG(INFO) << "Performing unique to ensure RDF semantics..." << std::endl;
-  LOG(INFO) << "Size before: " << v.size() << std::endl;
-  auto last = std::unique(begin(v), end(v));
-  v.resize(size_t(last - v.begin()));
-  LOG(INFO) << "Done: unique." << std::endl;
-  LOG(INFO) << "Size after: " << v.size() << std::endl;
-  createPermutation(indexFilename + ".pso", v, _psoMeta, 1, 0, 2);
-  // POS permutation
-  LOG(INFO) << "Sorting for POS permutation..." << std::endl;
-  ;
-  stxxl::sort(begin(v), end(v), SortByPOS(), STXXL_MEMORY_TO_USE);
-  LOG(INFO) << "Sort done." << std::endl;
-  createPermutation(indexFilename + ".pos", v, _posMeta, 1, 2, 0);
-  if (allPermutations) {
-    IndexMetaDataMmap opsMetaTmp;
-    IndexMetaDataMmap ospMetaTmp;
-
-    opsMetaTmp.setup(_totalVocabularySize, FullRelationMetaData::empty,
-                     _onDiskBase + ".index.ops" + MMAP_FILE_SUFFIX);
-    ospMetaTmp.setup(_totalVocabularySize, FullRelationMetaData::empty,
-                     _onDiskBase + ".index.osp" + MMAP_FILE_SUFFIX);
-    // SPO permutation
-    LOG(INFO) << "Sorting for SPO permutation..." << std::endl;
-    stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
-    LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".spo", v, _spoMeta, 0, 1, 2);
-    if (_usePatterns) {
-      LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
-      createPatterns(indexFilename + ".patterns", v, _hasPredicate, _hasPattern,
-                     _patterns, _fullHasPredicateMultiplicityEntities,
-                     _fullHasPredicateMultiplicityPredicates,
-                     _fullHasPredicateSize, _maxNumPatterns);
-    }
-    // SOP permutation
-    LOG(INFO) << "Sorting for SOP permutation..." << std::endl;
-    stxxl::sort(begin(v), end(v), SortBySOP(), STXXL_MEMORY_TO_USE);
-    LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".sop", v, _sopMeta, 0, 2, 1);
-    // OSP permutation
-    LOG(INFO) << "Sorting for OSP permutation..." << std::endl;
-    stxxl::sort(begin(v), end(v), SortByOSP(), STXXL_MEMORY_TO_USE);
-    LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".osp", v, ospMetaTmp, 2, 0, 1);
-    // OPS permutation
-    LOG(INFO) << "Sorting for OPS permutation..." << std::endl;
-    stxxl::sort(begin(v), end(v), SortByOPS(), STXXL_MEMORY_TO_USE);
-    LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".ops", v, opsMetaTmp, 2, 1, 0);
-  } else if (_usePatterns) {
-    LOG(INFO) << "Sorting for pattern creation..." << std::endl;
-    stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
-    LOG(INFO) << "Sort done." << std::endl;
-    createPatterns(indexFilename + ".patterns", v, _hasPredicate, _hasPattern,
-                   _patterns, _fullHasPredicateMultiplicityEntities,
-                   _fullHasPredicateMultiplicityPredicates,
-                   _fullHasPredicateSize, _maxNumPatterns);
-  }
-  openFileHandles();
-}
 
 // _____________________________________________________________________________________________
-Index::ExtVec Index::createExtVecAndVocabFromNTriples(const string& ntFile) {
+template <class Parser>
+Index::ExtVec Index::createExtVecAndVocab(const string& filename) {
   auto linesAndWords =
-      passNTriplesFileForVocabulary(ntFile, NUM_TRIPLES_PER_PARTIAL_VOCAB);
+      passFileForVocabulary<Parser>(filename, NUM_TRIPLES_PER_PARTIAL_VOCAB);
   size_t nofLines = linesAndWords.nofLines;
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
@@ -113,8 +41,9 @@ Index::ExtVec Index::createExtVecAndVocabFromNTriples(const string& ntFile) {
   // clear vocabulary to save ram (only information from partial binary files
   // used from now on).
   _vocab = Vocabulary();
-  ExtVec v(nofLines);
-  passNTriplesFileIntoIdVector(ntFile, v, NUM_TRIPLES_PER_PARTIAL_VOCAB);
+  ExtVec idTriples(nofLines);
+  passFileIntoIdVector<Parser>(filename, idTriples,
+                               NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
   if (!_keepTempFiles) {
     // remove temporary files only used during index creation
@@ -139,147 +68,46 @@ Index::ExtVec Index::createExtVecAndVocabFromNTriples(const string& ntFile) {
     LOG(INFO) << "Keeping temporary files (partial vocabulary and external "
                  "text file...\n";
   }
-  return v;
+  return idTriples;
 }
 
 // _____________________________________________________________________________
-void Index::createFromNTriplesFile(const string& ntFile, bool allPermutations) {
+template <class Parser>
+void Index::createFromFile(const string& filename, bool allPermutations) {
   string indexFilename = _onDiskBase + ".index";
 
-  ExtVec v = createExtVecAndVocabFromNTriples(ntFile);
-  LOG(INFO) << "Sorting for PSO permutation..." << std::endl;
-  stxxl::sort(begin(v), end(v), SortByPSO(), STXXL_MEMORY_TO_USE);
-  LOG(INFO) << "Sort done." << std::endl;
-  LOG(INFO) << "Performing unique to ensure RDF semantics..." << std::endl;
-  LOG(INFO) << "Size before: " << v.size() << std::endl;
-  auto last = std::unique(begin(v), end(v));
-  v.resize(size_t(last - v.begin()));
-  LOG(INFO) << "Done: unique." << std::endl;
-  LOG(INFO) << "Size after: " << v.size() << std::endl;
-  createPermutation(indexFilename + ".pso", v, _psoMeta, 1, 0, 2);
-  LOG(INFO) << "Sorting for POS permutation..." << std::endl;
-  stxxl::sort(begin(v), end(v), SortByPOS(), STXXL_MEMORY_TO_USE);
-  LOG(INFO) << "Sort done." << std::endl;
-  createPermutation(indexFilename + ".pos", v, _posMeta, 1, 2, 0);
+  ExtVec idTriples = createExtVecAndVocab<Parser>(filename);
+
+  // also perform unique for first permutation
+  createPermutation<IndexMetaDataHmap>(&idTriples, Permutation::Pso, true);
+  createPermutation<IndexMetaDataHmap>(&idTriples, Permutation::Pos);
   if (allPermutations) {
-    // the members _opsMeta and _ospMeta are Readonly, so we have to construct
-    // Writeable temporaries here to setup the MMap files
-    // TODO<joka921>(when refactoring this whole file):
-    // we currently split IndexBuilding and using completely, so we could only
-    // give a type to createPermutation and not an actual MetaData
-    // (currently the built indexes can not be used right away without a further
-    // call to createFromOnDiskIndex)
-    IndexMetaDataMmap opsMetaTmp;
-    IndexMetaDataMmap ospMetaTmp;
-    opsMetaTmp.setup(_totalVocabularySize, FullRelationMetaData::empty,
-                     _onDiskBase + ".index.ops" + MMAP_FILE_SUFFIX);
-    ospMetaTmp.setup(_totalVocabularySize, FullRelationMetaData::empty,
-                     _onDiskBase + ".index.osp" + MMAP_FILE_SUFFIX);
-    // SPO permutation
-    LOG(INFO) << "Sorting for SPO permutation..." << std::endl;
-    stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
-    LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".spo", v, _spoMeta, 0, 1, 2);
+    createPermutation<IndexMetaDataHmap>(&idTriples, Permutation::Spo);
     if (_usePatterns) {
-      LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
-      createPatterns(indexFilename + ".patterns", v, _hasPredicate, _hasPattern,
-                     _patterns, _fullHasPredicateMultiplicityEntities,
-                     _fullHasPredicateMultiplicityPredicates,
-                     _fullHasPredicateSize, _maxNumPatterns);
+      // vector already sorted correctly
+      createPatterns(true, &idTriples);
     }
-    // SOP permutation
-    LOG(INFO) << "Sorting for SOP permutation..." << std::endl;
-    stxxl::sort(begin(v), end(v), SortBySOP(), STXXL_MEMORY_TO_USE);
-    LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".sop", v, _sopMeta, 0, 2, 1);
-    // OSP permutation
-    LOG(INFO) << "Sorting for OSP permutation..." << std::endl;
-    stxxl::sort(begin(v), end(v), SortByOSP(), STXXL_MEMORY_TO_USE);
-    LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".osp", v, ospMetaTmp, 2, 0, 1);
-    // OPS permutation
-    LOG(INFO) << "Sorting for OPS permutation..." << std::endl;
-    stxxl::sort(begin(v), end(v), SortByOPS(), STXXL_MEMORY_TO_USE);
-    LOG(INFO) << "Sort done." << std::endl;
-    createPermutation(indexFilename + ".ops", v, opsMetaTmp, 2, 1, 0);
+    createPermutation<IndexMetaDataHmap>(&idTriples, Permutation::Sop);
+    createPermutation<IndexMetaDataMmap>(&idTriples, Permutation::Osp);
+    createPermutation<IndexMetaDataMmap>(&idTriples, Permutation::Ops);
   } else if (_usePatterns) {
-    LOG(INFO) << "Sorting for pattern creation..." << std::endl;
-    stxxl::sort(begin(v), end(v), SortBySPO(), STXXL_MEMORY_TO_USE);
-    LOG(INFO) << "Sort done." << std::endl;
-    createPatterns(indexFilename + ".patterns", v, _hasPredicate, _hasPattern,
-                   _patterns, _fullHasPredicateMultiplicityEntities,
-                   _fullHasPredicateMultiplicityPredicates,
-                   _fullHasPredicateSize, _maxNumPatterns);
+    // vector is not yet sorted
+    createPatterns(false, &idTriples);
   }
-  openFileHandles();
 }
 
-// _____________________________________________________________________________
-size_t Index::passTsvFileForVocabulary(const string& tsvFile) {
-  LOG(INFO) << "Making pass over TsvFile " << tsvFile << " for vocabulary."
-            << std::endl;
-  array<string, 3> spo;
-  TsvParser p(tsvFile);
-  ad_utility::HashSet<string> items;
-  size_t i = 0;
-  while (p.getLine(spo)) {
-    if (ad_utility::isXsdValue(spo[2])) {
-      spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
-    }
-    if (_onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
-      spo[2] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[2];
-    }
-    items.insert(spo[0]);
-    items.insert(spo[1]);
-    items.insert(spo[2]);
-    ++i;
-    if (i % 10000000 == 0) {
-      LOG(INFO) << "Lines processed: " << i << '\n';
-    }
-  }
-  LOG(INFO) << "Pass done.\n";
-  _vocab.createFromSet(items);
-  // TODO<joka921>: completely merge TSV and NTrIPLEs parsing. This is just for
-  // making
-  // the tests work
-  _totalVocabularySize = items.size();
-  return i;
-}
+// explicit instantiations
+template void Index::createFromFile<TsvParser>(const string& filename,
+                                               bool allPermutations);
+template void Index::createFromFile<NTriplesParser>(const string& filename,
+                                                    bool allPermutations);
 
 // _____________________________________________________________________________
-void Index::passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data) {
-  LOG(INFO) << "Making pass over TsvFile " << tsvFile
-            << " and creating stxxl vector.\n";
+template <class Parser>
+LinesAndWords Index::passFileForVocabulary(const string& filename,
+                                           size_t linesPerPartial) {
   array<string, 3> spo;
-  TsvParser p(tsvFile);
-  auto vocabMap = _vocab.asMap();
-  size_t i = 0;
-  // write using vector_bufwriter
-  ExtVec::bufwriter_type writer(data);
-  while (p.getLine(spo)) {
-    if (ad_utility::isXsdValue(spo[2])) {
-      spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
-    }
-    if (_onDiskLiterals && isLiteral(spo[2]) && shouldBeExternalized(spo[2])) {
-      spo[2] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[2];
-    }
-    writer << array<Id, 3>{{vocabMap.find(spo[0])->second,
-                            vocabMap.find(spo[1])->second,
-                            vocabMap.find(spo[2])->second}};
-    ++i;
-    if (i % 10000000 == 0) {
-      LOG(INFO) << "Lines processed: " << i << '\n';
-    }
-  }
-  writer.finish();
-  LOG(INFO) << "Pass done.\n";
-}
-
-// _____________________________________________________________________________
-LinesAndWords Index::passNTriplesFileForVocabulary(const string& ntFile,
-                                                   size_t linesPerPartial) {
-  array<string, 3> spo;
-  NTriplesParser p(ntFile);
+  Parser p(filename);
   ad_utility::HashSet<string> items;
   size_t i = 0;
   size_t numFiles = 0;
@@ -339,12 +167,13 @@ LinesAndWords Index::passNTriplesFileForVocabulary(const string& ntFile,
 }
 
 // _____________________________________________________________________________
-void Index::passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data,
-                                         size_t linesPerPartial) {
-  LOG(INFO) << "Making pass over NTriples " << ntFile
+template <class Parser>
+void Index::passFileIntoIdVector(const string& filename, ExtVec& data,
+                                 size_t linesPerPartial) {
+  LOG(INFO) << "Making pass over NTriples " << filename
             << " and creating stxxl vector.\n";
   array<string, 3> spo;
-  NTriplesParser p(ntFile);
+  Parser p(filename);
   std::string vocabFilename(_onDiskBase + PARTIAL_VOCAB_FILE_NAME +
                             std::to_string(0));
   LOG(INFO) << "Reading partial vocab from " << vocabFilename << " ...\n";
@@ -396,9 +225,15 @@ void Index::passNTriplesFileIntoIdVector(const string& ntFile, ExtVec& data,
 
 // _____________________________________________________________________________
 template <class MetaData>
-void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
-                              MetaData& metaData, size_t c0, size_t c1,
-                              size_t c2) {
+void Index::createPermutationImpl(const string& fileName,
+                                  Index::ExtVec const& vec, size_t c0,
+                                  size_t c1, size_t c2) {
+  MetaData metaData;
+  if constexpr (metaData._isMmapBased) {
+    metaData.setup(_totalVocabularySize, FullRelationMetaData::empty,
+                   fileName + MMAP_FILE_SUFFIX);
+  }
+
   if (vec.size() == 0) {
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
     return;
@@ -445,8 +280,50 @@ void Index::createPermutation(const string& fileName, Index::ExtVec const& vec,
   LOG(INFO) << "Permutation done.\n";
 }
 
+// ________________________________________________________________________
+template <class MetaData, class Comparator>
+void Index::createPermutation(ExtVec* vec,
+                              Permutation::PermutationImpl<Comparator> p,
+                              bool performUnique) {
+  LOG(INFO) << "Sorting for " << p._readableName << " permutation..."
+            << std::endl;
+  stxxl::sort(begin(*vec), end(*vec), p._comp, STXXL_MEMORY_TO_USE);
+  LOG(INFO) << "Sort done." << std::endl;
+
+  if (performUnique) {
+    // this only has to be done for the first permutation (PSO)
+    LOG(INFO) << "Performing unique to ensure RDF semantics..." << std::endl;
+    LOG(INFO) << "Size before: " << vec->size() << std::endl;
+    auto last = std::unique(begin(*vec), end(*vec));
+    vec->resize(size_t(last - vec->begin()));
+    LOG(INFO) << "Done: unique." << std::endl;
+    LOG(INFO) << "Size after: " << vec->size() << std::endl;
+  }
+
+  createPermutationImpl<MetaData>(_onDiskBase + ".index" + p._fileSuffix, *vec,
+                                  p._keyOrder[0], p._keyOrder[1],
+                                  p._keyOrder[2]);
+}
+
+// ____________________________________________________________________________
+void Index::createPatterns(bool vecAlreadySorted, ExtVec* idTriples) {
+  if (vecAlreadySorted) {
+    LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
+  } else {
+    LOG(INFO) << "Sorting for pattern creation..." << std::endl;
+    stxxl::sort(begin(*idTriples), end(*idTriples), SortBySPO(),
+                STXXL_MEMORY_TO_USE);
+    LOG(INFO) << "Sort done." << std::endl;
+  }
+  createPatternsImpl(_onDiskBase + ".index.patterns", *idTriples, _hasPredicate,
+                     _hasPattern, _patterns,
+                     _fullHasPredicateMultiplicityEntities,
+                     _fullHasPredicateMultiplicityPredicates,
+                     _fullHasPredicateSize, _maxNumPatterns);
+}
+
 // _____________________________________________________________________________
-void Index::createPatterns(const string& fileName, const ExtVec& vec,
+void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
                            CompactStringVector<Id, Id>& hasPredicate,
                            std::vector<PatternID>& hasPattern,
                            CompactStringVector<size_t, Id>& patterns,

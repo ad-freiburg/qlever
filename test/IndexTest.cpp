@@ -50,9 +50,13 @@ TEST(IndexTest, createFromTsvTest) {
          "a2\tb2\tc2\t.";
     f.close();
 
+    {
+      Index index;
+      index.setOnDiskBase("_testindex");
+      index.createFromFile<TsvParser>("_testtmp2.tsv", false);
+    }
     Index index;
-    index.setOnDiskBase("_testindex");
-    index.createFromTsvFile("_testtmp2.tsv", false);
+    index.createFromOnDiskIndex("_testindex");
 
     ASSERT_TRUE(index._psoMeta.relationExists(2));
     ASSERT_TRUE(index._psoMeta.relationExists(3));
@@ -146,9 +150,13 @@ TEST(IndexTest, createFromTsvTest) {
          "c\tis-a\t2\t.\n";
     f.close();
 
+    {
+      Index index;
+      index.setOnDiskBase("_testindex");
+      index.createFromFile<TsvParser>("_testtmp2.tsv", false);
+    }
     Index index;
-    index.setOnDiskBase("_testindex");
-    index.createFromTsvFile("_testtmp2.tsv", false);
+    index.createFromOnDiskIndex("_testindex");
 
     ASSERT_TRUE(index._psoMeta.relationExists(7));
     ASSERT_FALSE(index._psoMeta.relationExists(1));
@@ -367,11 +375,16 @@ TEST_F(CreatePatternsFixture, createPatterns) {
          "a2\td\tc2\t.";
     f.close();
 
+    {
+      Index index;
+      index.setUsePatterns(true);
+      index._maxNumPatterns = 1;
+      index.setOnDiskBase("_testindex");
+      index.createFromFile<TsvParser>("_testtmppatterns.tsv", false);
+    }
     Index index;
     index.setUsePatterns(true);
-    index._maxNumPatterns = 1;
-    index.setOnDiskBase("_testindex");
-    index.createFromTsvFile("_testtmppatterns.tsv", false);
+    index.createFromOnDiskIndex("_testindex");
 
     ASSERT_EQ(2u, index.getHasPattern().size());
     ASSERT_EQ(1u, index.getHasPredicate().size());
@@ -438,7 +451,7 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   {
     Index indexPrim;
     indexPrim.setOnDiskBase("_testindex2");
-    indexPrim.createFromTsvFile("_testtmp3.tsv", false);
+    indexPrim.createFromFile<TsvParser>("_testtmp3.tsv", false);
   }
 
   Index index;
@@ -487,9 +500,14 @@ TEST(IndexTest, scanTest) {
        "a2\tb2\tc2\t.";
   f.close();
   {
+    {
+      Index index;
+      index.setOnDiskBase("_testindex");
+      index.createFromFile<TsvParser>("_testtmp2.tsv", false);
+    }
+
     Index index;
-    index.setOnDiskBase("_testindex");
-    index.createFromTsvFile("_testtmp2.tsv", false);
+    index.createFromOnDiskIndex("_testindex");
 
     Index::WidthOneList wol;
     Index::WidthTwoList wtl;
@@ -566,9 +584,13 @@ TEST(IndexTest, scanTest) {
   f2.close();
 
   {
+    {
+      Index index;
+      index.setOnDiskBase("_testindex");
+      index.createFromFile<TsvParser>("_testtmp2.tsv", false);
+    }
     Index index;
-    index.setOnDiskBase("_testindex");
-    index.createFromTsvFile("_testtmp2.tsv", false);
+    index.createFromOnDiskIndex("_testindex");
 
     Index::WidthOneList wol;
     Index::WidthTwoList wtl;
