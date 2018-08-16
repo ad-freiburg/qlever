@@ -46,6 +46,7 @@ struct TurtleToken {
 
         PnCharsBase(PnCharsBaseString),
         WsMultiple(WsMultipleString),
+        Anon(AnonString),
         Comment(CommentString) {}
 
   const wregex TurtlePrefix;
@@ -161,6 +162,9 @@ struct TurtleToken {
   const wstring WsMultipleString = L"(" + WsSingleString + L")*";
   const wregex WsMultiple;
 
+  const wstring AnonString = L"\\[" + WsMultipleString + L"\\]";
+  const wregex Anon;
+
   const wstring CommentString = L"#[^\n]*\n";
   const wregex Comment;
 };
@@ -171,15 +175,21 @@ class Tokenizer {
 
  public:
   Tokenizer(WstringIt first, WstringIt last)
-      : _begin(first), _current(first), _end(last), _tokens() {}
+      : _tokens(), _begin(first), _current(first), _end(last) {}
 
   std::pair<bool, std::wstring> getNextToken(const std::wregex& reg);
   std::tuple<bool, size_t, std::wstring> getNextToken(
-      const std::vector<const std::wregex*> regs);
+      const std::vector<const std::wregex*>& regs);
 
   void skipWhitespaceAndComments();
 
   const TurtleToken _tokens;
+
+  void reset(WstringIt first, WstringIt last) {
+    _begin = first;
+    _current = first;
+    _end = last;
+  }
 
  private:
   void skipWhitespace() {
@@ -192,6 +202,7 @@ class Tokenizer {
     // if not successful, then there was no comment, but this does not matter to
     // us
     auto [success, ws] = getNextToken(_tokens.Comment);
+    (void)success;
     _current += ws.size();
     return;
   }
@@ -228,7 +239,7 @@ std::pair<bool, std::wstring> Tokenizer<WstringIt>::getNextToken(
 // _______________________________________________________
 template <class WstringIt>
 std::tuple<bool, size_t, std::wstring> Tokenizer<WstringIt>::getNextToken(
-    const std::vector<const std::wregex*> regs) {
+    const std::vector<const std::wregex*>& regs) {
   size_t maxMatchSize = 0;
   size_t maxMatchIndex = 0;
   std::wstring maxMatch;

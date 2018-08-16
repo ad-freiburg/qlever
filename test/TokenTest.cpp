@@ -27,6 +27,7 @@ TEST(TokenizerTest, Compilation) {
   std::wstring s(L"    #comment of some way\n  start");
   Tokenizer<std::wstring::const_iterator> tok(s.begin(), s.end());
   auto [success, ws] = tok.getNextToken(tok._tokens.Comment);
+  (void)ws;
   ASSERT_FALSE(success);
   tok.skipWhitespaceAndComments();
   ASSERT_EQ(tok._current - tok._begin, 27);
