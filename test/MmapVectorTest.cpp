@@ -2,11 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (joka921) <johannes.kalmbach@gmail.com>
 //
-#include "../src/util/MmapVector.h"
 #include <gtest/gtest.h>
 #include <unistd.h>
 #include <stdexcept>
 #include <vector>
+#include "../src/util/MmapVector.h"
 
 using ad_utility::MmapVector;
 using ad_utility::MmapVectorView;
@@ -27,7 +27,7 @@ TEST(MmapVectorTest, DefaultConstructor) {
 
 // ___________________________________________________________________
 TEST(MmapVectorTest, NewEmptyFileConstructor) {
-  MmapVector<int> v("_test.mmap", ad_utility::CreateTag()) ;
+  MmapVector<int> v("_test.mmap", ad_utility::CreateTag());
   ASSERT_EQ(size_t(0), v.size());
   ASSERT_NE(nullptr, v.begin());
   ASSERT_EQ(v.begin(), v.end());
@@ -91,8 +91,8 @@ TEST(MmapVectorTest, At) {
   ASSERT_EQ(v.begin() + s, v.end());
   for (int i = 0; i < 5000; i++) {
     ASSERT_EQ(v.at(i), 5000 - i);
-    }
-    ASSERT_THROW(v.at(5000), std::out_of_range);
+  }
+  ASSERT_THROW(v.at(5000), std::out_of_range);
 }
 
 // ___________________________________________________________________
@@ -291,7 +291,6 @@ TEST(MmapVectorTest, Reuse) {
   }
 }
 
-
 // ____________________________________________________________________
 TEST(MmapVectorTest, MoveConstructor) {
   // make sure that we get a unsignned 5000 to prevent compiler warnings
@@ -337,7 +336,6 @@ TEST(MmapVectorTest, MoveConstructor) {
     ASSERT_EQ(v2[i], i);
   }
 }
-
 
 // ____________________________________________________________________
 TEST(MmapVectorTest, MoveAssignment) {

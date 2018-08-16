@@ -30,7 +30,6 @@ class InvalidFileException : public std::exception {
   }
 };
 
-
 // _________________________________________________________________________
 class TruncateException : public std::exception {
  public:
@@ -65,7 +64,6 @@ class ReuseTag {};
 // Enum that specifies access patterns to this array
 enum class AccessPattern { None, Random, Sequential };
 
-
 // STL-like class which implements a dynamic array (similar to std::vector)
 // whose contents are stored persistently in a file on memory and are accessed
 // using memory mapping
@@ -79,18 +77,14 @@ class MmapVector {
   size_t size() const { return _size; }
 
   // __________________________________________________________________
-  size_t capacity() const {return _capacity; }
+  size_t capacity() const { return _capacity; }
 
   // standard iterator functions, each in a const and non-const version
   // begin
-  T* begin() {
-    return _ptr;
-  }
+  T* begin() { return _ptr; }
   const T* begin() const { return _ptr; }
   // end
-  T* end() {
-    return _ptr + _size;
-  }
+  T* end() { return _ptr + _size; }
   const T* end() const { return _ptr + _size; }
   // cbegin and cend
   const T* cbegin() const { return _ptr; }
@@ -163,7 +157,8 @@ class MmapVector {
 
   // create from given Iterator range
   // It must be an iterator type whose value Type must be convertible to T
-  // TODO<joka921>: use enable_if or constexpr if or concepts/ranges one they're out
+  // TODO<joka921>: use enable_if or constexpr if or concepts/ranges one they're
+  // out
   template <class It>
   void open(It begin, It end, const string& filename,
             AccessPattern pattern = AccessPattern::None);
@@ -210,7 +205,6 @@ class MmapVector {
     }
   }
 
-
   // truncate the underlying file to _bytesize and write meta data (_size,
   // _capacity, etc) for this
   // array to the end. new size of file will be _bytesize + sizeof(meta data)
@@ -251,7 +245,6 @@ class MmapVector {
   // advise the kernel to use a certain access pattern
   void advise(AccessPattern pattern);
 
-
   T* _ptr = nullptr;
   size_t _size = 0;
   size_t _capacity = 0;
@@ -268,7 +261,6 @@ class MmapVector {
 template <class T>
 class MmapVectorView : private MmapVector<T> {
  public:
-
   using const_iterator = const T*;
   using iterator = T*;
   // const access and iteration methods, directly map to the MmapVector-Variants
@@ -327,5 +319,5 @@ class MmapVectorView : private MmapVector<T> {
   // destructor
   ~MmapVectorView() { close(); }
 };
-}
+}  // namespace ad_utility
 #include "./MmapVectorImpl.h"

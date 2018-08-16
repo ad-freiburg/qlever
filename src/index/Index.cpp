@@ -22,7 +22,6 @@ Index::Index()
     : _usePatterns(false),
       _maxNumPatterns(std::numeric_limits<PatternID>::max() - 2) {}
 
-
 // _____________________________________________________________________________________________
 template <class Parser>
 Index::ExtVec Index::createExtVecAndVocab(const string& filename) {
@@ -324,13 +323,13 @@ void Index::createPatterns(bool vecAlreadySorted, ExtVec* idTriples) {
 
 // _____________________________________________________________________________
 void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
-                           CompactStringVector<Id, Id>& hasPredicate,
-                           std::vector<PatternID>& hasPattern,
-                           CompactStringVector<size_t, Id>& patterns,
-                           double& fullHasPredicateMultiplicityEntities,
-                           double& fullHasPredicateMultiplicityPredicates,
-                           size_t& fullHasPredicateSize,
-                           size_t maxNumPatterns) {
+                               CompactStringVector<Id, Id>& hasPredicate,
+                               std::vector<PatternID>& hasPattern,
+                               CompactStringVector<size_t, Id>& patterns,
+                               double& fullHasPredicateMultiplicityEntities,
+                               double& fullHasPredicateMultiplicityPredicates,
+                               size_t& fullHasPredicateSize,
+                               size_t maxNumPatterns) {
   if (vec.size() == 0) {
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
     return;
@@ -831,11 +830,11 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
     LOG(INFO) << "Registered SOP permutation: " << _sopMeta.statistics()
               << std::endl;
     // OSP
-      _ospMeta.readFromFile(&_ospFile);
+    _ospMeta.readFromFile(&_ospFile);
     LOG(INFO) << "Registered OSP permutation: " << _ospMeta.statistics()
               << std::endl;
     // OPS
-      _opsMeta.readFromFile(&_opsFile);
+    _opsMeta.readFromFile(&_opsFile);
     LOG(INFO) << "Registered OPS permutation: " << _opsMeta.statistics()
               << std::endl;
   }

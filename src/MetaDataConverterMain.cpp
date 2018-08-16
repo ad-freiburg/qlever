@@ -2,14 +2,14 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (johannes.kalmbach@gmail.com)
 //
-#include "./index/MetaDataConverter.h"
 #include <array>
 #include <iostream>
 #include "./global/Constants.h"
+#include "./index/MetaDataConverter.h"
 #include "./util/File.h"
 
 // _________________________________________________________
-int main (int argc, char** argv) {
+int main(int argc, char** argv) {
   if (argc != 2) {
     std::cerr << "Usage: ./MetaDataConverterMain <indexPrefix>\n";
     exit(1);
