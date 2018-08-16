@@ -15,6 +15,7 @@
 #include <cwchar>
 #include <iostream>
 #include <limits>
+#include <numeric>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -83,26 +84,23 @@ inline string normalizeSpaces(const string& orig);
 inline string escapeForJson(const string& orig);
 
 //! Strips any sequence of characters in s from the left and right of the text.
-inline string strip(const string& text, const string& s);
-
-inline string strip(const string& text, const char* s);
-
-//! Strips any sequence of c from the left and right of the text.
-inline string strip(const string& text, char c);
-
-//! Strips any sequence of c from the left of the text.
-inline string lstrip(const string& text, char c);
-
-inline string lstrip(const string& text, string s);
-
-inline string lstrip(const string& text, const char* s);
-
-//! Strips any sequence of c from the tight of the text.
-inline string rstrip(const string& text, char c);
-
-inline string rstrip(const string& text, string s);
-
-inline string rstrip(const string& text, const char* s);
+//! The type T can be anything convertible to a std::string_view<char> so in
+//! particular s can be a string literal, std::string, std::string_view.
+//! Additionally it can also be a single char as in ' '
+template <class T>
+inline string strip(const string& text, const T& s);
+//! Strips any sequence of characters from s from the left of the text.
+//! The type T can be anything convertible to a std::string_view<char> so in
+//! particular s can be a string literal, std::string, std::string_view.
+//! Additionally it can also be a single char as in ' '
+template <class T>
+inline string lstrip(const string& text, const T& s);
+//! Strips any sequence of characters from s from the right of the text.
+//! The type T can be anything convertible to a std::string_view<char> so in
+//! particular s can be a string literal, std::string, std::string_view.
+//! Additionally it can also be a single char as in ' '
+template <class T>
+inline string rstrip(const string& text, const T& s);
 
 //! Splits a string at the separator, kinda like python.
 inline vector<string> split(const string& orig, const char sep);
@@ -118,10 +116,20 @@ inline vector<string> splitWs(const string& orig);
 inline vector<string> splitWsWithEscape(const string& orig, const char left,
                                         const char right);
 
-//! Splits a string a any character inside the seps string.
-inline vector<string> splitAny(const string& orig, const char* seps);
+//! Splits a string at any character found in the separators string.
+//! The type T can be anything convertible to a std::string_view so in
+//! particular seps can be a string literal, a std::string or
+//! a std::string_view.
+//! This is analogous to how std::string::find_first_of() works
+template <class T>
+inline vector<string> splitAny(const string& orig, const T& separators);
 
-inline vector<string> splitAny(const string& orig, const string& seps);
+//! Similar to Python's ",".join(somelist) this joins elements of the given
+//! vector to_join, separating them by joiner.
+//! In order for this to work the type J needs an operator+= implementation that
+//! accepts a value of type S as the right hand side
+template <typename J, typename S>
+J join(const vector<J>& to_join, const S& joiner);
 
 inline string decodeUrl(const string& orig);
 
@@ -458,12 +466,12 @@ inline vector<string> splitWsWithEscape(const string& orig, const char left,
 }
 
 // _____________________________________________________________________________
-vector<string> splitAny(const string& orig, const char* seps) {
-  return splitAny(orig, string(seps));
-}
-
-// _____________________________________________________________________________
-vector<string> splitAny(const string& orig, const string& seps) {
+template <class T>
+vector<string> splitAny(const string& orig, const T& separators) {
+  // Converting the input into a std::string_view gives us a size() method and
+  // iterators. It works with both const char* and std::string without needing
+  // a copy
+  std::string_view seps(separators);
   // 256 bytes should fit on almost any stack
   // note the {}, it initializes with 0 = false
   array<bool, std::numeric_limits<unsigned char>::max() + 1> chars{};
@@ -507,82 +515,35 @@ J join(const vector<J>& to_join, const S& joiner) {
 }
 
 // _____________________________________________________________________________
-inline string lstrip(const string& text, char c) {
-  size_t i = 0;
-  while (i < text.size() && text[i] == c) {
-    ++i;
+template <class T>
+inline string lstrip(const string& text, const T& s) {
+  auto pos = text.find_first_not_of(s);
+  if (pos == string::npos) {
+    return string{};
   }
-  return text.substr(i);
+  return text.substr(pos);
 }
 
 // _____________________________________________________________________________
-inline string lstrip(const string& text, string s) {
-  // 256 bytes should fit on almost any stack
-  // note the {}, it initializes with 0 = false
-  array<bool, std::numeric_limits<unsigned char>::max() + 1> chars{};
-  for (size_t i = 0; i < s.size(); ++i) {
-    chars[s[i]] = true;
+template <class T>
+inline string rstrip(const string& text, const T& s) {
+  auto pos = text.find_last_not_of(s);
+  if (pos == string::npos) {
+    return string{};
   }
-  size_t i = 0;
-  while (i < text.size() && chars[static_cast<unsigned char>(text[i])]) {
-    ++i;
+  auto length = pos + 1;
+  return text.substr(0, length);
+}
+
+// _____________________________________________________________________________
+template <class T>
+inline string strip(const string& text, const T& s) {
+  auto pos = text.find_first_not_of(s);
+  if (pos == string::npos) {
+    return string{};
   }
-  return text.substr(i);
-}
-
-// _____________________________________________________________________________
-inline string lstrip(const string& text, const char* s) {
-  return lstrip(text, string(s));
-}
-
-// _____________________________________________________________________________
-inline string rstrip(const string& text, char c) {
-  size_t i = text.size();
-  while (i > 0 && text[i - 1] == c) {
-    --i;
-  }
-  return text.substr(0, i);
-}
-
-// _____________________________________________________________________________
-inline string rstrip(const string& text, string s) {
-  // 256 bytes should fit on almost any stack
-  // note the {}, it initializes with 0 = false
-  array<bool, std::numeric_limits<unsigned char>::max() + 1> chars{};
-  for (size_t i = 0; i < s.size(); ++i) {
-    chars[s[i]] = true;
-  }
-  size_t i = text.size();
-  while (i > 0 && chars[static_cast<unsigned char>(text[i - 1])]) {
-    --i;
-  }
-  return text.substr(0, i);
-}
-
-// _____________________________________________________________________________
-inline string rstrip(const string& text, const char* s) {
-  return rstrip(text, string(s));
-}
-
-// _____________________________________________________________________________
-inline std::string strip(const std::string& text, char c) {
-  auto left = text.begin();
-  auto right = text.end();  // right is of course exclusive
-  for (; left < right && *left == c; left++)
-    ;
-  for (; right > left && *(right - 1) == c; right--)
-    ;
-  return std::string(left, right);
-}
-
-// _____________________________________________________________________________
-string strip(const string& text, const char* s) {
-  return strip(text, string(s));
-}
-
-// _____________________________________________________________________________
-string strip(const string& text, const string& s) {
-  return rstrip(lstrip(text, s), s);
+  auto length = text.find_last_not_of(s) - pos + 1;
+  return text.substr(pos, length);
 }
 
 // _____________________________________________________________________________
