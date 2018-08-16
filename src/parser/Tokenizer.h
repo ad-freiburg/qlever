@@ -26,6 +26,7 @@ struct TurtleToken {
         OpenRound(L"\\("),
         CloseRound(L"\\)"),
         A(L"a"),
+        DoubleCircumflex(L"\\^\\^"),
 
         True(L"true"),
         False(L"false"),
@@ -49,6 +50,7 @@ struct TurtleToken {
   const wregex OpenRound;
   const wregex CloseRound;
   const wregex A;
+  const wregex DoubleCircumflex;
 
   const wregex True;
   const wregex False;
