@@ -30,9 +30,20 @@ struct TurtleToken {
 
         True(L"true"),
         False(L"false"),
+        Langtag(LangtagString),
 
         Integer(L"[+-]?[0-9]+"),
         Decimal(L"[+-]?[0-9]*\\.[0-9]+"),
+        Exponent(ExponentString),
+        Double(DoubleString),
+        Hex(HexString),
+        Uchar(UcharString),
+        Echar(EcharString),
+        StringLiteralQuote(StringLiteralQuoteString),
+        StringLiteralSingleQuote(StringLiteralSingleQuoteString),
+        StringLiteralLongSingleQuote(StringLiteralLongSingleQuoteString),
+        StringLiteralLongQuote(StringLiteralLongQuoteString),
+
         PnCharsBase(PnCharsBaseString),
         WsMultiple(WsMultipleString),
         Comment(CommentString) {}
@@ -55,6 +66,9 @@ struct TurtleToken {
   const wregex True;
   const wregex False;
 
+  const wstring LangtagString = L"@[a-zA-Z]+(\\-[a-zA-Z0-9]+)*";
+  const wregex Langtag;
+
   const wregex Integer;
   const wregex Decimal;
   const wstring ExponentString = L"[eE][+-]?[0-9]+";
@@ -65,6 +79,37 @@ struct TurtleToken {
 
   const wstring HexString = L"[0-9] | [A-F] | [a-f]";
   const wregex Hex;
+
+  // TODO: check precedence of "|"
+  const wstring UcharString = L"(\\u" + HexString + HexString + HexString +
+                              HexString + L") | (\\U" + HexString + HexString +
+                              HexString + HexString + HexString + HexString +
+                              HexString + HexString + L")";
+  const wregex Uchar;
+
+  const wstring EcharString = L"\\[tbnrf\"'\\]";
+  const wregex Echar;
+
+  const wstring StringLiteralQuoteString =
+      L"\"([^\x22\x5C\x0A\x0D]|" + EcharString + L"|" + UcharString + L")*\"";
+  const wregex StringLiteralQuote;
+
+  const wstring StringLiteralSingleQuoteString =
+      L"'([^\x22\x5C\x0A\x0D]|" + EcharString + L"|" + UcharString + L")*'";
+  const wregex StringLiteralSingleQuote;
+
+  const wstring StringLiteralLongSingleQuoteString =
+      L"'''(('|'')?([^'\\]|" + EcharString + L"|" + UcharString + L"))*'''";
+  const wregex StringLiteralLongSingleQuote;
+
+  const wstring StringLiteralLongQuoteString = L"\"\"\"((\"|\"\")?([^\"\\]|" +
+                                               EcharString + L"|" +
+                                               UcharString + L"))*\"\"\"";
+  const wregex StringLiteralLongQuote;
+
+  const wstring IrirefString =
+      L"\\<([^\x00-\x20<>\"{}|^`\\]|" + UcharString + L")*\\>";
+  const wregex Iriref;
 
   const wstring PercentString = L"%" + HexString + HexString;
   const wregex Percent;
@@ -87,6 +132,9 @@ struct TurtleToken {
                                  L"|\\.)*" + PnCharsString + L")?";
   const wregex PnPrefix;
 
+  const wstring PnameNSString = PnPrefixString + L"\\:";
+  const wregex PnameNS;
+
   const wstring PnLocalEscString = L"";  // = L"\\\\[_~.\\-!$&'()*+,;=/?#@%";
   const wregex PnLocalEsc;
 
@@ -98,6 +146,14 @@ struct TurtleToken {
                                 L"|\\.|:|" + PlxString + L")*(" +
                                 PnCharsString + L"|:|" + PlxString + L"))?";
   const wregex PnLocal;
+
+  const wstring PnameLNString = PnameNSString + PnLocalString;
+  const wregex PnameLN;
+
+  const wstring BlankNodeLabelString = L"_\\:(" + PnCharsUString +
+                                       L"|[0-9])((" + PnCharsString +
+                                       L"|\\.)*" + PnCharsString + L")?";
+  const wregex BlankNodeLabel;
 
   const wstring WsSingleString = L"\x20|\x09|\x0D|\x0A";
   const wregex WsSingle;

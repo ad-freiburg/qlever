@@ -28,7 +28,26 @@ class TurtleParser {
   bool predicateSpecialA();
   bool predicate();
 
+  bool iri();
+  bool blankNode();
+  bool collection();
+  bool literal();
+  bool rdfLiteral();
+  bool numericLiteral();
+  bool booleanLiteral();
+  bool prefixedName();
+  bool stringParse();
+
+  // Terminals
+  bool iriref() { parseTerminal(_tokens.Iriref); }
+  bool integer() { parseTerminal(_tokens.Integer); }
+  bool decimal() { parseTerminal(_tokens.Decimal); }
+  bool doubleParse() { parseTerminal(_tokens.Double); }
+  bool pnameLN() { parseTerminal(_tokens.PnameLN); }
+  bool pnameNS() { parseTerminal(_tokens.PnameNS); }
+
   bool skip(const std::wregex& reg);
+  bool parseTerminal(const std::wregex& terminal);
 
   std::wstring _lastParseResult;
   std::wstring _baseIRI;

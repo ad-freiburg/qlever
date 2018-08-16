@@ -119,7 +119,7 @@ bool TurtleParser::predicateSpecialA() {
 
 // ____________________________________________________________________
 bool TurtleParser::subject() {
-  if (iri() || BlankNode() || collection()) {
+  if (iri() || blankNode() || collection()) {
     _activeSubject = _lastParseResult;
     return true;
   } else {
@@ -141,7 +141,7 @@ bool TurtleParser::predicate() {
 bool TurtleParser::object() {
   if (iri() || blankNode() || collection() || blankNodePropertyList() ||
       literal()) {
-    _emitTriple();
+    emitTriple();
     return true;
   } else {
     return false;
@@ -150,7 +150,7 @@ bool TurtleParser::object() {
 
 // ____________________________________________________________________
 bool TurtleParser::literal() {
-  return (rdfLiteral() || NumericLiteral() || BooleanLiteral());
+  return (rdfLiteral() || numericLiteral() || booleanLiteral());
 }
 
 // _____________________________________________________________________
