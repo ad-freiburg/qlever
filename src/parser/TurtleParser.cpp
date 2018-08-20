@@ -19,10 +19,13 @@ bool TurtleParser::directive() {
 
 // ________________________________________________________________
 bool TurtleParser::prefixID() {
-  if (skip(_tokens.TurtlePrefix) && pnameNS() && iriref() &&
-      skip(_tokens.Dot)) {
-    // TODO: get values and update prefixMap
-    return true;
+  if (skip(_tokens.TurtlePrefix)) {
+    if (pnameNS() && iriref() && skip(_tokens.Dot)) {
+      _prefixMap[_activePrefix] = _lastParseResult;
+      return true;
+    } else {
+      throw ParseException();
+    }
   } else {
     return false;
   }
@@ -30,9 +33,13 @@ bool TurtleParser::prefixID() {
 
 // ________________________________________________________________
 bool TurtleParser::base() {
-  if (skip(_tokens.TurtleBase) && iriref()) {
-    _baseIRI = _lastParseResult;
-    return true;
+  if (skip(_tokens.TurtleBase)) {
+    if (iriref()) {
+      _baseIRI = _lastParseResult;
+      return true;
+    } else {
+      throw ParseException();
+    }
   } else {
     return false;
   }
@@ -40,9 +47,13 @@ bool TurtleParser::base() {
 
 // ________________________________________________________________
 bool TurtleParser::sparqlPrefix() {
-  if (skip(_tokens.SparqlPrefix) && pnameNS() && iriref()) {
-    // TODO: get values and update prefixMap
-    return true;
+  if (skip(_tokens.SparqlPrefix)) {
+    if (pnameNS() && iriref()) {
+      _prefixMap[_activePrefix] = _lastParseResult;
+      return true;
+    } else {
+      throw ParseException();
+    }
   } else {
     return false;
   }
@@ -50,9 +61,13 @@ bool TurtleParser::sparqlPrefix() {
 
 // ________________________________________________________________
 bool TurtleParser::sparqlBase() {
-  if (skip(_tokens.SparqlBase) && iriref()) {
-    // TODO: get values and update prefixMap
-    return true;
+  if (skip(_tokens.SparqlBase)) {
+    if (iriref()) {
+      _baseIRI = _lastParseResult;
+      return true;
+    } else {
+      throw ParseException();
+    }
   } else {
     return false;
   }
@@ -60,13 +75,18 @@ bool TurtleParser::sparqlBase() {
 
 // ________________________________________________
 bool TurtleParser::triples() {
-  if (subject() && predicateObjectList()) {
-    return true;
+  if (subject()) {
+    if (predicateObjectList()) {
+      return true;
+    } else {
+      throw ParseException();
+    }
   } else {
     if (blankNodePropertyList()) {
       predicateObjectList();
       return true;
     } else {
+      // TODO: do we need to throw here
       return false;
     }
   }
@@ -74,13 +94,10 @@ bool TurtleParser::triples() {
 
 // __________________________________________________
 bool TurtleParser::predicateObjectList() {
-  if (verb() && objectList()) {
+  if (verb() && check(objectList())) {
     while (skip(_tokens.Semicolon)) {
-      if (verb()) {
-        if (!objectList()) {
-          // TODO: this is actually a parse error
-          return false;
-        }
+      if (verb() && check(objectList())) {
+        continue;
       }
     }
     return true;
@@ -92,11 +109,8 @@ bool TurtleParser::predicateObjectList() {
 // _____________________________________________________
 bool TurtleParser::objectList() {
   if (object()) {
-    while (skip(_tokens.Comma)) {
-      if (!object()) {
-        // TODO parse Error
-        return false;
-      }
+    while (skip(_tokens.Comma) && check(object())) {
+      continue;
     }
     return true;
   } else {
@@ -156,8 +170,9 @@ bool TurtleParser::literal() {
 
 // _____________________________________________________________________
 bool TurtleParser::blankNodePropertyList() {
-  return skip(_tokens.OpenSquared) && predicateObjectList() &&
-         skip(_tokens.CloseSquared);
+  // TODO: how do these have to be parsed
+  return skip(_tokens.OpenSquared) &&
+         check(predicateObjectList() && skip(_tokens.CloseSquared));
 }
 
 // _____________________________________________________________________
@@ -167,8 +182,7 @@ bool TurtleParser::collection() {
   }
   while (object()) {
   }
-  // TODO: here would be a parser error
-  return skip(_tokens.CloseRound);
+  return check(skip(_tokens.CloseRound));
 }
 
 // ______________________________________________________________________
@@ -185,14 +199,8 @@ bool TurtleParser::rdfLiteral() {
   if (langtag()) {
     _lastParseResult = s + _lastParseResult;
     return true;
-  } else if (skip(_tokens.DoubleCircumflex)) {
-    if (iri()) {
-      _lastParseResult = s + _lastParseResult;
-      return true;
-    } else {
-      // TODO: parseError here if false
-      return false;
-    }
+  } else if (skip(_tokens.DoubleCircumflex) && check(iri())) {
+    return true;
   } else {
     // it is okay to neither have a langtag nor a xsd datatype
     return true;
@@ -233,7 +241,14 @@ bool TurtleParser::stringParse() {
 bool TurtleParser::iri() { return iriref() || prefixedName(); }
 
 // _____________________________________________________________________
-bool TurtleParser::prefixedName() { return pnameLN() || pnameNS(); }
+bool TurtleParser::prefixedName() {
+  if (pnameLN() || pnameNS()) {
+    _lastParseResult = _prefixMap[_activePrefix] + _lastParseResult;
+  return true;
+  } else {
+    return false;
+  }
+}
 
 // _____________________________________________________________________
 bool TurtleParser::blankNode() { return blankNodeLabel() || anon(); }

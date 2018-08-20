@@ -40,9 +40,11 @@ struct TurtleToken {
         Uchar(UcharString),
         Echar(EcharString),
         StringLiteralQuote(StringLiteralQuoteString),
+        /*
         StringLiteralSingleQuote(StringLiteralSingleQuoteString),
         StringLiteralLongSingleQuote(StringLiteralLongSingleQuoteString),
         StringLiteralLongQuote(StringLiteralLongQuoteString),
+        */
 
         PnCharsBase(PnCharsBaseString),
         WsMultiple(WsMultipleString),
@@ -78,17 +80,19 @@ struct TurtleToken {
       L"[+-]?([0-9]+\\.[0-9]*" + ExponentString + L"|" + ExponentString + L")";
   const wregex Double;
 
-  const wstring HexString = L"[0-9] | [A-F] | [a-f]";
+  const wstring HexString = L"([0-9] | [A-F] | [a-f])";
   const wregex Hex;
 
   // TODO: check precedence of "|"
-  const wstring UcharString = L"(\\u" + HexString + HexString + HexString +
-                              HexString + L") | (\\U" + HexString + HexString +
+  const wstring UcharString = L"(\\\\u" + HexString + HexString + HexString +
+                              HexString + L")|(\\\\U" + HexString + HexString +
                               HexString + HexString + HexString + HexString +
                               HexString + HexString + L")";
   const wregex Uchar;
 
-  const wstring EcharString = L"\\[tbnrf\"'\\]";
+  // const wstring EcharString = L"\\\\[tbnrf\"'\\]";
+  const wstring EcharString = L"\\\\[tbnrf\"\'\\\\]";
+
   const wregex Echar;
 
   const wstring StringLiteralQuoteString =

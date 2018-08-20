@@ -6,10 +6,15 @@
 #pragma once
 
 #include <codecvt>
+#include <exception>
 #include <locale>
 #include "../util/HashMap.h"
 #include "../util/Log.h"
 #include "./Tokenizer.h"
+
+class ParseException : public std::exception {
+  const char* what() const throw() { return "Error while parsing Turtle"; }
+};
 
 class TurtleParser {
  public:
@@ -56,7 +61,16 @@ class TurtleParser {
   bool decimal() { return parseTerminal(_tokens.Decimal); }
   bool doubleParse() { return parseTerminal(_tokens.Double); }
   bool pnameLN() { return parseTerminal(_tokens.PnameLN); }
-  bool pnameNS() { return parseTerminal(_tokens.PnameNS); }
+  bool pnameNS() {
+    if (parseTerminal(_tokens.PnameNS)) {
+      // this also includes a ":" which we do not need
+      _activePrefix = _lastParseResult.substr(0, _lastParseResult.size() - 1);
+      _lastParseResult = L"";
+      return true;
+    } else {
+      return false;
+    }
+  }
   bool langtag() { return parseTerminal(_tokens.Langtag); }
   bool blankNodeLabel() { return parseTerminal(_tokens.BlankNodeLabel); }
   bool anon() { return parseTerminal(_tokens.Anon); }
@@ -72,6 +86,7 @@ class TurtleParser {
   std::wstring _lastParseResult;
   std::wstring _baseIRI;
   ad_utility::HashMap<std::wstring, std::wstring> _prefixMap;
+  std::wstring _activePrefix;
   std::wstring _activeSubject;
   std::wstring _activePredicate;
   ad_utility::HashMap<std::wstring, std::wstring> _blankNodeMap;
@@ -84,4 +99,13 @@ class TurtleParser {
   std::wstring s2w(std::string s) const { return _converter.from_bytes(s); }
 
   std::wstring _tmpToParse = L"";
+
+  bool check(bool result) {
+    if (result) {
+      return true;
+    } else {
+      throw ParseException();
+      return false;
+    }
+  }
 };

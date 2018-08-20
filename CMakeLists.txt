@@ -74,6 +74,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
 # add STXXL includes path
 include_directories(SYSTEM ${STXXL_INCLUDE_DIRS})
 
+################################
+# RE2
+################################
+add_subdirectory(third_party/re2)
+include_directories(third_party/re2)
+
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
 message(STATUS "CXX_FLAGS_RELEASE are : " ${CMAKE_CXX_FLAGS_RELEASE})
