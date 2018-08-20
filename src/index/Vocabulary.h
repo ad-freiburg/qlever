@@ -6,7 +6,9 @@
 
 #include <algorithm>
 #include <cassert>
+#include <functional>
 #include <google/sparse_hash_map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -70,9 +72,27 @@ class Vocabulary {
   //! Append a word to the vocabulary. Wraps the std::vector method.
   void push_back(const string& word) { _words.push_back(word); }
 
-  //! Get the word with the given id (as const, not as lvalue).
-  const string& operator[](Id id) const {
-    return _words[static_cast<size_t>(id)];
+  //! Get the word with the given id or an empty optional if the
+  //! word is not in the vocabulary.
+  //! Note: So as to keep things as references this does *NOT* check the
+  //! externalized part of the vocabulary
+  const std::optional<std::reference_wrapper<const string>> operator[](
+      Id id) const {
+    if (id < _words.size()) {
+      return _words[static_cast<size_t>(id)];
+    } else {
+      return std::nullopt;
+    }
+  }
+
+  const std::optional<string> idToOptionalString(Id id) const {
+    std::optional<string> res = (*this)[id];
+    if (!res && id != ID_NO_VALUE) {
+      id -= _words.size();
+      AD_CHECK(id < _externalLiterals.size());
+      res = _externalLiterals[id];
+    }
+    return res;
   }
 
   //! Get the number of words in the vocabulary.
@@ -161,10 +181,6 @@ class Vocabulary {
   void externalizeLiteralsFromTextFile(const string& textFileName,
                                        const string& outFileName) {
     _externalLiterals.buildFromTextFile(textFileName, outFileName);
-  }
-
-  const ExternalVocabulary& getExternalVocab() const {
-    return _externalLiterals;
   }
 
   static bool shouldBeExternalized(const string& word);

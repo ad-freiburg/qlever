@@ -5,6 +5,7 @@
 
 #include <array>
 #include <fstream>
+#include <optional>
 #include <string>
 #include <stxxl/vector>
 #include <vector>
@@ -100,7 +101,9 @@ class Index {
   size_t sizeEstimate(const string& sub, const string& pred,
                       const string& obj) const;
 
-  string idToString(Id id) const;
+  std::optional<string> idToOptionalString(Id id) const {
+    return _vocab.idToOptionalString(id);
+  }
 
   void scanPSO(const string& predicate, WidthTwoList* result) const;
 

@@ -5,6 +5,7 @@
 #include "./Index.h"
 #include <algorithm>
 #include <cmath>
+#include <optional>
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_set>
@@ -1283,20 +1284,6 @@ double Index::getHasPredicateMultiplicityPredicates() const {
 size_t Index::getHasPredicateFullSize() const {
   throwExceptionIfNoPatterns();
   return _fullHasPredicateSize;
-}
-
-// _____________________________________________________________________________
-string Index::idToString(Id id) const {
-  if (id < _vocab.size()) {
-    return _vocab[id];
-  } else if (id == ID_NO_VALUE) {
-    return "";
-  } else {
-    id -= _vocab.size();
-    AD_CHECK(id < _vocab.getExternalVocab().size()) {
-      return _vocab.getExternalVocab()[id];
-    }
-  }
 }
 
 // _____________________________________________________________________________

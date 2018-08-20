@@ -6,6 +6,7 @@
 #include <array>
 #include <condition_variable>
 #include <mutex>
+#include <optional>
 #include <vector>
 #include "../global/Id.h"
 #include "../util/Exception.h"
@@ -81,13 +82,13 @@ class ResultTable {
     _cond_var.wait(lk, [&] { return _status == ResultTable::FINISHED; });
   }
 
-  std::string idToString(Id id) const {
+  std::optional<std::string> idToOptionalString(Id id) const {
     if (id < _localVocab.size()) {
       return _localVocab[id];
     } else if (id == ID_NO_VALUE) {
-      return "";
+      return std::nullopt;
     }
-    return "ID OUT OF RANGE";
+    return std::nullopt;
   }
 
   size_t size() const;

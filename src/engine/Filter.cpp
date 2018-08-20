@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./Filter.h"
+#include <optional>
 #include <sstream>
 #include "./QueryExecutionTree.h"
 
@@ -388,9 +389,13 @@ void Filter::computeResultFixedValue(ResultTable* result) const {
         case SparqlFilter::LANG_MATCHES:
           getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                              [this, &l](const RT& e) {
-                               return ad_utility::endsWith(
-                                   getIndex().idToString(e[l]),
-                                   this->_rhsString);
+                               std::optional<string> entity =
+                                   getIndex().idToOptionalString(e[l]);
+                               if (!entity) {
+                                 return true;
+                               }
+                               return ad_utility::endsWith(entity.value(),
+                                                           this->_rhsString);
                              },
                              res);
           break;
@@ -429,9 +434,13 @@ void Filter::computeResultFixedValue(ResultTable* result) const {
         case SparqlFilter::LANG_MATCHES:
           getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                              [this, &l](const RT& e) {
-                               return ad_utility::endsWith(
-                                   getIndex().idToString(e[l]),
-                                   this->_rhsString);
+                               std::optional<string> entity =
+                                   getIndex().idToOptionalString(e[l]);
+                               if (!entity) {
+                                 return true;
+                               }
+                               return ad_utility::endsWith(entity.value(),
+                                                           this->_rhsString);
                              },
                              res);
           break;
@@ -470,9 +479,13 @@ void Filter::computeResultFixedValue(ResultTable* result) const {
         case SparqlFilter::LANG_MATCHES:
           getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                              [this, &l](const RT& e) {
-                               return ad_utility::endsWith(
-                                   getIndex().idToString(e[l]),
-                                   this->_rhsString);
+                               std::optional<string> entity =
+                                   getIndex().idToOptionalString(e[l]);
+                               if (!entity) {
+                                 return true;
+                               }
+                               return ad_utility::endsWith(entity.value(),
+                                                           this->_rhsString);
                              },
                              res);
           break;
@@ -511,9 +524,13 @@ void Filter::computeResultFixedValue(ResultTable* result) const {
         case SparqlFilter::LANG_MATCHES:
           getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                              [this, &l](const RT& e) {
-                               return ad_utility::endsWith(
-                                   getIndex().idToString(e[l]),
-                                   this->_rhsString);
+                               std::optional<string> entity =
+                                   getIndex().idToOptionalString(e[l]);
+                               if (!entity) {
+                                 return true;
+                               }
+                               return ad_utility::endsWith(entity.value(),
+                                                           this->_rhsString);
                              },
                              res);
           break;
@@ -552,9 +569,13 @@ void Filter::computeResultFixedValue(ResultTable* result) const {
         case SparqlFilter::LANG_MATCHES:
           getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
                              [this, &l](const RT& e) {
-                               return ad_utility::endsWith(
-                                   getIndex().idToString(e[l]),
-                                   this->_rhsString);
+                               std::optional<string> entity =
+                                   getIndex().idToOptionalString(e[l]);
+                               if (!entity) {
+                                 return true;
+                               }
+                               return ad_utility::endsWith(entity.value(),
+                                                           this->_rhsString);
                              },
                              res);
           break;
@@ -597,9 +618,13 @@ void Filter::computeResultFixedValue(ResultTable* result) const {
         case SparqlFilter::LANG_MATCHES:
           getEngine().filter(subRes->_varSizeData,
                              [this, &l](const RT& e) {
-                               return ad_utility::endsWith(
-                                   getIndex().idToString(e[l]),
-                                   this->_rhsString);
+                               std::optional<string> entity =
+                                   getIndex().idToOptionalString(e[l]);
+                               if (!entity) {
+                                 return true;
+                               }
+                               return ad_utility::endsWith(entity.value(),
+                                                           this->_rhsString);
                              },
                              &result->_varSizeData);
           break;
