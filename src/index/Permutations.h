@@ -34,15 +34,14 @@ class PermutationImpl {
   // sorted. Needed for the createPermutation function in the Index class
   // e.g. {1, 0, 2} for PsO
   const array<unsigned short, 3> _keyOrder;
-  };
+};
 
-  // instantiations for the 6 Permutations used in QLever
-  // They simplify the creation of permutations in the index class
-  const PermutationImpl<SortByPOS> Pos(SortByPOS(), "POS", ".pos", {1, 2, 0});
-  const PermutationImpl<SortByPSO> Pso(SortByPSO(), "PSO", ".pso", {1, 0, 2});
-  const PermutationImpl<SortBySOP> Sop(SortBySOP(), "SOP", ".sop", {0, 2, 1});
-  const PermutationImpl<SortBySPO> Spo(SortBySPO(), "SPO", ".spo", {0, 1, 2});
-  const PermutationImpl<SortByOPS> Ops(SortByOPS(), "OPS", ".ops", {2, 1, 0});
-  const PermutationImpl<SortByOSP> Osp(SortByOSP(), "OSP", ".osp", {2, 0, 1});
-}
-
+// instantiations for the 6 Permutations used in QLever
+// They simplify the creation of permutations in the index class
+const PermutationImpl<SortByPOS> Pos(SortByPOS(), "POS", ".pos", {1, 2, 0});
+const PermutationImpl<SortByPSO> Pso(SortByPSO(), "PSO", ".pso", {1, 0, 2});
+const PermutationImpl<SortBySOP> Sop(SortBySOP(), "SOP", ".sop", {0, 2, 1});
+const PermutationImpl<SortBySPO> Spo(SortBySPO(), "SPO", ".spo", {0, 1, 2});
+const PermutationImpl<SortByOPS> Ops(SortByOPS(), "OPS", ".ops", {2, 1, 0});
+const PermutationImpl<SortByOSP> Osp(SortByOSP(), "OSP", ".osp", {2, 0, 1});
+}  // namespace Permutation

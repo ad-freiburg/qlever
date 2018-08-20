@@ -47,7 +47,7 @@ class IndexMetaData {
   // metaData implementations. Must be a compile time parameter because we have
   // to avoid instantation of member function set() for readonly MapTypes (e.g.
   // based on MmapVectorView
-  template<bool persistentRMD = false>
+  template <bool persistentRMD = false>
   void add(const FullRelationMetaData& rmd,
            const BlockBasedRelationMetaData& bRmd);
 
@@ -129,7 +129,7 @@ class IndexMetaData {
   // but this should not be an issue.
   template <class U>
   friend inline ad_utility::File& operator<<(ad_utility::File& f,
-                                      const IndexMetaData<U>& rmd);
+                                             const IndexMetaData<U>& rmd);
 
   size_t getNofBlocksForRelation(const Id relId) const;
 

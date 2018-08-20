@@ -2,13 +2,13 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./Index.h"
 #include <stxxl/algorithm>
 #include <tuple>
 #include <utility>
 #include "../parser/ContextFileParser.h"
 #include "../util/Simple8bCode.h"
 #include "./FTSAlgorithms.h"
+#include "./Index.h"
 
 // _____________________________________________________________________________
 void Index::addTextFromContextFile(const string& contextFile) {
@@ -469,10 +469,11 @@ void Index::createCodebooks(const vector<Index::Posting>& postings,
             [](const std::pair<Id, size_t>& a, const std::pair<Id, size_t>& b) {
               return a.second > b.second;
             });
-  std::sort(sfVec.begin(), sfVec.end(), [](const std::pair<Score, size_t>& a,
-                                           const std::pair<Score, size_t>& b) {
-    return a.second > b.second;
-  });
+  std::sort(
+      sfVec.begin(), sfVec.end(),
+      [](const std::pair<Score, size_t>& a, const std::pair<Score, size_t>& b) {
+        return a.second > b.second;
+      });
   for (size_t j = 0; j < wfVec.size(); ++j) {
     wordCodebook.push_back(wfVec[j].first);
     wordCodemap[wfVec[j].first] = j;
@@ -572,9 +573,8 @@ void Index::getWordPostingsForTerm(const string& term, vector<Id>& cids,
       entityTerm
           ? _textMeta.getBlockInfoByEntityId(idRange._first)
           : _textMeta.getBlockInfoByWordRange(idRange._first, idRange._last);
-  if (tbmd._cl.hasMultipleWords() &&
-      !(tbmd._firstWordId == idRange._first &&
-        tbmd._lastWordId == idRange._last)) {
+  if (tbmd._cl.hasMultipleWords() && !(tbmd._firstWordId == idRange._first &&
+                                       tbmd._lastWordId == idRange._last)) {
     vector<Id> blockCids;
     vector<Id> blockWids;
     vector<Score> blockScores;

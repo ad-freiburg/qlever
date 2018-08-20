@@ -5,7 +5,6 @@
 
 #pragma once
 
-#include "./IndexMetaData.h"
 #include "../util/File.h"
 #include "./IndexMetaData.h"
 #include "./MetaDataHandler.h"
@@ -86,7 +85,7 @@ void IndexMetaData<MapType>::createFromByteBufferSparse(unsigned char* buf) {
     } else {
       add(rmd, BlockBasedRelationMetaData());
     }
-    }
+  }
 }
 
 // _____________________________________________________________________________

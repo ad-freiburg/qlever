@@ -87,7 +87,7 @@ class Iterator {
 
   const FullRelationMetaData emptyMetaData = FullRelationMetaData::empty;
 };
-}
+}  // namespace VecWrapperImpl
 
 // _____________________________________________________________________
 template <class M>
