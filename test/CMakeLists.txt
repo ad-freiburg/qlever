@@ -68,7 +68,7 @@ add_executable(MmapVectorTest MmapVectorTest.cpp)
 target_link_libraries(MmapVectorTest gtest_main -pthread)
 
 add_executable(TokenTest TokenTest.cpp)
-target_link_libraries(TokenTest gtest_main -pthread)
+target_link_libraries(TokenTest re2 gtest_main -pthread)
 
 add_library(tests
             SparqlParserTest

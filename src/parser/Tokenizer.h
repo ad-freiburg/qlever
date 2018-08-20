@@ -5,7 +5,10 @@
 #pragma once
 
 #include <gtest/gtest.h>
+#include <re2/re2.h>
 #include <regex>
+
+using re2::RE2;
 
 struct TurtleToken {
   using regex = std::regex;
@@ -17,6 +20,7 @@ struct TurtleToken {
         SparqlPrefix(L"PREFIX"),
         TurtleBase(L"@base"),
         SparqlBase(L"BASE"),
+        testRegex("bla[xy]*"),
 
         Dot(L"\\."),
         Comma(L","),
@@ -51,6 +55,7 @@ struct TurtleToken {
         Anon(AnonString),
         Comment(CommentString) {}
 
+  const RE2 testRegex;
   const wregex TurtlePrefix;
   const wregex SparqlPrefix;
   const wregex TurtleBase;
