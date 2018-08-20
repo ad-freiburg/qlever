@@ -7,29 +7,31 @@
 #include "../src/parser/Tokenizer.h"
 
 using std::string;
-using std::wstring;
 TEST(TokenTest, Numbers) {
   TurtleToken t;
 
-  wstring integer = L"+235632";
-  wstring decimal = L"-235632.23";
-  ASSERT_TRUE(std::regex_match(integer, t.Integer));
-  ASSERT_TRUE(std::regex_match(decimal, t.Decimal));
-  ASSERT_FALSE(std::regex_match(integer, t.Decimal));
-  ASSERT_TRUE(std::regex_match(L"A", t.PnCharsBase));
-  ASSERT_TRUE(std::regex_match(L"\u00dd", t.PnCharsBase));
-  ASSERT_TRUE(std::regex_search(L"\u00DD", t.PnCharsBase));
-  ASSERT_TRUE(std::regex_search(L"\u00De", t.PnCharsBase));
-  ASSERT_FALSE(std::regex_search(L"\u00D7", t.PnCharsBase));
+  string integer = "235632";
+  string decimal = u8"-235632.23";
+  ASSERT_TRUE(RE2::FullMatch("123", "[123]+"));
+  ASSERT_TRUE(RE2::FullMatch("123", "[1-3]+"));
+  ASSERT_TRUE(RE2::FullMatch("234", t.Integer));
+  ASSERT_TRUE(RE2::FullMatch(integer, t.Integer));
+  ASSERT_TRUE(RE2::FullMatch(decimal, t.Decimal));
+  ASSERT_FALSE(RE2::FullMatch(integer, t.Decimal));
+  ASSERT_TRUE(RE2::FullMatch(u8"A", t.PnCharsBase));
+  ASSERT_TRUE(RE2::FullMatch(u8"\u00dd", t.PnCharsBase));
+  ASSERT_TRUE(RE2::FullMatch(u8"\u00DD", t.PnCharsBase));
+  ASSERT_TRUE(RE2::FullMatch(u8"\u00De", t.PnCharsBase));
+  ASSERT_FALSE(RE2::FullMatch(u8"\u00D7", t.PnCharsBase));
 }
 
 TEST(TokenizerTest, Compilation) {
-  std::wstring s(L"    #comment of some way\n  start");
-  Tokenizer<std::wstring::const_iterator> tok(s.begin(), s.end());
+  std::string s(u8"    #comment of some way\n  start");
+  Tokenizer tok(s.data(), s.size());
   auto [success, ws] = tok.getNextToken(tok._tokens.Comment);
   (void)ws;
   ASSERT_FALSE(success);
   tok.skipWhitespaceAndComments();
-  ASSERT_EQ(tok._current - tok._begin, 27);
+  ASSERT_EQ(tok._data.begin() - s.data(), 27);
 }
 

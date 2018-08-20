@@ -19,8 +19,8 @@ class ParseException : public std::exception {
 class TurtleParser {
  public:
   void parseUtf8String(const std::string& toParse) {
-    _tmpToParse = s2w(toParse);
-    _tok.reset(_tmpToParse.cbegin(), _tmpToParse.cend());
+    _tmpToParse = toParse;
+    _tok.reset(_tmpToParse.data(), _tmpToParse.size());
     turtleDoc();
   }
 
@@ -65,7 +65,7 @@ class TurtleParser {
     if (parseTerminal(_tokens.PnameNS)) {
       // this also includes a ":" which we do not need
       _activePrefix = _lastParseResult.substr(0, _lastParseResult.size() - 1);
-      _lastParseResult = L"";
+      _lastParseResult = "";
       return true;
     } else {
       return false;
@@ -75,30 +75,25 @@ class TurtleParser {
   bool blankNodeLabel() { return parseTerminal(_tokens.BlankNodeLabel); }
   bool anon() { return parseTerminal(_tokens.Anon); }
 
-  bool skip(const std::wregex& reg);
-  bool parseTerminal(const std::wregex& terminal);
+  bool skip(const RE2& reg);
+  bool parseTerminal(const RE2& terminal);
 
   void emitTriple() {
-    LOG(INFO) << w2s(_activeSubject) << " " << w2s(_activePredicate) << " "
-              << w2s(_lastParseResult) << '\n';
-}
+    LOG(INFO) << _activeSubject << " " << _activePredicate << " "
+              << _lastParseResult << '\n';
+  }
 
-  std::wstring _lastParseResult;
-  std::wstring _baseIRI;
-  ad_utility::HashMap<std::wstring, std::wstring> _prefixMap;
-  std::wstring _activePrefix;
-  std::wstring _activeSubject;
-  std::wstring _activePredicate;
-  ad_utility::HashMap<std::wstring, std::wstring> _blankNodeMap;
-  Tokenizer<std::wstring::const_iterator> _tok{_tmpToParse.cbegin(),
-                                               _tmpToParse.cend()};
+  std::string _lastParseResult;
+  std::string _baseIRI;
+  ad_utility::HashMap<std::string, std::string> _prefixMap;
+  std::string _activePrefix;
+  std::string _activeSubject;
+  std::string _activePredicate;
+  ad_utility::HashMap<std::string, std::string> _blankNodeMap;
+  Tokenizer _tok{_tmpToParse.data(), _tmpToParse.size()};
   const TurtleToken& _tokens = _tok._tokens;
 
-  mutable std::wstring_convert<std::codecvt_utf8<wchar_t>> _converter;
-  std::string w2s(std::wstring w) const { return _converter.to_bytes(w); }
-  std::wstring s2w(std::string s) const { return _converter.from_bytes(s); }
-
-  std::wstring _tmpToParse = L"";
+  std::string _tmpToParse = u8"";
 
   bool check(bool result) {
     if (result) {

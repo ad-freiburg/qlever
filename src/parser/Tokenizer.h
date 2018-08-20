@@ -9,249 +9,245 @@
 #include <regex>
 
 using re2::RE2;
+using namespace std::string_literals;
 
 struct TurtleToken {
-  using regex = std::regex;
-  using wregex = std::wregex;
   using string = std::string;
-  using wstring = std::wstring;
   TurtleToken()
-      : TurtlePrefix(L"@prefix"),
-        SparqlPrefix(L"PREFIX"),
-        TurtleBase(L"@base"),
-        SparqlBase(L"BASE"),
-        testRegex("bla[xy]*"),
+      : TurtlePrefix(u8"@prefix"),
+        SparqlPrefix(u8"PREFIX"),
+        TurtleBase(u8"@base"),
+        SparqlBase(u8"BASE"),
 
-        Dot(L"\\."),
-        Comma(L","),
-        Semicolon(L";"),
-        OpenSquared(L"\\["),
-        CloseSquared(L"\\]"),
-        OpenRound(L"\\("),
-        CloseRound(L"\\)"),
-        A(L"a"),
-        DoubleCircumflex(L"\\^\\^"),
+        Dot(u8"\\."),
+        Comma(u8","),
+        Semicolon(u8";"),
+        OpenSquared(u8"\\["),
+        CloseSquared(u8"\\]"),
+        OpenRound(u8"\\("),
+        CloseRound(u8"\\)"),
+        A(u8"a"),
+        DoubleCircumflex(u8"\\^\\^"),
 
-        True(L"true"),
-        False(L"false"),
+        True(u8"true"),
+        False(u8"false"),
         Langtag(LangtagString),
 
-        Integer(L"[+-]?[0-9]+"),
-        Decimal(L"[+-]?[0-9]*\\.[0-9]+"),
+        Integer(u8"[+-]?[0-9]+"),
+        Decimal(u8"[+-]?[0-9]*\\.[0-9]+"),
         Exponent(ExponentString),
         Double(DoubleString),
         Hex(HexString),
         Uchar(UcharString),
         Echar(EcharString),
         StringLiteralQuote(StringLiteralQuoteString),
-        /*
         StringLiteralSingleQuote(StringLiteralSingleQuoteString),
         StringLiteralLongSingleQuote(StringLiteralLongSingleQuoteString),
         StringLiteralLongQuote(StringLiteralLongQuoteString),
-        */
+
+        Iriref(IrirefString),
+        Percent(PercentString),
 
         PnCharsBase(PnCharsBaseString),
+        PnCharsU(PnCharsUString),
+        PnChars(PnCharsString),
+        PnPrefix(PnPrefixString),
+        PnameNS(PnameNSString),
+        PnLocalEsc(PnLocalEscString),
+        Plx(PlxString),
+        PnLocal(PnLocalString),
+        PnameLN(PnameLNString),
+        BlankNodeLabel(BlankNodeLabelString),
+
+        WsSingle(WsSingleString),
         WsMultiple(WsMultipleString),
         Anon(AnonString),
         Comment(CommentString) {}
 
-  const RE2 testRegex;
-  const wregex TurtlePrefix;
-  const wregex SparqlPrefix;
-  const wregex TurtleBase;
-  const wregex SparqlBase;
+  const RE2 TurtlePrefix;
+  const RE2 SparqlPrefix;
+  const RE2 TurtleBase;
+  const RE2 SparqlBase;
 
-  const wregex Dot;
-  const wregex Comma;
-  const wregex Semicolon;
-  const wregex OpenSquared;
-  const wregex CloseSquared;
-  const wregex OpenRound;
-  const wregex CloseRound;
-  const wregex A;
-  const wregex DoubleCircumflex;
+  const RE2 Dot;
+  const RE2 Comma;
+  const RE2 Semicolon;
+  const RE2 OpenSquared;
+  const RE2 CloseSquared;
+  const RE2 OpenRound;
+  const RE2 CloseRound;
+  const RE2 A;
+  const RE2 DoubleCircumflex;
 
-  const wregex True;
-  const wregex False;
+  const RE2 True;
+  const RE2 False;
 
-  const wstring LangtagString = L"@[a-zA-Z]+(\\-[a-zA-Z0-9]+)*";
-  const wregex Langtag;
+  const string LangtagString = u8"@[a-zA-Z]+(\\-[a-zA-Z0-9]+)*";
+  const RE2 Langtag;
 
-  const wregex Integer;
-  const wregex Decimal;
-  const wstring ExponentString = L"[eE][+-]?[0-9]+";
-  const wregex Exponent;
-  const wstring DoubleString =
-      L"[+-]?([0-9]+\\.[0-9]*" + ExponentString + L"|" + ExponentString + L")";
-  const wregex Double;
+  const RE2 Integer;
+  const RE2 Decimal;
+  const string ExponentString = u8"[eE][+-]?[0-9]+";
+  const RE2 Exponent;
+  const string DoubleString = u8"[+-]?([0-9]+\\.[0-9]*" + ExponentString +
+                              u8"|" + ExponentString + u8")";
+  const RE2 Double;
 
-  const wstring HexString = L"([0-9] | [A-F] | [a-f])";
-  const wregex Hex;
+  const string HexString = u8"[0-9]|[A-F]|[a-f]";
+  const RE2 Hex;
 
   // TODO: check precedence of "|"
-  const wstring UcharString = L"(\\\\u" + HexString + HexString + HexString +
-                              HexString + L")|(\\\\U" + HexString + HexString +
-                              HexString + HexString + HexString + HexString +
-                              HexString + HexString + L")";
-  const wregex Uchar;
+  const string UcharString = u8"(\\\\u" + HexString + HexString + HexString +
+                             HexString + u8")|(\\\\U" + HexString + HexString +
+                             HexString + HexString + HexString + HexString +
+                             HexString + HexString + u8")";
+  const RE2 Uchar;
 
-  // const wstring EcharString = L"\\\\[tbnrf\"'\\]";
-  const wstring EcharString = L"\\\\[tbnrf\"\'\\\\]";
+  // const string EcharString = u8"\\\\[tbnrf\"'\\]";
+  const string EcharString = u8"\\\\[tbnrf\"\'\\\\]";
 
-  const wregex Echar;
+  const RE2 Echar;
 
-  const wstring StringLiteralQuoteString =
-      L"\"([^\x22\x5C\x0A\x0D]|" + EcharString + L"|" + UcharString + L")*\"";
-  const wregex StringLiteralQuote;
+  const string StringLiteralQuoteString = u8"\"([^\x22\x5C\x0A\x0D]|" +
+                                          EcharString + u8"|" + UcharString +
+                                          u8")*\"";
+  const RE2 StringLiteralQuote;
 
-  const wstring StringLiteralSingleQuoteString =
-      L"'([^\x22\x5C\x0A\x0D]|" + EcharString + L"|" + UcharString + L")*'";
-  const wregex StringLiteralSingleQuote;
+  const string StringLiteralSingleQuoteString =
+      u8"'([^\x22\x5C\x0A\x0D]|" + EcharString + u8"|" + UcharString + u8")*'";
+  const RE2 StringLiteralSingleQuote;
 
-  const wstring StringLiteralLongSingleQuoteString =
-      L"'''(('|'')?([^'\\]|" + EcharString + L"|" + UcharString + L"))*'''";
-  const wregex StringLiteralLongSingleQuote;
+  const string StringLiteralLongSingleQuoteString =
+      u8"'''(('|'')?([^'\\]|" + EcharString + u8"|" + UcharString + u8"))*'''";
+  const RE2 StringLiteralLongSingleQuote;
 
-  const wstring StringLiteralLongQuoteString = L"\"\"\"((\"|\"\")?([^\"\\]|" +
-                                               EcharString + L"|" +
-                                               UcharString + L"))*\"\"\"";
-  const wregex StringLiteralLongQuote;
+  const string StringLiteralLongQuoteString = u8"\"\"\"((\"|\"\")?([^\"\\]|" +
+                                              EcharString + u8"|" +
+                                              UcharString + u8"))*\"\"\"";
+  const RE2 StringLiteralLongQuote;
 
-  const wstring IrirefString =
-      L"\\<([^\x00-\x20<>\"{}|^`\\]|" + UcharString + L")*\\>";
-  const wregex Iriref;
+  // TODO: fix this!
+  const string IrirefString = "dummy";
+  //  "\\<([^\\x00-\\x20<>\"{}|^`\\]|"s + UcharString + u8")*\\>";
+  const RE2 Iriref;
 
-  const wstring PercentString = L"%" + HexString + HexString;
-  const wregex Percent;
+  const string PercentString = u8"%" + HexString + HexString;
+  const RE2 Percent;
 
-  const wstring PnCharsBaseString =
-      L"[A-Z]|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-"
-      L"\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-\u2FEF]"
-      L"|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]|[\U00010000-"
-      L"\U000EFFFF]";
-  const wregex PnCharsBase;
+  const string PnCharsBaseString =
+      u8"[A-Z]|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-"
+      u8"\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-"
+      u8"\u2FEF]"
+      u8"|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]|[\U00010000-"
+      u8"\U000EFFFF]";
+  const RE2 PnCharsBase;
 
-  const wstring PnCharsUString = PnCharsBaseString + L"|_";
-  const wregex PnCharsU;
+  const string PnCharsUString = PnCharsBaseString + u8"|_";
+  const RE2 PnCharsU;
 
-  const wstring PnCharsString =
-      PnCharsUString + L"|-|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]";
-  const wregex PnChars;
+  const string PnCharsString =
+      PnCharsUString + u8"|-|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]";
+  const RE2 PnChars;
 
-  const wstring PnPrefixString = PnCharsBaseString + L"((" + PnCharsString +
-                                 L"|\\.)*" + PnCharsString + L")?";
-  const wregex PnPrefix;
+  const string PnPrefixString = PnCharsBaseString + u8"((" + PnCharsString +
+                                u8"|\\.)*" + PnCharsString + u8")?";
+  const RE2 PnPrefix;
 
-  const wstring PnameNSString = PnPrefixString + L"\\:";
-  const wregex PnameNS;
+  const string PnameNSString = PnPrefixString + u8"\\:";
+  const RE2 PnameNS;
 
-  const wstring PnLocalEscString = L"";  // = L"\\\\[_~.\\-!$&'()*+,;=/?#@%";
-  const wregex PnLocalEsc;
+  const string PnLocalEscString = u8"";  // = u8"\\\\[_~.\\-!$&'()*+,;=/?#@%";
+  const RE2 PnLocalEsc;
 
-  const wstring PlxString = PercentString + L"|" + PnLocalEscString;
-  const wregex Plx;
+  const string PlxString = PercentString + u8"|" + PnLocalEscString;
+  const RE2 Plx;
 
-  const wstring PnLocalString = L"(" + PnCharsUString + L"|:|[0-9]|" +
-                                PlxString + L")((" + PnCharsString +
-                                L"|\\.|:|" + PlxString + L")*(" +
-                                PnCharsString + L"|:|" + PlxString + L"))?";
-  const wregex PnLocal;
+  const string PnLocalString = u8"(" + PnCharsUString + u8"|:|[0-9]|" +
+                               PlxString + u8")((" + PnCharsString +
+                               u8"|\\.|:|" + PlxString + u8")*(" +
+                               PnCharsString + u8"|:|" + PlxString + u8"))?";
+  const RE2 PnLocal;
 
-  const wstring PnameLNString = PnameNSString + PnLocalString;
-  const wregex PnameLN;
+  const string PnameLNString = PnameNSString + PnLocalString;
+  const RE2 PnameLN;
 
-  const wstring BlankNodeLabelString = L"_\\:(" + PnCharsUString +
-                                       L"|[0-9])((" + PnCharsString +
-                                       L"|\\.)*" + PnCharsString + L")?";
-  const wregex BlankNodeLabel;
+  const string BlankNodeLabelString = u8"_\\:(" + PnCharsUString +
+                                      u8"|[0-9])((" + PnCharsString +
+                                      u8"|\\.)*" + PnCharsString + u8")?";
+  const RE2 BlankNodeLabel;
 
-  const wstring WsSingleString = L"\x20|\x09|\x0D|\x0A";
-  const wregex WsSingle;
+  const string WsSingleString = u8"\x20|\x09|\x0D|\x0A";
+  const RE2 WsSingle;
 
-  const wstring WsMultipleString = L"(" + WsSingleString + L")*";
-  const wregex WsMultiple;
+  const string WsMultipleString = u8"(" + WsSingleString + u8")*";
+  const RE2 WsMultiple;
 
-  const wstring AnonString = L"\\[" + WsMultipleString + L"\\]";
-  const wregex Anon;
+  const string AnonString = u8"\\[" + WsMultipleString + u8"\\]";
+  const RE2 Anon;
 
-  const wstring CommentString = L"#[^\n]*\n";
-  const wregex Comment;
+  const string CommentString = u8"#[^\\n]*\\n";
+  const RE2 Comment;
 };
 
-template <class WstringIt>
 class Tokenizer {
   FRIEND_TEST(TokenizerTest, Compilation);
 
  public:
-  Tokenizer(WstringIt first, WstringIt last)
-      : _tokens(), _begin(first), _current(first), _end(last) {}
+  Tokenizer(const char* ptr, size_t size) : _tokens(), _data(ptr, size) {}
 
-  std::pair<bool, std::wstring> getNextToken(const std::wregex& reg);
-  std::tuple<bool, size_t, std::wstring> getNextToken(
-      const std::vector<const std::wregex*>& regs);
+  std::pair<bool, std::string> getNextToken(const RE2& reg);
+  std::tuple<bool, size_t, std::string> getNextToken(
+      const std::vector<const RE2*>& regs);
 
   void skipWhitespaceAndComments();
 
   const TurtleToken _tokens;
 
-  void reset(WstringIt first, WstringIt last) {
-    _begin = first;
-    _current = first;
-    _end = last;
+  void reset(const char* ptr, size_t size) {
+    _data = re2::StringPiece(ptr, size);
   }
 
  private:
   void skipWhitespace() {
     auto [success, ws] = getNextToken(_tokens.WsMultiple);
+    (void)ws;
     assert(success);
-    _current += ws.size();
     return;
   }
   void skipComments() {
     // if not successful, then there was no comment, but this does not matter to
     // us
-    auto [success, ws] = getNextToken(_tokens.Comment);
-    (void)success;
-    _current += ws.size();
+    getNextToken(_tokens.Comment);
+
     return;
   }
-  WstringIt _begin;
-  WstringIt _current;
-  WstringIt _end;
+  re2::StringPiece _data;
 };
 
 // ______________________________________________________
-template <class WstringIt>
-void Tokenizer<WstringIt>::skipWhitespaceAndComments() {
+void Tokenizer::skipWhitespaceAndComments() {
   skipWhitespace();
   skipComments();
   skipWhitespace();
 }
 
 // _______________________________________________________
-template <class WstringIt>
-std::pair<bool, std::wstring> Tokenizer<WstringIt>::getNextToken(
-    const std::wregex& reg) {
-  std::wsmatch match;
-  // TODO(joka921): does this enfore beginning at the first character as i
-  // suppose it does
-  bool success = std::regex_search(_current, _end, match, reg,
-                                   std::regex_constants::match_continuous);
+std::pair<bool, std::string> Tokenizer::getNextToken(const RE2& reg) {
+  std::string match = "";
+  bool success = RE2::Consume(&_data, reg, &match);
   if (!success) {
     return {false, {}};
   } else {
-    assert(match.position() == 0);
-    return {true, match.str()};
+    return {true, match};
   }
 }
 
 // _______________________________________________________
-template <class WstringIt>
-std::tuple<bool, size_t, std::wstring> Tokenizer<WstringIt>::getNextToken(
-    const std::vector<const std::wregex*>& regs) {
+std::tuple<bool, size_t, std::string> Tokenizer::getNextToken(
+    const std::vector<const RE2*>& regs) {
   size_t maxMatchSize = 0;
   size_t maxMatchIndex = 0;
-  std::wstring maxMatch;
+  std::string maxMatch;
   bool success = false;
   for (size_t i = 0; i < regs.size(); i++) {
     auto [tmpSuccess, tmpMatch] = getNextToken(*(regs[i]));

@@ -125,7 +125,7 @@ bool TurtleParser::verb() { return predicate() || predicateSpecialA(); }
 bool TurtleParser::predicateSpecialA() {
   if (auto [success, word] = _tok.getNextToken(_tokens.A); success) {
     (void)word;
-    _activePredicate = L"http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    _activePredicate = u8"http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
     return true;
   } else {
     return false;
@@ -209,7 +209,7 @@ bool TurtleParser::rdfLiteral() {
 
 // ______________________________________________________________________
 bool TurtleParser::booleanLiteral() {
-  std::vector<const std::wregex*> candidates;
+  std::vector<const RE2*> candidates;
   candidates.push_back(&(_tokens.True));
   candidates.push_back(&(_tokens.False));
   if (auto [success, index, word] = _tok.getNextToken(candidates); success) {
@@ -223,7 +223,7 @@ bool TurtleParser::booleanLiteral() {
 
 // ______________________________________________________________________
 bool TurtleParser::stringParse() {
-  std::vector<const std::wregex*> candidates;
+  std::vector<const RE2*> candidates;
   candidates.push_back(&(_tokens.StringLiteralQuote));
   candidates.push_back(&(_tokens.StringLiteralSingleQuote));
   candidates.push_back(&(_tokens.StringLiteralLongSingleQuote));
@@ -254,7 +254,7 @@ bool TurtleParser::prefixedName() {
 bool TurtleParser::blankNode() { return blankNodeLabel() || anon(); }
 
 // _______________________________________________________________________
-bool TurtleParser::parseTerminal(const std::wregex& terminal) {
+bool TurtleParser::parseTerminal(const RE2& terminal) {
   auto [success, word] = _tok.getNextToken(terminal);
   if (success) {
     _lastParseResult = word;
@@ -262,4 +262,5 @@ bool TurtleParser::parseTerminal(const std::wregex& terminal) {
   } else {
     return false;
   }
+  return false;
 }
