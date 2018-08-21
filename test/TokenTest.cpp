@@ -87,6 +87,65 @@ TEST(TokenizerTest, StringLiterals){
       RE2::FullMatch(sSingleQuote3, t.StringLiteralSingleQuote, nullptr));
   ASSERT_FALSE(RE2::FullMatch(NoSQuote1, t.StringLiteralSingleQuote, nullptr));
   ASSERT_FALSE(RE2::FullMatch(NoSQuote2, t.StringLiteralSingleQuote, nullptr));
+
+  string sMultiline1 = u8"\"\"\"test\n\"\"\"";
+  string sMultiline2 =
+      "\"\"\"MultilineString\' \'\'\'\n\\n\\u00FF\\U0001AB34\"  \"\" "
+      "someMore\"\"\"";
+  string sNoMultiline1 = u8"\"\"\"\\autsch\"\"\"";
+  string sNoMultiline2 = u8"\"\"\"\"\"\"\"";
+  ASSERT_TRUE(RE2::FullMatch(sMultiline1, t.StringLiteralLongQuote, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(sMultiline2, t.StringLiteralLongQuote, nullptr));
+  ASSERT_FALSE(
+      RE2::FullMatch(sNoMultiline1, t.StringLiteralLongQuote, nullptr));
+  ASSERT_FALSE(
+      RE2::FullMatch(sNoMultiline2, t.StringLiteralLongQuote, nullptr));
+
+  string sSingleMultiline1 = u8"\'\'\'test\n\'\'\'";
+  string sSingleMultiline2 =
+      "\'\'\'MultilineString\" \"\"\"\n\\n\\u00FF\\U0001AB34\'  \'\' "
+      "someMore\'\'\'";
+  string sSingleNoMultiline1 = u8"\'\'\'\\autsch\'\'\'";
+  string sSingleNoMultiline2 = u8"\'\'\'\'\'\'\'";
+  ASSERT_TRUE(RE2::FullMatch(sSingleMultiline1, t.StringLiteralLongSingleQuote,
+                             nullptr));
+  ASSERT_TRUE(RE2::FullMatch(sSingleMultiline2, t.StringLiteralLongSingleQuote,
+                             nullptr));
+  ASSERT_FALSE(RE2::FullMatch(sSingleNoMultiline1,
+                              t.StringLiteralLongSingleQuote, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(sSingleNoMultiline2,
+                              t.StringLiteralLongSingleQuote, nullptr));
+}
+
+TEST(TokenizerTest, Entities) {
+  TurtleToken t;
+  string iriref1 = "<>";
+  string iriref2 = "<simple>";
+  string iriref3 = "<unicode\uAA34\U000ABC34end>";
+  string iriref4 = "<escaped\\uAA34\\U000ABC34end>";
+  string noIriref1 = "<\n>";
+  string noIriref2 = "< >";
+  ASSERT_TRUE(RE2::FullMatch(iriref1, t.Iriref, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(iriref2, t.Iriref, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(iriref3, t.Iriref, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(iriref4, t.Iriref, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(noIriref1, t.Iriref, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(noIriref2, t.Iriref, nullptr));
+
+  string prefix1 = "wd:";
+  string prefix2 = "wdDDa_afa:";
+  // string prefix2 = "wD.a:";
+  string prefix3 = "wD\u00D2:";
+  string noPrefix1 = "_w:";
+  string noPrefix2 = "wd";
+  string noPrefix3 = "w\nd";
+  string noPrefix4 = "wd\u00D7:";
+  ASSERT_TRUE(RE2::FullMatch(prefix1, t.PnameNS, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(prefix2, t.PnameNS, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(prefix3, t.PnameNS, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(noPrefix1, t.PnameNS, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(noPrefix2, t.PnameNS, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(noPrefix3, t.PnameNS, nullptr));
 }
 
 TEST(TokenizerTest, Consume) {

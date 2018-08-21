@@ -83,21 +83,9 @@ struct TurtleToken {
   const RE2 Double;
 
   const string HexString = u8"[0-9]|[A-F]|[a-f]";
-  // const RE2 Hex;
-
-  // TODO: check precedence of "|"
-  /*const string UcharString = u8"(\\\\u" + HexString + HexString + HexString +
-                             HexString + u8")|(\\\\U" + HexString + HexString +
-                             HexString + HexString + HexString + HexString +
-                             HexString + HexString + u8")";
-                             */
   const string UcharString = u8"\\\\u[0-9a-fA-f]{4}|\\\\U[0-9a-fA-f]{8}";
-  // const RE2 Uchar;
 
-  // const string EcharString = u8"\\\\[tbnrf\"'\\]";
   const string EcharString = u8"\\\\[tbnrf\"\'\\\\]";
-
-  // const RE2 Echar;
 
   const string StringLiteralQuoteString = u8"\"([^\\x22\\x5C\\x0A\\x0D]|" +
                                           EcharString + u8"|" + UcharString +
@@ -109,18 +97,19 @@ struct TurtleToken {
                                                 UcharString + u8")*'";
   const RE2 StringLiteralSingleQuote;
 
-  const string StringLiteralLongSingleQuoteString =
-      u8"'''(('|'')?([^'\\]|" + EcharString + u8"|" + UcharString + u8"))*'''";
+  const string StringLiteralLongSingleQuoteString = u8"'''((''|')?([^'\\\\]|" +
+                                                    EcharString + u8"|" +
+                                                    UcharString + u8"))*'''";
   const RE2 StringLiteralLongSingleQuote;
 
-  const string StringLiteralLongQuoteString = u8"\"\"\"((\"|\"\")?([^\"\\]|" +
+  const string StringLiteralLongQuoteString = u8"\"\"\"((\"\"|\")?([^\"\\\\]|" +
                                               EcharString + u8"|" +
                                               UcharString + u8"))*\"\"\"";
   const RE2 StringLiteralLongQuote;
 
   // TODO: fix this!
-  const string IrirefString = "dummy";
-  //  "\\<([^\\x00-\\x20<>\"{}|^`\\]|"s + UcharString + u8")*\\>";
+  const string IrirefString =
+      "<([^\\x00-\\x20<>\"{}|^`\\\\]|"s + UcharString + u8")*>";
   const RE2 Iriref;
 
   const string PercentString = u8"%" + HexString + HexString;
@@ -143,10 +132,16 @@ struct TurtleToken {
   const string PnCharsString =
       PnCharsUString + u8"|-|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]";
 
-  const string PnPrefixString = PnCharsBaseString + u8"((" + PnCharsString +
-                                u8"|\\.)*" + PnCharsString + u8")?";
+  /*
+  const string PnPrefixString = grp(PnCharsBaseString) + u8"((" +
+                                PnCharsString + u8"|\\.)*" + PnCharsString +
+                                u8")?";
+                        */
+  // TODO<joka921> verify that this is what is meant
+  const string PnPrefixString = grp(PnCharsBaseString) + u8"(\\." +
+                                PnCharsString + u8"|" + PnCharsString + ")*";
 
-  const string PnameNSString = PnPrefixString + u8"\\:";
+  const string PnameNSString = PnPrefixString + u8":";
   const RE2 PnameNS;
 
   const string PnLocalEscString = u8"";  // = u8"\\\\[_~.\\-!$&'()*+,;=/?#@%";
