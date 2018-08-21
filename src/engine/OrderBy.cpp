@@ -25,11 +25,8 @@ string OrderBy::asString(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  os << "OrderBy " << _subtree->asString(indent) << "\n";
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "order on ";
+  os << "ORDER_BY\n" << _subtree->asString(indent);
+  os << " order on ";
   for (auto ind : _sortIndices) {
     os << (ind.second ? "desc(" : "asc(") << ind.first << ") ";
   }
