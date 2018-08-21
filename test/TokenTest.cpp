@@ -51,11 +51,11 @@ TEST(TokenTest, Numbers) {
 TEST(TokenizerTest, SingleChars) {
   TurtleToken t;
 
-  ASSERT_TRUE(RE2::FullMatch(u8"A", t.PnCharsBaseString));
-  ASSERT_TRUE(RE2::FullMatch(u8"\u00dd", t.PnCharsBaseString));
-  ASSERT_TRUE(RE2::FullMatch(u8"\u00DD", t.PnCharsBaseString));
-  ASSERT_TRUE(RE2::FullMatch(u8"\u00De", t.PnCharsBaseString));
-  ASSERT_FALSE(RE2::FullMatch(u8"\u00D7", t.PnCharsBaseString));
+  ASSERT_TRUE(RE2::FullMatch(u8"A", t.cls(t.PnCharsBaseString)));
+  ASSERT_TRUE(RE2::FullMatch(u8"\u00dd", t.cls(t.PnCharsBaseString)));
+  ASSERT_TRUE(RE2::FullMatch(u8"\u00DD", t.cls(t.PnCharsBaseString)));
+  ASSERT_TRUE(RE2::FullMatch(u8"\u00De", t.cls(t.PnCharsBaseString)));
+  ASSERT_FALSE(RE2::FullMatch(u8"\u00D7", t.cls(t.PnCharsBaseString)));
 }
 
 TEST(TokenizerTest, StringLiterals){
@@ -133,9 +133,9 @@ TEST(TokenizerTest, Entities) {
   ASSERT_FALSE(RE2::FullMatch(noIriref2, t.Iriref, nullptr));
 
   string prefix1 = "wd:";
-  string prefix2 = "wdDDa_afa:";
-  // string prefix2 = "wD.a:";
+  string prefix2 = "wdDDäéa_afa:";
   string prefix3 = "wD\u00D2:";
+  string prefix4 = "wD.aä:";
   string noPrefix1 = "_w:";
   string noPrefix2 = "wd";
   string noPrefix3 = "w\nd";
@@ -143,6 +143,7 @@ TEST(TokenizerTest, Entities) {
   ASSERT_TRUE(RE2::FullMatch(prefix1, t.PnameNS, nullptr));
   ASSERT_TRUE(RE2::FullMatch(prefix2, t.PnameNS, nullptr));
   ASSERT_TRUE(RE2::FullMatch(prefix3, t.PnameNS, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(prefix4, t.PnameNS, nullptr));
   ASSERT_FALSE(RE2::FullMatch(noPrefix1, t.PnameNS, nullptr));
   ASSERT_FALSE(RE2::FullMatch(noPrefix2, t.PnameNS, nullptr));
   ASSERT_FALSE(RE2::FullMatch(noPrefix3, t.PnameNS, nullptr));

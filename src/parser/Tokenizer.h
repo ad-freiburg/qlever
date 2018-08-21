@@ -116,21 +116,22 @@ struct TurtleToken {
   // const RE2 Percent;
 
   const string PnCharsBaseString =
-      u8"[A-Z]|[a-z]|[\\x{00C0}-\\x{00D6}]|[\\x{00D8}-\\x{00F6}]|[\\x{00F8}-"
-      u8"\\x{02FF}]|["
+      u8"A-Za-z\\x{00C0}-\\x{00D6}\\x{00D8}-\\x{00F6}\\x{00F8}-"
+      u8"\\x{02FF}"
       u8"\\x{0370}-"
-      u8"\\x{037D}]|[\\x{037F}-\\x{1FFF}]|[\\x{200C}-\\x{200D}]|[\\x{2070}-\\x{"
-      u8"218F}]|["
+      u8"\\x{037D}\\x{037F}-\\x{1FFF}\\x{200C}-\\x{200D}\\x{2070}-\\x{"
+      u8"218F}"
       u8"\\x{2C00}-"
-      u8"\\x{2FEF}]"
-      u8"|[\\x{3001}-\\x{D7FF}]|[\\x{F900}-\\x{FDCF}]|[\\x{FDF0}-\\x{FFFD}]|["
+      u8"\\x{2FEF}"
+      u8"\\x{3001}-\\x{D7FF}\\x{F900}-\\x{FDCF}\\x{FDF0}-\\x{FFFD}"
       u8"\\x{00010000}-"
-      u8"\\x{000EFFFF}]";
+      u8"\\x{000EFFFF}";
 
-  const string PnCharsUString = PnCharsBaseString + u8"|_";
+  const string PnCharsUString = PnCharsBaseString + u8"_";
 
   const string PnCharsString =
-      PnCharsUString + u8"|-|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]";
+      PnCharsUString +
+      u8"\\-0-9\\x{00B7}\\x{0300}-\\x{036F}\\x{203F}-\\x{2040}";
 
   /*
   const string PnPrefixString = grp(PnCharsBaseString) + u8"((" +
@@ -138,8 +139,9 @@ struct TurtleToken {
                                 u8")?";
                         */
   // TODO<joka921> verify that this is what is meant
-  const string PnPrefixString = grp(PnCharsBaseString) + u8"(\\." +
-                                PnCharsString + u8"|" + PnCharsString + ")*";
+  const string PnPrefixString = cls(PnCharsBaseString) + u8"(\\." +
+                                cls(PnCharsString) + u8"|" +
+                                cls(PnCharsString) + ")*";
 
   const string PnameNSString = PnPrefixString + u8":";
   const RE2 PnameNS;
@@ -173,6 +175,7 @@ struct TurtleToken {
   const RE2 Comment;
 
   static string grp(const string& s) { return '(' + s + ')'; }
+  static string cls(const string& s) { return '[' + s + ']'; }
 };
 
 class Tokenizer {
