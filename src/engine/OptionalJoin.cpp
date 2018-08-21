@@ -327,6 +327,8 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
   } else {
     _sizeEstimate = multResult * numDistinctResult;
   }
+  // Don't estimate 0 since then upstream thinks we are sure it's zero
+  _sizeEstimate += 1;
 
   // compute estimates for the multiplicities of the result columns
   _multiplicities.clear();

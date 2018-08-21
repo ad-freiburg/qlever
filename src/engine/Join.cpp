@@ -57,6 +57,7 @@ void Join::computeResult(ResultTable* result) const {
   // Checking this before calling getResult on the subtrees can
   // avoid the computation of an non-empty subtree.
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
+    LOG(TRACE) << "Either side is empty thus join result is empty" << endl;
     size_t resWidth = leftWidth + rightWidth - 1;
     result->_nofColumns = resWidth;
     result->_resultTypes.resize(result->_nofColumns);
@@ -78,15 +79,17 @@ void Join::computeResult(ResultTable* result) const {
 
   // Check for joins with dummy
   if (isFullScanDummy(_left) || isFullScanDummy(_right)) {
+    LOG(TRACE) << "Either side is Full Scan Dummy" << endl;
     computeResultForJoinWithFullScanDummy(result);
     return;
   }
 
-  shared_ptr<const ResultTable> leftRes =
-      _left->getRootOperation()->getResult();
+  LOG(TRACE) << "Computing left side..." << endl;
+  shared_ptr<const ResultTable> leftRes = _left->getResult();
 
   // Check if we can stop early.
   if (leftRes->size() == 0) {
+    LOG(TRACE) << "Left side empty thus join result is empty" << endl;
     size_t resWidth = leftWidth + rightWidth - 1;
     result->_nofColumns = resWidth;
     result->_resultTypes.resize(result->_nofColumns);
@@ -106,10 +109,10 @@ void Join::computeResult(ResultTable* result) const {
     return;
   }
 
-  shared_ptr<const ResultTable> rightRes =
-      _right->getRootOperation()->getResult();
+  LOG(TRACE) << "Computing right side..." << endl;
+  shared_ptr<const ResultTable> rightRes = _right->getResult();
 
-  LOG(DEBUG) << "Join result computation..." << endl;
+  LOG(DEBUG) << "Computing Join result..." << endl;
 
   AD_CHECK(result);
   AD_CHECK(!result->_fixedSizeData);
@@ -490,8 +493,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
     AD_CHECK(!isFullScanDummy(_right))
     result->_nofColumns = _right->getResultWidth() + 2;
     result->_sortedBy = 2 + _rightJoinCol;
-    shared_ptr<const ResultTable> nonDummyRes =
-        _right->getRootOperation()->getResult();
+    shared_ptr<const ResultTable> nonDummyRes = _right->getResult();
     result->_resultTypes.reserve(result->_nofColumns);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -534,8 +536,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
     result->_nofColumns = _left->getResultWidth() + 2;
     result->_sortedBy = _leftJoinCol;
 
-    shared_ptr<const ResultTable> nonDummyRes =
-        _left->getRootOperation()->getResult();
+    shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
     result->_resultTypes.reserve(result->_nofColumns);
     result->_resultTypes.insert(result->_resultTypes.end(),
                                 nonDummyRes->_resultTypes.begin(),

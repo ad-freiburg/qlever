@@ -34,8 +34,8 @@ class Operation {
   // Use existing results if they are already available, otherwise
   // trigger computation.
   shared_ptr<const ResultTable> getResult() const {
-    LOG(TRACE) << "Try to atomically emplace a new empty ResultTable" << endl;
-    LOG(TRACE) << "Using key: \n" << asString() << endl;
+    LOG(DEBUG) << "Try to atomically emplace a new empty ResultTable" << endl;
+    LOG(DEBUG) << "Using key: \n" << asString() << endl;
     auto [newResult, existingResult] =
         _executionContext->getQueryTreeCache().tryEmplace(asString());
     if (newResult) {
