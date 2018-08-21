@@ -14,6 +14,8 @@ using namespace std::string_literals;
 struct TurtleToken {
   using string = std::string;
   TurtleToken()
+      // those constants are always skipped, so they don't need a group around
+      // them
       : TurtlePrefix(u8"@prefix"),
         SparqlPrefix(u8"PREFIX"),
         TurtleBase(u8"@base"),
@@ -37,29 +39,16 @@ struct TurtleToken {
         Decimal(u8"[+-]?[0-9]*\\.[0-9]+"),
         Exponent(ExponentString),
         Double(DoubleString),
-        Hex(HexString),
-        Uchar(UcharString),
-        Echar(EcharString),
         StringLiteralQuote(StringLiteralQuoteString),
         StringLiteralSingleQuote(StringLiteralSingleQuoteString),
         StringLiteralLongSingleQuote(StringLiteralLongSingleQuoteString),
         StringLiteralLongQuote(StringLiteralLongQuoteString),
 
         Iriref(IrirefString),
-        Percent(PercentString),
-
-        PnCharsBase(PnCharsBaseString),
-        PnCharsU(PnCharsUString),
-        PnChars(PnCharsString),
-        PnPrefix(PnPrefixString),
         PnameNS(PnameNSString),
-        PnLocalEsc(PnLocalEscString),
-        Plx(PlxString),
-        PnLocal(PnLocalString),
         PnameLN(PnameLNString),
         BlankNodeLabel(BlankNodeLabelString),
 
-        WsSingle(WsSingleString),
         WsMultiple(WsMultipleString),
         Anon(AnonString),
         Comment(CommentString) {}
@@ -94,19 +83,19 @@ struct TurtleToken {
   const RE2 Double;
 
   const string HexString = u8"[0-9]|[A-F]|[a-f]";
-  const RE2 Hex;
+  // const RE2 Hex;
 
   // TODO: check precedence of "|"
   const string UcharString = u8"(\\\\u" + HexString + HexString + HexString +
                              HexString + u8")|(\\\\U" + HexString + HexString +
                              HexString + HexString + HexString + HexString +
                              HexString + HexString + u8")";
-  const RE2 Uchar;
+  // const RE2 Uchar;
 
   // const string EcharString = u8"\\\\[tbnrf\"'\\]";
   const string EcharString = u8"\\\\[tbnrf\"\'\\\\]";
 
-  const RE2 Echar;
+  // const RE2 Echar;
 
   const string StringLiteralQuoteString = u8"\"([^\x22\x5C\x0A\x0D]|" +
                                           EcharString + u8"|" + UcharString +
@@ -132,7 +121,7 @@ struct TurtleToken {
   const RE2 Iriref;
 
   const string PercentString = u8"%" + HexString + HexString;
-  const RE2 Percent;
+  // const RE2 Percent;
 
   const string PnCharsBaseString =
       u8"[A-Z]|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-"
@@ -140,33 +129,26 @@ struct TurtleToken {
       u8"\u2FEF]"
       u8"|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]|[\U00010000-"
       u8"\U000EFFFF]";
-  const RE2 PnCharsBase;
 
   const string PnCharsUString = PnCharsBaseString + u8"|_";
-  const RE2 PnCharsU;
 
   const string PnCharsString =
       PnCharsUString + u8"|-|[0-9]|\u00B7|[\u0300-\u036F]|[\u203F-\u2040]";
-  const RE2 PnChars;
 
   const string PnPrefixString = PnCharsBaseString + u8"((" + PnCharsString +
                                 u8"|\\.)*" + PnCharsString + u8")?";
-  const RE2 PnPrefix;
 
   const string PnameNSString = PnPrefixString + u8"\\:";
   const RE2 PnameNS;
 
   const string PnLocalEscString = u8"";  // = u8"\\\\[_~.\\-!$&'()*+,;=/?#@%";
-  const RE2 PnLocalEsc;
 
   const string PlxString = PercentString + u8"|" + PnLocalEscString;
-  const RE2 Plx;
 
   const string PnLocalString = u8"(" + PnCharsUString + u8"|:|[0-9]|" +
                                PlxString + u8")((" + PnCharsString +
                                u8"|\\.|:|" + PlxString + u8")*(" +
                                PnCharsString + u8"|:|" + PlxString + u8"))?";
-  const RE2 PnLocal;
 
   const string PnameLNString = PnameNSString + PnLocalString;
   const RE2 PnameLN;
@@ -177,7 +159,6 @@ struct TurtleToken {
   const RE2 BlankNodeLabel;
 
   const string WsSingleString = u8"\x20|\x09|\x0D|\x0A";
-  const RE2 WsSingle;
 
   const string WsMultipleString = u8"(" + WsSingleString + u8")*";
   const RE2 WsMultiple;
@@ -200,6 +181,7 @@ class Tokenizer {
       const std::vector<const RE2*>& regs);
 
   void skipWhitespaceAndComments();
+  bool skip(const RE2& reg) { return RE2::Consume(&_data, reg); }
 
   const TurtleToken _tokens;
 
@@ -207,20 +189,21 @@ class Tokenizer {
     _data = re2::StringPiece(ptr, size);
   }
 
+  const re2::StringPiece& data() const { return _data; }
+
  private:
   void skipWhitespace() {
-    auto [success, ws] = getNextToken(_tokens.WsMultiple);
-    (void)ws;
+    auto success = skip(_tokens.WsMultiple);
     assert(success);
     return;
   }
   void skipComments() {
     // if not successful, then there was no comment, but this does not matter to
     // us
-    getNextToken(_tokens.Comment);
-
+    skip(_tokens.Comment);
     return;
   }
+  FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
   re2::StringPiece _data;
 };
 
@@ -260,3 +243,4 @@ std::tuple<bool, size_t, std::string> Tokenizer::getNextToken(
   }
   return {success, maxMatchIndex, maxMatch};
 }
+

@@ -75,7 +75,7 @@ class TurtleParser {
   bool blankNodeLabel() { return parseTerminal(_tokens.BlankNodeLabel); }
   bool anon() { return parseTerminal(_tokens.Anon); }
 
-  bool skip(const RE2& reg);
+  bool skip(const RE2& reg) { return _tok.skip(reg); }
   bool parseTerminal(const RE2& terminal);
 
   void emitTriple() {
