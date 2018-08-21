@@ -16,42 +16,42 @@ struct TurtleToken {
   TurtleToken()
       // those constants are always skipped, so they don't need a group around
       // them
-      : TurtlePrefix(u8"@prefix"),
-        SparqlPrefix(u8"PREFIX"),
-        TurtleBase(u8"@base"),
-        SparqlBase(u8"BASE"),
+      : TurtlePrefix(grp(u8"@prefix")),
+        SparqlPrefix(grp(u8"PREFIX")),
+        TurtleBase(grp(u8"@base")),
+        SparqlBase(grp(u8"BASE")),
 
-        Dot(u8"\\."),
-        Comma(u8","),
-        Semicolon(u8";"),
-        OpenSquared(u8"\\["),
-        CloseSquared(u8"\\]"),
-        OpenRound(u8"\\("),
-        CloseRound(u8"\\)"),
-        A(u8"a"),
-        DoubleCircumflex(u8"\\^\\^"),
+        Dot(grp(u8"\\.")),
+        Comma(grp(u8",")),
+        Semicolon(grp(u8";")),
+        OpenSquared(grp(u8"\\[")),
+        CloseSquared(grp(u8"\\]")),
+        OpenRound(grp(u8"\\(")),
+        CloseRound(grp(u8"\\)")),
+        A(grp(u8"a")),
+        DoubleCircumflex(grp(u8"\\^\\^")),
 
-        True(u8"true"),
-        False(u8"false"),
-        Langtag(LangtagString),
+        True(grp(u8"true")),
+        False(grp(u8"false")),
+        Langtag(grp(LangtagString)),
 
-        Integer(u8"[+-]?[0-9]+"),
-        Decimal(u8"[+-]?[0-9]*\\.[0-9]+"),
-        Exponent(ExponentString),
-        Double(DoubleString),
-        StringLiteralQuote(StringLiteralQuoteString),
-        StringLiteralSingleQuote(StringLiteralSingleQuoteString),
-        StringLiteralLongSingleQuote(StringLiteralLongSingleQuoteString),
-        StringLiteralLongQuote(StringLiteralLongQuoteString),
+        Integer(grp(u8"[+-]?[0-9]+")),
+        Decimal(grp(u8"[+-]?[0-9]*\\.[0-9]+")),
+        Exponent(grp(ExponentString)),
+        Double(grp(DoubleString)),
+        StringLiteralQuote(grp(StringLiteralQuoteString)),
+        StringLiteralSingleQuote(grp(StringLiteralSingleQuoteString)),
+        StringLiteralLongSingleQuote(grp(StringLiteralLongSingleQuoteString)),
+        StringLiteralLongQuote(grp(StringLiteralLongQuoteString)),
 
-        Iriref(IrirefString),
-        PnameNS(PnameNSString),
-        PnameLN(PnameLNString),
-        BlankNodeLabel(BlankNodeLabelString),
+        Iriref(grp(IrirefString)),
+        PnameNS(grp(PnameNSString)),
+        PnameLN(grp(PnameLNString)),
+        BlankNodeLabel(grp(BlankNodeLabelString)),
 
-        WsMultiple(WsMultipleString),
-        Anon(AnonString),
-        Comment(CommentString) {}
+        WsMultiple(grp(WsMultipleString)),
+        Anon(grp(AnonString)),
+        Comment(grp(CommentString)) {}
 
   const RE2 TurtlePrefix;
   const RE2 SparqlPrefix;
@@ -86,10 +86,12 @@ struct TurtleToken {
   // const RE2 Hex;
 
   // TODO: check precedence of "|"
-  const string UcharString = u8"(\\\\u" + HexString + HexString + HexString +
+  /*const string UcharString = u8"(\\\\u" + HexString + HexString + HexString +
                              HexString + u8")|(\\\\U" + HexString + HexString +
                              HexString + HexString + HexString + HexString +
                              HexString + HexString + u8")";
+                             */
+  const string UcharString = u8"\\\\u[0-9a-fA-f]{4}|\\\\U[0-9a-fA-f]{8}";
   // const RE2 Uchar;
 
   // const string EcharString = u8"\\\\[tbnrf\"'\\]";
@@ -97,13 +99,14 @@ struct TurtleToken {
 
   // const RE2 Echar;
 
-  const string StringLiteralQuoteString = u8"\"([^\x22\x5C\x0A\x0D]|" +
+  const string StringLiteralQuoteString = u8"\"([^\\x22\\x5C\\x0A\\x0D]|" +
                                           EcharString + u8"|" + UcharString +
                                           u8")*\"";
   const RE2 StringLiteralQuote;
 
-  const string StringLiteralSingleQuoteString =
-      u8"'([^\x22\x5C\x0A\x0D]|" + EcharString + u8"|" + UcharString + u8")*'";
+  const string StringLiteralSingleQuoteString = u8"'([^\\x27\\x5C\\x0A\\x0D]|" +
+                                                EcharString + u8"|" +
+                                                UcharString + u8")*'";
   const RE2 StringLiteralSingleQuote;
 
   const string StringLiteralLongSingleQuoteString =
@@ -124,11 +127,16 @@ struct TurtleToken {
   // const RE2 Percent;
 
   const string PnCharsBaseString =
-      u8"[A-Z]|[a-z]|[\u00C0-\u00D6]|[\u00D8-\u00F6]|[\u00F8-\u02FF]|[\u0370-"
-      u8"\u037D]|[\u037F-\u1FFF]|[\u200C-\u200D]|[\u2070-\u218F]|[\u2C00-"
-      u8"\u2FEF]"
-      u8"|[\u3001-\uD7FF]|[\uF900-\uFDCF]|[\uFDF0-\uFFFD]|[\U00010000-"
-      u8"\U000EFFFF]";
+      u8"[A-Z]|[a-z]|[\\x{00C0}-\\x{00D6}]|[\\x{00D8}-\\x{00F6}]|[\\x{00F8}-"
+      u8"\\x{02FF}]|["
+      u8"\\x{0370}-"
+      u8"\\x{037D}]|[\\x{037F}-\\x{1FFF}]|[\\x{200C}-\\x{200D}]|[\\x{2070}-\\x{"
+      u8"218F}]|["
+      u8"\\x{2C00}-"
+      u8"\\x{2FEF}]"
+      u8"|[\\x{3001}-\\x{D7FF}]|[\\x{F900}-\\x{FDCF}]|[\\x{FDF0}-\\x{FFFD}]|["
+      u8"\\x{00010000}-"
+      u8"\\x{000EFFFF}]";
 
   const string PnCharsUString = PnCharsBaseString + u8"|_";
 
@@ -168,6 +176,8 @@ struct TurtleToken {
 
   const string CommentString = u8"#[^\\n]*\\n";
   const RE2 Comment;
+
+  static string grp(const string& s) { return '(' + s + ')'; }
 };
 
 class Tokenizer {
