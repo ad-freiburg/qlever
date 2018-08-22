@@ -3,6 +3,7 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 #include <gtest/gtest.h>
+#include <iostream>
 #include <string>
 #include "../src/parser/Tokenizer.h"
 
@@ -147,6 +148,57 @@ TEST(TokenizerTest, Entities) {
   ASSERT_FALSE(RE2::FullMatch(noPrefix1, t.PnameNS, nullptr));
   ASSERT_FALSE(RE2::FullMatch(noPrefix2, t.PnameNS, nullptr));
   ASSERT_FALSE(RE2::FullMatch(noPrefix3, t.PnameNS, nullptr));
+
+  string prefName1 = "wd:Q34";
+  string prefName2 = "wdDDäé_afa::93.x";
+  string prefName3 = "wd:\%FF\%33...\%FF";
+  string prefName4 = "wd:\\_\\~ab.c";
+  string prefName5 = "wd:_hey";
+  string prefName6 = "wd:h-ey";
+  string prefName7 = "wd:::.::";
+
+  string noPrefName1 = "wd:.hey";
+  string noPrefName2 = "wd:-hey";
+  string noPrefName3 = "wd:\u00BF";
+
+  ASSERT_FALSE(RE2::FullMatch("\xBF", t.cls(t.PnCharsUString)));
+  ASSERT_FALSE(RE2::FullMatch("\xBF", t.PnLocalString));
+
+  ASSERT_TRUE(RE2::FullMatch(prefName1, t.PnameLN, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(prefName2, t.PnameLN, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(prefName3, t.PnameLN, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(prefName4, t.PnameLN, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(prefName5, t.PnameLN, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(prefName6, t.PnameLN, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(prefName7, t.PnameLN, nullptr));
+
+  ASSERT_FALSE(RE2::FullMatch(noPrefName1, t.PnameLN, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(noPrefName2, t.PnameLN, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(noPrefName3, t.PnameLN, nullptr));
+
+  string blank1 = "_:easy";
+  string blank2 = "_:_easy";
+  string blank3 = "_:d-35\u00B7";
+  string blank4 = "_:a..d...A";
+  string blank5 = "_:a..\u00B7";
+  string blank6 = "_:3numberFirst";
+
+  string noBlank1 = "_:ab.";
+  string noBlank2 = "_:-ab";
+  string noBlank3 = "_:\u00B7";
+  string noBlank4 = "_:.pointFirst";
+
+  ASSERT_TRUE(RE2::FullMatch(blank1, t.BlankNodeLabel, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(blank2, t.BlankNodeLabel, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(blank3, t.BlankNodeLabel, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(blank4, t.BlankNodeLabel, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(blank5, t.BlankNodeLabel, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(blank6, t.BlankNodeLabel, nullptr));
+
+  ASSERT_FALSE(RE2::FullMatch(noBlank1, t.BlankNodeLabel, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(noBlank2, t.BlankNodeLabel, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(noBlank3, t.BlankNodeLabel, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(noBlank4, t.BlankNodeLabel, nullptr));
 }
 
 TEST(TokenizerTest, Consume) {

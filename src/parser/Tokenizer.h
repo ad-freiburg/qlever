@@ -82,7 +82,7 @@ struct TurtleToken {
                               u8"|" + ExponentString + u8")";
   const RE2 Double;
 
-  const string HexString = u8"[0-9]|[A-F]|[a-f]";
+  const string HexString = u8"0-9A-Fa-f";
   const string UcharString = u8"\\\\u[0-9a-fA-f]{4}|\\\\U[0-9a-fA-f]{8}";
 
   const string EcharString = u8"\\\\[tbnrf\"\'\\\\]";
@@ -112,7 +112,7 @@ struct TurtleToken {
       "<([^\\x00-\\x20<>\"{}|^`\\\\]|"s + UcharString + u8")*>";
   const RE2 Iriref;
 
-  const string PercentString = u8"%" + HexString + HexString;
+  const string PercentString = u8"%" + cls(HexString) + "{2}";
   // const RE2 Percent;
 
   const string PnCharsBaseString =
@@ -146,21 +146,32 @@ struct TurtleToken {
   const string PnameNSString = PnPrefixString + u8":";
   const RE2 PnameNS;
 
-  const string PnLocalEscString = u8"";  // = u8"\\\\[_~.\\-!$&'()*+,;=/?#@%";
+  const string PnLocalEscString = u8"\\\\[_~.\\-!$&'()*+,;=/?#@%]";
 
   const string PlxString = PercentString + u8"|" + PnLocalEscString;
 
-  const string PnLocalString = u8"(" + PnCharsUString + u8"|:|[0-9]|" +
-                               PlxString + u8")((" + PnCharsString +
-                               u8"|\\.|:|" + PlxString + u8")*(" +
-                               PnCharsString + u8"|:|" + PlxString + u8"))?";
+  /*const string PnLocalString =
+      u8"(" + cls(PnCharsUString + u8":[0-9]" + PlxString) + u8")((" +
+      cls(PnCharsString + u8"\\.:" + PlxString) + u8")*(" +
+      cls(PnCharsString + u8":" + PlxString) + u8"))?";
+      */
 
-  const string PnameLNString = PnameNSString + PnLocalString;
+  const string TmpNoDot = cls(PnCharsString + ":") + "|" + PlxString;
+  const string PnLocalString =
+      grp(cls(PnCharsUString + u8":0-9") + "|" + PlxString) +
+      grp(u8"\\.*" + grp(TmpNoDot)) + "*";
+
+  const string PnameLNString = grp(PnameNSString) + grp(PnLocalString);
   const RE2 PnameLN;
 
-  const string BlankNodeLabelString = u8"_\\:(" + PnCharsUString +
+  /*
+  const string BlankNodeLabelString = u8"_:(" + PnCharsUString +
                                       u8"|[0-9])((" + PnCharsString +
                                       u8"|\\.)*" + PnCharsString + u8")?";
+                                      */
+  const string BlankNodeLabelString = u8"_:" + cls(PnCharsUString + u8"0-9") +
+                                      grp("\\.*" + cls(PnCharsString)) + "*";
+
   const RE2 BlankNodeLabel;
 
   const string WsSingleString = u8"\x20|\x09|\x0D|\x0A";
