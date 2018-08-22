@@ -217,3 +217,36 @@ queries:
           - contains_row: ["<Named_after>"]
           - contains_row: ["<Influenced_By>"]
           - contains_row: ["<Production_staff>"]
+  - query : optional-spouse
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?x ?y WHERE {
+              ?x <is-a> <Scientist> .
+              OPTIONAL { ?x <Spouse_(or_domestic_partner)> ?y } .
+              FILTER (?x < <Ada_Lovelace>)
+          }
+        checks:
+          - num_rows: 126
+          - num_cols: 2
+          - selected: ["?x", "?y"]
+          - contains_row: ["<Aaron_Antonovsky>","<Helen_Antonovsky>"]
+          - contains_row: ["<Abraham_Zelmanov>", null]
+  - query : optional-spouse-group-concat
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?x (GROUP_CONCAT(?y; separator=";") AS ?partners) WHERE {
+              ?x <is-a> <Scientist> .
+              OPTIONAL {?x <Spouse_(or_domestic_partner)> ?y .}
+              FILTER (?x < <Ada_Lovelace>)
+          }
+          GROUP BY ?x
+        checks:
+          - num_rows: 124
+          - num_cols: 2
+          - selected: ["?x", "?partners"]
+          - contains_row: ["<Aaron_Antonovsky>","<Helen_Antonovsky>"]
+          - contains_row: ["<Abraham_Zelmanov>", ""]
+          - contains_row: ["<Abraham_Pais>","<Ida_Nicolaisen>;<Lila_Lee_Pais>"]
+          - contains_row: ["<Aafia_Siddiqui>","<Ammar_al-Baluchi>;<Amjad_Mohammed_Khan>"]
