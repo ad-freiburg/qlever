@@ -5,6 +5,7 @@
 #pragma once
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -32,14 +33,22 @@ std::vector<std::string> calculatePrefixes(std::vector<std::string> vocabulary,
 //            numPrefixes - the number of prefixes we want to compute
 //            codelength  - the (fixed) length of the code for the prefixes we
 //                          want the algorithm to assume.
+//            alwaysAddCode - this means that a encoding of size codelength will
+//                            be added to every word, no matter if it is
+//                            actually compressed. (This is true for the
+//                            vocabulary in QLever). The Algorithm has to know
+//                            this in order to chosse the correct prefixes.
+//
 // Returns:   vector of suitable  prefixes  which have been selected by the
 //            algorthm
 //
 std::vector<std::string> calculatePrefixes(const std::string& filename,
                                            size_t numPrefixes,
-                                           size_t codelength);
+                                           size_t codelength,
+                                           bool alwaysAddCode = false);
 namespace ad_utility {
 using std::string;
+using std::string_view;
 
 // Node of the Tree used in the algorithm. Each TreeNode represents a prefix of
 // the vocabulary that can be chosen for compression
@@ -49,17 +58,17 @@ class TreeNode {
   using NodePtr = std::unique_ptr<TreeNode>;
 
   // Constructor
-  explicit TreeNode(const string& value) : _value(value) {}
+  explicit TreeNode(string_view value) : _value(value) {}
 
   // Recursive Insertion of value. If the value does not match _value we will
   // automatically call insert on a node that is closer to the actual position
   // of value in the Tree. Returns the node that was actually inserted
-  TreeNode* insert(const string& value);
+  TreeNode* insert(string_view value);
 
   // recursive insertion used when this nodes _value is a prefix of argument
   // value. Thus we know that we will insert into this TreeNode's subtree
   // Returns the node that was actually inserted
-  TreeNode* insertAfter(const string& value);
+  TreeNode* insertAfter(string_view value);
 
   // Compute the scores of this Nodes subtree and find the maximum score and the
   // Node to which this value corresponds.
@@ -123,7 +132,7 @@ class Tree {
 
   // insert a value to the tree. If value is already present, the _ownCount of
   // the corresponding TreeNode is increased  by one.
-  TreeNode* insert(const string& value);
+  TreeNode* insert(string_view value);
 
   // Same functionality as the simple insert. Additionally gets a node as a hint
   // where to start searching for the value's place in the tree. This is useful
@@ -131,7 +140,7 @@ class Tree {
   // each other in the tree
   // passing the nullptr as startPoint will start looking at the root
   // Returns the node that was actually inserted
-  TreeNode* insert(const string& value, TreeNode* startPoint);
+  TreeNode* insert(string_view value, TreeNode* startPoint);
 
   // Recursively compute the score of all the nodes in the tree, find the
   // maximum, return and delete it.

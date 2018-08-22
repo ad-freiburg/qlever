@@ -41,7 +41,7 @@ INDEX="e2e_data/scientists-index"
 if [ "$1" != "no-index" ]; then
 	rm -f "$INDEX.*"
 	pushd "./build"
-	./IndexBuilderMain -a -l -c -i "../$INDEX" \
+	./IndexBuilderMain -a -l -i "../$INDEX" \
 		-n "../e2e_data/scientist-collection/scientists.nt" \
 		-w "../e2e_data/scientist-collection/scientists.wordsfile.tsv" \
 		-d "../e2e_data/scientist-collection/scientists.docsfile.tsv" \
@@ -52,7 +52,7 @@ fi
 # Launch the Server using the freshly baked index. Can't simply use a subshell here because
 # then we can't easily get the SERVER_PID out of that subshell
 pushd "./build"
-./ServerMain -i "../$INDEX" -p 9099 -t -a -l --patterns &> server_log.txt &
+./ServerMain -i "../$INDEX" -p 9099 -t -a --patterns &> server_log.txt &
 SERVER_PID=$!
 popd
 

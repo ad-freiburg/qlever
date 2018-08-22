@@ -1,6 +1,8 @@
 // Copyright 2011, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold <buchholb>
+// Authors: Björn Buchhold <buchholb>,
+//          Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+//
 
 #pragma once
 
@@ -292,26 +294,30 @@ class Vocabulary {
   template <typename = std::enable_if_t<_isCompressed>>
   CompressedString compressPrefix(const string& word) const;
 
-  // ____________________________________________
-  // TODO<joka921> actually we don't want to read the complete file here
-  // Move to Index class, where a settings file can be read.
-  // TODO throw out, actually we want to automatically create our prefixes
-  /*
-  void initializeNewPrefixes(const string& filename);
-  */
-
-  // TODO< this overload is needed for creating the prefix heuristic
+  // initialize compression with a list of prefixes
+  // can only be called on an empty array.
+  // The prefixes do not have to be in any specific order
+  //
+  // StringRange prefixes can be of any type where
+  // for (const string& el : prefixes {}
+  // works
   template <class StringRange, typename = std::enable_if_t<_isCompressed>>
   void initializeNewPrefixes(const StringRange& prefixes);
 
   // set the list of prefixes for words which will become part of the
   // externalized vocabulary. Good for entity names that normally don't appear
   // in queries or results but take a lot of space (e.g. Wikidata statements)
+  //
+  // StringRange prefixes can be of any type where
+  // for (const string& el : prefixes {}
+  // works
   template <class StringRange>
   void initializeExternalizePrefixes(const StringRange& prefixes);
 
   // ______________________________________________________
   // set the prefixes used for compression
+  // These have to have the exact same format returned by
+  // getJsonForPrefixes (serialization of the compression information)
   template <typename = std::enable_if_t<_isCompressed>>
   void initializeRestartPrefixes(const json& j);
 
@@ -331,8 +337,9 @@ class Vocabulary {
   //            j[2]="ablab" means, that the prefix "ablab" was encoded by the
   //            byte \x02
   template <typename = std::enable_if_t<_isCompressed>>
-  static json prefixCompressFile(const string& infile, const string& outfile,
-                                 const vector<string>& prefixes);
+  static std::array<std::string, NUM_COMPRESSION_PREFIXES> prefixCompressFile(
+      const string& infile, const string& outfile,
+      const vector<string>& prefixes);
 
  private:
   // Wraps std::lower_bound and returns an index instead of an iterator

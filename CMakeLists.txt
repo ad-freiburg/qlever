@@ -113,8 +113,8 @@ target_link_libraries (WriteIndexListsMain engine ${CMAKE_THREAD_LIBS_INIT})
 add_executable(MetaDataConverterMain src/MetaDataConverterMain.cpp)
 target_link_libraries (MetaDataConverterMain metaConverter ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(PrefixHeuristicMain src/PrefixHeuristicMain.cpp)
-target_link_libraries (PrefixHeuristicMain index ${CMAKE_THREAD_LIBS_INIT})
+add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
+target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
 
 #add_executable(TextFilterComparison src/experiments/TextFilterComparison.cpp)
 #target_link_libraries (TextFilterComparison experiments)

@@ -310,7 +310,7 @@ class Index {
   json _configurationJson;
   Vocabulary<CompressedString> _vocab;
   size_t _totalVocabularySize = 0;
-  bool _vocabPrefixCompressed = false;
+  bool _vocabPrefixCompressed = true;
   Vocabulary<std::string> _textVocab;
 
   IndexMetaDataHmap _psoMeta;

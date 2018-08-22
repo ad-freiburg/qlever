@@ -1,6 +1,7 @@
 // Copyright 2011, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold <buchholb>
+// Authors: Björn Buchhold <buchholb>,
+//          Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
 #pragma once
 
@@ -36,6 +37,13 @@ void Vocabulary<S>::readFromFile(const string& fileName,
   LOG(INFO) << "Done reading vocabulary from file.\n";
   LOG(INFO) << "It contains " << _words.size() << " elements\n";
   if (extLitsFileName.size() > 0) {
+    if (!_isCompressed) {
+      LOG(INFO) << "ERROR: trying to load externalized literals to an "
+                   "uncompressed vocabulary. This is not valid and a "
+                   "programming error. Terminating\n";
+      AD_CHECK(false);
+    }
+
     LOG(INFO) << "Registering external vocabulary for literals.\n";
     _externalLiterals.initFromFile(extLitsFileName);
     LOG(INFO) << "Done registering external vocabulary for literals.\n";
@@ -69,7 +77,6 @@ void Vocabulary<S>::writeToBinaryFileForMerging(const string& fileName) const {
   AD_CHECK(out.is_open());
   for (size_t i = 0; i < _words.size(); ++i) {
     // 32 bits should be enough for len of string
-    // TODO<C++17> string_view of compressedString
     std::string_view word = _words[i];
     uint32_t len = word.size();
     size_t zeros = 0;
@@ -153,17 +160,6 @@ bool Vocabulary<S>::shouldBeExternalized(const string& word) const {
   return false;
 }
 
-// partial instantiation, TODO: does itwork like this
-/*
-template <class S>
-template bool Vocabulary<S>::shouldBeExternalized<true>(
-    const string& word) const;
-
-template <class S>
-template bool Vocabulary<S>::shouldBeExternalized<false>(
-    const string& word) const;
-    */
-
 // ___________________________________________________________________
 template <class S>
 bool Vocabulary<S>::shouldEntityBeExternalized(const string& word) const {
@@ -193,7 +189,7 @@ template <class S>
 template <typename>
 string Vocabulary<S>::expandPrefix(const CompressedString& word) const {
   assert(!word.empty());
-  auto idx = static_cast<unsigned char>(word[0]) - MIN_COMPRESSION_PREFIX;
+  auto idx = static_cast<uint8_t>(word[0]) - MIN_COMPRESSION_PREFIX;
   if (idx < NUM_COMPRESSION_PREFIXES) {
     return _prefixMap[idx] + word.toStringView().substr(1);
   } else {
@@ -209,12 +205,10 @@ CompressedString Vocabulary<S>::compressPrefix(const string& word) const {
     if (ad_utility::startsWith(word, p._fulltext)) {
       auto res = CompressedString::fromString(
           p._prefix + std::string_view(word).substr(p._fulltext.size()));
-      LOG(DEBUG) << "compressed " << word << " to " << res.toString() << '\n';
       return res;
     }
   }
   auto res = CompressedString::fromString(NO_PREFIX_CHAR + word);
-  LOG(DEBUG) << "compressed " << word << " to " << res.toString() << '\n';
   return res;
 }
 
@@ -261,7 +255,7 @@ void Vocabulary<S>::initializeRestartPrefixes(const json& j) {
     el = "";
   }
   _prefixVec.clear();
-  unsigned char idx = 0;
+  uint8_t idx = 0;
   for (const auto& p : j) {
     if (idx >= NUM_COMPRESSION_PREFIXES) {
       LOG(INFO) << "ERROR: configuration file contained more than "
@@ -324,9 +318,9 @@ bool PrefixComparator<S>::operator()(const string& lhs,
 // _____________________________________________________
 template <class S>
 template <typename>
-json Vocabulary<S>::prefixCompressFile(const string& infile,
-                                       const string& outfile,
-                                       const vector<string>& prefixes) {
+std::array<std::string, NUM_COMPRESSION_PREFIXES>
+Vocabulary<S>::prefixCompressFile(const string& infile, const string& outfile,
+                                  const vector<string>& prefixes) {
   std::ifstream in(infile);
   std::ofstream out(outfile);
   AD_CHECK(in.is_open() && out.is_open());
@@ -336,7 +330,7 @@ json Vocabulary<S>::prefixCompressFile(const string& infile,
   while (std::getline(in, word)) {
     out << v.compressPrefix(word).toStringView() << '\n';
   }
-  return v.getJsonForPrefixes();
+  return v._prefixMap;
 }
 
 // explicit instantiations

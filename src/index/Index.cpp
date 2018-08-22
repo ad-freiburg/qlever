@@ -91,7 +91,7 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
   string vocabFileTmp = _onDiskBase + ".vocabularyTmp";
   std::vector<string> prefixes;
   if (_vocabPrefixCompressed) {
-    prefixes = calculatePrefixes(vocabFile, NUM_COMPRESSION_PREFIXES, 1);
+    prefixes = calculatePrefixes(vocabFile, NUM_COMPRESSION_PREFIXES, 1, true);
   }
   _configurationJson["prefixes"] =
       Vocabulary<CompressedString>::prefixCompressFile(vocabFile, vocabFileTmp,

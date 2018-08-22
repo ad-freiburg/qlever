@@ -110,7 +110,7 @@ the name chosen during `docker build`.
     docker run -it -p 7001:7001 -v "$(pwd)/index:/index" -e INDEX_PREFIX=<prefix> --name qlever-<name> qlever-<name> <ServerMain args>
 
 where `<ServerMain args>` are arguments (except for port and index prefix)
-which are always included. If none are supplied `-t -a -l` is used. If you want
+which are always included. If none are supplied `-t -a` is used. If you want
 the container to run in the background and restart automatically replace `-it`
 with `-d --restart=unless-stopped`
 
@@ -214,7 +214,7 @@ To generate a patterns file and include support for ql:has-predicates:
 
     ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt --patterns
 
-If you want some literals to be written to an on disk vocabulary (by default this concerns literals longer than 50 chars and literals in less frequent lagnuages), add an topional parameter -l. This is useful for large knowledge bases that included texts (descriptions etc) as literals and thus consume lots of memory on startup without this option.
+If you want some literals to be written to an on disk vocabulary (by default this concerns literals longer than 50 chars and literals in less frequent lagnuages), add an optional parameter -l. This is useful for large knowledge bases that included texts (descriptions etc) as literals and thus consume lots of memory on startup without this option.
 
     ./IndexBuilderMain -i /path/to/myindex -n /path/to/input.nt -l
 
@@ -239,9 +239,10 @@ b) With text collection:
 Depending on if you built the index with the -a version, two or six index permutations will be registered.
 For some data this can be a significant difference in memory consumption.
 
-If you built an index using the -l and/or -a options, make sure to include it at startup
+If you built an index using the -a option, make sure to include it at startup
+(otherwise only 2 of the 6 permutations will be registered).
 
-    ./ServerMain -i /path/to/myindex -p <PORT> -t -a -l
+    ./ServerMain -i /path/to/myindex -p <PORT> -t -a
 
 ## 4. Running queries:
 
@@ -553,8 +554,8 @@ memory usage. Larger KBs are much more problematic.
 There are two things that can contribute to high RAM usage (and large startup
 times) during runtime:
 
-1) The size of the KB vocabulary. Using the -l flag while building the index and
-starting the server causes long and rarely used strings to be externalized to
+1) The size of the KB vocabulary. Using the -l flag while building the index
+causes long and rarely used strings to be externalized to
 disk. This saves a significant amount of memory at little to no time cost for
 typical queries. The strategy can be modified to be more aggressive (currently
 by editing directly in the code during index construction)

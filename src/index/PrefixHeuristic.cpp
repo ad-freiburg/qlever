@@ -14,10 +14,10 @@ using std::string;
 namespace ad_utility {
 
 // ______________________________________________________________________
-TreeNode* Tree::insert(const string& value) { return _root->insert(value); }
+TreeNode* Tree::insert(string_view value) { return _root->insert(value); }
 
 // ______________________________________________________________________
-TreeNode* Tree::insert(const string& value, TreeNode* startPoint) {
+TreeNode* Tree::insert(string_view value, TreeNode* startPoint) {
   if (!startPoint) {
     startPoint = _root.get();
   }
@@ -25,7 +25,7 @@ TreeNode* Tree::insert(const string& value, TreeNode* startPoint) {
 }
 
 // ______________________________________________________________
-TreeNode* TreeNode::insertAfter(const string& value) {
+TreeNode* TreeNode::insertAfter(string_view value) {
   // exact match of the  value
   if (value == _value) {
     _ownCount++;
@@ -64,7 +64,7 @@ TreeNode* TreeNode::insertAfter(const string& value) {
 }
 
 // ______________________________________________________________________
-TreeNode* TreeNode::insert(const string& value) {
+TreeNode* TreeNode::insert(string_view value) {
   if (startsWith(value, _value)) {
     // this node is a prefix of value, insert in subtree
     return insertAfter(value);
@@ -157,13 +157,13 @@ void TreeNode::penaltize() {
 
 // ______________________________________________________________________________________
 std::vector<string> calculatePrefixes(const string& filename,
-                                      size_t numPrefixes, size_t codelength) {
+                                      size_t numPrefixes, size_t codelength,
+                                      bool alwaysAddCode) {
   std::ifstream ifs(filename);
   AD_CHECK(ifs.is_open());
-  // only consider prefixes with at least three characters, reduces RAM usage
-  // and time complexity
-  // TODO<joka921> this  should actually depend on the  codelength
-  static const size_t MIN_PREFIX_LENGTH = 3;
+
+  size_t MinPrefixLength = alwaysAddCode ? 1 : codelength + 1;
+  size_t actualCodeLength = alwaysAddCode ? 0 : codelength;
   string lastWord;
 
   if (!std::getline(ifs, lastWord)) {
@@ -184,8 +184,8 @@ std::vector<string> calculatePrefixes(const string& filename,
     totalChars += nextWord.size();
     // the longest common prefixes between two adjacent words are our candidates
     // for compression
-    auto pref = ad_utility::commonPrefix(lastWord, nextWord);
-    if (pref.size() >= MIN_PREFIX_LENGTH) {
+    string_view pref = ad_utility::commonPrefix(lastWord, nextWord);
+    if (pref.size() >= MinPrefixLength) {
       // since our words are sorted, we assume that we can insert near the last
       // position
       lastPos = t.insert(pref, lastPos);
@@ -205,7 +205,7 @@ std::vector<string> calculatePrefixes(const string& filename,
   std::vector<string> res;
   res.reserve(numPrefixes);
   for (size_t i = 0; i < numPrefixes; ++i) {
-    auto p = t.getAndDeleteMaximum(codelength);
+    auto p = t.getAndDeleteMaximum(actualCodeLength);
     if (p.second == "") {
       break;
     }
@@ -213,6 +213,11 @@ std::vector<string> calculatePrefixes(const string& filename,
     LOG(INFO) << "Found prefix " << p.second
               << " with number of bytes gained: " << p.first << '\n';
     res.push_back(std::move(p.second));
+  }
+  // if we always add an encoding we have calculated with a codelength of 0 so
+  // far, so the actual encoding length has to be added here
+  if (alwaysAddCode) {
+    totalSavings -= codelength * numWords;
   }
   double efficiency = static_cast<double>(totalSavings) / totalChars;
   std::cout << "total number of bytes : " << totalChars << '\n';

@@ -44,6 +44,7 @@ void IndexMetaData<MapType>::createFromByteBuffer(unsigned char* buf) {
   // read magic number
   auto v = parseMagicNumberAndVersioning(buf);
   auto version = v._version;
+  _version = version;
   buf += v._nOfBytes;
 
   size_t nameLength = readFromBuf<size_t>(&buf);
@@ -55,14 +56,13 @@ void IndexMetaData<MapType>::createFromByteBuffer(unsigned char* buf) {
     _data.setSize(nofRelations);
   }
   _offsetAfter = readFromBuf<off_t>(&buf);
-  _nofTriples = 0;
 
-  // look for blockData in the already existing mmaped vector
   if constexpr (!_isMmapBased) {
+    // HashMap-based means that FullRMD and Blocks are all stored withing the
+    // permutation file
     for (size_t i = 0; i < nofRelations; ++i) {
       FullRelationMetaData rmd;
       rmd.createFromByteBuffer(buf);
-      _nofTriples += rmd.getNofElements();
       buf += rmd.bytesRequired();
       if (rmd.hasBlocks()) {
         BlockBasedRelationMetaData bRmd;
@@ -74,10 +74,10 @@ void IndexMetaData<MapType>::createFromByteBuffer(unsigned char* buf) {
       }
     }
   } else {
+    // MmapBased
     if (version < V_BLOCK_LIST_AND_STATISTICS) {
       for (auto it = _data.cbegin(); it != _data.cend(); ++it) {
         const FullRelationMetaData& rmd = (*it).second;
-        _nofTriples += rmd.getNofElements();
         if (rmd.hasBlocks()) {
           BlockBasedRelationMetaData bRmd;
           bRmd.createFromByteBuffer(buf);
@@ -91,6 +91,8 @@ void IndexMetaData<MapType>::createFromByteBuffer(unsigned char* buf) {
       }
       calculateExpensiveStatistics();
     } else {
+      // version >= V_BLOCK_LIST_AND_STATISTICS, no need to touch Relations that
+      // don't have blocks
       size_t numBlockData = readFromBuf<size_t>(&buf);
       for (size_t i = 0; i < numBlockData; ++i) {
         Id id = readFromBuf<Id>(&buf);
@@ -107,6 +109,8 @@ void IndexMetaData<MapType>::createFromByteBuffer(unsigned char* buf) {
     _totalElements = readFromBuf<size_t>(&buf);
     _totalBytes = readFromBuf<size_t>(&buf);
     _totalBlocks = readFromBuf<size_t>(&buf);
+  } else {
+    calculateExpensiveStatistics();
   }
 }
 // _____________________________________________________________________________
@@ -134,11 +138,11 @@ ad_utility::File& operator<<(ad_utility::File& f,
   if constexpr (imd._isMmapBased) {
     f.write(&MAGIC_NUMBER_MMAP_META_DATA_VERSION,
             sizeof(MAGIC_NUMBER_MMAP_META_DATA_VERSION));
-    // write version for MMAP based
   } else {
     f.write(&MAGIC_NUMBER_SPARSE_META_DATA_VERSION,
             sizeof(MAGIC_NUMBER_SPARSE_META_DATA_VERSION));
   }
+  // write version
   f.write(&V_CURRENT, sizeof(V_CURRENT));
   size_t nameLength = imd._name.size();
   f.write(&nameLength, sizeof(nameLength));
@@ -293,13 +297,12 @@ VersionInfo IndexMetaData<MapType>::parseMagicNumberAndVersioning(
   if constexpr (!_isMmapBased) {
     if (magicNumber == MAGIC_NUMBER_MMAP_META_DATA ||
         magicNumber == MAGIC_NUMBER_MMAP_META_DATA_VERSION) {
-      LOG(INFO)
-          << "ERROR: magic number of MetaData indicates that we are trying "
-             "to construct a hashMap based IndexMetaData from  mmap-based meta "
-             "data. This is not validx."
-             "Please use ./MetaDataConverterMain"
-             "to convert old indices without rebuilding them (See README.md). "
-             "Terminating...\n";
+      throw WrongFormatException(
+          "ERROR: magic number of MetaData indicates that we are trying "
+          "to construct a hashMap based IndexMetaData from  mmap-based meta "
+          "data. This is not valid."
+          "Please use ./MetaDataConverterMain"
+          "to convert old indices without rebuilding them (See README.md).\n");
       AD_CHECK(false);
     } else if (magicNumber == MAGIC_NUMBER_SPARSE_META_DATA) {
       hasVersion = false;
@@ -320,12 +323,12 @@ VersionInfo IndexMetaData<MapType>::parseMagicNumberAndVersioning(
       hasVersion = true;
       nOfBytes = sizeof(uint64_t);
     } else {
-      LOG(INFO) << "ERROR: No or wrong magic number found in persistent "
-                   "mmap-based meta data. "
-                   "Please use ./MetaDataConverterMain "
-                   "to convert old indices without rebuilding them (See "
-                   "README.md).Terminating...\n";
-      AD_CHECK(false);
+      throw WrongFormatException(
+          "ERROR: No or wrong magic number found in persistent "
+          "mmap-based meta data. "
+          "Please use ./MetaDataConverterMain "
+          "to convert old indices without rebuilding them (See "
+          "README.md).Terminating...\n");
     }
   }
 
@@ -351,4 +354,3 @@ VersionInfo IndexMetaData<MapType>::parseMagicNumberAndVersioning(
   }
   return res;
 }
-
