@@ -76,7 +76,15 @@ class Filter : public Operation {
   Id _rhsId;
   std::string _rhsString;
 
-  virtual void computeResult(ResultTable* result) const;
+  template <class RT>
+  vector<RT>* computeFilter(vector<RT>* res, size_t l, size_t r,
+                            shared_ptr<const ResultTable> subRes) const;
+  void computeResult(ResultTable* result) const;
+
+  template <class RT>
+  vector<RT>* computeFilterFixedValue(
+      vector<RT>* res, size_t l, Id r,
+      shared_ptr<const ResultTable> subRes) const;
 
   void computeResultFixedValue(ResultTable* result) const;
 };

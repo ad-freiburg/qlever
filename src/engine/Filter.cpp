@@ -73,6 +73,44 @@ string Filter::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
+template <class RT>
+vector<RT>* Filter::computeFilter(vector<RT>* res, size_t l, size_t r,
+                                  shared_ptr<const ResultTable> subRes) const {
+  switch (_type) {
+    case SparqlFilter::EQ:
+      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                         [l, r](const RT& e) { return e[l] == e[r]; }, res);
+      break;
+    case SparqlFilter::NE:
+      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                         [l, r](const RT& e) { return e[l] != e[r]; }, res);
+      break;
+    case SparqlFilter::LT:
+      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                         [l, r](const RT& e) { return e[l] < e[r]; }, res);
+      break;
+    case SparqlFilter::LE:
+      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                         [l, r](const RT& e) { return e[l] <= e[r]; }, res);
+      break;
+    case SparqlFilter::GT:
+      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                         [l, r](const RT& e) { return e[l] > e[r]; }, res);
+      break;
+    case SparqlFilter::GE:
+      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                         [l, r](const RT& e) { return e[l] >= e[r]; }, res);
+      break;
+    case SparqlFilter::LANG_MATCHES:
+      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+               "Language filtering with a dynamic right side has not yet "
+               "been implemented.");
+      break;
+  }
+  return res;
+}
+
+// _____________________________________________________________________________
 void Filter::computeResult(ResultTable* result) const {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
@@ -90,263 +128,81 @@ void Filter::computeResult(ResultTable* result) const {
   switch (subRes->_nofColumns) {
     case 1: {
       typedef array<Id, 1> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      switch (_type) {
-        case SparqlFilter::EQ:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] == e[r]; },
-                             res);
-          break;
-        case SparqlFilter::NE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] != e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] < e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] <= e[r]; },
-                             res);
-          break;
-        case SparqlFilter::GT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] > e[r]; },
-                             res);
-          break;
-        case SparqlFilter::GE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] >= e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LANG_MATCHES:
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                   "Language filtering with a dynamic right side has not yet "
-                   "been implemented.");
-          break;
-      }
+      result->_fixedSizeData = computeFilter(new vector<RT>(), l, r, subRes);
       break;
     }
     case 2: {
       typedef array<Id, 2> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      switch (_type) {
-        case SparqlFilter::EQ:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] == e[r]; },
-                             res);
-          break;
-        case SparqlFilter::NE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] != e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] < e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] <= e[r]; },
-                             res);
-          break;
-        case SparqlFilter::GT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] > e[r]; },
-                             res);
-          break;
-        case SparqlFilter::GE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] >= e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LANG_MATCHES:
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                   "Language filtering with a dynamic right side has not yet "
-                   "been implemented.");
-          break;
-      }
+      result->_fixedSizeData = computeFilter(new vector<RT>(), l, r, subRes);
       break;
     }
     case 3: {
       typedef array<Id, 3> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      switch (_type) {
-        case SparqlFilter::EQ:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] == e[r]; },
-                             res);
-          break;
-        case SparqlFilter::NE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] != e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] < e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] <= e[r]; },
-                             res);
-          break;
-        case SparqlFilter::GT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] > e[r]; },
-                             res);
-          break;
-        case SparqlFilter::GE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] >= e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LANG_MATCHES:
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                   "Language filtering with a dynamic right side has not yet "
-                   "been implemented.");
-          break;
-      }
+      result->_fixedSizeData = computeFilter(new vector<RT>(), l, r, subRes);
       break;
     }
     case 4: {
       typedef array<Id, 4> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      switch (_type) {
-        case SparqlFilter::EQ:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] == e[r]; },
-                             res);
-          break;
-        case SparqlFilter::NE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] != e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] < e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] <= e[r]; },
-                             res);
-          break;
-        case SparqlFilter::GT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] > e[r]; },
-                             res);
-          break;
-        case SparqlFilter::GE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] >= e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LANG_MATCHES:
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                   "Language filtering with a dynamic right side has not yet "
-                   "been implemented.");
-          break;
-      }
+      result->_fixedSizeData = computeFilter(new vector<RT>(), l, r, subRes);
       break;
     }
     case 5: {
       typedef array<Id, 5> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      switch (_type) {
-        case SparqlFilter::EQ:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] == e[r]; },
-                             res);
-          break;
-        case SparqlFilter::NE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] != e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] < e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] <= e[r]; },
-                             res);
-          break;
-        case SparqlFilter::GT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] > e[r]; },
-                             res);
-          break;
-        case SparqlFilter::GE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] >= e[r]; },
-                             res);
-          break;
-        case SparqlFilter::LANG_MATCHES:
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                   "Language filtering with a dynamic right side has not yet "
-                   "been implemented.");
-          break;
-      }
+      result->_fixedSizeData = computeFilter(new vector<RT>(), l, r, subRes);
       break;
     }
-    default: {
-      typedef vector<Id> RT;
-      switch (_type) {
-        case SparqlFilter::EQ:
-          getEngine().filter(subRes->_varSizeData,
-                             [&l, &r](const RT& e) { return e[l] == e[r]; },
-                             &result->_varSizeData);
-          break;
-        case SparqlFilter::NE:
-          getEngine().filter(subRes->_varSizeData,
-                             [&l, &r](const RT& e) { return e[l] != e[r]; },
-                             &result->_varSizeData);
-          break;
-        case SparqlFilter::LT:
-          getEngine().filter(subRes->_varSizeData,
-                             [&l, &r](const RT& e) { return e[l] < e[r]; },
-                             &result->_varSizeData);
-          break;
-        case SparqlFilter::LE:
-          getEngine().filter(subRes->_varSizeData,
-                             [&l, &r](const RT& e) { return e[l] <= e[r]; },
-                             &result->_varSizeData);
-          break;
-        case SparqlFilter::GT:
-          getEngine().filter(subRes->_varSizeData,
-                             [&l, &r](const RT& e) { return e[l] > e[r]; },
-                             &result->_varSizeData);
-          break;
-        case SparqlFilter::GE:
-          getEngine().filter(subRes->_varSizeData,
-                             [&l, &r](const RT& e) { return e[l] >= e[r]; },
-                             &result->_varSizeData);
-          break;
-        case SparqlFilter::LANG_MATCHES:
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                   "Language filtering with a dynamic right side has not yet "
-                   "been implemented.");
-          break;
-      }
+    default:
+      computeFilter(&result->_varSizeData, l, r, subRes);
       break;
-    }
   }
   result->finish();
   LOG(DEBUG) << "Filter result computation done." << endl;
+}
+
+// _____________________________________________________________________________
+template <class RT>
+vector<RT>* Filter::computeFilterFixedValue(
+    vector<RT>* res, size_t l, Id r,
+    shared_ptr<const ResultTable> subRes) const {
+  switch (_type) {
+    case SparqlFilter::EQ:
+      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                         [l, r](const RT& e) { return e[l] == r; }, res);
+      break;
+    case SparqlFilter::NE:
+      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                         [l, r](const RT& e) { return e[l] != r; }, res);
+      break;
+    case SparqlFilter::LT:
+      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                         [l, r](const RT& e) { return e[l] < r; }, res);
+      break;
+    case SparqlFilter::LE:
+      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                         [l, r](const RT& e) { return e[l] <= r; }, res);
+      break;
+    case SparqlFilter::GT:
+      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                         [l, r](const RT& e) { return e[l] > r; }, res);
+      break;
+    case SparqlFilter::GE:
+      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                         [l, r](const RT& e) { return e[l] >= r; }, res);
+      break;
+    case SparqlFilter::LANG_MATCHES:
+      getEngine().filter(
+          *static_cast<vector<RT>*>(subRes->_fixedSizeData),
+          [this, l](const RT& e) {
+            std::optional<string> entity = getIndex().idToOptionalString(e[l]);
+            if (!entity) {
+              return true;
+            }
+            return ad_utility::endsWith(entity.value(), this->_rhsString);
+          },
+          res);
+      break;
+  }
+  return res;
 }
 
 // _____________________________________________________________________________
@@ -359,276 +215,36 @@ void Filter::computeResultFixedValue(ResultTable* result) const {
   switch (subRes->_nofColumns) {
     case 1: {
       typedef array<Id, 1> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      switch (_type) {
-        case SparqlFilter::EQ:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] == r; }, res);
-          break;
-        case SparqlFilter::NE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] != r; }, res);
-          break;
-        case SparqlFilter::LT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] < r; }, res);
-          break;
-        case SparqlFilter::LE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] <= r; }, res);
-          break;
-        case SparqlFilter::GT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] > r; }, res);
-          break;
-        case SparqlFilter::GE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] >= r; }, res);
-          break;
-        case SparqlFilter::LANG_MATCHES:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [this, &l](const RT& e) {
-                               std::optional<string> entity =
-                                   getIndex().idToOptionalString(e[l]);
-                               if (!entity) {
-                                 return true;
-                               }
-                               return ad_utility::endsWith(entity.value(),
-                                                           this->_rhsString);
-                             },
-                             res);
-          break;
-      }
+      result->_fixedSizeData =
+          computeFilterFixedValue(new vector<RT>(), l, r, subRes);
       break;
     }
     case 2: {
       typedef array<Id, 2> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      switch (_type) {
-        case SparqlFilter::EQ:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] == r; }, res);
-          break;
-        case SparqlFilter::NE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] != r; }, res);
-          break;
-        case SparqlFilter::LT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] < r; }, res);
-          break;
-        case SparqlFilter::LE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] <= r; }, res);
-          break;
-        case SparqlFilter::GT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] > r; }, res);
-          break;
-        case SparqlFilter::GE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] >= r; }, res);
-          break;
-        case SparqlFilter::LANG_MATCHES:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [this, &l](const RT& e) {
-                               std::optional<string> entity =
-                                   getIndex().idToOptionalString(e[l]);
-                               if (!entity) {
-                                 return true;
-                               }
-                               return ad_utility::endsWith(entity.value(),
-                                                           this->_rhsString);
-                             },
-                             res);
-          break;
-      }
+      result->_fixedSizeData =
+          computeFilterFixedValue(new vector<RT>(), l, r, subRes);
       break;
     }
     case 3: {
       typedef array<Id, 3> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      switch (_type) {
-        case SparqlFilter::EQ:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] == r; }, res);
-          break;
-        case SparqlFilter::NE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] != r; }, res);
-          break;
-        case SparqlFilter::LT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] < r; }, res);
-          break;
-        case SparqlFilter::LE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] <= r; }, res);
-          break;
-        case SparqlFilter::GT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] > r; }, res);
-          break;
-        case SparqlFilter::GE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] >= r; }, res);
-          break;
-        case SparqlFilter::LANG_MATCHES:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [this, &l](const RT& e) {
-                               std::optional<string> entity =
-                                   getIndex().idToOptionalString(e[l]);
-                               if (!entity) {
-                                 return true;
-                               }
-                               return ad_utility::endsWith(entity.value(),
-                                                           this->_rhsString);
-                             },
-                             res);
-          break;
-      }
+      result->_fixedSizeData =
+          computeFilterFixedValue(new vector<RT>(), l, r, subRes);
       break;
     }
     case 4: {
       typedef array<Id, 4> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      switch (_type) {
-        case SparqlFilter::EQ:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] == r; }, res);
-          break;
-        case SparqlFilter::NE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] != r; }, res);
-          break;
-        case SparqlFilter::LT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] < r; }, res);
-          break;
-        case SparqlFilter::LE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] <= r; }, res);
-          break;
-        case SparqlFilter::GT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] > r; }, res);
-          break;
-        case SparqlFilter::GE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] >= r; }, res);
-          break;
-        case SparqlFilter::LANG_MATCHES:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [this, &l](const RT& e) {
-                               std::optional<string> entity =
-                                   getIndex().idToOptionalString(e[l]);
-                               if (!entity) {
-                                 return true;
-                               }
-                               return ad_utility::endsWith(entity.value(),
-                                                           this->_rhsString);
-                             },
-                             res);
-          break;
-      }
+      result->_fixedSizeData =
+          computeFilterFixedValue(new vector<RT>(), l, r, subRes);
       break;
     }
     case 5: {
       typedef array<Id, 5> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      switch (_type) {
-        case SparqlFilter::EQ:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] == r; }, res);
-          break;
-        case SparqlFilter::NE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] != r; }, res);
-          break;
-        case SparqlFilter::LT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] < r; }, res);
-          break;
-        case SparqlFilter::LE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] <= r; }, res);
-          break;
-        case SparqlFilter::GT:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] > r; }, res);
-          break;
-        case SparqlFilter::GE:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [&l, &r](const RT& e) { return e[l] >= r; }, res);
-          break;
-        case SparqlFilter::LANG_MATCHES:
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                             [this, &l](const RT& e) {
-                               std::optional<string> entity =
-                                   getIndex().idToOptionalString(e[l]);
-                               if (!entity) {
-                                 return true;
-                               }
-                               return ad_utility::endsWith(entity.value(),
-                                                           this->_rhsString);
-                             },
-                             res);
-          break;
-      }
+      result->_fixedSizeData =
+          computeFilterFixedValue(new vector<RT>(), l, r, subRes);
       break;
     }
     default: {
-      typedef vector<Id> RT;
-      switch (_type) {
-        case SparqlFilter::EQ:
-          getEngine().filter(subRes->_varSizeData,
-                             [&l, &r](const RT& e) { return e[l] == r; },
-                             &result->_varSizeData);
-          break;
-        case SparqlFilter::NE:
-          getEngine().filter(subRes->_varSizeData,
-                             [&l, &r](const RT& e) { return e[l] != r; },
-                             &result->_varSizeData);
-          break;
-        case SparqlFilter::LT:
-          getEngine().filter(subRes->_varSizeData,
-                             [&l, &r](const RT& e) { return e[l] < r; },
-                             &result->_varSizeData);
-          break;
-        case SparqlFilter::LE:
-          getEngine().filter(subRes->_varSizeData,
-                             [&l, &r](const RT& e) { return e[l] <= r; },
-                             &result->_varSizeData);
-          break;
-        case SparqlFilter::GT:
-          getEngine().filter(subRes->_varSizeData,
-                             [&l, &r](const RT& e) { return e[l] > r; },
-                             &result->_varSizeData);
-          break;
-        case SparqlFilter::GE:
-          getEngine().filter(subRes->_varSizeData,
-                             [&l, &r](const RT& e) { return e[l] >= r; },
-                             &result->_varSizeData);
-          break;
-        case SparqlFilter::LANG_MATCHES:
-          getEngine().filter(subRes->_varSizeData,
-                             [this, &l](const RT& e) {
-                               std::optional<string> entity =
-                                   getIndex().idToOptionalString(e[l]);
-                               if (!entity) {
-                                 return true;
-                               }
-                               return ad_utility::endsWith(entity.value(),
-                                                           this->_rhsString);
-                             },
-                             &result->_varSizeData);
-          break;
-      }
+      computeFilterFixedValue(&result->_varSizeData, l, r, subRes);
       break;
     }
   }
