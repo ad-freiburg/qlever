@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <google/sparse_hash_map>
 #include "../global/Id.h"
 #include "../util/File.h"
@@ -22,6 +23,16 @@
 using std::array;
 using std::pair;
 using std::vector;
+
+// an exception thrown when we want to construct Mmap meta data from Hmap meta
+// data and vice versa
+class WrongFormatException : public std::exception {
+ public:
+  WrongFormatException(std::string msg) : _msg(std::move(msg)) {}
+  const char* what() const throw() { return _msg.c_str(); }
+ private:
+  std::string _msg;
+};
 
 // simple ReturnValue struct
 struct VersionInfo {
@@ -37,6 +48,19 @@ T readFromBuf(unsigned char** buf) {
   *buf += sizeof(T);
   return res;
 }
+
+// constants for Magic Numbers to separate different types of MetaData;
+constexpr size_t MAGIC_NUMBER_MMAP_META_DATA = static_cast<size_t>(-1);
+constexpr size_t MAGIC_NUMBER_SPARSE_META_DATA = static_cast<size_t>(-2);
+constexpr size_t MAGIC_NUMBER_MMAP_META_DATA_VERSION = static_cast<size_t>(-3);
+constexpr size_t MAGIC_NUMBER_SPARSE_META_DATA_VERSION =
+    static_cast<size_t>(-4);
+
+// constants for meta data versions in case the format is changed again
+constexpr size_t V_NO_VERSION = 0;  // this is  a dummy
+constexpr size_t V_BLOCK_LIST_AND_STATISTICS = 1;
+
+constexpr size_t V_CURRENT = V_BLOCK_LIST_AND_STATISTICS;
 
 // Check index_layout.md for explanations (expected comments).
 // Removed comments here so that not two places had to be kept up-to-date.
@@ -105,7 +129,8 @@ class IndexMetaData {
   void readFromFile(const std::string& filename);
 
   // read from file that already must opened and has
-  // valid metadata at its end
+  // valid metadata at its end. Will move the seek pointer
+  // of file.
   void readFromFile(ad_utility::File* file);
 
   bool relationExists(Id relId) const;
@@ -115,7 +140,7 @@ class IndexMetaData {
   void calculateExpensiveStatistics();
   string statistics() const;
 
-  size_t getNofTriples() const { return _nofTriples; }
+  size_t getNofTriples() const { return _totalElements; }
 
   void setName(const string& name) { _name = name; }
 
@@ -123,9 +148,10 @@ class IndexMetaData {
 
   size_t getNofDistinctC1() const;
 
+  size_t getVersion() const { return _version; }
+
  private:
   off_t _offsetAfter = 0;
-  size_t _nofTriples;
 
   string _name;
   string _filename;
@@ -135,6 +161,7 @@ class IndexMetaData {
   size_t _totalElements = 0;
   size_t _totalBytes = 0;
   size_t _totalBlocks = 0;
+  size_t _version = V_CURRENT;
 
   // friend declaration for external converter function with ugly types
   //  using IndexMetaDataHmap = IndexMetaData<MetaDataWrapperHashMap>;
@@ -144,6 +171,10 @@ class IndexMetaData {
       MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>>;
   friend IndexMetaDataMmap convertHmapMetaDataToMmap(
       const IndexMetaDataHmapSparse&, const std::string&, bool);
+  friend IndexMetaDataHmapSparse convertMmapMetaDataToHmap(
+      const IndexMetaDataMmap&, const std::string&, bool);
+  friend IndexMetaDataHmapSparse convertMmapMetaDataToHmap(
+      const IndexMetaDataMmap& mmap, bool verify);
 
   // this way all instantations will be friends with each other,
   // but this should not be an issue.
@@ -177,16 +208,5 @@ using IndexMetaDataMmap = IndexMetaData<
 using IndexMetaDataMmapView = IndexMetaData<
     MetaDataWrapperDense<ad_utility::MmapVectorView<FullRelationMetaData>>>;
 
-// constants for Magic Numbers to separate different types of MetaData;
-const size_t MAGIC_NUMBER_MMAP_META_DATA = static_cast<size_t>(-1);
-const size_t MAGIC_NUMBER_SPARSE_META_DATA = static_cast<size_t>(-2);
-const size_t MAGIC_NUMBER_MMAP_META_DATA_VERSION = static_cast<size_t>(-3);
-const size_t MAGIC_NUMBER_SPARSE_META_DATA_VERSION = static_cast<size_t>(-4);
-
-// constants for meta data versions in case the format is changed again
-constexpr size_t V_NO_VERSION = 0;  // this is  a dummy
-constexpr size_t V_BLOCK_LIST_AND_STATISTICS = 1;
-
-constexpr size_t V_CURRENT = V_BLOCK_LIST_AND_STATISTICS;
 
 #include "./IndexMetaDataImpl.h"

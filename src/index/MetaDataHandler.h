@@ -164,6 +164,9 @@ class MetaDataWrapperDense {
     return _vec[id] != emptyMetaData;
   }
 
+  // ___________________________________________________________
+  std::string getFilename() const { return _vec.getFilename(); }
+
  private:
   // the empty key, must be the first member to be initialized
   const FullRelationMetaData emptyMetaData = FullRelationMetaData::empty;

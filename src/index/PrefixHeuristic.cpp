@@ -14,10 +14,10 @@ using std::string;
 namespace ad_utility {
 
 // ______________________________________________________________________
-TreeNode* Tree::insert(const string& value) { return _root->insert(value); }
+TreeNode* Tree::insert(string_view value) { return _root->insert(value); }
 
 // ______________________________________________________________________
-TreeNode* Tree::insert(const string& value, TreeNode* startPoint) {
+TreeNode* Tree::insert(string_view value, TreeNode* startPoint) {
   if (!startPoint) {
     startPoint = _root.get();
   }
@@ -25,7 +25,7 @@ TreeNode* Tree::insert(const string& value, TreeNode* startPoint) {
 }
 
 // ______________________________________________________________
-TreeNode* TreeNode::insertAfter(const string& value) {
+TreeNode* TreeNode::insertAfter(string_view value) {
   // exact match of the  value
   if (value == _value) {
     _ownCount++;
@@ -64,7 +64,7 @@ TreeNode* TreeNode::insertAfter(const string& value) {
 }
 
 // ______________________________________________________________________
-TreeNode* TreeNode::insert(const string& value) {
+TreeNode* TreeNode::insert(string_view value) {
   if (startsWith(value, _value)) {
     // this node is a prefix of value, insert in subtree
     return insertAfter(value);
@@ -184,7 +184,7 @@ std::vector<string> calculatePrefixes(const string& filename,
     totalChars += nextWord.size();
     // the longest common prefixes between two adjacent words are our candidates
     // for compression
-    auto pref = ad_utility::commonPrefix(lastWord, nextWord);
+    string_view pref = ad_utility::commonPrefix(lastWord, nextWord);
     if (pref.size() >= MIN_PREFIX_LENGTH) {
       // since our words are sorted, we assume that we can insert near the last
       // position
