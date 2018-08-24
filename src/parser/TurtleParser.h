@@ -153,4 +153,6 @@ class TurtleParser {
 
   FRIEND_TEST(TurtleParserTest, prefixedName);
   FRIEND_TEST(TurtleParserTest, prefixID);
+  FRIEND_TEST(TurtleParserTest, stringParse);
+  FRIEND_TEST(TurtleParserTest, rdfLiteral);
 };

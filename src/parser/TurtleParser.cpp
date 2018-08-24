@@ -201,7 +201,10 @@ bool TurtleParser::rdfLiteral() {
   if (langtag()) {
     _lastParseResult = s + _lastParseResult;
     return true;
+    // TODO<joka921> this allows spaces here since the ^^ is unique in the
+    // sparql syntax. is this correct?
   } else if (skip(_tokens.DoubleCircumflex) && check(iri())) {
+    _lastParseResult = s + "^^" + _lastParseResult;
     return true;
   } else {
     // it is okay to neither have a langtag nor a xsd datatype
@@ -232,6 +235,8 @@ bool TurtleParser::stringParse() {
   candidates.push_back(&(_tokens.StringLiteralLongQuote));
   if (auto [success, index, word] = _tok.getNextToken(candidates); success) {
     (void)index;
+    // TODO<joka921> check how QLever handles multiline strings and strings
+    // with single quotes
     _lastParseResult = word;
     return true;
   } else {
