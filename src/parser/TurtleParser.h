@@ -94,8 +94,27 @@ class TurtleParser {
     }
   }
   bool langtag() { return parseTerminal(_tokens.Langtag); }
-  bool blankNodeLabel() { return parseTerminal(_tokens.BlankNodeLabel); }
-  bool anon() { return parseTerminal(_tokens.Anon); }
+  bool blankNodeLabel() {
+    if (!parseTerminal(_tokens.BlankNodeLabel)) {
+      return false;
+    }
+
+    if (_blankNodeMap.count(_lastParseResult)) {
+      _lastParseResult = _blankNodeMap[_lastParseResult];
+    } else {
+      string blank = createBlankNode();
+      _blankNodeMap[_lastParseResult] = blank;
+      _lastParseResult = blank;
+    }
+    return true;
+  }
+
+  bool anon() {
+    if (!parseTerminal(_tokens.Anon)) {
+      return false;
+    }
+    _lastParseResult = createBlankNode();
+  }
 
   bool skip(const RE2& reg) {
     _tok.skipWhitespaceAndComments();
@@ -106,17 +125,21 @@ class TurtleParser {
   void emitTriple() {
     LOG(INFO) << _activeSubject << " " << _activePredicate << " "
               << _lastParseResult << '\n';
+    _triples.push_back({_activeSubject, _activePredicate, _lastParseResult});
   }
 
   std::string _lastParseResult;
   std::string _baseIRI;
   ad_utility::HashMap<std::string, std::string> _prefixMap;
+  ad_utility::HashMap<std::string, std::string> _blankNodeMap;
   std::string _activePrefix;
   std::string _activeSubject;
   std::string _activePredicate;
-  ad_utility::HashMap<std::string, std::string> _blankNodeMap;
   Tokenizer _tok{_tmpToParse.data(), _tmpToParse.size()};
   const TurtleToken& _tokens = _tok._tokens;
+  size_t _numBlankNodes = 0;
+  // only for testing first, stores the triples that have been parsed
+  std::vector<std::array<string, 3>> _triples;
 
   std::string _tmpToParse = u8"";
 
@@ -140,6 +163,13 @@ class TurtleParser {
     }
   }
 
+  // create a new, unused, unique blank node.
+  string createBlankNode() {
+    string res = "_:" + std::to_string(_numBlankNodes);
+    _numBlankNodes++;
+    return res;
+  }
+
   // testing interface
   void reset(const string& utf8String) {
     _tmpToParse = utf8String;
@@ -155,4 +185,8 @@ class TurtleParser {
   FRIEND_TEST(TurtleParserTest, prefixID);
   FRIEND_TEST(TurtleParserTest, stringParse);
   FRIEND_TEST(TurtleParserTest, rdfLiteral);
+  FRIEND_TEST(TurtleParserTest, predicateObjectList);
+  FRIEND_TEST(TurtleParserTest, objectList);
+  FRIEND_TEST(TurtleParserTest, object);
+  FRIEND_TEST(TurtleParserTest, blankNode);
 };

@@ -156,9 +156,12 @@ bool TurtleParser::predicate() {
 
 // ____________________________________________________________________
 bool TurtleParser::object() {
-  if (iri() || blankNode() || collection() || blankNodePropertyList() ||
-      literal()) {
+  // these produce a single object that becomes part of a triple
+  if (iri() || blankNode() || literal()) {
     emitTriple();
+    return true;
+  } else if (collection() || blankNodePropertyList()) {
+    // these have a more complex logic and produce their own triples
     return true;
   } else {
     return false;
@@ -172,9 +175,24 @@ bool TurtleParser::literal() {
 
 // _____________________________________________________________________
 bool TurtleParser::blankNodePropertyList() {
-  // TODO: how do these have to be parsed
-  return skip(_tokens.OpenSquared) &&
-         check(predicateObjectList() && skip(_tokens.CloseSquared));
+  if (!skip(_tokens.OpenSquared)) {
+    return false;
+  }
+  // save subject and predicate
+  string savedSubject = _activeSubject;
+  string savedPredicate = _activePredicate;
+  // new triple with blank node as object
+  string blank = createBlankNode();
+  _lastParseResult = blank;
+  emitTriple();
+  // the following triples have the blank node as subject
+  _activeSubject = blank;
+  check(predicateObjectList());
+  check(skip(_tokens.CloseSquared));
+  // restore subject and predicate
+  _activeSubject = savedSubject;
+  _activePredicate = savedPredicate;
+  return true;
 }
 
 // _____________________________________________________________________
@@ -182,9 +200,15 @@ bool TurtleParser::collection() {
   if (!skip(_tokens.OpenRound)) {
     return false;
   }
+  throw ParseException(
+      "We do not know how to handle collections in QLever yet\n");
+  // TODO<joka921> understand collections
+
+  /*
   while (object()) {
   }
   return check(skip(_tokens.CloseRound));
+  */
 }
 
 // ______________________________________________________________________
