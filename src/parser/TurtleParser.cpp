@@ -269,7 +269,11 @@ bool TurtleParser::stringParse() {
 }
 
 // ______________________________________________________________________
-bool TurtleParser::iri() { return iriref() || prefixedName(); }
+bool TurtleParser::iri() {
+  // irirefs always start with "<", prefixedNames never, so the lookahead always
+  // works
+  return iriref() || prefixedName();
+}
 
 // _____________________________________________________________________
 bool TurtleParser::prefixedName() {
