@@ -154,8 +154,25 @@ TEST(TurtleParserTest, blankNode) {
   ASSERT_EQ(p.getPosition(), 11u);
 }
 
-// TODO<joka921> Test for blankNodePropertyList
-TEST(TurtleParserTest, blankNodePropertyList) {}
+TEST(TurtleParserTest, blankNodePropertyList) {
+  TurtleParser p;
+  p._activeSubject = "<s>";
+  p._activePredicate = "<p1>";
+
+  string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
+  std::vector<std::array<string, 3>> exp;
+  exp.push_back({"<s>", "<p1>", "_:0"});
+  exp.push_back({"_:0", "<p2>", "<ob2>"});
+  exp.push_back({"_:0", "<p3>", "<ob3>"});
+  p.reset(blankNodeL);
+  ASSERT_TRUE(p.blankNodePropertyList());
+  ASSERT_EQ(p._triples, exp);
+  ASSERT_EQ(p.getPosition(), blankNodeL.size());
+
+  blankNodeL = "[<2> <ob2>; \"invalidPred\" <ob3>]";
+  p.reset(blankNodeL);
+  ASSERT_THROW(p.blankNodePropertyList(), ParseException);
+}
 
 TEST(TurtleParserTest, object) {
   TurtleParser p;
@@ -186,6 +203,36 @@ TEST(TurtleParserTest, object) {
   exp = triple{sub, pred, "_:0"};
   ASSERT_EQ(p._triples.back(), exp);
 }
-TEST(TurtleParserTest, objectList) {}
-TEST(TurtleParserTest, predicateObjectList) {}
+TEST(TurtleParserTest, objectList) {
+  TurtleParser p;
+  p._activeSubject = "<s>";
+  p._activePredicate = "<p>";
+  string objectL = " <ob1>, <ob2>, <ob3>";
+  std::vector<std::array<string, 3>> exp;
+  exp.push_back({"<s>", "<p>", "<ob1>"});
+  exp.push_back({"<s>", "<p>", "<ob2>"});
+  exp.push_back({"<s>", "<p>", "<ob3>"});
+  p.reset(objectL);
+  ASSERT_TRUE(p.objectList());
+  ASSERT_EQ(p._triples, exp);
+  ASSERT_EQ(p.getPosition(), objectL.size());
+
+  p.reset("@noObject");
+  ASSERT_FALSE(p.objectList());
+  p.reset("<obj1>, @illFormed");
+  ASSERT_THROW(p.objectList(), ParseException);
+}
+TEST(TurtleParserTest, predicateObjectList) {
+  TurtleParser p;
+  p._activeSubject = "<s>";
+  string predL = "\n <p1> <ob1>;<p2> \"ob2\",\n <ob3>";
+  std::vector<std::array<string, 3>> exp;
+  exp.push_back({"<s>", "<p1>", "<ob1>"});
+  exp.push_back({"<s>", "<p2>", "\"ob2\""});
+  exp.push_back({"<s>", "<p2>", "<ob3>"});
+  p.reset(predL);
+  ASSERT_TRUE(p.predicateObjectList());
+  ASSERT_EQ(p._triples, exp);
+  ASSERT_EQ(p.getPosition(), predL.size());
+}
 

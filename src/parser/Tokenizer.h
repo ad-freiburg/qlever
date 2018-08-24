@@ -176,9 +176,9 @@ struct TurtleToken {
 
   const RE2 BlankNodeLabel;
 
-  const string WsSingleString = u8"\x20|\x09|\x0D|\x0A";
+  const string WsSingleString = u8"\\x20\\x09\\x0D\\x0A";
 
-  const string WsMultipleString = u8"(" + WsSingleString + u8")*";
+  const string WsMultipleString = cls(WsSingleString) + u8"*";
   const RE2 WsMultiple;
 
   const string AnonString = u8"\\[" + WsMultipleString + u8"\\]";

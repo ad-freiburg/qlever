@@ -114,6 +114,7 @@ class TurtleParser {
       return false;
     }
     _lastParseResult = createBlankNode();
+    return true;
   }
 
   bool skip(const RE2& reg) {
@@ -189,4 +190,5 @@ class TurtleParser {
   FRIEND_TEST(TurtleParserTest, objectList);
   FRIEND_TEST(TurtleParserTest, object);
   FRIEND_TEST(TurtleParserTest, blankNode);
+  FRIEND_TEST(TurtleParserTest, blankNodePropertyList);
 };
