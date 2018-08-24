@@ -5,5 +5,6 @@ add_library(parser
               TsvParser.h TsvParser.cpp
               NTriplesParser.h NTriplesParser.cpp
               TurtleParser.h TurtleParser.cpp
+              Tokenizer.h Tokenizer.cpp
               ContextFileParser.cpp ContextFileParser.h)
 target_link_libraries(parser re2)

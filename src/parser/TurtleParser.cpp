@@ -21,7 +21,9 @@ bool TurtleParser::directive() {
 bool TurtleParser::prefixID() {
   if (skip(_tokens.TurtlePrefix)) {
     if (pnameNS() && iriref() && skip(_tokens.Dot)) {
-      _prefixMap[_activePrefix] = _lastParseResult;
+      // strip  the angled brackes <bla> -> bla
+      _prefixMap[_activePrefix] =
+          _lastParseResult.substr(1, _lastParseResult.size() - 2);
       return true;
     } else {
       throw ParseException();
@@ -243,8 +245,9 @@ bool TurtleParser::iri() { return iriref() || prefixedName(); }
 // _____________________________________________________________________
 bool TurtleParser::prefixedName() {
   if (pnameLN() || pnameNS()) {
-    _lastParseResult = _prefixMap[_activePrefix] + _lastParseResult;
-  return true;
+    _lastParseResult =
+        '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
+    return true;
   } else {
     return false;
   }
@@ -255,6 +258,7 @@ bool TurtleParser::blankNode() { return blankNodeLabel() || anon(); }
 
 // _______________________________________________________________________
 bool TurtleParser::parseTerminal(const RE2& terminal) {
+  _tok.skipWhitespaceAndComments();
   auto [success, word] = _tok.getNextToken(terminal);
   if (success) {
     _lastParseResult = word;

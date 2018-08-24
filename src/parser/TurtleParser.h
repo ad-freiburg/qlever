@@ -5,15 +5,25 @@
 
 #pragma once
 
+#include <gtest/gtest.h>
 #include <codecvt>
 #include <exception>
 #include <locale>
+#include <string_view>
 #include "../util/HashMap.h"
 #include "../util/Log.h"
 #include "./Tokenizer.h"
 
+using std::string;
+
 class ParseException : public std::exception {
-  const char* what() const throw() { return "Error while parsing Turtle"; }
+ public:
+  ParseException() = default;
+  ParseException(const string& msg) : _msg(msg) {}
+  const char* what() const throw() { return _msg.c_str(); }
+
+ private:
+  string _msg = "Error while parsing Turtle";
 };
 
 class TurtleParser {
@@ -23,6 +33,8 @@ class TurtleParser {
     _tok.reset(_tmpToParse.data(), _tmpToParse.size());
     turtleDoc();
   }
+
+  // interface needed for convenient testing
 
  private:
   void turtleDoc() {
@@ -60,7 +72,17 @@ class TurtleParser {
   bool integer() { return parseTerminal(_tokens.Integer); }
   bool decimal() { return parseTerminal(_tokens.Decimal); }
   bool doubleParse() { return parseTerminal(_tokens.Double); }
-  bool pnameLN() { return parseTerminal(_tokens.PnameLN); }
+  bool pnameLN() {
+    if (parseTerminal(_tokens.PnameLN)) {
+      // TODO: better do this with subgroup matching directly
+      auto pos = _lastParseResult.find(':');
+      _activePrefix = _lastParseResult.substr(0, pos);
+      _lastParseResult = _lastParseResult.substr(pos + 1);
+      return true;
+    } else {
+      return false;
+    }
+  }
   bool pnameNS() {
     if (parseTerminal(_tokens.PnameNS)) {
       // this also includes a ":" which we do not need
@@ -75,7 +97,10 @@ class TurtleParser {
   bool blankNodeLabel() { return parseTerminal(_tokens.BlankNodeLabel); }
   bool anon() { return parseTerminal(_tokens.Anon); }
 
-  bool skip(const RE2& reg) { return _tok.skip(reg); }
+  bool skip(const RE2& reg) {
+    _tok.skipWhitespaceAndComments();
+    return _tok.skip(reg);
+  }
   bool parseTerminal(const RE2& terminal);
 
   void emitTriple() {
@@ -103,4 +128,29 @@ class TurtleParser {
       return false;
     }
   }
+
+  // _______________________________________________________________
+  string expandPrefix(const string& prefix) {
+    if (!_prefixMap.count(prefix)) {
+      throw ParseException("Prefix " + prefix +
+                           " was not registered using a PREFIX or @prefix "
+                           "declaration before using it!\n");
+    } else {
+      return _prefixMap[prefix];
+    }
+  }
+
+  // testing interface
+  void reset(const string& utf8String) {
+    _tmpToParse = utf8String;
+    _tok.reset(_tmpToParse.data(), _tmpToParse.size());
+  }
+
+  // ___________________________________________________
+  size_t getPosition() const {
+    return _tok.data().begin() - _tmpToParse.data();
+  }
+
+  FRIEND_TEST(TurtleParserTest, prefixedName);
+  FRIEND_TEST(TurtleParserTest, prefixID);
 };

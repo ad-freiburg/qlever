@@ -17,8 +17,10 @@ struct TurtleToken {
       // those constants are always skipped, so they don't need a group around
       // them
       : TurtlePrefix(grp(u8"@prefix")),
+        // TODO: this is actually case-insensitive
         SparqlPrefix(grp(u8"PREFIX")),
         TurtleBase(grp(u8"@base")),
+        // TODO: this also
         SparqlBase(grp(u8"BASE")),
 
         Dot(grp(u8"\\.")),
@@ -225,41 +227,4 @@ class Tokenizer {
   FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
   re2::StringPiece _data;
 };
-
-// ______________________________________________________
-void Tokenizer::skipWhitespaceAndComments() {
-  skipWhitespace();
-  skipComments();
-  skipWhitespace();
-}
-
-// _______________________________________________________
-std::pair<bool, std::string> Tokenizer::getNextToken(const RE2& reg) {
-  std::string match = "";
-  bool success = RE2::Consume(&_data, reg, &match);
-  if (!success) {
-    return {false, {}};
-  } else {
-    return {true, match};
-  }
-}
-
-// _______________________________________________________
-std::tuple<bool, size_t, std::string> Tokenizer::getNextToken(
-    const std::vector<const RE2*>& regs) {
-  size_t maxMatchSize = 0;
-  size_t maxMatchIndex = 0;
-  std::string maxMatch;
-  bool success = false;
-  for (size_t i = 0; i < regs.size(); i++) {
-    auto [tmpSuccess, tmpMatch] = getNextToken(*(regs[i]));
-    if (tmpSuccess && tmpMatch.size() > maxMatchSize) {
-      success = true;
-      maxMatchSize = tmpMatch.size();
-      maxMatchIndex = i;
-      maxMatch = std::move(tmpMatch);
-    }
-  }
-  return {success, maxMatchIndex, maxMatch};
-}
 
