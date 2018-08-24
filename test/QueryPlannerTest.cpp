@@ -937,13 +937,13 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n  TWO_COLUMN_JOIN\n    {\n    OrderBy     {\n      JOIN\n"
+        "{\n  TWO_COLUMN_JOIN\n    {\n    ORDER_BY\n    {\n      JOIN\n"
         "      {\n        SCAN PSO with P = \"<Film_performance>\"\n"
         "        qet-width: 2 \n      } join-column: [0]\n      |X|\n"
         "      {\n        "
         "SCAN PSO with P = \"<Spouse_(or_domestic_partner)>\"\n    "
         "    qet-width: 2 \n      } join-column: [0]\n "
-        "     qet-width: 3 \n    }\n    order on asc(2) asc(1) \n"
+        "     qet-width: 3 \n    } order on asc(2) asc(1) \n"
         "    qet-width: 3 \n  }\n  join-columns: [2 & 1]\n  |X|\n"
         "    {\n    SCAN PSO with P = \"<Film_performance>\"\n"
         "    qet-width: 2 \n  }\n  join-columns: [0 & 1]\n"
