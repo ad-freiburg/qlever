@@ -327,6 +327,10 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
   } else {
     _sizeEstimate = multResult * numDistinctResult;
   }
+  // Don't estimate 0 since then some parent operations 
+  // (in particular joins) using isKnownEmpty() will
+  // will assume the size to be exactly zero
+  _sizeEstimate += 1;
 
   // compute estimates for the multiplicities of the result columns
   _multiplicities.clear();
