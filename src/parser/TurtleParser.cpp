@@ -127,7 +127,7 @@ bool TurtleParser::verb() { return predicate() || predicateSpecialA(); }
 bool TurtleParser::predicateSpecialA() {
   if (auto [success, word] = _tok.getNextToken(_tokens.A); success) {
     (void)word;
-    _activePredicate = u8"http://www.w3.org/1999/02/22-rdf-syntax-ns#type";
+    _activePredicate = u8"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
     return true;
   } else {
     return false;
