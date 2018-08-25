@@ -122,6 +122,10 @@ target_link_libraries (MetaDataConverterMain metaConverter ${CMAKE_THREAD_LIBS_I
 add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
 target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
 
+add_executable(TurtleParserMain src/TurtleParserMain.cpp)
+target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT})
+
+
 #add_executable(TextFilterComparison src/experiments/TextFilterComparison.cpp)
 #target_link_libraries (TextFilterComparison experiments)
 

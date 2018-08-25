@@ -9,7 +9,7 @@
 
 // _______________________________________________________________
 bool TurtleParser::statement() {
-  return ((directive() || triples()) && skip(_tokens.Dot));
+  return directive() || (triples() && skip(_tokens.Dot));
 }
 
 // ______________________________________________________________
