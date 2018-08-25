@@ -35,6 +35,15 @@ static const char INTERNAL_TEXT_MATCH_PREDICATE[] =
     "<QLever-internal-function/text>";
 static const char HAS_PREDICATE_PREDICATE[] =
     "<QLever-internal-function/has-predicate>";
+static const char NUM_TRIPLES_PREDICATE[] =
+    "<QLever-internal-function/num-triples>";
+static const char NUM_OCCURRENCES_PREDICATE[] =
+    "<QLever-internal-function/num-occurrences>";
+static const char ENTITY_TYPE_PREDICATE[] =
+    "<QLever-internal-function/entity-type>";
+static const char SUBJECT_TYPE[] = "<QLever-internal-function/subject>";
+static const char PREDICATE_TYPE[] = "<QLever-internal-function/predicate>";
+static const char OBJECT_TYPE[] = "<QLever-internal-function/object>";
 
 static const char VALUE_PREFIX[] = ":v:";
 static const char VALUE_DATE_PREFIX[] = ":v:date:";

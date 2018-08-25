@@ -27,6 +27,7 @@ add_library(engine
         CountAvailablePredicates.cpp CountAvailablePredicates.h
         GroupBy.cpp GroupBy.h
         HasPredicateScan.cpp HasPredicateScan.h
+        StatScan.cpp StatScan.h
 )
 
 target_link_libraries(engine index parser)

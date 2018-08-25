@@ -36,7 +36,9 @@ class ResultTable {
     // bytes have to be zero.
     FLOAT,
     // An entry in the ResultTable's _localVocab
-    LOCAL_VOCAB
+    LOCAL_VOCAB,
+    // An integer in range 0,1,2
+    ENTITY_TYPE
   };
 
   size_t _nofColumns;

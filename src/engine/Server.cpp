@@ -18,12 +18,13 @@
 // _____________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
                         bool allPermutations, bool optimizeOptionals,
-                        bool usePatterns) {
+                        bool usePatterns, bool entityStats) {
   LOG(INFO) << "Initializing server..." << std::endl;
 
   _optimizeOptionals = optimizeOptionals;
 
   _index.setUsePatterns(usePatterns);
+  _index.setEntityStats(entityStats);
 
   // Init the index.
   _index.createFromOnDiskIndex(ontologyBaseName, allPermutations);
