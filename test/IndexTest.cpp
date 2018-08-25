@@ -2,11 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "../src/index/Index.h"
 #include <gtest/gtest.h>
 #include <cstdio>
 #include <fstream>
 #include "../src/global/Pattern.h"
-#include "../src/index/Index.h"
 
 string getStxxlDiskFileName(const string& location, const string& tail) {
   std::ostringstream os;
@@ -675,6 +675,160 @@ TEST(IndexTest, scanTest) {
   remove("_testindex.index.pso");
   remove("_testindex.index.pos");
 };
+
+TEST(IndexTest, computeEntityStatsTest) {
+  string location = "./";
+  string tail = "";
+  writeStxxlConfigFile(location, tail);
+  string stxxlFileName = getStxxlDiskFileName(location, tail);
+
+  {
+    std::fstream f("_testtmp4.tsv", std::ios_base::out);
+
+    // Vocab:
+    // 0: a
+    // 1: a2
+    // 2: b
+    // 3: b2
+    // 4: c
+    // 5: c2
+    f << "a\tb\tc\t.\n"
+         "a\tb\tc2\t.\n"
+         "a\tb2\tc\t.\n"
+         "a2\tb2\tc2\t.";
+    f.close();
+
+    std::fstream f2("_testtmp5.tsv", std::ios_base::out);
+
+    // dummy wordsfile for ql:num-occurrences
+    f2 << "a\t1\t0\t5\n"
+          "w\t0\t0\t1\n"
+          "c\t1\t0\t1\n"
+          "a2\t1\t1\t1\n"
+          "w2\t0\t1\t1\n"
+          "w3\t0\t1\t1\n"
+          "c2\t1\t1\t9\n"
+          "a\t1\t1\t1\n";
+    f2.close();
+    {
+      Index index;
+      index.setEntityStats(true);
+      index.setContextFile("_testtmp5.tsv");
+      index.setOnDiskBase("_testindex");
+      index.createFromFile<TsvParser>("_testtmp4.tsv", false);
+    }
+    Index index;
+    index.setEntityStats(true);
+    index.createFromOnDiskIndex("_testindex");
+
+    ASSERT_TRUE(index._statsPsoMeta.relationExists(0));  // num-triples
+    ASSERT_TRUE(index._statsPsoMeta.relationExists(1));  // entity-type
+    ASSERT_TRUE(index._statsPsoMeta.relationExists(2));  // num-occurrences
+    ASSERT_FALSE(index._statsPsoMeta.relationExists(3));
+    ASSERT_TRUE(index._statsPsoMeta.getRmd(0).isFunctional());
+    ASSERT_TRUE(index._statsPsoMeta.getRmd(1).isFunctional());
+    ASSERT_TRUE(index._statsPsoMeta.getRmd(2).isFunctional());
+
+    ASSERT_TRUE(index._statsPosMeta.relationExists(0));
+    ASSERT_TRUE(index._statsPosMeta.relationExists(1));
+    ASSERT_TRUE(index._statsPosMeta.relationExists(2));
+    ASSERT_FALSE(index._statsPosMeta.relationExists(3));
+    ASSERT_FALSE(index._statsPosMeta.getRmd(0).isFunctional());
+    ASSERT_FALSE(index._statsPosMeta.getRmd(1).isFunctional());
+    ASSERT_FALSE(index._statsPosMeta.getRmd(2).isFunctional());
+
+    ASSERT_TRUE(index._statsPsoMeta.relationExists(0));
+
+    ad_utility::File statsPsoFile("_testindex.index.stats.pso", "r");
+    size_t nofbytes = static_cast<size_t>(index._statsPsoMeta.getOffsetAfter());
+    unsigned char* buf = new unsigned char[nofbytes];
+    statsPsoFile.read(buf, nofbytes);
+    off_t bytesDone = 0;
+
+    // num-triples
+    ASSERT_EQ(Id(0), *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+
+    // entity-type
+    ASSERT_EQ(Id(0), *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+
+    // num-occurrences
+    ASSERT_EQ(Id(0), *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+
+    ASSERT_EQ(index._statsPsoMeta.getOffsetAfter(), bytesDone);
+
+    delete[] buf;
+    statsPsoFile.close();
+
+    remove("_testtmp4.tsv");
+    remove("_testtmp5.tsv");
+    std::remove(stxxlFileName.c_str());
+    remove("_testindex.index.pso");
+    remove("_testindex.index.pos");
+    remove("_testindex.index.stats.pos");
+    remove("_testindex.index.stats.pso");
+  }
+}
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);

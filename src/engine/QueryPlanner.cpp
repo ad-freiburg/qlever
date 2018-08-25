@@ -15,6 +15,7 @@
 #include "OptionalJoin.h"
 #include "OrderBy.h"
 #include "Sort.h"
+#include "StatScan.h"
 #include "TextOperationWithFilter.h"
 #include "TextOperationWithoutFilter.h"
 #include "TwoColumnJoin.h"
@@ -641,7 +642,63 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             ad_semsearch::Exception::BAD_QUERY,
             "Triples should have at least one variable. Not the case in: " +
                 node._triple.asString());
-      } else if (node._variables.size() == 1) {
+      }
+      if (node._triple._p == NUM_TRIPLES_PREDICATE ||
+          node._triple._p == ENTITY_TYPE_PREDICATE ||
+          node._triple._p == NUM_OCCURRENCES_PREDICATE) {
+        Id statId;
+        if (node._triple._p == NUM_TRIPLES_PREDICATE) {
+          statId = Id(0);
+        } else if (node._triple._p == ENTITY_TYPE_PREDICATE) {
+          statId = Id(1);
+        } else {
+          statId = Id(2);
+        }
+        if (node._variables.size() == 1) {
+          SubtreePlan plan(_qec);
+          plan._idsOfIncludedNodes |= (1 << i);
+          auto& tree = *plan._qet.get();
+          if (isVariable(node._triple._s)) {
+            std::shared_ptr<Operation> statScan(
+                new StatScan(_qec, statId, StatScan::ScanType::POS_BOUND_O));
+            static_cast<StatScan*>(statScan.get())->setObject(node._triple._o);
+            tree.setOperation(QueryExecutionTree::SCAN_STATS, statScan);
+            tree.setVariableColumn(node._triple._s, 0);
+          } else {
+            std::shared_ptr<Operation> statScan(
+                new StatScan(_qec, statId, StatScan::ScanType::PSO_BOUND_S));
+            static_cast<StatScan*>(statScan.get())->setSubject(node._triple._s);
+            tree.setOperation(QueryExecutionTree::SCAN_STATS, statScan);
+            tree.setVariableColumn(node._triple._o, 0);
+          }
+          seeds.push_back(plan);
+        } else {
+          {
+            SubtreePlan plan(_qec);
+            plan._idsOfIncludedNodes |= (1 << i);
+            auto& tree = *plan._qet.get();
+            std::shared_ptr<Operation> statScan(
+                new StatScan(_qec, statId, StatScan::ScanType::PSO_FREE_S));
+            tree.setVariableColumn(node._triple._s, 0);
+            tree.setVariableColumn(node._triple._o, 1);
+            tree.setOperation(QueryExecutionTree::SCAN_STATS, statScan);
+            seeds.push_back(plan);
+          }
+          {
+            SubtreePlan plan(_qec);
+            plan._idsOfIncludedNodes |= (1 << i);
+            auto& tree = *plan._qet.get();
+            std::shared_ptr<Operation> statScan(
+                new StatScan(_qec, statId, StatScan::ScanType::PSO_FREE_S));
+            tree.setVariableColumn(node._triple._s, 0);
+            tree.setVariableColumn(node._triple._o, 1);
+            tree.setOperation(QueryExecutionTree::SCAN_STATS, statScan);
+            seeds.push_back(plan);
+          }
+        }
+        continue;
+      }
+      if (node._variables.size() == 1) {
         // Just pick one direction, they should be equivalent.
         SubtreePlan plan(_qec);
         plan._idsOfIncludedNodes |= (1 << i);
