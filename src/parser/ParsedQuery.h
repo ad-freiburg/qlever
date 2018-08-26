@@ -129,6 +129,7 @@ class SparqlFilter {
   FilterType _type;
   string _lhs;
   string _rhs;
+  bool _regexIgnoreCase;
 };
 
 // A parsed SPARQL query. To be extended.

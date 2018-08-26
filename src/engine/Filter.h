@@ -68,6 +68,8 @@ class Filter : public Operation {
 
   void setRightHandSideString(std::string s) { _rhsString = s; }
 
+  void setRegexIgnoreCase(bool i) { _regexIgnoreCase = i; }
+
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
 
   virtual bool knownEmptyResult() { return _subtree->knownEmptyResult(); }
@@ -83,6 +85,7 @@ class Filter : public Operation {
   size_t _rhsInd;
   Id _rhsId;
   std::string _rhsString;
+  bool _regexIgnoreCase;
 
   template <class RT>
   vector<RT>* computeFilter(vector<RT>* res, size_t l, size_t r,

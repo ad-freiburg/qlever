@@ -101,6 +101,9 @@ string SparqlFilter::asString() const {
       break;
     case SparqlFilter::REGEX:
       os << " REGEX ";
+      if (_regexIgnoreCase) {
+        os << "ignoring case ";
+      }
       break;
   }
   os << _rhs << ")";

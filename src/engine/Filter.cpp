@@ -5,7 +5,7 @@
 #include "./Filter.h"
 #include <optional>
 #include <sstream>
-#include <regex>
+#include <sstream>
 #include "./QueryExecutionTree.h"
 
 using std::string;
@@ -62,11 +62,14 @@ string Filter::asString(size_t indent) const {
       os << " LANG_MATCHES " << _rhsString;
       break;
     case SparqlFilter::REGEX:
-      os << " REGEX " << _rhsString;
+      os << " REGEX ";
+      if (_regexIgnoreCase) {
+        os << "ignoring case ";
+      }
+      os << _rhsString;
       break;
   }
-  if (_type != SparqlFilter::LANG_MATCHES &&
-      _type != SparqlFilter::REGEX) {
+  if (_type != SparqlFilter::LANG_MATCHES && _type != SparqlFilter::REGEX) {
     if (_rhsInd != std::numeric_limits<size_t>::max()) {
       os << "col " << _rhsInd;
     } else {
