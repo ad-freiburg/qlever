@@ -31,6 +31,10 @@ class Filter : public Operation {
   virtual void setTextLimit(size_t limit) { _subtree->setTextLimit(limit); }
 
   virtual size_t getSizeEstimate() {
+    if (_type == SparqlFilter::FilterType::REGEX) {
+      // TODO: return a better estimate
+      return std::numeric_limits<Id>::max();
+    }
     // TODO: return a better estimate
     if (_rhsId == std::numeric_limits<Id>::max()) {
       if (_type == SparqlFilter::FilterType::EQ) {
@@ -54,6 +58,10 @@ class Filter : public Operation {
   }
 
   virtual size_t getCostEstimate() {
+    if (_type == SparqlFilter::FilterType::REGEX) {
+      // TODO: return a better estimate
+      return std::numeric_limits<Id>::max();
+    }
     return getSizeEstimate() + _subtree->getSizeEstimate() +
            _subtree->getCostEstimate();
   }

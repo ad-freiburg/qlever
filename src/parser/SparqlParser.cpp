@@ -455,10 +455,13 @@ void SparqlParser::addFilter(const string& str,
         return;
       }
       if (pred == "regex") {
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                 "No filters with regex supported, yet. "
-                 "Try prefix(...) or comparisons with == instead"
-                 " if that satisfies your need.")
+        // TODO(buerklij): Handle "i" flag
+        SparqlFilter f;
+        f._type = SparqlFilter::REGEX;
+        f._lhs = lhs;
+        f._rhs = rhs.substr(1, rhs.size() - 2);
+        pattern->_filters.emplace_back(f);
+        return;
       }
       if (pred == "prefix") {
         // Rewrite this filter into two ones that use >= and <.

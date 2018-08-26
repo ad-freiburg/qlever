@@ -1477,7 +1477,8 @@ void QueryPlanner::applyFiltersIfPossible(
               entityId = _qec->getIndex().getVocab().getValueIdForLT(compWith);
             } else if (filters[i]._type == SparqlFilter::LE) {
               entityId = _qec->getIndex().getVocab().getValueIdForLE(compWith);
-            } else if (filters[i]._type == SparqlFilter::LANG_MATCHES) {
+            } else if (filters[i]._type == SparqlFilter::LANG_MATCHES ||
+                       filters[i]._type == SparqlFilter::REGEX) {
               entityId = std::numeric_limits<size_t>::max() - 1;
             }
           }
@@ -1485,7 +1486,8 @@ void QueryPlanner::applyFiltersIfPossible(
               new Filter(_qec, row[n]._qet, filters[i]._type,
                          row[n]._qet.get()->getVariableColumn(filters[i]._lhs),
                          std::numeric_limits<size_t>::max(), entityId));
-          if (_qec && filters[i]._type == SparqlFilter::LANG_MATCHES) {
+          if (_qec && (filters[i]._type == SparqlFilter::LANG_MATCHES ||
+                      filters[i]._type == SparqlFilter::REGEX)) {
             static_cast<Filter*>(filter.get())
                 ->setRightHandSideString(filters[i]._rhs);
           }

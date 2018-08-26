@@ -120,7 +120,8 @@ class SparqlFilter {
     LE = 3,
     GT = 5,
     GE = 6,
-    LANG_MATCHES = 7
+    LANG_MATCHES = 7,
+    REGEX = 8
   };
 
   string asString() const;
