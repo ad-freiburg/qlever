@@ -4,7 +4,7 @@
 
 #include "./Filter.h"
 #include <optional>
-#include <sstream>
+#include <regex>
 #include <sstream>
 #include "./QueryExecutionTree.h"
 
@@ -114,6 +114,11 @@ vector<RT>* Filter::computeFilter(vector<RT>* res, size_t l, size_t r,
                "Language filtering with a dynamic right side has not yet "
                "been implemented.");
       break;
+    case SparqlFilter::REGEX:
+      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+               "Regex filtering with a dynamic right side has not yet "
+               "been implemented.");
+      break;
   }
   return res;
 }
@@ -208,6 +213,25 @@ vector<RT>* Filter::computeFilterFixedValue(
             return ad_utility::endsWith(entity.value(), this->_rhsString);
           },
           res);
+      break;
+    case SparqlFilter::REGEX:
+      std::regex self_regex;
+      if (_regexIgnoreCase) {
+        self_regex.assign(this->_rhsString, std::regex_constants::ECMAScript |
+                                                std::regex_constants::icase);
+      } else {
+        self_regex.assign(this->_rhsString, std::regex_constants::ECMAScript);
+      }
+      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                         [this, self_regex, &l](const RT& e) {
+                           std::optional<string> entity =
+                               getIndex().idToOptionalString(e[l]);
+                           if (!entity) {
+                             return true;
+                           }
+                           return std::regex_search(entity.value(), self_regex);
+                         },
+                         res);
       break;
   }
   return res;
