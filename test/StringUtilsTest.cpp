@@ -92,8 +92,24 @@ TEST(StringUtilsTest, firstCharToUpperUtf8) {
   // that use different specifications for unicode chars.
   // In one, the capital ß exists, in others it doesn't.
   //  ASSERT_EQ("ẞfoo", firstCharToUpperUtf8("ßfoo"));
-  ASSERT_EQ("Éfoo", firstCharToUpperUtf8("éfoo"));
-  ASSERT_EQ("Éfoo", firstCharToUpperUtf8("Éfoo"));
+  ASSERT_EQ(u8"Éfoo", firstCharToUpperUtf8(u8"éfoo"));
+  ASSERT_EQ(u8"Éfoo", firstCharToUpperUtf8(u8"Éfoo"));
+}
+
+TEST(StringUtilsTest, toJson) {
+  setlocale(LC_CTYPE, "");
+  ASSERT_EQ("\"nothing special\"", toJson("nothing special"));
+  // We can pass an optional without value to get JSON null
+  ASSERT_EQ("null", toJson(std::nullopt));
+  ASSERT_EQ(u8"\"2 byte unicode: äöüß\"", toJson(u8"2 byte unicode: äöüß"));
+  ASSERT_EQ(u8"\"Chinese: 漢字\"", toJson(u8"Chinese: 漢字"));
+
+  ASSERT_EQ("\"embedded \\\"quotes\\\" should work\"",
+            toJson("embedded \"quotes\" should work"));
+  ASSERT_EQ("\"quoteception: \\\"\\\\\\\"\\\"\"",
+            toJson("quoteception: \"\\\"\""));
+  ASSERT_EQ("\"tabs\\tare nice\"", toJson("tabs\tare nice"));
+  ASSERT_EQ("\"multi\\nline\"", toJson("multi\nline"));
 }
 
 TEST(StringUtilsTest, split) {

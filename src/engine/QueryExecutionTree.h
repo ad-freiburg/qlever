@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -140,36 +141,39 @@ class QueryExecutionTree {
     for (size_t i = from; i < upperBound; ++i) {
       const auto& row = data[i];
       auto& os = (i < (maxSend + from) ? out : throwaway);
-      os << "[\"";
+      os << "[";
       for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
         switch (validIndices[j].second) {
           case ResultTable::ResultType::KB: {
-            string entity =
-                _qec->getIndex().idToString(row[validIndices[j].first]);
-            if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
-              entity = ad_utility::convertIndexWordToValueLiteral(entity);
+            std::optional<string> entity =
+                _qec->getIndex().idToOptionalString(row[validIndices[j].first]);
+            if (entity) {
+              string entitystr = entity.value();
+              if (ad_utility::startsWith(entitystr, VALUE_PREFIX)) {
+                entity = ad_utility::convertIndexWordToValueLiteral(entitystr);
+              }
             }
-            os << ad_utility::escapeForJson(entity) << "\",\"";
+            os << ad_utility::toJson(entity) << ",";
             break;
           }
           case ResultTable::ResultType::VERBATIM:
-            os << row[validIndices[j].first] << "\",\"";
+            os << "\"" << row[validIndices[j].first] << "\",";
             break;
           case ResultTable::ResultType::TEXT:
-            os << ad_utility::escapeForJson(_qec->getIndex().getTextExcerpt(
+            os << ad_utility::toJson(_qec->getIndex().getTextExcerpt(
                       row[validIndices[j].first]))
-               << "\",\"";
+               << ",";
             break;
           case ResultTable::ResultType::FLOAT: {
             float f;
             std::memcpy(&f, &row[validIndices[j].first], sizeof(float));
-            os << f << "\",\"";
+            os << "\"" << f << "\",";
             break;
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
-            os << ad_utility::escapeForJson(
-                      res->idToString(row[validIndices[j].first]))
-               << "\",\"";
+            std::optional<string> entity =
+                res->idToOptionalString(row[validIndices[j].first]);
+            os << ad_utility::toJson(entity.value()) << ",";
             break;
           }
           default:
@@ -179,33 +183,37 @@ class QueryExecutionTree {
       }
       switch (validIndices[validIndices.size() - 1].second) {
         case ResultTable::ResultType::KB: {
-          string entity = _qec->getIndex().idToString(
+          std::optional<string> entity = _qec->getIndex().idToOptionalString(
               row[validIndices[validIndices.size() - 1].first]);
-          if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
-            entity = ad_utility::convertIndexWordToValueLiteral(entity);
+          if (entity) {
+            string entitystr = entity.value();
+            if (ad_utility::startsWith(entitystr, VALUE_PREFIX)) {
+              entity = ad_utility::convertIndexWordToValueLiteral(entitystr);
+            }
           }
-          os << ad_utility::escapeForJson(entity) << "\"]";
+          os << ad_utility::toJson(entity) << "]";
           break;
         }
         case ResultTable::ResultType::VERBATIM:
-          os << row[validIndices[validIndices.size() - 1].first] << "\"]";
+          os << "\"" << row[validIndices[validIndices.size() - 1].first]
+             << "\"]";
           break;
         case ResultTable::ResultType::TEXT:
-          os << ad_utility::escapeForJson(_qec->getIndex().getTextExcerpt(
+          os << ad_utility::toJson(_qec->getIndex().getTextExcerpt(
                     row[validIndices[validIndices.size() - 1].first]))
-             << "\"]";
+             << "]";
           break;
         case ResultTable::ResultType::FLOAT: {
           float f;
           std::memcpy(&f, &row[validIndices[validIndices.size() - 1].first],
                       sizeof(float));
-          os << f << "\"]";
+          os << "\"" << f << "\"]";
           break;
         }
         case ResultTable::ResultType::LOCAL_VOCAB: {
-          os << ad_utility::escapeForJson(res->idToString(
-                    row[validIndices[validIndices.size() - 1].first]))
-             << "\"]";
+          std::optional<string> entity = res->idToOptionalString(
+              row[validIndices[validIndices.size() - 1].first]);
+          os << ad_utility::toJson(entity.value()) << "]";
           break;
         }
         default:
@@ -230,8 +238,9 @@ class QueryExecutionTree {
       for (size_t j = 0; j < validIndices.size(); ++j) {
         switch (validIndices[j].second) {
           case ResultTable::ResultType::KB: {
-            string entity =
-                _qec->getIndex().idToString(row[validIndices[j].first]);
+            string entity = _qec->getIndex()
+                                .idToOptionalString(row[validIndices[j].first])
+                                .value_or("");
             if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
               out << ad_utility::convertIndexWordToValueLiteral(entity);
             } else {
@@ -252,7 +261,8 @@ class QueryExecutionTree {
             break;
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
-            out << res->idToString(row[validIndices[j].first]);
+            out << res->idToOptionalString(row[validIndices[j].first])
+                       .value_or("");
             break;
           }
           default:

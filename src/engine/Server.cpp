@@ -328,8 +328,7 @@ string Server::composeResponseJson(const ParsedQuery& query,
 
   std::ostringstream os;
   os << "{\n"
-     << "\"query\": \"" << ad_utility::escapeForJson(query._originalString)
-     << "\",\n"
+     << "\"query\": " << ad_utility::toJson(query._originalString) << ",\n"
      << "\"status\": \"OK\",\n"
      << "\"resultsize\": \"" << resultSize << "\",\n";
 
@@ -390,7 +389,7 @@ string Server::composeResponseJson(
   _requestProcessingTimer.stop();
 
   os << "{\n"
-     << "\"query\": \"" << ad_utility::escapeForJson(query) << "\",\n"
+     << "\"query\": " << ad_utility::toJson(query) << ",\n"
      << "\"status\": \"ERROR\",\n"
      << "\"resultsize\": \"0\",\n"
      << "\"time\": {\n"
@@ -399,9 +398,9 @@ string Server::composeResponseJson(
      << "ms\"\n"
      << "},\n";
 
-  string msg = ad_utility::escapeForJson(exception.getFullErrorMessage());
+  string msg = ad_utility::toJson(exception.getFullErrorMessage());
 
-  os << "\"exception\": \"" << msg << "\"\n"
+  os << "\"exception\": " << msg << "\n"
      << "}\n";
 
   return os.str();
@@ -414,7 +413,7 @@ string Server::composeResponseJson(const string& query,
   _requestProcessingTimer.stop();
 
   os << "{\n"
-     << "\"query\": \"" << ad_utility::escapeForJson(query) << "\",\n"
+     << "\"query\": " << ad_utility::toJson(query) << ",\n"
      << "\"status\": \"ERROR\",\n"
      << "\"resultsize\": \"0\",\n"
      << "\"time\": {\n"
@@ -422,9 +421,9 @@ string Server::composeResponseJson(const string& query,
      << "\"computeResult\": \"" << _requestProcessingTimer.msecs() << "ms\"\n"
      << "},\n";
 
-  string msg = ad_utility::escapeForJson(exception.what());
+  string msg = ad_utility::toJson(exception.what());
 
-  os << "\"exception\": \"" << msg << "\"\n"
+  os << "\"exception\": " << msg << "\n"
      << "}\n";
 
   return os.str();

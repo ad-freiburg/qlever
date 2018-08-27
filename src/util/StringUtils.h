@@ -16,6 +16,7 @@
 #include <iostream>
 #include <limits>
 #include <numeric>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -81,7 +82,11 @@ inline string removeSpaces(const string& orig);
 
 inline string normalizeSpaces(const string& orig);
 
-inline string escapeForJson(const string& orig);
+//! Converts an optional string to a JSON string value.
+//! I.e. it escapes illegal characters and adss quotes around the string.
+//! Taking a std::optional<string> it takes normal strings (which are implicitly
+//! converted or std::nullopt which it converts to 'null' (without quotes)
+inline string toJson(const std::optional<string>& orig);
 
 //! Strips any sequence of characters in s from the left and right of the text.
 //! The type T can be anything convertible to a std::string_view<char> so in
@@ -348,38 +353,62 @@ string normalizeSpaces(const string& orig) {
 }
 
 // ____________________________________________________________________________
-string escapeForJson(const string& orig) {
-  string ret;
-  for (size_t i = 0; i < orig.size(); ++i) {
-    if (orig[i] == '\t') {
-      ret += "\\t";
-      continue;
-    }
-    if (orig[i] == '\v') {
-      ret += "\\v";
-      continue;
-    }
-    if (orig[i] == '\0') {
-      ret += "\\0";
-      continue;
-    }
-    if (orig[i] == '\f') {
-      ret += "\\f";
-      continue;
-    }
-    if (orig[i] == '\b') {
-      ret += "\\b";
-      continue;
-    }
-    if (orig[i] == '\n') {
-      ret += "\\n";
-      continue;
-    }
-    if (orig[i] == '\"' || /* orig[i] == '\'' || */ orig[i] == '\\') {
-      ret += '\\';
-    }
-    ret += orig[i];
+string toJson(const std::optional<string>& input) {
+  if (!input) {
+    return "null";
   }
+  const auto& orig = input.value();
+  // First we should determine the size of the result.
+  // As a linear scan this should almost always be faster than
+  // having to realloc. + 2 for quotes
+  size_t rsize = orig.size() + 2;
+  for (const auto& c : orig) {
+    switch (c) {
+      case '\t':
+      case '\v':
+      case '\0':
+      case '\f':
+      case '\b':
+      case '\n':
+      case '\"':
+      case '\\':
+        rsize++;
+      default:
+        continue;
+    }
+  }
+  string ret;
+  ret.reserve(rsize);
+  ret += '"';
+  for (const auto& c : orig) {
+    switch (c) {
+      case '\t':
+        ret += "\\t";
+        continue;
+      case '\v':
+        ret += "\\v";
+        continue;
+      case '\0':
+        ret += "\\0";
+        continue;
+      case '\f':
+        ret += "\\f";
+        continue;
+      case '\b':
+        ret += "\\b";
+        continue;
+      case '\n':
+        ret += "\\n";
+        continue;
+      case '\"':
+      case '\\':
+        ret += '\\';
+        [[fallthrough]];
+      default:
+        ret += c;
+    }
+  }
+  ret += '"';
   return ret;
 }
 

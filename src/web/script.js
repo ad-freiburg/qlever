@@ -183,8 +183,12 @@ function processQuery(query) {
         for (var i = 0; i < result.res.length; i++) {
             res += "<tr>"
             for (var j = 0; j < result.res[i].length; ++j) {
-                res += "<td title=\"" + htmlEscape(result.res[i][j]).replace(/\"/g, "&quot;") + "\">"
-                    + htmlEscape(getShortStr(result.res[i][j], 26))
+                var value = result.res[i][j];
+                if (!value) {
+                  value = "";
+                }
+                res += "<td title=\"" + htmlEscape(value.replace(/\"/g, "&quot;")) + "\">"
+                    + htmlEscape(getShortStr(value, 26))
                     + "</td>";
             }
             res += "</tr>";

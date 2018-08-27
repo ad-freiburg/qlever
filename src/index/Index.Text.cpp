@@ -388,10 +388,13 @@ void Index::calculateBlockBoundaries() {
   // A block boundary is always the last WordId in the block.
   // this way std::lower_bound will point to the correct bracket.
   for (size_t i = 0; i < _textVocab.size() - 1; ++i) {
-    if (_textVocab[i].size() < MIN_WORD_PREFIX_SIZE ||
-        (_textVocab[i + 1].size() < MIN_WORD_PREFIX_SIZE) ||
-        _textVocab[i].substr(0, MIN_WORD_PREFIX_SIZE) !=
-            _textVocab[i + 1].substr(0, MIN_WORD_PREFIX_SIZE)) {
+    // we need foo.value().get() because the vocab returns
+    // a std::optional<std::reference_wrapper<string>> and the "." currently
+    // doesn't implicitly convert to a true reference (unlike function calls)
+    if (_textVocab[i].value().get().size() < MIN_WORD_PREFIX_SIZE ||
+        (_textVocab[i + 1].value().get().size() < MIN_WORD_PREFIX_SIZE) ||
+        _textVocab[i].value().get().substr(0, MIN_WORD_PREFIX_SIZE) !=
+            _textVocab[i + 1].value().get().substr(0, MIN_WORD_PREFIX_SIZE)) {
       _blockBoundaries.push_back(i);
     }
   }
@@ -501,7 +504,9 @@ void Index::openTextFileHandle() {
 }
 
 // _____________________________________________________________________________
-const string& Index::wordIdToString(Id id) const { return _textVocab[id]; }
+const string& Index::wordIdToString(Id id) const {
+  return _textVocab[id].value();
+}
 
 // _____________________________________________________________________________
 void Index::getContextListForWords(const string& words,

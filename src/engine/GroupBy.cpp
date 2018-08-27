@@ -196,8 +196,10 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
             const auto it = distinctHashSet.find((*input)[i][a._inCol]);
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert((*input)[i][a._inCol]);
+              // TODO(schnelle): What's the correct way to handle OPTIONAL here
               // load the string, parse it as an xsd::int or float
-              std::string entity = index.idToString((*input)[i][a._inCol]);
+              std::string entity =
+                  index.idToOptionalString((*input)[i][a._inCol]).value_or("");
               if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
                 res = std::numeric_limits<float>::quiet_NaN();
                 break;
@@ -213,7 +215,9 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
         } else {
           for (size_t i = blockStart; i <= blockEnd; i++) {
             // load the string, parse it as an xsd::int or float
-            std::string entity = index.idToString((*input)[i][a._inCol]);
+            // TODO(schnelle): What's the correct way to handle OPTIONAL here
+            std::string entity =
+                index.idToOptionalString((*input)[i][a._inCol]).value_or("");
             if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
               res = std::numeric_limits<float>::quiet_NaN();
               break;
@@ -320,19 +324,28 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
             const auto it = distinctHashSet.find((*input)[i][a._inCol]);
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert((*input)[i][a._inCol]);
-              out << inTable->idToString((*input)[i][a._inCol]) << *delim;
+              // TODO(schnelle): What's the correct way to handle OPTIONAL here
+              out << inTable->idToOptionalString((*input)[i][a._inCol])
+                         .value_or("")
+                  << *delim;
             }
           }
           const auto it = distinctHashSet.find((*input)[blockEnd][a._inCol]);
           if (it == distinctHashSet.end()) {
-            out << inTable->idToString((*input)[blockEnd][a._inCol]);
+            // TODO(schnelle): What's the correct way to handle OPTIONAL here
+            out << inTable->idToOptionalString((*input)[blockEnd][a._inCol])
+                       .value_or("");
           }
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-            out << inTable->idToString((*input)[i][a._inCol]) << *delim;
+            // TODO(schnelle): What's the correct way to handle OPTIONAL here
+            out << inTable->idToOptionalString((*input)[i][a._inCol])
+                       .value_or("")
+                << *delim;
           }
-          out << inTable->idToString((*input)[blockEnd][a._inCol]);
+          out << inTable->idToOptionalString((*input)[blockEnd][a._inCol])
+                     .value_or("");
         }
       } else {
         if (a._distinct) {
@@ -340,7 +353,9 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
             const auto it = distinctHashSet.find((*input)[i][a._inCol]);
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert((*input)[i][a._inCol]);
-              std::string entity = index.idToString((*input)[i][a._inCol]);
+              // TODO(schnelle): What's the correct way to handle OPTIONAL here
+              std::string entity =
+                  index.idToOptionalString((*input)[i][a._inCol]).value_or("");
               if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
                 out << ad_utility::convertIndexWordToValueLiteral(entity)
                     << *delim;
@@ -351,7 +366,10 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           }
           const auto it = distinctHashSet.find((*input)[blockEnd][a._inCol]);
           if (it == distinctHashSet.end()) {
-            std::string entity = index.idToString((*input)[blockEnd][a._inCol]);
+            // TODO(schnelle): What's the correct way to handle OPTIONAL here
+            std::string entity =
+                index.idToOptionalString((*input)[blockEnd][a._inCol])
+                    .value_or("");
             if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
               out << ad_utility::convertIndexWordToValueLiteral(entity);
             } else {
@@ -361,7 +379,9 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-            std::string entity = index.idToString((*input)[i][a._inCol]);
+            // TODO(schnelle): What's the correct way to handle OPTIONAL here
+            std::string entity =
+                index.idToOptionalString((*input)[i][a._inCol]).value_or("");
             if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
               out << ad_utility::convertIndexWordToValueLiteral(entity)
                   << *delim;
@@ -369,7 +389,10 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
               out << entity << *delim;
             }
           }
-          std::string entity = index.idToString((*input)[blockEnd][a._inCol]);
+          // TODO(schnelle): What's the correct way to handle OPTIONAL here
+          std::string entity =
+              index.idToOptionalString((*input)[blockEnd][a._inCol])
+                  .value_or("");
           if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
             out << ad_utility::convertIndexWordToValueLiteral(entity);
           } else {
@@ -490,7 +513,9 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert((*input)[i][a._inCol]);
               // load the string, parse it as an xsd::int or float
-              std::string entity = index.idToString((*input)[i][a._inCol]);
+              // TODO(schnelle): What's the correct way to handle OPTIONAL here
+              std::string entity =
+                  index.idToOptionalString((*input)[i][a._inCol]).value_or("");
               if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
                 res = std::numeric_limits<float>::quiet_NaN();
                 break;
@@ -504,7 +529,9 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
         } else {
           for (size_t i = blockStart; i <= blockEnd; i++) {
             // load the string, parse it as an xsd::int or float
-            std::string entity = index.idToString((*input)[i][a._inCol]);
+            // TODO(schnelle): What's the correct way to handle OPTIONAL here
+            std::string entity =
+                index.idToOptionalString((*input)[i][a._inCol]).value_or("");
             if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
               res = std::numeric_limits<float>::quiet_NaN();
               break;
