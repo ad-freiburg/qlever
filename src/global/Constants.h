@@ -51,12 +51,15 @@ static const int DEFAULT_NOF_VALUE_MANTISSA_DIGITS = 30;
 static const int DEFAULT_NOF_DATE_YEAR_DIGITS = 19;
 
 static const std::string MMAP_FILE_SUFFIX = ".meta-mmap";
-static const std::string CONFIGURATION_FILE = ".conf";
+static const std::string CONFIGURATION_FILE = ".meta-data.json";
 
 // Constants for the range of valid compression prefixes
-// all printable characters are left out
+// all ASCII- printable characters are left out.
 // when adding more special characters to the vocabulary make sure to leave out
 // \n since the vocabulary is stored in a text file line by line.
+// All prefix codes have a most significant bit of 1. This means the prefix
+// codes are never valid UTF-8 and thus it is always able to determine, whether
+// this vocabulary was compressed or not.
 static constexpr uint8_t MIN_COMPRESSION_PREFIX = 128;
 static constexpr uint8_t NUM_COMPRESSION_PREFIXES = 127;
 // if this is the first character of a compressed string, this means that no
