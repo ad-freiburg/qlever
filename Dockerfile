@@ -5,7 +5,7 @@ ENV LC_ALL C.UTF-8
 ENV LC_CTYPE C.UTF-8
 
 FROM base as builder
-RUN apt-get update && apt-get install -y build-essential cmake libsparsehash-dev
+RUN apt-get update && apt-get install -y build-essential cmake libsparsehash-dev libbz2-dev
 COPY . /app/
 WORKDIR /app/build/
 RUN cmake -DCMAKE_BUILD_TYPE=Release .. && make -j $(nproc) && make test
@@ -14,6 +14,7 @@ FROM base as runtime
 WORKDIR /app
 ARG UID=1000
 RUN groupadd -r qlever && useradd --no-log-init -r -u $UID -g qlever qlever && chown qlever:qlever /app
+RUN apt-get update && apt-get install -y bzip2
 USER qlever
 ENV PATH=/app/:$PATH
 COPY --from=builder /app/build/*Main /app/src/web/* /app/
