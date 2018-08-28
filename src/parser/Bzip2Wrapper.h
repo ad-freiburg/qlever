@@ -16,11 +16,30 @@ using std::string;
 class Bzip2Exception : public std::exception {
  public:
   // TODO handle the different error codes of BZIP2
-  Bzip2Exception(int errCode) {}
-  Bzip2Exception(const string& msg) {}
-  const char* what() const throw() {
-    return "Error occured while decompressing Bzip2\n";
+  Bzip2Exception(int errCode) {
+    string msg;
+    switch (errCode) {
+      case BZ_CONFIG_ERROR:
+        msg = "BZ_CONFIG_ERROR";
+      case BZ_PARAM_ERROR:
+        msg = "BZ_PARAM_ERROR";
+        break;
+      case BZ_DATA_ERROR:
+        msg = "BZ_DATA_ERROR";
+        break;
+      case BZ_DATA_ERROR_MAGIC:
+        msg = "BZ_DATA_ERROR_MAGIC";
+        break;
+      case BZ_MEM_ERROR:
+        msg = "BZ_MEM_ERROR";
+        break;
+    }
+    _msg = "Internal exception in libbz: " + msg;
   }
+
+  Bzip2Exception(const string& msg) : _msg(msg) {}
+  const char* what() const throw() { return _msg.c_str(); }
+  string _msg;
 };
 
 class Bzip2Wrapper {
@@ -43,21 +62,40 @@ class Bzip2Wrapper {
 
   ~Bzip2Wrapper() { BZ2_bzDecompressEnd(&_bzStream); }
 
-  std::optional<std::vector<char>> decompressBlock() {
+  std::optional<size_t> decompressBlock(char* target, size_t maxRead) {
+    if (_endOfBzipStream) {
+      return std::nullopt;
+    }
     if (_bzStream.avail_in == 0) {
+      if (_endOfFile) {
+        throw Bzip2Exception(
+            "bzip2-compressed file ended before end of decompression stream "
+            "was detected");
+      }
       readNextBlock();
     }
-    _bufferOut.resize(_bufferSize);
-    _bzStream.next_out = _bufferOut.data();
-    _bzStream.avail_out = _bufferOut.size();
+    _bzStream.next_out = target;
+    _bzStream.avail_out = maxRead;
     auto errcode = BZ2_bzDecompress(&_bzStream);
     if (errcode == BZ_STREAM_END) {
-      return std::nullopt;
+      _endOfBzipStream = true;
     } else if (errcode != BZ_OK) {
       throw Bzip2Exception(errcode);
     }
-    _bufferOut.resize(_bufferOut.size() - _bzStream.avail_out);
-    return std::move(_bufferOut);
+    return (maxRead - _bzStream.avail_out);
+  }
+
+  // ________________________________________________________
+  std::optional<std::vector<char>> decompressBlock(size_t maxRead = 10 << 20) {
+    std::vector<char> buf;
+    buf.resize(maxRead);
+    auto res = decompressBlock(buf.data(), buf.size());
+    if (!res) {
+      return std::nullopt;
+    } else {
+      buf.resize(res.value());
+      return std::move(buf);
+    }
   }
 
   // _________________________________________________________________
@@ -75,6 +113,7 @@ class Bzip2Wrapper {
   std::size_t _ReadPositionIn = 0;
   std::vector<char> _bufferOut;
   bool _endOfFile = false;
+  bool _endOfBzipStream = false;
   size_t _bufferSize = 100 << 20;  // default 100 MB of Buffer
 
   // ________________________________________________________________

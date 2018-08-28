@@ -7,4 +7,4 @@ add_library(parser
               TurtleParser.h TurtleParser.cpp
               Tokenizer.h Tokenizer.cpp
               ContextFileParser.cpp ContextFileParser.h)
-target_link_libraries(parser re2)
+target_link_libraries(parser re2 -lbz2)

@@ -15,6 +15,7 @@
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/Log.h"
+#include "./Bzip2Wrapper.h"
 #include "./Tokenizer.h"
 
 using std::string;
@@ -29,16 +30,70 @@ class ParseException : public std::exception {
   string _msg = "Error while parsing Turtle";
 };
 
+struct TurtleParserBackupState {
+  ad_utility::HashMap<std::string, std::string> _blankNodeMap;
+  size_t _numBlankNodes = 0;
+  size_t _numTriples;
+  const char* _tokenizerPosition;
+  size_t _tokenizerSize;
+};
+
 class TurtleParser {
  public:
   TurtleParser() = default;
-  explicit TurtleParser(const string& filename) { mapFile(filename); }
+  explicit TurtleParser(const string& filename) {
+    if (ad_utility::endsWith(filename, ".ttl")) {
+      mapFile(filename);
+    } else if (ad_utility::endsWith(filename, ".bz2")) {
+      _isBzip = true;
+      _bzipWrapper.open(filename);
+      _byteVec.resize(_bufferSize);
+      if (auto res =
+              _bzipWrapper.decompressBlock(_byteVec.data(), _byteVec.size());
+          res) {
+        _byteVec.resize(res.value());
+        _tok.reset(_byteVec.data(), _byteVec.size());
+      } else {
+        LOG(INFO) << "This bz2 file seems to contain no data!\n";
+      }
+    }
+  }
   ~TurtleParser() { unmapFile(); }
 
   bool getline(std::array<string, 3>* triple) {
+    TurtleParserBackupState b;
     while (_triples.empty()) {
-      if (!statement()) {
-        return false;
+      if (_isBzip) {
+        b = backupState();
+      }
+      bool parsedStatement;
+      bool exceptionThrown = false;
+      ParseException ex;
+      try {
+        parsedStatement = statement();
+      } catch (const ParseException& p) {
+        if (!_isBzip) {
+          throw p;
+        } else {
+          parsedStatement = false;
+          exceptionThrown = true;
+          ex = p;
+        }
+      }
+      if (!parsedStatement) {
+        if (!_isBzip) {
+          return false;
+        } else {
+          if (resetStateAndRead(b)) {
+            continue;
+          } else {
+            if (exceptionThrown) {
+              throw ex;
+            } else {
+              return false;
+            }
+          }
+        }
       }
     }
     *triple = _triples.back();
@@ -146,6 +201,9 @@ class TurtleParser {
       _triples.push_back({_activeSubject, _activePredicate, _lastParseResult});
     }
 
+    TurtleParserBackupState backupState() const;
+    bool resetStateAndRead(const TurtleParserBackupState state);
+
     std::string _lastParseResult;
     std::string _baseIRI;
     ad_utility::HashMap<std::string, std::string> _prefixMap;
@@ -158,11 +216,15 @@ class TurtleParser {
     size_t _numBlankNodes = 0;
     // only for testing first, stores the triples that have been parsed
     std::vector<std::array<string, 3>> _triples;
+    Bzip2Wrapper _bzipWrapper;
 
     std::string _tmpToParse = u8"";
+    std::vector<char> _byteVec;
     const char* _data = nullptr;
     size_t _dataSize = 0;
     bool _isMmapped = false;
+    bool _isBzip = false;
+    size_t _bufferSize = 100 << 20;
 
     void mapFile(const string& filename) {
       unmapFile();

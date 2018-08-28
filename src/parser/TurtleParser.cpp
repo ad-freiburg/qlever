@@ -4,6 +4,7 @@
 //
 
 #include "./TurtleParser.h"
+#include <string.h>
 
 // TODO: always disambiguate if we indeed take the longest match
 
@@ -300,4 +301,45 @@ bool TurtleParser::parseTerminal(const RE2& terminal) {
     return false;
   }
   return false;
+}
+
+// ______________________________________________________________________
+TurtleParserBackupState TurtleParser::backupState() const {
+  TurtleParserBackupState b;
+  b._numBlankNodes = _numBlankNodes;
+  b._blankNodeMap = _blankNodeMap;
+  b._numTriples = _triples.size();
+  b._tokenizerPosition = _tok.data().begin();
+  b._tokenizerSize = _tok.data().size();
+  return b;
+}
+
+// _______________________________________________________________
+bool TurtleParser::resetStateAndRead(const TurtleParserBackupState b) {
+  _numBlankNodes = b._numBlankNodes;
+  _blankNodeMap = b._blankNodeMap;
+  AD_CHECK(_triples.size() >= b._numTriples);
+  _triples.resize(b._numTriples);
+  _tok.reset(b._tokenizerPosition, b._tokenizerSize);
+  std::vector<char> buf;
+  buf.reserve(_bufferSize + _tok.data().size());
+  buf.resize(_tok.data().size());
+  memcpy(buf.data(), _tok.data().begin(), _tok.data().size());
+  // buf.insert(const_cast<char*>(_tok.data().begin()),
+  //           const_cast<char*>(_tok.data().end()));
+  auto remainderSize = buf.size();
+  buf.resize(buf.size() + _bufferSize);
+  LOG(INFO) << "decompressing next bytes\n";
+  auto bytesRead =
+      _bzipWrapper.decompressBlock(buf.data() + remainderSize, _bufferSize);
+  if (!bytesRead) {
+    return false;
+  } else {
+    buf.resize(remainderSize + bytesRead.value());
+    LOG(INFO) << "Done. number of Bytes in parser Buffer: " << buf.size()
+              << '\n';
+    _byteVec = std::move(buf);
+    _tok.reset(_byteVec.data(), _byteVec.size());
+    return true;
+  }
 }
