@@ -28,6 +28,7 @@ struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
                            {"help", no_argument, NULL, 'h'},
                            {"index", required_argument, NULL, 'i'},
                            {"worker-threads", required_argument, NULL, 'j'},
+                           {"on-disk-literals", no_argument, NULL, 'l'},
                            {"port", required_argument, NULL, 'p'},
                            {"patterns", no_argument, NULL, 'P'},
                            {"text", no_argument, NULL, 't'},
@@ -85,7 +86,7 @@ int main(int argc, char** argv) {
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "i:p:j:tauhPm", options, NULL);
+    int c = getopt_long(argc, argv, "i:p:j:tauhPml", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'i':
@@ -112,6 +113,11 @@ int main(int argc, char** argv) {
       case 'h':
         printUsage(argv[0]);
         exit(0);
+        break;
+      case 'l':
+        std::cout << "Warning: the -l flag (onDiskLiterals) is deprecated and "
+                     "will be ignored for ServerMain. The correct setting for "
+                     "this flag is read directly from the index\n";
         break;
       default:
         cout << endl

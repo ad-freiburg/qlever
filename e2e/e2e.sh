@@ -52,7 +52,7 @@ fi
 # Launch the Server using the freshly baked index. Can't simply use a subshell here because
 # then we can't easily get the SERVER_PID out of that subshell
 pushd "./build"
-./ServerMain -i "../$INDEX" -p 9099 -t -a -l --patterns &> server_log.txt &
+./ServerMain -i "../$INDEX" -p 9099 -t -a --patterns &> server_log.txt &
 SERVER_PID=$!
 popd
 

@@ -2,8 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#include "./index/PrefixHeuristic.h"
 #include <iostream>
+#include "./global/Constants.h"
+#include "./index/PrefixHeuristic.h"
 
 // Reads a vocabulary of words from file, calculates the prefixes with which the
 // greedy heuristic would compress this vocabulary and prints them on the
@@ -34,7 +35,8 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  for (const auto& p : calculatePrefixes(argv[1], 127, 1, true)) {
+  for (const auto& p :
+       calculatePrefixes(argv[1], 127, NUM_COMPRESSION_PREFIXES, true)) {
     std::cout << p << '\n';
   }
 }
