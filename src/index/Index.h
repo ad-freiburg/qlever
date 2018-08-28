@@ -5,6 +5,7 @@
 
 #include <array>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <stxxl/vector>
@@ -13,6 +14,7 @@
 #include "../global/Pattern.h"
 #include "../parser/NTriplesParser.h"
 #include "../parser/TsvParser.h"
+#include "../parser/TurtleParser.h"
 #include "../util/File.h"
 #include "./ConstantsIndexCreation.h"
 #include "./DocsDB.h"
@@ -21,7 +23,6 @@
 #include "./StxxlSortFunctors.h"
 #include "./TextMetaData.h"
 #include "./Vocabulary.h"
-#include <nlohmann/json.hpp>
 
 using std::array;
 using std::string;

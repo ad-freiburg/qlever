@@ -34,7 +34,7 @@ TEST(TurtleParserTest, prefixedName) {
   ASSERT_EQ(p.getPosition(), 0u);
 
   p.reset("unregistered:bla");
-  ASSERT_THROW(p.prefixedName(), ParseException);
+  ASSERT_THROW(p.prefixedName(), TurtleParser::ParseException);
 }
 
 TEST(TurtleParserTest, prefixID) {
@@ -55,7 +55,7 @@ TEST(TurtleParserTest, prefixID) {
   // invalid LL1
   s = "@prefix bla<www.bla.org/>.";
   p.reset(s);
-  ASSERT_THROW(p.prefixID(), ParseException);
+  ASSERT_THROW(p.prefixID(), TurtleParser::ParseException);
 
   s = "@prefxxix bla<www.bla.org/>.";
   p.reset(s);
@@ -171,7 +171,7 @@ TEST(TurtleParserTest, blankNodePropertyList) {
 
   blankNodeL = "[<2> <ob2>; \"invalidPred\" <ob3>]";
   p.reset(blankNodeL);
-  ASSERT_THROW(p.blankNodePropertyList(), ParseException);
+  ASSERT_THROW(p.blankNodePropertyList(), TurtleParser::ParseException);
 }
 
 TEST(TurtleParserTest, object) {
@@ -220,7 +220,7 @@ TEST(TurtleParserTest, objectList) {
   p.reset("@noObject");
   ASSERT_FALSE(p.objectList());
   p.reset("<obj1>, @illFormed");
-  ASSERT_THROW(p.objectList(), ParseException);
+  ASSERT_THROW(p.objectList(), TurtleParser::ParseException);
 }
 TEST(TurtleParserTest, predicateObjectList) {
   TurtleParser p;

@@ -21,6 +21,7 @@ class Bzip2Exception : public std::exception {
     switch (errCode) {
       case BZ_CONFIG_ERROR:
         msg = "BZ_CONFIG_ERROR";
+        break;
       case BZ_PARAM_ERROR:
         msg = "BZ_PARAM_ERROR";
         break;
@@ -33,6 +34,8 @@ class Bzip2Exception : public std::exception {
       case BZ_MEM_ERROR:
         msg = "BZ_MEM_ERROR";
         break;
+      default:
+        msg = "unknown error";
     }
     _msg = "Internal exception in libbz: " + msg;
   }

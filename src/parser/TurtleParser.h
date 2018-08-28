@@ -20,15 +20,6 @@
 
 using std::string;
 
-class ParseException : public std::exception {
- public:
-  ParseException() = default;
-  ParseException(const string& msg) : _msg(msg) {}
-  const char* what() const throw() { return _msg.c_str(); }
-
- private:
-  string _msg = "Error while parsing Turtle";
-};
 
 struct TurtleParserBackupState {
   ad_utility::HashMap<std::string, std::string> _blankNodeMap;
@@ -40,6 +31,16 @@ struct TurtleParserBackupState {
 
 class TurtleParser {
  public:
+  class ParseException : public std::exception {
+   public:
+    ParseException() = default;
+    ParseException(const string& msg) : _msg(msg) {}
+    const char* what() const throw() { return _msg.c_str(); }
+
+   private:
+    string _msg = "Error while parsing Turtle";
+  };
+
   TurtleParser() = default;
   explicit TurtleParser(const string& filename) {
     if (ad_utility::endsWith(filename, ".ttl")) {
@@ -60,7 +61,10 @@ class TurtleParser {
   }
   ~TurtleParser() { unmapFile(); }
 
-  bool getline(std::array<string, 3>* triple) {
+  // ____________________________________________________________________
+  bool getLine(std::array<string, 3>& triple) { return getLine(&triple); }
+
+  bool getLine(std::array<string, 3>* triple) {
     TurtleParserBackupState b;
     while (_triples.empty()) {
       if (_isBzip) {

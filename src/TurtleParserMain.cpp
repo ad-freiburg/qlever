@@ -14,7 +14,7 @@ int main(int argc, char** argv) {
   }
   TurtleParser p(argv[1]);
   std::array<std::string, 3> triple;
-  while (p.getline(&triple)) {
+  while (p.getLine(&triple)) {
     std::cout << triple[0] << " " << triple[1] << " " << triple[2] << '\n';
   }
 }
