@@ -37,6 +37,13 @@ void Vocabulary<S>::readFromFile(const string& fileName,
   LOG(INFO) << "Done reading vocabulary from file.\n";
   LOG(INFO) << "It contains " << _words.size() << " elements\n";
   if (extLitsFileName.size() > 0) {
+    if (!_isCompressed) {
+      LOG(INFO) << "ERROR: trying to load externalized literals to an "
+                   "uncompressed vocabulary. This is not valid and a "
+                   "programming error. Terminating\n";
+      AD_CHECK(false);
+    }
+
     LOG(INFO) << "Registering external vocabulary for literals.\n";
     _externalLiterals.initFromFile(extLitsFileName);
     LOG(INFO) << "Done registering external vocabulary for literals.\n";
