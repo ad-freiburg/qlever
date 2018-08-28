@@ -28,7 +28,6 @@ struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
                            {"help", no_argument, NULL, 'h'},
                            {"index", required_argument, NULL, 'i'},
                            {"worker-threads", required_argument, NULL, 'j'},
-                           {"on-disk-literals", no_argument, NULL, 'l'},
                            {"port", required_argument, NULL, 'p'},
                            {"patterns", no_argument, NULL, 'P'},
                            {"text", no_argument, NULL, 't'},
@@ -50,10 +49,6 @@ void printUsage(char* execName) {
        << "Show this help and exit." << endl;
   cout << "  " << std::setw(20) << "i, index" << std::setw(1) << "    "
        << "The location of the index files." << endl;
-  cout << "  " << std::setw(20) << "l, on-disk-literals" << std::setw(1)
-       << "    "
-       << "Indicates that the literals can be found on disk with the index."
-       << endl;
   cout << "  " << std::setw(20) << "p, port" << std::setw(1) << "    "
        << "The port on which to run the web interface." << endl;
   cout << "  " << std::setw(20) << "P, patterns" << std::setw(1) << "    "
@@ -81,7 +76,6 @@ int main(int argc, char** argv) {
   // filled / set depending on the options.
   string index = "";
   bool text = false;
-  bool onDiskLiterals = false;
   bool allPermutations = false;
   bool optimizeOptionals = true;
   int port = -1;
@@ -91,7 +85,7 @@ int main(int argc, char** argv) {
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "i:p:j:tlauhPm", options, NULL);
+    int c = getopt_long(argc, argv, "i:p:j:tauhPm", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'i':
@@ -105,9 +99,6 @@ int main(int argc, char** argv) {
         break;
       case 't':
         text = true;
-        break;
-      case 'l':
-        onDiskLiterals = true;
         break;
       case 'a':
         allPermutations = true;
@@ -152,8 +143,8 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numThreads);
-    server.initialize(index, text, allPermutations, onDiskLiterals,
-                      optimizeOptionals, usePatterns);
+    server.initialize(index, text, allPermutations, optimizeOptionals,
+                      usePatterns);
     server.run();
   } catch (const ad_semsearch::Exception& e) {
     LOG(ERROR) << e.getFullErrorMessage() << '\n';
