@@ -34,7 +34,7 @@ int main(int argc, char** argv) {
     exit(1);
   }
 
-  for (const auto& p : calculatePrefixes(argv[1], 127, 1)) {
+  for (const auto& p : calculatePrefixes(argv[1], 127, 1, true)) {
     std::cout << p << '\n';
   }
 }

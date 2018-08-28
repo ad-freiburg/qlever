@@ -202,7 +202,6 @@ CompressedString Vocabulary<S>::compressPrefix(const string& word) const {
     }
   }
   auto res = CompressedString::fromString(NO_PREFIX_CHAR + word);
-  LOG(DEBUG) << "compressed " << word << " to " << res.toString() << '\n';
   return res;
 }
 
