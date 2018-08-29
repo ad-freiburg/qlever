@@ -373,6 +373,7 @@ string toJson(const std::optional<string>& input) {
       case '\"':
       case '\\':
         rsize++;
+        continue;
       default:
         continue;
     }
