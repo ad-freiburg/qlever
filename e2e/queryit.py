@@ -69,6 +69,11 @@ def test_row(gold_row: List[Any],
         if gold is None:
             continue
         actual = actual_row[i]
+        # from literals only take the part in quotes stripping
+        # the quotes and any "^^xsd:type hints.
+        # This allows us to ignore double quoting trouble in checks
+        if actual and actual[0] == '"':
+            actual = actual[1:actual.rfind('"')]
         matches = False
         if isinstance(gold, int):
             matches = int(actual) == gold
@@ -118,6 +123,11 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
                 return False
         elif check == 'res':
             gold_res = value
+            if len(gold_res) != len(res):
+                eprint("res check failed:\n"+
+                       "\texpected number of rows: %r" % len(gold_res) +
+                       "\tdoes not match actual: %r" % len(value))
+                return False
             for i, gold_row in enumerate(gold_res):
                 actual_row = res[i]
                 if not test_row(gold_row, actual_row):
