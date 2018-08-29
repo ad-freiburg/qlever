@@ -12,7 +12,7 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
                            std::shared_ptr<QueryExecutionTree> t1,
                            bool t1Optional,
                            std::shared_ptr<QueryExecutionTree> t2,
-                           bool t2Optional, const vector<array<size_t, 2>>& jcs)
+                           bool t2Optional, const vector<array<Id, 2>>& jcs)
     : Operation(qec), _joinColumns(jcs), _multiplicitiesComputed(false) {
   // Make sure subtrees are ordered so that identical queries can be identified.
   AD_CHECK_GT(jcs.size(), 0);
@@ -57,13 +57,14 @@ string OptionalJoin::asString(size_t indent) const {
 }
 
 // Used to generate all up to 125 combinations of left, right and result size.
-template <int I, int J, int K>
+template <size_t I, size_t J, size_t K>
 struct meta_for {
-  void operator()(int i, int j, int k, shared_ptr<const ResultTable> leftResult,
+  void operator()(size_t i, size_t j, size_t k,
+                  shared_ptr<const ResultTable> leftResult,
                   shared_ptr<const ResultTable> rightResult, bool leftOptional,
                   bool rightOptional,
-                  const std::vector<std::array<size_t, 2>>& joinColumns,
-                  ResultTable* result, int resultSize) const {
+                  const std::vector<std::array<Id, 2>>& joinColumns,
+                  ResultTable* result, size_t resultSize) const {
     if (I == i) {
       if (J == j) {
         if (K == k) {
@@ -94,13 +95,14 @@ struct meta_for {
   }
 };
 
-template <int I, int K>
+template <size_t I, size_t K>
 struct meta_for<I, 6, K> {
-  void operator()(int i, int j, int k, shared_ptr<const ResultTable> leftResult,
+  void operator()(size_t i, size_t j, size_t k,
+                  shared_ptr<const ResultTable> leftResult,
                   shared_ptr<const ResultTable> rightResult, bool leftOptional,
                   bool rightOptional,
-                  const std::vector<std::array<size_t, 2>>& joinColumns,
-                  ResultTable* result, int resultSize) const {
+                  const std::vector<std::array<Id, 2>>& joinColumns,
+                  ResultTable* result, size_t resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void)i;
     (void)j;
@@ -113,13 +115,14 @@ struct meta_for<I, 6, K> {
   }
 };
 
-template <int I, int J>
+template <size_t I, size_t J>
 struct meta_for<I, J, 6> {
-  void operator()(int i, int j, int k, shared_ptr<const ResultTable> leftResult,
+  void operator()(size_t i, size_t j, size_t k,
+                  shared_ptr<const ResultTable> leftResult,
                   shared_ptr<const ResultTable> rightResult, bool leftOptional,
                   bool rightOptional,
-                  const std::vector<std::array<size_t, 2>>& joinColumns,
-                  ResultTable* result, int resultSize) const {
+                  const std::vector<std::array<Id, 2>>& joinColumns,
+                  ResultTable* result, size_t resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void)i;
     (void)j;
@@ -133,13 +136,14 @@ struct meta_for<I, J, 6> {
   }
 };
 
-template <int J>
+template <size_t J>
 struct meta_for<6, J, 6> {
-  void operator()(int i, int j, int k, shared_ptr<const ResultTable> leftResult,
+  void operator()(size_t i, size_t j, size_t k,
+                  shared_ptr<const ResultTable> leftResult,
                   shared_ptr<const ResultTable> rightResult, bool leftOptional,
                   bool rightOptional,
-                  const std::vector<std::array<size_t, 2>>& joinColumns,
-                  ResultTable* result, int resultSize) const {
+                  const std::vector<std::array<Id, 2>>& joinColumns,
+                  ResultTable* result, size_t resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void)i;
     (void)j;
@@ -155,11 +159,12 @@ struct meta_for<6, J, 6> {
 
 template <>
 struct meta_for<6, 6, 6> {
-  void operator()(int i, int j, int k, shared_ptr<const ResultTable> leftResult,
+  void operator()(size_t i, size_t j, size_t k,
+                  shared_ptr<const ResultTable> leftResult,
                   shared_ptr<const ResultTable> rightResult, bool leftOptional,
                   bool rightOptional,
-                  const std::vector<std::array<size_t, 2>>& joinColumns,
-                  ResultTable* result, int resultSize) const {
+                  const std::vector<std::array<Id, 2>>& joinColumns,
+                  ResultTable* result, size_t resultSize) const {
     // avoid unused warnings from the compiler (there would be a lot of them)
     (void)i;
     (void)j;
@@ -191,7 +196,7 @@ void OptionalJoin::computeResult(ResultTable* result) const {
                               leftResult->_resultTypes.end());
   for (size_t col = 0; col < rightResult->_nofColumns; col++) {
     bool isJoinColumn = false;
-    for (const std::array<size_t, 2>& a : _joinColumns) {
+    for (const std::array<Id, 2>& a : _joinColumns) {
       if (a[1] == col) {
         isJoinColumn = true;
         break;
@@ -226,7 +231,7 @@ std::unordered_map<string, size_t> OptionalJoin::getVariableColumns() const {
     bool isJoinColumn = false;
     // Reduce the index for every column of _right that is beeing joined on,
     // and the index of which is smaller than the index of it.
-    for (const std::array<size_t, 2>& a : _joinColumns) {
+    for (const std::array<Id, 2>& a : _joinColumns) {
       if (a[1] < it->second) {
         columnIndex--;
       } else if (a[1] == it->second) {
@@ -327,7 +332,7 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
   } else {
     _sizeEstimate = multResult * numDistinctResult;
   }
-  // Don't estimate 0 since then some parent operations 
+  // Don't estimate 0 since then some parent operations
   // (in particular joins) using isKnownEmpty() will
   // will assume the size to be exactly zero
   _sizeEstimate += 1;

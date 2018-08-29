@@ -183,8 +183,8 @@ class QueryPlanner {
   bool connected(const SubtreePlan& a, const SubtreePlan& b,
                  const TripleGraph& graph) const;
 
-  vector<array<size_t, 2>> getJoinColumns(const SubtreePlan& a,
-                                          const SubtreePlan& b) const;
+  vector<array<Id, 2>> getJoinColumns(const SubtreePlan& a,
+                                      const SubtreePlan& b) const;
 
   string getPruningKey(const SubtreePlan& plan, size_t orderedOnCol) const;
 

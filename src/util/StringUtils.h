@@ -588,7 +588,8 @@ string decodeUrl(const string& url) {
       } else if (h1 >= 'a' && h1 <= 'f') {
         h1 = h1 - 'a' + 10;
       } else {
-        h1 = -1;
+        decoded += '%';
+        continue;
       }
       char h2 = tolower(url[i + 2]);
       if (h2 >= '0' && h2 <= '9') {
@@ -596,14 +597,11 @@ string decodeUrl(const string& url) {
       } else if (h2 >= 'a' && h2 <= 'f') {
         h2 = h2 - 'a' + 10;
       } else {
-        h2 = -1;
-      }
-      if (h1 != -1 && h2 != -1) {
-        decoded += static_cast<char>(h1 * 16 + h2);
-        i += 2;
-      } else {
         decoded += '%';
+        continue;
       }
+      decoded += static_cast<char>(h1 * 16 + h2);
+      i += 2;
     } else {
       decoded += url[i];
     }

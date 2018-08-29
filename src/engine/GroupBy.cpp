@@ -745,7 +745,7 @@ void GroupBy::computeResult(ResultTable* result) const {
   aggregates.reserve(_aliases.size() + _groupByVariables.size());
 
   // parse the group by columns
-  std::unordered_map<string, Id> subtreeVarCols =
+  std::unordered_map<string, size_t> subtreeVarCols =
       _subtree->getVariableColumnMap();
   for (const string& var : _groupByVariables) {
     auto it = subtreeVarCols.find(var);

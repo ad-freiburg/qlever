@@ -208,7 +208,7 @@ void CountAvailablePredicates::computePatternTrick(
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
   size_t posInput = 0;
-  size_t lastSubject = ID_NO_VALUE;
+  Id lastSubject = ID_NO_VALUE;
   while (posInput < input->size()) {
     while ((*input)[posInput][subjectColumn] == lastSubject &&
            posInput < input->size()) {
