@@ -42,14 +42,19 @@ inline string convertValueLiteralToIndexWord(const string& orig);
 inline string convertIndexWordToValueLiteral(const string& indexWord);
 
 //! Converts like this: "12.34 to PP0*2E0*1234 and -0.123 to M-0*1E9*876".
-inline string convertFloatToIndexWord(const string& value,
-                                      size_t nofExponentDigits,
-                                      size_t nofMantissaDigits);
+inline string convertFloatToIndexWord(
+    const string& value,
+    size_t nofExponentDigits = DEFAULT_NOF_VALUE_EXPONENT_DIGITS,
+    size_t nofMantissaDigits = DEFAULT_NOF_VALUE_MANTISSA_DIGITS);
 
 //! Converts like this: "PP0*2E0*1234 to "12.34 and M-0*1E9*876 to -0.123".
 inline string convertIndexWordToFloatString(const string& indexWord);
 
 //! Converts like this: "PP0*2E0*1234 to "12.34 and M-0*1E9*876 to -0.123".
+//! NOTE: Unexpectedly this doesn't work directly on the output produced
+//!       by convertNumericToIndexWord() and convertValueLiteralToIndexWord()
+//!       as these add :v:<type>: in front
+//! TODO(schnelle): Rename this to reflect the above
 inline float convertIndexWordToFloat(const string& indexWord);
 
 //! Brings a date to the format:
@@ -70,7 +75,15 @@ inline string getBase10ComplementOfIntegerString(const string& orig);
 inline string removeLeadingZeros(const string& orig);
 
 //! Check if this looks like an value literal
-inline bool isXsdValue(const string val);
+inline bool isXsdValue(const string& val);
+
+//! Check if the given string is numeric, i.e. a decimal integer or float string
+//! i.e. "42", "42.2", "0123", ".3" are all numeric while "a", "1F", "0x32" are
+//! not
+inline bool isNumeric(const string& val);
+
+//! Converts numeric strings (as determined by isNumeric()) into index words
+inline string convertNumericToIndexWord(const string& val);
 
 // _____________________________________________________________________________
 string convertValueLiteralToIndexWord(const string& orig) {
@@ -116,18 +129,10 @@ string convertValueLiteralToIndexWord(const string& orig) {
     // have a special marker at the very end to tell if the original number
     // was int for float. The benefit: can compare float with int that way.
     if (type == "int" || type == "integer") {
-      // return convertIntegerToIndexWord(
-      //    value,
-      //    ad_semsearch::DEFAULT_NOF_VALUE_INTEGER_DIGITS);
-      return convertFloatToIndexWord(value + ".0",
-                                     DEFAULT_NOF_VALUE_EXPONENT_DIGITS,
-                                     DEFAULT_NOF_VALUE_MANTISSA_DIGITS) +
-             "I";
+      return convertFloatToIndexWord(value + ".0") + "I";
     }
     if (type == "float" || type == "decimal") {
-      return convertFloatToIndexWord(value, DEFAULT_NOF_VALUE_EXPONENT_DIGITS,
-                                     DEFAULT_NOF_VALUE_MANTISSA_DIGITS) +
-             "F";
+      return convertFloatToIndexWord(value) + "F";
     }
   }
   return orig;
@@ -198,9 +203,7 @@ string convertFloatToIndexWord(const string& orig, size_t nofExponentDigits,
   os << (negaMantissa ? 'M' : 'P');
 
   // Get the exponent.
-  assert(posOfDot >= 1);
   int exponent = static_cast<int>(posOfDot) - 1;
-
   if (posOfDot <= 1) {
     if (value[0] == '0') {
       exponent = -1;
@@ -568,10 +571,37 @@ inline string removeLeadingZeros(const string& orig) {
 }
 
 // _____________________________________________________________________________
-bool isXsdValue(const string val) {
+bool isXsdValue(const string& val) {
   // starting the search for "^^ at position 1 makes sure it's not in the
   // quotes as we already checked that the first char is the first quote
-  return val.size() > 0 && val[0] == '\"' &&
-         val.find("\"^^", 1) != string::npos;
+  return !val.empty() && val[0] == '\"' && val.find("\"^^", 1) != string::npos;
+}
+
+// _____________________________________________________________________________
+bool isNumeric(const string& val) {
+  if (val.empty()) {
+    return false;
+  }
+  size_t start = (val[0] == '-' || val[0] == '+') ? 1 : 0;
+  size_t posNonDigit = val.find_first_not_of("0123456789", start);
+  if (posNonDigit == string::npos) {
+    return true;
+  }
+  if (val[posNonDigit] == '.') {
+    return posNonDigit + 1 < val.size() &&
+           val.find_first_not_of("0123456789", posNonDigit + 1) == string::npos;
+  }
+  return false;
+}
+
+// _____________________________________________________________________________
+string convertNumericToIndexWord(const string& val) {
+  bool wasInt = false;
+  string tmp = val;
+  if (tmp.find('.') == string::npos) {
+    tmp += ".0";
+    wasInt = true;
+  }
+  return convertFloatToIndexWord(tmp) + ((wasInt) ? 'I' : 'F');
 }
 }  // namespace ad_utility

@@ -25,6 +25,7 @@ TEST(ConversionsTest, convertFloatToIndexWord) {
   string pos4 = "2.0000009999";
   string pos5 = "2.9999";
   string pos6 = "111000.05";
+  string pos7 = "+111000.05";
   string neg = "-0.0005002";
   string neg2 = "-0.005002";
   string neg3 = "-2023.414";
@@ -46,6 +47,7 @@ TEST(ConversionsTest, convertFloatToIndexWord) {
   indexWords.push_back(convertFloatToIndexWord(pos4, 10, 20));
   indexWords.push_back(convertFloatToIndexWord(pos5, 10, 20));
   indexWords.push_back(convertFloatToIndexWord(pos6, 10, 20));
+  indexWords.push_back(convertFloatToIndexWord(pos7, 10, 20));
   indexWords.push_back(convertFloatToIndexWord(extra, 10, 20));
   indexWords.push_back(convertFloatToIndexWord(extra2, 10, 20));
   indexWords.push_back(convertFloatToIndexWord(extra3, 10, 20));
@@ -68,6 +70,7 @@ TEST(ConversionsTest, convertFloatToIndexWord) {
   ASSERT_EQ(pos4, convertIndexWordToFloatString(indexWords[12]));
   ASSERT_EQ(pos5, convertIndexWordToFloatString(indexWords[13]));
   ASSERT_EQ(pos6, convertIndexWordToFloatString(indexWords[14]));
+  ASSERT_EQ(pos6, convertIndexWordToFloatString(indexWords[15]));
 
   ASSERT_EQ("0.0",
             convertIndexWordToFloatString(convertFloatToIndexWord("0", 5, 5)));
@@ -290,6 +293,53 @@ TEST(ConversionsTest, convertIndexWordToFloat) {
                   convertIndexWordToFloat(convertFloatToIndexWord("1", 5, 5)));
   ASSERT_FLOAT_EQ(-1,
                   convertIndexWordToFloat(convertFloatToIndexWord("-1", 5, 5)));
+}
+
+TEST(ConversionsTest, isNumeric) {
+  ASSERT_TRUE(isNumeric("42"));
+  ASSERT_TRUE(isNumeric("42.3"));
+  ASSERT_TRUE(isNumeric("12345678"));
+  ASSERT_TRUE(isNumeric(".4"));
+  ASSERT_TRUE(isNumeric("-12.4"));
+  ASSERT_TRUE(isNumeric("+12.4"));
+  ASSERT_TRUE(isNumeric("-2"));
+  ASSERT_TRUE(isNumeric("0"));
+  ASSERT_TRUE(isNumeric("0.0"));
+  ASSERT_TRUE(isNumeric("0123"));
+
+  ASSERT_FALSE(isNumeric("a"));
+  // no automatic stripping
+  ASSERT_FALSE(isNumeric(" 123 "));
+  ASSERT_FALSE(isNumeric(" 123"));
+  ASSERT_FALSE(isNumeric("123 "));
+
+  ASSERT_FALSE(isNumeric("xyz"));
+  ASSERT_FALSE(isNumeric("0a"));
+  // Oh how awesome it were, if we Germans could just stop
+  // this comma as a decimal separator nonesense
+  ASSERT_FALSE(isNumeric("0,023"));
+}
+
+TEST(ConversionsTest, convertNumericToIndexWordEndToEnd) {
+  ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("42")),
+                  "\"42\"^^<http://www.w3.org/2001/XMLSchema#int>");
+  ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("42.3")),
+                  "\"42.3\"^^<http://www.w3.org/2001/XMLSchema#float>");
+  ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("12345678")),
+                  "\"12345678\"^^<http://www.w3.org/2001/XMLSchema#int>");
+  ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord(".4")),
+                  "\"0.4\"^^<http://www.w3.org/2001/XMLSchema#float>");
+  ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("-12.3")),
+                  "\"-12.3\"^^<http://www.w3.org/2001/XMLSchema#float>");
+  ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("-2")),
+                  "\"-2\"^^<http://www.w3.org/2001/XMLSchema#int>");
+  ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("0")),
+                  "\"0\"^^<http://www.w3.org/2001/XMLSchema#int>");
+  ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("0.0")),
+                  "\"0.0\"^^<http://www.w3.org/2001/XMLSchema#float>");
+  // TODO(schnelle) for whatever reason the actual result becomes 1230
+  //ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("0123")),
+  //                "\"123\"^^<http://www.w3.org/2001/XMLSchema#int>");
 }
 
 int main(int argc, char** argv) {

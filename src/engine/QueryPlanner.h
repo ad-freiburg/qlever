@@ -162,8 +162,6 @@ class QueryPlanner {
 
   static bool isVariable(const string& elem);
 
-  static bool isWords(const string& elem);
-
   void getVarTripleMap(
       const ParsedQuery& pq,
       ad_utility::HashMap<string, vector<SparqlTriple>>& varToTrip,
