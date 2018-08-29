@@ -43,7 +43,6 @@ void MmapVector<T>::writeMetaDataToEnd() {
   ofs.write((char*)&_bytesize, sizeof(_bytesize));
   ofs.write((char*)&MagicNumber, sizeof(MagicNumber));
   ofs.write((char*)&Version, sizeof(Version));
-  ofs.flush();
   ofs.close();
 }
 
@@ -227,8 +226,6 @@ void MmapVector<T>::open(size_t size, string filename, AccessPattern pattern) {
   {
     std::ofstream ofs(_filename);
     AD_CHECK(ofs.is_open());
-    ofs << "bla";
-    // ofs.flush();
   }
   auto info = convertArraySizeToFileSize(std::max(size, MinCapacity));
   _bytesize = info._bytesize;
