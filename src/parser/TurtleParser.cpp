@@ -10,6 +10,7 @@
 
 // _______________________________________________________________
 bool TurtleParser::statement() {
+  _tok.skipWhitespaceAndComments();
   return directive() || (triples() && skip(_tokens.Dot));
 }
 
@@ -21,13 +22,13 @@ bool TurtleParser::directive() {
 // ________________________________________________________________
 bool TurtleParser::prefixID() {
   if (skip(_tokens.TurtlePrefix)) {
-    if (pnameNS() && iriref() && skip(_tokens.Dot)) {
+    if (check(pnameNS()) && check(iriref()) && check(skip(_tokens.Dot))) {
       // strip  the angled brackes <bla> -> bla
       _prefixMap[_activePrefix] =
           _lastParseResult.substr(1, _lastParseResult.size() - 2);
       return true;
     } else {
-      throw ParseException();
+      throw ParseException("prefixID");
     }
   } else {
     return false;
@@ -41,7 +42,7 @@ bool TurtleParser::base() {
       _baseIRI = _lastParseResult;
       return true;
     } else {
-      throw ParseException();
+      throw ParseException("base");
     }
   } else {
     return false;
@@ -55,7 +56,7 @@ bool TurtleParser::sparqlPrefix() {
       _prefixMap[_activePrefix] = _lastParseResult;
       return true;
     } else {
-      throw ParseException();
+      throw ParseException("sparqlPrefix");
     }
   } else {
     return false;
@@ -69,7 +70,7 @@ bool TurtleParser::sparqlBase() {
       _baseIRI = _lastParseResult;
       return true;
     } else {
-      throw ParseException();
+      throw ParseException("sparqlBase");
     }
   } else {
     return false;
@@ -82,7 +83,7 @@ bool TurtleParser::triples() {
     if (predicateObjectList()) {
       return true;
     } else {
-      throw ParseException();
+      throw ParseException("triples");
     }
   } else {
     if (blankNodePropertyList()) {
@@ -122,10 +123,11 @@ bool TurtleParser::objectList() {
 }
 
 // ______________________________________________________
-bool TurtleParser::verb() { return predicate() || predicateSpecialA(); }
+bool TurtleParser::verb() { return predicateSpecialA() || predicate(); }
 
 // ___________________________________________________________________
 bool TurtleParser::predicateSpecialA() {
+  _tok.skipWhitespaceAndComments();
   if (auto [success, word] = _tok.getNextToken(_tokens.A); success) {
     (void)word;
     _activePredicate = u8"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
@@ -137,7 +139,7 @@ bool TurtleParser::predicateSpecialA() {
 
 // ____________________________________________________________________
 bool TurtleParser::subject() {
-  if (iri() || blankNode() || collection()) {
+  if (blankNode() || iri() || collection()) {
     _activeSubject = _lastParseResult;
     return true;
   } else {
@@ -158,7 +160,8 @@ bool TurtleParser::predicate() {
 // ____________________________________________________________________
 bool TurtleParser::object() {
   // these produce a single object that becomes part of a triple
-  if (iri() || blankNode() || literal()) {
+  // check blank Node first because _: also could look like a prefix
+  if (blankNode() || literal() || iri()) {
     emitTriple();
     return true;
   } else if (collection() || blankNodePropertyList()) {
@@ -253,20 +256,64 @@ bool TurtleParser::booleanLiteral() {
 
 // ______________________________________________________________________
 bool TurtleParser::stringParse() {
-  std::vector<const RE2*> candidates;
-  candidates.push_back(&(_tokens.StringLiteralQuote));
-  candidates.push_back(&(_tokens.StringLiteralSingleQuote));
-  candidates.push_back(&(_tokens.StringLiteralLongSingleQuote));
-  candidates.push_back(&(_tokens.StringLiteralLongQuote));
-  if (auto [success, index, word] = _tok.getNextToken(candidates); success) {
-    (void)index;
-    // TODO<joka921> check how QLever handles multiline strings and strings
-    // with single quotes
-    _lastParseResult = word;
-    return true;
+  auto view = _tok.view();
+  size_t startPos = 0;
+  size_t endPos = 1;
+  std::array<string, 4> quotes{"\"\"\"", "\'\'\'", "\"", "\'"};
+  bool foundString = false;
+  for (const auto& q : quotes) {
+    if (ad_utility::startsWith(view, q)) {
+      foundString = true;
+      startPos = q.size();
+      endPos = view.find(q, startPos);
+      while (endPos != string::npos && view[endPos - 1] == '\\') {
+        endPos = view.find(q, endPos + 1);
+      }
+    }
+  }
+  /*
+  if (ad_utility::startsWith(view, "\"\"\"")) {
+    startPos = 3;
+    endPos = view.find("\"\"\"", startPos);
+  } else if (ad_utility::startsWith(view, "\'\'\'")) {
+    startPos = 3;
+    endPos = view.find("\'\'\'", startPos);
+  } else if (ad_utility::startsWith(view, "\"")) {
+    startPos = 1;
+    endPos = view.find("\"", startPos);
+  } else if (ad_utility::startsWith(view, "\'")) {
+    startPos = 1;
+    endPos = view.find("\'", startPos);
   } else {
     return false;
   }
+  */
+  if (!foundString) {
+    return false;
+    }
+    if (endPos == string::npos) {
+      throw ParseException("unterminated string Literal");
+    }
+    // also include the quotation marks in the word
+    _lastParseResult = view.substr(0, endPos + startPos);
+    _tok.data().remove_prefix(endPos + startPos);
+    return true;
+    /*
+    std::vector<const RE2*> candidates;
+    candidates.push_back(&(_tokens.StringLiteralQuote));
+    candidates.push_back(&(_tokens.StringLiteralSingleQuote));
+    candidates.push_back(&(_tokens.StringLiteralLongSingleQuote));
+    candidates.push_back(&(_tokens.StringLiteralLongQuote));
+    if (auto [success, index, word] = _tok.getNextToken(candidates); success) {
+      (void)index;
+      // TODO<joka921> check how QLever handles multiline strings and strings
+      // with single quotes
+      _lastParseResult = word;
+      return true;
+    } else {
+      return false;
+    }
+    */
 }
 
 // ______________________________________________________________________

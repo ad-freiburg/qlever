@@ -146,20 +146,57 @@ class TurtleParser {
     bool stringParse();
 
     // Terminals
-    bool iriref() { return parseTerminal(_tokens.Iriref); }
+    bool iriref() {
+      _tok.skipWhitespaceAndComments();
+      auto view = _tok.view();
+      if (ad_utility::startsWith(view, "<")) {
+        auto endPos = view.find_first_of("> \n");
+        if (endPos == string::npos || view[endPos] != '>') {
+          throw ParseException("Iriref");
+        } else {
+          _tok.data().remove_prefix(endPos + 1);
+          _lastParseResult = view.substr(0, endPos + 1);
+          return true;
+        }
+      } else {
+        return false;
+      }
+      // return parseTerminal(_tokens.Iriref);
+    }
     bool integer() { return parseTerminal(_tokens.Integer); }
     bool decimal() { return parseTerminal(_tokens.Decimal); }
     bool doubleParse() { return parseTerminal(_tokens.Double); }
     bool pnameLN() {
-      if (parseTerminal(_tokens.PnameLN)) {
-        // TODO: better do this with subgroup matching directly
-        auto pos = _lastParseResult.find(':');
-        _activePrefix = _lastParseResult.substr(0, pos);
-        _lastParseResult = _lastParseResult.substr(pos + 1);
-        return true;
-      } else {
+      _tok.skipWhitespaceAndComments();
+      auto view = _tok.view();
+      auto pos = view.find(":");
+      if (pos == string::npos) {
         return false;
       }
+      // these can also be part of a collection etc
+      auto posEnd = view.find_first_of(" \n,;", pos);
+      if (posEnd == string::npos) {
+        // make tests work
+        posEnd = view.size();
+      }
+      // TODO: is it allowed to have no space between triples and the dots? in
+      // this case we have to check something here
+      _activePrefix = view.substr(0, pos);
+      _lastParseResult = view.substr(pos + 1, posEnd - (pos + 1));
+      // we do not remove the whitespace or the ,; since they are needed
+      _tok.data().remove_prefix(posEnd);
+      return true;
+
+      /* if (parseTerminal(_tokens.PnameLN)) {
+         // TODO: better do this with subgroup matching directly
+         auto pos = _lastParseResult.find(':');
+         _activePrefix = _lastParseResult.substr(0, pos);
+         _lastParseResult = _lastParseResult.substr(pos + 1);
+         return true;
+       } else {
+         return false;
+       }
+       */
     }
     bool pnameNS() {
       if (parseTerminal(_tokens.PnameNS)) {

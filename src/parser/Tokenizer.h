@@ -7,6 +7,7 @@
 #include <gtest/gtest.h>
 #include <re2/re2.h>
 #include <regex>
+#include "../util/Log.h"
 
 using re2::RE2;
 using namespace std::string_literals;
@@ -211,18 +212,36 @@ class Tokenizer {
   }
 
   const re2::StringPiece& data() const { return _data; }
+  re2::StringPiece& data() { return _data; }
+
+  std::string_view view() const { return {_data.data(), _data.size()}; }
 
  private:
   void skipWhitespace() {
-    auto success = skip(_tokens.WsMultiple);
-    assert(success);
+    auto v = view();
+    auto pos = v.find_first_not_of("\x20\x09\x0D\x0A");
+    if (pos != string::npos) {
+      _data.remove_prefix(pos);
+    }
+    // auto success = skip(_tokens.WsMultiple);
+    // assert(success);
     return;
   }
   void skipComments() {
     // if not successful, then there was no comment, but this does not matter to
     // us
-    skip(_tokens.Comment);
-    return;
+    auto v = view();
+    if (ad_utility::startsWith(v, "#")) {
+      auto pos = v.find("\n");
+      if (pos == string::npos) {
+        // TODO: this actually should yield a n error
+        LOG(INFO) << "Warning, unfinished comment found while parsing";
+      } else {
+        _data.remove_prefix(pos + 1);
+      }
+
+      // skip(_tokens.Comment);
+    }
   }
   FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
   re2::StringPiece _data;
