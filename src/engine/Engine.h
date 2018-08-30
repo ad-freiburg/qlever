@@ -386,7 +386,7 @@ class Engine {
                                    const typename B::value_type* b,
                                    size_t sizeA, int joinColumnBitmap_a,
                                    int joinColumnBitmap_b,
-                                   const std::vector<size_t>& joinColumnAToB,
+                                   const std::vector<Id>& joinColumnAToB,
                                    unsigned int resultSize, R& res) {
     assert(!(aEmpty && bEmpty));
     if (aEmpty) {
@@ -442,11 +442,11 @@ class Engine {
    * @param joinColumns
    * @param result
    */
-  template <typename A, typename B, typename R, int K>
+  template <typename A, typename B, typename R, size_t K>
   static void optionalJoin(const A& a, const B& b, bool aOptional,
                            bool bOptional,
-                           const vector<array<size_t, 2>>& joinColumns,
-                           vector<R>* result, unsigned int resultSize) {
+                           const vector<array<Id, 2>>& joinColumns,
+                           vector<R>* result, size_t resultSize) {
     // check for trivial cases
     if ((a.size() == 0 && b.size() == 0) || (a.size() == 0 && !aOptional) ||
         (b.size() == 0 && !bOptional)) {
@@ -455,23 +455,23 @@ class Engine {
 
     int joinColumnBitmap_a = 0;
     int joinColumnBitmap_b = 0;
-    for (const array<size_t, 2>& jc : joinColumns) {
+    for (const array<Id, 2>& jc : joinColumns) {
       joinColumnBitmap_a |= (1 << jc[0]);
       joinColumnBitmap_b |= (1 << jc[1]);
     }
 
     // When a is optional this is used to quickly determine
     // in which column of b the value of a joined column can be found.
-    std::vector<size_t> joinColumnAToB;
+    std::vector<Id> joinColumnAToB;
     if (aOptional) {
       uint32_t maxJoinColA = 0;
-      for (const array<size_t, 2>& jc : joinColumns) {
+      for (const array<Id, 2>& jc : joinColumns) {
         if (jc[0] > maxJoinColA) {
           maxJoinColA = jc[0];
         }
       }
       joinColumnAToB.resize(maxJoinColA + 1);
-      for (const array<size_t, 2>& jc : joinColumns) {
+      for (const array<Id, 2>& jc : joinColumns) {
         joinColumnAToB[jc[0]] = jc[1];
       }
     }
@@ -543,7 +543,7 @@ class Engine {
       matched = true;
       for (size_t joinColIndex = 0; joinColIndex < joinColumns.size();
            joinColIndex++) {
-        const array<size_t, 2>& joinColumn = joinColumns[joinColIndex];
+        const array<Id, 2>& joinColumn = joinColumns[joinColIndex];
         if (a[ia][joinColumn[0]] < b[ib][joinColumn[1]]) {
           if (bOptional) {
             R res = newOptionalResult<R, K>()(resultSize);
@@ -585,7 +585,7 @@ class Engine {
           ib++;
 
           // do the rows still match?
-          for (const array<size_t, 2>& jc : joinColumns) {
+          for (const array<Id, 2>& jc : joinColumns) {
             if (ib == b.size() || a[ia][jc[0]] != b[ib][jc[1]]) {
               matched = false;
               break;
@@ -595,7 +595,7 @@ class Engine {
         ia++;
         // Check if the next row in a also matches the initial row in b
         matched = true;
-        for (const array<size_t, 2>& jc : joinColumns) {
+        for (const array<Id, 2>& jc : joinColumns) {
           if (ia == a.size() || a[ia][jc[0]] != b[initIb][jc[1]]) {
             matched = false;
             break;

@@ -42,7 +42,7 @@ template <class MapType>
 void IndexMetaData<MapType>::createFromByteBufferSparse(unsigned char* buf) {
   size_t nofBytesDone = 0;
   // read magic number
-  size_t magicNumber = *reinterpret_cast<size_t*>(buf);
+  uint64_t magicNumber = *reinterpret_cast<uint64_t*>(buf);
   if (magicNumber == MAGIC_NUMBER_MMAP_META_DATA) {
     LOG(INFO)
         << "ERROR: magic number of MetaData indicates that we are trying "
@@ -94,7 +94,7 @@ void IndexMetaData<MapType>::createFromByteBufferSparse(unsigned char* buf) {
 template <class MapType>
 void IndexMetaData<MapType>::createFromByteBufferMmap(unsigned char* buf) {
   // read magic number
-  size_t magicNumber = *reinterpret_cast<size_t*>(buf);
+  uint64_t magicNumber = *reinterpret_cast<uint64_t*>(buf);
   if (magicNumber != MAGIC_NUMBER_MMAP_META_DATA) {
     LOG(INFO) << "ERROR: No or wrong magic number found in persistent "
                  "mmap-based meta data. "

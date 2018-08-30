@@ -1298,15 +1298,15 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
 }
 
 // _____________________________________________________________________________
-vector<array<size_t, 2>> QueryPlanner::getJoinColumns(
+vector<array<Id, 2>> QueryPlanner::getJoinColumns(
     const QueryPlanner::SubtreePlan& a,
     const QueryPlanner::SubtreePlan& b) const {
-  vector<array<size_t, 2>> jcs;
+  vector<array<Id, 2>> jcs;
   for (auto it = a._qet.get()->getVariableColumnMap().begin();
        it != a._qet.get()->getVariableColumnMap().end(); ++it) {
     auto itt = b._qet.get()->getVariableColumnMap().find(it->first);
     if (itt != b._qet.get()->getVariableColumnMap().end()) {
-      jcs.push_back(array<size_t, 2>{{it->second, itt->second}});
+      jcs.push_back(array<Id, 2>{{it->second, itt->second}});
     }
   }
   return jcs;

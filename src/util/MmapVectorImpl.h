@@ -20,10 +20,10 @@ template <class T>
 constexpr float MmapVector<T>::ResizeFactor;
 
 template <class T>
-constexpr int MmapVector<T>::MagicNumber;
+constexpr uint32_t MmapVector<T>::MagicNumber;
 
 template <class T>
-constexpr int MmapVector<T>::Version;
+constexpr uint32_t MmapVector<T>::Version;
 
 // __________________________________________________________________________
 template <class T>
@@ -43,6 +43,7 @@ void MmapVector<T>::writeMetaDataToEnd() {
   ofs.write((char*)&_bytesize, sizeof(_bytesize));
   ofs.write((char*)&MagicNumber, sizeof(MagicNumber));
   ofs.write((char*)&Version, sizeof(Version));
+  ofs.close();
 }
 
 // __________________________________________________________________________
@@ -51,9 +52,9 @@ void MmapVector<T>::readMetaDataFromEnd() {
   std::ifstream fs(_filename, std::ios::binary | std::ios::ate);
   // since we do not know _bytesize yet we have to seek from the end
   AD_CHECK(fs.is_open());
-  static constexpr auto metaDataSize = sizeof(_size) + sizeof(_capacity) +
-                                       sizeof(_bytesize) + sizeof(MagicNumber) +
-                                       sizeof(Version);
+  static constexpr off_t metaDataSize = sizeof(_size) + sizeof(_capacity) +
+                                        sizeof(_bytesize) +
+                                        sizeof(MagicNumber) + sizeof(Version);
   if (fs.tellg() == -1 || static_cast<size_t>(fs.tellg()) < metaDataSize) {
     throw InvalidFileException();
   }
@@ -68,6 +69,7 @@ void MmapVector<T>::readMetaDataFromEnd() {
   auto tmpVersion = Version;
   fs.read((char*)&tmpMagic, sizeof(tmpMagic));
   fs.read((char*)&tmpVersion, sizeof(tmpVersion));
+  fs.close();
   if (tmpMagic != MagicNumber || tmpVersion != Version) {
     throw InvalidFileException();
   }
@@ -77,14 +79,14 @@ void MmapVector<T>::readMetaDataFromEnd() {
 template <class T>
 void MmapVector<T>::mapForReading() {
   // open to get valid file descriptor
-  FILE* fp = fopen(_filename.c_str(), "r");
+  int orig_fd = ::open(_filename.c_str(), O_RDONLY);
   // TODO: check if MAP_SHARED is necessary/usefule
-  void* ptr = mmap(0, _bytesize, PROT_READ, MAP_SHARED, fileno(fp), 0);
+  void* ptr = mmap(nullptr, _bytesize, PROT_READ, MAP_SHARED, orig_fd, 0);
   AD_CHECK(ptr != MAP_FAILED);
 
   // the filedescriptor and thus our mapping will still be valid
   // after closing, because mmap increases the count by one
-  fclose(fp);
+  ::close(orig_fd);
   _ptr = static_cast<T*>(ptr);
   advise(_pattern);
 }
@@ -96,7 +98,7 @@ void MmapVector<T>::mapForWriting() {
   int orig_fd = ::open(_filename.c_str(), O_RDWR);
   // map_shared because we need our updates in the original file
   void* ptr =
-      mmap(0, _bytesize, PROT_WRITE | PROT_READ, MAP_SHARED, orig_fd, 0);
+      mmap(nullptr, _bytesize, PROT_WRITE | PROT_READ, MAP_SHARED, orig_fd, 0);
   AD_CHECK(ptr != MAP_FAILED);
   // the filedescriptor and thus our mapping will still be valid
   // after closing, because mmap increases the count by one
@@ -224,8 +226,6 @@ void MmapVector<T>::open(size_t size, string filename, AccessPattern pattern) {
   {
     std::ofstream ofs(_filename);
     AD_CHECK(ofs.is_open());
-    ofs << "bla";
-    // ofs.flush();
   }
   auto info = convertArraySizeToFileSize(std::max(size, MinCapacity));
   _bytesize = info._bytesize;

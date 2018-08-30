@@ -87,14 +87,14 @@ TEST(EngineTest, optionalJoinTest) {
   b.push_back(array<Id, 3>{{4, 2, 2}});
   b.push_back(array<Id, 3>{{1, 1, 3}});
   vector<array<Id, 4>> res;
-  vector<array<size_t, 2>> jcls;
-  jcls.push_back(array<size_t, 2>{{1, 2}});
-  jcls.push_back(array<size_t, 2>{{2, 1}});
+  vector<array<Id, 2>> jcls;
+  jcls.push_back(array<Id, 2>{{1, 2}});
+  jcls.push_back(array<Id, 2>{{2, 1}});
 
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).
   e.optionalJoin<vector<array<Id, 3>>, vector<array<Id, 3>>, array<Id, 4>, 4>(
-      a, b, false, true, jcls, &res, 4);
+      a, b, false, true, jcls, &res, 4u);
 
   ASSERT_EQ(5u, res.size());
 
@@ -136,13 +136,13 @@ TEST(EngineTest, optionalJoinTest) {
 
   vector<vector<Id>> vres;
   jcls.clear();
-  jcls.push_back(array<size_t, 2>{{1, 0}});
-  jcls.push_back(array<size_t, 2>{{2, 1}});
+  jcls.push_back(array<Id, 2>{{1, 0}});
+  jcls.push_back(array<Id, 2>{{2, 1}});
 
   // The template size parameter can be at most 6 (the maximum number
   // of fixed size columns plus one).
   e.optionalJoin<vector<vector<Id>>, vector<array<Id, 3>>, vector<Id>, 6>(
-      va, vb, true, false, jcls, &vres, 7);
+      va, vb, true, false, jcls, &vres, 7u);
 
   ASSERT_EQ(5u, vres.size());
   ASSERT_EQ(7u, vres[0].size());

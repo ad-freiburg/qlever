@@ -4,6 +4,7 @@
 #pragma once
 
 #include <array>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -153,7 +154,9 @@ using IndexMetaDataMmapView = IndexMetaData<
     MetaDataWrapperDense<ad_utility::MmapVectorView<FullRelationMetaData>>>;
 
 // constants for Magic Numbers to separate different types of MetaData;
-const size_t MAGIC_NUMBER_MMAP_META_DATA = static_cast<size_t>(-1);
-const size_t MAGIC_NUMBER_SPARSE_META_DATA = static_cast<size_t>(-2);
+const uint64_t MAGIC_NUMBER_MMAP_META_DATA =
+    std::numeric_limits<uint64_t>::max();
+const uint64_t MAGIC_NUMBER_SPARSE_META_DATA =
+    std::numeric_limits<uint64_t>::max() - 1;
 
 #include "./IndexMetaDataImpl.h"

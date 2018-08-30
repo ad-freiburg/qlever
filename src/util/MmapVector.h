@@ -252,8 +252,8 @@ class MmapVector {
   std::string _filename = "";
   AccessPattern _pattern = AccessPattern::None;
   static constexpr float ResizeFactor = 1.5;
-  static constexpr int MagicNumber = 7601577;
-  static constexpr int Version = 0;
+  static constexpr uint32_t MagicNumber = 7601577;
+  static constexpr uint32_t Version = 0;
 };
 
 // MmapVector variation that only supports read-access to a previously created

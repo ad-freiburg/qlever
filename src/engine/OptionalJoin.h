@@ -16,7 +16,7 @@ class OptionalJoin : public Operation {
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1, bool t1Optional,
                std::shared_ptr<QueryExecutionTree> t2, bool t2Optional,
-               const std::vector<array<size_t, 2>>& joinCols);
+               const std::vector<array<Id, 2>>& joinCols);
 
   virtual string asString(size_t indent = 0) const;
 
@@ -51,7 +51,7 @@ class OptionalJoin : public Operation {
   bool _leftOptional;
   bool _rightOptional;
 
-  std::vector<std::array<size_t, 2>> _joinColumns;
+  std::vector<std::array<Id, 2>> _joinColumns;
 
   vector<float> _multiplicities;
   size_t _sizeEstimate;
