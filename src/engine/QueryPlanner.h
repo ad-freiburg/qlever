@@ -201,4 +201,6 @@ class QueryPlanner {
   SubtreePlan getTextLeafPlan(const TripleGraph::Node& node) const;
 
   SubtreePlan optionalJoin(const SubtreePlan& a, const SubtreePlan& b) const;
+  bool checkUsePatternTrick(ParsedQuery& pq,
+                            SparqlTriple& patternTrickTriple) const;
 };
