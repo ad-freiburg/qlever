@@ -48,10 +48,11 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
              << std::endl;
 
   // Look for ql:has-predicate to determine if the pattern trick should be used.
-  // If the pattern trick is used the has predicate triple will be removed from
-  // the list of where clause triples.
+  // If the pattern trick is used the ql:has-predicate triple will be removed
+  // from the list of where clause triples. Otherwise the ql:has-relation triple
+  // will be handled using a HasRelationScan.
   SparqlTriple patternTrickTriple("", "", "");
-  bool usePatternTrick = checkUsePatternTrick(pq, patternTrickTriple);
+  bool usePatternTrick = checkUsePatternTrick(&pq, &patternTrickTriple);
 
   bool doGrouping = pq._groupByVariables.size() > 0 || usePatternTrick;
   if (!doGrouping) {
@@ -408,87 +409,98 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
 }
 
 bool QueryPlanner::checkUsePatternTrick(
-    ParsedQuery& pq, SparqlTriple& patternTrickTriple) const {
+    ParsedQuery* pq, SparqlTriple* patternTrickTriple) const {
   bool usePatternTrick = false;
   // Check if the query has the right number of variables for aliases and group
   // by.
-  if (pq._groupByVariables.size() == 1 && pq._aliases.size() == 1) {
-    const ParsedQuery::Alias& alias = pq._aliases.back();
+  if (pq->_groupByVariables.size() == 1 && pq->_aliases.size() == 1) {
+    const ParsedQuery::Alias& alias = pq->_aliases.back();
+    // Create a lower case version of the aliases function string to allow
+    // for case insensitive keyword detection.
+    std::string aliasFunctionLower =
+        ad_utility::getLowercaseUtf8(alias._function);
     // Check if the alias is a non distinct count alias
     if (alias._isAggregate &&
-        alias._function.find("DISTINCT") == std::string::npos &&
-        alias._function.find("distinct") == std::string::npos &&
-        (ad_utility::startsWith(alias._function, "COUNT") ||
-         ad_utility::startsWith(alias._function, "count"))) {
+        aliasFunctionLower.find("distinct") == std::string::npos &&
+        ad_utility::startsWith(aliasFunctionLower, "count")) {
       // look for a HAS_RELATION_PREDICATE triple
-      for (size_t i = 0; i < pq._rootGraphPattern._whereClauseTriples.size();
+      for (size_t i = 0; i < pq->_rootGraphPattern._whereClauseTriples.size();
            i++) {
-        const SparqlTriple& t = pq._rootGraphPattern._whereClauseTriples[i];
+        const SparqlTriple& t = pq->_rootGraphPattern._whereClauseTriples[i];
         // Check that the triples predicates is the HAS_PREDICATE_PREDICATE.
         // Also check that the triples object matches the aliases input variable
         // and the group by variable.
         if (t._p == HAS_PREDICATE_PREDICATE && alias._inVarName == t._o &&
-            pq._groupByVariables[0] == t._o) {
+            pq->_groupByVariables[0] == t._o) {
           // Assume we will use the pattern trick for now but run several more
           // checks before actually modifying the query.
           usePatternTrick = true;
           // check that all selected variables are outputs of
           // CountAvailablePredicates
-          for (const std::string& s : pq._selectedVariables) {
+          for (const std::string& s : pq->_selectedVariables) {
             if (s != t._o && s != alias._outVarName) {
               usePatternTrick = false;
               break;
             }
           }
-          // Check for triples containing the has predicates triples object.
+          // Check for triples containing the ql:has-predicate triple's object.
           for (size_t j = 0;
-               j < pq._rootGraphPattern._whereClauseTriples.size() &&
-               usePatternTrick;
+               usePatternTrick &&
+               j < pq->_rootGraphPattern._whereClauseTriples.size();
                j++) {
             const SparqlTriple& other =
-                pq._rootGraphPattern._whereClauseTriples[j];
+                pq->_rootGraphPattern._whereClauseTriples[j];
             if (j != i &&
                 (other._s == t._o || other._p == t._o || other._o == t._o)) {
               usePatternTrick = false;
             }
           }
-          // Check for filters on the has predicate triples subject or object
-          for (const SparqlFilter& filter : pq._rootGraphPattern._filters) {
-            if (filter._lhs == t._o || filter._lhs == t._s ||
-                filter._rhs == t._o || filter._rhs == t._s) {
-              usePatternTrick = false;
-              break;
-            }
-          }
-          // Check for optional parts containing the has predicate triples
-          // object
-          std::vector<const ParsedQuery::GraphPattern*> graphsToProcess;
-          graphsToProcess.insert(graphsToProcess.end(),
-                                 pq._rootGraphPattern._children.begin(),
-                                 pq._rootGraphPattern._children.end());
-          while (!graphsToProcess.empty()) {
-            const ParsedQuery::GraphPattern* pattern = graphsToProcess.back();
-            graphsToProcess.pop_back();
-            graphsToProcess.insert(graphsToProcess.end(),
-                                   pattern->_children.begin(),
-                                   pattern->_children.end());
-            for (const SparqlTriple& other : pattern->_whereClauseTriples) {
-              if (other._s == t._o || other._p == t._o || other._o == t._o) {
+          // Don't run any more checks if we already determined that the pattern
+          // trick is not going to be used.
+          if (usePatternTrick) {
+            // Check for filters on the ql:has-predicate triple's subject or
+            // object
+            for (const SparqlFilter& filter : pq->_rootGraphPattern._filters) {
+              if (filter._lhs == t._o || filter._lhs == t._s ||
+                  filter._rhs == t._o || filter._rhs == t._s) {
                 usePatternTrick = false;
                 break;
               }
             }
-            if (!usePatternTrick) {
-              break;
+          }
+          // Don't run any more checks if we already determined that the pattern
+          // trick is not going to be used.
+          if (usePatternTrick) {
+            // Check for optional parts containing the ql:has-predicate triple's
+            // object
+            std::vector<const ParsedQuery::GraphPattern*> graphsToProcess;
+            graphsToProcess.insert(graphsToProcess.end(),
+                                   pq->_rootGraphPattern._children.begin(),
+                                   pq->_rootGraphPattern._children.end());
+            while (!graphsToProcess.empty()) {
+              const ParsedQuery::GraphPattern* pattern = graphsToProcess.back();
+              graphsToProcess.pop_back();
+              graphsToProcess.insert(graphsToProcess.end(),
+                                     pattern->_children.begin(),
+                                     pattern->_children.end());
+              for (const SparqlTriple& other : pattern->_whereClauseTriples) {
+                if (other._s == t._o || other._p == t._o || other._o == t._o) {
+                  usePatternTrick = false;
+                  break;
+                }
+              }
+              if (!usePatternTrick) {
+                break;
+              }
             }
           }
           if (usePatternTrick) {
             LOG(DEBUG) << "Using the pattern trick to answer the query."
                        << endl;
-            patternTrickTriple = t;
+            *patternTrickTriple = t;
             // remove the triple from the graph
-            pq._rootGraphPattern._whereClauseTriples.erase(
-                pq._rootGraphPattern._whereClauseTriples.begin() + i);
+            pq->_rootGraphPattern._whereClauseTriples.erase(
+                pq->_rootGraphPattern._whereClauseTriples.begin() + i);
           }
         }
       }

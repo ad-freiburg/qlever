@@ -201,6 +201,18 @@ class QueryPlanner {
   SubtreePlan getTextLeafPlan(const TripleGraph::Node& node) const;
 
   SubtreePlan optionalJoin(const SubtreePlan& a, const SubtreePlan& b) const;
-  bool checkUsePatternTrick(ParsedQuery& pq,
-                            SparqlTriple& patternTrickTriple) const;
+
+  /**
+   * @brief Determines if the pattern trick (and in turn the
+   * CountAvailablePredicates operation) are applicable to the given
+   * parsed query. If a ql:has-predicate triple is found and
+   * CountAvailblePredicates can be used for it, the triple will be removed from
+   * the parsed query.
+   * @param pq The parsed query.
+   * @param patternTrickTriple An output parameter in which the triple that
+   * satisfies the requirements for the pattern trick is stored.
+   * @return True if the pattern trick should be used.
+   */
+  bool checkUsePatternTrick(ParsedQuery* pq,
+                            SparqlTriple* patternTrickTriple) const;
 };
