@@ -288,3 +288,53 @@ queries:
         checks:
           - res: [["<Zelda_Rubinstein>", 1.29]]
           - num_rows: 1
+  - query : regex-initials-a-e
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?s WHERE {
+              ?s <Profession> <Scientist> .
+              ?s <is-a> <Person> .
+              FILTER regex(?s, "^<A[a-z]*_E[a-z]*>$")
+          }
+        checks:
+          - num_rows: 22
+          - num_cols: 1
+          - selected: ["?s"]
+          - contains_row: ["<Abraham_Esau>"]
+          - contains_row: ["<Albert_Einstein>"]
+          - contains_row: ["<Alfred_Einhorn>"]
+  - query : regex-lastname-stein
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?s WHERE {
+              ?s <Profession> <Scientist> .
+              ?s <is-a> <Person> .
+              FILTER regex(?s, "^<[a-z]*_[a-z]*stein[a-z]*>$", "i")
+          }
+        checks:
+          - num_rows: 68
+          - num_cols: 1
+          - selected: ["?s"]
+          - contains_row: ["<Adin_Steinsaltz>"]
+          - contains_row: ["<Albert_Einstein>"]
+          - contains_row: ["<Albert_Zylberstein>"]
+          - contains_row: ["<Greg_Stein>"]
+  - query : regex-albert-physics-award
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?s ?a WHERE {
+              ?s <is-a> <Scientist> .
+              FILTER regex(?s, "^<Albert") .
+              ?s <Award_Won> ?a .
+              FILTER regex(?a, "physic", "i")
+          }
+        checks:
+          - num_rows: 6
+          - num_cols: 2
+          - selected: ["?s", "?a"]
+          - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
+          - contains_row: ["<Albert_Fert>", "<Wolf_Prize_in_Physics>"]
+          - contains_row: ["<Albert_Overhauser>", "<National_Medal_of_Science_for_Physical_Science>"]
