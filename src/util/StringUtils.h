@@ -23,6 +23,7 @@
 
 using std::array;
 using std::string;
+using std::string_view;
 using std::vector;
 
 namespace ad_utility {
@@ -33,18 +34,14 @@ namespace ad_utility {
 //! Safe startWith function. Returns true iff prefix is a
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
-inline bool startsWith(const string& text, const char* prefix,
-                       size_t patternSize);
+inline bool startsWith(string_view text, string_view prefix);
 
 //! Safe startWith function. Returns true iff prefix is a
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
-inline bool startsWith(const string& text, const string& prefix);
-
-//! Safe startWith function. Returns true iff prefix is a
-//! prefix of text. Using a larger pattern than text.size()
-//! will return false. Case sensitive.
-inline bool startsWith(const string& text, const char* prefix);
+//! if prefixSize < prefix.size() we will only use the first prefisSize chars of
+//! prefix.
+inline bool startsWith(string_view text, string_view prefix, size_t prefixSize);
 
 //! Safe endsWith function. Returns true iff suffix is a
 //! prefix of text. Using a larger pattern than text.size()
@@ -61,6 +58,9 @@ inline bool endsWith(const string& text, const string& suffix);
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
 inline bool endsWith(const string& text, const char* suffix);
+
+//! Returns the longest prefix that the two arguments have in common
+inline string_view commonPrefix(string_view a, const string_view b);
 
 //! Case transformations. Should be thread safe.
 inline string getLowercase(const string& orig);
@@ -143,11 +143,11 @@ inline string decodeUrl(const string& orig);
 // *****************************************************************************
 
 // ____________________________________________________________________________
-bool startsWith(const string& text, const char* prefix, size_t prefixSize) {
-  if (prefixSize > text.size()) {
+bool startsWith(string_view text, string_view prefix) {
+  if (prefix.size() > text.size()) {
     return false;
   }
-  for (size_t i = 0; i < prefixSize; ++i) {
+  for (size_t i = 0; i < prefix.size(); ++i) {
     if (text[i] != prefix[i]) {
       return false;
     }
@@ -155,15 +155,17 @@ bool startsWith(const string& text, const char* prefix, size_t prefixSize) {
   return true;
 }
 
-// ____________________________________________________________________________
-bool startsWith(const string& text, const string& prefix) {
-  return startsWith(text, prefix.data(), prefix.size());
+// _______________________________________________________________________
+bool startsWith(string_view text, string_view prefix, size_t prefixSize) {
+  return startsWith(text,
+                    prefix.substr(0, std::min(prefix.size(), prefixSize)));
 }
 
-// ____________________________________________________________________________
+/* ____________________________________________________________________________
 bool startsWith(const string& text, const char* prefix) {
   return startsWith(text, prefix, std::char_traits<char>::length(prefix));
 }
+*/
 
 // ____________________________________________________________________________
 bool endsWith(const string& text, const char* suffix, size_t suffixSize) {
@@ -186,6 +188,19 @@ bool endsWith(const string& text, const string& suffix) {
 // ____________________________________________________________________________
 bool endsWith(const string& text, const char* suffix) {
   return endsWith(text, suffix, std::char_traits<char>::length(suffix));
+}
+
+// ____________________________________________________________________________
+string_view commonPrefix(string_view a, const string_view b) {
+  size_t maxIdx = std::min(a.size(), b.size());
+  size_t i = 0;
+  while (i < maxIdx) {
+    if (a[i] != b[i]) {
+      break;
+    }
+    ++i;
+  }
+  return a.substr(0, i);
 }
 
 // ____________________________________________________________________________
@@ -611,3 +626,20 @@ string decodeUrl(const string& url) {
 }
 
 }  // namespace ad_utility
+
+// these overloads are missing in the STL
+inline std::string operator+(const std::string& a, std::string_view b) {
+  std::string res;
+  res.resize(a.size() + b.size());
+  std::memcpy(res.data(), a.data(), a.size());
+  std::memcpy(res.data() + a.size(), b.data(), b.size());
+  return res;
+}
+
+inline std::string operator+(char c, std::string_view b) {
+  std::string res;
+  res.resize(1 + b.size());
+  res[0] = c;
+  std::memcpy(res.data() + 1, b.data(), b.size());
+  return res;
+}

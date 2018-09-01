@@ -17,8 +17,8 @@
 
 // _____________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
-                        bool allPermutations, bool onDiskLiterals,
-                        bool optimizeOptionals, bool usePatterns) {
+                        bool allPermutations, bool optimizeOptionals,
+                        bool usePatterns) {
   LOG(INFO) << "Initializing server..." << std::endl;
 
   _optimizeOptionals = optimizeOptionals;
@@ -26,7 +26,6 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
   _index.setUsePatterns(usePatterns);
 
   // Init the index.
-  _index.setOnDiskLiterals(onDiskLiterals);
   _index.createFromOnDiskIndex(ontologyBaseName, allPermutations);
   if (useText) {
     _index.addTextFromOnDiskIndex();

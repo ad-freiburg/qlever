@@ -114,17 +114,17 @@ class MetaDataWrapperDense {
   // TODO<joka921>: enable_if  for better error messages
   template <typename... Args>
   void setup(Args... args) {
+    // size has to be set correctly by a call to setSize(), this is done
+    // in IndexMetaData::createFromByteBuffer
     _size = 0;
     _vec = M(args...);
-    // for (const auto& el : _vec) {
-    for (auto it = _vec.cbegin(); it != _vec.cend(); ++it) {
-      const auto& el = *it;
-      _size += (el != emptyMetaData);
-    }
   }
 
   // ___________________________________________________________
   size_t size() const { return _size; }
+
+  // ___________________________________________________________
+  void setSize(size_t newSize) { _size = newSize; }
 
   // __________________________________________________________________
   const Iterator cbegin() const {
@@ -164,6 +164,9 @@ class MetaDataWrapperDense {
     return _vec[id] != emptyMetaData;
   }
 
+  // ___________________________________________________________
+  std::string getFilename() const { return _vec.getFilename(); }
+
  private:
   // the empty key, must be the first member to be initialized
   const FullRelationMetaData emptyMetaData = FullRelationMetaData::empty;
@@ -172,11 +175,12 @@ class MetaDataWrapperDense {
 };
 
 // _____________________________________________________________________
+template <class hashMap>
 class MetaDataWrapperHashMap {
  public:
   // using hashMap = ad_utility::HashMap<Id, FullRelationMetaData>;
-  using hashMap = ad_utility::HashMap<Id, FullRelationMetaData>;
-  using Iterator = hashMap::const_iterator;
+  // using hashMap = ad_utility::HashMap<Id, FullRelationMetaData>;
+  using Iterator = typename hashMap::const_iterator;
 
   // nothing to do here, since the default constructor of the hashMap does
   // everything we want

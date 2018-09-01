@@ -120,6 +120,9 @@ class MmapVector {
     AD_CHECK(idx < _size);
   }
 
+  // _____________________________________________________________
+  std::string getFilename() const { return _filename; }
+
   // we will never have less than this capacity
   static constexpr size_t MinCapacity = 100;
 
@@ -318,6 +321,9 @@ class MmapVectorView : private MmapVector<T> {
 
   // destructor
   ~MmapVectorView() { close(); }
+
+  // _____________________________________________________________
+  std::string getFilename() const { return this->_filename; }
 };
 }  // namespace ad_utility
 #include "./MmapVectorImpl.h"

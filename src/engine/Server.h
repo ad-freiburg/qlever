@@ -36,8 +36,8 @@ class Server {
 
   // Initialize the server.
   void initialize(const string& ontologyBaseName, bool useText,
-                  bool allPermutations = false, bool onDiskLiterals = false,
-                  bool optimizeOptionals = true, bool usePatterns = false);
+                  bool allPermutations = false, bool optimizeOptionals = true,
+                  bool usePatterns = false);
 
   //! Loop, wait for requests and trigger processing.
   void run();

@@ -162,13 +162,8 @@ TEST(IndexMetaDataTest, writeReadTest2Hmap) {
     f.close();
 
     ad_utility::File in("_testtmp.imd", "r");
-    size_t imdBytes = 3 * sizeof(size_t) + sizeof(off_t) +
-                      (rmdF.bytesRequired() + rmdB.bytesRequired()) * 2;
-    unsigned char* buf = new unsigned char[imdBytes];
-    in.read(buf, imdBytes);
     IndexMetaDataHmap imd2;
-    imd2.createFromByteBuffer(buf);
-    delete[] buf;
+    imd2.readFromFile(&in);
     remove("_testtmp.rmd");
 
     ASSERT_EQ(rmdF._relId, imd2.getRmd(1)._rmdPairs._relId);
@@ -237,14 +232,10 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
     }
 
     ad_utility::File in("_testtmp.imd", "r");
-    size_t imdBytes = 3 * sizeof(size_t) + sizeof(off_t) +
-                      (rmdF.bytesRequired() + rmdB.bytesRequired()) * 2;
-    unsigned char* buf = new unsigned char[imdBytes];
-    in.read(buf, imdBytes);
     IndexMetaDataMmap imd2;
     imd2.setup("_testtmp.imd.mmap", ad_utility::ReuseTag());
-    imd2.createFromByteBuffer(buf);
-    delete[] buf;
+    imd2.readFromFile(&in);
+
     remove("_testtmp.rmd");
 
     ASSERT_EQ(rmdF._relId, imd2.getRmd(1)._rmdPairs._relId);

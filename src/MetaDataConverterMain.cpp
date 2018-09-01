@@ -9,13 +9,22 @@
 #include "./util/File.h"
 
 // _________________________________________________________
+// Opens an index from disk. Determines whether this index was built by an older
+// QLever version and has to be updated in order to use it (efficiently or at
+// all) with the current QLever version. Will NOT overwrite existing files but
+// create new files with a .converted suffix which has  to be manually removed
+// to make the index work. It is highly recommended to backup the original index
+// before overwriting it like this.
+//
+// This converter prints detailed information about which files were created and
+// which files have to be renamed in ordere to  complete the index update
 int main(int argc, char** argv) {
   if (argc != 2) {
     std::cerr << "Usage: ./MetaDataConverterMain <indexPrefix>\n";
     exit(1);
   }
   std::string in = argv[1];
-  std::array<std::string, 4> sparseNames{".pso", ".pos", ".spo", ".sop"};
+  std::array<std::string, 2> sparseNames{".pso", ".pos"};
   for (const auto& n : sparseNames) {
     std::string permutName = in + ".index" + n;
     if (!ad_utility::File::exists(permutName)) {
@@ -24,11 +33,10 @@ int main(int argc, char** argv) {
                    "this index. Skipping\n";
       continue;
     }
-    addMagicNumberToSparseMetaDataPermutation(permutName,
-                                              permutName + ".converted");
+    convertPermutationToHmap(permutName, permutName + ".converted");
   }
 
-  std::array<std::string, 2> denseNames{".osp", ".ops"};
+  std::array<std::string, 4> denseNames{".spo", ".sop", ".osp", ".ops"};
   for (const auto& n : denseNames) {
     std::string permutName = in + ".index" + n;
     if (!ad_utility::File::exists(permutName)) {
@@ -37,7 +45,8 @@ int main(int argc, char** argv) {
                    "this index. Skipping\n";
       continue;
     }
-    convertHmapBasedPermutatationToMmap(permutName, permutName + ".converted",
-                                        permutName + MMAP_FILE_SUFFIX);
+    convertPermutationToMmap(permutName, permutName + ".converted",
+                             permutName + MMAP_FILE_SUFFIX);
   }
+  CompressVocabAndCreateConfigurationFile(in);
 }

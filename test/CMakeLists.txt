@@ -1,3 +1,9 @@
+################################
+# NLOHNMANN-JSON 
+################################
+# Header only, nothing to include
+include_directories(../third_party/json/include/)
+
 add_executable(SparqlParserTest SparqlParserTest.cpp)
 target_link_libraries(SparqlParserTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT})
 

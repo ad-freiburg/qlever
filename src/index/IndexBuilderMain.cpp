@@ -13,6 +13,7 @@
 #include "../global/Constants.h"
 #include "../util/File.h"
 #include "../util/ReadableNumberFact.h"
+#include "./ConstantsIndexCreation.h"
 #include "./Index.h"
 
 using std::cerr;
@@ -38,6 +39,8 @@ struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
                            {"words-by-contexts", required_argument, NULL, 'w'},
                            {"add-text-index", no_argument, NULL, 'A'},
                            {"keep-temporary-files", no_argument, NULL, 'k'},
+                           {"settings-file", required_argument, NULL, 's'},
+                           {"no-compressed-vocabulary", no_argument, NULL, 'N'},
                            {NULL, 0, NULL, 0}};
 
 string getStxxlDiskFileName(const string& location, const string& tail) {
@@ -106,6 +109,15 @@ void printUsage(char* execName) {
       << "    "
       << "Keep Temporary Files from IndexCreation (normally only for debugging)"
       << endl;
+  cout << "  " << std::setw(20) << "s, settings-file" << std::setw(1) << "    "
+       << "Specify a input settings file where prefixes that are to be "
+          "externalized etc can be specified"
+       << endl;
+  cout << "  " << std::setw(20) << "N, no-compressed-vocabulary" << std::setw(1)
+       << "    "
+       << "Do NOT use prefix compression on the vocabulary (default is to "
+          "compress)."
+       << endl;
   cout.copyfmt(coutState);
 }
 
@@ -125,6 +137,8 @@ int main(int argc, char** argv) {
   string docsfile;
   string textIndexName;
   string kbIndexName;
+  string settingsFile = "";
+  bool useCompression = true;
   bool allPermutations = false;
   bool onDiskLiterals = false;
   bool usePatterns = false;
@@ -133,7 +147,7 @@ int main(int argc, char** argv) {
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:PhAk", options, NULL);
+    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:PhAks:N", options, NULL);
     if (c == -1) {
       break;
     }
@@ -177,6 +191,12 @@ int main(int argc, char** argv) {
         break;
       case 'k':
         keepTemporaryFiles = true;
+        break;
+      case 's':
+        settingsFile = optarg;
+        break;
+      case 'N':
+        useCompression = false;
         break;
       default:
         cout << endl
@@ -235,15 +255,15 @@ int main(int argc, char** argv) {
     index.setKbName(kbIndexName);
     index.setTextName(textIndexName);
     index.setUsePatterns(usePatterns);
-    // TODO(j.kalmbach): onDiskLiterals is now  redundant in all other
-    // functions, probably remove it, same for onDiskBase
     index.setOnDiskLiterals(onDiskLiterals);
     index.setOnDiskBase(baseName);
     index.setKeepTempFiles(keepTemporaryFiles);
+    index.setSettingsFile(settingsFile);
+    index.setPrefixCompression(useCompression);
     if (!onlyAddTextIndex) {
-      // if onlyAddTextIndex is true, we do not want to construct an index, but
-      // assume that it  already exists (especially we need a valid vocabulary
-      // for  text  index  creation)
+      // if onlyAddTextIndex is true, we do not want to construct an index,
+      // but assume that it  already exists (especially we need a valid
+      // vocabulary for  text  index  creation)
 
       if (ntFile.size() > 0) {
         index.createFromFile<NTriplesParser>(ntFile, allPermutations);

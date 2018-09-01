@@ -127,9 +127,14 @@ void Index::passContextFileIntoVector(const string& contextFile,
   // now we have to reload it,
   LOG(INFO) << "Loading vocabulary from disk (needed for correct Ids in text "
                "index)\n";
-  _vocab = Vocabulary();
+  // this has to be repeated completely here because we have the possibility to
+  // only add a text index. In that case the Vocabulary has never been
+  // initialized before
+  _vocab = Vocabulary<CompressedString>();
+  readConfigurationFile();
   _vocab.readFromFile(_onDiskBase + ".vocabulary",
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
+
   TextVec::bufwriter_type writer(vec);
   ad_utility::HashMap<Id, Score> wordsInContext;
   ad_utility::HashMap<Id, Score> entitiesInContext;
@@ -167,6 +172,10 @@ void Index::passContextFileIntoVector(const string& contextFile,
       Id wid;
 #ifndef NDEBUG
       bool ret = _textVocab.getId(line._word, &wid);
+      if (!ret) {
+        LOG(INFO) << "ERROR: word " << line._word
+                  << "not found in textVocab. Terminating\n";
+      }
       assert(ret);
 #else
       _textVocab.getId(line._word, &wid);
