@@ -55,7 +55,7 @@ string Filter::asString(size_t indent) const {
       os << " > ";
       break;
     case SparqlFilter::GE:
-      os << " <= ";
+      os << " >= ";
       break;
     case SparqlFilter::LANG_MATCHES:
       os << " LANG_MATCHES " << _rhsString;
