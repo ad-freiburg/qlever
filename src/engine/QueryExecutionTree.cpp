@@ -2,7 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./QueryExecutionTree.h"
 #include <algorithm>
 #include <sstream>
 #include <string>
@@ -11,6 +10,7 @@
 #include "./IndexScan.h"
 #include "./Join.h"
 #include "./OrderBy.h"
+#include "./QueryExecutionTree.h"
 #include "./Sort.h"
 #include "TextOperationForContexts.h"
 #include "TextOperationWithFilter.h"
@@ -204,11 +204,7 @@ size_t QueryExecutionTree::getCostEstimate() {
 size_t QueryExecutionTree::getSizeEstimate() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
     if (_qec) {
-      if (_type == QueryExecutionTree::SCAN && getResultWidth() == 1) {
-        _sizeEstimate = getResult()->size();
-      } else {
-        _sizeEstimate = _rootOperation->getSizeEstimate();
-      }
+      _sizeEstimate = _rootOperation->getSizeEstimate();
     } else {
       // For test cases without index only:
       // Make it deterministic by using the asString.
@@ -220,7 +216,9 @@ size_t QueryExecutionTree::getSizeEstimate() {
 }
 
 // _____________________________________________________________________________
-bool QueryExecutionTree::knownEmptyResult() { return getSizeEstimate() == 0; }
+bool QueryExecutionTree::knownEmptyResult() {
+  return _rootOperation->knownEmptyResult();
+}
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::varCovered(string var) const {
