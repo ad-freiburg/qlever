@@ -1,39 +1,21 @@
 language: generic
-sudo: false
-dist: trusty
+sudo: required
 
+
+# We need a newer docker version since our multi-stage build
+# relies on old stages not leaking into the current stage
+# see https://github.com/moby/moby/issues/35641
 addons:
   apt:
-    sources:
-      - deadsnakes
-      - ubuntu-toolchain-r-test
     packages:
-      - gcc-7
-      - g++-7
-      - libsparsehash-dev
-      - python3.6
-      - python3-yaml
-      - cmake
-      - netcat
+      - docker-ce
 
-cache:
-  directories:
-    - e2e_data/scientist-collection/
-
-env:
-  - CC=gcc-7 CXX=g++-7
-
-before_script:
-  - $CXX --version
-  - mkdir build
-  - cd build
-  - cmake ..
+services:
+  - docker
 
 script:
-  - make -j 3
-  - make test
-  - cd ..
-  - e2e/e2e.sh
+  - docker build -t qlever .
+  - docker run -it --rm --entrypoint e2e/e2e.sh qlever
 
 notifications:
   email:
