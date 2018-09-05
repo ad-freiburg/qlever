@@ -72,6 +72,11 @@ inline string removeLeadingZeros(const string& orig);
 //! Check if this looks like an value literal
 inline bool isXsdValue(const string val);
 
+//! Convert a language tag like "@en" to the corresponding entity uri
+//! for the efficient language filter
+inline string convertLangtagToEntityUri(const string& tag);
+inline std::optional<string> convertEntityUriToLangtag(const string& word);
+
 // _____________________________________________________________________________
 string convertValueLiteralToIndexWord(const string& orig) {
   /*
@@ -573,5 +578,21 @@ bool isXsdValue(const string val) {
   // quotes as we already checked that the first char is the first quote
   return val.size() > 0 && val[0] == '\"' &&
          val.find("\"^^", 1) != string::npos;
+}
+
+// _________________________________________________________
+string convertLangtagToEntityUri(const string& tag) {
+  return BEGINNING_VOCAB_PREFIX + URI_PREFIX + "/entities/" + tag + ">";
+}
+
+// _________________________________________________________
+std::optional<string> convertEntityUriToLangtag(const string& word) {
+  static const string prefix =
+      BEGINNING_VOCAB_PREFIX + URI_PREFIX + "/entities/@";
+  if (ad_utility::startsWith(word, prefix)) {
+    return word.substr(prefix.size() - 1, word.size() - prefix.size());
+  } else {
+    return std::nullopt;
+  }
 }
 }  // namespace ad_utility
