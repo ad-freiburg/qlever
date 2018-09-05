@@ -166,6 +166,7 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
       vocab.createFromSet(items);
       LOG(INFO) << "writing partial vocabular to " << partialFilename
                 << std::endl;
+      LOG(INFO) << "it contains " << items.size() << " elements\n";
       vocab.writeToBinaryFileForMerging(partialFilename);
       LOG(INFO) << "Done\n";
       items.clear();
@@ -183,6 +184,7 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
         _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
     LOG(INFO) << "writing partial vocabular to " << partialFilename
               << std::endl;
+    LOG(INFO) << "it contains " << items.size() << " elements\n";
     Vocabulary<string> vocab;
     vocab.createFromSet(items);
     vocab.writeToBinaryFileForMerging(partialFilename);
@@ -223,6 +225,8 @@ void Index::passFileIntoIdVector(const string& filename, ExtVec& data,
   // write using vector_bufwriter
   ExtVec::bufwriter_type writer(data);
   while (p.getLine(spo)) {
+    // we don't need the langtag here, so we ignore the return value
+    tripleToInternalRepresentation(&spo);
     bool broken = false;
     for (size_t k = 0; k < 3; ++k) {
       if (vocabMap.find(spo[k]) == vocabMap.end()) {

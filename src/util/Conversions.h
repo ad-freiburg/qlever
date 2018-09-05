@@ -17,6 +17,7 @@
 #include <vector>
 
 #include "../global/Constants.h"
+#include "../util/Log.h"
 #include "./Exception.h"
 #include "./StringUtils.h"
 
@@ -582,15 +583,17 @@ bool isXsdValue(const string val) {
 
 // _________________________________________________________
 string convertLangtagToEntityUri(const string& tag) {
-  return BEGINNING_VOCAB_PREFIX + URI_PREFIX + "/entities/" + tag + ">";
+  return BEGINNING_VOCAB_PREFIX + URI_PREFIX + "entities/@" + tag + ">";
 }
 
 // _________________________________________________________
 std::optional<string> convertEntityUriToLangtag(const string& word) {
   static const string prefix =
-      BEGINNING_VOCAB_PREFIX + URI_PREFIX + "/entities/@";
+      BEGINNING_VOCAB_PREFIX + URI_PREFIX + "entities/@";
   if (ad_utility::startsWith(word, prefix)) {
-    return word.substr(prefix.size() - 1, word.size() - prefix.size());
+    auto res = word.substr(prefix.size(), word.size() - prefix.size() - 1);
+    LOG(INFO) << "Converted uri to langtag " << res << '\n';
+    return res;
   } else {
     return std::nullopt;
   }

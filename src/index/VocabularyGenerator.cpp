@@ -39,7 +39,7 @@ std::pair<size_t, IdPairMMapVec> mergeVocabulary(const std::string& basename,
   ad_utility::HashMap<string, Id> langtagMap;
   // will dynamically grow
   ad_utility::MmapVector<std::array<Id, 2>> languageTripleVec(
-      1000, basename + ".tmp.LanguageTripleVec.mmap");
+      0, basename + ".tmp.LanguageTripleVec.mmap");
 
   using pair_T = std::pair<string, size_t>;
   std::priority_queue<pair_T, std::vector<pair_T>, PairCompare> queue;

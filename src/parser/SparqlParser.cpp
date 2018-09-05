@@ -4,6 +4,7 @@
 
 #include "./SparqlParser.h"
 #include "../global/Constants.h"
+#include "../util/Conversions.h"
 #include "../util/Exception.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
@@ -447,11 +448,26 @@ void SparqlParser::addFilter(const string& str,
         }
         std::string lvar = lhs.substr(5, lhs.size() - 6);
         std::cout << "lvar:" << lvar << std::endl;
-        SparqlFilter f;
-        f._type = SparqlFilter::LANG_MATCHES;
-        f._lhs = lvar;
-        f._rhs = rhs.substr(1, rhs.size() - 2);
-        pattern->_filters.emplace_back(f);
+        // SparqlFilter f;
+        // f._type = SparqlFilter::LANG_MATCHES;
+        // f._lhs = lvar;
+        // pattern->_filters.emplace_back(f);
+
+        // Convert the language filter to a special triple
+        // to make it more efficient (no need for string resolution)
+        auto langTag = rhs.substr(1, rhs.size() - 2);
+        auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
+        SparqlTriple triple(lvar, LANGUAGE_PREDICATE, langEntity);
+        // Quadratic in number of triples in query.
+        // Shouldn't be a problem here, though.
+        // Could use a (hash)-set instead of vector.
+        if (std::find(pattern->_whereClauseTriples.begin(),
+                      pattern->_whereClauseTriples.end(),
+                      triple) != pattern->_whereClauseTriples.end()) {
+          LOG(INFO) << "Ignoring duplicate triple: " << str << std::endl;
+        } else {
+          pattern->_whereClauseTriples.push_back(triple);
+        }
         return;
       }
       if (pred == "regex") {
