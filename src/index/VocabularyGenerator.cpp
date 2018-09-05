@@ -73,7 +73,8 @@ std::pair<size_t, IdPairMMapVec> mergeVocabulary(const std::string& basename,
 
       if (auto lang = ad_utility::convertEntityUriToLangtag(top.first); lang) {
         langtagMap[lang.value()] = totalWritten;
-      } else if (Vocabulary<string>::isLiteral(top.first)) {
+      } else if (Vocabulary<string>::isLiteral(top.first) ||
+                 Vocabulary<string>::isExternalizedLiteral(top.first)) {
         auto langtag = Vocabulary<string>::getLanguage(top.first);
         if (!langtag.empty()) {
           languageTripleVec.push_back(std::array<Id, 2>{
