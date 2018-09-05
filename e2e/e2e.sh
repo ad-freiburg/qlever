@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -e
-PROJECT_DIR=$(realpath "$(dirname ${BASH_SOURCE[0]})/..")
+PROJECT_DIR=$(readlink -f -- "$(dirname ${BASH_SOURCE[0]})/..")
 # Change to the project directory so we can use simple relative paths
 pushd $PROJECT_DIR
-BINARY_DIR=$(realpath ./build)
+BINARY_DIR=$(readlink -f -- ./build)
 if [ ! -e $BINARY_DIR ]; then
-	BINARY_DIR=$(realpath .)
+	BINARY_DIR=$(readlink -f -- .)
 fi
 function bail {
 	echo "$*"
