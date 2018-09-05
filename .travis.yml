@@ -13,9 +13,17 @@ addons:
 services:
   - docker
 
+cache:
+  directories:
+    - e2e_data/scientist-collection/
+
+before_script:
+  - mkdir -p e2e_data/scientist-collection/
+  - chmod -R o+rwx e2e_data
+
 script:
   - docker build -t qlever .
-  - docker run -it --rm --entrypoint e2e/e2e.sh qlever
+  - docker run -it --rm -v "$(pwd)/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh qlever
 
 notifications:
   email:

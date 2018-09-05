@@ -14,8 +14,10 @@ function bail {
 }
 
 function cleanup_server {
-	echo "The Server Log follows:"
+	echo "The Server Log:"
 	cat "$BINARY_DIR/server_log.txt"
+	echo "The Query Log:"
+	cat "$BINARY_DIR/query_log.txt"
 	# Killing 0 sends the signal to all processes in the current
 	# process group
 	kill $SERVER_PID
@@ -77,5 +79,5 @@ echo "Waiting for ServerMain to launch and open port"
 while ! curl --max-time 1 --output /dev/null --silent http://localhost:9099/; do
 	sleep 1
 done
-$PYTHON_BINARY "$PROJECT_DIR/e2e/queryit.py" "$PROJECT_DIR/e2e/scientists_queries.yaml" "http://localhost:9099" || bail "Querying Server failed"
+$PYTHON_BINARY "$PROJECT_DIR/e2e/queryit.py" "$PROJECT_DIR/e2e/scientists_queries.yaml" "http://localhost:9099" &> $BINARY_DIR/query_log.txt || bail "Querying Server failed"
 popd
