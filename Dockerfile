@@ -11,12 +11,18 @@ WORKDIR /app/build/
 RUN cmake -DCMAKE_BUILD_TYPE=Release .. && make -j $(nproc) && make test
 
 FROM base as runtime
+RUN apt-get update && apt-get install -y wget python3-yaml unzip curl
 WORKDIR /app
 ARG UID=1000
 RUN groupadd -r qlever && useradd --no-log-init -r -u $UID -g qlever qlever && chown qlever:qlever /app
-USER qlever
 ENV PATH=/app/:$PATH
 COPY --from=builder /app/build/*Main /app/src/web/* /app/
+COPY --from=builder /app/e2e/* /app/e2e/
+# We do the final End-to-End test in the runtime container so we are sure that
+# has all the necessary libraries/runtime dependencies. Also it's nice to have
+# the test queries accessible in the final image
+USER qlever
+RUN e2e/e2e.sh
 
 EXPOSE 7001
 VOLUME ["/input", "/index"]
