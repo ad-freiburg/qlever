@@ -85,7 +85,8 @@ std::pair<size_t, IdPairMMapVec> mergeVocabulary(const std::string& basename,
       if (top.first < string({EXTERNALIZED_LITERALS_PREFIX})) {
         outfile << top.first << std::endl;
       } else {
-        outfileExternal << top.first << std::endl;
+        // we have to strip the externalization character again
+        outfileExternal << top.first.substr(1) << std::endl;
       }
 
       // according to the standard, flush() or seek() must be called before
