@@ -139,6 +139,13 @@ bool Vocabulary<S>::isLiteral(const string& word) {
 
 // _____________________________________________________________________________
 template <class S>
+bool Vocabulary<S>::isExternalizedLiteral(const string& word) {
+  return word.size() > 1 && word[0] == EXTERNALIZED_LITERALS_PREFIX &&
+         word[1] == '\"';
+}
+
+// _____________________________________________________________________________
+template <class S>
 template <bool isEntity>
 bool Vocabulary<S>::shouldBeExternalized(const string& word) const {
   if constexpr (isEntity) {

@@ -58,20 +58,20 @@ TEST(IndexTest, createFromTsvTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_TRUE(index._psoMeta.relationExists(2));
     ASSERT_TRUE(index._psoMeta.relationExists(3));
+    ASSERT_TRUE(index._psoMeta.relationExists(4));
+    ASSERT_FALSE(index._psoMeta.relationExists(2));
     ASSERT_FALSE(index._psoMeta.relationExists(1));
-    ASSERT_FALSE(index._psoMeta.relationExists(4));
-    ASSERT_FALSE(index._psoMeta.getRmd(2).isFunctional());
-    ASSERT_TRUE(index._psoMeta.getRmd(3).isFunctional());
-    ASSERT_FALSE(index._psoMeta.getRmd(2).hasBlocks());
+    ASSERT_FALSE(index._psoMeta.getRmd(3).isFunctional());
+    ASSERT_TRUE(index._psoMeta.getRmd(4).isFunctional());
+    ASSERT_FALSE(index._psoMeta.getRmd(3).hasBlocks());
 
-    ASSERT_TRUE(index._posMeta.relationExists(2));
     ASSERT_TRUE(index._posMeta.relationExists(3));
-    ASSERT_FALSE(index._posMeta.relationExists(1));
-    ASSERT_FALSE(index._posMeta.relationExists(4));
-    ASSERT_TRUE(index._posMeta.getRmd(2).isFunctional());
+    ASSERT_TRUE(index._posMeta.relationExists(4));
+    ASSERT_FALSE(index._posMeta.relationExists(2));
+    ASSERT_FALSE(index._posMeta.relationExists(5));
     ASSERT_TRUE(index._posMeta.getRmd(3).isFunctional());
+    ASSERT_TRUE(index._posMeta.getRmd(4).isFunctional());
 
     ad_utility::File psoFile("_testindex.index.pso", "r");
     size_t nofbytes = static_cast<size_t>(index._psoMeta.getOffsetAfter());
@@ -81,13 +81,13 @@ TEST(IndexTest, createFromTsvTest) {
     off_t bytesDone = 0;
     // Relation b
     // Pair index
-    ASSERT_EQ(Id(0), *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(Id(1), *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     // No (more) block info because of the change from Aug2016 and
     // due to the reasons that the test relation is very small.
@@ -103,13 +103,13 @@ TEST(IndexTest, createFromTsvTest) {
     //    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     //    bytesDone += sizeof(Id);
     // Relation b2
-    ASSERT_EQ(Id(0), *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(Id(1), *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     // No LHS & RHS
     ASSERT_EQ(index._psoMeta.getOffsetAfter(), bytesDone);
@@ -137,10 +137,11 @@ TEST(IndexTest, createFromTsvTest) {
     // 1: 1
     // 2: 2
     // 3: 3
-    // 4: a
-    // 5: b
-    // 6: c
-    // 7: is-a
+    // 4: ql:langtag
+    // 5: a
+    // 6: b
+    // 7: c
+    // 8: is-a
     f << "a\tis-a\t1\t.\n"
          "a\tis-a\t2\t.\n"
          "a\tis-a\t0\t.\n"
@@ -158,14 +159,14 @@ TEST(IndexTest, createFromTsvTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_TRUE(index._psoMeta.relationExists(7));
-    ASSERT_FALSE(index._psoMeta.relationExists(1));
+    ASSERT_TRUE(index._psoMeta.relationExists(8));
+    ASSERT_FALSE(index._psoMeta.relationExists(2));
 
-    ASSERT_FALSE(index._psoMeta.getRmd(7).isFunctional());
-    ASSERT_FALSE(index._psoMeta.getRmd(7).hasBlocks());
+    ASSERT_FALSE(index._psoMeta.getRmd(8).isFunctional());
+    ASSERT_FALSE(index._psoMeta.getRmd(8).hasBlocks());
 
-    ASSERT_TRUE(index._posMeta.relationExists(7));
-    ASSERT_FALSE(index._posMeta.getRmd(7).isFunctional());
+    ASSERT_TRUE(index._posMeta.relationExists(8));
+    ASSERT_FALSE(index._posMeta.getRmd(8).isFunctional());
 
     ad_utility::File psoFile("_testindex.index.pso", "r");
     size_t nofbytes = static_cast<size_t>(index._psoMeta.getOffsetAfter());
@@ -175,31 +176,31 @@ TEST(IndexTest, createFromTsvTest) {
     off_t bytesDone = 0;
 
     // Pair index
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(7u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(7u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
@@ -256,31 +257,31 @@ TEST(IndexTest, createFromTsvTest) {
     // Pair index
     ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(0u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
+    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
+    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+    bytesDone += sizeof(Id);
     ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
-    bytesDone += sizeof(Id);
-    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(7u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(4u, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(7u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     ASSERT_EQ(3u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
 
     // Lhs info
@@ -386,18 +387,20 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     index.setUsePatterns(true);
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_EQ(2u, index.getHasPattern().size());
-    ASSERT_EQ(1u, index.getHasPredicate().size());
+    ASSERT_EQ(3u, index.getHasPattern().size());
+    ASSERT_EQ(2u, index.getHasPredicate().size());
     ASSERT_EQ(1u, index._patterns.size());
     Pattern p;
     p.push_back(3);
     p.push_back(6);
     std::pair<Id*, size_t> ip = index._patterns[0];
     for (size_t i = 0; i < ip.second; i++) {
-      ASSERT_EQ(p[i], ip.first[i]);
+      // add 1 because of special language filter predicate
+      // which is automatically inserted
+      ASSERT_EQ(p[i] + 1, ip.first[i]);
     }
-    ASSERT_EQ(0u, index.getHasPattern()[1]);
-    ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
+    ASSERT_EQ(0u, index.getHasPattern()[2]);
+    ASSERT_EQ(NO_PATTERN, index.getHasPattern()[1]);
 
     ASSERT_FLOAT_EQ(4.0 / 2, index.getHasPredicateMultiplicityEntities());
     ASSERT_FLOAT_EQ(4.0 / 3, index.getHasPredicateMultiplicityPredicates());
@@ -409,18 +412,18 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     index._maxNumPatterns = 1;
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_EQ(2u, index.getHasPattern().size());
-    ASSERT_EQ(1u, index.getHasPredicate().size());
+    ASSERT_EQ(3u, index.getHasPattern().size());
+    ASSERT_EQ(2u, index.getHasPredicate().size());
     ASSERT_EQ(1u, index._patterns.size());
     Pattern p;
     p.push_back(3);
     p.push_back(6);
     std::pair<Id*, size_t> ip = index._patterns[0];
     for (size_t i = 0; i < ip.second; i++) {
-      ASSERT_EQ(p[i], ip.first[i]);
+      ASSERT_EQ(p[i] + 1, ip.first[i]);
     }
-    ASSERT_EQ(0u, index.getHasPattern()[1]);
-    ASSERT_EQ(NO_PATTERN, index.getHasPattern()[0]);
+    ASSERT_EQ(0u, index.getHasPattern()[2]);
+    ASSERT_EQ(NO_PATTERN, index.getHasPattern()[1]);
 
     ASSERT_FLOAT_EQ(4.0 / 2, index.getHasPredicateMultiplicityEntities());
     ASSERT_FLOAT_EQ(4.0 / 3, index.getHasPredicateMultiplicityPredicates());
@@ -457,21 +460,21 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   Index index;
   index.createFromOnDiskIndex("_testindex2");
 
-  ASSERT_TRUE(index._psoMeta.relationExists(2));
   ASSERT_TRUE(index._psoMeta.relationExists(3));
-  ASSERT_FALSE(index._psoMeta.relationExists(1));
-  ASSERT_FALSE(index._psoMeta.relationExists(4));
-  ASSERT_FALSE(index._psoMeta.getRmd(2).isFunctional());
-  ASSERT_TRUE(index._psoMeta.getRmd(3).isFunctional());
-  ASSERT_FALSE(index._psoMeta.getRmd(2).hasBlocks());
+  ASSERT_TRUE(index._psoMeta.relationExists(4));
+  ASSERT_FALSE(index._psoMeta.relationExists(2));
+  ASSERT_FALSE(index._psoMeta.relationExists(5));
+  ASSERT_FALSE(index._psoMeta.getRmd(3).isFunctional());
+  ASSERT_TRUE(index._psoMeta.getRmd(4).isFunctional());
   ASSERT_FALSE(index._psoMeta.getRmd(3).hasBlocks());
+  ASSERT_FALSE(index._psoMeta.getRmd(4).hasBlocks());
 
-  ASSERT_TRUE(index._posMeta.relationExists(2));
   ASSERT_TRUE(index._posMeta.relationExists(3));
-  ASSERT_FALSE(index._posMeta.relationExists(1));
-  ASSERT_FALSE(index._posMeta.relationExists(4));
-  ASSERT_TRUE(index._posMeta.getRmd(2).isFunctional());
+  ASSERT_TRUE(index._posMeta.relationExists(4));
+  ASSERT_FALSE(index._posMeta.relationExists(2));
+  ASSERT_FALSE(index._posMeta.relationExists(5));
   ASSERT_TRUE(index._posMeta.getRmd(3).isFunctional());
+  ASSERT_TRUE(index._posMeta.getRmd(4).isFunctional());
 
   remove("_testtmp3.tsv");
   remove("_testindex2.index.pso");
@@ -514,10 +517,10 @@ TEST(IndexTest, scanTest) {
 
     index.scanPSO("b", &wtl);
     ASSERT_EQ(2u, wtl.size());
-    ASSERT_EQ(0u, wtl[0][0]);
-    ASSERT_EQ(4u, wtl[0][1]);
-    ASSERT_EQ(0u, wtl[1][0]);
-    ASSERT_EQ(5u, wtl[1][1]);
+    ASSERT_EQ(1u, wtl[0][0]);
+    ASSERT_EQ(5u, wtl[0][1]);
+    ASSERT_EQ(1u, wtl[1][0]);
+    ASSERT_EQ(6u, wtl[1][1]);
     wtl.clear();
     index.scanPSO("x", &wtl);
     ASSERT_EQ(0u, wtl.size());
@@ -527,10 +530,10 @@ TEST(IndexTest, scanTest) {
 
     index.scanPOS("b", &wtl);
     ASSERT_EQ(2u, wtl.size());
-    ASSERT_EQ(4u, wtl[0][0]);
-    ASSERT_EQ(0u, wtl[0][1]);
-    ASSERT_EQ(5u, wtl[1][0]);
-    ASSERT_EQ(0u, wtl[1][1]);
+    ASSERT_EQ(5u, wtl[0][0]);
+    ASSERT_EQ(1u, wtl[0][1]);
+    ASSERT_EQ(6u, wtl[1][0]);
+    ASSERT_EQ(1u, wtl[1][1]);
     wtl.clear();
     index.scanPOS("x", &wtl);
     ASSERT_EQ(0u, wtl.size());
@@ -540,15 +543,15 @@ TEST(IndexTest, scanTest) {
 
     index.scanPSO("b", "a", &wol);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(4u, wol[0][0]);
-    ASSERT_EQ(5u, wol[1][0]);
+    ASSERT_EQ(5u, wol[0][0]);
+    ASSERT_EQ(6u, wol[1][0]);
     wol.clear();
     index.scanPSO("b", "c", &wol);
     ASSERT_EQ(0u, wol.size());
 
     index.scanPOS("b2", "c2", &wol);
     ASSERT_EQ(1u, wol.size());
-    ASSERT_EQ(1u, wol[0][0]);
+    ASSERT_EQ(2u, wol[0][0]);
   }
 
   remove("_testtmp2.tsv");
@@ -570,10 +573,11 @@ TEST(IndexTest, scanTest) {
   // 1: 1
   // 2: 2
   // 3: 3
-  // 4: a
-  // 5: b
-  // 6: c
-  // 7: is-a
+  // 4: ql:langtag
+  // 5: a
+  // 6: b
+  // 7: c
+  // 8: is-a
   f2 << "a\tis-a\t1\t.\n"
         "a\tis-a\t2\t.\n"
         "a\tis-a\t0\t.\n"
@@ -597,59 +601,59 @@ TEST(IndexTest, scanTest) {
 
     index.scanPSO("is-a", &wtl);
     ASSERT_EQ(7u, wtl.size());
-    ASSERT_EQ(4u, wtl[0][0]);
+    ASSERT_EQ(5u, wtl[0][0]);
     ASSERT_EQ(0u, wtl[0][1]);
-    ASSERT_EQ(4u, wtl[1][0]);
+    ASSERT_EQ(5u, wtl[1][0]);
     ASSERT_EQ(1u, wtl[1][1]);
-    ASSERT_EQ(4u, wtl[2][0]);
+    ASSERT_EQ(5u, wtl[2][0]);
     ASSERT_EQ(2u, wtl[2][1]);
-    ASSERT_EQ(5u, wtl[3][0]);
+    ASSERT_EQ(6u, wtl[3][0]);
     ASSERT_EQ(0u, wtl[3][1]);
-    ASSERT_EQ(5u, wtl[4][0]);
+    ASSERT_EQ(6u, wtl[4][0]);
     ASSERT_EQ(3u, wtl[4][1]);
-    ASSERT_EQ(6u, wtl[5][0]);
+    ASSERT_EQ(7u, wtl[5][0]);
     ASSERT_EQ(1u, wtl[5][1]);
-    ASSERT_EQ(6u, wtl[6][0]);
+    ASSERT_EQ(7u, wtl[6][0]);
     ASSERT_EQ(2u, wtl[6][1]);
 
     index.scanPOS("is-a", &wtl);
     ASSERT_EQ(7u, wtl.size());
     ASSERT_EQ(0u, wtl[0][0]);
-    ASSERT_EQ(4u, wtl[0][1]);
+    ASSERT_EQ(5u, wtl[0][1]);
     ASSERT_EQ(0u, wtl[1][0]);
-    ASSERT_EQ(5u, wtl[1][1]);
+    ASSERT_EQ(6u, wtl[1][1]);
     ASSERT_EQ(1u, wtl[2][0]);
-    ASSERT_EQ(4u, wtl[2][1]);
+    ASSERT_EQ(5u, wtl[2][1]);
     ASSERT_EQ(1u, wtl[3][0]);
-    ASSERT_EQ(6u, wtl[3][1]);
+    ASSERT_EQ(7u, wtl[3][1]);
     ASSERT_EQ(2u, wtl[4][0]);
-    ASSERT_EQ(4u, wtl[4][1]);
+    ASSERT_EQ(5u, wtl[4][1]);
     ASSERT_EQ(2u, wtl[5][0]);
-    ASSERT_EQ(6u, wtl[5][1]);
+    ASSERT_EQ(7u, wtl[5][1]);
     ASSERT_EQ(3u, wtl[6][0]);
-    ASSERT_EQ(5u, wtl[6][1]);
+    ASSERT_EQ(6u, wtl[6][1]);
 
     index.scanPOS("is-a", "0", &wol);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(4u, wol[0][0]);
-    ASSERT_EQ(5u, wol[1][0]);
+    ASSERT_EQ(5u, wol[0][0]);
+    ASSERT_EQ(6u, wol[1][0]);
 
     wol.clear();
     index.scanPOS("is-a", "1", &wol);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(4u, wol[0][0]);
-    ASSERT_EQ(6u, wol[1][0]);
+    ASSERT_EQ(5u, wol[0][0]);
+    ASSERT_EQ(7u, wol[1][0]);
 
     wol.clear();
     index.scanPOS("is-a", "2", &wol);
     ASSERT_EQ(2u, wol.size());
-    ASSERT_EQ(4u, wol[0][0]);
-    ASSERT_EQ(6u, wol[1][0]);
+    ASSERT_EQ(5u, wol[0][0]);
+    ASSERT_EQ(7u, wol[1][0]);
 
     wol.clear();
     index.scanPOS("is-a", "3", &wol);
     ASSERT_EQ(1u, wol.size());
-    ASSERT_EQ(5u, wol[0][0]);
+    ASSERT_EQ(6u, wol[0][0]);
 
     wol.clear();
     index.scanPSO("is-a", "a", &wol);

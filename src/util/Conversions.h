@@ -85,6 +85,13 @@ inline bool isNumeric(const string& val);
 //! Converts numeric strings (as determined by isNumeric()) into index words
 inline string convertNumericToIndexWord(const string& val);
 
+//! Convert a language tag like "@en" to the corresponding entity uri
+//! for the efficient language filter
+inline string convertLangtagToEntityUri(const string& tag);
+inline std::optional<string> convertEntityUriToLangtag(const string& word);
+inline std::string convertToLanguageTaggedPredicate(const string& pred,
+                                                    const string& langtag);
+
 // _____________________________________________________________________________
 string convertValueLiteralToIndexWord(const string& orig) {
   /*
@@ -603,5 +610,25 @@ string convertNumericToIndexWord(const string& val) {
     wasInt = true;
   }
   return convertFloatToIndexWord(tmp) + ((wasInt) ? 'I' : 'F');
+}
+
+// _________________________________________________________
+string convertLangtagToEntityUri(const string& tag) {
+  return URI_PREFIX + "@" + tag + ">";
+}
+
+// _________________________________________________________
+std::optional<string> convertEntityUriToLangtag(const string& word) {
+  static const string prefix = URI_PREFIX + "@";
+  if (ad_utility::startsWith(word, prefix)) {
+    return word.substr(prefix.size(), word.size() - prefix.size() - 1);
+  } else {
+    return std::nullopt;
+  }
+}
+// _________________________________________________________
+std::string convertToLanguageTaggedPredicate(const string& pred,
+                                             const string& langtag) {
+  return '@' + langtag + '@' + pred;
 }
 }  // namespace ad_utility

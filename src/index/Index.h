@@ -32,6 +32,7 @@ using std::vector;
 
 using json = nlohmann::json;
 
+using IdPairMMapVec = ad_utility::MmapVector<std::array<Id, 2>>;
 // a simple struct for better naming
 struct LinesAndWords {
   size_t nofLines;
@@ -545,7 +546,11 @@ class Index {
   bool isLiteral(const string& object);
 
   bool shouldBeExternalized(const string& object);
-  void tripleToInternalRepresentation(array<string, 3>* spo);
+  // convert value literals to internal representation
+  // and add externalization characters if necessary.
+  // Returns the language tag of spo[2] (the object) or ""
+  // if there is none.
+  string tripleToInternalRepresentation(array<string, 3>* spo);
 
   /**
    * @brief Throws an exception if no patterns are loaded. Should be called from

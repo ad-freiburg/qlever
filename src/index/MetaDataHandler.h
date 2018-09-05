@@ -148,7 +148,9 @@ class MetaDataWrapperDense {
 
   // ____________________________________________________________
   void set(Id id, const FullRelationMetaData& value) {
-    AD_CHECK(id < _vec.size());
+    if (id >= _vec.size()) {
+      AD_CHECK(id < _vec.size());
+    }
     bool previouslyEmpty = _vec[id] == emptyMetaData;
 
     // check that we never insert the empty key
