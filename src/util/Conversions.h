@@ -17,7 +17,6 @@
 #include <vector>
 
 #include "../global/Constants.h"
-#include "../util/Log.h"
 #include "./Exception.h"
 #include "./StringUtils.h"
 
@@ -591,9 +590,7 @@ std::optional<string> convertEntityUriToLangtag(const string& word) {
   static const string prefix =
       BEGINNING_VOCAB_PREFIX + URI_PREFIX + "entities/@";
   if (ad_utility::startsWith(word, prefix)) {
-    auto res = word.substr(prefix.size(), word.size() - prefix.size() - 1);
-    LOG(INFO) << "Converted uri to langtag " << res << '\n';
-    return res;
+    return word.substr(prefix.size(), word.size() - prefix.size() - 1);
   } else {
     return std::nullopt;
   }

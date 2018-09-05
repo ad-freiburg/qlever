@@ -448,10 +448,6 @@ void SparqlParser::addFilter(const string& str,
         }
         std::string lvar = lhs.substr(5, lhs.size() - 6);
         std::cout << "lvar:" << lvar << std::endl;
-        // SparqlFilter f;
-        // f._type = SparqlFilter::LANG_MATCHES;
-        // f._lhs = lvar;
-        // pattern->_filters.emplace_back(f);
 
         // Convert the language filter to a special triple
         // to make it more efficient (no need for string resolution)
