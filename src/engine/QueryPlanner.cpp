@@ -299,8 +299,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
         static_cast<GroupBy*>(groupBy.get())->computeSortColumns(final._qet);
 
     if (!sortColumns.empty() &&
-        !(sortColumns.size() == 1 &&
-          final._qet->resultSortedOn() == sortColumns[0].first)) {
+        !(sortColumns.size() == 1 && final._qet->resultSortedOn() ==
+          sortColumns[0].first)) {
       // Create an order by operation as required by the group by
       std::shared_ptr<Operation> orderBy =
           std::make_shared<OrderBy>(_qec, final._qet, sortColumns);
@@ -340,7 +340,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
   // but not necessarily optimal.
   // TODO: Adjust so that the optimal place for the operation is found.
   if (pq._distinct) {
-    QueryExecutionTree distinctTree(*final._qet.get());
+    QueryExecutionTree distinctTree(* final._qet.get());
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
     for (const auto& var : pq._selectedVariables) {
@@ -405,7 +405,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
 
   final._qet.get()->setTextLimit(getTextLimit(pq._textLimit));
   LOG(DEBUG) << "Done creating execution plan.\n";
-  return *final._qet.get();
+  return * final._qet.get();
 }
 
 bool QueryPlanner::checkUsePatternTrick(
@@ -1477,7 +1477,8 @@ void QueryPlanner::applyFiltersIfPossible(
               entityId = _qec->getIndex().getVocab().getValueIdForLT(compWith);
             } else if (filters[i]._type == SparqlFilter::LE) {
               entityId = _qec->getIndex().getVocab().getValueIdForLE(compWith);
-            } else if (filters[i]._type == SparqlFilter::LANG_MATCHES) {
+            } else if (filters[i]._type == SparqlFilter::LANG_MATCHES ||
+                       filters[i]._type == SparqlFilter::REGEX) {
               entityId = std::numeric_limits<size_t>::max() - 1;
             }
           }
@@ -1485,9 +1486,14 @@ void QueryPlanner::applyFiltersIfPossible(
               new Filter(_qec, row[n]._qet, filters[i]._type,
                          row[n]._qet.get()->getVariableColumn(filters[i]._lhs),
                          std::numeric_limits<size_t>::max(), entityId));
-          if (_qec && filters[i]._type == SparqlFilter::LANG_MATCHES) {
+          if (_qec && (filters[i]._type == SparqlFilter::LANG_MATCHES ||
+                       filters[i]._type == SparqlFilter::REGEX)) {
             static_cast<Filter*>(filter.get())
                 ->setRightHandSideString(filters[i]._rhs);
+            if (filters[i]._type == SparqlFilter::REGEX) {
+              static_cast<Filter*>(filter.get())
+                  ->setRegexIgnoreCase(filters[i]._regexIgnoreCase);
+            }
           }
           tree.setOperation(QueryExecutionTree::FILTER, filter);
         }

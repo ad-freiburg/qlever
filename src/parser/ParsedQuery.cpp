@@ -99,6 +99,12 @@ string SparqlFilter::asString() const {
     case LANG_MATCHES:
       os << " LANG_MATCHES ";
       break;
+    case SparqlFilter::REGEX:
+      os << " REGEX ";
+      if (_regexIgnoreCase) {
+        os << "ignoring case ";
+      }
+      break;
   }
   os << _rhs << ")";
   return os.str();

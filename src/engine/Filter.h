@@ -31,7 +31,11 @@ class Filter : public Operation {
   virtual void setTextLimit(size_t limit) { _subtree->setTextLimit(limit); }
 
   virtual size_t getSizeEstimate() {
-    // TODO: return a better estimate
+    if (_type == SparqlFilter::FilterType::REGEX) {
+      // TODO(jbuerklin): return a better estimate
+      return std::numeric_limits<Id>::max();
+    }
+    // TODO(schnelle): return a better estimate
     if (_rhsId == std::numeric_limits<Id>::max()) {
       if (_type == SparqlFilter::FilterType::EQ) {
         return _subtree->getSizeEstimate() / 1000;
@@ -54,11 +58,16 @@ class Filter : public Operation {
   }
 
   virtual size_t getCostEstimate() {
+    if (_type == SparqlFilter::FilterType::REGEX) {
+      return std::numeric_limits<Id>::max();
+    }
     return getSizeEstimate() + _subtree->getSizeEstimate() +
            _subtree->getCostEstimate();
   }
 
   void setRightHandSideString(std::string s) { _rhsString = s; }
+
+  void setRegexIgnoreCase(bool i) { _regexIgnoreCase = i; }
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
 
@@ -75,6 +84,7 @@ class Filter : public Operation {
   size_t _rhsInd;
   Id _rhsId;
   std::string _rhsString;
+  bool _regexIgnoreCase;
 
   template <class RT>
   vector<RT>* computeFilter(vector<RT>* res, size_t l, size_t r,

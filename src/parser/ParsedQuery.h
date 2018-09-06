@@ -120,7 +120,8 @@ class SparqlFilter {
     LE = 3,
     GT = 5,
     GE = 6,
-    LANG_MATCHES = 7
+    LANG_MATCHES = 7,
+    REGEX = 8
   };
 
   string asString() const;
@@ -128,6 +129,7 @@ class SparqlFilter {
   FilterType _type;
   string _lhs;
   string _rhs;
+  bool _regexIgnoreCase;
 };
 
 // A parsed SPARQL query. To be extended.

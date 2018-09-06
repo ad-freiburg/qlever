@@ -434,7 +434,7 @@ void SparqlParser::addFilter(const string& str,
       s++;
       auto pred = str.substr(s, i - s);
       auto parts = ad_utility::split(str.substr(i + 1, j - i - 1), ',');
-      AD_CHECK(parts.size() == 2);
+      AD_CHECK(parts.size() == 2 || (parts.size() == 3 && pred == "regex"));
       std::string lhs = ad_utility::strip(parts[0], ' ');
       std::string rhs = ad_utility::strip(parts[1], ' ');
       if (pred == "langMatches") {
@@ -455,10 +455,14 @@ void SparqlParser::addFilter(const string& str,
         return;
       }
       if (pred == "regex") {
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                 "No filters with regex supported, yet. "
-                 "Try prefix(...) or comparisons with == instead"
-                 " if that satisfies your need.")
+        SparqlFilter f;
+        f._type = SparqlFilter::REGEX;
+        f._lhs = lhs;
+        f._rhs = rhs.substr(1, rhs.size() - 2);
+        f._regexIgnoreCase =
+            (parts.size() == 3 && ad_utility::strip(parts[2], ' ') == "\"i\"");
+        pattern->_filters.emplace_back(f);
+        return;
       }
       if (pred == "prefix") {
         // Rewrite this filter into two ones that use >= and <.
