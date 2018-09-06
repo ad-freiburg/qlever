@@ -19,7 +19,7 @@ cache:
 
 before_script:
   - mkdir -p e2e_data/scientist-collection/
-  - chmod -R o+rwx e2e_data
+  - sudo chmod -R o+rwx e2e_data
 
 script:
   - docker build -t qlever .
