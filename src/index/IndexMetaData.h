@@ -155,6 +155,8 @@ class IndexMetaData {
 
   size_t getVersion() const { return _version; }
 
+  MapType& data() { return _data; }
+
  private:
   off_t _offsetAfter = 0;
 
