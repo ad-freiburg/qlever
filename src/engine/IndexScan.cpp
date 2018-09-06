@@ -2,9 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./IndexScan.h"
 #include <sstream>
 #include <string>
+#include "./IndexScan.h"
 
 using std::string;
 
@@ -189,6 +189,11 @@ void IndexScan::computePOSfreeO(ResultTable* result) const {
 size_t IndexScan::computeSizeEstimate() const {
   if (_executionContext) {
     // Should always be in this branch. Else is only for test cases.
+
+    // We have to do a simple scan anyway so might as well do it now
+    if (getResultWidth() == 1) {
+      return getResult()->size();
+    }
     return getIndex().sizeEstimate(_subject, _predicate, _object);
   } else {
     return 1000 + _subject.size() + _predicate.size() + _object.size();
