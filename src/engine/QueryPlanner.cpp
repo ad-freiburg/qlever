@@ -582,11 +582,6 @@ bool QueryPlanner::isVariable(const string& elem) {
 }
 
 // _____________________________________________________________________________
-bool QueryPlanner::isWords(const string& elem) {
-  return !isVariable(elem) && elem.size() > 0 && elem[0] != '<';
-}
-
-// _____________________________________________________________________________
 QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     const ParsedQuery::GraphPattern* pattern) const {
   TripleGraph tg;
@@ -1437,7 +1432,7 @@ void QueryPlanner::applyFiltersIfPossible(
       continue;
     }
     for (size_t i = 0; i < filters.size(); ++i) {
-      LOG(DEBUG) << "filter type: " << filters[i]._type << std::endl;
+      LOG(TRACE) << "filter type: " << filters[i]._type << std::endl;
       if (((row[n]._idsOfIncludedFilters >> i) & 1) != 0) {
         continue;
       }
@@ -1461,8 +1456,13 @@ void QueryPlanner::applyFiltersIfPossible(
           string compWith = filters[i]._rhs;
           Id entityId = 0;
           if (_qec) {
-            if (ad_utility::isXsdValue(filters[i]._rhs)) {
+            // TODO(schnelle): A proper SPARQL parser should have
+            // tagged/converted numeric values already. However our parser is
+            // currently far too crude for that
+            if (ad_utility::isXsdValue(compWith)) {
               compWith = ad_utility::convertValueLiteralToIndexWord(compWith);
+            } else if (ad_utility::isNumeric(compWith)) {
+              compWith = ad_utility::convertNumericToIndexWord(compWith);
             }
             if (filters[i]._type == SparqlFilter::EQ ||
                 filters[i]._type == SparqlFilter::NE) {

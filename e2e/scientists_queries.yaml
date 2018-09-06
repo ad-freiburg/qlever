@@ -250,3 +250,41 @@ queries:
           - contains_row: ["<Abraham_Zelmanov>", ""]
           - contains_row: ["<Abraham_Pais>","<Ida_Nicolaisen>;<Lila_Lee_Pais>"]
           - contains_row: ["<Aafia_Siddiqui>","<Ammar_al-Baluchi>;<Amjad_Mohammed_Khan>"]
+  - query: giant-int-scientists
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?person ?height WHERE  {
+            ?person <is-a> <Scientist> .
+            ?person <Height> ?height .
+            FILTER(?height > 2)
+          }
+        checks:
+          - res: [["<Granville_Woods>", 2.134]]
+          - num_rows: 1
+  - query: tall-float-scientists
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?person ?height WHERE  {
+            ?person <is-a> <Scientist> .
+            ?person <Height> ?height .
+            FILTER(?height > 1.8)
+          }
+        checks:
+          - contains_row: ["<Granville_Woods>", 2.134]
+          - contains_row: ["<Andrew_Hogue>", 1.956]
+          - num_rows: 52
+          - num_cols: 2
+  - query: dwarf-float-scientists
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?person ?height WHERE  {
+            ?person <is-a> <Scientist> .
+            ?person <Height> ?height .
+            FILTER(?height < 1.47)
+          }
+        checks:
+          - res: [["<Zelda_Rubinstein>", 1.29]]
+          - num_rows: 1
