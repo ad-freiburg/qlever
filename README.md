@@ -54,12 +54,13 @@ For old versions of git, that do not support this parameter, you can do:
     git submodule init
     git submodule update
 
-## a) Running QLever inside a `docker` container
+## Running QLever inside a `docker` container
 ### 0. Requirements:
 A 64 bit host system (32 bit systems can't deal with `mmap` on > 4 GB files or
 allocate enough RAM for larger KBs)
 
-* docker 17.05 or newer (needs multi-stage builds)
+* docker 18.05 or newer (needs multi-stage builds without leaking files (for
+  End-to-End Tests))
 
 ### 1. Build the container
 
@@ -70,7 +71,26 @@ Inside the the repositories root folder run
 where `<name>` is a name chosen by convention to match the dataset or variant
 you're building for.
 
-### 2. Create or reuse an index
+### 2. Run End-to-End Tests
+
+QLever includes a simple mechanism for testing the entire system from
+from building an index to running queries in a single command.
+
+In fact this End-to-End Test is run on Travis CI for every commit and Pull
+Request. It is also useful for local development however since it allows you to
+quickly test if something is horribly broken.
+
+Just like QLever itself the End-to-End Tests can be executed from a previously
+build QLever container
+
+**Note**: If you encounter permission issues e.g. if your UID is not 1000 or you
+are using docker with user namespaces, add the flag `-u root` to your `docker
+run` command or do a `chmod -R o+rw e2e_data`
+
+    docker build -t qlever-<name> .
+    docker run -it --rm -v "$(pwd)/e2e_data:/app/e2e_data/" --name qlever-<name>-e2e --entrypoint e2e/e2e.sh qlever-<name>
+
+### 3. Create or reuse an index
 #### Allow QLever to access the `/index` and `/input` volumes
 When running **with user namespaces** you may need to make the index folder
 accessible to the user the QLever process is mapped to on the host (e.g. nobody,
@@ -102,7 +122,7 @@ is now `/index`.
 (*Note: you don't actually need `./` as the executables are in the
 `$PATH`*)
 
-### 3. Running the QLever container
+### 4. Running the QLever Server
 
 To run a QLever container use the following command, replacing `<name>` with
 the name chosen during `docker build`.
@@ -114,28 +134,24 @@ which are always included. If none are supplied `-t -a` is used. If you want
 the container to run in the background and restart automatically replace `-it`
 with `-d --restart=unless-stopped`
 
-## b) Running QLever on a Linux host
+## Running QLever on a Linux host
 ### 0. Requirements:
+QLever is primarily tested on a Ubuntu 18.04 based container as well as current
+Arch Linux.
 
-Make sure you use a 64 bit Linux with:
+For Ubuntu 18.04 the following packages are required
 
-* g++ 5.x or higher
-* CMake 2.8.4 or higher
-* libsparsehash-dev (google-sparsehash)
-* python3 + python3-yaml (for End-to-End Tests)
+* build-essential cmake libsparsehash-dev
+* wget python3-yaml unzip curl (for End-to-End Tests)
 
-Other compilers (and OS) are not supported, yet.
-So far no major problems are known.
-Support for more platforms would be a highly appreciated contribution.
+This roughly translates to
 
-You also have to have google sparsehash installed. On Ubuntu 16.04 and newer
-the `libsparsehash-dev` package works.
+* GCC >= 7.x
+* CMake >= 2.8.4
+* Google's sparsehash >= 2.02
+* python >= 3.6 (for End-to-End Tests with type hints)
+* python-yaml >= 3.10
 
-If this isn't the case on your system, run:
-
-    git clone https://github.com/sparsehash/sparsehash.git
-    cd  sparsehash
-    ./configure && make && sudo make install
 
 ### 1. Build and run on the host:
 
@@ -152,31 +168,6 @@ Build the project (Optional: add `-DPERFTOOLS_PROFILER=True/False` and `-DALLOW_
 Run ctest. All tests should pass:
 
     ctest
-
-### 2. Running End-to-End Tests
-
-QLever includes a simple mechanism for testing the entire system from
-from building an index to running queries in a single command.
-
-In fact this End-to-End Test is run on Travis CI for every commit and Pull
-Request. It is also useful for local development however since it allows you to
-quickly test if something is horribly broken.
-
-
-**Note**: This does not include compilation and unit tests, though these are
-also run on Travis CI. Refer to the previous section for Unit Tests and
-compilation.
-Also this does assume that the build uses the `./build` directory
-as described in the [Build](#1-build) section. Currently the end-to-end tests
-are not part of the `docker` image.
-
-To do a full End-to-End Test run *(from the project root)*
-
-    e2e/e2e.sh
-
-If you want to skip creation of the index run
-
-    e2e/e2e.sh no-index
 
 ## 2. Creating an Index:
 
@@ -367,7 +358,7 @@ To obtain a list of available predicates and their counts `ql:has-predicate` can
     GROUP BY ?relations
     ORDER BY DESC(?count)
 
-`ql:has-predicate` can also be used as a normal predicate in an arbitrary query. 
+`ql:has-predicate` can also be used as a normal predicate in an arbitrary query.
 
 Group by is supported, but aggregate aliases may currently only be used within the SELECT part of the query:
 
