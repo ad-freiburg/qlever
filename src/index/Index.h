@@ -5,6 +5,7 @@
 
 #include <array>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
 #include <stxxl/vector>
@@ -14,6 +15,7 @@
 #include "../parser/NTriplesParser.h"
 #include "../parser/TsvParser.h"
 #include "../util/File.h"
+#include "../util/MmapVector.h"
 #include "./ConstantsIndexCreation.h"
 #include "./DocsDB.h"
 #include "./IndexMetaData.h"
@@ -21,12 +23,13 @@
 #include "./StxxlSortFunctors.h"
 #include "./TextMetaData.h"
 #include "./Vocabulary.h"
-#include <nlohmann/json.hpp>
 
+using ad_utility::MmapVector;
 using std::array;
 using std::string;
 using std::tuple;
 using std::vector;
+
 using json = nlohmann::json;
 
 // a simple struct for better naming
@@ -377,14 +380,47 @@ class Index {
 
   // no need for explicit instatiation since this function is private
   template <class MetaData>
-  void createPermutationImpl(const string& fileName, const ExtVec& vec,
-                             size_t c0, size_t c1, size_t c2);
+  std::optional<MetaData> createPermutationImpl(const string& fileName,
+                                                const ExtVec& vec, size_t c0,
+                                                size_t c1, size_t c2);
+  template <class MetaData, class Comparator1, class Comparator2>
+
+  // _______________________________________________________________________
+  // Create a pair of permutations. Only works for valid pairs (PSO-POS,
+  // OSP-OPS, SPO-SOP).  First creates the permutation and then exchanges the
+  // multiplicities and also writes the MetaData to disk. So we end up with
+  // fully functional permutations.
+  // performUnique must be set for the first pair created using vec to enforce
+  // RDF standard (no duplicate triples).
+  // createPatternsAfterFirst is only valid when  the pair is SPO-SOP because
+  // the SPO permutation is also needed for patterns (see usage in
+  // Index::createFromFile function)
+  void createPermutationPair(
+      ExtVec* vec, const Permutation::PermutationImpl<Comparator1>& p1,
+      const Permutation::PermutationImpl<Comparator2>& p2,
+      bool performUnique = false, bool createPatternsAfterFirst = false);
+
+  // The pairs of permutations are PSO-POS, OSP-OPS and SPO-SOP
+  // the multiplicity of column 1 in partner 1 of the pair is equal to the
+  // multiplity of column 2 in partner 2
+  // This functions writes the multiplicities of the first column of one
+  // arguments to the 2nd column multiplicities of the other
+  template <class MetaData>
+  void exchangeMultiplicities(MetaData* m1, MetaData* m2);
 
   // wrapper for createPermutation that saves a lot of code duplications
+  // Writes the permutation that is specified by argument permutation
+  // performs std::unique on arg vec iff arg performUnique is true (normally
+  // done for first permutation that is created using vec).
+  // Will sort vec.
+  // returns the MetaData (MmapBased or HmapBased) for this relation.
+  // Careful: only multiplicities for first column is valid after call, need to
+  // call exchangeMultiplicities as done by createPermutationPair
+  // the optional is std::nullopt if vec and thus the index is empty
   template <class MetaData, class Comparator>
-  void createPermutation(ExtVec* vec,
-                         Permutation::PermutationImpl<Comparator> permutation,
-                         bool performUnique = false);
+  std::optional<MetaData> createPermutation(
+      ExtVec* vec, const Permutation::PermutationImpl<Comparator>& permutation,
+      bool performUnique = false);
 
   /**
    * @brief Creates the data required for the "pattern-trick" used for fast
@@ -412,16 +448,32 @@ class Index {
                                     const vector<Posting>& postings,
                                     bool skipWordlistIfAllTheSame);
 
+  // Add relation to permutation file. Calculate corresponding metaData
+  // (Mutliplicity of second column will be invalid and has to be set by a
+  // separate call to exchangeMultiplicities)
+  // Args:
+  //   out - permutation file to which we write the relation. Must be open.
+  //   currentOffset - the offset of this relation within the permutation file
+  //   relId - the Id of the 0-th column of this relation (e.g. the 'P' in PSO)
+  //   data - the 1st and 2nd column of this relation (e.g. the "SO" for a fixed
+  //          'P' in PSO. Must be sorted by 1. and then 2. column.
+  //   distinctC1 - the number of distinct elemens in 1. column of data ("S" in
+  //                PSO)
+  //   functional - is this relation functional (only one triple per value for
+  //                1. column)
+  // Returns:
+  //   The Meta Data (Permutation offsets) for this relation,
+  //   Careful: only multiplicity for first column is valid in return value
   static pair<FullRelationMetaData, BlockBasedRelationMetaData> writeRel(
       ad_utility::File& out, off_t currentOffset, Id relId,
-      const vector<array<Id, 2>>& data, bool functional);
+      const MmapVector<array<Id, 2>>& data, size_t distinctC1, bool functional);
 
   static void writeFunctionalRelation(
-      const vector<array<Id, 2>>& data,
+      const MmapVector<array<Id, 2>>& data,
       pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd);
 
   static void writeNonFunctionalRelation(
-      ad_utility::File& out, const vector<array<Id, 2>>& data,
+      ad_utility::File& out, const MmapVector<array<Id, 2>>& data,
       pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd);
 
   void openFileHandles();

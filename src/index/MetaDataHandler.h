@@ -127,16 +127,24 @@ class MetaDataWrapperDense {
   void setSize(size_t newSize) { _size = newSize; }
 
   // __________________________________________________________________
-  const Iterator cbegin() const {
+  Iterator cbegin() const {
+    Iterator it(0, _vec.cbegin(), &_vec);
+    it.goToNexValidEntry();
+    return it;
+  }
+
+  // __________________________________________________________________
+  Iterator begin() const {
     Iterator it(0, _vec.begin(), &_vec);
     it.goToNexValidEntry();
     return it;
   }
 
   // __________________________________________________________________________
-  const Iterator cend() const {
-    return Iterator(_vec.size(), _vec.end(), &_vec);
-  }
+  Iterator cend() const { return Iterator(_vec.size(), _vec.cend(), &_vec); }
+
+  // __________________________________________________________________________
+  Iterator end() const { return Iterator(_vec.size(), _vec.end(), &_vec); }
 
   // ____________________________________________________________
   void set(Id id, const FullRelationMetaData& value) {
@@ -154,6 +162,13 @@ class MetaDataWrapperDense {
   // __________________________________________________________
   const FullRelationMetaData& getAsserted(Id id) const {
     const auto& res = _vec[id];
+    AD_CHECK(res != emptyMetaData);
+    return res;
+  }
+
+  // _________________________________________________________
+  FullRelationMetaData& operator[](Id id) {
+    auto& res = _vec[id];
     AD_CHECK(res != emptyMetaData);
     return res;
   }
@@ -180,7 +195,8 @@ class MetaDataWrapperHashMap {
  public:
   // using hashMap = ad_utility::HashMap<Id, FullRelationMetaData>;
   // using hashMap = ad_utility::HashMap<Id, FullRelationMetaData>;
-  using Iterator = typename hashMap::const_iterator;
+  using ConstIterator = typename hashMap::const_iterator;
+  using Iterator = typename hashMap::iterator;
 
   // nothing to do here, since the default constructor of the hashMap does
   // everything we want
@@ -192,10 +208,16 @@ class MetaDataWrapperHashMap {
   size_t size() const { return _map.size(); }
 
   // __________________________________________________________________
-  Iterator cbegin() const { return _map.begin(); }
+  ConstIterator cbegin() const { return _map.begin(); }
+
+  // __________________________________________________________________
+  Iterator begin() { return _map.begin(); }
 
   // ____________________________________________________________
-  Iterator cend() const { return _map.end(); }
+  ConstIterator cend() const { return _map.end(); }
+
+  // ____________________________________________________________
+  Iterator end() { return _map.end(); }
 
   // ____________________________________________________________
   void set(Id id, const FullRelationMetaData& value) { _map[id] = value; }
@@ -205,6 +227,13 @@ class MetaDataWrapperHashMap {
     auto it = _map.find(id);
     AD_CHECK(it != _map.end());
     return std::cref(it->second);
+  }
+
+  // __________________________________________________________
+  FullRelationMetaData& operator[](Id id) {
+    auto it = _map.find(id);
+    AD_CHECK(it != _map.end());
+    return std::ref(it->second);
   }
 
   // ________________________________________________________

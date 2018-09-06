@@ -104,17 +104,15 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
     AD_CHECK(false);
   }
   // also perform unique for first permutation
-  createPermutation<IndexMetaDataHmap>(&idTriples, Permutation::Pso, true);
-  createPermutation<IndexMetaDataHmap>(&idTriples, Permutation::Pos);
+
+  createPermutationPair<IndexMetaDataHmap>(&idTriples, Permutation::Pso,
+                                           Permutation::Pos, true);
   if (allPermutations) {
-    createPermutation<IndexMetaDataMmap>(&idTriples, Permutation::Spo);
-    if (_usePatterns) {
-      // vector already sorted correctly
-      createPatterns(true, &idTriples);
-    }
-    createPermutation<IndexMetaDataMmap>(&idTriples, Permutation::Sop);
-    createPermutation<IndexMetaDataMmap>(&idTriples, Permutation::Osp);
-    createPermutation<IndexMetaDataMmap>(&idTriples, Permutation::Ops);
+    // also create Patterns after the Spo permutation
+    createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Spo,
+                                             Permutation::Sop, false, true);
+    createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Osp,
+                                             Permutation::Ops);
   } else if (_usePatterns) {
     // vector is not yet sorted
     createPatterns(false, &idTriples);
@@ -238,9 +236,10 @@ void Index::passFileIntoIdVector(const string& filename, ExtVec& data,
 
 // _____________________________________________________________________________
 template <class MetaData>
-void Index::createPermutationImpl(const string& fileName,
-                                  Index::ExtVec const& vec, size_t c0,
-                                  size_t c1, size_t c2) {
+std::optional<MetaData> Index::createPermutationImpl(const string& fileName,
+                                                     Index::ExtVec const& vec,
+                                                     size_t c0, size_t c1,
+                                                     size_t c2) {
   MetaData metaData;
   if constexpr (metaData._isMmapBased) {
     metaData.setup(_totalVocabularySize, FullRelationMetaData::empty,
@@ -249,7 +248,7 @@ void Index::createPermutationImpl(const string& fileName,
 
   if (vec.size() == 0) {
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
-    return;
+    return std::nullopt;
   }
   ad_utility::File out(fileName.c_str(), "w");
   LOG(INFO) << "Creating an on-disk index permutation of " << vec.size()
@@ -258,27 +257,35 @@ void Index::createPermutationImpl(const string& fileName,
   size_t from = 0;
   Id currentRel = vec[0][c0];
   off_t lastOffset = 0;
-  vector<array<Id, 2>> buffer;
+  ad_utility::MmapVector<array<Id, 2>> buffer(0, fileName + ".tmp.MmapBuffer");
   bool functional = true;
+  size_t distinctC1 = 0;
+  size_t sizeOfRelation = 0;
   Id lastLhs = std::numeric_limits<Id>::max();
   for (ExtVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if ((*reader)[c0] != currentRel) {
-      auto md = writeRel(out, lastOffset, currentRel, buffer, functional);
+      auto md =
+          writeRel(out, lastOffset, currentRel, buffer, distinctC1, functional);
       metaData.add(md.first, md.second);
       buffer.clear();
+      distinctC1 = 0;
       lastOffset = metaData.getOffsetAfter();
       currentRel = (*reader)[c0];
       functional = true;
     } else {
+      sizeOfRelation++;
       if ((*reader)[c1] == lastLhs) {
         functional = false;
+      } else {
+        distinctC1++;
       }
     }
-    buffer.emplace_back(array<Id, 2>{{(*reader)[c1], (*reader)[c2]}});
+    buffer.push_back(array<Id, 2>{{(*reader)[c1], (*reader)[c2]}});
     lastLhs = (*reader)[c1];
   }
   if (from < vec.size()) {
-    auto md = writeRel(out, lastOffset, currentRel, buffer, functional);
+    auto md =
+        writeRel(out, lastOffset, currentRel, buffer, distinctC1, functional);
     metaData.add(md.first, md.second);
   }
 
@@ -288,18 +295,16 @@ void Index::createPermutationImpl(const string& fileName,
   LOG(INFO) << "Writing statistics for this permutation:\n"
             << metaData.statistics() << std::endl;
 
-  LOG(INFO) << "Writing Meta data to file...\n";
-
-  metaData.appendToFile(&out);
   out.close();
   LOG(INFO) << "Permutation done.\n";
+  return std::move(metaData);
 }
 
 // ________________________________________________________________________
 template <class MetaData, class Comparator>
-void Index::createPermutation(ExtVec* vec,
-                              Permutation::PermutationImpl<Comparator> p,
-                              bool performUnique) {
+std::optional<MetaData> Index::createPermutation(
+    ExtVec* vec, const Permutation::PermutationImpl<Comparator>& p,
+    bool performUnique) {
   LOG(INFO) << "Sorting for " << p._readableName << " permutation..."
             << std::endl;
   stxxl::sort(begin(*vec), end(*vec), p._comp, STXXL_MEMORY_TO_USE);
@@ -315,9 +320,53 @@ void Index::createPermutation(ExtVec* vec,
     LOG(INFO) << "Size after: " << vec->size() << std::endl;
   }
 
-  createPermutationImpl<MetaData>(_onDiskBase + ".index" + p._fileSuffix, *vec,
-                                  p._keyOrder[0], p._keyOrder[1],
-                                  p._keyOrder[2]);
+  return createPermutationImpl<MetaData>(_onDiskBase + ".index" + p._fileSuffix,
+                                         *vec, p._keyOrder[0], p._keyOrder[1],
+                                         p._keyOrder[2]);
+}
+
+// ________________________________________________________________________
+template <class MetaData, class Comparator1, class Comparator2>
+void Index::createPermutationPair(
+    ExtVec* vec, const Permutation::PermutationImpl<Comparator1>& p1,
+    const Permutation::PermutationImpl<Comparator2>& p2, bool performUnique,
+    bool createPatternsAfterFirst) {
+  auto m1 = createPermutation<MetaData>(vec, p1, performUnique);
+  if (createPatternsAfterFirst) {
+    createPatterns(true, vec);
+  }
+  auto m2 = createPermutation<MetaData>(vec, p2, false);
+  if (m1 && m2) {
+    LOG(INFO) << "Exchanging Multiplicities for " << p1._readableName << " and "
+              << p2._readableName << '\n';
+    exchangeMultiplicities(&m1.value(), &m2.value());
+    LOG(INFO) << "Done" << '\n';
+    LOG(INFO) << "Writing MetaData for " << p1._readableName << " and "
+              << p2._readableName << '\n';
+    ad_utility::File f1(_onDiskBase + ".index" + p1._fileSuffix, "r+");
+    m1.value().appendToFile(&f1);
+    ad_utility::File f2(_onDiskBase + ".index" + p2._fileSuffix, "r+");
+    m2.value().appendToFile(&f2);
+    LOG(INFO) << "Done" << '\n';
+  }
+}
+
+// _________________________________________________________________________
+template <class MetaData>
+void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
+  for (auto it = m1->data().begin(); it != m1->data().end(); ++it) {
+    const FullRelationMetaData& constRmd = it->second;
+    // our MetaData classes have a read-only interface because normally the
+    // FuullRelationMetaData are created separately and then added and never
+    // changed. This function forms an exception to this pattern
+    // because calculation the 2nd column multiplicity separately for each
+    // permutation is inefficient. So it is fine to use const_cast here as an
+    // exception: we delibarately write to a read-only data structure and are
+    // knowing what we are doing
+    FullRelationMetaData& rmd = const_cast<FullRelationMetaData&>(constRmd);
+    m2->data()[it->first].setCol2LogMultiplicity(rmd.getCol1LogMultiplicity());
+    rmd.setCol2LogMultiplicity(m2->data()[it->first].getCol1LogMultiplicity());
+  }
 }
 
 // ____________________________________________________________________________
@@ -683,20 +732,14 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
 // _____________________________________________________________________________
 pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeRel(
     ad_utility::File& out, off_t currentOffset, Id relId,
-    const vector<array<Id, 2>>& data, bool functional) {
+    const ad_utility::MmapVector<array<Id, 2>>& data, size_t distinctC1,
+    bool functional) {
   LOG(TRACE) << "Writing a relation ...\n";
   AD_CHECK_GT(data.size(), 0);
   LOG(TRACE) << "Calculating multiplicities ...\n";
-  ad_utility::HashSet<Id> distinctC1;
-  ad_utility::HashSet<Id> distinctC2;
-  for (size_t i = 0; i < data.size(); ++i) {
-    if (!functional) {
-      distinctC1.insert(data[i][0]);
-    }
-    distinctC2.insert(data[i][1]);
-  }
-  double multC1 = functional ? 1.0 : data.size() / double(distinctC1.size());
-  double multC2 = data.size() / double(distinctC2.size());
+  double multC1 = functional ? 1.0 : data.size() / double(distinctC1);
+  // Dummy value that will be overwritten later
+  double multC2 = 42.42;
   LOG(TRACE) << "Done calculating multiplicities.\n";
   FullRelationMetaData rmd(
       relId, currentOffset, data.size(), multC1, multC2, functional,
@@ -718,7 +761,7 @@ pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeRel(
 
 // _____________________________________________________________________________
 void Index::writeFunctionalRelation(
-    const vector<array<Id, 2>>& data,
+    const MmapVector<array<Id, 2>>& data,
     pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd) {
   // Only has to do something if there are blocks.
   if (rmd.first.hasBlocks()) {
@@ -747,7 +790,7 @@ void Index::writeFunctionalRelation(
 
 // _____________________________________________________________________________
 void Index::writeNonFunctionalRelation(
-    ad_utility::File& out, const vector<array<Id, 2>>& data,
+    ad_utility::File& out, const MmapVector<array<Id, 2>>& data,
     pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd) {
   // Only has to do something if there are blocks.
   if (rmd.first.hasBlocks()) {
