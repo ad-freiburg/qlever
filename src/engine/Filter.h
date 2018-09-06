@@ -32,10 +32,10 @@ class Filter : public Operation {
 
   virtual size_t getSizeEstimate() {
     if (_type == SparqlFilter::FilterType::REGEX) {
-      // TODO: return a better estimate
+      // TODO(jbuerklin): return a better estimate
       return std::numeric_limits<Id>::max();
     }
-    // TODO: return a better estimate
+    // TODO(schnelle): return a better estimate
     if (_rhsId == std::numeric_limits<Id>::max()) {
       if (_type == SparqlFilter::FilterType::EQ) {
         return _subtree->getSizeEstimate() / 1000;
@@ -59,7 +59,6 @@ class Filter : public Operation {
 
   virtual size_t getCostEstimate() {
     if (_type == SparqlFilter::FilterType::REGEX) {
-      // TODO: return a better estimate
       return std::numeric_limits<Id>::max();
     }
     return getSizeEstimate() + _subtree->getSizeEstimate() +
