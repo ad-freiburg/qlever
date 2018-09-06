@@ -12,12 +12,15 @@ RUN cmake -DCMAKE_BUILD_TYPE=Release .. && make -j $(nproc) && make test
 
 FROM base as runtime
 WORKDIR /app
+RUN apt-get update && apt-get install -y wget python3-yaml unzip curl
 ARG UID=1000
 RUN groupadd -r qlever && useradd --no-log-init -r -u $UID -g qlever qlever && chown qlever:qlever /app
-USER qlever
-ENV PATH=/app/:$PATH
-COPY --from=builder /app/build/*Main /app/src/web/* /app/
 
+COPY --from=builder /app/build/*Main /app/src/web/* /app/
+COPY --from=builder /app/e2e/* /app/e2e/
+ENV PATH=/app/:$PATH
+
+USER qlever
 EXPOSE 7001
 VOLUME ["/input", "/index"]
 
@@ -34,7 +37,7 @@ CMD ["-t", "-a", "-P"]
 # # index.* or
 # # set the envirionment variable "INDEX_PREFIX" during `docker run` using `-e INDEX_PREFIX=<prefix>`
 # # To build an index run a bash inside the container as follows
-# docker run -it --rm -v "<path_to_input>:/input" -v "$(pwd)/index:/index" qlever-<name> bash
+# docker run -it --rm --entrypoint bash -v "<path_to_input>:/input" -v "$(pwd)/index:/index" qlever-<name>
 # # Then inside that shell IndexBuilder is in the path and can be used like
 # # described in the README.md with the files in /input
 # # To run a server use
