@@ -150,8 +150,8 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
   size_t numExtraTriples = 0;
   size_t numFiles = 0;
   auto [isParserValid, tripleBuf] = parseBatch(&p, linesPerPartial);
-  bool firstIteration = true;
-  while (isParserValid || firstIteration) {
+  bool stopParsing = false;
+  while (!stopParsing) {
     firstIteration = false;
     auto futBatch = std::async(parseBatch<Parser>, &p, linesPerPartial);
     for (auto& spo : tripleBuf) {
@@ -192,6 +192,9 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
     // vocab.
     items.insert(LANGUAGE_PREDICATE);
     numFiles++;
+    // when the parser signals endOfFile we still have to handle the buffer
+    // contents
+    stopParsing = !isParserValid;
     std::tie(isParserValid, tripleBuf) = std::move(futBatch.get());
   }
   LOG(INFO) << "Merging vocabulary\n";
