@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./QueryExecutionTree.h"
 #include <algorithm>
 #include <sstream>
 #include <string>
@@ -10,7 +11,6 @@
 #include "./IndexScan.h"
 #include "./Join.h"
 #include "./OrderBy.h"
-#include "./QueryExecutionTree.h"
 #include "./Sort.h"
 #include "TextOperationForContexts.h"
 #include "TextOperationWithFilter.h"

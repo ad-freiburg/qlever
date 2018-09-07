@@ -299,8 +299,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
         static_cast<GroupBy*>(groupBy.get())->computeSortColumns(final._qet);
 
     if (!sortColumns.empty() &&
-        !(sortColumns.size() == 1 && final._qet->resultSortedOn() ==
-          sortColumns[0].first)) {
+        !(sortColumns.size() == 1 &&
+          final._qet->resultSortedOn() == sortColumns[0].first)) {
       // Create an order by operation as required by the group by
       std::shared_ptr<Operation> orderBy =
           std::make_shared<OrderBy>(_qec, final._qet, sortColumns);
@@ -340,7 +340,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
   // but not necessarily optimal.
   // TODO: Adjust so that the optimal place for the operation is found.
   if (pq._distinct) {
-    QueryExecutionTree distinctTree(* final._qet.get());
+    QueryExecutionTree distinctTree(*final._qet.get());
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
     for (const auto& var : pq._selectedVariables) {
@@ -405,7 +405,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
 
   final._qet.get()->setTextLimit(getTextLimit(pq._textLimit));
   LOG(DEBUG) << "Done creating execution plan.\n";
-  return * final._qet.get();
+  return *final._qet.get();
 }
 
 bool QueryPlanner::checkUsePatternTrick(

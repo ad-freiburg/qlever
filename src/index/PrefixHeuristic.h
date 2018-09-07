@@ -151,5 +151,4 @@ class Tree {
   std::pair<size_t, string> getAndDeleteMaximum(size_t codelength);
 };
 
-}
-
+}  // namespace ad_utility

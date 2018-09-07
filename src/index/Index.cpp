@@ -5,8 +5,8 @@
 #include "./Index.h"
 #include <algorithm>
 #include <cmath>
-#include <optional>
 #include <cstdio>
+#include <optional>
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_set>

@@ -2,9 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./IndexScan.h"
 #include <sstream>
 #include <string>
-#include "./IndexScan.h"
 
 using std::string;
 
