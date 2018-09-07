@@ -76,6 +76,8 @@ inline bool isXsdValue(const string val);
 //! for the efficient language filter
 inline string convertLangtagToEntityUri(const string& tag);
 inline std::optional<string> convertEntityUriToLangtag(const string& word);
+inline std::string convertToLanguageTaggedPredicate(const string& pred,
+                                                    const string& langtag);
 
 // _____________________________________________________________________________
 string convertValueLiteralToIndexWord(const string& orig) {
@@ -594,5 +596,10 @@ std::optional<string> convertEntityUriToLangtag(const string& word) {
   } else {
     return std::nullopt;
   }
+}
+// _________________________________________________________
+std::string convertToLanguageTaggedPredicate(const string& pred,
+                                             const string& langtag) {
+  return pred + "." + langtag;
 }
 }  // namespace ad_utility

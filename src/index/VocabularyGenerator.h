@@ -3,12 +3,12 @@
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 #pragma once
 
-#include <google/sparse_hash_map>
 #include <string>
 #include <utility>
 
 #include "../global/Constants.h"
 #include "../global/Id.h"
+#include "../util/HashMap.h"
 #include "../util/MmapVector.h"
 
 using IdPairMMapVec = ad_utility::MmapVector<std::array<Id, 2>>;
@@ -27,5 +27,5 @@ std::pair<size_t, IdPairMMapVec> mergeVocabulary(const std::string& basename,
 
 // __________________________________________________________________________________________
 // read the words and indices from the file and create hash map from it.
-google::sparse_hash_map<string, Id> vocabMapFromPartialIndexedFile(
+ad_utility::HashMap<string, Id> vocabMapFromPartialIndexedFile(
     const string& partialFile);
