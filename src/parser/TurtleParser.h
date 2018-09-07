@@ -64,6 +64,7 @@ class TurtleParser {
   // ____________________________________________________________________
   bool getLine(std::array<string, 3>& triple) { return getLine(&triple); }
 
+  // ___________________________________________________________________
   bool getLine(std::array<string, 3>* triple) {
     TurtleParserBackupState b;
     while (_triples.empty()) {
@@ -86,6 +87,15 @@ class TurtleParser {
       }
       if (!parsedStatement) {
         if (!_isBzip) {
+	  auto& d = _tok.data();
+	  LOG(INFO) << "Parsing of Line has Failed, Remaining bytes: " << d.size() << '\n';
+	  if (d.size() > 0) {
+	    LOG(INFO) << "Parsing of Line has Failed, but parseInput is not yet exhausted. Remaining bytes: " << d.size() << '\n';
+	    auto s = std::min(size_t(1000), size_t(d.size()));
+	    LOG(INFO) << std::string_view(d.data(), s);
+
+	  }
+
           return false;
         } else {
           if (resetStateAndRead(b)) {
@@ -271,6 +281,7 @@ class TurtleParser {
       unmapFile();
       ad_utility::File f(filename.c_str(), "r");
       size_t size = f.sizeOfFile();
+      LOG(INFO) << "mapping " << size << " bytes" << std::endl;
       const int fd = f.getFileDescriptor();
       void* ptr = mmap(0, size, PROT_READ, MAP_SHARED, fd, 0);
       AD_CHECK(ptr != MAP_FAILED);
