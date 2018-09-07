@@ -600,6 +600,6 @@ std::optional<string> convertEntityUriToLangtag(const string& word) {
 // _________________________________________________________
 std::string convertToLanguageTaggedPredicate(const string& pred,
                                              const string& langtag) {
-  return pred + "." + langtag;
+  return '@' + langtag + pred;
 }
 }  // namespace ad_utility
