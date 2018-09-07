@@ -273,7 +273,7 @@ void Index::passFileIntoIdVector(const string& filename, ExtVec& data,
 	 
         
     ++i;
-    if (i % 100000 == 0) {
+    if (i % 10000000 == 0) {
       LOG(INFO) << "Lines processed: " << i << '\n';
     }
 
