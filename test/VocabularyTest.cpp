@@ -79,7 +79,7 @@ TEST(VocabularyTest, readWriteTest) {
 }
 
 TEST(VocabularyTest, createFromSetTest) {
-  ad_utility::HashSet<string> s;
+  google::sparse_hash_set<string> s;
   s.insert("a");
   s.insert("ab");
   s.insert("ba");

@@ -136,14 +136,6 @@ template <class Parser>
 LinesAndWords Index::passFileForVocabulary(const string& filename,
                                            size_t linesPerPartial) {
   Parser p(filename);
-  google::sparse_hash_set<string> items;
-  // We will insert many duplicates into this hashSet, should be faster to
-  // keep this separate
-  // Will hold all the words connected to the language filter implementation
-  google::sparse_hash_set<string> langFilterItems;
-
-  // insert the special predicate into the first partial vocabulary
-  langFilterItems.insert(LANGUAGE_PREDICATE);
   size_t i = 0;
   // already count the numbers of triples that will be used for the language
   // filter
@@ -153,6 +145,14 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
   bool stopParsing = false;
   while (!stopParsing) {
     auto futBatch = std::async(parseBatch<Parser>, &p, linesPerPartial);
+    google::sparse_hash_set<string> items;
+    // We will insert many duplicates into this hashSet, should be faster to
+    // keep this separate
+    // Will hold all the words connected to the language filter implementation
+    google::sparse_hash_set<string> langFilterItems;
+
+    // insert the special predicate into all partial vocabularies
+    langFilterItems.insert(LANGUAGE_PREDICATE);
     for (auto& spo : tripleBuf) {
       auto langtag = tripleToInternalRepresentation(&spo);
       if (!langtag.empty()) {
@@ -185,11 +185,6 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
     LOG(INFO) << "it contains " << items.size() << " elements\n";
     vocab.writeToBinaryFileForMerging(partialFilename);
     LOG(INFO) << "Done\n";
-    items.clear();
-    langFilterItems.clear();
-    // the id of the special predicate has to be known in every partial
-    // vocab.
-    items.insert(LANGUAGE_PREDICATE);
     numFiles++;
     // when the parser signals endOfFile we still have to handle the buffer
     // contents
