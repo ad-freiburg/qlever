@@ -67,6 +67,7 @@ TEST(TurtleParserTest, prefixID) {
 
 TEST(TurtleParserTest, stringParse) {
   TurtleParser p;
+  string s0("\"?\\\\\"");
   string s1("\"double quote\"");
   string s2("\'single quote\'");
   string s3("\"\"\"multiline \n double quote\"\"\"");
@@ -74,6 +75,10 @@ TEST(TurtleParserTest, stringParse) {
 
   // the main thing to test here is that s3 does not prefix-match the simple
   // string "" but the complex string """..."""
+  p.reset(s0);
+  ASSERT_TRUE(p.stringParse());
+  ASSERT_EQ(p._lastParseResult, s0);
+  ASSERT_EQ(p.getPosition(), s0.size());
 
   p.reset(s1);
   ASSERT_TRUE(p.stringParse());
