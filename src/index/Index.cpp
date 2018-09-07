@@ -1792,6 +1792,7 @@ void Index::initializeVocabularySettingsBuild() {
 template <class Parser>
 std::pair<bool, std::vector<array<string, 3>>> Index::parseBatch(
     Parser* parser, size_t maxLines) {
+  LOG(INFO) << "Parsing next batch in parallel" << std::endl;
   std::vector<array<string, 3>> buf;
   // for small knowledge bases on small systems that fit in one
   // batch (e.g. during tests) the reserve may fail which is not bad in this
@@ -1806,6 +1807,9 @@ std::pair<bool, std::vector<array<string, 3>>> Index::parseBatch(
     if (!parser->getLine(buf.back())) {
       buf.pop_back();
       return {false, std::move(buf)};
+    }
+    if (buf.size() % 10000000 == 0) {
+      LOG(INFO) << "Parsed " << buf.size() << " triples." << std::endl;
     }
   }
   return {true, std::move(buf)};
