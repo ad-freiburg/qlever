@@ -25,10 +25,12 @@
 #include "./TextMetaData.h"
 #include "./Vocabulary.h"
 
+using ad_utility::MmapVector;
 using std::array;
 using std::string;
 using std::tuple;
 using std::vector;
+
 using json = nlohmann::json;
 
 using IdPairMMapVec = ad_utility::MmapVector<std::array<Id, 2>>;
@@ -382,14 +384,25 @@ class Index {
 
   // no need for explicit instatiation since this function is private
   template <class MetaData>
-  void createPermutationImpl(const string& fileName, const ExtVec& vec,
-                             size_t c0, size_t c1, size_t c2);
+  std::optional<MetaData> createPermutationImpl(const string& fileName,
+                                                const ExtVec& vec, size_t c0,
+                                                size_t c1, size_t c2);
+  template <class MetaData, class Comparator1, class Comparator2>
+  // _______________________________________________________________________
+  void createPermutationPair(ExtVec* vec,
+                             Permutation::PermutationImpl<Comparator1> p1,
+                             Permutation::PermutationImpl<Comparator2> p2,
+                             bool performUnique = false,
+                             bool createPatternsAfterFirst = false);
+  // _______________________________________________________________________
+  template <class MetaData>
+  void exchangeMultiplicities(MetaData* m1, MetaData* m2);
 
   // wrapper for createPermutation that saves a lot of code duplications
   template <class MetaData, class Comparator>
-  void createPermutation(ExtVec* vec,
-                         Permutation::PermutationImpl<Comparator> permutation,
-                         bool performUnique = false);
+  std::optional<MetaData> createPermutation(
+      ExtVec* vec, Permutation::PermutationImpl<Comparator> permutation,
+      bool performUnique = false);
 
   /**
    * @brief Creates the data required for the "pattern-trick" used for fast
@@ -419,14 +432,14 @@ class Index {
 
   static pair<FullRelationMetaData, BlockBasedRelationMetaData> writeRel(
       ad_utility::File& out, off_t currentOffset, Id relId,
-      const vector<array<Id, 2>>& data, bool functional);
+      const MmapVector<array<Id, 2>>& data, size_t distinctC1, bool functional);
 
   static void writeFunctionalRelation(
-      const vector<array<Id, 2>>& data,
+      const MmapVector<array<Id, 2>>& data,
       pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd);
 
   static void writeNonFunctionalRelation(
-      ad_utility::File& out, const vector<array<Id, 2>>& data,
+      ad_utility::File& out, const MmapVector<array<Id, 2>>& data,
       pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd);
 
   void openFileHandles();
