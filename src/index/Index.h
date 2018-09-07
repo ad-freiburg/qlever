@@ -372,6 +372,9 @@ class Index {
   template <class Parser>
   LinesAndWords passFileForVocabulary(const string& ntFile,
                                       size_t linesPerPartial = 100000000);
+  template <class Parser>
+  static std::pair<bool, std::vector<array<string, 3>>> parseBatch(
+      Parser* parser, size_t maxLines);
 
   template <class Parser>
   void passFileIntoIdVector(const string& filename, ExtVec& data,

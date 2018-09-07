@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <future>
 #include <optional>
 #include <stxxl/algorithm>
 #include <stxxl/map>
@@ -134,7 +135,6 @@ template void Index::createFromFile<TurtleParser>(const string& filename,
 template <class Parser>
 LinesAndWords Index::passFileForVocabulary(const string& filename,
                                            size_t linesPerPartial) {
-  array<string, 3> spo;
   Parser p(filename);
   ad_utility::HashSet<string> items;
   // We will insert many duplicates into this hashSet, should be faster to
@@ -149,54 +149,33 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
   // filter
   size_t numExtraTriples = 0;
   size_t numFiles = 0;
-  while (p.getLine(spo)) {
-    auto langtag = tripleToInternalRepresentation(&spo);
-    if (!langtag.empty()) {
-      numExtraTriples += 2;
-      langFilterItems.insert(ad_utility::convertLangtagToEntityUri(langtag));
-      langFilterItems.insert(
-          ad_utility::convertToLanguageTaggedPredicate(spo[1], langtag));
-    }
-    for (size_t k = 0; k < 3; ++k) {
-      items.insert(spo[k]);
-    }
-
-    ++i;
-    if (i % 10000000 == 0) {
-      LOG(INFO) << "Lines processed: " << i << '\n';
-    }
-
-    if (i % linesPerPartial == 0) {
-      LOG(INFO) << "Lines processed: " << i << '\n';
-      string partialFilename =
-          _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
-      Vocabulary<string> vocab;
-
-      // merge the big and small hashSet
-      for (const auto& el : langFilterItems) {
-        items.insert(el);
+  auto [isParserValid, tripleBuf] = parseBatch(&p, linesPerPartial);
+  bool firstIteration = true;
+  while (isParserValid || firstIteration) {
+    firstIteration = false;
+    auto futBatch = std::async(parseBatch<Parser>, &p, linesPerPartial);
+    for (auto& spo : tripleBuf) {
+      auto langtag = tripleToInternalRepresentation(&spo);
+      if (!langtag.empty()) {
+        numExtraTriples += 2;
+        langFilterItems.insert(ad_utility::convertLangtagToEntityUri(langtag));
+        langFilterItems.insert(
+            ad_utility::convertToLanguageTaggedPredicate(spo[1], langtag));
       }
-      vocab.createFromSet(items);
-      LOG(INFO) << "writing partial vocabular to " << partialFilename
-                << std::endl;
-      LOG(INFO) << "it contains " << items.size() << " elements\n";
-      vocab.writeToBinaryFileForMerging(partialFilename);
-      LOG(INFO) << "Done\n";
-      items.clear();
-      langFilterItems.clear();
-      // the id of the special predicate has to be known in every partial vocab.
-      items.insert(LANGUAGE_PREDICATE);
-      numFiles++;
+      for (size_t k = 0; k < 3; ++k) {
+        items.insert(spo[k]);
+      }
+
+      ++i;
+      if (i % 10000000 == 0) {
+        LOG(INFO) << "Lines processed: " << i << '\n';
+      }
     }
-  }
-  // write Remainder
-  //
-  LOG(INFO) << "Lines processed: " << i << '\n';
-  if (items.size() > 0) {
-    // write remainder
+    LOG(INFO) << "Lines processed: " << i << '\n';
     string partialFilename =
         _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
     Vocabulary<string> vocab;
+
     // merge the big and small hashSet
     for (const auto& el : langFilterItems) {
       items.insert(el);
@@ -206,8 +185,14 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
               << std::endl;
     LOG(INFO) << "it contains " << items.size() << " elements\n";
     vocab.writeToBinaryFileForMerging(partialFilename);
+    LOG(INFO) << "Done\n";
     items.clear();
+    langFilterItems.clear();
+    // the id of the special predicate has to be known in every partial
+    // vocab.
+    items.insert(LANGUAGE_PREDICATE);
     numFiles++;
+    std::tie(isParserValid, tripleBuf) = std::move(futBatch.get());
   }
   LOG(INFO) << "Merging vocabulary\n";
   LinesAndWords res;
@@ -1801,4 +1786,27 @@ void Index::initializeVocabularySettingsBuild() {
     _vocab.initializeExternalizePrefixes(j["prefixes-external"]);
     _configurationJson["prefixes-external"] = j["prefixes-external"];
   }
+}
+
+// _____________________________________________________________________________
+template <class Parser>
+std::pair<bool, std::vector<array<string, 3>>> Index::parseBatch(
+    Parser* parser, size_t maxLines) {
+  std::vector<array<string, 3>> buf;
+  // for small knowledge bases on small systems that fit in one
+  // batch (e.g. during tests) the reserve may fail which is not bad in this
+  // case
+  try {
+    buf.reserve(maxLines);
+  } catch (const std::bad_alloc& b) {
+    buf = std::vector<array<string, 3>>();
+  }
+  while (buf.size() < maxLines) {
+    buf.emplace_back();
+    if (!parser->getLine(buf.back())) {
+      buf.pop_back();
+      return {false, std::move(buf)};
+    }
+  }
+  return {true, std::move(buf)};
 }
