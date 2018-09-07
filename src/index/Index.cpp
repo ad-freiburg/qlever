@@ -152,7 +152,6 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
   auto [isParserValid, tripleBuf] = parseBatch(&p, linesPerPartial);
   bool stopParsing = false;
   while (!stopParsing) {
-    firstIteration = false;
     auto futBatch = std::async(parseBatch<Parser>, &p, linesPerPartial);
     for (auto& spo : tripleBuf) {
       auto langtag = tripleToInternalRepresentation(&spo);
