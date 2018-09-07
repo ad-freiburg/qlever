@@ -107,24 +107,12 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
 
   createPermutationPair<IndexMetaDataHmap>(&idTriples, Permutation::Pso,
                                            Permutation::Pos, true);
-  // createPermutation<IndexMetaDataHmap>(&idTriples, Permutation::Pso, true);
-  // createPermutation<IndexMetaDataHmap>(&idTriples, Permutation::Pos);
   if (allPermutations) {
-    /*
-    createPermutation<IndexMetaDataMmap>(&idTriples, Permutation::Spo);
-    if (_usePatterns) {
-      // vector already sorted correctly
-      createPatterns(true, &idTriples);
-    }
-    createPermutation<IndexMetaDataMmap>(&idTriples, Permutation::Sop);
-    */
     // also create Patterns after the Spo permutation
     createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Spo,
                                              Permutation::Sop, false, true);
     createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Osp,
                                              Permutation::Ops);
-    //   createPermutation<IndexMetaDataMmap>(&idTriples, Permutation::Osp);
-    //  createPermutation<IndexMetaDataMmap>(&idTriples, Permutation::Ops);
   } else if (_usePatterns) {
     // vector is not yet sorted
     createPatterns(false, &idTriples);
