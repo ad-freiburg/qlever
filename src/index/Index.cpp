@@ -136,11 +136,11 @@ template <class Parser>
 LinesAndWords Index::passFileForVocabulary(const string& filename,
                                            size_t linesPerPartial) {
   Parser p(filename);
-  ad_utility::HashSet<string> items;
+  google::sparse_hash_set<string> items;
   // We will insert many duplicates into this hashSet, should be faster to
   // keep this separate
   // Will hold all the words connected to the language filter implementation
-  ad_utility::HashSet<string> langFilterItems;
+  google::sparse_hash_set<string> langFilterItems;
 
   // insert the special predicate into the first partial vocabulary
   langFilterItems.insert(LANGUAGE_PREDICATE);
@@ -218,7 +218,7 @@ void Index::passFileIntoIdVector(const string& filename, ExtVec& data,
   std::string vocabFilename(_onDiskBase + PARTIAL_VOCAB_FILE_NAME +
                             std::to_string(0));
   LOG(INFO) << "Reading partial vocab from " << vocabFilename << " ...\n";
-  ad_utility::HashMap<string, Id> vocabMap =
+  google::sparse_hash_map<string, Id> vocabMap =
       vocabMapFromPartialIndexedFile(vocabFilename);
   LOG(INFO) << "done reading partial vocab\n";
   size_t i = 0;
@@ -232,7 +232,7 @@ void Index::passFileIntoIdVector(const string& filename, ExtVec& data,
   while (p.getLine(spo)) {
     auto langtag = tripleToInternalRepresentation(&spo);
     bool broken = false;
-    ad_utility::HashMap<string, Id>::iterator iterators[3];
+    google::sparse_hash_map<string, Id>::iterator iterators[3];
     for (size_t k = 0; k < 3; ++k) {
       iterators[k] = vocabMap.find(spo[k]);
       // TODO<joka921>: only check this in Debug mode
@@ -583,7 +583,7 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
 
   // the input triple list is in spo order, we only need a hash map for
   // predicates
-  ad_utility::HashSet<Id> predicateHashSet;
+  google::sparse_hash_set<Id> predicateHashSet;
 
   pattern.clear();
   currentRel = vec[0][0];

@@ -90,8 +90,8 @@ void Vocabulary<S>::writeToBinaryFileForMerging(const string& fileName) const {
 
 // _____________________________________________________________________________
 template <class S>
-template <typename>
-void Vocabulary<S>::createFromSet(const ad_utility::HashSet<S>& set) {
+template <typename HashSet, typename>
+void Vocabulary<S>::createFromSet(const HashSet& set) {
   LOG(INFO) << "Creating vocabulary from set ...\n";
   _words.clear();
   _words.reserve(set.size());

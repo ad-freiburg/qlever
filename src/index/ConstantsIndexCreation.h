@@ -14,7 +14,7 @@ const std::string EXTERNAL_LITS_TEXT_FILE_NAME = ".externalized-text";
 
 // How many lines are parsed at once during index creation.
 // Reduce to save RAM
-static const int NUM_TRIPLES_PER_PARTIAL_VOCAB = 100000000;
+static const int NUM_TRIPLES_PER_PARTIAL_VOCAB = 50000000;
 
 // ________________________________________________________________
 static const std::string PARTIAL_VOCAB_FILE_NAME = ".partial-vocabulary";

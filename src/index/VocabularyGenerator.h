@@ -3,6 +3,7 @@
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 #pragma once
 
+#include <google/sparse_hash_map>
 #include <string>
 #include <utility>
 
@@ -27,5 +28,5 @@ std::pair<size_t, IdPairMMapVec> mergeVocabulary(const std::string& basename,
 
 // __________________________________________________________________________________________
 // read the words and indices from the file and create hash map from it.
-ad_utility::HashMap<string, Id> vocabMapFromPartialIndexedFile(
+google::sparse_hash_map<string, Id> vocabMapFromPartialIndexedFile(
     const string& partialFile);

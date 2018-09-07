@@ -129,11 +129,11 @@ std::pair<size_t, IdPairMMapVec> mergeVocabulary(const std::string& basename,
 }
 
 // ____________________________________________________________________________________________
-ad_utility::HashMap<string, Id> vocabMapFromPartialIndexedFile(
+google::sparse_hash_map<string, Id> vocabMapFromPartialIndexedFile(
     const string& partialFile) {
   std::ifstream file(partialFile, std::ios_base::binary);
   AD_CHECK(file.is_open());
-  ad_utility::HashMap<string, Id> vocabMap;
+  google::sparse_hash_map<string, Id> vocabMap;
   uint32_t len;
   while (file.read((char*)&len, sizeof(len))) {
     std::string word(len, '\0');

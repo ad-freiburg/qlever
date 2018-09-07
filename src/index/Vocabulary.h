@@ -10,6 +10,7 @@
 #include <cassert>
 #include <functional>
 #include <google/sparse_hash_map>
+#include <google/sparse_hash_set>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -258,8 +259,8 @@ class Vocabulary {
   }
 
   // only used during Index building, not needed for compressed vocabulary
-  template <typename = std::enable_if_t<!_isCompressed>>
-  void createFromSet(const ad_utility::HashSet<StringType>& set);
+  template <typename HashSet, typename = std::enable_if_t<!_isCompressed>>
+  void createFromSet(const HashSet& set);
 
   template <typename = std::enable_if_t<!_isCompressed>>
   google::sparse_hash_map<string, Id> asMap();

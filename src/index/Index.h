@@ -5,6 +5,7 @@
 
 #include <array>
 #include <fstream>
+#include <google/sparse_hash_set>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
