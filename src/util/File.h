@@ -203,6 +203,9 @@ class File {
     return bytesRead;
   }
 
+  //! get the underlying file descriptor
+  int getFileDescriptor() const { return fileno(_file); }
+
   //! Returns the number of bytes from the beginning
   //! is 0 on opening. Later equal the number of bytes written.
   //! -1 is returned when an error occurs

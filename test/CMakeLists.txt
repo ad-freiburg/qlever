@@ -67,6 +67,12 @@ target_link_libraries(HasPredicateScanTest gtest_main engine ${CMAKE_THREAD_LIBS
 add_executable(MmapVectorTest MmapVectorTest.cpp)
 target_link_libraries(MmapVectorTest gtest_main -pthread)
 
+add_executable(TokenTest TokenTest.cpp)
+target_link_libraries(TokenTest parser re2 gtest_main -pthread)
+
+add_executable(TurtleParserTest TurtleParserTest.cpp)
+target_link_libraries(TurtleParserTest parser re2 gtest_main -pthread)
+
 add_library(tests
             SparqlParserTest
             StringUtilsTest
@@ -87,4 +93,5 @@ add_library(tests
             VocabularyGeneratorTest
             HasPredicateScanTest
             MmapVectorTest
+            TurtleParserTest
             )
