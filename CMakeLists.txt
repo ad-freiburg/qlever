@@ -77,6 +77,8 @@ include_directories(SYSTEM ${STXXL_INCLUDE_DIRS})
 ################################
 # RE2
 ################################
+#no unit tests for RE2 (they test long and exhaustive there)
+option(RE2_BUILD_TESTING "enable testing for RE2" OFF)
 add_subdirectory(third_party/re2)
 include_directories(third_party/re2)
 
