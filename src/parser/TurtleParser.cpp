@@ -269,6 +269,7 @@ bool TurtleParser::stringParse() {
       while (endPos != string::npos && view[endPos - 1] == '\\') {
         endPos = view.find(q, endPos + 1);
       }
+      break;
     }
   }
   /*
@@ -290,9 +291,9 @@ bool TurtleParser::stringParse() {
   */
   if (!foundString) {
     return false;
-    }
-    if (endPos == string::npos) {
-      throw ParseException("unterminated string Literal");
+  }
+  if (endPos == string::npos) {
+    throw ParseException("unterminated string Literal");
     }
     // also include the quotation marks in the word
     _lastParseResult = view.substr(0, endPos + startPos);
