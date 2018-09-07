@@ -5,14 +5,15 @@
 #include "./Index.h"
 #include <algorithm>
 #include <cmath>
-#include <optional>
 #include <cstdio>
+#include <optional>
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_set>
 #include "../parser/NTriplesParser.h"
 #include "../parser/TsvParser.h"
 #include "../util/Conversions.h"
+#include "../util/HashMap.h"
 #include "./PrefixHeuristic.h"
 #include "./VocabularyGenerator.h"
 
@@ -48,6 +49,7 @@ Index::ExtVec Index::createExtVecAndVocab(const string& filename) {
   _vocab.clear();
   ExtVec idTriples(nofLines);
   passFileIntoIdVector<Parser>(filename, idTriples,
+                               linesAndWords.languageTriples,
                                NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
   if (!_keepTempFiles) {
@@ -137,10 +139,26 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
   array<string, 3> spo;
   Parser p(filename);
   ad_utility::HashSet<string> items;
+  // We will insert many duplicates into this hashSet, should be faster to
+  // keep this separate
+  // Will hold all the words connected to the language filter implementation
+  ad_utility::HashSet<string> langFilterItems;
+
+  // insert the special predicate into the first partial vocabulary
+  langFilterItems.insert(LANGUAGE_PREDICATE);
   size_t i = 0;
+  // already count the numbers of triples that will be used for the language
+  // filter
+  size_t numExtraTriples = 0;
   size_t numFiles = 0;
   while (p.getLine(spo)) {
-    tripleToInternalRepresentation(&spo);
+    auto langtag = tripleToInternalRepresentation(&spo);
+    if (!langtag.empty()) {
+      numExtraTriples += 2;
+      langFilterItems.insert(ad_utility::convertLangtagToEntityUri(langtag));
+      langFilterItems.insert(
+          ad_utility::convertToLanguageTaggedPredicate(spo[1], langtag));
+    }
     for (size_t k = 0; k < 3; ++k) {
       items.insert(spo[k]);
     }
@@ -155,12 +173,21 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
       string partialFilename =
           _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
       Vocabulary<string> vocab;
+
+      // merge the big and small hashSet
+      for (const auto& el : langFilterItems) {
+        items.insert(el);
+      }
       vocab.createFromSet(items);
       LOG(INFO) << "writing partial vocabular to " << partialFilename
                 << std::endl;
+      LOG(INFO) << "it contains " << items.size() << " elements\n";
       vocab.writeToBinaryFileForMerging(partialFilename);
       LOG(INFO) << "Done\n";
       items.clear();
+      langFilterItems.clear();
+      // the id of the special predicate has to be known in every partial vocab.
+      items.insert(LANGUAGE_PREDICATE);
       numFiles++;
     }
   }
@@ -171,25 +198,33 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
     // write remainder
     string partialFilename =
         _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
+    Vocabulary<string> vocab;
+    // merge the big and small hashSet
+    for (const auto& el : langFilterItems) {
+      items.insert(el);
+    }
+    vocab.createFromSet(items);
     LOG(INFO) << "writing partial vocabular to " << partialFilename
               << std::endl;
-    Vocabulary<string> vocab;
-    vocab.createFromSet(items);
+    LOG(INFO) << "it contains " << items.size() << " elements\n";
     vocab.writeToBinaryFileForMerging(partialFilename);
     items.clear();
     numFiles++;
   }
   LOG(INFO) << "Merging vocabulary\n";
   LinesAndWords res;
-  res.nofWords = mergeVocabulary(_onDiskBase, numFiles);
+  auto [nofWords, languageTriples] = mergeVocabulary(_onDiskBase, numFiles);
+  res.nofWords = nofWords;
+  res.languageTriples = std::move(languageTriples);
   LOG(INFO) << "Pass done.\n";
-  res.nofLines = i;
+  res.nofLines = i + numExtraTriples;
   return res;
 }
 
 // _____________________________________________________________________________
 template <class Parser>
 void Index::passFileIntoIdVector(const string& filename, ExtVec& data,
+                                 const IdPairMMapVec& languageTriples,
                                  size_t linesPerPartial) {
   LOG(INFO) << "Making pass over NTriples " << filename
             << " and creating stxxl vector.\n";
@@ -198,29 +233,49 @@ void Index::passFileIntoIdVector(const string& filename, ExtVec& data,
   std::string vocabFilename(_onDiskBase + PARTIAL_VOCAB_FILE_NAME +
                             std::to_string(0));
   LOG(INFO) << "Reading partial vocab from " << vocabFilename << " ...\n";
-  google::sparse_hash_map<string, Id> vocabMap =
+  ad_utility::HashMap<string, Id> vocabMap =
       vocabMapFromPartialIndexedFile(vocabFilename);
   LOG(INFO) << "done reading partial vocab\n";
   size_t i = 0;
   size_t numFiles = 0;
+  // the id of the special language filter predicate is stored
+  // in the first partial vocabulary, is always needed and always the same
+  // so we store it here.
+  auto languagePredicateId = vocabMap.find(LANGUAGE_PREDICATE)->second;
   // write using vector_bufwriter
   ExtVec::bufwriter_type writer(data);
   while (p.getLine(spo)) {
-    tripleToInternalRepresentation(&spo);
-
+    auto langtag = tripleToInternalRepresentation(&spo);
     bool broken = false;
+    ad_utility::HashMap<string, Id>::iterator iterators[3];
     for (size_t k = 0; k < 3; ++k) {
-      if (vocabMap.find(spo[k]) == vocabMap.end()) {
+      iterators[k] = vocabMap.find(spo[k]);
+      // TODO<joka921>: only check this in Debug mode
+      if (iterators[k] == vocabMap.end()) {
         LOG(INFO) << "not found in partial Vocab: " << spo[k] << '\n';
+        AD_CHECK(false);
         broken = true;
       }
     }
+
     if (broken) continue;
-    writer << array<Id, 3>{{vocabMap.find(spo[0])->second,
-                            vocabMap.find(spo[1])->second,
-                            vocabMap.find(spo[2])->second}};
+    writer << array<Id, 3>{
+        {iterators[0]->second, iterators[1]->second, iterators[2]->second}};
+    if (!langtag.empty()) {
+      auto langPredIt = vocabMap.find(
+          ad_utility::convertToLanguageTaggedPredicate(spo[1], langtag));
+      if (langPredIt == vocabMap.end()) {
+        LOG(INFO) << "not found language Predicate in partial Vocab: " << spo[1]
+                  << " " << langtag << '\n';
+        AD_CHECK(false);
+      }
+      writer << array<Id, 3>{
+          {iterators[0]->second, langPredIt->second, iterators[2]->second}};
+	  }
+	 
+        
     ++i;
-    if (i % 100000 == 0) {
+    if (i % 10000000 == 0) {
       LOG(INFO) << "Lines processed: " << i << '\n';
     }
 
@@ -233,6 +288,11 @@ void Index::passFileIntoIdVector(const string& filename, ExtVec& data,
       vocabMap = vocabMapFromPartialIndexedFile(vocabFilename);
       LOG(INFO) << "done reading partial vocab\n";
     }
+  }
+
+  // add the extra triples for the language filter
+  for (const auto& el : languageTriples) {
+    writer << array<Id, 3>{{el[0], languagePredicateId, el[1]}};
   }
   writer.finish();
   LOG(INFO) << "Pass done.\n";
@@ -1674,18 +1734,23 @@ void Index::readConfigurationFile() {
 }
 
 // ___________________________________________________________________________
-void Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
+string Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
   auto& spo = *triplePtr;
   size_t upperBound = 3;
+  string langtag = "";
   if (ad_utility::isXsdValue(spo[2])) {
     spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
     upperBound = 2;
+  } else if (isLiteral(spo[2])) {
+    langtag = Vocabulary<string>::getLanguage(spo[2]);
   }
+
   for (size_t k = 0; k < upperBound; ++k) {
     if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k])) {
       spo[k] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[k];
     }
   }
+  return langtag;
 }
 
 // ___________________________________________________________________________

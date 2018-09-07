@@ -11,9 +11,12 @@
 #include <utility>
 #include <vector>
 
+#include "../util/Conversions.h"
 #include "../util/Exception.h"
+#include "../util/HashMap.h"
 #include "../util/Log.h"
 #include "./ConstantsIndexCreation.h"
+#include "./Vocabulary.h"
 
 class PairCompare {
  public:
@@ -24,13 +27,19 @@ class PairCompare {
 };
 
 // ___________________________________________________________________
-size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
+std::pair<size_t, IdPairMMapVec> mergeVocabulary(const std::string& basename,
+                                                 size_t numFiles) {
   std::vector<std::fstream> infiles;
   std::ofstream outfile(basename + ".vocabulary");
   AD_CHECK(outfile.is_open());
   std::ofstream outfileExternal(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
   AD_CHECK(outfileExternal.is_open());
   std::vector<bool> endOfFile(numFiles, false);
+
+  ad_utility::HashMap<string, Id> langtagMap;
+  // will dynamically grow
+  ad_utility::MmapVector<std::array<Id, 2>> languageTripleVec(
+      0, basename + ".tmp.LanguageTripleVec.mmap");
 
   using pair_T = std::pair<string, size_t>;
   std::priority_queue<pair_T, std::vector<pair_T>, PairCompare> queue;
@@ -62,10 +71,22 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
     if (top.first != lastWritten) {
       lastWritten = top.first;
 
+      if (auto lang = ad_utility::convertEntityUriToLangtag(top.first); lang) {
+        langtagMap[lang.value()] = totalWritten;
+      } else if (Vocabulary<string>::isLiteral(top.first) ||
+                 Vocabulary<string>::isExternalizedLiteral(top.first)) {
+        auto langtag = Vocabulary<string>::getLanguage(top.first);
+        if (!langtag.empty()) {
+          languageTripleVec.push_back(std::array<Id, 2>{
+              totalWritten, langtagMap.find(langtag)->second});
+        }
+      }
+
       if (top.first < string({EXTERNALIZED_LITERALS_PREFIX})) {
         outfile << top.first << std::endl;
       } else {
-        outfileExternal << top.first << std::endl;
+        // we have to strip the externalization character again
+        outfileExternal << top.first.substr(1) << std::endl;
       }
 
       // according to the standard, flush() or seek() must be called before
@@ -104,15 +125,15 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
       queue.push(std::make_pair(word, i));
     }
   }
-  return totalWritten;
+  return {totalWritten, std::move(languageTripleVec)};
 }
 
 // ____________________________________________________________________________________________
-google::sparse_hash_map<string, Id> vocabMapFromPartialIndexedFile(
+ad_utility::HashMap<string, Id> vocabMapFromPartialIndexedFile(
     const string& partialFile) {
   std::ifstream file(partialFile, std::ios_base::binary);
   AD_CHECK(file.is_open());
-  google::sparse_hash_map<string, Id> vocabMap;
+  ad_utility::HashMap<string, Id> vocabMap;
   uint32_t len;
   while (file.read((char*)&len, sizeof(len))) {
     std::string word(len, '\0');
