@@ -266,8 +266,24 @@ bool TurtleParser::stringParse() {
       foundString = true;
       startPos = q.size();
       endPos = view.find(q, startPos);
-      while (endPos != string::npos && view[endPos - 1] == '\\') {
+      while (endPos != string::npos) {
+        if (view[endPos - 1] == '\\') {
+          size_t numBackslash = 1;
+          auto slashPos = endPos - 2;
+          while (view[slashPos] == '\\') {
+            slashPos--;
+            numBackslash++;
+          }
+          if (numBackslash % 2 == 0) {
+            // even number of backslashes means that the quote we found has not
+            // been escaped
+            break;
+          }
         endPos = view.find(q, endPos + 1);
+        } else {
+          // no backslash before " , the string has definitely ended
+          break;
+        }
       }
       break;
     }
