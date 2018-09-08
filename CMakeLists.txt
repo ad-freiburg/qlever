@@ -66,13 +66,32 @@ include_directories(third_party/json/include/)
 # STXXL
 ################################
 # Disable GNU parallel as it prevents build on Ubuntu 14.04
-set(USE_GNU_PARALLEL OFF CACHE BOOL "Don't use gnu parallel" FORCE)
-set(USE_OPENMP OFF CACHE BOOL "Don't use OpenMP" FORCE)
+set(USE_GNU_PARALLEL ON CACHE BOOL "Don't use gnu parallel" FORCE)
+set(USE_OPENMP ON CACHE BOOL "Don't use OpenMP" FORCE)
 add_subdirectory(third_party/stxxl)
 # apply STXXL CXXFLAGS
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
 # add STXXL includes path
 include_directories(SYSTEM ${STXXL_INCLUDE_DIRS})
+
+################################
+# GNU PARALLEL
+################################
+if(USE_OPENMP OR USE_GNU_PARALLEL)
+  include(FindOpenMP)
+  if(NOT OPENMP_FOUND)
+    message(STATUS "OpenMP not found. Continuing without parallel algorithm support.")
+  else()
+    message(STATUS "OpenMP found, enabling built-in parallel algorithms.")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
+  endif()
+
+else()
+  message(STATUS "OpenMP disabled in QLever (no parallelism is used).")
+
+endif(USE_OPENMP OR USE_GNU_PARALLEL)
 
 ################################
 # RE2

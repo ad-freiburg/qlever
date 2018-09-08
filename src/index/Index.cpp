@@ -164,7 +164,7 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
       actualCurrentPartialSize++;
 
       if (!langtag.empty()) {
-        auto langTagId = assignNextId(
+            auto langTagId = assignNextId(
             &items, ad_utility::convertLangtagToEntityUri(langtag));
         auto langTaggedPredId = assignNextId(
             &items,
