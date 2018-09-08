@@ -198,6 +198,7 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
     stopParsing = !isParserValid;
     std::tie(isParserValid, tripleBuf) = std::move(futBatch.get());
   }
+  writer.finish();
   LOG(INFO) << "Merging vocabulary\n";
   LinesAndWords res;
   auto nofWords = mergeVocabulary(_onDiskBase, numFiles);
