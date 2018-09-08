@@ -82,7 +82,9 @@ class MmapVector {
   // standard iterator functions, each in a const and non-const version
   // begin
   T* begin() { return _ptr; }
+  T* data() { return _ptr; }
   const T* begin() const { return _ptr; }
+  const T* data() const { return _ptr; }
   // end
   T* end() { return _ptr + _size; }
   const T* end() const { return _ptr + _size; }
@@ -187,6 +189,7 @@ class MmapVector {
   // if new size > old size new elements will be uninitialized
   // iterators are possibly invalidated
   void resize(size_t newSize);
+  void clear() { resize(0); }
 
   // add element specified by arg el at the end of the array
   // possibly invalidates iterators
