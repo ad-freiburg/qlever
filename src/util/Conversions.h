@@ -614,13 +614,12 @@ string convertNumericToIndexWord(const string& val) {
 
 // _________________________________________________________
 string convertLangtagToEntityUri(const string& tag) {
-  return BEGINNING_VOCAB_PREFIX + URI_PREFIX + "entities/@" + tag + ">";
+  return URI_PREFIX + "entities/@" + tag + ">";
 }
 
 // _________________________________________________________
 std::optional<string> convertEntityUriToLangtag(const string& word) {
-  static const string prefix =
-      BEGINNING_VOCAB_PREFIX + URI_PREFIX + "entities/@";
+  static const string prefix = URI_PREFIX + "entities/@";
   if (ad_utility::startsWith(word, prefix)) {
     return word.substr(prefix.size(), word.size() - prefix.size() - 1);
   } else {
