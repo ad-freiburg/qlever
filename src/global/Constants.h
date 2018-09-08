@@ -71,11 +71,10 @@ static const uint8_t NO_PREFIX_CHAR =
 // Vocabulary. Necessary for language filter, because the languages have to be
 // known during the merge process
 
-static constexpr char BEGINNING_VOCAB_PREFIX = 1;  // \0 has special meaning
 // Special predicate for returning the language of a literal
 static const std::string URI_PREFIX =
     "<http://http://qlever.informatik.uni-freiburg.de/";
 
 static const std::string LANGUAGE_PREDICATE =
-    BEGINNING_VOCAB_PREFIX + URI_PREFIX + "/predicates/langtag>";
+    URI_PREFIX + "predicates/langtag>";
 
