@@ -12,7 +12,8 @@
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
 
-using IdPairMMapVec = ad_utility::MmapVector<std::array<Id, 2>>;
+using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
+using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
 using std::string;
 // _______________________________________________________________
 // merge the partial vocabularies at  binary files
@@ -23,10 +24,18 @@ using std::string;
 // Writes file "externalTextFile" which can be used to directly write external
 // Literals
 // Returns the number of total Words merged
-std::pair<size_t, IdPairMMapVec> mergeVocabulary(const std::string& basename,
-                                                 size_t numFiles);
+size_t mergeVocabulary(const std::string& basename, size_t numFiles);
 
 // __________________________________________________________________________________________
 // read the words and indices from the file and create hash map from it.
 google::sparse_hash_map<string, Id> vocabMapFromPartialIndexedFile(
     const string& partialFile);
+
+// _________________________________________________________________________________________
+void writePartialIdMapToBinaryFileForMerging(
+    const google::sparse_hash_map<string, Id>& map, const string& fileName);
+
+// _________________________________________________________________________________________
+google::sparse_hash_map<Id, Id> IdMapFromPartialIdMapFile(
+    const string& mmapFilename);
+

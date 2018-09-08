@@ -27,6 +27,7 @@
 #include "./Vocabulary.h"
 
 using ad_utility::MmapVector;
+using ad_utility::MmapVectorView;
 using std::array;
 using std::string;
 using std::tuple;
@@ -34,12 +35,14 @@ using std::vector;
 
 using json = nlohmann::json;
 
-using IdPairMMapVec = ad_utility::MmapVector<std::array<Id, 2>>;
+
 // a simple struct for better naming
 struct LinesAndWords {
+  typedef stxxl::VECTOR_GENERATOR<array<Id, 3>>::result ExtVec;
   size_t nofLines;
   size_t nofWords;
-  IdPairMMapVec languageTriples;
+  std::vector<size_t> actualPartialSizes;
+  ExtVec idTriples;
 };
 
 class Index {
@@ -378,9 +381,13 @@ class Index {
       Parser* parser, size_t maxLines);
 
   template <class Parser>
-  void passFileIntoIdVector(const string& filename, ExtVec& data,
-                            const IdPairMMapVec& languageTriples,
-                            size_t linesPerPartial = 100000000);
+  void passFileIntoIdVector(ExtVec& data,
+                            const vector<size_t>& actualLinesPerPartial,
+                            size_t linesPerPartial);
+
+  // ___________________________________________________________________________
+  template <class Map>
+  static Id assignNextId(Map* mapPtr, const string& key);
 
   size_t passContextFileForVocabulary(const string& contextFile);
 
