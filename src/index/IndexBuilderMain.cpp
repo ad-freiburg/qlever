@@ -38,6 +38,7 @@ struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
                            {"text-index-name", required_argument, NULL, 'T'},
                            {"words-by-contexts", required_argument, NULL, 'w'},
                            {"entity-stats", no_argument, NULL, 'r'},
+                           {"add-entity-stats", no_argument, NULL, 'R'},
                            {"add-text-index", no_argument, NULL, 'A'},
                            {"keep-temporary-files", no_argument, NULL, 'k'},
                            {"settings-file", required_argument, NULL, 's'},
@@ -105,6 +106,9 @@ void printUsage(char* execName) {
        << "words-file to build text index from." << endl;
   cout << "  " << std::setw(20) << "r, entity-stats" << std::setw(1) << "    "
        << "Compute additional stats for entities that can be queried." << endl;
+  cout << "  " << std::setw(20) << "R, add-entity-stats" << std::setw(1)
+       << "    "
+       << "Compute entity stats without rebuilding the index." << endl;
   cout << "  " << std::setw(20) << "A, add-text-index" << std::setw(1) << "    "
        << "Add text index to already existing kb-index" << endl;
   cout
@@ -146,12 +150,13 @@ int main(int argc, char** argv) {
   bool onDiskLiterals = false;
   bool usePatterns = false;
   bool onlyAddTextIndex = false;
+  bool onlyAddEntityStats = false;
   bool keepTemporaryFiles = false;
   bool entityStats = false;
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:PhAks:Nr", options, NULL);
+    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:PhAks:NrR", options, NULL);
     if (c == -1) {
       break;
     }
@@ -204,6 +209,9 @@ int main(int argc, char** argv) {
         break;
       case 'r':
         entityStats = true;
+        break;
+      case 'R':
+        onlyAddEntityStats = true;
         break;
       default:
         cout << endl
@@ -269,7 +277,7 @@ int main(int argc, char** argv) {
     index.setPrefixCompression(useCompression);
     index.setEntityStats(entityStats);
     index.setContextFile(wordsfile);
-    if (!onlyAddTextIndex) {
+    if (!onlyAddTextIndex && !onlyAddEntityStats) {
       // if onlyAddTextIndex is true, we do not want to construct an index,
       // but assume that it  already exists (especially we need a valid
       // vocabulary for  text  index  creation)
@@ -283,11 +291,19 @@ int main(int argc, char** argv) {
       }
     }
 
-    if (wordsfile.size() > 0) {
+    if (onlyAddEntityStats) {
+      if (ntFile.size() > 0) {
+        index.addEntityStats<NTriplesParser>(ntFile);
+      } else if (tsvFile.size() > 0) {
+        index.addEntityStats<TsvParser>(tsvFile);
+      }
+    }
+
+    if (wordsfile.size() > 0 && !(onlyAddEntityStats && !onlyAddTextIndex)) {
       index.addTextFromContextFile(wordsfile);
     }
 
-    if (docsfile.size() > 0) {
+    if (docsfile.size() > 0 && !onlyAddEntityStats) {
       index.buildDocsDB(docsfile);
     }
   } catch (ad_semsearch::Exception& e) {

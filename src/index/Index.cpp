@@ -110,7 +110,7 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
   if (_entityStats) {
     ExtVec stats = computeEntityStats(idTriples);
     createPermutationPair<IndexMetaDataHmap>(
-        &idTriples, Permutation::Pso, Permutation::Pos, false, false, true);
+        &stats, Permutation::Pso, Permutation::Pos, false, false, true);
   }
   if (allPermutations) {
     // also create Patterns after the Spo permutation
@@ -737,6 +737,53 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
 }
 
 // _____________________________________________________________________________
+template <class Parser>
+void Index::addEntityStats(const string& filename) {
+  _vocab = Vocabulary<CompressedString>();
+  readConfigurationFile();
+  _vocab.readFromFile(_onDiskBase + ".vocabulary",
+                      _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
+
+  Parser p(filename);
+  size_t nofLines = 0;
+  array<string, 3> spo;
+  while (p.getLine(spo)) {
+    ++nofLines;
+  }
+  ExtVec idTriples(nofLines);
+  LOG(INFO) << "Making pass over NTriples " << filename
+            << " and creating stxxl vector.\n";
+  Parser p2(filename);
+
+  size_t i = 0;
+  array<Id, 3> spoId;
+  // write using vector_bufwriter
+  ExtVec::bufwriter_type writer(idTriples);
+
+  while (p2.getLine(spo)) {
+    tripleToInternalRepresentation(&spo);
+    _vocab.getId(spo[0], &spoId[0]);
+    _vocab.getId(spo[1], &spoId[1]);
+    _vocab.getId(spo[2], &spoId[2]);
+    writer << spoId;
+    ++i;
+    if (i % 100000 == 0) {
+      LOG(INFO) << "Lines processed: " << i << '\n';
+    }
+  }
+  writer.finish();
+  LOG(INFO) << "Pass done.\n";
+
+  ExtVec stats = computeEntityStats(idTriples);
+  createPermutationPair<IndexMetaDataHmap>(
+      &stats, Permutation::Pso, Permutation::Pos, false, false, true);
+}
+
+// explicit instantiations
+template void Index::addEntityStats<TsvParser>(const string& filename);
+template void Index::addEntityStats<NTriplesParser>(const string& filename);
+
+// _____________________________________________________________________________
 Index::ExtVec Index::computeEntityStats(const ExtVec& vec) {
   if (vec.size() == 0) {
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
@@ -769,6 +816,7 @@ Index::ExtVec Index::computeEntityStats(const ExtVec& vec) {
     LOG(INFO) << "No wordsfile submitted. Skipping ql:num-occurrences stat"
               << std::endl;
   }
+
   ExtVec stats(EntityCountMap.size() + subjectSet.size() + predicateSet.size() +
                objectSet.size() + textOccMap.size());
   ExtVec::bufwriter_type writer(stats);
@@ -808,11 +856,14 @@ void Index::countTextOccurrences(std::unordered_map<Id, size_t>* textOccMap) {
 
   // we have deleted the vocabulary during the index creation to save ram, so
   // now we have to reload it.
-  LOG(INFO) << "Loading vocabulary from disk (needed for correct Ids in text "
-               "index)\n";
-  Vocabulary<string> _vocab;
-  _vocab.readFromFile(_onDiskBase + ".vocabulary",
-                      _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
+  if (_vocab.size() == 0) {
+    LOG(INFO) << "Loading vocabulary from disk (needed for correct Ids in text "
+                 "index)\n";
+    _vocab = Vocabulary<CompressedString>();
+    readConfigurationFile();
+    _vocab.readFromFile(_onDiskBase + ".vocabulary",
+                        _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
+  }
 
   while (p.getLine(line)) {
     if (line._isEntity) {
@@ -1094,6 +1145,20 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
     }
   }
   if (_entityStats) {
+    auto psoName = string(_onDiskBase + ".index.stats.pso");
+    _statsPsoFile.open(psoName, "r");
+    auto posName = string(_onDiskBase + ".index.stats.pos");
+    _statsPosFile.open(posName, "r");
+    AD_CHECK(_psoFile.isOpen() && _posFile.isOpen());
+
+    _statsPsoMeta.readFromFile(&_statsPsoFile);
+    LOG(INFO) << "Registered PSO permutation: " << _statsPsoMeta.statistics()
+              << std::endl;
+    // POS
+    _statsPosMeta.readFromFile(&_statsPosFile);
+    LOG(INFO) << "Registered POS permutation: " << _statsPosMeta.statistics()
+              << std::endl;
+    /*
     _statsPsoFile.open(string(_onDiskBase + ".index.stats.pso").c_str(), "r");
     AD_CHECK(_statsPsoFile.isOpen());
 
@@ -1116,6 +1181,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
     delete[] buf;
     LOG(INFO) << "Registered entity stats POS: " << _statsPosMeta.statistics()
               << std::endl;
+    */
   }
 }
 
