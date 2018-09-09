@@ -151,7 +151,7 @@ int main(int argc, char** argv) {
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:PhAksr:N", options, NULL);
+    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:PhAks:Nr", options, NULL);
     if (c == -1) {
       break;
     }
