@@ -5,8 +5,8 @@
 #include "./Index.h"
 #include <algorithm>
 #include <cmath>
-#include <optional>
 #include <cstdio>
+#include <optional>
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_set>
@@ -109,15 +109,8 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
                                            Permutation::Pos, true);
   if (_entityStats) {
     ExtVec stats = computeEntityStats(idTriples);
-    LOG(INFO) << "Sorting stats for PSO permutation..." << std::endl;
-    stxxl::sort(begin(stats), end(stats), SortByPSO(), STXXL_MEMORY_TO_USE);
-    createPermutationImpl<IndexMetaDataHmap>(indexFilename + ".stats.pso",
-                                             stats, 1, 0, 2);
-    LOG(INFO) << "Sorting stats for POS permutation..." << std::endl;
-    stxxl::sort(begin(stats), end(stats), SortByPOS(), STXXL_MEMORY_TO_USE);
-    LOG(INFO) << "Sort done." << std::endl;
-    createPermutationImpl<IndexMetaDataHmap>(indexFilename + ".stats.pos",
-                                             stats, 1, 2, 0);
+    createPermutationPair<IndexMetaDataHmap>(
+        &idTriples, Permutation::Pso, Permutation::Pos, false, false, true);
   }
   if (allPermutations) {
     // also create Patterns after the Spo permutation
@@ -253,11 +246,10 @@ std::optional<MetaData> Index::createPermutationImpl(const string& fileName,
                                                      size_t c0, size_t c1,
                                                      size_t c2) {
   MetaData metaData;
-  if
-    constexpr(metaData._isMmapBased) {
-      metaData.setup(_totalVocabularySize, FullRelationMetaData::empty,
-                     fileName + MMAP_FILE_SUFFIX);
-    }
+  if constexpr (metaData._isMmapBased) {
+    metaData.setup(_totalVocabularySize, FullRelationMetaData::empty,
+                   fileName + MMAP_FILE_SUFFIX);
+  }
 
   if (vec.size() == 0) {
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
@@ -317,7 +309,7 @@ std::optional<MetaData> Index::createPermutationImpl(const string& fileName,
 template <class MetaData, class Comparator>
 std::optional<MetaData> Index::createPermutation(
     ExtVec* vec, const Permutation::PermutationImpl<Comparator>& p,
-    bool performUnique) {
+    bool performUnique, bool addedPredicates) {
   LOG(INFO) << "Sorting for " << p._readableName << " permutation..."
             << std::endl;
   stxxl::sort(begin(*vec), end(*vec), p._comp, STXXL_MEMORY_TO_USE);
@@ -332,10 +324,10 @@ std::optional<MetaData> Index::createPermutation(
     LOG(INFO) << "Done: unique." << std::endl;
     LOG(INFO) << "Size after: " << vec->size() << std::endl;
   }
-
-  return createPermutationImpl<MetaData>(_onDiskBase + ".index" + p._fileSuffix,
-                                         *vec, p._keyOrder[0], p._keyOrder[1],
-                                         p._keyOrder[2]);
+  string fileTypeName = (addedPredicates) ? ".index.stats" : ".index";
+  return createPermutationImpl<MetaData>(
+      _onDiskBase + fileTypeName + p._fileSuffix, *vec, p._keyOrder[0],
+      p._keyOrder[1], p._keyOrder[2]);
 }
 
 // ________________________________________________________________________
@@ -343,12 +335,13 @@ template <class MetaData, class Comparator1, class Comparator2>
 void Index::createPermutationPair(
     ExtVec* vec, const Permutation::PermutationImpl<Comparator1>& p1,
     const Permutation::PermutationImpl<Comparator2>& p2, bool performUnique,
-    bool createPatternsAfterFirst) {
-  auto m1 = createPermutation<MetaData>(vec, p1, performUnique);
+    bool createPatternsAfterFirst, bool addedPredicates) {
+  auto m1 =
+      createPermutation<MetaData>(vec, p1, performUnique, addedPredicates);
   if (createPatternsAfterFirst) {
     createPatterns(true, vec);
   }
-  auto m2 = createPermutation<MetaData>(vec, p2, false);
+  auto m2 = createPermutation<MetaData>(vec, p2, false, addedPredicates);
   if (m1 && m2) {
     LOG(INFO) << "Exchanging Multiplicities for " << p1._readableName << " and "
               << p2._readableName << '\n';
@@ -356,9 +349,10 @@ void Index::createPermutationPair(
     LOG(INFO) << "Done" << '\n';
     LOG(INFO) << "Writing MetaData for " << p1._readableName << " and "
               << p2._readableName << '\n';
-    ad_utility::File f1(_onDiskBase + ".index" + p1._fileSuffix, "r+");
+    string fileTypeName = (addedPredicates) ? ".index.stats" : ".index";
+    ad_utility::File f1(_onDiskBase + fileTypeName + p1._fileSuffix, "r+");
     m1.value().appendToFile(&f1);
-    ad_utility::File f2(_onDiskBase + ".index" + p2._fileSuffix, "r+");
+    ad_utility::File f2(_onDiskBase + fileTypeName + p2._fileSuffix, "r+");
     m2.value().appendToFile(&f2);
     LOG(INFO) << "Done" << '\n';
   }

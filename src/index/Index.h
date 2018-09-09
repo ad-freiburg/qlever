@@ -422,7 +422,8 @@ class Index {
   void createPermutationPair(
       ExtVec* vec, const Permutation::PermutationImpl<Comparator1>& p1,
       const Permutation::PermutationImpl<Comparator2>& p2,
-      bool performUnique = false, bool createPatternsAfterFirst = false);
+      bool performUnique = false, bool createPatternsAfterFirst = false,
+      bool addedPredicates = false);
 
   // The pairs of permutations are PSO-POS, OSP-OPS and SPO-SOP
   // the multiplicity of column 1 in partner 1 of the pair is equal to the
@@ -444,7 +445,7 @@ class Index {
   template <class MetaData, class Comparator>
   std::optional<MetaData> createPermutation(
       ExtVec* vec, const Permutation::PermutationImpl<Comparator>& permutation,
-      bool performUnique = false);
+      bool performUnique = false, bool addedPredicates = false);
 
   /**
    * @brief Creates the data required for the "pattern-trick" used for fast
