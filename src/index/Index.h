@@ -262,7 +262,7 @@ class Index {
   void setKeepTempFiles(bool keepTempFiles);
 
   void setOnDiskBase(const std::string& onDiskBase);
- 
+
   void setSettingsFile(const std::string& filename);
 
   void setPrefixCompression(bool compressed);

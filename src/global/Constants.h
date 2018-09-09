@@ -66,4 +66,3 @@ static constexpr uint8_t NUM_COMPRESSION_PREFIXES = 127;
 // compression has been applied to  a word
 static const uint8_t NO_PREFIX_CHAR =
     MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES;
-

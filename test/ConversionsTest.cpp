@@ -322,23 +322,24 @@ TEST(ConversionsTest, isNumeric) {
 
 TEST(ConversionsTest, convertNumericToIndexWordEndToEnd) {
   ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("42")),
-                  "\"42\"^^<http://www.w3.org/2001/XMLSchema#int>");
+            "\"42\"^^<http://www.w3.org/2001/XMLSchema#int>");
   ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("42.3")),
-                  "\"42.3\"^^<http://www.w3.org/2001/XMLSchema#float>");
-  ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("12345678")),
-                  "\"12345678\"^^<http://www.w3.org/2001/XMLSchema#int>");
+            "\"42.3\"^^<http://www.w3.org/2001/XMLSchema#float>");
+  ASSERT_EQ(
+      convertIndexWordToValueLiteral(convertNumericToIndexWord("12345678")),
+      "\"12345678\"^^<http://www.w3.org/2001/XMLSchema#int>");
   ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord(".4")),
-                  "\"0.4\"^^<http://www.w3.org/2001/XMLSchema#float>");
+            "\"0.4\"^^<http://www.w3.org/2001/XMLSchema#float>");
   ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("-12.3")),
-                  "\"-12.3\"^^<http://www.w3.org/2001/XMLSchema#float>");
+            "\"-12.3\"^^<http://www.w3.org/2001/XMLSchema#float>");
   ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("-2")),
-                  "\"-2\"^^<http://www.w3.org/2001/XMLSchema#int>");
+            "\"-2\"^^<http://www.w3.org/2001/XMLSchema#int>");
   ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("0")),
-                  "\"0\"^^<http://www.w3.org/2001/XMLSchema#int>");
+            "\"0\"^^<http://www.w3.org/2001/XMLSchema#int>");
   ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("0.0")),
-                  "\"0.0\"^^<http://www.w3.org/2001/XMLSchema#float>");
+            "\"0.0\"^^<http://www.w3.org/2001/XMLSchema#float>");
   // TODO(schnelle) for whatever reason the actual result becomes 1230
-  //ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("0123")),
+  // ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("0123")),
   //                "\"123\"^^<http://www.w3.org/2001/XMLSchema#int>");
 }
 

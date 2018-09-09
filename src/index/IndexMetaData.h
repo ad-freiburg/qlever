@@ -31,6 +31,7 @@ class WrongFormatException : public std::exception {
  public:
   WrongFormatException(std::string msg) : _msg(std::move(msg)) {}
   const char* what() const throw() { return _msg.c_str(); }
+
  private:
   std::string _msg;
 };
@@ -214,6 +215,5 @@ using IndexMetaDataMmap = IndexMetaData<
     MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>>;
 using IndexMetaDataMmapView = IndexMetaData<
     MetaDataWrapperDense<ad_utility::MmapVectorView<FullRelationMetaData>>>;
-
 
 #include "./IndexMetaDataImpl.h"
