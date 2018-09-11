@@ -744,30 +744,34 @@ void Index::addEntityStats(const string& filename) {
   _vocab.readFromFile(_onDiskBase + ".vocabulary",
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
 
-  Parser p(filename);
+  LOG(DEBUG) << "Counting number of lines of input file\n";
   size_t nofLines = 0;
-  array<string, 3> spo;
-  while (p.getLine(spo)) {
+  string line;
+  std::ifstream in(filename.c_str(), std::ios_base::in);
+  while (std::getline(in, line)) {
     ++nofLines;
   }
+  in.close();
+  LOG(DEBUG) << "Done. " << nofLines << " lines\n";
   ExtVec idTriples(nofLines);
   LOG(INFO) << "Making pass over NTriples " << filename
             << " and creating stxxl vector.\n";
-  Parser p2(filename);
-
+  Parser p(filename);
+  array<string, 3> spo;
   size_t i = 0;
-  array<Id, 3> spoId;
   // write using vector_bufwriter
   ExtVec::bufwriter_type writer(idTriples);
 
-  while (p2.getLine(spo)) {
+  LOG(DEBUG) << "Creating vocabMap\n";
+  google::sparse_hash_map<string, Id> vocabMap = _vocab.asMap();
+  LOG(DEBUG) << "done\n";
+  while (p.getLine(spo)) {
     tripleToInternalRepresentation(&spo);
-    _vocab.getId(spo[0], &spoId[0]);
-    _vocab.getId(spo[1], &spoId[1]);
-    _vocab.getId(spo[2], &spoId[2]);
-    writer << spoId;
+    writer << array<Id, 3>{{vocabMap.find(spo[0])->second,
+                            vocabMap.find(spo[1])->second,
+                            vocabMap.find(spo[2])->second}};
     ++i;
-    if (i % 100000 == 0) {
+    if (i % 10000000 == 0) {
       LOG(INFO) << "Lines processed: " << i << '\n';
     }
   }
