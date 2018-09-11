@@ -18,7 +18,7 @@
 using std::string;
 using std::vector;
 
-class StatScan : public Operation {
+class AddedPredicatesScan : public Operation {
  public:
   enum ScanType {
     POS_BOUND_O = 0,
@@ -27,7 +27,7 @@ class StatScan : public Operation {
     POS_FREE_O = 3
   };
 
-  StatScan(QueryExecutionContext* qec, Id statId, ScanType type);
+  AddedPredicatesScan(QueryExecutionContext* qec, Id statId, ScanType type);
 
   void setSubject(const string& subject) { _subject = subject; }
   void setObject(const string& object) { _object = object; }

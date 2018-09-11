@@ -2,11 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "../src/index/Index.h"
 #include <gtest/gtest.h>
 #include <cstdio>
 #include <fstream>
 #include "../src/global/Pattern.h"
+#include "../src/index/Index.h"
 
 string getStxxlDiskFileName(const string& location, const string& tail) {
   std::ostringstream os;
@@ -676,7 +676,7 @@ TEST(IndexTest, scanTest) {
   remove("_testindex.index.pos");
 };
 
-TEST(IndexTest, computeEntityStatsTest) {
+TEST(IndexTest, computeAddedPredicatesTest) {
   string location = "./";
   string tail = "";
   writeStxxlConfigFile(location, tail);
@@ -712,37 +712,37 @@ TEST(IndexTest, computeEntityStatsTest) {
     f2.close();
     {
       Index index;
-      index.setEntityStats(true);
+      index.setAddedPredicates(true);
       index.setContextFile("_testtmp5.tsv");
       index.setOnDiskBase("_testindex");
       index.createFromFile<TsvParser>("_testtmp4.tsv", false);
     }
     Index index;
-    index.setEntityStats(true);
+    index.setAddedPredicates(true);
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_TRUE(index._statsPsoMeta.relationExists(0));  // num-triples
-    ASSERT_TRUE(index._statsPsoMeta.relationExists(1));  // entity-type
-    ASSERT_TRUE(index._statsPsoMeta.relationExists(2));  // num-occurrences
-    ASSERT_FALSE(index._statsPsoMeta.relationExists(3));
-    ASSERT_TRUE(index._statsPsoMeta.getRmd(0).isFunctional());
-    ASSERT_TRUE(index._statsPsoMeta.getRmd(1).isFunctional());
-    ASSERT_TRUE(index._statsPsoMeta.getRmd(2).isFunctional());
+    ASSERT_TRUE(index._addedPsoMeta.relationExists(0));  // num-triples
+    ASSERT_TRUE(index._addedPsoMeta.relationExists(1));  // entity-type
+    ASSERT_TRUE(index._addedPsoMeta.relationExists(2));  // num-occurrences
+    ASSERT_FALSE(index._addedPsoMeta.relationExists(3));
+    ASSERT_TRUE(index._addedPsoMeta.getRmd(0).isFunctional());
+    ASSERT_TRUE(index._addedPsoMeta.getRmd(1).isFunctional());
+    ASSERT_TRUE(index._addedPsoMeta.getRmd(2).isFunctional());
 
-    ASSERT_TRUE(index._statsPosMeta.relationExists(0));
-    ASSERT_TRUE(index._statsPosMeta.relationExists(1));
-    ASSERT_TRUE(index._statsPosMeta.relationExists(2));
-    ASSERT_FALSE(index._statsPosMeta.relationExists(3));
-    ASSERT_FALSE(index._statsPosMeta.getRmd(0).isFunctional());
-    ASSERT_FALSE(index._statsPosMeta.getRmd(1).isFunctional());
-    ASSERT_FALSE(index._statsPosMeta.getRmd(2).isFunctional());
+    ASSERT_TRUE(index._addedPosMeta.relationExists(0));
+    ASSERT_TRUE(index._addedPosMeta.relationExists(1));
+    ASSERT_TRUE(index._addedPosMeta.relationExists(2));
+    ASSERT_FALSE(index._addedPosMeta.relationExists(3));
+    ASSERT_FALSE(index._addedPosMeta.getRmd(0).isFunctional());
+    ASSERT_FALSE(index._addedPosMeta.getRmd(1).isFunctional());
+    ASSERT_FALSE(index._addedPosMeta.getRmd(2).isFunctional());
 
-    ASSERT_TRUE(index._statsPsoMeta.relationExists(0));
+    ASSERT_TRUE(index._addedPsoMeta.relationExists(0));
 
-    ad_utility::File statsPsoFile("_testindex.index.stats.pso", "r");
-    size_t nofbytes = static_cast<size_t>(index._statsPsoMeta.getOffsetAfter());
+    ad_utility::File addedPsoFile("_testindex.added.pso", "r");
+    size_t nofbytes = static_cast<size_t>(index._addedPsoMeta.getOffsetAfter());
     unsigned char* buf = new unsigned char[nofbytes];
-    statsPsoFile.read(buf, nofbytes);
+    addedPsoFile.read(buf, nofbytes);
     off_t bytesDone = 0;
 
     // num-triples
@@ -815,18 +815,18 @@ TEST(IndexTest, computeEntityStatsTest) {
     ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
 
-    ASSERT_EQ(index._statsPsoMeta.getOffsetAfter(), bytesDone);
+    ASSERT_EQ(index._addedPsoMeta.getOffsetAfter(), bytesDone);
 
     delete[] buf;
-    statsPsoFile.close();
+    addedPsoFile.close();
 
     remove("_testtmp4.tsv");
     remove("_testtmp5.tsv");
     std::remove(stxxlFileName.c_str());
     remove("_testindex.index.pso");
     remove("_testindex.index.pos");
-    remove("_testindex.index.stats.pos");
-    remove("_testindex.index.stats.pso");
+    remove("_testindex.added.pos");
+    remove("_testindex.added.pso");
   }
 }
 
