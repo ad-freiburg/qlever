@@ -848,7 +848,7 @@ Index::ExtVec Index::computeAddedPredicates(const ExtVec& vec) {
     writer << array<Id, 3>{{it->first, Id(2), it->second}};
   }
   writer.finish();
-  LOG(INFO) << "Done collecting stats.\n";
+  LOG(INFO) << "Done collecting info for added predicates.\n";
   return stats;
 }
 

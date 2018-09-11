@@ -715,6 +715,7 @@ TEST(IndexTest, computeAddedPredicatesTest) {
       index.setAddedPredicates(true);
       index.setContextFile("_testtmp5.tsv");
       index.setOnDiskBase("_testindex");
+      index.setPrefixCompression(false);
       index.createFromFile<TsvParser>("_testtmp4.tsv", false);
     }
     Index index;
