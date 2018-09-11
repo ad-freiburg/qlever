@@ -5,6 +5,7 @@
 #include "./QueryPlanner.h"
 #include <algorithm>
 #include "../parser/ParseException.h"
+#include "AddedPredicatesScan.h"
 #include "CountAvailablePredicates.h"
 #include "Distinct.h"
 #include "Filter.h"
@@ -15,7 +16,6 @@
 #include "OptionalJoin.h"
 #include "OrderBy.h"
 #include "Sort.h"
-#include "StatScan.h"
 #include "TextOperationWithFilter.h"
 #include "TextOperationWithoutFilter.h"
 #include "TwoColumnJoin.h"
@@ -659,16 +659,22 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           plan._idsOfIncludedNodes |= (1 << i);
           auto& tree = *plan._qet.get();
           if (isVariable(node._triple._s)) {
-            std::shared_ptr<Operation> statScan(
-                new StatScan(_qec, statId, StatScan::ScanType::POS_BOUND_O));
-            static_cast<StatScan*>(statScan.get())->setObject(node._triple._o);
-            tree.setOperation(QueryExecutionTree::SCAN_STATS, statScan);
+            std::shared_ptr<Operation> addedPredicatesScan(
+                new AddedPredicatesScan(
+                    _qec, statId, AddedPredicatesScan::ScanType::POS_BOUND_O));
+            static_cast<AddedPredicatesScan*>(addedPredicatesScan.get())
+                ->setObject(node._triple._o);
+            tree.setOperation(QueryExecutionTree::SCAN_ADDED_PREDICATES,
+                              addedPredicatesScan);
             tree.setVariableColumn(node._triple._s, 0);
           } else {
-            std::shared_ptr<Operation> statScan(
-                new StatScan(_qec, statId, StatScan::ScanType::PSO_BOUND_S));
-            static_cast<StatScan*>(statScan.get())->setSubject(node._triple._s);
-            tree.setOperation(QueryExecutionTree::SCAN_STATS, statScan);
+            std::shared_ptr<Operation> addedPredicatesScan(
+                new AddedPredicatesScan(
+                    _qec, statId, AddedPredicatesScan::ScanType::PSO_BOUND_S));
+            static_cast<AddedPredicatesScan*>(addedPredicatesScan.get())
+                ->setSubject(node._triple._s);
+            tree.setOperation(QueryExecutionTree::SCAN_ADDED_PREDICATES,
+                              addedPredicatesScan);
             tree.setVariableColumn(node._triple._o, 0);
           }
           seeds.push_back(plan);
@@ -677,22 +683,26 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             SubtreePlan plan(_qec);
             plan._idsOfIncludedNodes |= (1 << i);
             auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> statScan(
-                new StatScan(_qec, statId, StatScan::ScanType::PSO_FREE_S));
+            std::shared_ptr<Operation> addedPredicatesScan(
+                new AddedPredicatesScan(
+                    _qec, statId, AddedPredicatesScan::ScanType::PSO_FREE_S));
             tree.setVariableColumn(node._triple._s, 0);
             tree.setVariableColumn(node._triple._o, 1);
-            tree.setOperation(QueryExecutionTree::SCAN_STATS, statScan);
+            tree.setOperation(QueryExecutionTree::SCAN_ADDED_PREDICATES,
+                              addedPredicatesScan);
             seeds.push_back(plan);
           }
           {
             SubtreePlan plan(_qec);
             plan._idsOfIncludedNodes |= (1 << i);
             auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> statScan(
-                new StatScan(_qec, statId, StatScan::ScanType::PSO_FREE_S));
+            std::shared_ptr<Operation> addedPredicatesScan(
+                new AddedPredicatesScan(
+                    _qec, statId, AddedPredicatesScan::ScanType::PSO_FREE_S));
             tree.setVariableColumn(node._triple._s, 0);
             tree.setVariableColumn(node._triple._o, 1);
-            tree.setOperation(QueryExecutionTree::SCAN_STATS, statScan);
+            tree.setOperation(QueryExecutionTree::SCAN_ADDED_PREDICATES,
+                              addedPredicatesScan);
             seeds.push_back(plan);
           }
         }

@@ -78,7 +78,7 @@ class Index {
   void addTextFromOnDiskIndex();
 
   template <class Parser>
-  void addEntityStats(const string& filename);
+  void addPredicates(const string& filename);
 
   // Checks if the index is ready for use, i.e. it is properly intitialized.
   bool ready() const;
@@ -111,7 +111,7 @@ class Index {
   size_t sizeEstimate(const string& sub, const string& pred,
                       const string& obj) const;
 
-  size_t statSizeEstimate(const Id& predId) const;
+  size_t addedPredicatesSizeEstimate(const Id& predId) const;
 
   std::optional<string> idToOptionalString(Id id) const {
     return _vocab.idToOptionalString(id);
@@ -138,11 +138,11 @@ class Index {
 
   void scanOSP(const string& object, WidthTwoList* result) const;
 
-  void scanStatsPso(Id statId, const string& subject,
-                    WidthOneList* result) const;
+  void scanAddedPredicatesPso(Id statId, const string& subject,
+                              WidthOneList* result) const;
 
-  void scanStatsPos(Id statId, const string& object,
-                    WidthOneList* result) const;
+  void scanAddedPredicatesPos(Id statId, const string& object,
+                              WidthOneList* result) const;
 
   void scanPSO(Id predicate, WidthTwoList* result) const;
   void scanPOS(Id predicate, WidthTwoList* result) const;
@@ -150,8 +150,8 @@ class Index {
   void scanSOP(Id subject, WidthTwoList* result) const;
   void scanOPS(Id object, WidthTwoList* result) const;
   void scanOSP(Id object, WidthTwoList* result) const;
-  void scanStatsPso(Id statId, WidthTwoList* result) const;
-  void scanStatsPos(Id statId, WidthTwoList* result) const;
+  void scanAddedPredicatesPso(Id statId, WidthTwoList* result) const;
+  void scanAddedPredicatesPos(Id statId, WidthTwoList* result) const;
 
   const vector<PatternID>& getHasPattern() const;
   const CompactStringVector<Id, Id>& getHasPredicate() const;
@@ -181,8 +181,8 @@ class Index {
   vector<float> getSOPMultiplicities(const string& key) const;
   vector<float> getOSPMultiplicities(const string& key) const;
   vector<float> getOPSMultiplicities(const string& key) const;
-  vector<float> getStatsPsoMultiplicities(const Id& keyId) const;
-  vector<float> getStatsPosMultiplicities(const Id& keyId) const;
+  vector<float> getAddedPredicatesPsoMultiplicities(const Id& keyId) const;
+  vector<float> getAddedPredicatesPosMultiplicities(const Id& keyId) const;
 
   // Get multiplicities for full scans (dummy)
   vector<float> getPSOMultiplicities() const;
@@ -284,7 +284,7 @@ class Index {
 
   void setPrefixCompression(bool compressed);
 
-  void setEntityStats(bool entityStats);
+  void setAddedPredicates(bool addedPredicates);
 
   void setContextFile(const std::string& contextFile);
 
@@ -331,7 +331,7 @@ class Index {
   string _settingsFileName;
   bool _onDiskLiterals = false;
   bool _keepTempFiles = false;
-  bool _entityStats = false;
+  bool _addedPredicates = false;
   string _contextFile;
   json _configurationJson;
   Vocabulary<CompressedString> _vocab;
@@ -345,8 +345,8 @@ class Index {
   IndexMetaDataMmapView _sopMeta;
   IndexMetaDataMmapView _ospMeta;
   IndexMetaDataMmapView _opsMeta;
-  IndexMetaDataHmap _statsPsoMeta;
-  IndexMetaDataHmap _statsPosMeta;
+  IndexMetaDataHmap _addedPsoMeta;
+  IndexMetaDataHmap _addedPosMeta;
   TextMetaData _textMeta;
   DocsDB _docsDB;
   vector<Id> _blockBoundaries;
@@ -358,8 +358,8 @@ class Index {
   mutable ad_utility::File _ospFile;
   mutable ad_utility::File _opsFile;
   mutable ad_utility::File _textIndexFile;
-  mutable ad_utility::File _statsPsoFile;
-  mutable ad_utility::File _statsPosFile;
+  mutable ad_utility::File _addedPsoFile;
+  mutable ad_utility::File _addedPosFile;
 
   // Pattern trick data
   static const uint32_t PATTERNS_FILE_VERSION;
@@ -470,7 +470,7 @@ class Index {
   // creation
   void createPatterns(bool vecAlreadySorted, ExtVec* idTriples);
 
-  ExtVec computeEntityStats(const ExtVec& vec);
+  ExtVec computeAddedPredicates(const ExtVec& vec);
 
   void countTextOccurrences(std::unordered_map<Id, size_t>* textOccMap);
 
@@ -567,7 +567,7 @@ class Index {
   friend class IndexTest_createFromTsvTest_Test;
   friend class IndexTest_createFromOnDiskIndexTest_Test;
   friend class CreatePatternsFixture_createPatterns_Test;
-  friend class IndexTest_computeEntityStatsTest_Test;
+  friend class IndexTest_computeAddedPredicatesTest_Test;
 
   template <class T>
   void writeAsciiListFile(const string& filename, const T& ids) const;
