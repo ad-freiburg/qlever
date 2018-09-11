@@ -178,6 +178,7 @@ class QueryExecutionTree {
             break;
           }
           case ResultTable::ResultType::ENTITY_TYPE: {
+            os << "\"";
             switch (row[validIndices[j].first]) {
               case 0:
                 os << "subject";
@@ -235,6 +236,7 @@ class QueryExecutionTree {
           break;
         }
         case ResultTable::ResultType::ENTITY_TYPE: {
+          os << "\"";
           switch (row[validIndices[validIndices.size() - 1].first]) {
             case 0:
               os << "subject";
