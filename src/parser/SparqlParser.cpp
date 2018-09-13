@@ -290,7 +290,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
     }
   }
   for (const string& filter : filters) {
-    addFilter(filter, currentPattern);
+    addFilter(filter, &currentPattern->_filters);
   }
 }
 
@@ -382,7 +382,7 @@ void SparqlParser::addWhereTriple(const string& str,
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(const string& str,
                                           ParsedQuery& query) {
-  // Split the string at any whitespace but ignoe whitespace inside brackets
+  // Split the string at any whitespace but ignore whitespace inside brackets
   // to allow for alias parsing.
   auto tokens = ad_utility::splitWsWithEscape(str, '(', ')');
   for (size_t i = 0; i < tokens.size(); ++i) {
@@ -391,7 +391,7 @@ void SparqlParser::parseSolutionModifiers(const string& str,
       i += 1;
       while (i + 1 < tokens.size() && tokens[i + 1] != "LIMIT" &&
              tokens[i + 1] != "OFFSET" && tokens[i + 1] != "TEXTLIMIT" &&
-             tokens[i + 1] != "GROUP") {
+             tokens[i + 1] != "GROUP" && tokens[i + 1] != "HAVING") {
         query._orderBy.emplace_back(OrderKey(tokens[i + 1]));
         ++i;
       }
@@ -416,12 +416,20 @@ void SparqlParser::parseSolutionModifiers(const string& str,
         i++;
       }
     }
+    if (tokens[i] == "HAVING" && i < tokens.size() - 1) {
+      while (i + 1 < tokens.size() && tokens[i + 1] != "LIMIT" &&
+             tokens[i + 1] != "OFFSET" && tokens[i + 1] != "TEXTLIMIT" &&
+             tokens[i + 1] != "GROUP" && tokens[i + 1] != "ORDER") {
+        addFilter(tokens[i + 1], &query._havingClauses);
+        i++;
+      }
+    }
   }
 }
 
 // _____________________________________________________________________________
 void SparqlParser::addFilter(const string& str,
-                             ParsedQuery::GraphPattern* pattern) {
+                             vector<SparqlFilter>* _filters) {
   size_t i = str.find('(');
   AD_CHECK(i != string::npos);
   size_t j = str.rfind(')');
@@ -451,7 +459,7 @@ void SparqlParser::addFilter(const string& str,
         f._type = SparqlFilter::LANG_MATCHES;
         f._lhs = lvar;
         f._rhs = rhs.substr(1, rhs.size() - 2);
-        pattern->_filters.emplace_back(f);
+        _filters->emplace_back(f);
         return;
       }
       if (pred == "regex") {
@@ -461,7 +469,7 @@ void SparqlParser::addFilter(const string& str,
         f._rhs = rhs.substr(1, rhs.size() - 2);
         f._regexIgnoreCase =
             (parts.size() == 3 && ad_utility::strip(parts[2], ' ') == "\"i\"");
-        pattern->_filters.emplace_back(f);
+        _filters->emplace_back(f);
         return;
       }
       if (pred == "prefix") {
@@ -482,8 +490,8 @@ void SparqlParser::addFilter(const string& str,
         upper += rhs[rhs.size() - 2] + 1;
         upper += rhs.back();
         f2._rhs = upper;
-        pattern->_filters.emplace_back(f1);
-        pattern->_filters.emplace_back(f2);
+        _filters->emplace_back(f1);
+        _filters->emplace_back(f2);
         return;
       }
     }
@@ -545,7 +553,7 @@ void SparqlParser::addFilter(const string& str,
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
              "Filter not supported yet: " + filter);
   }
-  pattern->_filters.emplace_back(f);
+  _filters->emplace_back(f);
 }
 
 // _____________________________________________________________________________
