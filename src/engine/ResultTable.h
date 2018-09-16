@@ -41,7 +41,7 @@ class ResultTable {
 
   size_t _nofColumns;
   // A value >= _nofColumns indicates unsorted data
-  size_t _sortedBy;
+  vector<size_t> _sortedBy;
 
   vector<vector<Id>> _varSizeData;
   void* _fixedSizeData;

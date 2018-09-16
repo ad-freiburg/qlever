@@ -24,30 +24,32 @@ class ScanningJoin : public IndexScan {
 
   virtual ~ScanningJoin();
 
-  virtual string asString() const;
+  virtual string asString(size_t indent = 0) const override;
 
-  virtual size_t getResultWidth() const;
+  virtual size_t getResultWidth() const override;
 
-  virtual size_t resultSortedOn() const { return _subtreeJoinCol; }
+  virtual vector<size_t> resultSortedOn() const override {
+    return {_subtreeJoinCol};
+  }
 
   virtual void setTextLimit(size_t limit) { _subtree->setTextLimit(limit); }
 
   virtual size_t getSizeEstimate() { return _subtree->getSizeEstimate(); }
 
-  virtual float getMultiplicity(size_t col) {
+  virtual float getMultiplicity(size_t col) override {
     return _subtree->getMultiplicity(col);
   }
 
-  virtual size_t getCostEstimate() {
+  virtual size_t getCostEstimate() override {
     return _subtree->getSizeEstimate() + getSizeEstimate() * 10;
   }
 
-  virtual bool knownEmptyResult() {
+  virtual bool knownEmptyResult() override {
     return _subtree->knownEmptyResult() || IndexScan::knownEmptyResult();
   }
 
  private:
   QueryExecutionTree* _subtree;
   size_t _subtreeJoinCol;
-  virtual void computeResult(ResultTable* result) const;
+  virtual void computeResult(ResultTable* result) const override;
 };

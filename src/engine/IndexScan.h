@@ -29,7 +29,7 @@ class IndexScan : public Operation {
     FULL_INDEX_SCAN_OPS = 14
   };
 
-  virtual string asString(size_t indent = 0) const;
+  virtual string asString(size_t indent = 0) const override;
 
   IndexScan(QueryExecutionContext* qec, ScanType type)
       : Operation(qec),
@@ -50,26 +50,26 @@ class IndexScan : public Operation {
     }
   }
 
-  virtual size_t getResultWidth() const;
+  virtual size_t getResultWidth() const override;
 
-  virtual size_t resultSortedOn() const { return 0; }
+  virtual vector<size_t> resultSortedOn() const override;
 
-  virtual void setTextLimit(size_t) {
+  virtual void setTextLimit(size_t) override {
     // Do nothing.
   }
 
-  virtual size_t getSizeEstimate() {
+  virtual size_t getSizeEstimate() override {
     if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
       _sizeEstimate = computeSizeEstimate();
     }
     return _sizeEstimate;
   }
 
-  virtual size_t getCostEstimate() { return getSizeEstimate(); }
+  virtual size_t getCostEstimate() override { return getSizeEstimate(); }
 
   void determineMultiplicities();
 
-  virtual float getMultiplicity(size_t col) {
+  virtual float getMultiplicity(size_t col) override {
     if (_multiplicity.size() == 0) {
       determineMultiplicities();
     }
@@ -79,7 +79,7 @@ class IndexScan : public Operation {
 
   void precomputeSizeEstimate() { _sizeEstimate = computeSizeEstimate(); }
 
-  virtual bool knownEmptyResult() { return getSizeEstimate() == 0; }
+  virtual bool knownEmptyResult() override { return getSizeEstimate() == 0; }
 
   ScanType getType() const { return _type; }
 
@@ -91,7 +91,7 @@ class IndexScan : public Operation {
   size_t _sizeEstimate;
   vector<float> _multiplicity;
 
-  virtual void computeResult(ResultTable* result) const;
+  virtual void computeResult(ResultTable* result) const override;
 
   void computePSOboundS(ResultTable* result) const;
 

@@ -22,36 +22,36 @@ class TextOperationWithFilter : public Operation {
                           std::shared_ptr<QueryExecutionTree> filterResult,
                           size_t filterColumn, size_t textLimit = 1);
 
-  virtual string asString(size_t indent) const;
+  virtual string asString(size_t indent) const override;
 
-  virtual size_t getResultWidth() const;
+  virtual size_t getResultWidth() const override;
 
-  virtual size_t resultSortedOn() const {
+  virtual vector<size_t> resultSortedOn() const override {
     // unsorted, obtained from iterating over a hash map.
-    return std::numeric_limits<size_t>::max();
+    return {};
   }
 
-  virtual void setTextLimit(size_t limit) {
+  virtual void setTextLimit(size_t limit) override {
     _textLimit = limit;
     _filterResult->setTextLimit(limit);
     _sizeEstimate = std::numeric_limits<size_t>::max();
     _multiplicities.clear();
   }
 
-  virtual size_t getSizeEstimate();
-  virtual size_t getCostEstimate();
+  virtual size_t getSizeEstimate() override;
+  virtual size_t getCostEstimate() override;
 
   const string& getWordPart() const { return _words; }
 
   size_t getNofVars() const { return _nofVars; }
 
-  virtual bool knownEmptyResult() {
+  virtual bool knownEmptyResult() override {
     return _filterResult->knownEmptyResult() ||
            (_executionContext &&
             _executionContext->getIndex().getSizeEstimate(_words) == 0);
   }
 
-  virtual float getMultiplicity(size_t col);
+  virtual float getMultiplicity(size_t col) override;
 
  private:
   string _words;
@@ -66,5 +66,5 @@ class TextOperationWithFilter : public Operation {
 
   void computeMultiplicities();
 
-  virtual void computeResult(ResultTable* result) const;
+  virtual void computeResult(ResultTable* result) const override;
 };

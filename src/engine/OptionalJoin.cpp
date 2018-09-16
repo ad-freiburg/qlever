@@ -255,7 +255,14 @@ size_t OptionalJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-size_t OptionalJoin::resultSortedOn() const { return _joinColumns[0][0]; }
+vector<size_t> OptionalJoin::resultSortedOn() const {
+  std::vector<size_t> sortedOn;
+  // The result is sorted on all join columns from the left subtree.
+  for (const auto& a : _joinColumns) {
+    sortedOn.push_back(a[0]);
+  }
+  return sortedOn;
+}
 
 // _____________________________________________________________________________
 float OptionalJoin::getMultiplicity(size_t col) {

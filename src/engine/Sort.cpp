@@ -77,7 +77,7 @@ void Sort::computeResult(ResultTable* result) const {
       break;
     }
   }
-  result->_sortedBy = _sortCol;
+  result->_sortedBy = resultSortedOn();
   result->finish();
   LOG(DEBUG) << "Sort result computation done." << endl;
 }

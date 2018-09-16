@@ -63,7 +63,15 @@ string GroupBy::asString(size_t indent) const {
 
 size_t GroupBy::getResultWidth() const { return _varColMap.size(); }
 
-size_t GroupBy::resultSortedOn() const { return -1; }
+vector<size_t> GroupBy::resultSortedOn() const {
+  vector<size_t> sortedOn;
+  std::unordered_map<string, size_t> subtreeVarCols =
+      _subtree->getVariableColumnMap();
+  for (std::string var : _groupByVariables) {
+    sortedOn.push_back(subtreeVarCols[var]);
+  }
+  return sortedOn;
+}
 
 vector<pair<size_t, bool>> GroupBy::computeSortColumns(
     std::shared_ptr<QueryExecutionTree> inputTree) {

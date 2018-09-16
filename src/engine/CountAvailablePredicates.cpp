@@ -41,9 +41,9 @@ string CountAvailablePredicates::asString(size_t indent) const {
 size_t CountAvailablePredicates::getResultWidth() const { return 2; }
 
 // _____________________________________________________________________________
-size_t CountAvailablePredicates::resultSortedOn() const {
+vector<size_t> CountAvailablePredicates::resultSortedOn() const {
   // The result is not sorted on any column.
-  return std::numeric_limits<size_t>::max();
+  return {};
 }
 
 // _____________________________________________________________________________
@@ -100,7 +100,7 @@ size_t CountAvailablePredicates::getCostEstimate() {
 // _____________________________________________________________________________
 void CountAvailablePredicates::computeResult(ResultTable* result) const {
   result->_nofColumns = 2;
-  result->_sortedBy = 0;
+  result->_sortedBy = resultSortedOn();
   result->_fixedSizeData = new vector<array<Id, 2>>();
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
