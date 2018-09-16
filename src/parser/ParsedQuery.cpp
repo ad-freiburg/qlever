@@ -297,6 +297,9 @@ ParsedQuery::GraphPattern& ParsedQuery::GraphPattern::operator=(
   _whereClauseTriples = std::vector<SparqlTriple>(other._whereClauseTriples);
   _filters = std::vector<SparqlFilter>(other._filters);
   _optional = other._optional;
+  for (GraphPattern* child : _children) {
+    delete child;
+  }
   _children.clear();
   _children.reserve(other._children.size());
   for (const GraphPattern* g : other._children) {

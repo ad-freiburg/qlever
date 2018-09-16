@@ -178,6 +178,9 @@ class QueryPlanner {
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 
+  vector<SubtreePlan> getGroupByRow(
+      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
+
   bool connected(const SubtreePlan& a, const SubtreePlan& b,
                  const TripleGraph& graph) const;
 

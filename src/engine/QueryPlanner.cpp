@@ -134,10 +134,13 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     // as a filter later on).
     finalTab = fillDpTab(tg, pattern->_filters, childPlans);
 
-    // If any form of grouping is used (e.g. the pattern trick) sorting
-    // has to be done after the grouping.
+    if (pattern == &pq._rootGraphPattern && doGrouping && !usePatternTrick) {
+      finalTab.emplace_back(getGroupByRow(pq, finalTab));
+    }
+
+    // If the pattern trick is used sorting has to be done after the grouping.
     if (pattern == &pq._rootGraphPattern && pq._orderBy.size() > 0 &&
-        !doGrouping) {
+        !usePatternTrick) {
       // If there is an order by clause, add another row to the table and
       // just add an order by / sort to every previous result if needed.
       // If the ordering is perfect already, just copy the plan.
@@ -288,39 +291,6 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
 
       final = patternTrickPlan;
     }
-  } else if (doGrouping) {
-    // Create a group by operation to determine on which columns the input
-    // needs to be sorted
-    SubtreePlan groupByPlan(_qec);
-    std::shared_ptr<Operation> groupBy =
-        std::make_shared<GroupBy>(_qec, pq._groupByVariables, pq._aliases);
-    QueryExecutionTree& groupByTree = *groupByPlan._qet.get();
-
-    // Then compute the sort columns
-    std::vector<std::pair<size_t, bool>> sortColumns =
-        static_cast<GroupBy*>(groupBy.get())->computeSortColumns(final._qet);
-
-    const std::vector<size_t>& resultSortedOn =
-        final._qet->getRootOperation()->getResultSortedOn();
-
-    if (!sortColumns.empty() &&
-        !(sortColumns.size() == 1 && resultSortedOn.size() > 0 &&
-          resultSortedOn[0] == sortColumns[0].first)) {
-      // Create an order by operation as required by the group by
-      std::shared_ptr<Operation> orderBy =
-          std::make_shared<OrderBy>(_qec, final._qet, sortColumns);
-      SubtreePlan orderByPlan(_qec);
-      QueryExecutionTree& orderByTree = *orderByPlan._qet.get();
-      orderByTree.setVariableColumns(final._qet->getVariableColumnMap());
-      orderByTree.setOperation(QueryExecutionTree::ORDER_BY, orderBy);
-      final = orderByPlan;
-    }
-
-    static_cast<GroupBy*>(groupBy.get())->setSubtree(final._qet);
-    groupByTree.setVariableColumns(
-        static_cast<GroupBy*>(groupBy.get())->getVariableColumns());
-    groupByTree.setOperation(QueryExecutionTree::GROUP_BY, groupBy);
-    final = groupByPlan;
   }
 
   // create filter operations for the having clauses
@@ -334,9 +304,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     final = plan;
   }
 
-  if (doGrouping) {
-    // Either the pattern trick or another form of grouping is in use
-    // Add the order by operation
+  if (usePatternTrick) {
+    // OrderBy for the pattern trick has to be added after the pattern trick
     if (pq._orderBy.size() > 0) {
       SubtreePlan plan(_qec);
       auto& tree = *plan._qet.get();
@@ -386,11 +355,11 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     const std::vector<size_t>& resultSortedOn =
         final._qet->getRootOperation()->getResultSortedOn();
     // check if the current result is sorted on all columns of the distinct
+    // with the order of the sorting
     bool isSorted = resultSortedOn.size() >= keepIndices.size();
+    size_t lastSortedOnIndex = 0;
     for (size_t i = 0; isSorted && i < keepIndices.size(); i++) {
-      isSorted =
-          isSorted && std::find(resultSortedOn.begin(), resultSortedOn.end(),
-                                keepIndices[i]) != resultSortedOn.end();
+      isSorted = isSorted && resultSortedOn[i] == keepIndices[i];
     }
     if (isSorted) {
       std::shared_ptr<Operation> distinct(
@@ -529,7 +498,7 @@ bool QueryPlanner::checkUsePatternTrick(
                 pq->_rootGraphPattern._whereClauseTriples.begin() + i);
             // Transform filters on the ql:has-relation triple's object that
             // have a static rhs to having clauses
-            for (int i = 0; i < pq->_rootGraphPattern._filters.size(); i++) {
+            for (size_t i = 0; i < pq->_rootGraphPattern._filters.size(); i++) {
               const SparqlFilter& filter = pq->_rootGraphPattern._filters[i];
               if (filter._lhs == t._o && filter._rhs[0] != '?') {
                 pq->_havingClauses.push_back(filter);
@@ -544,6 +513,55 @@ bool QueryPlanner::checkUsePatternTrick(
     }
   }
   return usePatternTrick;
+}
+
+// _____________________________________________________________________________
+vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
+    const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const {
+  const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
+  vector<SubtreePlan> added;
+  added.reserve(previous.size());
+  for (size_t i = 0; i < previous.size(); ++i) {
+    const SubtreePlan* parent = &previous[i];
+    // Create a group by operation to determine on which columns the input
+    // needs to be sorted
+    SubtreePlan groupByPlan(_qec);
+    groupByPlan._idsOfIncludedNodes = parent->_idsOfIncludedNodes;
+    groupByPlan._idsOfIncludedFilters = parent->_idsOfIncludedFilters;
+    std::shared_ptr<Operation> groupBy =
+        std::make_shared<GroupBy>(_qec, pq._groupByVariables, pq._aliases);
+    QueryExecutionTree& groupByTree = *groupByPlan._qet.get();
+
+    // Then compute the sort columns
+    std::vector<std::pair<size_t, bool>> sortColumns =
+        static_cast<GroupBy*>(groupBy.get())->computeSortColumns(parent->_qet);
+
+    const std::vector<size_t>& inputSortedOn =
+        parent->_qet->getRootOperation()->getResultSortedOn();
+
+    bool inputSorted = sortColumns.size() <= inputSortedOn.size();
+    for (size_t i = 0; inputSorted && i < sortColumns.size(); i++) {
+      inputSorted = sortColumns[i].first == inputSortedOn[i];
+    }
+    // Create the plan here to avoid it falling out of context early
+    SubtreePlan orderByPlan(_qec);
+    if (!sortColumns.empty() && !inputSorted) {
+      // Create an order by operation as required by the group by
+      std::shared_ptr<Operation> orderBy =
+          std::make_shared<OrderBy>(_qec, parent->_qet, sortColumns);
+      QueryExecutionTree& orderByTree = *orderByPlan._qet.get();
+      orderByTree.setVariableColumns(parent->_qet->getVariableColumnMap());
+      orderByTree.setOperation(QueryExecutionTree::ORDER_BY, orderBy);
+      parent = &orderByPlan;
+    }
+
+    static_cast<GroupBy*>(groupBy.get())->setSubtree(parent->_qet);
+    groupByTree.setVariableColumns(
+        static_cast<GroupBy*>(groupBy.get())->getVariableColumns());
+    groupByTree.setOperation(QueryExecutionTree::GROUP_BY, groupBy);
+    added.push_back(groupByPlan);
+  }
+  return added;
 }
 
 // _____________________________________________________________________________
@@ -578,13 +596,25 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
         sortIndices.emplace_back(pair<size_t, bool>{
             previous[i]._qet.get()->getVariableColumn(ord._key), ord._desc});
       }
-      std::shared_ptr<Operation> ob(
-          new OrderBy(_qec, previous[i]._qet, sortIndices));
-      tree.setVariableColumns(previous[i]._qet.get()->getVariableColumnMap());
-      tree.setOperation(QueryExecutionTree::ORDER_BY, ob);
-      tree.setContextVars(previous[i]._qet.get()->getContextVars());
+      const std::vector<size_t>& previousSortedOn =
+          previous[i]._qet.get()->resultSortedOn();
+      bool alreadySorted = previousSortedOn.size() >= sortIndices.size();
+      for (size_t i = 0; alreadySorted && i < sortIndices.size(); i++) {
+        alreadySorted = alreadySorted && !sortIndices[i].second &&
+                        sortIndices[i].first == previousSortedOn[i];
+      }
+      if (alreadySorted) {
+        // Already sorted perfectly
+        added.push_back(previous[i]);
+      } else {
+        std::shared_ptr<Operation> ob(
+            new OrderBy(_qec, previous[i]._qet, sortIndices));
+        tree.setVariableColumns(previous[i]._qet.get()->getVariableColumnMap());
+        tree.setOperation(QueryExecutionTree::ORDER_BY, ob);
+        tree.setContextVars(previous[i]._qet.get()->getContextVars());
 
-      added.push_back(plan);
+        added.push_back(plan);
+      }
     }
   }
   return added;
@@ -1308,14 +1338,14 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
   const vector<size_t>& aSortedOn = a._qet.get()->resultSortedOn();
   const vector<size_t>& bSortedOn = b._qet.get()->resultSortedOn();
 
-  bool aSorted = aSortedOn.size() == jcs.size();
+  bool aSorted = aSortedOn.size() >= jcs.size();
   // TODO: We could probably also accept permutations of the join columns
   // as the order of a here and then permute the join columns to match the
   // sorted columns of a or b (whichever is larger).
   for (int i = 0; aSorted && i < jcs.size(); i++) {
     aSorted = aSorted && jcs[i][0] == aSortedOn[i];
   }
-  bool bSorted = bSortedOn.size() == jcs.size();
+  bool bSorted = bSortedOn.size() >= jcs.size();
   for (int i = 0; bSorted && i < jcs.size(); i++) {
     bSorted = bSorted && jcs[i][1] == bSortedOn[i];
   }

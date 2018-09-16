@@ -107,17 +107,15 @@ float GroupBy::getMultiplicity(size_t col) {
 }
 
 size_t GroupBy::getSizeEstimate() {
-  // group by should currently not be used in the optimizer
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-           "GroupBy does not yet compute size estimates.");
-  return 0;
+  // TODO: stub implementation of getSizeEstimate()
+  return _subtree->getSizeEstimate();
 }
 
 size_t GroupBy::getCostEstimate() {
-  // group by should currently not be used in the optimizer
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-           "GroupBy does not yet compute cost estimates.");
-  return 0;
+  // TODO: add the cost of the actual group by operation to the cost.
+  // Currently group by is only added to the optimizer as a terminal operation
+  // and its cost should not affect the optimizers results.
+  return _subtree->getCostEstimate();
 }
 
 template <typename T, typename C>
