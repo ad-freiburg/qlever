@@ -22,7 +22,7 @@ class Operation {
 
   // Typical Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
-      : _executionContext(executionContext) {}
+      : _executionContext(executionContext), _hasComputedSortColumns(false) {}
 
   // Destructor.
   virtual ~Operation() {
@@ -100,7 +100,7 @@ class Operation {
   }
 
   /**
-   * @brief Compute and return the columns un which the result will be sorted
+   * @brief Compute and return the columns on which the result will be sorted
    * @return The columns on which the result will be sorted.
    */
   virtual vector<size_t> resultSortedOn() const = 0;
