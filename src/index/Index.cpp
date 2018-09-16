@@ -10,6 +10,7 @@
 #include <stxxl/algorithm>
 #include <stxxl/map>
 #include <unordered_set>
+#include "../parser/ContextFileParser.h"
 #include "../parser/NTriplesParser.h"
 #include "../parser/TsvParser.h"
 #include "../util/Conversions.h"
@@ -104,9 +105,13 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
     AD_CHECK(false);
   }
   // also perform unique for first permutation
-
   createPermutationPair<IndexMetaDataHmap>(&idTriples, Permutation::Pso,
                                            Permutation::Pos, true);
+  if (_addedPredicates) {
+    ExtVec stats = computeAddedPredicates(idTriples);
+    createPermutationPair<IndexMetaDataHmap>(
+        &stats, Permutation::Pso, Permutation::Pos, false, false, true);
+  }
   if (allPermutations) {
     // also create Patterns after the Spo permutation
     createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Spo,
@@ -304,7 +309,7 @@ std::optional<MetaData> Index::createPermutationImpl(const string& fileName,
 template <class MetaData, class Comparator>
 std::optional<MetaData> Index::createPermutation(
     ExtVec* vec, const Permutation::PermutationImpl<Comparator>& p,
-    bool performUnique) {
+    bool performUnique, bool addedPredicates) {
   LOG(INFO) << "Sorting for " << p._readableName << " permutation..."
             << std::endl;
   stxxl::sort(begin(*vec), end(*vec), p._comp, STXXL_MEMORY_TO_USE);
@@ -319,10 +324,10 @@ std::optional<MetaData> Index::createPermutation(
     LOG(INFO) << "Done: unique." << std::endl;
     LOG(INFO) << "Size after: " << vec->size() << std::endl;
   }
-
-  return createPermutationImpl<MetaData>(_onDiskBase + ".index" + p._fileSuffix,
-                                         *vec, p._keyOrder[0], p._keyOrder[1],
-                                         p._keyOrder[2]);
+  string fileTypeName = (addedPredicates) ? ".added" : ".index";
+  return createPermutationImpl<MetaData>(
+      _onDiskBase + fileTypeName + p._fileSuffix, *vec, p._keyOrder[0],
+      p._keyOrder[1], p._keyOrder[2]);
 }
 
 // ________________________________________________________________________
@@ -330,12 +335,13 @@ template <class MetaData, class Comparator1, class Comparator2>
 void Index::createPermutationPair(
     ExtVec* vec, const Permutation::PermutationImpl<Comparator1>& p1,
     const Permutation::PermutationImpl<Comparator2>& p2, bool performUnique,
-    bool createPatternsAfterFirst) {
-  auto m1 = createPermutation<MetaData>(vec, p1, performUnique);
+    bool createPatternsAfterFirst, bool addedPredicates) {
+  auto m1 =
+      createPermutation<MetaData>(vec, p1, performUnique, addedPredicates);
   if (createPatternsAfterFirst) {
     createPatterns(true, vec);
   }
-  auto m2 = createPermutation<MetaData>(vec, p2, false);
+  auto m2 = createPermutation<MetaData>(vec, p2, false, addedPredicates);
   if (m1 && m2) {
     LOG(INFO) << "Exchanging Multiplicities for " << p1._readableName << " and "
               << p2._readableName << '\n';
@@ -343,9 +349,10 @@ void Index::createPermutationPair(
     LOG(INFO) << "Done" << '\n';
     LOG(INFO) << "Writing MetaData for " << p1._readableName << " and "
               << p2._readableName << '\n';
-    ad_utility::File f1(_onDiskBase + ".index" + p1._fileSuffix, "r+");
+    string fileTypeName = (addedPredicates) ? ".added" : ".index";
+    ad_utility::File f1(_onDiskBase + fileTypeName + p1._fileSuffix, "r+");
     m1.value().appendToFile(&f1);
-    ad_utility::File f2(_onDiskBase + ".index" + p2._fileSuffix, "r+");
+    ad_utility::File f2(_onDiskBase + fileTypeName + p2._fileSuffix, "r+");
     m2.value().appendToFile(&f2);
     LOG(INFO) << "Done" << '\n';
   }
@@ -730,6 +737,157 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
 }
 
 // _____________________________________________________________________________
+template <class Parser>
+void Index::addPredicates(const string& filename) {
+  // TODO(jbuerklin): This Function still uses the nt / tsv input to compute
+  // the additional predicates. Using the pair index from an Index file should
+  // be considerably faster.
+  _vocab = Vocabulary<CompressedString>();
+  readConfigurationFile();
+  _vocab.readFromFile(_onDiskBase + ".vocabulary",
+                      _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
+
+  LOG(DEBUG) << "Counting number of lines of input file\n";
+  size_t nofLines = 0;
+  string line;
+  std::ifstream in(filename.c_str(), std::ios_base::in);
+  while (std::getline(in, line)) {
+    ++nofLines;
+  }
+  in.close();
+  LOG(DEBUG) << "Done. " << nofLines << " lines\n";
+  ExtVec idTriples(nofLines);
+  LOG(INFO) << "Making pass over NTriples " << filename
+            << " and creating stxxl vector.\n";
+  Parser p(filename);
+  array<string, 3> spo;
+  size_t i = 0;
+  // write using vector_bufwriter
+  ExtVec::bufwriter_type writer(idTriples);
+
+  LOG(DEBUG) << "Creating vocabMap\n";
+  google::sparse_hash_map<string, Id> vocabMap = _vocab.asMap();
+  LOG(DEBUG) << "done\n";
+  while (p.getLine(spo)) {
+    tripleToInternalRepresentation(&spo);
+    writer << array<Id, 3>{{vocabMap.find(spo[0])->second,
+                            vocabMap.find(spo[1])->second,
+                            vocabMap.find(spo[2])->second}};
+    ++i;
+    if (i % 10000000 == 0) {
+      LOG(INFO) << "Lines processed: " << i << '\n';
+    }
+  }
+  writer.finish();
+  LOG(INFO) << "Pass done.\n";
+
+  ExtVec stats = computeAddedPredicates(idTriples);
+  createPermutationPair<IndexMetaDataHmap>(
+      &stats, Permutation::Pso, Permutation::Pos, false, false, true);
+}
+
+// explicit instantiations
+template void Index::addPredicates<TsvParser>(const string& filename);
+template void Index::addPredicates<NTriplesParser>(const string& filename);
+
+// _____________________________________________________________________________
+Index::ExtVec Index::computeAddedPredicates(const ExtVec& vec) {
+  if (vec.size() == 0) {
+    LOG(WARN) << "Attempt to write an empty index!" << std::endl;
+  }
+
+  std::unordered_map<Id, size_t> EntityCountMap;
+  std::unordered_map<Id, size_t> textOccMap;
+  std::unordered_set<Id> subjectSet;
+  std::unordered_set<Id> predicateSet;
+  std::unordered_set<Id> objectSet;
+
+  LOG(INFO) << "Counting entities..." << std::endl;
+
+  for (ExtVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
+    ++EntityCountMap[(*reader)[0]];
+    if ((*reader)[1] != (*reader)[0]) {
+      ++EntityCountMap[(*reader)[1]];
+    }
+    if ((*reader)[2] != (*reader)[0] && (*reader)[2] != (*reader)[1]) {
+      ++EntityCountMap[(*reader)[2]];
+    }
+    subjectSet.emplace((*reader)[0]);
+    predicateSet.emplace((*reader)[1]);
+    objectSet.emplace((*reader)[2]);
+  }
+
+  if (_contextFile.size() > 0) {
+    countTextOccurrences(&textOccMap);
+  } else {
+    LOG(INFO) << "No wordsfile submitted. Skipping ql:num-occurrences stat"
+              << std::endl;
+  }
+
+  ExtVec stats(EntityCountMap.size() + subjectSet.size() + predicateSet.size() +
+               objectSet.size() + textOccMap.size());
+  ExtVec::bufwriter_type writer(stats);
+
+  for (auto it = EntityCountMap.begin(); it != EntityCountMap.end(); ++it) {
+    writer << array<Id, 3>{{it->first, Id(0), it->second}};
+  }
+
+  for (auto it = subjectSet.begin(); it != subjectSet.end(); ++it) {
+    writer << array<Id, 3>{{*it, Id(1), Id(0)}};
+  }
+
+  for (auto it = predicateSet.begin(); it != predicateSet.end(); ++it) {
+    writer << array<Id, 3>{{*it, Id(1), Id(1)}};
+  }
+
+  for (auto it = objectSet.begin(); it != objectSet.end(); ++it) {
+    writer << array<Id, 3>{{*it, Id(1), Id(2)}};
+  }
+
+  for (auto it = textOccMap.begin(); it != textOccMap.end(); ++it) {
+    writer << array<Id, 3>{{it->first, Id(2), it->second}};
+  }
+  writer.finish();
+  LOG(INFO) << "Done collecting info for added predicates.\n";
+  return stats;
+}
+
+// _____________________________________________________________________________
+void Index::countTextOccurrences(std::unordered_map<Id, size_t>* textOccMap) {
+  LOG(INFO) << "Making pass over ContextFile " << _contextFile
+            << " and counting text occurrences.\n";
+  ContextFileParser::Line line;
+  ContextFileParser p(_contextFile);
+  size_t i = 0;
+  // write using vector_bufwriter
+
+  // we have deleted the vocabulary during the index creation to save ram, so
+  // now we have to reload it.
+  if (_vocab.size() == 0) {
+    LOG(INFO) << "Loading vocabulary from disk (needed for correct Ids in text "
+                 "index)\n";
+    _vocab = Vocabulary<CompressedString>();
+    readConfigurationFile();
+    _vocab.readFromFile(_onDiskBase + ".vocabulary",
+                        _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
+  }
+
+  while (p.getLine(line)) {
+    if (line._isEntity) {
+      Id eid;
+      if (_vocab.getId(line._word, &eid)) {
+        ++(*textOccMap)[eid];
+      }
+    }
+    ++i;
+    if (i % 10000000 == 0) {
+      LOG(INFO) << "Lines processed: " << i << '\n';
+    }
+  }
+  LOG(INFO) << "Done counting text occurrences\n";
+}
+
+// _____________________________________________________________________________
 pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeRel(
     ad_utility::File& out, off_t currentOffset, Id relId,
     const ad_utility::MmapVector<array<Id, 2>>& data, size_t distinctC1,
@@ -992,6 +1150,21 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
       }
       _hasPredicate.build(hasPredicateTmp);
     }
+  }
+  if (_addedPredicates) {
+    auto psoName = string(_onDiskBase + ".added.pso");
+    _addedPsoFile.open(psoName, "r");
+    auto posName = string(_onDiskBase + ".added.pos");
+    _addedPosFile.open(posName, "r");
+    AD_CHECK(_psoFile.isOpen() && _posFile.isOpen());
+
+    _addedPsoMeta.readFromFile(&_addedPsoFile);
+    LOG(INFO) << "Registered added predicates PSO permutation: "
+              << _addedPsoMeta.statistics() << std::endl;
+    // POS
+    _addedPosMeta.readFromFile(&_addedPosFile);
+    LOG(INFO) << "Registered added predicates POS permutation: "
+              << _addedPosMeta.statistics() << std::endl;
   }
 }
 
@@ -1308,6 +1481,147 @@ void Index::scanOPS(Id object, Index::WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
+void Index::scanAddedPredicatesPso(Id statId,
+                                   Index::WidthTwoList* result) const {
+  if (!_addedPsoFile.isOpen()) {
+    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+             "Cannot use stat relations without the required "
+             "index permutations. Build an index with option -s "
+             "to use this feature.");
+  }
+  if (_addedPsoMeta.relationExists(statId)) {
+    const FullRelationMetaData& rmd = _addedPsoMeta.getRmd(statId)._rmdPairs;
+    result->reserve(rmd.getNofElements() + 2);
+    result->resize(rmd.getNofElements());
+    _addedPsoFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
+                       rmd._startFullIndex);
+  }
+}
+
+// _____________________________________________________________________________
+void Index::scanAddedPredicatesPso(Id statId, const string& subject,
+                                   WidthOneList* result) const {
+  LOG(DEBUG) << "Performing stat scan of relation " << statId
+             << " with fixed subject: " << subject << "...\n";
+
+  Id subjId;
+  if (_vocab.getId(subject, &subjId)) {
+    if (_addedPsoMeta.relationExists(statId)) {
+      auto rmd = _addedPsoMeta.getRmd(statId);
+      if (rmd.hasBlocks()) {
+        pair<off_t, size_t> blockOff =
+            rmd._rmdBlocks->getBlockStartAndNofBytesForLhs(subjId);
+        // Functional relations have blocks point into the pair index,
+        // non-functional relations have them point into lhs lists
+        if (rmd.isFunctional()) {
+          scanFunctionalRelation(blockOff, subjId, _addedPsoFile, result);
+        } else {
+          pair<off_t, size_t> block2 =
+              rmd._rmdBlocks->getFollowBlockForLhs(subjId);
+          scanNonFunctionalRelation(blockOff, block2, subjId, _addedPsoFile,
+                                    rmd._rmdBlocks->_offsetAfter, result);
+        }
+      } else {
+        // If we don't have blocks, scan the whole relation and filter /
+        // restrict.
+        WidthTwoList fullRelation;
+        fullRelation.resize(rmd.getNofElements());
+        _addedPsoFile.read(fullRelation.data(),
+                           rmd.getNofElements() * 2 * sizeof(Id),
+                           rmd._rmdPairs._startFullIndex);
+        getRhsForSingleLhs(fullRelation, subjId, result);
+      }
+    } else {
+      LOG(DEBUG) << "No such relation.\n";
+    }
+  } else {
+    LOG(DEBUG) << "No such subject.\n";
+  }
+  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
+}
+
+// _____________________________________________________________________________
+void Index::scanAddedPredicatesPos(Id statId,
+                                   Index::WidthTwoList* result) const {
+  if (!_addedPosFile.isOpen()) {
+    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+             "Cannot use ql:num-triples without the required "
+             "index permutations. Build an index with option -s "
+             "to use this feature.");
+  }
+  if (_addedPosMeta.relationExists(statId)) {
+    const FullRelationMetaData& rmd = _addedPosMeta.getRmd(statId)._rmdPairs;
+    result->reserve(rmd.getNofElements() + 2);
+    result->resize(rmd.getNofElements());
+    _addedPosFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
+                       rmd._startFullIndex);
+  }
+}
+
+// _____________________________________________________________________________
+void Index::scanAddedPredicatesPos(Id statId, const string& object,
+                                   WidthOneList* result) const {
+  LOG(DEBUG) << "Performing stat scan of relation " << statId
+             << " with fixed object: " << object << "...\n";
+
+  Id objId;
+  if (statId == 0) {
+    size_t idx;
+    try {
+      objId = Id(std::stoi(object, &idx, 10));
+      if (idx != object.size()) {
+        objId = 0;
+      }
+    } catch (const std::invalid_argument&) {
+      objId = 0;
+    }
+    if (objId == 0) {
+      LOG(DEBUG) << "No valid number.\n";
+      return;
+    }
+  } else {
+    if (object == SUBJECT_TYPE) {
+      objId = Id(0);
+    } else if (object == PREDICATE_TYPE) {
+      objId = Id(1);
+    } else if (object == OBJECT_TYPE) {
+      objId = Id(2);
+    } else {
+      objId = Id(4);
+    }
+  }
+  if (_addedPosMeta.relationExists(statId)) {
+    auto rmd = _addedPosMeta.getRmd(statId);
+    if (rmd.hasBlocks()) {
+      pair<off_t, size_t> blockOff =
+          rmd._rmdBlocks->getBlockStartAndNofBytesForLhs(objId);
+      // Functional relations have blocks point into the pair index,
+      // non-functional relations have them point into lhs lists
+      if (rmd.isFunctional()) {
+        scanFunctionalRelation(blockOff, objId, _addedPosFile, result);
+      } else {
+        pair<off_t, size_t> block2 =
+            rmd._rmdBlocks->getFollowBlockForLhs(objId);
+        scanNonFunctionalRelation(blockOff, block2, objId, _addedPosFile,
+                                  rmd._rmdBlocks->_offsetAfter, result);
+      }
+    } else {
+      // If we don't have blocks, scan the whole relation and filter /
+      // restrict.
+      WidthTwoList fullRelation;
+      fullRelation.resize(rmd.getNofElements());
+      _addedPosFile.read(fullRelation.data(),
+                         rmd.getNofElements() * 2 * sizeof(Id),
+                         rmd._rmdPairs._startFullIndex);
+      getRhsForSingleLhs(fullRelation, objId, result);
+    }
+  } else {
+    LOG(DEBUG) << "No such relation.\n";
+  }
+  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
+}
+
+// _____________________________________________________________________________
 void Index::throwExceptionIfNoPatterns() const {
   if (!_usePatterns) {
     AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
@@ -1408,6 +1722,14 @@ void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
 }
 
 // _____________________________________________________________________________
+size_t Index::statCardinality(const Id& predId) const {
+  if (this->_addedPsoMeta.relationExists(predId)) {
+    return this->_addedPsoMeta.getRmd(predId).getNofElements();
+  }
+  return 0;
+}
+
+// _____________________________________________________________________________
 size_t Index::relationCardinality(const string& relationName) const {
   if (relationName == INTERNAL_TEXT_MATCH_PREDICATE) {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
@@ -1441,6 +1763,11 @@ size_t Index::objectCardinality(const string& obj) const {
     }
   }
   return 0;
+}
+
+// _____________________________________________________________________________
+size_t Index::addedPredicatesSizeEstimate(const Id& predId) const {
+  return statCardinality(predId);
 }
 
 // _____________________________________________________________________________
@@ -1496,6 +1823,40 @@ bool Index::isLiteral(const string& object) {
 // _____________________________________________________________________________
 bool Index::shouldBeExternalized(const string& object) {
   return _vocab.shouldBeExternalized(object);
+}
+
+// _____________________________________________________________________________
+vector<float> Index::getAddedPredicatesPsoMultiplicities(
+    const Id& keyId) const {
+  vector<float> res;
+  if (_addedPsoMeta.relationExists(keyId)) {
+    auto rmd = _addedPsoMeta.getRmd(keyId);
+    auto logM1 = rmd.getCol1LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM1)));
+    auto logM2 = rmd.getCol2LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM2)));
+  } else {
+    res.push_back(1);
+    res.push_back(1);
+  }
+  return res;
+}
+
+// _____________________________________________________________________________
+vector<float> Index::getAddedPredicatesPosMultiplicities(
+    const Id& keyId) const {
+  vector<float> res;
+  if (_addedPosMeta.relationExists(keyId)) {
+    auto rmd = _addedPosMeta.getRmd(keyId);
+    auto logM1 = rmd.getCol1LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM1)));
+    auto logM2 = rmd.getCol2LogMultiplicity();
+    res.push_back(static_cast<float>(pow(2, logM2)));
+  } else {
+    res.push_back(1);
+    res.push_back(1);
+  }
+  return res;
 }
 
 // _____________________________________________________________________________
@@ -1750,4 +2111,14 @@ void Index::initializeVocabularySettingsBuild() {
     _vocab.initializeExternalizePrefixes(j["prefixes-external"]);
     _configurationJson["prefixes-external"] = j["prefixes-external"];
   }
+}
+
+// _____________________________________________________________________________
+void Index::setAddedPredicates(bool addedPredicates) {
+  _addedPredicates = addedPredicates;
+}
+
+// ____________________________________________________________________________
+void Index::setContextFile(const std::string& contextFile) {
+  _contextFile = contextFile;
 }

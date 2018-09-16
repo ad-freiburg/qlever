@@ -109,7 +109,7 @@ template <typename>
 google::sparse_hash_map<string, Id> Vocabulary<S>::asMap() {
   google::sparse_hash_map<string, Id> map;
   for (size_t i = 0; i < _words.size(); ++i) {
-    map[_words[i]] = i;
+    map[expandPrefix(_words[i])] = i;
   }
   return map;
 }

@@ -37,6 +37,8 @@ struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
                            {"tsv-file", required_argument, NULL, 't'},
                            {"text-index-name", required_argument, NULL, 'T'},
                            {"words-by-contexts", required_argument, NULL, 'w'},
+                           {"added-predicates", no_argument, NULL, 'r'},
+                           {"add-predicates", no_argument, NULL, 'R'},
                            {"add-text-index", no_argument, NULL, 'A'},
                            {"keep-temporary-files", no_argument, NULL, 'k'},
                            {"settings-file", required_argument, NULL, 's'},
@@ -102,6 +104,11 @@ void printUsage(char* execName) {
   cout << "  " << std::setw(20) << "w, words-by-contexts" << std::setw(1)
        << "    "
        << "words-file to build text index from." << endl;
+  cout << "  " << std::setw(20) << "r, added-predicates" << std::setw(1)
+       << "    "
+       << "Create additional predicates that can be used in queries." << endl;
+  cout << "  " << std::setw(20) << "R, add-predicates" << std::setw(1) << "    "
+       << "Create additional predicates to already existing kb-index." << endl;
   cout << "  " << std::setw(20) << "A, add-text-index" << std::setw(1) << "    "
        << "Add text index to already existing kb-index" << endl;
   cout
@@ -143,11 +150,13 @@ int main(int argc, char** argv) {
   bool onDiskLiterals = false;
   bool usePatterns = false;
   bool onlyAddTextIndex = false;
+  bool onlyAddPredicates = false;
   bool keepTemporaryFiles = false;
+  bool addedPredicates = false;
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:PhAks:N", options, NULL);
+    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:PhAks:NrR", options, NULL);
     if (c == -1) {
       break;
     }
@@ -197,6 +206,12 @@ int main(int argc, char** argv) {
         break;
       case 'N':
         useCompression = false;
+        break;
+      case 'r':
+        addedPredicates = true;
+        break;
+      case 'R':
+        onlyAddPredicates = true;
         break;
       default:
         cout << endl
@@ -260,7 +275,9 @@ int main(int argc, char** argv) {
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.setPrefixCompression(useCompression);
-    if (!onlyAddTextIndex) {
+    index.setAddedPredicates(addedPredicates);
+    index.setContextFile(wordsfile);
+    if (!onlyAddTextIndex && !onlyAddPredicates) {
       // if onlyAddTextIndex is true, we do not want to construct an index,
       // but assume that it  already exists (especially we need a valid
       // vocabulary for  text  index  creation)
@@ -274,11 +291,19 @@ int main(int argc, char** argv) {
       }
     }
 
-    if (wordsfile.size() > 0) {
+    if (onlyAddPredicates) {
+      if (ntFile.size() > 0) {
+        index.addPredicates<NTriplesParser>(ntFile);
+      } else if (tsvFile.size() > 0) {
+        index.addPredicates<TsvParser>(tsvFile);
+      }
+    }
+
+    if (wordsfile.size() > 0 && !(onlyAddPredicates && !onlyAddTextIndex)) {
       index.addTextFromContextFile(wordsfile);
     }
 
-    if (docsfile.size() > 0) {
+    if (docsfile.size() > 0 && !onlyAddPredicates) {
       index.buildDocsDB(docsfile);
     }
   } catch (ad_semsearch::Exception& e) {

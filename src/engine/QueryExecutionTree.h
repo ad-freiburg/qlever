@@ -38,7 +38,8 @@ class QueryExecutionTree {
     OPTIONAL_JOIN = 11,
     COUNT_AVAILABLE_PREDICATES = 12,
     GROUP_BY = 13,
-    HAS_RELATION_SCAN = 14
+    HAS_RELATION_SCAN = 14,
+    SCAN_ADDED_PREDICATES = 15
   };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
@@ -176,6 +177,24 @@ class QueryExecutionTree {
             os << ad_utility::toJson(entity.value()) << ",";
             break;
           }
+          case ResultTable::ResultType::ENTITY_TYPE: {
+            os << "\"";
+            switch (row[validIndices[j].first]) {
+              case 0:
+                os << "subject";
+                break;
+              case 1:
+                os << "predicate";
+                break;
+              case 2:
+                os << "object";
+                break;
+              default:
+                os << row[validIndices[j].first];
+            }
+            os << "\",\"";
+            break;
+          }
           default:
             AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
                      "Cannot deduce output type.");
@@ -214,6 +233,24 @@ class QueryExecutionTree {
           std::optional<string> entity = res->idToOptionalString(
               row[validIndices[validIndices.size() - 1].first]);
           os << ad_utility::toJson(entity.value()) << "]";
+          break;
+        }
+        case ResultTable::ResultType::ENTITY_TYPE: {
+          os << "\"";
+          switch (row[validIndices[validIndices.size() - 1].first]) {
+            case 0:
+              os << "subject";
+              break;
+            case 1:
+              os << "predicate";
+              break;
+            case 2:
+              os << "object";
+              break;
+            default:
+              os << row[validIndices[validIndices.size() - 1].first];
+          }
+          os << "\"]";
           break;
         }
         default:
