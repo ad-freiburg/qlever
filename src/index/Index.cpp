@@ -1688,9 +1688,16 @@ void Index::setPrefixCompression(bool compressed) {
 
 // ____________________________________________________________________________
 void Index::writeConfigurationFile() const {
+  
   std::ofstream f(_onDiskBase + CONFIGURATION_FILE);
+  std::stringstream stream;
+  stream << std::setw(4) << _configurationJson;
+  LOG(INFO) << "writing configuration JSON to " 
+            << _onDiskBase + CONFIGURATION_FILE << '\n';
+  LOG(INFO) << "configuration is:\n" + stream.str();
   AD_CHECK(f.is_open());
-  f << _configurationJson;
+  AD_CHECK(f);
+  f << std::setw(4) << _configurationJson;
 }
 
 // ___________________________________________________________________________
