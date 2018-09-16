@@ -184,7 +184,8 @@ class QueryPlanner {
   vector<array<Id, 2>> getJoinColumns(const SubtreePlan& a,
                                       const SubtreePlan& b) const;
 
-  string getPruningKey(const SubtreePlan& plan, size_t orderedOnCol) const;
+  string getPruningKey(const SubtreePlan& plan,
+                       const vector<size_t>& orderedOnColumns) const;
 
   void applyFiltersIfPossible(vector<SubtreePlan>& row,
                               const vector<SparqlFilter>& filters,

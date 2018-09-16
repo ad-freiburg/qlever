@@ -61,7 +61,7 @@ void Join::computeResult(ResultTable* result) const {
     size_t resWidth = leftWidth + rightWidth - 1;
     result->_nofColumns = resWidth;
     result->_resultTypes.resize(result->_nofColumns);
-    result->_sortedBy = _leftJoinCol;
+    result->_sortedBy = {_leftJoinCol};
     if (resWidth == 1) {
       result->_fixedSizeData = new vector<array<Id, 1>>();
     } else if (resWidth == 2) {
@@ -93,7 +93,7 @@ void Join::computeResult(ResultTable* result) const {
     size_t resWidth = leftWidth + rightWidth - 1;
     result->_nofColumns = resWidth;
     result->_resultTypes.resize(result->_nofColumns);
-    result->_sortedBy = _leftJoinCol;
+    result->_sortedBy = {_leftJoinCol};
     if (resWidth == 1) {
       result->_fixedSizeData = new vector<array<Id, 1>>();
     } else if (resWidth == 2) {
@@ -127,7 +127,7 @@ void Join::computeResult(ResultTable* result) const {
       result->_resultTypes.push_back(rightRes->_resultTypes[i]);
     }
   }
-  result->_sortedBy = _leftJoinCol;
+  result->_sortedBy = {_leftJoinCol};
 
   if (leftWidth == 1) {
     if (rightWidth == 1) {
@@ -433,11 +433,11 @@ size_t Join::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-size_t Join::resultSortedOn() const {
+vector<size_t> Join::resultSortedOn() const {
   if (!isFullScanDummy(_left)) {
-    return _leftJoinCol;
+    return {_leftJoinCol};
   } else {
-    return 2 + _rightJoinCol;
+    return {2 + _rightJoinCol};
   }
 }
 
@@ -492,7 +492,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
   if (isFullScanDummy(_left)) {
     AD_CHECK(!isFullScanDummy(_right))
     result->_nofColumns = _right->getResultWidth() + 2;
-    result->_sortedBy = 2 + _rightJoinCol;
+    result->_sortedBy = {2 + _rightJoinCol};
     shared_ptr<const ResultTable> nonDummyRes = _right->getResult();
     result->_resultTypes.reserve(result->_nofColumns);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -534,7 +534,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
   } else {
     AD_CHECK(!isFullScanDummy(_left))
     result->_nofColumns = _left->getResultWidth() + 2;
-    result->_sortedBy = _leftJoinCol;
+    result->_sortedBy = {_leftJoinCol};
 
     shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
     result->_resultTypes.reserve(result->_nofColumns);

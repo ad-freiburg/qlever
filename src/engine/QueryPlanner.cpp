@@ -239,8 +239,10 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
                      "trick.");
       }
       size_t subjectColumn = it->second;
+      const std::vector<size_t>& resultSortedOn =
+          final._qet->getRootOperation()->getResultSortedOn();
       bool isSorted =
-          final._qet->getRootOperation()->resultSortedOn() == subjectColumn;
+          resultSortedOn.size() > 0 && resultSortedOn[0] == subjectColumn;
       // a and b need to be ordered properly first
       vector<pair<size_t, bool>> sortIndices = {
           std::make_pair(subjectColumn, false)};
@@ -298,9 +300,12 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     std::vector<std::pair<size_t, bool>> sortColumns =
         static_cast<GroupBy*>(groupBy.get())->computeSortColumns(final._qet);
 
+    const std::vector<size_t>& resultSortedOn =
+        final._qet->getRootOperation()->getResultSortedOn();
+
     if (!sortColumns.empty() &&
-        !(sortColumns.size() == 1 &&
-          final._qet->resultSortedOn() == sortColumns[0].first)) {
+        !(sortColumns.size() == 1 && resultSortedOn.size() > 0 &&
+          resultSortedOn[0] == sortColumns[0].first)) {
       // Create an order by operation as required by the group by
       std::shared_ptr<Operation> orderBy =
           std::make_shared<OrderBy>(_qec, final._qet, sortColumns);
@@ -378,10 +383,16 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
         }
       }
     }
-    if (final._qet.get()->getType() == QueryExecutionTree::SORT ||
-        final._qet.get()->getType() == QueryExecutionTree::ORDER_BY ||
-        std::find(keepIndices.begin(), keepIndices.end(),
-                  final._qet.get()->resultSortedOn()) != keepIndices.end()) {
+    const std::vector<size_t>& resultSortedOn =
+        final._qet->getRootOperation()->getResultSortedOn();
+    // check if the current result is sorted on all columns of the distinct
+    bool isSorted = resultSortedOn.size() >= keepIndices.size();
+    for (size_t i = 0; isSorted && i < keepIndices.size(); i++) {
+      isSorted =
+          isSorted && std::find(resultSortedOn.begin(), resultSortedOn.end(),
+                                keepIndices[i]) != resultSortedOn.end();
+    }
+    if (isSorted) {
       std::shared_ptr<Operation> distinct(
           new Distinct(_qec, final._qet, keepIndices));
       distinctTree.setOperation(QueryExecutionTree::DISTINCT, distinct);
@@ -549,7 +560,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     if (pq._orderBy.size() == 1 && !pq._orderBy[0]._desc) {
       size_t col =
           previous[i]._qet.get()->getVariableColumn(pq._orderBy[0]._key);
-      if (col == previous[i]._qet.get()->resultSortedOn()) {
+      const std::vector<size_t>& previousSortedOn =
+          previous[i]._qet.get()->resultSortedOn();
+      if (previousSortedOn.size() > 0 && col == previousSortedOn[0]) {
         // Already sorted perfectly
         added.push_back(previous[i]);
       } else {
@@ -1020,7 +1033,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
                 new QueryExecutionTree(_qec));
             std::shared_ptr<QueryExecutionTree> right(
                 new QueryExecutionTree(_qec));
-            if (a[i]._qet.get()->resultSortedOn() == jcs[c][(0 + swap) % 2] &&
+            const vector<size_t>& aSortedOn = a[i]._qet.get()->resultSortedOn();
+            if (aSortedOn.size() > 0 &&
+                aSortedOn[0] == jcs[c][(0 + swap) % 2] &&
                 (a[i]._qet.get()->getResultWidth() == 2 ||
                  a[i]._qet.get()->getType() == QueryExecutionTree::SCAN)) {
               left = a[i]._qet;
@@ -1036,7 +1051,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
               left->setVariableColumns(a[i]._qet->getVariableColumnMap());
               left->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
             }
-            if (b[j]._qet.get()->resultSortedOn() == jcs[c][(1 + swap) % 2] &&
+            const vector<size_t>& bSortedOn = b[j]._qet.get()->resultSortedOn();
+            if (bSortedOn.size() > 0 &&
+                bSortedOn[0] == jcs[c][(1 + swap) % 2] &&
                 b[j]._qet.get()->getResultWidth() == 2) {
               right = b[j]._qet;
             } else {
@@ -1063,7 +1080,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
             plan._idsOfIncludedFilters = a[i]._idsOfIncludedFilters;
             plan._idsOfIncludedNodes = a[i]._idsOfIncludedNodes;
             plan.addAllNodes(b[j]._idsOfIncludedNodes);
-            candidates[getPruningKey(plan, jcs[c][(0 + swap) % 2])]
+            candidates[getPruningKey(plan, {jcs[c][(0 + swap) % 2]})]
                 .emplace_back(plan);
           }
           continue;
@@ -1127,7 +1144,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           tree.setVariableColumns(vcmap);
           tree.setContextVars(filterPlan._qet.get()->getContextVars());
           tree.addContextVar(cvar);
-          candidates[getPruningKey(plan, jcs[0][0])].emplace_back(plan);
+          candidates[getPruningKey(plan, {jcs[0][0]})].emplace_back(plan);
         }
         // Skip if we have two dummies
         if (a[i]._qet.get()->getType() ==
@@ -1207,7 +1224,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
         // TODO: replace with HashJoin maybe (or add variant to possible plans).
         std::shared_ptr<QueryExecutionTree> left(new QueryExecutionTree(_qec));
         std::shared_ptr<QueryExecutionTree> right(new QueryExecutionTree(_qec));
-        if (a[i]._qet.get()->resultSortedOn() == jcs[0][0]) {
+        const vector<size_t>& aSortedOn = a[i]._qet.get()->resultSortedOn();
+        if (aSortedOn.size() > 0 && aSortedOn[0] == jcs[0][0]) {
           left = a[i]._qet;
         } else {
           // Create a sort operation.
@@ -1221,7 +1239,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           left.get()->setContextVars(a[i]._qet.get()->getContextVars());
           left.get()->setOperation(QueryExecutionTree::SORT, sort);
         }
-        if (b[j]._qet.get()->resultSortedOn() == jcs[0][1]) {
+        const vector<size_t>& bSortedOn = b[j]._qet.get()->resultSortedOn();
+        if (bSortedOn.size() > 0 && bSortedOn[0] == jcs[0][1]) {
           right = b[j]._qet;
         } else {
           // Create a sort operation.
@@ -1249,7 +1268,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
         plan.addAllNodes(b[j]._idsOfIncludedNodes);
         plan._idsOfIncludedFilters = a[i]._idsOfIncludedFilters;
         plan._idsOfIncludedFilters |= b[j]._idsOfIncludedFilters;
-        candidates[getPruningKey(plan, jcs[0][0])].emplace_back(plan);
+        candidates[getPruningKey(plan, {jcs[0][0]})].emplace_back(plan);
       }
     }
   }
@@ -1286,10 +1305,20 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
 
   std::vector<std::array<Id, 2>> jcs = getJoinColumns(a, b);
 
-  bool aSorted = jcs.size() == 1 &&
-                 a._qet->getRootOperation()->resultSortedOn() == jcs[0][0];
-  bool bSorted = jcs.size() == 1 &&
-                 b._qet->getRootOperation()->resultSortedOn() == jcs[0][1];
+  const vector<size_t>& aSortedOn = a._qet.get()->resultSortedOn();
+  const vector<size_t>& bSortedOn = b._qet.get()->resultSortedOn();
+
+  bool aSorted = aSortedOn.size() == jcs.size();
+  // TODO: We could probably also accept permutations of the join columns
+  // as the order of a here and then permute the join columns to match the
+  // sorted columns of a or b (whichever is larger).
+  for (int i = 0; aSorted && i < jcs.size(); i++) {
+    aSorted = aSorted && jcs[i][0] == aSortedOn[i];
+  }
+  bool bSorted = bSortedOn.size() == jcs.size();
+  for (int i = 0; bSorted && i < jcs.size(); i++) {
+    bSorted = bSorted && jcs[i][1] == bSortedOn[i];
+  }
 
   // a and b need to be ordered properly first
   vector<pair<size_t, bool>> sortIndicesA;
@@ -1409,15 +1438,18 @@ vector<array<Id, 2>> QueryPlanner::getJoinColumns(
 }
 
 // _____________________________________________________________________________
-string QueryPlanner::getPruningKey(const QueryPlanner::SubtreePlan& plan,
-                                   size_t orderedOnCol) const {
+string QueryPlanner::getPruningKey(
+    const QueryPlanner::SubtreePlan& plan,
+    const vector<size_t>& orderedOnColumns) const {
   // Get the ordered var
   std::ostringstream os;
-  for (auto it = plan._qet.get()->getVariableColumnMap().begin();
-       it != plan._qet.get()->getVariableColumnMap().end(); ++it) {
-    if (it->second == orderedOnCol) {
-      os << it->first;
-      break;
+  for (size_t orderedOnCol : orderedOnColumns) {
+    for (auto it = plan._qet.get()->getVariableColumnMap().begin();
+         it != plan._qet.get()->getVariableColumnMap().end(); ++it) {
+      if (it->second == orderedOnCol) {
+        os << it->first << ", ";
+        break;
+      }
     }
   }
 

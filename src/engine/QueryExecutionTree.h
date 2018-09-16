@@ -89,7 +89,9 @@ class QueryExecutionTree {
                                  size_t offset = 0,
                                  size_t maxSend = MAX_NOF_ROWS_IN_RESULT) const;
 
-  size_t resultSortedOn() const { return _rootOperation->resultSortedOn(); }
+  const std::vector<size_t>& resultSortedOn() const {
+    return _rootOperation->getResultSortedOn();
+  }
 
   bool isContextvar(const string& var) const {
     return _contextVars.count(var) > 0;

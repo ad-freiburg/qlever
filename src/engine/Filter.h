@@ -24,13 +24,17 @@ class Filter : public Operation {
          SparqlFilter::FilterType type, size_t var1Column, size_t var2Column,
          Id rhsId = std::numeric_limits<Id>::max());
 
-  virtual string asString(size_t indent = 0) const;
+  virtual string asString(size_t indent = 0) const override;
 
-  virtual size_t resultSortedOn() const { return _subtree->resultSortedOn(); }
+  virtual vector<size_t> resultSortedOn() const override {
+    return _subtree->resultSortedOn();
+  }
 
-  virtual void setTextLimit(size_t limit) { _subtree->setTextLimit(limit); }
+  virtual void setTextLimit(size_t limit) override {
+    _subtree->setTextLimit(limit);
+  }
 
-  virtual size_t getSizeEstimate() {
+  virtual size_t getSizeEstimate() override {
     if (_type == SparqlFilter::FilterType::REGEX) {
       // TODO(jbuerklin): return a better estimate
       return std::numeric_limits<Id>::max();
@@ -57,7 +61,7 @@ class Filter : public Operation {
     }
   }
 
-  virtual size_t getCostEstimate() {
+  virtual size_t getCostEstimate() override {
     if (_type == SparqlFilter::FilterType::REGEX) {
       return std::numeric_limits<Id>::max();
     }
@@ -71,9 +75,11 @@ class Filter : public Operation {
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
 
-  virtual bool knownEmptyResult() { return _subtree->knownEmptyResult(); }
+  virtual bool knownEmptyResult() override {
+    return _subtree->knownEmptyResult();
+  }
 
-  virtual float getMultiplicity(size_t col) {
+  virtual float getMultiplicity(size_t col) override {
     return _subtree->getMultiplicity(col);
   }
 
@@ -89,7 +95,7 @@ class Filter : public Operation {
   template <class RT>
   vector<RT>* computeFilter(vector<RT>* res, size_t l, size_t r,
                             shared_ptr<const ResultTable> subRes) const;
-  void computeResult(ResultTable* result) const;
+  virtual void computeResult(ResultTable* result) const override;
 
   template <class RT>
   vector<RT>* computeFilterFixedValue(
