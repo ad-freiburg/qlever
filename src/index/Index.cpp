@@ -104,6 +104,9 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
               << ". Terminating...\n";
     AD_CHECK(false);
   }
+  // moved this up here because the configuration file is neede for buerklin
+  // changes
+  writeConfigurationFile();
   // also perform unique for first permutation
   createPermutationPair<IndexMetaDataHmap>(&idTriples, Permutation::Pso,
                                            Permutation::Pos, true);
@@ -122,7 +125,6 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
     // vector is not yet sorted
     createPatterns(false, &idTriples);
   }
-  writeConfigurationFile();
 }
 
 // explicit instantiations
