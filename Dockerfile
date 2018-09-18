@@ -28,7 +28,7 @@ VOLUME ["/input", "/index"]
 ENV INDEX_PREFIX wikidata-full
 # Need the shell to get the INDEX_PREFIX envirionment variable
 ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -p 7001 \"$@\"", "--"]
-CMD ["-a"]
+CMD ["-a", "-j 8"]
 
 # docker build -t qlever-<name> .
 # # When running with user namespaces you may need to make the index folder accessible
