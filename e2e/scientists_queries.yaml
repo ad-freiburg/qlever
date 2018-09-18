@@ -249,7 +249,7 @@ queries:
           - contains_row: ["<Aaron_Antonovsky>","<Helen_Antonovsky>"]
           - contains_row: ["<Abraham_Zelmanov>", ""]
           - contains_row: ["<Abraham_Pais>","<Ida_Nicolaisen>;<Lila_Lee_Pais>"]
-          - contains_row: ["<Aafia_Siddiqui>","<Ammar_al-Baluchi>;<Amjad_Mohammed_Khan>"]
+          - contains_row: ["<Aafia_Siddiqui>","<Amjad_Mohammed_Khan>;<Ammar_al-Baluchi>"]
   - query: giant-int-scientists
     solutions:
       - type: no-text
