@@ -5,6 +5,7 @@
 
 #include <array>
 #include <fstream>
+#include <memory>
 #include <google/sparse_hash_set>
 #include <nlohmann/json.hpp>
 #include <optional>
@@ -42,7 +43,7 @@ struct LinesAndWords {
   size_t nofLines;
   size_t nofWords;
   std::vector<size_t> actualPartialSizes;
-  ExtVec idTriples;
+  std::unique_ptr<ExtVec> idTriples;
 };
 
 class Index {
@@ -341,6 +342,10 @@ class Index {
   mutable ad_utility::File _opsFile;
   mutable ad_utility::File _textIndexFile;
 
+  // we buffer the stxxl vector here during the index build. This is memory
+  // inefficient but it helps us when we crash
+  MmapVector<std::array<Id, 3>> _tripleBuf;
+
   // Pattern trick data
   static const uint32_t PATTERNS_FILE_VERSION;
   bool _usePatterns;
@@ -370,7 +375,7 @@ class Index {
   // Member _vocab will be empty after this because it is not needed for index
   // creation once the ExtVec is set up and it would be a waste of RAM
   template <class Parser>
-  ExtVec createExtVecAndVocab(const string& ntFile);
+  std::unique_ptr<ExtVec> createExtVecAndVocab(const string& ntFile);
 
   // ___________________________________________________________________
   template <class Parser>
@@ -452,6 +457,15 @@ class Index {
   static void writeNonFunctionalRelation(
       ad_utility::File& out, const MmapVector<array<Id, 2>>& data,
       pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd);
+
+  void bufferExtVecToMmap(const ExtVec& vec) {
+    LOG(INFO) << "Buffering stxxl vector to MmapBuffer\n";
+    _tripleBuf.resize(vec.size());
+    for (size_t i = 0; i < vec.size(); ++i) {
+      _tripleBuf[i] = vec[i];
+    }
+    LOG(INFO) << "Done.\n";
+  }
 
   void openFileHandles();
 

@@ -29,7 +29,7 @@ Index::Index()
 
 // _____________________________________________________________________________________________
 template <class Parser>
-Index::ExtVec Index::createExtVecAndVocab(const string& filename) {
+std::unique_ptr<Index::ExtVec> Index::createExtVecAndVocab(const string& filename) {
   initializeVocabularySettingsBuild();
 
   auto linesAndWords =
@@ -47,7 +47,7 @@ Index::ExtVec Index::createExtVecAndVocab(const string& filename) {
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
   _vocab.clear();
-  passFileIntoIdVector<Parser>(linesAndWords.idTriples,
+  passFileIntoIdVector<Parser>(*(linesAndWords.idTriples),
                                linesAndWords.actualPartialSizes,
                                NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
@@ -83,7 +83,24 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
   string indexFilename = _onDiskBase + ".index";
   _configurationJson["external-literals"] = _onDiskLiterals;
 
-  ExtVec idTriples = createExtVecAndVocab<Parser>(filename);
+  auto idTriplesPtr = createExtVecAndVocab<Parser>(filename);
+  ExtVec& idTriples = *idTriplesPtr;
+
+  // also perform unique for first permutation
+
+  createPermutationPair<IndexMetaDataHmap>(&idTriples, Permutation::Pso,
+                                           Permutation::Pos, true);
+  if (allPermutations) {
+    // also create Patterns after the Spo permutation
+    createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Spo,
+                                             Permutation::Sop, false, true);
+    createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Osp,
+                                             Permutation::Ops);
+  } else if (_usePatterns) {
+    // vector is not yet sorted
+    createPatterns(false, &idTriples);
+  }
+  // move compression to end
 
   // if we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
@@ -103,20 +120,6 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
               << " to " << vocabFile << " set errno to " << errno
               << ". Terminating...\n";
     AD_CHECK(false);
-  }
-  // also perform unique for first permutation
-
-  createPermutationPair<IndexMetaDataHmap>(&idTriples, Permutation::Pso,
-                                           Permutation::Pos, true);
-  if (allPermutations) {
-    // also create Patterns after the Spo permutation
-    createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Spo,
-                                             Permutation::Sop, false, true);
-    createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Osp,
-                                             Permutation::Ops);
-  } else if (_usePatterns) {
-    // vector is not yet sorted
-    createPatterns(false, &idTriples);
   }
   writeConfigurationFile();
 }
@@ -143,10 +146,10 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
   // we add extra triples
   std::vector<size_t> actualPartialSizes;
   size_t actualCurrentPartialSize = 0;
-  ExtVec idTriples;
-  ExtVec::bufwriter_type writer(idTriples);
+  std::unique_ptr<ExtVec> idTriples(new ExtVec());
+  ExtVec::bufwriter_type writer(*idTriples);
   while (!stopParsing) {
-    auto futBatch = std::async(parseBatch<Parser>, &p, linesPerPartial);
+    auto futBatch = std::async(std::launch::async, parseBatch<Parser>, &p, linesPerPartial);
     google::sparse_hash_map<string, Id> items;
     // We will insert many duplicates into this hashSet, should be faster to
     // keep this separate
@@ -179,6 +182,8 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
           LOG(INFO) << "Lines processed: " << i << '\n';
         }
     }
+    // we don't need this memory anymore
+    std::vector<std::array<std::string, 3>>().swap(tripleBuf);
     LOG(INFO) << "Lines processed: " << i << '\n';
     LOG(INFO) << "Actual number of Triples in this section: "
               << actualCurrentPartialSize << '\n';
@@ -206,7 +211,7 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
   res.idTriples = std::move(idTriples);
   res.actualPartialSizes = std::move(actualPartialSizes);
   LOG(INFO) << "Pass done.\n";
-  res.nofLines = res.idTriples.size();
+  res.nofLines = res.idTriples->size();
   return res;
 }
 
@@ -343,6 +348,8 @@ std::optional<MetaData> Index::createPermutation(
     LOG(INFO) << "Done: unique." << std::endl;
     LOG(INFO) << "Size after: " << vec->size() << std::endl;
   }
+
+  bufferExtVecToMmap(*vec);
 
   return createPermutationImpl<MetaData>(_onDiskBase + ".index" + p._fileSuffix,
                                          *vec, p._keyOrder[0], p._keyOrder[1],
@@ -810,8 +817,8 @@ void Index::writeNonFunctionalRelation(
     // Make a pass over the data and extract a RHS list for each LHS.
     // Prepare both in buffers.
     // TODO: add compression - at least to RHS.
-    pair<Id, off_t>* bufLhs = new pair<Id, off_t>[data.size()];
-    Id* bufRhs = new Id[data.size()];
+    MmapVector<pair<Id, off_t>> bufLhs(data.size(), out.getFilename() + ".tmp.nonFunctionalPair");
+    MmapVector<Id> bufRhs(data.size(), out.getFilename() + ".tmp.nonFunctionalId");
     size_t nofDistinctLhs = 0;
     Id lastLhs = std::numeric_limits<Id>::max();
     size_t nofRhsDone = 0;
@@ -833,8 +840,8 @@ void Index::writeNonFunctionalRelation(
     }
 
     // Write to file.
-    out.write(bufLhs, nofDistinctLhs * (sizeof(Id) + sizeof(off_t)));
-    out.write(bufRhs, data.size() * sizeof(Id));
+    out.write(bufLhs.begin(), nofDistinctLhs * (sizeof(Id) + sizeof(off_t)));
+    out.write(bufRhs.begin(), data.size() * sizeof(Id));
 
     // Update meta data.
     rmd.second._startRhs = startRhs;
@@ -850,8 +857,6 @@ void Index::writeNonFunctionalRelation(
             rmd.first.getStartOfLhs() + i * (sizeof(Id) + sizeof(off_t))));
       }
     }
-    delete[] bufLhs;
-    delete[] bufRhs;
   }
 }
 
@@ -1678,6 +1683,7 @@ void Index::setOnDiskLiterals(bool onDiskLiterals) {
 // ____________________________________________________________________________
 void Index::setOnDiskBase(const std::string& onDiskBase) {
   _onDiskBase = onDiskBase;
+  _tripleBuf.open(0, _onDiskBase + ".tmp.tripleBuf");
 }
 
 // ____________________________________________________________________________

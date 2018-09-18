@@ -8,11 +8,11 @@ FROM base as builder
 RUN apt-get update && apt-get install -y build-essential cmake libsparsehash-dev libbz2-dev
 COPY . /app/
 WORKDIR /app/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release .. && make -j $(nproc) && make test
+RUN cmake -DCMAKE_BUILD_TYPE=Release .. && make -j $(nproc)
 
 FROM base as runtime
 WORKDIR /app
-RUN apt-get update && apt-get install -y wget python3-yaml unzip curl
+RUN apt-get update && apt-get install -y wget python3-yaml unzip curl libgomp1
 ARG UID=1000
 RUN groupadd -r qlever && useradd --no-log-init -r -u $UID -g qlever qlever && chown qlever:qlever /app
 RUN apt-get update && apt-get install -y bzip2
@@ -25,10 +25,10 @@ USER qlever
 EXPOSE 7001
 VOLUME ["/input", "/index"]
 
-ENV INDEX_PREFIX index
+ENV INDEX_PREFIX wikidata-full
 # Need the shell to get the INDEX_PREFIX envirionment variable
 ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -p 7001 \"$@\"", "--"]
-CMD ["-t", "-a", "-P"]
+CMD ["-a"]
 
 # docker build -t qlever-<name> .
 # # When running with user namespaces you may need to make the index folder accessible

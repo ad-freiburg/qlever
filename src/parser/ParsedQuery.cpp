@@ -5,8 +5,10 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <optional>
 
 #include "../util/StringUtils.h"
+#include "../util/Conversions.h"
 #include "ParseException.h"
 #include "ParsedQuery.h"
 
@@ -158,6 +160,16 @@ void ParsedQuery::expandPrefix(
     string& item, const ad_utility::HashMap<string, string>& prefixMap) {
   if (!ad_utility::startsWith(item, "?") &&
       !ad_utility::startsWith(item, "<")) {
+    std::optional<string> langtag = std::nullopt;
+    if (ad_utility::startsWith(item, "@")) {
+      auto secondPos = item.find("@", 1);
+      if (secondPos == string::npos) {
+	throw ParseException("langtaged predicates must have form @lang@ActualPredicate. Second @ is missing in " + item);
+      }
+      langtag = item.substr(1, secondPos - 1);
+      item = item.substr(secondPos + 1);
+    }
+    
     size_t i = item.find(':');
     size_t from = item.find("^^");
     if (from == string::npos) {
@@ -176,6 +188,9 @@ void ParsedQuery::expandPrefix(
                prefixUri.substr(0, prefixUri.size() - 1) + item.substr(i + 1) +
                '>';
       }
+    }
+    if (langtag) {
+      item = ad_utility::convertToLanguageTaggedPredicate(item, langtag.value());
     }
   }
 }

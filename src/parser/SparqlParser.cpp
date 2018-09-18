@@ -449,21 +449,36 @@ void SparqlParser::addFilter(const string& str,
         std::string lvar = lhs.substr(5, lhs.size() - 6);
         std::cout << "lvar:" << lvar << std::endl;
 
+	auto langTag = rhs.substr(1, rhs.size() - 2);
+	// first find a predicate for the given variable
+	auto it = std::find_if(pattern->_whereClauseTriples.begin(),
+                      pattern->_whereClauseTriples.end(), [&lvar](const auto& tr) {return tr._o == lvar;});
+	while (it != pattern->_whereClauseTriples.end() && ad_utility::startsWith(it->_p, "?")) {
+	  it = std::find_if(it + 1,
+                      pattern->_whereClauseTriples.end(), [&lvar](const auto& tr) {return tr._o == lvar;});
+	}
+	if (it == pattern->_whereClauseTriples.end()) {
+	  LOG(INFO) << "language filter variable " + rhs + "that did not appear as object in any suitable triple. using special language predicate instead";
+	  auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
+	  SparqlTriple triple(lvar, LANGUAGE_PREDICATE, langEntity);
+	  // Quadratic in number of triples in query.
+	  // Shouldn't be a problem here, though.
+	  // Could use a (hash)-set instead of vector.
+	  if (std::find(pattern->_whereClauseTriples.begin(),
+			pattern->_whereClauseTriples.end(),
+			triple) != pattern->_whereClauseTriples.end()) {
+	    LOG(INFO) << "Ignoring duplicate triple: " << str << std::endl;
+	  } else {
+	    pattern->_whereClauseTriples.push_back(triple);
+	  }
+	} else {
+	  // replace the triple
+	  string taggedPredicate = '@' + langTag + '@' + it->_p;
+	  *it = SparqlTriple(it->_s, taggedPredicate, it->_o);
+	}
+
         // Convert the language filter to a special triple
         // to make it more efficient (no need for string resolution)
-        auto langTag = rhs.substr(1, rhs.size() - 2);
-        auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-        SparqlTriple triple(lvar, LANGUAGE_PREDICATE, langEntity);
-        // Quadratic in number of triples in query.
-        // Shouldn't be a problem here, though.
-        // Could use a (hash)-set instead of vector.
-        if (std::find(pattern->_whereClauseTriples.begin(),
-                      pattern->_whereClauseTriples.end(),
-                      triple) != pattern->_whereClauseTriples.end()) {
-          LOG(INFO) << "Ignoring duplicate triple: " << str << std::endl;
-        } else {
-          pattern->_whereClauseTriples.push_back(triple);
-        }
         return;
       }
       if (pred == "regex") {

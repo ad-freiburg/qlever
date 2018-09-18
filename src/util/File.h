@@ -41,6 +41,8 @@ class File {
     _name = "";
   }
 
+  const string& getFilename() const { return _name;}
+
   //! Constructor that creates an instance from the
   //! file system.
   File(const char* filename, const char* mode) : _name(filename) {
