@@ -84,12 +84,23 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
   std::unordered_map<string, size_t> inVarColMap =
       inputTree->getVariableColumnMap();
 
+  std::unordered_set<size_t> sortColSet;
+
   // The returned columns are all groupByVariables followed by aggregrates
   for (std::string var : _groupByVariables) {
-    cols.push_back({inVarColMap[var], false});
+    size_t col = inVarColMap[var];
+    // avoid sorting by a column twice
+    if (sortColSet.find(col) == sortColSet.end()) {
+      sortColSet.insert(col);
+      cols.push_back({col, false});
+    }
   }
   for (const ParsedQuery::Alias& a : _aliases) {
-    cols.push_back({inVarColMap[a._outVarName], false});
+    size_t col = inVarColMap[a._inVarName];
+    if (sortColSet.find(col) == sortColSet.end()) {
+      sortColSet.insert(col);
+      cols.push_back({inVarColMap[a._inVarName], false});
+    }
   }
   return cols;
 }
