@@ -1599,10 +1599,11 @@ std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
         static_cast<Filter*>(filterOp.get())
             ->setRegexIgnoreCase(filter._regexIgnoreCase);
       }
-    }
-    if (_qec && (filter._type == SparqlFilter::PREFIX)) {
+    } else if (_qec && (filter._type == SparqlFilter::PREFIX)) {
       static_cast<Filter*>(filterOp.get())
           ->setRightHandSideString(filter._rhs.substr(1));
+    } else {
+      static_cast<Filter*>(filterOp.get())->setRightHandSideString(filter._rhs);
     }
     return filterOp;
   }
