@@ -29,29 +29,27 @@ class TextOperationForContexts : public Operation {
             vector<pair<std::shared_ptr<QueryExecutionTree>, size_t>>(),
             textLimit) {}
 
-  virtual string asString(size_t indent = 0) const;
+  virtual string asString(size_t indent = 0) const override;
 
-  virtual size_t getResultWidth() const;
+  virtual size_t getResultWidth() const override;
 
-  virtual size_t resultSortedOn() const {
-    return std::numeric_limits<size_t>::max();
-  }
+  virtual vector<size_t> resultSortedOn() const override { return {}; }
 
-  virtual void setTextLimit(size_t limit) {
+  virtual void setTextLimit(size_t limit) override {
     _textLimit = limit;
     for (auto& st : _subtrees) {
       st.first->setTextLimit(limit);
     }
   }
 
-  virtual size_t getSizeEstimate() {
+  virtual size_t getSizeEstimate() override {
     if (_executionContext) {
       // TODO: return a better estimate!
     }
     return 10000;
   }
 
-  virtual size_t getCostEstimate() {
+  virtual size_t getCostEstimate() override {
     size_t sum = 10000;
     for (auto& pair : _subtrees) {
       sum += pair.first->getCostEstimate();
@@ -59,12 +57,12 @@ class TextOperationForContexts : public Operation {
     return sum;
   }
 
-  virtual float getMultiplicity(size_t col) {
+  virtual float getMultiplicity(size_t col) override {
     // TODO: return a better estimate!
     return col;
   }
 
-  virtual bool knownEmptyResult() {
+  virtual bool knownEmptyResult() override {
     // TODO: return a better estimate!
     return false;
   }
@@ -74,5 +72,5 @@ class TextOperationForContexts : public Operation {
   vector<pair<std::shared_ptr<QueryExecutionTree>, size_t>> _subtrees;
   size_t _textLimit;
 
-  virtual void computeResult(ResultTable* result) const;
+  virtual void computeResult(ResultTable* result) const override;
 };

@@ -2,11 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
-#include "../src/index/Vocabulary.h"
 #include <gtest/gtest.h>
 #include <cstdio>
 #include <nlohmann/json.hpp>
 #include <vector>
+#include "../src/index/Vocabulary.h"
 
 using json = nlohmann::json;
 using std::string;

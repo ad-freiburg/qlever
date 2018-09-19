@@ -17,24 +17,24 @@ class TwoColumnJoin : public Operation {
                 std::shared_ptr<QueryExecutionTree> t2,
                 const std::vector<array<Id, 2>>& joinCols);
 
-  virtual string asString(size_t indent = 0) const;
+  virtual string asString(size_t indent = 0) const override;
 
-  virtual size_t getResultWidth() const;
+  virtual size_t getResultWidth() const override;
 
-  virtual size_t resultSortedOn() const;
+  virtual vector<size_t> resultSortedOn() const override;
 
   std::unordered_map<string, size_t> getVariableColumns() const;
 
-  virtual void setTextLimit(size_t limit) {
+  virtual void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);
     _right->setTextLimit(limit);
   }
 
-  virtual size_t getSizeEstimate() {
+  virtual size_t getSizeEstimate() override {
     return (_left->getSizeEstimate() + _right->getSizeEstimate()) / 10;
   }
 
-  virtual size_t getCostEstimate() {
+  virtual size_t getCostEstimate() override {
     if ((_left->getResultWidth() == 2 && _jc1Left == 0 && _jc2Left == 1) ||
         (_right->getResultWidth() == 2 && _jc1Right == 0 && _jc2Right == 1)) {
       return _left->getSizeEstimate() + _left->getCostEstimate() +
@@ -44,11 +44,11 @@ class TwoColumnJoin : public Operation {
     return std::numeric_limits<size_t>::max() / 1000000;
   }
 
-  virtual bool knownEmptyResult() {
+  virtual bool knownEmptyResult() override {
     return _left->knownEmptyResult() || _right->knownEmptyResult();
   }
 
-  virtual float getMultiplicity(size_t col);
+  virtual float getMultiplicity(size_t col) override;
 
  private:
   std::shared_ptr<QueryExecutionTree> _left;
@@ -63,5 +63,5 @@ class TwoColumnJoin : public Operation {
 
   void computeMultiplicities();
 
-  virtual void computeResult(ResultTable* result) const;
+  virtual void computeResult(ResultTable* result) const override;
 };

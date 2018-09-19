@@ -20,32 +20,32 @@ class TextOperationWithoutFilter : public Operation {
   TextOperationWithoutFilter(QueryExecutionContext* qec, const string& words,
                              size_t nofVars, size_t textLimit = 1);
 
-  virtual string asString(size_t indent = 0) const;
+  virtual string asString(size_t indent = 0) const override;
 
-  virtual size_t getResultWidth() const;
+  virtual size_t getResultWidth() const override;
 
-  virtual size_t resultSortedOn() const {
+  virtual vector<size_t> resultSortedOn() const override {
     // unsorted, obtained from iterating over a hash map.
-    return std::numeric_limits<size_t>::max();
+    return {};
   }
 
-  virtual void setTextLimit(size_t limit) {
+  virtual void setTextLimit(size_t limit) override {
     _textLimit = limit;
     _multiplicities.clear();
     _sizeEstimate = std::numeric_limits<size_t>::max();
   }
 
-  virtual size_t getSizeEstimate();
+  virtual size_t getSizeEstimate() override;
 
-  virtual size_t getCostEstimate();
+  virtual size_t getCostEstimate() override;
 
-  virtual float getMultiplicity(size_t col);
+  virtual float getMultiplicity(size_t col) override;
 
   const string& getWordPart() const { return _words; }
 
   size_t getNofVars() const { return _nofVars; }
 
-  virtual bool knownEmptyResult() {
+  virtual bool knownEmptyResult() override {
     return _executionContext &&
            _executionContext->getIndex().getSizeEstimate(_words) == 0;
   }
@@ -60,7 +60,7 @@ class TextOperationWithoutFilter : public Operation {
 
   void computeMultiplicities();
 
-  virtual void computeResult(ResultTable* result) const;
+  virtual void computeResult(ResultTable* result) const override;
 
   void computeResultNoVar(ResultTable* result) const;
 

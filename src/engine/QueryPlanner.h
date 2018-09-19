@@ -178,17 +178,24 @@ class QueryPlanner {
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 
+  vector<SubtreePlan> getGroupByRow(
+      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
+
   bool connected(const SubtreePlan& a, const SubtreePlan& b,
                  const TripleGraph& graph) const;
 
   vector<array<Id, 2>> getJoinColumns(const SubtreePlan& a,
                                       const SubtreePlan& b) const;
 
-  string getPruningKey(const SubtreePlan& plan, size_t orderedOnCol) const;
+  string getPruningKey(const SubtreePlan& plan,
+                       const vector<size_t>& orderedOnColumns) const;
 
   void applyFiltersIfPossible(vector<SubtreePlan>& row,
                               const vector<SparqlFilter>& filters,
                               bool replaceInsteadOfAddPlans) const;
+
+  std::shared_ptr<Operation> createFilterOperation(
+      const SparqlFilter& filter, const SubtreePlan& parent) const;
 
   vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, const vector<SparqlFilter>& fs,

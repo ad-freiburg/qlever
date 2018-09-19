@@ -94,7 +94,6 @@ std::pair<size_t, TreeNode*> TreeNode::getMaximum(size_t codelength) {
 
   // score calculation
 
-
   // Example: if this node is "abab", and we already have compressed by "ab"
   // (_penaltyLength = 2) and our codes have length 1 then we actually gain only
   // one byte per word (relevantLength = 1) by compressing  with "abab"
@@ -152,8 +151,7 @@ void TreeNode::penaltize() {
   // from now on
   _active = false;
 }
-}
-
+}  // namespace ad_utility
 
 // ______________________________________________________________________________________
 std::vector<string> calculatePrefixes(const string& filename,

@@ -28,23 +28,23 @@ class HasPredicateScan : public Operation {
 
   HasPredicateScan(QueryExecutionContext* qec, ScanType type);
 
-  virtual string asString(size_t indent = 0) const;
+  virtual string asString(size_t indent = 0) const override;
 
-  virtual size_t getResultWidth() const;
+  virtual size_t getResultWidth() const override;
 
-  virtual size_t resultSortedOn() const;
+  virtual vector<size_t> resultSortedOn() const override;
 
   std::unordered_map<string, size_t> getVariableColumns() const;
 
-  virtual void setTextLimit(size_t limit);
+  virtual void setTextLimit(size_t limit) override;
 
-  virtual bool knownEmptyResult();
+  virtual bool knownEmptyResult() override;
 
-  virtual float getMultiplicity(size_t col);
+  virtual float getMultiplicity(size_t col) override;
 
-  virtual size_t getSizeEstimate();
+  virtual size_t getSizeEstimate() override;
 
-  virtual size_t getCostEstimate();
+  virtual size_t getCostEstimate() override;
 
   void setSubject(const std::string& subject);
   void setObject(const std::string& object);
@@ -85,5 +85,5 @@ class HasPredicateScan : public Operation {
   std::string _subject;
   std::string _object;
 
-  virtual void computeResult(ResultTable* result) const;
+  virtual void computeResult(ResultTable* result) const override;
 };

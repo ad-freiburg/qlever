@@ -121,7 +121,8 @@ class SparqlFilter {
     GT = 5,
     GE = 6,
     LANG_MATCHES = 7,
-    REGEX = 8
+    REGEX = 8,
+    PREFIX = 9
   };
 
   string asString() const;
@@ -140,7 +141,7 @@ class ParsedQuery {
   class GraphPattern {
    public:
     // deletes the patterns children.
-    GraphPattern() {}
+    GraphPattern() : _optional(false) {}
     // Move and copyconstructors to avoid double deletes on the trees children
     GraphPattern(GraphPattern&& other);
     GraphPattern(const GraphPattern& other);
@@ -169,6 +170,7 @@ class ParsedQuery {
   vector<SparqlPrefix> _prefixes;
   vector<string> _selectedVariables;
   GraphPattern _rootGraphPattern;
+  vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns;
   vector<OrderKey> _orderBy;
   vector<string> _groupByVariables;

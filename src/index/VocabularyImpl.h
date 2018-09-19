@@ -11,8 +11,8 @@
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
-#include "./Vocabulary.h"
 #include "./ConstantsIndexCreation.h"
+#include "./Vocabulary.h"
 
 using std::string;
 

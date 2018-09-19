@@ -77,4 +77,3 @@ static const std::string URI_PREFIX =
 
 static const std::string LANGUAGE_PREDICATE =
     URI_PREFIX + "predicates/langtag>";
-

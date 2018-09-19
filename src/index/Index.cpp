@@ -321,9 +321,6 @@ std::optional<MetaData> Index::createPermutationImpl(const string& fileName,
   LOG(INFO) << "Writing statistics for this permutation:\n"
             << metaData.statistics() << std::endl;
 
-  LOG(INFO) << "Writing Meta data to file...\n";
-
-  //  metaData.appendToFile(&out);
   out.close();
   LOG(INFO) << "Permutation done.\n";
   return std::move(metaData);
@@ -332,7 +329,7 @@ std::optional<MetaData> Index::createPermutationImpl(const string& fileName,
 // ________________________________________________________________________
 template <class MetaData, class Comparator>
 std::optional<MetaData> Index::createPermutation(
-    ExtVec* vec, Permutation::PermutationImpl<Comparator> p,
+    ExtVec* vec, const Permutation::PermutationImpl<Comparator>& p,
     bool performUnique) {
   LOG(INFO) << "Sorting for " << p._readableName << " permutation..."
             << std::endl;
@@ -358,22 +355,27 @@ std::optional<MetaData> Index::createPermutation(
 
 // ________________________________________________________________________
 template <class MetaData, class Comparator1, class Comparator2>
-void Index::createPermutationPair(ExtVec* vec,
-                                  Permutation::PermutationImpl<Comparator1> p1,
-                                  Permutation::PermutationImpl<Comparator2> p2,
-                                  bool performUnique,
-                                  bool createPatternsAfterFirst) {
+void Index::createPermutationPair(
+    ExtVec* vec, const Permutation::PermutationImpl<Comparator1>& p1,
+    const Permutation::PermutationImpl<Comparator2>& p2, bool performUnique,
+    bool createPatternsAfterFirst) {
   auto m1 = createPermutation<MetaData>(vec, p1, performUnique);
   if (createPatternsAfterFirst) {
     createPatterns(true, vec);
   }
   auto m2 = createPermutation<MetaData>(vec, p2, false);
   if (m1 && m2) {
+    LOG(INFO) << "Exchanging Multiplicities for " << p1._readableName << " and "
+              << p2._readableName << '\n';
     exchangeMultiplicities(&m1.value(), &m2.value());
+    LOG(INFO) << "Done" << '\n';
+    LOG(INFO) << "Writing MetaData for " << p1._readableName << " and "
+              << p2._readableName << '\n';
     ad_utility::File f1(_onDiskBase + ".index" + p1._fileSuffix, "r+");
     m1.value().appendToFile(&f1);
     ad_utility::File f2(_onDiskBase + ".index" + p2._fileSuffix, "r+");
     m2.value().appendToFile(&f2);
+    LOG(INFO) << "Done" << '\n';
   }
 }
 
@@ -382,6 +384,13 @@ template <class MetaData>
 void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
   for (auto it = m1->data().begin(); it != m1->data().end(); ++it) {
     const FullRelationMetaData& constRmd = it->second;
+    // our MetaData classes have a read-only interface because normally the
+    // FuullRelationMetaData are created separately and then added and never
+    // changed. This function forms an exception to this pattern
+    // because calculation the 2nd column multiplicity separately for each
+    // permutation is inefficient. So it is fine to use const_cast here as an
+    // exception: we delibarately write to a read-only data structure and are
+    // knowing what we are doing
     FullRelationMetaData& rmd = const_cast<FullRelationMetaData&>(constRmd);
     m2->data()[it->first].setCol2LogMultiplicity(rmd.getCol1LogMultiplicity());
     rmd.setCol2LogMultiplicity(m2->data()[it->first].getCol1LogMultiplicity());

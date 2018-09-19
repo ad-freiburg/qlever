@@ -249,7 +249,7 @@ queries:
           - contains_row: ["<Aaron_Antonovsky>","<Helen_Antonovsky>"]
           - contains_row: ["<Abraham_Zelmanov>", ""]
           - contains_row: ["<Abraham_Pais>","<Ida_Nicolaisen>;<Lila_Lee_Pais>"]
-          - contains_row: ["<Aafia_Siddiqui>","<Ammar_al-Baluchi>;<Amjad_Mohammed_Khan>"]
+          - contains_row: ["<Aafia_Siddiqui>","<Amjad_Mohammed_Khan>;<Ammar_al-Baluchi>"]
   - query: giant-int-scientists
     solutions:
       - type: no-text
@@ -338,3 +338,33 @@ queries:
           - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
           - contains_row: ["<Albert_Fert>", "<Wolf_Prize_in_Physics>"]
           - contains_row: ["<Albert_Overhauser>", "<National_Medal_of_Science_for_Physical_Science>"]
+  - query : having-predicate-religion 
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?predicate (COUNT(?predicate) as ?count) WHERE {
+            ?x <is-a> <Astronaut> .
+            ?x ql:has-predicate ?predicate .
+          }
+          GROUP BY ?predicate
+          HAVING (?predicate < <Z) (?predicate = <Religion>)
+        checks:
+          - num_rows: 1
+          - num_cols: 2
+          - selected: ["?predicate", "?count"]
+          - contains_row: ["<Religion>", "5"]
+  - query : pattern-trick-automatic-having 
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?predicate (COUNT(?predicate) as ?count) WHERE {
+            ?x ql:has-predicate ?predicate .
+            FILTER (?predicate = <Gender>)
+          }
+          GROUP BY ?predicate
+          ORDER BY DESC(?count)
+        checks:
+          - num_rows: 1 
+          - num_cols: 2
+          - selected: ["?predicate", "?count"]
+          - contains_row: ["<Gender>", "18589"]
