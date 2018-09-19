@@ -121,7 +121,8 @@ class SparqlFilter {
     GT = 5,
     GE = 6,
     LANG_MATCHES = 7,
-    REGEX = 8
+    REGEX = 8,
+    PREFIX = 9
   };
 
   string asString() const;

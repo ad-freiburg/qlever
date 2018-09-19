@@ -68,8 +68,12 @@ string Filter::asString(size_t indent) const {
       }
       os << _rhsString;
       break;
+    case SparqlFilter::PREFIX:
+      os << " PREFIX " << _rhsString;
+      break;
   }
-  if (_type != SparqlFilter::LANG_MATCHES && _type != SparqlFilter::REGEX) {
+  if (_type != SparqlFilter::LANG_MATCHES && _type != SparqlFilter::REGEX &&
+      _type != SparqlFilter::PREFIX) {
     if (_rhsInd != std::numeric_limits<size_t>::max()) {
       os << "col " << _rhsInd;
     } else {
@@ -117,6 +121,11 @@ vector<RT>* Filter::computeFilter(vector<RT>* res, size_t l, size_t r,
     case SparqlFilter::REGEX:
       AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
                "Regex filtering with a dynamic right side has not yet "
+               "been implemented.");
+      break;
+    case SparqlFilter::PREFIX:
+      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+               "Prefix filtering with a dynamic right side has not yet "
                "been implemented.");
       break;
   }
@@ -214,7 +223,7 @@ vector<RT>* Filter::computeFilterFixedValue(
           },
           res);
       break;
-    case SparqlFilter::REGEX:
+    case SparqlFilter::REGEX: {
       std::regex self_regex;
       if (_regexIgnoreCase) {
         self_regex.assign(this->_rhsString, std::regex_constants::ECMAScript |
@@ -232,7 +241,19 @@ vector<RT>* Filter::computeFilterFixedValue(
                            return std::regex_search(entity.value(), self_regex);
                          },
                          res);
-      break;
+    } break;
+    case SparqlFilter::PREFIX: {
+      size_t lowerBound = getIndex().getVocab().getValueIdForGE(_rhsString);
+      std::string upperBoundStr = _rhsString;
+      // TODO(florian): This only works for ascii but could break unicode
+      upperBoundStr[upperBoundStr.size() - 1]++;
+      size_t upperBound = getIndex().getVocab().getValueIdForLT(upperBoundStr);
+      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                         [this, l, lowerBound, upperBound](const RT& e) {
+                           return lowerBound <= e[l] && e[l] < upperBound;
+                         },
+                         res);
+    } break;
   }
   return res;
 }
