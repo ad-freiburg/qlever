@@ -507,6 +507,31 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
         f._type = SparqlFilter::REGEX;
         f._lhs = lhs;
         f._rhs = rhs.substr(1, rhs.size() - 2);
+        if (f._rhs[0] == '^') {
+          // Check if we can use the more efficient prefix filter instead of
+          // an expensive regex filter.
+          bool isSimple = true;
+          bool escaped = false;
+          for (size_t i = 1; isSimple && i < f._rhs.size(); i++) {
+            if (f._rhs[i] == '\\') {
+              escaped = true;
+              continue;
+            }
+            if (!escaped) {
+              char c = f._rhs[i];
+              std::string badChars = "[^$.|?*+()";
+              if (badChars.find(c) != std::string::npos) {
+                isSimple = false;
+              }
+            }
+            escaped = false;
+          }
+          if (isSimple) {
+            // There are no regex special chars apart from the leading '^' so
+            // we can use a prefix filter.
+            f._type = SparqlFilter::PREFIX;
+          }
+        }
         f._regexIgnoreCase =
             (parts.size() == 3 && ad_utility::strip(parts[2], ' ') == "\"i\"");
         _filters->emplace_back(f);

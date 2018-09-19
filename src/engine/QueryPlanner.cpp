@@ -1549,7 +1549,8 @@ std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
       } else if (filter._type == SparqlFilter::LE) {
         entityId = _qec->getIndex().getVocab().getValueIdForLE(compWith);
       } else if (filter._type == SparqlFilter::LANG_MATCHES ||
-                 filter._type == SparqlFilter::REGEX) {
+                 filter._type == SparqlFilter::REGEX ||
+                 filter._type == SparqlFilter::PREFIX) {
         entityId = std::numeric_limits<size_t>::max() - 1;
       }
     }
@@ -1564,6 +1565,10 @@ std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
         static_cast<Filter*>(filterOp.get())
             ->setRegexIgnoreCase(filter._regexIgnoreCase);
       }
+    }
+    if (_qec && (filter._type == SparqlFilter::PREFIX)) {
+      static_cast<Filter*>(filterOp.get())
+          ->setRightHandSideString(filter._rhs.substr(1));
     }
     return filterOp;
   }
