@@ -326,10 +326,10 @@ class Index {
 
   IndexMetaDataHmap _psoMeta;
   IndexMetaDataHmap _posMeta;
-  IndexMetaDataMmapView _spoMeta;
-  IndexMetaDataMmapView _sopMeta;
-  IndexMetaDataMmapView _ospMeta;
-  IndexMetaDataMmapView _opsMeta;
+  IndexMetaDataHmap _spoMeta;
+  IndexMetaDataHmap _sopMeta;
+  IndexMetaDataHmap _ospMeta;
+  IndexMetaDataHmap _opsMeta;
   TextMetaData _textMeta;
   DocsDB _docsDB;
   vector<Id> _blockBoundaries;

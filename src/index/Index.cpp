@@ -92,9 +92,9 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
                                            Permutation::Pos, true);
   if (allPermutations) {
     // also create Patterns after the Spo permutation
-    createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Spo,
+    createPermutationPair<IndexMetaDataHmap>(&idTriples, Permutation::Spo,
                                              Permutation::Sop, false, true);
-    createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Osp,
+    createPermutationPair<IndexMetaDataHmap>(&idTriples, Permutation::Osp,
                                              Permutation::Ops);
   } else if (_usePatterns) {
     // vector is not yet sorted
@@ -122,6 +122,9 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
     AD_CHECK(false);
   }
   writeConfigurationFile();
+  // remove temporary_file
+  std::string removeCommand = "rm -f " + _onDiskBase + ".*.tmp.*";
+  system(removeCommand.c_str());
 }
 
 // explicit instantiations
@@ -891,17 +894,6 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
   LOG(INFO) << "Registered POS permutation: " << _posMeta.statistics()
             << std::endl;
   if (allPermutations) {
-    // TODO<joka921> also refactor this, similar to createFromFile
-    LOG(INFO) << "Setting up MmapBasedPermutations\n";
-    _spoMeta.setup(onDiskBase + ".index.spo" + MMAP_FILE_SUFFIX,
-                   ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-    _sopMeta.setup(onDiskBase + ".index.sop" + MMAP_FILE_SUFFIX,
-                   ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-    _opsMeta.setup(onDiskBase + ".index.ops" + MMAP_FILE_SUFFIX,
-                   ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-    _ospMeta.setup(onDiskBase + ".index.osp" + MMAP_FILE_SUFFIX,
-                   ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-    LOG(INFO) << "Done\n";
     // TODO<joka921>: Refactor (upcoming PR): there is so  so much code
     // duplication in here
     auto spoName = string(_onDiskBase + ".index.spo");
