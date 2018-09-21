@@ -344,7 +344,6 @@ class Index {
 
   // we buffer the stxxl vector here during the index build. This is memory
   // inefficient but it helps us when we crash
-  MmapVector<std::array<Id, 3>> _tripleBuf;
 
   // Pattern trick data
   static const uint32_t PATTERNS_FILE_VERSION;
@@ -496,14 +495,7 @@ class Index {
       ad_utility::File& out, const MmapVector<array<Id, 2>>& data,
       pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd);
 
-  void bufferExtVecToMmap(const ExtVec& vec) {
-    LOG(INFO) << "Buffering stxxl vector to MmapBuffer\n";
-    _tripleBuf.resize(vec.size());
-    for (size_t i = 0; i < vec.size(); ++i) {
-      _tripleBuf[i] = vec[i];
-    }
-    LOG(INFO) << "Done.\n";
-  }
+  void bufferExtVecToMmap(const ExtVec& vec) { return; }
 
   void openFileHandles();
 

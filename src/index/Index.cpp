@@ -1686,7 +1686,6 @@ void Index::setOnDiskLiterals(bool onDiskLiterals) {
 // ____________________________________________________________________________
 void Index::setOnDiskBase(const std::string& onDiskBase) {
   _onDiskBase = onDiskBase;
-  _tripleBuf.open(0, _onDiskBase + ".tmp.tripleBuf");
 }
 
 // ____________________________________________________________________________
