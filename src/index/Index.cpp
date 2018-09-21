@@ -124,7 +124,9 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
   writeConfigurationFile();
   // remove temporary_file
   std::string removeCommand = "rm -f " + _onDiskBase + ".*.tmp.*";
+  std::string removeCommandP = "rm -f " + _onDiskBase + ".partial-ids-mmap*";
   system(removeCommand.c_str());
+  system(removeCommandP.c_str());
 }
 
 // explicit instantiations
