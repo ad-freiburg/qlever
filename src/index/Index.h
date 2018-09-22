@@ -77,8 +77,7 @@ class Index {
   // Read necessary meta data into memory and opens file handles.
   void addTextFromOnDiskIndex();
 
-  template <class Parser>
-  void addPredicates(const string& filename);
+  void addPredicates();
 
   // Checks if the index is ready for use, i.e. it is properly intitialized.
   bool ready() const;

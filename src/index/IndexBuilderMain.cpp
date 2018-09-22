@@ -292,11 +292,8 @@ int main(int argc, char** argv) {
     }
 
     if (onlyAddPredicates) {
-      if (ntFile.size() > 0) {
-        index.addPredicates<NTriplesParser>(ntFile);
-      } else if (tsvFile.size() > 0) {
-        index.addPredicates<TsvParser>(tsvFile);
-      }
+      index.createFromOnDiskIndex(baseName, allPermutations);
+      index.addPredicates();
     }
 
     if (wordsfile.size() > 0 && !(onlyAddPredicates && !onlyAddTextIndex)) {

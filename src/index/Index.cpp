@@ -107,11 +107,6 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
   // also perform unique for first permutation
   createPermutationPair<IndexMetaDataHmap>(&idTriples, Permutation::Pso,
                                            Permutation::Pos, true);
-  if (_addedPredicates) {
-    ExtVec stats = computeAddedPredicates(idTriples);
-    createPermutationPair<IndexMetaDataHmap>(
-        &stats, Permutation::Pso, Permutation::Pos, false, false, true);
-  }
   if (allPermutations) {
     // also create Patterns after the Spo permutation
     createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Spo,
@@ -123,6 +118,11 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
     createPatterns(false, &idTriples);
   }
   writeConfigurationFile();
+  if (_addedPredicates) {
+    ExtVec added = computeAddedPredicates(idTriples);
+    createPermutationPair<IndexMetaDataHmap>(
+        &added, Permutation::Pso, Permutation::Pos, false, false, true);
+  }
 }
 
 // explicit instantiations
@@ -737,58 +737,26 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
 }
 
 // _____________________________________________________________________________
-template <class Parser>
-void Index::addPredicates(const string& filename) {
-  // TODO(jbuerklin): This Function still uses the nt / tsv input to compute
-  // the additional predicates. Using the pair index from an Index file should
-  // be considerably faster.
-  _vocab = Vocabulary<CompressedString>();
-  readConfigurationFile();
-  _vocab.readFromFile(_onDiskBase + ".vocabulary",
-                      _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
-
-  LOG(DEBUG) << "Counting number of lines of input file\n";
-  size_t nofLines = 0;
-  string line;
-  std::ifstream in(filename.c_str(), std::ios_base::in);
-  while (std::getline(in, line)) {
-    ++nofLines;
-  }
-  in.close();
-  LOG(DEBUG) << "Done. " << nofLines << " lines\n";
-  ExtVec idTriples(nofLines);
-  LOG(INFO) << "Making pass over NTriples " << filename
-            << " and creating stxxl vector.\n";
-  Parser p(filename);
-  array<string, 3> spo;
-  size_t i = 0;
-  // write using vector_bufwriter
+void Index::addPredicates() {
+  LOG(INFO) << "Collecting Id triples from pso file.\n";
+  ExtVec idTriples(_psoMeta.getNofTriples());
+  LOG(DEBUG) << _psoMeta.getNofTriples() << " triples\n";
   ExtVec::bufwriter_type writer(idTriples);
-
-  LOG(DEBUG) << "Creating vocabMap\n";
-  google::sparse_hash_map<string, Id> vocabMap = _vocab.asMap();
-  LOG(DEBUG) << "done\n";
-  while (p.getLine(spo)) {
-    tripleToInternalRepresentation(&spo);
-    writer << array<Id, 3>{{vocabMap.find(spo[0])->second,
-                            vocabMap.find(spo[1])->second,
-                            vocabMap.find(spo[2])->second}};
-    ++i;
-    if (i % 10000000 == 0) {
-      LOG(INFO) << "Lines processed: " << i << '\n';
+  auto psoData = _psoMeta.data();
+  WidthTwoList pairIndex;
+  for (auto it = psoData.cbegin(); it != psoData.cend(); ++it) {
+    Id currentRel = (*it).first;
+    scanPSO(currentRel, &pairIndex);
+    for (auto ids = pairIndex.begin(); ids != pairIndex.end(); ++ids) {
+      writer << array<Id, 3>{{(*ids)[0], currentRel, (*ids)[1]}};
     }
   }
-  writer.finish();
-  LOG(INFO) << "Pass done.\n";
+  LOG(INFO) << "Done.\n";
 
-  ExtVec stats = computeAddedPredicates(idTriples);
+  ExtVec added = computeAddedPredicates(idTriples);
   createPermutationPair<IndexMetaDataHmap>(
-      &stats, Permutation::Pso, Permutation::Pos, false, false, true);
+      &added, Permutation::Pso, Permutation::Pos, false, false, true);
 }
-
-// explicit instantiations
-template void Index::addPredicates<TsvParser>(const string& filename);
-template void Index::addPredicates<NTriplesParser>(const string& filename);
 
 // _____________________________________________________________________________
 Index::ExtVec Index::computeAddedPredicates(const ExtVec& vec) {
@@ -824,9 +792,9 @@ Index::ExtVec Index::computeAddedPredicates(const ExtVec& vec) {
               << std::endl;
   }
 
-  ExtVec stats(EntityCountMap.size() + subjectSet.size() + predicateSet.size() +
+  ExtVec added(EntityCountMap.size() + subjectSet.size() + predicateSet.size() +
                objectSet.size() + textOccMap.size());
-  ExtVec::bufwriter_type writer(stats);
+  ExtVec::bufwriter_type writer(added);
 
   for (auto it = EntityCountMap.begin(); it != EntityCountMap.end(); ++it) {
     writer << array<Id, 3>{{it->first, Id(0), it->second}};
@@ -849,7 +817,7 @@ Index::ExtVec Index::computeAddedPredicates(const ExtVec& vec) {
   }
   writer.finish();
   LOG(INFO) << "Done collecting info for added predicates.\n";
-  return stats;
+  return added;
 }
 
 // _____________________________________________________________________________
