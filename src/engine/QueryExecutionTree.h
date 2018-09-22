@@ -192,7 +192,7 @@ class QueryExecutionTree {
               default:
                 os << row[validIndices[j].first];
             }
-            os << "\",\"";
+            os << "\",";
             break;
           }
           default:
