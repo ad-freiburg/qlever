@@ -20,8 +20,7 @@
 #include "TwoColumnJoin.h"
 
 // _____________________________________________________________________________
-QueryPlanner::QueryPlanner(QueryExecutionContext* qec, bool optimizeOptionals)
-    : _qec(qec), _optimizeOptionals(optimizeOptionals) {}
+QueryPlanner::QueryPlanner(QueryExecutionContext* qec) : _qec(qec) {}
 
 // _____________________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
@@ -73,10 +72,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
 
     LOG(DEBUG) << "Creating execution plan.\n";
     childPlans.clear();
-    if (_optimizeOptionals) {
-      for (const ParsedQuery::GraphPattern* child : pattern->_children) {
-        childPlans.push_back(&patternPlans[child->_id]);
-      }
+    for (const ParsedQuery::GraphPattern* child : pattern->_children) {
+      childPlans.push_back(&patternPlans[child->_id]);
     }
 
     // Strategy:
@@ -166,60 +163,6 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
       }
       lastRow[minInd]._isOptional = pattern->_optional;
       patternPlans[pattern->_id] = lastRow[minInd];
-    }
-  }
-
-  if (!_optimizeOptionals) {
-    // join the created trees using optional joins on all of their common
-    // variables
-    // Create an inverse topological ordering of all nodes with children
-    std::vector<const ParsedQuery::GraphPattern*> inverseTopo;
-    patternsToProcess.push_back(&pq._rootGraphPattern);
-    while (!patternsToProcess.empty()) {
-      const ParsedQuery::GraphPattern* pattern = patternsToProcess.back();
-      patternsToProcess.pop_back();
-      if (pattern->_children.size() > 0) {
-        // queue all children for processing
-        patternsToProcess.insert(patternsToProcess.end(),
-                                 pattern->_children.begin(),
-                                 pattern->_children.end());
-        inverseTopo.push_back(pattern);
-      }
-    }
-
-    LOG(DEBUG) << inverseTopo.size() << " of the nodes have children"
-               << std::endl;
-
-    if (!inverseTopo.empty()) {
-      std::vector<ParsedQuery::GraphPattern*> sortedChildren;
-      for (int i = inverseTopo.size() - 1; i >= 0; i--) {
-        const ParsedQuery::GraphPattern* pattern = inverseTopo[i];
-        sortedChildren.clear();
-        sortedChildren.insert(sortedChildren.end(), pattern->_children.begin(),
-                              pattern->_children.end());
-        // Init the joins by taking the parent and its first child, then
-        // succesively join with the next child.
-        // ensure the children are sorted in ascending order
-        std::sort(sortedChildren.begin(), sortedChildren.end(),
-                  [&patternPlans](const ParsedQuery::GraphPattern* p1,
-                                  const ParsedQuery::GraphPattern* p2) -> bool {
-                    return patternPlans[p1->_id].getSizeEstimate() <
-                           patternPlans[p2->_id].getSizeEstimate();
-                  });
-
-        std::vector<SubtreePlan> plans;
-
-        plans.push_back(optionalJoin(patternPlans[pattern->_id],
-                                     patternPlans[sortedChildren[0]->_id]));
-
-        for (size_t j = 1; j < sortedChildren.size(); j++) {
-          SubtreePlan& plan1 = plans.back();
-          SubtreePlan& plan2 = patternPlans[sortedChildren[j]->_id];
-          plans.push_back(optionalJoin(plan1, plan2));
-        }
-        // Replace the old pattern with the new one that merges all children.
-        patternPlans[pattern->_id] = plans.back();
-      }
     }
   }
 

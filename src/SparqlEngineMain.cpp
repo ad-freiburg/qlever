@@ -214,7 +214,7 @@ void processQuery(QueryExecutionContext& qec, const string& query,
   SparqlParser sp;
   ParsedQuery pq = sp.parse(query);
   pq.expandPrefixes();
-  QueryPlanner qp(&qec, optimizeOptionals);
+  QueryPlanner qp(&qec);
   ad_utility::Timer timer;
   timer.start();
   auto qet = qp.createExecutionTree(pq);
