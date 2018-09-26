@@ -338,6 +338,21 @@ queries:
           - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
           - contains_row: ["<Albert_Fert>", "<Wolf_Prize_in_Physics>"]
           - contains_row: ["<Albert_Overhauser>", "<National_Medal_of_Science_for_Physical_Science>"]
+  - query : having-height
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT (COUNT(?profession) as ?count) ?height WHERE {
+            ?x <Profession> ?profession .
+            ?x <Height> ?height
+          }
+          GROUP BY ?height
+          HAVING (?height > 1.7)
+        checks:
+          - num_rows: 32
+          - num_cols: 2
+          - selected: ["?count", "?height"]
+          - contains_row: ["5", "1.803"]
   - query : having-predicate-religion 
     solutions:
       - type: no-text
