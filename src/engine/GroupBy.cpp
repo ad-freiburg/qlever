@@ -49,7 +49,7 @@ string GroupBy::asString(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  os << "GROUP_BY" << std::endl;
+  os << "GROUP_BY ";
   for (const std::string var : _groupByVariables) {
     os << var << ", ";
   }

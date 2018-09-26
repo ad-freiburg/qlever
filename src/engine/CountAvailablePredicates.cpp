@@ -67,34 +67,39 @@ float CountAvailablePredicates::getMultiplicity(size_t col) {
   if (col == 0) {
     return 1;
   } else {
-    // As this operation is currently only intended to be used as the last or
-    // second to last (with an OrderBy aftwerards) operation in a
-    // QueryExecutionTree the multiplicity of its columns is not needed.
-    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-             "CountAvailablePredicates has no implementation for the"
-             "multiplicity of columns other than the first.");
+    // Determining the multiplicity of the second column (the counts)
+    // is non trivial (and potentially not possible) without computing
+    // at least a part of the result first.
     return 1;
   }
 }
 
 // _____________________________________________________________________________
 size_t CountAvailablePredicates::getSizeEstimate() {
-  // There is no easy way of computing the size estimate, but it should also
-  // not be used, as this operation should not be used within the optimizer.
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-           "CountAvailablePredicates has no implementation for the size "
-           "estimation.");
-  return 1;
+  if (_subtree.get() != nullptr) {
+    // This estimate is probably wildly innacurrate, but as it does not
+    // depend on the order of operations of the subtree should be sufficient
+    // for the type of optizations the optimizer can currently do.
+    size_t num_distinct = _subtree->getSizeEstimate() /
+                          _subtree->getMultiplicity(_subjectColumnIndex);
+    return num_distinct / getIndex().getHasPredicateMultiplicityPredicates();
+  } else {
+    return getIndex().getHasPredicateFullSize() /
+           getIndex().getHasPredicateMultiplicityPredicates();
+  }
 }
 
 // _____________________________________________________________________________
 size_t CountAvailablePredicates::getCostEstimate() {
-  // This operation should not be used within the optimizer, and the cost
-  // should never be queried.
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-           "CountAvailablePredicates has no implementation for the cost "
-           "estimate determination.");
-  return 1;
+  if (_subtree.get() != nullptr) {
+    // Without knowing the ratio of elements that will have a pattern assuming
+    // constant cost per entry should be reasonable (altough non distinct
+    // entries are of course actually cheaper).
+    return _subtree->getCostEstimate() + _subtree->getSizeEstimate();
+  } else {
+    // the cost is proportional to the number of elements we need to write.
+    return getSizeEstimate();
+  }
 }
 
 // _____________________________________________________________________________

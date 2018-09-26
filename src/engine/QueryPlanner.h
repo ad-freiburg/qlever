@@ -175,6 +175,16 @@ class QueryPlanner {
   vector<SubtreePlan> getGroupByRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 
+  vector<SubtreePlan> getDistinctRow(
+      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
+
+  vector<SubtreePlan> getPatternTrickRow(
+      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab,
+      const SparqlTriple& patternTrickTriple) const;
+
+  vector<SubtreePlan> getHavingRow(
+      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
+
   bool connected(const SubtreePlan& a, const SubtreePlan& b,
                  const TripleGraph& graph) const;
 

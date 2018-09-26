@@ -51,6 +51,8 @@ class Distinct : public Operation {
     return _subtree->knownEmptyResult();
   }
 
+  std::unordered_map<string, size_t> getVariableColumns() const;
+
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<size_t> _keepIndices;
