@@ -318,7 +318,19 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     final = groupByPlan;
   }
 
+  // create filter operations for the having clauses
+  for (const SparqlFilter& filter : pq._havingClauses) {
+    SubtreePlan plan(_qec);
+    auto& tree = *plan._qet.get();
+    tree.setVariableColumns(final._qet.get()->getVariableColumnMap());
+    tree.setOperation(QueryExecutionTree::FILTER,
+                      createFilterOperation(filter, final));
+    tree.setContextVars(final._qet.get()->getContextVars());
+    final = plan;
+  }
+
   if (doGrouping) {
+    // Either the pattern trick or another form of grouping is in use
     // Add the order by operation
     if (pq._orderBy.size() > 0) {
       SubtreePlan plan(_qec);
@@ -459,10 +471,13 @@ bool QueryPlanner::checkUsePatternTrick(
           // trick is not going to be used.
           if (usePatternTrick) {
             // Check for filters on the ql:has-predicate triple's subject or
-            // object
+            // object.
+            // Filters that filter on the triple's object but have a static
+            // rhs will be transformed to a having clause later on.
             for (const SparqlFilter& filter : pq->_rootGraphPattern._filters) {
-              if (filter._lhs == t._o || filter._lhs == t._s ||
-                  filter._rhs == t._o || filter._rhs == t._s) {
+              if (!(filter._lhs == t._o && filter._rhs[0] != '?') &&
+                  (filter._lhs == t._s || filter._rhs == t._o ||
+                   filter._rhs == t._s)) {
                 usePatternTrick = false;
                 break;
               }
@@ -501,6 +516,17 @@ bool QueryPlanner::checkUsePatternTrick(
             // remove the triple from the graph
             pq->_rootGraphPattern._whereClauseTriples.erase(
                 pq->_rootGraphPattern._whereClauseTriples.begin() + i);
+            // Transform filters on the ql:has-relation triple's object that
+            // have a static rhs to having clauses
+            for (int i = 0; i < pq->_rootGraphPattern._filters.size(); i++) {
+              const SparqlFilter& filter = pq->_rootGraphPattern._filters[i];
+              if (filter._lhs == t._o && filter._rhs[0] != '?') {
+                pq->_havingClauses.push_back(filter);
+                pq->_rootGraphPattern._filters.erase(
+                    pq->_rootGraphPattern._filters.begin() + i);
+                i--;
+              }
+            }
           }
         }
       }
@@ -1446,58 +1472,8 @@ void QueryPlanner::applyFiltersIfPossible(
         newPlan._idsOfIncludedNodes = row[n]._idsOfIncludedNodes;
         newPlan._isOptional = row[n]._isOptional;
         auto& tree = *newPlan._qet.get();
-        if (isVariable(filters[i]._rhs)) {
-          std::shared_ptr<Operation> filter = std::make_shared<Filter>(
-              _qec, row[n]._qet, filters[i]._type,
-              row[n]._qet.get()->getVariableColumn(filters[i]._lhs),
-              row[n]._qet.get()->getVariableColumn(filters[i]._rhs));
-          tree.setOperation(QueryExecutionTree::FILTER, filter);
-        } else {
-          string compWith = filters[i]._rhs;
-          Id entityId = 0;
-          if (_qec) {
-            // TODO(schnelle): A proper SPARQL parser should have
-            // tagged/converted numeric values already. However our parser is
-            // currently far too crude for that
-            if (ad_utility::isXsdValue(compWith)) {
-              compWith = ad_utility::convertValueLiteralToIndexWord(compWith);
-            } else if (ad_utility::isNumeric(compWith)) {
-              compWith = ad_utility::convertNumericToIndexWord(compWith);
-            }
-            if (filters[i]._type == SparqlFilter::EQ ||
-                filters[i]._type == SparqlFilter::NE) {
-              if (!_qec->getIndex().getVocab().getId(compWith, &entityId)) {
-                entityId = std::numeric_limits<size_t>::max() - 1;
-              }
-            } else if (filters[i]._type == SparqlFilter::GE) {
-              entityId = _qec->getIndex().getVocab().getValueIdForGE(compWith);
-            } else if (filters[i]._type == SparqlFilter::GT) {
-              entityId = _qec->getIndex().getVocab().getValueIdForGT(compWith);
-            } else if (filters[i]._type == SparqlFilter::LT) {
-              entityId = _qec->getIndex().getVocab().getValueIdForLT(compWith);
-            } else if (filters[i]._type == SparqlFilter::LE) {
-              entityId = _qec->getIndex().getVocab().getValueIdForLE(compWith);
-            } else if (filters[i]._type == SparqlFilter::LANG_MATCHES ||
-                       filters[i]._type == SparqlFilter::REGEX) {
-              entityId = std::numeric_limits<size_t>::max() - 1;
-            }
-          }
-          std::shared_ptr<Operation> filter(
-              new Filter(_qec, row[n]._qet, filters[i]._type,
-                         row[n]._qet.get()->getVariableColumn(filters[i]._lhs),
-                         std::numeric_limits<size_t>::max(), entityId));
-          if (_qec && (filters[i]._type == SparqlFilter::LANG_MATCHES ||
-                       filters[i]._type == SparqlFilter::REGEX)) {
-            static_cast<Filter*>(filter.get())
-                ->setRightHandSideString(filters[i]._rhs);
-            if (filters[i]._type == SparqlFilter::REGEX) {
-              static_cast<Filter*>(filter.get())
-                  ->setRegexIgnoreCase(filters[i]._regexIgnoreCase);
-            }
-          }
-          tree.setOperation(QueryExecutionTree::FILTER, filter);
-        }
-
+        tree.setOperation(QueryExecutionTree::FILTER,
+                          createFilterOperation(filters[i], row[n]));
         tree.setVariableColumns(row[n]._qet.get()->getVariableColumnMap());
         tree.setContextVars(row[n]._qet.get()->getContextVars());
         if (replace) {
@@ -1507,6 +1483,61 @@ void QueryPlanner::applyFiltersIfPossible(
         }
       }
     }
+  }
+}
+
+// _____________________________________________________________________________
+std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
+    const SparqlFilter& filter, const SubtreePlan& parent) const {
+  if (isVariable(filter._rhs)) {
+    std::shared_ptr<Operation> filterOp = std::make_shared<Filter>(
+        _qec, parent._qet, filter._type,
+        parent._qet.get()->getVariableColumn(filter._lhs),
+        parent._qet.get()->getVariableColumn(filter._rhs));
+    return filterOp;
+  } else {
+    string compWith = filter._rhs;
+    Id entityId = 0;
+    if (_qec) {
+      // TODO(schnelle): A proper SPARQL parser should have
+      // tagged/converted numeric values already. However our parser is
+      // currently far too crude for that
+      if (ad_utility::isXsdValue(compWith)) {
+        compWith = ad_utility::convertValueLiteralToIndexWord(compWith);
+      } else if (ad_utility::isNumeric(compWith)) {
+        compWith = ad_utility::convertNumericToIndexWord(compWith);
+      }
+      if (filter._type == SparqlFilter::EQ ||
+          filter._type == SparqlFilter::NE) {
+        if (!_qec->getIndex().getVocab().getId(compWith, &entityId)) {
+          entityId = std::numeric_limits<size_t>::max() - 1;
+        }
+      } else if (filter._type == SparqlFilter::GE) {
+        entityId = _qec->getIndex().getVocab().getValueIdForGE(compWith);
+      } else if (filter._type == SparqlFilter::GT) {
+        entityId = _qec->getIndex().getVocab().getValueIdForGT(compWith);
+      } else if (filter._type == SparqlFilter::LT) {
+        entityId = _qec->getIndex().getVocab().getValueIdForLT(compWith);
+      } else if (filter._type == SparqlFilter::LE) {
+        entityId = _qec->getIndex().getVocab().getValueIdForLE(compWith);
+      } else if (filter._type == SparqlFilter::LANG_MATCHES ||
+                 filter._type == SparqlFilter::REGEX) {
+        entityId = std::numeric_limits<size_t>::max() - 1;
+      }
+    }
+    std::shared_ptr<Operation> filterOp(
+        new Filter(_qec, parent._qet, filter._type,
+                   parent._qet.get()->getVariableColumn(filter._lhs),
+                   std::numeric_limits<size_t>::max(), entityId));
+    if (_qec && (filter._type == SparqlFilter::LANG_MATCHES ||
+                 filter._type == SparqlFilter::REGEX)) {
+      static_cast<Filter*>(filterOp.get())->setRightHandSideString(filter._rhs);
+      if (filter._type == SparqlFilter::REGEX) {
+        static_cast<Filter*>(filterOp.get())
+            ->setRegexIgnoreCase(filter._regexIgnoreCase);
+      }
+    }
+    return filterOp;
   }
 }
 

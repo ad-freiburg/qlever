@@ -190,6 +190,9 @@ class QueryPlanner {
                               const vector<SparqlFilter>& filters,
                               bool replaceInsteadOfAddPlans) const;
 
+  std::shared_ptr<Operation> createFilterOperation(
+      const SparqlFilter& filter, const SubtreePlan& parent) const;
+
   vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
       const vector<SubtreePlan*>& children) const;

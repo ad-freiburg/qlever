@@ -360,7 +360,7 @@ To obtain a list of available predicates and their counts `ql:has-predicate` can
 
 `ql:has-predicate` can also be used as a normal predicate in an arbitrary query.
 
-Group by is supported, but aggregate aliases may currently only be used within the SELECT part of the query:
+Group by is supported both for selecting as well as in ORDER BY clauses:
 
     SELECT ?profession (AVG(?height) as ?avg) WHERE {
       ?a <is-a> ?profession .
@@ -368,9 +368,32 @@ Group by is supported, but aggregate aliases may currently only be used within t
     }
     GROUP BY ?profession
     ORDER BY ?avg
+    HAVING (?profession > <H)
+
+
+    SELECT ?profession  WHERE {
+      ?a <is-a> ?profession .
+      ?a <Height> ?height .
+    }
+    ORDER BY (AVG(?height) as ?avg)
+    GROUP BY ?profession
 
 Supported aggregates are `MIN, MAX, AVG, GROUP_CONCAT, SAMPLE, COUNT, SUM`. All of the aggreagates support `DISTINCT`, e.g. `(GROUP_CONCAT(DISTINCT ?a) as ?b)`.
 Group concat also supports a custom separator: `(GROUP_CONCAT(?a ; separator=" ; ") as ?concat)`. Xsd types float, decimal and integer are recognized as numbers, other types or unbound variables (e.g. no entries for an optional part) in one of the aggregates that need to interpret the variable (e.g. AVG) lead to either no result or nan. MAX with an unbound variable will always return the unbound variable.
+A query can only have one GROUP BY and one HAVING clause, but may have several
+variables in the GROUP BY and several filters in the HAVING clause (which will
+then be concatenated using and) are possible:
+
+    SELECT ?profession ?gender (AVG(?height) as ?avg) WHERE {
+      ?a <is-a> ?profession .
+      ?a <Gender> ?gender .
+      ?a <Height> ?height .
+    }
+    GROUP BY ?profession ?gender
+    HAVING (?a > <H) (?gender == <Female>)
+
+Filtering on the results of aggregates beyond SAMPLE, MIN or MAX is not yet 
+supported.
 
 # 6. Converting Old Indices For Current QLever Versions
 

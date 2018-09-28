@@ -338,3 +338,48 @@ queries:
           - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
           - contains_row: ["<Albert_Fert>", "<Wolf_Prize_in_Physics>"]
           - contains_row: ["<Albert_Overhauser>", "<National_Medal_of_Science_for_Physical_Science>"]
+  - query : having-height
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT (COUNT(?profession) as ?count) ?height WHERE {
+            ?x <Profession> ?profession .
+            ?x <Height> ?height
+          }
+          GROUP BY ?height
+          HAVING (?height > 1.7)
+        checks:
+          - num_rows: 32
+          - num_cols: 2
+          - selected: ["?count", "?height"]
+          - contains_row: ["5", "1.803"]
+  - query : having-predicate-religion 
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?predicate (COUNT(?predicate) as ?count) WHERE {
+            ?x <is-a> <Astronaut> .
+            ?x ql:has-predicate ?predicate .
+          }
+          GROUP BY ?predicate
+          HAVING (?predicate < <Z) (?predicate = <Religion>)
+        checks:
+          - num_rows: 1
+          - num_cols: 2
+          - selected: ["?predicate", "?count"]
+          - contains_row: ["<Religion>", "5"]
+  - query : pattern-trick-automatic-having 
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?predicate (COUNT(?predicate) as ?count) WHERE {
+            ?x ql:has-predicate ?predicate .
+            FILTER (?predicate = <Gender>)
+          }
+          GROUP BY ?predicate
+          ORDER BY DESC(?count)
+        checks:
+          - num_rows: 1 
+          - num_cols: 2
+          - selected: ["?predicate", "?count"]
+          - contains_row: ["<Gender>", "18589"]
