@@ -14,8 +14,8 @@
 #include "../parser/TsvParser.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
-#include "./PrefixHeuristic.h"
 #include "./Index.h"
+#include "./PrefixHeuristic.h"
 #include "./VocabularyGenerator.h"
 
 using std::array;
