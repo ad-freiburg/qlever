@@ -1,5 +1,5 @@
 ################################
-# NLOHNMANN-JSON 
+# NLOHNMANN-JSON
 ################################
 # Header only, nothing to include
 include_directories(../third_party/json/include/)
@@ -54,6 +54,12 @@ target_link_libraries(ConversionsTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT
 
 add_executable(SparsehashTest SparsehashTest.cpp)
 target_link_libraries(SparsehashTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(HashMapTest HashMapTest.cpp)
+target_link_libraries(HashMapTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(HashSetTest HashSetTest.cpp)
+target_link_libraries(HashSetTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(GroupByTest GroupByTest.cpp)
 target_link_libraries(GroupByTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})

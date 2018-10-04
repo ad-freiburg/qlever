@@ -57,7 +57,7 @@ add_subdirectory(third_party/googletest/googletest)
 include_directories(third_party/googletest/googletest/include)
 
 ################################
-# NLOHNMANN-JSON 
+# NLOHNMANN-JSON
 ################################
 # Header only, nothing to include
 include_directories(third_party/json/include/)
@@ -135,5 +135,7 @@ add_test(FTSAlgorithmsTest test/FTSAlgorithmsTest)
 add_test(QueryPlannerTest test/QueryPlannerTest)
 add_test(ConversionsTest test/ConversionsTest)
 add_test(SparsehashTest test/SparsehashTest)
+add_test(HashMapTest test/HashMapTest)
+add_test(HashSetTest test/HashSetTest)
 add_test(VocabularyGeneratorTest test/VocabularyGeneratorTest)
 add_test(MmapVectorTest test/MmapVectorTest)
