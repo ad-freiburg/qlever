@@ -261,7 +261,7 @@ class Vocabulary {
   template <typename = std::enable_if_t<!_isCompressed>>
   void createFromSet(const ad_utility::HashSet<StringType>& set);
 
-  template <typename = std::enable_if_t<!_isCompressed>>
+  template <typename = std::enable_if_t<_isCompressed>>
   google::sparse_hash_map<string, Id> asMap();
 
   static bool isLiteral(const string& word);

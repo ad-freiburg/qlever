@@ -33,6 +33,7 @@ struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
                            {"patterns", no_argument, NULL, 'P'},
                            {"text", no_argument, NULL, 't'},
                            {"unopt-optional", no_argument, NULL, 'u'},
+                           {"added-predicates", no_argument, NULL, 'r'},
                            {NULL, 0, NULL, 0}};
 
 void printUsage(char* execName) {
@@ -61,6 +62,9 @@ void printUsage(char* execName) {
   cout << "  " << std::setw(20) << "u, unopt-optional" << std::setw(1) << "    "
        << "Always place optional joins at the root of the query execution tree."
        << endl;
+  cout << "  " << std::setw(20) << "r, added-predicates" << std::setw(1)
+       << "    "
+       << "Create additional predicates that can be used in queries." << endl;
   cout.copyfmt(coutState);
 }
 
@@ -79,6 +83,7 @@ int main(int argc, char** argv) {
   bool text = false;
   bool allPermutations = false;
   bool optimizeOptionals = true;
+  bool addedPredicates = false;
   int port = -1;
   int numThreads = 1;
   bool usePatterns = false;
@@ -86,7 +91,7 @@ int main(int argc, char** argv) {
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "i:p:j:tauhPml", options, NULL);
+    int c = getopt_long(argc, argv, "i:p:j:tauhPmlr", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'i':
@@ -119,6 +124,9 @@ int main(int argc, char** argv) {
                      "will be ignored for ServerMain. The correct setting for "
                      "this flag is read directly from the index\n";
         break;
+      case 'r':
+        addedPredicates = true;
+        break;
       default:
         cout << endl
              << "! ERROR in processing options (getopt returned '" << c
@@ -150,7 +158,7 @@ int main(int argc, char** argv) {
   try {
     Server server(port, numThreads);
     server.initialize(index, text, allPermutations, optimizeOptionals,
-                      usePatterns);
+                      usePatterns, addedPredicates);
     server.run();
   } catch (const ad_semsearch::Exception& e) {
     LOG(ERROR) << e.getFullErrorMessage() << '\n';
