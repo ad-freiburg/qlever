@@ -67,6 +67,7 @@ vector<size_t> GroupBy::resultSortedOn() const {
   vector<size_t> sortedOn;
   std::unordered_map<string, size_t> subtreeVarCols =
       _subtree->getVariableColumnMap();
+  sortedOn.reserve(subtreeVarCols.size());
   for (std::string var : _groupByVariables) {
     sortedOn.push_back(subtreeVarCols[var]);
   }

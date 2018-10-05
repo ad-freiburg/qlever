@@ -360,7 +360,7 @@ To obtain a list of available predicates and their counts `ql:has-predicate` can
 
 `ql:has-predicate` can also be used as a normal predicate in an arbitrary query.
 
-Group by is supported both for selecting as well as in ORDER BY clauses:
+Group by is supported, its aggregates can be used both for selecting as well as in ORDER BY clauses:
 
     SELECT ?profession (AVG(?height) as ?avg) WHERE {
       ?a <is-a> ?profession .

@@ -419,10 +419,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
           std::make_pair(subjectColumn, false)};
 
       SubtreePlan orderByPlan(_qec);
-      std::shared_ptr<Operation> orderByOp(
-          new OrderBy(_qec, parent._qet, sortIndices));
-
       if (!isSorted) {
+        std::shared_ptr<Operation> orderByOp =
+            std::make_shared<OrderBy>(_qec, parent._qet, sortIndices);
         orderByPlan._qet->setVariableColumns(
             parent._qet->getVariableColumnMap());
         orderByPlan._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByOp);

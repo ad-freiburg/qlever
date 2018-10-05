@@ -77,13 +77,17 @@ float CountAvailablePredicates::getMultiplicity(size_t col) {
 // _____________________________________________________________________________
 size_t CountAvailablePredicates::getSizeEstimate() {
   if (_subtree.get() != nullptr) {
+    // Predicates are only computed for entities in the subtrees result.
+
     // This estimate is probably wildly innacurrate, but as it does not
     // depend on the order of operations of the subtree should be sufficient
-    // for the type of optizations the optimizer can currently do.
+    // for the type of optimizations the optimizer can currently do.
     size_t num_distinct = _subtree->getSizeEstimate() /
                           _subtree->getMultiplicity(_subjectColumnIndex);
     return num_distinct / getIndex().getHasPredicateMultiplicityPredicates();
   } else {
+    // Predicates are counted for all entities. In this case the size estimate
+    // should be accurate.
     return getIndex().getHasPredicateFullSize() /
            getIndex().getHasPredicateMultiplicityPredicates();
   }
