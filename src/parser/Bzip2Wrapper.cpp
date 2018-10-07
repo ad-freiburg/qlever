@@ -5,4 +5,3 @@
 //
 
 #include "./Bzip2Wrapper.h"
-

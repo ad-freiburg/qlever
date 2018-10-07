@@ -133,5 +133,4 @@ class Bzip2Wrapper {
     _bzStream.next_in = _bufferIn.data();
     _bzStream.avail_in = bytesRead;
   }
-
 };

@@ -246,4 +246,3 @@ class Tokenizer {
   FRIEND_TEST(TokenizerTest, WhitespaceAndComments);
   re2::StringPiece _data;
 };
-
