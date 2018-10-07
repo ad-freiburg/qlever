@@ -291,7 +291,8 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
     }
   }
   for (const string& filter : filters) {
-    addFilter(filter, currentPattern);
+    // We might add a language filter, those need the GraphPattern
+    addFilter(filter, &currentPattern->_filters, currentPattern);
   }
 }
 
@@ -429,8 +430,7 @@ void SparqlParser::parseSolutionModifiers(const string& str,
 }
 
 // _____________________________________________________________________________
-void SparqlParser::addFilter(const string& str,
-                             vector<SparqlFilter>* _filters,
+void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
                              ParsedQuery::GraphPattern* pattern) {
   size_t i = str.find('(');
   AD_CHECK(i != string::npos);
@@ -448,6 +448,12 @@ void SparqlParser::addFilter(const string& str,
       std::string lhs = ad_utility::strip(parts[0], ' ');
       std::string rhs = ad_utility::strip(parts[1], ' ');
       if (pred == "langMatches") {
+        if (!pattern) {
+          AD_THROW(
+              ad_semsearch::Exception::BAD_QUERY,
+              "Invalid position for language filter. Probable cause: language "
+              "filters are currently not supported in HAVING clauses.");
+        }
         if (!ad_utility::startsWith(lhs, "lang(")) {
           AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                    "langMatches filters"
