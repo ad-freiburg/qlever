@@ -18,3 +18,4 @@ static const int NUM_TRIPLES_PER_PARTIAL_VOCAB = 100000000;
 
 // ________________________________________________________________
 static const std::string PARTIAL_VOCAB_FILE_NAME = ".partial-vocabulary";
+static const std::string PARTIAL_MMAP_IDS = ".partial-ids-mmap";
