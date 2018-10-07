@@ -235,4 +235,3 @@ TEST(TurtleParserTest, predicateObjectList) {
   ASSERT_EQ(p._triples, exp);
   ASSERT_EQ(p.getPosition(), predL.size());
 }
-

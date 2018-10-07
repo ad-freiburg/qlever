@@ -59,7 +59,7 @@ TEST(TokenizerTest, SingleChars) {
   ASSERT_FALSE(RE2::FullMatch(u8"\u00D7", t.cls(t.PnCharsBaseString)));
 }
 
-TEST(TokenizerTest, StringLiterals){
+TEST(TokenizerTest, StringLiterals) {
   TurtleToken t;
   string sQuote1 = "\"this is a quote \"";
   string sQuote2 =
@@ -227,4 +227,3 @@ TEST(TokenizerTest, WhitespaceAndComments) {
   tok.skipWhitespaceAndComments();
   ASSERT_EQ(tok.data().begin() - s.data(), 27);
 }
-

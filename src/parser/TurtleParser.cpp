@@ -279,7 +279,7 @@ bool TurtleParser::stringParse() {
             // been escaped
             break;
           }
-        endPos = view.find(q, endPos + 1);
+          endPos = view.find(q, endPos + 1);
         } else {
           // no backslash before " , the string has definitely ended
           break;
@@ -310,27 +310,27 @@ bool TurtleParser::stringParse() {
   }
   if (endPos == string::npos) {
     throw ParseException("unterminated string Literal");
-    }
-    // also include the quotation marks in the word
-    _lastParseResult = view.substr(0, endPos + startPos);
-    _tok.data().remove_prefix(endPos + startPos);
+  }
+  // also include the quotation marks in the word
+  _lastParseResult = view.substr(0, endPos + startPos);
+  _tok.data().remove_prefix(endPos + startPos);
+  return true;
+  /*
+  std::vector<const RE2*> candidates;
+  candidates.push_back(&(_tokens.StringLiteralQuote));
+  candidates.push_back(&(_tokens.StringLiteralSingleQuote));
+  candidates.push_back(&(_tokens.StringLiteralLongSingleQuote));
+  candidates.push_back(&(_tokens.StringLiteralLongQuote));
+  if (auto [success, index, word] = _tok.getNextToken(candidates); success) {
+    (void)index;
+    // TODO<joka921> check how QLever handles multiline strings and strings
+    // with single quotes
+    _lastParseResult = word;
     return true;
-    /*
-    std::vector<const RE2*> candidates;
-    candidates.push_back(&(_tokens.StringLiteralQuote));
-    candidates.push_back(&(_tokens.StringLiteralSingleQuote));
-    candidates.push_back(&(_tokens.StringLiteralLongSingleQuote));
-    candidates.push_back(&(_tokens.StringLiteralLongQuote));
-    if (auto [success, index, word] = _tok.getNextToken(candidates); success) {
-      (void)index;
-      // TODO<joka921> check how QLever handles multiline strings and strings
-      // with single quotes
-      _lastParseResult = word;
-      return true;
-    } else {
-      return false;
-    }
-    */
+  } else {
+    return false;
+  }
+  */
 }
 
 // ______________________________________________________________________

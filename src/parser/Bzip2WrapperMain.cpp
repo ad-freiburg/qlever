@@ -19,4 +19,3 @@ int main(int argc, char** argv) {
     ofs.write(data.value().data(), data.value().size());
   }
 }
-
