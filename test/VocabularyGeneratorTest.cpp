@@ -71,7 +71,7 @@ class MergeVocabularyTest : public ::testing::Test {
     std::ofstream expVoc(_pathVocabExp);
     std::ofstream expExtVoc(_pathExternalVocabExp);
     expVoc << "ape\nbear\ngorilla\nmonkey\nzebra\n";
-    expExtVoc << EXTERNALIZED_LITERALS_PREFIX << "bla\n";
+    expExtVoc << "bla\n";
 
     // open files for partial Vocabularies
     auto mode = std::ios_base::out | std::ios_base::binary;

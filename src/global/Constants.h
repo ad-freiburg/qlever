@@ -36,6 +36,10 @@ static const char INTERNAL_TEXT_MATCH_PREDICATE[] =
 static const char HAS_PREDICATE_PREDICATE[] =
     "<QLever-internal-function/has-predicate>";
 
+static const std::string URI_PREFIX = "<QLever-internal-function/";
+
+static const std::string LANGUAGE_PREDICATE = URI_PREFIX + "langtag>";
+
 static const char VALUE_PREFIX[] = ":v:";
 static const char VALUE_DATE_PREFIX[] = ":v:date:";
 static const char VALUE_FLOAT_PREFIX[] = ":v:float:";
@@ -66,3 +70,7 @@ static constexpr uint8_t NUM_COMPRESSION_PREFIXES = 127;
 // compression has been applied to  a word
 static const uint8_t NO_PREFIX_CHAR =
     MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES;
+
+// Prefixing strings with this char will put them to the beginning of the
+// Vocabulary. Necessary for language filter, because the languages have to be
+// known during the merge process

@@ -4,6 +4,7 @@
 
 #include "./SparqlParser.h"
 #include "../global/Constants.h"
+#include "../util/Conversions.h"
 #include "../util/Exception.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
@@ -290,7 +291,8 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
     }
   }
   for (const string& filter : filters) {
-    addFilter(filter, &currentPattern->_filters);
+    // We might add a language filter, those need the GraphPattern
+    addFilter(filter, &currentPattern->_filters, currentPattern);
   }
 }
 
@@ -428,8 +430,8 @@ void SparqlParser::parseSolutionModifiers(const string& str,
 }
 
 // _____________________________________________________________________________
-void SparqlParser::addFilter(const string& str,
-                             vector<SparqlFilter>* _filters) {
+void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
+                             ParsedQuery::GraphPattern* pattern) {
   size_t i = str.find('(');
   AD_CHECK(i != string::npos);
   size_t j = str.rfind(')');
@@ -446,6 +448,12 @@ void SparqlParser::addFilter(const string& str,
       std::string lhs = ad_utility::strip(parts[0], ' ');
       std::string rhs = ad_utility::strip(parts[1], ' ');
       if (pred == "langMatches") {
+        if (!pattern) {
+          AD_THROW(
+              ad_semsearch::Exception::BAD_QUERY,
+              "Invalid position for language filter. Probable cause: language "
+              "filters are currently not supported in HAVING clauses.");
+        }
         if (!ad_utility::startsWith(lhs, "lang(")) {
           AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                    "langMatches filters"
@@ -455,11 +463,43 @@ void SparqlParser::addFilter(const string& str,
         }
         std::string lvar = lhs.substr(5, lhs.size() - 6);
         std::cout << "lvar:" << lvar << std::endl;
-        SparqlFilter f;
-        f._type = SparqlFilter::LANG_MATCHES;
-        f._lhs = lvar;
-        f._rhs = rhs.substr(1, rhs.size() - 2);
-        _filters->emplace_back(f);
+
+        auto langTag = rhs.substr(1, rhs.size() - 2);
+        // first find a predicate for the given variable
+        auto it =
+            std::find_if(pattern->_whereClauseTriples.begin(),
+                         pattern->_whereClauseTriples.end(),
+                         [&lvar](const auto& tr) { return tr._o == lvar; });
+        while (it != pattern->_whereClauseTriples.end() &&
+               ad_utility::startsWith(it->_p, "?")) {
+          it = std::find_if(it + 1, pattern->_whereClauseTriples.end(),
+                            [&lvar](const auto& tr) { return tr._o == lvar; });
+        }
+        if (it == pattern->_whereClauseTriples.end()) {
+          LOG(INFO)
+              << "language filter variable " + rhs +
+                     "that did not appear as object in any suitable triple. "
+                     "using special literal-to-language triple instead.\n";
+          auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
+          SparqlTriple triple(lvar, LANGUAGE_PREDICATE, langEntity);
+          // Quadratic in number of triples in query.
+          // Shouldn't be a problem here, though.
+          // Could use a (hash)-set instead of vector.
+          if (std::find(pattern->_whereClauseTriples.begin(),
+                        pattern->_whereClauseTriples.end(),
+                        triple) != pattern->_whereClauseTriples.end()) {
+            LOG(INFO) << "Ignoring duplicate triple: " << str << std::endl;
+          } else {
+            pattern->_whereClauseTriples.push_back(triple);
+          }
+        } else {
+          // replace the triple
+          string taggedPredicate = '@' + langTag + '@' + it->_p;
+          *it = SparqlTriple(it->_s, taggedPredicate, it->_o);
+        }
+
+        // Convert the language filter to a special triple
+        // to make it more efficient (no need for string resolution)
         return;
       }
       if (pred == "regex") {

@@ -265,6 +265,7 @@ class Vocabulary {
   google::sparse_hash_map<string, Id> asMap();
 
   static bool isLiteral(const string& word);
+  static bool isExternalizedLiteral(const string& word);
 
   template <bool isEntity = false>
   bool shouldBeExternalized(const string& word) const;

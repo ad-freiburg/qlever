@@ -23,7 +23,8 @@ class SparqlParser {
   static void addPrefix(const string& str, ParsedQuery& query);
   static void addWhereTriple(const string& str,
                              ParsedQuery::GraphPattern* pattern);
-  static void addFilter(const string& str, vector<SparqlFilter>* _filters);
+  static void addFilter(const string& str, vector<SparqlFilter>* _filters,
+                        ParsedQuery::GraphPattern* pattern = nullptr);
 
   static string stripAndLowercaseKeywordLiteral(const string& lit);
 };

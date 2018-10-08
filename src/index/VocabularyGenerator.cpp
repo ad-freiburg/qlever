@@ -11,9 +11,12 @@
 #include <utility>
 #include <vector>
 
+#include "../util/Conversions.h"
 #include "../util/Exception.h"
+#include "../util/HashMap.h"
 #include "../util/Log.h"
 #include "./ConstantsIndexCreation.h"
+#include "./Vocabulary.h"
 
 class PairCompare {
  public:
@@ -31,6 +34,8 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
   std::ofstream outfileExternal(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
   AD_CHECK(outfileExternal.is_open());
   std::vector<bool> endOfFile(numFiles, false);
+
+  ad_utility::HashMap<string, Id> langtagMap;
 
   using pair_T = std::pair<string, size_t>;
   std::priority_queue<pair_T, std::vector<pair_T>, PairCompare> queue;
@@ -65,7 +70,8 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
       if (top.first < string({EXTERNALIZED_LITERALS_PREFIX})) {
         outfile << top.first << std::endl;
       } else {
-        outfileExternal << top.first << std::endl;
+        // we have to strip the externalization character again
+        outfileExternal << top.first.substr(1) << std::endl;
       }
 
       // according to the standard, flush() or seek() must be called before
@@ -108,11 +114,11 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
 }
 
 // ____________________________________________________________________________________________
-google::sparse_hash_map<string, Id> vocabMapFromPartialIndexedFile(
+ad_utility::HashMap<string, Id> vocabMapFromPartialIndexedFile(
     const string& partialFile) {
   std::ifstream file(partialFile, std::ios_base::binary);
   AD_CHECK(file.is_open());
-  google::sparse_hash_map<string, Id> vocabMap;
+  ad_utility::HashMap<string, Id> vocabMap;
   uint32_t len;
   while (file.read((char*)&len, sizeof(len))) {
     std::string word(len, '\0');
