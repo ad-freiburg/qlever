@@ -95,7 +95,7 @@ void TwoColumnJoin::computeResult(ResultTable* result) const {
         rightFilter ? rightResult->_fixedSizeData : leftResult->_fixedSizeData);
     size_t jc1 = rightFilter ? _jc1Left : _jc1Right;
     size_t jc2 = rightFilter ? _jc2Left : _jc2Right;
-    result->_sortedBy = jc1;
+    result->_sortedBy = {jc1};
     result->_nofColumns = v->getResultWidth();
     result->_resultTypes.reserve(result->_nofColumns);
     result->_resultTypes.insert(result->_resultTypes.end(),
@@ -181,7 +181,9 @@ size_t TwoColumnJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-size_t TwoColumnJoin::resultSortedOn() const { return _jc1Left; }
+vector<size_t> TwoColumnJoin::resultSortedOn() const {
+  return {_jc1Left, _jc2Left};
+}
 
 // _____________________________________________________________________________
 float TwoColumnJoin::getMultiplicity(size_t col) {

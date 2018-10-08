@@ -36,10 +36,11 @@ ScanningJoin& ScanningJoin::operator=(const ScanningJoin& other) {
 ScanningJoin::~ScanningJoin() { delete _subtree; }
 
 // _____________________________________________________________________________
-string ScanningJoin::asString() const {
+string ScanningJoin::asString(size_t indent) const {
   std::ostringstream os;
   os << "SCANNING JOIN for the result of " << _subtree << " on col "
-     << _subtreeJoinCol << " and the equivalent of: " << IndexScan::asString();
+     << _subtreeJoinCol
+     << " and the equivalent of: " << IndexScan::asString(indent);
   return os.str();
 }
 

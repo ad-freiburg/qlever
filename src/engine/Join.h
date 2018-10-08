@@ -18,23 +18,23 @@ class Join : public Operation {
        std::shared_ptr<QueryExecutionTree> t2, size_t t1JoinCol,
        size_t t2JoinCol, bool keepJoinColumn = true);
 
-  virtual string asString(size_t indent = 0) const;
+  virtual string asString(size_t indent = 0) const override;
 
-  virtual size_t getResultWidth() const;
+  virtual size_t getResultWidth() const override;
 
-  virtual size_t resultSortedOn() const;
+  virtual vector<size_t> resultSortedOn() const override;
 
   std::unordered_map<string, size_t> getVariableColumns() const;
 
   std::unordered_set<string> getContextVars() const;
 
-  virtual void setTextLimit(size_t limit) {
+  virtual void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);
     _right->setTextLimit(limit);
     _sizeEstimateComputed = false;
   }
 
-  virtual size_t getSizeEstimate() {
+  virtual size_t getSizeEstimate() override {
     if (!_sizeEstimateComputed) {
       computeSizeEstimateAndMultiplicities();
       _sizeEstimateComputed = true;
@@ -42,15 +42,15 @@ class Join : public Operation {
     return _sizeEstimate;
   }
 
-  virtual size_t getCostEstimate();
+  virtual size_t getCostEstimate() override;
 
-  virtual bool knownEmptyResult() {
+  virtual bool knownEmptyResult() override {
     return _left->knownEmptyResult() || _right->knownEmptyResult();
   }
 
   void computeSizeEstimateAndMultiplicities();
 
-  virtual float getMultiplicity(size_t col);
+  virtual float getMultiplicity(size_t col) override;
 
  private:
   std::shared_ptr<QueryExecutionTree> _left;
@@ -66,7 +66,7 @@ class Join : public Operation {
 
   vector<float> _multiplicities;
 
-  virtual void computeResult(ResultTable* result) const;
+  virtual void computeResult(ResultTable* result) const override;
 
   static bool isFullScanDummy(std::shared_ptr<QueryExecutionTree> tree) {
     return tree->getType() == QueryExecutionTree::SCAN &&

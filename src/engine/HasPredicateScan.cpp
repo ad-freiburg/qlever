@@ -55,19 +55,19 @@ size_t HasPredicateScan::getResultWidth() const {
   return -1;
 }
 
-size_t HasPredicateScan::resultSortedOn() const {
+vector<size_t> HasPredicateScan::resultSortedOn() const {
   switch (_type) {
     case ScanType::FREE_S:
       // is the lack of sorting here a problem?
-      return -1;
+      return {};
     case ScanType::FREE_O:
-      return 0;
+      return {0};
     case ScanType::FULL_SCAN:
-      return 0;
+      return {0};
     case ScanType::SUBQUERY_S:
       return _subtree->resultSortedOn();
   }
-  return -1;
+  return {};
 }
 
 std::unordered_map<string, size_t> HasPredicateScan::getVariableColumns()

@@ -41,9 +41,9 @@ string CountAvailablePredicates::asString(size_t indent) const {
 size_t CountAvailablePredicates::getResultWidth() const { return 2; }
 
 // _____________________________________________________________________________
-size_t CountAvailablePredicates::resultSortedOn() const {
+vector<size_t> CountAvailablePredicates::resultSortedOn() const {
   // The result is not sorted on any column.
-  return std::numeric_limits<size_t>::max();
+  return {};
 }
 
 // _____________________________________________________________________________
@@ -67,40 +67,49 @@ float CountAvailablePredicates::getMultiplicity(size_t col) {
   if (col == 0) {
     return 1;
   } else {
-    // As this operation is currently only intended to be used as the last or
-    // second to last (with an OrderBy aftwerards) operation in a
-    // QueryExecutionTree the multiplicity of its columns is not needed.
-    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-             "CountAvailablePredicates has no implementation for the"
-             "multiplicity of columns other than the first.");
+    // Determining the multiplicity of the second column (the counts)
+    // is non trivial (and potentially not possible) without computing
+    // at least a part of the result first.
     return 1;
   }
 }
 
 // _____________________________________________________________________________
 size_t CountAvailablePredicates::getSizeEstimate() {
-  // There is no easy way of computing the size estimate, but it should also
-  // not be used, as this operation should not be used within the optimizer.
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-           "CountAvailablePredicates has no implementation for the size "
-           "estimation.");
-  return 1;
+  if (_subtree.get() != nullptr) {
+    // Predicates are only computed for entities in the subtrees result.
+
+    // This estimate is probably wildly innacurrate, but as it does not
+    // depend on the order of operations of the subtree should be sufficient
+    // for the type of optimizations the optimizer can currently do.
+    size_t num_distinct = _subtree->getSizeEstimate() /
+                          _subtree->getMultiplicity(_subjectColumnIndex);
+    return num_distinct / getIndex().getHasPredicateMultiplicityPredicates();
+  } else {
+    // Predicates are counted for all entities. In this case the size estimate
+    // should be accurate.
+    return getIndex().getHasPredicateFullSize() /
+           getIndex().getHasPredicateMultiplicityPredicates();
+  }
 }
 
 // _____________________________________________________________________________
 size_t CountAvailablePredicates::getCostEstimate() {
-  // This operation should not be used within the optimizer, and the cost
-  // should never be queried.
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-           "CountAvailablePredicates has no implementation for the cost "
-           "estimate determination.");
-  return 1;
+  if (_subtree.get() != nullptr) {
+    // Without knowing the ratio of elements that will have a pattern assuming
+    // constant cost per entry should be reasonable (altough non distinct
+    // entries are of course actually cheaper).
+    return _subtree->getCostEstimate() + _subtree->getSizeEstimate();
+  } else {
+    // the cost is proportional to the number of elements we need to write.
+    return getSizeEstimate();
+  }
 }
 
 // _____________________________________________________________________________
 void CountAvailablePredicates::computeResult(ResultTable* result) const {
   result->_nofColumns = 2;
-  result->_sortedBy = 0;
+  result->_sortedBy = resultSortedOn();
   result->_fixedSizeData = new vector<array<Id, 2>>();
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);

@@ -18,11 +18,11 @@ using std::shared_ptr;
 class Operation {
  public:
   // Default Constructor.
-  Operation() : _executionContext(NULL) {}
+  Operation() : _executionContext(NULL), _hasComputedSortColumns(false) {}
 
   // Typical Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
-      : _executionContext(executionContext) {}
+      : _executionContext(executionContext), _hasComputedSortColumns(false) {}
 
   // Destructor.
   virtual ~Operation() {
@@ -56,6 +56,17 @@ class Operation {
     _executionContext = executionContext;
   }
 
+  /**
+   * @return A list of columns on which the result of this operation is sorted.
+   */
+  const vector<size_t>& getResultSortedOn() {
+    if (!_hasComputedSortColumns) {
+      _hasComputedSortColumns = true;
+      _resultSortedColumns = resultSortedOn();
+    }
+    return _resultSortedColumns;
+  }
+
   const Index& getIndex() const { return _executionContext->getIndex(); }
 
   const Engine& getEngine() const { return _executionContext->getEngine(); }
@@ -64,7 +75,6 @@ class Operation {
   // This should possible act like an ID for each subtree.
   virtual string asString(size_t indent = 0) const = 0;
   virtual size_t getResultWidth() const = 0;
-  virtual size_t resultSortedOn() const = 0;
   virtual void setTextLimit(size_t limit) = 0;
   virtual size_t getCostEstimate() = 0;
   virtual size_t getSizeEstimate() = 0;
@@ -80,8 +90,26 @@ class Operation {
   // No ownership.
   QueryExecutionContext* _executionContext;
 
+  /**
+   * @brief Allows for updating of the sorted columns of an operation. This
+   *        has to be used by an operation if it's sort columns change during
+   *        the operations lifetime.
+   */
+  void setResultSortedOn(const vector<size_t>& sortedColumns) {
+    _resultSortedColumns = sortedColumns;
+  }
+
+  /**
+   * @brief Compute and return the columns on which the result will be sorted
+   * @return The columns on which the result will be sorted.
+   */
+  virtual vector<size_t> resultSortedOn() const = 0;
+
  private:
   //! Compute the result of the query-subtree rooted at this element..
   //! Computes both, an EntityList and a HitList.
   virtual void computeResult(ResultTable* result) const = 0;
+
+  vector<size_t> _resultSortedColumns;
+  bool _hasComputedSortColumns;
 };

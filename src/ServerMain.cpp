@@ -32,7 +32,6 @@ struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
                            {"port", required_argument, NULL, 'p'},
                            {"patterns", no_argument, NULL, 'P'},
                            {"text", no_argument, NULL, 't'},
-                           {"unopt-optional", no_argument, NULL, 'u'},
                            {NULL, 0, NULL, 0}};
 
 void printUsage(char* execName) {
@@ -58,9 +57,6 @@ void printUsage(char* execName) {
        << "Enables the usage of text." << endl;
   cout << "  " << std::setw(20) << "j, worker-threads" << std::setw(1) << "    "
        << "Sets the number of worker threads to use" << endl;
-  cout << "  " << std::setw(20) << "u, unopt-optional" << std::setw(1) << "    "
-       << "Always place optional joins at the root of the query execution tree."
-       << endl;
   cout.copyfmt(coutState);
 }
 
@@ -78,7 +74,6 @@ int main(int argc, char** argv) {
   string index = "";
   bool text = false;
   bool allPermutations = false;
-  bool optimizeOptionals = true;
   int port = -1;
   int numThreads = 1;
   bool usePatterns = false;
@@ -106,9 +101,6 @@ int main(int argc, char** argv) {
         break;
       case 'j':
         numThreads = atoi(optarg);
-        break;
-      case 'u':
-        optimizeOptionals = false;
         break;
       case 'h':
         printUsage(argv[0]);
@@ -149,8 +141,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numThreads);
-    server.initialize(index, text, allPermutations, optimizeOptionals,
-                      usePatterns);
+    server.initialize(index, text, allPermutations, usePatterns);
     server.run();
   } catch (const ad_semsearch::Exception& e) {
     LOG(ERROR) << e.getFullErrorMessage() << '\n';

@@ -33,11 +33,9 @@ struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
                            {"patterns", no_argument, NULL, 'P'},
                            {"queryfile", required_argument, NULL, 'q'},
                            {"text", no_argument, NULL, 't'},
-                           {"unopt-optional", no_argument, NULL, 'u'},
                            {NULL, 0, NULL, 0}};
 
-void processQuery(QueryExecutionContext& qec, const string& query,
-                  bool optimizeOptionals);
+void processQuery(QueryExecutionContext& qec, const string& query);
 void printUsage(char* execName);
 
 void printUsage(char* execName) {
@@ -68,8 +66,6 @@ void printUsage(char* execName) {
        << "Path to a file containing one query per line." << endl;
   cout << "  " << std::setw(20) << "t, text" << std::setw(1) << "    "
        << "Enables the usage of text." << endl;
-  cout << "  " << std::setw(20) << "u, unopt-optional" << std::setw(1) << "    "
-       << "Always execute optional joins last." << endl;
   cout.copyfmt(coutState);
 }
 
@@ -90,7 +86,6 @@ int main(int argc, char** argv) {
   bool interactive = false;
   bool onDiskLiterals = false;
   bool allPermutations = false;
-  bool optimizeOptionals = true;
   bool usePatterns = false;
 
   optind = 1;
@@ -123,9 +118,6 @@ int main(int argc, char** argv) {
       case 'h':
         printUsage(argv[0]);
         exit(0);
-        break;
-      case 'u':
-        optimizeOptionals = false;
         break;
       case 'P':
         usePatterns = true;
@@ -188,13 +180,13 @@ int main(int argc, char** argv) {
         if (os.str() == "") {
           return 0;
         }
-        processQuery(qec, os.str(), optimizeOptionals);
+        processQuery(qec, os.str());
       }
     } else {
       std::ifstream qf(queryfile);
       string line;
       while (std::getline(qf, line)) {
-        processQuery(qec, line, optimizeOptionals);
+        processQuery(qec, line);
       }
     }
   } catch (const std::exception& e) {
@@ -207,14 +199,13 @@ int main(int argc, char** argv) {
   return 0;
 }
 
-void processQuery(QueryExecutionContext& qec, const string& query,
-                  bool optimizeOptionals) {
+void processQuery(QueryExecutionContext& qec, const string& query) {
   ad_utility::Timer t;
   t.start();
   SparqlParser sp;
   ParsedQuery pq = sp.parse(query);
   pq.expandPrefixes();
-  QueryPlanner qp(&qec, optimizeOptionals);
+  QueryPlanner qp(&qec);
   ad_utility::Timer timer;
   timer.start();
   auto qet = qp.createExecutionTree(pq);

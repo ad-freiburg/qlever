@@ -36,8 +36,7 @@ class Server {
 
   // Initialize the server.
   void initialize(const string& ontologyBaseName, bool useText,
-                  bool allPermutations = false, bool optimizeOptionals = true,
-                  bool usePatterns = false);
+                  bool allPermutations = false, bool usePatterns = false);
 
   //! Loop, wait for requests and trigger processing.
   void run();
@@ -48,7 +47,6 @@ class Server {
   int _port;
   Index _index;
   Engine _engine;
-  bool _optimizeOptionals;
 
   bool _initialized;
 

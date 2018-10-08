@@ -140,7 +140,7 @@ class ParsedQuery {
   class GraphPattern {
    public:
     // deletes the patterns children.
-    GraphPattern() {}
+    GraphPattern() : _optional(false) {}
     // Move and copyconstructors to avoid double deletes on the trees children
     GraphPattern(GraphPattern&& other);
     GraphPattern(const GraphPattern& other);

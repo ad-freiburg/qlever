@@ -60,23 +60,27 @@ class GroupBy : public Operation {
   GroupBy(QueryExecutionContext* qec, const vector<string>& groupByVariables,
           const std::vector<ParsedQuery::Alias>& aliases);
 
-  virtual string asString(size_t indent = 0) const;
+  virtual string asString(size_t indent = 0) const override;
 
-  virtual size_t getResultWidth() const;
+  virtual size_t getResultWidth() const override;
 
-  virtual size_t resultSortedOn() const;
+  virtual vector<size_t> resultSortedOn() const override;
 
   std::unordered_map<string, size_t> getVariableColumns() const;
 
-  virtual void setTextLimit(size_t limit) { _subtree->setTextLimit(limit); }
+  virtual void setTextLimit(size_t limit) override {
+    _subtree->setTextLimit(limit);
+  }
 
-  virtual bool knownEmptyResult() { return _subtree->knownEmptyResult(); }
+  virtual bool knownEmptyResult() override {
+    return _subtree->knownEmptyResult();
+  }
 
-  virtual float getMultiplicity(size_t col);
+  virtual float getMultiplicity(size_t col) override;
 
-  virtual size_t getSizeEstimate();
+  virtual size_t getSizeEstimate() override;
 
-  virtual size_t getCostEstimate();
+  virtual size_t getCostEstimate() override;
 
   /**
    * @brief To allow for creating a OrderBy Operation after the GroupBy
@@ -102,7 +106,7 @@ class GroupBy : public Operation {
   std::vector<ParsedQuery::Alias> _aliases;
   std::unordered_map<string, size_t> _varColMap;
 
-  virtual void computeResult(ResultTable* result) const;
+  virtual void computeResult(ResultTable* result) const override;
 };
 
 // This method is declared here solely for unit testing purposes

@@ -11,8 +11,7 @@ using std::vector;
 
 class QueryPlanner {
  public:
-  explicit QueryPlanner(QueryExecutionContext* qec,
-                        bool optimizeOptionals = true);
+  explicit QueryPlanner(QueryExecutionContext* qec);
 
   QueryExecutionTree createExecutionTree(ParsedQuery& pq) const;
 
@@ -154,11 +153,6 @@ class QueryPlanner {
 
  private:
   QueryExecutionContext* _qec;
-  /**
-   * @brief Controls if optional joins are added to the optimizer or always
-   *        done last.
-   */
-  bool _optimizeOptionals;
 
   static bool isVariable(const string& elem);
 
@@ -178,13 +172,27 @@ class QueryPlanner {
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 
+  vector<SubtreePlan> getGroupByRow(
+      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
+
+  vector<SubtreePlan> getDistinctRow(
+      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
+
+  vector<SubtreePlan> getPatternTrickRow(
+      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab,
+      const SparqlTriple& patternTrickTriple) const;
+
+  vector<SubtreePlan> getHavingRow(
+      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
+
   bool connected(const SubtreePlan& a, const SubtreePlan& b,
                  const TripleGraph& graph) const;
 
   vector<array<Id, 2>> getJoinColumns(const SubtreePlan& a,
                                       const SubtreePlan& b) const;
 
-  string getPruningKey(const SubtreePlan& plan, size_t orderedOnCol) const;
+  string getPruningKey(const SubtreePlan& plan,
+                       const vector<size_t>& orderedOnColumns) const;
 
   void applyFiltersIfPossible(vector<SubtreePlan>& row,
                               const vector<SparqlFilter>& filters,

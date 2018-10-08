@@ -17,11 +17,8 @@
 
 // _____________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
-                        bool allPermutations, bool optimizeOptionals,
-                        bool usePatterns) {
+                        bool allPermutations, bool usePatterns) {
   LOG(INFO) << "Initializing server..." << std::endl;
-
-  _optimizeOptionals = optimizeOptionals;
 
   _index.setUsePatterns(usePatterns);
 
@@ -164,7 +161,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       // QueryGraph qg(qec);
       // qg.createFromParsedQuery(pq);
       // const QueryExecutionTree& qet = qg.getExecutionTree();
-      QueryPlanner qp(qec, _optimizeOptionals);
+      QueryPlanner qp(qec);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
       LOG(INFO) << qet.asString() << std::endl;
 

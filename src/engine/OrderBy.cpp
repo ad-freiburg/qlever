@@ -34,6 +34,19 @@ string OrderBy::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
+vector<size_t> OrderBy::resultSortedOn() const {
+  std::vector<size_t> sortedOn;
+  sortedOn.resize(_sortIndices.size());
+  for (const pair<size_t, bool>& p : _sortIndices) {
+    if (!p.second) {
+      // Only ascending columns count as sorted.
+      sortedOn.push_back(p.first);
+    }
+  }
+  return sortedOn;
+}
+
+// _____________________________________________________________________________
 void OrderBy::computeResult(ResultTable* result) const {
   LOG(DEBUG) << "Gettign sub-result for OrderBy result computation..." << endl;
   AD_CHECK(_sortIndices.size() > 0);
@@ -85,8 +98,7 @@ void OrderBy::computeResult(ResultTable* result) const {
       break;
     }
   }
-  result->_sortedBy = (_sortIndices[0].second ? result->_nofColumns + 1
-                                              : _sortIndices[0].first);
+  result->_sortedBy = resultSortedOn();
   result->finish();
   LOG(DEBUG) << "OrderBy result computation done." << endl;
 }

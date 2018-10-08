@@ -31,7 +31,7 @@ class DummyOperation : public Operation {
 
   virtual size_t getResultWidth() const { return 2; }
 
-  virtual size_t resultSortedOn() const { return 1; }
+  virtual vector<size_t> resultSortedOn() const { return {1}; }
 
   virtual void setTextLimit(size_t limit) { (void)limit; }
 
