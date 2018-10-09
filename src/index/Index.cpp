@@ -8,7 +8,6 @@
 #include <optional>
 #include <stxxl/algorithm>
 #include <stxxl/map>
-#include <unordered_set>
 
 #include "../parser/NTriplesParser.h"
 #include "../parser/TsvParser.h"
@@ -458,7 +457,7 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
   typedef std::unordered_map<Pattern, size_t> PatternsCountMap;
 
   LOG(INFO) << "Creating patterns file..." << std::endl;
-  PatternsCountMap patternCounts;  //(4096 * 16, 4096 * 16);
+  PatternsCountMap patternCounts;
 
   // determine the most common patterns
   Pattern pattern;
@@ -509,7 +508,7 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
             << std::endl;
   LOG(INFO) << "Discarded the patterns of " << numInvalidPatterns
             << " entities"
-               " because they were to large."
+               " because they were too large."
             << std::endl;
 
   // stores patterns sorted by their number of occurences
@@ -521,6 +520,13 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
             << std::endl;
   std::vector<std::pair<Pattern, size_t>> sortedPatterns;
   sortedPatterns.reserve(actualNumPatterns);
+  auto comparePatternCounts =
+      [](const std::pair<Pattern, size_t>& first,
+         const std::pair<Pattern, size_t>& second) -> bool {
+    return first.second > second.second ||
+           (first.second == second.second &&
+            first.first > second.first);
+  };
   for (auto& it : patternCounts) {
     if (sortedPatterns.size() < maxNumPatterns) {
       sortedPatterns.push_back(it);
@@ -528,23 +534,17 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
         LOG(DEBUG) << "Sorting patterns after initial insertions." << std::endl;
         // actuall sort the sorted patterns
         std::sort(sortedPatterns.begin(), sortedPatterns.end(),
-                  [](const std::pair<Pattern, size_t>& first,
-                     const std::pair<Pattern, size_t>& second) -> bool {
-                    return first.second > second.second;
-                  });
+                  comparePatternCounts);
       }
     } else {
-      if (it.second > sortedPatterns.back().second) {
+      if (comparePatternCounts(it, sortedPatterns.back())) {
         // The new element is larger than the smallest element in the vector.
         // Insert it into the correct position in the vector using binary
         // search.
         sortedPatterns.pop_back();
         auto sortedIt =
             std::lower_bound(sortedPatterns.begin(), sortedPatterns.end(), it,
-                             [](const std::pair<Pattern, size_t>& p1,
-                                const std::pair<Pattern, size_t>& p2) -> bool {
-                               return p1.second > p2.second;
-                             });
+                             comparePatternCounts);
         sortedPatterns.insert(sortedIt, it);
       }
     }
@@ -553,10 +553,7 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
     LOG(DEBUG) << "Sorting patterns after all insertions." << std::endl;
     // actuall sort the sorted patterns
     std::sort(sortedPatterns.begin(), sortedPatterns.end(),
-              [](const std::pair<Pattern, size_t>& first,
-                 const std::pair<Pattern, size_t>& second) -> bool {
-                return first.second > second.second;
-              });
+              comparePatternCounts);
   }
 
   LOG(DEBUG) << "Number of sorted patterns: " << sortedPatterns.size()
