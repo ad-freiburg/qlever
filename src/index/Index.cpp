@@ -524,8 +524,7 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
       [](const std::pair<Pattern, size_t>& first,
          const std::pair<Pattern, size_t>& second) -> bool {
     return first.second > second.second ||
-           (first.second == second.second &&
-            first.first > second.first);
+           (first.second == second.second && first.first > second.first);
   };
   for (auto& it : patternCounts) {
     if (sortedPatterns.size() < maxNumPatterns) {
