@@ -192,9 +192,9 @@ namespace std {
 template <>
 struct hash<Pattern> {
   std::size_t operator()(const Pattern& p) const {
-    string s = string(reinterpret_cast<const char*>(p._data.data()),
+    std::string_view s = std::string_view(reinterpret_cast<const char*>(p._data.data()),
                       sizeof(Id) * p.size());
-    return hash<string>()(s);
+    return hash<std::string_view>()(s);
   }
 };
 }  // namespace std
