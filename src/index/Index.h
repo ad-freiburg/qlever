@@ -41,10 +41,9 @@ struct LinesAndWords {
 
 class Index {
  public:
-  typedef stxxl::VECTOR_GENERATOR<array<Id, 3>>::result ExtVec;
+  typedef stxxl::vector<array<Id, 3>> ExtVec;
   // Block Id, Context Id, Word Id, Score, entity
-  typedef stxxl::VECTOR_GENERATOR<tuple<Id, Id, Id, Score, bool>>::result
-      TextVec;
+  typedef stxxl::vector<tuple<Id, Id, Id, Score, bool>> TextVec;
   typedef std::tuple<Id, Id, Score> Posting;
 
   // Forbid copy and assignment
