@@ -1308,11 +1308,11 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
   // TODO: We could probably also accept permutations of the join columns
   // as the order of a here and then permute the join columns to match the
   // sorted columns of a or b (whichever is larger).
-  for (int i = 0; aSorted && i < jcs.size(); i++) {
+  for (size_t i = 0; aSorted && i < jcs.size(); i++) {
     aSorted = aSorted && jcs[i][0] == aSortedOn[i];
   }
   bool bSorted = bSortedOn.size() >= jcs.size();
-  for (int i = 0; bSorted && i < jcs.size(); i++) {
+  for (size_t i = 0; bSorted && i < jcs.size(); i++) {
     bSorted = bSorted && jcs[i][1] == bSortedOn[i];
   }
 
