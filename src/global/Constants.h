@@ -56,6 +56,7 @@ static const int DEFAULT_NOF_DATE_YEAR_DIGITS = 19;
 
 static const std::string MMAP_FILE_SUFFIX = ".meta-mmap";
 static const std::string CONFIGURATION_FILE = ".meta-data.json";
+static const std::string PREFIX_FILE = ".prefixes";
 
 // Constants for the range of valid compression prefixes
 // all ASCII- printable characters are left out.

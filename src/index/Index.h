@@ -558,9 +558,8 @@ class Index {
    */
   void throwExceptionIfNoPatterns() const;
 
-  // TODO<joka921> better names
-  void writeConfigurationFile() const;
-  void readConfigurationFile();
+  void writeConfiguration() const;
+  void readConfiguration();
 
   // initialize the index-build-time settings for the vocabulary
   void initializeVocabularySettingsBuild();

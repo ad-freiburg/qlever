@@ -176,8 +176,38 @@ void CompressVocabAndCreateConfigurationFile(const string& indexPrefix) {
   string confFilename = indexPrefix + CONFIGURATION_FILE;
   string vocabFilename = indexPrefix + ".vocabulary";
   if (ad_utility::File::exists(confFilename)) {
-    std::cout
-        << "This index already has a configuration file, nothing to do here\n";
+    std::cout << "This index already has a configuration file, check if it\n"
+                 "contains prefixes as internal list instead of in a separate\n"
+                 ".prefixes file\n";
+
+    std::ifstream confFile(indexPrefix + CONFIGURATION_FILE);
+    AD_CHECK(confFile.is_open());
+    json config;
+    confFile >> config;
+    if (config.find("prefixes") == config.end()) {
+      std::cout << "The configuration file " << confFilename
+                << " is missing the \"prefixes\" field" << std::endl;
+      AD_CHECK(false);
+    }
+    auto prefixes = config["prefixes"];
+    if (prefixes.type() == json::value_t::boolean &&
+        ad_utility::File::exists(indexPrefix + PREFIX_FILE)) {
+      std::cout << "The index already uses a separate " << PREFIX_FILE
+                << " file\n";
+    } else if (prefixes.type() == json::value_t::array) {
+      std::cout << "Converting to separate " << PREFIX_FILE << " file\n";
+      std::ofstream prefixFile(indexPrefix + PREFIX_FILE);
+      AD_CHECK(prefixFile.is_open());
+      for (const string& prefix : prefixes) {
+        prefixFile << prefix << '\n';
+      }
+    } else {
+      std::cout << "The configuration file " << confFilename
+                << " has an unrecoverably broken \"prefixes\" field"
+                << std::endl;
+      AD_CHECK(false);
+    }
+
   } else {
     std::cout << "This index does not have a configuration file. We have to "
                  "create it and also compress the vocabulary\n";

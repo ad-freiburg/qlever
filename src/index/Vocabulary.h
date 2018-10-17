@@ -318,7 +318,7 @@ class Vocabulary {
   //   prefixes - a list of prefixes which we will compress
   template <typename = std::enable_if_t<_isCompressed>>
   static void prefixCompressFile(const string& infile, const string& outfile,
-                          const vector<string>& prefixes);
+                                 const vector<string>& prefixes);
 
  private:
   // Wraps std::lower_bound and returns an index instead of an iterator

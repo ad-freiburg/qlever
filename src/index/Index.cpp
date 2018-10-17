@@ -94,10 +94,16 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
   std::vector<string> prefixes;
   if (_vocabPrefixCompressed) {
     prefixes = calculatePrefixes(vocabFile, NUM_COMPRESSION_PREFIXES, 1, true);
+    std::ofstream prefixFile(_onDiskBase + PREFIX_FILE);
+    AD_CHECK(prefixFile.is_open());
+    for (const auto& prefix : prefixes) {
+      prefixFile << prefix << '\n';
+    }
   }
-  _configurationJson["prefixes"] = prefixes;
+  _configurationJson["prefixes"] = _vocabPrefixCompressed;
   Vocabulary<CompressedString>::prefixCompressFile(vocabFile, vocabFileTmp,
                                                    prefixes);
+
   // TODO<joka921> maybe move this to its own function
   if (std::rename(vocabFileTmp.c_str(), vocabFile.c_str())) {
     LOG(INFO) << "Error: Rename the prefixed vocab file " << vocabFileTmp
@@ -119,7 +125,7 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
     // vector is not yet sorted
     createPatterns(false, &idTriples);
   }
-  writeConfigurationFile();
+  writeConfiguration();
 }
 
 // explicit instantiations
@@ -896,7 +902,7 @@ void Index::writeNonFunctionalRelation(
 void Index::createFromOnDiskIndex(const string& onDiskBase,
                                   bool allPermutations) {
   setOnDiskBase(onDiskBase);
-  readConfigurationFile();
+  readConfiguration();
   _vocab.readFromFile(_onDiskBase + ".vocabulary",
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
   auto psoName = string(_onDiskBase + ".index.pso");
@@ -1736,14 +1742,14 @@ void Index::setPrefixCompression(bool compressed) {
 }
 
 // ____________________________________________________________________________
-void Index::writeConfigurationFile() const {
+void Index::writeConfiguration() const {
   std::ofstream f(_onDiskBase + CONFIGURATION_FILE);
   AD_CHECK(f.is_open());
   f << _configurationJson;
 }
 
 // ___________________________________________________________________________
-void Index::readConfigurationFile() {
+void Index::readConfiguration() {
   std::ifstream f(_onDiskBase + CONFIGURATION_FILE);
   AD_CHECK(f.is_open());
   f >> _configurationJson;
@@ -1753,7 +1759,15 @@ void Index::readConfigurationFile() {
   }
 
   if (_configurationJson.find("prefixes") != _configurationJson.end()) {
-    _vocab.initializePrefixes(_configurationJson["prefixes"]);
+    if (_configurationJson["prefixes"]) {
+      vector<string> prefixes;
+      std::ifstream prefixFile(_onDiskBase + PREFIX_FILE);
+      AD_CHECK(prefixFile.is_open());
+      for (string prefix; std::getline(prefixFile, prefix);) {
+        prefixes.emplace_back(std::move(prefix));
+      }
+      _vocab.initializePrefixes(prefixes);
+    }
   }
 
   if (_configurationJson.find("prefixes-external") !=
