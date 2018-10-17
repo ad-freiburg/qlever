@@ -222,12 +222,13 @@ CompressedString Vocabulary<S>::compressPrefix(const string& word) const {
 // _____________________________________________________________________________
 template <class S>
 template <class StringRange, typename>
-void Vocabulary<S>::initializeNewPrefixes(const StringRange& j) {
+void Vocabulary<S>::initializePrefixes(const StringRange& prefixes) {
   for (auto& el : _prefixMap) {
     el = "";
   }
+  _prefixVec.clear();
   unsigned char prefixIdx = 0;
-  for (const auto& fulltext : j) {
+  for (const auto& fulltext : prefixes) {
     if (prefixIdx >= NUM_COMPRESSION_PREFIXES) {
       LOG(INFO) << "More than " << NUM_COMPRESSION_PREFIXES
                 << " prefixes have been specified. Skipping the rest\n";
@@ -236,6 +237,10 @@ void Vocabulary<S>::initializeNewPrefixes(const StringRange& j) {
     _prefixMap[prefixIdx] = fulltext;
     _prefixVec.emplace_back(prefixIdx + MIN_COMPRESSION_PREFIX, fulltext);
     prefixIdx++;
+  }
+  if (prefixIdx != NUM_COMPRESSION_PREFIXES) {
+    LOG(INFO) << "WARNING: less than " << NUM_COMPRESSION_PREFIXES
+              << " prefixes specified.";
   }
   // if longest strings come first we correctly handle overlapping prefixes
   auto pred = [](const Prefix& a, const Prefix& b) {
@@ -252,49 +257,6 @@ void Vocabulary<S>::initializeExternalizePrefixes(const StringRange& s) {
   for (const auto& el : s) {
     _externalizedPrefixes.push_back(el);
   }
-}
-
-// _____________________________________________________________________________
-template <class S>
-template <typename>
-void Vocabulary<S>::initializeRestartPrefixes(const json& j) {
-  for (auto& el : _prefixMap) {
-    el = "";
-  }
-  _prefixVec.clear();
-  uint8_t idx = 0;
-  for (const auto& p : j) {
-    if (idx >= NUM_COMPRESSION_PREFIXES) {
-      LOG(INFO) << "ERROR: configuration file contained more than "
-                << NUM_COMPRESSION_PREFIXES << " prefixes. Terminating.\n";
-      AD_CHECK(false);
-    }
-    _prefixMap[idx] = p;
-    _prefixVec.emplace_back(idx + MIN_COMPRESSION_PREFIX, p);
-    idx++;
-  }
-  if (idx != NUM_COMPRESSION_PREFIXES) {
-    LOG(INFO) << "ERROR: configuration file contained less than "
-              << NUM_COMPRESSION_PREFIXES
-              << " prefixes. Setup of prefix compression is not possible. "
-                 "Terminating.\n";
-    AD_CHECK(false);
-  }
-  auto pred = [](const Prefix& a, const Prefix& b) {
-    return a._fulltext.size() > b._fulltext.size();
-  };
-  std::sort(_prefixVec.begin(), _prefixVec.end(), pred);
-}
-
-// ____________________________________________________________________________
-template <class S>
-template <typename>
-json Vocabulary<S>::getJsonForPrefixes() const {
-  json j = json::array();
-  for (const auto& p : _prefixMap) {
-    j.push_back(p);
-  }
-  return j;
 }
 
 // __________________________________________________________________________
@@ -325,23 +287,16 @@ bool PrefixComparator<S>::operator()(const string& lhs,
 // _____________________________________________________
 template <class S>
 template <typename>
-std::array<std::string, NUM_COMPRESSION_PREFIXES>
-Vocabulary<S>::prefixCompressFile(const string& infile, const string& outfile,
-                                  const vector<string>& prefixes) {
+void Vocabulary<S>::prefixCompressFile(const string& infile,
+                                       const string& outfile,
+                                       const vector<string>& prefixes) {
   std::ifstream in(infile);
   std::ofstream out(outfile);
   AD_CHECK(in.is_open() && out.is_open());
   Vocabulary v;
-  v.initializeNewPrefixes(prefixes);
+  v.initializePrefixes(prefixes);
   std::string word;
   while (std::getline(in, word)) {
     out << v.compressPrefix(word).toStringView() << '\n';
   }
-  return v._prefixMap;
 }
-
-// explicit instantiations
-/*
-template class Vocabulary<string>;
-template class Vocabulary<CompressedString>;
-*/

@@ -187,7 +187,8 @@ void CompressVocabAndCreateConfigurationFile(const string& indexPrefix) {
         ad_utility::File::exists(indexPrefix + ".literals-index");
     auto prefixes =
         calculatePrefixes(vocabFilename, NUM_COMPRESSION_PREFIXES, 1);
-    j["prefixes"] = Vocabulary<CompressedString>::prefixCompressFile(
+    j["prefixes"] = prefixes;
+    Vocabulary<CompressedString>::prefixCompressFile(
         vocabFilename, vocabFilename + ".converted", prefixes);
     notifyCreated(vocabFilename, true);
     std::ofstream f(confFilename);

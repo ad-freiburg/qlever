@@ -95,9 +95,9 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
   if (_vocabPrefixCompressed) {
     prefixes = calculatePrefixes(vocabFile, NUM_COMPRESSION_PREFIXES, 1, true);
   }
-  _configurationJson["prefixes"] =
-      Vocabulary<CompressedString>::prefixCompressFile(vocabFile, vocabFileTmp,
-                                                       prefixes);
+  _configurationJson["prefixes"] = prefixes;
+  Vocabulary<CompressedString>::prefixCompressFile(vocabFile, vocabFileTmp,
+                                                   prefixes);
   // TODO<joka921> maybe move this to its own function
   if (std::rename(vocabFileTmp.c_str(), vocabFile.c_str())) {
     LOG(INFO) << "Error: Rename the prefixed vocab file " << vocabFileTmp
@@ -1753,7 +1753,7 @@ void Index::readConfigurationFile() {
   }
 
   if (_configurationJson.find("prefixes") != _configurationJson.end()) {
-    _vocab.initializeRestartPrefixes(_configurationJson["prefixes"]);
+    _vocab.initializePrefixes(_configurationJson["prefixes"]);
   }
 
   if (_configurationJson.find("prefixes-external") !=
