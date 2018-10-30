@@ -51,7 +51,7 @@ class ResultTable {
   // results) which are used in the output with the ResultType::STRING type.
   // WARNING: Currently only operations that can run after a GroupBy copy
   //          the _localVocab of a subresult.
-  vector<string> _localVocab;
+  std::shared_ptr<vector<string>> _localVocab;
 
   ResultTable();
 
@@ -83,8 +83,8 @@ class ResultTable {
   }
 
   std::optional<std::string> idToOptionalString(Id id) const {
-    if (id < _localVocab.size()) {
-      return _localVocab[id];
+    if (id < _localVocab->size()) {
+      return (*_localVocab)[id];
     } else if (id == ID_NO_VALUE) {
       return std::nullopt;
     }

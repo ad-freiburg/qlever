@@ -11,7 +11,8 @@ ResultTable::ResultTable()
       _sortedBy(0),
       _varSizeData(),
       _fixedSizeData(nullptr),
-      _status(ResultTable::OTHER) {}
+      _status(ResultTable::OTHER),
+      _localVocab(std::make_shared<std::vector<std::string>>()) {}
 
 // _____________________________________________________________________________
 void ResultTable::clear() {

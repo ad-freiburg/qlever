@@ -399,3 +399,52 @@ queries:
           - selected: ["?scientist", "?height"]
           - contains_row: ["<Granville_Woods>", '2.1336']
           - contains_row: ["<Charles_Bradley_(Chemist)>", '1.98']
+  - query : having-avg-height
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?profession (AVG(?height) as ?avg) WHERE {
+            ?s <Profession> ?profession .
+            ?s <Height> ?height .
+          }
+          GROUP BY ?profession
+          HAVING (?avg > 1.9)
+          ORDER BY DESC(?avg)
+        checks:
+          - num_rows: 17
+          - num_cols: 2
+          - selected: ["?profession", "?avg"]
+          - contains_row: ["<Anatomist>", '1.94']
+          - contains_row: ["<Peace_activist>", '1.91']
+  - query : having-number-of-awards
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?profession (COUNT(DISTINCT ?s) as ?count) WHERE {
+            ?s <Profession> ?profession .
+            ?s <Award_Won> ?award .
+          }
+          GROUP BY ?profession
+          ORDER BY DESC(?count)
+          HAVING (?count > 300)
+        checks:
+          - num_rows: 6 
+          - num_cols: 2
+          - selected: ["?profession", "?count"]
+          - contains_row: ["<Chemist>", '603']
+          - contains_row: ["<Professor>", '352']
+  - query : having-group-concat
+    solutions:
+      - type: no-text
+        sparql: |
+          SELECT ?profession (GROUP_CONCAT(DISTINCT ?award) as ?awards) WHERE {
+            ?s <Profession> ?profession .
+            ?s <Award_Won> ?award .
+          }
+          GROUP BY ?profession
+          HAVING (?awards = <Victoria_Cross>)
+        checks:
+          - num_rows: 1 
+          - num_cols: 2
+          - selected: ["?profession", "?awards"]
+          - contains_row: ["<Apothecary>", '<Victoria_Cross>']

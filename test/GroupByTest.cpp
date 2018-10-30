@@ -89,9 +89,9 @@ TEST_F(GroupByTest, doGroupBy) {
 
   // create an input result table with a local vocabulary
   ResultTable inTable;
-  inTable._localVocab.push_back("<local1>");
-  inTable._localVocab.push_back("<local2>");
-  inTable._localVocab.push_back("<local3>");
+  inTable._localVocab->push_back("<local1>");
+  inTable._localVocab->push_back("<local2>");
+  inTable._localVocab->push_back("<local3>");
 
   vector<vector<Id>> inputData;
   // The input data types are
@@ -182,13 +182,13 @@ TEST_F(GroupByTest, doGroupBy) {
     ASSERT_EQ(0u + i + 10, outTable._varSizeData[2][2 + i]);
   }
   // check for a local vocab entry for each of the 5 input cols
-  ASSERT_EQ(std::string("<entity1>, <entity2>"), outTable._localVocab[0]);
-  ASSERT_EQ(std::string("123, 0"), outTable._localVocab[1]);
-  ASSERT_EQ(std::string("Exert 1, Exert 2"), outTable._localVocab[2]);
+  ASSERT_EQ(std::string("<entity1>, <entity2>"), (*outTable._localVocab)[0]);
+  ASSERT_EQ(std::string("123, 0"), (*outTable._localVocab)[1]);
+  ASSERT_EQ(std::string("Exert 1, Exert 2"), (*outTable._localVocab)[2]);
   std::ostringstream groupConcatFloatString;
   groupConcatFloatString << floatValues[0] << ", " << floatValues[1];
-  ASSERT_EQ(groupConcatFloatString.str(), outTable._localVocab[3]);
-  ASSERT_EQ(std::string("<local1>, <local2>"), outTable._localVocab[4]);
+  ASSERT_EQ(groupConcatFloatString.str(), (*outTable._localVocab)[3]);
+  ASSERT_EQ(std::string("<local1>, <local2>"), (*outTable._localVocab)[4]);
 
   // SAMPLE CHECKS
   ASSERT_EQ(4u, outTable._varSizeData[0][7]);
