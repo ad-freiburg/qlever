@@ -21,7 +21,8 @@ void IndexMetaData<MapType>::add(const FullRelationMetaData& rmd,
 
   off_t afterExpected =
       rmd.hasBlocks() ? bRmd._offsetAfter
-                      : static_cast<off_t>(rmd._startFullIndex + rmd.getNofBytesForFulltextIndex());
+                      : static_cast<off_t>(rmd._startFullIndex +
+                                           rmd.getNofBytesForFulltextIndex());
   if (rmd.hasBlocks()) {
     _blockData[rmd._relId] = bRmd;
   }
@@ -131,12 +132,15 @@ bool IndexMetaData<MapType>::relationExists(Id relId) const {
 
 // _____________________________________________________________________________
 template <class MapType>
-ad_utility::File& operator<<(ad_utility::File& f, const IndexMetaData<MapType>& imd) {
+ad_utility::File& operator<<(ad_utility::File& f,
+                             const IndexMetaData<MapType>& imd) {
   // first write magic number
   if constexpr (imd._isMmapBased) {
-    f.write(&MAGIC_NUMBER_MMAP_META_DATA_VERSION, sizeof(MAGIC_NUMBER_MMAP_META_DATA_VERSION));
+    f.write(&MAGIC_NUMBER_MMAP_META_DATA_VERSION,
+            sizeof(MAGIC_NUMBER_MMAP_META_DATA_VERSION));
   } else {
-    f.write(&MAGIC_NUMBER_SPARSE_META_DATA_VERSION, sizeof(MAGIC_NUMBER_SPARSE_META_DATA_VERSION));
+    f.write(&MAGIC_NUMBER_SPARSE_META_DATA_VERSION,
+            sizeof(MAGIC_NUMBER_SPARSE_META_DATA_VERSION));
   }
   // write version
   f.write(&V_CURRENT, sizeof(V_CURRENT));
@@ -231,8 +235,10 @@ string IndexMetaData<MapType>::statistics() const {
 
   os << "# Elements:  " << _totalElements << '\n';
   os << "# Blocks:    " << _totalBlocks << "\n\n";
-  os << "Theoretical size of Id triples: " << _totalElements * 3 * sizeof(Id) << " bytes \n";
-  os << "Size of pair index:             " << totalPairIndexBytes << " bytes \n";
+  os << "Theoretical size of Id triples: " << _totalElements * 3 * sizeof(Id)
+     << " bytes \n";
+  os << "Size of pair index:             " << totalPairIndexBytes
+     << " bytes \n";
   os << "Total Size:                     " << _totalBytes << " bytes \n";
   os << "-------------------------------------------------------------------\n";
   return os.str();
@@ -251,7 +257,8 @@ size_t IndexMetaData<MapType>::getNofBlocksForRelation(const Id id) const {
 
 // _____________________________________________________________________________
 template <class MapType>
-size_t IndexMetaData<MapType>::getTotalBytesForRelation(const FullRelationMetaData& frmd) const {
+size_t IndexMetaData<MapType>::getTotalBytesForRelation(
+    const FullRelationMetaData& frmd) const {
   auto it = _blockData.find(frmd._relId);
   if (it != _blockData.end()) {
     return static_cast<size_t>(it->second._offsetAfter - frmd._startFullIndex);
@@ -282,7 +289,8 @@ void IndexMetaData<MapType>::calculateExpensiveStatistics() {
 
 // ___________________________________________________________________
 template <class MapType>
-VersionInfo IndexMetaData<MapType>::parseMagicNumberAndVersioning(unsigned char* buf) {
+VersionInfo IndexMetaData<MapType>::parseMagicNumberAndVersioning(
+    unsigned char* buf) {
   uint64_t magicNumber = *reinterpret_cast<uint64_t*>(buf);
   size_t nOfBytes = 0;
   bool hasVersion = false;
@@ -315,11 +323,12 @@ VersionInfo IndexMetaData<MapType>::parseMagicNumberAndVersioning(unsigned char*
       hasVersion = true;
       nOfBytes = sizeof(uint64_t);
     } else {
-      throw WrongFormatException("ERROR: No or wrong magic number found in persistent "
-                                 "mmap-based meta data. "
-                                 "Please use ./MetaDataConverterMain "
-                                 "to convert old indices without rebuilding them (See "
-                                 "README.md).Terminating...\n");
+      throw WrongFormatException(
+          "ERROR: No or wrong magic number found in persistent "
+          "mmap-based meta data. "
+          "Please use ./MetaDataConverterMain "
+          "to convert old indices without rebuilding them (See "
+          "README.md).Terminating...\n");
     }
   }
 
@@ -332,9 +341,10 @@ VersionInfo IndexMetaData<MapType>::parseMagicNumberAndVersioning(unsigned char*
     res._nOfBytes += sizeof(uint64_t);
   }
   if (res._version < V_CURRENT) {
-    LOG(INFO) << "WARNING: your IndexMetaData seems to have an old format (version "
-                 "tag < V_CURRENT). Please consider using ./MetaDataConverterMain to "
-                 "benefit from improvements in the index structure.\n";
+    LOG(INFO)
+        << "WARNING: your IndexMetaData seems to have an old format (version "
+           "tag < V_CURRENT). Please consider using ./MetaDataConverterMain to "
+           "benefit from improvements in the index structure.\n";
 
   } else if (res._version > V_CURRENT) {
     LOG(INFO) << "ERROR: version tag does not match any actual version (> "
