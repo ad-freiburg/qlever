@@ -439,9 +439,17 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
 
   // Handle filters with prefix predicates (langMatches, prefix, regex, etc)
   if (i >= 1 && str[i - 1] != ' ') {
+    // find the last whitespace after the 'FILTER' keyword (as in e.g.
+    // 'FILTER regex...'. If none is found assume this is a filter from
+    // the having clause where the pred would start at the beginning of the
+    // string.
     auto s = str.rfind(' ', i);
-    if (s != string::npos) {
-      s++;
+    if (s != string::npos || str.substr(0, 6) != "FILTER") {
+      if (s != string::npos) {
+        s++;
+      } else {
+        s = 0;
+      }
       auto pred = str.substr(s, i - s);
       auto parts = ad_utility::split(str.substr(i + 1, j - i - 1), ',');
       AD_CHECK(parts.size() == 2 || (parts.size() == 3 && pred == "regex"));
@@ -512,6 +520,19 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
           // an expensive regex filter.
           bool isSimple = true;
           bool escaped = false;
+
+          std::vector<bool> regexControlChars(sizeof(char), false);
+          regexControlChars['['] = true;
+          regexControlChars['^'] = true;
+          regexControlChars['$'] = true;
+          regexControlChars['.'] = true;
+          regexControlChars['|'] = true;
+          regexControlChars['?'] = true;
+          regexControlChars['*'] = true;
+          regexControlChars['+'] = true;
+          regexControlChars['('] = true;
+          regexControlChars[')'] = true;
+
           for (size_t i = 1; isSimple && i < f._rhs.size(); i++) {
             if (f._rhs[i] == '\\') {
               escaped = true;
@@ -519,8 +540,7 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
             }
             if (!escaped) {
               char c = f._rhs[i];
-              std::string badChars = "[^$.|?*+()";
-              if (badChars.find(c) != std::string::npos) {
+              if (regexControlChars[c]) {
                 isSimple = false;
               }
             }

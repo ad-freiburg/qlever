@@ -94,7 +94,7 @@ class Filter : public Operation {
    */
   template <class RT, ResultTable::ResultType T>
   vector<RT>* computeFilterForResultType(
-      vector<RT>* res, size_t l, size_t r,
+      vector<RT>* res, size_t lhs, size_t rhs,
       shared_ptr<const ResultTable> subRes) const;
 
   /**
@@ -102,7 +102,7 @@ class Filter : public Operation {
    *        arguments
    */
   template <class RT>
-  vector<RT>* computeFilter(vector<RT>* res, size_t l, size_t r,
+  vector<RT>* computeFilter(vector<RT>* res, size_t lhs, size_t rhs,
                             shared_ptr<const ResultTable> subRes) const;
   /**
    * @brief Uses the result type and the filter type (_type) to apply the filter
@@ -111,7 +111,7 @@ class Filter : public Operation {
    */
   template <class RT, ResultTable::ResultType T>
   vector<RT>* computeFilterFixedValueForResultType(
-      vector<RT>* res, size_t l, Id r,
+      vector<RT>* res, size_t lhs, Id rhs,
       shared_ptr<const ResultTable> subRes) const;
 
   /**
@@ -120,7 +120,7 @@ class Filter : public Operation {
    */
   template <class RT>
   vector<RT>* computeFilterFixedValue(
-      vector<RT>* res, size_t l, Id r,
+      vector<RT>* res, size_t lhs, Id rhs,
       shared_ptr<const ResultTable> subRes) const;
 
   void computeResultFixedValue(
