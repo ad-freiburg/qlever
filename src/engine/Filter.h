@@ -21,8 +21,7 @@ class Filter : public Operation {
  public:
   Filter(QueryExecutionContext* qec,
          std::shared_ptr<QueryExecutionTree> subtree,
-         SparqlFilter::FilterType type, size_t var1Column, size_t var2Column,
-         Id rhsId = std::numeric_limits<Id>::max());
+         SparqlFilter::FilterType type, string lhs, string rhs);
 
   virtual string asString(size_t indent = 0) const override;
 
@@ -40,7 +39,7 @@ class Filter : public Operation {
       return std::numeric_limits<Id>::max();
     }
     // TODO(schnelle): return a better estimate
-    if (_rhsId == std::numeric_limits<Id>::max()) {
+    if (_rhs[0] == '?') {
       if (_type == SparqlFilter::FilterType::EQ) {
         return _subtree->getSizeEstimate() / 1000;
       }
@@ -69,8 +68,6 @@ class Filter : public Operation {
            _subtree->getCostEstimate();
   }
 
-  void setRightHandSideString(std::string s) { _rhsString = s; }
-
   void setRegexIgnoreCase(bool i) { _regexIgnoreCase = i; }
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
@@ -86,21 +83,66 @@ class Filter : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   SparqlFilter::FilterType _type;
-  size_t _lhsInd;
-  size_t _rhsInd;
-  Id _rhsId;
-  std::string _rhsString;
+  string _lhs;
+  string _rhs;
   bool _regexIgnoreCase;
 
-  template <class RT>
-  vector<RT>* computeFilter(vector<RT>* res, size_t l, size_t r,
-                            shared_ptr<const ResultTable> subRes) const;
-  virtual void computeResult(ResultTable* result) const override;
-
-  template <class RT>
-  vector<RT>* computeFilterFixedValue(
-      vector<RT>* res, size_t l, Id r,
+  /**
+   * @brief Uses the result type and the filter type (_type) to apply the filter
+   * to subRes and store it in res.
+   * @return The pointer res.
+   */
+  template <class RT, ResultTable::ResultType T>
+  vector<RT>* computeFilterForResultType(
+      vector<RT>* res, size_t lhs, size_t rhs,
       shared_ptr<const ResultTable> subRes) const;
 
-  void computeResultFixedValue(ResultTable* result) const;
+  /**
+   * @brief Calls computeFilterForResultType with the correct template
+   *        arguments
+   */
+  template <class RT>
+  vector<RT>* computeFilter(vector<RT>* res, size_t lhs, size_t rhs,
+                            shared_ptr<const ResultTable> subRes) const;
+  /**
+   * @brief Uses the result type and the filter type (_type) to apply the filter
+   * to subRes and store it in res.
+   * @return The pointer res.
+   */
+  template <class RT, ResultTable::ResultType T>
+  vector<RT>* computeFilterFixedValueForResultType(
+      vector<RT>* res, size_t lhs, Id rhs,
+      shared_ptr<const ResultTable> subRes) const;
+
+  /**
+   * @brief Calls computeFilterFixedValueForResultType with the correct template
+   *        arguments
+   */
+  template <class RT>
+  vector<RT>* computeFilterFixedValue(
+      vector<RT>* res, size_t lhs, Id rhs,
+      shared_ptr<const ResultTable> subRes) const;
+
+  void computeResultFixedValue(
+      ResultTable* result,
+      const std::shared_ptr<const ResultTable> subRes) const;
+  virtual void computeResult(ResultTable* result) const override;
+
+  /**
+   * @brief This struct handles the extraction of the data from an id based upon
+   *        the result type of the id's column.
+   */
+  template <ResultTable::ResultType T>
+  struct ValueReader {
+    static Id get(size_t in) { return in; }
+  };
+};
+
+template <>
+struct Filter::ValueReader<ResultTable::ResultType::FLOAT> {
+  static float get(size_t in) {
+    float f;
+    std::memcpy(&f, &in, sizeof(float));
+    return f;
+  }
 };

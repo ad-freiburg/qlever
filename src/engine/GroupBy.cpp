@@ -418,8 +418,8 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           }
         }
       }
-      resultRow[a._outCol] = outTable->_localVocab.size();
-      outTable->_localVocab.push_back(out.str());
+      resultRow[a._outCol] = outTable->_localVocab->size();
+      outTable->_localVocab->push_back(out.str());
       break;
     }
     case GroupBy::AggregateType::MAX: {

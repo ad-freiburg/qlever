@@ -1517,56 +1517,12 @@ void QueryPlanner::applyFiltersIfPossible(
 // _____________________________________________________________________________
 std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
     const SparqlFilter& filter, const SubtreePlan& parent) const {
-  if (isVariable(filter._rhs)) {
-    std::shared_ptr<Operation> filterOp = std::make_shared<Filter>(
-        _qec, parent._qet, filter._type,
-        parent._qet.get()->getVariableColumn(filter._lhs),
-        parent._qet.get()->getVariableColumn(filter._rhs));
-    return filterOp;
-  } else {
-    string compWith = filter._rhs;
-    Id entityId = 0;
-    if (_qec) {
-      // TODO(schnelle): A proper SPARQL parser should have
-      // tagged/converted numeric values already. However our parser is
-      // currently far too crude for that
-      if (ad_utility::isXsdValue(compWith)) {
-        compWith = ad_utility::convertValueLiteralToIndexWord(compWith);
-      } else if (ad_utility::isNumeric(compWith)) {
-        compWith = ad_utility::convertNumericToIndexWord(compWith);
-      }
-      if (filter._type == SparqlFilter::EQ ||
-          filter._type == SparqlFilter::NE) {
-        if (!_qec->getIndex().getVocab().getId(compWith, &entityId)) {
-          entityId = std::numeric_limits<size_t>::max() - 1;
-        }
-      } else if (filter._type == SparqlFilter::GE) {
-        entityId = _qec->getIndex().getVocab().getValueIdForGE(compWith);
-      } else if (filter._type == SparqlFilter::GT) {
-        entityId = _qec->getIndex().getVocab().getValueIdForGT(compWith);
-      } else if (filter._type == SparqlFilter::LT) {
-        entityId = _qec->getIndex().getVocab().getValueIdForLT(compWith);
-      } else if (filter._type == SparqlFilter::LE) {
-        entityId = _qec->getIndex().getVocab().getValueIdForLE(compWith);
-      } else if (filter._type == SparqlFilter::LANG_MATCHES ||
-                 filter._type == SparqlFilter::REGEX) {
-        entityId = std::numeric_limits<size_t>::max() - 1;
-      }
-    }
-    std::shared_ptr<Operation> filterOp(
-        new Filter(_qec, parent._qet, filter._type,
-                   parent._qet.get()->getVariableColumn(filter._lhs),
-                   std::numeric_limits<size_t>::max(), entityId));
-    if (_qec && (filter._type == SparqlFilter::LANG_MATCHES ||
-                 filter._type == SparqlFilter::REGEX)) {
-      static_cast<Filter*>(filterOp.get())->setRightHandSideString(filter._rhs);
-      if (filter._type == SparqlFilter::REGEX) {
-        static_cast<Filter*>(filterOp.get())
-            ->setRegexIgnoreCase(filter._regexIgnoreCase);
-      }
-    }
-    return filterOp;
+  std::shared_ptr<Filter> op = std::make_shared<Filter>(
+      _qec, parent._qet, filter._type, filter._lhs, filter._rhs);
+  if (filter._type == SparqlFilter::REGEX) {
+    op->setRegexIgnoreCase(filter._regexIgnoreCase);
   }
+  return op;
 }
 
 // _____________________________________________________________________________

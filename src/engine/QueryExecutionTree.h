@@ -175,7 +175,7 @@ class QueryExecutionTree {
           case ResultTable::ResultType::LOCAL_VOCAB: {
             std::optional<string> entity =
                 res->idToOptionalString(row[validIndices[j].first]);
-            os << ad_utility::toJson(entity.value()) << ",";
+            os << ad_utility::toJson(entity) << ",";
             break;
           }
           default:
@@ -215,7 +215,7 @@ class QueryExecutionTree {
         case ResultTable::ResultType::LOCAL_VOCAB: {
           std::optional<string> entity = res->idToOptionalString(
               row[validIndices[validIndices.size() - 1].first]);
-          os << ad_utility::toJson(entity.value()) << "]";
+          os << ad_utility::toJson(entity) << "]";
           break;
         }
         default:

@@ -439,9 +439,17 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
 
   // Handle filters with prefix predicates (langMatches, prefix, regex, etc)
   if (i >= 1 && str[i - 1] != ' ') {
+    // find the last whitespace after the 'FILTER' keyword (as in e.g.
+    // 'FILTER regex...'. If none is found assume this is a filter from
+    // the having clause where the pred would start at the beginning of the
+    // string.
     auto s = str.rfind(' ', i);
-    if (s != string::npos) {
-      s++;
+    if (s != string::npos || str.substr(0, 6) != "FILTER") {
+      if (s != string::npos) {
+        s++;
+      } else {
+        s = 0;
+      }
       auto pred = str.substr(s, i - s);
       auto parts = ad_utility::split(str.substr(i + 1, j - i - 1), ',');
       AD_CHECK(parts.size() == 2 || (parts.size() == 3 && pred == "regex"));
@@ -507,6 +515,34 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
         f._type = SparqlFilter::REGEX;
         f._lhs = lhs;
         f._rhs = rhs.substr(1, rhs.size() - 2);
+        if (f._rhs[0] == '^') {
+          // Check if we can use the more efficient prefix filter instead of
+          // an expensive regex filter.
+          bool isSimple = true;
+          bool escaped = false;
+
+          // Check if the regex is only a prefix regex or also does
+          // anything else.
+          const static string regexControlChars = "[]^$.|?*+()";
+          for (size_t i = 1; isSimple && i < f._rhs.size(); i++) {
+            if (f._rhs[i] == '\\') {
+              escaped = true;
+              continue;
+            }
+            if (!escaped) {
+              char c = f._rhs[i];
+              if (regexControlChars.find(c) != string::npos) {
+                isSimple = false;
+              }
+            }
+            escaped = false;
+          }
+          if (isSimple) {
+            // There are no regex special chars apart from the leading '^' so
+            // we can use a prefix filter.
+            f._type = SparqlFilter::PREFIX;
+          }
+        }
         f._regexIgnoreCase =
             (parts.size() == 3 && ad_utility::strip(parts[2], ' ') == "\"i\"");
         _filters->emplace_back(f);
