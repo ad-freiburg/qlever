@@ -47,8 +47,16 @@ class ResultTable {
   void* _fixedSizeData;
 
   vector<ResultType> _resultTypes;
+
   // This vector is used to store generated strings (such as the GROUP_CONCAT
   // results) which are used in the output with the ResultType::STRING type.
+  // A std::shared_ptr is used to allow for quickly passing the vocabulary
+  // from one result to the next, as any operation that occurs after one
+  // having added entries to the _localVocab needs to ensure its ResultTable
+  // has the same _localVocab. As currently entries in the _localVocab are not
+  // being moved or deleted having a single copy used by several operations
+  // should not lead to any references to the _localVocab being invalidated
+  // due to later use.
   // WARNING: Currently only operations that can run after a GroupBy copy
   //          the _localVocab of a subresult.
   std::shared_ptr<vector<string>> _localVocab;

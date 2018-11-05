@@ -521,18 +521,9 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
           bool isSimple = true;
           bool escaped = false;
 
-          std::vector<bool> regexControlChars(sizeof(char), false);
-          regexControlChars['['] = true;
-          regexControlChars['^'] = true;
-          regexControlChars['$'] = true;
-          regexControlChars['.'] = true;
-          regexControlChars['|'] = true;
-          regexControlChars['?'] = true;
-          regexControlChars['*'] = true;
-          regexControlChars['+'] = true;
-          regexControlChars['('] = true;
-          regexControlChars[')'] = true;
-
+          // Check if the regex is only a prefix regex or also does
+          // anything else.
+          const static string regexControlChars = "[]^$.|?*+()";
           for (size_t i = 1; isSimple && i < f._rhs.size(); i++) {
             if (f._rhs[i] == '\\') {
               escaped = true;
@@ -540,7 +531,7 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
             }
             if (!escaped) {
               char c = f._rhs[i];
-              if (regexControlChars[c]) {
+              if (regexControlChars.find(c) != string::npos) {
                 isSimple = false;
               }
             }
