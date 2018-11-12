@@ -229,46 +229,136 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
     shared_ptr<const ResultTable> subRes) const {
   switch (_type) {
     case SparqlFilter::EQ:
-      getEngine().filter(
-          *static_cast<vector<RT>*>(subRes->_fixedSizeData),
-          [lhs, rhs, &subRes](const RT& e) { return e[lhs] == rhs; }, res);
+      if (subRes->_sortedBy[lhs]) {
+        // The input data is sorted, use binary search to locate the first
+        // and last element that match rhs and copy the range.
+        RT rhs_array;
+        rhs_array[lhs] = rhs;
+        vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
+        const typename vector<RT>::iterator& lower = std::lower_bound(
+            data->begin(), data->end(), rhs_array,
+            [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+        if (lower != data->end() && (*lower)[lhs] == rhs) {
+          // an element equal to rhs exists in the vector
+          const auto& upper = std::upper_bound(
+              lower, data->end(), rhs_array,
+              [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+          res->insert(res->end(), lower, upper);
+        }
+      } else {
+        getEngine().filter(
+            *static_cast<vector<RT>*>(subRes->_fixedSizeData),
+            [lhs, rhs, &subRes](const RT& e) { return e[lhs] == rhs; }, res);
+      }
       break;
     case SparqlFilter::NE:
-      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                         [lhs, rhs](const RT& e) { return e[lhs] != rhs; },
-                         res);
+      if (subRes->_sortedBy[lhs]) {
+        // The input data is sorted, use binary search to locate the first
+        // and last element that match rhs and copy the range.
+        RT rhs_array;
+        rhs_array[lhs] = rhs;
+        vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
+        const typename vector<RT>::iterator& lower = std::lower_bound(
+            data->begin(), data->end(), rhs_array,
+            [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+        if (lower != data->end() && (*lower)[lhs] == rhs) {
+          // rhs appears within the data, take all elements before and after it
+          const typename vector<RT>::iterator& upper = std::upper_bound(
+              lower, data->end(), rhs_array,
+              [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+          res->insert(res->end(), data->begin(), lower);
+          res->insert(res->end(), upper, data->end());
+        } else {
+          // rhs does not appear within the data
+          res->insert(res->end(), data->begin(), data->end());
+        }
+      } else {
+        getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                           [lhs, rhs](const RT& e) { return e[lhs] != rhs; },
+                           res);
+      }
       break;
     case SparqlFilter::LT:
-      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                         [lhs, rhs](const RT& e) {
-                           return ValueReader<T>::get(e[lhs]) <
-                                  ValueReader<T>::get(rhs);
-                         },
-                         res);
+      if (subRes->_sortedBy[lhs]) {
+        // The input data is sorted, use binary search to locate the first
+        // and last element that match rhs and copy the range.
+        RT rhs_array;
+        rhs_array[lhs] = rhs;
+        vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
+        const typename vector<RT>::iterator& lower = std::lower_bound(
+            data->begin(), data->end(), rhs_array,
+            [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+        res->insert(res->end(), data->begin(), lower);
+      } else {
+        getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                           [lhs, rhs](const RT& e) {
+                             return ValueReader<T>::get(e[lhs]) <
+                                    ValueReader<T>::get(rhs);
+                           },
+                           res);
+      }
       break;
     case SparqlFilter::LE:
-      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                         [lhs, rhs](const RT& e) {
-                           return ValueReader<T>::get(e[lhs]) <=
-                                  ValueReader<T>::get(rhs);
-                         },
-                         res);
+      if (subRes->_sortedBy[lhs]) {
+        // The input data is sorted, use binary search to locate the first
+        // and last element that match rhs and copy the range.
+        RT rhs_array;
+        rhs_array[lhs] = rhs;
+        vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
+        const typename vector<RT>::iterator& upper = std::upper_bound(
+            data->begin(), data->end(), rhs_array,
+            [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+        res->insert(res->end(), data->begin(), upper);
+      } else {
+        getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                           [lhs, rhs](const RT& e) {
+                             return ValueReader<T>::get(e[lhs]) <=
+                                    ValueReader<T>::get(rhs);
+                           },
+                           res);
+      }
       break;
     case SparqlFilter::GT:
-      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                         [lhs, rhs](const RT& e) {
-                           return ValueReader<T>::get(e[lhs]) >
-                                  ValueReader<T>::get(rhs);
-                         },
-                         res);
+      if (subRes->_sortedBy[lhs]) {
+        // The input data is sorted, use binary search to locate the first
+        // and last element that match rhs and copy the range.
+        RT rhs_array;
+        rhs_array[lhs] = rhs;
+        vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
+        const typename vector<RT>::iterator& upper = std::upper_bound(
+            data->begin(), data->end(), rhs_array,
+            [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+        // an element equal to rhs exists in the vector
+        res->insert(res->end(), upper, data->end());
+      } else {
+        getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                           [lhs, rhs](const RT& e) {
+                             return ValueReader<T>::get(e[lhs]) >
+                                    ValueReader<T>::get(rhs);
+                           },
+                           res);
+      }
       break;
     case SparqlFilter::GE:
-      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                         [lhs, rhs](const RT& e) {
-                           return ValueReader<T>::get(e[lhs]) >=
-                                  ValueReader<T>::get(rhs);
-                         },
-                         res);
+      if (subRes->_sortedBy[lhs]) {
+        // The input data is sorted, use binary search to locate the first
+        // and last element that match rhs and copy the range.
+        RT rhs_array;
+        rhs_array[lhs] = rhs;
+        vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
+        const typename vector<RT>::iterator& lower = std::lower_bound(
+            data->begin(), data->end(), rhs_array,
+            [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+        // an element equal to rhs exists in the vector
+        res->insert(res->end(), lower, data->end());
+      } else {
+        getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                           [lhs, rhs](const RT& e) {
+                             return ValueReader<T>::get(e[lhs]) >=
+                                    ValueReader<T>::get(rhs);
+                           },
+                           res);
+      }
       break;
     case SparqlFilter::LANG_MATCHES:
       getEngine().filter(
@@ -298,11 +388,32 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         size_t upperBound =
             getIndex().getVocab().getValueIdForLT(upperBoundStr);
         size_t lowerBound = getIndex().getVocab().getValueIdForGE(rhs);
-        getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                           [this, lhs, lowerBound, upperBound](const RT& e) {
-                             return lowerBound <= e[lhs] && e[lhs] < upperBound;
-                           },
-                           res);
+        if (subRes->_sortedBy[lhs]) {
+          // The input data is sorted, use binary search to locate the first
+          // and last element that match rhs and copy the range.
+          RT rhs_array;
+          rhs_array[lhs] = lowerBound;
+          vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
+          const typename vector<RT>::iterator& lower = std::lower_bound(
+              data->begin(), data->end(), rhs_array,
+              [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+          if (lower != data->end()) {
+            // rhs appears within the data, take all elements before and after
+            // it
+            rhs_array[lhs] = upperBound;
+            const typename vector<RT>::iterator& upper = std::upper_bound(
+                lower, data->end(), rhs_array,
+                [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+            res->insert(res->end(), lower, upper);
+          }
+        } else {
+          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+                             [this, lhs, lowerBound, upperBound](const RT& e) {
+                               return lowerBound <= e[lhs] &&
+                                      e[lhs] < upperBound;
+                             },
+                             res);
+        }
         break;
       }
     case SparqlFilter::REGEX: {
