@@ -227,9 +227,11 @@ template <class RT, ResultTable::ResultType T>
 vector<RT>* Filter::computeFilterFixedValueForResultType(
     vector<RT>* res, size_t lhs, Id rhs,
     shared_ptr<const ResultTable> subRes) const {
+  bool lhs_is_sorted =
+      subRes->_sortedBy.size() > 0 && subRes->_sortedBy[0] == lhs;
   switch (_type) {
     case SparqlFilter::EQ:
-      if (subRes->_sortedBy[lhs]) {
+      if (lhs_is_sorted) {
         // The input data is sorted, use binary search to locate the first
         // and last element that match rhs and copy the range.
         RT rhs_array;
@@ -252,7 +254,7 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
       }
       break;
     case SparqlFilter::NE:
-      if (subRes->_sortedBy[lhs]) {
+      if (lhs_is_sorted) {
         // The input data is sorted, use binary search to locate the first
         // and last element that match rhs and copy the range.
         RT rhs_array;
@@ -279,7 +281,7 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
       }
       break;
     case SparqlFilter::LT:
-      if (subRes->_sortedBy[lhs]) {
+      if (lhs_is_sorted) {
         // The input data is sorted, use binary search to locate the first
         // and last element that match rhs and copy the range.
         RT rhs_array;
@@ -299,7 +301,7 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
       }
       break;
     case SparqlFilter::LE:
-      if (subRes->_sortedBy[lhs]) {
+      if (lhs_is_sorted) {
         // The input data is sorted, use binary search to locate the first
         // and last element that match rhs and copy the range.
         RT rhs_array;
@@ -319,7 +321,7 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
       }
       break;
     case SparqlFilter::GT:
-      if (subRes->_sortedBy[lhs]) {
+      if (lhs_is_sorted) {
         // The input data is sorted, use binary search to locate the first
         // and last element that match rhs and copy the range.
         RT rhs_array;
@@ -340,7 +342,7 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
       }
       break;
     case SparqlFilter::GE:
-      if (subRes->_sortedBy[lhs]) {
+      if (lhs_is_sorted) {
         // The input data is sorted, use binary search to locate the first
         // and last element that match rhs and copy the range.
         RT rhs_array;
@@ -388,7 +390,7 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         size_t upperBound =
             getIndex().getVocab().getValueIdForLT(upperBoundStr);
         size_t lowerBound = getIndex().getVocab().getValueIdForGE(rhs);
-        if (subRes->_sortedBy[lhs]) {
+        if (lhs_is_sorted) {
           // The input data is sorted, use binary search to locate the first
           // and last element that match rhs and copy the range.
           RT rhs_array;
