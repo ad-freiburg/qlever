@@ -213,13 +213,18 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
             throw ParseException("Unbalanced curly braces.");
           }
         }
-        currentPattern->_children.push_back(new ParsedQuery::GraphPattern());
-        currentPattern->_children.back()->_optional = true;
-        currentPattern->_children.back()->_id = query._numGraphPatterns;
+        currentPattern->_children.push_back(
+            new ParsedQuery::GraphPatternOperation(
+                ParsedQuery::GraphPatternOperation::Type::OPTIONAL,
+                {new ParsedQuery::GraphPattern()}));
+        currentPattern->_children.back()->_childGraphPatterns[0]->_optional =
+            true;
+        currentPattern->_children.back()->_childGraphPatterns[0]->_id =
+            query._numGraphPatterns;
         query._numGraphPatterns++;
         // Recursively call parseWhere to parse the optional part.
         parseWhere(inner.substr(ob, cb - ob + 1), query,
-                   currentPattern->_children.back());
+                   currentPattern->_children.back()->_childGraphPatterns[0]);
 
         // set start to the end of the optional part
         start = cb + 1;

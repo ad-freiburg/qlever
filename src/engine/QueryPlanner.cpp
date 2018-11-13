@@ -33,11 +33,14 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     const ParsedQuery::GraphPattern* pattern = childrenToAdd.back();
     childrenToAdd.pop_back();
     patternsToProcess.push_back(pattern);
-    childrenToAdd.insert(childrenToAdd.end(), pattern->_children.begin(),
-                         pattern->_children.end());
+    for (const ParsedQuery::GraphPatternOperation* op : pattern->_children) {
+      childrenToAdd.insert(childrenToAdd.end(), op->_childGraphPatterns.begin(),
+                           op->_childGraphPatterns.end());
+    }
   }
 
   std::vector<SubtreePlan> patternPlans;
+  patternPlans.reserve(pq._numGraphPatterns);
   for (size_t i = 0; i < pq._numGraphPatterns; i++) {
     // Using a loop instead of resize as there is no default constructor, and
     // distinct _qet values are needed.
@@ -72,8 +75,21 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
 
     LOG(DEBUG) << "Creating execution plan.\n";
     childPlans.clear();
-    for (const ParsedQuery::GraphPattern* child : pattern->_children) {
-      childPlans.push_back(&patternPlans[child->_id]);
+    std::vector<SubtreePlan> unionPlans;
+    for (const ParsedQuery::GraphPatternOperation* child : pattern->_children) {
+      switch (child->_type) {
+        case ParsedQuery::GraphPatternOperation::Type::OPTIONAL:
+          for (const ParsedQuery::GraphPattern* p :
+               child->_childGraphPatterns) {
+            childPlans.push_back(&patternPlans[p->_id]);
+          }
+          break;
+        case ParsedQuery::GraphPatternOperation::Type::UNION:
+          // TODO(florian): create a union operation instead and insert it into
+          // the child plans.
+
+          break;
+      }
     }
 
     // Strategy:
@@ -253,15 +269,23 @@ bool QueryPlanner::checkUsePatternTrick(
             // Check for optional parts containing the ql:has-predicate triple's
             // object
             std::vector<const ParsedQuery::GraphPattern*> graphsToProcess;
-            graphsToProcess.insert(graphsToProcess.end(),
-                                   pq->_rootGraphPattern._children.begin(),
-                                   pq->_rootGraphPattern._children.end());
+            for (const ParsedQuery::GraphPatternOperation* op :
+                 pq->_rootGraphPattern._children) {
+              graphsToProcess.insert(graphsToProcess.end(),
+                                     op->_childGraphPatterns.begin(),
+                                     op->_childGraphPatterns.end());
+            }
             while (!graphsToProcess.empty()) {
               const ParsedQuery::GraphPattern* pattern = graphsToProcess.back();
               graphsToProcess.pop_back();
-              graphsToProcess.insert(graphsToProcess.end(),
-                                     pattern->_children.begin(),
-                                     pattern->_children.end());
+
+              for (const ParsedQuery::GraphPatternOperation* op :
+                   pattern->_children) {
+                graphsToProcess.insert(graphsToProcess.end(),
+                                       op->_childGraphPatterns.begin(),
+                                       op->_childGraphPatterns.end());
+              }
+
               for (const SparqlTriple& other : pattern->_whereClauseTriples) {
                 if (other._s == t._o || other._p == t._o || other._o == t._o) {
                   usePatternTrick = false;

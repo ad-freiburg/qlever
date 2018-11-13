@@ -135,6 +135,26 @@ class SparqlFilter {
 // A parsed SPARQL query. To be extended.
 class ParsedQuery {
  public:
+  class GraphPattern;
+
+  class GraphPatternOperation {
+   public:
+    enum class Type { OPTIONAL, UNION };
+    GraphPatternOperation(Type type,
+                          std::initializer_list<GraphPattern*> children);
+
+    // Move and copyconstructors to avoid double deletes on the trees children
+    GraphPatternOperation(GraphPatternOperation&& other);
+    GraphPatternOperation(const GraphPatternOperation& other);
+    GraphPatternOperation& operator=(const GraphPatternOperation& other);
+    virtual ~GraphPatternOperation();
+
+    void toString(std::ostringstream& os, int indentation = 0) const;
+
+    Type _type;
+    std::vector<GraphPattern*> _childGraphPatterns;
+  };
+
   // Groups triplets and filters. Represents a node in a tree (as graph patterns
   // are recursive).
   class GraphPattern {
@@ -151,9 +171,13 @@ class ParsedQuery {
     vector<SparqlTriple> _whereClauseTriples;
     vector<SparqlFilter> _filters;
     bool _optional;
+    /**
+     * @brief A id that is unique for the ParsedQuery. Ids are guaranteed to
+     * start with zero and to be dense.
+     */
     size_t _id;
 
-    vector<GraphPattern*> _children;
+    vector<GraphPatternOperation*> _children;
   };
 
   struct Alias {

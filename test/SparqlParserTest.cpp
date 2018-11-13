@@ -169,7 +169,10 @@ TEST(ParserTest, testParse) {
         "}");
 
     ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
-    ParsedQuery::GraphPattern* child = pq._rootGraphPattern._children[0];
+    ASSERT_EQ(1u,
+              pq._rootGraphPattern._children[0]->_childGraphPatterns.size());
+    ParsedQuery::GraphPattern* child =
+        pq._rootGraphPattern._children[0]->_childGraphPatterns[0];
     ASSERT_EQ(1u, child->_whereClauseTriples.size());
     ASSERT_EQ("?y", child->_whereClauseTriples[0]._s);
     ASSERT_EQ("<test2>", child->_whereClauseTriples[0]._p);
@@ -192,10 +195,16 @@ TEST(ParserTest, testParse) {
         "  }\n"
         "}");
     ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
-    child = pq._rootGraphPattern._children[0];
+    ASSERT_EQ(1u,
+              pq._rootGraphPattern._children[0]->_childGraphPatterns.size());
+    child = pq._rootGraphPattern._children[0]->_childGraphPatterns[0];
     ASSERT_EQ(2u, child->_children.size());
-    ParsedQuery::GraphPattern* child2 = child->_children[0];
-    ParsedQuery::GraphPattern* child3 = child->_children[1];
+    ASSERT_EQ(1u, child->_children[0]->_childGraphPatterns.size());
+    ASSERT_EQ(1u, child->_children[0]->_childGraphPatterns.size());
+    ParsedQuery::GraphPattern* child2 =
+        child->_children[0]->_childGraphPatterns[0];
+    ParsedQuery::GraphPattern* child3 =
+        child->_children[1]->_childGraphPatterns[0];
     ASSERT_EQ(1u, child2->_whereClauseTriples.size());
     ASSERT_EQ(1u, child2->_filters.size());
     ASSERT_EQ(1u, child3->_whereClauseTriples.size());
