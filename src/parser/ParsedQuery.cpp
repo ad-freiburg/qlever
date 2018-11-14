@@ -406,6 +406,15 @@ ParsedQuery::GraphPatternOperation::GraphPatternOperation(
 // _____________________________________________________________________________
 ParsedQuery::GraphPatternOperation& ParsedQuery::GraphPatternOperation::
 operator=(const ParsedQuery::GraphPatternOperation& other) {
+  _type = other._type;
+  for (GraphPattern* p : _childGraphPatterns) {
+    delete p;
+  }
+  _childGraphPatterns.clear();
+  _childGraphPatterns.reserve(other._childGraphPatterns.size());
+  for (const GraphPattern* p : other._childGraphPatterns) {
+    _childGraphPatterns.push_back(new GraphPattern(*p));
+  }
   return *this;
 }
 

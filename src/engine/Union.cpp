@@ -5,7 +5,7 @@
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
 
-Union::Union(QueryExecutionContext *qec, std::shared_ptr<QueryExecutionTree> t1,
+Union::Union(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
              std::shared_ptr<QueryExecutionTree> t2)
     : Operation(qec) {
   _subtrees[0] = t1;
@@ -42,7 +42,7 @@ string Union::asString(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  os << " } UNION {\n" << _subtrees[1]->asString(indent) << "\n";
+  os << "UNION\n" << _subtrees[1]->asString(indent) << "\n";
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
@@ -120,12 +120,12 @@ size_t Union::getCostEstimate() {
          getSizeEstimate();
 }
 
-void Union::computeResult(ResultTable *result) const {
+void Union::computeResult(ResultTable* result) const {
   shared_ptr<const ResultTable> subRes1 = _subtrees[0]->getResult();
   shared_ptr<const ResultTable> subRes2 = _subtrees[1]->getResult();
 
   result->_sortedBy = resultSortedOn();
-  for (const std::array<size_t, 2> &o : _columnOrigins) {
+  for (const std::array<size_t, 2>& o : _columnOrigins) {
     if (o[0] != NO_COLUMN) {
       result->_resultTypes.push_back(subRes1->getResultType(o[0]));
     } else if (o[1] != NO_COLUMN) {
@@ -135,87 +135,97 @@ void Union::computeResult(ResultTable *result) const {
     }
   }
   result->_nofColumns = getResultWidth();
-  if (result->_nofColumns == 1) {
-    result->_fixedSizeData = new vector<array<Id, 1>>();
-    computeUnion(static_cast<vector<array<Id, 1>> *>(result->_fixedSizeData),
-                 subRes1, subRes2);
-  } else if (result->_nofColumns == 2) {
-    result->_fixedSizeData = new vector<array<Id, 2>>();
-    computeUnion(static_cast<vector<array<Id, 1>> *>(result->_fixedSizeData),
-                 subRes1, subRes2);
-  } else if (result->_nofColumns == 3) {
-    result->_fixedSizeData = new vector<array<Id, 3>>();
-    computeUnion(static_cast<vector<array<Id, 1>> *>(result->_fixedSizeData),
-                 subRes1, subRes2);
-  } else if (result->_nofColumns == 4) {
-    result->_fixedSizeData = new vector<array<Id, 4>>();
-    computeUnion(static_cast<vector<array<Id, 1>> *>(result->_fixedSizeData),
-                 subRes1, subRes2);
-  } else if (result->_nofColumns == 5) {
-    result->_fixedSizeData = new vector<array<Id, 5>>();
-    computeUnion(static_cast<vector<array<Id, 1>> *>(result->_fixedSizeData),
-                 subRes1, subRes2);
-  } else {
-    computeUnion(&result->_varSizeData, subRes1, subRes2);
-  }
+  computeUnion(result, subRes1, subRes2, _columnOrigins);
 
   result->finish();
 }
 
+void Union::computeUnion(
+    ResultTable* result, shared_ptr<const ResultTable> subRes1,
+    shared_ptr<const ResultTable> subRes2,
+    const std::vector<std::array<size_t, 2>>& columnOrigins) {
+  if (result->_nofColumns == 1) {
+    result->_fixedSizeData = new vector<array<Id, 1>>();
+    computeUnion(static_cast<vector<array<Id, 1>>*>(result->_fixedSizeData),
+                 subRes1, subRes2, columnOrigins);
+  } else if (result->_nofColumns == 2) {
+    result->_fixedSizeData = new vector<array<Id, 2>>();
+    computeUnion(static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
+                 subRes1, subRes2, columnOrigins);
+  } else if (result->_nofColumns == 3) {
+    result->_fixedSizeData = new vector<array<Id, 3>>();
+    computeUnion(static_cast<vector<array<Id, 3>>*>(result->_fixedSizeData),
+                 subRes1, subRes2, columnOrigins);
+  } else if (result->_nofColumns == 4) {
+    result->_fixedSizeData = new vector<array<Id, 4>>();
+    computeUnion(static_cast<vector<array<Id, 4>>*>(result->_fixedSizeData),
+                 subRes1, subRes2, columnOrigins);
+  } else if (result->_nofColumns == 5) {
+    result->_fixedSizeData = new vector<array<Id, 5>>();
+    computeUnion(static_cast<vector<array<Id, 5>>*>(result->_fixedSizeData),
+                 subRes1, subRes2, columnOrigins);
+  } else {
+    computeUnion(&result->_varSizeData, subRes1, subRes2, columnOrigins);
+  }
+}
+
 template <typename Res>
-void Union::computeUnion(vector<Res> *res,
-                         shared_ptr<const ResultTable> subRes1,
-                         shared_ptr<const ResultTable> subRes2) const {
+void Union::computeUnion(
+    vector<Res>* res, shared_ptr<const ResultTable> subRes1,
+    shared_ptr<const ResultTable> subRes2,
+    const std::vector<std::array<size_t, 2>>& columnOrigins) {
   if (subRes1->_nofColumns == 1) {
     computeUnion(res,
-                 static_cast<vector<array<Id, 1>> *>(subRes1->_fixedSizeData),
-                 subRes2);
+                 static_cast<vector<array<Id, 1>>*>(subRes1->_fixedSizeData),
+                 subRes2, columnOrigins);
   } else if (subRes1->_nofColumns == 2) {
     computeUnion(res,
-                 static_cast<vector<array<Id, 2>> *>(subRes1->_fixedSizeData),
-                 subRes2);
+                 static_cast<vector<array<Id, 2>>*>(subRes1->_fixedSizeData),
+                 subRes2, columnOrigins);
   } else if (subRes1->_nofColumns == 3) {
     computeUnion(res,
-                 static_cast<vector<array<Id, 3>> *>(subRes1->_fixedSizeData),
-                 subRes2);
+                 static_cast<vector<array<Id, 3>>*>(subRes1->_fixedSizeData),
+                 subRes2, columnOrigins);
   } else if (subRes1->_nofColumns == 4) {
     computeUnion(res,
-                 static_cast<vector<array<Id, 4>> *>(subRes1->_fixedSizeData),
-                 subRes2);
+                 static_cast<vector<array<Id, 4>>*>(subRes1->_fixedSizeData),
+                 subRes2, columnOrigins);
   } else if (subRes1->_nofColumns == 5) {
     computeUnion(res,
-                 static_cast<vector<array<Id, 5>> *>(subRes1->_fixedSizeData),
-                 subRes2);
+                 static_cast<vector<array<Id, 5>>*>(subRes1->_fixedSizeData),
+                 subRes2, columnOrigins);
   } else {
-    computeUnion(res, &subRes1->_varSizeData, subRes2);
+    computeUnion(res, &subRes1->_varSizeData, subRes2, columnOrigins);
   }
 }
 
 template <typename Res, typename L>
-void Union::computeUnion(vector<Res> *res, const vector<L> *left,
-                         shared_ptr<const ResultTable> subRes2) const {
+void Union::computeUnion(
+    vector<Res>* res, const vector<L>* left,
+    shared_ptr<const ResultTable> subRes2,
+    const std::vector<std::array<size_t, 2>>& columnOrigins) {
   if (subRes2->_nofColumns == 1) {
-    ::computeUnion(res, left,
-                   static_cast<vector<array<Id, 1>> *>(subRes2->_fixedSizeData),
-                   _columnOrigins);
+    computeUnion(res, left,
+                 static_cast<vector<array<Id, 1>>*>(subRes2->_fixedSizeData),
+                 columnOrigins);
   } else if (subRes2->_nofColumns == 2) {
-    ::computeUnion(res, left,
-                   static_cast<vector<array<Id, 2>> *>(subRes2->_fixedSizeData),
-                   _columnOrigins);
+    computeUnion(res, left,
+                 static_cast<vector<array<Id, 2>>*>(subRes2->_fixedSizeData),
+                 columnOrigins);
   } else if (subRes2->_nofColumns == 3) {
-    ::computeUnion(res, left,
-                   static_cast<vector<array<Id, 3>> *>(subRes2->_fixedSizeData),
-                   _columnOrigins);
+    computeUnion(res, left,
+                 static_cast<vector<array<Id, 3>>*>(subRes2->_fixedSizeData),
+                 columnOrigins);
   } else if (subRes2->_nofColumns == 4) {
-    ::computeUnion(res, left,
-                   static_cast<vector<array<Id, 4>> *>(subRes2->_fixedSizeData),
-                   _columnOrigins);
+    computeUnion(res, left,
+                 static_cast<vector<array<Id, 4>>*>(subRes2->_fixedSizeData),
+                 columnOrigins);
   } else if (subRes2->_nofColumns == 5) {
-    ::computeUnion(res, left,
-                   static_cast<vector<array<Id, 5>> *>(subRes2->_fixedSizeData),
-                   _columnOrigins);
+    computeUnion(res, left,
+                 static_cast<vector<array<Id, 5>>*>(subRes2->_fixedSizeData),
+                 columnOrigins);
   } else {
-    ::computeUnion(res, left, &subRes2->_varSizeData, _columnOrigins);
+    computeUnion(res, left, &subRes2->_varSizeData, columnOrigins);
   }
 }
 
@@ -242,16 +252,80 @@ struct newResultRow<std::vector<Id>> {
 };
 
 template <typename Res, typename L, typename R>
-void computeUnion(vector<Res> *res, const vector<L> *left,
-                  const vector<R> *right,
-                  const std::vector<std::array<size_t, 2>> &columnOrigins) {
+void Union::computeUnion(
+    vector<Res>* res, const vector<L>* left, const vector<R>* right,
+    const std::vector<std::array<size_t, 2>>& columnOrigins) {
+  res->reserve(left->size() + right->size());
+  if (left->size() > 0) {
+    if ((*left)[0].size() == columnOrigins.size()) {
+      // Left and right have the same columns, we can simply copy the entries.
+      // As the variableColumnMap of left was simply copied over to create
+      // this operations variableColumnMap the order of the columns will
+      // be the same.
+      if constexpr (std::is_same<Res, L>::value) {
+        // This is only true iff the columns match, but the compiler
+        // would complain if Res != L.
+        res->insert(res->end(), left->begin(), left->end());
+      }
+    } else {
+      for (const L& l : *left) {
+        Res row = newResultRow<Res>::create(columnOrigins.size());
+        for (size_t i = 0; i < columnOrigins.size(); i++) {
+          const std::array<size_t, 2>& co = columnOrigins[i];
+          if (co[0] != Union::NO_COLUMN) {
+            row[i] = l[co[0]];
+          } else {
+            row[i] = ID_NO_VALUE;
+          }
+        }
+        res->push_back(row);
+      }
+    }
+  }
+
+  if (right->size() > 0) {
+    bool columnsMatch = (*right)[0].size() == columnOrigins.size();
+    // check if the order of the columns matches
+    for (size_t i = 0; columnsMatch && i < columnOrigins.size(); i++) {
+      const std::array<size_t, 2>& co = columnOrigins[i];
+      if (co[1] != i) {
+        columnsMatch = false;
+      }
+    }
+    if (columnsMatch) {
+      // The columns of the right subtree and the result match, we can
+      // just copy the entries.
+      if constexpr (std::is_same<Res, R>::value) {
+        // This is only true iff the columns match, but the compiler
+        // would complain if Res != R.
+        res->insert(res->end(), right->begin(), right->end());
+      }
+    } else {
+      for (const R& r : *right) {
+        Res row = newResultRow<Res>::create(columnOrigins.size());
+        for (size_t i = 0; i < columnOrigins.size(); i++) {
+          const std::array<size_t, 2>& co = columnOrigins[i];
+          if (co[1] != Union::NO_COLUMN) {
+            row[i] = r[co[1]];
+          } else {
+            row[i] = ID_NO_VALUE;
+          }
+        }
+        res->push_back(row);
+      }
+    }
+  }
+  /*
+
   res->reserve(left->size() + right->size());
   for (const L &l : *left) {
     Res row = newResultRow<Res>::create(columnOrigins.size());
     for (size_t i = 0; i < columnOrigins.size(); i++) {
       const std::array<size_t, 2> &co = columnOrigins[i];
       if (co[0] != Union::NO_COLUMN) {
-        row[co[0]] = l[i];
+        row[i] = l[co[0]];
+      } else {
+        row[i] = ID_NO_VALUE;
       }
     }
     res->push_back(row);
@@ -262,7 +336,9 @@ void computeUnion(vector<Res> *res, const vector<L> *left,
     for (size_t i = 0; i < columnOrigins.size(); i++) {
       const std::array<size_t, 2> &co = columnOrigins[i];
       if (co[1] != Union::NO_COLUMN) {
-        row[co[1]] = r[i];
+        row[i] = r[co[1]];
+      } else {
+        row[i] = ID_NO_VALUE;
       }
     }
     res->push_back(row);
@@ -270,8 +346,8 @@ void computeUnion(vector<Res> *res, const vector<L> *left,
 }
 
 template <typename T>
-void computeUnion(vector<T> *res, const vector<T> *left, const vector<T> *right,
-                  const std::vector<std::array<size_t, 2>> &columnOrigins) {
+void Union::computeUnion(vector<T> *res, const vector<T> *left, const vector<T>
+*right, const std::vector<std::array<size_t, 2>> &columnOrigins) {
   res->reserve(left->size() + right->size());
   if (left->size() > 0) {
     if ((*left)[0].size() == columnOrigins.size()) {
@@ -286,7 +362,9 @@ void computeUnion(vector<T> *res, const vector<T> *left, const vector<T> *right,
         for (size_t i = 0; i < columnOrigins.size(); i++) {
           const std::array<size_t, 2> &co = columnOrigins[i];
           if (co[0] != Union::NO_COLUMN) {
-            row[co[0]] = l[i];
+            row[i] = l[co[0]];
+          } else {
+            row[i] = ID_NO_VALUE;
           }
         }
         res->push_back(row);
@@ -313,11 +391,13 @@ void computeUnion(vector<T> *res, const vector<T> *left, const vector<T> *right,
         for (size_t i = 0; i < columnOrigins.size(); i++) {
           const std::array<size_t, 2> &co = columnOrigins[i];
           if (co[1] != Union::NO_COLUMN) {
-            row[co[1]] = r[i];
+            row[i] = r[co[1]];
+          } else {
+            row[i] = ID_NO_VALUE;
           }
         }
         res->push_back(row);
       }
     }
-  }
+  }*/
 }

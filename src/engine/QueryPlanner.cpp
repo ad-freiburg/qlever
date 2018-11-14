@@ -18,6 +18,7 @@
 #include "TextOperationWithFilter.h"
 #include "TextOperationWithoutFilter.h"
 #include "TwoColumnJoin.h"
+#include "Union.h"
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec) : _qec(qec) {}
@@ -85,9 +86,28 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
           }
           break;
         case ParsedQuery::GraphPatternOperation::Type::UNION:
-          // TODO(florian): create a union operation instead and insert it into
-          // the child plans.
+          // the efficiency of the union operation is not dependent on the
+          // sorting of the inputs and its position is fixed so it does not
+          // need to be part of the optimization of the child.
+          SubtreePlan* left = &patternPlans[child->_childGraphPatterns[0]->_id];
+          SubtreePlan* right =
+              &patternPlans[child->_childGraphPatterns[1]->_id];
 
+          // create a new subtree plan
+          unionPlans.emplace_back(_qec);
+          std::shared_ptr<Operation> unionOp(
+              new Union(_qec, left->_qet, right->_qet));
+          QueryExecutionTree& tree = *unionPlans.back()._qet.get();
+          tree.setVariableColumns(
+              static_cast<Union*>(unionOp.get())->getVariableColumns());
+          tree.setOperation(QueryExecutionTree::UNION, unionOp);
+
+          unionPlans.back()._idsOfIncludedNodes = left->_idsOfIncludedNodes;
+          unionPlans.back().addAllNodes(right->_idsOfIncludedNodes);
+          unionPlans.back()._idsOfIncludedFilters = left->_idsOfIncludedFilters;
+          unionPlans.back()._idsOfIncludedFilters |=
+              right->_idsOfIncludedFilters;
+          childPlans.push_back(&unionPlans.back());
           break;
       }
     }
