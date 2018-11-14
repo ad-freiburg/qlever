@@ -277,12 +277,12 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             tg.asString());
         tg.collapseTextCliques();
         ASSERT_EQ(
-            "0 {TextOP for ?c2, wordPart: \"xx\"} : (1)\n"
-            "1 {TextOP for ?c, wordPart: \"abc\"} : (0, 2)\n"
-            "2 {s: ?x, p: <p>, o: <X>} : (1)",
+            "0 {TextOP for ?c, wordPart: \"abc\"} : (1, 2)\n"
+            "1 {TextOP for ?c2, wordPart: \"xx\"} : (0)\n"
+            "2 {s: ?x, p: <p>, o: <X>} : (0)",
             tg.asString());
-        ASSERT_EQ(2ul, tg._nodeMap[0]->_variables.size());
-        ASSERT_EQ(3ul, tg._nodeMap[1]->_variables.size());
+        ASSERT_EQ(3ul, tg._nodeMap[0]->_variables.size());
+        ASSERT_EQ(2ul, tg._nodeMap[1]->_variables.size());
         ASSERT_EQ(1ul, tg._nodeMap[2]->_variables.size());
       }
       {
@@ -309,13 +309,13 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             tg.asString());
         tg.collapseTextCliques();
         ASSERT_EQ(
-            "0 {TextOP for ?c2, wordPart: \"xx\"} : (1, 3)\n"
-            "1 {TextOP for ?c, wordPart: \"abc\"} : (0, 2, 3)\n"
-            "2 {s: ?x, p: <p>, o: <X>} : (1)\n"
+            "0 {TextOP for ?c, wordPart: \"abc\"} : (1, 2, 3)\n"
+            "1 {TextOP for ?c2, wordPart: \"xx\"} : (0, 3)\n"
+            "2 {s: ?x, p: <p>, o: <X>} : (0)\n"
             "3 {s: ?y, p: <P2>, o: <X2>} : (0, 1)",
             tg.asString());
-        ASSERT_EQ(2ul, tg._nodeMap[0]->_variables.size());
-        ASSERT_EQ(3ul, tg._nodeMap[1]->_variables.size());
+        ASSERT_EQ(3ul, tg._nodeMap[0]->_variables.size());
+        ASSERT_EQ(2ul, tg._nodeMap[1]->_variables.size());
         ASSERT_EQ(1ul, tg._nodeMap[2]->_variables.size());
         ASSERT_EQ(1ul, tg._nodeMap[3]->_variables.size());
       }
@@ -908,16 +908,16 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
         "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
         "\"manhattan project\" and 1 variables with textLimit = 1 "
         "filtered by\n  {\n    JOIN\n    {\n      "
-        "SCAN POS with P = \"<is-a>\", O = \"<Politician>\"\n     "
+        "SCAN POS with P = \"<is-a>\", O = \"<Scientist>\"\n     "
         " qet-width: 1 \n    } join-column: [0]\n    |X|\n    {\n     "
         " SORT on column:2\n      {\n        "
         "TEXT OPERATION WITH FILTER: co-occurrence with words: \"friend*\" "
         "and 2 variables with textLimit = 1 filtered by\n        {\n     "
-        "     SCAN POS with P = \"<is-a>\", O = \"<Scientist>\"\n     "
+        "     SCAN POS with P = \"<is-a>\", O = \"<Politician>\"\n     "
         "     qet-width: 1 \n        }\n         filtered on column 0\n   "
         "     qet-width: 4 \n      }\n      qet-width: 4 \n    }"
         " join-column: [2]\n    qet-width: 4 \n  }\n   filtered on column"
-        " 3\n  qet-width: 6 \n}",
+        " 0\n  qet-width: 6 \n}",
         qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;

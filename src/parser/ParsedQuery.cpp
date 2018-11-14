@@ -107,6 +107,9 @@ string SparqlFilter::asString() const {
         os << "ignoring case ";
       }
       break;
+    case PREFIX:
+      os << " PREFIX ";
+      break;
   }
   os << _rhs << ")";
   return os.str();
