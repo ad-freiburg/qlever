@@ -8,11 +8,12 @@
 // _____________________________________________________________________________
 ResultTable::ResultTable()
     : _nofColumns(0),
-      _sortedBy(0),
+      _sortedBy(),
       _varSizeData(),
       _fixedSizeData(nullptr),
-      _status(ResultTable::OTHER),
-      _localVocab(std::make_shared<std::vector<std::string>>()) {}
+      _resultTypes(),
+      _localVocab(std::make_shared<std::vector<std::string>>()),
+      _status(ResultTable::OTHER) {}
 
 // _____________________________________________________________________________
 void ResultTable::clear() {
