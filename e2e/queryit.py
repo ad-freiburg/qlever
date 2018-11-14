@@ -177,15 +177,15 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
 
 
 
-def solution_checks(solution: Dict[str, Any],
-                    result: Dict[str, Any]) -> bool:
+def query_checks(query: Dict[str, Any],
+                 result: Dict[str, Any]) -> bool:
     """
-    Tests the checks specified in the solution
+    Tests the checks specified in the query
     """
-    if not 'checks' in solution:
+    if not 'checks' in query:
         return True
     passed = True
-    checks = solution['checks']
+    checks = query['checks']
     for check in checks:
         if not test_check(check, result):
             passed = False
@@ -214,35 +214,33 @@ def main() -> None:
         queries = yaml_tree['queries']
         for query in queries:
             query_name = query['query']
-            solutions = query['solutions']
-            for solution in solutions:
-                solution_type = solution['type']
-                solution_sparql = solution['sparql']
-                print(Color.HEADER+'Trying: ', query_name,
-                      '(%s)' % solution_type + Color.ENDC)
-                print('SPARQL:')
-                print(solution_sparql)
-                result = exec_query(endpoint_url, solution_sparql)
-                if not result:
-                    # A print was already done in exec_query()
-                    error_detected = True
-                    print_qlever_result(result)
-                    continue
+            query_type = query['type']
+            query_sparql = query['sparql']
+            print(Color.HEADER+'Trying: ', query_name,
+                  '(%s)' % query_type + Color.ENDC)
+            print('SPARQL:')
+            print(query_sparql)
+            result = exec_query(endpoint_url, query_sparql)
+            if not result:
+                # A print was already done in exec_query()
+                error_detected = True
+                print_qlever_result(result)
+                continue
 
-                if not is_result_sane(result):
-                    error_detected = True
-                    print_qlever_result(result)
-                    continue
+            if not is_result_sane(result):
+                error_detected = True
+                print_qlever_result(result)
+                continue
 
-                if result['status'] != 'OK':
-                    eprint('QLever Result "status" is not "OK"')
-                    error_detected = True
-                    print_qlever_result(result)
-                    continue
+            if result['status'] != 'OK':
+                eprint('QLever Result "status" is not "OK"')
+                error_detected = True
+                print_qlever_result(result)
+                continue
 
-                if not solution_checks(solution, result):
-                    error_detected = True
-                    continue
+            if not query_checks(query, result):
+                error_detected = True
+                continue
 
     if error_detected:
         print(Color.FAIL+'Query tool found errors!'+Color.ENDC)
