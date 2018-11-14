@@ -24,8 +24,8 @@ Union::Union(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
     }
 
     // look for the corresponding column in t2
-    auto it2 = t1->getVariableColumnMap().find(it.first);
-    if (it2 != t1->getVariableColumnMap().end()) {
+    auto it2 = t2->getVariableColumnMap().find(it.first);
+    if (it2 != t2->getVariableColumnMap().end()) {
       _columnOrigins[it.second][1] = it2->second;
     } else {
       _columnOrigins[it.second][1] = NO_COLUMN;
@@ -35,18 +35,12 @@ Union::Union(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
 
 string Union::asString(size_t indent) const {
   std::ostringstream os;
+  os << _subtrees[0]->asString(indent) << "\n";
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  os << "{\n" << _subtrees[0]->asString(indent) << "\n";
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "UNION\n" << _subtrees[1]->asString(indent) << "\n";
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "}";
+  os << "UNION\n";
+  os << _subtrees[1]->asString(indent) << "\n";
   return os.str();
 }
 
@@ -266,6 +260,11 @@ void Union::computeUnion(
         // This is only true iff the columns match, but the compiler
         // would complain if Res != L.
         res->insert(res->end(), left->begin(), left->end());
+      } else {
+        // This should never occur
+        AD_THROW(ad_semsearch::Exception::OTHER,
+                 "Error in " __FILE__
+                 ": Types Res and L differ but their size is the same.");
       }
     } else {
       for (const L& l : *left) {
@@ -299,6 +298,11 @@ void Union::computeUnion(
         // This is only true iff the columns match, but the compiler
         // would complain if Res != R.
         res->insert(res->end(), right->begin(), right->end());
+      } else {
+        // This should never occur
+        AD_THROW(ad_semsearch::Exception::OTHER,
+                 "Error in " __FILE__
+                 ": Types Res and R differ but their size is the same.");
       }
     } else {
       for (const R& r : *right) {
@@ -315,89 +319,4 @@ void Union::computeUnion(
       }
     }
   }
-  /*
-
-  res->reserve(left->size() + right->size());
-  for (const L &l : *left) {
-    Res row = newResultRow<Res>::create(columnOrigins.size());
-    for (size_t i = 0; i < columnOrigins.size(); i++) {
-      const std::array<size_t, 2> &co = columnOrigins[i];
-      if (co[0] != Union::NO_COLUMN) {
-        row[i] = l[co[0]];
-      } else {
-        row[i] = ID_NO_VALUE;
-      }
-    }
-    res->push_back(row);
-  }
-
-  for (const R &r : *right) {
-    Res row = newResultRow<Res>::create(columnOrigins.size());
-    for (size_t i = 0; i < columnOrigins.size(); i++) {
-      const std::array<size_t, 2> &co = columnOrigins[i];
-      if (co[1] != Union::NO_COLUMN) {
-        row[i] = r[co[1]];
-      } else {
-        row[i] = ID_NO_VALUE;
-      }
-    }
-    res->push_back(row);
-  }
-}
-
-template <typename T>
-void Union::computeUnion(vector<T> *res, const vector<T> *left, const vector<T>
-*right, const std::vector<std::array<size_t, 2>> &columnOrigins) {
-  res->reserve(left->size() + right->size());
-  if (left->size() > 0) {
-    if ((*left)[0].size() == columnOrigins.size()) {
-      // Left and right have the same columns, we can simply copy the entries.
-      // As the variableColumnMap of left was simply copied over to create
-      // this operations variableColumnMap the order of the columns will
-      // be the same.
-      res->insert(res->end(), left->begin(), left->end());
-    } else {
-      for (const T &l : *left) {
-        T row = newResultRow<T>::create(columnOrigins.size());
-        for (size_t i = 0; i < columnOrigins.size(); i++) {
-          const std::array<size_t, 2> &co = columnOrigins[i];
-          if (co[0] != Union::NO_COLUMN) {
-            row[i] = l[co[0]];
-          } else {
-            row[i] = ID_NO_VALUE;
-          }
-        }
-        res->push_back(row);
-      }
-    }
-  }
-
-  if (right->size() > 0) {
-    bool columnsMatch = (*right)[0].size() == columnOrigins.size();
-    // check if the order of the columns matches
-    for (size_t i = 0; columnsMatch && i < columnOrigins.size(); i++) {
-      const std::array<size_t, 2> &co = columnOrigins[i];
-      if (co[1] != i) {
-        columnsMatch = false;
-      }
-    }
-    if (columnsMatch) {
-      // The columns of the right subtree and the result match, we can
-      // just copy the entries.
-      res->insert(res->end(), right->begin(), right->end());
-    } else {
-      for (const T &r : *right) {
-        T row = newResultRow<T>::create(columnOrigins.size());
-        for (size_t i = 0; i < columnOrigins.size(); i++) {
-          const std::array<size_t, 2> &co = columnOrigins[i];
-          if (co[1] != Union::NO_COLUMN) {
-            row[i] = r[co[1]];
-          } else {
-            row[i] = ID_NO_VALUE;
-          }
-        }
-        res->push_back(row);
-      }
-    }
-  }*/
 }
