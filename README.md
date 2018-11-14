@@ -255,9 +255,15 @@ A tab-separated file with one line per posting and following the format:
 
     word    isEntity    recordId   score
 
-For example, for a sentence `He discovered penicillin, a drug.`, it could look like this:
+For example, for a sentence `Alexander Fleming discovered penicillin, a drug.`,
+it could look like this when using contexts as records. In this case the
+`penicilin` entity was prepended to the second context by the CSD-IE
+preprocessing. In a more simple setting each record could also be a full
+sentence.
 
-    He                  0   0   1
+    Alexander           0   0   1
+    <Alexander_Fleming> 1   0   1
+    Fleming             0   0   1
     <Alexander_Fleming> 1   0   1
     dicovered           0   0   1
     penicillin          0   0   1
@@ -278,7 +284,7 @@ A tab-separated file with one line per original unit of text and following the f
 
 For example, for the sentence above:
 
-    1   He discovered penicillin, a drug.
+    1   Alexander Fleming discovered penicillin, a drug.
 
 Note that this file is only used to display proper excerpts as evidence for texttual matches.
 
