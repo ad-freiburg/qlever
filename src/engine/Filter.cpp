@@ -239,12 +239,16 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
         const typename vector<RT>::iterator& lower = std::lower_bound(
             data->begin(), data->end(), rhs_array,
-            [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+            [lhs](const RT& l, const RT& r) {
+              return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
+            });
         if (lower != data->end() && (*lower)[lhs] == rhs) {
           // an element equal to rhs exists in the vector
           const auto& upper = std::upper_bound(
-              lower, data->end(), rhs_array,
-              [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+              lower, data->end(), rhs_array, [lhs](const RT& l, const RT& r) {
+                return ValueReader<T>::get(l[lhs]) <
+                       ValueReader<T>::get(r[lhs]);
+              });
           res->insert(res->end(), lower, upper);
         }
       } else {
@@ -262,12 +266,16 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
         const typename vector<RT>::iterator& lower = std::lower_bound(
             data->begin(), data->end(), rhs_array,
-            [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+            [lhs](const RT& l, const RT& r) {
+              return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
+            });
         if (lower != data->end() && (*lower)[lhs] == rhs) {
           // rhs appears within the data, take all elements before and after it
           const typename vector<RT>::iterator& upper = std::upper_bound(
-              lower, data->end(), rhs_array,
-              [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+              lower, data->end(), rhs_array, [lhs](const RT& l, const RT& r) {
+                return ValueReader<T>::get(l[lhs]) <
+                       ValueReader<T>::get(r[lhs]);
+              });
           res->insert(res->end(), data->begin(), lower);
           res->insert(res->end(), upper, data->end());
         } else {
@@ -289,7 +297,9 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
         const typename vector<RT>::iterator& lower = std::lower_bound(
             data->begin(), data->end(), rhs_array,
-            [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+            [lhs](const RT& l, const RT& r) {
+              return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
+            });
         res->insert(res->end(), data->begin(), lower);
       } else {
         getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
@@ -309,7 +319,9 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
         const typename vector<RT>::iterator& upper = std::upper_bound(
             data->begin(), data->end(), rhs_array,
-            [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+            [lhs](const RT& l, const RT& r) {
+              return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
+            });
         res->insert(res->end(), data->begin(), upper);
       } else {
         getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
@@ -329,7 +341,9 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
         const typename vector<RT>::iterator& upper = std::upper_bound(
             data->begin(), data->end(), rhs_array,
-            [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+            [lhs](const RT& l, const RT& r) {
+              return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
+            });
         // an element equal to rhs exists in the vector
         res->insert(res->end(), upper, data->end());
       } else {
@@ -350,7 +364,9 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
         const typename vector<RT>::iterator& lower = std::lower_bound(
             data->begin(), data->end(), rhs_array,
-            [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+            [lhs](const RT& l, const RT& r) {
+              return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
+            });
         // an element equal to rhs exists in the vector
         res->insert(res->end(), lower, data->end());
       } else {
@@ -400,8 +416,9 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
               data->begin(), data->end(), rhs_array,
               [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
           if (lower != data->end()) {
-            // rhs appears within the data, take all elements before and after
-            // it
+            // There is at least one element in the data that is also within the
+            // range, look for the upper boundary and then copy all elements
+            // within the range.
             rhs_array[lhs] = upperBound;
             const typename vector<RT>::iterator& upper = std::upper_bound(
                 lower, data->end(), rhs_array,
