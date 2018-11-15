@@ -239,7 +239,7 @@ void Vocabulary<S>::initializePrefixes(const StringRange& prefixes) {
     prefixIdx++;
   }
   if (prefixIdx != NUM_COMPRESSION_PREFIXES) {
-    LOG(INFO) << "WARNING: less than " << NUM_COMPRESSION_PREFIXES
+    LOG(WARN) << "less than " << NUM_COMPRESSION_PREFIXES
               << " prefixes specified.";
   }
   // if longest strings come first we correctly handle overlapping prefixes

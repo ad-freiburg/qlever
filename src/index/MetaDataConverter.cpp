@@ -201,6 +201,10 @@ void CompressVocabAndCreateConfigurationFile(const string& indexPrefix) {
       for (const string& prefix : prefixes) {
         prefixFile << prefix << '\n';
       }
+      std::ofstream f(confFilename + ".converted");
+      AD_CHECK(f.is_open());
+      f << config;
+      notifyCreated(confFilename, true);
     } else {
       std::cout << "The configuration file " << confFilename
                 << " has an unrecoverably broken \"prefixes\" field"
