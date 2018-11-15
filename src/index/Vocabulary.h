@@ -12,10 +12,10 @@
 #include <google/sparse_hash_map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
-#include <nlohmann/json.hpp>
 #include "../global/Constants.h"
 #include "../global/Id.h"
 #include "../util/Exception.h"
@@ -28,7 +28,6 @@
 
 using std::string;
 using std::vector;
-using json = nlohmann::json;
 
 template <class StringType>
 struct AccessReturnTypeGetter {};
@@ -96,10 +95,6 @@ class PrefixComparator {
 template <class StringType>
 class Vocabulary {
  public:
-  // TODO<joka921, niklas> It would be cleaner to put the enable_if into the
-  // class declaration but this would need a lot of code restructuring.
-  // Can I leave it like this, the compiler errors are as decent as they become
-  // with templates
   template <
       typename = std::enable_if_t<std::is_same_v<StringType, string> ||
                                   std::is_same_v<StringType, CompressedString>>>
@@ -296,14 +291,13 @@ class Vocabulary {
   CompressedString compressPrefix(const string& word) const;
 
   // initialize compression with a list of prefixes
-  // can only be called on an empty array.
   // The prefixes do not have to be in any specific order
   //
   // StringRange prefixes can be of any type where
   // for (const string& el : prefixes {}
   // works
   template <class StringRange, typename = std::enable_if_t<_isCompressed>>
-  void initializeNewPrefixes(const StringRange& prefixes);
+  void initializePrefixes(const StringRange& prefixes);
 
   // set the list of prefixes for words which will become part of the
   // externalized vocabulary. Good for entity names that normally don't appear
@@ -315,17 +309,6 @@ class Vocabulary {
   template <class StringRange>
   void initializeExternalizePrefixes(const StringRange& prefixes);
 
-  // ______________________________________________________
-  // set the prefixes used for compression
-  // These have to have the exact same format returned by
-  // getJsonForPrefixes (serialization of the compression information)
-  template <typename = std::enable_if_t<_isCompressed>>
-  void initializeRestartPrefixes(const json& j);
-
-  // needed by function prefixCompressFile
-  template <typename = std::enable_if_t<_isCompressed>>
-  json getJsonForPrefixes() const;
-
   // Compress the file at path infile, write to file at outfile using the
   // specified prefixes.
   // Arguments:
@@ -333,14 +316,9 @@ class Vocabulary {
   //   outfile- output path. Will be overwritten by also one word per line
   //            in the same order as the infile
   //   prefixes - a list of prefixes which we will compress
-  //
-  //   Returns: A json array with information about the prefixes,
-  //            j[2]="ablab" means, that the prefix "ablab" was encoded by the
-  //            byte \x02
   template <typename = std::enable_if_t<_isCompressed>>
-  static std::array<std::string, NUM_COMPRESSION_PREFIXES> prefixCompressFile(
-      const string& infile, const string& outfile,
-      const vector<string>& prefixes);
+  static void prefixCompressFile(const string& infile, const string& outfile,
+                                 const vector<string>& prefixes);
 
  private:
   // Wraps std::lower_bound and returns an index instead of an iterator

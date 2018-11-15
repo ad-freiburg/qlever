@@ -131,7 +131,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
   // only add a text index. In that case the Vocabulary has never been
   // initialized before
   _vocab = Vocabulary<CompressedString>();
-  readConfigurationFile();
+  readConfiguration();
   _vocab.readFromFile(_onDiskBase + ".vocabulary",
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
 
