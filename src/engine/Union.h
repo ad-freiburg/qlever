@@ -72,14 +72,10 @@ class Union : public Operation {
       vector<Res>* res, const vector<L>* left, const vector<R>* right,
       const std::vector<std::array<size_t, 2>>& columnOrigins);
 
-  /*template <typename T>
-  static void computeUnion<T, T, T>(
-      vector<T> *res, const vector<T> *left, const vector<T> *right,
-      const std::vector<std::array<size_t, 2>> &columnOrigins);*/
-
   /**
-   * @brief This stores the input column from each of the subtrees or NO_COLUMN
-   * if the subtree does not have a matching column for each result column.
+   * @brief This stores the input column from each of the two subtrees or
+   * NO_COLUMN if the subtree does not have a matching column for each result
+   * column.
    */
   std::vector<std::array<size_t, 2>> _columnOrigins;
   std::shared_ptr<QueryExecutionTree> _subtrees[2];

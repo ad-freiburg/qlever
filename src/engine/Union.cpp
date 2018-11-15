@@ -45,7 +45,9 @@ string Union::asString(size_t indent) const {
 }
 
 size_t Union::getResultWidth() const {
-  // the width depends on how many columns use the same variable
+  // The width depends on the number of unique variables (as the columns of
+  // two variables from the left and right subtree will end up in the same
+  // result column if they have the same name).
   return _columnOrigins.size();
 }
 
@@ -55,9 +57,11 @@ std::unordered_map<string, size_t> Union::getVariableColumns() const {
   std::unordered_map<string, size_t> variableColumns(
       _subtrees[0]->getVariableColumnMap());
 
+  size_t column = variableColumns.size();
   for (auto it : _subtrees[1]->getVariableColumnMap()) {
     if (variableColumns.find(it.first) == variableColumns.end()) {
-      variableColumns.insert(it);
+      variableColumns[it.first] = column;
+      column++;
     }
   }
   return variableColumns;

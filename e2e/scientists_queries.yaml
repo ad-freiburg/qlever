@@ -454,7 +454,7 @@ queries:
     sparql: |
       SELECT ?a ?t WHERE {
         {?a <Height> ?t .}
-        uNiON
+        UNION 
         {?a <Religion> ?t .}
       }
     checks:

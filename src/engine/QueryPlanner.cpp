@@ -25,8 +25,9 @@ QueryPlanner::QueryPlanner(QueryExecutionContext* qec) : _qec(qec) {}
 
 // _____________________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
-  // Create a topological sorting of the tree where children are in the list
-  // after their parents.
+  // Create a topological sorting of the trees GraphPatterns where children are
+  // in the list after their parents. This allows for ensuring that children are
+  // already optimized when their parents need to be optimized
   std::vector<const ParsedQuery::GraphPattern*> patternsToProcess;
   std::vector<const ParsedQuery::GraphPattern*> childrenToAdd;
   childrenToAdd.push_back(&pq._rootGraphPattern);
@@ -40,6 +41,9 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     }
   }
 
+  // This vector holds the SubtreePlan for every GraphPattern that was already
+  // processed. As the plans ids are dense we can use a vector, but because
+  // the ids may be processed in any order the vector needs to be resized here.
   std::vector<SubtreePlan> patternPlans;
   patternPlans.reserve(pq._numGraphPatterns);
   for (size_t i = 0; i < pq._numGraphPatterns; i++) {
@@ -69,12 +73,18 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     }
   }
 
+  // Optimize every GraphPattern starting with the leaves of the GraphPattern
+  // tree.
   vector<SubtreePlan*> childPlans;
   while (!patternsToProcess.empty()) {
     const ParsedQuery::GraphPattern* pattern = patternsToProcess.back();
     patternsToProcess.pop_back();
 
     LOG(DEBUG) << "Creating execution plan.\n";
+
+    // Add all the OPTIONALs and UNIONs of the GraphPattern into the childPlans
+    // vector. These will be treated the same as a node in the triple graph
+    // later on (so the same as a simple triple).
     childPlans.clear();
     std::vector<SubtreePlan> unionPlans;
     for (const ParsedQuery::GraphPatternOperation* child : pattern->_children) {
@@ -101,12 +111,6 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
           tree.setVariableColumns(
               static_cast<Union*>(unionOp.get())->getVariableColumns());
           tree.setOperation(QueryExecutionTree::UNION, unionOp);
-
-          unionPlans.back()._idsOfIncludedNodes = left->_idsOfIncludedNodes;
-          unionPlans.back().addAllNodes(right->_idsOfIncludedNodes);
-          unionPlans.back()._idsOfIncludedFilters = left->_idsOfIncludedFilters;
-          unionPlans.back()._idsOfIncludedFilters |=
-              right->_idsOfIncludedFilters;
           childPlans.push_back(&unionPlans.back());
           break;
       }
@@ -167,6 +171,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     // as a filter later on).
     finalTab = fillDpTab(tg, pattern->_filters, childPlans);
 
+    // If the pattern is the root node some aditional query level operations
+    // may need to be added.
     if (pattern == &pq._rootGraphPattern) {
       // GROUP BY
       if (doGrouping && !usePatternTrick) {
@@ -195,6 +201,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
       }
     }
 
+    // Now find the cheapest execution plan and store that as the optimal
+    // plan for this graph pattern.
     vector<SubtreePlan>& lastRow = finalTab.back();
 
     AD_CHECK_GT(lastRow.size(), 0);
@@ -1443,7 +1451,10 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
     return false;
   }
 
-  if (a._isOptional || b._isOptional) {
+  if (a._idsOfIncludedNodes >= tg._nodeMap.size() ||
+      b._idsOfIncludedNodes >= tg._nodeMap.size()) {
+    // One of the two plans contains a node that is not part of the triple
+    // graph, falling back to comparing their variable column maps.
     return getJoinColumns(a, b).size() > 0;
   }
 
