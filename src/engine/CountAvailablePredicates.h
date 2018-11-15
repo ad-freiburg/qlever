@@ -47,7 +47,7 @@ class CountAvailablePredicates : public Operation {
 
   virtual vector<size_t> resultSortedOn() const override;
 
-  std::unordered_map<string, size_t> getVariableColumns() const;
+  ad_utility::HashMap<string, size_t> getVariableColumns() const;
 
   virtual void setTextLimit(size_t limit) override {
     if (_subtree != nullptr) {

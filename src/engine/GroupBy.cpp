@@ -65,7 +65,7 @@ size_t GroupBy::getResultWidth() const { return _varColMap.size(); }
 
 vector<size_t> GroupBy::resultSortedOn() const {
   vector<size_t> sortedOn;
-  std::unordered_map<string, size_t> subtreeVarCols =
+  ad_utility::HashMap<string, size_t> subtreeVarCols =
       _subtree->getVariableColumnMap();
   sortedOn.reserve(subtreeVarCols.size());
   for (std::string var : _groupByVariables) {
@@ -82,7 +82,7 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
     return cols;
   }
 
-  std::unordered_map<string, size_t> inVarColMap =
+  ad_utility::HashMap<string, size_t> inVarColMap =
       inputTree->getVariableColumnMap();
 
   std::unordered_set<size_t> sortColSet;
@@ -106,7 +106,7 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
   return cols;
 }
 
-std::unordered_map<string, size_t> GroupBy::getVariableColumns() const {
+ad_utility::HashMap<string, size_t> GroupBy::getVariableColumns() const {
   return _varColMap;
 }
 
@@ -763,7 +763,7 @@ void GroupBy::computeResult(ResultTable* result) const {
   aggregates.reserve(_aliases.size() + _groupByVariables.size());
 
   // parse the group by columns
-  std::unordered_map<string, size_t> subtreeVarCols =
+  ad_utility::HashMap<string, size_t> subtreeVarCols =
       _subtree->getVariableColumnMap();
   for (const string& var : _groupByVariables) {
     auto it = subtreeVarCols.find(var);

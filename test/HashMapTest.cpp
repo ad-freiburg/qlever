@@ -55,8 +55,3 @@ TEST(HashMapTest, iterator) {
   ASSERT_EQ(maptwo["foo"], 42);
   ASSERT_EQ(maptwo["bar"], 41);
 };
-
-int main(int argc, char** argv) {
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

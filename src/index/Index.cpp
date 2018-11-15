@@ -8,6 +8,7 @@
 #include <optional>
 #include <stxxl/algorithm>
 #include <stxxl/map>
+#include <unordered_map>
 
 #include "../parser/NTriplesParser.h"
 #include "../parser/TsvParser.h"

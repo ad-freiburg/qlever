@@ -9,11 +9,9 @@
 #include <algorithm>
 #include <cassert>
 #include <functional>
-#include <google/sparse_hash_map>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 #include "../global/Constants.h"
@@ -257,7 +255,7 @@ class Vocabulary {
   void createFromSet(const ad_utility::HashSet<StringType>& set);
 
   template <typename = std::enable_if_t<!_isCompressed>>
-  google::sparse_hash_map<string, Id> asMap();
+  ad_utility::HashMap<string, Id> asMap();
 
   static bool isLiteral(const string& word);
   static bool isExternalizedLiteral(const string& word);

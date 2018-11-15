@@ -943,7 +943,7 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
       _qec, node._wordPart, node._variables.size() - 1));
   tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
                     textOp);
-  std::unordered_map<string, size_t> vcmap;
+  ad_utility::HashMap<string, size_t> vcmap;
   size_t index = 0;
   vcmap[node._cvar] = index++;
   vcmap[string("SCORE(") + node._cvar + ")"] = index++;
@@ -1117,7 +1117,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
               filterPlan._qet, otherPlanJc));
           tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITH_FILTER,
                             textOp);
-          std::unordered_map<string, size_t> vcmap;
+          ad_utility::HashMap<string, size_t> vcmap;
           // Subtract one because the entity that we filtered on
           // is provided by the filter table and still has the same place there.
           size_t colN = 2;
