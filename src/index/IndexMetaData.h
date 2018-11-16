@@ -173,15 +173,15 @@ class IndexMetaData {
 
   // friend declaration for external converter function with ugly types
   //  using IndexMetaDataHmap = IndexMetaData<MetaDataWrapperHashMap>;
-  using IndexMetaDataHmapSparse = IndexMetaData<MetaDataWrapperHashMap<
-      google::sparse_hash_map<Id, FullRelationMetaData>>>;
+  using IndexMetaDataHmap = IndexMetaData<
+      MetaDataWrapperHashMap<ad_utility::HashMap<Id, FullRelationMetaData>>>;
   using IndexMetaDataMmap = IndexMetaData<
       MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>>;
-  friend IndexMetaDataMmap convertHmapMetaDataToMmap(
-      const IndexMetaDataHmapSparse&, const std::string&, bool);
-  friend IndexMetaDataHmapSparse convertMmapMetaDataToHmap(
-      const IndexMetaDataMmap&, const std::string&, bool);
-  friend IndexMetaDataHmapSparse convertMmapMetaDataToHmap(
+  friend IndexMetaDataMmap convertHmapMetaDataToMmap(const IndexMetaDataHmap&,
+                                                     const std::string&, bool);
+  friend IndexMetaDataHmap convertMmapMetaDataToHmap(const IndexMetaDataMmap&,
+                                                     const std::string&, bool);
+  friend IndexMetaDataHmap convertMmapMetaDataToHmap(
       const IndexMetaDataMmap& mmap, bool verify);
 
   // this way all instantations will be friends with each other,
@@ -205,12 +205,10 @@ using MetaWrapperMmap =
     MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>;
 using MetaWrapperMmapView =
     MetaDataWrapperDense<ad_utility::MmapVectorView<FullRelationMetaData>>;
-using MetaDataWrapperHashMapSparse =
-    MetaDataWrapperHashMap<google::sparse_hash_map<Id, FullRelationMetaData>>;
+using MetaWrapperHashMap =
+    MetaDataWrapperHashMap<ad_utility::HashMap<Id, FullRelationMetaData>>;
 using IndexMetaDataHmap = IndexMetaData<
     MetaDataWrapperHashMap<ad_utility::HashMap<Id, FullRelationMetaData>>>;
-using IndexMetaDataHmapSparse = IndexMetaData<
-    MetaDataWrapperHashMap<google::sparse_hash_map<Id, FullRelationMetaData>>>;
 using IndexMetaDataMmap = IndexMetaData<
     MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>>;
 using IndexMetaDataMmapView = IndexMetaData<

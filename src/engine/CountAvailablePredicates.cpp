@@ -54,9 +54,9 @@ void CountAvailablePredicates::setVarNames(const std::string& predicateVarName,
 }
 
 // _____________________________________________________________________________
-std::unordered_map<string, size_t>
+ad_utility::HashMap<string, size_t>
 CountAvailablePredicates::getVariableColumns() const {
-  std::unordered_map<string, size_t> varCols;
+  ad_utility::HashMap<string, size_t> varCols;
   varCols[_predicateVarName] = 0;
   varCols[_countVarName] = 1;
   return varCols;

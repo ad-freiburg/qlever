@@ -16,7 +16,7 @@ using std::string;
 using json = nlohmann::json;
 
 // Conversion function for old binary indices
-MmapHandler convertHmapHandlerToMmap(const MetaDataWrapperHashMapSparse& hmap,
+MmapHandler convertHmapHandlerToMmap(const MetaWrapperHashMap& hmap,
                                      const std::string& filename) {
   // first we need the maximal Id of the hashMap
   size_t maxId = 0;
@@ -37,8 +37,8 @@ MmapHandler convertHmapHandlerToMmap(const MetaDataWrapperHashMapSparse& hmap,
 }
 
 // ___________________________________________________________________________
-MetaDataWrapperHashMapSparse convertMmapHandlerToHmap(const MmapHandler& mmap) {
-  MetaDataWrapperHashMapSparse res;
+MetaWrapperHashMap convertMmapHandlerToHmap(const MmapHandler& mmap) {
+  MetaWrapperHashMap res;
   for (auto it = mmap.cbegin(); it != mmap.cend(); ++it) {
     res.set(it->first, it->second);
   }
@@ -46,7 +46,7 @@ MetaDataWrapperHashMapSparse convertMmapHandlerToHmap(const MmapHandler& mmap) {
 }
 
 // _______________________________________________________________________
-IndexMetaDataMmap convertHmapMetaDataToMmap(const IndexMetaDataHmapSparse& hmap,
+IndexMetaDataMmap convertHmapMetaDataToMmap(const IndexMetaDataHmap& hmap,
                                             const std::string& filename,
                                             bool verify) {
   IndexMetaDataMmap res;
@@ -75,9 +75,9 @@ IndexMetaDataMmap convertHmapMetaDataToMmap(const IndexMetaDataHmapSparse& hmap,
 }
 
 // _______________________________________________________________________
-IndexMetaDataHmapSparse convertMmapMetaDataToHmap(const IndexMetaDataMmap& mmap,
-                                                  bool verify) {
-  IndexMetaDataHmapSparse res;
+IndexMetaDataHmap convertMmapMetaDataToHmap(const IndexMetaDataMmap& mmap,
+                                            bool verify) {
+  IndexMetaDataHmap res;
   res._offsetAfter = mmap._offsetAfter;
   res._totalElements = mmap._totalElements;
   res._name = mmap._name;
@@ -107,7 +107,7 @@ IndexMetaDataHmapSparse convertMmapMetaDataToHmap(const IndexMetaDataMmap& mmap,
 void convertPermutationToMmap(const string& permutIn, const string& permutOut,
                               const string& mmap, bool verify) {
   try {
-    IndexMetaDataHmapSparse h;
+    IndexMetaDataHmap h;
     h.readFromFile(permutIn);
     IndexMetaDataMmap m = convertHmapMetaDataToMmap(h, mmap, verify);
     writeNewPermutation(permutIn, permutOut, m);
@@ -125,14 +125,14 @@ void convertPermutationToMmap(const string& permutIn, const string& permutOut,
 void convertPermutationToHmap(const string& permutIn, const string& permutOut,
                               bool verify) {
   try {
-    IndexMetaDataHmapSparse h;
+    IndexMetaDataHmap h;
     h.readFromFile(permutIn);
     writeNewPermutation(permutIn, permutOut, h);
   } catch (const WrongFormatException& e) {
     std::cerr << "this is not a sparse permutation, Trying to read as Mmap";
     IndexMetaDataMmap m;
     m.readFromFile(permutIn);
-    IndexMetaDataHmapSparse h = convertMmapMetaDataToHmap(m, verify);
+    IndexMetaDataHmap h = convertMmapMetaDataToHmap(m, verify);
     writeNewPermutation(permutIn, permutOut, h);
   }
 }

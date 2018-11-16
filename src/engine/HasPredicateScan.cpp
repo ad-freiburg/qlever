@@ -70,9 +70,9 @@ vector<size_t> HasPredicateScan::resultSortedOn() const {
   return {};
 }
 
-std::unordered_map<string, size_t> HasPredicateScan::getVariableColumns()
+ad_utility::HashMap<string, size_t> HasPredicateScan::getVariableColumns()
     const {
-  std::unordered_map<string, size_t> varCols;
+  ad_utility::HashMap<string, size_t> varCols;
   switch (_type) {
     case ScanType::FREE_S:
       varCols.insert(std::make_pair(_subject, 0));

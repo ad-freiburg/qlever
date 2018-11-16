@@ -382,8 +382,8 @@ void Join::computeResult(ResultTable* result) const {
 }
 
 // _____________________________________________________________________________
-std::unordered_map<string, size_t> Join::getVariableColumns() const {
-  std::unordered_map<string, size_t> retVal;
+ad_utility::HashMap<string, size_t> Join::getVariableColumns() const {
+  ad_utility::HashMap<string, size_t> retVal;
   if (!isFullScanDummy(_left) && !isFullScanDummy(_right)) {
     retVal = _left->getVariableColumnMap();
     size_t leftSize = _left->getResultWidth();

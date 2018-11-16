@@ -106,8 +106,8 @@ void Vocabulary<S>::createFromSet(const ad_utility::HashSet<S>& set) {
 // compressedString as key type
 template <class S>
 template <typename>
-google::sparse_hash_map<string, Id> Vocabulary<S>::asMap() {
-  google::sparse_hash_map<string, Id> map;
+ad_utility::HashMap<string, Id> Vocabulary<S>::asMap() {
+  ad_utility::HashMap<string, Id> map;
   for (size_t i = 0; i < _words.size(); ++i) {
     map[_words[i]] = i;
   }

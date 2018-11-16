@@ -84,7 +84,7 @@ size_t QueryExecutionTree::getVariableColumn(const string& variable) const {
 
 // _____________________________________________________________________________
 void QueryExecutionTree::setVariableColumns(
-    std::unordered_map<string, size_t> const& map) {
+    ad_utility::HashMap<string, size_t> const& map) {
   _variableColumnMap = map;
 }
 

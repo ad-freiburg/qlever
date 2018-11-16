@@ -47,7 +47,7 @@ class QueryExecutionTree {
 
   QueryExecutionContext* getQec() const { return _qec; }
 
-  const std::unordered_map<string, size_t>& getVariableColumnMap() const {
+  const ad_utility::HashMap<string, size_t>& getVariableColumnMap() const {
     return _variableColumnMap;
   }
 
@@ -63,7 +63,7 @@ class QueryExecutionTree {
 
   size_t getVariableColumn(const string& var) const;
 
-  void setVariableColumns(const std::unordered_map<string, size_t>& map);
+  void setVariableColumns(const ad_utility::HashMap<string, size_t>& map);
 
   void setContextVars(const std::unordered_set<string>& set) {
     _contextVars = set;
@@ -125,7 +125,7 @@ class QueryExecutionTree {
 
  private:
   QueryExecutionContext* _qec;  // No ownership
-  std::unordered_map<string, size_t> _variableColumnMap;
+  ad_utility::HashMap<string, size_t> _variableColumnMap;
   std::shared_ptr<Operation>
       _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;

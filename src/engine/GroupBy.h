@@ -66,7 +66,7 @@ class GroupBy : public Operation {
 
   virtual vector<size_t> resultSortedOn() const override;
 
-  std::unordered_map<string, size_t> getVariableColumns() const;
+  ad_utility::HashMap<string, size_t> getVariableColumns() const;
 
   virtual void setTextLimit(size_t limit) override {
     _subtree->setTextLimit(limit);
@@ -104,7 +104,7 @@ class GroupBy : public Operation {
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<string> _groupByVariables;
   std::vector<ParsedQuery::Alias> _aliases;
-  std::unordered_map<string, size_t> _varColMap;
+  ad_utility::HashMap<string, size_t> _varColMap;
 
   virtual void computeResult(ResultTable* result) const override;
 };

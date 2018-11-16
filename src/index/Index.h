@@ -15,6 +15,7 @@
 #include "../parser/NTriplesParser.h"
 #include "../parser/TsvParser.h"
 #include "../util/File.h"
+#include "../util/HashMap.h"
 #include "../util/MmapVector.h"
 #include "./ConstantsIndexCreation.h"
 #include "./DocsDB.h"

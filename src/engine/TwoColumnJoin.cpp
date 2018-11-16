@@ -150,8 +150,8 @@ void TwoColumnJoin::computeResult(ResultTable* result) const {
 }
 
 // _____________________________________________________________________________
-std::unordered_map<string, size_t> TwoColumnJoin::getVariableColumns() const {
-  std::unordered_map<string, size_t> retVal(_left->getVariableColumnMap());
+ad_utility::HashMap<string, size_t> TwoColumnJoin::getVariableColumns() const {
+  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumnMap());
   size_t leftSize = _left->getResultWidth();
   for (auto it = _right->getVariableColumnMap().begin();
        it != _right->getVariableColumnMap().end(); ++it) {

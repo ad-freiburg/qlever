@@ -9,7 +9,7 @@
 using ad_utility::MmapVector;
 using MmapHandler = MetaDataWrapperDense<MmapVector<FullRelationMetaData>>;
 // _______________________________________________________________________
-MmapHandler convertHmapHandlerToMmap(const MetaDataWrapperHashMapSparse& hmap,
+MmapHandler convertHmapHandlerToMmap(const MetaWrapperHashMap& hmap,
                                      const std::string& filename);
 
 // _______________________________________________________________________
@@ -21,8 +21,8 @@ IndexMetaDataMmap convertHmapMetaDataToMmap(const IndexMetaDataHmap& hmap,
                                             bool verify);
 
 // _______________________________________________________________________
-IndexMetaDataHmapSparse convertMmapMetaDataToHmap(const IndexMetaDataMmap& mmap,
-                                                  bool verify);
+IndexMetaDataHmap convertMmapMetaDataToHmap(const IndexMetaDataMmap& mmap,
+                                            bool verify);
 
 // Convert hashmap based permutation to mmap-based permutation
 // Arguments:
@@ -39,8 +39,8 @@ void convertPermutationToHmap(const string& permutIn, const string& permutOut,
 
 // Copy hashMap based permutation and update meta data format (add magic number)
 // permutIn is read, permutOut is (over)written.
-void addMagicNumberToSparseMetaDataPermutation(const string& permutIn,
-                                               const string& permutOut);
+void addMagicNumberToHmapMetaDataPermutation(const string& permutIn,
+                                             const string& permutOut);
 // Copy the permutation data from oldPermutation to newPermutation and add the
 // meta data
 template <class MetaData>
