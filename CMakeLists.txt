@@ -89,6 +89,12 @@ include_directories(third_party/re2)
 # reinstate original flags including all warnings
 set(CMAKE_CXX_FLAGS "${LOCAL_CXX_BACKUP_FLAGS}")
 
+################################
+# RE2
+################################
+add_subdirectory(third_party/re2)
+include_directories(third_party/re2)
+
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
 message(STATUS "CXX_FLAGS_RELEASE are : " ${CMAKE_CXX_FLAGS_RELEASE})
