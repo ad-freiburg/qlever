@@ -71,12 +71,23 @@ set(USE_OPENMP OFF CACHE BOOL "Don't use OpenMP" FORCE)
 add_subdirectory(third_party/stxxl)
 # apply STXXL CXXFLAGS
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
+include_directories(${STXXL_INCLUDE_DIRS})
 
 ################################
 # RE2
 ################################
+
+# RE2 has a lot of unused-parameter warnings, we will deactivate
+# these for the subproject
+set(LOCAL_CXX_BACKUP_FLAGS "${CMAKE_CXX_FLAGS}")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
+
+set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
 add_subdirectory(third_party/re2)
 include_directories(third_party/re2)
+
+# reinstate original flags including all warnings
+set(CMAKE_CXX_FLAGS "${LOCAL_CXX_BACKUP_FLAGS}")
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})

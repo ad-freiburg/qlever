@@ -200,6 +200,7 @@ TEST(TurtleParserTest, object) {
   p.reset(blank);
   ASSERT_TRUE(p.object());
   ASSERT_EQ(p._lastParseResult, "_:0");
+
   exp = triple{sub, pred, "_:0"};
   ASSERT_EQ(p._triples.back(), exp);
 }
@@ -219,6 +220,7 @@ TEST(TurtleParserTest, objectList) {
 
   p.reset("@noObject");
   ASSERT_FALSE(p.objectList());
+
   p.reset("<obj1>, @illFormed");
   ASSERT_THROW(p.objectList(), TurtleParser::ParseException);
 }

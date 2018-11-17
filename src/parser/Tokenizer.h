@@ -12,6 +12,9 @@
 using re2::RE2;
 using namespace std::string_literals;
 
+
+// holds all the google re2 regexes that correspond to all terminals in the turtle grammar
+// cannot be static since google regexes have to be constructed at runtime
 struct TurtleToken {
   using string = std::string;
   TurtleToken()
@@ -167,11 +170,6 @@ struct TurtleToken {
   const string PnameLNString = grp(PnameNSString) + grp(PnLocalString);
   const RE2 PnameLN;
 
-  /*
-  const string BlankNodeLabelString = u8"_:(" + PnCharsUString +
-                                      u8"|[0-9])((" + PnCharsString +
-                                      u8"|\\.)*" + PnCharsString + u8")?";
-                                      */
   const string BlankNodeLabelString = u8"_:" + cls(PnCharsUString + u8"0-9") +
                                       grp("\\.*" + cls(PnCharsString)) + "*";
 
@@ -192,31 +190,61 @@ struct TurtleToken {
   static string cls(const string& s) { return '[' + s + ']'; }
 };
 
+// The currently used hand-written tokenizer
+// TODO<joka921>: Use a automatically generated lexer (e.g. from flex)
+// for this for correctness and efficiency
 class Tokenizer {
   FRIEND_TEST(TokenizerTest, Compilation);
 
  public:
+  // Construct from a char ptr (the bytes to parse) and the number of bytes that can be read/parsed
+  // from this ptr
   Tokenizer(const char* ptr, size_t size) : _tokens(), _data(ptr, size) {}
 
+  // if a prefix of the input stream matches the regex argument,
+  // return true and that prefix and move the input stream forward
+  // by the length of the match. If no match is found,
+  // false is returned and the input stream remains the same
   std::pair<bool, std::string> getNextToken(const RE2& reg);
+
+  // overload that takes multiple regexes
+  // determines the longest match of the input stream prefix
+  // with one of the regexes. If such a match is found,
+  // The input stream is advanced by the longest match prefix
+  // Return value:
+  //  - bool: True iff any match was found
+  // - size_t: The index of the regex that was responsible for the longest match
+  // - string: The prefix that forms the longest match
   std::tuple<bool, size_t, std::string> getNextToken(
       const std::vector<const RE2*>& regs);
 
+  // _______________________________________________________________________________
   void skipWhitespaceAndComments();
+
+  // If there is a prefix match with the argument, move forward the input stream
+  // and return true. Can be used if we are not interested in the actual value of the match
   bool skip(const RE2& reg) { return RE2::Consume(&_data, reg); }
 
-  const TurtleToken _tokens;
 
+  // reinitialize with a new byte pointer and size pair
   void reset(const char* ptr, size_t size) {
     _data = re2::StringPiece(ptr, size);
   }
 
+  // Access to the input stream as a  StringPiece
   const re2::StringPiece& data() const { return _data; }
   re2::StringPiece& data() { return _data; }
 
+  // Access to input stream as std::string_view
   std::string_view view() const { return {_data.data(), _data.size()}; }
 
+  // holds all the regexes needed for Tokenization
+  const TurtleToken _tokens;
+
+
  private:
+
+  // ________________________________________________________________
   void skipWhitespace() {
     auto v = view();
     auto pos = v.find_first_not_of("\x20\x09\x0D\x0A");
@@ -227,6 +255,8 @@ class Tokenizer {
     // assert(success);
     return;
   }
+
+  // ___________________________________________________________________________________
   void skipComments() {
     // if not successful, then there was no comment, but this does not matter to
     // us
@@ -239,8 +269,6 @@ class Tokenizer {
       } else {
         _data.remove_prefix(pos + 1);
       }
-
-      // skip(_tokens.Comment);
     }
   }
   FRIEND_TEST(TokenizerTest, WhitespaceAndComments);

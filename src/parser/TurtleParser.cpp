@@ -6,7 +6,6 @@
 #include "./TurtleParser.h"
 #include <string.h>
 
-// TODO: always disambiguate if we indeed take the longest match
 
 // _______________________________________________________________
 bool TurtleParser::statement() {
@@ -207,12 +206,6 @@ bool TurtleParser::collection() {
   throw ParseException(
       "We do not know how to handle collections in QLever yet\n");
   // TODO<joka921> understand collections
-
-  /*
-  while (object()) {
-  }
-  return check(skip(_tokens.CloseRound));
-  */
 }
 
 // ______________________________________________________________________
@@ -256,6 +249,7 @@ bool TurtleParser::booleanLiteral() {
 
 // ______________________________________________________________________
 bool TurtleParser::stringParse() {
+  // manually parse strings for efficiency
   auto view = _tok.view();
   size_t startPos = 0;
   size_t endPos = 1;
@@ -288,23 +282,6 @@ bool TurtleParser::stringParse() {
       break;
     }
   }
-  /*
-  if (ad_utility::startsWith(view, "\"\"\"")) {
-    startPos = 3;
-    endPos = view.find("\"\"\"", startPos);
-  } else if (ad_utility::startsWith(view, "\'\'\'")) {
-    startPos = 3;
-    endPos = view.find("\'\'\'", startPos);
-  } else if (ad_utility::startsWith(view, "\"")) {
-    startPos = 1;
-    endPos = view.find("\"", startPos);
-  } else if (ad_utility::startsWith(view, "\'")) {
-    startPos = 1;
-    endPos = view.find("\'", startPos);
-  } else {
-    return false;
-  }
-  */
   if (!foundString) {
     return false;
   }
@@ -312,25 +289,10 @@ bool TurtleParser::stringParse() {
     throw ParseException("unterminated string Literal");
   }
   // also include the quotation marks in the word
+  // TODO <joka921> how do we have to translate multiline strings for QLever?
   _lastParseResult = view.substr(0, endPos + startPos);
   _tok.data().remove_prefix(endPos + startPos);
   return true;
-  /*
-  std::vector<const RE2*> candidates;
-  candidates.push_back(&(_tokens.StringLiteralQuote));
-  candidates.push_back(&(_tokens.StringLiteralSingleQuote));
-  candidates.push_back(&(_tokens.StringLiteralLongSingleQuote));
-  candidates.push_back(&(_tokens.StringLiteralLongQuote));
-  if (auto [success, index, word] = _tok.getNextToken(candidates); success) {
-    (void)index;
-    // TODO<joka921> check how QLever handles multiline strings and strings
-    // with single quotes
-    _lastParseResult = word;
-    return true;
-  } else {
-    return false;
-  }
-  */
 }
 
 // ______________________________________________________________________
@@ -386,6 +348,8 @@ bool TurtleParser::resetStateAndRead(const TurtleParserBackupState b) {
   _triples.resize(b._numTriples);
   _tok.reset(b._tokenizerPosition, b._tokenizerSize);
   std::vector<char> buf;
+  // TODO<joka921>: Does this work? Probably we should also take the _tokenizerPosition
+  // into account here. TODO: verify BZIP2 variant and make it efficient
   buf.reserve(_bufferSize + _tok.data().size());
   buf.resize(_tok.data().size());
   memcpy(buf.data(), _tok.data().begin(), _tok.data().size());

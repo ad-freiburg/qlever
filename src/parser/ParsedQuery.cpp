@@ -101,6 +101,9 @@ string SparqlFilter::asString() const {
     case LANG_MATCHES:
       os << " LANG_MATCHES ";
       break;
+    case PREFIX:
+      os << " PREFIX ";
+      break;
     case SparqlFilter::REGEX:
       os << " REGEX ";
       if (_regexIgnoreCase) {
