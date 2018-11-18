@@ -434,3 +434,32 @@ queries:
       - selected: ["?s", "?awards"]
       - contains_row: ['<Eric_Betzig>', '<Nobel_Prize_in_Chemistry>']
       - contains_row: ['<Alan_MacDiarmid>', '<Nobel_Prize_in_Chemistry> <Rutherford_Medal>']
+  - query : union-partial-merge
+    type: no-text
+    sparql: |
+      SELECT ?a ?h WHERE {
+        {?a <Profession> <Biologist> .}
+        uNiON
+        {?a <Height> ?h.}
+      }
+      ORDER BY ASC(?h)
+    checks:
+      - num_rows: 737 
+      - num_cols: 2
+      - selected: ["?a", "?h"]
+      - contains_row: ['<Sophie_Hosking>', '1.65']
+      - contains_row: ['<Stuart_Kornfeld>', null]
+  - query : union-full-merge
+    type: no-text
+    sparql: |
+      SELECT ?a ?t WHERE {
+        {?a <Height> ?t .}
+        UNION 
+        {?a <Religion> ?t .}
+      }
+    checks:
+      - num_rows: 1488
+      - num_cols: 2
+      - selected: ["?a", "?t"]
+      - contains_row: ['<Carl_Sagan>', '1.8']
+      - contains_row: ['<Noreena_Hertz>', '<Judaism>']

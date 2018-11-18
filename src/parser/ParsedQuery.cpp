@@ -107,6 +107,9 @@ string SparqlFilter::asString() const {
         os << "ignoring case ";
       }
       break;
+    case PREFIX:
+      os << " PREFIX ";
+      break;
   }
   os << _rhs << ")";
   return os.str();
@@ -127,8 +130,9 @@ void ParsedQuery::expandPrefixes() {
   while (!graphPatterns.empty()) {
     GraphPattern* pattern = graphPatterns.back();
     graphPatterns.pop_back();
-    for (GraphPattern* p : pattern->_children) {
-      graphPatterns.push_back(p);
+    for (GraphPatternOperation* p : pattern->_children) {
+      graphPatterns.insert(graphPatterns.end(), p->_childGraphPatterns.begin(),
+                           p->_childGraphPatterns.end());
     }
 
     for (auto& trip : pattern->_whereClauseTriples) {
@@ -285,7 +289,7 @@ std::string ParsedQuery::parseAlias(const std::string& alias) {
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPattern::~GraphPattern() {
-  for (GraphPattern* child : _children) {
+  for (GraphPatternOperation* child : _children) {
     delete child;
   }
 }
@@ -305,8 +309,8 @@ ParsedQuery::GraphPattern::GraphPattern(const GraphPattern& other)
       _filters(other._filters),
       _optional(other._optional) {
   _children.reserve(other._children.size());
-  for (const GraphPattern* g : other._children) {
-    _children.push_back(new GraphPattern(*g));
+  for (const GraphPatternOperation* g : other._children) {
+    _children.push_back(new GraphPatternOperation(*g));
   }
 }
 
@@ -316,13 +320,13 @@ ParsedQuery::GraphPattern& ParsedQuery::GraphPattern::operator=(
   _whereClauseTriples = std::vector<SparqlTriple>(other._whereClauseTriples);
   _filters = std::vector<SparqlFilter>(other._filters);
   _optional = other._optional;
-  for (GraphPattern* child : _children) {
+  for (GraphPatternOperation* child : _children) {
     delete child;
   }
   _children.clear();
   _children.reserve(other._children.size());
-  for (const GraphPattern* g : other._children) {
-    _children.push_back(new GraphPattern(*g));
+  for (const GraphPatternOperation* g : other._children) {
+    _children.push_back(new GraphPatternOperation(*g));
   }
   return *this;
 }
@@ -331,9 +335,6 @@ ParsedQuery::GraphPattern& ParsedQuery::GraphPattern::operator=(
 void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
                                          int indentation) const {
   for (int j = 1; j < indentation; ++j) os << "  ";
-  if (_optional) {
-    os << "OPTIONAL ";
-  }
   os << "{";
   for (size_t i = 0; i + 1 < _whereClauseTriples.size(); ++i) {
     os << "\n";
@@ -355,11 +356,91 @@ void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
     for (int j = 0; j < indentation; ++j) os << "  ";
     os << _filters.back().asString();
   }
-  for (GraphPattern* child : _children) {
+  for (GraphPatternOperation* child : _children) {
     os << "\n";
     child->toString(os, indentation + 1);
   }
   os << "\n";
   for (int j = 1; j < indentation; ++j) os << "  ";
   os << "}";
+}
+
+// _____________________________________________________________________________
+ParsedQuery::GraphPatternOperation::GraphPatternOperation(
+    ParsedQuery::GraphPatternOperation::Type type,
+    std::initializer_list<ParsedQuery::GraphPattern*> children)
+    : _type(type) {
+  switch (_type) {
+    case Type::OPTIONAL:
+      if (children.size() != 1) {
+        AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+                 "Optional expects one sub graph pattern.");
+      }
+      break;
+    case Type::UNION:
+      if (children.size() != 2) {
+        AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+                 "Union expects two sub graph patterns.");
+      }
+      break;
+  }
+  _childGraphPatterns.insert(_childGraphPatterns.end(), children.begin(),
+                             children.end());
+}
+
+// _____________________________________________________________________________
+ParsedQuery::GraphPatternOperation::GraphPatternOperation(
+    GraphPatternOperation&& other)
+    : _type(other._type),
+      _childGraphPatterns(std::move(other._childGraphPatterns)) {
+  other._childGraphPatterns.clear();
+}
+
+// _____________________________________________________________________________
+ParsedQuery::GraphPatternOperation::GraphPatternOperation(
+    const GraphPatternOperation& other)
+    : _type(other._type) {
+  _childGraphPatterns.reserve(other._childGraphPatterns.size());
+  for (const GraphPattern* child : other._childGraphPatterns) {
+    _childGraphPatterns.push_back(new GraphPattern(*child));
+  }
+}
+
+// _____________________________________________________________________________
+ParsedQuery::GraphPatternOperation& ParsedQuery::GraphPatternOperation::
+operator=(const ParsedQuery::GraphPatternOperation& other) {
+  _type = other._type;
+  for (GraphPattern* p : _childGraphPatterns) {
+    delete p;
+  }
+  _childGraphPatterns.clear();
+  _childGraphPatterns.reserve(other._childGraphPatterns.size());
+  for (const GraphPattern* p : other._childGraphPatterns) {
+    _childGraphPatterns.push_back(new GraphPattern(*p));
+  }
+  return *this;
+}
+
+// _____________________________________________________________________________
+ParsedQuery::GraphPatternOperation::~GraphPatternOperation() {
+  for (GraphPattern* child : _childGraphPatterns) {
+    delete child;
+  }
+}
+
+// _____________________________________________________________________________
+void ParsedQuery::GraphPatternOperation::toString(std::ostringstream& os,
+                                                  int indentation) const {
+  for (int j = 1; j < indentation; ++j) os << "  ";
+  switch (_type) {
+    case Type::OPTIONAL:
+      os << "OPTIONAL ";
+      _childGraphPatterns[0]->toString(os, indentation);
+      break;
+    case Type::UNION:
+      _childGraphPatterns[0]->toString(os, indentation);
+      os << " UNION ";
+      _childGraphPatterns[1]->toString(os, indentation);
+      break;
+  }
 }

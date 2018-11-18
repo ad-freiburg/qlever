@@ -20,6 +20,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include "../parser/ParseException.h"
 
 using std::array;
 using std::string;
@@ -135,6 +136,15 @@ inline vector<string> splitAny(const string& orig, const T& separators);
 //! accepts a value of type S as the right hand side
 template <typename J, typename S>
 J join(const vector<J>& to_join, const S& joiner);
+
+//! This scans the haystack from start onward until it finds a closing bracket
+//! at the same bracket depth as the opening bracket.
+//! This throws a Parse exception, if haystack[start] != openingBracket, or if
+//! the end of teh haystack is reached before a bracket at the right depth was
+//! found.
+inline size_t findClosingBracket(const string& haystack, size_t start = 0,
+                                 char openingBracket = '{',
+                                 char closingBracket = '}');
 
 inline string decodeUrl(const string& orig);
 
@@ -623,6 +633,35 @@ string decodeUrl(const string& url) {
     }
   }
   return decoded;
+}
+
+inline size_t findClosingBracket(const string& haystack, size_t start,
+                                 char openingBracket, char closingBracket) {
+  if (haystack[start] != openingBracket) {
+    throw ParseException(
+        "The string " + haystack + " does not have a opening bracket " +
+        string(1, openingBracket) + " at position " + std::to_string(start));
+  }
+  int depth = 0;
+  size_t i;
+  for (i = start + 1; i < haystack.size(); i++) {
+    if (haystack[i] == openingBracket) {
+      depth++;
+    }
+    if (haystack[i] == closingBracket) {
+      if (depth == 0) {
+        return i;
+      } else {
+        depth--;
+      }
+    }
+  }
+  if (depth == 0) {
+    throw ParseException("Need curly braces in string " + haystack + "clause.");
+  } else {
+    throw ParseException("Unbalanced curly braces.");
+  }
+  return -1;
 }
 
 }  // namespace ad_utility
