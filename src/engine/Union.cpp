@@ -12,7 +12,7 @@ Union::Union(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   _subtrees[1] = t2;
 
   // compute the column origins
-  std::unordered_map<string, size_t> variableColumns = getVariableColumns();
+  ad_utility::HashMap<string, size_t> variableColumns = getVariableColumns();
   _columnOrigins.resize(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
   for (auto it : variableColumns) {
     // look for the corresponding column in t1
@@ -53,8 +53,8 @@ size_t Union::getResultWidth() const {
 
 vector<size_t> Union::resultSortedOn() const { return {}; }
 
-std::unordered_map<string, size_t> Union::getVariableColumns() const {
-  std::unordered_map<string, size_t> variableColumns(
+ad_utility::HashMap<string, size_t> Union::getVariableColumns() const {
+  ad_utility::HashMap<string, size_t> variableColumns(
       _subtrees[0]->getVariableColumnMap());
 
   size_t column = variableColumns.size();
