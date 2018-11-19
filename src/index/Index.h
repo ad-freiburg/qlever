@@ -16,6 +16,7 @@
 #include "../parser/TsvParser.h"
 #include "../parser/TurtleParser.h"
 #include "../util/File.h"
+#include "../util/HashMap.h"
 #include "../util/MmapVector.h"
 #include "./ConstantsIndexCreation.h"
 #include "./DocsDB.h"

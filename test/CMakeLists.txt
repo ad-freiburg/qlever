@@ -1,5 +1,5 @@
 ################################
-# NLOHNMANN-JSON 
+# NLOHNMANN-JSON
 ################################
 # Header only, nothing to include
 include_directories(../third_party/json/include/)
@@ -52,8 +52,11 @@ target_link_libraries(QueryPlannerTest gtest_main engine ${CMAKE_THREAD_LIBS_INI
 add_executable(ConversionsTest ConversionsTest.cpp)
 target_link_libraries(ConversionsTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(SparsehashTest SparsehashTest.cpp)
-target_link_libraries(SparsehashTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+add_executable(HashMapTest HashMapTest.cpp)
+target_link_libraries(HashMapTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(HashSetTest HashSetTest.cpp)
+target_link_libraries(HashSetTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(GroupByTest GroupByTest.cpp)
 target_link_libraries(GroupByTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
@@ -73,25 +76,5 @@ target_link_libraries(TokenTest parser re2 gtest_main -pthread)
 add_executable(TurtleParserTest TurtleParserTest.cpp)
 target_link_libraries(TurtleParserTest parser re2 gtest_main -pthread)
 
-add_library(tests
-            SparqlParserTest
-            StringUtilsTest
-            LRUCacheTest
-            Simple8bTest
-            FileTest
-            VocabularyTest
-            TsvParserTest
-            ContextFileParserTest
-            IndexMetaDataTest
-            IndexTest
-            EngineTest
-            FTSAlgorithmsTest
-            QueryPlannerTest
-            ConversionsTest
-            SparsehashTest
-            GroupByTest
-            VocabularyGeneratorTest
-            HasPredicateScanTest
-            MmapVectorTest
-            TurtleParserTest
-            )
+add_executable(UnionTest UnionTest.cpp)
+target_link_libraries(UnionTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})

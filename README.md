@@ -388,7 +388,7 @@ Supported aggregates are `MIN, MAX, AVG, GROUP_CONCAT, SAMPLE, COUNT, SUM`. All 
 Group concat also supports a custom separator: `(GROUP_CONCAT(?a ; separator=" ; ") as ?concat)`. Xsd types float, decimal and integer are recognized as numbers, other types or unbound variables (e.g. no entries for an optional part) in one of the aggregates that need to interpret the variable (e.g. AVG) lead to either no result or nan. MAX with an unbound variable will always return the unbound variable.
 A query can only have one GROUP BY and one HAVING clause, but may have several
 variables in the GROUP BY and several filters in the HAVING clause (which will
-then be concatenated using and) are possible:
+then be concatenated using and)
 
     SELECT ?profession ?gender (AVG(?height) as ?avg) WHERE {
       ?a <is-a> ?profession .
@@ -398,8 +398,23 @@ then be concatenated using and) are possible:
     GROUP BY ?profession ?gender
     HAVING (?a > <H) (?gender == <Female>)
 
-Filtering on the results of aggregates beyond SAMPLE, MIN or MAX is not yet 
-supported.
+
+QLever has support for both OPTIONAL as well as UNION. When marking part of a query as optional the variable bindings of the optional parts are only added to results that
+are created by the non optional part. Furthermore, if the optional part has no result matching the rest of the graph pattern its variables are left unbound, leading
+to empty entries in the result table. UNION combines two graph patterns by appending the result of one pattern to the result of the other. Results for Variables with the same name
+in both graph patterns will end up in the same column in the result table.
+
+
+    SELECT ?profession ?gender (AVG(?height) as ?avg) WHERE {
+      { ?a <is-a> ?profession . }
+      UNION
+      {
+        ?a <Gender> ?gender .
+        OPTIONAL {
+          ?a <Height> ?height .
+        }
+      }
+    }
 
 # 6. Converting Old Indices For Current QLever Versions
 

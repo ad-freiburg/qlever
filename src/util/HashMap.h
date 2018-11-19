@@ -1,6 +1,7 @@
-// Copyright 2011, University of Freiburg, Chair of Algorithms and Data
+// Copyright 2018, University of Freiburg, Chair of Algorithms and Data
 // Structures.
-// Author: Björn Buchhold <buchholb>
+// Author: Björn Buchhold <buchholb@informatik.uni-freiburg.de>
+// Author: Niklas Schnelle <schnelle@informatik.uni-freiburg.de>
 
 #pragma once
 
@@ -9,73 +10,68 @@
 #include "./DefaultKeyProvider.h"
 
 namespace ad_utility {
-//! Wrapper for HashMaps to be used everywhere throughout code for
-//! the semantic search. This wrapper interface is not designed to
-//! be complete from the beginning. Feel free to extend it at need.
-//! The first version as of May 2011 uses google's dense_hash_map.
-//! Backing-up implementations may be changed in the future.
+// Wrapper for HashMaps to be used everywhere throughout code for the semantic
+// search. This wrapper interface is not designed to be complete from the
+// beginning. Feel free to extend it at need.
+//
+// The current version uses google's dense_hash_map and directly exports its
+// functions. It only adds a constructor which automatically sets the empty and
+// deleted keys.  This may be changed in the future.
 template <class K, class V,
           class HashFcn = SPARSEHASH_HASH<K>,  // defined in sparseconfig.h
           class EqualKey = std::equal_to<K>,
           class Alloc =
               google::libc_allocator_with_realloc<std::pair<const K, V> > >
-class HashMap {
+class HashMap : private google::dense_hash_map<K, V, HashFcn, EqualKey, Alloc> {
+  using Base = typename google::dense_hash_map<K, V, HashFcn, EqualKey, Alloc>;
+
  public:
   HashMap<K, V, HashFcn, EqualKey, Alloc>(
       K emptyKey = DefaultKeyProvider<K>::DEFAULT_EMPTY_KEY,
-      K deletedKey = DefaultKeyProvider<K>::DEFAULT_DELETED_KEY)
-      : _impl() {
-    _impl.set_empty_key(emptyKey);
-    _impl.set_deleted_key(deletedKey);
+      K deletedKey = DefaultKeyProvider<K>::DEFAULT_DELETED_KEY) {
+    Base::set_empty_key(emptyKey);
+    Base::set_deleted_key(deletedKey);
   }
 
-  typedef
-      typename google::dense_hash_map<K, V, HashFcn, EqualKey, Alloc>::iterator
-          iterator;
-  typedef typename google::dense_hash_map<K, V, HashFcn, EqualKey,
-                                          Alloc>::const_iterator const_iterator;
+  // Iterator type of this map, it.first is the key, it.second the value
+  using Base::iterator;
 
-  const_iterator begin() const { return _impl.begin(); }
+  // Const Iterator type of this map, it.first is the key, it.second the value
+  using Base::const_iterator;
 
-  const_iterator end() const { return _impl.end(); }
+  // Returns an iterator to the first element of the map if it exists and an
+  // iterator equal to end() otherwise
+  using Base::begin;
 
-  iterator begin() { return _impl.begin(); }
+  // Returns an iterator one past the end so that `it != m.end()` is a viable
+  // stopping condition in a for loop
+  using Base::end;
 
-  iterator end() { return _impl.end(); }
+  // Finds an element for a given key. Returns an iterator to the element or
+  // end() if it is not found
+  using Base::find;
 
-  iterator find(const K& key) { return _impl.find(key); }
+  // Erases an element for a given key
+  using Base::erase;
 
-  const_iterator find(const K& key) const { return _impl.find(key); }
+  // Access an element for the given key, creating by default construction if it
+  // does not exist
+  using Base::operator[];
 
-  size_t erase(const K& key) { return _impl.erase(key); }
+  // Counts the number of occurences (0 or 1) of the given key
+  using Base::count;
 
-  //! Lookup operator that also adds pairs whenever
-  //! they don't exist, using @param key as key
-  //! and a value /w default constructor.
-  //! If this is not the behavior you want, use "find" instead.
-  V&
+  // Returns the size of the map
+  using Base::size;
 
-  operator[](const K& key) {
-    return _impl[key];
-  }
+  // Clears the contents of the map
+  using Base::clear;
 
-  size_t count(const K& key) const { return _impl.count(key); }
-
-  size_t size() const { return _impl.size(); }
-
-  void clear() { _impl.clear(); }
-
-  // Insertion routines
-  std::pair<iterator, bool> insert(const V& obj) { return _impl.insert(obj); }
-  template <class InputIterator>
-  void insert(InputIterator f, InputIterator l) {
-    _impl.insert(f, l);
-  }
-  void insert(const_iterator f, const_iterator l) { _impl.insert(f, l); }
-  // Required for std::insert_iterator; the passed-in iterator is ignored.
-  iterator insert(iterator, const V& obj) { return insert(obj).first; }
-
- private:
-  google::dense_hash_map<K, V, HashFcn, EqualKey, Alloc> _impl;
+  // Inserts a std::pair<K, V> pair or a range of pairs from a compatible
+  // container. Note: Such a pair can also be constructed using brace
+  // initializer lists.
+  //       Therefore syntax like m.insert({"answer", 42}); can be used in
+  //       a HashMap<string, int>
+  using Base::insert;
 };
 }  // namespace ad_utility

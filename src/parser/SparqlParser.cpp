@@ -188,43 +188,74 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
           inner.substr(k, 8) == "optional") {
         // find opening and closing brackets of optional part
         size_t ob = inner.find('{', k);
-        size_t cb = ob;
-        int depth = 0;
-        size_t i;
-        for (i = ob + 1; i < inner.size(); i++) {
-          if (inner[i] == '{') {
-            depth++;
-          }
-          if (inner[i] == '}') {
-            if (depth == 0) {
-              cb = i;
-              break;
-            } else {
-              depth--;
-            }
-          }
-        }
-        if (i == inner.size()) {
-          if (depth == 0) {
-            throw ParseException(
-                "Need curly braces in optional"
-                "clause.");
-          } else {
-            throw ParseException("Unbalanced curly braces.");
-          }
-        }
-        currentPattern->_children.push_back(new ParsedQuery::GraphPattern());
-        currentPattern->_children.back()->_optional = true;
-        currentPattern->_children.back()->_id = query._numGraphPatterns;
+        size_t cb = ad_utility::findClosingBracket(inner, ob, '{', '}');
+        currentPattern->_children.push_back(
+            new ParsedQuery::GraphPatternOperation(
+                ParsedQuery::GraphPatternOperation::Type::OPTIONAL,
+                {new ParsedQuery::GraphPattern()}));
+        currentPattern->_children.back()->_childGraphPatterns[0]->_optional =
+            true;
+        currentPattern->_children.back()->_childGraphPatterns[0]->_id =
+            query._numGraphPatterns;
         query._numGraphPatterns++;
         // Recursively call parseWhere to parse the optional part.
         parseWhere(inner.substr(ob, cb - ob + 1), query,
-                   currentPattern->_children.back());
+                   currentPattern->_children.back()->_childGraphPatterns[0]);
 
         // set start to the end of the optional part
         start = cb + 1;
         continue;
       }
+    } else if (inner[k] == '{') {
+      // look for a UNION
+      // find the opening and closing bracket of the left side
+      size_t leftOpeningBracket = k;
+      size_t leftClosingBracket =
+          ad_utility::findClosingBracket(inner, k, '{', '}');
+      k = leftClosingBracket + 1;
+      while (inner[k] == ' ' || inner[k] == '\t' || inner[k] == '\n') {
+        ++k;
+      }
+      // look for the union keyword
+      if (ad_utility::getLowercase(inner.substr(k, 5)) != "union") {
+        throw ParseException("Found an unexpected pair of brackets in " +
+                             inner + " at positions " +
+                             std::to_string(leftOpeningBracket) + " and " +
+                             std::to_string(leftClosingBracket));
+      }
+      k += 5;
+      while (inner[k] == ' ' || inner[k] == '\t' || inner[k] == '\n') {
+        ++k;
+      }
+      // find the opening and closing brackets of the right part
+      size_t rightOpeningBracket = k;
+      size_t rightClosingBracket =
+          ad_utility::findClosingBracket(inner, k, '{', '}');
+
+      // create the union operation
+      ParsedQuery::GraphPatternOperation* u =
+          new ParsedQuery::GraphPatternOperation(
+              ParsedQuery::GraphPatternOperation::Type::UNION,
+              {new ParsedQuery::GraphPattern(),
+               new ParsedQuery::GraphPattern()});
+      u->_childGraphPatterns[0]->_optional = false;
+      u->_childGraphPatterns[1]->_optional = false;
+      u->_childGraphPatterns[0]->_id = query._numGraphPatterns;
+      u->_childGraphPatterns[1]->_id = query._numGraphPatterns + 1;
+      query._numGraphPatterns += 2;
+      currentPattern->_children.push_back(u);
+
+      // parse the left and right bracket
+      parseWhere(inner.substr(leftOpeningBracket,
+                              leftClosingBracket - leftOpeningBracket + 1),
+                 query, u->_childGraphPatterns[0]);
+      parseWhere(inner.substr(rightOpeningBracket,
+                              rightClosingBracket - rightOpeningBracket + 1),
+                 query, u->_childGraphPatterns[1]);
+
+      // continue parsing after the union statement
+      start = rightClosingBracket + 1;
+      continue;
     } else if (inner[k] == 'F' || inner[k] == 'f') {
       if (inner.substr(k, 6) == "FILTER" || inner.substr(k, 6) == "filter") {
         // find the final closing bracket

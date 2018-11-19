@@ -28,8 +28,8 @@ string Distinct::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-std::unordered_map<string, size_t> Distinct::getVariableColumns() const {
-  std::unordered_map<string, size_t> map;
+ad_utility::HashMap<string, size_t> Distinct::getVariableColumns() const {
+  ad_utility::HashMap<string, size_t> map;
   for (size_t index : _keepIndices) {
     for (const auto& it : _subtree->getVariableColumnMap()) {
       if (it.second == index) {
