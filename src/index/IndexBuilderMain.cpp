@@ -13,6 +13,7 @@
 #include "../global/Constants.h"
 #include "../util/File.h"
 #include "../util/ReadableNumberFact.h"
+#include "../util/StringUtils.h"
 #include "./ConstantsIndexCreation.h"
 #include "./Index.h"
 
@@ -266,7 +267,12 @@ int main(int argc, char** argv) {
       // vocabulary for  text  index  creation)
 
       if (ntFile.size() > 0) {
-        index.createFromFile<NTriplesParser>(ntFile, allPermutations);
+        if (ad_utility::endsWith(ntFile, ".ttl") ||
+            ad_utility::endsWith(ntFile, ".ttl.bz2")) {
+          index.createFromFile<TurtleParser>(ntFile, allPermutations);
+        } else {
+          index.createFromFile<NTriplesParser>(ntFile, allPermutations);
+        }
       } else if (tsvFile.size() > 0) {
         index.createFromFile<TsvParser>(tsvFile, allPermutations);
       } else {

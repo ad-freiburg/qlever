@@ -14,6 +14,7 @@
 #include "../global/Pattern.h"
 #include "../parser/NTriplesParser.h"
 #include "../parser/TsvParser.h"
+#include "../parser/TurtleParser.h"
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
