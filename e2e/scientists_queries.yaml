@@ -463,3 +463,17 @@ queries:
       - selected: ["?a", "?t"]
       - contains_row: ['<Carl_Sagan>', '1.8']
       - contains_row: ['<Noreena_Hertz>', '<Judaism>']
+  - query : duplicate-alias 
+    type: no-text
+    sparql: |
+      SELECT ?object (COUNT(?object) AS ?count) WHERE {
+              ?subject <Profession> ?object
+      }
+      GROUP BY ?object
+      ORDER BY DESC((COUNT(?object) AS ?count))
+    checks:
+      - num_rows: 836 
+      - num_cols: 2
+      - selected: ["?object", "?count"]
+      - contains_row: ['<Inventor>', '1616']
+      - contains_row: ['<Astrologer>', '43']

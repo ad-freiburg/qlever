@@ -280,7 +280,29 @@ std::string ParsedQuery::parseAlias(const std::string& alias) {
     }
 
     a._inVarName = alias.substr(start, pos - start - 1);
-    _aliases.push_back(a);
+    bool isUnique = true;
+    // check if another alias for the output variable already exists:
+    for (const Alias& other : _aliases) {
+      if (other._outVarName == a._outVarName) {
+        // Check if the aliases are equal, otherwise throw an exception
+        if (other._isAggregate != a._isAggregate ||
+            other._function != a._function) {
+          // TODO(florian): For a proper comparison the alias would need to have
+          // been parsed fully already. As the alias is still stored as a string
+          // at this point the comparison of two aliases is also string based.
+          throw ParseException(
+              "Two aliases try to bind values to the variable " +
+              a._outVarName);
+        } else {
+          isUnique = false;
+          break;
+        }
+      }
+    }
+    if (isUnique) {
+      // only add the alias if it doesn't already exist
+      _aliases.push_back(a);
+    }
   } else {
     throw ParseException("Unknown or malformed alias: (" + alias + ")");
   }
