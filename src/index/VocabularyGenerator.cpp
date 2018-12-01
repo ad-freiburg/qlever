@@ -18,15 +18,19 @@
 #include "./ConstantsIndexCreation.h"
 #include "./Vocabulary.h"
 
+// helper struct used in the priority queue for merging.
+// represents tokens/words in a certain partial vocabular
 struct QueueValue {
   QueueValue() = default;
   QueueValue(const string& v, size_t file, Id word)
       : _value(v), _partialFileId(file), _partialWordId(word) {}
-  string _value;
-  size_t _partialFileId;
-  Id _partialWordId;
+  string _value;          // the word
+  size_t _partialFileId;  // from which partial vocabulary did this word come
+  Id _partialWordId;      // which partial id did the word have in this partial
+                          // vocabulary
 };
 
+// we sort alphabetically by the token
 class QueueCompare {
  public:
   bool operator()(const QueueValue& p1, const QueueValue& p2) {
@@ -37,6 +41,8 @@ class QueueCompare {
 // ___________________________________________________________________
 size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
   std::vector<std::fstream> infiles;
+
+  // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> idVecs;
   std::ofstream outfile(basename + ".vocabulary");
   AD_CHECK(outfile.is_open());
@@ -44,15 +50,17 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
   AD_CHECK(outfileExternal.is_open());
   std::vector<bool> endOfFile(numFiles, false);
 
-  ad_utility::HashMap<string, Id> langtagMap;
-
+  // Priority queue for the k-way merge
   std::priority_queue<QueueValue, std::vector<QueueValue>, QueueCompare> queue;
 
+  // open and prepare all infiles and mmap output vectors
   for (size_t i = 0; i < numFiles; i++) {
     infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME + std::to_string(i),
                          std::ios_base::in | std::ios_base::out);
     idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
     AD_CHECK(infiles.back().is_open());
+
+    // read the first entry of the vocabulary and add it to the queue
     endOfFile[i] = true;
 
     uint32_t len;
@@ -66,7 +74,10 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
     }
   }
 
+  // keep track of the last seen word to correctly handle duplicates
   std::string lastWritten = "";
+  // the number of words we have written. This also is the global Id of the next
+  // word we see, unless it is is equal to the previous word
   size_t totalWritten = 0;
 
   // start k-way merge
@@ -78,6 +89,7 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
     if (top._value != lastWritten) {
       lastWritten = top._value;
 
+      // write the new word to the vocabulary
       if (top._value < string({EXTERNALIZED_LITERALS_PREFIX})) {
         outfile << top._value << std::endl;
       } else {
@@ -91,7 +103,7 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
       totalWritten++;
     } else {
       // this is a duplicate which already occured in another partial vocabulary
-      // in the last step
+      // in the last step.
       // we already have increased total written, so for the duplicate
       // we have to subtract one again
       size_t minusOne = totalWritten - 1;
@@ -117,23 +129,6 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
     }
   }
   return totalWritten;
-}
-
-// ____________________________________________________________________________________________
-ad_utility::HashMap<string, Id> vocabMapFromPartialIndexedFile(
-    const string& partialFile) {
-  std::ifstream file(partialFile, std::ios_base::binary);
-  AD_CHECK(file.is_open());
-  ad_utility::HashMap<string, Id> vocabMap;
-  uint32_t len;
-  while (file.read((char*)&len, sizeof(len))) {
-    std::string word(len, '\0');
-    file.read(&(word[0]), len);
-    size_t idx;
-    file.read((char*)&idx, sizeof(idx));
-    vocabMap[word] = idx;
-  }
-  return vocabMap;
 }
 
 // ______________________________________________________________________________________________

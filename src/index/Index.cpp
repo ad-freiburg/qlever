@@ -12,6 +12,7 @@
 #include <unordered_map>
 
 #include "../parser/NTriplesParser.h"
+#include "../parser/ParallelParseBuffer.h"
 #include "../parser/TsvParser.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
@@ -39,6 +40,8 @@ std::unique_ptr<Index::ExtVec> Index::createExtVecAndVocab(
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
   _totalVocabularySize = linesAndWords.nofWords;
+  LOG(INFO) << "total size of vocabulary (internal and external) is "
+            << _totalVocabularySize << std::endl;
 
   if (_onDiskLiterals) {
     _vocab.externalizeLiteralsFromTextFile(
@@ -49,9 +52,9 @@ std::unique_ptr<Index::ExtVec> Index::createExtVecAndVocab(
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
   _vocab.clear();
-  passFileIntoIdVector<Parser>(*(linesAndWords.idTriples),
-                               linesAndWords.actualPartialSizes,
-                               NUM_TRIPLES_PER_PARTIAL_VOCAB);
+  convertPartialToGlobalIds<Parser>(*(linesAndWords.idTriples),
+                                    linesAndWords.actualPartialSizes,
+                                    NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
   if (!_keepTempFiles) {
     // remove temporary files only used during index creation
@@ -94,9 +97,9 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
                                            Permutation::Pos, true);
   if (allPermutations) {
     // also create Patterns after the Spo permutation
-    createPermutationPair<IndexMetaDataHmap>(&idTriples, Permutation::Spo,
-                                             Permutation::Sop, false, true);
-    createPermutationPair<IndexMetaDataHmap>(&idTriples, Permutation::Osp,
+    createPermutationPair<IndexMetaDataMmap>(
+        &idTriples, Permutation::Spo, Permutation::Sop, false, _usePatterns);
+    createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Osp,
                                              Permutation::Ops);
   } else if (_usePatterns) {
     // vector is not yet sorted
@@ -130,19 +133,6 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
     AD_CHECK(false);
   }
   // also perform unique for first permutation
-
-  createPermutationPair<IndexMetaDataHmap>(&idTriples, Permutation::Pso,
-                                           Permutation::Pos, true);
-  if (allPermutations) {
-    // also create Patterns after the Spo permutation
-    createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Spo,
-                                             Permutation::Sop, false, true);
-    createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Osp,
-                                             Permutation::Ops);
-  } else if (_usePatterns) {
-    // vector is not yet sorted
-    createPatterns(false, &idTriples);
-  }
   writeConfiguration();
 }
 
@@ -158,55 +148,79 @@ template void Index::createFromFile<TurtleParser>(const string& filename,
 template <class Parser>
 LinesAndWords Index::passFileForVocabulary(const string& filename,
                                            size_t linesPerPartial) {
-  Parser p(filename);
+  ParallelParseBuffer<Parser> p(PARSER_BATCH_SIZE, filename);
   size_t i = 0;
   // already count the numbers of triples that will be used for the language
   // filter
   size_t numFiles = 0;
-  auto [isParserValid, tripleBuf] = parseBatch(&p, linesPerPartial);
-  bool stopParsing = false;
+
   // we add extra triples
   std::vector<size_t> actualPartialSizes;
   size_t actualCurrentPartialSize = 0;
   std::unique_ptr<ExtVec> idTriples(new ExtVec());
   ExtVec::bufwriter_type writer(*idTriples);
-  while (!stopParsing) {
-    auto futBatch =
-        std::async(std::launch::async, parseBatch<Parser>, &p, linesPerPartial);
-    ad_utility::HashMap<string, Id> items;
-    // We will insert many duplicates into this hashSet, should be faster to
-    // keep this separate
-    // Will hold all the words connected to the language filter implementation
 
-    // insert the special predicate into all partial vocabularies
-    auto langPredId = assignNextId(&items, LANGUAGE_PREDICATE);
-    for (auto& spo : tripleBuf) {
-      auto langtag = tripleToInternalRepresentation(&spo);
-      std::array<Id, 3> spoIds;
-      for (size_t k = 0; k < 3; ++k) {
-        spoIds[k] = assignNextId(&items, spo[k]);
-      }
-      writer << array<Id, 3>{{spoIds[0], spoIds[1], spoIds[2]}};
-      actualCurrentPartialSize++;
+  ad_utility::HashMap<string, Id> items;
 
-      if (!langtag.empty()) {
-        auto langTagId = assignNextId(
-            &items, ad_utility::convertLangtagToEntityUri(langtag));
-        auto langTaggedPredId = assignNextId(
-            &items,
-            ad_utility::convertToLanguageTaggedPredicate(spo[1], langtag));
-        writer << array<Id, 3>{{spoIds[0], langTaggedPredId, spoIds[2]}};
-        writer << array<Id, 3>{{spoIds[2], langPredId, langTagId}};
-        actualCurrentPartialSize += 2;
-      }
-
-      ++i;
-      if (i % 10000000 == 0) {
-        LOG(INFO) << "Lines processed: " << i << '\n';
-      }
+  // insert the special  ql:langtag predicate into all partial vocabularies
+  auto langPredId = assignNextId(&items, LANGUAGE_PREDICATE);
+  std::array<string, 3> spo;
+  while (p.getline(spo)) {
+    auto langtag = tripleToInternalRepresentation(&spo);
+    std::array<Id, 3> spoIds;
+    // immediately get or reuse ids for the elements of the triple
+    // these are sorted by order of appearance and only valid in the current
+    // partial vocabulary
+    for (size_t k = 0; k < 3; ++k) {
+      spoIds[k] = assignNextId(&items, spo[k]);
     }
-    // we don't need this memory anymore
-    std::vector<std::array<std::string, 3>>().swap(tripleBuf);
+    writer << array<Id, 3>{{spoIds[0], spoIds[1], spoIds[2]}};
+    actualCurrentPartialSize++;
+
+    // if we have a language-tagged object we also add the special triples for
+    // the language filter
+    if (!langtag.empty()) {
+      auto langTagId =
+          assignNextId(&items, ad_utility::convertLangtagToEntityUri(langtag));
+      auto langTaggedPredId = assignNextId(
+          &items,
+          ad_utility::convertToLanguageTaggedPredicate(spo[1], langtag));
+      writer << array<Id, 3>{{spoIds[0], langTaggedPredId, spoIds[2]}};
+      writer << array<Id, 3>{{spoIds[2], langPredId, langTagId}};
+      actualCurrentPartialSize += 2;
+    }
+
+    ++i;
+    if (i % 10000000 == 0) {
+      LOG(INFO) << "Lines (from KB-file) processed: " << i << '\n';
+    }
+    if (i % linesPerPartial == 0) {
+      LOG(INFO) << "Lines (from KB-file) processed: " << i << '\n';
+      LOG(INFO) << "Actual number of Triples in this section (include "
+                   "langfilter triples): "
+                << actualCurrentPartialSize << '\n';
+      string partialFilename =
+          _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
+
+      LOG(INFO) << "writing partial vocabulary to " << partialFilename
+                << std::endl;
+      LOG(INFO) << "it contains " << items.size() << " elements\n";
+      writePartialIdMapToBinaryFileForMerging(items, partialFilename);
+      LOG(INFO) << "Done\n";
+      numFiles++;
+      // Save the information how many triples this partial vocabulary actually
+      // deals with we will use this later for mapping from partial to global
+      // ids
+      actualPartialSizes.push_back(actualCurrentPartialSize);
+      // reset data structures for next partial vocab
+      actualCurrentPartialSize = 0;
+      items.clear();
+      // insert the special predicate into all partial vocabularies
+      langPredId = assignNextId(&items, LANGUAGE_PREDICATE);
+    }
+  }
+  // deal with remainder
+  if (items.size() > 0) {
     LOG(INFO) << "Lines processed: " << i << '\n';
     LOG(INFO) << "Actual number of Triples in this section: "
               << actualCurrentPartialSize << '\n';
@@ -220,17 +234,12 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
     LOG(INFO) << "Done\n";
     numFiles++;
     actualPartialSizes.push_back(actualCurrentPartialSize);
-    actualCurrentPartialSize = 0;
-    // when the parser signals endOfFile we still have to handle the buffer
-    // contents
-    stopParsing = !isParserValid;
-    std::tie(isParserValid, tripleBuf) = std::move(futBatch.get());
   }
   writer.finish();
+
   LOG(INFO) << "Merging vocabulary\n";
   LinesAndWords res;
-  auto nofWords = mergeVocabulary(_onDiskBase, numFiles);
-  res.nofWords = nofWords;
+  res.nofWords = mergeVocabulary(_onDiskBase, numFiles);
   res.idTriples = std::move(idTriples);
   res.actualPartialSizes = std::move(actualPartialSizes);
   LOG(INFO) << "Pass done.\n";
@@ -240,35 +249,34 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
 
 // _____________________________________________________________________________
 template <class Parser>
-void Index::passFileIntoIdVector(ExtVec& data,
-                                 const vector<size_t>& actualLinesPerPartial,
-                                 size_t linesPerPartial) {
+void Index::convertPartialToGlobalIds(
+    ExtVec& data, const vector<size_t>& actualLinesPerPartial,
+    size_t linesPerPartial) {
   LOG(INFO) << "Updating Ids in stxxl vector to global Ids.\n";
   array<string, 3> spo;
-  std::string vocabFilename(_onDiskBase + PARTIAL_VOCAB_FILE_NAME +
-                            std::to_string(0));
-  LOG(INFO) << "Reading partial vocab from " << vocabFilename << " ...\n";
-  ad_utility::HashMap<string, Id> vocabMap =
-      vocabMapFromPartialIndexedFile(vocabFilename);
-  LOG(INFO) << "done reading partial vocab\n";
+
   size_t i = 0;
+  // iterate over all partial vocabularies
   for (size_t partialNum = 0; partialNum < actualLinesPerPartial.size();
        partialNum++) {
     LOG(INFO) << "Lines processed: " << i << '\n';
     LOG(INFO) << "Corresponding number of statements in original knowledgeBase:"
               << linesPerPartial * partialNum << '\n';
+
     std::string mmapFilename(_onDiskBase + PARTIAL_MMAP_IDS +
                              std::to_string(partialNum));
     LOG(INFO) << "Reading IdMap from " << mmapFilename << " ...\n";
     ad_utility::HashMap<Id, Id> idMap = IdMapFromPartialIdMapFile(mmapFilename);
     LOG(INFO) << "Done reading idMap\n";
+    // update the triples for which this partial vocabulary was responsible
     for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[partialNum];
          ++tmpNum) {
       std::array<Id, 3> curTriple = data[i];
+
+      // for all triple elements find their mapping from partial to global ids
       ad_utility::HashMap<Id, Id>::iterator iterators[3];
       for (size_t k = 0; k < 3; ++k) {
         iterators[k] = idMap.find(curTriple[k]);
-        // TODO<joka921>: only check this in Debug mode
         if (iterators[k] == idMap.end()) {
           LOG(INFO) << "not found in partial Vocab: " << curTriple[k] << '\n';
           AD_CHECK(false);
@@ -312,7 +320,8 @@ std::optional<MetaData> Index::createPermutationImpl(const string& fileName,
   size_t from = 0;
   Id currentRel = vec[0][c0];
   off_t lastOffset = 0;
-  ad_utility::MmapVector<array<Id, 2>> buffer(0, fileName + ".tmp.MmapBuffer");
+  ad_utility::BufferedVector<array<Id, 2>> buffer(THRESHOLD_RELATION_CREATION,
+                                                  fileName + ".tmp.MmapBuffer");
   bool functional = true;
   size_t distinctC1 = 0;
   size_t sizeOfRelation = 0;
@@ -576,8 +585,10 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
   LOG(DEBUG) << "Pattern set size: " << patternSet.size() << std::endl;
 
   // Associate entities with patterns if possible, store has-relation otherwise
-  std::vector<std::array<Id, 2>> entityHasPattern;
-  std::vector<std::array<Id, 2>> entityHasPredicate;
+  ad_utility::MmapVector<std::array<Id, 2>> entityHasPattern(
+      0, fileName + ".mmap.entityHasPattern.tmp");
+  ad_utility::MmapVector<std::array<Id, 2>> entityHasPredicate(
+      0, fileName + ".mmap.entityHasPredicate.tmp");
 
   size_t numEntitiesWithPatterns = 0;
   size_t numEntitiesWithoutPatterns = 0;
@@ -784,7 +795,7 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
 // _____________________________________________________________________________
 pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeRel(
     ad_utility::File& out, off_t currentOffset, Id relId,
-    const ad_utility::MmapVector<array<Id, 2>>& data, size_t distinctC1,
+    const ad_utility::BufferedVector<array<Id, 2>>& data, size_t distinctC1,
     bool functional) {
   LOG(TRACE) << "Writing a relation ...\n";
   AD_CHECK_GT(data.size(), 0);
@@ -813,7 +824,7 @@ pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeRel(
 
 // _____________________________________________________________________________
 void Index::writeFunctionalRelation(
-    const MmapVector<array<Id, 2>>& data,
+    const BufferedVector<array<Id, 2>>& data,
     pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd) {
   // Only has to do something if there are blocks.
   if (rmd.first.hasBlocks()) {
@@ -842,7 +853,7 @@ void Index::writeFunctionalRelation(
 
 // _____________________________________________________________________________
 void Index::writeNonFunctionalRelation(
-    ad_utility::File& out, const MmapVector<array<Id, 2>>& data,
+    ad_utility::File& out, const BufferedVector<array<Id, 2>>& data,
     pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd) {
   // Only has to do something if there are blocks.
   if (rmd.first.hasBlocks()) {
@@ -902,6 +913,9 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
   readConfiguration();
   _vocab.readFromFile(_onDiskBase + ".vocabulary",
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
+
+  _totalVocabularySize = _vocab.size() + _vocab.getExternalVocab().size();
+  LOG(INFO) << "total vocab size is " << _totalVocabularySize << std::endl;
   auto psoName = string(_onDiskBase + ".index.pso");
   _psoFile.open(psoName, "r");
   auto posName = string(_onDiskBase + ".index.pos");
@@ -916,6 +930,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
   _posMeta.readFromFile(&_posFile);
   LOG(INFO) << "Registered POS permutation: " << _posMeta.statistics()
             << std::endl;
+
   if (allPermutations) {
     // TODO<joka921> also refactor this, similar to createFromFile
     LOG(INFO) << "Setting up MmapBasedPermutations\n";
@@ -1143,6 +1158,8 @@ void Index::scanPOS(const string& predicate, const string& object,
   Id relId;
   Id objId;
   if (_vocab.getId(predicate, &relId) && _vocab.getId(object, &objId)) {
+    LOG(TRACE) << "predicate Id " << relId << " object Id " << objId
+               << std::endl;
     if (_posMeta.relationExists(relId)) {
       auto rmd = _posMeta.getRmd(relId);
       if (rmd.hasBlocks()) {
@@ -1764,6 +1781,8 @@ void Index::readConfiguration() {
         prefixes.emplace_back(std::move(prefix));
       }
       _vocab.initializePrefixes(prefixes);
+    } else {
+      _vocab.initializePrefixes(std::vector<std::string>());
     }
   }
 
@@ -1808,33 +1827,6 @@ void Index::initializeVocabularySettingsBuild() {
     _vocab.initializeExternalizePrefixes(j["prefixes-external"]);
     _configurationJson["prefixes-external"] = j["prefixes-external"];
   }
-}
-
-// _____________________________________________________________________________
-template <class Parser>
-std::pair<bool, std::vector<array<string, 3>>> Index::parseBatch(
-    Parser* parser, size_t maxLines) {
-  LOG(INFO) << "Parsing next batch in parallel" << std::endl;
-  std::vector<array<string, 3>> buf;
-  // for small knowledge bases on small systems that fit in one
-  // batch (e.g. during tests) the reserve may fail which is not bad in this
-  // case
-  try {
-    buf.reserve(maxLines);
-  } catch (const std::bad_alloc& b) {
-    buf = std::vector<array<string, 3>>();
-  }
-  while (buf.size() < maxLines) {
-    buf.emplace_back();
-    if (!parser->getLine(buf.back())) {
-      buf.pop_back();
-      return {false, std::move(buf)};
-    }
-    if (buf.size() % 10000000 == 0) {
-      LOG(INFO) << "Parsed " << buf.size() << " triples." << std::endl;
-    }
-  }
-  return {true, std::move(buf)};
 }
 
 // ___________________________________________________________________________

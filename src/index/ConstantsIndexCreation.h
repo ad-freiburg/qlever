@@ -16,6 +16,14 @@ const std::string EXTERNAL_LITS_TEXT_FILE_NAME = ".externalized-text";
 // Reduce to save RAM
 static const int NUM_TRIPLES_PER_PARTIAL_VOCAB = 100000000;
 
+// How many Triples is the Buffer supposed to parse ahead.
+// If too big, the memory consumption is high, if too low we possibly lose speed
+static const size_t PARSER_BATCH_SIZE = 10000000;
+
+// If a single relation has more than this number of triples, it will be
+// buffered into an MmapVector during the creation of the relations;
+static const size_t THRESHOLD_RELATION_CREATION = 2 << 20;
+
 // ________________________________________________________________
 static const std::string PARTIAL_VOCAB_FILE_NAME = ".partial-vocabulary";
 static const std::string PARTIAL_MMAP_IDS = ".partial-ids-mmap";

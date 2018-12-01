@@ -197,7 +197,7 @@ template <typename>
 string Vocabulary<S>::expandPrefix(const CompressedString& word) const {
   assert(!word.empty());
   auto idx = static_cast<uint8_t>(word[0]) - MIN_COMPRESSION_PREFIX;
-  if (idx < NUM_COMPRESSION_PREFIXES) {
+  if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
     return _prefixMap[idx] + word.toStringView().substr(1);
   } else {
     return string(word.toStringView().substr(1));

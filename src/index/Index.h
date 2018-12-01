@@ -17,6 +17,7 @@
 #include "../parser/NTriplesParser.h"
 #include "../parser/TsvParser.h"
 #include "../parser/TurtleParser.h"
+#include "../util/BufferedVector.h"
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
@@ -28,6 +29,7 @@
 #include "./TextMetaData.h"
 #include "./Vocabulary.h"
 
+using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
 using ad_utility::MmapVectorView;
 using std::array;
@@ -37,7 +39,6 @@ using std::vector;
 
 using json = nlohmann::json;
 
-// u    sing IdPairMMapVec = ad_utility::MmapVector<std::array<Id, 2>>;
 // a simple struct for better naming
 struct LinesAndWords {
   typedef stxxl::vector<array<Id, 3>> ExtVec;
@@ -362,10 +363,6 @@ class Index {
    */
   CompactStringVector<Id, Id> _hasPredicate;
 
-  size_t passTsvFileForVocabulary(const string& tsvFile);
-
-  void passTsvFileIntoIdVector(const string& tsvFile, ExtVec& data);
-
   // Create Vocabulary and directly write it to disk. Create ExtVec which can be
   // used for creating permutations
   // Member _vocab will be empty after this because it is not needed for index
@@ -377,14 +374,11 @@ class Index {
   template <class Parser>
   LinesAndWords passFileForVocabulary(const string& ntFile,
                                       size_t linesPerPartial = 100000000);
-  template <class Parser>
-  static std::pair<bool, std::vector<array<string, 3>>> parseBatch(
-      Parser* parser, size_t maxLines);
 
   template <class Parser>
-  void passFileIntoIdVector(ExtVec& data,
-                            const vector<size_t>& actualLinesPerPartial,
-                            size_t linesPerPartial);
+  void convertPartialToGlobalIds(ExtVec& data,
+                                 const vector<size_t>& actualLinesPerPartial,
+                                 size_t linesPerPartial);
 
   // ___________________________________________________________________________
   template <class Map>
@@ -482,14 +476,15 @@ class Index {
   //   Careful: only multiplicity for first column is valid in return value
   static pair<FullRelationMetaData, BlockBasedRelationMetaData> writeRel(
       ad_utility::File& out, off_t currentOffset, Id relId,
-      const MmapVector<array<Id, 2>>& data, size_t distinctC1, bool functional);
+      const BufferedVector<array<Id, 2>>& data, size_t distinctC1,
+      bool functional);
 
   static void writeFunctionalRelation(
-      const MmapVector<array<Id, 2>>& data,
+      const BufferedVector<array<Id, 2>>& data,
       pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd);
 
   static void writeNonFunctionalRelation(
-      ad_utility::File& out, const MmapVector<array<Id, 2>>& data,
+      ad_utility::File& out, const BufferedVector<array<Id, 2>>& data,
       pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd);
 
   void openFileHandles();
@@ -579,4 +574,16 @@ class Index {
 
   // initialize the index-build-time settings for the vocabulary
   void initializeVocabularySettingsBuild();
+
+  // Helper function for Debugging during the index build.
+  // ExtVecs are not persistent, so we dump them to a mmapVector in a file with
+  // given filename
+  static void dumpExtVecToMmap(const ExtVec& vec, std::string filename) {
+    LOG(INFO) << "Dumping ext vec to mmap" << std::endl;
+    MmapVector<ExtVec::value_type> mmapVec(vec.size(), filename);
+    for (size_t i = 0; i < vec.size(); ++i) {
+      mmapVec[i] = vec[i];
+    }
+    LOG(INFO) << "Done" << std::endl;
+  }
 };

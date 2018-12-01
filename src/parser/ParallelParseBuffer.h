@@ -1,0 +1,111 @@
+// Copyright 2018, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
+
+#pragma once
+
+#include <array>
+#include <future>
+#include <string>
+#include <vector>
+#include "../util/Log.h"
+
+using std::array;
+using std::string;
+using std::vector;
+
+// A class that holds a parser for a knowledge base file (.nt, .tsv, .ttl, etc)
+// and asynchronously retrieves triples from the file.
+// Can be used to parallelize the parsing and processing of kb files.
+// External interface is similar to a parser, so the usage makes the code simple
+template <class Parser>
+class ParallelParseBuffer {
+ public:
+  // Parse from the file at filename.
+  // A batch of bufferSize triples is always parsed in parallel
+  // bigger bufferSizes will increase memory usage whereas smaller sizes might
+  // be inefficient.
+  ParallelParseBuffer(size_t bufferSize, const std::string& filename)
+      : _bufferSize(bufferSize), _p(filename) {
+    // parse the initial batch, before this we cannot do anything
+    std::tie(_isParserValid, _buffer) = parseBatch();
+
+    // already submit the next batch for parallel computation
+    if (_isParserValid) {
+      _fut = std::async(std::launch::async,
+                        &ParallelParseBuffer<Parser>::parseBatch, this);
+    }
+  }
+
+  // retrieve a single triple from the internal buffer and write it to
+  // argument spo. Return true in this case. If the buffer is exhausted blocks
+  // until the (asynchronous) call to parseBatch has finished. Returns false if
+  // the parser has completely parsed the file. In this case the argument is
+  // untouched
+  bool getline(std::array<string, 3>& spo) {
+    // Return our triple in the order the parser handles them to us.
+    // Makes debugging easier.
+    if (_buffer.size() == _bufferPosition && _isParserValid) {
+      // we have to wait for the next parallel batch to be completed.
+      std::tie(_isParserValid, _buffer) = std::move(_fut.get());
+      _bufferPosition = 0;
+      if (_isParserValid) {
+        // if possible, directly submit the next parsing job
+        _fut = std::async(std::launch::async,
+                          &ParallelParseBuffer<Parser>::parseBatch, this);
+      }
+    }
+
+    // we now should have some triples in our buffer
+    if (_bufferPosition < _buffer.size()) {
+      spo = _buffer[_bufferPosition];
+      _bufferPosition++;
+      return true;
+    } else {
+      // we can only reach this if the buffer is exhausted and there is nothing
+      // more to parse
+      return false;
+    }
+  }
+
+ private:
+  const size_t _bufferSize;
+  // needed for the ringbuffer-style access
+  size_t _bufferPosition = 0;
+  Parser _p;
+  // becomes false when the parser is done. In this case we still have to
+  // empty our buffer
+  bool _isParserValid = true;
+  std::vector<array<string, 3>> _buffer;
+  // this future handles the asynchronous parser calls
+  std::future<std::pair<bool, std::vector<array<string, 3>>>> _fut;
+
+  // this function extracts _bufferSize many triples from the parser.
+  // If the bool argument is false, the parser is exhausted and further calls
+  // to parseBatch are useless. In this case we probably still have some triples
+  // that were parsed before the parser was done, so we still have to consider
+  // these.
+  std::pair<bool, std::vector<array<string, 3>>> parseBatch() {
+    LOG(INFO) << "Parsing next batch in parallel" << std::endl;
+    std::vector<array<string, 3>> buf;
+    // for small knowledge bases on small systems that fit in one
+    // batch (e.g. during tests) the reserve may fail which is not bad in this
+    // case
+    try {
+      buf.reserve(_bufferSize);
+    } catch (const std::bad_alloc& b) {
+      buf = std::vector<array<string, 3>>();
+    }
+    while (buf.size() < _bufferSize) {
+      buf.emplace_back();
+      if (!_p.getLine(buf.back())) {
+        buf.pop_back();
+        return {false, std::move(buf)};
+      }
+      if (buf.size() % 10000000 == 0) {
+        LOG(INFO) << "Parsed " << buf.size() << " triples." << std::endl;
+      }
+    }
+    return {true, std::move(buf)};
+  }
+};

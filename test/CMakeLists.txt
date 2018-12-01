@@ -70,6 +70,9 @@ target_link_libraries(HasPredicateScanTest gtest_main engine ${CMAKE_THREAD_LIBS
 add_executable(MmapVectorTest MmapVectorTest.cpp)
 target_link_libraries(MmapVectorTest gtest_main -pthread)
 
+add_executable(BufferedVectorTest BufferedVectorTest.cpp)
+target_link_libraries(BufferedVectorTest gtest_main -pthread)
+
 add_executable(UnionTest UnionTest.cpp)
 target_link_libraries(UnionTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
 
