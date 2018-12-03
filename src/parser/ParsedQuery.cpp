@@ -443,6 +443,7 @@ ParsedQuery::GraphPatternOperation::GraphPatternOperation(
     _subquery = other._subquery;
     other._subquery = nullptr;
   } else {
+    new (&_childGraphPatterns) std::vector<GraphPattern*>();
     _childGraphPatterns = std::move(other._childGraphPatterns);
     other._childGraphPatterns.clear();
   }
@@ -455,6 +456,7 @@ ParsedQuery::GraphPatternOperation::GraphPatternOperation(
   if (_type == Type::SUBQUERY) {
     _subquery = new ParsedQuery(*other._subquery);
   } else {
+    new (&_childGraphPatterns) std::vector<GraphPattern*>();
     _childGraphPatterns.reserve(other._childGraphPatterns.size());
     for (const GraphPattern* child : other._childGraphPatterns) {
       _childGraphPatterns.push_back(new GraphPattern(*child));
