@@ -136,7 +136,8 @@ void ParsedQuery::expandPrefixes() {
         p->_subquery->_prefixes = _prefixes;
         p->_subquery->expandPrefixes();
       } else {
-        graphPatterns.insert(graphPatterns.end(), p->_childGraphPatterns.begin(),
+        graphPatterns.insert(graphPatterns.end(),
+                             p->_childGraphPatterns.begin(),
                              p->_childGraphPatterns.end());
       }
     }
@@ -397,7 +398,7 @@ void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
 ParsedQuery::GraphPatternOperation::GraphPatternOperation(
     ParsedQuery::GraphPatternOperation::Type type,
     std::initializer_list<ParsedQuery::GraphPattern*> children)
-    : _type(type) {
+    : _type(type), _childGraphPatterns() {
   switch (_type) {
     case Type::OPTIONAL:
       if (children.size() != 1) {
@@ -513,7 +514,7 @@ void ParsedQuery::GraphPatternOperation::toString(std::ostringstream& os,
       if (_subquery != nullptr) {
         os << _subquery->asString();
       } else {
-        os << "Missing Subquery\n"; 
+        os << "Missing Subquery\n";
       }
       break;
   }
