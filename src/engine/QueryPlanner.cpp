@@ -2,9 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./QueryPlanner.h"
 #include <algorithm>
 #include "../parser/ParseException.h"
-#include "./QueryPlanner.h"
 #include "CountAvailablePredicates.h"
 #include "Distinct.h"
 #include "Filter.h"
