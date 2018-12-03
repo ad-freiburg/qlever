@@ -36,7 +36,7 @@ string OrderBy::asString(size_t indent) const {
 // _____________________________________________________________________________
 vector<size_t> OrderBy::resultSortedOn() const {
   std::vector<size_t> sortedOn;
-  sortedOn.resize(_sortIndices.size());
+  sortedOn.reserve(_sortIndices.size());
   for (const pair<size_t, bool>& p : _sortIndices) {
     if (!p.second) {
       // Only ascending columns count as sorted.

@@ -139,9 +139,10 @@ class ParsedQuery {
 
   class GraphPatternOperation {
    public:
-    enum class Type { OPTIONAL, UNION };
+    enum class Type { OPTIONAL, UNION, SUBQUERY };
     GraphPatternOperation(Type type,
                           std::initializer_list<GraphPattern*> children);
+    GraphPatternOperation(Type type);
 
     // Move and copyconstructors to avoid double deletes on the trees children
     GraphPatternOperation(GraphPatternOperation&& other);
@@ -152,7 +153,10 @@ class ParsedQuery {
     void toString(std::ostringstream& os, int indentation = 0) const;
 
     Type _type;
-    std::vector<GraphPattern*> _childGraphPatterns;
+    union {
+      std::vector<GraphPattern*> _childGraphPatterns;
+      ParsedQuery* _subquery;
+    };
   };
 
   // Groups triplets and filters. Represents a node in a tree (as graph patterns
