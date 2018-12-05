@@ -218,7 +218,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
       if (ad_utility::getLowercase(inner.substr(h, 6)) == "select") {
         size_t selectPos = h;
         size_t endBracket = ad_utility::findClosingBracket(inner, k, '{', '}');
-        if (endBracket == std::numeric_limits<size_t>::max()) {
+        if (endBracket == size_t(-1)) {
           throw ParseException(
               "SELECT keyword found at " + std::to_string(selectPos) + " (" +
               inner.substr(selectPos, 15) +
@@ -234,7 +234,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
         }
         size_t closing_bracket =
             ad_utility::findClosingBracket(inner, openingBracket, '{', '}');
-        if (closing_bracket == std::numeric_limits<size_t>::max()) {
+        if (closing_bracket == size_t(-1)) {
           throw ParseException("The subquery at " + std::to_string(selectPos) +
                                "(" + inner.substr(selectPos, 15) +
                                ") is missing a closing bracket.");
