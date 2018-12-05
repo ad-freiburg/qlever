@@ -36,8 +36,11 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     childrenToAdd.pop_back();
     patternsToProcess.push_back(pattern);
     for (const ParsedQuery::GraphPatternOperation* op : pattern->_children) {
-      childrenToAdd.insert(childrenToAdd.end(), op->_childGraphPatterns.begin(),
-                           op->_childGraphPatterns.end());
+      if (op->_type != ParsedQuery::GraphPatternOperation::Type::SUBQUERY) {
+        childrenToAdd.insert(childrenToAdd.end(),
+                             op->_childGraphPatterns.begin(),
+                             op->_childGraphPatterns.end());
+      }
     }
   }
 
@@ -87,7 +90,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     // later on (so the same as a simple triple).
     childPlans.clear();
     std::vector<SubtreePlan> unionPlans;
-    for (const ParsedQuery::GraphPatternOperation* child : pattern->_children) {
+    std::vector<SubtreePlan> subqueryPlans;
+    for (ParsedQuery::GraphPatternOperation* child : pattern->_children) {
       switch (child->_type) {
         case ParsedQuery::GraphPatternOperation::Type::OPTIONAL:
           for (const ParsedQuery::GraphPattern* p :
@@ -95,7 +99,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
             childPlans.push_back(&patternPlans[p->_id]);
           }
           break;
-        case ParsedQuery::GraphPatternOperation::Type::UNION:
+        case ParsedQuery::GraphPatternOperation::Type::UNION: {
           // the efficiency of the union operation is not dependent on the
           // sorting of the inputs and its position is fixed so it does not
           // need to be part of the optimization of the child.
@@ -112,7 +116,13 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
               static_cast<Union*>(unionOp.get())->getVariableColumns());
           tree.setOperation(QueryExecutionTree::UNION, unionOp);
           childPlans.push_back(&unionPlans.back());
-          break;
+        } break;
+        case ParsedQuery::GraphPatternOperation::Type::SUBQUERY: {
+          subqueryPlans.emplace_back(_qec);
+          QueryExecutionTree tree = createExecutionTree(*child->_subquery);
+          *subqueryPlans.back()._qet.get() = tree;
+          childPlans.push_back(&subqueryPlans.back());
+        } break;
       }
     }
 

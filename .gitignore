@@ -33,4 +33,4 @@ e2e_data/*
 .idea
 
 # vim files
-.swp
+*.swp

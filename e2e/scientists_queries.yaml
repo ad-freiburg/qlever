@@ -477,3 +477,42 @@ queries:
       - selected: ["?object", "?count"]
       - contains_row: ['<Inventor>', '1616']
       - contains_row: ['<Astrologer>', '43']
+  - query : simple-subquery 
+    type: no-text
+    sparql: |
+      SELECT ?a ?h WHERE {
+        ?a <is-a> <Scientist> .
+        {
+          SELECT ?a WHERE {
+            ?a <Height> ?h .
+          }
+          ORDER BY DESC(?h)
+        }
+      }
+    checks:
+      - num_rows: 134 
+      - num_cols: 2
+      - selected: ["?a", "?h"]
+      - contains_row: ['<Daryl_Hannah>', 1.78]
+      - contains_row: ['<Marissa_Mayer>', 1.73]
+  - query : subquery-profession-avg-height 
+    type: no-text
+    sparql: |
+      SELECT ?a ?o ?h ?avg WHERE {
+        ?a <Profession> ?o .
+        ?a <Height> ?h .
+        {
+          SELECT ?o (AVG(?h) as ?avg) WHERE {
+            ?a <Profession> ?o .
+            ?a <Height> ?h .
+          }
+          GROUP BY ?o
+        }
+      }
+    checks:
+      - num_rows: 994 
+      - num_cols: 4
+      - selected: ["?a", "?o", "?h", "?avg"]
+      - contains_row: ['<Steve_Backshall>', '<Actor>', 1.8, 1.76627]
+      - contains_row: ['<Carl_Sagan>', '<Astrobiologist>', 1.8, 1.8]
+

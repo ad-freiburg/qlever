@@ -131,8 +131,15 @@ void ParsedQuery::expandPrefixes() {
     GraphPattern* pattern = graphPatterns.back();
     graphPatterns.pop_back();
     for (GraphPatternOperation* p : pattern->_children) {
-      graphPatterns.insert(graphPatterns.end(), p->_childGraphPatterns.begin(),
-                           p->_childGraphPatterns.end());
+      if (p->_type == GraphPatternOperation::Type::SUBQUERY) {
+        // Pass the prefixes to the subquery and expand them.
+        p->_subquery->_prefixes = _prefixes;
+        p->_subquery->expandPrefixes();
+      } else {
+        graphPatterns.insert(graphPatterns.end(),
+                             p->_childGraphPatterns.begin(),
+                             p->_childGraphPatterns.end());
+      }
     }
 
     for (auto& trip : pattern->_whereClauseTriples) {
@@ -391,7 +398,7 @@ void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
 ParsedQuery::GraphPatternOperation::GraphPatternOperation(
     ParsedQuery::GraphPatternOperation::Type type,
     std::initializer_list<ParsedQuery::GraphPattern*> children)
-    : _type(type) {
+    : _type(type), _childGraphPatterns() {
   switch (_type) {
     case Type::OPTIONAL:
       if (children.size() != 1) {
@@ -405,6 +412,10 @@ ParsedQuery::GraphPatternOperation::GraphPatternOperation(
                  "Union expects two sub graph patterns.");
       }
       break;
+    default:
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+               "This constructor should only be used for UNION and OPTIONAL "
+               "type operations.");
   }
   _childGraphPatterns.insert(_childGraphPatterns.end(), children.begin(),
                              children.end());
@@ -412,41 +423,81 @@ ParsedQuery::GraphPatternOperation::GraphPatternOperation(
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPatternOperation::GraphPatternOperation(
+    ParsedQuery::GraphPatternOperation::Type type)
+    : _type(type) {
+  switch (_type) {
+    case Type::SUBQUERY:
+      _subquery = nullptr;
+      break;
+    default:
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+               "This constructor should only be used for SUBQUERY"
+               "type operations.");
+  }
+}
+
+// _____________________________________________________________________________
+ParsedQuery::GraphPatternOperation::GraphPatternOperation(
     GraphPatternOperation&& other)
-    : _type(other._type),
-      _childGraphPatterns(std::move(other._childGraphPatterns)) {
-  other._childGraphPatterns.clear();
+    : _type(other._type) {
+  if (_type == Type::SUBQUERY) {
+    _subquery = other._subquery;
+    other._subquery = nullptr;
+  } else {
+    new (&_childGraphPatterns) std::vector<GraphPattern*>();
+    _childGraphPatterns = std::move(other._childGraphPatterns);
+    other._childGraphPatterns.clear();
+  }
 }
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPatternOperation::GraphPatternOperation(
     const GraphPatternOperation& other)
     : _type(other._type) {
-  _childGraphPatterns.reserve(other._childGraphPatterns.size());
-  for (const GraphPattern* child : other._childGraphPatterns) {
-    _childGraphPatterns.push_back(new GraphPattern(*child));
+  if (_type == Type::SUBQUERY) {
+    _subquery = new ParsedQuery(*other._subquery);
+  } else {
+    new (&_childGraphPatterns) std::vector<GraphPattern*>();
+    _childGraphPatterns.reserve(other._childGraphPatterns.size());
+    for (const GraphPattern* child : other._childGraphPatterns) {
+      _childGraphPatterns.push_back(new GraphPattern(*child));
+    }
   }
 }
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPatternOperation& ParsedQuery::GraphPatternOperation::
 operator=(const ParsedQuery::GraphPatternOperation& other) {
-  _type = other._type;
-  for (GraphPattern* p : _childGraphPatterns) {
-    delete p;
+  if (_type == Type::SUBQUERY) {
+    delete _subquery;
+  } else {
+    for (GraphPattern* p : _childGraphPatterns) {
+      delete p;
+    }
+    _childGraphPatterns.~vector<GraphPattern*>();
   }
-  _childGraphPatterns.clear();
-  _childGraphPatterns.reserve(other._childGraphPatterns.size());
-  for (const GraphPattern* p : other._childGraphPatterns) {
-    _childGraphPatterns.push_back(new GraphPattern(*p));
+  _type = other._type;
+  if (_type == Type::SUBQUERY) {
+    _subquery = new ParsedQuery(*other._subquery);
+  } else {
+    new (&_childGraphPatterns) std::vector<GraphPattern*>();
+    _childGraphPatterns.reserve(other._childGraphPatterns.size());
+    for (const GraphPattern* p : other._childGraphPatterns) {
+      _childGraphPatterns.push_back(new GraphPattern(*p));
+    }
   }
   return *this;
 }
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPatternOperation::~GraphPatternOperation() {
-  for (GraphPattern* child : _childGraphPatterns) {
-    delete child;
+  if (_type == Type::SUBQUERY) {
+    delete _subquery;
+  } else {
+    for (GraphPattern* child : _childGraphPatterns) {
+      delete child;
+    }
+    _childGraphPatterns.~vector<GraphPattern*>();
   }
 }
 
@@ -463,6 +514,13 @@ void ParsedQuery::GraphPatternOperation::toString(std::ostringstream& os,
       _childGraphPatterns[0]->toString(os, indentation);
       os << " UNION ";
       _childGraphPatterns[1]->toString(os, indentation);
+      break;
+    case Type::SUBQUERY:
+      if (_subquery != nullptr) {
+        os << _subquery->asString();
+      } else {
+        os << "Missing Subquery\n";
+      }
       break;
   }
 }

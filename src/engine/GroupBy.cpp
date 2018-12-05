@@ -111,9 +111,9 @@ ad_utility::HashMap<string, size_t> GroupBy::getVariableColumns() const {
 }
 
 float GroupBy::getMultiplicity(size_t col) {
-  // group by should currently not be used in the optimizer
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-           "GroupBy does not yet compute multiplicities.");
+  // Group by should currently not be used in the optimizer, unless
+  // it is part of a subquery. In that case multiplicities may only be
+  // taken from the actual result
   (void)col;
   return 1;
 }

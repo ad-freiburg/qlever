@@ -3,6 +3,9 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./SparqlParser.h"
+
+#include <unordered_set>
+
 #include "../global/Constants.h"
 #include "../util/Conversions.h"
 #include "../util/Exception.h"
@@ -207,6 +210,54 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
         continue;
       }
     } else if (inner[k] == '{') {
+      // look for a subquery
+      size_t h = k + 1;
+      while (std::isspace(inner[h])) {
+        h++;
+      }
+      if (ad_utility::getLowercase(inner.substr(h, 6)) == "select") {
+        size_t selectPos = h;
+        size_t endBracket = ad_utility::findClosingBracket(inner, k, '{', '}');
+        if (endBracket == size_t(-1)) {
+          throw ParseException(
+              "SELECT keyword found at " + std::to_string(selectPos) + " (" +
+              inner.substr(selectPos, 15) +
+              ") without a closing bracket for the outer brackets.");
+        }
+        // look for a subquery
+        size_t openingBracket = inner.find('{', selectPos);
+        if (openingBracket == std::string::npos) {
+          throw ParseException("SELECT keyword found at " +
+                               std::to_string(selectPos) + " (" +
+                               inner.substr(selectPos, 15) +
+                               ") without an accompanying opening bracket.");
+        }
+        size_t closing_bracket =
+            ad_utility::findClosingBracket(inner, openingBracket, '{', '}');
+        if (closing_bracket == size_t(-1)) {
+          throw ParseException("The subquery at " + std::to_string(selectPos) +
+                               "(" + inner.substr(selectPos, 15) +
+                               ") is missing a closing bracket.");
+        }
+        std::string subquery_string =
+            inner.substr(selectPos, endBracket - selectPos);
+        LOG(DEBUG) << "Found subquery: " << subquery_string << std::endl;
+
+        // create the subquery operation
+        ParsedQuery::GraphPatternOperation* u =
+            new ParsedQuery::GraphPatternOperation(
+                ParsedQuery::GraphPatternOperation::Type::SUBQUERY);
+        u->_subquery = new ParsedQuery(parse(subquery_string));
+        // Remove all manual ordering from the subquery as it would be changed
+        // by the parent query.
+        u->_subquery->_orderBy.clear();
+        currentPattern->_children.push_back(u);
+
+        // continue parsing after the union statement
+        start = endBracket + 1;
+        continue;
+      }
+
       // look for a UNION
       // find the opening and closing bracket of the left side
       size_t leftOpeningBracket = k;
@@ -281,6 +332,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
         start = (posOfDelim == string::npos ? end + 1 : posOfDelim + 1);
         continue;
       }
+    } else if (inner[k] == 'S' || inner[k] == 's') {
     }
     while (k < inner.size()) {
       if (!insideUri && !insideLiteral && !insideNsThing) {
