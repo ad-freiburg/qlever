@@ -2,9 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./QueryPlanner.h"
 #include <algorithm>
 #include "../parser/ParseException.h"
+#include "./QueryPlanner.h"
 #include "CountAvailablePredicates.h"
 #include "Distinct.h"
 #include "Filter.h"
@@ -12,6 +12,7 @@
 #include "HasPredicateScan.h"
 #include "IndexScan.h"
 #include "Join.h"
+#include "MultiColumnJoin.h"
 #include "OptionalJoin.h"
 #include "OrderBy.h"
 #include "Sort.h"
@@ -1142,6 +1143,16 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
                 .emplace_back(plan);
           }
           continue;
+        } else if (jcs.size() > 2) {
+          // this can happen when e.g. subqueries are used
+          SubtreePlan plan = multiColumnJoin(a[i], b[j]);
+          plan._idsOfIncludedNodes = a[i]._idsOfIncludedNodes;
+          plan.addAllNodes(b[j]._idsOfIncludedNodes);
+          plan._idsOfIncludedFilters = a[i]._idsOfIncludedFilters;
+          plan._idsOfIncludedFilters |= b[j]._idsOfIncludedFilters;
+          candidates[getPruningKey(plan, plan._qet->resultSortedOn())]
+              .emplace_back(plan);
+          continue;
         }
 
         // CASE: JOIN ON ONE COLUMN ONLY.
@@ -1406,6 +1417,60 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
   tree.setVariableColumns(
       static_cast<OptionalJoin*>(join.get())->getVariableColumns());
   tree.setOperation(QueryExecutionTree::OPTIONAL_JOIN, join);
+
+  return plan;
+}
+
+// _____________________________________________________________________________
+QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(const SubtreePlan& a,
+                                          const SubtreePlan& b) const {
+  SubtreePlan plan(_qec);
+
+  std::vector<std::array<Id, 2>> jcs = getJoinColumns(a, b);
+
+  const vector<size_t>& aSortedOn = a._qet.get()->resultSortedOn();
+  const vector<size_t>& bSortedOn = b._qet.get()->resultSortedOn();
+
+  bool aSorted = aSortedOn.size() >= jcs.size();
+  // TODO: We could probably also accept permutations of the join columns
+  // as the order of a here and then permute the join columns to match the
+  // sorted columns of a or b (whichever is larger).
+  for (size_t i = 0; aSorted && i < jcs.size(); i++) {
+    aSorted = aSorted && jcs[i][0] == aSortedOn[i];
+  }
+  bool bSorted = bSortedOn.size() >= jcs.size();
+  for (size_t i = 0; bSorted && i < jcs.size(); i++) {
+    bSorted = bSorted && jcs[i][1] == bSortedOn[i];
+  }
+
+  // a and b need to be ordered properly first
+  vector<pair<size_t, bool>> sortIndicesA;
+  vector<pair<size_t, bool>> sortIndicesB;
+  for (array<Id, 2>& jc : jcs) {
+    sortIndicesA.push_back(std::make_pair(jc[0], false));
+    sortIndicesB.push_back(std::make_pair(jc[1], false));
+  }
+
+  SubtreePlan orderByPlanA(_qec), orderByPlanB(_qec);
+  std::shared_ptr<Operation> orderByA(new OrderBy(_qec, a._qet, sortIndicesA));
+  std::shared_ptr<Operation> orderByB(new OrderBy(_qec, b._qet, sortIndicesB));
+
+  if (!aSorted) {
+    orderByPlanA._qet->setVariableColumns(a._qet->getVariableColumnMap());
+    orderByPlanA._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByA);
+  }
+  if (!bSorted) {
+    orderByPlanB._qet->setVariableColumns(b._qet->getVariableColumnMap());
+    orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
+  }
+
+  std::shared_ptr<Operation> join(new MultiColumnJoin(
+      _qec, aSorted ? a._qet : orderByPlanA._qet, 
+      bSorted ? b._qet : orderByPlanB._qet, jcs));
+  QueryExecutionTree& tree = *plan._qet.get();
+  tree.setVariableColumns(
+      static_cast<OptionalJoin*>(join.get())->getVariableColumns());
+  tree.setOperation(QueryExecutionTree::MULTICOLUMN_JOIN, join);
 
   return plan;
 }
