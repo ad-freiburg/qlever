@@ -1422,8 +1422,8 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
 }
 
 // _____________________________________________________________________________
-QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(const SubtreePlan& a,
-                                          const SubtreePlan& b) const {
+QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
+    const SubtreePlan& a, const SubtreePlan& b) const {
   SubtreePlan plan(_qec);
 
   std::vector<std::array<Id, 2>> jcs = getJoinColumns(a, b);
@@ -1464,9 +1464,9 @@ QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(const SubtreePlan& a,
     orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
   }
 
-  std::shared_ptr<Operation> join(new MultiColumnJoin(
-      _qec, aSorted ? a._qet : orderByPlanA._qet, 
-      bSorted ? b._qet : orderByPlanB._qet, jcs));
+  std::shared_ptr<Operation> join(
+      new MultiColumnJoin(_qec, aSorted ? a._qet : orderByPlanA._qet,
+                          bSorted ? b._qet : orderByPlanB._qet, jcs));
   QueryExecutionTree& tree = *plan._qet.get();
   tree.setVariableColumns(
       static_cast<OptionalJoin*>(join.get())->getVariableColumns());
@@ -1659,11 +1659,13 @@ std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
 vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, const vector<SparqlFilter>& filters,
     const vector<QueryPlanner::SubtreePlan*>& children) const {
-  LOG(TRACE) << "Fill DP table... (there are " << tg._nodeMap.size()
-             << " triples to join)" << std::endl;
+  LOG(TRACE) << "Fill DP table... (there are "
+             << tg._nodeMap.size() + children.size() << " triples to join)"
+             << std::endl;
   vector<vector<SubtreePlan>> dpTab;
   dpTab.emplace_back(seedWithScansAndText(tg, children));
-  applyFiltersIfPossible(dpTab.back(), filters, tg._nodeMap.size() == 1);
+  applyFiltersIfPossible(dpTab.back(), filters,
+                         tg._nodeMap.size() + children.size() == 1);
 
   for (size_t k = 2; k <= tg._nodeMap.size() + children.size(); ++k) {
     LOG(TRACE) << "Producing plans that unite " << k << " triples."
@@ -1675,7 +1677,8 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
         continue;
       }
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
-      applyFiltersIfPossible(dpTab.back(), filters, k == tg._nodeMap.size());
+      applyFiltersIfPossible(dpTab.back(), filters,
+                             k == (tg._nodeMap.size() + children.size()));
     }
     if (dpTab[k - 1].size() == 0) {
       AD_THROW(ad_semsearch::Exception::BAD_QUERY,
