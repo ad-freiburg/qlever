@@ -80,6 +80,9 @@ class Server {
   string composeResponseJson(const string& query,
                              const ParseException& e) const;
 
+  string composeResponseJson(const string& query,
+                             const std::runtime_error& e) const;
+
   string composeStatsJson() const;
 
   mutable ad_utility::Timer _requestProcessingTimer;

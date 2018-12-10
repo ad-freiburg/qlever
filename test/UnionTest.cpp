@@ -38,7 +38,7 @@ TEST(UnionTest, computeUnion) {
 
   const vector<array<Id, 2>>* resData =
       static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
-  ASSERT_EQ(5, resData->size());
+  ASSERT_EQ(5u, resData->size());
   for (size_t i = 0; i < leftData->size(); i++) {
     ASSERT_EQ((*leftData)[i][0], resData->at(i)[0]);
     ASSERT_EQ(ID_NO_VALUE, resData->at(i)[1]);
@@ -76,7 +76,7 @@ TEST(UnionTest, computeUnionOptimized) {
 
   const vector<array<Id, 2>>* resData =
       static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
-  ASSERT_EQ(5, resData->size());
+  ASSERT_EQ(5u, resData->size());
   for (size_t i = 0; i < leftData->size(); i++) {
     ASSERT_EQ((*leftData)[i][0], resData->at(i)[0]);
     ASSERT_EQ((*leftData)[i][1], resData->at(i)[1]);
