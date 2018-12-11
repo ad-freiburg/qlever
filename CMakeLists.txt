@@ -60,7 +60,7 @@ include_directories(third_party/googletest/googletest/include)
 # NLOHNMANN-JSON
 ################################
 # Header only, nothing to include
-include_directories(third_party/json/include/)
+include_directories(third_party/json/)
 
 ################################
 # STXXL
