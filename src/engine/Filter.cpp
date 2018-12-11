@@ -2,10 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./Filter.h"
 #include <optional>
 #include <regex>
 #include <sstream>
-#include "./Filter.h"
 #include "./QueryExecutionTree.h"
 
 using std::string;

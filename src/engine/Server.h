@@ -78,10 +78,7 @@ class Server {
                              const ad_semsearch::Exception& e) const;
 
   string composeResponseJson(const string& query,
-                             const ParseException& e) const;
-
-  string composeResponseJson(const string& query,
-                             const std::runtime_error& e) const;
+                             const std::exception* e) const;
 
   string composeStatsJson() const;
 

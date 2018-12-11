@@ -2,9 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./QueryPlanner.h"
 #include <algorithm>
 #include "../parser/ParseException.h"
-#include "./QueryPlanner.h"
 #include "CountAvailablePredicates.h"
 #include "Distinct.h"
 #include "Filter.h"
@@ -1128,6 +1128,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
               right->setVariableColumns(b[j]._qet->getVariableColumnMap());
               right->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
             }
+            // TODO(florian): consider replacing this with a multicolumn join.
             // Create the join operation.
             SubtreePlan plan(_qec);
             auto& tree = *plan._qet.get();
@@ -1324,6 +1325,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           right.get()->setOperation(QueryExecutionTree::SORT, sort);
         }
 
+        // TODO(florian): consider replacing this with a multicolumn join.
         // Create the join operation.
         SubtreePlan plan(_qec);
         auto& tree = *plan._qet.get();
@@ -1678,7 +1680,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
       }
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
       applyFiltersIfPossible(dpTab.back(), filters,
-                             k == (tg._nodeMap.size() + children.size()));
+                             tg._nodeMap.size() + children.size() == k);
     }
     if (dpTab[k - 1].size() == 0) {
       AD_THROW(ad_semsearch::Exception::BAD_QUERY,

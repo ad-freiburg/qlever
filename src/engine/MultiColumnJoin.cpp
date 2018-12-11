@@ -18,8 +18,11 @@ MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
     _left = t1;
     _right = t2;
   } else {
+    // Swap the two subtrees
     _left = t2;
     _right = t1;
+    // As the subtrees have been swapped the join columns need to be swapped
+    // as well.
     for (unsigned int i = 0; i < _joinColumns.size(); i++) {
       std::swap(_joinColumns[i][0], _joinColumns[i][1]);
     }
@@ -53,7 +56,7 @@ string MultiColumnJoin::asString(size_t indent) const {
 // Used to generate all up to 125 combinations of left, right and result size.
 template <size_t I, size_t J, size_t K>
 struct MultiColumnJoinCaller {
-  static void call(size_t i, size_t j, size_t k,
+  static void call(const size_t i, const size_t j, const size_t k,
                    shared_ptr<const ResultTable> leftResult,
                    shared_ptr<const ResultTable> rightResult,
                    const std::vector<std::array<Id, 2>>& joinColumns,
@@ -70,25 +73,26 @@ struct MultiColumnJoinCaller {
               static_cast<vector<array<Id, K>>*>(result->_fixedSizeData),
               resultSize);
         } else {
-          MultiColumnJoinCaller<I, J, K + 1>::call(i, j, k, leftResult, rightResult,
-                                               joinColumns, result, resultSize);
+          MultiColumnJoinCaller<I, J, K + 1>::call(i, j, k, leftResult,
+                                                   rightResult, joinColumns,
+                                                   result, resultSize);
         }
       } else {
-        MultiColumnJoinCaller<I, J + 1, K>::call(i, j, k, leftResult, rightResult,
-                                             joinColumns, result, resultSize);
+        MultiColumnJoinCaller<I, J + 1, K>::call(
+            i, j, k, leftResult, rightResult, joinColumns, result, resultSize);
       }
     } else {
       // K has to be at least as large as I (otherwise we couldn't store
       // all columns).
-      MultiColumnJoinCaller<I + 1, J, K + 1>::call(i, j, k, leftResult, rightResult,
-                                               joinColumns, result, resultSize);
+      MultiColumnJoinCaller<I + 1, J, K + 1>::call(
+          i, j, k, leftResult, rightResult, joinColumns, result, resultSize);
     }
   }
 };
 
 template <size_t I, size_t K>
 struct MultiColumnJoinCaller<I, 6, K> {
-  static void call(size_t i, size_t j, size_t k,
+  static void call(const size_t i, const size_t j, const size_t k,
                    shared_ptr<const ResultTable> leftResult,
                    shared_ptr<const ResultTable> rightResult,
                    const std::vector<std::array<Id, 2>>& joinColumns,
@@ -107,7 +111,7 @@ struct MultiColumnJoinCaller<I, 6, K> {
 
 template <size_t I, size_t J>
 struct MultiColumnJoinCaller<I, J, 6> {
-  static void call(size_t i, size_t j, size_t k,
+  static void call(const size_t i, const size_t j, const size_t k,
                    shared_ptr<const ResultTable> leftResult,
                    shared_ptr<const ResultTable> rightResult,
                    const std::vector<std::array<Id, 2>>& joinColumns,
@@ -126,7 +130,7 @@ struct MultiColumnJoinCaller<I, J, 6> {
 
 template <size_t J>
 struct MultiColumnJoinCaller<6, J, 6> {
-  static void call(size_t i, size_t j, size_t k,
+  static void call(const size_t i, const size_t j, const size_t k,
                    shared_ptr<const ResultTable> leftResult,
                    shared_ptr<const ResultTable> rightResult,
                    const std::vector<std::array<Id, 2>>& joinColumns,
@@ -145,7 +149,7 @@ struct MultiColumnJoinCaller<6, J, 6> {
 
 template <>
 struct MultiColumnJoinCaller<6, 6, 6> {
-  static void call(size_t i, size_t j, size_t k,
+  static void call(const size_t i, const size_t j, const size_t k,
                    shared_ptr<const ResultTable> leftResult,
                    shared_ptr<const ResultTable> rightResult,
                    const std::vector<std::array<Id, 2>>& joinColumns,
@@ -268,9 +272,9 @@ size_t MultiColumnJoin::getSizeEstimate() {
 size_t MultiColumnJoin::getCostEstimate() {
   size_t costEstimate =
       getSizeEstimate() + _left->getSizeEstimate() + _right->getSizeEstimate();
-  // The optional join is about 3-7 times slower than a normal join, due to
+  // This join is slower than a normal join, due to
   // its increased complexity
-  costEstimate *= 4;
+  costEstimate *= 2;
   // Make the join 7% more expensive per join column
   costEstimate *= (1 + (_joinColumns.size() - 1) * 0.07);
   return _left->getCostEstimate() + _right->getCostEstimate() + costEstimate;
@@ -279,7 +283,7 @@ size_t MultiColumnJoin::getCostEstimate() {
 // _____________________________________________________________________________
 void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
   // The number of distinct entries in the result is at most the minimum of
-  // the numbers of distinc entries in all join columns.
+  // the numbers of distinct entries in all join columns.
   // The multiplicity in the result is approximated by the product of the
   // maximum of the multiplicities of each side.
 
@@ -367,6 +371,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
     joinColumnBitmap_b |= (1 << jc[1]);
   }
 
+  // TODO(florian): Check if this actually improves the performance.
   // Cast away constness so we can add sentinels that will be removed
   // in the end and create and add those sentinels.
   A& l1 = const_cast<A&>(a);
