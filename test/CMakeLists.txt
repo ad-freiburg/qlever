@@ -78,3 +78,6 @@ target_link_libraries(TokenTest parser re2 gtest_main -pthread)
 
 add_executable(TurtleParserTest TurtleParserTest.cpp)
 target_link_libraries(TurtleParserTest parser re2 gtest_main -pthread)
+
+add_executable(MultiColumnJoinTest MultiColumnJoinTest.cpp)
+target_link_libraries(MultiColumnJoinTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})

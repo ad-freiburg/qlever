@@ -437,11 +437,20 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
       }
     case SparqlFilter::REGEX: {
       std::regex self_regex;
-      if (_regexIgnoreCase) {
-        self_regex.assign(_rhs, std::regex_constants::ECMAScript |
-                                    std::regex_constants::icase);
-      } else {
-        self_regex.assign(_rhs, std::regex_constants::ECMAScript);
+      try {
+        if (_regexIgnoreCase) {
+          self_regex.assign(_rhs, std::regex_constants::ECMAScript |
+                                      std::regex_constants::icase);
+        } else {
+          self_regex.assign(_rhs, std::regex_constants::ECMAScript);
+        }
+      } catch (const std::regex_error& e) {
+        // Rethrow the regex error with more information. Can't use the
+        // regex_error here as the constructor does not allow setting the
+        // error message.
+        throw std::runtime_error(
+            "The regex '" + _rhs +
+            "'is not an ECMAScript regex: " + std::string(e.what()));
       }
       getEngine().filter(
           *static_cast<vector<RT>*>(subRes->_fixedSizeData),

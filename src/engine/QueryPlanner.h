@@ -210,6 +210,7 @@ class QueryPlanner {
   SubtreePlan getTextLeafPlan(const TripleGraph::Node& node) const;
 
   SubtreePlan optionalJoin(const SubtreePlan& a, const SubtreePlan& b) const;
+  SubtreePlan multiColumnJoin(const SubtreePlan& a, const SubtreePlan& b) const;
 
   /**
    * @brief Determines if the pattern trick (and in turn the

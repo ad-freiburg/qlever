@@ -184,8 +184,8 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       }
     } catch (const ad_semsearch::Exception& e) {
       response = composeResponseJson(query, e);
-    } catch (const ParseException& e) {
-      response = composeResponseJson(query, e);
+    } catch (const std::exception& e) {
+      response = composeResponseJson(query, &e);
     }
     string httpResponse = createHttpResponse(response, contentType);
     auto bytesSent = client->send(httpResponse);
@@ -404,7 +404,7 @@ string Server::composeResponseJson(
 
 // _____________________________________________________________________________
 string Server::composeResponseJson(const string& query,
-                                   const ParseException& exception) const {
+                                   const std::exception* exception) const {
   std::ostringstream os;
   _requestProcessingTimer.stop();
 
@@ -417,7 +417,7 @@ string Server::composeResponseJson(const string& query,
      << "\"computeResult\": \"" << _requestProcessingTimer.msecs() << "ms\"\n"
      << "},\n";
 
-  string msg = ad_utility::toJson(exception.what());
+  string msg = ad_utility::toJson(exception->what());
 
   os << "\"exception\": " << msg << "\n"
      << "}\n";

@@ -28,6 +28,7 @@ add_library(engine
         GroupBy.cpp GroupBy.h
         HasPredicateScan.cpp HasPredicateScan.h
         Union.cpp Union.h
+        MultiColumnJoin.cpp MultiColumnJoin.h
 )
 
 target_link_libraries(engine index parser)
