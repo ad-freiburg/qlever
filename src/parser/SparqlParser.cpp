@@ -447,6 +447,9 @@ void SparqlParser::addWhereTriple(const string& str,
     }
   }
   string o = str.substr(i, j - i);
+  if (o[0] == '"') {
+    o = parseLiteral(o, true);
+  }
   if (p == CONTAINS_WORD_PREDICATE || p == CONTAINS_WORD_PREDICATE_NS) {
     o = stripAndLowercaseKeywordLiteral(o);
   }
@@ -538,6 +541,11 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
       AD_CHECK(parts.size() == 2 || (parts.size() == 3 && pred == "regex"));
       std::string lhs = ad_utility::strip(parts[0], ' ');
       std::string rhs = ad_utility::strip(parts[1], ' ');
+      if (rhs[0] == '"') {
+        // Parse the rhs as a literal, throw an exception if it is malformed
+        // or not a literal.
+        rhs = parseLiteral(rhs, true);
+      }
       if (pred == "langMatches") {
         if (!pattern) {
           AD_THROW(
@@ -724,4 +732,77 @@ string SparqlParser::stripAndLowercaseKeywordLiteral(const string& lit) {
     return ad_utility::getLowercaseUtf8(stripped);
   }
   return lit;
+}
+
+// _____________________________________________________________________________
+string SparqlParser::parseLiteral(const string& literal, bool isEntireString,
+                                  size_t off) {
+  std::stringstream out;
+  size_t pos = off;
+  if (isEntireString) {
+    // check for a leading qutation mark
+    while (pos < literal.size() &&
+           std::isspace(static_cast<unsigned char>(literal[pos]))) {
+      pos++;
+    }
+    if (pos == literal.size() || literal[pos] != '"') {
+      throw ParseException("The literal: " + literal +
+                           " does not begin with a quotation mark.");
+    }
+  }
+  while (pos < literal.size() && literal[pos] != '"') {
+    pos++;
+  }
+  if (pos == literal.size()) {
+    // the string does not contain a literal
+    return "";
+  }
+  out << '"';
+  pos++;
+  bool escaped = false;
+  while (pos < literal.size() && (escaped || literal[pos] != '"')) {
+    escaped = false;
+    if (literal[pos] == '\\' && pos + 1 < literal.size() &&
+        literal[pos + 1] == '"') {
+      // Allow for escaping " using \ but do not change any other form of
+      // escaping.
+      escaped = true;
+    } else {
+      out << literal[pos];
+    }
+    pos++;
+  }
+  out << '"';
+  pos++;
+  if (pos < literal.size() && literal[pos] == '@') {
+    // add the language tag
+    // allow for ascii based language tags (no current language tag should
+    // contain non ascii letters).
+    while (pos < literal.size() &&
+           std::isalpha(static_cast<unsigned char>(literal[pos]))) {
+      out << literal[pos];
+      pos++;
+    }
+  }
+  if (pos + 1 < literal.size() && literal[pos] == '^' &&
+      literal[pos + 1] == '^') {
+    // add the xsd type
+    while (pos < literal.size() &&
+           !std::isspace(static_cast<unsigned char>(literal[pos]))) {
+      out << literal[pos];
+      pos++;
+    }
+  }
+  if (isEntireString && pos < literal.size()) {
+    // check for trailing non whitespace characters
+    while (pos < literal.size() &&
+           std::isspace(static_cast<unsigned char>(literal[pos]))) {
+      pos++;
+    }
+    if (pos < literal.size()) {
+      throw ParseException("The literal: " + literal +
+                           " was not terminated properly.");
+    }
+  }
+  return out.str();
 }

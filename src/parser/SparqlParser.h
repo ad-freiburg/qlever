@@ -27,4 +27,13 @@ class SparqlParser {
                         ParsedQuery::GraphPattern* pattern = nullptr);
 
   static string stripAndLowercaseKeywordLiteral(const string& lit);
+
+  /**
+   * @brief This method looks for the first string literal it can find and
+   * parses it. During the parsing any escaped characters are resolved (e.g. \")
+   * If isEntireString is true an exception is thrown if the entire string
+   * is not a literal (apart from any leading and trailing whitespace).
+   **/
+  static string parseLiteral(const string& literal, bool isEntireString,
+                             size_t off = 0);
 };
