@@ -60,8 +60,7 @@ if [ "$1" != "no-index" ]; then
 	./IndexBuilderMain -a -l -i "$INDEX" \
 		-n "$INPUT.nt" \
 		-w "$INPUT.wordsfile.tsv" \
-		-d "$INPUT.docsfile.tsv" \
-		--patterns || bail "Building Index failed"
+		-d "$INPUT.docsfile.tsv" || bail "Building Index failed"
 	popd
 fi
 
@@ -69,7 +68,7 @@ fi
 # then we can't easily get the SERVER_PID out of that subshell
 pushd "$BINARY_DIR"
 echo "Launching server from path $(pwd)"
-./ServerMain -i "$INDEX" -p 9099 -t -a --patterns &> server_log.txt &
+./ServerMain -i "$INDEX" -p 9099 -t -a &> server_log.txt &
 SERVER_PID=$!
 popd
 

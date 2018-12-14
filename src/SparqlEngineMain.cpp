@@ -30,7 +30,7 @@ struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
                            {"index", required_argument, NULL, 'i'},
                            {"interactive", no_argument, NULL, 'I'},
                            {"on-disk-literals", no_argument, NULL, 'l'},
-                           {"patterns", no_argument, NULL, 'P'},
+                           {"no-patterns", no_argument, NULL, 'P'},
                            {"queryfile", required_argument, NULL, 'q'},
                            {"text", no_argument, NULL, 't'},
                            {NULL, 0, NULL, 0}};
@@ -60,8 +60,9 @@ void printUsage(char* execName) {
        << "    "
        << "Indicates that the literals can be found on disk with the index."
        << endl;
-  cout << "  " << std::setw(20) << "P, patterns" << std::setw(1) << "    "
-       << "Use relation patterns for fast ql:has-relation queries." << endl;
+  cout << "  " << std::setw(20) << "no-patterns" << std::setw(1) << "    "
+       << "Disable the use of patterns. This disables ql:has-predicate."
+       << endl;
   cout << "  " << std::setw(20) << "q, queryfile" << std::setw(1) << "    "
        << "Path to a file containing one query per line." << endl;
   cout << "  " << std::setw(20) << "t, text" << std::setw(1) << "    "
@@ -91,7 +92,7 @@ int main(int argc, char** argv) {
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "q:Ii:tc:lahuP", options, NULL);
+    int c = getopt_long(argc, argv, "q:Ii:tc:lahu", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'q':
@@ -120,7 +121,7 @@ int main(int argc, char** argv) {
         exit(0);
         break;
       case 'P':
-        usePatterns = true;
+        usePatterns = false;
         break;
       default:
         cout << endl

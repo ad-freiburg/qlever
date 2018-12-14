@@ -1365,8 +1365,8 @@ void Index::scanOPS(Id object, Index::WidthTwoList* result) const {
 void Index::throwExceptionIfNoPatterns() const {
   if (!_usePatterns) {
     AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-             "The requested feature requires a loaded patterns file (Use the "
-             "-P or --patterns option when running the executable).");
+             "The requested feature requires a loaded patterns file ("
+             "do not specify the --no-patterns option for this to work)");
   }
 }
 
