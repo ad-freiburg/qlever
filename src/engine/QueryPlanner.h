@@ -225,4 +225,18 @@ class QueryPlanner {
    */
   bool checkUsePatternTrick(ParsedQuery* pq,
                             SparqlTriple* patternTrickTriple) const;
+
+  /**
+   * @brief Check if the query fulfills the requirements of a FullRelationScan
+   *        and build a QueryExecutionTree if the requirements are fulfilled.
+   *        The requirements for a FullRelationScan are:
+   *         - There must only be one triple that only contains variables
+   *         - Only one of these variables (and optionaly its count) must be
+   *           selected.
+   *         - The query must group on the selected variable.
+   * @returns An optional that containts a QueryExecutionTree if the query
+   *          matches the requirements for a FullRelationScan.
+   */
+  std::optional<QueryExecutionTree> checkUseFullRelationScan(
+      const ParsedQuery& pq) const;
 };

@@ -27,6 +27,7 @@ add_library(engine
         CountAvailablePredicates.cpp CountAvailablePredicates.h
         GroupBy.cpp GroupBy.h
         HasPredicateScan.cpp HasPredicateScan.h
+        FullRelationScan.cpp FullRelationScan.h
         Union.cpp Union.h
         MultiColumnJoin.cpp MultiColumnJoin.h
 )

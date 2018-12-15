@@ -8,6 +8,7 @@
 #include "CountAvailablePredicates.h"
 #include "Distinct.h"
 #include "Filter.h"
+#include "FullRelationScan.h"
 #include "GroupBy.h"
 #include "HasPredicateScan.h"
 #include "IndexScan.h"
@@ -26,6 +27,14 @@ QueryPlanner::QueryPlanner(QueryExecutionContext* qec) : _qec(qec) {}
 
 // _____________________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
+  // Check if a FullRelationScan plan can be used, and return it if that is the
+  // case
+  std::optional<QueryExecutionTree> optionalFullRelationScan =
+      checkUseFullRelationScan(pq);
+  if (optionalFullRelationScan) {
+    return optionalFullRelationScan.value();
+  }
+
   // Create a topological sorting of the trees GraphPatterns where children are
   // in the list after their parents. This allows for ensuring that children are
   // already optimized when their parents need to be optimized
@@ -360,6 +369,88 @@ bool QueryPlanner::checkUsePatternTrick(
     }
   }
   return usePatternTrick;
+}
+
+// _____________________________________________________________________________
+std::optional<QueryExecutionTree> QueryPlanner::checkUseFullRelationScan(
+    const ParsedQuery& pq) const {
+  const ParsedQuery::GraphPattern* pattern = &pq._rootGraphPattern;
+  // Check that there is only one triple on no child graph patterns and only
+  // two variables are selected. Also check that we group by one variable.
+  if (pattern->_whereClauseTriples.size() > 1 ||
+      pattern->_children.size() > 0 || pq._selectedVariables.size() > 2 ||
+      pq._groupByVariables.size() != 1) {
+    return std::optional<QueryExecutionTree>();
+  }
+
+  // Get the selected variable candidate
+  std::string var = pq._selectedVariables[0];
+
+  // check that the group by groups on var
+  if (pq._groupByVariables[0] != var) {
+    return std::optional<QueryExecutionTree>();
+  }
+
+  // Check that the triple only contains variables and that one of these
+  // variables is var
+  const SparqlTriple& triple = pattern->_whereClauseTriples[0];
+  if (triple._s[0] != '?' || triple._p[0] != '?' || triple._o[0] != '?' ||
+      (triple._s != var && triple._o != var && triple._p != var)) {
+    return std::optional<QueryExecutionTree>();
+  }
+
+  // Determine the potential scan type
+  FullRelationScan::ScanType type = FullRelationScan::ScanType::SUBJECT;
+  if (var == triple._o) {
+    type = FullRelationScan::ScanType::OBJECT;
+  } else if (var == triple._p) {
+    type = FullRelationScan::ScanType::PREDICATE;
+  }
+
+  std::string count_var = "?count";
+  if (pq._selectedVariables.size() == 2) {
+    // check that there is one alias on the correct input and output variables
+    if (pq._aliases.size() != 1 || pq._aliases[0]._inVarName != var ||
+        pq._aliases[0]._outVarName != pq._selectedVariables[1]) {
+      return std::optional<QueryExecutionTree>();
+    }
+    // check that that one alias is a count alias
+    std::string funcLower =
+        ad_utility::getLowercaseUtf8(pq._aliases[0]._function);
+    if (!ad_utility::startsWith(funcLower, "count")) {
+      return std::optional<QueryExecutionTree>();
+    }
+    count_var = pq._selectedVariables[1];
+  }
+
+  // The query passed all required testing, assemble the query execution tree
+  SubtreePlan plan(_qec);
+  QueryExecutionTree& tree = *plan._qet.get();
+  std::shared_ptr<Operation> fullRelationScan(
+      new FullRelationScan(_qec, type, var, count_var));
+  tree.setVariableColumns(static_cast<FullRelationScan*>(fullRelationScan.get())
+                              ->getVariableColumns());
+  tree.setOperation(QueryExecutionTree::FULL_RELATION_SCAN, fullRelationScan);
+
+  std::vector<std::vector<SubtreePlan>> dpTable;
+  dpTable.push_back({plan});
+
+  // HAVING
+  if (pq._havingClauses.size() > 0) {
+    dpTable.emplace_back(getHavingRow(pq, dpTable));
+  }
+
+  // DISTINCT
+  if (pq._distinct) {
+    dpTable.emplace_back(getDistinctRow(pq, dpTable));
+  }
+
+  // ORDER BY
+  if (pq._orderBy.size() > 0) {
+    dpTable.emplace_back(getOrderByRow(pq, dpTable));
+  }
+
+  return *dpTable.back()[0]._qet.get();
 }
 
 // _____________________________________________________________________________

@@ -495,6 +495,52 @@ queries:
       - selected: ["?a", "?h"]
       - contains_row: ['<Daryl_Hannah>', 1.78]
       - contains_row: ['<Marissa_Mayer>', 1.73]
+  - query : full-relation-scan-subject 
+    type: no-text
+    sparql: |
+      SELECT ?a (COUNT(?a) as ?count2) WHERE {
+        ?a ?b ?c .
+      }
+      GROUP BY ?a
+      ORDER BY DESC(?count2)
+      LIMIT 100
+    checks:
+      - num_rows: 100
+      - num_cols: 2
+      - selected: ["?a", "?count2"]
+      - contains_row: ['<Ed_Begley,_Jr.>', 270]
+      - contains_row: ['<Isaac_Newton>', 74]
+  - query : full-relation-scan-predicate
+    type: no-text
+    sparql: |
+      SELECT ?b (COUNT(?b) as ?count2) WHERE {
+        ?a ?b ?c .
+      }
+      GROUP BY ?b
+      ORDER BY ASC(?count2)
+      LIMIT 100
+    checks:
+      - num_rows: 100
+      - num_cols: 2
+      - selected: ["?b", "?count2"]
+      - contains_row: ['<Source>', 1]
+      - contains_row: ['<Venture_Investment>', 12]
+  - query : full-relation-scan-object
+    type: no-text
+    sparql: |
+      SELECT ?c (COUNT(?c) as ?count2) WHERE {
+        ?a ?b ?c .
+      }
+      GROUP BY ?c
+      HAVING regex(?c, "^<Ma")
+      ORDER BY DESC(?count2)
+      LIMIT 200
+    checks:
+      - num_rows: 200
+      - num_cols: 2
+      - selected: ["?c", "?count2"]
+      - contains_row: ['<Manhattan>', 32]
+      - contains_row: ['<Max_Planck>', 13]
   - query : subquery-profession-avg-height 
     type: no-text
     sparql: |

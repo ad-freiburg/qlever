@@ -158,6 +158,8 @@ class IndexMetaData {
 
   MapType& data() { return _data; }
 
+  const MapType& data() const { return _data; }
+
  private:
   off_t _offsetAfter = 0;
 

@@ -215,11 +215,17 @@ class MetaDataWrapperHashMap {
   // __________________________________________________________________
   Iterator begin() { return _map.begin(); }
 
+  // __________________________________________________________________
+  ConstIterator begin() const { return _map.begin(); }
+
   // ____________________________________________________________
   ConstIterator cend() const { return _map.end(); }
 
   // ____________________________________________________________
   Iterator end() { return _map.end(); }
+
+  // ____________________________________________________________
+  ConstIterator end() const { return _map.end(); }
 
   // ____________________________________________________________
   void set(Id id, const FullRelationMetaData& value) { _map[id] = value; }

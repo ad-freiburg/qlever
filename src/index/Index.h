@@ -307,6 +307,39 @@ class Index {
 
   bool hasAllPermutations() const { return _spoFile.isOpen(); }
 
+  const IndexMetaDataHmap& getPsoMeta() const {
+    if (hasAllPermutations()) {
+      return _psoMeta;
+    } else {
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+               "Can only use the spo metadta if all 6 permutations "
+               "have been registered on sever start (and index build time) "
+               "with the -a option.")
+    }
+  }
+
+  const IndexMetaDataMmapView& getSpoMeta() const {
+    if (hasAllPermutations()) {
+      return _spoMeta;
+    } else {
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+               "Can only use the spo metadta if all 6 permutations "
+               "have been registered on sever start (and index build time) "
+               "with the -a option.")
+    }
+  }
+
+  const IndexMetaDataMmapView& getOpsMeta() const {
+    if (hasAllPermutations()) {
+      return _opsMeta;
+    } else {
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+               "Can only use the spo metadta if all 6 permutations "
+               "have been registered on sever start (and index build time) "
+               "with the -a option.")
+    }
+  }
+
  private:
   string _onDiskBase;
   string _settingsFileName;
