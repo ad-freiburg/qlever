@@ -515,4 +515,19 @@ queries:
       - selected: ["?a", "?o", "?h", "?avg"]
       - contains_row: ['<Steve_Backshall>', '<Actor>', 1.8, 1.76627]
       - contains_row: ['<Carl_Sagan>', '<Astrobiologist>', 1.8, 1.8]
+  - query : filter-on-variable-columns 
+    type: no-text
+    sparql: |
+      SELECT ?p (SAMPLE(?a) as ?a1) (SAMPLE(?a) as ?a2) (SAMPLE(?a) as ?a3) (SAMPLE(?a) as ?a4) (AVG(?h) as ?avg) WHERE {
+        ?a <Height> ?h .
+        ?a <Profession> ?p .
+      }
+      GROUP BY ?p
+      HAVING (?avg > 1.8)
+    checks:
+      - num_rows: 87 
+      - num_cols: 6
+      - selected: ["?p", "?a1", "?a2", "?a3", "?a4", "?avg"]
+      - contains_row: ['<Cameraman>', '<Chris_Packham>', '<Chris_Packham>', '<Chris_Packham>', '<Chris_Packham>', 1.83]
+      - contains_row: ['<Lawyer>', '<Thomas_Jefferson>', '<Thomas_Jefferson>', '<Thomas_Jefferson>', '<Thomas_Jefferson>', 1.8056]
 
