@@ -43,11 +43,14 @@ ad_utility::HashMap<string, size_t> FullRelationScan::getVariableColumns()
   return varCols;
 }
 
-void FullRelationScan::setTextLimit(size_t limit) {}
+void FullRelationScan::setTextLimit(size_t limit) { (void)limit; }
 
 bool FullRelationScan::knownEmptyResult() { return false; }
 
-float FullRelationScan::getMultiplicity(size_t col) { return 1; }
+float FullRelationScan::getMultiplicity(size_t col) {
+  (void)col;
+  return 1;
+}
 
 size_t FullRelationScan::getSizeEstimate() {
   switch (_type) {
@@ -77,31 +80,37 @@ void FullRelationScan::computeFullScan(ResultTable* result, const Index& index,
   std::vector<std::array<Id, 2>>* fixedSizeData =
       new std::vector<std::array<Id, 2>>();
   result->_fixedSizeData = fixedSizeData;
-  if (type == FullRelationScan::ScanType::PREDICATE) {
-    fixedSizeData->reserve(index.getNofPredicates());
-    const IndexMetaDataHmap& meta = index.getPsoMeta();
-    for (const std::pair<size_t, const FullRelationMetaData&> elem :
-         meta.data()) {
-      fixedSizeData->push_back({elem.first, elem.second.getNofElements()});
-    }
-  } else {
-    const IndexMetaDataMmapView* meta;
-    if (type == FullRelationScan::ScanType::SUBJECT) {
-      fixedSizeData->reserve(index.getNofSubjects());
-      meta = &index.getSpoMeta();
-    } else if (type == FullRelationScan::ScanType::OBJECT) {
-      fixedSizeData->reserve(index.getNofObjects());
-      meta = &index.getOpsMeta();
-    } else {
+
+  switch (type) {
+    case ScanType::SUBJECT:
+      computeFullScanForMeta(fixedSizeData, index.getSpoMeta(),
+                             index.getNofSubjects());
+
+      break;
+    case ScanType::PREDICATE:
+      computeFullScanForMeta(fixedSizeData, index.getPsoMeta(),
+                             index.getNofPredicates());
+      break;
+    case ScanType::OBJECT:
+      computeFullScanForMeta(fixedSizeData, index.getOpsMeta(),
+                             index.getNofObjects());
+      break;
+    default:
       AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
                "FullRelationScan called with an unsupported scan type : " +
                    std::to_string(static_cast<int>(type)));
-    }
+      break;
+  }
+}
 
-    for (const std::pair<size_t, const FullRelationMetaData&> elem :
-         meta->data()) {
-      fixedSizeData->push_back({elem.first, elem.second.getNofElements()});
-    }
+template <typename T>
+void FullRelationScan::computeFullScanForMeta(
+    std::vector<std::array<Id, 2>>* result, const T& metaDataStorage,
+    size_t numResults) {
+  result->reserve(numResults);
+  for (const std::pair<size_t, const FullRelationMetaData&> elem :
+       metaDataStorage.data()) {
+    result->push_back({elem.first, elem.second.getNofElements()});
   }
 }
 

@@ -48,6 +48,11 @@ class FullRelationScan : public Operation {
   static void computeFullScan(ResultTable* result, const Index& index,
                               ScanType type);
 
+  template <typename T>
+  static void computeFullScanForMeta(std::vector<std::array<Id, 2>>* result,
+                                     const T& metaDataStorage,
+                                     size_t numResults);
+
   static void computeSubqueryS(
       ResultTable* result, const std::shared_ptr<QueryExecutionTree> _subtree,
       const size_t subtreeColIndex, const std::vector<PatternID>& hasPattern,

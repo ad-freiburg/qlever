@@ -307,16 +307,7 @@ class Index {
 
   bool hasAllPermutations() const { return _spoFile.isOpen(); }
 
-  const IndexMetaDataHmap& getPsoMeta() const {
-    if (hasAllPermutations()) {
-      return _psoMeta;
-    } else {
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-               "Can only use the spo metadta if all 6 permutations "
-               "have been registered on sever start (and index build time) "
-               "with the -a option.")
-    }
-  }
+  const IndexMetaDataHmap& getPsoMeta() const { return _psoMeta; }
 
   const IndexMetaDataMmapView& getSpoMeta() const {
     if (hasAllPermutations()) {
