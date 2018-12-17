@@ -68,12 +68,12 @@ string Filter::asString(size_t indent) const {
 
 // _____________________________________________________________________________
 template <class RT, ResultTable::ResultType T>
-vector<RT>* Filter::computeFilterForResultType(
-    vector<RT>* res, size_t lhs, size_t rhs,
-    shared_ptr<const ResultTable> subRes) const {
+vector<RT>* Filter::computeFilterForResultType(vector<RT>* res, size_t lhs,
+                                               size_t rhs,
+                                               const vector<RT>& input) const {
   switch (_type) {
     case SparqlFilter::EQ:
-      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+      getEngine().filter(input,
                          [lhs, rhs](const RT& e) {
                            return ValueReader<T>::get(e[lhs]) ==
                                   ValueReader<T>::get(e[rhs]);
@@ -81,7 +81,7 @@ vector<RT>* Filter::computeFilterForResultType(
                          res);
       break;
     case SparqlFilter::NE:
-      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+      getEngine().filter(input,
                          [lhs, rhs](const RT& e) {
                            return ValueReader<T>::get(e[lhs]) !=
                                   ValueReader<T>::get(e[rhs]);
@@ -89,7 +89,7 @@ vector<RT>* Filter::computeFilterForResultType(
                          res);
       break;
     case SparqlFilter::LT:
-      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+      getEngine().filter(input,
                          [lhs, rhs](const RT& e) {
                            return ValueReader<T>::get(e[lhs]) <
                                   ValueReader<T>::get(e[rhs]);
@@ -97,7 +97,7 @@ vector<RT>* Filter::computeFilterForResultType(
                          res);
       break;
     case SparqlFilter::LE:
-      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+      getEngine().filter(input,
                          [lhs, rhs](const RT& e) {
                            return ValueReader<T>::get(e[lhs]) <=
                                   ValueReader<T>::get(e[rhs]);
@@ -105,7 +105,7 @@ vector<RT>* Filter::computeFilterForResultType(
                          res);
       break;
     case SparqlFilter::GT:
-      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+      getEngine().filter(input,
                          [lhs, rhs](const RT& e) {
                            return ValueReader<T>::get(e[lhs]) >
                                   ValueReader<T>::get(e[rhs]);
@@ -113,7 +113,7 @@ vector<RT>* Filter::computeFilterForResultType(
                          res);
       break;
     case SparqlFilter::GE:
-      getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+      getEngine().filter(input,
                          [lhs, rhs](const RT& e) {
                            return ValueReader<T>::get(e[lhs]) >=
                                   ValueReader<T>::get(e[rhs]);
@@ -139,26 +139,28 @@ vector<RT>* Filter::computeFilterForResultType(
   return res;
 }
 
+// _____________________________________________________________________________
 template <class RT>
 vector<RT>* Filter::computeFilter(vector<RT>* res, size_t lhs, size_t rhs,
+                                  const vector<RT>& input,
                                   shared_ptr<const ResultTable> subRes) const {
   switch (subRes->getResultType(lhs)) {
     case ResultTable::ResultType::KB:
       return computeFilterForResultType<RT, ResultTable::ResultType::KB>(
-          res, lhs, rhs, subRes);
+          res, lhs, rhs, input);
     case ResultTable::ResultType::VERBATIM:
       return computeFilterForResultType<RT, ResultTable::ResultType::VERBATIM>(
-          res, lhs, rhs, subRes);
+          res, lhs, rhs, input);
     case ResultTable::ResultType::FLOAT:
       return computeFilterForResultType<RT, ResultTable::ResultType::FLOAT>(
-          res, lhs, rhs, subRes);
+          res, lhs, rhs, input);
     case ResultTable::ResultType::LOCAL_VOCAB:
       return computeFilterForResultType<RT,
                                         ResultTable::ResultType::LOCAL_VOCAB>(
-          res, lhs, rhs, subRes);
+          res, lhs, rhs, input);
     case ResultTable::ResultType::TEXT:
       return computeFilterForResultType<RT, ResultTable::ResultType::TEXT>(
-          res, lhs, rhs, subRes);
+          res, lhs, rhs, input);
   }
   AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
            "Tried to compute a filter on an unknown result type " +
@@ -183,36 +185,42 @@ void Filter::computeResult(ResultTable* result) const {
     switch (subRes->_nofColumns) {
       case 1: {
         typedef array<Id, 1> RT;
-        result->_fixedSizeData =
-            computeFilter(new vector<RT>(), lhsInd, rhsInd, subRes);
+        result->_fixedSizeData = computeFilter(
+            new vector<RT>(), lhsInd, rhsInd,
+            *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
         break;
       }
       case 2: {
         typedef array<Id, 2> RT;
-        result->_fixedSizeData =
-            computeFilter(new vector<RT>(), lhsInd, rhsInd, subRes);
+        result->_fixedSizeData = computeFilter(
+            new vector<RT>(), lhsInd, rhsInd,
+            *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
         break;
       }
       case 3: {
         typedef array<Id, 3> RT;
-        result->_fixedSizeData =
-            computeFilter(new vector<RT>(), lhsInd, rhsInd, subRes);
+        result->_fixedSizeData = computeFilter(
+            new vector<RT>(), lhsInd, rhsInd,
+            *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
         break;
       }
       case 4: {
         typedef array<Id, 4> RT;
-        result->_fixedSizeData =
-            computeFilter(new vector<RT>(), lhsInd, rhsInd, subRes);
+        result->_fixedSizeData = computeFilter(
+            new vector<RT>(), lhsInd, rhsInd,
+            *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
         break;
       }
       case 5: {
         typedef array<Id, 5> RT;
-        result->_fixedSizeData =
-            computeFilter(new vector<RT>(), lhsInd, rhsInd, subRes);
+        result->_fixedSizeData = computeFilter(
+            new vector<RT>(), lhsInd, rhsInd,
+            *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
         break;
       }
       default:
-        computeFilter(&result->_varSizeData, lhsInd, rhsInd, subRes);
+        computeFilter(&result->_varSizeData, lhsInd, rhsInd,
+                      subRes->_varSizeData, subRes);
         break;
     }
   } else {
@@ -223,9 +231,10 @@ void Filter::computeResult(ResultTable* result) const {
   LOG(DEBUG) << "Filter result computation done." << endl;
 }
 
+// _____________________________________________________________________________
 template <class RT, ResultTable::ResultType T>
 vector<RT>* Filter::computeFilterFixedValueForResultType(
-    vector<RT>* res, size_t lhs, Id rhs,
+    vector<RT>* res, size_t lhs, Id rhs, const vector<RT>& input,
     shared_ptr<const ResultTable> subRes) const {
   bool lhs_is_sorted =
       subRes->_sortedBy.size() > 0 && subRes->_sortedBy[0] == lhs;
@@ -236,16 +245,15 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         // and last element that match rhs and copy the range.
         RT rhs_array;
         rhs_array[lhs] = rhs;
-        vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
-        const typename vector<RT>::iterator& lower = std::lower_bound(
-            data->begin(), data->end(), rhs_array,
+        const typename vector<RT>::const_iterator& lower = std::lower_bound(
+            input.begin(), input.end(), rhs_array,
             [lhs](const RT& l, const RT& r) {
               return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
             });
-        if (lower != data->end() && (*lower)[lhs] == rhs) {
+        if (lower != input.end() && (*lower)[lhs] == rhs) {
           // an element equal to rhs exists in the vector
           const auto& upper = std::upper_bound(
-              lower, data->end(), rhs_array, [lhs](const RT& l, const RT& r) {
+              lower, input.end(), rhs_array, [lhs](const RT& l, const RT& r) {
                 return ValueReader<T>::get(l[lhs]) <
                        ValueReader<T>::get(r[lhs]);
               });
@@ -253,8 +261,7 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         }
       } else {
         getEngine().filter(
-            *static_cast<vector<RT>*>(subRes->_fixedSizeData),
-            [lhs, rhs, &subRes](const RT& e) { return e[lhs] == rhs; }, res);
+            input, [lhs, rhs](const RT& e) { return e[lhs] == rhs; }, res);
       }
       break;
     case SparqlFilter::NE:
@@ -263,29 +270,27 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         // and last element that match rhs and copy the range.
         RT rhs_array;
         rhs_array[lhs] = rhs;
-        vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
-        const typename vector<RT>::iterator& lower = std::lower_bound(
-            data->begin(), data->end(), rhs_array,
+        const typename vector<RT>::const_iterator& lower = std::lower_bound(
+            input.begin(), input.end(), rhs_array,
             [lhs](const RT& l, const RT& r) {
               return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
             });
-        if (lower != data->end() && (*lower)[lhs] == rhs) {
-          // rhs appears within the data, take all elements before and after it
-          const typename vector<RT>::iterator& upper = std::upper_bound(
-              lower, data->end(), rhs_array, [lhs](const RT& l, const RT& r) {
+        if (lower != input.end() && (*lower)[lhs] == rhs) {
+          // rhs appears within the input, take all elements before and after it
+          const typename vector<RT>::const_iterator& upper = std::upper_bound(
+              lower, input.end(), rhs_array, [lhs](const RT& l, const RT& r) {
                 return ValueReader<T>::get(l[lhs]) <
                        ValueReader<T>::get(r[lhs]);
               });
-          res->insert(res->end(), data->begin(), lower);
-          res->insert(res->end(), upper, data->end());
+          res->insert(res->end(), input.begin(), lower);
+          res->insert(res->end(), upper, input.end());
         } else {
-          // rhs does not appear within the data
-          res->insert(res->end(), data->begin(), data->end());
+          // rhs does not appear within the input
+          res->insert(res->end(), input.begin(), input.end());
         }
       } else {
-        getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                           [lhs, rhs](const RT& e) { return e[lhs] != rhs; },
-                           res);
+        getEngine().filter(
+            input, [lhs, rhs](const RT& e) { return e[lhs] != rhs; }, res);
       }
       break;
     case SparqlFilter::LT:
@@ -294,15 +299,14 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         // and last element that match rhs and copy the range.
         RT rhs_array;
         rhs_array[lhs] = rhs;
-        vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
-        const typename vector<RT>::iterator& lower = std::lower_bound(
-            data->begin(), data->end(), rhs_array,
+        const typename vector<RT>::const_iterator& lower = std::lower_bound(
+            input.begin(), input.end(), rhs_array,
             [lhs](const RT& l, const RT& r) {
               return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
             });
-        res->insert(res->end(), data->begin(), lower);
+        res->insert(res->end(), input.begin(), lower);
       } else {
-        getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+        getEngine().filter(input,
                            [lhs, rhs](const RT& e) {
                              return ValueReader<T>::get(e[lhs]) <
                                     ValueReader<T>::get(rhs);
@@ -316,15 +320,14 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         // and last element that match rhs and copy the range.
         RT rhs_array;
         rhs_array[lhs] = rhs;
-        vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
-        const typename vector<RT>::iterator& upper = std::upper_bound(
-            data->begin(), data->end(), rhs_array,
+        const typename vector<RT>::const_iterator& upper = std::upper_bound(
+            input.begin(), input.end(), rhs_array,
             [lhs](const RT& l, const RT& r) {
               return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
             });
-        res->insert(res->end(), data->begin(), upper);
+        res->insert(res->end(), input.begin(), upper);
       } else {
-        getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+        getEngine().filter(input,
                            [lhs, rhs](const RT& e) {
                              return ValueReader<T>::get(e[lhs]) <=
                                     ValueReader<T>::get(rhs);
@@ -338,16 +341,15 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         // and last element that match rhs and copy the range.
         RT rhs_array;
         rhs_array[lhs] = rhs;
-        vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
-        const typename vector<RT>::iterator& upper = std::upper_bound(
-            data->begin(), data->end(), rhs_array,
+        const typename vector<RT>::const_iterator& upper = std::upper_bound(
+            input.begin(), input.end(), rhs_array,
             [lhs](const RT& l, const RT& r) {
               return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
             });
         // an element equal to rhs exists in the vector
-        res->insert(res->end(), upper, data->end());
+        res->insert(res->end(), upper, input.end());
       } else {
-        getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+        getEngine().filter(input,
                            [lhs, rhs](const RT& e) {
                              return ValueReader<T>::get(e[lhs]) >
                                     ValueReader<T>::get(rhs);
@@ -361,16 +363,15 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         // and last element that match rhs and copy the range.
         RT rhs_array;
         rhs_array[lhs] = rhs;
-        vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
-        const typename vector<RT>::iterator& lower = std::lower_bound(
-            data->begin(), data->end(), rhs_array,
+        const typename vector<RT>::const_iterator& lower = std::lower_bound(
+            input.begin(), input.end(), rhs_array,
             [lhs](const RT& l, const RT& r) {
               return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
             });
         // an element equal to rhs exists in the vector
-        res->insert(res->end(), lower, data->end());
+        res->insert(res->end(), lower, input.end());
       } else {
-        getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+        getEngine().filter(input,
                            [lhs, rhs](const RT& e) {
                              return ValueReader<T>::get(e[lhs]) >=
                                     ValueReader<T>::get(rhs);
@@ -380,7 +381,7 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
       break;
     case SparqlFilter::LANG_MATCHES:
       getEngine().filter(
-          *static_cast<vector<RT>*>(subRes->_fixedSizeData),
+          input,
           [this, lhs, &subRes](const RT& e) {
             std::optional<string> entity;
             if constexpr (T == ResultTable::ResultType::KB) {
@@ -411,22 +412,21 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
           // and last element that match rhs and copy the range.
           RT rhs_array;
           rhs_array[lhs] = lowerBound;
-          vector<RT>* data = static_cast<vector<RT>*>(subRes->_fixedSizeData);
-          const typename vector<RT>::iterator& lower = std::lower_bound(
-              data->begin(), data->end(), rhs_array,
+          const typename vector<RT>::const_iterator& lower = std::lower_bound(
+              input.begin(), input.end(), rhs_array,
               [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
-          if (lower != data->end()) {
-            // There is at least one element in the data that is also within the
-            // range, look for the upper boundary and then copy all elements
+          if (lower != input.end()) {
+            // There is at least one element in the input that is also within
+            // the range, look for the upper boundary and then copy all elements
             // within the range.
             rhs_array[lhs] = upperBound;
-            const typename vector<RT>::iterator& upper = std::upper_bound(
-                lower, data->end(), rhs_array,
+            const typename vector<RT>::const_iterator& upper = std::upper_bound(
+                lower, input.end(), rhs_array,
                 [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
             res->insert(res->end(), lower, upper);
           }
         } else {
-          getEngine().filter(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
+          getEngine().filter(input,
                              [this, lhs, lowerBound, upperBound](const RT& e) {
                                return lowerBound <= e[lhs] &&
                                       e[lhs] < upperBound;
@@ -453,7 +453,7 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
             "'is not an ECMAScript regex: " + std::string(e.what()));
       }
       getEngine().filter(
-          *static_cast<vector<RT>*>(subRes->_fixedSizeData),
+          input,
           [this, self_regex, &lhs, &subRes](const RT& e) {
             std::optional<string> entity;
             if constexpr (T == ResultTable::ResultType::KB) {
@@ -475,7 +475,7 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
 // _____________________________________________________________________________
 template <class RT>
 vector<RT>* Filter::computeFilterFixedValue(
-    vector<RT>* res, size_t lhs, Id rhs,
+    vector<RT>* res, size_t lhs, Id rhs, const vector<RT>& input,
     shared_ptr<const ResultTable> subRes) const {
   ResultTable::ResultType resultType = subRes->getResultType(lhs);
   // Catch some unsupported combinations
@@ -492,19 +492,20 @@ vector<RT>* Filter::computeFilterFixedValue(
     case ResultTable::ResultType::KB:
       return computeFilterFixedValueForResultType<RT,
                                                   ResultTable::ResultType::KB>(
-          res, lhs, rhs, subRes);
+          res, lhs, rhs, input, subRes);
     case ResultTable::ResultType::VERBATIM:
       return computeFilterFixedValueForResultType<
-          RT, ResultTable::ResultType::VERBATIM>(res, lhs, rhs, subRes);
+          RT, ResultTable::ResultType::VERBATIM>(res, lhs, rhs, input, subRes);
     case ResultTable::ResultType::FLOAT:
       return computeFilterFixedValueForResultType<
-          RT, ResultTable::ResultType::FLOAT>(res, lhs, rhs, subRes);
+          RT, ResultTable::ResultType::FLOAT>(res, lhs, rhs, input, subRes);
     case ResultTable::ResultType::LOCAL_VOCAB:
       return computeFilterFixedValueForResultType<
-          RT, ResultTable::ResultType::LOCAL_VOCAB>(res, lhs, rhs, subRes);
+          RT, ResultTable::ResultType::LOCAL_VOCAB>(res, lhs, rhs, input,
+                                                    subRes);
     case ResultTable::ResultType::TEXT:
       return computeFilterFixedValueForResultType<
-          RT, ResultTable::ResultType::TEXT>(res, lhs, rhs, subRes);
+          RT, ResultTable::ResultType::TEXT>(res, lhs, rhs, input, subRes);
   }
   AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
            "Tried to compute a filter on an unknown result type " +
@@ -602,36 +603,42 @@ void Filter::computeResultFixedValue(
   switch (subRes->_nofColumns) {
     case 1: {
       typedef array<Id, 1> RT;
-      result->_fixedSizeData =
-          computeFilterFixedValue(new vector<RT>(), lhs, rhs, subRes);
+      result->_fixedSizeData = computeFilterFixedValue(
+          new vector<RT>(), lhs, rhs,
+          *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
       break;
     }
     case 2: {
       typedef array<Id, 2> RT;
-      result->_fixedSizeData =
-          computeFilterFixedValue(new vector<RT>(), lhs, rhs, subRes);
+      result->_fixedSizeData = computeFilterFixedValue(
+          new vector<RT>(), lhs, rhs,
+          *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
       break;
     }
     case 3: {
       typedef array<Id, 3> RT;
-      result->_fixedSizeData =
-          computeFilterFixedValue(new vector<RT>(), lhs, rhs, subRes);
+      result->_fixedSizeData = computeFilterFixedValue(
+          new vector<RT>(), lhs, rhs,
+          *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
       break;
     }
     case 4: {
       typedef array<Id, 4> RT;
-      result->_fixedSizeData =
-          computeFilterFixedValue(new vector<RT>(), lhs, rhs, subRes);
+      result->_fixedSizeData = computeFilterFixedValue(
+          new vector<RT>(), lhs, rhs,
+          *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
       break;
     }
     case 5: {
       typedef array<Id, 5> RT;
-      result->_fixedSizeData =
-          computeFilterFixedValue(new vector<RT>(), lhs, rhs, subRes);
+      result->_fixedSizeData = computeFilterFixedValue(
+          new vector<RT>(), lhs, rhs,
+          *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
       break;
     }
     default: {
-      computeFilterFixedValue(&result->_varSizeData, lhs, rhs, subRes);
+      computeFilterFixedValue(&result->_varSizeData, lhs, rhs,
+                              subRes->_varSizeData, subRes);
       break;
     }
   }

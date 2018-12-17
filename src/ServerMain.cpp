@@ -30,7 +30,7 @@ struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
                            {"worker-threads", required_argument, NULL, 'j'},
                            {"on-disk-literals", no_argument, NULL, 'l'},
                            {"port", required_argument, NULL, 'p'},
-                           {"patterns", no_argument, NULL, 'P'},
+                           {"no-patterns", no_argument, NULL, 'P'},
                            {"text", no_argument, NULL, 't'},
                            {NULL, 0, NULL, 0}};
 
@@ -51,8 +51,9 @@ void printUsage(char* execName) {
        << "The location of the index files." << endl;
   cout << "  " << std::setw(20) << "p, port" << std::setw(1) << "    "
        << "The port on which to run the web interface." << endl;
-  cout << "  " << std::setw(20) << "P, patterns" << std::setw(1) << "    "
-       << "Use predicate patterns to enable ql:has-predicate queries." << endl;
+  cout << "  " << std::setw(20) << "no-patterns" << std::setw(1) << "    "
+       << "Disable the use of patterns. This disables ql:has-predicate."
+       << endl;
   cout << "  " << std::setw(20) << "t, text" << std::setw(1) << "    "
        << "Enables the usage of text." << endl;
   cout << "  " << std::setw(20) << "j, worker-threads" << std::setw(1) << "    "
@@ -76,12 +77,12 @@ int main(int argc, char** argv) {
   bool allPermutations = false;
   int port = -1;
   int numThreads = 1;
-  bool usePatterns = false;
+  bool usePatterns = true;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "i:p:j:tauhPml", options, NULL);
+    int c = getopt_long(argc, argv, "i:p:j:tauhml", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'i':
@@ -91,7 +92,7 @@ int main(int argc, char** argv) {
         port = atoi(optarg);
         break;
       case 'P':
-        usePatterns = true;
+        usePatterns = false;
         break;
       case 't':
         text = true;

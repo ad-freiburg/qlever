@@ -476,6 +476,45 @@ TEST(ParserTest, testGroupByAndAlias) {
   ASSERT_EQ("?b", pq._groupByVariables[0]);
 }
 
+TEST(ParserTest, testParseLiteral) {
+  using std::string;
+  // Test a basic parse of a simple xsd string
+  string inp = "   \"Astronaut\"^^xsd::string  \t";
+  string ret = SparqlParser::parseLiteral(inp, true);
+  ASSERT_EQ("\"Astronaut\"^^xsd::string", ret);
+
+  // Test parsing without the isEntireString check and with escaped quotation
+  // marks.
+  inp = "?a ?b \"The \\\"Moon\\\"\"@en .";
+  ret = SparqlParser::parseLiteral(inp, false);
+  ASSERT_EQ("\"The \"Moon\"\"@en", ret);
+
+  // Do a negative test for the isEntireString check
+  inp = "?a ?b \"The \\\"Moon\\\"\"@en .";
+  bool caught_exception = false;
+  try {
+    ret = SparqlParser::parseLiteral(inp, true);
+  } catch (const ParseException& e) {
+    caught_exception = true;
+  }
+  ASSERT_TRUE(caught_exception);
+
+  // check if specifying the correct offset works
+  inp = "?a ?b \"The \\\"Moon\\\"\"@en";
+  ret = SparqlParser::parseLiteral(inp, true, 6);
+  ASSERT_EQ("\"The \"Moon\"\"@en", ret);
+
+  // Do not escape qutation marks with the isEntireString check
+  inp = "?a ?b \"The \\\"Moon\"\"@en";
+  caught_exception = false;
+  try {
+    ret = SparqlParser::parseLiteral(inp, true, 6);
+  } catch (const ParseException& e) {
+    caught_exception = true;
+  }
+  ASSERT_TRUE(caught_exception);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

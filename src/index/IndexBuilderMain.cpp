@@ -34,7 +34,7 @@ struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
                            {"kb-index-name", required_argument, NULL, 'K'},
                            {"on-disk-literals", no_argument, NULL, 'l'},
                            {"ntriples-file", required_argument, NULL, 'n'},
-                           {"patterns", no_argument, NULL, 'P'},
+                           {"no-patterns", no_argument, NULL, 'P'},
                            {"tsv-file", required_argument, NULL, 't'},
                            {"text-index-name", required_argument, NULL, 'T'},
                            {"words-by-contexts", required_argument, NULL, 'w'},
@@ -89,9 +89,8 @@ void printUsage(char* execName) {
        << "Externalize parts of the KB vocab." << endl;
   cout << "  " << std::setw(20) << "n, ntriples-file" << std::setw(1) << "    "
        << "NT file to build KB index from." << endl;
-  cout << "  " << std::setw(20) << "P, patterns" << std::setw(1) << "    "
-       << "Detect and store prediate patterns to enable ql:has-predicate "
-          "queries."
+  cout << "  " << std::setw(20) << "no-patterns" << std::setw(1) << "    "
+       << "Disable the use of patterns. This disables ql:has-predicate."
        << endl;
   cout << "  " << std::setw(20) << "t, tsv-file" << std::setw(1) << "    "
        << "TSV file to build KB index from." << endl;
@@ -142,13 +141,13 @@ int main(int argc, char** argv) {
   bool useCompression = true;
   bool allPermutations = false;
   bool onDiskLiterals = false;
-  bool usePatterns = false;
+  bool usePatterns = true;
   bool onlyAddTextIndex = false;
   bool keepTemporaryFiles = false;
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:PhAks:N", options, NULL);
+    int c = getopt_long(argc, argv, "t:n:i:w:d:alT:K:hAks:N", options, NULL);
     if (c == -1) {
       break;
     }
@@ -185,7 +184,7 @@ int main(int argc, char** argv) {
         kbIndexName = optarg;
         break;
       case 'P':
-        usePatterns = true;
+        usePatterns = false;
         break;
       case 'A':
         onlyAddTextIndex = true;
