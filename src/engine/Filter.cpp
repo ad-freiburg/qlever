@@ -261,8 +261,7 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         }
       } else {
         getEngine().filter(
-            input, [lhs, rhs, &subRes](const RT& e) { return e[lhs] == rhs; },
-            res);
+            input, [lhs, rhs](const RT& e) { return e[lhs] == rhs; }, res);
       }
       break;
     case SparqlFilter::NE:

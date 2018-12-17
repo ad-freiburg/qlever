@@ -736,7 +736,7 @@ string SparqlParser::stripAndLowercaseKeywordLiteral(const string& lit) {
 
 // _____________________________________________________________________________
 string SparqlParser::parseLiteral(const string& literal, bool isEntireString,
-                                  size_t off) {
+                                  size_t off /*defaults to 0*/) {
   std::stringstream out;
   size_t pos = off;
   if (isEntireString) {
@@ -775,6 +775,8 @@ string SparqlParser::parseLiteral(const string& literal, bool isEntireString,
   out << '"';
   pos++;
   if (pos < literal.size() && literal[pos] == '@') {
+    out << literal[pos];
+    pos++;
     // add the language tag
     // allow for ascii based language tags (no current language tag should
     // contain non ascii letters).
