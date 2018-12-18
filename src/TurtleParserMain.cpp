@@ -8,7 +8,7 @@
 #include <string>
 #include "./parser/TurtleParser.h"
 
-void write_nt(std::ostream& out, const std::string& filename) {
+void writeNT(std::ostream& out, const std::string& filename) {
   TurtleParser p(filename);
   std::array<std::string, 3> triple;
   while (p.getLine(&triple)) {
@@ -29,9 +29,9 @@ int main(int argc, char** argv) {
       std::cerr << "Error opening '" << argv[2] << "'" << std::endl;
       exit(1);
     }
-    write_nt(of, argv[1]);
+    writeNT(of, argv[1]);
     of.close();
   } else {
-    write_nt(std::cout, argv[1]);
+    writeNT(std::cout, argv[1]);
   }
 }
