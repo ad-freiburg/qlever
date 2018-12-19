@@ -530,4 +530,23 @@ queries:
       - selected: ["?p", "?a1", "?a2", "?a3", "?a4", "?avg"]
       - contains_row: ['<Cameraman>', '<Chris_Packham>', '<Chris_Packham>', '<Chris_Packham>', '<Chris_Packham>', 1.83]
       - contains_row: ['<Lawyer>', '<Thomas_Jefferson>', '<Thomas_Jefferson>', '<Thomas_Jefferson>', '<Thomas_Jefferson>', 1.8056]
+  - query : count-available-predicates-on-variable-columns 
+    type: no-text
+    sparql: |
+      SELECT ?p (COUNT(?p) as ?count) WHERE {
+        ?a ql:has-predicate ?p .
+        ?a <Height> ?h1 .
+        ?a <Height> ?h2 .
+        ?a <Height> ?h3 .
+        ?a <Height> ?h4 .
+        ?a <Height> ?h5 .
+        ?a <Profession> ?profession .
+      }
+      GROUP BY ?p
+    checks:
+      - num_rows: 108 
+      - num_cols: 2
+      - selected: ["?p", "?count"]
+      - contains_row: ["<Film_appeared_in>", 56] 
+      - contains_row: ["<Patent>", 2]
 
