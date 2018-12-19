@@ -130,7 +130,7 @@ void CountAvailablePredicates::computeResult(ResultTable* result) const {
     // Compute the predicates for entities in subresult's _subjectColumnIndex
     // column.
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
-    if (result->_nofColumns > 5) {
+    if (subresult->_nofColumns > 5) {
       CountAvailablePredicates::computePatternTrick<vector<Id>>(
           &subresult->_varSizeData,
           static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
