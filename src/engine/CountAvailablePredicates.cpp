@@ -219,9 +219,10 @@ void CountAvailablePredicates::computePatternTrick(
   size_t posInput = 0;
   Id lastSubject = ID_NO_VALUE;
   while (posInput < input->size()) {
-    while ((*input)[posInput][subjectColumn] == lastSubject &&
-           posInput < input->size()) {
+    // Skip over elements with the same subject (don't count them twice)
+    if ((*input)[posInput][subjectColumn] == lastSubject) {
       posInput++;
+      continue;
     }
     size_t subject = (*input)[posInput][subjectColumn];
     lastSubject = subject;
@@ -254,12 +255,14 @@ void CountAvailablePredicates::computePatternTrick(
     }
     posInput++;
   }
+  // resolve the patterns to predicate counts
   for (const auto& it : patternCounts) {
     std::pair<Id*, size_t> pattern = patterns[it.first];
     for (size_t i = 0; i < pattern.second; i++) {
       predicateCounts[pattern.first[i]] += it.second;
     }
   }
+  // write the predicate counts to the result
   result->reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
     result->push_back(array<Id, 2>{it.first, static_cast<Id>(it.second)});
