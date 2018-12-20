@@ -19,10 +19,10 @@
 #include "./Vocabulary.h"
 
 // helper struct used in the priority queue for merging.
-// represents tokens/words in a certain partial vocabular
-struct QueueValue {
-  QueueValue() = default;
-  QueueValue(const string& v, size_t file, Id word)
+// represents tokens/words in a certain partial vocabulary
+struct QueueWord {
+  QueueWord() = default;
+  QueueWord(const string& v, size_t file, Id word)
       : _value(v), _partialFileId(file), _partialWordId(word) {}
   string _value;          // the word
   size_t _partialFileId;  // from which partial vocabulary did this word come
@@ -33,7 +33,7 @@ struct QueueValue {
 // we sort alphabetically by the token
 class QueueCompare {
  public:
-  bool operator()(const QueueValue& p1, const QueueValue& p2) {
+  bool operator()(const QueueWord& p1, const QueueWord& p2) {
     return p1._value > p2._value;
   }
 };
@@ -51,7 +51,7 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
   std::vector<bool> endOfFile(numFiles, false);
 
   // Priority queue for the k-way merge
-  std::priority_queue<QueueValue, std::vector<QueueValue>, QueueCompare> queue;
+  std::priority_queue<QueueWord, std::vector<QueueWord>, QueueCompare> queue;
 
   // open and prepare all infiles and mmap output vectors
   for (size_t i = 0; i < numFiles; i++) {
@@ -69,7 +69,7 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
       infiles[i].read(&(word[0]), len);
       Id id;
       infiles[i].read((char*)&id, sizeof(id));
-      queue.push(QueueValue(word, i, id));
+      queue.push(QueueWord(word, i, id));
       endOfFile[i] = false;
     }
   }
@@ -124,7 +124,7 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
       infiles[i].read(&(word[0]), len);
       Id id;
       infiles[i].read((char*)&id, sizeof(id));
-      queue.push(QueueValue(word, i, id));
+      queue.push(QueueWord(word, i, id));
       endOfFile[i] = false;
     }
   }

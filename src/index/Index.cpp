@@ -31,12 +31,12 @@ Index::Index()
 
 // _____________________________________________________________________________________________
 template <class Parser>
-std::unique_ptr<Index::ExtVec> Index::createExtVecAndVocab(
-    const string& filename) {
+std::unique_ptr<Index::StxxlVec> Index::createIdTriplesAndVocab(
+    const string& ntFile) {
   initializeVocabularySettingsBuild();
 
   auto linesAndWords =
-      passFileForVocabulary<Parser>(filename, NUM_TRIPLES_PER_PARTIAL_VOCAB);
+      passFileForVocabulary<Parser>(ntFile, NUM_TRIPLES_PER_PARTIAL_VOCAB);
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
   _totalVocabularySize = linesAndWords.nofWords;
@@ -88,8 +88,8 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
   string indexFilename = _onDiskBase + ".index";
   _configurationJson["external-literals"] = _onDiskLiterals;
 
-  auto idTriplesPtr = createExtVecAndVocab<Parser>(filename);
-  ExtVec& idTriples = *idTriplesPtr;
+  auto idTriplesPtr = createIdTriplesAndVocab<Parser>(filename);
+  StxxlVec& idTriples = *idTriplesPtr;
 
   // also perform unique for first permutation
 
@@ -146,8 +146,8 @@ template void Index::createFromFile<TurtleParser>(const string& filename,
 
 // _____________________________________________________________________________
 template <class Parser>
-LinesAndWords Index::passFileForVocabulary(const string& filename,
-                                           size_t linesPerPartial) {
+VocabularyData Index::passFileForVocabulary(const string& filename,
+                                            size_t linesPerPartial) {
   ParallelParseBuffer<Parser> p(PARSER_BATCH_SIZE, filename);
   size_t i = 0;
   // already count the numbers of triples that will be used for the language
@@ -157,15 +157,20 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
   // we add extra triples
   std::vector<size_t> actualPartialSizes;
   size_t actualCurrentPartialSize = 0;
-  std::unique_ptr<ExtVec> idTriples(new ExtVec());
-  ExtVec::bufwriter_type writer(*idTriples);
+  std::unique_ptr<StxxlVec> idTriples(new StxxlVec());
+  StxxlVec::bufwriter_type writer(*idTriples);
 
   ad_utility::HashMap<string, Id> items;
 
   // insert the special  ql:langtag predicate into all partial vocabularies
   auto langPredId = assignNextId(&items, LANGUAGE_PREDICATE);
   std::array<string, 3> spo;
-  while (p.getline(spo)) {
+  while (true) {
+    auto opt = p.getTriple();
+    if (!opt) {
+      break;
+    }
+    auto& spo = opt.value();
     auto langtag = tripleToInternalRepresentation(&spo);
     std::array<Id, 3> spoIds;
     // immediately get or reuse ids for the elements of the triple
@@ -238,19 +243,19 @@ LinesAndWords Index::passFileForVocabulary(const string& filename,
   writer.finish();
 
   LOG(INFO) << "Merging vocabulary\n";
-  LinesAndWords res;
+  VocabularyData res;
   res.nofWords = mergeVocabulary(_onDiskBase, numFiles);
   res.idTriples = std::move(idTriples);
   res.actualPartialSizes = std::move(actualPartialSizes);
   LOG(INFO) << "Pass done.\n";
-  res.nofLines = res.idTriples->size();
+  res.idTriples->size();
   return res;
 }
 
 // _____________________________________________________________________________
 template <class Parser>
 void Index::convertPartialToGlobalIds(
-    ExtVec& data, const vector<size_t>& actualLinesPerPartial,
+    StxxlVec& data, const vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial) {
   LOG(INFO) << "Updating Ids in stxxl vector to global Ids.\n";
   array<string, 3> spo;
@@ -300,7 +305,7 @@ void Index::convertPartialToGlobalIds(
 // _____________________________________________________________________________
 template <class MetaData>
 std::optional<MetaData> Index::createPermutationImpl(const string& fileName,
-                                                     Index::ExtVec const& vec,
+                                                     Index::StxxlVec const& vec,
                                                      size_t c0, size_t c1,
                                                      size_t c2) {
   MetaData metaData;
@@ -326,7 +331,7 @@ std::optional<MetaData> Index::createPermutationImpl(const string& fileName,
   size_t distinctC1 = 0;
   size_t sizeOfRelation = 0;
   Id lastLhs = std::numeric_limits<Id>::max();
-  for (ExtVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
+  for (StxxlVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if ((*reader)[c0] != currentRel) {
       auto md =
           writeRel(out, lastOffset, currentRel, buffer, distinctC1, functional);
@@ -367,7 +372,7 @@ std::optional<MetaData> Index::createPermutationImpl(const string& fileName,
 // ________________________________________________________________________
 template <class MetaData, class Comparator>
 std::optional<MetaData> Index::createPermutation(
-    ExtVec* vec, const Permutation::PermutationImpl<Comparator>& p,
+    StxxlVec* vec, const Permutation::PermutationImpl<Comparator>& p,
     bool performUnique) {
   LOG(INFO) << "Sorting for " << p._readableName << " permutation..."
             << std::endl;
@@ -392,7 +397,7 @@ std::optional<MetaData> Index::createPermutation(
 // ________________________________________________________________________
 template <class MetaData, class Comparator1, class Comparator2>
 void Index::createPermutationPair(
-    ExtVec* vec, const Permutation::PermutationImpl<Comparator1>& p1,
+    StxxlVec* vec, const Permutation::PermutationImpl<Comparator1>& p1,
     const Permutation::PermutationImpl<Comparator2>& p2, bool performUnique,
     bool createPatternsAfterFirst) {
   auto m1 = createPermutation<MetaData>(vec, p1, performUnique);
@@ -434,7 +439,7 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 }
 
 // ____________________________________________________________________________
-void Index::createPatterns(bool vecAlreadySorted, ExtVec* idTriples) {
+void Index::createPatterns(bool vecAlreadySorted, StxxlVec* idTriples) {
   if (vecAlreadySorted) {
     LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
   } else {
@@ -451,7 +456,7 @@ void Index::createPatterns(bool vecAlreadySorted, ExtVec* idTriples) {
 }
 
 // _____________________________________________________________________________
-void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
+void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
                                CompactStringVector<Id, Id>& hasPredicate,
                                std::vector<PatternID>& hasPattern,
                                CompactStringVector<size_t, Id>& patterns,
@@ -479,7 +484,7 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
   size_t numInvalidPatterns = 0;
   size_t numValidPatterns = 0;
 
-  for (ExtVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
+  for (StxxlVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if ((*reader)[0] != currentRel) {
       currentRel = (*reader)[0];
       if (isValidPattern) {
@@ -612,7 +617,7 @@ void Index::createPatternsImpl(const string& fileName, const ExtVec& vec,
   currentRel = vec[0][0];
   patternIndex = 0;
   // Create the has-relation and has-pattern predicates
-  for (ExtVec::bufreader_type reader2(vec); !reader2.empty(); ++reader2) {
+  for (StxxlVec::bufreader_type reader2(vec); !reader2.empty(); ++reader2) {
     if ((*reader2)[0] != currentRel) {
       // we have arrived at a new entity;
       fullHasPredicateEntitiesDistinctSize++;

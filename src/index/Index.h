@@ -40,20 +40,24 @@ using std::vector;
 using json = nlohmann::json;
 
 // a simple struct for better naming
-struct LinesAndWords {
-  typedef stxxl::vector<array<Id, 3>> ExtVec;
-  size_t nofLines;
+struct VocabularyData {
+  using StxxlVec = stxxl::vector<array<Id, 3>>;
+  // The total number of distinct words in the complete Vocabulary
   size_t nofWords;
+  // The number of triples in the idTriples vec that each partial vocabulary is
+  // responsible for (depends on the number of additional language filter
+  // triples)
   std::vector<size_t> actualPartialSizes;
-  std::unique_ptr<ExtVec> idTriples;
+  // All the triples as Ids.
+  std::unique_ptr<StxxlVec> idTriples;
 };
 
 class Index {
  public:
-  typedef stxxl::vector<array<Id, 3>> ExtVec;
+  using StxxlVec = stxxl::vector<array<Id, 3>>;
   // Block Id, Context Id, Word Id, Score, entity
-  typedef stxxl::vector<tuple<Id, Id, Id, Score, bool>> TextVec;
-  typedef std::tuple<Id, Id, Score> Posting;
+  using TextVec = stxxl::vector<tuple<Id, Id, Id, Score, bool>>;
+  using Posting = std::tuple<Id, Id, Score>;
 
   // Forbid copy and assignment
   Index& operator=(const Index&) = delete;
@@ -363,20 +367,21 @@ class Index {
    */
   CompactStringVector<Id, Id> _hasPredicate;
 
-  // Create Vocabulary and directly write it to disk. Create ExtVec which can be
-  // used for creating permutations
-  // Member _vocab will be empty after this because it is not needed for index
-  // creation once the ExtVec is set up and it would be a waste of RAM
+  // Create Vocabulary and directly write it to disk. Create StxxlVec with all
+  // the triples converted to id space. This Vec can be used for creating
+  // permutations. Member _vocab will be empty after this because it is not
+  // needed for index creation once the StxxlVec is set up and it would be a
+  // waste of RAM.
   template <class Parser>
-  std::unique_ptr<ExtVec> createExtVecAndVocab(const string& ntFile);
+  std::unique_ptr<StxxlVec> createIdTriplesAndVocab(const string& ntFile);
 
   // ___________________________________________________________________
   template <class Parser>
-  LinesAndWords passFileForVocabulary(const string& ntFile,
-                                      size_t linesPerPartial = 100000000);
+  VocabularyData passFileForVocabulary(const string& ntFile,
+                                       size_t linesPerPartial = 100000000);
 
   template <class Parser>
-  void convertPartialToGlobalIds(ExtVec& data,
+  void convertPartialToGlobalIds(StxxlVec& data,
                                  const vector<size_t>& actualLinesPerPartial,
                                  size_t linesPerPartial);
 
@@ -391,7 +396,7 @@ class Index {
   // no need for explicit instatiation since this function is private
   template <class MetaData>
   std::optional<MetaData> createPermutationImpl(const string& fileName,
-                                                const ExtVec& vec, size_t c0,
+                                                const StxxlVec& vec, size_t c0,
                                                 size_t c1, size_t c2);
   template <class MetaData, class Comparator1, class Comparator2>
 
@@ -406,7 +411,7 @@ class Index {
   // the SPO permutation is also needed for patterns (see usage in
   // Index::createFromFile function)
   void createPermutationPair(
-      ExtVec* vec, const Permutation::PermutationImpl<Comparator1>& p1,
+      StxxlVec* vec, const Permutation::PermutationImpl<Comparator1>& p1,
       const Permutation::PermutationImpl<Comparator2>& p2,
       bool performUnique = false, bool createPatternsAfterFirst = false);
 
@@ -429,7 +434,8 @@ class Index {
   // the optional is std::nullopt if vec and thus the index is empty
   template <class MetaData, class Comparator>
   std::optional<MetaData> createPermutation(
-      ExtVec* vec, const Permutation::PermutationImpl<Comparator>& permutation,
+      StxxlVec* vec,
+      const Permutation::PermutationImpl<Comparator>& permutation,
       bool performUnique = false);
 
   /**
@@ -438,7 +444,7 @@ class Index {
    * @param fileName The name of the file in which the data should be stored
    * @param vec The vectors of triples in spo order.
    */
-  static void createPatternsImpl(const string& fileName, const ExtVec& vec,
+  static void createPatternsImpl(const string& fileName, const StxxlVec& vec,
                                  CompactStringVector<Id, Id>& hasPredicate,
                                  std::vector<PatternID>& hasPattern,
                                  CompactStringVector<size_t, Id>& patterns,
@@ -448,9 +454,9 @@ class Index {
                                  size_t maxNumPatterns);
 
   // wrap the static function using the internal member variables
-  // the bool indicates wether the ExtVec has to be sorted before the pattern
+  // the bool indicates wether the StxxlVec has to be sorted before the pattern
   // creation
-  void createPatterns(bool vecAlreadySorted, ExtVec* idTriples);
+  void createPatterns(bool vecAlreadySorted, StxxlVec* idTriples);
 
   void createTextIndex(const string& filename, const TextVec& vec);
 
@@ -578,9 +584,9 @@ class Index {
   // Helper function for Debugging during the index build.
   // ExtVecs are not persistent, so we dump them to a mmapVector in a file with
   // given filename
-  static void dumpExtVecToMmap(const ExtVec& vec, std::string filename) {
+  static void dumpExtVecToMmap(const StxxlVec& vec, std::string filename) {
     LOG(INFO) << "Dumping ext vec to mmap" << std::endl;
-    MmapVector<ExtVec::value_type> mmapVec(vec.size(), filename);
+    MmapVector<StxxlVec::value_type> mmapVec(vec.size(), filename);
     for (size_t i = 0; i < vec.size(); ++i) {
       mmapVec[i] = vec[i];
     }

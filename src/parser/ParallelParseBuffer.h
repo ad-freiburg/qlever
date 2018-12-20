@@ -37,12 +37,11 @@ class ParallelParseBuffer {
     }
   }
 
-  // retrieve a single triple from the internal buffer and write it to
-  // argument spo. Return true in this case. If the buffer is exhausted blocks
-  // until the (asynchronous) call to parseBatch has finished. Returns false if
-  // the parser has completely parsed the file. In this case the argument is
-  // untouched
-  bool getline(std::array<string, 3>& spo) {
+  // Retrieve and return a the next triple from the internal buffer.
+  // If the buffer is exhausted blocks
+  // until the (asynchronous) call to parseBatch has finished. A nullopt
+  // the parser has completely parsed the file.
+  std::optional<std::array<string, 3>> getTriple() {
     // Return our triple in the order the parser handles them to us.
     // Makes debugging easier.
     if (_buffer.size() == _bufferPosition && _isParserValid) {
@@ -58,13 +57,11 @@ class ParallelParseBuffer {
 
     // we now should have some triples in our buffer
     if (_bufferPosition < _buffer.size()) {
-      spo = _buffer[_bufferPosition];
-      _bufferPosition++;
-      return true;
+      return _buffer[_bufferPosition++];
     } else {
       // we can only reach this if the buffer is exhausted and there is nothing
       // more to parse
-      return false;
+      return std::nullopt;
     }
   }
 
