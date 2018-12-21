@@ -119,7 +119,7 @@ class File {
   // Removes the \n from the end of the string.
   // Returns null on EOF when no chars have been read.
   // Throws an Exception if the buffer is not sufficiently large.
-  // Warning: std::getline which works on a file stream
+  // Warning: std::getTriple which works on a file stream
   // is generally more performant (it uses a general stream buffer
   // to wrap the file)
   // and appeds char by char to the string.

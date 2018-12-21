@@ -11,6 +11,8 @@
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
 
+using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
+using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
 using std::string;
 // _______________________________________________________________
 // merge the partial vocabularies at  binary files
@@ -23,7 +25,10 @@ using std::string;
 // Returns the number of total Words merged
 size_t mergeVocabulary(const std::string& basename, size_t numFiles);
 
-// __________________________________________________________________________________________
-// read the words and indices from the file and create hash map from it.
-ad_utility::HashMap<string, Id> vocabMapFromPartialIndexedFile(
-    const string& partialFile);
+// _________________________________________________________________________________________
+void writePartialIdMapToBinaryFileForMerging(
+    const ad_utility::HashMap<string, Id>& map, const string& fileName);
+
+// _________________________________________________________________________________________
+ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
+    const string& mmapFilename);

@@ -67,7 +67,7 @@ include_directories(third_party/json/)
 ################################
 # Disable GNU parallel as it prevents build on Ubuntu 14.04
 set(USE_GNU_PARALLEL OFF CACHE BOOL "Don't use gnu parallel" FORCE)
-set(USE_OPENMP OFF CACHE BOOL "Don't use OpenMP" FORCE)
+set(USE_OPENMP OFF CACHE BOOL "Don't use OPENMP as default" FORCE)
 add_subdirectory(third_party/stxxl)
 # apply STXXL CXXFLAGS
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
@@ -161,6 +161,7 @@ add_test(HashMapTest test/HashMapTest)
 add_test(HashSetTest test/HashSetTest)
 add_test(VocabularyGeneratorTest test/VocabularyGeneratorTest)
 add_test(MmapVectorTest test/MmapVectorTest)
+add_test(BufferedVectorTest test/BufferedVectorTest)
 add_test(TokenTest test/TokenTest)
 add_test(TurtleParserTest test/TurtleParserTest)
 add_test(MultiColumnJoinTest test/MultiColumnJoinTest)

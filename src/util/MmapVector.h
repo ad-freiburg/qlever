@@ -122,6 +122,10 @@ class MmapVector {
     AD_CHECK(idx < _size);
   }
 
+  // ____________________________________________________________________________
+  T& back() { return *(_ptr + _size - 1); }
+  const T& back() const { return *(_ptr + _size - 1); }
+
   // _____________________________________________________________
   std::string getFilename() const { return _filename; }
 

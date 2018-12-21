@@ -20,4 +20,3 @@ add_library(metaConverter
             MetaDataConverter.cpp MetaDataConverter.h)
 
 target_link_libraries(metaConverter index)
-

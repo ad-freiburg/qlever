@@ -9,6 +9,22 @@
 #include "../src/index/ConstantsIndexCreation.h"
 #include "../src/index/VocabularyGenerator.h"
 
+// equality operator used in this test
+bool vocabTestCompare(const IdPairMMapVecView& a,
+                      const std::vector<std::pair<Id, Id>>& b) {
+  if (a.size() != b.size()) {
+    return false;
+  }
+
+  for (size_t i = 0; i < a.size(); ++i) {
+    if (a[i] != b[i]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 // Test fixture that sets up the binary files vor partial vocabulary and
 // everything else connected with vocabulary merging.
 class MergeVocabularyTest : public ::testing::Test {
@@ -26,6 +42,11 @@ class MergeVocabularyTest : public ::testing::Test {
   std::string _pathVocabExp;
   // path to expected external vocabulary text file
   std::string _pathExternalVocabExp;
+
+  // two std::vectors where we store the expected mapping
+  // form partial to global ids;
+  std::vector<std::pair<Id, Id>> _expMapping0;
+  std::vector<std::pair<Id, Id>> _expMapping1;
 
   // Constructor. TODO: Better write Setup method because of complex logic which
   // may throw?
@@ -90,11 +111,9 @@ class MergeVocabularyTest : public ::testing::Test {
       std::cerr << "could not open temp file at" << _pathExp1 << '\n';
 
     // write first partial vocabulary
+    size_t localIdx = 0;
     for (const auto& w : words1) {
-      std::string word;
-      size_t id;
-      size_t zeros = 0;
-      std::tie(word, id) = w;
+      std::string word = w.first;
       uint32_t len = word.size();
       // write 4 Bytes of string length
       partial0.write((char*)&len, sizeof(uint32_t));
@@ -104,19 +123,17 @@ class MergeVocabularyTest : public ::testing::Test {
       partial0.write(word.c_str(), len);
       partialExp0.write(word.c_str(), len);
 
-      // zero for the file on which mergeVocabulary will work (that's how
-      // they are created in index.cpp
-      partial0.write((char*)&zeros, sizeof(size_t));
-      // valid Id for the expected partial vocab
-      partialExp0.write((char*)&id, sizeof(size_t));
+      // these indices are in order and are not supposed to change ever
+      partial0.write((char*)&localIdx, sizeof(size_t));
+      partialExp0.write((char*)&localIdx, sizeof(size_t));
+      _expMapping0.emplace_back(localIdx, w.second);
+      localIdx++;
     }
 
     // write second partialVocabulary
+    localIdx = 0;
     for (const auto& w : words2) {
-      std::string word;
-      size_t id;
-      size_t zeros = 0;
-      std::tie(word, id) = w;
+      std::string word = w.first;
       uint32_t len = word.size();
       partial1.write((char*)&len, sizeof(uint32_t));
       partialExp1.write((char*)&len, sizeof(uint32_t));
@@ -124,8 +141,10 @@ class MergeVocabularyTest : public ::testing::Test {
       partial1.write(word.c_str(), len);
       partialExp1.write(word.c_str(), len);
 
-      partial1.write((char*)&zeros, sizeof(size_t));
-      partialExp1.write((char*)&id, sizeof(size_t));
+      partial1.write((char*)&localIdx, sizeof(size_t));
+      partialExp1.write((char*)&localIdx, sizeof(size_t));
+      _expMapping1.emplace_back(localIdx, w.second);
+      localIdx++;
     }
   }
 
@@ -179,4 +198,9 @@ TEST_F(MergeVocabularyTest, bla) {
   ASSERT_TRUE(areBinaryFilesEqual(_pathVocabExp, _basePath + ".vocabulary"));
   ASSERT_TRUE(areBinaryFilesEqual(_pathExternalVocabExp,
                                   _basePath + EXTERNAL_LITS_TEXT_FILE_NAME));
+
+  IdPairMMapVecView mapping0(_basePath + PARTIAL_MMAP_IDS + std::to_string(0));
+  ASSERT_TRUE(vocabTestCompare(mapping0, _expMapping0));
+  IdPairMMapVecView mapping1(_basePath + PARTIAL_MMAP_IDS + std::to_string(1));
+  ASSERT_TRUE(vocabTestCompare(mapping1, _expMapping1));
 }
