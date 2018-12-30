@@ -108,6 +108,8 @@ class QueryPlanner {
           _isOptional(false) {}
 
     std::shared_ptr<QueryExecutionTree> _qet;
+    std::shared_ptr<ResultTable> _cachedResult;
+    bool _isCached = false;
     uint64_t _idsOfIncludedNodes;
     uint64_t _idsOfIncludedFilters;
     bool _isOptional;
