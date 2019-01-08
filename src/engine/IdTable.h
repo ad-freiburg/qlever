@@ -5,16 +5,18 @@
 #pragma once
 
 #include <array>
+#include <cassert>
 #include <cstdlib>
 #include <cstring>
 #include <initializer_list>
 #include "../global/Id.h"
 
-template <int COLS>
-class IdTable;
+template <int COLS = 0>
+class IdTableStatic;
+using IdTable = IdTableStatic<>;
 
 template <>
-class IdTable<0> {
+class IdTableStatic<0> {
  private:
   static constexpr float GROWTH_FACTOR = 1.5;
 
@@ -26,8 +28,10 @@ class IdTable<0> {
     virtual ~iterator() {}
 
     // Copy and move constructors and assignment operators
-    iterator(const iterator& other) : _data(other._data), _row(other._row) {}
-    iterator(iterator&& other) : _data(other._data), _row(other._row) {}
+    iterator(const iterator& other)
+        : _data(other._data), _row(other._row), _cols(other._cols) {}
+    iterator(iterator&& other)
+        : _data(other._data), _row(other._row), _cols(other._cols) {}
     iterator& operator=(const iterator& other) {
       new (this) iterator(other);
       return *this;
@@ -63,9 +67,19 @@ class IdTable<0> {
       return tmp;
     }
 
-    bool operator==(const iterator& other) const {
-      return _data == other._data && _row == other._row;
+    iterator operator+(size_t i) { return iterator(_data, _row + i, _cols); }
+    iterator operator-(size_t i) { return iterator(_data, _row - i, _cols); }
+
+    bool operator==(iterator const& other) const {
+      return _data == other._data && _row == other._row && _cols == other._cols;
     }
+
+    bool operator!=(iterator const& other) const {
+      return _data != other._data || _row != other._row || _cols != other._cols;
+    }
+
+    Id* operator*() { return _data + _row * _cols; }
+    const Id* operator*() const { return _data + _row * _cols; }
 
     Id& operator[](size_t i) { return *(_data + _row * _cols + i); }
     const Id& operator[](size_t i) const { return *(_data + _row * _cols + i); }
@@ -80,12 +94,16 @@ class IdTable<0> {
 
   using const_iterator = const iterator;
 
-  IdTable(size_t cols) : _data(nullptr), _size(0), _cols(cols), _capacity(0) {}
-  virtual ~IdTable() { delete[] _data; }
+  IdTableStatic(size_t cols)
+      : _data(nullptr), _size(0), _cols(cols), _capacity(0) {}
+  virtual ~IdTableStatic() { delete[] _data; }
 
   // Copy constructor
-  IdTable<0>(const IdTable<0>& other)
-      : _data(other._data), _size(other._size), _capacity(other._capacity) {
+  IdTableStatic<0>(const IdTableStatic<0>& other)
+      : _data(other._data),
+        _size(other._size),
+        _cols(other._cols),
+        _capacity(other._capacity) {
     if (other._data != nullptr) {
       _data = new Id[_capacity * _cols];
       std::memcpy(_data, other._data, _size * sizeof(Id) * _cols);
@@ -93,26 +111,29 @@ class IdTable<0> {
   }
 
   // Move constructor
-  IdTable<0>(IdTable<0>&& other)
-      : _data(other._data), _size(other._size), _capacity(other._capacity) {
+  IdTableStatic<0>(IdTableStatic<0>&& other)
+      : _data(other._data),
+        _size(other._size),
+        _cols(other._cols),
+        _capacity(other._capacity) {
     other._data = nullptr;
     other._size = 0;
     other._capacity = 0;
   }
 
   // copy assignment
-  IdTable<0>& operator=(const IdTable<0>& other) {
+  IdTableStatic<0>& operator=(const IdTableStatic<0>& other) {
     delete[] _data;
     // Use a placement new to call the copy constructor
-    new (this) IdTable<0>(other);
+    new (this) IdTableStatic<0>(other);
     return *this;
   }
 
   // move assignment
-  IdTable<0>& operator=(IdTable<0>&& other) {
+  IdTableStatic<0>& operator=(IdTableStatic<0>&& other) {
     delete[] _data;
     // Use a placement new to call the move constructor
-    new (this) IdTable<0>(other);
+    new (this) IdTableStatic<0>(other);
     return *this;
   }
 
@@ -134,23 +155,25 @@ class IdTable<0> {
   const_iterator cbegin() const { return iterator(_data, 0, _cols); }
 
   // End iterator
-  iterator end() { return iterator(_data, _size + 1, _cols); }
-  const_iterator end() const { return iterator(_data, _size + 1, _cols); }
-  const_iterator cend() const { return iterator(_data, _size + 1, _cols); }
+  iterator end() { return iterator(_data, _size, _cols); }
+  const_iterator end() const { return iterator(_data, _size, _cols); }
+  const_iterator cend() const { return iterator(_data, _size, _cols); }
 
   // Size access
-  size_t rows() const { return _size / _cols; }
+  size_t rows() const { return _size; }
   size_t cols() const { return _cols; }
 
+  size_t size() const { return _size; }
+
   void push_back() {
-    _size++;
-    if (_size >= _capacity) {
+    if (_size + 1 >= _capacity) {
       grow();
     }
+    _size++;
   }
 
   void push_back(const std::initializer_list<Id>& init) {
-    AD_CHECK(init.size() == _cols);
+    assert(init.size() == _cols);
     if (_size + 1 >= _capacity) {
       grow();
     }
@@ -167,8 +190,8 @@ class IdTable<0> {
     if (actualEnd == iterator(nullptr, 0, 0)) {
       actualEnd = iterator(_data, begin.row() + 1, _cols);
     }
-    if (actualEnd.row() > IdTable<0>::end().row()) {
-      actualEnd = IdTable<0>::end();
+    if (actualEnd.row() > IdTableStatic<0>::end().row()) {
+      actualEnd = IdTableStatic<0>::end();
     }
     if (actualEnd.row() <= begin.row()) {
       return;
@@ -195,8 +218,8 @@ class IdTable<0> {
   }
 
   /**
-   * @brief Resizes this IdTable to have at least row many rows. This method
-   *        never makes the IdTable smaller.
+   * @brief Resizes this IdTableStatic to have at least row many rows. This
+   *method never makes the IdTableStatic smaller.
    **/
   void resize(size_t rows) {
     if (rows > _size) {
@@ -206,11 +229,11 @@ class IdTable<0> {
   }
 
   /**
-   * Returns a dyamically sized IdTable that now owns this tables data
+   * Returns a dyamically sized IdTableStatic that now owns this tables data
    **/
   template <int COLS>
-  IdTable<COLS> moveToStatic() {
-    IdTable<COLS> tmp();
+  IdTableStatic<COLS> moveToStatic() {
+    IdTableStatic<COLS> tmp();
     tmp._data = _data;
     tmp._size = _size;
     tmp._capacity = _capacity;
@@ -221,12 +244,12 @@ class IdTable<0> {
   };
 
   /**
-   * Returns a dyamically sized IdTable that conatains a copy of this tables
-   * data
+   * Returns a dyamically sized IdTableStatic that conatains a copy of this
+   *tables data
    **/
   template <int COLS>
-  IdTable<COLS> copyToStatic() const {
-    IdTable<COLS> tmp();
+  IdTableStatic<COLS> copyToStatic() const {
+    IdTableStatic<COLS> tmp();
     tmp._data = new Id[_capacity * COLS];
     std::memcpy(tmp._data, _data, sizeof(Id) * _size * COLS);
     tmp._size = _size;
@@ -239,7 +262,7 @@ class IdTable<0> {
 
  private:
   /**
-   * @brief Grows the storage of this IdTable
+   * @brief Grows the storage of this IdTableStatic
    * @param newRows If newRows is 0 the storage is grown by GROWTH_FACTOR. If
    *        newRows is any other number the vector is grown by newRows many
    *        rows.
@@ -267,8 +290,8 @@ class IdTable<0> {
   size_t _capacity;
 };
 
-template <int COLS = 0>
-class IdTable {
+template <int COLS>
+class IdTableStatic {
  private:
   static constexpr float GROWTH_FACTOR = 1.5;
 
@@ -316,9 +339,19 @@ class IdTable {
       return tmp;
     }
 
+    iterator operator+(size_t i) { return iterator(_data, _row + i); }
+    iterator operator-(size_t i) { return iterator(_data, _row - i); }
+
     bool operator==(const iterator& other) const {
       return _data == other._data && _row == other._row;
     }
+
+    bool operator!=(const iterator& other) const {
+      return _data != other._data || _row != other._row;
+    }
+
+    Id* operator*() { return _data + _row * COLS; }
+    const Id* operator*() const { return _data + _row * COLS; }
 
     Id& operator[](size_t i) { return *(_data + _row * COLS + i); }
     const Id& operator[](size_t i) const { return *(_data + _row * COLS + i); }
@@ -332,11 +365,11 @@ class IdTable {
 
   using const_iterator = const iterator;
 
-  IdTable() : _data(nullptr), _size(0), _capacity(0) {}
-  virtual ~IdTable() { delete[] _data; }
+  IdTableStatic() : _data(nullptr), _size(0), _capacity(0) {}
+  virtual ~IdTableStatic() { delete[] _data; }
 
   // Copy constructor
-  IdTable<COLS>(const IdTable<COLS>& other)
+  IdTableStatic<COLS>(const IdTableStatic<COLS>& other)
       : _data(other._data), _size(other._size), _capacity(other._capacity) {
     if (other._data != nullptr) {
       _data = new Id[_capacity * COLS];
@@ -345,7 +378,7 @@ class IdTable {
   }
 
   // Move constructor
-  IdTable<COLS>(IdTable<COLS>&& other)
+  IdTableStatic<COLS>(IdTableStatic<COLS>&& other)
       : _data(other._data), _size(other._size), _capacity(other._capacity) {
     other._data = nullptr;
     other._size = 0;
@@ -353,18 +386,18 @@ class IdTable {
   }
 
   // copy assignment
-  IdTable<COLS>& operator=(const IdTable<COLS>& other) {
+  IdTableStatic<COLS>& operator=(const IdTableStatic<COLS>& other) {
     delete[] _data;
     // Use a placement new to call the copy constructor
-    new (this) IdTable<COLS>(other);
+    new (this) IdTableStatic<COLS>(other);
     return *this;
   }
 
   // move assignment
-  IdTable<COLS>& operator=(IdTable<COLS>&& other) {
+  IdTableStatic<COLS>& operator=(IdTableStatic<COLS>&& other) {
     delete[] _data;
     // Use a placement new to call the move constructor
-    new (this) IdTable<COLS>(other);
+    new (this) IdTableStatic<COLS>(other);
     return *this;
   }
 
@@ -384,19 +417,21 @@ class IdTable {
   const_iterator cbegin() const { return iterator(_data, 0); }
 
   // End iterator
-  iterator end() { return iterator(_data, _size + 1); }
-  const_iterator end() const { return iterator(_data, _size + 1); }
-  const_iterator cend() const { return iterator(_data, _size + 1); }
+  iterator end() { return iterator(_data, _size); }
+  const_iterator end() const { return iterator(_data, _size); }
+  const_iterator cend() const { return iterator(_data, _size); }
 
   // Size access
-  size_t rows() const { return _size / COLS; }
+  size_t rows() const { return _size; }
   size_t cols() const { return COLS; }
 
+  size_t size() const { return _size; }
+
   void push_back() {
-    _size++;
-    if (_size >= _capacity) {
+    if (_size + 1 >= _capacity) {
       grow();
     }
+    _size++;
   }
 
   void push_back(const std::array<Id, COLS>& init) {
@@ -411,13 +446,13 @@ class IdTable {
    * @brief Erases all rows in the range [begin;end)
    **/
   void erase(const_iterator& begin,
-             const_iterator& end = iterator(nullptr, 0, 0)) {
+             const_iterator& end = iterator(nullptr, 0)) {
     iterator actualEnd = end;
-    if (actualEnd == iterator(nullptr, 0, 0)) {
-      actualEnd = iterator(_data, begin.row() + 1, COLS);
+    if (actualEnd == iterator(nullptr, 0)) {
+      actualEnd = iterator(_data, begin.row() + 1);
     }
-    if (actualEnd.row() > IdTable<COLS>::end().row()) {
-      actualEnd = IdTable<COLS>::end();
+    if (actualEnd.row() > IdTableStatic<COLS>::end().row()) {
+      actualEnd = IdTableStatic<COLS>::end();
     }
     if (actualEnd.row() <= begin.row()) {
       return;
@@ -444,8 +479,8 @@ class IdTable {
   }
 
   /**
-   * @brief Resizes this IdTable to have at least row many rows. This method
-   *        never makes the IdTable smaller.
+   * @brief Resizes this IdTableStatic to have at least row many rows. This
+   *method never makes the IdTableStatic smaller.
    **/
   void resize(size_t rows) {
     if (rows > _size) {
@@ -455,10 +490,10 @@ class IdTable {
   }
 
   /**
-   * Returns a dyamically sized IdTable that now owns this tables data
+   * Returns a dyamically sized IdTableStatic that now owns this tables data
    **/
-  IdTable<0> moveToDynamic() {
-    IdTable<0> tmp(COLS);
+  IdTableStatic<0> moveToDynamic() {
+    IdTableStatic<0> tmp(COLS);
     tmp._data = _data;
     tmp._size = _size;
     tmp._capacity = _capacity;
@@ -469,11 +504,11 @@ class IdTable {
   };
 
   /**
-   * Returns a dyamically sized IdTable that conatains a copy of this tables
-   * data
+   * Returns a dyamically sized IdTableStatic that conatains a copy of this
+   *tables data
    **/
-  IdTable<0> copyToDynamic() const {
-    IdTable<0> tmp(COLS);
+  IdTableStatic<0> copyToDynamic() const {
+    IdTableStatic<0> tmp(COLS);
     tmp._data = new Id[_capacity * COLS];
     std::memcpy(tmp._data, _data, sizeof(Id) * _size * COLS);
     tmp._size = _size;
@@ -486,7 +521,7 @@ class IdTable {
 
  private:
   /**
-   * @brief Grows the storage of this IdTable
+   * @brief Grows the storage of this IdTableStatic
    * @param newRows If newRows is 0 the storage is grown by GROWTH_FACTOR. If
    *        newRows is any other number the vector is grown by newRows many
    *        rows.

@@ -84,3 +84,6 @@ target_link_libraries(TurtleParserTest parser re2 gtest_main -pthread)
 
 add_executable(MultiColumnJoinTest MultiColumnJoinTest.cpp)
 target_link_libraries(MultiColumnJoinTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(IdTableTest IdTableTest.cpp)
+target_link_libraries(IdTableTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
