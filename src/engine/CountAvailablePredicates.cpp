@@ -123,8 +123,8 @@ size_t CountAvailablePredicates::getCostEstimate() {
 void CountAvailablePredicates::computeResult(ResultTable* result) {
   LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
   result->_nofColumns = 2;
+  result->_data.setCols(result->_nofColumns);
   result->_sortedBy = resultSortedOn();
-  result->_fixedSizeData = new vector<array<Id, 2>>();
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
 
@@ -143,71 +143,33 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
     // If the entity exists return the all predicates for that entitity,
     // otherwise return an empty result.
     if (getIndex().getVocab().getId(_subjectEntityName.value(), &entityId)) {
-      std::vector<array<Id, 1>> input = {{entityId}};
-      CountAvailablePredicates::computePatternTrick<array<Id, 1>>(
-          &input, static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-          hasPattern, hasPredicate, patterns, 0, &runtimeInfo);
+      IdTable input(1);
+      input.push_back({entityId});
+      CountAvailablePredicates::computePatternTrick(input, &result->_data,
+                                                    hasPattern, hasPredicate,
+                                                    patterns, 0, &runtimeInfo);
     }
   } else if (_subtree == nullptr) {
     runtimeInfo.setDescriptor("CountAvailablePredicates for all entities");
     // Compute the predicates for all entities
     CountAvailablePredicates::computePatternTrickAllEntities(
-        static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData), hasPattern,
-        hasPredicate, patterns);
+        &result->_data, hasPattern, hasPredicate, patterns);
   } else {
-    // Compute the predicates for entities in subresult's _subjectColumnIndex
-    // column.
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
     runtimeInfo.setDescriptor("CountAvailablePredicates");
     runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
-    if (subresult->_nofColumns > 5) {
-      CountAvailablePredicates::computePatternTrick<vector<Id>>(
-          &subresult->_varSizeData,
-          static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-          hasPattern, hasPredicate, patterns, _subjectColumnIndex,
-          &runtimeInfo);
-    } else {
-      if (subresult->_nofColumns == 1) {
-        CountAvailablePredicates::computePatternTrick<array<Id, 1>>(
-            static_cast<vector<array<Id, 1>>*>(subresult->_fixedSizeData),
-            static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-            hasPattern, hasPredicate, patterns, _subjectColumnIndex,
-            &runtimeInfo);
-      } else if (subresult->_nofColumns == 2) {
-        CountAvailablePredicates::computePatternTrick<array<Id, 2>>(
-            static_cast<vector<array<Id, 2>>*>(subresult->_fixedSizeData),
-            static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-            hasPattern, hasPredicate, patterns, _subjectColumnIndex,
-            &runtimeInfo);
-      } else if (subresult->_nofColumns == 3) {
-        CountAvailablePredicates::computePatternTrick<array<Id, 3>>(
-            static_cast<vector<array<Id, 3>>*>(subresult->_fixedSizeData),
-            static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-            hasPattern, hasPredicate, patterns, _subjectColumnIndex,
-            &runtimeInfo);
-      } else if (subresult->_nofColumns == 4) {
-        CountAvailablePredicates::computePatternTrick<array<Id, 4>>(
-            static_cast<vector<array<Id, 4>>*>(subresult->_fixedSizeData),
-            static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-            hasPattern, hasPredicate, patterns, _subjectColumnIndex,
-            &runtimeInfo);
-      } else if (subresult->_nofColumns == 5) {
-        CountAvailablePredicates::computePatternTrick<array<Id, 5>>(
-            static_cast<vector<array<Id, 5>>*>(subresult->_fixedSizeData),
-            static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-            hasPattern, hasPredicate, patterns, _subjectColumnIndex,
-            &runtimeInfo);
-      }
-    }
+    CountAvailablePredicates::computePatternTrick(
+        subresult->_data, &result->_data, hasPattern, hasPredicate, patterns,
+        _subjectColumnIndex, &runtimeInfo);
   }
   LOG(DEBUG) << "CountAvailablePredicates result computation done."
              << std::endl;
 }
 
 void CountAvailablePredicates::computePatternTrickAllEntities(
-    vector<array<Id, 2>>* result, const vector<PatternID>& hasPattern,
+    IdTable* result, const vector<PatternID>& hasPattern,
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
   LOG(DEBUG) << "For all entities." << std::endl;
@@ -245,18 +207,16 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   }
   result->reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
-    result->push_back(array<Id, 2>{it.first, static_cast<Id>(it.second)});
+    result->push_back({it.first, static_cast<Id>(it.second)});
   }
 }
 
-template <typename A>
 void CountAvailablePredicates::computePatternTrick(
-    const vector<A>* input, vector<array<Id, 2>>* result,
-    const vector<PatternID>& hasPattern,
+    const IdTable& input, IdTable* result, const vector<PatternID>& hasPattern,
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns, const size_t subjectColumn,
     RuntimeInformation* runtimeInfo) {
-  LOG(DEBUG) << "For " << input->size() << " entities in column "
+  LOG(DEBUG) << "For " << input.size() << " entities in column "
              << subjectColumn << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
@@ -268,9 +228,9 @@ void CountAvailablePredicates::computePatternTrick(
   // the number of predicates counted without patterns
   size_t numListPredicates = 0;
   Id lastSubject = ID_NO_VALUE;
-  while (inputIdx < input->size()) {
+  while (inputIdx < input.size()) {
     // Skip over elements with the same subject (don't count them twice)
-    Id subject = (*input)[inputIdx][subjectColumn];
+    Id subject = input(inputIdx, subjectColumn);
     if (subject == lastSubject) {
       inputIdx++;
       continue;
@@ -318,12 +278,12 @@ void CountAvailablePredicates::computePatternTrick(
   // write the predicate counts to the result
   result->reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
-    result->push_back(array<Id, 2>{it.first, static_cast<Id>(it.second)});
+    result->push_back({it.first, static_cast<Id>(it.second)});
   }
 
   // Print interesting statistics about the pattern trick
   double ratioHasPatterns =
-      static_cast<double>(numEntitiesWithPatterns) / input->size();
+      static_cast<double>(numEntitiesWithPatterns) / input.size();
   size_t numPredicatesWithRepetitions =
       numPredicatesSubsumedInPatterns + numListPredicates;
   double ratioCountedWithPatterns =
@@ -331,12 +291,12 @@ void CountAvailablePredicates::computePatternTrick(
       numPredicatesWithRepetitions;
 
   size_t costWithPatterns =
-      input->size() + numListPredicates + numPatternPredicates;
-  size_t costWithoutPatterns = input->size() + numPredicatesWithRepetitions;
+      input.size() + numListPredicates + numPatternPredicates;
+  size_t costWithoutPatterns = input.size() + numPredicatesWithRepetitions;
   double costRatio =
       static_cast<double>(costWithPatterns) / costWithoutPatterns;
   // Print the ratio of entities that used a pattern
-  LOG(DEBUG) << numEntitiesWithPatterns << " of " << input->size()
+  LOG(DEBUG) << numEntitiesWithPatterns << " of " << input.size()
              << " entities had a pattern. That equals "
              << (ratioHasPatterns * 100) << " %" << std::endl;
   // Print info about how many predicates where counted with patterns
@@ -355,7 +315,7 @@ void CountAvailablePredicates::computePatternTrick(
              << std::endl;
 
   // Add these values to the runtime info
-  runtimeInfo->addDetail("numEntities", input->size());
+  runtimeInfo->addDetail("numEntities", input.size());
   runtimeInfo->addDetail("numPredicatesWithRepetitions",
                          numPredicatesWithRepetitions);
   runtimeInfo->addDetail("percentEntitesWithPatterns", ratioHasPatterns * 100);

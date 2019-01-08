@@ -187,6 +187,7 @@ size_t HasPredicateScan::getCostEstimate() {
 void HasPredicateScan::computeResult(ResultTable* result) {
   LOG(DEBUG) << "HasPredicateScan result computation..." << std::endl;
   result->_nofColumns = getResultWidth();
+  result->_data.setCols(result->_nofColumns);
   result->_sortedBy = resultSortedOn();
 
   const std::vector<PatternID>& hasPattern = getIndex().getHasPattern();
@@ -241,9 +242,6 @@ void HasPredicateScan::computeFreeS(
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  std::vector<std::array<Id, 1>>* fixedSizeData =
-      new std::vector<std::array<Id, 1>>();
-  result->_fixedSizeData = fixedSizeData;
 
   Id id = 0;
   while (id < hasPattern.size() || id < hasPredicate.size()) {
@@ -254,7 +252,7 @@ void HasPredicateScan::computeFreeS(
       std::tie(patternData, numPredicates) = patterns[hasPattern[id]];
       for (size_t i = 0; i < numPredicates; i++) {
         if (patternData[i] == objectId) {
-          fixedSizeData->push_back({{id}});
+          result->_data.push_back({id});
         }
       }
     } else if (id < hasPredicate.size()) {
@@ -264,7 +262,7 @@ void HasPredicateScan::computeFreeS(
       std::tie(predicateData, numPredicates) = hasPredicate[id];
       for (size_t i = 0; i < numPredicates; i++) {
         if (predicateData[i] == objectId) {
-          fixedSizeData->push_back({{id}});
+          result->_data.push_back({id});
         }
       }
     }
@@ -278,9 +276,6 @@ void HasPredicateScan::computeFreeO(
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  std::vector<std::array<Id, 1>>* fixedSizeData =
-      new std::vector<std::array<Id, 1>>();
-  result->_fixedSizeData = fixedSizeData;
 
   if (subjectId < hasPattern.size() && hasPattern[subjectId] != NO_PATTERN) {
     // add the pattern
@@ -288,7 +283,7 @@ void HasPredicateScan::computeFreeO(
     Id* patternData;
     std::tie(patternData, numPredicates) = patterns[hasPattern[subjectId]];
     for (size_t i = 0; i < numPredicates; i++) {
-      fixedSizeData->push_back({{patternData[i]}});
+      result->_data.push_back({patternData[i]});
     }
   } else if (subjectId < hasPredicate.size()) {
     // add the relations
@@ -296,7 +291,7 @@ void HasPredicateScan::computeFreeO(
     Id* predicateData;
     std::tie(predicateData, numPredicates) = hasPredicate[subjectId];
     for (size_t i = 0; i < numPredicates; i++) {
-      fixedSizeData->push_back({{predicateData[i]}});
+      result->_data.push_back({predicateData[i]});
     }
   }
 }
@@ -307,10 +302,7 @@ void HasPredicateScan::computeFullScan(
     const CompactStringVector<size_t, Id>& patterns, size_t resultSize) {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  std::vector<std::array<Id, 2>>* fixedSizeData =
-      new std::vector<std::array<Id, 2>>();
-  result->_fixedSizeData = fixedSizeData;
-  fixedSizeData->reserve(resultSize);
+  result->_data.reserve(resultSize);
 
   size_t id = 0;
   while (id < hasPattern.size() || id < hasPredicate.size()) {
@@ -320,7 +312,7 @@ void HasPredicateScan::computeFullScan(
       Id* patternData;
       std::tie(patternData, numPredicates) = patterns[hasPattern[id]];
       for (size_t i = 0; i < numPredicates; i++) {
-        fixedSizeData->push_back({{id, patternData[i]}});
+        result->_data.push_back({id, patternData[i]});
       }
     } else if (id < hasPredicate.size()) {
       // add the relations
@@ -328,150 +320,62 @@ void HasPredicateScan::computeFullScan(
       Id* predicateData;
       std::tie(predicateData, numPredicates) = hasPredicate[id];
       for (size_t i = 0; i < numPredicates; i++) {
-        fixedSizeData->push_back({{id, predicateData[i]}});
+        result->_data.push_back({id, predicateData[i]});
       }
     }
     id++;
   }
 }
 
-/**
- * @brief This struct resizes std::containers if they are vectors,
- *        allowing for nicer templated code that can handle both result vectors
- *        of vectors and vectors of arrays.
- */
-template <typename T, typename C>
-struct resizeIfVec {
-  static void resize(T& t, int size) {
-    (void)t;
-    (void)size;
-  }
-};
+void HasPredicateScan::computeSubqueryS(
+    ResultTable* resultTable, const std::shared_ptr<QueryExecutionTree> subtree,
+    const size_t subtreeColIndex, const std::vector<PatternID>& hasPattern,
+    const CompactStringVector<Id, Id>& hasPredicate,
+    const CompactStringVector<size_t, Id>& patterns) {
+  std::shared_ptr<const ResultTable> subresult = subtree->getResult();
 
-template <typename C>
-struct resizeIfVec<vector<C>, C> {
-  static void resize(vector<C>& t, int size) { t.resize(size); }
-};
+  resultTable->_resultTypes.insert(resultTable->_resultTypes.begin(),
+                                   subresult->_resultTypes.begin(),
+                                   subresult->_resultTypes.end());
+  resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
 
-template <typename A, typename R>
-void doComputeSubqueryS(const std::vector<A>* input,
-                        const size_t inputSubjectColumn, std::vector<R>* result,
-                        const std::vector<PatternID>& hasPattern,
-                        const CompactStringVector<Id, Id>& hasPredicate,
-                        const CompactStringVector<size_t, Id>& patterns) {
-  LOG(DEBUG) << "HasPredicateScan subresult size " << input->size()
-             << std::endl;
-  for (size_t i = 0; i < input->size(); i++) {
-    const A& inputRow = (*input)[i];
-    size_t id = inputRow[inputSubjectColumn];
+  const IdTable& input = subresult->_data;
+  IdTable* result = &resultTable->_data;
+
+  LOG(DEBUG) << "HasPredicateScan subresult size " << input.size() << std::endl;
+
+  for (size_t i = 0; i < input.size(); i++) {
+    size_t id = input(i, subtreeColIndex);
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
-      // add the pattern
+      // Expand the pattern and add it to the result
       size_t numPredicates;
       Id* patternData;
       std::tie(patternData, numPredicates) = patterns[hasPattern[id]];
-      for (size_t i = 0; i < numPredicates; i++) {
-        R row;
-        resizeIfVec<R, Id>::resize(row, inputRow.size() + 1);
-        for (size_t j = 0; j < inputRow.size(); j++) {
-          row[j] = inputRow[j];
+      for (size_t j = 0; j < numPredicates; j++) {
+        result->push_back();
+        size_t backIdx = result->size() - 1;
+        for (size_t k = 0; k < input.cols(); k++) {
+          (*result)(backIdx, k) = input(i, k);
         }
-        row[inputRow.size()] = patternData[i];
-        result->push_back(row);
+        (*result)(backIdx, input.cols()) = patternData[j];
       }
     } else if (id < hasPredicate.size()) {
       // add the relations
       size_t numPredicates;
       Id* predicateData;
       std::tie(predicateData, numPredicates) = hasPredicate[id];
-      for (size_t i = 0; i < numPredicates; i++) {
-        R row;
-        resizeIfVec<R, Id>::resize(row, inputRow.size() + 1);
-        for (size_t j = 0; j < inputRow.size(); j++) {
-          row[j] = inputRow[j];
+      for (size_t j = 0; j < numPredicates; j++) {
+        result->push_back();
+        size_t backIdx = result->size() - 1;
+        for (size_t k = 0; k < input.cols(); k++) {
+          (*result)(backIdx, k) = input(i, k);
         }
-        row[inputRow.size()] = predicateData[i];
-        result->push_back(row);
+        (*result)(backIdx, input.cols()) = predicateData[j];
       }
     } else {
       break;
     }
   }
-}
-
-/**
- * @brief  This struct is used to call doComputeSubqueryS with the correct
- * template parameters. Using it is equivalent to a structure of nested if
- * clauses, checking if the inputColCount and resultColCount are of a certain
- * value, and then calling doGroupBy.
- */
-template <int InputColCount>
-struct CallComputeSubqueryS {
-  static void call(int inputColCount, const ResultTable* input,
-                   const size_t inputSubjectColumn, ResultTable* result,
-                   const std::vector<PatternID>& hasPattern,
-                   const CompactStringVector<Id, Id>& hasPredicate,
-                   const CompactStringVector<size_t, Id>& patterns) {
-    if (InputColCount == inputColCount) {
-      if (InputColCount < 5) {
-        // Both the input and the result use _fixedSizeData
-        result->_fixedSizeData = new vector<array<Id, InputColCount + 1>>();
-        doComputeSubqueryS<std::array<Id, InputColCount>,
-                           std::array<Id, InputColCount + 1>>(
-            static_cast<vector<array<Id, InputColCount>>*>(
-                input->_fixedSizeData),
-            inputSubjectColumn,
-            static_cast<vector<array<Id, InputColCount + 1>>*>(
-                result->_fixedSizeData),
-            hasPattern, hasPredicate, patterns);
-      } else {
-        // The input uses _fixedSizeData, but the output uses _varSizeData
-        doComputeSubqueryS<std::array<Id, InputColCount>, std::vector<Id>>(
-            static_cast<vector<array<Id, InputColCount>>*>(
-                input->_fixedSizeData),
-            inputSubjectColumn, &result->_varSizeData, hasPattern, hasPredicate,
-            patterns);
-      }
-    } else {
-      CallComputeSubqueryS<InputColCount + 1>::call(
-          inputColCount, input, inputSubjectColumn, result, hasPattern,
-          hasPredicate, patterns);
-    }
-  }
-};
-
-template <>
-struct CallComputeSubqueryS<6> {
-  static void call(int inputColCount, const ResultTable* input,
-                   const size_t inputSubjectColumn, ResultTable* result,
-                   const std::vector<PatternID>& hasPattern,
-                   const CompactStringVector<Id, Id>& hasPredicate,
-                   const CompactStringVector<size_t, Id>& patterns) {
-    // avoid unused warnings from the compiler
-    (void)inputColCount;
-    // Both the input and the result use _varSizeData
-    doComputeSubqueryS<std::vector<Id>, std::vector<Id>>(
-        &input->_varSizeData, inputSubjectColumn, &result->_varSizeData,
-        hasPattern, hasPredicate, patterns);
-  }
-};
-
-void HasPredicateScan::computeSubqueryS(
-    ResultTable* result, const std::shared_ptr<QueryExecutionTree> subtree,
-    const size_t subtreeColIndex, const std::vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasPredicate,
-    const CompactStringVector<size_t, Id>& patterns) {
-  std::shared_ptr<const ResultTable> subresult = subtree->getResult();
-  LOG(DEBUG) << "Finished computing the HasPredicateScan subresult."
-             << std::endl;
-
-  result->_resultTypes.insert(result->_resultTypes.begin(),
-                              subresult->_resultTypes.begin(),
-                              subresult->_resultTypes.end());
-  result->_resultTypes.push_back(ResultTable::ResultType::KB);
-
-  CallComputeSubqueryS<1>::call(subresult->_nofColumns, subresult.get(),
-                                subtreeColIndex, result, hasPattern,
-                                hasPredicate, patterns);
 }
 
 void HasPredicateScan::setSubject(const std::string& subject) {

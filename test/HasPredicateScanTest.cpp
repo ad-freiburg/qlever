@@ -16,10 +16,9 @@ class DummyOperation : public Operation {
     result->_nofColumns = 2;
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    result->_fixedSizeData = new vector<array<Id, 2>>();
+    result->_data.setCols(2);
     for (size_t i = 0; i < 10; i++) {
-      static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData)
-          ->push_back({{10 - i, 2 * i}});
+      result->_data.push_back({10 - i, 2 * i});
     }
     result->finish();
   }
@@ -68,13 +67,11 @@ TEST(HasPredicateScan, freeS) {
   // Find all entities that are in a triple with predicate 3
   HasPredicateScan::computeFreeS(&resultTable, 3, hasPattern, hasRelation,
                                  patterns);
-  std::vector<array<Id, 1>> result =
-      *static_cast<vector<array<Id, 1>>*>(resultTable._fixedSizeData);
+  IdTable& result = resultTable._data;
 
   // the result set does not guarantee any sorting so we have to sort manually
-  std::sort(
-      result.begin(), result.end(),
-      [](const array<Id, 1>& a, const array<Id, 1>& b) { return a[0] < b[0]; });
+  std::sort(result.begin(), result.end(),
+            [](const auto& a, const auto& b) { return a[0] < b[0]; });
 
   // three entties with a pattern and four entities without one are in the
   // relation
@@ -109,8 +106,7 @@ TEST(HasPredicateScan, freeO) {
   // Find all predicates for entity 3 (pattern 1)
   HasPredicateScan::computeFreeO(&resultTable, 3, hasPattern, hasRelation,
                                  patterns);
-  std::vector<array<Id, 1>> result =
-      *static_cast<vector<array<Id, 1>>*>(resultTable._fixedSizeData);
+  IdTable& result = resultTable._data;
 
   ASSERT_EQ(5u, result.size());
   ASSERT_EQ(1u, result[0][0]);
@@ -122,7 +118,7 @@ TEST(HasPredicateScan, freeO) {
   // Find all predicates for entity 6 (has-relation entry 6)
   HasPredicateScan::computeFreeO(&resultTable, 6, hasPattern, hasRelation,
                                  patterns);
-  result = *static_cast<vector<array<Id, 1>>*>(resultTable._fixedSizeData);
+  result = resultTable._data;
 
   ASSERT_EQ(2u, result.size());
   ASSERT_EQ(3u, result[0][0]);
@@ -149,8 +145,7 @@ TEST(HasPredicateScan, fullScan) {
   // Query for all relations
   HasPredicateScan::computeFullScan(&resultTable, hasPattern, hasRelation,
                                     patterns, 16);
-  std::vector<array<Id, 2>> result =
-      *static_cast<vector<array<Id, 2>>*>(resultTable._fixedSizeData);
+  IdTable& result = resultTable._data;
 
   ASSERT_EQ(16u, result.size());
 
@@ -224,8 +219,7 @@ TEST(HasPredicateScan, subtreeS) {
   HasPredicateScan::computeSubqueryS(&resultTable, subtree, 1, hasPattern,
                                      hasRelation, patterns);
 
-  std::vector<array<Id, 3>> result =
-      *static_cast<vector<array<Id, 3>>*>(resultTable._fixedSizeData);
+  IdTable& result = resultTable._data;
 
   // the sum of the count of every second entities relations
   ASSERT_EQ(10u, result.size());
@@ -271,9 +265,12 @@ TEST(HasPredicateScan, subtreeS) {
 
 TEST(CountAvailablePredicates, patternTrickTest) {
   // The input table containing entity ids
-  std::vector<std::array<Id, 1>> input = {{0}, {1}, {2}, {3}, {4}, {6}, {7}};
+  IdTable input(1);
+  for (Id i = 0; i < 8; i++) {
+    input.push_back({i});
+  }
   // Used to store the result.
-  vector<array<Id, 2>> result;
+  IdTable result(2);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};
@@ -291,8 +288,8 @@ TEST(CountAvailablePredicates, patternTrickTest) {
 
   RuntimeInformation runtimeInfo;
   try {
-    CountAvailablePredicates::computePatternTrick<std::array<Id, 1>>(
-        &input, &result, hasPattern, hasRelation, patterns, 0, &runtimeInfo);
+    CountAvailablePredicates::computePatternTrick(
+        input, &result, hasPattern, hasRelation, patterns, 0, &runtimeInfo);
   } catch (ad_semsearch::Exception e) {
     // More verbose output in the case of an exception occuring.
     std::cout << e.getErrorMessage() << std::endl
@@ -300,10 +297,9 @@ TEST(CountAvailablePredicates, patternTrickTest) {
     ASSERT_TRUE(false);
   }
 
-  std::sort(result.begin(), result.end(),
-            [](const array<Id, 2>& i1, const array<Id, 2>& i2) -> bool {
-              return i1[0] < i2[0];
-            });
+  std::sort(
+      result.begin(), result.end(),
+      [](const auto& i1, const auto& i2) -> bool { return i1[0] < i2[0]; });
   ASSERT_EQ(5u, result.size());
 
   ASSERT_EQ(0u, result[0][0]);

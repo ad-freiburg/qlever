@@ -58,12 +58,11 @@ void TextOperationForContexts::computeResult(ResultTable* result) {
   runtimeInfo.setDescriptor("TextOperationForContexts " + _words);
   if (_subtrees.size() == 0) {
     result->_nofColumns = 2;
+    result->_data.setCols(result->_nofColumns);
     result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
     result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-    result->_fixedSizeData = new vector<array<Id, 2>>;
-    getExecutionContext()->getIndex().getContextListForWords(
-        _words,
-        reinterpret_cast<vector<array<Id, 2>>*>(result->_fixedSizeData));
+    getExecutionContext()->getIndex().getContextListForWords(_words,
+                                                             &result->_data);
   } else {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
              "Complex text query is a todo for the future.");

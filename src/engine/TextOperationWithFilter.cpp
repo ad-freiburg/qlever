@@ -49,6 +49,7 @@ void TextOperationWithFilter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "TextOperationWithFilter result computation..." << endl;
   AD_CHECK_GE(_nofVars, 1);
   result->_nofColumns = 1 + _filterResult->getResultWidth() + _nofVars;
+  result->_data.setCols(result->_nofColumns);
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
@@ -61,86 +62,13 @@ void TextOperationWithFilter::computeResult(ResultTable* result) {
   for (size_t i = 2; i < result->_nofColumns; i++) {
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
   }
-  if (_filterResult->getResultWidth() == 1) {
-    AD_CHECK_GE(result->_nofColumns, 3);
-    if (result->_nofColumns == 3) {
-      result->_fixedSizeData = new vector<array<Id, 3>>;
-      getExecutionContext()->getIndex().getFilteredECListForWords(
-          _words,
-          *static_cast<vector<array<Id, 1>>*>(filterResult->_fixedSizeData),
-          _nofVars, _textLimit,
-          *reinterpret_cast<vector<array<Id, 3>>*>(result->_fixedSizeData));
-    } else if (result->_nofColumns == 4) {
-      result->_fixedSizeData = new vector<array<Id, 4>>;
-      getExecutionContext()->getIndex().getFilteredECListForWords(
-          _words,
-          *static_cast<vector<array<Id, 1>>*>(filterResult->_fixedSizeData),
-          _nofVars, _textLimit,
-          *reinterpret_cast<vector<array<Id, 4>>*>(result->_fixedSizeData));
-    } else if (result->_nofColumns == 5) {
-      result->_fixedSizeData = new vector<array<Id, 5>>;
-      getExecutionContext()->getIndex().getFilteredECListForWords(
-          _words,
-          *static_cast<vector<array<Id, 1>>*>(filterResult->_fixedSizeData),
-          _nofVars, _textLimit,
-          *reinterpret_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
-    } else {
-      getExecutionContext()->getIndex().getFilteredECListForWords(
-          _words,
-          *static_cast<vector<array<Id, 1>>*>(filterResult->_fixedSizeData),
-          _nofVars, _textLimit, result->_varSizeData);
-    }
-  } else if (_filterResult->getResultWidth() == 2) {
-    AD_CHECK_GE(result->_nofColumns, 4);
-    if (result->_nofColumns == 4) {
-      result->_fixedSizeData = new vector<array<Id, 4>>;
-      getExecutionContext()->getIndex().getFilteredECListForWords(
-          _words,
-          *static_cast<vector<array<Id, 2>>*>(filterResult->_fixedSizeData),
-          _filterColumn, _nofVars, _textLimit,
-          *reinterpret_cast<vector<array<Id, 4>>*>(result->_fixedSizeData));
-    } else if (result->_nofColumns == 5) {
-      result->_fixedSizeData = new vector<array<Id, 5>>;
-      getExecutionContext()->getIndex().getFilteredECListForWords(
-          _words,
-          *static_cast<vector<array<Id, 2>>*>(filterResult->_fixedSizeData),
-          _filterColumn, _nofVars, _textLimit,
-          *reinterpret_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
-    } else {
-      getExecutionContext()->getIndex().getFilteredECListForWords(
-          _words,
-          *static_cast<vector<array<Id, 2>>*>(filterResult->_fixedSizeData),
-          _filterColumn, _nofVars, _textLimit, result->_varSizeData);
-    }
-  } else if (_filterResult->getResultWidth() == 3) {
-    AD_CHECK_GE(result->_nofColumns, 5);
-    if (result->_nofColumns == 5) {
-      result->_fixedSizeData = new vector<array<Id, 5>>;
-      getExecutionContext()->getIndex().getFilteredECListForWords(
-          _words,
-          *static_cast<vector<array<Id, 3>>*>(filterResult->_fixedSizeData),
-          _filterColumn, _nofVars, _textLimit,
-          *reinterpret_cast<vector<array<Id, 5>>*>(result->_fixedSizeData));
-    } else {
-      getExecutionContext()->getIndex().getFilteredECListForWords(
-          _words,
-          *static_cast<vector<array<Id, 3>>*>(filterResult->_fixedSizeData),
-          _filterColumn, _nofVars, _textLimit, result->_varSizeData);
-    }
-  } else if (_filterResult->getResultWidth() == 4) {
-    getExecutionContext()->getIndex().getFilteredECListForWords(
-        _words,
-        *static_cast<vector<array<Id, 4>>*>(filterResult->_fixedSizeData),
-        _filterColumn, _nofVars, _textLimit, result->_varSizeData);
-  } else if (_filterResult->getResultWidth() == 5) {
-    getExecutionContext()->getIndex().getFilteredECListForWords(
-        _words,
-        *static_cast<vector<array<Id, 5>>*>(filterResult->_fixedSizeData),
-        _filterColumn, _nofVars, _textLimit, result->_varSizeData);
+  if (filterResult->_data.cols() == 1) {
+    getExecutionContext()->getIndex().getFilteredECListForWordsWidthOne(
+        _words, filterResult->_data, _nofVars, _textLimit, &result->_data);
   } else {
     getExecutionContext()->getIndex().getFilteredECListForWords(
-        _words, filterResult->_varSizeData, _filterColumn, _nofVars, _textLimit,
-        result->_varSizeData);
+        _words, filterResult->_data, _filterColumn, _nofVars, _textLimit,
+        &result->_data);
   }
 
   LOG(DEBUG) << "TextOperationWithFilter result computation done." << endl;

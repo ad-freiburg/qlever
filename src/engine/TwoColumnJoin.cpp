@@ -79,7 +79,6 @@ string TwoColumnJoin::asString(size_t indent) const {
 // _____________________________________________________________________________
 void TwoColumnJoin::computeResult(ResultTable* result) {
   AD_CHECK(result);
-  AD_CHECK(!result->_fixedSizeData);
   LOG(DEBUG) << "TwoColumnJoin result computation..." << endl;
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
@@ -102,12 +101,13 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
     const auto rightResult = _right->getResult();
     runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
     runtimeInfo.addChild(_right->getRootOperation()->getRuntimeInfo());
-    const auto& filter = *static_cast<vector<array<Id, 2>>*>(
-        rightFilter ? rightResult->_fixedSizeData : leftResult->_fixedSizeData);
+    const IdTable& filter =
+        rightFilter ? rightResult->_data : leftResult->_data;
     size_t jc1 = rightFilter ? _jc1Left : _jc1Right;
     size_t jc2 = rightFilter ? _jc2Left : _jc2Right;
     result->_sortedBy = {jc1};
     result->_nofColumns = v->getResultWidth();
+    result->_data.setCols(result->_nofColumns);
     result->_resultTypes.reserve(result->_nofColumns);
     result->_resultTypes.insert(result->_resultTypes.end(),
                                 leftResult->_resultTypes.begin(),
@@ -122,34 +122,7 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
 
     const auto& toFilter = rightFilter ? leftResult : rightResult;
 
-    if (result->_nofColumns == 2) {
-      using ResType = vector<array<Id, 2>>;
-      result->_fixedSizeData = new ResType();
-      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData), jc1,
-                         jc2, filter,
-                         static_cast<ResType*>(result->_fixedSizeData));
-    } else if (result->_nofColumns == 3) {
-      using ResType = vector<array<Id, 3>>;
-      result->_fixedSizeData = new ResType();
-      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData), jc1,
-                         jc2, filter,
-                         static_cast<ResType*>(result->_fixedSizeData));
-    } else if (result->_nofColumns == 4) {
-      using ResType = vector<array<Id, 4>>;
-      result->_fixedSizeData = new ResType();
-      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData), jc1,
-                         jc2, filter,
-                         static_cast<ResType*>(result->_fixedSizeData));
-    } else if (result->_nofColumns == 5) {
-      using ResType = vector<array<Id, 5>>;
-      result->_fixedSizeData = new ResType();
-      getEngine().filter(*static_cast<ResType*>(toFilter->_fixedSizeData), jc1,
-                         jc2, filter,
-                         static_cast<ResType*>(result->_fixedSizeData));
-    } else {
-      getEngine().filter(toFilter->_varSizeData, jc1, jc2, filter,
-                         &result->_varSizeData);
-    }
+    getEngine().filter(toFilter->_data, jc1, jc2, filter, &result->_data);
 
     LOG(DEBUG) << "TwoColumnJoin result computation done." << endl;
     return;

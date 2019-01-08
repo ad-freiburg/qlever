@@ -1085,7 +1085,7 @@ void Index::openFileHandles() {
 }
 
 // _____________________________________________________________________________
-void Index::scanPSO(const string& predicate, WidthTwoList* result) const {
+void Index::scanPSO(const string& predicate, IdTable* result) const {
   LOG(DEBUG) << "Performing PSO scan for full relation: " << predicate << "\n";
   Id relId;
   if (_vocab.getId(predicate, &relId)) {
@@ -1097,7 +1097,7 @@ void Index::scanPSO(const string& predicate, WidthTwoList* result) const {
 
 // _____________________________________________________________________________
 void Index::scanPSO(const string& predicate, const string& subject,
-                    WidthOneList* result) const {
+                    IdTable* result) const {
   LOG(DEBUG) << "Performing PSO scan of relation " << predicate
              << " with fixed subject: " << subject << "...\n";
   Id relId;
@@ -1121,7 +1121,7 @@ void Index::scanPSO(const string& predicate, const string& subject,
       } else {
         // If we don't have blocks, scan the whole relation and filter /
         // restrict.
-        WidthTwoList fullRelation;
+        IdTable fullRelation(2);
         fullRelation.resize(rmd.getNofElements());
         _psoFile.read(fullRelation.data(),
                       rmd.getNofElements() * 2 * sizeof(Id),
@@ -1138,7 +1138,7 @@ void Index::scanPSO(const string& predicate, const string& subject,
 }
 
 // _____________________________________________________________________________
-void Index::scanPOS(const string& predicate, WidthTwoList* result) const {
+void Index::scanPOS(const string& predicate, IdTable* result) const {
   LOG(DEBUG) << "Performing POS scan for full relation: " << predicate << "\n";
   Id relId;
   if (_vocab.getId(predicate, &relId)) {
@@ -1150,7 +1150,7 @@ void Index::scanPOS(const string& predicate, WidthTwoList* result) const {
 
 // _____________________________________________________________________________
 void Index::scanPOS(const string& predicate, const string& object,
-                    WidthOneList* result) const {
+                    IdTable* result) const {
   LOG(DEBUG) << "Performing POS scan of relation " << predicate
              << " with fixed object: " << object << "...\n";
   Id relId;
@@ -1176,7 +1176,7 @@ void Index::scanPOS(const string& predicate, const string& object,
       } else {
         // If we don't have blocks, scan the whole relation and filter /
         // restrict.
-        WidthTwoList fullRelation;
+        IdTable fullRelation(2);
         fullRelation.resize(rmd.getNofElements());
         _posFile.read(fullRelation.data(),
                       rmd.getNofElements() * 2 * sizeof(Id),
@@ -1194,7 +1194,7 @@ void Index::scanPOS(const string& predicate, const string& object,
 
 // _____________________________________________________________________________
 void Index::scanSOP(const string& subject, const string& object,
-                    WidthOneList* result) const {
+                    IdTable* result) const {
   if (!_sopFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Cannot use predicate variables without the required "
@@ -1224,7 +1224,7 @@ void Index::scanSOP(const string& subject, const string& object,
       } else {
         // If we don't have blocks, scan the whole relation and filter /
         // restrict.
-        WidthTwoList fullRelation;
+        IdTable fullRelation(2);
         fullRelation.resize(rmd.getNofElements());
         _sopFile.read(fullRelation.data(),
                       rmd.getNofElements() * 2 * sizeof(Id),
@@ -1241,7 +1241,7 @@ void Index::scanSOP(const string& subject, const string& object,
 }
 
 // _____________________________________________________________________________
-void Index::scanSPO(const string& subject, WidthTwoList* result) const {
+void Index::scanSPO(const string& subject, IdTable* result) const {
   if (!_spoFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Cannot use predicate variables without the required "
@@ -1258,7 +1258,7 @@ void Index::scanSPO(const string& subject, WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanSOP(const string& subject, WidthTwoList* result) const {
+void Index::scanSOP(const string& subject, IdTable* result) const {
   if (!_sopFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Cannot use predicate variables without the required "
@@ -1275,7 +1275,7 @@ void Index::scanSOP(const string& subject, WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanOPS(const string& object, WidthTwoList* result) const {
+void Index::scanOPS(const string& object, IdTable* result) const {
   if (!_opsFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Cannot use predicate variables without the required "
@@ -1292,7 +1292,7 @@ void Index::scanOPS(const string& object, WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanOSP(const string& object, WidthTwoList* result) const {
+void Index::scanOSP(const string& object, IdTable* result) const {
   if (!_ospFile.isOpen()) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Cannot use predicate variables without the required "
@@ -1309,7 +1309,7 @@ void Index::scanOSP(const string& object, WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanPSO(Id predicate, Index::WidthTwoList* result) const {
+void Index::scanPSO(Id predicate, IdTable* result) const {
   if (_psoMeta.relationExists(predicate)) {
     const FullRelationMetaData& rmd = _psoMeta.getRmd(predicate)._rmdPairs;
     result->reserve(rmd.getNofElements() + 2);
@@ -1320,7 +1320,7 @@ void Index::scanPSO(Id predicate, Index::WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanPOS(Id predicate, Index::WidthTwoList* result) const {
+void Index::scanPOS(Id predicate, IdTable* result) const {
   if (_posMeta.relationExists(predicate)) {
     const FullRelationMetaData& rmd = _posMeta.getRmd(predicate)._rmdPairs;
     result->reserve(rmd.getNofElements() + 2);
@@ -1331,7 +1331,7 @@ void Index::scanPOS(Id predicate, Index::WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanSPO(Id subject, Index::WidthTwoList* result) const {
+void Index::scanSPO(Id subject, IdTable* result) const {
   if (_spoMeta.relationExists(subject)) {
     const FullRelationMetaData& rmd = _spoMeta.getRmd(subject)._rmdPairs;
     result->reserve(rmd.getNofElements() + 2);
@@ -1342,7 +1342,7 @@ void Index::scanSPO(Id subject, Index::WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanSOP(Id subject, Index::WidthTwoList* result) const {
+void Index::scanSOP(Id subject, IdTable* result) const {
   if (_sopMeta.relationExists(subject)) {
     const FullRelationMetaData& rmd = _sopMeta.getRmd(subject)._rmdPairs;
     result->reserve(rmd.getNofElements() + 2);
@@ -1353,7 +1353,7 @@ void Index::scanSOP(Id subject, Index::WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanOSP(Id object, Index::WidthTwoList* result) const {
+void Index::scanOSP(Id object, IdTable* result) const {
   if (_ospMeta.relationExists(object)) {
     const FullRelationMetaData& rmd = _ospMeta.getRmd(object)._rmdPairs;
     result->reserve(rmd.getNofElements() + 2);
@@ -1364,7 +1364,7 @@ void Index::scanOSP(Id object, Index::WidthTwoList* result) const {
 }
 
 // _____________________________________________________________________________
-void Index::scanOPS(Id object, Index::WidthTwoList* result) const {
+void Index::scanOPS(Id object, IdTable* result) const {
   if (_opsMeta.relationExists(object)) {
     const FullRelationMetaData& rmd = _opsMeta.getRmd(object)._rmdPairs;
     result->reserve(rmd.getNofElements() + 2);
@@ -1422,7 +1422,7 @@ size_t Index::getHasPredicateFullSize() const {
 // _____________________________________________________________________________
 void Index::scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                    Id lhsId, ad_utility::File& indexFile,
-                                   WidthOneList* result) const {
+                                   IdTable* result) const {
   LOG(TRACE) << "Scanning functional relation ...\n";
   WidthTwoList block;
   block.resize(blockOff.second / (2 * sizeof(Id)));
@@ -1431,7 +1431,7 @@ void Index::scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
       block.begin(), block.end(), lhsId,
       [](const array<Id, 2>& elem, Id key) { return elem[0] < key; });
   if ((*it)[0] == lhsId) {
-    result->push_back(array<Id, 1>{(*it)[1]});
+    result->push_back({(*it)[1]});
   }
   LOG(TRACE) << "Read " << result->size() << " RHS.\n";
 }
@@ -1440,8 +1440,7 @@ void Index::scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
 void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                       const pair<off_t, size_t>& followBlock,
                                       Id lhsId, ad_utility::File& indexFile,
-                                      off_t upperBound,
-                                      Index::WidthOneList* result) const {
+                                      off_t upperBound, IdTable* result) const {
   LOG(TRACE) << "Scanning non-functional relation ...\n";
   vector<pair<Id, off_t>> block;
   block.resize(blockOff.second / (sizeof(Id) + sizeof(off_t)));

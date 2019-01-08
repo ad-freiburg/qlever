@@ -94,37 +94,19 @@ class Filter : public Operation {
    * to subRes and store it in res.
    * @return The pointer res.
    */
-  template <class RT, ResultTable::ResultType T>
-  vector<RT>* computeFilterForResultType(vector<RT>* res, size_t lhs,
-                                         size_t rhs,
-                                         const vector<RT>& subRes) const;
+  template <ResultTable::ResultType T>
+  void computeFilter(IdTable* res, size_t lhs, size_t rhs,
+                     const IdTable& subRes) const;
 
-  /**
-   * @brief Calls computeFilterForResultType with the correct template
-   *        arguments
-   */
-  template <class RT>
-  vector<RT>* computeFilter(vector<RT>* res, size_t lhs, size_t rhs,
-                            const vector<RT>& input,
-                            shared_ptr<const ResultTable> subRes) const;
   /**
    * @brief Uses the result type and the filter type (_type) to apply the filter
    * to subRes and store it in res.
    * @return The pointer res.
    */
-  template <class RT, ResultTable::ResultType T>
-  vector<RT>* computeFilterFixedValueForResultType(
-      vector<RT>* res, size_t lhs, Id rhs, const vector<RT>& input,
-      shared_ptr<const ResultTable> subRes) const;
-
-  /**
-   * @brief Calls computeFilterFixedValueForResultType with the correct template
-   *        arguments
-   */
-  template <class RT>
-  vector<RT>* computeFilterFixedValue(
-      vector<RT>* res, size_t lhs, Id rhs, const vector<RT>& input,
-      shared_ptr<const ResultTable> subRes) const;
+  template <ResultTable::ResultType T>
+  void computeFilterFixedValue(IdTable* res, size_t lhs, Id rhs,
+                               const IdTable& input,
+                               shared_ptr<const ResultTable> subRes) const;
 
   void computeResultFixedValue(
       ResultTable* result,

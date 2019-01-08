@@ -5,17 +5,17 @@
 
 #include <utility>
 #include <vector>
+#include "IdTable.h"
 
 using std::pair;
 using std::vector;
 
-template <typename E>
 class OBComp {
  public:
   OBComp(const vector<pair<size_t, bool>>& sortIndices)
       : _sortIndices(sortIndices) {}
 
-  bool operator()(const E& a, const E& b) const {
+  bool operator()(const IdTable::Row& a, const IdTable::Row& b) const {
     for (auto& entry : _sortIndices) {
       if (a[entry.first] < b[entry.first]) {
         return !entry.second;
