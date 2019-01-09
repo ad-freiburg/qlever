@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import sys
 import os
@@ -10,7 +11,8 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument('--queryfile',
                     type=str,
-                    help='One line per (standard) SPARQL query. TS specific transformations are made by the python script.',
+                    help='One line per (standard) SPARQL query. TS specific \
+                          transformations are made by the python script.',
                     required=True)
 
 parser.add_argument('--index',
@@ -19,7 +21,8 @@ parser.add_argument('--index',
                     required=True)
 
 parser.add_argument('binaries', metavar='B', type=str, nargs='+',
-                    help='binaries to use, always as two strings, one name and a path.')
+                    help='binaries to use where each binary is specified as 3 \
+                          string <binary>, <name> and <cost factor>')
 
 
 def expanded_to_my_syntax(q):
