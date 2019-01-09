@@ -3,6 +3,7 @@ import argparse
 import sys
 import os
 import subprocess
+import compare_performance
 from subprocess import Popen
 
 __author__ = 'buchholb'
@@ -25,36 +26,14 @@ parser.add_argument('binaries', metavar='B', type=str, nargs='+',
                           string <binary>, <name> and <cost factor>')
 
 
-def expanded_to_my_syntax(q):
-    before_where, after_where = q.split('WHERE')
-    no_mod, mod = after_where.strip().split('}')
-    clauses = no_mod.strip('{').split('.')
-    new_clauses = []
-    context_to_words = {}
-    for c in clauses:
-        if '<word:' in c:
-            try:
-                s, p, o = c.strip().split(' ')
-            except ValueError:
-                print("Problem in : " + c)
-                exit(1)
-            if o not in context_to_words:
-                context_to_words[o] = []
-            context_to_words[o].append(s[6: -1])
-        else:
-            new_clauses.append(c)
-    for c, ws in context_to_words.items():
-        new_clauses.append(' ' + c + ' <in-text> "' + ' '.join(ws) + '" ')
-    new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
-    return 'WHERE'.join([before_where, new_after_where])
-
-
 def get_query_times(query_file, name, binary, costFactors, index):
     with open('__tmp.myqueries', 'w') as tmpfile:
         for line in open(query_file):
             try:
                 tmpfile.write(
-                    expanded_to_my_syntax(line.strip().split('\t')[1]) + '\n')
+                    compare_performance.
+                        expanded_to_my_syntax(
+                            line.strip().split('\t')[1]) + '\n')
             except IndexError:
                 print("Problem with tabs in : " + line)
                 exit(1)
