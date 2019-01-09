@@ -5,6 +5,6 @@ cnt_building-top5rel	SELECT ?x ?1 ?2 ?3 ?4 ?5 WHERE { ?x <Contained_by> ?1 . ?x 
 cnt_chain-sc-sc-doo	SELECT ?x WHERE { ?x <Spouse_(or_domestic_partner)> ?a . ?a <Children> ?b . ?b <Spouse_(or_domestic_partner)> ?c . ?c <Children> <Duke_of_Orléans> }
 cnt_people-bornin-european-capital	SELECT ?x ?y ?z WHERE { ?x <is-a> <Person> . ?x <Place_of_birth> ?y . ?y <Contained_by> <Europe> . ?z <Capital> ?y . ?z <is-a> <Country> }
 cnt_animal-breedof-artbythatguy	SELECT ?x ?y ?z WHERE { ?x <is-a> <Animal> . ?x <Breed_of> ?y . ?z <Art_Subject> ?y . ?z <Artist> <Franz_Marc> }
-cnt_personwithbdp-namedafter-personwithbdp	SELECT ?x ?xd ?xp ?y ?yd ?yp WHERE { ?x <is-a> <Person> . ?x <Date_of_birth> ?xd . ?x <Place_of_birth> ?xp . ?x <Named_after> ?y . ?y <is-a> <Person> . ?y <Date_of_birht> ?yd . ?y <Place_of_birth> ?yp }
+cnt_personwithbdp-namedafter-personwithbdp	SELECT ?x ?xd ?xp ?y ?yd ?yp WHERE { ?x <is-a> <Person> . ?x <Date_of_birth> ?xd . ?x <Place_of_birth> ?xp . ?x <Named_after> ?y . ?y <is-a> <Person> . ?y <Date_of_birth> ?yd . ?y <Place_of_birth> ?yp }
 cnt_tallest_buildings_europe	SELECT ?x ?h WHERE { ?x <is-a> <Building> . ?x <Structural_Height> ?h . ?x <Contained_by> <Europe> } ORDER BY DESC(?h)
 cnt_singer_in_horror_film	SELECT ?x ?m WHERE { ?x <Profession> <Singer> . ?x <Film_performance> ?m . ?m <Genre> <Horror> }
