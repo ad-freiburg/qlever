@@ -1,7 +1,7 @@
 onejoin_bornin-europe	SELECT ?x ?y WHERE { ?x <Place_of_birth> ?y . ?y <Contained_by> <Europe> }
 onejoin_german-actors	SELECT ?x WHERE { ?x <Profession> <Actor> . ?x <Country_of_nationality> <Germany> }
 onejoin_female_cs	SELECT ?x WHERE { ?x <is-a> <Computer_scientist> . ?x <Gender> <Female> }
-onejoin_ffc-initrelease	SELECT ?x ?y WHERE { ?x <Directed_by> <Francis_Ford_coppola> . ?x <Initial_release_date> ?y }
+onejoin_ffc-initrelease	SELECT ?x ?y WHERE { ?x <Directed_by> <Francis_Ford_Coppola> . ?x <Initial_release_date> ?y }
 onejoin_beatles_siblings	SELECT DISTINCT ?p ?b WHERE { ?p <Sibling> ?b . ?b <Member_of> <The_Beatles> . FILTER(?p != ?b) }
 onejoin_action-comedy 	SELECT ?x WHERE { ?x <Genre> <Action_Film> . ?x <Genre> <Comedy> }
 onejoin_fantasy-book 	SELECT ?x WHERE { ?x <is-a> <Book> . ?x <Genre> <Fantasy> }
