@@ -13,7 +13,7 @@ ResultTable::ResultTable()
       _fixedSizeData(nullptr),
       _resultTypes(),
       _localVocab(std::make_shared<std::vector<std::string>>()),
-      _status(ResultTable::OTHER) {}
+      _status(ResultTable::IN_PROGESS) {}
 
 // _____________________________________________________________________________
 void ResultTable::clear() {
@@ -45,8 +45,9 @@ void ResultTable::clear() {
     }
   }
   _fixedSizeData = nullptr;
+  _localVocab = nullptr;
   _varSizeData.clear();
-  _status = OTHER;
+  _status = IN_PROGESS;
 }
 
 // _____________________________________________________________________________

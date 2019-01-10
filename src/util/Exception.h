@@ -23,8 +23,9 @@ using std::string;
                                   __PRETTY_FUNCTION__);              \
   }  // NOLINT
 // Rethrow an exception
-#define AD_RETHROW(e) \
-  throw semsearch::Exception(e.getErrorCode(), e.getErrorDetails())  // NOLINT
+#define AD_RETHROW(e)                             \
+  throw ad_semsearch::Exception(e.getErrorCode(), \
+                                e.getErrorDetails())  // NOLINT
 
 // --------------------------------------------------------------------------
 // Macros for assertions that will throw Exceptions.
@@ -119,13 +120,14 @@ class Exception {
     // formatting errors
     BAD_INPUT = 16 * 2 + 5,
     BAD_REQUEST = 16 * 2 + 6,
-    BAD_QUERY = 16 * 2 + 7,
 
     // memory allocation errors
     REALLOC_FAILED = 16 * 3 + 1,
     NEW_FAILED = 16 * 3 + 2,
 
-    // intersect errors
+    // query errors
+    BAD_QUERY = 16 * 4 + 1,
+    QUERY_ABORTED = 16 * 4 + 2,
 
     // history errors
 
@@ -160,6 +162,8 @@ class Exception {
         return "BAD REQUEST STRING";
       case BAD_QUERY:
         return "BAD QUERY";
+      case QUERY_ABORTED:
+        return "QUERY ABORTED";
       case REALLOC_FAILED:
         return "MEMORY ALLOCATION ERROR: Realloc failed";
       case NEW_FAILED:

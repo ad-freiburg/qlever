@@ -34,20 +34,37 @@ class Operation {
   // Use existing results if they are already available, otherwise
   // trigger computation.
   shared_ptr<const ResultTable> getResult() const {
-    LOG(DEBUG) << "Try to atomically emplace a new empty ResultTable" << endl;
+    LOG(DEBUG) << "Check cache for Operation result" << endl;
     LOG(DEBUG) << "Using key: \n" << asString() << endl;
     auto [newResult, existingResult] =
         _executionContext->getQueryTreeCache().tryEmplace(asString());
     if (newResult) {
-      LOG(DEBUG) << "We were the first to emplace, need to compute result"
-                 << endl;
+      LOG(DEBUG) << "Not in the cache, need to compute result" << endl;
       // Passing the raw pointer here is ok as the result shared_ptr remains
       // in scope
-      computeResult(newResult.get());
+      try {
+        computeResult(newResult.get());
+      } catch (const ad_semsearch::Exception& e) {
+        if (e.getErrorCode() != ad_semsearch::Exception::QUERY_ABORTED) {
+          // Only print the Operation at the innermost failure
+          LOG(ERROR) << "Failed to compute Operation result for:" << endl;
+          LOG(ERROR) << asString() << endl;
+          LOG(ERROR) << e.getFullErrorMessage() << endl;
+        }
+        newResult->abort();
+        // Rethrow as QUERY_ABORTED allowing us to print the Operation
+        // only at innermost failure of a recursive call
+        throw ad_semsearch::Exception(ad_semsearch::Exception::QUERY_ABORTED,
+                                      e.getErrorDetails());
+      }
       return newResult;
     }
-    LOG(INFO) << "Result already (being) computed" << endl;
     existingResult->awaitFinished();
+    if (existingResult->status() == ResultTable::ABORTED) {
+      LOG(ERROR) << "Result in the cache was aborted" << endl;
+      AD_THROW(ad_semsearch::Exception::QUERY_ABORTED,
+               "Operation was found aborted in the cache");
+    }
     return existingResult;
   }
 
