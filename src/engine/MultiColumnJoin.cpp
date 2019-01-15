@@ -169,7 +169,7 @@ struct MultiColumnJoinCaller<6, 6, 6> {
 void MultiColumnJoin::computeResult(ResultTable* result) const {
   AD_CHECK(result);
   AD_CHECK(!result->_fixedSizeData);
-  LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
+  LOG(DEBUG) << "Beginning to compute the MultiColumnJoin result." << endl;
 
   result->_sortedBy = resultSortedOn();
   result->_nofColumns = getResultWidth();
@@ -178,6 +178,9 @@ void MultiColumnJoin::computeResult(ResultTable* result) const {
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
+
+  LOG(DEBUG) << "Finished with computing the MultiColumnJoin subresults."
+             << std::endl;
 
   // compute the result types
   result->_resultTypes.reserve(result->_nofColumns);
@@ -197,7 +200,7 @@ void MultiColumnJoin::computeResult(ResultTable* result) const {
     }
   }
 
-  LOG(DEBUG) << "Computing optional join between results of size "
+  LOG(DEBUG) << "Computing a multi column join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
 
   // Calls computeMultiColumnJoin with the right values for the array sizes.
@@ -205,7 +208,7 @@ void MultiColumnJoin::computeResult(ResultTable* result) const {
       leftResult->_nofColumns, rightResult->_nofColumns, result->_nofColumns,
       leftResult, rightResult, _joinColumns, result, result->_nofColumns);
   result->finish();
-  LOG(DEBUG) << "MultiColumnJoin result computation done." << endl;
+  LOG(DEBUG) << "Finished with computing the MultiColumnJoin result." << endl;
 }
 
 // _____________________________________________________________________________

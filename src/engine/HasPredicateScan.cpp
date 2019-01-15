@@ -185,6 +185,8 @@ size_t HasPredicateScan::getCostEstimate() {
 }
 
 void HasPredicateScan::computeResult(ResultTable* result) const {
+  LOG(DEBUG) << "Beginning the HasPredicateScan result computation."
+             << std::endl;
   result->_nofColumns = getResultWidth();
   result->_sortedBy = resultSortedOn();
 
@@ -223,6 +225,8 @@ void HasPredicateScan::computeResult(ResultTable* result) const {
       break;
   }
   result->finish();
+  LOG(DEBUG) << "Finished with computing the HasPredicateScan result."
+             << std::endl;
 }
 
 void HasPredicateScan::computeFreeS(
@@ -349,6 +353,8 @@ void doComputeSubqueryS(const std::vector<A>* input,
                         const std::vector<PatternID>& hasPattern,
                         const CompactStringVector<Id, Id>& hasPredicate,
                         const CompactStringVector<size_t, Id>& patterns) {
+  LOG(DEBUG) << "HasPredicateScan subresult size " << input->size()
+             << std::endl;
   for (size_t i = 0; i < input->size(); i++) {
     const A& inputRow = (*input)[i];
     size_t id = inputRow[inputSubjectColumn];
@@ -449,6 +455,8 @@ void HasPredicateScan::computeSubqueryS(
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
   std::shared_ptr<const ResultTable> subresult = subtree->getResult();
+  LOG(DEBUG) << "Finished computing the HasPredicateScan subresult."
+             << std::endl;
 
   result->_resultTypes.insert(result->_resultTypes.begin(),
                               subresult->_resultTypes.begin(),

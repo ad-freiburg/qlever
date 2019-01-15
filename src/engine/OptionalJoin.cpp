@@ -179,7 +179,7 @@ struct meta_for<6, 6, 6> {
 void OptionalJoin::computeResult(ResultTable* result) const {
   AD_CHECK(result);
   AD_CHECK(!result->_fixedSizeData);
-  LOG(DEBUG) << "OptionalJoin result computation..." << endl;
+  LOG(DEBUG) << "Beginning to compute the OptionalJoin result." << endl;
 
   result->_sortedBy = resultSortedOn();
   result->_nofColumns = getResultWidth();
@@ -188,6 +188,8 @@ void OptionalJoin::computeResult(ResultTable* result) const {
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
+  LOG(DEBUG) << "Finished with computing the OptionalJoin subresults."
+             << std::endl;
 
   // compute the result types
   result->_resultTypes.reserve(result->_nofColumns);
@@ -218,7 +220,7 @@ void OptionalJoin::computeResult(ResultTable* result) const {
                       _leftOptional, _rightOptional, _joinColumns, result,
                       result->_nofColumns);
   result->finish();
-  LOG(DEBUG) << "OptionalJoin result computation done." << endl;
+  LOG(DEBUG) << "Finished with computing the optional join result." << endl;
 }
 
 // _____________________________________________________________________________
