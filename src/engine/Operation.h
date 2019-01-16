@@ -58,6 +58,17 @@ class Operation {
         // Rethrow as QUERY_ABORTED allowing us to print the Operation
         // only at innermost failure of a recursive call
         throw ad_semsearch::AbortException(e);
+      } catch (...) {
+        // Only print the Operation at the innermost (original) failure
+        // then create not so weird AbortException
+        LOG(ERROR) << "Failed to compute Operation result for:" << endl;
+        LOG(ERROR) << asString() << endl;
+        LOG(ERROR) << "WEIRD_EXCEPTION not inheriting from std::exception"
+                   << endl;
+        newResult->abort();
+        // Rethrow as QUERY_ABORTED allowing us to print the Operation
+        // only at innermost failure of a recursive call
+        throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
       }
       return newResult;
     }
