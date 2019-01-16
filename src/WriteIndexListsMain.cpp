@@ -112,10 +112,7 @@ int main(int argc, char** argv) {
     f.close();
 
   } catch (const std::exception& e) {
-    cout << string("Caught exceptions: ") + e.what();
-    return 1;
-  } catch (ad_semsearch::Exception& e) {
-    cout << e.getFullErrorMessage() << std::endl;
+    cout << e.what() << std::endl;
   }
 
   return 0;

@@ -44,25 +44,27 @@ class Operation {
       // in scope
       try {
         computeResult(newResult.get());
-      } catch (const ad_semsearch::Exception& e) {
-        if (e.getErrorCode() != ad_semsearch::Exception::QUERY_ABORTED) {
-          // Only print the Operation at the innermost failure
-          LOG(ERROR) << "Failed to compute Operation result for:" << endl;
-          LOG(ERROR) << asString() << endl;
-          LOG(ERROR) << e.getFullErrorMessage() << endl;
-        }
+      } catch (const ad_semsearch::AbortException& e) {
+        // AbortExceptions have already been printed simply rethrow to
+        // unwind the callstack until the whole query is aborted
+        throw;
+      } catch (const std::exception& e) {
+        // Only print the Operation at the innermost (original) failure
+        // then "rethrow" as special ad_semsearch::AbortException
+        LOG(ERROR) << "Failed to compute Operation result for:" << endl;
+        LOG(ERROR) << asString() << endl;
+        LOG(ERROR) << e.what() << endl;
         newResult->abort();
         // Rethrow as QUERY_ABORTED allowing us to print the Operation
         // only at innermost failure of a recursive call
-        throw ad_semsearch::Exception(ad_semsearch::Exception::QUERY_ABORTED,
-                                      e.getErrorDetails());
+        throw ad_semsearch::AbortException(e);
       }
       return newResult;
     }
     existingResult->awaitFinished();
     if (existingResult->status() == ResultTable::ABORTED) {
       LOG(ERROR) << "Result in the cache was aborted" << endl;
-      AD_THROW(ad_semsearch::Exception::QUERY_ABORTED,
+      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                "Operation was found aborted in the cache");
     }
     return existingResult;

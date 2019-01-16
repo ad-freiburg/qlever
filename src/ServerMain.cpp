@@ -144,9 +144,8 @@ int main(int argc, char** argv) {
     Server server(port, numThreads);
     server.initialize(index, text, allPermutations, usePatterns);
     server.run();
-  } catch (const ad_semsearch::Exception& e) {
-    LOG(ERROR) << e.getFullErrorMessage() << '\n';
-    return 1;
+  } catch (const std::exception& e) {
+    LOG(ERROR) << e.what() << std::endl;
   }
   return 0;
 }

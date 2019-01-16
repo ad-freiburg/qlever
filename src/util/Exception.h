@@ -6,6 +6,7 @@
 #ifndef GLOBALS_EXCEPTION_H_
 #define GLOBALS_EXCEPTION_H_
 
+#include <exception>
 #include <sstream>
 #include <string>
 
@@ -22,10 +23,6 @@ using std::string;
     throw ad_semsearch::Exception(e, __os.str(), __FILE__, __LINE__, \
                                   __PRETTY_FUNCTION__);              \
   }  // NOLINT
-// Rethrow an exception
-#define AD_RETHROW(e)                             \
-  throw ad_semsearch::Exception(e.getErrorCode(), \
-                                e.getErrorDetails())  // NOLINT
 
 // --------------------------------------------------------------------------
 // Macros for assertions that will throw Exceptions.
@@ -88,13 +85,27 @@ using std::string;
 // Exception class code
 // -------------------------------------------
 namespace ad_semsearch {
+
+//! Exception class for rethrowing exceptions during a query abort
+//! such exceptions are never printed but still keep the original what()
+//! message just in case
+class AbortException : public std::exception {
+ public:
+  AbortException(const std::exception& original) : _origWhat(original.what()) {}
+
+  const char* what() const noexcept { return _origWhat.c_str(); }
+
+ private:
+  string _origWhat;
+};
+
 //! Exception class for all kinds of exceptions.
 //! Compatibility with the THROW macro is ensured by using error
 //! codes inside this exception class instead of implementing an
 //! exception hierarchy through inheritance.
 //! This approach is taken from CompleteSearch's exception code.
 //! Add error codes whenever necessary.
-class Exception {
+class Exception : public std::exception {
  private:
   //! Error code
   int _errorCode;
@@ -103,7 +114,9 @@ class Exception {
   //! optionally provided by thrower)
   string _errorDetails;
 
-  string _errorDetailsNoFileAndLines;
+  string _errorDetailsFileAndLines;
+
+  string _errorMessageFull;
 
  public:
   //! Error codes
@@ -127,7 +140,6 @@ class Exception {
 
     // query errors
     BAD_QUERY = 16 * 4 + 1,
-    QUERY_ABORTED = 16 * 4 + 2,
 
     // history errors
 
@@ -149,7 +161,7 @@ class Exception {
   };
 
   //! Error messages (one per code)
-  const char* errorCodeAsString(int errorCode) const {
+  static const string errorCodeAsString(int errorCode) {
     switch (errorCode) {
       case VOCABULARY_MISS:
         return "VOCABULARY MISS";
@@ -162,16 +174,12 @@ class Exception {
         return "BAD REQUEST STRING";
       case BAD_QUERY:
         return "BAD QUERY";
-      case QUERY_ABORTED:
-        return "QUERY ABORTED";
       case REALLOC_FAILED:
         return "MEMORY ALLOCATION ERROR: Realloc failed";
       case NEW_FAILED:
         return "MEMORY ALLOCATION ERROR: new failed";
       case ERROR_PASSED_ON:
         return "PASSING ON ERROR";
-        return "QUERY EXCEPTION: "
-               "Check of query result failed";
       case UNCOMPRESS_ERROR:
         return "UNCOMPRESSION PROBLEM";
       case COULD_NOT_GET_MUTEX:
@@ -202,27 +210,28 @@ class Exception {
   explicit Exception(int errorCode) {
     _errorCode = errorCode;
     _errorDetails = "";
-    _errorDetailsNoFileAndLines = "";
+    _errorDetailsFileAndLines = "";
+    _errorMessageFull = errorCodeAsString(_errorCode);
   }
 
   //! Constructor (code + details)
-  Exception(int errorCode, string errorDetails) {
+  Exception(int errorCode, const string& errorDetails) {
     _errorCode = errorCode;
     _errorDetails = errorDetails;
-    _errorDetailsNoFileAndLines = errorDetails;
+    _errorDetailsFileAndLines = "";
+    _errorMessageFull = getErrorMessage() + " (" + _errorDetails + ")";
   }
 
   //! Constructor
   //! (code + details + file name + line number + enclosing method)
-  Exception(int errorCode, const string& errorDetails, const char* file_name,
-            int line_no, const char* fct_name) {
+  Exception(int errorCode, const string& errorDetails, const string& file_name,
+            int line_no, const string& fct_name) {
     _errorCode = errorCode;
-    _errorDetailsNoFileAndLines = errorDetails;
-    std::ostringstream os;
-    if (errorDetails.size() > 0) os << errorDetails << "; ";
-    os << "in " << file_name << ", line " << line_no << ", function "
-       << fct_name;
-    _errorDetails = os.str();
+    _errorDetails = errorDetails;
+    _errorDetailsFileAndLines = "in " + file_name + ", line " +
+                                std::to_string(line_no) + ", function " +
+                                fct_name;
+    _errorMessageFull = getErrorMessage() + " (" + getErrorDetails() + ")";
   }
 
   //! Set error code
@@ -231,28 +240,30 @@ class Exception {
   //! Set error details
   void setErrorDetails(const string& errorDetails) {
     _errorDetails = errorDetails;
-    _errorDetailsNoFileAndLines = _errorDetailsNoFileAndLines;
   }
 
   //! Get error Code
-  int getErrorCode() const { return _errorCode; }
+  int getErrorCode() const noexcept { return _errorCode; }
 
   //! Get error message pertaining to code
-  string getErrorMessage() const { return errorCodeAsString(_errorCode); }
+  string getErrorMessage() const noexcept {
+    return errorCodeAsString(_errorCode);
+  }
 
   //! Get error details
-  const string& getErrorDetails() const { return _errorDetails; }
-
-  //! Get full error message (generic message + specific details if available)
-  string getFullErrorMessage() const {
-    return _errorDetails.length() > 0
-               ? getErrorMessage() + " (" + _errorDetails + ")"
-               : getErrorMessage();
+  const string getErrorDetails() const noexcept {
+    return _errorDetails + "; " + _errorDetailsFileAndLines;
   }
 
-  const string& getErrorMsgNoFileAndLines() const {
-    return _errorDetailsNoFileAndLines;
+  const string getErrorDetailsNoFileAndLines() const noexcept {
+    return _errorDetails;
   }
+
+  const string& getFullErrorMessage() const noexcept {
+    return _errorMessageFull;
+  }
+
+  const char* what() const noexcept { return _errorMessageFull.c_str(); }
 };
 }  // namespace ad_semsearch
 
