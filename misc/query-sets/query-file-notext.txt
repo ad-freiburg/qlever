@@ -1,13 +1,13 @@
-simon_q1	SELECT ?x WHERE { ?x <is-a> <Book> . ?x <Author> <Anthony_Newman_(Author)> }
+simon_q1	SELECT ?x WHERE { ?x <is-a> <Book> . ?x <Author> <Anthony_Newman_(Pianist)> }
 simon_q2	SELECT ?x WHERE { ?x <Genre> <Comedy> . ?x <is-a> <Award-Nominated_Work> . ?x <is-a> <Film> }
 simon_q3	SELECT ?x WHERE { ?x <is-a> <Politician> . ?x <Film_performance> ?y . ?y <Genre> <Comedy> }
 simon_q4	SELECT ?x WHERE { ?x <is-a> <Olympic_athlete> . ?x <is-a> <Deceased_Person> }
 simon_q5	SELECT ?x WHERE { ?x <Release> <Technodrome,_Volume_2_(Consumer_product)> . ?x <is-a> <Canonical_Version> . ?x <is-a> <Musical_Recording> }
-simon_q6	SELECT ?x ?y WHERE { ?x <is-a> <Person> . ?x <Country_of_nationality> <Germany> . ?x <Author> ?y . ?y <is-a> <Award-Nominated_Work> }
-simon_q7	SELECT ?x WHERE { ?x <is-a> <Politician> . ?x <Parent> ?y . ?x <Parent> ?z . ?y <is-a> <Politician> . ?z <is-a> <Politician> . FILTER(?y != ?z)}
+simon_q6	SELECT ?x ?y WHERE { ?x <is-a> <Person> . ?x <Country_of_nationality> <Germany> . ?y <Author> ?x . ?y <is-a> <Award-Nominated_Work> }
+simon_q7	SELECT ?x WHERE { ?x <is-a> <Politician> . ?y <Children> ?x . ?z <Children> ?x . ?y <is-a> <Politician> . ?z <is-a> <Politician> }
 simon_q8	SELECT ?x ?y WHERE{ ?x <is-a> <Monarch> . ?x <is-a> <Deceased_Person> .?x <Cause_of_death> <Assassination> . ?x <Place_of_birth> ?y }
 simon_q9	SELECT ?x WHERE{ ?x <is-a> <Lake> . ?x <Contained_by> <Russia> }
-simon_q10	SELECT ?x ?y ?z WHERE{ ?x <is-a> <Musical_Recording> . ?x <Recorded_by> ?y . ?y <Award_Won> <Bollywood_Movie_Humanitarian_Award> . ?y <Celebrity_friend> ?z . ?z <Profession> <Prophet> }
+simon_q10	SELECT ?x ?y ?z WHERE{ ?x <is-a> <Musical_Recording> . ?x <Recorded_by> ?y . ?y <Award_Won> <Bollywood_Movie_Award_–_Humanitarian_Award> . ?y <Celebrity_friend> ?z . ?z <Profession> <Prophet> }
 astronauts	SELECT ?p WHERE { ?p <is-a> <Astronaut> }
 persons_limit_100	SELECT ?p WHERE { ?p <is-a> <Person> } LIMIT 100
 beatles_siblings	SELECT DISTINCT ?p ?b WHERE { ?p <Sibling> ?b . ?b <Member_of> <The_Beatles> . FILTER(?p != ?b) }

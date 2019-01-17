@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import argparse
 import sys
 import subprocess
@@ -62,10 +63,17 @@ def expanded_to_my_syntax(q):
             except ValueError:
                 print("Problem in : " + c, file=sys.stderr)
                 exit(1)
+        elif '<in-text>' in c: # <subject> <in-text> ?context
+            try:
+                s, p, o = c.strip().split(' ')
+                new_clauses.append(o + ' ql:contains-entity ' + s)
+            except ValueError:
+                print("Problem in : " + c, file=sys.stderr)
+                exit(1)
         else:
             new_clauses.append(c)
     for c, ws in context_to_words.items():
-        new_clauses.append(' ' + c + ' <in-text> "' + ' '.join(ws) + '" ')
+        new_clauses.append(' ' + c + ' ql:contains-word "' + ' '.join(ws) + '" ')
     new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
     return 'WHERE'.join([before_where, new_after_where])
 

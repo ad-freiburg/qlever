@@ -1,7 +1,9 @@
+#!/usr/bin/env python3
 import argparse
 import sys
 import os
 import subprocess
+import compare_performance
 from subprocess import Popen
 
 __author__ = 'buchholb'
@@ -10,7 +12,8 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument('--queryfile',
                     type=str,
-                    help='One line per (standard) SPARQL query. TS specific transformations are made by the python script.',
+                    help='One line per (standard) SPARQL query. TS specific \
+                          transformations are made by the python script.',
                     required=True)
 
 parser.add_argument('--index',
@@ -19,31 +22,8 @@ parser.add_argument('--index',
                     required=True)
 
 parser.add_argument('binaries', metavar='B', type=str, nargs='+',
-                    help='binaries to use, always as two strings, one name and a path.')
-
-
-def expanded_to_my_syntax(q):
-    before_where, after_where = q.split('WHERE')
-    no_mod, mod = after_where.strip().split('}')
-    clauses = no_mod.strip('{').split('.')
-    new_clauses = []
-    context_to_words = {}
-    for c in clauses:
-        if '<word:' in c:
-            try:
-                s, p, o = c.strip().split(' ')
-            except ValueError:
-                print("Problem in : " + c)
-                exit(1)
-            if o not in context_to_words:
-                context_to_words[o] = []
-            context_to_words[o].append(s[6: -1])
-        else:
-            new_clauses.append(c)
-    for c, ws in context_to_words.items():
-        new_clauses.append(' ' + c + ' <in-text> "' + ' '.join(ws) + '" ')
-    new_after_where = ' {' + '.'.join(new_clauses) + '}' + mod
-    return 'WHERE'.join([before_where, new_after_where])
+                    help='binaries to use where each binary is specified as 3 \
+                          string <binary>, <name> and <cost factor>')
 
 
 def get_query_times(query_file, name, binary, costFactors, index):
@@ -51,7 +31,9 @@ def get_query_times(query_file, name, binary, costFactors, index):
         for line in open(query_file):
             try:
                 tmpfile.write(
-                    expanded_to_my_syntax(line.strip().split('\t')[1]) + '\n')
+                    compare_performance.
+                        expanded_to_my_syntax(
+                            line.strip().split('\t')[1]) + '\n')
             except IndexError:
                 print("Problem with tabs in : " + line)
                 exit(1)
