@@ -125,6 +125,12 @@ class QueryExecutionTree {
 
   bool knownEmptyResult();
 
+  // Try to find the result for this tree in the LRU cache
+  // of our qec. If found, we store a shared ptr to pin it
+  // and set the size estimate correctly and the cost estimate
+  // to zero. Currently multiplicities are not affected
+  void readFromCache();
+
  private:
   QueryExecutionContext* _qec;  // No ownership
   ad_utility::HashMap<string, size_t> _variableColumnMap;
@@ -133,7 +139,10 @@ class QueryExecutionTree {
   OperationType _type;
   std::unordered_set<string> _contextVars;
   string _asString;
+  size_t _indent = 0;  // the indent with which the _asString repr was formatted
   size_t _sizeEstimate;
+
+  std::shared_ptr<const ResultTable> _cachedResult = nullptr;
 
   template <typename Row>
   void writeJsonTable(

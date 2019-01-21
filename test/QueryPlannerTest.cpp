@@ -744,15 +744,6 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
         "O = \"<Plant>\"\n    qet-width: 1 \n  }\n   filtered on "
         "column 0\n  qet-width: 3 \n}",
         qet.asString());
-    // ASSERT_EQ("{JOIN(\n"
-    //              "{SCAN POS with P = \"<is-a>\", "
-    //              "O = \"<Plant>\" | width: 1} [0]\n"
-    //              "|X|\n"
-    //              "{SORT {TEXT OPERATION FOR ENTITIES: "
-    //              "co-occurrence with words: "
-    //              "\"edible leaves\" with textLimit = 5 | width: 3} on 0 "
-    //              "| width: 3} [0]\n) | width: 3}",
-    //          qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -807,20 +798,6 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
         "      qet-width: 2 \n    } join-column: [0]\n    qet-width: 2 \n"
         "  }\n   filtered on column 1\n  qet-width: 4 \n}",
         qet.asString());
-    //    ASSERT_EQ("{JOIN(\n"
-    //                  "{SCAN POS with P = \"<Contained_by>\", O = \"<Europe>\"
-    //                  | width: 1} [0]"
-    //                  "\n|X|\n"
-    //                  "{SORT {JOIN(\n"
-    //                  "{SCAN PSO with P = \"<Place_of_birth>\" | width: 2}
-    //                  [0]"
-    //                  "\n|X|\n"
-    //                  "{SORT {TEXT OPERATION FOR ENTITIES: co-occurrence with
-    //                  words: "
-    //                  "\"cocaine\" with textLimit = 1 | width: 3} on 0 "
-    //                  "| width: 3} [0]\n) | width: 4} "
-    //                  "on 1 | width: 4} [1]\n) | width: 4}",
-    //              qet.asString());
     ASSERT_EQ(0u, qet.getVariableColumn("?c"));
     ASSERT_EQ(1u, qet.getVariableColumn("SCORE(?c)"));
     ASSERT_EQ(2u, qet.getVariableColumn("?y"));
@@ -877,47 +854,18 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
-    //    ASSERT_EQ("{TEXT OPERATION WITH FILTER: co-occurrence with words: "
-    //                  "\"manhattan project\" and 1 variables with textLimit =
-    //                  1 " "filtered by {JOIN(\n{SCAN POS with P = \"<is-a>\",
-    //                  " "O = \"<Scientist>\" | width: 1} [0]\n"
-    //                  "|X|\n{SORT {TEXT OPERATION WITH FILTER: "
-    //                  "co-occurrence with words: \"friend*\" and "
-    //                  "2 variables with textLimit = 1 filtered by "
-    //                  "{SCAN POS with P = \"<is-a>\", O = \"<Politician>\" "
-    //                  "| width: 1} on column 0 | width: 4} on 2 | width: 4}
-    //                  [2]\n) "
-    //                  "| width: 4} on column 0 | width: 6}", qet.asString());
-    //    ASSERT_EQ("{JOIN(\n"
-    //                  "{SCAN POS with P = \"<is-a>\", O = \"<Politician>\" |
-    //                  width: 1} [0]\n"
-    //                  "|X|\n"
-    //                  "{TEXT OPERATION FOR ENTITIES: co-occurrence with words:
-    //                  \"friend*\"\n" "and {JOIN(\n"
-    //                  "{SCAN POS with P = \"<is-a>\", O = \"<Scientist>\" |
-    //                  width: 1} [0]\n"
-    //                  "|X|\n"
-    //                  "{SORT {TEXT OPERATION FOR ENTITIES: "
-    //                  "co-occurrence with words: \"manhattan project\" "
-    //                  "with textLimit = 1 | width: 3} on 0 | width: 3} [0]\n)
-    //                  "
-    //                  "| width: 3} [0] with textLimit = 1 | width: 6} [0]\n) "
-    //                  "| width: 6}",
-    //              qet.asString());
     ASSERT_EQ(
-        "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
-        "\"manhattan project\" and 1 variables with textLimit = 1 "
-        "filtered by\n  {\n    JOIN\n    {\n      "
-        "SCAN POS with P = \"<is-a>\", O = \"<Scientist>\"\n     "
-        " qet-width: 1 \n    } join-column: [0]\n    |X|\n    {\n     "
-        " SORT on column:2\n      {\n        "
-        "TEXT OPERATION WITH FILTER: co-occurrence with words: \"friend*\" "
-        "and 2 variables with textLimit = 1 filtered by\n        {\n     "
-        "     SCAN POS with P = \"<is-a>\", O = \"<Politician>\"\n     "
-        "     qet-width: 1 \n        }\n         filtered on column 0\n   "
-        "     qet-width: 4 \n      }\n      qet-width: 4 \n    }"
-        " join-column: [2]\n    qet-width: 4 \n  }\n   filtered on column"
-        " 0\n  qet-width: 6 \n}",
+        "{\n  JOIN\n  {\n    SCAN POS with P = \"<is-a>\", O = "
+        "\"<Scientist>\"\n    qet-width: 1 \n  } join-column: [0]\n  |X|\n  "
+        "{\n    SORT on column:4\n    {\n      TEXT OPERATION WITH FILTER: "
+        "co-occurrence with words: \"manhattan project\" and 1 variables with "
+        "textLimit = 1 filtered by\n      {\n        TEXT OPERATION WITH "
+        "FILTER: co-occurrence with words: \"friend*\" and 2 variables with "
+        "textLimit = 1 filtered by\n        {\n          SCAN POS with P = "
+        "\"<is-a>\", O = \"<Politician>\"\n          qet-width: 1 \n        "
+        "}\n         filtered on column 0\n        qet-width: 4 \n      }\n    "
+        "   filtered on column 2\n      qet-width: 6 \n    }\n    qet-width: 6 "
+        "\n  } join-column: [4]\n  qet-width: 6 \n}",
         qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;

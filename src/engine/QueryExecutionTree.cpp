@@ -31,30 +31,24 @@ QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* qec)
 
 // _____________________________________________________________________________
 string QueryExecutionTree::asString(size_t indent) {
+  if (indent == _indent && !_asString.empty()) {
+    return _asString;
+  }
   string indentStr;
   for (size_t i = 0; i < indent; ++i) {
     indentStr += " ";
   }
-  if (_asString.size() == 0) {
-    if (_rootOperation) {
-      std::ostringstream os;
-      os << indentStr << "{\n"
-         << _rootOperation->asString(indent + 2) << "\n"
-         << indentStr << "  qet-width: " << getResultWidth() << " ";
-      if (LOGLEVEL >= TRACE && _qec) {
-        os << " [estimated size: " << getSizeEstimate() << "]";
-        os << " [multiplicities: ";
-        for (size_t i = 0; i < getResultWidth(); ++i) {
-          os << getMultiplicity(i) << ' ';
-        }
-        os << "]";
-      }
-      os << '\n' << indentStr << '}';
-      _asString = os.str();
-    } else {
-      _asString = "<Empty QueryExecutionTree>";
-    }
+  if (_rootOperation) {
+    std::ostringstream os;
+    os << indentStr << "{\n"
+       << _rootOperation->asString(indent + 2) << "\n"
+       << indentStr << "  qet-width: " << getResultWidth() << " ";
+    os << '\n' << indentStr << '}';
+    _asString = os.str();
+  } else {
+    _asString = "<Empty QueryExecutionTree>";
   }
+  _indent = indent;
   return _asString;
 }
 
@@ -65,6 +59,9 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
   _rootOperation = op;
   _asString = "";
   _sizeEstimate = std::numeric_limits<size_t>::max();
+  // with setting the operation the initialization is done and we can try to
+  // find our result in the cache.
+  readFromCache();
 }
 
 // _____________________________________________________________________________
@@ -193,6 +190,10 @@ void QueryExecutionTree::writeResultToStreamAsJson(
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getCostEstimate() {
+  if (_cachedResult && _cachedResult->isFinished()) {
+    // result is pinned in cache. Nothing to compute
+    return 0;
+  }
   if (_type == QueryExecutionTree::SCAN && getResultWidth() == 1) {
     return getSizeEstimate();
   } else {
@@ -203,7 +204,9 @@ size_t QueryExecutionTree::getCostEstimate() {
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getSizeEstimate() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
-    if (_qec) {
+    if (_cachedResult && _cachedResult->isFinished()) {
+      _sizeEstimate = _cachedResult->size();
+    } else if (_qec) {
       _sizeEstimate = _rootOperation->getSizeEstimate();
     } else {
       // For test cases without index only:
@@ -217,10 +220,22 @@ size_t QueryExecutionTree::getSizeEstimate() {
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::knownEmptyResult() {
+  if (_cachedResult && _cachedResult->isFinished()) {
+    return _cachedResult->size() == 0;
+  }
   return _rootOperation->knownEmptyResult();
 }
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::varCovered(string var) const {
   return _variableColumnMap.count(var) > 0;
+}
+
+// _______________________________________________________________________
+void QueryExecutionTree::readFromCache() {
+  if (!_qec) {
+    return;
+  }
+  auto& cache = _qec->getQueryTreeCache();
+  _cachedResult = cache[asString()];
 }
