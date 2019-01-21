@@ -45,6 +45,7 @@ class Operation {
       try {
         computeResult(newResult.get());
       } catch (const ad_semsearch::AbortException& e) {
+        newResult->abort();
         // AbortExceptions have already been printed simply rethrow to
         // unwind the callstack until the whole query is aborted
         throw;

@@ -145,7 +145,12 @@ int main(int argc, char** argv) {
     server.initialize(index, text, allPermutations, usePatterns);
     server.run();
   } catch (const std::exception& e) {
+    // This code should never be reached as all exceptions should be handled
+    // within server.run()
     LOG(ERROR) << e.what() << std::endl;
+    return 1;
   }
-  return 0;
+  // This should also never be reached as the server threads are not supposed
+  // to terminate.
+  return 2;
 }
