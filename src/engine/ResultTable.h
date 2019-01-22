@@ -20,7 +20,7 @@ using std::vector;
 
 class ResultTable {
  public:
-  enum Status { FINISHED = 0, OTHER = 1 };
+  enum Status { IN_PROGRESS = 0, FINISHED = 1, ABORTED = 2 };
 
   /**
    * @brief Describes the type of a columns data
@@ -79,21 +79,27 @@ class ResultTable {
 
   virtual ~ResultTable();
 
+  void abort() {
+    lock_guard<mutex> lk(_cond_var_m);
+    clear();
+    _status = ResultTable::ABORTED;
+    _cond_var.notify_all();
+  }
+
   void finish() {
     lock_guard<mutex> lk(_cond_var_m);
     _status = ResultTable::FINISHED;
     _cond_var.notify_all();
   }
 
-  bool isFinished() const {
+  Status status() const {
     lock_guard<mutex> lk(_cond_var_m);
-    bool tmp = _status == ResultTable::FINISHED;
-    return tmp;
+    return _status;
   }
 
   void awaitFinished() const {
     unique_lock<mutex> lk(_cond_var_m);
-    _cond_var.wait(lk, [&] { return _status == ResultTable::FINISHED; });
+    _cond_var.wait(lk, [&] { return _status != ResultTable::IN_PROGRESS; });
   }
 
   std::optional<std::string> idToOptionalString(Id id) const {

@@ -673,7 +673,7 @@ TEST(QueryPlannerTest, threeVarXthreeVarException) {
         "Could not find a suitable execution tree. "
         "Likely cause: Queries that require joins of the full index with "
         "itself are not supported at the moment.",
-        e.getErrorMsgNoFileAndLines());
+        e.getErrorDetailsNoFileAndLines());
   } catch (const std::exception& e) {
     std::cout << "Caught: " << e.what() << std::endl;
     FAIL() << e.what();
