@@ -3,7 +3,9 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <chrono>
 #include <string>
+using namespace std::chrono_literals;
 
 static const size_t STXXL_MEMORY_TO_USE = 1024L * 1024L * 1024L * 2L;
 static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 500 * 1000;
@@ -71,3 +73,6 @@ static constexpr uint8_t NUM_COMPRESSION_PREFIXES = 127;
 // compression has been applied to  a word
 static const uint8_t NO_PREFIX_CHAR =
     MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES;
+
+static constexpr auto DEFAULT_QUERY_COMPUTATIION_TIMEOUT = 30s;
+static constexpr auto DEFAULT_STRING_TRANSLATION_TIMEOUT = 30s;

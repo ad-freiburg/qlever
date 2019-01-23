@@ -21,7 +21,6 @@ class DummyOperation : public Operation {
       static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData)
           ->push_back({{10 - i, 2 * i}});
     }
-    result->finish();
   }
 
   virtual string asString(size_t indent = 0) const {

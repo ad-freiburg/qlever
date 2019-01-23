@@ -20,7 +20,7 @@ using std::vector;
 
 class ResultTable {
  public:
-  enum Status { IN_PROGRESS = 0, FINISHED = 1, ABORTED = 2 };
+  enum Status { IN_PROGRESS = 0, FINISHED = 1, ABORTED = 2, TIMEOUT = 3 };
 
   /**
    * @brief Describes the type of a columns data
@@ -79,18 +79,22 @@ class ResultTable {
 
   virtual ~ResultTable();
 
-  void abort() {
+  // ________________________________________________________
+  void setStatus(Status s, bool doClear) {
     lock_guard<mutex> lk(_cond_var_m);
-    clear();
-    _status = ResultTable::ABORTED;
+    if (doClear) {
+      clear();
+    }
+    _status = s;
     _cond_var.notify_all();
   }
 
-  void finish() {
-    lock_guard<mutex> lk(_cond_var_m);
-    _status = ResultTable::FINISHED;
-    _cond_var.notify_all();
-  }
+  void abort() { setStatus(ResultTable::ABORTED, true); }
+
+  void finish() { setStatus(ResultTable::FINISHED, false); }
+
+  // __________________________________________________________________
+  void timeout() { setStatus(ResultTable::TIMEOUT, true); }
 
   Status status() const {
     lock_guard<mutex> lk(_cond_var_m);

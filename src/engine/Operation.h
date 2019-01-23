@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include <future>
 #include "../util/Exception.h"
 #include "../util/Log.h"
 #include "../util/Timer.h"
@@ -49,7 +50,20 @@ class Operation {
       // Passing the raw pointer here is ok as the result shared_ptr remains
       // in scope
       try {
-        computeResult(newResult->_resTable.get());
+        // lambda that computes the result
+        auto c = [this, &newResult]() { this->computeResult(newResult->resTable.get()); };
+        // deferred futures are never run in parallel
+        auto fut = std::async(std::launch::async, c);
+        // assign a time budget to this future
+        auto status = fut.wait_for(
+            _executionContext->getSettings()._timeoutQueryComputation);
+        if (status != std::future_status::ready) {
+          newResult->timeout();
+          AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Operation time out");
+        } else {
+          // we succeeded within the given timeout
+          newResult->finish();
+        }
       } catch (const ad_semsearch::AbortException& e) {
         newResult->_resTable->abort();
         // AbortExceptions have already been printed simply rethrow to
@@ -61,7 +75,7 @@ class Operation {
         LOG(ERROR) << "Failed to compute Operation result for:" << endl;
         LOG(ERROR) << asString() << endl;
         LOG(ERROR) << e.what() << endl;
-        newResult->_resTable->abort();
+        newResult->abort();
         // Rethrow as QUERY_ABORTED allowing us to print the Operation
         // only at innermost failure of a recursive call
         throw ad_semsearch::AbortException(e);
@@ -72,7 +86,7 @@ class Operation {
         LOG(ERROR) << asString() << endl;
         LOG(ERROR) << "WEIRD_EXCEPTION not inheriting from std::exception"
                    << endl;
-        newResult->_resTable->abort();
+        newResult->abort();
         // Rethrow as QUERY_ABORTED allowing us to print the Operation
         // only at innermost failure of a recursive call
         throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
@@ -94,6 +108,9 @@ class Operation {
       LOG(ERROR) << "Result in the cache was aborted" << endl;
       AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                "Operation was found aborted in the cache");
+    } else if (existingResult->status() == ResultTable::TIMEOUT) {
+      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+               "Operation was found timed-out in the cache");
     }
     timer.stop();
     if (!newResult) {

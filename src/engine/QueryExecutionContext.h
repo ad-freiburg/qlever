@@ -13,6 +13,7 @@
 #include "../util/Log.h"
 #include "./Engine.h"
 #include "./ResultTable.h"
+#include "./RuntimeSettings.h"
 #include "QueryPlanningCostFactors.h"
 #include "RuntimeInformation.h"
 
@@ -32,17 +33,21 @@ typedef ad_utility::LRUCache<string, CacheValue> SubtreeCache;
 // Holds references to index and engine, implements caching.
 class QueryExecutionContext {
  public:
-  QueryExecutionContext(const Index& index, const Engine& engine)
+  QueryExecutionContext(const Index& index, const Engine& engine,
+                        const RuntimeSettings& settings = RuntimeSettings())
       : _subtreeCache(NOF_SUBTREES_TO_CACHE),
         _index(index),
         _engine(engine),
-        _costFactors() {}
+        _costFactors(),
+        _settings(settings) {}
 
   SubtreeCache& getQueryTreeCache() { return _subtreeCache; }
 
   const Engine& getEngine() const { return _engine; }
 
   const Index& getIndex() const { return _index; }
+
+  const RuntimeSettings& getSettings() const { return _settings; }
 
   void clearCache() { _subtreeCache.clear(); }
 
@@ -59,4 +64,5 @@ class QueryExecutionContext {
   const Index& _index;
   const Engine& _engine;
   QueryPlanningCostFactors _costFactors;
+  RuntimeSettings _settings;
 };
