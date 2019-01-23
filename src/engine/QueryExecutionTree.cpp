@@ -190,7 +190,7 @@ void QueryExecutionTree::writeResultToStreamAsJson(
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getCostEstimate() {
-  if (_cachedResult && _cachedResult->isFinished()) {
+  if (_cachedResult && _cachedResult->status() == ResultTable::FINISHED) {
     // result is pinned in cache. Nothing to compute
     return 0;
   }
@@ -204,7 +204,7 @@ size_t QueryExecutionTree::getCostEstimate() {
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getSizeEstimate() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
-    if (_cachedResult && _cachedResult->isFinished()) {
+    if (_cachedResult && _cachedResult->status() == ResultTable::FINISHED) {
       _sizeEstimate = _cachedResult->size();
     } else if (_qec) {
       _sizeEstimate = _rootOperation->getSizeEstimate();
@@ -220,7 +220,7 @@ size_t QueryExecutionTree::getSizeEstimate() {
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::knownEmptyResult() {
-  if (_cachedResult && _cachedResult->isFinished()) {
+  if (_cachedResult && _cachedResult->status() == ResultTable::FINISHED) {
     return _cachedResult->size() == 0;
   }
   return _rootOperation->knownEmptyResult();
