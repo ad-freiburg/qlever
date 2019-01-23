@@ -63,7 +63,7 @@ Inside the the repositories root folder run
 This creates a docker image named "qlever" which contains all the libraries and
 dependencies necessary to use QLever. If you want to be sure that everything is
 working as it should before proceeding, you can run the [end-to-end
-tests](#Run_End-to-End_Tests)
+tests](#run-end-to-end-tests)
 
 ## Create or reuse an index
 ### Allow QLever to access the `/index` and `/input` volumes
@@ -88,7 +88,7 @@ To build a new index run a bash inside the container as follows
 
 Then inside the container follow the instructions for [creating an
 index](#creating-an-index). **Only then** proceed to the [next
-section](Run_the_QLever_Server)
+section](#run-the-qlever-server)
 
 For an existing index, copy it into the `./index` folder and make sure to either
 name it so that all files start with `index`  or set `-e INDEX_PREFIX=<prefix>`
