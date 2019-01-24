@@ -3,7 +3,7 @@
 [![Build
 Status](https://travis-ci.org/ad-freiburg/QLever.svg?branch=master)](https://travis-ci.org/ad-freiburg/QLever)
 
-QLever (pronounced "clever") is a high performance SPARQL engine for efficient
+QLever (pronounced "clever") is a super high performance SPARQL engine for efficient
 search on large scale knowledge bases (KB) such as Wikidata.
 On top of its best in class performance and scalability to large datasets (> 1.5
 TB) QLever has some unique features and SPARQL extensions.
