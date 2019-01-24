@@ -38,20 +38,18 @@ class Operation {
   // Get the result for the subtree rooted at this element.
   // Use existing results if they are already available, otherwise
   // trigger computation.
-  shared_ptr<const ResultTable> getResult() {
-    ad_utility::Timer timer;
-    timer.start();
-    LOG(TRACE) << "Check cache for Operation result" << endl;
-    LOG(TRACE) << "Using key: \n" << asString() << endl;
+  shared_ptr<const ResultTable> getResult() const {
+    LOG(DEBUG) << "Check cache for Operation result" << endl;
+    LOG(DEBUG) << "Using key: \n" << asString() << endl;
     auto [newResult, existingResult] =
         _executionContext->getQueryTreeCache().tryEmplace(asString());
     if (newResult) {
-      LOG(TRACE) << "Not in the cache, need to compute result" << endl;
+      LOG(DEBUG) << "Not in the cache, need to compute result" << endl;
       // Passing the raw pointer here is ok as the result shared_ptr remains
       // in scope
       try {
         // lambda that computes the result
-        auto c = [this, &newResult]() { this->computeResult(newResult->resTable.get()); };
+        auto c = [this, &newResult]() { this->computeResult(newResult.get()); };
         // deferred futures are never run in parallel
         auto fut = std::async(std::launch::async, c);
         // assign a time budget to this future

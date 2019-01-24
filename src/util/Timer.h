@@ -74,7 +74,7 @@ class Timer {
 
   // ___________________________________________________________________
   long msecs() {
-    return std::chrono::duration_cast<std::chrono::microseconds>(getTime())
+    return std::chrono::duration_cast<std::chrono::milliseconds>(getTime())
         .count();
   }
 };

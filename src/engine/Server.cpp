@@ -18,7 +18,9 @@
 
 // _____________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
-                        bool allPermutations, bool usePatterns) {
+                        bool allPermutations, bool usePatterns,
+                        std::chrono::seconds queryTimeout,
+                        std::chrono::seconds translationTimeout) {
   LOG(INFO) << "Initializing server..." << std::endl;
 
   _index.setUsePatterns(usePatterns);
@@ -38,6 +40,9 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
     exit(1);
   }
 
+  _settings._timeoutQueryComputation = queryTimeout;
+  _settings._timeoutStringTranslation = translationTimeout;
+
   // Set flag.
   _initialized = true;
   LOG(INFO) << "Done initializing server." << std::endl;
@@ -49,7 +54,7 @@ void Server::run() {
     LOG(ERROR) << "Cannot start an uninitialized server!" << std::endl;
     exit(1);
   }
-  QueryExecutionContext qec(_index, _engine);
+  QueryExecutionContext qec(_index, _engine, _settings);
   std::vector<std::thread> threads;
   for (int i = 0; i < _numThreads; ++i) {
     threads.emplace_back(&Server::runAcceptLoop, this, &qec);
@@ -360,7 +365,7 @@ string Server::composeResponseJson(const ParsedQuery& query,
   os << ",\n";
 
   os << "\"time\": {\n"
-     << "\"total\": \"" << _requestProcessingTimer.msecs() / 1000.0 << "ms\",\n"
+     << "\"total\": \"" << _requestProcessingTimer.usecs() / 1000.0 << "ms\",\n"
      << "\"computeResult\": \"" << compResultUsecs / 1000.0 << "ms\"\n"
      << "}\n"
      << "}\n";

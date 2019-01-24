@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "engine/Server.h"
+#include "global/Constants.h"
 #include "util/ReadableNumberFact.h"
 
 using std::cerr;
@@ -24,15 +25,18 @@ using std::vector;
 #define EMPH_OFF "\033[22m"
 
 // Available options.
-struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
-                           {"help", no_argument, NULL, 'h'},
-                           {"index", required_argument, NULL, 'i'},
-                           {"worker-threads", required_argument, NULL, 'j'},
-                           {"on-disk-literals", no_argument, NULL, 'l'},
-                           {"port", required_argument, NULL, 'p'},
-                           {"no-patterns", no_argument, NULL, 'P'},
-                           {"text", no_argument, NULL, 't'},
-                           {NULL, 0, NULL, 0}};
+struct option options[] = {
+    {"all-permutations", no_argument, NULL, 'a'},
+    {"help", no_argument, NULL, 'h'},
+    {"index", required_argument, NULL, 'i'},
+    {"worker-threads", required_argument, NULL, 'j'},
+    {"on-disk-literals", no_argument, NULL, 'l'},
+    {"port", required_argument, NULL, 'p'},
+    {"no-patterns", no_argument, NULL, 'P'},
+    {"text", no_argument, NULL, 't'},
+    {"query-timeout", required_argument, NULL, 'q'},
+    {"translation-timeout", required_argument, NULL, 's'},
+    {NULL, 0, NULL, 0}};
 
 void printUsage(char* execName) {
   std::ios coutState(nullptr);
@@ -58,6 +62,14 @@ void printUsage(char* execName) {
        << "Enables the usage of text." << endl;
   cout << "  " << std::setw(20) << "j, worker-threads" << std::setw(1) << "    "
        << "Sets the number of worker threads to use" << endl;
+  cout << "  " << std::setw(20) << "q, query-timeout" << std::setw(1) << "    "
+       << "Sets the timeout for the computation phase of a query (in seconds)"
+       << endl;
+  cout << "  " << std::setw(20) << "s, translation-timeout" << std::setw(1)
+       << "    "
+       << "Sets the timeout for the string translation phase of a query (in "
+          "seconds)"
+       << endl;
   cout.copyfmt(coutState);
 }
 
@@ -76,8 +88,11 @@ int main(int argc, char** argv) {
   bool text = false;
   bool allPermutations = false;
   int port = -1;
+  auto queryTimeout = DEFAULT_QUERY_COMPUTATIION_TIMEOUT;
+  auto translationTimeout = DEFAULT_STRING_TRANSLATION_TIMEOUT;
   int numThreads = 1;
   bool usePatterns = true;
+  int tmpTimeout;
 
   optind = 1;
   // Process command line arguments.
@@ -102,6 +117,14 @@ int main(int argc, char** argv) {
         break;
       case 'j':
         numThreads = atoi(optarg);
+        break;
+      case 'q':
+        tmpTimeout = atoi(optarg);
+        queryTimeout = std::chrono::seconds(tmpTimeout);
+        break;
+      case 's':
+        tmpTimeout = atoi(optarg);
+        translationTimeout = std::chrono::seconds(tmpTimeout);
         break;
       case 'h':
         printUsage(argv[0]);
@@ -142,7 +165,8 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numThreads);
-    server.initialize(index, text, allPermutations, usePatterns);
+    server.initialize(index, text, allPermutations, usePatterns,
+                      queryTimeout, translationTimeout);
     server.run();
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled

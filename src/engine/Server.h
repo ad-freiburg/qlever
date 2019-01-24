@@ -35,8 +35,12 @@ class Server {
   typedef ad_utility::HashMap<string, string> ParamValueMap;
 
   // Initialize the server.
-  void initialize(const string& ontologyBaseName, bool useText,
-                  bool allPermutations = false, bool usePatterns = false);
+  void initialize(
+      const string& ontologyBaseName, bool useText,
+      bool allPermutations = false, bool usePatterns = false,
+      std::chrono::seconds queryTimeout = DEFAULT_QUERY_COMPUTATIION_TIMEOUT,
+      std::chrono::seconds translationTimeout =
+          DEFAULT_STRING_TRANSLATION_TIMEOUT);
 
   //! Loop, wait for requests and trigger processing. This method never returns
   //! except when throwing an exceptiob
@@ -48,6 +52,7 @@ class Server {
   int _port;
   Index _index;
   Engine _engine;
+  RuntimeSettings _settings;
 
   bool _initialized;
 
