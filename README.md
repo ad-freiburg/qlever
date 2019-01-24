@@ -117,6 +117,7 @@ Note that QLever only accepts UTF-8 encoded input files, then again [you should
 be using UTF-8 anyway](http://utf8everywhere.org/)
 
 Then proceed with creating an index.
+
 **Important: Ensure that you have enough disk space where your `./index`
 folder resides or see below for using a separate path**
 
