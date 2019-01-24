@@ -8,7 +8,7 @@ search on large scale knowledge bases (KB) such as Wikidata.
 On top of its best in class performance and scalability to large datasets (> 1.5
 TB) QLever has some unique features and SPARQL extensions.
 
-# QLever's Superpowers
+## QLever's Superpowers
 
 QLever extends SPARQL with several useful features such as the ability to
 combine classic SPARQL queries with search on a knowledge base linked text
