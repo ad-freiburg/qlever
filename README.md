@@ -256,15 +256,22 @@ run` command or do a `chmod -R o+rw e2e_data`
 We have recently updated the way the index meta data (offsets of relations
 within the permutations) is stored. Old index builds with 6 permutations will
 not work directly with the recent QLever version while 2 permutation indices
-will work but throw a warning at runtime. We have provided a converter which
+will work but throw a warning at runtime.
+
+We have provided a converter which
 allows to only modify the meta data without having to rebuild the index. Just
-run `./MetaDataConverterMain <index-prefix>` . This will not automatically
-overwrite the old index but copy the permutations and create new files with the
-suffix `.converted` (e.g. `<index-prefix>.index.ops.converted` These suffixes
-have to be removed manually in order to use the converted index (rename to
-`<index-prefix>.index.ops` in our example). Please consider creating backups of
-the "original" index files before overwriting them like this.  them. Please note
-that for 6 permutations the converter also builds new files
+run `MetaDataConverterMain <index-prefix>` in the same way as the
+`IndexBuilderMain`.
+
+This will not automatically overwrite the old index but copy the permutations
+and create new files with the suffix `.converted` (e.g.
+`<index-prefix>.index.ops.converted` These suffixes have to be removed manually
+in order to use the converted index (rename to `<index-prefix>.index.ops` in our
+example).
+**Please consider creating backups of
+the "original" index files before overwriting them like this**.
+
+Please note that for 6 permutations the converter also builds new files
 `<index-prefix>.index.xxx.meta-mmap` where parts of the meta data of OPS and OSP
 permutations will be stored.
 
@@ -272,11 +279,11 @@ permutations will be stored.
 ### High RAM Usage During Runtime
 
 QLever uses an on-disk index and is usually able to operate with pretty low RAM
-usage. However, there are data layouts that currently lead to an excessive
-amount of memory being used. Firstly, note that even very large text corpora have little impact on
-memory usage. Larger KBs are much more problematic.
-There are two things that can contribute to high RAM usage (and large startup
-times) during runtime:
+usage. For example it can handle the full Wikidata KB + Wikipedia which is about
+1.5 TB of index with less than 46 GB of RAM
+
+However, there are data layouts that currently lead to an excessive
+amount of memory being used.
 
 * The size of the KB vocabulary. Using the -l flag while building the index
 causes long and rarely used strings to be externalized to
@@ -292,11 +299,3 @@ the query execution. We will evaluate if it's  worth to also externalize SPO and
 SOP permutations in this way to further reduce the RAM usage or to let the user
 decide which permutations shall be stored in which format.
 
-### Workarounds
-
-* Removing unnecessary objects (e.g. literals in unused languages) helps a lot,
-but is no very "clean".
-
-* Reduce ID size and switch from 64 to 32bit IDs. However this would only yield save a
-low portion of memory since it doesn't effect pointers byte offsets into index
-files.
