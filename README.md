@@ -9,6 +9,7 @@ On top of its best in class performance and scalability to large datasets (> 1.5
 TB) QLever has some unique features and SPARQL extensions.
 
 # QLever's Superpowers
+
 QLever extends SPARQL with several useful features such as the ability to
 combine classic SPARQL queries with search on a knowledge base linked text
 corpus. Such a linked corpus is basically a large (several TBs) collection of
@@ -60,16 +61,19 @@ tag). Since then, we have made several changes, including some to query syntax
 that has not be carried over to the input queries for our experiments.
 
 # How to use
+
 We recommend using QLever with `docker` as this alleviates the need for
 installing dependencies. If you want to build QLever natively for your host or
 are targeting a non Linux Unix-like system see [here](docs/native_setup.md).
 
 ## Get the code
+
 This requires `git` to be installed
 
     git clone --recursive https://github.com/Buchhold/QLever.git
 
 ## Requirements:
+
 A 64 bit host system (32 bit systems can't deal with `mmap` on > 4 GB files or
 allocate enough RAM for larger KBs)
 
@@ -77,6 +81,7 @@ allocate enough RAM for larger KBs)
   End-to-End Tests))
 
 ## Build the image
+
 Inside the the repositories root folder run
 
     docker build -t qlever .
@@ -86,8 +91,9 @@ dependencies necessary to use QLever. If you want to be sure that everything is
 working as it should before proceeding, you can run the [end-to-end
 tests](#run-end-to-end-tests)
 
-## Create or reuse an index
-### Allow QLever to access the `/index` and `/input` volumes
+## Create an Index
+### Provide QLever with access to the `/index` and `/input` volumes
+
 When running **without user namespaces**, the container will use a user with UID
 1000 which on desktop Linux is almost always the first real user.  If your UID
 is not 1000 add `-u "$(id -u):$(id -g)"` to `docker run` to let QLever
@@ -99,55 +105,51 @@ see `/etc/subuid`)
 
     chmod -R o+rw ./index
 
-### Use an existing index or create a new one
-To build a new index run a bash inside the container as follows
+### Create an Index
+
+First make sure that you have the your input data ready and accessible on your
+machine. If you have no input data yet obtain it from one of our [recommended
+sources](docs/obtaining_data.md) or create your own knowledge base in standard
+*NTriple* or *Turtle* formats and (obtionally) add a [text
+corpus](docs/sparql_plus_text.md).
+
+Note that QLever only accepts UTF-8 encoded input files, then again [you should
+be using UTF-8 anyway](http://utf8everywhere.org/)
+
+Then proceed with creating an index.
+**Important: Ensure that you have enough disk space where your `./index`
+folder resides or see below for using a separate path**
+
+To build a new index run a bash inside the QLever container as follows
 
     docker run -it --rm \
                -v "<absolute_path_to_input>:/input" \
-               -v "$(pwd)/index:/index" --entrypoint "bash" qlever-<name>
-
-
-Then inside the container follow the instructions for [creating an
-index](#creating-an-index). **Only then** proceed to the [next
-section](#run-the-qlever-server)
-
-For an existing index, copy it into the `./index` folder and make sure to either
-name it so that all files start with `index`  or set `-e INDEX_PREFIX=<prefix>`
-during docker run where `<prefix>` is the part of the index file names before
-the first `.`.
-
-## Creating an Index:
-
-**Important: Make sure that you have enough disk space where your `./index`
-folder lives or see below for using a separate path**
+               -v "$(pwd)/index:/index" --entrypoint "bash" qlever
 
 If you want to use a *separate path* you **MUST** change the `"$(pwd)/index`
-oart in all `docker …` commands.
+part in all `docker …` commands and replace it with the absolute path where your
+index will reside.
 
-QLever only accepts UTF-8 encoded input files, then again [you should be using
-UTF-8 anyway](http://utf8everywhere.org/)
+From now on we are inside the container, make sure you follow all the coming instructions
+for creating an index and **only then** proceed to the [next
+section](#run-the-qlever-server).
 
-If you don't have a knowledge base in *Turtle*, *NTriple* or *TSV* format
-already, you can [use our playground
-datasets](#how-to-obtain-data-to-play-around-with)
-
-### Using an NTriples or Turtle file:
+#### Using an NTriples or Turtle file:
 
 Note that the string passed to `-i` is the base name of the index files QLever
 creates.
 
     IndexBuilderMain -i /index/<prefix> -n /input/knowledge_base.ttl
 
-### Using a TSV File (no spaces / tabs in spo):
+#### Using a TSV File (no spaces / tabs in spo):
 
     IndexBuilderMain -i /index/<prefix> -t /input/knowledge_base.tsv
 
 Where `<perfix>` is the base name for all index files. If you use `index` tou
 can later skip the `-e INDEX_PREFIX=<prefix>` flag.
 
-To include a text collection, the wordsfile (see below for the required format)
-has to be passed with `-w`.  To support text snippets, a docsfile (see below for
-the required format)has to be passed with `-d`
+To include a text collection, the wordsfile and docsfiles (see [here](docs/sparql_plus_text.md) for the required format)
+is provided with the `-w` and `-d` flags respectively.
 
 The full call will look like this:
 
@@ -172,6 +174,7 @@ literals on disk will look like this:
     IndexBuilderMain -a -l -i /input/<prefix> -n /input/knowledge_base.ttl -w /input/wordsfile.tsv -d /input/docsfile.tsv
 
 ## Run the QLever Server
+
 To run a QLever server container use the following command.
 
     docker run -it -p 7001:7001 -v "$(pwd)/index:/index" -e INDEX_PREFIX=<prefix> --name qlever qlever <ServerMain args>
@@ -181,137 +184,14 @@ which are always included. If none are supplied `-t -a` is used. If you want
 the container to run in the background and restart automatically replace `-it`
 with `-d --restart=unless-stopped`
 
-## Running queries:
+## Executing queries:
+Queries can be executed from the command line using `curl`
 
     curl 'http://localhost:7001/?query=SELECT ?x WHERE {?x <rel> ?y}'
 
-or visit:
+or with a minimal web UI accessible with the browser under:
 
     http://localhost:7001/index.html
-
-## Converting Old Indices For Current QLever Versions
-
-We have recently updated the way the index meta data (offsets of relations
-within the permutations) is stored. Old index builds with 6 permutations will
-not work directly with the recent QLever version while 2 permutation indices
-will work but throw a warning at runtime. We have provided a converter which
-allows to only modify the meta data without having to rebuild the index. Just
-run `./MetaDataConverterMain <index-prefix>` . This will not automatically
-overwrite the old index but copy the permutations and create new files with the
-suffix `.converted` (e.g. `<index-prefix>.index.ops.converted` These suffixes
-have to be removed manually in order to use the converted index (rename to
-`<index-prefix>.index.ops` in our example). Please consider creating backups of
-the "original" index files before overwriting them like this.  them. Please note
-that for 6 permutations the converter also builds new files
-`<index-prefix>.index.xxx.meta-mmap` where parts of the meta data of OPS and OSP
-permutations will be stored.
-
-
-## How to obtain data to play around with
-
-### Use the tiny examples contained in the repository
-
-
-These are tiny and there's nothing meaningful to discover.
-They are fine for setting up a working sever within seconds and getting
-comfortable with the query language:
-
-    QLever/misc/tiny-example.kb.nt
-    QLever/misc/tiny-example.wordsfile.tsv
-    QLever/misc/tiny-example.docsfile.tsv
-
-Note that we left out stopwords (unlike in the docsfile) to demonstrate how this
-can be done if desired.
-If you build an index using these files and ask the query:
-
-    SELECT ?x TEXT(?t) WHERE {
-        ?x <is-a> <Scientist> .
-        ?t ql:contains-entity ?x .
-        ?t ql:contains-word "penicillin"
-    }  ORDER BY DESC(SCORE(?t))
-
-You should find `<Alexander_Fleming>` and the textual evidence for that match.
-
-You can also display his awards or find `<Albert_Einstein>` and his awards with
-the following query:
-
-    SELECT ?x ?award TEXT(?t) WHERE {
-        ?x <is-a> <Scientist> .
-        ?t ql:contains-entity ?x .
-        ?t ql:contains-word "theory rela*" .
-        ?x <Award_Won> ?award
-    }  ORDER BY DESC(SCORE(?t))
-
-have a look at the (really tiny) input files to get a feeling for how this works.
-
-Curl-versions (ready for copy&paste) of the queries:
-
-    SELECT ?x TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?t ql:contains-entity ?x . ?t ql:contains-word \"penicillin\" \} ORDER BY DESC(SCORE(?t))
-
-    SELECT ?x ?award TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?t ql:contains-entity ?x . ?t ql:contains-word \"theory rela*\" . ?x <Award_Won> ?award \}  ORDER BY DESC(SCORE(?t))
-
-Again, there's not much to be done with this data.
-For a meaningful index, use the example data below.
-
-### Download prepared input files for a collection about scientists
-
-These files are of medium size (facts about scientists - only one hop from a scientist in a knowledge graph. Text are Wikipedia articles about scientists.)
-Includes a knowledge base as nt file, and a words- and docsfile as tsv.
-
-[scientist-collection.zip](http://filicudi.informatik.uni-freiburg.de/bjoern-data/scientist-collection.zip):
-
-* 78 MB zipped
-* 318 MB unzipped
-* 350 k facts
-* 11.7 m text postings
-
-Here is a sample query to try and check if everything worked for you:
-
-    SELECT ?x SCORE(?t) TEXT(?t) WHERE {
-        ?x <is-a> <Scientist> .
-        ?t ql:contains-entity ?x .
-        ?t ql:contains-word "relati*"
-    }
-    ORDER BY DESC(SCORE(?t))
-
-Curl-version (ready for copy&paste) of the query:
-
-    SELECT ?x SCORE(?t) TEXT(?t) WHERE \{ ?x <is-a> <Scientist> . ?t ql:contains-entity ?x . ?t ql:contains-word \"relati*\" \} ORDER BY DESC(SCORE(?t))
-
-### Download prepared input for English Wikipedia text and a KB derived from Freebase
-
-
-Includes a knowledge base as nt file, and a words- and docsfile as tsv.  Text
-and facts are basically equivalent to the
-[Broccoli](http://broccoli.cs.uni-freiburg.de) search engine.
-
-[wikipedia-freebase.zip](http://filicudi.informatik.uni-freiburg.de/bjoern-data/wikipedia-freebase.zip):
-
-* 21 GB zipped
-* 103 GB unzipped
-* 372 million facts
-* 2.8 billion text postings
-
-Here is a sample query to try and check if everything worked for you:
-
-    SELECT ?x SCORE(?t) TEXT(?t) WHERE {
-        ?x <is-a> <Astronaut> .
-        ?t ql:contains-entity ?x .
-        ?t ql:contains-word "walk* moon"
-    }
-    ORDER BY DESC(SCORE(?t))
-
-Curl-version (ready for copy&paste) of the query:
-
-    SELECT ?x SCORE(?t) TEXT(?t) WHERE \{ ?x <is-a> <Astronaut> . ?t ql:contains-entity ?x . ?t ql:contains-word \"walk* moon\" \} ORDER BY DESC(SCORE(?t))
-
-### Use any knowledge base and text collection of your choice
-
-
-Create the files similar to the three files provided as sample downloads for
-other data sets.  Usually, knowledge base files do not have to be changed. Only
-words- and docsfile have to be produced.
-
 
 ## Convenience features
 
@@ -349,7 +229,6 @@ Therefore an additional HTTP parameter "&send=<x>" can be used to only send x re
 
 **IMPORTANT: Unless you want to measure QLever's performance, using LIMIT (+ OFFSET for sequential loading) should be preferred in all applications. That way should be faster and standard SPARQL without downsides.**
 
-
 ## Troubleshooting
 
 If you have problems, try to rebuild when compiling with `-DCMAKE_BUILD_TYPE=Debug`.
@@ -374,6 +253,23 @@ run` command or do a `chmod -R o+rw e2e_data`
 
     docker build -t qlever .
     docker run -it --rm -v "$(pwd)/e2e_data:/app/e2e_data/" --name qlever-e2e --entrypoint e2e/e2e.sh qlever
+
+### Converting old Indices For Current QLever Versions
+
+We have recently updated the way the index meta data (offsets of relations
+within the permutations) is stored. Old index builds with 6 permutations will
+not work directly with the recent QLever version while 2 permutation indices
+will work but throw a warning at runtime. We have provided a converter which
+allows to only modify the meta data without having to rebuild the index. Just
+run `./MetaDataConverterMain <index-prefix>` . This will not automatically
+overwrite the old index but copy the permutations and create new files with the
+suffix `.converted` (e.g. `<index-prefix>.index.ops.converted` These suffixes
+have to be removed manually in order to use the converted index (rename to
+`<index-prefix>.index.ops` in our example). Please consider creating backups of
+the "original" index files before overwriting them like this.  them. Please note
+that for 6 permutations the converter also builds new files
+`<index-prefix>.index.xxx.meta-mmap` where parts of the meta data of OPS and OSP
+permutations will be stored.
 
 
 ### High RAM Usage During Runtime
