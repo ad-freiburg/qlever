@@ -46,7 +46,7 @@ in the knowledge base, ordered by the number of persons which have that predicat
 Note that this query could also be processed by standard SPARQL simply by replacing the second
 triple by ?x ?predicate ?object. However, that query is bound to produce a very large intermediate
 result (all triples of all persons) with a correspondingly huge query time.
-In contrast, the query above takes only ~ 100ms on a standard Linux machine.
+In contrast, the query above takes only ~ 100ms on a standard Linux machine for a dataset with ~ 360 million triples and ~ 530 million text records.
 More details on this feature set will be provided here soon.
 
 # How to use
