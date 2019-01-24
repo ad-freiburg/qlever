@@ -154,7 +154,8 @@ To include a text collection, the wordsfile and docsfiles (see
 
 Then the full command will look like this:
 
-    IndexBuilderMain -a -i /index/<prefix> -n /input/knowledge_base.ttl -w /input/wordsfile.tsv -d /input/docsfile.tsv
+    IndexBuilderMain -a -i /index/<prefix> -n /input/knowledge_base.ttl \
+      -w /input/wordsfile.tsv -d /input/docsfile.tsv
 
 If you want some literals to be written to an on disk vocabulary (by default
 this concerns literals longer than 50 chars and literals in less frequent
@@ -169,7 +170,11 @@ You can also add a text index to an existing knowledge base index by ommitting
 
 To run a QLever server container use the following command.
 
-    docker run -it -p 7001:7001 -v "$(pwd)/index:/index" -e INDEX_PREFIX=<prefix> --name qlever qlever <ServerMain args>
+    docker run -it -p 7001:7001 \
+      -v "$(pwd)/index:/index" \
+      -e INDEX_PREFIX=<prefix> \
+      --name qlever \
+      qlever <ServerMain args>
 
 where `<ServerMain args>` are arguments (except for port and index prefix)
 which are always included. If none are supplied `-t -a` is used. If you want
