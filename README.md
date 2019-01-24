@@ -7,7 +7,7 @@ QLever (pronounced "clever") is an efficient SPARQL engine which can handle very
 For example, QLever can index the complete Wikidata (~ 7 billion triples) in less than 12 hours
 on a standard Linux machine using around 40 GB of RAM, with subsequent query times below 1 second
 even for relatively complex queries with large result sets.
-On top of the standard SPARQL functionality, QLever also supports SPARQL+Text search and SPARQL Autocompletion;
+On top of the standard SPARQL functionality, QLever also supports SPARQL+Text search and SPARQL autocompletion;
 these are described in the next section.
 
 A demo of QLever on a variety of large datasets, including the complete Wikidata, can be found under http://qlever.cs.uni-freiburg.de 
