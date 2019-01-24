@@ -3,21 +3,24 @@
 [![Build
 Status](https://travis-ci.org/ad-freiburg/QLever.svg?branch=master)](https://travis-ci.org/ad-freiburg/QLever)
 
-QLever (pronounced "clever") is a super high performance SPARQL engine for efficient
-search on large scale knowledge bases (KB) such as Wikidata.
-On top of its best in class performance and scalability to large datasets (> 1.5
-TB) QLever has some unique features and SPARQL extensions.
+QLever (pronounced "clever") is an efficient SPARQL engine which can handle very large datasets.
+For example, QLever can index the complete Wikidata (~ 7 billion triples) in less than 12 hours
+on a standard Linux machine using around 40 GB of RAM, with subsequent query times below 1 second
+even for relatively complex queries with large result sets.
+On top of the standard SPARQL functionality, QLever also supports SPARQL+Text search and SPARQL Autocompletion;
+these are described in the next section.
 
-## QLever's Superpowers
+A demo of QLever on a variety of large datasets, including the complete Wikidata, can be found under http://qlever.cs.uni-freiburg.de 
 
-QLever extends SPARQL with several useful features such as the ability to
-combine classic SPARQL queries with search on a knowledge base linked text
-corpus. Such a linked corpus is basically a large (several TBs) collection of
-text in which mentions of entities are linked to the
-respective entities in the knowledge base.
+The basic design behind QLever is described in this [CIKM'17 paper](http://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf). If you use QLever, please cite this paper.
+We are working on a follow-up publication that describes and evaluates the many additional features
+and performance improvements to QLever since 2017.
 
-In QLever this enables efficient queries such as the following query asking
-which astronauts walked on the moon.
+# SPARQL+Text and SPARQL Autocompletion
+
+On top of the vanilla SPARQL functionality,
+QLever allows so-called SPARQL+Text queries on a text corpus linked to a knowledge base via entity recognition.
+For example, the following query find all mentions of astronauts next to the words "moon" and "walk*" in the text corpus:
 
     SELECT ?a TEXT(?t) SCORE(?t) WHERE {
         ?a <is-a> <Astronaut> .
@@ -25,40 +28,26 @@ which astronauts walked on the moon.
         ?t ql:contains-word "walk* moon"
     } ORDER BY DESC(SCORE(?t))
 
-Technically it finds entities which are mentioned together with the word prefix
-"walk" and the word "moon" which are known to be astronauts.
+Such queries can be simulated in standard SPARQL, but only with poor performance, see the CIKM'17 paper above.
+Details about the required input data and the SPARQL+text query syntax and semantics can be
+found [here](docs/sparql_plus_text.md).
 
-The format required of such a linked corpus as well as a more details aboute the
-queries this enables can be found [here](docs/sparql_plus_text.md).
-
-Another extension to SPARQL is the ability to efficiently look up the predicates
-that a, possibly very large, group of entities has, including how often they
-appear.
-
-For example the following query gives us a list of predicates that are typical
-of astronauts ordered by how often they appear.
+QLever also supports efficient SPARQL autocompletion.
+For example, the following query yields a list of all predicates associated with persons
+in the knowledge base, ordered by the number of persons which have that predicate.
 
     SELECT ?predicate (COUNT(?predicate) as ?count) WHERE {
-      ?x <is-a> <Astronaut> .
+      ?x <is-a> <Person> .
       ?x ql:has-predicate ?predicate
     }
     GROUP BY ?predicate
     ORDER BY DESC(?count)
 
-## Research paper
-
-The first research paper ["QLever: A Query Engine for Efficient SPARQL+Text
-Search"](http://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf)
-about this work was presented at [CIKM 2017](http://cikm2017.org/)!
-
-The paper describes the research behind QLever, how it works, and most
-importantly contains an evaluation where we compare QLever to state-of-the-art
-SPARQL engines. Query times are competitive and often faster on the pure SPARQL
-queries, and several orders of magnitude faster on the SPARQL+Text queries.
-
-To reproduce our experimental evaluation, best use the according release (git
-tag). Since then, we have made several changes, including some to query syntax
-that has not be carried over to the input queries for our experiments.
+Note that this query could also be processed by standard SPARQL simply by replacing the second
+triple by ?x ?predicate ?object. However, that query is bound to produce a very large intermediate
+result (all triples of all persons) with a correspondingly huge query time.
+In contrast, the query above takes only ~ 100ms on a standard Linux machine.
+More details on this feature set will be provided here soon.
 
 # How to use
 
