@@ -142,15 +142,16 @@ creates.
 
     IndexBuilderMain -i /index/<prefix> -n /input/knowledge_base.ttl
 
-#### Using a TSV File (no spaces / tabs in spo):
-
-    IndexBuilderMain -i /index/<prefix> -t /input/knowledge_base.tsv
-
 Where `<perfix>` is the base name for all index files. If you use `index` tou
 can later skip the `-e INDEX_PREFIX=<prefix>` flag.
 
-To include a text collection, the wordsfile and docsfiles (see [here](docs/sparql_plus_text.md) for the required format)
-is provided with the `-w` and `-d` flags respectively.
+If instead you are using a *non standard* TSV knowledge base file use the `-t`
+flag instead of `-n`. This is *not recommended* but supported for legacy
+reasons.
+
+To include a text collection, the wordsfile and docsfiles (see
+[here](docs/sparql_plus_text.md) for the required format) is provided with the
+`-w` and `-d` flags respectively.
 
 The full call will look like this:
 
