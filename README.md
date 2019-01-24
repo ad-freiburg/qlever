@@ -55,24 +55,13 @@ We recommend using QLever with `docker` as this alleviates the need for
 installing dependencies. If you want to build QLever natively for your host or
 are targeting a non Linux Unix-like system see [here](docs/native_setup.md).
 
-## Get the code
+The installation requires a 64-bit system (32 bit systems can't deal with `mmap`
+on > 4 GB files or allocate enough RAM for larger KBs), docker version 18.05 or newer
+(needs multi-stage builds without leaking files (for End-to-End Tests)) and `git`.
+The you can simply do the following:
 
-This requires `git` to be installed
-
-    git clone --recursive https://github.com/Buchhold/QLever.git
-
-## Requirements:
-
-A 64 bit host system (32 bit systems can't deal with `mmap` on > 4 GB files or
-allocate enough RAM for larger KBs)
-
-* docker 18.05 or newer (needs multi-stage builds without leaking files (for
-  End-to-End Tests))
-
-## Build the image
-
-Inside the the repositories root folder run
-
+    git clone --recursive https://github.com/Buchhold/QLever.git qlever
+    cd qlever
     docker build -t qlever .
 
 This creates a docker image named "qlever" which contains all the libraries and
@@ -80,8 +69,9 @@ dependencies necessary to use QLever. If you want to be sure that everything is
 working as it should before proceeding, you can run the [end-to-end
 tests](#run-end-to-end-tests)
 
-## Create an Index
-### Provide QLever with access to the `/index` and `/input` volumes
+# Create an Index
+
+## Provide QLever with access to the `/index` and `/input` volumes
 
 When running **without user namespaces**, the container will use a user with UID
 1000 which on desktop Linux is almost always the first real user.  If your UID
@@ -94,7 +84,7 @@ see `/etc/subuid`)
 
     chmod -R o+rw ./index
 
-### Create an Index
+## Create an Index
 
 First make sure that you have the your input data ready and accessible on your
 machine. If you have no input data yet obtain it from one of our [recommended
@@ -155,7 +145,7 @@ literals and thus consume lots of memory on startup without this option.
 You can also add a text index to an existing knowledge base index by ommitting
 `-n` (or `-t`) parameter.
 
-## Run the QLever Server
+# Run the QLever Server
 
 To run a QLever server container use the following command.
 
