@@ -360,7 +360,7 @@ string Server::composeResponseJson(const ParsedQuery& query,
   os << ",\n";
 
   os << "\"time\": {\n"
-     << "\"total\": \"" << _requestProcessingTimer.usecs() / 1000.0 << "ms\",\n"
+     << "\"total\": \"" << _requestProcessingTimer.msecs() / 1000.0 << "ms\",\n"
      << "\"computeResult\": \"" << compResultUsecs / 1000.0 << "ms\"\n"
      << "}\n"
      << "}\n";
