@@ -16,7 +16,6 @@ namespace ad_utility {
 //
 class Timer {
  private:
-
   std::chrono::steady_clock _clock;
   std::chrono::time_point<std::chrono::steady_clock> _startTime = _clock.now();
   //! The timer value (initially zero)
@@ -31,7 +30,7 @@ class Timer {
 
   //! Resets the timer value to zero and stops the measurement.
   void reset() {
-    _passedTime =  0us;
+    _passedTime = 0us;
     _running = false;
   }
 
@@ -51,33 +50,32 @@ class Timer {
     }
   }
 
-
-
   //! Stops the measurement (does *not* return the timer value anymore)
   inline void stop() {
     if (_running) {
-      _passedTime += std::chrono::duration_cast<std::chrono::microseconds>(_clock.now() - _startTime);
+      _passedTime += std::chrono::duration_cast<std::chrono::microseconds>(
+          _clock.now() - _startTime);
     }
     _running = false;
   }
 
   std::chrono::microseconds getTime() {
     if (_running) {
-      return _passedTime + std::chrono::duration_cast<std::chrono::microseconds>(_clock.now() - _startTime);
+      return _passedTime +
+             std::chrono::duration_cast<std::chrono::microseconds>(
+                 _clock.now() - _startTime);
     } else {
       return _passedTime;
     }
   };
 
   // ___________________________________________________________________
-  long usecs() {
-    return getTime().count();
-  }
+  long usecs() { return getTime().count(); }
 
   // ___________________________________________________________________
   long msecs() {
-    return std::chrono::duration_cast<std::chrono::microseconds>(getTime()).count();
+    return std::chrono::duration_cast<std::chrono::microseconds>(getTime())
+        .count();
   }
-
 };
 }  // namespace ad_utility

@@ -10,6 +10,7 @@
 #include <unordered_set>
 #include "../util/Conversions.h"
 #include "../util/HashSet.h"
+#include "../util/Timer.h"
 #include "./Operation.h"
 #include "./QueryExecutionContext.h"
 
@@ -151,7 +152,19 @@ class QueryExecutionTree {
       size_t maxSend, std::ostream& out) const {
     std::ostringstream throwaway;
     shared_ptr<const ResultTable> res = getResult();
+    ad_utility::Timer timer;
+    timer.start();
     for (size_t i = from; i < upperBound; ++i) {
+      // check the timer every 10 result
+      if (!(i % 10)) {
+        if (timer.getTime() >= _qec->getSettings()._timeoutStringTranslation) {
+          // we have exhausted our budget, simply break here and return the
+          // possibly incomplete result
+          // TODO Can we simply break here or do we have to inform about the
+          // result that is too small?
+          break;
+        }
+      }
       const auto& row = data[i];
       auto& os = (i < (maxSend + from) ? out : throwaway);
       os << "[";
