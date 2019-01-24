@@ -135,15 +135,14 @@ From now on we are inside the container, make sure you follow all the coming ins
 for creating an index and **only then** proceed to the [next
 section](#run-the-qlever-server).
 
-#### Using an NTriples or Turtle file:
+If your input knowledge base is in the standard *NTriple* or *Turtle* format
+create the index with the following command
 
-Note that the string passed to `-i` is the base name of the index files QLever
-creates.
+    IndexBuilderMain -a -i /index/<prefix> -n /input/knowledge_base.ttl
 
-    IndexBuilderMain -i /index/<prefix> -n /input/knowledge_base.ttl
-
-Where `<perfix>` is the base name for all index files. If you use `index` tou
-can later skip the `-e INDEX_PREFIX=<prefix>` flag.
+Where `<perfix>` is the base name for all index files and `-a` enables certain
+queries using predicate variables. If you use `index` as the prefix you can
+later skip the `-e INDEX_PREFIX=<prefix>` flag.
 
 If instead you are using a *non standard* TSV knowledge base file use the `-t`
 flag instead of `-n`. This is *not recommended* but supported for legacy
@@ -153,27 +152,18 @@ To include a text collection, the wordsfile and docsfiles (see
 [here](docs/sparql_plus_text.md) for the required format) is provided with the
 `-w` and `-d` flags respectively.
 
-The full call will look like this:
+Then the full command will look like this:
 
-    IndexBuilderMain -i /index/<prefix> -n /input/knowledge_base.ttl -w /input/wordsfile.tsv -d /input/docsfile.tsv
+    IndexBuilderMain -a -i /index/<prefix> -n /input/knowledge_base.ttl -w /input/wordsfile.tsv -d /input/docsfile.tsv
 
 If you want some literals to be written to an on disk vocabulary (by default
 this concerns literals longer than 50 chars and literals in less frequent
-lagnuages), add an optional parameter `-l`. This is useful for large knowledge
-bases that includ texts (descriptions etc) as literals and thus consume lots
-of memory on startup without this option.
-
-    IndexBuilderMain -i /index/<prefix> -n /input/knowledge_base.ttl -l
+lagnuages), add the optional `-l` flag.
+This is useful for large knowledge bases that includ texts (descriptions etc) as
+literals and thus consume lots of memory on startup without this option.
 
 You can also add a text index to an existing knowledge base index by ommitting
-`-n` and `-t` parameters (for KB input)
-
-    IndexBuilderMain -i /index/<prefix> -w /input/wordsfile.tsv -d /input/docsfile.tsv
-
-All options can, of course, be combined. The full call with all permutations and
-literals on disk will look like this:
-
-    IndexBuilderMain -a -l -i /input/<prefix> -n /input/knowledge_base.ttl -w /input/wordsfile.tsv -d /input/docsfile.tsv
+`-n` (or `-t`) parameter.
 
 ## Run the QLever Server
 
