@@ -25,8 +25,8 @@ which astronauts walked on the moon.
         ?t ql:contains-word "walk* moon"
     } ORDER BY DESC(SCORE(?t))
 
-Technically it finds entities which are mentioned with the word prefix "walk"
-and the word "moon" which are known to be astronauts.
+Technically it finds entities which are mentioned together with the word prefix
+"walk" and the word "moon" which are known to be astronauts.
 
 The format required of such a linked corpus as well as a more details aboute the
 queries this enables can be found [here](docs/sparql_plus_text.md).
