@@ -188,6 +188,7 @@ void OptionalJoin::computeResult(ResultTable* result) const {
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
+  LOG(DEBUG) << "OptionalJoin subresult computation done." << std::endl;
 
   // compute the result types
   result->_resultTypes.reserve(result->_nofColumns);

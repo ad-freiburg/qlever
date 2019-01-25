@@ -108,6 +108,7 @@ size_t CountAvailablePredicates::getCostEstimate() {
 
 // _____________________________________________________________________________
 void CountAvailablePredicates::computeResult(ResultTable* result) const {
+  LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
   result->_nofColumns = 2;
   result->_sortedBy = resultSortedOn();
   result->_fixedSizeData = new vector<array<Id, 2>>();
@@ -130,6 +131,8 @@ void CountAvailablePredicates::computeResult(ResultTable* result) const {
     // Compute the predicates for entities in subresult's _subjectColumnIndex
     // column.
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
+    LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
+               << std::endl;
     if (subresult->_nofColumns > 5) {
       CountAvailablePredicates::computePatternTrick<vector<Id>>(
           &subresult->_varSizeData,
@@ -164,6 +167,8 @@ void CountAvailablePredicates::computeResult(ResultTable* result) const {
       }
     }
   }
+  LOG(DEBUG) << "CountAvailablePredicates result computation done."
+             << std::endl;
   result->finish();
 }
 
@@ -171,6 +176,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
     vector<array<Id, 2>>* result, const vector<PatternID>& hasPattern,
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
+  LOG(DEBUG) << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
 
@@ -195,6 +201,8 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
     }
   }
 
+  LOG(DEBUG) << "Using " << patternCounts.size()
+             << " patterns for computing the result." << std::endl;
   for (const auto& it : patternCounts) {
     std::pair<Id*, size_t> pattern = patterns[it.first];
     for (size_t i = 0; i < pattern.second; i++) {
@@ -214,6 +222,8 @@ void CountAvailablePredicates::computePatternTrick(
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns,
     const size_t subjectColumn) {
+  LOG(DEBUG) << "For " << input->size() << " entities in column "
+             << subjectColumn << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
   size_t posInput = 0;
@@ -255,6 +265,8 @@ void CountAvailablePredicates::computePatternTrick(
     }
     posInput++;
   }
+  LOG(DEBUG) << "Using " << patternCounts.size()
+             << " patterns for computing the result." << std::endl;
   // resolve the patterns to predicate counts
   for (const auto& it : patternCounts) {
     std::pair<Id*, size_t> pattern = patterns[it.first];

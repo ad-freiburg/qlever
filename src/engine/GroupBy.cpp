@@ -584,6 +584,7 @@ void doGroupBy(const vector<A>* input,
                const vector<GroupBy::Aggregate>& aggregates, vector<R>* result,
                const ResultTable* inTable, ResultTable* outTable,
                const Index& index) {
+  LOG(DEBUG) << "Group by input size " << input->size() << std::endl;
   if (input->size() == 0) {
     return;
   }
@@ -754,6 +755,7 @@ struct callDoGroupBy<6, 6> {
 };
 
 void GroupBy::computeResult(ResultTable* result) const {
+  LOG(DEBUG) << "GroupBy result computation..." << std::endl;
   std::vector<size_t> groupByColumns;
 
   result->_sortedBy = resultSortedOn();
@@ -911,6 +913,7 @@ void GroupBy::computeResult(ResultTable* result) const {
   }
 
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
+  LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
   // populate the result type vector
   result->_resultTypes.resize(result->_nofColumns);
@@ -968,4 +971,5 @@ void GroupBy::computeResult(ResultTable* result) const {
     }
   }
   result->finish();
+  LOG(DEBUG) << "GroupBy result computation done." << std::endl;
 }

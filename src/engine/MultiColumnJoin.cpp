@@ -179,6 +179,8 @@ void MultiColumnJoin::computeResult(ResultTable* result) const {
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
 
+  LOG(DEBUG) << "MultiColumnJoin subresult computation done." << std::endl;
+
   // compute the result types
   result->_resultTypes.reserve(result->_nofColumns);
   result->_resultTypes.insert(result->_resultTypes.end(),
@@ -197,7 +199,7 @@ void MultiColumnJoin::computeResult(ResultTable* result) const {
     }
   }
 
-  LOG(DEBUG) << "Computing optional join between results of size "
+  LOG(DEBUG) << "Computing a multi column join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
 
   // Calls computeMultiColumnJoin with the right values for the array sizes.

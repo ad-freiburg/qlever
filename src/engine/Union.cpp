@@ -119,8 +119,10 @@ size_t Union::getCostEstimate() {
 }
 
 void Union::computeResult(ResultTable* result) const {
+  LOG(DEBUG) << "Union result computation..." << std::endl;
   shared_ptr<const ResultTable> subRes1 = _subtrees[0]->getResult();
   shared_ptr<const ResultTable> subRes2 = _subtrees[1]->getResult();
+  LOG(DEBUG) << "Union subresult computation done." << std::endl;
 
   result->_sortedBy = resultSortedOn();
   for (const std::array<size_t, 2>& o : _columnOrigins) {
@@ -136,6 +138,7 @@ void Union::computeResult(ResultTable* result) const {
   computeUnion(result, subRes1, subRes2, _columnOrigins);
 
   result->finish();
+  LOG(DEBUG) << "Union result computation done." << std::endl;
 }
 
 void Union::computeUnion(
