@@ -3,24 +3,29 @@
 [![Build
 Status](https://travis-ci.org/ad-freiburg/QLever.svg?branch=master)](https://travis-ci.org/ad-freiburg/QLever)
 
-QLever (pronounced "clever") is an efficient SPARQL engine which can handle very large datasets.
-For example, QLever can index the complete Wikidata (~ 7 billion triples) in less than 12 hours
-on a standard Linux machine using around 40 GB of RAM, with subsequent query times below 1 second
-even for relatively complex queries with large result sets.
-On top of the standard SPARQL functionality, QLever also supports SPARQL+Text search and SPARQL autocompletion;
-these are described in the next section.
+QLever (pronounced "clever") is an efficient SPARQL engine which can handle very
+large datasets.  For example, QLever can index the complete Wikidata (~
+7 billion triples) in less than 12 hours on a standard Linux machine using
+around 40 GB of RAM, with subsequent query times below 1 second even for
+relatively complex queries with large result sets.  On top of the standard
+SPARQL functionality, QLever also supports SPARQL+Text search and SPARQL
+autocompletion; these are described in the next section.
 
-A demo of QLever on a variety of large datasets, including the complete Wikidata, can be found under http://qlever.cs.uni-freiburg.de 
+A demo of QLever on a variety of large datasets, including the complete
+Wikidata, can be found under http://qlever.cs.uni-freiburg.de
 
-The basic design behind QLever is described in this [CIKM'17 paper](http://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf). If you use QLever, please cite this paper.
-We are working on a follow-up publication that describes and evaluates the many additional features
-and performance improvements to QLever since 2017.
+The basic design behind QLever is described in this [CIKM'17
+paper](http://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf).
+If you use QLever, please cite this paper.  We are working on a follow-up
+publication that describes and evaluates the many additional features and
+performance improvements to QLever since 2017.
 
 # SPARQL+Text and SPARQL Autocompletion
 
-On top of the vanilla SPARQL functionality,
-QLever allows so-called SPARQL+Text queries on a text corpus linked to a knowledge base via entity recognition.
-For example, the following query find all mentions of astronauts next to the words "moon" and "walk*" in the text corpus:
+On top of the vanilla SPARQL functionality, QLever allows so-called SPARQL+Text
+queries on a text corpus linked to a knowledge base via entity recognition.  For
+example, the following query find all mentions of astronauts next to the words
+"moon" and "walk*" in the text corpus:
 
     SELECT ?a TEXT(?t) SCORE(?t) WHERE {
         ?a <is-a> <Astronaut> .
@@ -28,13 +33,14 @@ For example, the following query find all mentions of astronauts next to the wor
         ?t ql:contains-word "walk* moon"
     } ORDER BY DESC(SCORE(?t))
 
-Such queries can be simulated in standard SPARQL, but only with poor performance, see the CIKM'17 paper above.
-Details about the required input data and the SPARQL+text query syntax and semantics can be
-found [here](docs/sparql_plus_text.md).
+Such queries can be simulated in standard SPARQL, but only with poor
+performance, see the CIKM'17 paper above.  Details about the required input data
+and the SPARQL+text query syntax and semantics can be found
+[here](docs/sparql_plus_text.md).
 
-QLever also supports efficient SPARQL autocompletion.
-For example, the following query yields a list of all predicates associated with persons
-in the knowledge base, ordered by the number of persons which have that predicate.
+QLever also supports efficient SPARQL autocompletion.  For example, the
+following query yields a list of all predicates associated with persons in the
+knowledge base, ordered by the number of persons which have that predicate.
 
     SELECT ?predicate (COUNT(?predicate) as ?count) WHERE {
       ?x <is-a> <Person> .
@@ -43,11 +49,13 @@ in the knowledge base, ordered by the number of persons which have that predicat
     GROUP BY ?predicate
     ORDER BY DESC(?count)
 
-Note that this query could also be processed by standard SPARQL simply by replacing the second
-triple by ?x ?predicate ?object. However, that query is bound to produce a very large intermediate
-result (all triples of all persons) with a correspondingly huge query time.
-In contrast, the query above takes only ~ 100ms on a standard Linux machine for a dataset with ~ 360 million triples and ~ 530 million text records.
-More details on this feature set will be provided here soon.
+Note that this query could also be processed by standard SPARQL simply by
+replacing the second triple by ?x ?predicate ?object. However, that query is
+bound to produce a very large intermediate result (all triples of all persons)
+with a correspondingly huge query time.  In contrast, the query above takes only
+~ 100ms on a standard Linux machine for a dataset with ~ 360 million triples and
+~ 530 million text records.  More details on this feature set will be provided
+here soon.
 
 # How to use
 
@@ -58,9 +66,9 @@ are targeting a non Linux Unix-like system see [here](docs/native_setup.md).
 The installation requires a 64-bit system (32 bit systems can't deal with `mmap`
 on > 4 GB files or allocate enough RAM for larger KBs), docker version 18.05 or newer
 (needs multi-stage builds without leaking files (for End-to-End Tests)) and `git`.
-The you can simply do the following:
+Then you can simply do the following:
 
-    git clone --recursive https://github.com/Buchhold/QLever.git qlever
+    git clone --recursive https://github.com/ad-freiburg/QLever.git qlever
     cd qlever
     docker build -t qlever .
 
