@@ -755,7 +755,7 @@ struct callDoGroupBy<6, 6> {
 };
 
 void GroupBy::computeResult(ResultTable* result) const {
-  LOG(DEBUG) << "Beginning computing the GroupBy result." << std::endl;
+  LOG(DEBUG) << "GroupBy result computation..." << std::endl;
   std::vector<size_t> groupByColumns;
 
   result->_sortedBy = resultSortedOn();
@@ -913,7 +913,7 @@ void GroupBy::computeResult(ResultTable* result) const {
   }
 
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
-  LOG(DEBUG) << "GroupBy subresult computation complete" << std::endl;
+  LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
   // populate the result type vector
   result->_resultTypes.resize(result->_nofColumns);
@@ -971,5 +971,5 @@ void GroupBy::computeResult(ResultTable* result) const {
     }
   }
   result->finish();
-  LOG(DEBUG) << "Finished with computing the GroupBy result." << std::endl;
+  LOG(DEBUG) << "GroupBy result computation done." << std::endl;
 }

@@ -185,8 +185,7 @@ size_t HasPredicateScan::getCostEstimate() {
 }
 
 void HasPredicateScan::computeResult(ResultTable* result) const {
-  LOG(DEBUG) << "Beginning the HasPredicateScan result computation."
-             << std::endl;
+  LOG(DEBUG) << "HasPredicateScan result computation..." << std::endl;
   result->_nofColumns = getResultWidth();
   result->_sortedBy = resultSortedOn();
 
@@ -225,8 +224,7 @@ void HasPredicateScan::computeResult(ResultTable* result) const {
       break;
   }
   result->finish();
-  LOG(DEBUG) << "Finished with computing the HasPredicateScan result."
-             << std::endl;
+  LOG(DEBUG) << "HasPredicateScan result compuation done." << std::endl;
 }
 
 void HasPredicateScan::computeFreeS(

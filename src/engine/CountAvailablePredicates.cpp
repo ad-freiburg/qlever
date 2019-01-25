@@ -108,8 +108,7 @@ size_t CountAvailablePredicates::getCostEstimate() {
 
 // _____________________________________________________________________________
 void CountAvailablePredicates::computeResult(ResultTable* result) const {
-  LOG(DEBUG) << "Beginning with computing the CountAvailablePredicates result."
-             << std::endl;
+  LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
   result->_nofColumns = 2;
   result->_sortedBy = resultSortedOn();
   result->_fixedSizeData = new vector<array<Id, 2>>();
@@ -132,7 +131,7 @@ void CountAvailablePredicates::computeResult(ResultTable* result) const {
     // Compute the predicates for entities in subresult's _subjectColumnIndex
     // column.
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
-    LOG(DEBUG) << "CountAvailablePredicates subresult computation complete"
+    LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
     if (subresult->_nofColumns > 5) {
       CountAvailablePredicates::computePatternTrick<vector<Id>>(
@@ -168,7 +167,7 @@ void CountAvailablePredicates::computeResult(ResultTable* result) const {
       }
     }
   }
-  LOG(DEBUG) << "Finished with computing the CountAvailablePredicates result."
+  LOG(DEBUG) << "CountAvailablePredicates result computation done."
              << std::endl;
   result->finish();
 }
