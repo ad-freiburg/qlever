@@ -43,12 +43,9 @@ if (${ALLOW_SHUTDOWN})
 endif()
 
 
-set(LOG_LEVEL_INFO 3)
-set(LOG_LEVEL_DEBUG 4)
-set(LOG_LEVEL_TRACE 5)
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DLOGLEVEL=${LOG_LEVEL_DEBUG}")
-set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -DLOGLEVEL=${LOG_LEVEL_DEBUG}")
-set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -DLOGLEVEL=${LOG_LEVEL_DEBUG}")
+set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
+set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
+set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 
 ################################
 # GTEST
@@ -99,6 +96,27 @@ message(STATUS ---)
 ###############################################################################
 ##### Actual project configuration #####
 ###############################################################################
+
+option(DISABLE_PATTERN_TRICK_STATISTICS "This disables the computation of statistics when using the pattern trick." OFF)
+if (DISABLE_PATTERN_TRICK_STATISTICS)
+  add_definitions(-DDISABLE_PATTERN_TRICK_STATISTICS)
+endif (DISABLE_PATTERN_TRICK_STATISTICS)
+
+set(LOG_LEVEL_FATAL 0)
+set(LOG_LEVEL_ERROR 1)
+set(LOG_LEVEL_WARN 2)
+set(LOG_LEVEL_INFO 3)
+set(LOG_LEVEL_DEBUG 4)
+set(LOG_LEVEL_TRACE 5)
+
+
+if(CMAKE_BUILD_TYPE MATCHES DEBUG)
+  set(LOGLEVEL DEBUG CACHE STRING "The loglevel")
+else()
+  set(LOGLEVEL INFO CACHE STRING "The loglevel")
+endif()
+set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TRACE)
+add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
 add_subdirectory(src/parser)
 add_subdirectory(src/engine)
