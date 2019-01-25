@@ -212,23 +212,20 @@ void MultiColumnJoin::computeResult(ResultTable* result) const {
 ad_utility::HashMap<string, size_t> MultiColumnJoin::getVariableColumns()
     const {
   ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumnMap());
-  size_t leftSize = _left->getResultWidth();
-  for (auto it = _right->getVariableColumnMap().begin();
-       it != _right->getVariableColumnMap().end(); ++it) {
-    size_t columnIndex = leftSize + it->second;
+  size_t columnIndex = retVal.size();
+  for (const auto& it : _right->getVariableColumnMap()) {
     bool isJoinColumn = false;
     // Reduce the index for every column of _right that is beeing joined on,
     // and the index of which is smaller than the index of it.
     for (const std::array<Id, 2>& a : _joinColumns) {
-      if (a[1] < it->second) {
-        columnIndex--;
-      } else if (a[1] == it->second) {
+      if (a[1] == it.second) {
         isJoinColumn = true;
         break;
       }
     }
     if (!isJoinColumn) {
-      retVal[it->first] = columnIndex;
+      retVal[it.first] = columnIndex;
+      columnIndex++;
     }
   }
   return retVal;

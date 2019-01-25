@@ -561,7 +561,6 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
                    "lang function.");
         }
         std::string lvar = lhs.substr(5, lhs.size() - 6);
-        std::cout << "lvar:" << lvar << std::endl;
 
         auto langTag = rhs.substr(1, rhs.size() - 2);
         // first find a predicate for the given variable
