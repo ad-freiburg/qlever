@@ -227,6 +227,14 @@ void CountAvailablePredicates::computePatternTrick(
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
   size_t posInput = 0;
+#ifndef DISABLE_PATTERN_TRICK_STATISTICS
+  // These variables are used to gather additional statistics
+  size_t num_entities_with_pattern = 0;
+  // the number of predicates counted with patterns
+  size_t predicates_from_patterns = 0;
+  // the number of predicates counted without patterns
+  size_t predicates_from_lists = 0;
+#endif
   Id lastSubject = ID_NO_VALUE;
   while (posInput < input->size()) {
     // Skip over elements with the same subject (don't count them twice)
@@ -239,11 +247,17 @@ void CountAvailablePredicates::computePatternTrick(
     if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
       // The subject matches a pattern
       patternCounts[hasPattern[subject]]++;
+#ifndef DISABLE_PATTERN_TRICK_STATISTICS
+      num_entities_with_pattern++;
+#endif
     } else if (subject < hasPredicate.size()) {
       // The subject does not match a pattern
       size_t numPredicates;
       Id* predicateData;
       std::tie(predicateData, numPredicates) = hasPredicate[subject];
+#ifndef DISABLE_PATTERN_TRICK_STATISTICS
+      predicates_from_lists += numPredicates;
+#endif
       if (numPredicates > 0) {
         for (size_t i = 0; i < numPredicates; i++) {
           auto it = predicateCounts.find(predicateData[i]);
@@ -270,6 +284,7 @@ void CountAvailablePredicates::computePatternTrick(
   // resolve the patterns to predicate counts
   for (const auto& it : patternCounts) {
     std::pair<Id*, size_t> pattern = patterns[it.first];
+    predicates_from_patterns += it.second;
     for (size_t i = 0; i < pattern.second; i++) {
       predicateCounts[pattern.first[i]] += it.second;
     }
@@ -279,4 +294,38 @@ void CountAvailablePredicates::computePatternTrick(
   for (const auto& it : predicateCounts) {
     result->push_back(array<Id, 2>{it.first, static_cast<Id>(it.second)});
   }
+
+#ifndef DISABLE_PATTERN_TRICK_STATISTICS
+  // Print interesting statistics about the pattern trick
+  double ratio_has_pattern =
+      static_cast<double>(num_entities_with_pattern) / input->size();
+  size_t num_predicates_total =
+      predicates_from_lists + predicates_from_patterns;
+  double ratio_counted_with_pattern =
+      static_cast<double>(predicates_from_patterns) / num_predicates_total;
+
+  size_t cost_with_patterns =
+      input->size() + predicates_from_lists + patternCounts.size();
+  size_t cost_without_patterns = input->size() + num_predicates_total;
+  double cost_ratio =
+      static_cast<double>(cost_with_patterns) / cost_without_patterns;
+  // Print the ratio of entities that used a pattern
+  LOG(DEBUG) << num_entities_with_pattern << " of " << input->size()
+             << " entities had a pattern. That equals "
+             << (ratio_has_pattern * 100) << "%" << std::endl;
+  // Print info about how many predicates where counted with patterns
+  LOG(DEBUG) << "Of the " << num_predicates_total << " predicates "
+             << predicates_from_patterns
+             << " were counted using patterns while " << predicates_from_lists
+             << " were counted without patterns. That equals "
+             << (ratio_counted_with_pattern * 100) << "%" << std::endl;
+  // Print information about of efficient the pattern trick is
+  LOG(DEBUG) << "The conceptual cost of the operation with patterns was "
+             << cost_with_patterns
+             << " while without patterns it would have been "
+             << cost_without_patterns << std::endl;
+  // Print the cost improvement using the the pattern trick gave us
+  LOG(DEBUG) << "This equals a ratio of cost with to cost without patterns of "
+             << cost_ratio << std::endl;
+#endif
 }
