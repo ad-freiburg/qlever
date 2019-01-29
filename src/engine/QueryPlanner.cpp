@@ -92,6 +92,9 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
     childPlans.clear();
     std::vector<SubtreePlan> unionPlans;
     std::vector<SubtreePlan> subqueryPlans;
+    // Ensure the vectors won't reallocate
+    unionPlans.reserve(pattern->_children.size());
+    subqueryPlans.reserve(pattern->_children.size());
     for (ParsedQuery::GraphPatternOperation* child : pattern->_children) {
       switch (child->_type) {
         case ParsedQuery::GraphPatternOperation::Type::OPTIONAL:
@@ -724,7 +727,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
   for (SubtreePlan* plan : children) {
     SubtreePlan newIdPlan = *plan;
     // give the plan a unique id bit
-    newIdPlan._idsOfIncludedNodes = 1 << idShift;
+    newIdPlan._idsOfIncludedNodes = size_t(1) << idShift;
     newIdPlan._idsOfIncludedFilters = 0;
     seeds.push_back(newIdPlan);
     idShift++;
@@ -742,7 +745,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
       } else if (node._variables.size() == 1) {
         // Just pick one direction, they should be equivalent.
         SubtreePlan plan(_qec);
-        plan._idsOfIncludedNodes |= (1 << i);
+        plan._idsOfIncludedNodes |= (size_t(1) << i);
         auto& tree = *plan._qet.get();
         if (node._triple._p == HAS_PREDICATE_PREDICATE) {
           // Add a has relation scan instead of a normal IndexScan
@@ -799,7 +802,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         if (node._triple._p == HAS_PREDICATE_PREDICATE) {
           // Add a has relation scan instead of a normal IndexScan
           SubtreePlan plan(_qec);
-          plan._idsOfIncludedNodes |= (1 << i);
+          plan._idsOfIncludedNodes |= (size_t(1) << i);
           auto& tree = *plan._qet.get();
           std::shared_ptr<Operation> scan(new HasPredicateScan(
               _qec, HasPredicateScan::ScanType::FULL_SCAN));
@@ -815,7 +818,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         } else if (!isVariable(node._triple._p)) {
           {
             SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (1 << i);
+            plan._idsOfIncludedNodes |= (size_t(1) << i);
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::PSO_FREE_S));
@@ -828,7 +831,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           }
           {
             SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (1 << i);
+            plan._idsOfIncludedNodes |= (size_t(1) << i);
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::POS_FREE_O));
@@ -842,7 +845,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         } else if (!isVariable(node._triple._s)) {
           {
             SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (1 << i);
+            plan._idsOfIncludedNodes |= (size_t(1) << i);
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::SPO_FREE_P));
@@ -855,7 +858,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           }
           {
             SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (1 << i);
+            plan._idsOfIncludedNodes |= (size_t(1) << i);
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::SOP_FREE_O));
@@ -869,7 +872,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         } else if (!isVariable(node._triple._o)) {
           {
             SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (1 << i);
+            plan._idsOfIncludedNodes |= (size_t(1) << i);
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::OSP_FREE_S));
@@ -882,7 +885,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           }
           {
             SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (1 << i);
+            plan._idsOfIncludedNodes |= (size_t(1) << i);
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::OPS_FREE_P));
@@ -900,7 +903,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           // SPO
           {
             SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (1 << i);
+            plan._idsOfIncludedNodes |= (size_t(1) << i);
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_SPO));
@@ -914,7 +917,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           // SOP
           {
             SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (1 << i);
+            plan._idsOfIncludedNodes |= (size_t(1) << i);
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_SOP));
@@ -928,7 +931,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           // PSO
           {
             SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (1 << i);
+            plan._idsOfIncludedNodes |= (size_t(1) << i);
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_PSO));
@@ -942,7 +945,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           // POS
           {
             SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (1 << i);
+            plan._idsOfIncludedNodes |= (size_t(1) << i);
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_POS));
@@ -956,7 +959,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           // OSP
           {
             SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (1 << i);
+            plan._idsOfIncludedNodes |= (size_t(1) << i);
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_OSP));
@@ -970,7 +973,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           // OPS
           {
             SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (1 << i);
+            plan._idsOfIncludedNodes |= (size_t(1) << i);
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_OPS));
@@ -998,7 +1001,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
 QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
     const QueryPlanner::TripleGraph::Node& node) const {
   SubtreePlan plan(_qec);
-  plan._idsOfIncludedNodes |= (1 << node._id);
+  plan._idsOfIncludedNodes |= (size_t(1) << node._id);
   auto& tree = *plan._qet.get();
   AD_CHECK(node._wordPart.size() > 0);
   // Subtract 1 for variables.size() for the context var.
@@ -1040,11 +1043,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
       if (connected(a[i], b[j], tg)) {
         // Find join variable(s) / columns.
         auto jcs = getJoinColumns(a[i], b[j]);
-        if (jcs.size() > 2 && !a[i]._isOptional && !b[j]._isOptional) {
-          LOG(WARN) << "Not considering possible join on "
-                    << "three or more columns at once.\n";
-          continue;
-        }
         if (jcs.size() == 2 &&
             (a[i]._qet.get()->getType() ==
                  QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER ||
@@ -1528,10 +1526,8 @@ bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
     return false;
   }
 
-  if (a._idsOfIncludedNodes >= tg._nodeMap.size() ||
-      b._idsOfIncludedNodes >= tg._nodeMap.size()) {
-    // One of the two plans contains a node that is not part of the triple
-    // graph, falling back to comparing their variable column maps.
+  if (a._idsOfIncludedNodes >= (size_t(1) << tg._nodeMap.size()) ||
+      b._idsOfIncludedNodes >= (size_t(1) << tg._nodeMap.size())) {
     return getJoinColumns(a, b).size() > 0;
   }
 
@@ -1628,7 +1624,7 @@ void QueryPlanner::applyFiltersIfPossible(
         // Apply this filter.
         SubtreePlan newPlan(_qec);
         newPlan._idsOfIncludedFilters = row[n]._idsOfIncludedFilters;
-        newPlan._idsOfIncludedFilters |= (1 << i);
+        newPlan._idsOfIncludedFilters |= (size_t(1) << i);
         newPlan._idsOfIncludedNodes = row[n]._idsOfIncludedNodes;
         newPlan._isOptional = row[n]._isOptional;
         auto& tree = *newPlan._qet.get();
