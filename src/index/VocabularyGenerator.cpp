@@ -39,7 +39,8 @@ class QueueCompare {
 };
 
 // ___________________________________________________________________
-size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
+size_t mergeVocabulary(const std::string& basename, size_t numFiles,
+                       Id* langPredLowerBound, Id* langPredUpperBound) {
   std::vector<std::fstream> infiles;
 
   // we will store pairs of <partialId, globalId>
@@ -79,6 +80,9 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
   // the number of words we have written. This also is the global Id of the next
   // word we see, unless it is is equal to the previous word
   size_t totalWritten = 0;
+  bool firstLangPredSeen = false;
+  *langPredLowerBound = 0;
+  *langPredUpperBound = 0;
 
   // start k-way merge
   while (!queue.empty()) {
@@ -100,6 +104,16 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles) {
       // write id to corresponding vec
       idVecs[top._partialFileId].push_back(
           std::make_pair(top._partialWordId, totalWritten));
+
+      if (top._value.size() > 0 && top._value[0] == '@') {
+        // exclusive
+        *langPredUpperBound = totalWritten + 1;
+        if (!firstLangPredSeen) {
+          // inclusive
+          *langPredLowerBound = totalWritten;
+          firstLangPredSeen = true;
+        }
+      }
       totalWritten++;
     } else {
       // this is a duplicate which already occured in another partial vocabulary

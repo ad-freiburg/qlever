@@ -40,6 +40,12 @@ std::unique_ptr<Index::StxxlVec> Index::createIdTriplesAndVocab(
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
   _totalVocabularySize = linesAndWords.nofWords;
+  // Save the lower and upper bound of language tagged predicates
+  // TODO(schnelle): These should either also be available when reading the
+  // Index from disk or reokaced with local variables only available when
+  // building the index.
+  _langPredLowerBound = linesAndWords.langPredLowerBound;
+  _langPredUpperBound = linesAndWords.langPredUpperBound;
   LOG(INFO) << "total size of vocabulary (internal and external) is "
             << _totalVocabularySize << std::endl;
 
@@ -51,17 +57,19 @@ std::unique_ptr<Index::StxxlVec> Index::createIdTriplesAndVocab(
   // clear vocabulary to save ram (only information from partial binary files
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
+  // TODO(schnelle): Since we don't use the Vocabulary anywhere until now
+  // this seems pointless
   _vocab.clear();
-  convertPartialToGlobalIds<Parser>(*(linesAndWords.idTriples),
-                                    linesAndWords.actualPartialSizes,
-                                    NUM_TRIPLES_PER_PARTIAL_VOCAB);
+  convertPartialToGlobalIds(*linesAndWords.idTriples,
+                            linesAndWords.actualPartialSizes,
+                            NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
   if (!_keepTempFiles) {
     // remove temporary files only used during index creation
     LOG(INFO) << "Removing temporary files (partial vocabulary and external "
                  "text file...\n";
 
-    // TODO: using system and rm is not really elegant nor portable.
+    // TODO(all): using system and rm is not really elegant nor portable.
     // use std::filesystem as soon as QLever is ported to C++17
     string removeCommand1 =
         "rm -- " + _onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME;
@@ -242,16 +250,15 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
 
   LOG(INFO) << "Merging vocabulary\n";
   VocabularyData res;
-  res.nofWords = mergeVocabulary(_onDiskBase, numFiles);
+  res.nofWords = mergeVocabulary(_onDiskBase, numFiles, &res.langPredLowerBound,
+                                 &res.langPredUpperBound);
   res.idTriples = std::move(idTriples);
   res.actualPartialSizes = std::move(actualPartialSizes);
   LOG(INFO) << "Pass done.\n";
-  res.idTriples->size();
   return res;
 }
 
 // _____________________________________________________________________________
-template <class Parser>
 void Index::convertPartialToGlobalIds(
     StxxlVec& data, const vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial) {
@@ -492,8 +499,14 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
       pattern.clear();
       patternIndex = 0;
     }
-    // don't list predicates twice
     Id currentPred = (*reader)[1];
+    // Ignore @lang@<predicate> language tagged predicates
+    if (currentPred >= _langPredLowerBound &&
+        currentPred < _langPredUpperBound) {
+      continue;
+    }
+
+    // don't list predicates twice
     if (patternIndex == 0 || pattern[patternIndex - 1] != currentPred) {
       pattern.push_back(currentPred);
       patternIndex++;
