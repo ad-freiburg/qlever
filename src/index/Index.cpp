@@ -19,6 +19,7 @@
 #include "./Index.h"
 #include "./PrefixHeuristic.h"
 #include "./VocabularyGenerator.h"
+#include "MetaDataIterator.h"
 
 using std::array;
 
@@ -438,7 +439,23 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
   }
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
+void Index::addPatternsToExistingIndex() {
+  //  createPatternsImpl<MetaDataIterator<>>(
+  //      _onDiskBase + ".index.patterns", _vocab, _hasPredicate, _hasPattern,
+  //      _patterns, _fullHasPredicateMultiplicityEntities,
+  //      _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
+  //      _maxNumPatterns);
+
+  createPatternsImpl<MetaDataIterator<IndexMetaDataMmapView>,
+                     IndexMetaDataMmapView, ad_utility::File>(
+      _onDiskBase + ".index.patterns", _vocab, _hasPredicate, _hasPattern,
+      _patterns, _fullHasPredicateMultiplicityEntities,
+      _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
+      _maxNumPatterns, _spoMeta, _spoFile);
+}
+
+// _____________________________________________________________________________
 void Index::createPatterns(bool vecAlreadySorted, StxxlVec* idTriples) {
   if (vecAlreadySorted) {
     LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
@@ -448,15 +465,16 @@ void Index::createPatterns(bool vecAlreadySorted, StxxlVec* idTriples) {
                 STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
   }
-  createPatternsImpl(_onDiskBase + ".index.patterns", *idTriples, _vocab,
-                     _hasPredicate, _hasPattern, _patterns,
-                     _fullHasPredicateMultiplicityEntities,
-                     _fullHasPredicateMultiplicityPredicates,
-                     _fullHasPredicateSize, _maxNumPatterns);
+  createPatternsImpl<StxxlVec::bufreader_type>(
+      _onDiskBase + ".index.patterns", _vocab, _hasPredicate, _hasPattern,
+      _patterns, _fullHasPredicateMultiplicityEntities,
+      _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
+      _maxNumPatterns, *idTriples);
 }
 
 // _____________________________________________________________________________
-void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
+template <typename VecReaderType, typename... Args>
+void Index::createPatternsImpl(const string& fileName,
                                const Vocabulary<CompressedString>& vocab,
                                CompactStringVector<Id, Id>& hasPredicate,
                                std::vector<PatternID>& hasPattern,
@@ -464,11 +482,7 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
                                double& fullHasPredicateMultiplicityEntities,
                                double& fullHasPredicateMultiplicityPredicates,
                                size_t& fullHasPredicateSize,
-                               size_t maxNumPatterns) {
-  if (vec.size() == 0) {
-    LOG(WARN) << "Attempt to write an empty index!" << std::endl;
-    return;
-  }
+                               size_t maxNumPatterns, Args&... vecReaderArgs) {
   // Language filter pattens of the form @..@ should be ignored. To do so
   // we assume that no valid predicate in the input start with @ and then
   // do prefix filtering.
@@ -486,12 +500,12 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
 
   size_t patternIndex = 0;
   Id currentRel;
-  currentRel = vec[0][0];
+  currentRel = (*VecReaderType(vecReaderArgs...))[0];
   bool isValidPattern = true;
   size_t numInvalidPatterns = 0;
   size_t numValidPatterns = 0;
 
-  for (StxxlVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
+  for (VecReaderType reader(vecReaderArgs...); !reader.empty(); ++reader) {
     auto triple = *reader;
     if (triple[0] != currentRel) {
       currentRel = triple[0];
@@ -625,10 +639,10 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
   ad_utility::HashSet<Id> predicateHashSet;
 
   pattern.clear();
-  currentRel = vec[0][0];
+  currentRel = (*VecReaderType(vecReaderArgs...))[0];
   patternIndex = 0;
   // Create the has-relation and has-pattern predicates
-  for (StxxlVec::bufreader_type reader2(vec); !reader2.empty(); ++reader2) {
+  for (VecReaderType reader2(vecReaderArgs...); !reader2.empty(); ++reader2) {
     auto triple = *reader2;
     if (triple[0] != currentRel) {
       // we have arrived at a new entity;

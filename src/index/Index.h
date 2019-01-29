@@ -74,6 +74,8 @@ class Index {
   template <class Parser>
   void createFromFile(const string& filename, bool allPermutations);
 
+  void addPatternsToExistingIndex();
+
   // Creates an index object from an on disk index
   // that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
@@ -442,9 +444,13 @@ class Index {
    * @brief Creates the data required for the "pattern-trick" used for fast
    *        ql:has-relation evaluation when selection relation counts.
    * @param fileName The name of the file in which the data should be stored
-   * @param vec The vectors of triples in spo order.
+   * @param args The arguments that need to be passed to the constructor of
+   *             VecReaderType. VecReaderType should allow for iterating over
+   *             the tuples of the spo permutation after having been constructed
+   *             using args.
    */
-  static void createPatternsImpl(const string& fileName, const StxxlVec& vec,
+  template <typename VecReaderType, typename... Args>
+  static void createPatternsImpl(const string& fileName,
                                  const Vocabulary<CompressedString>& vocab,
                                  CompactStringVector<Id, Id>& hasPredicate,
                                  std::vector<PatternID>& hasPattern,
@@ -452,7 +458,7 @@ class Index {
                                  double& fullHasPredicateMultiplicityEntities,
                                  double& fullHasPredicateMultiplicityPredicates,
                                  size_t& fullHasPredicateSize,
-                                 size_t maxNumPatterns);
+                                 size_t maxNumPatterns, Args&... vecReaderArgs);
 
   // wrap the static function using the internal member variables
   // the bool indicates wether the StxxlVec has to be sorted before the pattern

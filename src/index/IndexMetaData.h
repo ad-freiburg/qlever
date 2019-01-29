@@ -74,9 +74,12 @@ constexpr uint64_t V_CURRENT = V_BLOCK_LIST_AND_STATISTICS;
 // Templated MetaData. The datatype wrappers defined in MetaDataHandler.h
 // all meet the requirements of MapType
 // TODO(C++20): When concepts are available, MapType is a Concept!
-template <class MapType>
+template <class M>
 class IndexMetaData {
  public:
+  // This allows access to MapType given the type of IndexMetaData
+  typedef M MapType;
+
   // some MapTypes (the dense ones using stxxl or mmap) require additional calls
   // to setup() before being fully initialized
   IndexMetaData() = default;
@@ -157,6 +160,7 @@ class IndexMetaData {
   size_t getVersion() const { return _version; }
 
   MapType& data() { return _data; }
+  const MapType& data() const { return _data; }
 
  private:
   off_t _offsetAfter = 0;
