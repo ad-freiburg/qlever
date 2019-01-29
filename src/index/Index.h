@@ -44,6 +44,9 @@ struct VocabularyData {
   using StxxlVec = stxxl::vector<array<Id, 3>>;
   // The total number of distinct words in the complete Vocabulary
   size_t nofWords;
+  // Id lower and upper bound of @lang@<predicate> predicates
+  Id langPredLowerBound;
+  Id langPredUpperBound;
   // The number of triples in the idTriples vec that each partial vocabulary is
   // responsible for (depends on the number of additional language filter
   // triples)
@@ -321,6 +324,8 @@ class Index {
   bool hasAllPermutations() const { return _spoFile.isOpen(); }
 
  private:
+  Id _langPredLowerBound;
+  Id _langPredUpperBound;
   string _onDiskBase;
   string _settingsFileName;
   bool _onDiskLiterals = false;
@@ -382,7 +387,6 @@ class Index {
   VocabularyData passFileForVocabulary(const string& ntFile,
                                        size_t linesPerPartial = 100000000);
 
-  template <class Parser>
   void convertPartialToGlobalIds(StxxlVec& data,
                                  const vector<size_t>& actualLinesPerPartial,
                                  size_t linesPerPartial);
@@ -450,15 +454,14 @@ class Index {
    *             using args.
    */
   template <typename VecReaderType, typename... Args>
-  static void createPatternsImpl(const string& fileName,
-                                 const Vocabulary<CompressedString>& vocab,
-                                 CompactStringVector<Id, Id>& hasPredicate,
-                                 std::vector<PatternID>& hasPattern,
-                                 CompactStringVector<size_t, Id>& patterns,
-                                 double& fullHasPredicateMultiplicityEntities,
-                                 double& fullHasPredicateMultiplicityPredicates,
-                                 size_t& fullHasPredicateSize,
-                                 size_t maxNumPatterns, Args&... vecReaderArgs);
+  void createPatternsImpl(const string& fileName,
+                          CompactStringVector<Id, Id>& hasPredicate,
+                          std::vector<PatternID>& hasPattern,
+                          CompactStringVector<size_t, Id>& patterns,
+                          double& fullHasPredicateMultiplicityEntities,
+                          double& fullHasPredicateMultiplicityPredicates,
+                          size_t& fullHasPredicateSize, size_t maxNumPatterns,
+                          Args&... vecReaderArgs);
 
   // wrap the static function using the internal member variables
   // the bool indicates wether the StxxlVec has to be sorted before the pattern

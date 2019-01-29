@@ -27,6 +27,7 @@ class MetaDataIterator {
     if (_buffer_offset >= _buffer.size()) {
       ++_iterator;
       scanCurrentPos();
+      _buffer_offset = 0;
     }
     return *this;
   }

@@ -15,15 +15,17 @@ using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
 using std::string;
 // _______________________________________________________________
-// merge the partial vocabularies at  binary files
+// merge the partial vocabularies in the  binary files
 // basename + PARTIAL_VOCAB_FILE_NAME + to_string(i)
 // where 0 <= i < numFiles
 // Directly Writes .vocabulary file at basename (no more need to pass
 // through Vocabulary class
 // Writes file "externalTextFile" which can be used to directly write external
 // Literals
-// Returns the number of total Words merged
-size_t mergeVocabulary(const std::string& basename, size_t numFiles);
+// Returns the number of total Words merged and via the parameters
+// the lower and upper bound of language tagged predicates
+size_t mergeVocabulary(const std::string& basename, size_t numFiles,
+                       Id* langPredLowerBound, Id* langPredUpperBound);
 
 // _________________________________________________________________________________________
 void writePartialIdMapToBinaryFileForMerging(
