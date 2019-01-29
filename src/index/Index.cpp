@@ -512,7 +512,7 @@ void Index::createPatternsImpl(const string& fileName,
     // don't list predicates twice
     if (patternIndex == 0 || pattern[patternIndex - 1] != triple[1]) {
       // Ignore @..@ type language predicates
-      if (triple[0] < _langPredLowerBound || triple[0] >= _langPredUpperBound) {
+      if (triple[1] < _langPredLowerBound || triple[1] >= _langPredUpperBound) {
         pattern.push_back(triple[1]);
         patternIndex++;
       }
@@ -664,7 +664,7 @@ void Index::createPatternsImpl(const string& fileName,
     // don't list predicates twice
     if (patternIndex == 0 || pattern[patternIndex - 1] != (triple[1])) {
       // Ignore @..@ type language predicates
-      if (triple[0] < _langPredLowerBound || triple[0] >= _langPredUpperBound) {
+      if (triple[1] < _langPredLowerBound || triple[1] >= _langPredUpperBound) {
         pattern.push_back(triple[1]);
         patternIndex++;
       }
