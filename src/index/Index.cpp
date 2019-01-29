@@ -445,6 +445,8 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
+  _langPredUpperBound = _vocab.getValueIdForLT(std::string(1, '@' + 1));
+  _langPredLowerBound = _vocab.getValueIdForGE("@");
   createPatternsImpl<MetaDataIterator<IndexMetaDataMmapView>,
                      IndexMetaDataMmapView, ad_utility::File>(
       _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
