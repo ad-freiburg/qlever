@@ -478,15 +478,15 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
   Pattern pattern;
 
   size_t patternIndex = 0;
-  Id currentRel;
-  currentRel = vec[0][0];
+  Id currentSubj;
+  currentSubj = vec[0][0];
   bool isValidPattern = true;
   size_t numInvalidPatterns = 0;
   size_t numValidPatterns = 0;
 
   for (StxxlVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
-    if ((*reader)[0] != currentRel) {
-      currentRel = (*reader)[0];
+    if ((*reader)[0] != currentSubj) {
+      currentSubj = (*reader)[0];
       if (isValidPattern) {
         numValidPatterns++;
         auto it = patternCounts.find(pattern);
@@ -503,8 +503,9 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
       patternIndex = 0;
     }
     // don't list predicates twice
-    if (patternIndex == 0 || pattern[patternIndex - 1] != ((*reader)[1])) {
-      pattern.push_back((*reader)[1]);
+    Id currentPred = (*reader)[1];
+    if (patternIndex == 0 || pattern[patternIndex - 1] != currentPred) {
+      pattern.push_back(currentPred);
       patternIndex++;
     }
   }
@@ -519,7 +520,7 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
   }
   LOG(INFO) << "Counted patterns and found " << patternCounts.size()
             << " distinct patterns." << std::endl;
-  LOG(INFO) << "Patterns where found for " << numValidPatterns << " entities."
+  LOG(INFO) << "Patterns were found for " << numValidPatterns << " entities."
             << std::endl;
   LOG(INFO) << "Discarded the patterns of " << numInvalidPatterns
             << " entities"
@@ -614,11 +615,11 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
   ad_utility::HashSet<Id> predicateHashSet;
 
   pattern.clear();
-  currentRel = vec[0][0];
+  currentSubj = vec[0][0];
   patternIndex = 0;
-  // Create the has-relation and has-pattern predicates
+  // Create the has-predicate and has-pattern predicates
   for (StxxlVec::bufreader_type reader2(vec); !reader2.empty(); ++reader2) {
-    if ((*reader2)[0] != currentRel) {
+    if ((*reader2)[0] != currentSubj) {
       // we have arrived at a new entity;
       fullHasPredicateEntitiesDistinctSize++;
       std::unordered_map<Pattern, Id>::iterator it;
@@ -641,12 +642,12 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
             fullHasPredicatePredicatesDistinctSize++;
           }
           entityHasPredicate.push_back(
-              std::array<Id, 2>{currentRel, pattern[i]});
+              std::array<Id, 2>{currentSubj, pattern[i]});
         }
       } else {
         numEntitiesWithPatterns++;
         // The pattern does exist, add an entry to the has-pattern predicate
-        entityHasPattern.push_back(std::array<Id, 2>{currentRel, it->second});
+        entityHasPattern.push_back(std::array<Id, 2>{currentSubj, it->second});
         if (!haveCountedPattern[it->second]) {
           haveCountedPattern[it->second] = true;
           // iterate over the pattern once to
@@ -659,13 +660,14 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
         }
       }
       pattern.clear();
-      currentRel = (*reader2)[0];
+      currentSubj = (*reader2)[0];
       patternIndex = 0;
       isValidPattern = true;
     }
     // don't list predicates twice
-    if (patternIndex == 0 || pattern[patternIndex - 1] != ((*reader2)[1])) {
-      pattern.push_back((*reader2)[1]);
+    Id currentPred = (*reader2)[1];
+    if (patternIndex == 0 || pattern[patternIndex - 1] != currentPred) {
+      pattern.push_back(currentPred);
       patternIndex++;
     }
   }
@@ -682,7 +684,7 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
     numEntitiesWithoutPatterns++;
     // The pattern does not exist, use the has-relation predicate instead
     for (size_t i = 0; i < patternIndex; i++) {
-      entityHasPredicate.push_back(std::array<Id, 2>{currentRel, pattern[i]});
+      entityHasPredicate.push_back(std::array<Id, 2>{currentSubj, pattern[i]});
       if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
         predicateHashSet.insert(pattern[i]);
         fullHasPredicatePredicatesDistinctSize++;
@@ -691,7 +693,7 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
   } else {
     numEntitiesWithPatterns++;
     // The pattern does exist, add an entry to the has-pattern predicate
-    entityHasPattern.push_back(std::array<Id, 2>{currentRel, it->second});
+    entityHasPattern.push_back(std::array<Id, 2>{currentSubj, it->second});
     for (size_t i = 0; i < patternIndex; i++) {
       if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
         predicateHashSet.insert(pattern[i]);
