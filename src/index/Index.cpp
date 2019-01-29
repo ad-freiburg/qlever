@@ -448,8 +448,8 @@ void Index::createPatterns(bool vecAlreadySorted, StxxlVec* idTriples) {
                 STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
   }
-  createPatternsImpl(_onDiskBase + ".index.patterns", *idTriples, _hasPredicate,
-                     _hasPattern, _patterns,
+  createPatternsImpl(_onDiskBase + ".index.patterns", *idTriples, _vocab,
+                     _hasPredicate, _hasPattern, _patterns,
                      _fullHasPredicateMultiplicityEntities,
                      _fullHasPredicateMultiplicityPredicates,
                      _fullHasPredicateSize, _maxNumPatterns);
@@ -457,6 +457,7 @@ void Index::createPatterns(bool vecAlreadySorted, StxxlVec* idTriples) {
 
 // _____________________________________________________________________________
 void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
+                               const Vocabulary<CompressedString>& vocab,
                                CompactStringVector<Id, Id>& hasPredicate,
                                std::vector<PatternID>& hasPattern,
                                CompactStringVector<size_t, Id>& patterns,
@@ -468,6 +469,12 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
     return;
   }
+  // Language filter pattens of the form @..@ should be ignored. To do so
+  // we assume that no valid predicate in the input start with @ and then
+  // do prefix filtering.
+  size_t langPredLowerBound = vocab.getValueIdForGE("@");
+  size_t langPredUpperBound = vocab.getValueIdForLT(std::string(1, '@' + 1));
+
   IndexMetaDataHmap meta;
   typedef std::unordered_map<Pattern, size_t> PatternsCountMap;
 
@@ -485,8 +492,9 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
   size_t numValidPatterns = 0;
 
   for (StxxlVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
-    if ((*reader)[0] != currentRel) {
-      currentRel = (*reader)[0];
+    auto triple = *reader;
+    if (triple[0] != currentRel) {
+      currentRel = triple[0];
       if (isValidPattern) {
         numValidPatterns++;
         auto it = patternCounts.find(pattern);
@@ -503,9 +511,12 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
       patternIndex = 0;
     }
     // don't list predicates twice
-    if (patternIndex == 0 || pattern[patternIndex - 1] != ((*reader)[1])) {
-      pattern.push_back((*reader)[1]);
-      patternIndex++;
+    if (patternIndex == 0 || pattern[patternIndex - 1] != (triple[1])) {
+      // Ignore @..@ type language predicates
+      if (triple[0] < langPredLowerBound || triple[0] >= langPredUpperBound) {
+        pattern.push_back(triple[1]);
+        patternIndex++;
+      }
     }
   }
   // process the last entry
@@ -618,7 +629,8 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
   patternIndex = 0;
   // Create the has-relation and has-pattern predicates
   for (StxxlVec::bufreader_type reader2(vec); !reader2.empty(); ++reader2) {
-    if ((*reader2)[0] != currentRel) {
+    auto triple = *reader2;
+    if (triple[0] != currentRel) {
       // we have arrived at a new entity;
       fullHasPredicateEntitiesDistinctSize++;
       std::unordered_map<Pattern, Id>::iterator it;
@@ -659,14 +671,17 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
         }
       }
       pattern.clear();
-      currentRel = (*reader2)[0];
+      currentRel = triple[0];
       patternIndex = 0;
       isValidPattern = true;
     }
     // don't list predicates twice
-    if (patternIndex == 0 || pattern[patternIndex - 1] != ((*reader2)[1])) {
-      pattern.push_back((*reader2)[1]);
-      patternIndex++;
+    if (patternIndex == 0 || pattern[patternIndex - 1] != (triple[1])) {
+      // Ignore @..@ type language predicates
+      if (triple[0] < langPredLowerBound || triple[0] >= langPredUpperBound) {
+        pattern.push_back(triple[1]);
+        patternIndex++;
+      }
     }
   }
   // process the last element

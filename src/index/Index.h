@@ -445,6 +445,7 @@ class Index {
    * @param vec The vectors of triples in spo order.
    */
   static void createPatternsImpl(const string& fileName, const StxxlVec& vec,
+                                 const Vocabulary<CompressedString>& vocab,
                                  CompactStringVector<Id, Id>& hasPredicate,
                                  std::vector<PatternID>& hasPattern,
                                  CompactStringVector<size_t, Id>& patterns,
