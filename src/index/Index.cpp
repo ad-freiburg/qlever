@@ -92,7 +92,6 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
   StxxlVec& idTriples = *idTriplesPtr;
 
   // also perform unique for first permutation
-
   createPermutationPair<IndexMetaDataHmap>(&idTriples, Permutation::Pso,
                                            Permutation::Pos, true);
   if (allPermutations) {
@@ -102,7 +101,7 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
     createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Osp,
                                              Permutation::Ops);
   } else if (_usePatterns) {
-    // vector is not yet sorted
+    // Not constructed with Spo, Sop, needs extra sort
     createPatterns(false, &idTriples);
   }
   // move compression to end
@@ -132,7 +131,6 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
               << ". Terminating...\n";
     AD_CHECK(false);
   }
-  // also perform unique for first permutation
   writeConfiguration();
 }
 
@@ -258,7 +256,6 @@ void Index::convertPartialToGlobalIds(
     StxxlVec& data, const vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial) {
   LOG(INFO) << "Updating Ids in stxxl vector to global Ids.\n";
-  array<string, 3> spo;
 
   size_t i = 0;
   // iterate over all partial vocabularies
@@ -318,7 +315,7 @@ std::optional<MetaData> Index::createPermutationImpl(const string& fileName,
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
     return std::nullopt;
   }
-  ad_utility::File out(fileName.c_str(), "w");
+  ad_utility::File out(fileName, "w");
   LOG(INFO) << "Creating an on-disk index permutation of " << vec.size()
             << " elements / facts." << std::endl;
   // Iterate over the vector and identify relation boundaries
@@ -480,25 +477,18 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
   size_t patternIndex = 0;
   Id currentSubj;
   currentSubj = vec[0][0];
-  bool isValidPattern = true;
-  size_t numInvalidPatterns = 0;
   size_t numValidPatterns = 0;
 
   for (StxxlVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if ((*reader)[0] != currentSubj) {
       currentSubj = (*reader)[0];
-      if (isValidPattern) {
-        numValidPatterns++;
-        auto it = patternCounts.find(pattern);
-        if (it == patternCounts.end()) {
-          patternCounts.insert(std::pair<Pattern, size_t>(pattern, size_t(1)));
-        } else {
-          (*it).second++;
-        }
+      numValidPatterns++;
+      auto it = patternCounts.find(pattern);
+      if (it == patternCounts.end()) {
+        patternCounts.insert(std::pair<Pattern, size_t>(pattern, size_t(1)));
       } else {
-        numInvalidPatterns++;
+        (*it).second++;
       }
-      isValidPattern = true;
       pattern.clear();
       patternIndex = 0;
     }
@@ -510,21 +500,15 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
     }
   }
   // process the last entry
-  if (isValidPattern) {
-    auto it = patternCounts.find(pattern);
-    if (it == patternCounts.end()) {
-      patternCounts.insert(std::pair<Pattern, size_t>(pattern, size_t(1)));
-    } else {
-      (*it).second++;
-    }
+  auto it = patternCounts.find(pattern);
+  if (it == patternCounts.end()) {
+    patternCounts.insert(std::pair<Pattern, size_t>(pattern, size_t(1)));
+  } else {
+    (*it).second++;
   }
   LOG(INFO) << "Counted patterns and found " << patternCounts.size()
             << " distinct patterns." << std::endl;
   LOG(INFO) << "Patterns were found for " << numValidPatterns << " entities."
-            << std::endl;
-  LOG(INFO) << "Discarded the patterns of " << numInvalidPatterns
-            << " entities"
-               " because they were too large."
             << std::endl;
 
   // stores patterns sorted by their number of occurences
@@ -622,13 +606,7 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
     if ((*reader2)[0] != currentSubj) {
       // we have arrived at a new entity;
       fullHasPredicateEntitiesDistinctSize++;
-      std::unordered_map<Pattern, Id>::iterator it;
-      if (isValidPattern) {
-        it = patternSet.find(pattern);
-      } else {
-        it = patternSet.end();
-        numInvalidEntities++;
-      }
+      auto it = patternSet.find(pattern);
       // increase the haspredicate size here as every predicate is only
       // listed once per entity (otherwise it woul always be the same as
       // vec.size()
@@ -662,7 +640,6 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
       pattern.clear();
       currentSubj = (*reader2)[0];
       patternIndex = 0;
-      isValidPattern = true;
     }
     // don't list predicates twice
     Id currentPred = (*reader2)[1];
@@ -674,13 +651,8 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
   // process the last element
   fullHasPredicateSize += pattern.size();
   fullHasPredicateEntitiesDistinctSize++;
-  std::unordered_map<Pattern, Id>::iterator it;
-  if (isValidPattern) {
-    it = patternSet.find(pattern);
-  } else {
-    it = patternSet.end();
-  }
-  if (it == patternSet.end()) {
+  auto last = patternSet.find(pattern);
+  if (last == patternSet.end()) {
     numEntitiesWithoutPatterns++;
     // The pattern does not exist, use the has-relation predicate instead
     for (size_t i = 0; i < patternIndex; i++) {
@@ -693,7 +665,7 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
   } else {
     numEntitiesWithPatterns++;
     // The pattern does exist, add an entry to the has-pattern predicate
-    entityHasPattern.push_back(std::array<Id, 2>{currentSubj, it->second});
+    entityHasPattern.push_back(std::array<Id, 2>{currentSubj, last->second});
     for (size_t i = 0; i < patternIndex; i++) {
       if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
         predicateHashSet.insert(pattern[i]);
@@ -736,7 +708,7 @@ void Index::createPatternsImpl(const string& fileName, const StxxlVec& vec,
              << fullHasPredicateMultiplicityPredicates << std::endl;
 
   // Store all data in the file
-  ad_utility::File file(fileName.c_str(), "w");
+  ad_utility::File file(fileName, "w");
 
   // Write a byte of ones to make it less likely that an unversioned file is
   // read as a versioned one (unversioned files begin with the id of the lowest
@@ -983,7 +955,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
     // Read the pattern info from the patterns file
     std::string patternsFilePath = _onDiskBase + ".index.patterns";
     ad_utility::File patternsFile;
-    patternsFile.open(patternsFilePath.c_str(), "r");
+    patternsFile.open(patternsFilePath, "r");
     AD_CHECK(patternsFile.isOpen());
     off_t off = 0;
     unsigned char firstByte;
@@ -1075,19 +1047,19 @@ bool Index::ready() const { return _psoFile.isOpen() && _posFile.isOpen(); }
 // _____________________________________________________________________________
 void Index::openFileHandles() {
   AD_CHECK(_onDiskBase.size() > 0);
-  _psoFile.open((_onDiskBase + ".index.pso").c_str(), "r");
-  _posFile.open((_onDiskBase + ".index.pos").c_str(), "r");
+  _psoFile.open((_onDiskBase + ".index.pso"), "r");
+  _posFile.open((_onDiskBase + ".index.pos"), "r");
   if (ad_utility::File::exists(_onDiskBase + ".index.spo")) {
-    _spoFile.open((_onDiskBase + ".index.spo").c_str(), "r");
+    _spoFile.open((_onDiskBase + ".index.spo"), "r");
   }
   if (ad_utility::File::exists(_onDiskBase + ".index.sop")) {
-    _sopFile.open((_onDiskBase + ".index.sop").c_str(), "r");
+    _sopFile.open((_onDiskBase + ".index.sop"), "r");
   }
   if (ad_utility::File::exists(_onDiskBase + ".index.osp")) {
-    _ospFile.open((_onDiskBase + ".index.osp").c_str(), "r");
+    _ospFile.open((_onDiskBase + ".index.osp"), "r");
   }
   if (ad_utility::File::exists(_onDiskBase + ".index.ops")) {
-    _opsFile.open((_onDiskBase + ".index.ops").c_str(), "r");
+    _opsFile.open((_onDiskBase + ".index.ops"), "r");
   }
   AD_CHECK(_psoFile.isOpen());
   AD_CHECK(_posFile.isOpen());
@@ -1550,7 +1522,7 @@ size_t Index::sizeEstimate(const string& sub, const string& pred,
 // _____________________________________________________________________________
 template <class T>
 void Index::writeAsciiListFile(const string& filename, const T& ids) const {
-  std::ofstream f(filename.c_str());
+  std::ofstream f(filename);
 
   for (size_t i = 0; i < ids.size(); ++i) {
     f << ids[i] << ' ';
