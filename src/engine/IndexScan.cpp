@@ -212,7 +212,7 @@ void IndexScan::computePOSfreeO(ResultTable* result) const {
 }
 
 // _____________________________________________________________________________
-size_t IndexScan::computeSizeEstimate() const {
+size_t IndexScan::computeSizeEstimate() {
   if (_executionContext) {
     // Should always be in this branch. Else is only for test cases.
 

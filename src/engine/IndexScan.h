@@ -111,5 +111,5 @@ class IndexScan : public Operation {
 
   void computeOSPfreeS(ResultTable* result) const;
 
-  size_t computeSizeEstimate() const;
+  size_t computeSizeEstimate();
 };
