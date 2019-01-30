@@ -30,6 +30,18 @@ string Sort::asString(size_t indent) const {
 void Sort::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
+
+  std::string orderByVars = "";
+  for (auto p : _subtree->getVariableColumnMap()) {
+    if (p.second == _sortCol) {
+      orderByVars = "ASC(" + p.first + ")";
+      break;
+    }
+  }
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  runtimeInfo.setDescriptor("Sort on " + orderByVars);
+  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
+
   LOG(DEBUG) << "Sort result computation..." << endl;
   result->_nofColumns = subRes->_nofColumns;
   result->_resultTypes.insert(result->_resultTypes.end(),

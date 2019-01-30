@@ -124,7 +124,7 @@ void Join::computeResult(ResultTable* result) {
 
   LOG(TRACE) << "Computing right side..." << endl;
   shared_ptr<const ResultTable> rightRes = _right->getResult();
-  runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
+  runtimeInfo.addChild(_right->getRootOperation()->getRuntimeInfo());
 
   LOG(DEBUG) << "Computing Join result..." << endl;
 

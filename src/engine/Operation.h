@@ -13,6 +13,7 @@
 #include "../util/Timer.h"
 #include "./QueryExecutionContext.h"
 #include "./ResultTable.h"
+#include "RuntimeInformation.h"
 
 using std::endl;
 using std::pair;
@@ -20,80 +21,6 @@ using std::shared_ptr;
 
 class Operation {
  public:
-  class RuntimeInformation {
-   public:
-    void toJson(std::ostream& out) const {
-      out << "{";
-      out << "\"description\" : \"" << _descriptor << "\",";
-      out << "\"time\" : " << _time << ", ";
-      out << "\"was_chached\" : " << _wasCached << ", ";
-      out << "\"details\" : {";
-      auto it = _details.begin();
-      while (it != _details.end()) {
-        out << "\"" << it->first << "\" : \"" << it->second << "\"";
-        ++it;
-        if (it != _details.end()) {
-          out << ", ";
-        }
-      }
-      out << "}, ";
-      out << "\"children\" : [";
-      auto it2 = _children.begin();
-      while (it2 != _children.end()) {
-        // recursively call the childs to json method
-        it2->toJson(out);
-        ++it2;
-        if (it2 != _children.end()) {
-          out << ", ";
-        }
-      }
-      out << "]";
-      out << "}";
-    }
-
-    std::string toString() const {
-      std::ostringstream buffer;
-      toString(buffer, 0);
-      return buffer.str();
-    }
-
-    void toString(std::ostream& out, size_t indent) const {
-      out << std::string(indent * 2, ' ') << _descriptor << std::endl;
-      out << std::string(indent * 2, ' ') << "time: " << _time << "s"
-          << std::endl;
-      out << std::string(indent * 2, ' ') << "cached: " << _wasCached
-          << std::endl;
-      for (auto detail : _details) {
-        out << std::string((indent + 2) * 2, ' ') << detail.first << ", "
-            << detail.second << std::endl;
-      }
-      for (const RuntimeInformation& child : _children) {
-        child.toString(out, indent + 1);
-      }
-    }
-
-    void setDescriptor(const std::string& descriptor) {
-      _descriptor = descriptor;
-    }
-
-    void setTime(double time) { _time = time; }
-
-    void setWasCached(bool wasCached) { _wasCached = wasCached; }
-
-    void addChild(const RuntimeInformation& r) { _children.push_back(r); }
-
-    void addDetail(const std::string& key, const std::string& value) {
-      _details[key] = value;
-    }
-
-   private:
-    std::string _descriptor;
-    ad_utility::HashMap<std::string, std::string> _details;
-    double _time;
-    bool _wasCached;
-    std::vector<RuntimeInformation> _children;
-  };
-
   // Default Constructor.
   Operation() : _executionContext(NULL), _hasComputedSortColumns(false) {}
 
@@ -122,9 +49,9 @@ class Operation {
       // Passing the raw pointer here is ok as the result shared_ptr remains
       // in scope
       try {
-        computeResult(newResult.get());
+        computeResult(newResult->_resTable.get());
       } catch (const ad_semsearch::AbortException& e) {
-        newResult->abort();
+        newResult->_resTable->abort();
         // AbortExceptions have already been printed simply rethrow to
         // unwind the callstack until the whole query is aborted
         throw;
@@ -134,7 +61,7 @@ class Operation {
         LOG(ERROR) << "Failed to compute Operation result for:" << endl;
         LOG(ERROR) << asString() << endl;
         LOG(ERROR) << e.what() << endl;
-        newResult->abort();
+        newResult->_resTable->abort();
         // Rethrow as QUERY_ABORTED allowing us to print the Operation
         // only at innermost failure of a recursive call
         throw ad_semsearch::AbortException(e);
@@ -145,7 +72,7 @@ class Operation {
         LOG(ERROR) << asString() << endl;
         LOG(ERROR) << "WEIRD_EXCEPTION not inheriting from std::exception"
                    << endl;
-        newResult->abort();
+        newResult->_resTable->abort();
         // Rethrow as QUERY_ABORTED allowing us to print the Operation
         // only at innermost failure of a recursive call
         throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
@@ -153,18 +80,25 @@ class Operation {
       timer.stop();
       _runtimeInformation.setTime(timer.secs());
       _runtimeInformation.setWasCached(false);
-      return newResult;
+      // cache the runtime information for the execution as well
+      newResult->_runtimeInfo = _runtimeInformation;
+      return newResult->_resTable;
     }
-    existingResult->awaitFinished();
-    if (existingResult->status() == ResultTable::ABORTED) {
+    existingResult->_resTable->awaitFinished();
+    if (existingResult->_resTable->status() == ResultTable::ABORTED) {
       LOG(ERROR) << "Result in the cache was aborted" << endl;
       AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                "Operation was found aborted in the cache");
     }
     timer.stop();
-    _runtimeInformation.setTime(timer.secs());
-    _runtimeInformation.setWasCached(true);
-    return existingResult;
+    if (_runtimeInformation.getTime() == 0) {
+      // If this operation object was computed already we don't want to update
+      // the runtime information.
+      _runtimeInformation = existingResult->_runtimeInfo;
+      _runtimeInformation.setTime(timer.secs());
+      _runtimeInformation.setWasCached(true);
+    }
+    return existingResult->_resTable;
   }
 
   //! Set the QueryExecutionContext for this particular element.

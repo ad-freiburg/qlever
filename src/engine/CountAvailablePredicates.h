@@ -90,7 +90,7 @@ class CountAvailablePredicates : public Operation {
       const vector<PatternID>& hasPattern,
       const CompactStringVector<Id, Id>& hasPredicate,
       const CompactStringVector<size_t, Id>& patterns,
-      const size_t subjectColumn, RuntimeInformation& runtimeInfo);
+      const size_t subjectColumn, RuntimeInformation* runtimeInfo);
 
   static void computePatternTrickAllEntities(
       vector<array<Id, 2>>* result, const vector<PatternID>& hasPattern,

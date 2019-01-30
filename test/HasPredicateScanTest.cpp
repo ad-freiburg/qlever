@@ -289,10 +289,10 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
   CompactStringVector<size_t, Id> patterns(patternsSrc);
 
-  Operation::RuntimeInformation runtimeInfo;
+  RuntimeInformation runtimeInfo;
   try {
     CountAvailablePredicates::computePatternTrick<std::array<Id, 1>>(
-        &input, &result, hasPattern, hasRelation, patterns, 0, runtimeInfo);
+        &input, &result, hasPattern, hasRelation, patterns, 0, &runtimeInfo);
   } catch (ad_semsearch::Exception e) {
     // More verbose output in the case of an exception occuring.
     std::cout << e.getErrorMessage() << std::endl

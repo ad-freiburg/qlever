@@ -142,38 +142,39 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
       CountAvailablePredicates::computePatternTrick<vector<Id>>(
           &subresult->_varSizeData,
           static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-          hasPattern, hasPredicate, patterns, _subjectColumnIndex, runtimeInfo);
+          hasPattern, hasPredicate, patterns, _subjectColumnIndex,
+          &runtimeInfo);
     } else {
       if (subresult->_nofColumns == 1) {
         CountAvailablePredicates::computePatternTrick<array<Id, 1>>(
             static_cast<vector<array<Id, 1>>*>(subresult->_fixedSizeData),
             static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
             hasPattern, hasPredicate, patterns, _subjectColumnIndex,
-            runtimeInfo);
+            &runtimeInfo);
       } else if (subresult->_nofColumns == 2) {
         CountAvailablePredicates::computePatternTrick<array<Id, 2>>(
             static_cast<vector<array<Id, 2>>*>(subresult->_fixedSizeData),
             static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
             hasPattern, hasPredicate, patterns, _subjectColumnIndex,
-            runtimeInfo);
+            &runtimeInfo);
       } else if (subresult->_nofColumns == 3) {
         CountAvailablePredicates::computePatternTrick<array<Id, 3>>(
             static_cast<vector<array<Id, 3>>*>(subresult->_fixedSizeData),
             static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
             hasPattern, hasPredicate, patterns, _subjectColumnIndex,
-            runtimeInfo);
+            &runtimeInfo);
       } else if (subresult->_nofColumns == 4) {
         CountAvailablePredicates::computePatternTrick<array<Id, 4>>(
             static_cast<vector<array<Id, 4>>*>(subresult->_fixedSizeData),
             static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
             hasPattern, hasPredicate, patterns, _subjectColumnIndex,
-            runtimeInfo);
+            &runtimeInfo);
       } else if (subresult->_nofColumns == 5) {
         CountAvailablePredicates::computePatternTrick<array<Id, 5>>(
             static_cast<vector<array<Id, 5>>*>(subresult->_fixedSizeData),
             static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
             hasPattern, hasPredicate, patterns, _subjectColumnIndex,
-            runtimeInfo);
+            &runtimeInfo);
       }
     }
   }
@@ -231,7 +232,7 @@ void CountAvailablePredicates::computePatternTrick(
     const vector<PatternID>& hasPattern,
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns, const size_t subjectColumn,
-    RuntimeInformation& runtimeInfo) {
+    RuntimeInformation* runtimeInfo) {
   LOG(DEBUG) << "For " << input->size() << " entities in column "
              << subjectColumn << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
@@ -339,14 +340,16 @@ void CountAvailablePredicates::computePatternTrick(
              << cost_ratio << std::endl;
 
   // Add these values to the runtime info
-  runtimeInfo.addDetail("percentEntitesWithPatterns",
-                        std::to_string(ratio_has_pattern * 100) + "%");
-  runtimeInfo.addDetail("percentPredicatesThroughPatterns",
-                        std::to_string(ratio_counted_with_pattern * 100) + "%");
-  runtimeInfo.addDetail("costWithoutPatterns",
-                        std::to_string(cost_without_patterns));
-  runtimeInfo.addDetail("costWithPatterns", std::to_string(cost_with_patterns));
-  runtimeInfo.addDetail("costImprovement",
-                        std::to_string(cost_ratio * 100) + "%");
+  runtimeInfo->addDetail("percentEntitesWithPatterns",
+                         std::to_string(ratio_has_pattern * 100) + "%");
+  runtimeInfo->addDetail(
+      "percentPredicatesThroughPatterns",
+      std::to_string(ratio_counted_with_pattern * 100) + "%");
+  runtimeInfo->addDetail("costWithoutPatterns",
+                         std::to_string(cost_without_patterns));
+  runtimeInfo->addDetail("costWithPatterns",
+                         std::to_string(cost_with_patterns));
+  runtimeInfo->addDetail("costImprovement",
+                         std::to_string(cost_ratio * 100) + "%");
 #endif
 }

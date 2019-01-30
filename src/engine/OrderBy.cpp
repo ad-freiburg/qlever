@@ -55,7 +55,7 @@ void OrderBy::computeResult(ResultTable* result) {
   std::string orderByVars = "";
   for (auto p : _subtree->getVariableColumnMap()) {
     for (auto oc : _sortIndices) {
-      if (oc.first = p.second) {
+      if (oc.first == p.second) {
         if (oc.second) {
           orderByVars += "DESC(" + p.first + ") ";
         } else {
