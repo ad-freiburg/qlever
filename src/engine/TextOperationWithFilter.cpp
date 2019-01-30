@@ -45,11 +45,16 @@ string TextOperationWithFilter::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-void TextOperationWithFilter::computeResult(ResultTable* result) const {
+void TextOperationWithFilter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "TextOperationWithFilter result computation..." << endl;
   AD_CHECK_GE(_nofVars, 1);
   result->_nofColumns = 1 + _filterResult->getResultWidth() + _nofVars;
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
+
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  runtimeInfo.setDescriptor("Text operation with filter: " + _words);
+  runtimeInfo.addChild(_filterResult->getRootOperation()->getRuntimeInfo());
+
   result->_resultTypes.reserve(result->_nofColumns);
   result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);

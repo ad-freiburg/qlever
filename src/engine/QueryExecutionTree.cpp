@@ -237,5 +237,8 @@ void QueryExecutionTree::readFromCache() {
     return;
   }
   auto& cache = _qec->getQueryTreeCache();
-  _cachedResult = cache[asString()];
+  std::shared_ptr<const CacheValue> res = cache[asString()];
+  if (res) {
+    _cachedResult = cache[asString()]->_resTable;
+  }
 }

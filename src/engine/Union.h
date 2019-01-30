@@ -45,7 +45,7 @@ class Union : public Operation {
       const std::vector<std::array<size_t, 2>>& columnOrigins);
 
  private:
-  virtual void computeResult(ResultTable* result) const override;
+  virtual void computeResult(ResultTable* result) override;
 
   /**
    * @brief This method is used to convert runtime information about the

@@ -51,5 +51,5 @@ class ScanningJoin : public IndexScan {
  private:
   QueryExecutionTree* _subtree;
   size_t _subtreeJoinCol;
-  virtual void computeResult(ResultTable* result) const override;
+  virtual void computeResult(ResultTable* result) override;
 };

@@ -47,10 +47,26 @@ vector<size_t> OrderBy::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-void OrderBy::computeResult(ResultTable* result) const {
+void OrderBy::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Gettign sub-result for OrderBy result computation..." << endl;
   AD_CHECK(_sortIndices.size() > 0);
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
+
+  std::string orderByVars = "";
+  for (auto p : _subtree->getVariableColumnMap()) {
+    for (auto oc : _sortIndices) {
+      if (oc.first == p.second) {
+        if (oc.second) {
+          orderByVars += "DESC(" + p.first + ") ";
+        } else {
+          orderByVars += "ASC(" + p.first + ") ";
+        }
+      }
+    }
+  }
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  runtimeInfo.setDescriptor("OrderBy on " + orderByVars);
+  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "OrderBy result computation..." << endl;
   result->_nofColumns = subRes->_nofColumns;
   result->_resultTypes.insert(result->_resultTypes.end(),

@@ -81,6 +81,8 @@ class Filter : public Operation {
   }
 
  private:
+  std::string getDescriptor() const;
+
   std::shared_ptr<QueryExecutionTree> _subtree;
   SparqlFilter::FilterType _type;
   string _lhs;
@@ -127,7 +129,7 @@ class Filter : public Operation {
   void computeResultFixedValue(
       ResultTable* result,
       const std::shared_ptr<const ResultTable> subRes) const;
-  virtual void computeResult(ResultTable* result) const override;
+  virtual void computeResult(ResultTable* result) override;
 
   /**
    * @brief This struct handles the extraction of the data from an id based upon

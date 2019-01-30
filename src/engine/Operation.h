@@ -3,13 +3,17 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <iomanip>
+#include <iostream>
 #include <memory>
 #include <utility>
 
 #include "../util/Exception.h"
 #include "../util/Log.h"
+#include "../util/Timer.h"
 #include "./QueryExecutionContext.h"
 #include "./ResultTable.h"
+#include "RuntimeInformation.h"
 
 using std::endl;
 using std::pair;
@@ -33,7 +37,9 @@ class Operation {
   // Get the result for the subtree rooted at this element.
   // Use existing results if they are already available, otherwise
   // trigger computation.
-  shared_ptr<const ResultTable> getResult() const {
+  shared_ptr<const ResultTable> getResult() {
+    ad_utility::Timer timer;
+    timer.start();
     LOG(DEBUG) << "Check cache for Operation result" << endl;
     LOG(DEBUG) << "Using key: \n" << asString() << endl;
     auto [newResult, existingResult] =
@@ -43,9 +49,9 @@ class Operation {
       // Passing the raw pointer here is ok as the result shared_ptr remains
       // in scope
       try {
-        computeResult(newResult.get());
+        computeResult(newResult->_resTable.get());
       } catch (const ad_semsearch::AbortException& e) {
-        newResult->abort();
+        newResult->_resTable->abort();
         // AbortExceptions have already been printed simply rethrow to
         // unwind the callstack until the whole query is aborted
         throw;
@@ -55,7 +61,7 @@ class Operation {
         LOG(ERROR) << "Failed to compute Operation result for:" << endl;
         LOG(ERROR) << asString() << endl;
         LOG(ERROR) << e.what() << endl;
-        newResult->abort();
+        newResult->_resTable->abort();
         // Rethrow as QUERY_ABORTED allowing us to print the Operation
         // only at innermost failure of a recursive call
         throw ad_semsearch::AbortException(e);
@@ -66,20 +72,33 @@ class Operation {
         LOG(ERROR) << asString() << endl;
         LOG(ERROR) << "WEIRD_EXCEPTION not inheriting from std::exception"
                    << endl;
-        newResult->abort();
+        newResult->_resTable->abort();
         // Rethrow as QUERY_ABORTED allowing us to print the Operation
         // only at innermost failure of a recursive call
         throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
       }
-      return newResult;
+      timer.stop();
+      _runtimeInformation.setTime(timer.secs());
+      _runtimeInformation.setWasCached(false);
+      // cache the runtime information for the execution as well
+      newResult->_runtimeInfo = _runtimeInformation;
+      return newResult->_resTable;
     }
-    existingResult->awaitFinished();
-    if (existingResult->status() == ResultTable::ABORTED) {
+    existingResult->_resTable->awaitFinished();
+    if (existingResult->_resTable->status() == ResultTable::ABORTED) {
       LOG(ERROR) << "Result in the cache was aborted" << endl;
       AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                "Operation was found aborted in the cache");
     }
-    return existingResult;
+    timer.stop();
+    if (_runtimeInformation.getTime() == 0) {
+      // If this operation object was computed already we don't want to update
+      // the runtime information.
+      _runtimeInformation = existingResult->_runtimeInfo;
+      _runtimeInformation.setTime(timer.secs());
+      _runtimeInformation.setWasCached(true);
+    }
+    return existingResult->_resTable;
   }
 
   //! Set the QueryExecutionContext for this particular element.
@@ -112,6 +131,8 @@ class Operation {
   virtual float getMultiplicity(size_t col) = 0;
   virtual bool knownEmptyResult() = 0;
 
+  RuntimeInformation& getRuntimeInfo() { return _runtimeInformation; }
+
  protected:
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
@@ -139,8 +160,9 @@ class Operation {
  private:
   //! Compute the result of the query-subtree rooted at this element..
   //! Computes both, an EntityList and a HitList.
-  virtual void computeResult(ResultTable* result) const = 0;
+  virtual void computeResult(ResultTable* result) = 0;
 
   vector<size_t> _resultSortedColumns;
   bool _hasComputedSortColumns;
+  RuntimeInformation _runtimeInformation;
 };

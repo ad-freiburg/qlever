@@ -66,7 +66,7 @@ class Join : public Operation {
 
   vector<float> _multiplicities;
 
-  virtual void computeResult(ResultTable* result) const override;
+  virtual void computeResult(ResultTable* result) override;
 
   static bool isFullScanDummy(std::shared_ptr<QueryExecutionTree> tree) {
     return tree->getType() == QueryExecutionTree::SCAN &&

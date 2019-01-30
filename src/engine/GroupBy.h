@@ -106,7 +106,7 @@ class GroupBy : public Operation {
   std::vector<ParsedQuery::Alias> _aliases;
   ad_utility::HashMap<string, size_t> _varColMap;
 
-  virtual void computeResult(ResultTable* result) const override;
+  virtual void computeResult(ResultTable* result) override;
 };
 
 // This method is declared here solely for unit testing purposes

@@ -58,5 +58,5 @@ class OrderBy : public Operation {
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<pair<size_t, bool>> _sortIndices;
 
-  virtual void computeResult(ResultTable* result) const override;
+  virtual void computeResult(ResultTable* result) override;
 };

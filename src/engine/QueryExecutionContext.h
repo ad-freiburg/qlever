@@ -14,12 +14,19 @@
 #include "./Engine.h"
 #include "./ResultTable.h"
 #include "QueryPlanningCostFactors.h"
+#include "RuntimeInformation.h"
 
 using std::shared_ptr;
 using std::string;
 using std::vector;
 
-typedef ad_utility::LRUCache<string, ResultTable> SubtreeCache;
+struct CacheValue {
+  CacheValue() : _resTable(std::make_shared<ResultTable>()), _runtimeInfo() {}
+  std::shared_ptr<ResultTable> _resTable;
+  RuntimeInformation _runtimeInfo;
+};
+
+typedef ad_utility::LRUCache<string, CacheValue> SubtreeCache;
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.

@@ -777,6 +777,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         } else if (isVariable(node._triple._s)) {
           std::shared_ptr<Operation> scan(
               new IndexScan(_qec, IndexScan::ScanType::POS_BOUND_O));
+          static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
           static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
           static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
           tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
@@ -784,14 +785,16 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
         } else if (isVariable(node._triple._o)) {
           std::shared_ptr<Operation> scan(
               new IndexScan(_qec, IndexScan::ScanType::PSO_BOUND_S));
-          static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
           static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
+          static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
+          static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
           tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
           tree.setVariableColumn(node._triple._o, 0);
         } else {
           std::shared_ptr<Operation> scan(
               new IndexScan(_qec, IndexScan::ScanType::SOP_BOUND_O));
           static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
+          static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
           static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
           tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
           tree.setVariableColumn(node._triple._p, 0);
@@ -822,7 +825,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::PSO_FREE_S));
+            static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
             static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
+            static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
             static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
             tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
             tree.setVariableColumn(node._triple._s, 0);
@@ -835,7 +840,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::POS_FREE_O));
+            static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
             static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
+            static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
             static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
             tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
             tree.setVariableColumn(node._triple._o, 0);
@@ -850,6 +857,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::SPO_FREE_P));
             static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
+            static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
+            static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
             static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
             tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
             tree.setVariableColumn(node._triple._p, 0);
@@ -863,6 +872,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::SOP_FREE_O));
             static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
+            static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
+            static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
             static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
             tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
             tree.setVariableColumn(node._triple._o, 0);
@@ -876,6 +887,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::OSP_FREE_S));
+            static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
+            static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
             static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
             static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
             tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
@@ -889,6 +902,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             auto& tree = *plan._qet.get();
             std::shared_ptr<Operation> scan(
                 new IndexScan(_qec, IndexScan::ScanType::OPS_FREE_P));
+            static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
+            static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
             static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
             static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
             tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);

@@ -754,7 +754,7 @@ struct callDoGroupBy<6, 6> {
   }
 };
 
-void GroupBy::computeResult(ResultTable* result) const {
+void GroupBy::computeResult(ResultTable* result) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
   std::vector<size_t> groupByColumns;
 
@@ -914,6 +914,10 @@ void GroupBy::computeResult(ResultTable* result) const {
 
   std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
+
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  runtimeInfo.setDescriptor("GROUP BY");
+  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
 
   // populate the result type vector
   result->_resultTypes.resize(result->_nofColumns);
