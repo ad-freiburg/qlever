@@ -32,21 +32,14 @@ Index::Index()
 
 // _____________________________________________________________________________________________
 template <class Parser>
-std::unique_ptr<Index::StxxlVec> Index::createIdTriplesAndVocab(
-    const string& ntFile) {
+VocabularyData Index::createIdTriplesAndVocab(const string& ntFile) {
   initializeVocabularySettingsBuild();
 
-  auto linesAndWords =
+  auto vocabData =
       passFileForVocabulary<Parser>(ntFile, NUM_TRIPLES_PER_PARTIAL_VOCAB);
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
-  _totalVocabularySize = linesAndWords.nofWords;
-  // Save the lower and upper bound of language tagged predicates
-  // TODO(schnelle): These should either also be available when reading the
-  // Index from disk or reokaced with local variables only available when
-  // building the index.
-  _langPredLowerBound = linesAndWords.langPredLowerBound;
-  _langPredUpperBound = linesAndWords.langPredUpperBound;
+  _totalVocabularySize = vocabData.nofWords;
   LOG(INFO) << "total size of vocabulary (internal and external) is "
             << _totalVocabularySize << std::endl;
 
@@ -58,11 +51,8 @@ std::unique_ptr<Index::StxxlVec> Index::createIdTriplesAndVocab(
   // clear vocabulary to save ram (only information from partial binary files
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
-  // TODO(schnelle): Since we don't use the Vocabulary anywhere until now
-  // this seems pointless
   _vocab.clear();
-  convertPartialToGlobalIds(*linesAndWords.idTriples,
-                            linesAndWords.actualPartialSizes,
+  convertPartialToGlobalIds(*vocabData.idTriples, vocabData.actualPartialSizes,
                             NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
   if (!_keepTempFiles) {
@@ -88,7 +78,7 @@ std::unique_ptr<Index::StxxlVec> Index::createIdTriplesAndVocab(
     LOG(INFO) << "Keeping temporary files (partial vocabulary and external "
                  "text file...\n";
   }
-  return std::move(linesAndWords.idTriples);
+  return vocabData;
 }
 
 // _____________________________________________________________________________
@@ -97,21 +87,20 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
   string indexFilename = _onDiskBase + ".index";
   _configurationJson["external-literals"] = _onDiskLiterals;
 
-  auto idTriplesPtr = createIdTriplesAndVocab<Parser>(filename);
-  StxxlVec& idTriples = *idTriplesPtr;
+  auto vocabData = createIdTriplesAndVocab<Parser>(filename);
 
   // also perform unique for first permutation
-  createPermutationPair<IndexMetaDataHmap>(&idTriples, Permutation::Pso,
+  createPermutationPair<IndexMetaDataHmap>(&vocabData, Permutation::Pso,
                                            Permutation::Pos, true);
   if (allPermutations) {
     // also create Patterns after the Spo permutation
     createPermutationPair<IndexMetaDataMmap>(
-        &idTriples, Permutation::Spo, Permutation::Sop, false, _usePatterns);
-    createPermutationPair<IndexMetaDataMmap>(&idTriples, Permutation::Osp,
+        &vocabData, Permutation::Spo, Permutation::Sop, false, _usePatterns);
+    createPermutationPair<IndexMetaDataMmap>(&vocabData, Permutation::Osp,
                                              Permutation::Ops);
   } else if (_usePatterns) {
     // Not constructed with Spo, Sop, needs extra sort
-    createPatterns(false, &idTriples);
+    createPatterns(false, &vocabData);
   }
   // move compression to end
 
@@ -164,8 +153,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   // we add extra triples
   std::vector<size_t> actualPartialSizes;
   size_t actualCurrentPartialSize = 0;
-  std::unique_ptr<StxxlVec> idTriples(new StxxlVec());
-  StxxlVec::bufwriter_type writer(*idTriples);
+  std::unique_ptr<TripleVec> idTriples(new TripleVec());
+  TripleVec::bufwriter_type writer(*idTriples);
 
   ad_utility::HashMap<string, Id> items;
 
@@ -261,7 +250,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
 
 // _____________________________________________________________________________
 void Index::convertPartialToGlobalIds(
-    StxxlVec& data, const vector<size_t>& actualLinesPerPartial,
+    TripleVec& data, const vector<size_t>& actualLinesPerPartial,
     size_t linesPerPartial) {
   LOG(INFO) << "Updating Ids in stxxl vector to global Ids.\n";
 
@@ -309,10 +298,9 @@ void Index::convertPartialToGlobalIds(
 
 // _____________________________________________________________________________
 template <class MetaData>
-std::optional<MetaData> Index::createPermutationImpl(const string& fileName,
-                                                     Index::StxxlVec const& vec,
-                                                     size_t c0, size_t c1,
-                                                     size_t c2) {
+std::optional<MetaData> Index::createPermutationImpl(
+    const string& fileName, const Index::TripleVec& vec, size_t c0, size_t c1,
+    size_t c2) {
   MetaData metaData;
   if constexpr (metaData._isMmapBased) {
     metaData.setup(_totalVocabularySize, FullRelationMetaData::empty,
@@ -336,7 +324,7 @@ std::optional<MetaData> Index::createPermutationImpl(const string& fileName,
   size_t distinctC1 = 0;
   size_t sizeOfRelation = 0;
   Id lastLhs = std::numeric_limits<Id>::max();
-  for (StxxlVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
+  for (TripleVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if ((*reader)[c0] != currentRel) {
       auto md =
           writeRel(out, lastOffset, currentRel, buffer, distinctC1, functional);
@@ -377,7 +365,7 @@ std::optional<MetaData> Index::createPermutationImpl(const string& fileName,
 // ________________________________________________________________________
 template <class MetaData, class Comparator>
 std::optional<MetaData> Index::createPermutation(
-    StxxlVec* vec, const Permutation::PermutationImpl<Comparator>& p,
+    TripleVec* vec, const Permutation::PermutationImpl<Comparator>& p,
     bool performUnique) {
   LOG(INFO) << "Sorting for " << p._readableName << " permutation..."
             << std::endl;
@@ -402,14 +390,16 @@ std::optional<MetaData> Index::createPermutation(
 // ________________________________________________________________________
 template <class MetaData, class Comparator1, class Comparator2>
 void Index::createPermutationPair(
-    StxxlVec* vec, const Permutation::PermutationImpl<Comparator1>& p1,
+    VocabularyData* vocabData,
+    const Permutation::PermutationImpl<Comparator1>& p1,
     const Permutation::PermutationImpl<Comparator2>& p2, bool performUnique,
     bool createPatternsAfterFirst) {
-  auto m1 = createPermutation<MetaData>(vec, p1, performUnique);
+  auto m1 =
+      createPermutation<MetaData>(&(*vocabData->idTriples), p1, performUnique);
   if (createPatternsAfterFirst) {
-    createPatterns(true, vec);
+    createPatterns(true, vocabData);
   }
-  auto m2 = createPermutation<MetaData>(vec, p2, false);
+  auto m2 = createPermutation<MetaData>(&(*vocabData->idTriples), p2, false);
   if (m1 && m2) {
     LOG(INFO) << "Exchanging Multiplicities for " << p1._readableName << " and "
               << p2._readableName << '\n';
@@ -445,31 +435,33 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
-  _langPredUpperBound = _vocab.getValueIdForLT(std::string(1, '@' + 1));
-  _langPredLowerBound = _vocab.getValueIdForGE("@");
+  Id langPredUpperBound = _vocab.getValueIdForLT(std::string(1, '@' + 1));
+  Id langPredLowerBound = _vocab.getValueIdForGE("@");
   createPatternsImpl<MetaDataIterator<IndexMetaDataMmapView>,
                      IndexMetaDataMmapView, ad_utility::File>(
       _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
       _fullHasPredicateMultiplicityEntities,
       _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
-      _maxNumPatterns, _spoMeta, _spoFile);
+      _maxNumPatterns, langPredLowerBound, langPredUpperBound, _spoMeta,
+      _spoFile);
 }
 
 // _____________________________________________________________________________
-void Index::createPatterns(bool vecAlreadySorted, StxxlVec* idTriples) {
+void Index::createPatterns(bool vecAlreadySorted, VocabularyData* vocabData) {
   if (vecAlreadySorted) {
     LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
   } else {
     LOG(INFO) << "Sorting for pattern creation..." << std::endl;
-    stxxl::sort(begin(*idTriples), end(*idTriples), SortBySPO(),
-                STXXL_MEMORY_TO_USE);
+    stxxl::sort(begin(*vocabData->idTriples), end(*vocabData->idTriples),
+                SortBySPO(), STXXL_MEMORY_TO_USE);
     LOG(INFO) << "Sort done." << std::endl;
   }
-  createPatternsImpl<StxxlVec::bufreader_type>(
+  createPatternsImpl<TripleVec::bufreader_type>(
       _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
       _fullHasPredicateMultiplicityEntities,
       _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
-      _maxNumPatterns, *idTriples);
+      _maxNumPatterns, vocabData->langPredLowerBound,
+      vocabData->langPredUpperBound, *vocabData->idTriples);
 }
 
 // _____________________________________________________________________________
@@ -481,7 +473,10 @@ void Index::createPatternsImpl(const string& fileName,
                                double& fullHasPredicateMultiplicityEntities,
                                double& fullHasPredicateMultiplicityPredicates,
                                size_t& fullHasPredicateSize,
-                               size_t maxNumPatterns, Args&... vecReaderArgs) {
+                               const size_t maxNumPatterns,
+                               const Id langPredLowerBound,
+                               const Id langPredUpperBound,
+                               const Args&... vecReaderArgs) {
   IndexMetaDataHmap meta;
   typedef std::unordered_map<Pattern, size_t> PatternsCountMap;
 
@@ -514,7 +509,7 @@ void Index::createPatternsImpl(const string& fileName,
     // don't list predicates twice
     if (patternIndex == 0 || pattern[patternIndex - 1] != triple[1]) {
       // Ignore @..@ type language predicates
-      if (triple[1] < _langPredLowerBound || triple[1] >= _langPredUpperBound) {
+      if (triple[1] < langPredLowerBound || triple[1] >= langPredUpperBound) {
         pattern.push_back(triple[1]);
         patternIndex++;
       }
@@ -666,7 +661,7 @@ void Index::createPatternsImpl(const string& fileName,
     // don't list predicates twice
     if (patternIndex == 0 || pattern[patternIndex - 1] != (triple[1])) {
       // Ignore @..@ type language predicates
-      if (triple[1] < _langPredLowerBound || triple[1] >= _langPredUpperBound) {
+      if (triple[1] < langPredLowerBound || triple[1] >= langPredUpperBound) {
         pattern.push_back(triple[1]);
         patternIndex++;
       }

@@ -106,13 +106,13 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles,
           std::make_pair(top._partialWordId, totalWritten));
 
       if (top._value.size() > 0 && top._value[0] == '@') {
-        // exclusive
-        *langPredUpperBound = totalWritten + 1;
         if (!firstLangPredSeen) {
           // inclusive
           *langPredLowerBound = totalWritten;
           firstLangPredSeen = true;
         }
+        // exclusive
+        *langPredUpperBound = totalWritten + 1;
       }
       totalWritten++;
     } else {
