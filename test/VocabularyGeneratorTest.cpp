@@ -190,7 +190,11 @@ class MergeVocabularyTest : public ::testing::Test {
 // Test for merge Vocabulary
 TEST_F(MergeVocabularyTest, bla) {
   // mergeVocabulary only gets name of directory and number of files.
-  mergeVocabulary(_basePath, 2);
+  Id langPredLowerBound, langPredUpperBound;
+  mergeVocabulary(_basePath, 2, &langPredLowerBound, &langPredUpperBound);
+  // No language tags in text file
+  ASSERT_EQ(langPredLowerBound, 0ul);
+  ASSERT_EQ(langPredUpperBound, 0ul);
   // Assert that partial vocabularies have the expected ids
   ASSERT_TRUE(areBinaryFilesEqual(_path0, _pathExp0));
   ASSERT_TRUE(areBinaryFilesEqual(_path1, _pathExp1));

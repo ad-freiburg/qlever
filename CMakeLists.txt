@@ -134,6 +134,9 @@ configure_file(src/web/script.js script.js)
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT})
 
+add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp)
+target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
+
 add_executable(SparqlEngineMain src/SparqlEngineMain.cpp)
 target_link_libraries (SparqlEngineMain engine ${CMAKE_THREAD_LIBS_INIT})
 
