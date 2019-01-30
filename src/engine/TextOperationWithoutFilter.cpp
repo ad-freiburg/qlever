@@ -40,6 +40,8 @@ string TextOperationWithoutFilter::asString(size_t indent) const {
 
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResult(ResultTable* result) {
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  runtimeInfo.setDescriptor("Text operation without filter: " + _words);
   LOG(DEBUG) << "TextOperationWithoutFilter result computation..." << endl;
   if (_nofVars == 0) {
     computeResultNoVar(result);

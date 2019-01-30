@@ -53,6 +53,9 @@ string TextOperationForContexts::asString(size_t indent) const {
 // _____________________________________________________________________________
 void TextOperationForContexts::computeResult(ResultTable* result) {
   LOG(DEBUG) << "TextOperationForContexts result computation..." << endl;
+
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  runtimeInfo.setDescriptor("TextOperationForContexts " + _words);
   if (_subtrees.size() == 0) {
     result->_nofColumns = 2;
     result->_resultTypes.push_back(ResultTable::ResultType::TEXT);

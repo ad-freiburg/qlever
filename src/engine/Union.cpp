@@ -124,6 +124,11 @@ void Union::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> subRes2 = _subtrees[1]->getResult();
   LOG(DEBUG) << "Union subresult computation done." << std::endl;
 
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  runtimeInfo.setDescriptor("Union");
+  runtimeInfo.addChild(_subtrees[0]->getRootOperation()->getRuntimeInfo());
+  runtimeInfo.addChild(_subtrees[1]->getRootOperation()->getRuntimeInfo());
+
   result->_sortedBy = resultSortedOn();
   for (const std::array<size_t, 2>& o : _columnOrigins) {
     if (o[0] != NO_COLUMN) {

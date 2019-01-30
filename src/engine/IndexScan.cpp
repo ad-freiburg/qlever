@@ -231,9 +231,7 @@ size_t IndexScan::computeSizeEstimate() {
     } else if (_type == OPS_FREE_P || _type == OSP_FREE_S) {
       return getIndex().sizeEstimate("", "", _object);
     }
-    // This should never happen
-    AD_CHECK(false);
-    return 1000;
+    return getIndex().sizeEstimate("", "", "");
   } else {
     return 1000 + _subject.size() + _predicate.size() + _object.size();
   }

@@ -181,6 +181,19 @@ void OptionalJoin::computeResult(ResultTable* result) {
   AD_CHECK(!result->_fixedSizeData);
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
 
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  std::string joinVars = "";
+  for (auto p : _left->getVariableColumnMap()) {
+    for (auto jc : _joinColumns) {
+      // If the left join column matches the index of a variable in the left
+      // subresult.
+      if (jc[0] == p.second) {
+        joinVars += p.first + " ";
+      }
+    }
+  }
+  runtimeInfo.setDescriptor("OptionalJoin on " + joinVars);
+
   result->_sortedBy = resultSortedOn();
   result->_nofColumns = getResultWidth();
 
@@ -188,6 +201,9 @@ void OptionalJoin::computeResult(ResultTable* result) {
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
+
+  runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
+  runtimeInfo.addChild(_right->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "OptionalJoin subresult computation done." << std::endl;
 
   // compute the result types
