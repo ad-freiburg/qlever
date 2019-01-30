@@ -19,7 +19,7 @@ class RuntimeInformation {
     out << "{";
     out << "\"description\" : \"" << _descriptor << "\",";
     out << "\"total_time\" : " << _time << ", ";
-    out << "\"operation_time\" : " << _time - getChildrenTime() << ", ";
+    out << "\"operation_time\" : " << getOperationTime() << ", ";
     out << "\"was_chached\" : " << ((_wasCached) ? "true" : "false") << ", ";
     out << "\"details\" : {";
     auto it = _details.begin();
@@ -56,7 +56,7 @@ class RuntimeInformation {
     out << std::string(indent * 2, ' ') << "total_time: " << _time << "s"
         << std::endl;
     out << std::string(indent * 2, ' ')
-        << "operation_time: " << _time - getChildrenTime() << "s" << std::endl;
+        << "operation_time: " << getOperationTime() << "s" << std::endl;
     out << std::string(indent * 2, ' ')
         << "cached: " << ((_wasCached) ? "true" : "false") << std::endl;
     for (auto detail : _details) {
@@ -76,6 +76,14 @@ class RuntimeInformation {
   void setTime(double time) { _time = time; }
   // Get the overall time
   double getTime() const { return _time; }
+
+  double getOperationTime() const {
+    if (_wasCached) {
+      return getTime();
+    } else {
+      return getTime() - getChildrenTime();
+    }
+  }
 
   // The time spend in children
   double getChildrenTime() const {
