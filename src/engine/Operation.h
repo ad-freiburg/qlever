@@ -11,8 +11,8 @@
 #include "../util/Exception.h"
 #include "../util/Log.h"
 #include "../util/Timer.h"
-#include "./QueryExecutionContext.h"
-#include "./ResultTable.h"
+#include "QueryExecutionContext.h"
+#include "ResultTable.h"
 #include "RuntimeInformation.h"
 
 using std::endl;

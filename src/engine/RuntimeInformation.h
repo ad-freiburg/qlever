@@ -18,8 +18,9 @@ class RuntimeInformation {
   void toJson(std::ostream& out) const {
     out << "{";
     out << "\"description\" : \"" << _descriptor << "\",";
-    out << "\"time\" : " << _time << ", ";
-    out << "\"was_chached\" : " << _wasCached << ", ";
+    out << "\"total_time\" : " << _time << ", ";
+    out << "\"operation_time\" : " << _time - getChildrenTime() << ", ";
+    out << "\"was_chached\" : " << ((_wasCached) ? "true" : "false") << ", ";
     out << "\"details\" : {";
     auto it = _details.begin();
     while (it != _details.end()) {
@@ -52,10 +53,12 @@ class RuntimeInformation {
 
   void toString(std::ostream& out, size_t indent) const {
     out << std::string(indent * 2, ' ') << _descriptor << std::endl;
-    out << std::string(indent * 2, ' ') << "time: " << _time << "s"
+    out << std::string(indent * 2, ' ') << "total_time: " << _time << "s"
         << std::endl;
-    out << std::string(indent * 2, ' ') << "cached: " << _wasCached
-        << std::endl;
+    out << std::string(indent * 2, ' ')
+        << "operation_time: " << _time - getChildrenTime() << "s" << std::endl;
+    out << std::string(indent * 2, ' ')
+        << "cached: " << ((_wasCached) ? "true" : "false") << std::endl;
     for (auto detail : _details) {
       out << std::string((indent + 2) * 2, ' ') << detail.first << ", "
           << detail.second << std::endl;
@@ -69,8 +72,19 @@ class RuntimeInformation {
     _descriptor = descriptor;
   }
 
+  // Set the overall time
   void setTime(double time) { _time = time; }
+  // Get the overall time
   double getTime() const { return _time; }
+
+  // The time spend in children
+  double getChildrenTime() const {
+    double sum = 0;
+    for (const RuntimeInformation& child : _children) {
+      sum += child.getTime();
+    }
+    return sum;
+  }
 
   void setWasCached(bool wasCached) { _wasCached = wasCached; }
 
