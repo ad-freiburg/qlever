@@ -52,6 +52,7 @@ class RuntimeInformation {
   }
 
   void toString(std::ostream& out, size_t indent) const {
+    out << '\n';
     out << std::string(indent * 2, ' ') << _descriptor << std::endl;
     out << std::string(indent * 2, ' ') << "total_time: " << _time << "s"
         << std::endl;
