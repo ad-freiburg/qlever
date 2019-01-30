@@ -91,7 +91,7 @@ class IndexScan : public Operation {
   size_t _sizeEstimate;
   vector<float> _multiplicity;
 
-  virtual void computeResult(ResultTable* result) const override;
+  virtual void computeResult(ResultTable* result) override;
 
   void computePSOboundS(ResultTable* result) const;
 

@@ -49,7 +49,17 @@ string Join::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-void Join::computeResult(ResultTable* result) const {
+void Join::computeResult(ResultTable* result) {
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  std::string joinVar = "";
+  for (auto p : _left->getVariableColumnMap()) {
+    if (p.second == _leftJoinCol) {
+      joinVar = p.first;
+      break;
+    }
+  }
+  runtimeInfo.setDescriptor("Join on " + joinVar);
+
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
@@ -58,6 +68,7 @@ void Join::computeResult(ResultTable* result) const {
   // avoid the computation of an non-empty subtree.
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
     LOG(TRACE) << "Either side is empty thus join result is empty" << endl;
+    runtimeInfo.addDetail("Either side was empty", "");
     size_t resWidth = leftWidth + rightWidth - 1;
     result->_nofColumns = resWidth;
     result->_resultTypes.resize(result->_nofColumns);
@@ -86,10 +97,12 @@ void Join::computeResult(ResultTable* result) const {
 
   LOG(TRACE) << "Computing left side..." << endl;
   shared_ptr<const ResultTable> leftRes = _left->getResult();
+  runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
 
   // Check if we can stop early.
   if (leftRes->size() == 0) {
     LOG(TRACE) << "Left side empty thus join result is empty" << endl;
+    runtimeInfo.addDetail("The left side was empty", "");
     size_t resWidth = leftWidth + rightWidth - 1;
     result->_nofColumns = resWidth;
     result->_resultTypes.resize(result->_nofColumns);
@@ -111,6 +124,7 @@ void Join::computeResult(ResultTable* result) const {
 
   LOG(TRACE) << "Computing right side..." << endl;
   shared_ptr<const ResultTable> rightRes = _right->getResult();
+  runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
 
   LOG(DEBUG) << "Computing Join result..." << endl;
 

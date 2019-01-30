@@ -166,7 +166,7 @@ struct MultiColumnJoinCaller<6, 6, 6> {
 };
 
 // _____________________________________________________________________________
-void MultiColumnJoin::computeResult(ResultTable* result) const {
+void MultiColumnJoin::computeResult(ResultTable* result) {
   AD_CHECK(result);
   AD_CHECK(!result->_fixedSizeData);
   LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;

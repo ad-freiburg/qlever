@@ -176,7 +176,7 @@ struct meta_for<6, 6, 6> {
 };
 
 // _____________________________________________________________________________
-void OptionalJoin::computeResult(ResultTable* result) const {
+void OptionalJoin::computeResult(ResultTable* result) {
   AD_CHECK(result);
   AD_CHECK(!result->_fixedSizeData);
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;

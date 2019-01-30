@@ -51,7 +51,7 @@ string TextOperationForContexts::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-void TextOperationForContexts::computeResult(ResultTable* result) const {
+void TextOperationForContexts::computeResult(ResultTable* result) {
   LOG(DEBUG) << "TextOperationForContexts result computation..." << endl;
   if (_subtrees.size() == 0) {
     result->_nofColumns = 2;

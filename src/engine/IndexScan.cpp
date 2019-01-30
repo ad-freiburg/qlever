@@ -120,8 +120,12 @@ vector<size_t> IndexScan::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-void IndexScan::computeResult(ResultTable* result) const {
+void IndexScan::computeResult(ResultTable* result) {
   LOG(DEBUG) << "IndexScan result computation...\n";
+
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  runtimeInfo.setDescriptor("IndexScan " + _subject + " " + _predicate + " " +
+                            _object);
   switch (_type) {
     case PSO_BOUND_S:
       computePSOboundS(result);
@@ -220,7 +224,16 @@ size_t IndexScan::computeSizeEstimate() {
     if (getResultWidth() == 1) {
       return getResult()->size();
     }
-    return getIndex().sizeEstimate(_subject, _predicate, _object);
+    if (_type == SPO_FREE_P || _type == SOP_FREE_O) {
+      return getIndex().sizeEstimate(_subject, "", "");
+    } else if (_type == POS_FREE_O || _type == PSO_FREE_S) {
+      return getIndex().sizeEstimate("", _predicate, "");
+    } else if (_type == OPS_FREE_P || _type == OSP_FREE_S) {
+      return getIndex().sizeEstimate("", "", _object);
+    }
+    // This should never happen
+    AD_CHECK(false);
+    return 1000;
   } else {
     return 1000 + _subject.size() + _predicate.size() + _object.size();
   }

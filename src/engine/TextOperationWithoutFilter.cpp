@@ -39,7 +39,7 @@ string TextOperationWithoutFilter::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-void TextOperationWithoutFilter::computeResult(ResultTable* result) const {
+void TextOperationWithoutFilter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "TextOperationWithoutFilter result computation..." << endl;
   if (_nofVars == 0) {
     computeResultNoVar(result);

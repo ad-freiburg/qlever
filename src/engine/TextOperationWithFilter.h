@@ -66,5 +66,5 @@ class TextOperationWithFilter : public Operation {
 
   void computeMultiplicities();
 
-  virtual void computeResult(ResultTable* result) const override;
+  virtual void computeResult(ResultTable* result) override;
 };

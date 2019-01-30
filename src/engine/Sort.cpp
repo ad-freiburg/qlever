@@ -27,7 +27,7 @@ string Sort::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-void Sort::computeResult(ResultTable* result) const {
+void Sort::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Sort result computation..." << endl;

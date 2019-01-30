@@ -118,7 +118,7 @@ size_t Union::getCostEstimate() {
          getSizeEstimate();
 }
 
-void Union::computeResult(ResultTable* result) const {
+void Union::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Union result computation..." << std::endl;
   shared_ptr<const ResultTable> subRes1 = _subtrees[0]->getResult();
   shared_ptr<const ResultTable> subRes2 = _subtrees[1]->getResult();

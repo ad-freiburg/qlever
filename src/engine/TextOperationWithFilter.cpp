@@ -45,7 +45,7 @@ string TextOperationWithFilter::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-void TextOperationWithFilter::computeResult(ResultTable* result) const {
+void TextOperationWithFilter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "TextOperationWithFilter result computation..." << endl;
   AD_CHECK_GE(_nofVars, 1);
   result->_nofColumns = 1 + _filterResult->getResultWidth() + _nofVars;

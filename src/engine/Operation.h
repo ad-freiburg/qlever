@@ -226,7 +226,7 @@ class Operation {
  private:
   //! Compute the result of the query-subtree rooted at this element..
   //! Computes both, an EntityList and a HitList.
-  virtual void computeResult(ResultTable* result) const = 0;
+  virtual void computeResult(ResultTable* result) = 0;
 
   vector<size_t> _resultSortedColumns;
   bool _hasComputedSortColumns;

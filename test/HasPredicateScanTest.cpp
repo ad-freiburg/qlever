@@ -12,7 +12,7 @@
 class DummyOperation : public Operation {
  public:
   DummyOperation(QueryExecutionContext* ctx) : Operation(ctx) {}
-  virtual void computeResult(ResultTable* result) const {
+  virtual void computeResult(ResultTable* result) {
     result->_nofColumns = 2;
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -289,9 +289,10 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
   CompactStringVector<size_t, Id> patterns(patternsSrc);
 
+  Operation::RuntimeInformation runtimeInfo;
   try {
     CountAvailablePredicates::computePatternTrick<std::array<Id, 1>>(
-        &input, &result, hasPattern, hasRelation, patterns, 0);
+        &input, &result, hasPattern, hasRelation, patterns, 0, runtimeInfo);
   } catch (ad_semsearch::Exception e) {
     // More verbose output in the case of an exception occuring.
     std::cout << e.getErrorMessage() << std::endl

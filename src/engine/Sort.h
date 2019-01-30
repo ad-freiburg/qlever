@@ -52,5 +52,5 @@ class Sort : public Operation {
   std::shared_ptr<QueryExecutionTree> _subtree;
   size_t _sortCol;
 
-  virtual void computeResult(ResultTable* result) const override;
+  virtual void computeResult(ResultTable* result) override;
 };

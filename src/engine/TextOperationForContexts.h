@@ -72,5 +72,5 @@ class TextOperationForContexts : public Operation {
   vector<pair<std::shared_ptr<QueryExecutionTree>, size_t>> _subtrees;
   size_t _textLimit;
 
-  virtual void computeResult(ResultTable* result) const override;
+  virtual void computeResult(ResultTable* result) override;
 };

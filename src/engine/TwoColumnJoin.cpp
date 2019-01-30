@@ -77,7 +77,7 @@ string TwoColumnJoin::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-void TwoColumnJoin::computeResult(ResultTable* result) const {
+void TwoColumnJoin::computeResult(ResultTable* result) {
   AD_CHECK(result);
   AD_CHECK(!result->_fixedSizeData);
   LOG(DEBUG) << "TwoColumnJoin result computation..." << endl;
