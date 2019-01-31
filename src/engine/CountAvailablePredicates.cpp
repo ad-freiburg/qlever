@@ -237,32 +237,32 @@ void CountAvailablePredicates::computePatternTrick(
              << subjectColumn << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
-  size_t posInput = 0;
+  size_t inputIdx = 0;
   // These variables are used to gather additional statistics
-  size_t num_entities_with_pattern = 0;
-  // the number of predicates counted with patterns
-  size_t predicates_from_patterns = 0;
+  size_t numEntitiesWithPatterns = 0;
+  // the number of distinct predicates in patterns
+  size_t numPatternPredicates = 0;
   // the number of predicates counted without patterns
-  size_t predicates_from_lists = 0;
+  size_t numListPredicates = 0;
   Id lastSubject = ID_NO_VALUE;
-  while (posInput < input->size()) {
+  while (inputIdx < input->size()) {
     // Skip over elements with the same subject (don't count them twice)
-    Id subject = (*input)[posInput][subjectColumn];
+    Id subject = (*input)[inputIdx][subjectColumn];
     if (subject == lastSubject) {
-      posInput++;
+      inputIdx++;
       continue;
     }
     lastSubject = subject;
     if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
       // The subject matches a pattern
       patternCounts[hasPattern[subject]]++;
-      num_entities_with_pattern++;
+      numEntitiesWithPatterns++;
     } else if (subject < hasPredicate.size()) {
       // The subject does not match a pattern
       size_t numPredicates;
       Id* predicateData;
       std::tie(predicateData, numPredicates) = hasPredicate[subject];
-      predicates_from_lists += numPredicates;
+      numListPredicates += numPredicates;
       if (numPredicates > 0) {
         for (size_t i = 0; i < numPredicates; i++) {
           predicateCounts[predicateData[i]]++;
@@ -277,16 +277,19 @@ void CountAvailablePredicates::computePatternTrick(
                     "(its id is to high)."
                  << std::endl;
     }
-    posInput++;
+    inputIdx++;
   }
   LOG(DEBUG) << "Using " << patternCounts.size()
              << " patterns for computing the result." << std::endl;
+  // the number of predicates counted with patterns
+  size_t numPredicatesSubsumedInPatterns = 0;
   // resolve the patterns to predicate counts
   for (const auto& it : patternCounts) {
     std::pair<Id*, size_t> pattern = patterns[it.first];
-    predicates_from_patterns += it.second;
+    numPatternPredicates += pattern.second;
     for (size_t i = 0; i < pattern.second; i++) {
       predicateCounts[pattern.first[i]] += it.second;
+      numPredicatesSubsumedInPatterns += it.second;
     }
   }
   // write the predicate counts to the result
@@ -296,47 +299,48 @@ void CountAvailablePredicates::computePatternTrick(
   }
 
   // Print interesting statistics about the pattern trick
-  double ratio_has_pattern =
-      static_cast<double>(num_entities_with_pattern) / input->size();
-  size_t num_predicates_total =
-      predicates_from_lists + predicates_from_patterns;
-  double ratio_counted_with_pattern =
-      static_cast<double>(predicates_from_patterns) / num_predicates_total;
+  double ratioHasPatterns =
+      static_cast<double>(numEntitiesWithPatterns) / input->size();
+  size_t numPredicatesWithRepetitions =
+      numPredicatesSubsumedInPatterns + numListPredicates;
+  double ratioCountedWithPatterns =
+      static_cast<double>(numPredicatesSubsumedInPatterns) /
+      numPredicatesWithRepetitions;
 
-  size_t cost_with_patterns =
-      input->size() + predicates_from_lists + patternCounts.size();
-  size_t cost_without_patterns = input->size() + num_predicates_total;
-  double cost_ratio =
-      static_cast<double>(cost_with_patterns) / cost_without_patterns;
+  size_t costWithPatterns =
+      input->size() + numListPredicates + numPatternPredicates;
+  size_t costWithoutPatterns = input->size() + numPredicatesWithRepetitions;
+  double costRatio =
+      static_cast<double>(costWithPatterns) / costWithoutPatterns;
   // Print the ratio of entities that used a pattern
-  LOG(DEBUG) << num_entities_with_pattern << " of " << input->size()
+  LOG(DEBUG) << numEntitiesWithPatterns << " of " << input->size()
              << " entities had a pattern. That equals "
-             << (ratio_has_pattern * 100) << "%" << std::endl;
+             << (ratioHasPatterns * 100) << " %" << std::endl;
   // Print info about how many predicates where counted with patterns
-  LOG(DEBUG) << "Of the " << num_predicates_total << " predicates "
-             << predicates_from_patterns
-             << " were counted using patterns while " << predicates_from_lists
-             << " were counted without patterns. That equals "
-             << (ratio_counted_with_pattern * 100) << "%" << std::endl;
+  LOG(DEBUG) << "Of the " << numPredicatesWithRepetitions << "predicates "
+             << numPredicatesSubsumedInPatterns
+             << " were counted with patterns, " << numListPredicates
+             << " were counted without.";
+  LOG(DEBUG) << "The ratio is " << (ratioCountedWithPatterns * 100) << "%"
+             << std::endl;
   // Print information about of efficient the pattern trick is
-  LOG(DEBUG) << "The conceptual cost of the operation with patterns was "
-             << cost_with_patterns
-             << " while without patterns it would have been "
-             << cost_without_patterns << std::endl;
+  LOG(DEBUG) << "The conceptual cost with patterns was " << costWithPatterns
+             << " vs " << costWithoutPatterns << " without patterns"
+             << std::endl;
   // Print the cost improvement using the the pattern trick gave us
-  LOG(DEBUG) << "This equals a ratio of cost with to cost without patterns of "
-             << cost_ratio << std::endl;
+  LOG(DEBUG) << "This gives a ratio  with to without of " << costRatio
+             << std::endl;
 
   // Add these values to the runtime info
+  runtimeInfo->addDetail("numEntities", std::to_string(input->size()));
+  runtimeInfo->addDetail("numPredicatesWithRepetitions",
+                         std::to_string(numPredicatesWithRepetitions));
   runtimeInfo->addDetail("percentEntitesWithPatterns",
-                         std::to_string(ratio_has_pattern * 100) + "%");
-  runtimeInfo->addDetail(
-      "percentPredicatesThroughPatterns",
-      std::to_string(ratio_counted_with_pattern * 100) + "%");
+                         std::to_string(ratioHasPatterns * 100) + "%");
+  runtimeInfo->addDetail("percentPredicatesFromPatterns",
+                         std::to_string(ratioCountedWithPatterns * 100) + "%");
   runtimeInfo->addDetail("costWithoutPatterns",
-                         std::to_string(cost_without_patterns));
-  runtimeInfo->addDetail("costWithPatterns",
-                         std::to_string(cost_with_patterns));
-  runtimeInfo->addDetail("costImprovement",
-                         std::to_string(cost_ratio * 100) + "%");
+                         std::to_string(costWithoutPatterns));
+  runtimeInfo->addDetail("costWithPatterns", std::to_string(costWithPatterns));
+  runtimeInfo->addDetail("costRatio", std::to_string(costRatio * 100) + "%");
 }
