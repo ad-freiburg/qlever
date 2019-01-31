@@ -238,45 +238,34 @@ void CountAvailablePredicates::computePatternTrick(
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
   size_t posInput = 0;
-#ifndef DISABLE_PATTERN_TRICK_STATISTICS
   // These variables are used to gather additional statistics
   size_t num_entities_with_pattern = 0;
   // the number of predicates counted with patterns
   size_t predicates_from_patterns = 0;
   // the number of predicates counted without patterns
   size_t predicates_from_lists = 0;
-#endif
   Id lastSubject = ID_NO_VALUE;
   while (posInput < input->size()) {
     // Skip over elements with the same subject (don't count them twice)
-    if ((*input)[posInput][subjectColumn] == lastSubject) {
+    Id subject = (*input)[posInput][subjectColumn];
+    if (subject == lastSubject) {
       posInput++;
       continue;
     }
-    size_t subject = (*input)[posInput][subjectColumn];
     lastSubject = subject;
     if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
       // The subject matches a pattern
       patternCounts[hasPattern[subject]]++;
-#ifndef DISABLE_PATTERN_TRICK_STATISTICS
       num_entities_with_pattern++;
-#endif
     } else if (subject < hasPredicate.size()) {
       // The subject does not match a pattern
       size_t numPredicates;
       Id* predicateData;
       std::tie(predicateData, numPredicates) = hasPredicate[subject];
-#ifndef DISABLE_PATTERN_TRICK_STATISTICS
       predicates_from_lists += numPredicates;
-#endif
       if (numPredicates > 0) {
         for (size_t i = 0; i < numPredicates; i++) {
-          auto it = predicateCounts.find(predicateData[i]);
-          if (it == predicateCounts.end()) {
-            predicateCounts[predicateData[i]] = 1;
-          } else {
-            it->second++;
-          }
+          predicateCounts[predicateData[i]]++;
         }
       } else {
         LOG(TRACE) << "No pattern or has-relation entry found for entity "
@@ -306,7 +295,6 @@ void CountAvailablePredicates::computePatternTrick(
     result->push_back(array<Id, 2>{it.first, static_cast<Id>(it.second)});
   }
 
-#ifndef DISABLE_PATTERN_TRICK_STATISTICS
   // Print interesting statistics about the pattern trick
   double ratio_has_pattern =
       static_cast<double>(num_entities_with_pattern) / input->size();
@@ -351,5 +339,4 @@ void CountAvailablePredicates::computePatternTrick(
                          std::to_string(cost_with_patterns));
   runtimeInfo->addDetail("costImprovement",
                          std::to_string(cost_ratio * 100) + "%");
-#endif
 }
