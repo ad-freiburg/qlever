@@ -61,7 +61,7 @@ class RuntimeInformation {
     out << std::string(indent * 2, ' ')
         << "cached: " << ((_wasCached) ? "true" : "false") << std::endl;
     for (auto detail : _details) {
-      out << std::string((indent + 2) * 2, ' ') << detail.first << ", "
+      out << std::string((indent + 2) * 2, ' ') << detail.first << ": "
           << detail.second << std::endl;
     }
     for (const RuntimeInformation& child : _children) {
