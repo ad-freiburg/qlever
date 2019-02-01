@@ -40,12 +40,12 @@ class Operation {
   shared_ptr<const ResultTable> getResult() {
     ad_utility::Timer timer;
     timer.start();
-    LOG(DEBUG) << "Check cache for Operation result" << endl;
+    LOG(TRACE) << "Check cache for Operation result" << endl;
     LOG(TRACE) << "Using key: \n" << asString() << endl;
     auto [newResult, existingResult] =
         _executionContext->getQueryTreeCache().tryEmplace(asString());
     if (newResult) {
-      LOG(DEBUG) << "Not in the cache, need to compute result" << endl;
+      LOG(TRACE) << "Not in the cache, need to compute result" << endl;
       // Passing the raw pointer here is ok as the result shared_ptr remains
       // in scope
       try {
