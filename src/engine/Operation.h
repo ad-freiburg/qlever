@@ -95,6 +95,8 @@ class Operation {
       // If this operation object was computed already we don't want to update
       // the runtime information.
       _runtimeInformation = existingResult->_runtimeInfo;
+      _runtimeInformation.addDetail(
+          "InitialTime", std::to_string(_runtimeInformation.getTime()));
       _runtimeInformation.setTime(timer.secs());
       _runtimeInformation.setWasCached(true);
     }

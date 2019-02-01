@@ -223,7 +223,6 @@ size_t IndexScan::computeSizeEstimate() {
     // We have to do a simple scan anyway so might as well do it now
     if (getResultWidth() == 1) {
       RuntimeInformation& runtimeInfo = getRuntimeInfo();
-      bool firstRun = runtimeInfo.getTime() == 0;
       size_t size = getResult()->size();
       // When a cached result is loaded but the runtimeInfo for that
       // Operation object was already computed the old values are
@@ -232,15 +231,7 @@ size_t IndexScan::computeSizeEstimate() {
       // a single column scan as its child, as that operation itself
       // would measure the time of the cache access for the result
       // of that scan, while the scan itself would report the time
-      // required for the actual scan that is done in here. As both
-      // times are interestin we add the time for the initial scan
-      // as a detail to the RuntimeInformation and then reset the
-      // runtime information time to ensure the resulting runtime
-      // information trees operation runtimes are actually correct.
-      if (firstRun) {
-        runtimeInfo.addDetail("IntialScanTime",
-                              std::to_string(runtimeInfo.getTime()));
-      }
+      // required for the actual scan that is done in here.
       runtimeInfo.setTime(0);
       return size;
     }
