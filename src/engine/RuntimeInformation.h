@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../util/HashMap.h"
+#include "../util/StringUtils.h"
 #include "../util/Timer.h"
 
 class RuntimeInformation {
@@ -17,14 +18,15 @@ class RuntimeInformation {
       : _descriptor(), _details(), _time(0), _wasCached(false), _children() {}
   void toJson(std::ostream& out) const {
     out << "{";
-    out << "\"description\" : \"" << _descriptor << "\",";
+    out << "\"description\" : " << ad_utility::toJson(_descriptor) << ",";
     out << "\"total_time\" : " << _time << ", ";
     out << "\"operation_time\" : " << getOperationTime() << ", ";
     out << "\"was_chached\" : " << ((_wasCached) ? "true" : "false") << ", ";
     out << "\"details\" : {";
     auto it = _details.begin();
     while (it != _details.end()) {
-      out << "\"" << it->first << "\" : \"" << it->second << "\"";
+      out << "" << ad_utility::toJson(it->first) << " : "
+          << ad_utility::toJson(it->second);
       ++it;
       if (it != _details.end()) {
         out << ", ";
