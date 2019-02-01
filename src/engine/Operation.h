@@ -41,7 +41,7 @@ class Operation {
     ad_utility::Timer timer;
     timer.start();
     LOG(DEBUG) << "Check cache for Operation result" << endl;
-    LOG(DEBUG) << "Using key: \n" << asString() << endl;
+    LOG(TRACE) << "Using key: \n" << asString() << endl;
     auto [newResult, existingResult] =
         _executionContext->getQueryTreeCache().tryEmplace(asString());
     if (newResult) {

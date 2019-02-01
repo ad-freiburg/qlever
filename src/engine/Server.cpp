@@ -163,7 +163,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       // const QueryExecutionTree& qet = qg.getExecutionTree();
       QueryPlanner qp(qec);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
-      LOG(INFO) << qet.asString() << std::endl;
+      LOG(TRACE) << qet.asString() << std::endl;
 
       if (ad_utility::getLowercase(params["action"]) == "csv_export") {
         // CSV export
