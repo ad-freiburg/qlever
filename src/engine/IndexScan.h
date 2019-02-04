@@ -91,7 +91,7 @@ class IndexScan : public Operation {
   size_t _sizeEstimate;
   vector<float> _multiplicity;
 
-  virtual void computeResult(ResultTable* result) const override;
+  virtual void computeResult(ResultTable* result) override;
 
   void computePSOboundS(ResultTable* result) const;
 
@@ -111,5 +111,5 @@ class IndexScan : public Operation {
 
   void computeOSPfreeS(ResultTable* result) const;
 
-  size_t computeSizeEstimate() const;
+  size_t computeSizeEstimate();
 };

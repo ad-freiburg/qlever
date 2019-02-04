@@ -85,5 +85,5 @@ class HasPredicateScan : public Operation {
   std::string _subject;
   std::string _object;
 
-  virtual void computeResult(ResultTable* result) const override;
+  virtual void computeResult(ResultTable* result) override;
 };

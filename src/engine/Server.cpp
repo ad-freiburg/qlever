@@ -163,7 +163,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       // const QueryExecutionTree& qet = qg.getExecutionTree();
       QueryPlanner qp(qec);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
-      LOG(INFO) << qet.asString() << std::endl;
+      LOG(TRACE) << qet.asString() << std::endl;
 
       if (ad_utility::getLowercase(params["action"]) == "csv_export") {
         // CSV export
@@ -182,6 +182,10 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
         response = composeResponseJson(pq, qet, maxSend);
         contentType = "application/json";
       }
+      // Print the runtime info. This needs to be done after the query
+      // was computed.
+      LOG(DEBUG) << qet.getRootOperation()->getRuntimeInfo().toString()
+                 << std::endl;
     } catch (const ad_semsearch::Exception& e) {
       response = composeResponseJson(query, e);
     } catch (const std::exception& e) {
@@ -335,6 +339,10 @@ string Server::composeResponseJson(const ParsedQuery& query,
   } else {
     os << "[],\n";
   }
+
+  os << "\"runtimeInformation\" : ";
+  qet.getRootOperation()->getRuntimeInfo().toJson(os);
+  os << ", \n";
 
   os << "\"res\": ";
   size_t limit = MAX_NOF_ROWS_IN_RESULT;

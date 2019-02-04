@@ -66,6 +66,46 @@ string Filter::asString(size_t indent) const {
   return os.str();
 }
 
+std::string Filter::getDescriptor() const {
+  std::ostringstream os;
+  os << "FILTER ";
+  os << _lhs;
+  switch (_type) {
+    case SparqlFilter::EQ:
+      os << " == ";
+      break;
+    case SparqlFilter::NE:
+      os << " != ";
+      break;
+    case SparqlFilter::LT:
+      os << " < ";
+      break;
+    case SparqlFilter::LE:
+      os << " <= ";
+      break;
+    case SparqlFilter::GT:
+      os << " > ";
+      break;
+    case SparqlFilter::GE:
+      os << " >= ";
+      break;
+    case SparqlFilter::LANG_MATCHES:
+      os << " LANG_MATCHES ";
+      break;
+    case SparqlFilter::REGEX:
+      os << " REGEX ";
+      if (_regexIgnoreCase) {
+        os << "ignoring case ";
+      };
+      break;
+    case SparqlFilter::PREFIX:
+      os << " PREFIX ";
+      break;
+  }
+  os << _rhs;
+  return os.str();
+}
+
 // _____________________________________________________________________________
 template <class RT, ResultTable::ResultType T>
 vector<RT>* Filter::computeFilterForResultType(vector<RT>* res, size_t lhs,
@@ -168,9 +208,12 @@ vector<RT>* Filter::computeFilter(vector<RT>* res, size_t lhs, size_t rhs,
 }
 
 // _____________________________________________________________________________
-void Filter::computeResult(ResultTable* result) const {
+void Filter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  runtimeInfo.setDescriptor(getDescriptor());
+  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "Filter result computation..." << endl;
   result->_nofColumns = subRes->_nofColumns;
   result->_resultTypes.insert(result->_resultTypes.end(),

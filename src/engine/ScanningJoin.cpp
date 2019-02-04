@@ -50,7 +50,7 @@ size_t ScanningJoin::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-void ScanningJoin::computeResult(ResultTable* result) const {
+void ScanningJoin::computeResult(ResultTable* result) {
   AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, "TODO");
   IndexScan::computeResult(result);
 }

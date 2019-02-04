@@ -57,5 +57,5 @@ class Distinct : public Operation {
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<size_t> _keepIndices;
 
-  virtual void computeResult(ResultTable* result) const override;
+  virtual void computeResult(ResultTable* result) override;
 };

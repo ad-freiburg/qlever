@@ -120,8 +120,12 @@ vector<size_t> IndexScan::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-void IndexScan::computeResult(ResultTable* result) const {
+void IndexScan::computeResult(ResultTable* result) {
   LOG(DEBUG) << "IndexScan result computation...\n";
+
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  runtimeInfo.setDescriptor("IndexScan " + _subject + " " + _predicate + " " +
+                            _object);
   switch (_type) {
     case PSO_BOUND_S:
       computePSOboundS(result);
@@ -212,15 +216,33 @@ void IndexScan::computePOSfreeO(ResultTable* result) const {
 }
 
 // _____________________________________________________________________________
-size_t IndexScan::computeSizeEstimate() const {
+size_t IndexScan::computeSizeEstimate() {
   if (_executionContext) {
     // Should always be in this branch. Else is only for test cases.
 
     // We have to do a simple scan anyway so might as well do it now
     if (getResultWidth() == 1) {
-      return getResult()->size();
+      RuntimeInformation& runtimeInfo = getRuntimeInfo();
+      size_t size = getResult()->size();
+      // When a cached result is loaded but the runtimeInfo for that
+      // Operation object was already computed the old values are
+      // used (instead of the time for the cache access. This breaks
+      // the output of the operation time for any operation that has
+      // a single column scan as its child, as that operation itself
+      // would measure the time of the cache access for the result
+      // of that scan, while the scan itself would report the time
+      // required for the actual scan that is done in here.
+      runtimeInfo.setTime(0);
+      return size;
     }
-    return getIndex().sizeEstimate(_subject, _predicate, _object);
+    if (_type == SPO_FREE_P || _type == SOP_FREE_O) {
+      return getIndex().sizeEstimate(_subject, "", "");
+    } else if (_type == POS_FREE_O || _type == PSO_FREE_S) {
+      return getIndex().sizeEstimate("", _predicate, "");
+    } else if (_type == OPS_FREE_P || _type == OSP_FREE_S) {
+      return getIndex().sizeEstimate("", "", _object);
+    }
+    return getIndex().sizeEstimate("", "", "");
   } else {
     return 1000 + _subject.size() + _predicate.size() + _object.size();
   }

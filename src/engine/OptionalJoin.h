@@ -57,5 +57,5 @@ class OptionalJoin : public Operation {
   size_t _sizeEstimate;
   bool _multiplicitiesComputed;
 
-  virtual void computeResult(ResultTable* result) const override;
+  virtual void computeResult(ResultTable* result) override;
 };

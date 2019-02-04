@@ -184,7 +184,7 @@ size_t HasPredicateScan::getCostEstimate() {
   return 0;
 }
 
-void HasPredicateScan::computeResult(ResultTable* result) const {
+void HasPredicateScan::computeResult(ResultTable* result) {
   LOG(DEBUG) << "HasPredicateScan result computation..." << std::endl;
   result->_nofColumns = getResultWidth();
   result->_sortedBy = resultSortedOn();
@@ -194,8 +194,11 @@ void HasPredicateScan::computeResult(ResultTable* result) const {
       getIndex().getHasPredicate();
   const CompactStringVector<size_t, Id>& patterns = getIndex().getPatterns();
 
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+
   switch (_type) {
     case ScanType::FREE_S: {
+      runtimeInfo.setDescriptor("HasPredicateScan free subject: " + _subject);
       Id objectId;
       if (!getIndex().getVocab().getId(_object, &objectId)) {
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
@@ -205,6 +208,7 @@ void HasPredicateScan::computeResult(ResultTable* result) const {
                                      patterns);
     } break;
     case ScanType::FREE_O: {
+      runtimeInfo.setDescriptor("HasPredicateScan free object: " + _object);
       Id subjectId;
       if (!getIndex().getVocab().getId(_subject, &subjectId)) {
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
@@ -214,6 +218,7 @@ void HasPredicateScan::computeResult(ResultTable* result) const {
                                      hasPredicate, patterns);
     } break;
     case ScanType::FULL_SCAN:
+      runtimeInfo.setDescriptor("HasPredicateScan full scan");
       HasPredicateScan::computeFullScan(result, hasPattern, hasPredicate,
                                         patterns,
                                         getIndex().getHasPredicateFullSize());
@@ -221,6 +226,9 @@ void HasPredicateScan::computeResult(ResultTable* result) const {
     case ScanType::SUBQUERY_S:
       HasPredicateScan::computeSubqueryS(result, _subtree, _subtreeColIndex,
                                          hasPattern, hasPredicate, patterns);
+      runtimeInfo.setDescriptor("HasPredicateScan with a subquery on " +
+                                _subject);
+      runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
       break;
   }
   result->finish();

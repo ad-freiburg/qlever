@@ -77,10 +77,19 @@ string TwoColumnJoin::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-void TwoColumnJoin::computeResult(ResultTable* result) const {
+void TwoColumnJoin::computeResult(ResultTable* result) {
   AD_CHECK(result);
   AD_CHECK(!result->_fixedSizeData);
   LOG(DEBUG) << "TwoColumnJoin result computation..." << endl;
+
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  std::string joinVars = "";
+  for (auto p : _left->getVariableColumnMap()) {
+    if (p.second == _jc1Left || p.second == _jc2Left) {
+      joinVars += p.first + " ";
+    }
+  }
+  runtimeInfo.setDescriptor("TwoColumnJoin on " + joinVars);
 
   // Deal with the case that one of the lists is width two and
   // with join columns 0 1. This means we can use the filter method.
@@ -91,6 +100,8 @@ void TwoColumnJoin::computeResult(ResultTable* result) const {
     const auto& v = rightFilter ? _left : _right;
     const auto leftResult = _left->getResult();
     const auto rightResult = _right->getResult();
+    runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
+    runtimeInfo.addChild(_right->getRootOperation()->getRuntimeInfo());
     const auto& filter = *static_cast<vector<array<Id, 2>>*>(
         rightFilter ? rightResult->_fixedSizeData : leftResult->_fixedSizeData);
     size_t jc1 = rightFilter ? _jc1Left : _jc1Right;

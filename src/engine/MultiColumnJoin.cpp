@@ -166,10 +166,23 @@ struct MultiColumnJoinCaller<6, 6, 6> {
 };
 
 // _____________________________________________________________________________
-void MultiColumnJoin::computeResult(ResultTable* result) const {
+void MultiColumnJoin::computeResult(ResultTable* result) {
   AD_CHECK(result);
   AD_CHECK(!result->_fixedSizeData);
   LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
+
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  std::string joinVars = "";
+  for (auto p : _left->getVariableColumnMap()) {
+    for (auto jc : _joinColumns) {
+      // If the left join column matches the index of a variable in the left
+      // subresult.
+      if (jc[0] == p.second) {
+        joinVars += p.first + " ";
+      }
+    }
+  }
+  runtimeInfo.setDescriptor("MultiColumnJoin on " + joinVars);
 
   result->_sortedBy = resultSortedOn();
   result->_nofColumns = getResultWidth();
@@ -178,6 +191,9 @@ void MultiColumnJoin::computeResult(ResultTable* result) const {
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
+
+  runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
+  runtimeInfo.addChild(_right->getRootOperation()->getRuntimeInfo());
 
   LOG(DEBUG) << "MultiColumnJoin subresult computation done." << std::endl;
 

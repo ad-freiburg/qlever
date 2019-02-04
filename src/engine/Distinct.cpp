@@ -41,9 +41,13 @@ ad_utility::HashMap<string, size_t> Distinct::getVariableColumns() const {
 }
 
 // _____________________________________________________________________________
-void Distinct::computeResult(ResultTable* result) const {
+void Distinct::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Getting sub-result for distinct result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
+
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+  runtimeInfo.setDescriptor("DISTINCT");
+  runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "Distinct result computation..." << endl;
   result->_nofColumns = subRes->_nofColumns;
   result->_resultTypes.insert(result->_resultTypes.end(),
