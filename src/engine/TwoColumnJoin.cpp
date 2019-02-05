@@ -151,7 +151,6 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
                          &result->_varSizeData);
     }
 
-    result->finish();
     LOG(DEBUG) << "TwoColumnJoin result computation done." << endl;
     return;
   }

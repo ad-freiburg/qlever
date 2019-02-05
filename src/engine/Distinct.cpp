@@ -101,6 +101,6 @@ void Distinct::computeResult(ResultTable* result) {
       break;
     }
   }
-  result->finish();
+
   LOG(DEBUG) << "Distinct result computation done." << endl;
 }

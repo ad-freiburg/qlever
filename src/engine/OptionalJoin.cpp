@@ -234,7 +234,7 @@ void OptionalJoin::computeResult(ResultTable* result) {
                       result->_nofColumns, leftResult, rightResult,
                       _leftOptional, _rightOptional, _joinColumns, result,
                       result->_nofColumns);
-  result->finish();
+
   LOG(DEBUG) << "OptionalJoin result computation done." << endl;
 }
 

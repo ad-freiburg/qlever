@@ -783,7 +783,7 @@ void GroupBy::computeResult(ResultTable* result) {
       } else if (result->_nofColumns == 5) {
         result->_fixedSizeData = new vector<array<Id, 5>>();
       }
-      result->finish();
+
       return;
     }
     groupByColumns.push_back(it->second);
@@ -904,7 +904,7 @@ void GroupBy::computeResult(ResultTable* result) {
         } else if (result->_nofColumns == 5) {
           result->_fixedSizeData = new vector<array<Id, 5>>();
         }
-        result->finish();
+
         return;
       }
       aggregates.back()._inCol = inIt->second;
@@ -974,6 +974,6 @@ void GroupBy::computeResult(ResultTable* result) {
       delete static_cast<std::string*>(a._userData);
     }
   }
-  result->finish();
+
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
 }

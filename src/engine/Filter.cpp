@@ -270,7 +270,7 @@ void Filter::computeResult(ResultTable* result) {
     // compare the left column to a fixed value
     return computeResultFixedValue(result, subRes);
   }
-  result->finish();
+
   LOG(DEBUG) << "Filter result computation done." << endl;
 }
 
@@ -685,6 +685,6 @@ void Filter::computeResultFixedValue(
       break;
     }
   }
-  result->finish();
+
   LOG(DEBUG) << "Filter result computation done." << endl;
 }

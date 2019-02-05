@@ -204,7 +204,6 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
   }
   LOG(DEBUG) << "CountAvailablePredicates result computation done."
              << std::endl;
-  result->finish();
 }
 
 void CountAvailablePredicates::computePatternTrickAllEntities(

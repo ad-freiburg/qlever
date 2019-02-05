@@ -68,6 +68,6 @@ void TextOperationForContexts::computeResult(ResultTable* result) {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
              "Complex text query is a todo for the future.");
   }
-  result->finish();
+
   LOG(DEBUG) << "TextOperationForContexts result computation done." << endl;
 }

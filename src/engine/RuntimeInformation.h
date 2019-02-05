@@ -15,10 +15,18 @@
 class RuntimeInformation {
  public:
   RuntimeInformation()
-      : _descriptor(), _details(), _time(0), _wasCached(false), _children() {}
+      : _time(0),
+        _rows(0),
+        _cols(0),
+        _wasCached(false),
+        _descriptor(),
+        _details(),
+        _children() {}
   void toJson(std::ostream& out) const {
     out << "{";
     out << "\"description\" : " << ad_utility::toJson(_descriptor) << ",";
+    out << "\"result_rows\" : " << _rows << ", ";
+    out << "\"result_cols\" : " << _cols << ", ";
     out << "\"total_time\" : " << _time << ", ";
     out << "\"operation_time\" : " << getOperationTime() << ", ";
     out << "\"was_chached\" : " << ((_wasCached) ? "true" : "false") << ", ";
@@ -56,6 +64,8 @@ class RuntimeInformation {
   void toString(std::ostream& out, size_t indent) const {
     out << '\n';
     out << std::string(indent * 2, ' ') << _descriptor << std::endl;
+    out << std::string(indent * 2, ' ') << "result_size: " << _rows << " x "
+        << _cols << std::endl;
     out << std::string(indent * 2, ' ') << "total_time: " << _time << "s"
         << std::endl;
     out << std::string(indent * 2, ' ')
@@ -77,8 +87,21 @@ class RuntimeInformation {
 
   // Set the overall time
   void setTime(double time) { _time = time; }
+
   // Get the overall time
   double getTime() const { return _time; }
+
+  // Set the number of rows
+  void setRows(size_t rows) { _rows = rows; }
+
+  // Get the number of rows
+  size_t getRows() { return _rows; }
+
+  // Set the number of columns
+  void setCols(size_t cols) { _cols = cols; }
+
+  // Get the number of columns
+  size_t getCols() { return _cols; }
 
   double getOperationTime() const {
     if (_wasCached) {
@@ -106,9 +129,11 @@ class RuntimeInformation {
   }
 
  private:
+  double _time;
+  size_t _rows;
+  size_t _cols;
+  bool _wasCached;
   std::string _descriptor;
   ad_utility::HashMap<std::string, std::string> _details;
-  double _time;
-  bool _wasCached;
   std::vector<RuntimeInformation> _children;
 };

@@ -90,6 +90,6 @@ void Sort::computeResult(ResultTable* result) {
     }
   }
   result->_sortedBy = resultSortedOn();
-  result->finish();
+
   LOG(DEBUG) << "Sort result computation done." << endl;
 }
