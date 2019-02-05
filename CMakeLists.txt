@@ -96,12 +96,6 @@ message(STATUS ---)
 ###############################################################################
 ##### Actual project configuration #####
 ###############################################################################
-
-option(DISABLE_PATTERN_TRICK_STATISTICS "This disables the computation of statistics when using the pattern trick." OFF)
-if (DISABLE_PATTERN_TRICK_STATISTICS)
-  add_definitions(-DDISABLE_PATTERN_TRICK_STATISTICS)
-endif (DISABLE_PATTERN_TRICK_STATISTICS)
-
 set(LOG_LEVEL_FATAL 0)
 set(LOG_LEVEL_ERROR 1)
 set(LOG_LEVEL_WARN 2)
