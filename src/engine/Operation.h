@@ -80,7 +80,7 @@ class Operation {
       timer.stop();
       _runtimeInformation.setRows(newResult->_resTable->size());
       _runtimeInformation.setCols(getResultWidth());
-      _runtimeInformation.setTime(timer.secs());
+      _runtimeInformation.setTime(timer.msecs());
       _runtimeInformation.setWasCached(false);
       // cache the runtime information for the execution as well
       newResult->_runtimeInfo = _runtimeInformation;
@@ -102,8 +102,9 @@ class Operation {
       // information.
       _runtimeInformation = existingResult->_runtimeInfo;
       _runtimeInformation.addDetail(
-          "InitialTime", std::to_string(_runtimeInformation.getTime()));
-      _runtimeInformation.setTime(timer.secs());
+          "OriginalTime",
+          ad_utility::to_string(_runtimeInformation.getTime(), 2) + " ms");
+      _runtimeInformation.setTime(timer.msecs());
       _runtimeInformation.setWasCached(true);
     }
     return existingResult->_resTable;

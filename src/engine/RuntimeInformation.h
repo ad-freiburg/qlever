@@ -57,19 +57,24 @@ class RuntimeInformation {
 
   std::string toString() const {
     std::ostringstream buffer;
-    toString(buffer, 0);
+    // imbue with the same locale as std::cout which uses for exanoke
+    // thousands separators
+    buffer.imbue(ad_utility::commaLocale);
+    // So floats use fixed precision
+    buffer << std::fixed << std::setprecision(2);
+    writeToStream(buffer, 0);
     return buffer.str();
   }
 
-  void toString(std::ostream& out, size_t indent) const {
+  void writeToStream(std::ostream& out, size_t indent) const {
     out << '\n';
     out << std::string(indent * 2, ' ') << _descriptor << std::endl;
     out << std::string(indent * 2, ' ') << "result_size: " << _rows << " x "
         << _cols << std::endl;
-    out << std::string(indent * 2, ' ') << "total_time: " << _time << "s"
+    out << std::string(indent * 2, ' ') << "total_time: " << _time << " ms"
         << std::endl;
     out << std::string(indent * 2, ' ')
-        << "operation_time: " << getOperationTime() << "s" << std::endl;
+        << "operation_time: " << getOperationTime() << " ms" << std::endl;
     out << std::string(indent * 2, ' ')
         << "cached: " << ((_wasCached) ? "true" : "false") << std::endl;
     for (auto detail : _details) {
@@ -77,7 +82,7 @@ class RuntimeInformation {
           << detail.second << std::endl;
     }
     for (const RuntimeInformation& child : _children) {
-      child.toString(out, indent + 1);
+      child.writeToStream(out, indent + 1);
     }
   }
 
@@ -85,10 +90,10 @@ class RuntimeInformation {
     _descriptor = descriptor;
   }
 
-  // Set the overall time
+  // Set the overall time in milliseconds
   void setTime(double time) { _time = time; }
 
-  // Get the overall time
+  // Get the overall time in milliseconds
   double getTime() const { return _time; }
 
   // Set the number of rows

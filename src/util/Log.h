@@ -6,6 +6,7 @@
 
 #include <sys/timeb.h>
 #include <time.h>
+#include <iomanip>
 #include <iostream>
 #include <locale>
 #include <sstream>
@@ -33,9 +34,35 @@
 #define ERROR 1
 #define FATAL 0
 
-using std::string;
-
 namespace ad_utility {
+
+using std::string;
+//! Helper class to get thousandth separators in a locale
+class CommaNumPunct : public std::numpunct<char> {
+ protected:
+  virtual char do_thousands_sep() const { return ','; }
+
+  virtual std::string do_grouping() const { return "\03"; }
+};
+
+const static std::locale commaLocale(std::locale(), new CommaNumPunct());
+
+//! String representation of a double with precision and thousandth separators
+inline string to_string(double in, size_t precision) {
+  std::ostringstream buffer;
+  buffer.imbue(commaLocale);
+  buffer << std::setprecision(precision) << std::fixed << in;
+  return buffer.str();
+}
+
+//! String representation of a long with thousandth separators
+inline string to_string(long in) {
+  std::ostringstream buffer;
+  buffer.imbue(commaLocale);
+  buffer << in;
+  return buffer.str();
+}
+
 //! Log
 class Log {
  public:

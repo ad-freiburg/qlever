@@ -664,8 +664,8 @@ class Engine {
   static void doJoin(const vector<array<E, N>>& a, const vector<array<E, M>>& b,
                      vector<array<E, (N + M - 1)>>* result) {
     LOG(DEBUG) << "Performing join between two fixed width tables.\n";
-    LOG(DEBUG) << "A: witdth = " << N << ", size = " << a.size() << "\n";
-    LOG(DEBUG) << "B: witdth = " << M << ", size = " << b.size() << "\n";
+    LOG(DEBUG) << "A: width = " << N << ", size = " << a.size() << "\n";
+    LOG(DEBUG) << "B: width = " << M << ", size = " << b.size() << "\n";
 
     // Typedefs can hopefully prevent insanity. Read as:
     // "Tuple 1", "Tuple 2", "Tuple for Result", etc.
@@ -838,7 +838,7 @@ class Engine {
   static void doSelfJoin(const vector<array<E, N>>& v,
                          vector<array<E, N + N - 1>>* result) {
     LOG(DEBUG) << "Performing self join on fixed width tables.\n";
-    LOG(DEBUG) << "TAB: witdth = " << N << ", size = " << v.size() << "\n";
+    LOG(DEBUG) << "TAB: width = " << N << ", size = " << v.size() << "\n";
 
     // Always detect ranges of equal join col values and then
     // build a cross product for each range.
