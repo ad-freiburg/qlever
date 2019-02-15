@@ -355,18 +355,13 @@ void CountAvailablePredicates::computePatternTrick(
              << std::endl;
 
   // Add these values to the runtime info
-  runtimeInfo->addDetail("numEntities", std::to_string(input->size()));
+  runtimeInfo->addDetail("numEntities", input->size());
   runtimeInfo->addDetail("numPredicatesWithRepetitions",
-                         std::to_string(numPredicatesWithRepetitions));
-  runtimeInfo->addDetail(
-      "percentEntitesWithPatterns",
-      ad_utility::to_string(ratioHasPatterns * 100, 2) + "%");
-  runtimeInfo->addDetail(
-      "percentPredicatesFromPatterns",
-      ad_utility::to_string(ratioCountedWithPatterns * 100, 2) + "%");
-  runtimeInfo->addDetail("costWithoutPatterns",
-                         std::to_string(costWithoutPatterns));
-  runtimeInfo->addDetail("costWithPatterns", std::to_string(costWithPatterns));
-  runtimeInfo->addDetail("costRatio",
-                         ad_utility::to_string(costRatio * 100, 2) + "%");
+                         numPredicatesWithRepetitions);
+  runtimeInfo->addDetail("percentEntitesWithPatterns", ratioHasPatterns * 100);
+  runtimeInfo->addDetail("percentPredicatesFromPatterns",
+                         ratioCountedWithPatterns * 100);
+  runtimeInfo->addDetail("costWithoutPatterns", costWithoutPatterns);
+  runtimeInfo->addDetail("costWithPatterns", costWithPatterns);
+  runtimeInfo->addDetail("costRatio", costRatio * 100);
 }

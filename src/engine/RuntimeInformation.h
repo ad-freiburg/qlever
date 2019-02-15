@@ -5,6 +5,7 @@
 #pragma once
 
 #include <iostream>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,8 @@
 
 class RuntimeInformation {
  public:
+  friend void to_json(nlohmann::json& j, const RuntimeInformation& rti);
+
   RuntimeInformation()
       : _time(0),
         _rows(0),
@@ -22,38 +25,6 @@ class RuntimeInformation {
         _descriptor(),
         _details(),
         _children() {}
-  void toJson(std::ostream& out) const {
-    out << "{";
-    out << "\"description\" : " << ad_utility::toJson(_descriptor) << ",";
-    out << "\"result_rows\" : " << _rows << ", ";
-    out << "\"result_cols\" : " << _cols << ", ";
-    out << "\"total_time\" : " << _time << ", ";
-    out << "\"operation_time\" : " << getOperationTime() << ", ";
-    out << "\"was_chached\" : " << ((_wasCached) ? "true" : "false") << ", ";
-    out << "\"details\" : {";
-    auto it = _details.begin();
-    while (it != _details.end()) {
-      out << "" << ad_utility::toJson(it->first) << " : "
-          << ad_utility::toJson(it->second);
-      ++it;
-      if (it != _details.end()) {
-        out << ", ";
-      }
-    }
-    out << "}, ";
-    out << "\"children\" : [";
-    auto it2 = _children.begin();
-    while (it2 != _children.end()) {
-      // recursively call the childs to json method
-      it2->toJson(out);
-      ++it2;
-      if (it2 != _children.end()) {
-        out << ", ";
-      }
-    }
-    out << "]";
-    out << "}";
-  }
 
   std::string toString() const {
     std::ostringstream buffer;
@@ -67,6 +38,7 @@ class RuntimeInformation {
   }
 
   void writeToStream(std::ostream& out, size_t indent) const {
+    using json = nlohmann::json;
     out << '\n';
     out << std::string(indent * 2, ' ') << _descriptor << std::endl;
     out << std::string(indent * 2, ' ') << "result_size: " << _rows << " x "
@@ -77,9 +49,24 @@ class RuntimeInformation {
         << "operation_time: " << getOperationTime() << " ms" << std::endl;
     out << std::string(indent * 2, ' ')
         << "cached: " << ((_wasCached) ? "true" : "false") << std::endl;
-    for (auto detail : _details) {
-      out << std::string((indent + 2) * 2, ' ') << detail.first << ": "
-          << detail.second << std::endl;
+    for (const auto& el : _details.items()) {
+      out << std::string((indent + 2) * 2, ' ') << el.key() << ": ";
+      // We want to print doubles with fixed precision and stream ints as their
+      // native type so they get thousands separators. For everything else we
+      // let nlohmann::json handle it
+      if (el.value().type() == json::value_t::number_float) {
+        out << ad_utility::to_string(el.value().get<double>(), 2);
+      } else if (el.value().type() == json::value_t::number_unsigned) {
+        out << el.value().get<uint64_t>();
+      } else if (el.value().type() == json::value_t::number_integer) {
+        out << el.value().get<int64_t>();
+      } else {
+        out << el.value();
+      }
+      if (ad_utility::endsWith(el.key(), "Time")) {
+        out << " ms";
+      }
+      out << std::endl;
     }
     for (const RuntimeInformation& child : _children) {
       child.writeToStream(out, indent + 1);
@@ -129,7 +116,8 @@ class RuntimeInformation {
 
   void addChild(const RuntimeInformation& r) { _children.push_back(r); }
 
-  void addDetail(const std::string& key, const std::string& value) {
+  template <typename T>
+  void addDetail(const std::string& key, const T& value) {
     _details[key] = value;
   }
 
@@ -139,6 +127,18 @@ class RuntimeInformation {
   size_t _cols;
   bool _wasCached;
   std::string _descriptor;
-  ad_utility::HashMap<std::string, std::string> _details;
+  nlohmann::json _details;
   std::vector<RuntimeInformation> _children;
 };
+
+inline void to_json(nlohmann::json& j, const RuntimeInformation& rti) {
+  using nlohmann::json;
+  j = json{{"description", rti._descriptor},
+           {"result_rows", rti._rows},
+           {"result_cols", rti._cols},
+           {"total_time", rti._time},
+           {"operation_time", rti.getOperationTime()},
+           {"was_cached", rti._wasCached},
+           {"details", rti._details},
+           {"children", rti._children}};
+}

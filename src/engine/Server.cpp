@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <nlohmann/json.hpp>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -340,7 +341,7 @@ string Server::composeResponseJson(const ParsedQuery& query,
   }
 
   os << "\"runtimeInformation\" : ";
-  qet.getRootOperation()->getRuntimeInfo().toJson(os);
+  os << nlohmann::json(qet.getRootOperation()->getRuntimeInfo());
   os << ", \n";
 
   os << "\"res\": ";

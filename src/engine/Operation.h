@@ -101,9 +101,8 @@ class Operation {
       // original runtime information and only update the time and caching
       // information.
       _runtimeInformation = existingResult->_runtimeInfo;
-      _runtimeInformation.addDetail(
-          "OriginalTime",
-          ad_utility::to_string(_runtimeInformation.getTime(), 2) + " ms");
+      _runtimeInformation.addDetail("OriginalTime",
+                                    _runtimeInformation.getTime());
       _runtimeInformation.setTime(timer.msecs());
       _runtimeInformation.setWasCached(true);
     }
