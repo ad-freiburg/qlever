@@ -560,6 +560,6 @@ queries:
       - num_rows: 35 
       - num_cols: 2
       - selected: ["?p", "?count"]
-      - contains_row: ["<Hall_of_frame_induction>", 1] 
+      - contains_row: ["<Hall_of_fame_induction>", 1] 
       - contains_row: ["<Weight>", 1]
 

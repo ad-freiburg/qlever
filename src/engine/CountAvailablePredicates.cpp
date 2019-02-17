@@ -9,6 +9,7 @@ CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec)
     : Operation(qec),
       _subtree(nullptr),
       _subjectColumnIndex(0),
+      _subjectEntityName(),
       _predicateVarName("predicate"),
       _countVarName("count") {}
 
@@ -19,12 +20,15 @@ CountAvailablePredicates::CountAvailablePredicates(
     : Operation(qec),
       _subtree(subtree),
       _subjectColumnIndex(subjectColumnIndex),
+      _subjectEntityName(),
       _predicateVarName("predicate"),
       _countVarName("count") {}
 
 CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
                                                    std::string entityName)
     : Operation(qec),
+      _subtree(nullptr),
+      _subjectColumnIndex(0),
       _subjectEntityName(entityName),
       _predicateVarName("predicate"),
       _countVarName("count") {}
@@ -35,11 +39,13 @@ string CountAvailablePredicates::asString(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  if (_subtree != nullptr) {
+  if (_subjectEntityName) {
+    os << "COUNT_AVAILABLE_PREDICATES for " << _subjectEntityName.value();
+  } else if (_subtree == nullptr) {
+    os << "COUNT_AVAILABLE_PREDICATES for all entities.";
+  } else {
     os << "COUNT_AVAILABLE_PREDICATES (col " << _subjectColumnIndex << ")\n"
        << _subtree->asString(indent);
-  } else {
-    os << "COUNT_AVAILABLE_PREDICATES for all entities.";
   }
   return os.str();
 }
@@ -142,7 +148,7 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
           &input, static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
           hasPattern, hasPredicate, patterns, 0, &runtimeInfo);
     }
-  } else if (_subtree == nullptr && !_subjectEntityName) {
+  } else if (_subtree == nullptr) {
     runtimeInfo.setDescriptor("CountAvailablePredicates for all entities");
     // Compute the predicates for all entities
     CountAvailablePredicates::computePatternTrickAllEntities(
