@@ -455,12 +455,15 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
 vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab,
     const SparqlTriple& patternTrickTriple) const {
-  const vector<SubtreePlan>& previous = dpTab[dpTab.size() - 1];
+  const vector<SubtreePlan>* previous = nullptr;
+  if (!dpTab.empty()) {
+    previous = &dpTab.back();
+  }
   vector<SubtreePlan> added;
-  if (previous.size() > 0) {
-    added.reserve(previous.size());
-    for (size_t i = 0; i < previous.size(); ++i) {
-      const SubtreePlan& parent = previous[i];
+  if (previous != nullptr && !previous->empty()) {
+    added.reserve(previous->size());
+    for (size_t i = 0; i < previous->size(); ++i) {
+      const SubtreePlan& parent = (*previous)[i];
       // Determine the column containing the subjects for which we are
       // interested in their predicates.
       auto it =
@@ -506,6 +509,21 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
                         countPred);
       added.push_back(patternTrickPlan);
     }
+  } else if (patternTrickTriple._s[0] != '?') {
+    // The subject of the pattern trick is not a variable
+    SubtreePlan patternTrickPlan(_qec);
+    std::shared_ptr<Operation> countPred(
+        new CountAvailablePredicates(_qec, patternTrickTriple._s));
+
+    static_cast<CountAvailablePredicates*>(countPred.get())
+        ->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName);
+    QueryExecutionTree& tree = *patternTrickPlan._qet.get();
+    tree.setVariableColumns(
+        static_cast<CountAvailablePredicates*>(countPred.get())
+            ->getVariableColumns());
+    tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
+                      countPred);
+    added.push_back(patternTrickPlan);
   } else {
     // Use the pattern trick without a subtree
     SubtreePlan patternTrickPlan(_qec);

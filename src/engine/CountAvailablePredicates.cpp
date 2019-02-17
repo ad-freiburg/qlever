@@ -22,6 +22,13 @@ CountAvailablePredicates::CountAvailablePredicates(
       _predicateVarName("predicate"),
       _countVarName("count") {}
 
+CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
+                                                   std::string entityName)
+    : Operation(qec),
+      _subjectEntityName(entityName),
+      _predicateVarName("predicate"),
+      _countVarName("count") {}
+
 // _____________________________________________________________________________
 string CountAvailablePredicates::asString(size_t indent) const {
   std::ostringstream os;
@@ -124,7 +131,18 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
   const CompactStringVector<size_t, Id>& patterns =
       _executionContext->getIndex().getPatterns();
 
-  if (_subtree == nullptr) {
+  if (_subjectEntityName) {
+    runtimeInfo.setDescriptor("CountAvailablePredicates for a single entity.");
+    size_t entityId;
+    // If the entity exists return the all predicates for that entitity,
+    // otherwise return an empty result.
+    if (getIndex().getVocab().getId(_subjectEntityName.value(), &entityId)) {
+      std::vector<array<Id, 1>> input = {{entityId}};
+      CountAvailablePredicates::computePatternTrick<array<Id, 1>>(
+          &input, static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
+          hasPattern, hasPredicate, patterns, 0, &runtimeInfo);
+    }
+  } else if (_subtree == nullptr && !_subjectEntityName) {
     runtimeInfo.setDescriptor("CountAvailablePredicates for all entities");
     // Compute the predicates for all entities
     CountAvailablePredicates::computePatternTrickAllEntities(

@@ -41,6 +41,12 @@ class CountAvailablePredicates : public Operation {
                            std::shared_ptr<QueryExecutionTree> subtree,
                            size_t subjectColumnIndex);
 
+  /**
+   * @brief Creates a new CountAvailblePredicates operation that returns
+   * predicates and their counts for the entity given by the entityName.
+   */
+  CountAvailablePredicates(QueryExecutionContext* qec, std::string entityName);
+
   virtual string asString(size_t indent = 0) const override;
 
   virtual size_t getResultWidth() const override;
@@ -99,6 +105,8 @@ class CountAvailablePredicates : public Operation {
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
+  // This can be used to aquire the predicates for a single entity
+  std::optional<std::string> _subjectEntityName;
   size_t _subjectColumnIndex;
   std::string _predicateVarName;
   std::string _countVarName;

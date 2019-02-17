@@ -549,4 +549,17 @@ queries:
       - selected: ["?p", "?count"]
       - contains_row: ["<Film_appeared_in>", 56] 
       - contains_row: ["<Patent>", 2]
+  - query : count-available-predicates-on-single-entity
+    type: no-text
+    sparql: |
+      SELECT ?p (COUNT(?p) as ?count) WHERE {
+       <Albert_Einstein> ql:has-predicate ?p .
+      }
+      GROUP BY ?p
+    checks:
+      - num_rows: 35 
+      - num_cols: 2
+      - selected: ["?p", "?count"]
+      - contains_row: ["<Hall_of_frame_induction>", 1] 
+      - contains_row: ["<Weight>", 1]
 
