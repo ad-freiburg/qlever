@@ -86,4 +86,4 @@ add_executable(MultiColumnJoinTest MultiColumnJoinTest.cpp)
 target_link_libraries(MultiColumnJoinTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(IdTableTest IdTableTest.cpp)
-target_link_libraries(IdTableTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(IdTableTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
