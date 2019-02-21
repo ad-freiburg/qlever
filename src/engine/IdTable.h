@@ -21,6 +21,8 @@
 template <int COLS>
 class IdTableImpl {
  public:
+  IdTableImpl()
+      : _data(nullptr), _size(0), _capacity(0), _manage_storage(true) {}
   /**
    * This is simply an Id* which has some additional methods.
    **/
@@ -230,7 +232,7 @@ class IdTableImpl {
     return *reinterpret_cast<ConstRow>(_data + (row * COLS));
   }
 
-  constexpr size_t cols() { return COLS; }
+  constexpr size_t cols() const { return COLS; }
 
   Id* _data;
   size_t _size;
@@ -238,6 +240,7 @@ class IdTableImpl {
   // This ensures the name _cols is always defined within the IdTableImpl
   // and allows for uniform usage.
   static constexpr int _cols = COLS;
+  bool _manage_storage;
 
   void setCols(size_t cols) { (void)cols; };
 
@@ -247,6 +250,13 @@ class IdTableImpl {
 template <>
 class IdTableImpl<0> {
  public:
+  IdTableImpl()
+      : _data(nullptr),
+        _size(0),
+        _capacity(0),
+        _cols(0),
+        _manage_storage(true) {}
+
   class ConstRow {
    public:
     ConstRow(const Id* data, size_t cols) : _data(data), _cols(cols) {}
@@ -477,6 +487,7 @@ class IdTableImpl<0> {
   size_t _size;
   size_t _capacity;
   size_t _cols;
+  bool _manage_storage;
 
   using const_row_type = ConstRow;
 };
@@ -490,6 +501,8 @@ class IdTableStatic : private IdTableImpl<COLS> {
   // Make all other instantiations of this template friends of this.
   template <int>
   friend class IdTableStatic;
+  template <int I>
+  friend void swap(IdTableStatic<I>& left, IdTableStatic<I>& right);
 
  private:
   static constexpr float GROWTH_FACTOR = 1.5;
@@ -505,6 +518,7 @@ class IdTableStatic : private IdTableImpl<COLS> {
     IdTableImpl<COLS>::_size = 0;
     IdTableImpl<COLS>::_capacity = 0;
     IdTableImpl<COLS>::setCols(0);
+    IdTableImpl<COLS>::_manage_storage = true;
   }
 
   IdTableStatic(size_t cols) {
@@ -512,14 +526,20 @@ class IdTableStatic : private IdTableImpl<COLS> {
     IdTableImpl<COLS>::_size = 0;
     IdTableImpl<COLS>::_capacity = 0;
     IdTableImpl<COLS>::setCols(cols);
+    IdTableImpl<COLS>::_manage_storage = true;
   }
-  virtual ~IdTableStatic() { free(IdTableImpl<COLS>::_data); }
+
+  virtual ~IdTableStatic() {
+    if (IdTableImpl<COLS>::_manage_storage) {
+      free(IdTableImpl<COLS>::_data);
+    }
+  }
 
   // Copy constructor
   IdTableStatic<COLS>(const IdTableStatic<COLS>& other) {
     IdTableImpl<COLS>::_data = other.IdTableImpl<COLS>::_data;
     IdTableImpl<COLS>::_size = other.IdTableImpl<COLS>::_size;
-    setCols(other.IdTableImpl<COLS>::_cols);
+    IdTableImpl<COLS>::setCols(other.IdTableImpl<COLS>::_cols);
     IdTableImpl<COLS>::_capacity = other.IdTableImpl<COLS>::_capacity;
     if (other.IdTableImpl<COLS>::_data != nullptr) {
       IdTableImpl<COLS>::_data =
@@ -529,32 +549,20 @@ class IdTableStatic : private IdTableImpl<COLS> {
           IdTableImpl<COLS>::_data, other.IdTableImpl<COLS>::_data,
           IdTableImpl<COLS>::_size * sizeof(Id) * IdTableImpl<COLS>::_cols);
     }
+    IdTableImpl<COLS>::_manage_storage = true;
   }
 
   // Move constructor
   IdTableStatic<COLS>(IdTableStatic<COLS>&& other) {
-    IdTableImpl<COLS>::_data = other.IdTableImpl<COLS>::_data;
-    IdTableImpl<COLS>::_size = other.IdTableImpl<COLS>::_size;
-    IdTableImpl<COLS>::_capacity = other.IdTableImpl<COLS>::_capacity;
-    IdTableImpl<COLS>::setCols(other.IdTableImpl<COLS>::_cols);
+    swap(*this, other);
     other.IdTableImpl<COLS>::_data = nullptr;
     other.IdTableImpl<COLS>::_size = 0;
     other.IdTableImpl<COLS>::_capacity = 0;
   }
 
   // copy assignment
-  IdTableStatic<0>& operator=(const IdTableStatic<0>& other) {
-    delete[] IdTableImpl<COLS>::_data;
-    // Use a placement new to call the copy constructor
-    new (this) IdTableStatic<0>(other);
-    return *this;
-  }
-
-  // move assignment
-  IdTableStatic<0>& operator=(IdTableStatic<0>&& other) {
-    delete[] IdTableImpl<COLS>::_data;
-    // Use a placement new to call the move constructor
-    new (this) IdTableStatic<0>(other);
+  IdTableStatic<COLS>& operator=(IdTableStatic<COLS> other) {
+    swap(*this, other);
     return *this;
   }
 
@@ -780,12 +788,7 @@ class IdTableStatic : private IdTableImpl<COLS> {
     IdTableImpl<COLS>::_size -= numErased;
   }
 
-  void clear() {
-    delete[] IdTableImpl<COLS>::_data;
-    IdTableImpl<COLS>::_data = nullptr;
-    IdTableImpl<COLS>::_size = 0;
-    IdTableImpl<COLS>::_capacity = 0;
-  }
+  void clear() { IdTableImpl<COLS>::_size = 0; }
 
   /**
    * @brief Ensures this table has enough space allocated to store rows many
@@ -827,6 +830,17 @@ class IdTableStatic : private IdTableImpl<COLS> {
     return tmp;
   };
 
+  template <int NEW_COLS>
+  const IdTableStatic<NEW_COLS> asStaticView() const {
+    IdTableStatic<NEW_COLS> tmp;
+    tmp._data = IdTableImpl<COLS>::_data;
+    tmp._size = IdTableImpl<COLS>::_size;
+    tmp._capacity = IdTableImpl<COLS>::_capacity;
+    // This prevents the view from freeing the memory
+    tmp._manage_storage = false;
+    return tmp;
+  };
+
   /**
    * @brief Creates an IdTable that now owns this
    * id tables data. This is effectively a move operation that also
@@ -837,25 +851,6 @@ class IdTableStatic : private IdTableImpl<COLS> {
     tmp._data = IdTableImpl<COLS>::_data;
     tmp._size = IdTableImpl<COLS>::_size;
     tmp._capacity = IdTableImpl<COLS>::_capacity;
-    IdTableImpl<COLS>::_data = nullptr;
-    IdTableImpl<COLS>::_size = 0;
-    IdTableImpl<COLS>::_capacity = 0;
-    return tmp;
-  };
-
-  /**
-   * Returns a dyamically sized IdTableStatic that conatains a copy of this
-   *tables data
-   **/
-  template <int NEW_COLS>
-  IdTableStatic<NEW_COLS> copyToStatic() const {
-    IdTableStatic<NEW_COLS> tmp();
-    tmp.IdTableImpl<COLS>::_data =
-        new Id[IdTableImpl<COLS>::_capacity * NEW_COLS];
-    std::memcpy(tmp.IdTableImpl<COLS>::_data, IdTableImpl<COLS>::_data,
-                sizeof(Id) * IdTableImpl<COLS>::_size * NEW_COLS);
-    tmp.IdTableImpl<COLS>::_size = IdTableImpl<COLS>::_size;
-    tmp.IdTableImpl<COLS>::_capacity = IdTableImpl<COLS>::_capacity;
     IdTableImpl<COLS>::_data = nullptr;
     IdTableImpl<COLS>::_size = 0;
     IdTableImpl<COLS>::_capacity = 0;
@@ -919,4 +914,19 @@ inline std::ostream& operator<<(std::ostream& out,
   }
   out << std::endl;
   return out;
+}
+
+template <int COLS>
+void swap(IdTableStatic<COLS>& left, IdTableStatic<COLS>& right) {
+  using std::swap;
+  swap(left._data, right._data);
+  swap(left._size, right._size);
+  swap(left._capacity, right._capacity);
+  // As the cols member only exists for COLS = 0 we use the setCols
+  // method here. setCols is guaranteed to always be defined even
+  // if COLS != 0 (It might not have any effect though).
+  size_t rcols = right.cols();
+  right.IdTableImpl<COLS>::setCols(left.cols());
+  left.IdTableImpl<COLS>::setCols(rcols);
+  swap(left._manage_storage, right._manage_storage);
 }

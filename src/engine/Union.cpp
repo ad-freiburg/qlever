@@ -189,7 +189,6 @@ void Union::computeUnion(
     } else {
       for (const auto& r : right) {
         res->emplace_back();
-        res->emplace_back();
         size_t backIdx = res->size() - 1;
         for (size_t i = 0; i < columnOrigins.size(); i++) {
           const std::array<size_t, 2>& co = columnOrigins[i];

@@ -3,6 +3,7 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 
 #include "CountAvailablePredicates.h"
+#include "CallFixedSize.h"
 
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec)
@@ -145,9 +146,9 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
     if (getIndex().getVocab().getId(_subjectEntityName.value(), &entityId)) {
       IdTable input(1);
       input.push_back({entityId});
-      CountAvailablePredicates::computePatternTrick(input, &result->_data,
-                                                    hasPattern, hasPredicate,
-                                                    patterns, 0, &runtimeInfo);
+      CALL_FIXED_SIZE_1(
+          input.cols(), CountAvailablePredicates::computePatternTrick, input,
+          &result->_data, hasPattern, hasPredicate, patterns, 0, &runtimeInfo);
     }
   } else if (_subtree == nullptr) {
     runtimeInfo.setDescriptor("CountAvailablePredicates for all entities");
@@ -160,9 +161,11 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
     runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
-    CountAvailablePredicates::computePatternTrick(
-        subresult->_data, &result->_data, hasPattern, hasPredicate, patterns,
-        _subjectColumnIndex, &runtimeInfo);
+
+    CALL_FIXED_SIZE_1(subresult->_data.cols(),
+                      CountAvailablePredicates::computePatternTrick,
+                      subresult->_data, &result->_data, hasPattern,
+                      hasPredicate, patterns, 0, &runtimeInfo);
   }
   LOG(DEBUG) << "CountAvailablePredicates result computation done."
              << std::endl;
@@ -211,13 +214,18 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   }
 }
 
+template <int I>
 void CountAvailablePredicates::computePatternTrick(
-    const IdTable& input, IdTable* result, const vector<PatternID>& hasPattern,
+    const IdTable& dynInput, IdTable* dynResult,
+    const vector<PatternID>& hasPattern,
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns, const size_t subjectColumn,
     RuntimeInformation* runtimeInfo) {
+  const IdTableStatic<I> input = dynInput.asStaticView<I>();
+  IdTableStatic<2> result = dynResult->moveToStatic<2>();
   LOG(DEBUG) << "For " << input.size() << " entities in column "
              << subjectColumn << std::endl;
+
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
   size_t inputIdx = 0;
@@ -276,9 +284,9 @@ void CountAvailablePredicates::computePatternTrick(
     }
   }
   // write the predicate counts to the result
-  result->reserve(predicateCounts.size());
+  result.reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
-    result->push_back({it.first, static_cast<Id>(it.second)});
+    result.push_back({it.first, static_cast<Id>(it.second)});
   }
 
   // Print interesting statistics about the pattern trick
@@ -324,4 +332,5 @@ void CountAvailablePredicates::computePatternTrick(
   runtimeInfo->addDetail("costWithoutPatterns", costWithoutPatterns);
   runtimeInfo->addDetail("costWithPatterns", costWithPatterns);
   runtimeInfo->addDetail("costRatio", costRatio * 100);
+  *dynResult = result.moveToDynamic();
 }

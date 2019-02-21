@@ -417,8 +417,8 @@ TEST(IdTableTest, conversion) {
   IdTable initial = table;
 
   IdTableStatic<3> s = table.moveToStatic<3>();
-  ASSERT_EQ(4, s.size());
-  ASSERT_EQ(3, s.cols());
+  ASSERT_EQ(4u, s.size());
+  ASSERT_EQ(3u, s.cols());
   for (size_t i = 0; i < s.size(); i++) {
     for (size_t j = 0; j < s.cols(); j++) {
       ASSERT_EQ(initial(i, j), s(i, j));
@@ -426,11 +426,20 @@ TEST(IdTableTest, conversion) {
   }
 
   table = s.moveToDynamic();
-  ASSERT_EQ(4, table.size());
-  ASSERT_EQ(3, table.cols());
+  ASSERT_EQ(4u, table.size());
+  ASSERT_EQ(3u, table.cols());
   for (size_t i = 0; i < table.size(); i++) {
     for (size_t j = 0; j < table.cols(); j++) {
       ASSERT_EQ(initial(i, j), table(i, j));
+    }
+  }
+
+  const IdTableStatic<3> view = table.asStaticView<3>();
+  ASSERT_EQ(4u, view.size());
+  ASSERT_EQ(3u, view.cols());
+  for (size_t i = 0; i < view.size(); i++) {
+    for (size_t j = 0; j < view.cols(); j++) {
+      ASSERT_EQ(initial(i, j), view(i, j));
     }
   }
 }
