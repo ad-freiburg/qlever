@@ -6,6 +6,7 @@
 #include <sstream>
 #include <unordered_set>
 #include "./QueryExecutionTree.h"
+#include "CallFixedSize.h"
 
 using std::string;
 
@@ -121,8 +122,12 @@ void Join::computeResult(ResultTable* result) {
   }
   result->_sortedBy = {_leftJoinCol};
 
-  getEngine().join(leftRes->_data, _leftJoinCol, rightRes->_data, _rightJoinCol,
-                   &result->_data);
+  int lwidth = leftRes->_data.cols();
+  int rwidth = rightRes->_data.cols();
+  int reswidth = result->_data.cols();
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, getEngine().join, leftRes->_data,
+                    _leftJoinCol, rightRes->_data, _rightJoinCol,
+                    &result->_data);
 
   LOG(DEBUG) << "Join result computation done." << endl;
 }

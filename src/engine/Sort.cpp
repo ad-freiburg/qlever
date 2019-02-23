@@ -4,6 +4,7 @@
 
 #include "./Sort.h"
 #include <sstream>
+#include "CallFixedSize.h"
 #include "QueryExecutionTree.h"
 
 using std::string;
@@ -53,7 +54,8 @@ void Sort::computeResult(ResultTable* result) {
                        subRes->_data.end());
   // std::cout << "before\n" << subRes->_data << std::endl;
   // std::cout << "After insert\n" << result->_data << std::endl;
-  getEngine().sort(&result->_data, _sortCol);
+  int width = result->_data.cols();
+  CALL_FIXED_SIZE_1(width, Engine::sort, &result->_data, _sortCol);
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "Sort result computation done." << endl;

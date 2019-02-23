@@ -4,9 +4,10 @@
 
 #include <sstream>
 
-#include "./Comparators.h"
-#include "./OrderBy.h"
-#include "./QueryExecutionTree.h"
+#include "CallFixedSize.h"
+#include "Comparators.h"
+#include "OrderBy.h"
+#include "QueryExecutionTree.h"
 
 using std::string;
 
@@ -76,7 +77,22 @@ void OrderBy::computeResult(ResultTable* result) {
   result->_localVocab = subRes->_localVocab;
   result->_data.insert(result->_data.end(), subRes->_data.begin(),
                        subRes->_data.end());
-  getEngine().sort(&result->_data, OBComp(_sortIndices));
+
+  int width = result->_data.cols();
+  // CALL_FIXED_SIZE_1(width, getEngine().sort, &result->_data,
+  //                   OBComp(_sortIndices));
+  CALL_FIXED_SIZE_1(width, getEngine().sort, &result->_data,
+                    [this](const auto& a, const auto& b) {
+                      for (auto& entry : _sortIndices) {
+                        if (a[entry.first] < b[entry.first]) {
+                          return !entry.second;
+                        }
+                        if (a[entry.first] > b[entry.first]) {
+                          return entry.second;
+                        }
+                      }
+                      return a[0] < b[0];
+                    });
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "OrderBy result computation done." << endl;

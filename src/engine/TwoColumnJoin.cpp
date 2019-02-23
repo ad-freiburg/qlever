@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./TwoColumnJoin.h"
+#include "TwoColumnJoin.h"
+#include "CallFixedSize.h"
 
 using std::string;
 
@@ -122,7 +123,10 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
 
     const auto& toFilter = rightFilter ? leftResult : rightResult;
 
-    getEngine().filter(toFilter->_data, jc1, jc2, filter, &result->_data);
+    int inWidth = toFilter->_data.cols();
+    int filterWidth = filter.cols();
+    CALL_FIXED_SIZE_2(inWidth, filterWidth, getEngine().filter, toFilter->_data,
+                      jc1, jc2, filter, &result->_data);
 
     LOG(DEBUG) << "TwoColumnJoin result computation done." << endl;
     return;

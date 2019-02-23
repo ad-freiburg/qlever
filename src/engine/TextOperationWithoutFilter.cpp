@@ -79,37 +79,16 @@ void TextOperationWithoutFilter::computeResultOneVar(
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultMultVars(
     ResultTable* result) const {
-  if (_nofVars == 2) {
-    result->_nofColumns = 4;
-    result->_data.setCols(4);
-    result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-    result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
+  result->_nofColumns = _nofVars + 2;
+  result->_data.setCols(result->_nofColumns);
+  result->_resultTypes.reserve(result->_nofColumns);
+  result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
+  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
+  for (size_t i = 2; i < result->_nofColumns; i++) {
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    getExecutionContext()->getIndex().getECListForWords(
-        _words, _nofVars, _textLimit, &result->_data);
-  } else if (_nofVars == 3) {
-    result->_nofColumns = 5;
-    result->_data.setCols(5);
-    result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-    result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    getExecutionContext()->getIndex().getECListForWords(
-        _words, _nofVars, _textLimit, &result->_data);
-  } else {
-    result->_nofColumns = _nofVars + 2;
-    result->_data.setCols(result->_nofColumns);
-    result->_resultTypes.reserve(result->_nofColumns);
-    result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
-    result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-    for (size_t i = 2; i < result->_nofColumns; i++) {
-      result->_resultTypes.push_back(ResultTable::ResultType::KB);
-    }
-    getExecutionContext()->getIndex().getECListForWords(
-        _words, _nofVars, _textLimit, &result->_data);
   }
+  getExecutionContext()->getIndex().getECListForWords(
+      _words, _nofVars, _textLimit, &result->_data);
 }
 
 // _____________________________________________________________________________

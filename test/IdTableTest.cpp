@@ -442,4 +442,40 @@ TEST(IdTableTest, conversion) {
       ASSERT_EQ(initial(i, j), view(i, j));
     }
   }
+
+  // Test with more than 5 columns
+  IdTable tableVar(6);
+  tableVar.push_back({1, 2, 3, 6, 5, 9});
+  tableVar.push_back({0, 4, 3, 4, 5, 3});
+  tableVar.push_back({3, 2, 3, 2, 5, 6});
+  tableVar.push_back({5, 5, 9, 4, 7, 0});
+
+  IdTable initialVar = tableVar;
+
+  IdTableStatic<6> staticVar = tableVar.moveToStatic<6>();
+  ASSERT_EQ(initialVar.size(), staticVar.size());
+  ASSERT_EQ(initialVar.cols(), staticVar.cols());
+  for (size_t i = 0; i < staticVar.size(); i++) {
+    for (size_t j = 0; j < staticVar.cols(); j++) {
+      ASSERT_EQ(initialVar(i, j), staticVar(i, j));
+    }
+  }
+
+  IdTable dynamicVar = staticVar.moveToDynamic();
+  ASSERT_EQ(initialVar.size(), dynamicVar.size());
+  ASSERT_EQ(initialVar.cols(), dynamicVar.cols());
+  for (size_t i = 0; i < dynamicVar.size(); i++) {
+    for (size_t j = 0; j < dynamicVar.cols(); j++) {
+      ASSERT_EQ(initialVar(i, j), dynamicVar(i, j));
+    }
+  }
+
+  const IdTableStatic<6> viewVar = dynamicVar.asStaticView<6>();
+  ASSERT_EQ(initialVar.size(), viewVar.size());
+  ASSERT_EQ(initialVar.cols(), viewVar.cols());
+  for (size_t i = 0; i < viewVar.size(); i++) {
+    for (size_t j = 0; j < viewVar.cols(); j++) {
+      ASSERT_EQ(initialVar(i, j), viewVar(i, j));
+    }
+  }
 }

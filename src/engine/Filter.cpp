@@ -2,11 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./Filter.h"
+#include "Filter.h"
 #include <optional>
 #include <regex>
 #include <sstream>
-#include "./QueryExecutionTree.h"
+#include "CallFixedSize.h"
+#include "QueryExecutionTree.h"
 
 using std::string;
 
@@ -107,9 +108,9 @@ std::string Filter::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-template <ResultTable::ResultType T>
-void Filter::computeFilter(IdTable* res, size_t lhs, size_t rhs,
-                           const IdTable& input) const {
+template <ResultTable::ResultType T, int WIDTH>
+void Filter::computeFilter(IdTableStatic<WIDTH>* result, size_t lhs, size_t rhs,
+                           const IdTableStatic<WIDTH>& input) const {
   switch (_type) {
     case SparqlFilter::EQ:
       getEngine().filter(input,
@@ -117,7 +118,7 @@ void Filter::computeFilter(IdTable* res, size_t lhs, size_t rhs,
                            return ValueReader<T>::get(e[lhs]) ==
                                   ValueReader<T>::get(e[rhs]);
                          },
-                         res);
+                         result);
       break;
     case SparqlFilter::NE:
       getEngine().filter(input,
@@ -125,7 +126,7 @@ void Filter::computeFilter(IdTable* res, size_t lhs, size_t rhs,
                            return ValueReader<T>::get(e[lhs]) !=
                                   ValueReader<T>::get(e[rhs]);
                          },
-                         res);
+                         result);
       break;
     case SparqlFilter::LT:
       getEngine().filter(input,
@@ -133,7 +134,7 @@ void Filter::computeFilter(IdTable* res, size_t lhs, size_t rhs,
                            return ValueReader<T>::get(e[lhs]) <
                                   ValueReader<T>::get(e[rhs]);
                          },
-                         res);
+                         result);
       break;
     case SparqlFilter::LE:
       getEngine().filter(input,
@@ -141,7 +142,7 @@ void Filter::computeFilter(IdTable* res, size_t lhs, size_t rhs,
                            return ValueReader<T>::get(e[lhs]) <=
                                   ValueReader<T>::get(e[rhs]);
                          },
-                         res);
+                         result);
       break;
     case SparqlFilter::GT:
       getEngine().filter(input,
@@ -149,7 +150,7 @@ void Filter::computeFilter(IdTable* res, size_t lhs, size_t rhs,
                            return ValueReader<T>::get(e[lhs]) >
                                   ValueReader<T>::get(e[rhs]);
                          },
-                         res);
+                         result);
       break;
     case SparqlFilter::GE:
       getEngine().filter(input,
@@ -157,7 +158,7 @@ void Filter::computeFilter(IdTable* res, size_t lhs, size_t rhs,
                            return ValueReader<T>::get(e[lhs]) >=
                                   ValueReader<T>::get(e[rhs]);
                          },
-                         res);
+                         result);
       break;
     case SparqlFilter::LANG_MATCHES:
       AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
@@ -177,6 +178,42 @@ void Filter::computeFilter(IdTable* res, size_t lhs, size_t rhs,
   }
 }
 
+template <int WIDTH>
+void Filter::computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
+                                       size_t rhsInd, const IdTable& dynInput,
+                                       ResultTable::ResultType lhsType) {
+  const IdTableStatic<WIDTH> input = dynInput.asStaticView<WIDTH>();
+  IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
+  switch (lhsType) {
+    case ResultTable::ResultType::KB:
+      computeFilter<ResultTable::ResultType::KB>(&result, lhsInd, rhsInd,
+                                                 input);
+      break;
+    case ResultTable::ResultType::VERBATIM:
+      computeFilter<ResultTable::ResultType::VERBATIM>(&result, lhsInd, rhsInd,
+                                                       input);
+      break;
+    case ResultTable::ResultType::FLOAT:
+      computeFilter<ResultTable::ResultType::FLOAT>(&result, lhsInd, rhsInd,
+                                                    input);
+      break;
+    case ResultTable::ResultType::LOCAL_VOCAB:
+      computeFilter<ResultTable::ResultType::LOCAL_VOCAB>(&result, lhsInd,
+                                                          rhsInd, input);
+      break;
+    case ResultTable::ResultType::TEXT:
+      computeFilter<ResultTable::ResultType::TEXT>(&result, lhsInd, rhsInd,
+                                                   input);
+      break;
+    default:
+      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+               "Tried to compute a filter on an unknown result type " +
+                   std::to_string(static_cast<int>(lhsType)));
+      break;
+  }
+  *dynResult = result.moveToDynamic();
+}
+
 // _____________________________________________________________________________
 void Filter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
@@ -192,50 +229,24 @@ void Filter::computeResult(ResultTable* result) {
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
   size_t lhsInd = _subtree->getVariableColumn(_lhs);
-
+  int width = result->_nofColumns;
   if (_rhs[0] == '?') {
     size_t rhsInd = _subtree->getVariableColumn(_rhs);
-    switch (subRes->getResultType(lhsInd)) {
-      case ResultTable::ResultType::KB:
-        computeFilter<ResultTable::ResultType::KB>(&result->_data, lhsInd,
-                                                   rhsInd, subRes->_data);
-        break;
-      case ResultTable::ResultType::VERBATIM:
-        computeFilter<ResultTable::ResultType::VERBATIM>(&result->_data, lhsInd,
-                                                         rhsInd, subRes->_data);
-        break;
-      case ResultTable::ResultType::FLOAT:
-        computeFilter<ResultTable::ResultType::FLOAT>(&result->_data, lhsInd,
-                                                      rhsInd, subRes->_data);
-        break;
-      case ResultTable::ResultType::LOCAL_VOCAB:
-        computeFilter<ResultTable::ResultType::LOCAL_VOCAB>(
-            &result->_data, lhsInd, rhsInd, subRes->_data);
-        break;
-      case ResultTable::ResultType::TEXT:
-        computeFilter<ResultTable::ResultType::TEXT>(&result->_data, lhsInd,
-                                                     rhsInd, subRes->_data);
-        break;
-      default:
-
-        AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                 "Tried to compute a filter on an unknown result type " +
-                     std::to_string(
-                         static_cast<int>(subRes->getResultType(lhsInd))));
-        break;
-    }
+    CALL_FIXED_SIZE_1(width, computeResultDynamicValue, &result->_data, lhsInd,
+                      rhsInd, subRes->_data, subRes->getResultType(lhsInd));
   } else {
     // compare the left column to a fixed value
-    return computeResultFixedValue(result, subRes);
+    CALL_FIXED_SIZE_1(width, computeResultFixedValue, result, subRes);
   }
 
   LOG(DEBUG) << "Filter result computation done." << endl;
 }
 
 // _____________________________________________________________________________
-template <ResultTable::ResultType T>
+template <ResultTable::ResultType T, int WIDTH>
 void Filter::computeFilterFixedValue(
-    IdTable* res, size_t lhs, Id rhs, const IdTable& input,
+    IdTableStatic<WIDTH>* res, size_t lhs, Id rhs,
+    const IdTableStatic<WIDTH>& input,
     shared_ptr<const ResultTable> subRes) const {
   bool lhs_is_sorted =
       subRes->_sortedBy.size() > 0 && subRes->_sortedBy[0] == lhs;
@@ -471,10 +482,13 @@ void Filter::computeFilterFixedValue(
 }
 
 // _____________________________________________________________________________
+template <int WIDTH>
 void Filter::computeResultFixedValue(
-    ResultTable* result,
+    ResultTable* resultTable,
     const std::shared_ptr<const ResultTable> subRes) const {
   LOG(DEBUG) << "Filter result computation..." << endl;
+  IdTableStatic<WIDTH> result = resultTable->_data.moveToStatic<WIDTH>();
+  const IdTableStatic<WIDTH> input = subRes->_data.asStaticView<WIDTH>();
 
   // interpret the filters right hand side
   size_t lhs = _subtree->getVariableColumn(_lhs);
@@ -572,24 +586,24 @@ void Filter::computeResultFixedValue(
   }
   switch (resultType) {
     case ResultTable::ResultType::KB:
-      computeFilterFixedValue<ResultTable::ResultType::KB>(
-          &result->_data, lhs, rhs, subRes->_data, subRes);
+      computeFilterFixedValue<ResultTable::ResultType::KB>(&result, lhs, rhs,
+                                                           input, subRes);
       break;
     case ResultTable::ResultType::VERBATIM:
       computeFilterFixedValue<ResultTable::ResultType::VERBATIM>(
-          &result->_data, lhs, rhs, subRes->_data, subRes);
+          &result, lhs, rhs, input, subRes);
       break;
     case ResultTable::ResultType::FLOAT:
-      computeFilterFixedValue<ResultTable::ResultType::FLOAT>(
-          &result->_data, lhs, rhs, subRes->_data, subRes);
+      computeFilterFixedValue<ResultTable::ResultType::FLOAT>(&result, lhs, rhs,
+                                                              input, subRes);
       break;
     case ResultTable::ResultType::LOCAL_VOCAB:
       computeFilterFixedValue<ResultTable::ResultType::LOCAL_VOCAB>(
-          &result->_data, lhs, rhs, subRes->_data, subRes);
+          &result, lhs, rhs, input, subRes);
       break;
     case ResultTable::ResultType::TEXT:
-      computeFilterFixedValue<ResultTable::ResultType::TEXT>(
-          &result->_data, lhs, rhs, subRes->_data, subRes);
+      computeFilterFixedValue<ResultTable::ResultType::TEXT>(&result, lhs, rhs,
+                                                             input, subRes);
       break;
     default:
       AD_THROW(
@@ -598,6 +612,6 @@ void Filter::computeResultFixedValue(
               std::to_string(static_cast<int>(subRes->getResultType(lhs))));
       break;
   }
-
   LOG(DEBUG) << "Filter result computation done." << endl;
+  resultTable->_data = result.moveToDynamic();
 }

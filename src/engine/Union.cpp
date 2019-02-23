@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 #include "Union.h"
+#include "CallFixedSize.h"
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
 
@@ -141,32 +142,55 @@ void Union::computeResult(ResultTable* result) {
   }
   result->_nofColumns = getResultWidth();
   result->_data.setCols(result->_nofColumns);
-  computeUnion(&result->_data, subRes1->_data, subRes2->_data, _columnOrigins);
+  int leftWidth = subRes1->_data.cols();
+  int rightWidth = subRes2->_data.cols();
+  int outWidth = result->_data.cols();
+  CALL_FIXED_SIZE_3(leftWidth, rightWidth, outWidth, computeUnion,
+                    &result->_data, subRes1->_data, subRes2->_data,
+                    _columnOrigins);
 
   LOG(DEBUG) << "Union result computation done." << std::endl;
 }
 
+template <int LEFT_WIDTH, int RIGHT_WIDTH, int OUT_WIDTH>
 void Union::computeUnion(
-    IdTable* res, const IdTable& left, const IdTable& right,
+    IdTable* dynRes, const IdTable& dynLeft, const IdTable& dynRight,
     const std::vector<std::array<size_t, 2>>& columnOrigins) {
-  res->reserve(left.size() + right.size());
+  const IdTableStatic<LEFT_WIDTH> left = dynLeft.asStaticView<LEFT_WIDTH>();
+  const IdTableStatic<RIGHT_WIDTH> right = dynRight.asStaticView<RIGHT_WIDTH>();
+  IdTableStatic<OUT_WIDTH> res = dynRes->moveToStatic<OUT_WIDTH>();
+
+  res.reserve(left.size() + right.size());
   if (left.size() > 0) {
-    if (left.cols() == columnOrigins.size()) {
+    bool columnsMatch = left.cols() == columnOrigins.size();
+    // check if the order of the columns matches
+    for (size_t i = 0; columnsMatch && i < columnOrigins.size(); i++) {
+      const std::array<size_t, 2>& co = columnOrigins[i];
+      if (co[0] != i) {
+        columnsMatch = false;
+      }
+    }
+    if (columnsMatch) {
       // Left and right have the same columns, we can simply copy the entries.
       // As the variableColumnMap of left was simply copied over to create
       // this operations variableColumnMap the order of the columns will
       // be the same.
-      res->insert(res->end(), left.begin(), left.end());
+      // This if clause is only here to avoid creating the call to insert when
+      // it would not be possible to call the function due to not matching
+      // columns.
+      if constexpr (LEFT_WIDTH == OUT_WIDTH) {
+        res.insert(res.end(), left.begin(), left.end());
+      }
     } else {
       for (const auto& l : left) {
-        res->emplace_back();
-        size_t backIdx = res->size() - 1;
+        res.emplace_back();
+        size_t backIdx = res.size() - 1;
         for (size_t i = 0; i < columnOrigins.size(); i++) {
           const std::array<size_t, 2>& co = columnOrigins[i];
           if (co[0] != Union::NO_COLUMN) {
-            (*res)(backIdx, i) = l[co[0]];
+            res(backIdx, i) = l[co[0]];
           } else {
-            (*res)(backIdx, i) = ID_NO_VALUE;
+            res(backIdx, i) = ID_NO_VALUE;
           }
         }
       }
@@ -185,20 +209,23 @@ void Union::computeUnion(
     if (columnsMatch) {
       // The columns of the right subtree and the result match, we can
       // just copy the entries.
-      res->insert(res->end(), right.begin(), right.end());
+      if constexpr (RIGHT_WIDTH == OUT_WIDTH) {
+        res.insert(res.end(), right.begin(), right.end());
+      }
     } else {
       for (const auto& r : right) {
-        res->emplace_back();
-        size_t backIdx = res->size() - 1;
+        res.emplace_back();
+        size_t backIdx = res.size() - 1;
         for (size_t i = 0; i < columnOrigins.size(); i++) {
           const std::array<size_t, 2>& co = columnOrigins[i];
           if (co[1] != Union::NO_COLUMN) {
-            (*res)(backIdx, i) = r[co[1]];
+            res(backIdx, i) = r[co[1]];
           } else {
-            (*res)(backIdx, i) = ID_NO_VALUE;
+            res(backIdx, i) = ID_NO_VALUE;
           }
         }
       }
     }
   }
+  *dynRes = res.moveToDynamic();
 }

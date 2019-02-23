@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
-#include "./MultiColumnJoin.h"
+#include "MultiColumnJoin.h"
+#include "CallFixedSize.h"
 
 using std::string;
 
@@ -106,8 +107,12 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Computing a multi column join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
 
-  computeMultiColumnJoin(leftResult->_data, rightResult->_data, _joinColumns,
-                         &result->_data);
+  int leftWidth = leftResult->_data.cols();
+  int rightWidth = rightResult->_data.cols();
+  int resWidth = result->_data.cols();
+  CALL_FIXED_SIZE_3(leftWidth, rightWidth, resWidth, computeMultiColumnJoin,
+                    leftResult->_data, rightResult->_data, _joinColumns,
+                    &result->_data);
   LOG(DEBUG) << "MultiColumnJoin result computation done." << endl;
 }
 
@@ -238,11 +243,12 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
   _multiplicitiesComputed = true;
 }
 
+template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
 void MultiColumnJoin::computeMultiColumnJoin(
-    const IdTable& a, const IdTable& b, const vector<array<Id, 2>>& joinColumns,
-    IdTable* result) {
+    const IdTable& dynA, const IdTable& dynB,
+    const vector<array<Id, 2>>& joinColumns, IdTable* dynResult) {
   // check for trivial cases
-  if (a.size() == 0 || b.size() == 0) {
+  if (dynA.size() == 0 || dynB.size() == 0) {
     return;
   }
 
@@ -257,8 +263,8 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // Cast away constness so we can add sentinels that will be removed
   // in the end and create and add those sentinels.
   //
-  IdTable& l1 = const_cast<IdTable&>(a);
-  IdTable& l2 = const_cast<IdTable&>(b);
+  IdTable& l1 = const_cast<IdTable&>(dynA);
+  IdTable& l2 = const_cast<IdTable&>(dynB);
   Id sentVal = std::numeric_limits<Id>::max() - 1;
 
   l1.emplace_back();
@@ -269,6 +275,10 @@ void MultiColumnJoin::computeMultiColumnJoin(
   for (size_t i = 0; i < l2.cols(); i++) {
     l2.back()[i] = sentVal;
   }
+
+  IdTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
+  IdTableStatic<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
+  IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
 
   bool matched = false;
   size_t ia = 0, ib = 0;
@@ -305,18 +315,18 @@ void MultiColumnJoin::computeMultiColumnJoin(
       size_t initIb = ib;
 
       while (matched) {
-        result->emplace_back();
-        size_t backIdx = result->size() - 1;
+        result.emplace_back();
+        size_t backIdx = result.size() - 1;
 
         // fill the result
         unsigned int rIndex = 0;
         for (size_t col = 0; col < a.cols(); col++) {
-          (*result)(backIdx, rIndex) = a(ia, col);
+          result(backIdx, rIndex) = a(ia, col);
           rIndex++;
         }
         for (size_t col = 0; col < b.cols(); col++) {
           if ((joinColumnBitmap_b & (1 << col)) == 0) {
-            (*result)(backIdx, rIndex) = b(ib, col);
+            result(backIdx, rIndex) = b(ib, col);
             rIndex++;
           }
         }
@@ -350,7 +360,9 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // remove the sentinels
   l1.pop_back();
   l2.pop_back();
-  if (result->back()[joinColumns[0][0]] == sentVal) {
-    result->pop_back();
+  if (result.size() > 0 && result.back()[joinColumns[0][0]] == sentVal) {
+    result.pop_back();
   }
+
+  *dynResult = result.moveToDynamic();
 }

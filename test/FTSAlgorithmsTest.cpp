@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+#include "../src/engine/CallFixedSize.h"
 #include "../src/index/FTSAlgorithms.h"
 
 TEST(FTSAlgorithmsTest, filterByRangeTest) {
@@ -237,7 +238,9 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
     vector<Id> eids;
     vector<Score> scores;
 
-    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
+    int width = result.cols();
+    CALL_FIXED_SIZE_1(width, FTSAlgorithms::aggScoresAndTakeTopKContexts, cids,
+                      eids, scores, 2, &result);
     ASSERT_EQ(0u, result.size());
 
     cids.push_back(0);
@@ -252,7 +255,8 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
     scores.push_back(1);
     scores.push_back(2);
 
-    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
+    CALL_FIXED_SIZE_1(width, FTSAlgorithms::aggScoresAndTakeTopKContexts, cids,
+                      eids, scores, 2, &result);
     ASSERT_EQ(2u, result.size());
     ASSERT_EQ(2u, result(0, 0));
     ASSERT_EQ(0u, result(0, 2));
@@ -266,7 +270,8 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
     scores.push_back(1);
 
     result.clear();
-    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
+    CALL_FIXED_SIZE_1(width, FTSAlgorithms::aggScoresAndTakeTopKContexts, cids,
+                      eids, scores, 2, &result);
     ASSERT_EQ(3u, result.size());
     std::sort(result.begin(), result.end(),
               [](const auto& a, const auto& b) { return a[0] < b[0]; });
@@ -288,7 +293,9 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   vector<Id> cids;
   vector<Id> eids;
   vector<Score> scores;
-  FTSAlgorithms::aggScoresAndTakeTopContext(cids, eids, scores, &result);
+  int width = result.cols();
+  CALL_FIXED_SIZE_1(width, FTSAlgorithms::aggScoresAndTakeTopContext, cids,
+                    eids, scores, &result);
   ASSERT_EQ(0u, result.size());
 
   cids.push_back(0);
@@ -303,7 +310,8 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   scores.push_back(1);
   scores.push_back(2);
 
-  FTSAlgorithms::aggScoresAndTakeTopContext(cids, eids, scores, &result);
+  CALL_FIXED_SIZE_1(width, FTSAlgorithms::aggScoresAndTakeTopContext, cids,
+                    eids, scores, &result);
   ASSERT_EQ(1u, result.size());
   ASSERT_EQ(2u, result(0, 0));
   ASSERT_EQ(3u, result(0, 1));
@@ -313,7 +321,8 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   eids.push_back(1);
   scores.push_back(1);
 
-  FTSAlgorithms::aggScoresAndTakeTopContext(cids, eids, scores, &result);
+  CALL_FIXED_SIZE_1(width, FTSAlgorithms::aggScoresAndTakeTopContext, cids,
+                    eids, scores, &result);
   ASSERT_EQ(2u, result.size());
   std::sort(result.begin(), result.end(),
             [](const auto& a, const auto& b) { return a[2] < b[2]; });
@@ -328,7 +337,8 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
   eids.push_back(0);
   scores.push_back(10);
 
-  FTSAlgorithms::aggScoresAndTakeTopContext(cids, eids, scores, &result);
+  CALL_FIXED_SIZE_1(width, FTSAlgorithms::aggScoresAndTakeTopContext, cids,
+                    eids, scores, &result);
   ASSERT_EQ(2u, result.size());
   std::sort(result.begin(), result.end(),
             [](const auto& a, const auto& b) { return a[2] < b[2]; });
@@ -440,14 +450,16 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   size_t nofVars = 2;
   size_t k = 1;
   IdTable resW4(4);
-  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                      nofVars, k, &resW4);
+  int width = resW4.cols();
+  CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, nofVars, k, &resW4);
   ASSERT_EQ(0u, resW4.size());
   nofVars = 5;
   k = 10;
   IdTable resWV(13);
-  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                      nofVars, k, &resWV);
+  width = resWV.cols();
+  CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, nofVars, k, &resWV);
   ASSERT_EQ(0u, resWV.size());
 
   cids.push_back(0);
@@ -473,8 +485,9 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
 
   nofVars = 2;
   k = 1;
-  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                      nofVars, k, &resW4);
+  width = resW4.cols();
+  CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, nofVars, k, &resW4);
 
   // Res 0-0-0 (3) | 0-1 1-0 1-1 (2) | 0-2 1-2 2-0 2-1 2-2 (1)
   ASSERT_EQ(9u, resW4.size());
@@ -491,8 +504,8 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   ASSERT_EQ(1u, resW4(5, 1));
   k = 2;
   resW4.clear();
-  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                      nofVars, k, &resW4);
+  CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, nofVars, k, &resW4);
   ASSERT_EQ(13u, resW4.size());
   std::sort(std::begin(resW4), std::end(resW4),
             [](const auto& a, const auto& b) { return a[1] > b[1]; });
@@ -508,13 +521,15 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   nofVars = 3;
   k = 1;
   IdTable resW5(5);
-  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                      nofVars, k, &resW5);
+  width = resW5.cols();
+  CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, nofVars, k, &resW5);
   ASSERT_EQ(27u, resW5.size());  // Res size 3^3
 
   nofVars = 10;
-  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                      nofVars, k, &resWV);
+  width = resWV.cols();
+  CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, nofVars, k, &resWV);
   ASSERT_EQ(59049u, resWV.size());  // Res size: 3^10 = 59049
 }
 
@@ -526,8 +541,10 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   IdTable resW3(3);
   ad_utility::HashMap<Id, IdTable> fMap1;
 
-  FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                          fMap1, k, &resW3);
+  int width = resW3.cols();
+  CALL_FIXED_SIZE_1(width,
+                    FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, fMap1, k, &resW3);
   ASSERT_EQ(0u, resW3.size());
 
   cids.push_back(0);
@@ -551,27 +568,31 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   scores.push_back(1);
   scores.push_back(1);
 
-  FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                          fMap1, k, &resW3);
+  CALL_FIXED_SIZE_1(width,
+                    FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, fMap1, k, &resW3);
   ASSERT_EQ(0u, resW3.size());
 
   fMap1[1] = IdTable(1);
   fMap1[1].push_back({1});
 
-  FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                          fMap1, k, &resW3);
+  CALL_FIXED_SIZE_1(width,
+                    FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, fMap1, k, &resW3);
   ASSERT_EQ(1u, resW3.size());
   resW3.clear();
   k = 10;
-  FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                          fMap1, k, &resW3);
+  CALL_FIXED_SIZE_1(width,
+                    FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, fMap1, k, &resW3);
   ASSERT_EQ(2u, resW3.size());
 
   fMap1[0] = IdTable(1);
   fMap1[0].push_back({0});
   resW3.clear();
-  FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                          fMap1, k, &resW3);
+  CALL_FIXED_SIZE_1(width,
+                    FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, fMap1, k, &resW3);
   ASSERT_EQ(5u, resW3.size());
 
   ad_utility::HashMap<Id, IdTable> fMap4;
@@ -581,15 +602,18 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   fMap4[0].push_back({0, 2, 0, 0});
   IdTable resVar(7);
   k = 1;
-  FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                          fMap4, k, &resVar);
+  width = 7;
+  CALL_FIXED_SIZE_1(width,
+                    FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, fMap4, k, &resVar);
   ASSERT_EQ(3u, resVar.size());
 
   fMap4[2] = IdTable(4);
   fMap4[2].push_back({2, 2, 2, 2});
   resVar.clear();
-  FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                          fMap4, k, &resVar);
+  CALL_FIXED_SIZE_1(width,
+                    FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, fMap4, k, &resVar);
   ASSERT_EQ(4u, resVar.size());
 }
 
@@ -624,15 +648,18 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
     ad_utility::HashMap<Id, IdTable> fMap1;
 
     size_t nofVars = 2;
-    FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
-        cids, eids, scores, fMap1, nofVars, k, &resW4);
+    int width = resW4.cols();
+    CALL_FIXED_SIZE_1(width,
+                      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
+                      cids, eids, scores, fMap1, nofVars, k, &resW4);
     ASSERT_EQ(0u, resW4.size());
 
     fMap1[1] = IdTable(1);
     fMap1[1].push_back({1});
 
-    FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
-        cids, eids, scores, fMap1, nofVars, k, &resW4);
+    CALL_FIXED_SIZE_1(width,
+                      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
+                      cids, eids, scores, fMap1, nofVars, k, &resW4);
 
     ASSERT_EQ(3u, resW4.size());  // 1-1 1-0 1-2
 
@@ -660,8 +687,9 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
     ASSERT_EQ(1u, resW4(2, 3));
 
     resW4.clear();
-    FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
-        cids, eids, scores, fMap1, nofVars, 2, &resW4);
+    CALL_FIXED_SIZE_1(width,
+                      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
+                      cids, eids, scores, fMap1, nofVars, 2, &resW4);
     ASSERT_EQ(5u, resW4.size());  // 2x 1-1  2x 1-0   1x 1-2
 
     std::sort(std::begin(resW4), std::end(resW4),

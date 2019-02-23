@@ -110,9 +110,10 @@ class GroupBy : public Operation {
 };
 
 // This method is declared here solely for unit testing purposes
-void doGroupBy(const IdTable& input,
+template <int IN_WIDTH, int OUT_WIDTH>
+void doGroupBy(const IdTable& dynInput,
                const vector<ResultTable::ResultType>& inputTypes,
                const vector<size_t>& groupByCols,
-               const vector<GroupBy::Aggregate>& aggregates, IdTable* result,
+               const vector<GroupBy::Aggregate>& aggregates, IdTable* dynResult,
                const ResultTable* inTable, ResultTable* outTable,
                const Index& index);

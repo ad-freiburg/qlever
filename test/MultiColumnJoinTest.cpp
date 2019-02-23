@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include "../src/engine/CallFixedSize.h"
 #include "../src/engine/MultiColumnJoin.h"
 
 TEST(EngineTest, multiColumnJoinTest) {
@@ -30,7 +31,11 @@ TEST(EngineTest, multiColumnJoinTest) {
 
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).
-  MultiColumnJoin::computeMultiColumnJoin(a, b, jcls, &res);
+  int aWidth = a.cols();
+  int bWidth = b.cols();
+  int resWidth = res.cols();
+  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth,
+                    MultiColumnJoin::computeMultiColumnJoin, a, b, jcls, &res);
 
   ASSERT_EQ(2u, res.size());
 
@@ -62,7 +67,12 @@ TEST(EngineTest, multiColumnJoinTest) {
 
   // The template size parameter can be at most 6 (the maximum number
   // of fixed size columns plus one).
-  MultiColumnJoin::computeMultiColumnJoin(va, vb, jcls, &vres);
+  aWidth = va.cols();
+  bWidth = vb.cols();
+  resWidth = vres.cols();
+  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth,
+                    MultiColumnJoin::computeMultiColumnJoin, va, vb, jcls,
+                    &vres);
 
   ASSERT_EQ(4u, vres.size());
   ASSERT_EQ(7u, vres.cols());

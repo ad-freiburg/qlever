@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include "../src/engine/CallFixedSize.h"
 #include "../src/engine/Union.h"
 #include "../src/global/Id.h"
 
@@ -24,7 +25,12 @@ TEST(UnionTest, computeUnion) {
 
   const std::vector<std::array<size_t, 2>> columnOrigins = {
       {0, 1}, {Union::NO_COLUMN, 0}};
-  Union::computeUnion(&result, left, right, columnOrigins);
+
+  int leftWidth = left.cols();
+  int rightWidth = right.cols();
+  int outWidth = result.cols();
+  CALL_FIXED_SIZE_3(leftWidth, rightWidth, outWidth, Union::computeUnion,
+                    &result, left, right, columnOrigins);
 
   ASSERT_EQ(5u, result.size());
   for (size_t i = 0; i < left.size(); i++) {
@@ -51,7 +57,11 @@ TEST(UnionTest, computeUnionOptimized) {
   IdTable result(2);
 
   const std::vector<std::array<size_t, 2>> columnOrigins = {{0, 0}, {1, 1}};
-  Union::computeUnion(&result, left, right, columnOrigins);
+  int leftWidth = left.cols();
+  int rightWidth = right.cols();
+  int outWidth = result.cols();
+  CALL_FIXED_SIZE_3(leftWidth, rightWidth, outWidth, Union::computeUnion,
+                    &result, left, right, columnOrigins);
 
   ASSERT_EQ(5u, result.size());
   for (size_t i = 0; i < left.size(); i++) {

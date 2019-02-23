@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 #include <cstdio>
+#include "../src/engine/CallFixedSize.h"
 #include "../src/engine/GroupBy.h"
 
 // This fixture is used to create an Index for the tests.
@@ -96,15 +97,15 @@ TEST_F(GroupByTest, doGroupBy) {
   IdTable inputData(6);
   // The input data types are
   //                   KB, KB, VERBATIM, TEXT, FLOAT,           STRING
-  inputData.push_back({0, 3, 123, 0, floatBuffers[0], 0});
-  inputData.push_back({0, 4, 0, 1, floatBuffers[1], 1});
+  inputData.push_back({1, 4, 123, 0, floatBuffers[0], 0});
+  inputData.push_back({1, 5, 0, 1, floatBuffers[1], 1});
 
-  inputData.push_back({1, 5, 41223, 2, floatBuffers[2], 2});
-  inputData.push_back({1, 6, 123, 0, floatBuffers[0], 0});
-  inputData.push_back({1, 6, 123, 0, floatBuffers[0], 0});
+  inputData.push_back({2, 6, 41223, 2, floatBuffers[2], 2});
+  inputData.push_back({2, 7, 123, 0, floatBuffers[0], 0});
+  inputData.push_back({2, 7, 123, 0, floatBuffers[0], 0});
 
-  inputData.push_back({2, 7, 0, 1, floatBuffers[1], 1});
-  inputData.push_back({2, 8, 41223, 2, floatBuffers[2], 2});
+  inputData.push_back({3, 8, 0, 1, floatBuffers[1], 1});
+  inputData.push_back({3, 9, 41223, 2, floatBuffers[2], 2});
 
   std::vector<ResultTable::ResultType> inputTypes = {
       ResultTable::ResultType::KB,       ResultTable::ResultType::KB,
@@ -163,8 +164,11 @@ TEST_F(GroupByTest, doGroupBy) {
   // operation.
   outTable._data.setCols(24);
 
-  doGroupBy(inputData, inputTypes, groupByCols, aggregates, &outTable._data,
-            &inTable, &outTable, this->_index);
+  int inWidth = inputData.cols();
+  int outWidth = outTable._data.cols();
+  CALL_FIXED_SIZE_2(inWidth, outWidth, doGroupBy, inputData, inputTypes,
+                    groupByCols, aggregates, &outTable._data, &inTable,
+                    &outTable, this->_index);
 
   ASSERT_EQ(3u, outTable._data.size());
 
@@ -194,15 +198,15 @@ TEST_F(GroupByTest, doGroupBy) {
   ASSERT_EQ(std::string("<local1>, <local2>"), (*outTable._localVocab)[4]);
 
   // SAMPLE CHECKS
-  ASSERT_EQ(4u, outTable._data[0][7]);
-  ASSERT_EQ(6u, outTable._data[1][7]);
-  ASSERT_EQ(8u, outTable._data[2][7]);
+  ASSERT_EQ(5u, outTable._data[0][7]);
+  ASSERT_EQ(7u, outTable._data[1][7]);
+  ASSERT_EQ(9u, outTable._data[2][7]);
 
   // MIN CHECKS
   float buffer;
-  ASSERT_EQ(3u, outTable._data[0][8]);
-  ASSERT_EQ(5u, outTable._data[1][8]);
-  ASSERT_EQ(7u, outTable._data[2][8]);
+  ASSERT_EQ(4u, outTable._data[0][8]);
+  ASSERT_EQ(6u, outTable._data[1][8]);
+  ASSERT_EQ(8u, outTable._data[2][8]);
 
   ASSERT_EQ(0u, outTable._data[0][9]);
   ASSERT_EQ(123u, outTable._data[1][9]);
@@ -220,9 +224,9 @@ TEST_F(GroupByTest, doGroupBy) {
   ASSERT_FLOAT_EQ(2, buffer);
 
   // MAX CHECKS
-  ASSERT_EQ(4u, outTable._data[0][12]);
-  ASSERT_EQ(6u, outTable._data[1][12]);
-  ASSERT_EQ(8u, outTable._data[2][12]);
+  ASSERT_EQ(5u, outTable._data[0][12]);
+  ASSERT_EQ(7u, outTable._data[1][12]);
+  ASSERT_EQ(9u, outTable._data[2][12]);
 
   ASSERT_EQ(123u, outTable._data[0][13]);
   ASSERT_EQ(41223u, outTable._data[1][13]);

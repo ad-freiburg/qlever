@@ -7,6 +7,7 @@
 #include "../index/Index.h"
 #include "../util/Conversions.h"
 #include "../util/HashSet.h"
+#include "CallFixedSize.h"
 
 GroupBy::GroupBy(QueryExecutionContext* qec,
                  const vector<string>& groupByVariables,
@@ -161,11 +162,13 @@ struct resizeIfVec<vector<C>, C> {
  *                        argument to allow for efficient reusage of its
  *                        its already allocated storage.
  */
+template <int IN_WIDTH, int OUT_WIDTH>
 void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
-                  size_t blockEnd, const IdTable& input,
+                  size_t blockEnd, const IdTableStatic<IN_WIDTH>& input,
                   const vector<ResultTable::ResultType>& inputTypes,
-                  IdTable* result, size_t resultRow, const ResultTable* inTable,
-                  ResultTable* outTable, const Index& index,
+                  IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
+                  const ResultTable* inTable, ResultTable* outTable,
+                  const Index& index,
                   ad_utility::HashSet<size_t>& distinctHashSet) {
   switch (a._type) {
     case GroupBy::AggregateType::AVG: {
@@ -574,16 +577,19 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
   }
 }
 
-void doGroupBy(const IdTable& input,
+template <int IN_WIDTH, int OUT_WIDTH>
+void doGroupBy(const IdTable& dynInput,
                const vector<ResultTable::ResultType>& inputTypes,
                const vector<size_t>& groupByCols,
-               const vector<GroupBy::Aggregate>& aggregates, IdTable* result,
+               const vector<GroupBy::Aggregate>& aggregates, IdTable* dynResult,
                const ResultTable* inTable, ResultTable* outTable,
                const Index& index) {
-  LOG(DEBUG) << "Group by input size " << input.size() << std::endl;
-  if (input.size() == 0) {
+  LOG(DEBUG) << "Group by input size " << dynInput.size() << std::endl;
+  if (dynInput.size() == 0) {
     return;
   }
+  const IdTableStatic<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
+  IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
   ad_utility::HashSet<size_t> distinctHashSet;
 
   if (groupByCols.empty()) {
@@ -591,12 +597,13 @@ void doGroupBy(const IdTable& input,
     size_t blockStart = 0;
     size_t blockEnd = input.size();
 
-    result->emplace_back();
-    size_t resIdx = result->size() - 1;
+    result.emplace_back();
+    size_t resIdx = result.size() - 1;
     for (const GroupBy::Aggregate& a : aggregates) {
-      processGroup(a, blockStart, blockEnd, input, inputTypes, result, resIdx,
+      processGroup(a, blockStart, blockEnd, input, inputTypes, &result, resIdx,
                    inTable, outTable, index, distinctHashSet);
     }
+    *dynResult = result.moveToDynamic();
     return;
   }
 
@@ -620,11 +627,11 @@ void doGroupBy(const IdTable& input,
     if (!rowMatchesCurrentBlock) {
       blockEnd = pos - 1;
 
-      result->emplace_back();
-      size_t resIdx = result->size() - 1;
+      result.emplace_back();
+      size_t resIdx = result.size() - 1;
       for (const GroupBy::Aggregate& a : aggregates) {
-        processGroup(a, blockStart, blockEnd, input, inputTypes, result, resIdx,
-                     inTable, outTable, index, distinctHashSet);
+        processGroup(a, blockStart, blockEnd, input, inputTypes, &result,
+                     resIdx, inTable, outTable, index, distinctHashSet);
       }
       // setup for processing the next block
       blockStart = pos;
@@ -635,13 +642,14 @@ void doGroupBy(const IdTable& input,
   }
   blockEnd = input.size() - 1;
   {
-    result->emplace_back();
-    size_t resIdx = result->size() - 1;
+    result.emplace_back();
+    size_t resIdx = result.size() - 1;
     for (const GroupBy::Aggregate& a : aggregates) {
-      processGroup(a, blockStart, blockEnd, input, inputTypes, result, resIdx,
+      processGroup(a, blockStart, blockEnd, input, inputTypes, &result, resIdx,
                    inTable, outTable, index, distinctHashSet);
     }
   }
+  *dynResult = result.moveToDynamic();
 }
 
 void GroupBy::computeResult(ResultTable* result) {
@@ -831,8 +839,11 @@ void GroupBy::computeResult(ResultTable* result) {
     inputResultTypes.push_back(subresult->getResultType(i));
   }
 
-  doGroupBy(subresult->_data, inputResultTypes, groupByCols, aggregates,
-            &result->_data, subresult.get(), result, getIndex());
+  int inWidth = subresult->_data.cols();
+  int outWidth = result->_data.cols();
+  CALL_FIXED_SIZE_2(inWidth, outWidth, doGroupBy, subresult->_data,
+                    inputResultTypes, groupByCols, aggregates, &result->_data,
+                    subresult.get(), result, getIndex());
 
   // Free the user data used by GROUP_CONCAT aggregates.
   for (Aggregate& a : aggregates) {

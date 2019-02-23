@@ -103,11 +103,13 @@ class FTSAlgorithms {
                               const vector<Score>& scores, size_t k,
                               WidthOneList* result);
 
+  template <int WIDTH>
   static void aggScoresAndTakeTopKContexts(const vector<Id>& cids,
                                            const vector<Id>& eids,
                                            const vector<Score>& scores,
                                            size_t k, IdTable* result);
 
+  template <int WIDTH>
   static void multVarsAggScoresAndTakeTopKContexts(const vector<Id>& cids,
                                                    const vector<Id>& eids,
                                                    const vector<Score>& scores,
@@ -115,6 +117,7 @@ class FTSAlgorithms {
                                                    IdTable* result);
 
   // Special case with only top-1 context(s).
+  template <int WIDTH>
   static void multVarsAggScoresAndTakeTopContext(const vector<Id>& cids,
                                                  const vector<Id>& eids,
                                                  const vector<Score>& scores,
@@ -126,6 +129,7 @@ class FTSAlgorithms {
                                            vector<Row>& res);
 
   // Special case where k == 1.
+  template <int WIDTH>
   static void aggScoresAndTakeTopContext(const vector<Id>& cids,
                                          const vector<Id>& eids,
                                          const vector<Score>& scores,
@@ -282,21 +286,25 @@ class FTSAlgorithms {
       const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>&,
       vector<vector<Id>>& res);
 
+  template <int WIDTH>
   static void oneVarFilterAggScoresAndTakeTopKContexts(
       const vector<Id>& cids, const vector<Id>& eids,
       const vector<Score>& scores, const ad_utility::HashMap<Id, IdTable>& fMap,
       size_t k, IdTable* result);
 
+  template <int WIDTH>
   static void oneVarFilterAggScoresAndTakeTopKContexts(
       const vector<Id>& cids, const vector<Id>& eids,
       const vector<Score>& scores, const ad_utility::HashSet<Id>& fSet,
       size_t k, IdTable* result);
 
+  template <int WIDTH>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
       const vector<Id>& cids, const vector<Id>& eids,
       const vector<Score>& scores, const ad_utility::HashMap<Id, IdTable>& fMap,
       size_t nofVars, size_t k, IdTable* result);
 
+  template <int WIDTH>
   static void multVarsFilterAggScoresAndTakeTopKContexts(
       const vector<Id>& cids, const vector<Id>& eids,
       const vector<Score>& scores, const ad_utility::HashSet<Id>& fSet,

@@ -222,8 +222,12 @@ TEST(HasPredicateScan, subtreeS) {
   subtree->setOperation(QueryExecutionTree::OperationType::HAS_RELATION_SCAN,
                         operation);
 
-  HasPredicateScan::computeSubqueryS(&resultTable, subtree, 1, hasPattern,
-                                     hasRelation, patterns);
+  std::shared_ptr<const ResultTable> subresult = subtree->getResult();
+  int in_width = 2;
+  int out_width = 3;
+  CALL_FIXED_SIZE_2(in_width, out_width, HasPredicateScan::computeSubqueryS,
+                    &resultTable._data, subresult->_data, 1, hasPattern,
+                    hasRelation, patterns);
 
   IdTable& result = resultTable._data;
 

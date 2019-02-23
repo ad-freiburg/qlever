@@ -5,7 +5,9 @@
 #include <gtest/gtest.h>
 #include <cstdio>
 #include <fstream>
+#include "../src/engine/CallFixedSize.h"
 #include "../src/engine/Engine.h"
+#include "../src/engine/OptionalJoin.h"
 
 TEST(EngineTest, joinTest) {
   Engine e;
@@ -21,7 +23,10 @@ TEST(EngineTest, joinTest) {
   b.push_back({3, 1});
   b.push_back({4, 2});
   IdTable res(3);
-  e.join(a, 0, b, 0, &res);
+  int lwidth = a.cols();
+  int rwidth = b.cols();
+  int reswidth = a.cols() + b.cols() - 1;
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, e.join, a, 0, b, 0, &res);
 
   ASSERT_EQ(1u, res(0, 0));
   ASSERT_EQ(1u, res(0, 1));
@@ -51,7 +56,8 @@ TEST(EngineTest, joinTest) {
   }
   a.push_back({400000, 200000});
   b.push_back({400000, 200000});
-  e.join(a, 0, b, 0, &res);
+
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, e.join, a, 0, b, 0, &res);
   ASSERT_EQ(6u, res.size());
 
   a.clear();
@@ -69,12 +75,11 @@ TEST(EngineTest, joinTest) {
   }
   a.push_back({4000001, 200000});
   b.push_back({4000001, 200000});
-  e.join(a, 0, b, 0, &res);
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, e.join, a, 0, b, 0, &res);
   ASSERT_EQ(2u, res.size());
 };
 
 TEST(EngineTest, optionalJoinTest) {
-  Engine e;
   IdTable a(3);
   a.push_back({4, 1, 2});
   a.push_back({2, 1, 3});
@@ -93,7 +98,11 @@ TEST(EngineTest, optionalJoinTest) {
 
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).
-  e.optionalJoin(a, b, false, true, jcls, &res);
+  int aWidth = a.cols();
+  int bWidth = b.cols();
+  int resWidth = res.cols();
+  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth, OptionalJoin::optionalJoin, a, b,
+                    false, true, jcls, &res);
 
   ASSERT_EQ(5u, res.size());
 
@@ -138,7 +147,11 @@ TEST(EngineTest, optionalJoinTest) {
   jcls.push_back(array<Id, 2>{{1, 0}});
   jcls.push_back(array<Id, 2>{{2, 1}});
 
-  e.optionalJoin(va, vb, true, false, jcls, &vres);
+  aWidth = va.cols();
+  bWidth = vb.cols();
+  resWidth = vres.cols();
+  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth, OptionalJoin::optionalJoin, va,
+                    vb, true, false, jcls, &vres);
 
   ASSERT_EQ(5u, vres.size());
   ASSERT_EQ(7u, vres.cols());
@@ -163,6 +176,25 @@ TEST(EngineTest, optionalJoinTest) {
   for (size_t i = 0; i < 7; i++) {
     ASSERT_EQ(r[i], vres(4, i));
   }
+}
+
+TEST(EngineTest, distinctTest) {
+  IdTable inp(4);
+  IdTable res(4);
+
+  inp.push_back({1, 1, 3, 7});
+  inp.push_back({6, 1, 3, 6});
+  inp.push_back({2, 2, 3, 5});
+  inp.push_back({3, 6, 5, 4});
+  inp.push_back({1, 6, 5, 1});
+
+  std::vector<size_t> keepIndices = {1, 2};
+  CALL_FIXED_SIZE_1(4, Engine::distinct, inp, keepIndices, &res);
+
+  ASSERT_EQ(3u, res.size());
+  ASSERT_EQ(inp[0], res[0]);
+  ASSERT_EQ(inp[2], res[1]);
+  ASSERT_EQ(inp[3], res[2]);
 }
 
 int main(int argc, char** argv) {

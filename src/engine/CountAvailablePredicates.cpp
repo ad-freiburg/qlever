@@ -172,9 +172,10 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
 }
 
 void CountAvailablePredicates::computePatternTrickAllEntities(
-    IdTable* result, const vector<PatternID>& hasPattern,
+    IdTable* dynResult, const vector<PatternID>& hasPattern,
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
+  IdTableStatic<2> result = dynResult->moveToStatic<2>();
   LOG(DEBUG) << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
@@ -208,10 +209,11 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
       predicateCounts[pattern.first[i]] += it.second;
     }
   }
-  result->reserve(predicateCounts.size());
+  result.reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
-    result->push_back({it.first, static_cast<Id>(it.second)});
+    result.push_back({it.first, static_cast<Id>(it.second)});
   }
+  *dynResult = result.moveToDynamic();
 }
 
 template <int I>

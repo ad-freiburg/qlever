@@ -229,7 +229,7 @@ class IdTableImpl {
   };
 
   const ConstRow& getConstRow(size_t row) const {
-    return *reinterpret_cast<ConstRow>(_data + (row * COLS));
+    return *reinterpret_cast<ConstRow*>(_data + (row * COLS));
   }
 
   constexpr size_t cols() const { return COLS; }
@@ -684,7 +684,7 @@ class IdTableStatic : private IdTableImpl<COLS> {
    * @brief Read cols() elements from init and stores them in a new row
    **/
   void push_back(const Row& init) {
-    assert(init._cols == IdTableImpl<COLS>::_cols);
+    assert(init.cols() == cols());
     if (IdTableImpl<COLS>::_size + 1 >= IdTableImpl<COLS>::_capacity) {
       grow();
     }
@@ -698,7 +698,6 @@ class IdTableStatic : private IdTableImpl<COLS> {
    * @brief Read cols() elements from init and stores them in a new row
    **/
   void push_back(ConstRow init) {
-    assert(init.IdTableImpl<COLS>::_cols == IdTableImpl<COLS>::_cols);
     if (IdTableImpl<COLS>::_size + 1 >= IdTableImpl<COLS>::_capacity) {
       grow();
     }
@@ -708,7 +707,7 @@ class IdTableStatic : private IdTableImpl<COLS> {
     IdTableImpl<COLS>::_size++;
   }
 
-  void push_back(const IdTable init, size_t row) {
+  void push_back(const IdTableStatic<COLS>& init, size_t row) {
     assert(init.IdTableImpl<COLS>::_cols == IdTableImpl<COLS>::_cols);
     if (IdTableImpl<COLS>::_size + 1 >= IdTableImpl<COLS>::_capacity) {
       grow();
@@ -821,6 +820,7 @@ class IdTableStatic : private IdTableImpl<COLS> {
   template <int NEW_COLS>
   IdTableStatic<NEW_COLS> moveToStatic() {
     IdTableStatic<NEW_COLS> tmp;
+    tmp.setCols(cols());
     tmp._data = IdTableImpl<COLS>::_data;
     tmp._size = IdTableImpl<COLS>::_size;
     tmp._capacity = IdTableImpl<COLS>::_capacity;
@@ -833,6 +833,7 @@ class IdTableStatic : private IdTableImpl<COLS> {
   template <int NEW_COLS>
   const IdTableStatic<NEW_COLS> asStaticView() const {
     IdTableStatic<NEW_COLS> tmp;
+    tmp.setCols(cols());
     tmp._data = IdTableImpl<COLS>::_data;
     tmp._size = IdTableImpl<COLS>::_size;
     tmp._capacity = IdTableImpl<COLS>::_capacity;

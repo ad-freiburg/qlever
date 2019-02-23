@@ -5,6 +5,7 @@
 #include <stxxl/algorithm>
 #include <tuple>
 #include <utility>
+#include "../engine/CallFixedSize.h"
 #include "../parser/ContextFileParser.h"
 #include "../util/Simple8bCode.h"
 #include "./FTSAlgorithms.h"
@@ -518,7 +519,8 @@ const string& Index::wordIdToString(Id id) const {
 }
 
 // _____________________________________________________________________________
-void Index::getContextListForWords(const string& words, IdTable* result) const {
+void Index::getContextListForWords(const string& words,
+                                   IdTable* dynResult) const {
   LOG(DEBUG) << "In getContextListForWords...\n";
   auto terms = ad_utility::split(words, ' ');
   AD_CHECK(terms.size() > 0);
@@ -546,12 +548,14 @@ void Index::getContextListForWords(const string& words, IdTable* result) const {
   }
 
   LOG(DEBUG) << "Packing lists into a ResultTable\n...";
-  result->reserve(cids.size() + 2);
-  result->resize(cids.size());
+  IdTableStatic<2> result = dynResult->moveToStatic<2>();
+  result.reserve(cids.size() + 2);
+  result.resize(cids.size());
   for (size_t i = 0; i < cids.size(); ++i) {
-    (*result)(i, 0) = cids[i];
-    (*result)(i, 1) = scores[i];
+    result(i, 0) = cids[i];
+    result(i, 1) = scores[i];
   }
+  *dynResult = result.moveToDynamic();
   LOG(DEBUG) << "Done with getContextListForWords.\n";
 }
 
@@ -687,8 +691,9 @@ void Index::getECListForWordsOneVar(const string& words, size_t limit,
   vector<Id> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
-  FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, limit,
-                                              result);
+  int width = result->cols();
+  CALL_FIXED_SIZE_1(width, FTSAlgorithms::aggScoresAndTakeTopKContexts, cids,
+                    eids, scores, limit, result);
   LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
              << "\n";
 }
@@ -701,8 +706,9 @@ void Index::getECListForWords(const string& words, size_t nofVars, size_t limit,
   vector<Id> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
-  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                      nofVars, limit, result);
+  int width = result->cols();
+  CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, nofVars, limit, result);
   LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
              << "\n";
 }
@@ -731,11 +737,14 @@ void Index::getFilteredECListForWords(const string& words,
     vector<Id> eids;
     vector<Score> scores;
     getContextEntityScoreListsForWords(words, cids, eids, scores);
+    int width = result->cols();
     if (nofVars == 1) {
-      FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
-          cids, eids, scores, fMap, limit, result);
+      CALL_FIXED_SIZE_1(width,
+                        FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
+                        cids, eids, scores, fMap, limit, result);
     } else {
-      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
+      CALL_FIXED_SIZE_1(
+          width, FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
           cids, eids, scores, fMap, nofVars, limit, result);
     }
   }
@@ -760,12 +769,15 @@ void Index::getFilteredECListForWordsWidthOne(const string& words,
   vector<Id> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
+  int width = result->cols();
   if (nofVars == 1) {
-    FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
-        cids, eids, scores, fSet, limit, result);
+    CALL_FIXED_SIZE_1(width,
+                      FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
+                      cids, eids, scores, fSet, limit, result);
   } else {
-    FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
-        cids, eids, scores, fSet, nofVars, limit, result);
+    CALL_FIXED_SIZE_1(width,
+                      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
+                      cids, eids, scores, fSet, nofVars, limit, result);
   }
   LOG(DEBUG) << "Done with getFilteredECListForWords. Result size: "
              << result->size() << "\n";

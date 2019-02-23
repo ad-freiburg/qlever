@@ -15,7 +15,9 @@ class OBComp {
   OBComp(const vector<pair<size_t, bool>>& sortIndices)
       : _sortIndices(sortIndices) {}
 
-  bool operator()(const IdTable::Row& a, const IdTable::Row& b) const {
+  template <int I>
+  bool operator()(const typename IdTableImpl<I>::Row& a,
+                  const typename IdTableImpl<I>::Row& b) const {
     for (auto& entry : _sortIndices) {
       if (a[entry.first] < b[entry.first]) {
         return !entry.second;

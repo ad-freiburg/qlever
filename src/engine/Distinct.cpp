@@ -5,6 +5,7 @@
 #include "./Distinct.h"
 #include <sstream>
 #include "./QueryExecutionTree.h"
+#include "CallFixedSize.h"
 
 using std::string;
 
@@ -55,6 +56,8 @@ void Distinct::computeResult(ResultTable* result) {
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
-  getEngine().distinct(subRes->_data, _keepIndices, &result->_data);
+  int width = subRes->_data.size();
+  CALL_FIXED_SIZE_1(width, getEngine().distinct, subRes->_data, _keepIndices,
+                    &result->_data);
   LOG(DEBUG) << "Distinct result computation done." << endl;
 }

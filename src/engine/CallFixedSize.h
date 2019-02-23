@@ -84,25 +84,25 @@
     func<i, j, 0>(__VA_ARGS__);                    \
   }
 
-#define _CALL_FIXED_SIZE_3_i(i, j, k, func, ...)     \
-  if (j == 1) {                                      \
-    _CALL_FIXED_SIZE_3_i(i, 1, k, func, __VA_ARGS__) \
-  } else if (k == 3) {                               \
-    _CALL_FIXED_SIZE_3_i(i, 2, k, func, __VA_ARGS__) \
-  } else if (k == 3) {                               \
-    _CALL_FIXED_SIZE_3_i(i, 3, k, func, __VA_ARGS__) \
-  } else if (k == 4) {                               \
-    _CALL_FIXED_SIZE_3_i(i, 4, k, func, __VA_ARGS__) \
-  } else if (k == 5) {                               \
-    _CALL_FIXED_SIZE_3_i(i, 5, k, func, __VA_ARGS__) \
-  } else {                                           \
-    _CALL_FIXED_SIZE_3_i(i, 0, k, func, __VA_ARGS__) \
+#define _CALL_FIXED_SIZE_3_i(i, j, k, func, ...)       \
+  if (j == 1) {                                        \
+    _CALL_FIXED_SIZE_3_i_j(i, 1, k, func, __VA_ARGS__) \
+  } else if (j == 2) {                                 \
+    _CALL_FIXED_SIZE_3_i_j(i, 2, k, func, __VA_ARGS__) \
+  } else if (j == 3) {                                 \
+    _CALL_FIXED_SIZE_3_i_j(i, 3, k, func, __VA_ARGS__) \
+  } else if (j == 4) {                                 \
+    _CALL_FIXED_SIZE_3_i_j(i, 4, k, func, __VA_ARGS__) \
+  } else if (j == 5) {                                 \
+    _CALL_FIXED_SIZE_3_i_j(i, 5, k, func, __VA_ARGS__) \
+  } else {                                             \
+    _CALL_FIXED_SIZE_3_i_j(i, 0, k, func, __VA_ARGS__) \
   }
 
 #define CALL_FIXED_SIZE_3(i, j, k, func, ...)        \
   if (i == 1) {                                      \
     _CALL_FIXED_SIZE_3_i(1, j, k, func, __VA_ARGS__) \
-  } else if (i == 3) {                               \
+  } else if (i == 2) {                               \
     _CALL_FIXED_SIZE_3_i(2, j, k, func, __VA_ARGS__) \
   } else if (i == 3) {                               \
     _CALL_FIXED_SIZE_3_i(3, j, k, func, __VA_ARGS__) \
