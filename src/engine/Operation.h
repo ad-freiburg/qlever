@@ -78,10 +78,15 @@ class Operation {
         throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
       }
       timer.stop();
-      _runtimeInformation.setTime(timer.secs());
+      _runtimeInformation.setRows(newResult->_resTable->size());
+      _runtimeInformation.setCols(getResultWidth());
+      _runtimeInformation.setTime(timer.msecs());
       _runtimeInformation.setWasCached(false);
       // cache the runtime information for the execution as well
       newResult->_runtimeInfo = _runtimeInformation;
+      // Only now we can let other threads access the result
+      // and runtime information
+      newResult->_resTable->finish();
       return newResult->_resTable;
     }
     existingResult->_resTable->awaitFinished();
@@ -91,13 +96,14 @@ class Operation {
                "Operation was found aborted in the cache");
     }
     timer.stop();
-    if (_runtimeInformation.getTime() == 0) {
-      // If this operation object was computed already we don't want to update
-      // the runtime information.
+    if (!newResult) {
+      // If the result for this Operation came from the cache we take the
+      // original runtime information and only update the time and caching
+      // information.
       _runtimeInformation = existingResult->_runtimeInfo;
-      _runtimeInformation.addDetail(
-          "InitialTime", std::to_string(_runtimeInformation.getTime()));
-      _runtimeInformation.setTime(timer.secs());
+      _runtimeInformation.addDetail("OriginalTime",
+                                    _runtimeInformation.getTime());
+      _runtimeInformation.setTime(timer.msecs());
       _runtimeInformation.setWasCached(true);
     }
     return existingResult->_resTable;

@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <nlohmann/json.hpp>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -154,7 +155,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       }
 #endif
       query = createQueryFromHttpParams(params);
-      LOG(INFO) << "Query: " << query << '\n';
+      LOG(INFO) << "Query:\n" << query << '\n';
       ParsedQuery pq = SparqlParser::parse(query);
       pq.expandPrefixes();
 
@@ -184,8 +185,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       }
       // Print the runtime info. This needs to be done after the query
       // was computed.
-      LOG(DEBUG) << qet.getRootOperation()->getRuntimeInfo().toString()
-                 << std::endl;
+      LOG(INFO) << qet.getRootOperation()->getRuntimeInfo().toString();
     } catch (const ad_semsearch::Exception& e) {
       response = composeResponseJson(query, e);
     } catch (const std::exception& e) {
@@ -341,7 +341,7 @@ string Server::composeResponseJson(const ParsedQuery& query,
   }
 
   os << "\"runtimeInformation\" : ";
-  qet.getRootOperation()->getRuntimeInfo().toJson(os);
+  os << nlohmann::json(qet.getRootOperation()->getRuntimeInfo());
   os << ", \n";
 
   os << "\"res\": ";

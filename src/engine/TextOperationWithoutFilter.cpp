@@ -50,7 +50,7 @@ void TextOperationWithoutFilter::computeResult(ResultTable* result) {
   } else {
     computeResultMultVars(result);
   }
-  result->finish();
+
   LOG(DEBUG) << "TextOperationWithoutFilter result computation done." << endl;
 }
 

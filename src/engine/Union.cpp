@@ -142,7 +142,6 @@ void Union::computeResult(ResultTable* result) {
   result->_nofColumns = getResultWidth();
   computeUnion(result, subRes1, subRes2, _columnOrigins);
 
-  result->finish();
   LOG(DEBUG) << "Union result computation done." << std::endl;
 }
 

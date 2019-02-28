@@ -241,7 +241,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
         }
         std::string subquery_string =
             inner.substr(selectPos, endBracket - selectPos);
-        LOG(DEBUG) << "Found subquery: " << subquery_string << std::endl;
+        LOG(DEBUG) << "Found subquery:\n" << subquery_string << std::endl;
 
         // create the subquery operation
         ParsedQuery::GraphPatternOperation* u =

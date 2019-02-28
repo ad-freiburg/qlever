@@ -142,7 +142,7 @@ void TextOperationWithFilter::computeResult(ResultTable* result) {
         _words, filterResult->_varSizeData, _filterColumn, _nofVars, _textLimit,
         result->_varSizeData);
   }
-  result->finish();
+
   LOG(DEBUG) << "TextOperationWithFilter result computation done." << endl;
 }
 

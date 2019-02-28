@@ -204,7 +204,6 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
   }
   LOG(DEBUG) << "CountAvailablePredicates result computation done."
              << std::endl;
-  result->finish();
 }
 
 void CountAvailablePredicates::computePatternTrickAllEntities(
@@ -356,15 +355,13 @@ void CountAvailablePredicates::computePatternTrick(
              << std::endl;
 
   // Add these values to the runtime info
-  runtimeInfo->addDetail("numEntities", std::to_string(input->size()));
+  runtimeInfo->addDetail("numEntities", input->size());
   runtimeInfo->addDetail("numPredicatesWithRepetitions",
-                         std::to_string(numPredicatesWithRepetitions));
-  runtimeInfo->addDetail("percentEntitesWithPatterns",
-                         std::to_string(ratioHasPatterns * 100) + "%");
+                         numPredicatesWithRepetitions);
+  runtimeInfo->addDetail("percentEntitesWithPatterns", ratioHasPatterns * 100);
   runtimeInfo->addDetail("percentPredicatesFromPatterns",
-                         std::to_string(ratioCountedWithPatterns * 100) + "%");
-  runtimeInfo->addDetail("costWithoutPatterns",
-                         std::to_string(costWithoutPatterns));
-  runtimeInfo->addDetail("costWithPatterns", std::to_string(costWithPatterns));
-  runtimeInfo->addDetail("costRatio", std::to_string(costRatio * 100) + "%");
+                         ratioCountedWithPatterns * 100);
+  runtimeInfo->addDetail("costWithoutPatterns", costWithoutPatterns);
+  runtimeInfo->addDetail("costWithPatterns", costWithPatterns);
+  runtimeInfo->addDetail("costRatio", costRatio * 100);
 }

@@ -84,7 +84,7 @@ void Join::computeResult(ResultTable* result) {
     } else if (resWidth == 5) {
       result->_fixedSizeData = new vector<array<Id, 5>>();
     }
-    result->finish();
+
     return;
   }
 
@@ -118,7 +118,7 @@ void Join::computeResult(ResultTable* result) {
     } else if (resWidth == 5) {
       result->_fixedSizeData = new vector<array<Id, 5>>();
     }
-    result->finish();
+
     return;
   }
 
@@ -391,7 +391,7 @@ void Join::computeResult(ResultTable* result) {
                                           &result->_varSizeData);
     }
   }
-  result->finish();
+
   LOG(DEBUG) << "Join result computation done." << endl;
 }
 
@@ -588,7 +588,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
       doComputeJoinWithFullScanDummyRight(r, &result->_varSizeData);
     }
   }
-  result->finish();
+
   LOG(DEBUG) << "Join (with dummy) done. Size: " << result->size() << endl;
 }
 

@@ -115,6 +115,6 @@ void OrderBy::computeResult(ResultTable* result) {
     }
   }
   result->_sortedBy = resultSortedOn();
-  result->finish();
+
   LOG(DEBUG) << "OrderBy result computation done." << endl;
 }

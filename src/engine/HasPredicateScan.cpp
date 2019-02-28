@@ -231,7 +231,7 @@ void HasPredicateScan::computeResult(ResultTable* result) {
       runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
       break;
   }
-  result->finish();
+
   LOG(DEBUG) << "HasPredicateScan result compuation done." << std::endl;
 }
 

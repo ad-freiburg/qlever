@@ -222,7 +222,7 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
   MultiColumnJoinCaller<1, 1, 1>::call(
       leftResult->_nofColumns, rightResult->_nofColumns, result->_nofColumns,
       leftResult, rightResult, _joinColumns, result, result->_nofColumns);
-  result->finish();
+
   LOG(DEBUG) << "MultiColumnJoin result computation done." << endl;
 }
 
