@@ -41,6 +41,52 @@ TEST(IdTableTest, push_back_and_assign) {
   }
 }
 
+TEST(IdTableTest, insert) {
+  IdTable t1(4);
+  t1.push_back({7, 2, 4, 1});
+  t1.push_back({0, 22, 1, 4});
+
+  IdTable init(4);
+  init.push_back({1, 0, 6, 3});
+  init.push_back({3, 1, 8, 2});
+  init.push_back({0, 6, 8, 5});
+  init.push_back({9, 2, 6, 8});
+
+  IdTable t2(init);
+
+  // Test inserting at the beginning
+  t2.insert(t2.begin(), t1.begin(), t1.end());
+  for (size_t i = 0; i < t1.size(); i++) {
+    ASSERT_EQ(t1[i], t2[i]);
+  }
+  for (size_t i = 0; i < init.size(); i++) {
+    ASSERT_EQ(init[i], t2[i + t1.size()]);
+  }
+
+  // Test inserting at the end
+  t2 = init;
+  t2.insert(t2.end(), t1.begin(), t1.end());
+  for (size_t i = 0; i < init.size(); i++) {
+    ASSERT_EQ(init[i], t2[i]);
+  }
+  for (size_t i = 0; i < t1.size(); i++) {
+    ASSERT_EQ(t1[i], t2[i + init.size()]);
+  }
+
+  // Test inserting at the center
+  t2 = init;
+  t2.insert(t2.begin() + 3, t1.begin(), t1.end());
+  for (size_t i = 0; i < t2.size(); i++) {
+    if (i < 3) {
+      ASSERT_EQ(init[i], t2[i]);
+    } else if (i < 5) {
+      ASSERT_EQ(t1[i - 3], t2[i]);
+    } else {
+      ASSERT_EQ(init[i - 2], t2[i]);
+    }
+  }
+}
+
 TEST(IdTableTest, reserve_and_resize) {
   constexpr size_t NUM_ROWS = 34;
   constexpr size_t NUM_COLS = 20;
@@ -149,6 +195,9 @@ TEST(IdTableTest, erase) {
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(i + 1, t1(i / NUM_COLS, i % NUM_COLS));
   }
+
+  t1.erase(t1.begin(), t1.end());
+  ASSERT_EQ(0u, t1.size());
 }
 
 TEST(IdTableTest, iterating) {
@@ -181,7 +230,7 @@ TEST(IdTableTest, iterating) {
   }
 }
 
-TEST(IdTableTesti, sortTest) {
+TEST(IdTableTest, sortTest) {
   IdTable test(2);
   test.push_back({3, 1});
   test.push_back({8, 9});
@@ -261,6 +310,54 @@ TEST(IdTableStaticTest, push_back_and_assign) {
   // test for the new entries
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ((NUM_ROWS * NUM_COLS) - i, t1(i / NUM_COLS, i % NUM_COLS));
+  }
+}
+
+TEST(IdTableStaticTest, insert) {
+  IdTableStatic<4> t1;
+  t1.push_back({7, 2, 4, 1});
+  t1.push_back({0, 22, 1, 4});
+
+  IdTableStatic<4> init;
+  init.push_back({1, 0, 6, 3});
+  init.push_back({3, 1, 8, 2});
+  init.push_back({0, 6, 8, 5});
+  init.push_back({9, 2, 6, 8});
+
+  IdTableStatic<4> t2(init);
+
+  // Test inserting at the beginning
+  t2.insert(t2.begin(), t1.begin(), t1.end());
+  for (size_t i = 0; i < t1.size(); i++) {
+    ASSERT_EQ(t1[i], t2[i]);
+  }
+  for (size_t i = 0; i < init.size(); i++) {
+    ASSERT_EQ(init[i], t2[i + t1.size()]);
+  }
+
+  // Test inserting at the end
+  t2 = init;
+  t2.insert(t2.end(), t1.begin(), t1.end());
+  for (size_t i = 0; i < init.size(); i++) {
+    ASSERT_EQ(init[i], t2[i]);
+  }
+  for (size_t i = 0; i < t1.size(); i++) {
+    ASSERT_EQ(t1[i], t2[i + init.size()]);
+  }
+
+  // Test inserting at the center
+  t2 = init;
+  t2.insert(t2.begin() + 3, t1.begin(), t1.end());
+  for (size_t i = 0; i < t2.size(); i++) {
+    if (i < 3) {
+      ASSERT_EQ(init[i], t2[i]);
+
+    } else if (i < 5) {
+      ASSERT_EQ(t1[i - 3], t2[i]);
+
+    } else {
+      ASSERT_EQ(init[i - 2], t2[i]);
+    }
   }
 }
 
@@ -372,6 +469,9 @@ TEST(IdTableStaticTest, erase) {
   for (size_t i = 0; i < NUM_ROWS * NUM_COLS; i++) {
     ASSERT_EQ(i + 1, t1(i / NUM_COLS, i % NUM_COLS));
   }
+
+  t1.erase(t1.begin(), t1.end());
+  ASSERT_EQ(0u, t1.size());
 }
 
 TEST(IdTableStaticTest, iterating) {

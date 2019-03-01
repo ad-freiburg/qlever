@@ -117,7 +117,7 @@ class ResultTable {
 
   string asDebugString() const;
 
-  ResultType getResultType(unsigned int col) const {
+  ResultType getResultType(size_t col) const {
     if (col < _resultTypes.size()) {
       return _resultTypes[col];
     }

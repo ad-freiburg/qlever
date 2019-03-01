@@ -127,6 +127,24 @@ class IdTableImpl {
     bool _allocated;
   };
 
+  friend std::ostream& operator<<(std::ostream& out,
+                                  const typename IdTableImpl<COLS>::Row& row) {
+    for (size_t col = 0; col < row.size(); col++) {
+      out << row[col] << ", ";
+    }
+    out << std::endl;
+    return out;
+  }
+
+  friend std::ostream& operator<<(
+      std::ostream& out, const typename IdTableImpl<COLS>::ConstRow&& row) {
+    for (size_t col = 0; col < row.size(); col++) {
+      out << row[col] << ", ";
+    }
+    out << std::endl;
+    return out;
+  }
+
   class iterator {
    public:
     // iterator traits types
@@ -183,7 +201,7 @@ class IdTableImpl {
       return *this;
     }
 
-    // postfix increment
+    // postfix decrement
     iterator operator--(int) {
       iterator tmp(*this);
       --_row;
@@ -368,6 +386,24 @@ class IdTableImpl<0> {
     size_t _cols;
     bool _allocated;
   };
+
+  friend std::ostream& operator<<(std::ostream& out,
+                                  const typename IdTableImpl<0>::Row& row) {
+    for (size_t col = 0; col < row.size(); col++) {
+      out << row[col] << ", ";
+    }
+    out << std::endl;
+    return out;
+  }
+
+  friend std::ostream& operator<<(
+      std::ostream& out, const typename IdTableImpl<0>::ConstRow&& row) {
+    for (size_t col = 0; col < row.size(); col++) {
+      out << row[col] << ", ";
+    }
+    out << std::endl;
+    return out;
+  }
 
   class iterator {
    public:
@@ -740,17 +776,14 @@ class IdTableStatic : private IdTableImpl<COLS> {
           IdTableImpl<COLS>::_size + numNewRows - IdTableImpl<COLS>::_capacity;
       grow(numMissing);
     }
-    // Move the data currently in the way back. As the src and target
-    // of the copy might overlap the rows are copied individually starting
-    // at the back. The loop still counts up to avoid underflows.
-    for (size_t i = target;
-         i < target + numNewRows && i < IdTableImpl<COLS>::_size; i++) {
-      size_t row = target + numNewRows - 1 - i;
-      std::memcpy(IdTableImpl<COLS>::_data + row * IdTableImpl<COLS>::_cols,
-                  IdTableImpl<COLS>::_data +
-                      (row + numNewRows) * IdTableImpl<COLS>::_cols,
-                  sizeof(Id) * IdTableImpl<COLS>::_cols);
-    }
+
+    size_t afterTarget = size() - target;
+    // Move the data currently in the way back.
+    std::memmove(IdTableImpl<COLS>::_data +
+                     (target + numNewRows) * IdTableImpl<COLS>::_cols,
+                 IdTableImpl<COLS>::_data + target * IdTableImpl<COLS>::_cols,
+                 sizeof(Id) * IdTableImpl<COLS>::_cols * afterTarget);
+
     IdTableImpl<COLS>::_size += numNewRows;
     // Copy the new data
     std::memcpy(IdTableImpl<COLS>::_data + target * IdTableImpl<COLS>::_cols,
@@ -775,15 +808,11 @@ class IdTableStatic : private IdTableImpl<COLS> {
       return;
     }
     size_t numErased = actualEnd.row() - begin.row();
-    // Move the elements from actualEnd() to end() forward
-    for (size_t row = begin.row(); row + numErased < IdTableImpl<COLS>::_size;
-         row++) {
-      // copy a single row
-      std::memcpy(IdTableImpl<COLS>::_data + row * IdTableImpl<COLS>::_cols,
-                  IdTableImpl<COLS>::_data +
-                      (row + numErased) * IdTableImpl<COLS>::_cols,
-                  sizeof(Id) * IdTableImpl<COLS>::_cols);
-    }
+    size_t numToMove = size() - actualEnd.row();
+    std::memmove(
+        IdTableImpl<COLS>::_data + begin.row() * IdTableImpl<COLS>::_cols,
+        IdTableImpl<COLS>::_data + actualEnd.row() * IdTableImpl<COLS>::_cols,
+        numToMove * IdTableImpl<COLS>::_cols * sizeof(Id));
     IdTableImpl<COLS>::_size -= numErased;
   }
 
@@ -815,7 +844,7 @@ class IdTableStatic : private IdTableImpl<COLS> {
   /**
    * @brief Creates an IdTableStatic<NEW_COLS> that now owns this
    * id tables data. This is effectively a move operation that also
-   * changes the type to an equibalent one.
+   * changes the type to its equivalent dynamic variant.
    **/
   template <int NEW_COLS>
   IdTableStatic<NEW_COLS> moveToStatic() {
@@ -858,6 +887,20 @@ class IdTableStatic : private IdTableImpl<COLS> {
     return tmp;
   };
 
+  // Support for ostreams
+  friend std::ostream& operator<<(std::ostream& out,
+                                  const IdTableStatic<COLS>& table) {
+    out << "IdTable(" << ((void*)table.data()) << ") with " << table.size()
+        << " rows and " << table.cols() << " columns" << std::endl;
+    for (size_t row = 0; row < table.size(); row++) {
+      for (size_t col = 0; col < table.cols(); col++) {
+        out << table(row, col) << ", ";
+      }
+      out << std::endl;
+    }
+    return out;
+  }
+
  private:
   /**
    * @brief Grows the storage of this IdTableStatic
@@ -891,31 +934,6 @@ class IdTableStatic : private IdTableImpl<COLS> {
     IdTableImpl<COLS>::_capacity = new_capacity;
   }
 };
-
-// Support for ostreams
-template <int COLS>
-inline std::ostream& operator<<(std::ostream& out,
-                                const IdTableStatic<COLS>& table) {
-  out << "IdTable(" << ((void*)table.data()) << ") with " << table.size()
-      << " rows and " << table.cols() << " columns" << std::endl;
-  for (size_t row = 0; row < table.size(); row++) {
-    for (size_t col = 0; col < table.cols(); col++) {
-      out << table(row, col) << ", ";
-    }
-    out << std::endl;
-  }
-  return out;
-}
-
-template <int COLS>
-inline std::ostream& operator<<(std::ostream& out,
-                                const typename IdTableStatic<COLS>::Row& row) {
-  for (size_t col = 0; col < row.size(); col++) {
-    out << row[col] << ", ";
-  }
-  out << std::endl;
-  return out;
-}
 
 template <int COLS>
 void swap(IdTableStatic<COLS>& left, IdTableStatic<COLS>& right) {

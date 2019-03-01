@@ -319,7 +319,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
         size_t backIdx = result.size() - 1;
 
         // fill the result
-        unsigned int rIndex = 0;
+        size_t rIndex = 0;
         for (size_t col = 0; col < a.cols(); col++) {
           result(backIdx, rIndex) = a(ia, col);
           rIndex++;

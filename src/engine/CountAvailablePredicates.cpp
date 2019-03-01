@@ -146,9 +146,10 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
     if (getIndex().getVocab().getId(_subjectEntityName.value(), &entityId)) {
       IdTable input(1);
       input.push_back({entityId});
-      CALL_FIXED_SIZE_1(
-          input.cols(), CountAvailablePredicates::computePatternTrick, input,
-          &result->_data, hasPattern, hasPredicate, patterns, 0, &runtimeInfo);
+      int width = input.cols();
+      CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
+                        input, &result->_data, hasPattern, hasPredicate,
+                        patterns, 0, &runtimeInfo);
     }
   } else if (_subtree == nullptr) {
     runtimeInfo.setDescriptor("CountAvailablePredicates for all entities");
@@ -162,10 +163,11 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 
-    CALL_FIXED_SIZE_1(subresult->_data.cols(),
-                      CountAvailablePredicates::computePatternTrick,
+    int width = subresult->_data.cols();
+    CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
                       subresult->_data, &result->_data, hasPattern,
-                      hasPredicate, patterns, 0, &runtimeInfo);
+                      hasPredicate, patterns, _subjectColumnIndex,
+                      &runtimeInfo);
   }
   LOG(DEBUG) << "CountAvailablePredicates result computation done."
              << std::endl;

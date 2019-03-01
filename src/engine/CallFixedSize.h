@@ -6,12 +6,12 @@
 
 // The macros in this file provide automatic generation of if clauses that
 // enable transformation of runtime variables to a limited range of compile
-// time values and a default case. Currently this meansm that
+// time values and a default case. Currently this means that
 // CALL_FIXED_SIZE_1(i, func, ...) calls func with i as the first template
 // parameter if i is in the range [1;5] and with 0 as the first template
-// parameter. Any further template parameters can currently only be set
-// by the compiler using template argument deduction.
-// This feature is implemente using macros as passing templated but not
+// parameter otherwise. Any further template parameters can currently only be
+// set by the compiler using template argument deduction.
+// This feature is implemented using macros as passing templated but not
 // instantiated functions as function or template parameters is not possible
 // in C++ 17.
 

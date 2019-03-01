@@ -52,8 +52,6 @@ void Sort::computeResult(ResultTable* result) {
   result->_localVocab = subRes->_localVocab;
   result->_data.insert(result->_data.end(), subRes->_data.begin(),
                        subRes->_data.end());
-  // std::cout << "before\n" << subRes->_data << std::endl;
-  // std::cout << "After insert\n" << result->_data << std::endl;
   int width = result->_data.cols();
   CALL_FIXED_SIZE_1(width, Engine::sort, &result->_data, _sortCol);
   result->_sortedBy = resultSortedOn();

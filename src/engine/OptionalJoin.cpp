@@ -306,7 +306,7 @@ void OptionalJoin::createOptionalResult(
     }
   } else {
     // Use the values from both a and b
-    unsigned int i = 0;
+    size_t i = 0;
     for (size_t col = 0; col < a.cols(); col++) {
       (*res)(rIdx, col) = a(aIdx, col);
       i++;
