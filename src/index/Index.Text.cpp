@@ -771,9 +771,8 @@ void Index::getFilteredECListForWordsWidthOne(const string& words,
   getContextEntityScoreListsForWords(words, cids, eids, scores);
   int width = result->cols();
   if (nofVars == 1) {
-    CALL_FIXED_SIZE_1(width,
-                      FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
-                      cids, eids, scores, fSet, limit, result);
+    FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
+        cids, eids, scores, fSet, limit, result);
   } else {
     CALL_FIXED_SIZE_1(width,
                       FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,

@@ -23,151 +23,44 @@ class IdTableImpl {
  public:
   IdTableImpl()
       : _data(nullptr), _size(0), _capacity(0), _manage_storage(true) {}
-  /**
-   * This is simply an Id* which has some additional methods.
-   **/
-  class ConstRow final {
-   public:
-    bool operator==(ConstRow& other) const {
-      bool matches = true;
-      for (size_t i = 0; matches && i < COLS; i++) {
-        matches &= reinterpret_cast<const Id*>(this)[i] ==
-                   reinterpret_cast<const Id*>(&other)[i];
-      }
-      return matches;
-    }
-    const Id& operator[](size_t i) const {
-      return *(reinterpret_cast<const Id*>(this) + i);
-    }
-    const Id* data() const { return reinterpret_cast<const Id*>(this); }
-    size_t size() const { return COLS; }
-  };
 
-  /**
-   * This provides access to a single row of a Table. The class can optionally
-   * manage its own data, allowing for it to be swappable (otherwise swapping
-   * two rows during e.g. a std::sort would lead to bad behaviour).
-   **/
-  class Row {
-   public:
-    Row(size_t cols) : _data(new Id[cols]), _allocated(true) {}
-    Row(Id* data, size_t cols) : _data(data), _allocated(false) { (void)cols; }
-    virtual ~Row() {
-      if (_allocated) {
-        delete[] _data;
-      }
-    }
-    Row(const Row& other) : _data(new Id[COLS]), _allocated(true) {
-      std::memcpy(_data, other._data, sizeof(Id) * COLS);
-    }
-    Row(Row&& other)
-        : _data(other._allocated ? other._data : new Id[COLS]),
-          _allocated(true) {
-      if (other._allocated) {
-        other._data = nullptr;
-      } else {
-        std::memcpy(_data, other._data, sizeof(Id) * COLS);
-      }
-    }
-
-    Row& operator=(const Row& other) {
-      if (_allocated) {
-        // If we manage our own storage recreate that to fit the other row
-        delete[] _data;
-        _data = new Id[COLS];
-      }
-      // Copy over the data from the other row to this row
-      if (COLS == COLS && _data != nullptr && other._data != nullptr) {
-        std::memcpy(_data, other._data, sizeof(Id) * COLS);
-      }
-      return *this;
-    }
-
-    Row& operator=(Row&& other) {
-      // This class cannot use move semantics if at least one of the two
-      // rows invovled in an assigment does not manage it's data, but rather
-      // functions as a view into an IdTable
-      if (_allocated) {
-        // If we manage our own storage recreate that to fit the other row
-        delete[] _data;
-        if (other._allocated) {
-          // Both rows manage their own storage so we can take advantage
-          // of move semantics.
-          _data = other._data;
-          return *this;
-        } else {
-          _data = new Id[COLS];
-        }
-      }
-      // Copy over the data from the other row to this row
-      if (_data != nullptr && other._data != nullptr) {
-        std::memcpy(_data, other._data, sizeof(Id) * COLS);
-      }
-      return *this;
-    }
-
-    bool operator==(const Row& other) const {
-      bool matches = true;
-      for (size_t i = 0; matches && i < COLS; i++) {
-        matches &= _data[i] == other._data[i];
-      }
-      return matches;
-    }
-
-    Id& operator[](size_t i) { return *(_data + i); }
-    const Id& operator[](size_t i) const { return *(_data + i); }
-    Id* data() { return _data; }
-    const Id* data() const { return _data; }
-
-    size_t size() const { return COLS; }
-    size_t cols() const { return COLS; }
-
-    Id* _data;
-    bool _allocated;
-  };
-
-  friend std::ostream& operator<<(std::ostream& out,
-                                  const typename IdTableImpl<COLS>::Row& row) {
-    for (size_t col = 0; col < row.size(); col++) {
-      out << row[col] << ", ";
-    }
-    out << std::endl;
-    return out;
-  }
-
-  friend std::ostream& operator<<(
-      std::ostream& out, const typename IdTableImpl<COLS>::ConstRow&& row) {
-    for (size_t col = 0; col < row.size(); col++) {
-      out << row[col] << ", ";
-    }
-    out << std::endl;
-    return out;
-  }
+  //   friend std::ostream& operator<<(std::ostream& out,
+  //                                   const typename IdTableImpl<COLS>::Row&
+  //                                   row) {
+  //     for (size_t col = 0; col < row.size(); col++) {
+  //       out << row[col] << ", ";
+  //     }
+  //     out << std::endl;
+  //     return out;
+  //   }
+  //
+  //   friend std::ostream& operator<<(
+  //       std::ostream& out, const typename IdTableImpl<COLS>::ConstRow&& row)
+  //       {
+  //     for (size_t col = 0; col < row.size(); col++) {
+  //       out << row[col] << ", ";
+  //     }
+  //     out << std::endl;
+  //     return out;
+  //   }
 
   class iterator {
    public:
     // iterator traits types
     using difference_type = ssize_t;
-    using value_type = Row;
-    using pointer = Row*;
-    using reference = Row&;
+    using value_type = std::array<Id, COLS>;
+    using pointer = value_type*;
+    using reference = value_type&;
     using iterator_category = std::forward_iterator_tag;
 
-    iterator() : _data(nullptr), _row(0), _rowView(nullptr, 0) {}
-    iterator(Id* data, size_t row, size_t cols)
-        : _data(data), _row(row), _rowView(data + (cols * row), cols) {}
+    iterator() : _data(nullptr), _row(0) {}
+    iterator(Id* data, size_t row, size_t) : _data(data), _row(row) {}
     virtual ~iterator() {}
 
     // Copy and move constructors and assignment operators
-    iterator(const iterator& other)
-        : _data(other._data),
-          _row(other._row),
-          _rowView(_data + (COLS * _row), COLS) {}
+    iterator(const iterator& other) : _data(other._data), _row(other._row) {}
 
-    iterator(iterator&& other)
-        : _data(other._data),
-          _row(other._row),
-          _rowView(_data + (COLS * _row), COLS) {}
+    iterator(iterator&& other) : _data(other._data), _row(other._row) {}
 
     iterator& operator=(const iterator& other) {
       new (this) iterator(other);
@@ -181,7 +74,6 @@ class IdTableImpl {
     // prefix increment
     iterator& operator++() {
       ++_row;
-      _rowView._data = _data + (_row * COLS);
       return *this;
     }
 
@@ -189,14 +81,12 @@ class IdTableImpl {
     iterator operator++(int) {
       iterator tmp(*this);
       ++_row;
-      _rowView._data = _data + (_row * COLS);
       return tmp;
     }
 
     // prefix increment
     iterator& operator--() {
       --_row;
-      _rowView._data = _data + (_row * COLS);
       return *this;
     }
 
@@ -204,7 +94,6 @@ class IdTableImpl {
     iterator operator--(int) {
       iterator tmp(*this);
       --_row;
-      _rowView._data = _data + (_row * COLS);
       return tmp;
     }
 
@@ -229,8 +118,12 @@ class IdTableImpl {
     bool operator<=(const iterator& other) const { return _row <= other._row; }
     bool operator>=(const iterator& other) const { return _row >= other._row; }
 
-    Row& operator*() { return _rowView; }
-    const Row& operator*() const { return _rowView; }
+    value_type& operator*() {
+      return *reinterpret_cast<value_type*>(_data + (_row * COLS));
+    }
+    const value_type& operator*() const {
+      return *reinterpret_cast<const value_type*>(_data + (_row * COLS));
+    }
 
     Id& operator[](size_t i) { return *(_data + _row * COLS + i); }
     const Id& operator[](size_t i) const { return *(_data + _row * COLS + i); }
@@ -242,11 +135,19 @@ class IdTableImpl {
    private:
     Id* _data;
     size_t _row;
-    Row _rowView;
   };
 
-  const ConstRow& getConstRow(size_t row) const {
-    return *reinterpret_cast<ConstRow*>(_data + (row * COLS));
+  using const_row_type = const std::array<Id, COLS>;
+  using row_type = const std::array<Id, COLS>;
+  using const_row_reference = const_row_type&;
+  using row_reference = row_type&;
+
+  const_row_reference getConstRow(size_t row) const {
+    return *reinterpret_cast<const_row_type*>(_data + (row * COLS));
+  }
+
+  row_reference getRow(size_t row) {
+    return *reinterpret_cast<row_type*>(_data + (row * COLS));
   }
 
   constexpr size_t cols() const { return COLS; }
@@ -260,8 +161,6 @@ class IdTableImpl {
   bool _manage_storage;
 
   void setCols(size_t cols) { (void)cols; };
-
-  using const_row_type = const ConstRow&;
 };
 
 template <>
@@ -509,9 +408,16 @@ class IdTableImpl<0> {
     Row _rowView;
   };
 
-  ConstRow getConstRow(size_t row) const {
+  using const_row_type = ConstRow;
+  using row_type = Row;
+  using const_row_reference = const_row_type;
+  using row_reference = row_type;
+
+  const_row_reference getConstRow(size_t row) const {
     return ConstRow(_data + (row * _cols), _cols);
   }
+
+  row_reference getRow(size_t row) { return Row(_data + (row * _cols), _cols); }
 
   size_t cols() const { return _cols; }
 
@@ -522,8 +428,6 @@ class IdTableImpl<0> {
   size_t _capacity;
   size_t _cols;
   bool _manage_storage;
-
-  using const_row_type = ConstRow;
 };
 
 template <int COLS = 0>
@@ -542,7 +446,7 @@ class IdTableStatic : private IdTableImpl<COLS> {
   static constexpr float GROWTH_FACTOR = 1.5;
 
  public:
-  using Row = typename IdTableImpl<COLS>::Row;
+  using Row = typename IdTableImpl<COLS>::row_type;
   using ConstRow = typename IdTableImpl<COLS>::const_row_type;
   using iterator = typename IdTableImpl<COLS>::iterator;
   using const_iterator = const typename IdTableImpl<COLS>::iterator;
@@ -609,12 +513,11 @@ class IdTableStatic : private IdTableImpl<COLS> {
   }
 
   // Row access
-  Row operator[](size_t row) {
-    return Row(IdTableImpl<COLS>::_data + row * IdTableImpl<COLS>::_cols,
-               IdTableImpl<COLS>::_cols);
+  typename IdTableImpl<COLS>::row_reference operator[](size_t row) {
+    return IdTableImpl<COLS>::getRow(row);
   }
 
-  ConstRow operator[](size_t row) const {
+  typename IdTableImpl<COLS>::const_row_reference operator[](size_t row) const {
     // Moving this method to impl allows for efficient ConstRow types when
     // using non dynamic IdTables.
     return IdTableImpl<COLS>::getConstRow(row);
@@ -645,16 +548,12 @@ class IdTableStatic : private IdTableImpl<COLS> {
                     IdTableImpl<COLS>::_cols);
   }
 
-  Row back() {
-    return Row(IdTableImpl<COLS>::_data +
-                   (IdTableImpl<COLS>::_size - 1) * IdTableImpl<COLS>::_cols,
-               IdTableImpl<COLS>::_cols);
+  typename IdTableImpl<COLS>::row_reference back() {
+    return IdTableImpl<COLS>::getRow((end() - 1).row());
   }
 
-  ConstRow back() const {
-    return ConstRow(IdTableImpl<COLS>::_data + (IdTableImpl<COLS>::_size - 1) *
-                                                   IdTableImpl<COLS>::_cols,
-                    IdTableImpl<COLS>::_cols);
+  typename IdTableImpl<COLS>::const_row_reference back() const {
+    return IdTableImpl<COLS>::getConstRow((end() - 1).row());
   }
 
   Id* data() { return IdTableImpl<COLS>::_data; }
@@ -718,7 +617,6 @@ class IdTableStatic : private IdTableImpl<COLS> {
    * @brief Read cols() elements from init and stores them in a new row
    **/
   void push_back(const Row& init) {
-    assert(init.cols() == cols());
     if (IdTableImpl<COLS>::_size + 1 >= IdTableImpl<COLS>::_capacity) {
       grow();
     }
@@ -728,18 +626,18 @@ class IdTableStatic : private IdTableImpl<COLS> {
     IdTableImpl<COLS>::_size++;
   }
 
-  /**
-   * @brief Read cols() elements from init and stores them in a new row
-   **/
-  void push_back(ConstRow init) {
-    if (IdTableImpl<COLS>::_size + 1 >= IdTableImpl<COLS>::_capacity) {
-      grow();
-    }
-    std::memcpy(IdTableImpl<COLS>::_data +
-                    IdTableImpl<COLS>::_size * IdTableImpl<COLS>::_cols,
-                init.data(), sizeof(Id) * IdTableImpl<COLS>::_cols);
-    IdTableImpl<COLS>::_size++;
-  }
+  // /**
+  //  * @brief Read cols() elements from init and stores them in a new row
+  //  **/
+  // void push_back(ConstRow init) {
+  //   if (IdTableImpl<COLS>::_size + 1 >= IdTableImpl<COLS>::_capacity) {
+  //     grow();
+  //   }
+  //   std::memcpy(IdTableImpl<COLS>::_data +
+  //                   IdTableImpl<COLS>::_size * IdTableImpl<COLS>::_cols,
+  //               init.data(), sizeof(Id) * IdTableImpl<COLS>::_cols);
+  //   IdTableImpl<COLS>::_size++;
+  // }
 
   void push_back(const IdTableStatic<COLS>& init, size_t row) {
     assert(init.IdTableImpl<COLS>::_cols == IdTableImpl<COLS>::_cols);

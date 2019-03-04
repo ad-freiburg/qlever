@@ -292,7 +292,6 @@ class FTSAlgorithms {
       const vector<Score>& scores, const ad_utility::HashMap<Id, IdTable>& fMap,
       size_t k, IdTable* result);
 
-  template <int WIDTH>
   static void oneVarFilterAggScoresAndTakeTopKContexts(
       const vector<Id>& cids, const vector<Id>& eids,
       const vector<Score>& scores, const ad_utility::HashSet<Id>& fSet,
