@@ -26,9 +26,8 @@ class IdTableImpl {
   /**
    * This is simply an Id* which has some additional methods.
    **/
-  class ConstRow {
+  class ConstRow final {
    public:
-    virtual ~ConstRow() {}
     bool operator==(ConstRow& other) const {
       bool matches = true;
       for (size_t i = 0; matches && i < COLS; i++) {
@@ -275,10 +274,9 @@ class IdTableImpl<0> {
         _cols(0),
         _manage_storage(true) {}
 
-  class ConstRow {
+  class ConstRow final {
    public:
     ConstRow(const Id* data, size_t cols) : _data(data), _cols(cols) {}
-    virtual ~ConstRow() {}
     ConstRow(const ConstRow& other) : _data(other._data), _cols(other._cols) {}
     ConstRow(ConstRow&& other) : _data(other._data), _cols(other._cols) {}
     ConstRow& operator=(const ConstRow& other) = delete;

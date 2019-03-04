@@ -243,7 +243,6 @@ class QueryExecutionTree {
       std::ostream& out) const {
     shared_ptr<const ResultTable> res = getResult();
     for (size_t i = from; i < upperBound; ++i) {
-      const auto& row = data[i];
       for (size_t j = 0; j < validIndices.size(); ++j) {
         switch (validIndices[j].second) {
           case ResultTable::ResultType::KB: {
