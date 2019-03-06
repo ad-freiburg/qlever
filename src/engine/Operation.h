@@ -38,7 +38,9 @@ class Operation {
   // Get the result for the subtree rooted at this element.
   // Use existing results if they are already available, otherwise
   // trigger computation.
-  shared_ptr<const ResultTable> getResult() const {
+  shared_ptr<const ResultTable> getResult() {
+    ad_utility::Timer timer;
+    timer.start();
     LOG(DEBUG) << "Check cache for Operation result" << endl;
     LOG(DEBUG) << "Using key: \n" << asString() << endl;
     auto [newResult, existingResult] =
@@ -49,18 +51,18 @@ class Operation {
       // in scope
       try {
         // lambda that computes the result
-        auto c = [this, &newResult]() { this->computeResult(newResult.get()); };
+        auto c = [this, &newResult]() { this->computeResult(newResult->_resTable.get()); };
         // deferred futures are never run in parallel
         auto fut = std::async(std::launch::async, c);
         // assign a time budget to this future
         auto status = fut.wait_for(
             _executionContext->getSettings()._timeoutQueryComputation);
         if (status != std::future_status::ready) {
-          newResult->timeout();
+          newResult->_resTable->timeout();
           AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Operation time out");
         } else {
           // we succeeded within the given timeout
-          newResult->finish();
+          newResult->_resTable->finish();
         }
       } catch (const ad_semsearch::AbortException& e) {
         newResult->_resTable->abort();
@@ -73,7 +75,7 @@ class Operation {
         LOG(ERROR) << "Failed to compute Operation result for:" << endl;
         LOG(ERROR) << asString() << endl;
         LOG(ERROR) << e.what() << endl;
-        newResult->abort();
+        newResult->_resTable->abort();
         // Rethrow as QUERY_ABORTED allowing us to print the Operation
         // only at innermost failure of a recursive call
         throw ad_semsearch::AbortException(e);
@@ -84,7 +86,7 @@ class Operation {
         LOG(ERROR) << asString() << endl;
         LOG(ERROR) << "WEIRD_EXCEPTION not inheriting from std::exception"
                    << endl;
-        newResult->abort();
+        newResult->_resTable->abort();
         // Rethrow as QUERY_ABORTED allowing us to print the Operation
         // only at innermost failure of a recursive call
         throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
@@ -106,7 +108,7 @@ class Operation {
       LOG(ERROR) << "Result in the cache was aborted" << endl;
       AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                "Operation was found aborted in the cache");
-    } else if (existingResult->status() == ResultTable::TIMEOUT) {
+    } else if (existingResult->_resTable->status() == ResultTable::TIMEOUT) {
       AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                "Operation was found timed-out in the cache");
     }

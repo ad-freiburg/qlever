@@ -14,6 +14,7 @@ namespace ad_utility {
 //
 //! A SIMPLE CLASS FOR TIME MEASUREMENTS.
 //
+using namespace std::chrono_literals;
 class Timer {
  private:
   std::chrono::steady_clock _clock;
