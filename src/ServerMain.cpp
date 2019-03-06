@@ -165,8 +165,8 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numThreads);
-    server.initialize(index, text, allPermutations, usePatterns,
-                      queryTimeout, translationTimeout);
+    server.initialize(index, text, allPermutations, usePatterns, queryTimeout,
+                      translationTimeout);
     server.run();
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled

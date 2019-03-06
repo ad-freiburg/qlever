@@ -51,7 +51,9 @@ class Operation {
       // in scope
       try {
         // lambda that computes the result
-        auto c = [this, &newResult]() { this->computeResult(newResult->_resTable.get()); };
+        auto c = [this, &newResult]() {
+          this->computeResult(newResult->_resTable.get());
+        };
         // deferred futures are never run in parallel
         auto fut = std::async(std::launch::async, c);
         // assign a time budget to this future
