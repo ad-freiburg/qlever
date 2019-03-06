@@ -226,8 +226,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
               } else {
                 // Remove the trailing character indicating if the value
                 // is an integer or a float.
-                res += ad_utility::convertIndexWordToFloat(
-                    entity.substr(0, entity.size() - 1));
+                res += ad_utility::convertIndexWordToFloat(entity);
               }
             }
           }
@@ -242,8 +241,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
               res = std::numeric_limits<float>::quiet_NaN();
               break;
             } else {
-              res += ad_utility::convertIndexWordToFloat(
-                  entity.substr(0, entity.size() - 1));
+              res += ad_utility::convertIndexWordToFloat(entity);
             }
           }
         }
@@ -538,8 +536,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
                 res = std::numeric_limits<float>::quiet_NaN();
                 break;
               } else {
-                res += ad_utility::convertIndexWordToFloat(
-                    entity.substr(0, entity.size() - 1));
+                res += ad_utility::convertIndexWordToFloat(entity);
               }
             }
           }
@@ -554,8 +551,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
               res = std::numeric_limits<float>::quiet_NaN();
               break;
             } else {
-              res += ad_utility::convertIndexWordToFloat(
-                  entity.substr(0, entity.size() - 1));
+              res += ad_utility::convertIndexWordToFloat(entity);
             }
           }
         }

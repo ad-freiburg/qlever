@@ -41,20 +41,18 @@ inline string convertValueLiteralToIndexWord(const string& orig);
 //! a natural ordering of the values invloved.
 inline string convertIndexWordToValueLiteral(const string& indexWord);
 
-//! Converts like this: "12.34 to PP0*2E0*1234 and -0.123 to M-0*1E9*876".
-inline string convertFloatToIndexWord(
-    const string& value,
-    size_t nofExponentDigits = DEFAULT_NOF_VALUE_EXPONENT_DIGITS,
-    size_t nofMantissaDigits = DEFAULT_NOF_VALUE_MANTISSA_DIGITS);
+//! Converts like "12.34" to :v:float:PP0*2E0*1234F and -0.123 to
+//! :v:float:M-0*1E9*876F with the last F used to indicate that the value
+//! was originally a float. ('I' if it was an int).
+inline string convertFloatStringToIndexWord(const string& value,
+                                            const bool wasInt = false);
 
-//! Converts like this: "PP0*2E0*1234 to "12.34 and M-0*1E9*876 to -0.123".
+//! Converts like this: :v:float:PP0*2E0*1234F to "12.34" and
+//! :v:float:M-0*1E9*876F to "-0.123".
 inline string convertIndexWordToFloatString(const string& indexWord);
 
-//! Converts like this: "PP0*2E0*1234 to "12.34 and M-0*1E9*876 to -0.123".
-//! NOTE: Unexpectedly this doesn't work directly on the output produced
-//!       by convertNumericToIndexWord() and convertValueLiteralToIndexWord()
-//!       as these add :v:<type>: in front
-//! TODO(schnelle): Rename this to reflect the above
+//! Converts like this: ":v:float:PP0*2E0*1234F to "12.34 and
+//! :v:float:M-0*1E9*876F to -0.123".
 inline float convertIndexWordToFloat(const string& indexWord);
 
 //! Brings a date to the format:
@@ -136,10 +134,11 @@ string convertValueLiteralToIndexWord(const string& orig) {
     // have a special marker at the very end to tell if the original number
     // was int for float. The benefit: can compare float with int that way.
     if (type == "int" || type == "integer") {
-      return convertFloatToIndexWord(value + ".0") + "I";
+      return convertFloatStringToIndexWord(value + ".0", true);
     }
-    if (type == "float" || type == "decimal") {
-      return convertFloatToIndexWord(value) + "F";
+    // We treat double and decimal as synonyms for float
+    if (type == "float" || type == "double" || type == "decimal") {
+      return convertFloatStringToIndexWord(value);
     }
   }
   return orig;
@@ -159,16 +158,13 @@ string convertIndexWordToValueLiteral(const string& indexWord) {
   if (startsWith(indexWord, VALUE_FLOAT_PREFIX)) {
     if (endsWith(indexWord, "F")) {
       std::ostringstream os;
-      os << "\""
-         << convertIndexWordToFloatString(
-                indexWord.substr(0, indexWord.size() - 1))
-         << "\"" << XSD_FLOAT_SUFFIX;
+      os << "\"" << convertIndexWordToFloatString(indexWord) << "\""
+         << XSD_FLOAT_SUFFIX;
       return os.str();
     }
     if (endsWith(indexWord, "I")) {
       std::ostringstream os;
-      string asFloat = convertIndexWordToFloatString(
-          indexWord.substr(0, indexWord.size() - 1));
+      string asFloat = convertIndexWordToFloatString(indexWord);
       os << "\"" << asFloat.substr(0, asFloat.find('.')) << "\""
          << XSD_INT_SUFFIX;
       return os.str();
@@ -178,8 +174,7 @@ string convertIndexWordToValueLiteral(const string& indexWord) {
 }
 
 // _____________________________________________________________________________
-string convertFloatToIndexWord(const string& orig, size_t nofExponentDigits,
-                               size_t nofMantissaDigits) {
+string convertFloatStringToIndexWord(const string& orig, const bool wasInt) {
   // Need a copy to modify.
   string value;
   // ignore a + in the beginning of the number
@@ -190,13 +185,12 @@ string convertFloatToIndexWord(const string& orig, size_t nofExponentDigits,
   }
   size_t posOfDot = value.find('.');
   if (posOfDot == string::npos) {
-    return convertFloatToIndexWord(value + ".0", nofExponentDigits,
-                                   nofMantissaDigits);
+    return convertFloatStringToIndexWord(value + ".0", wasInt);
   }
 
   // Treat the special case 0.0
   if (value == "0.0" || value == "-0.0") {
-    return string(VALUE_FLOAT_PREFIX) + "N0";
+    return string(VALUE_FLOAT_PREFIX) + "N0" + ((wasInt) ? 'I' : 'F');
   }
 
   std::ostringstream os;
@@ -246,8 +240,9 @@ string convertFloatToIndexWord(const string& orig, size_t nofExponentDigits,
   }
 
   // Add padding to the exponent;
-  AD_CHECK_GT(nofExponentDigits, expoString.size());
-  size_t nofPaddingElems = nofExponentDigits - expoString.size();
+  AD_CHECK_GT(DEFAULT_NOF_VALUE_EXPONENT_DIGITS, expoString.size());
+  size_t nofPaddingElems =
+      DEFAULT_NOF_VALUE_EXPONENT_DIGITS - expoString.size();
   for (size_t i = 0; i < nofPaddingElems; ++i) {
     os << (negaExpo == negaMantissa ? '0' : '9');
   }
@@ -279,14 +274,17 @@ string convertFloatToIndexWord(const string& orig, size_t nofExponentDigits,
       os << '9';
     }
   }
-  return os.str();
+  return os.str() + ((wasInt) ? 'I' : 'F');
 }
 
 // _____________________________________________________________________________
 string convertIndexWordToFloatString(const string& indexWord) {
-  size_t prefixLength = std::char_traits<char>::length(VALUE_FLOAT_PREFIX);
-  AD_CHECK_GT(indexWord.size(), prefixLength);
-  string number = indexWord.substr(prefixLength);
+  const static size_t prefixLength =
+      std::char_traits<char>::length(VALUE_FLOAT_PREFIX);
+  AD_CHECK_GT(indexWord.size(), prefixLength + 1);
+  // the -1 accounts for the originally float/int identifier suffix
+  string number =
+      indexWord.substr(prefixLength, indexWord.size() - prefixLength - 1);
   // Handle the special case 0.0
   if (number == "N0") {
     return "0.0";
@@ -371,8 +369,10 @@ string convertIndexWordToFloatString(const string& indexWord) {
 // _____________________________________________________________________________
 float convertIndexWordToFloat(const string& indexWord) {
   size_t prefixLength = std::char_traits<char>::length(VALUE_FLOAT_PREFIX);
-  AD_CHECK_GT(indexWord.size(), prefixLength);
-  string number = indexWord.substr(prefixLength);
+  AD_CHECK_GT(indexWord.size(), prefixLength + 1);
+  // the -1 accounts for the originally float/int identifier suffix
+  string number =
+      indexWord.substr(prefixLength, indexWord.size() - prefixLength - 1);
   // Handle the special case 0.0
   if (number == "N0") {
     return 0;
@@ -609,7 +609,7 @@ string convertNumericToIndexWord(const string& val) {
     tmp += ".0";
     wasInt = true;
   }
-  return convertFloatToIndexWord(tmp) + ((wasInt) ? 'I' : 'F');
+  return convertFloatStringToIndexWord(tmp, wasInt);
 }
 
 // _________________________________________________________

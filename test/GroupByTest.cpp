@@ -84,9 +84,9 @@ TEST_F(GroupByTest, doGroupBy) {
   vocab.push_back("<entity1>");
   vocab.push_back("<entity2>");
   vocab.push_back("<entity3>");
-  vocab.push_back(ad_utility::convertFloatToIndexWord("1.1231", 10, 20));
-  vocab.push_back(ad_utility::convertFloatToIndexWord("-5", 10, 20));
-  vocab.push_back(ad_utility::convertFloatToIndexWord("17", 10, 20));
+  vocab.push_back(ad_utility::convertFloatStringToIndexWord("1.1231"));
+  vocab.push_back(ad_utility::convertFloatStringToIndexWord("-5"));
+  vocab.push_back(ad_utility::convertFloatStringToIndexWord("17"));
 
   // create an input result table with a local vocabulary
   ResultTable inTable;

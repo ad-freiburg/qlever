@@ -17,7 +17,7 @@ TEST(ConversionsTest, getBase10ComplementOfIntegerString) {
   ASSERT_EQ("898989", getBase10ComplementOfIntegerString("101010"));
 }
 
-TEST(ConversionsTest, convertFloatToIndexWord) {
+TEST(ConversionsTest, convertFloatStringToIndexWord) {
   string zero = "0.0";
   string pos = "0.339";
   string pos2 = "1.7";
@@ -36,22 +36,22 @@ TEST(ConversionsTest, convertFloatToIndexWord) {
   string extra4 = "-0.100001";
 
   vector<string> indexWords;
-  indexWords.push_back(convertFloatToIndexWord(zero, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(pos, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(pos2, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(pos3, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(neg, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(neg2, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(neg3, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(neg4, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(pos4, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(pos5, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(pos6, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(pos7, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(extra, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(extra2, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(extra3, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(extra4, 10, 20));
+  indexWords.push_back(convertFloatStringToIndexWord(zero));
+  indexWords.push_back(convertFloatStringToIndexWord(pos));
+  indexWords.push_back(convertFloatStringToIndexWord(pos2));
+  indexWords.push_back(convertFloatStringToIndexWord(pos3));
+  indexWords.push_back(convertFloatStringToIndexWord(neg));
+  indexWords.push_back(convertFloatStringToIndexWord(neg2));
+  indexWords.push_back(convertFloatStringToIndexWord(neg3));
+  indexWords.push_back(convertFloatStringToIndexWord(neg4));
+  indexWords.push_back(convertFloatStringToIndexWord(pos4));
+  indexWords.push_back(convertFloatStringToIndexWord(pos5));
+  indexWords.push_back(convertFloatStringToIndexWord(pos6));
+  indexWords.push_back(convertFloatStringToIndexWord(pos7));
+  indexWords.push_back(convertFloatStringToIndexWord(extra));
+  indexWords.push_back(convertFloatStringToIndexWord(extra2));
+  indexWords.push_back(convertFloatStringToIndexWord(extra3));
+  indexWords.push_back(convertFloatStringToIndexWord(extra4));
 
   std::sort(indexWords.begin(), indexWords.end());
 
@@ -73,11 +73,11 @@ TEST(ConversionsTest, convertFloatToIndexWord) {
   ASSERT_EQ(pos6, convertIndexWordToFloatString(indexWords[15]));
 
   ASSERT_EQ("0.0",
-            convertIndexWordToFloatString(convertFloatToIndexWord("0", 5, 5)));
+            convertIndexWordToFloatString(convertFloatStringToIndexWord("0")));
   ASSERT_EQ("1.0",
-            convertIndexWordToFloatString(convertFloatToIndexWord("1", 5, 5)));
+            convertIndexWordToFloatString(convertFloatStringToIndexWord("1")));
   ASSERT_EQ("-1.0",
-            convertIndexWordToFloatString(convertFloatToIndexWord("-1", 5, 5)));
+            convertIndexWordToFloatString(convertFloatStringToIndexWord("-1")));
 }
 
 TEST(ConversionsTest, convertDateToIndexWord) {
@@ -159,6 +159,31 @@ TEST(ConversionsTest, shortFormEquivalence) {
             convertValueLiteralToIndexWord(nin2_short));
 }
 
+TEST(ConversionsTest, convertValueLiteralToIndexWordTest) {
+  {
+    string in = "\"1000\"^^<http://www.w3.org/2001/XMLSchema#int>";
+    string index = convertValueLiteralToIndexWord(in);
+    ASSERT_EQ(convertIndexWordToValueLiteral(index), in);
+  }
+  {
+    string in = "\"-1000\"^^<http://www.w3.org/2001/XMLSchema#int>";
+    string index = convertValueLiteralToIndexWord(in);
+    ASSERT_EQ(convertIndexWordToValueLiteral(index), in);
+  }
+  {
+    string in = "\"-3.142\"^^<http://www.w3.org/2001/XMLSchema#float>";
+    string index = convertValueLiteralToIndexWord(in);
+    ASSERT_EQ(convertIndexWordToValueLiteral(index), in);
+  }
+  {
+    string in = "\"3.142\"^^<http://www.w3.org/2001/XMLSchema#double>";
+    // We use currently use float as canonical output
+    string out = "\"3.142\"^^<http://www.w3.org/2001/XMLSchema#float>";
+    string index = convertValueLiteralToIndexWord(in);
+    ASSERT_EQ(convertIndexWordToValueLiteral(index), out);
+  }
+}
+
 TEST(ConversionsTest, endToEndNumbers) {
   string in = "\"1000\"^^<http://www.w3.org/2001/XMLSchema#int>";
   string nin = "\"-1000\"^^<http://www.w3.org/2001/XMLSchema#int>";
@@ -232,24 +257,24 @@ TEST(ConversionsTest, convertIndexWordToFloat) {
   string extra4 = "-0.100001";
 
   vector<string> indexWords;
-  indexWords.push_back(convertFloatToIndexWord(zero, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(zero1, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(zero2, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(pos, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(pos2, 10, 20));
+  indexWords.push_back(convertFloatStringToIndexWord(zero));
+  indexWords.push_back(convertFloatStringToIndexWord(zero1));
+  indexWords.push_back(convertFloatStringToIndexWord(zero2));
+  indexWords.push_back(convertFloatStringToIndexWord(pos));
+  indexWords.push_back(convertFloatStringToIndexWord(pos2));
   // decimal and float xsd types may start with a +
-  indexWords.push_back(convertFloatToIndexWord("+" + pos3, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(pos4, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(pos5, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(pos6, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(neg, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(neg2, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(neg3, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(neg4, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(extra, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(extra2, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(extra3, 10, 20));
-  indexWords.push_back(convertFloatToIndexWord(extra4, 10, 20));
+  indexWords.push_back(convertFloatStringToIndexWord("+" + pos3));
+  indexWords.push_back(convertFloatStringToIndexWord(pos4));
+  indexWords.push_back(convertFloatStringToIndexWord(pos5));
+  indexWords.push_back(convertFloatStringToIndexWord(pos6));
+  indexWords.push_back(convertFloatStringToIndexWord(neg));
+  indexWords.push_back(convertFloatStringToIndexWord(neg2));
+  indexWords.push_back(convertFloatStringToIndexWord(neg3));
+  indexWords.push_back(convertFloatStringToIndexWord(neg4));
+  indexWords.push_back(convertFloatStringToIndexWord(extra));
+  indexWords.push_back(convertFloatStringToIndexWord(extra2));
+  indexWords.push_back(convertFloatStringToIndexWord(extra3));
+  indexWords.push_back(convertFloatStringToIndexWord(extra4));
 
   int i = 0;
   ASSERT_FLOAT_EQ(0, convertIndexWordToFloat(indexWords[i]));
@@ -288,11 +313,11 @@ TEST(ConversionsTest, convertIndexWordToFloat) {
   i++;
 
   ASSERT_FLOAT_EQ(0,
-                  convertIndexWordToFloat(convertFloatToIndexWord("0", 5, 5)));
+                  convertIndexWordToFloat(convertFloatStringToIndexWord("0")));
   ASSERT_FLOAT_EQ(1,
-                  convertIndexWordToFloat(convertFloatToIndexWord("1", 5, 5)));
+                  convertIndexWordToFloat(convertFloatStringToIndexWord("1")));
   ASSERT_FLOAT_EQ(-1,
-                  convertIndexWordToFloat(convertFloatToIndexWord("-1", 5, 5)));
+                  convertIndexWordToFloat(convertFloatStringToIndexWord("-1")));
 }
 
 TEST(ConversionsTest, isNumeric) {
