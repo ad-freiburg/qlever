@@ -41,11 +41,19 @@ inline string convertValueLiteralToIndexWord(const string& orig);
 //! a natural ordering of the values invloved.
 inline string convertIndexWordToValueLiteral(const string& indexWord);
 
+//! Enumeration type for the supported numeric xsd:<type>'s
+enum class NumericType : char {
+  INTEGER = 'I',
+  FLOAT = 'F',
+  DOUBLE = 'D',
+  DECIMAL = 'T'
+};
+
 //! Converts like "12.34" to :v:float:PP0*2E0*1234F and -0.123 to
 //! :v:float:M-0*1E9*876F with the last F used to indicate that the value
 //! was originally a float. ('I' if it was an int).
-inline string convertFloatStringToIndexWord(const string& value,
-                                            const bool wasInt = false);
+inline string convertFloatStringToIndexWord(
+    const string& value, const NumericType type = NumericType::FLOAT);
 
 //! Converts like this: :v:float:PP0*2E0*1234F to "12.34" and
 //! :v:float:M-0*1E9*876F to "-0.123".
@@ -134,11 +142,15 @@ string convertValueLiteralToIndexWord(const string& orig) {
     // have a special marker at the very end to tell if the original number
     // was int for float. The benefit: can compare float with int that way.
     if (type == "int" || type == "integer") {
-      return convertFloatStringToIndexWord(value + ".0", true);
+      return convertFloatStringToIndexWord(value + ".0", NumericType::INTEGER);
     }
     // We treat double and decimal as synonyms for float
-    if (type == "float" || type == "double" || type == "decimal") {
-      return convertFloatStringToIndexWord(value);
+    if (type == "float") {
+      return convertFloatStringToIndexWord(value, NumericType::FLOAT);
+    } else if (type == "double") {
+      return convertFloatStringToIndexWord(value, NumericType::DOUBLE);
+    } else if (type == "decimal") {
+      return convertFloatStringToIndexWord(value, NumericType::DECIMAL);
     }
   }
   return orig;
@@ -162,6 +174,18 @@ string convertIndexWordToValueLiteral(const string& indexWord) {
          << XSD_FLOAT_SUFFIX;
       return os.str();
     }
+    if (endsWith(indexWord, "D")) {
+      std::ostringstream os;
+      os << "\"" << convertIndexWordToFloatString(indexWord) << "\""
+         << XSD_DOUBLE_SUFFIX;
+      return os.str();
+    }
+    if (endsWith(indexWord, "T")) {
+      std::ostringstream os;
+      os << "\"" << convertIndexWordToFloatString(indexWord) << "\""
+         << XSD_DECIMAL_SUFFIX;
+      return os.str();
+    }
     if (endsWith(indexWord, "I")) {
       std::ostringstream os;
       string asFloat = convertIndexWordToFloatString(indexWord);
@@ -174,7 +198,8 @@ string convertIndexWordToValueLiteral(const string& indexWord) {
 }
 
 // _____________________________________________________________________________
-string convertFloatStringToIndexWord(const string& orig, const bool wasInt) {
+string convertFloatStringToIndexWord(const string& orig,
+                                     const NumericType type) {
   // Need a copy to modify.
   string value;
   // ignore a + in the beginning of the number
@@ -185,12 +210,12 @@ string convertFloatStringToIndexWord(const string& orig, const bool wasInt) {
   }
   size_t posOfDot = value.find('.');
   if (posOfDot == string::npos) {
-    return convertFloatStringToIndexWord(value + ".0", wasInt);
+    return convertFloatStringToIndexWord(value + ".0", type);
   }
 
   // Treat the special case 0.0
   if (value == "0.0" || value == "-0.0") {
-    return string(VALUE_FLOAT_PREFIX) + "N0" + ((wasInt) ? 'I' : 'F');
+    return string(VALUE_FLOAT_PREFIX) + "N0" + char(type);
   }
 
   std::ostringstream os;
@@ -274,7 +299,7 @@ string convertFloatStringToIndexWord(const string& orig, const bool wasInt) {
       os << '9';
     }
   }
-  return os.str() + ((wasInt) ? 'I' : 'F');
+  return os.str() + char(type);
 }
 
 // _____________________________________________________________________________
@@ -603,13 +628,13 @@ bool isNumeric(const string& val) {
 
 // _____________________________________________________________________________
 string convertNumericToIndexWord(const string& val) {
-  bool wasInt = false;
+  NumericType type = NumericType::FLOAT;
   string tmp = val;
   if (tmp.find('.') == string::npos) {
     tmp += ".0";
-    wasInt = true;
+    type = NumericType::INTEGER;
   }
-  return convertFloatStringToIndexWord(tmp, wasInt);
+  return convertFloatStringToIndexWord(tmp, type);
 }
 
 // _________________________________________________________

@@ -177,8 +177,7 @@ TEST(ConversionsTest, convertValueLiteralToIndexWordTest) {
   }
   {
     string in = "\"3.142\"^^<http://www.w3.org/2001/XMLSchema#double>";
-    // We use currently use float as canonical output
-    string out = "\"3.142\"^^<http://www.w3.org/2001/XMLSchema#float>";
+    string out = "\"3.142\"^^<http://www.w3.org/2001/XMLSchema#double>";
     string index = convertValueLiteralToIndexWord(in);
     ASSERT_EQ(convertIndexWordToValueLiteral(index), out);
   }
@@ -200,7 +199,7 @@ TEST(ConversionsTest, endToEndNumbers) {
   string in9 = "\"1230.99901\"^^<http://www.w3.org/2001/XMLSchema#float>";
 
   string nin5 = "\"-42.42421\"^^<http://www.w3.org/2001/XMLSchema#decimal>";
-  string nout5 = "\"-42.42421\"^^<http://www.w3.org/2001/XMLSchema#float>";
+  string nout5 = "\"-42.42421\"^^<http://www.w3.org/2001/XMLSchema#decimal>";
 
   vector<string> indexWords;
   indexWords.push_back(convertValueLiteralToIndexWord(in));

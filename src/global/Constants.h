@@ -48,6 +48,10 @@ static const char XSD_DATETIME_SUFFIX[] =
 static const char XSD_INT_SUFFIX[] = "^^<http://www.w3.org/2001/XMLSchema#int>";
 static const char XSD_FLOAT_SUFFIX[] =
     "^^<http://www.w3.org/2001/XMLSchema#float>";
+static const char XSD_DOUBLE_SUFFIX[] =
+    "^^<http://www.w3.org/2001/XMLSchema#double>";
+static const char XSD_DECIMAL_SUFFIX[] =
+    "^^<http://www.w3.org/2001/XMLSchema#decimal>";
 static const char VALUE_DATE_TIME_SEPARATOR[] = "T";
 static const int DEFAULT_NOF_VALUE_INTEGER_DIGITS = 50;
 static const int DEFAULT_NOF_VALUE_EXPONENT_DIGITS = 20;
