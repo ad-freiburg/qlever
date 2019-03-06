@@ -41,12 +41,12 @@ class Operation {
   shared_ptr<const ResultTable> getResult() {
     ad_utility::Timer timer;
     timer.start();
-    LOG(DEBUG) << "Check cache for Operation result" << endl;
-    LOG(DEBUG) << "Using key: \n" << asString() << endl;
+    LOG(TRACE) << "Check cache for Operation result" << endl;
+    LOG(TRACE) << "Using key: \n" << asString() << endl;
     auto [newResult, existingResult] =
         _executionContext->getQueryTreeCache().tryEmplace(asString());
     if (newResult) {
-      LOG(DEBUG) << "Not in the cache, need to compute result" << endl;
+      LOG(TRACE) << "Not in the cache, need to compute result" << endl;
       // Passing the raw pointer here is ok as the result shared_ptr remains
       // in scope
       try {
@@ -62,10 +62,10 @@ class Operation {
         if (status != std::future_status::ready) {
           newResult->_resTable->timeout();
           AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Operation time out");
-        } else {
-          // we succeeded within the given timeout
-          newResult->_resTable->finish();
         }
+        // reaching here means the computation was succesful
+        // the call to _resTable->finish() is handled below
+        // together with the runtime information
       } catch (const ad_semsearch::AbortException& e) {
         newResult->_resTable->abort();
         // AbortExceptions have already been printed simply rethrow to
