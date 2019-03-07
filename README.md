@@ -9,7 +9,8 @@ large datasets QLever uses only about 40 GB RAM, builds indices in less than 12
 hours and executes most queries in less than a second.
 
 On top of the standard SPARQL functionality, QLever also supports SPARQL+Text
-search and SPARQL autocompletion; these are described in the next section.
+search and SPARQL autocompletion; these are described on the [advanced
+features](docs/advanced_features.md) page.
 
 A demo of QLever on a variety of large datasets, including Wikidata, can be
 found [here](http://qlever.cs.uni-freiburg.de).
@@ -114,7 +115,7 @@ create the index with the following command
 
     IndexBuilderMain -a -l -i /index/<prefix> -n /input/knowledge_base.ttl
 
-Where `<perfix>` is the base name for all index files, `-a` enables certain
+Where `<prefix>` is the base name for all index files, `-a` enables certain
 queries using predicate variables and `-l` externalizes long literals to disk.
 If you use `index` as the prefix you can later skip the `-e
 INDEX_PREFIX=<prefix>` flag.
