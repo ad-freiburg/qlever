@@ -2,18 +2,18 @@
 The following instructions build an index from our scientists example Knowledge
 Base
 
-Download and build QLever using `docker`
+## Download and build QLever using `docker`
 
     git clone --recursive https://github.com/ad-freiburg/QLever.git qlever
     cd qlever
     docker build -t qlever .
 
-Download the example Knowledge Base
+## Download the example Knowledge Base
 
     wget http://filicudi.informatik.uni-freiburg.de/bjoern-data/scientist-collection.zip
     unzip -j scientist-collection.zip -d scientists
 
-Build a QLever index from the Knowledge Base
+## Build a QLever Index
 
     docker run -it --rm \
         -v "$(pwd)/scientists:/input" \
@@ -24,7 +24,7 @@ Build a QLever index from the Knowledge Base
         -d /input/scientists.docsfile.tsv
     qlever@xyz:/app$ exit
 
-Run QLever
+## Run QLever
 
     docker run -it -p 7001:7001 \
         -v "$(pwd)/index:/index" \
