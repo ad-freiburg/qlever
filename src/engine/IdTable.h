@@ -24,26 +24,6 @@ class IdTableImpl {
   IdTableImpl()
       : _data(nullptr), _size(0), _capacity(0), _manage_storage(true) {}
 
-  //   friend std::ostream& operator<<(std::ostream& out,
-  //                                   const typename IdTableImpl<COLS>::Row&
-  //                                   row) {
-  //     for (size_t col = 0; col < row.size(); col++) {
-  //       out << row[col] << ", ";
-  //     }
-  //     out << std::endl;
-  //     return out;
-  //   }
-  //
-  //   friend std::ostream& operator<<(
-  //       std::ostream& out, const typename IdTableImpl<COLS>::ConstRow&& row)
-  //       {
-  //     for (size_t col = 0; col < row.size(); col++) {
-  //       out << row[col] << ", ";
-  //     }
-  //     out << std::endl;
-  //     return out;
-  //   }
-
   class iterator {
    public:
     // iterator traits types
@@ -625,19 +605,6 @@ class IdTableStatic : private IdTableImpl<COLS> {
                 init.data(), sizeof(Id) * IdTableImpl<COLS>::_cols);
     IdTableImpl<COLS>::_size++;
   }
-
-  // /**
-  //  * @brief Read cols() elements from init and stores them in a new row
-  //  **/
-  // void push_back(ConstRow init) {
-  //   if (IdTableImpl<COLS>::_size + 1 >= IdTableImpl<COLS>::_capacity) {
-  //     grow();
-  //   }
-  //   std::memcpy(IdTableImpl<COLS>::_data +
-  //                   IdTableImpl<COLS>::_size * IdTableImpl<COLS>::_cols,
-  //               init.data(), sizeof(Id) * IdTableImpl<COLS>::_cols);
-  //   IdTableImpl<COLS>::_size++;
-  // }
 
   void push_back(const IdTableStatic<COLS>& init, size_t row) {
     assert(init.IdTableImpl<COLS>::_cols == IdTableImpl<COLS>::_cols);
