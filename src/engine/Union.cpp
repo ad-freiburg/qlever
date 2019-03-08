@@ -140,8 +140,7 @@ void Union::computeResult(ResultTable* result) {
       result->_resultTypes.push_back(ResultTable::ResultType::KB);
     }
   }
-  result->_nofColumns = getResultWidth();
-  result->_data.setCols(result->_nofColumns);
+  result->_data.setCols(getResultWidth());
   int leftWidth = subRes1->_data.cols();
   int rightWidth = subRes2->_data.cols();
   int outWidth = result->_data.cols();

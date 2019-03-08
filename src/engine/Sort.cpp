@@ -44,8 +44,7 @@ void Sort::computeResult(ResultTable* result) {
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
 
   LOG(DEBUG) << "Sort result computation..." << endl;
-  result->_nofColumns = subRes->_nofColumns;
-  result->_data.setCols(result->_nofColumns);
+  result->_data.setCols(subRes->_data.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());

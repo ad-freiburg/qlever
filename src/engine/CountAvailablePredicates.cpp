@@ -123,8 +123,7 @@ size_t CountAvailablePredicates::getCostEstimate() {
 // _____________________________________________________________________________
 void CountAvailablePredicates::computeResult(ResultTable* result) {
   LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
-  result->_nofColumns = 2;
-  result->_data.setCols(result->_nofColumns);
+  result->_data.setCols(2);
   result->_sortedBy = resultSortedOn();
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);

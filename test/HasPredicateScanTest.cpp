@@ -14,7 +14,6 @@ class DummyOperation : public Operation {
  public:
   DummyOperation(QueryExecutionContext* ctx) : Operation(ctx) {}
   virtual void computeResult(ResultTable* result) {
-    result->_nofColumns = 2;
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_data.setCols(2);

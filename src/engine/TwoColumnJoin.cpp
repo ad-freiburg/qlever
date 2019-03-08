@@ -107,19 +107,18 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
     size_t jc1 = rightFilter ? _jc1Left : _jc1Right;
     size_t jc2 = rightFilter ? _jc2Left : _jc2Right;
     result->_sortedBy = {jc1};
-    result->_nofColumns = v->getResultWidth();
-    result->_data.setCols(result->_nofColumns);
-    result->_resultTypes.reserve(result->_nofColumns);
+    result->_data.setCols(v->getResultWidth());
+    result->_resultTypes.reserve(result->_data.cols());
     result->_resultTypes.insert(result->_resultTypes.end(),
                                 leftResult->_resultTypes.begin(),
                                 leftResult->_resultTypes.end());
-    for (size_t col = 0; col < rightResult->_nofColumns; col++) {
+    for (size_t col = 0; col < rightResult->_data.cols(); col++) {
       if (col != _jc1Right && col != _jc2Right) {
         result->_resultTypes.push_back(rightResult->_resultTypes[col]);
       }
     }
 
-    AD_CHECK_GE(result->_nofColumns, 2);
+    AD_CHECK_GE(result->_data.cols(), 2);
 
     const auto& toFilter = rightFilter ? leftResult : rightResult;
 

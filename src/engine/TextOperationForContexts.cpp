@@ -57,8 +57,7 @@ void TextOperationForContexts::computeResult(ResultTable* result) {
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   runtimeInfo.setDescriptor("TextOperationForContexts " + _words);
   if (_subtrees.size() == 0) {
-    result->_nofColumns = 2;
-    result->_data.setCols(result->_nofColumns);
+    result->_data.setCols(2);
     result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
     result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
     getExecutionContext()->getIndex().getContextListForWords(_words,

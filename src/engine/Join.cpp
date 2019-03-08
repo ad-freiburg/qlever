@@ -71,9 +71,8 @@ void Join::computeResult(ResultTable* result) {
     LOG(TRACE) << "Either side is empty thus join result is empty" << endl;
     runtimeInfo.addDetail("Either side was empty", "");
     size_t resWidth = leftWidth + rightWidth - 1;
-    result->_nofColumns = resWidth;
-    result->_data.setCols(result->_nofColumns);
-    result->_resultTypes.resize(result->_nofColumns);
+    result->_data.setCols(resWidth);
+    result->_resultTypes.resize(result->_data.cols());
     result->_sortedBy = {_leftJoinCol};
     return;
   }
@@ -94,9 +93,8 @@ void Join::computeResult(ResultTable* result) {
     LOG(TRACE) << "Left side empty thus join result is empty" << endl;
     runtimeInfo.addDetail("The left side was empty", "");
     size_t resWidth = leftWidth + rightWidth - 1;
-    result->_nofColumns = resWidth;
-    result->_data.setCols(result->_nofColumns);
-    result->_resultTypes.resize(result->_nofColumns);
+    result->_data.setCols(resWidth);
+    result->_resultTypes.resize(result->_data.cols());
     result->_sortedBy = {_leftJoinCol};
     return;
   }
@@ -109,13 +107,12 @@ void Join::computeResult(ResultTable* result) {
 
   AD_CHECK(result);
 
-  result->_nofColumns = leftWidth + rightWidth - 1;
-  result->_data.setCols(result->_nofColumns);
-  result->_resultTypes.reserve(result->_nofColumns);
+  result->_data.setCols(leftWidth + rightWidth - 1);
+  result->_resultTypes.reserve(result->_data.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               leftRes->_resultTypes.begin(),
                               leftRes->_resultTypes.end());
-  for (size_t i = 0; i < rightRes->_nofColumns; i++) {
+  for (size_t i = 0; i < rightRes->_data.cols(); i++) {
     if (i != _rightJoinCol) {
       result->_resultTypes.push_back(rightRes->_resultTypes[i]);
     }
@@ -242,11 +239,10 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
   LOG(DEBUG) << "Join by making multiple scans..." << endl;
   if (isFullScanDummy(_left)) {
     AD_CHECK(!isFullScanDummy(_right))
-    result->_nofColumns = _right->getResultWidth() + 2;
-    result->_data.setCols(result->_nofColumns);
+    result->_data.setCols(_right->getResultWidth() + 2);
     result->_sortedBy = {2 + _rightJoinCol};
     shared_ptr<const ResultTable> nonDummyRes = _right->getResult();
-    result->_resultTypes.reserve(result->_nofColumns);
+    result->_resultTypes.reserve(result->_data.cols());
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.insert(result->_resultTypes.end(),
@@ -255,12 +251,11 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
     doComputeJoinWithFullScanDummyLeft(nonDummyRes->_data, &result->_data);
   } else {
     AD_CHECK(!isFullScanDummy(_left))
-    result->_nofColumns = _left->getResultWidth() + 2;
-    result->_data.setCols(result->_nofColumns);
+    result->_data.setCols(_left->getResultWidth() + 2);
     result->_sortedBy = {_leftJoinCol};
 
     shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
-    result->_resultTypes.reserve(result->_nofColumns);
+    result->_resultTypes.reserve(result->_data.cols());
     result->_resultTypes.insert(result->_resultTypes.end(),
                                 nonDummyRes->_resultTypes.begin(),
                                 nonDummyRes->_resultTypes.end());

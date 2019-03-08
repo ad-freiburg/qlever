@@ -69,8 +69,7 @@ void OrderBy::computeResult(ResultTable* result) {
   runtimeInfo.setDescriptor("OrderBy on " + orderByVars);
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "OrderBy result computation..." << endl;
-  result->_nofColumns = subRes->_nofColumns;
-  result->_data.setCols(result->_nofColumns);
+  result->_data.setCols(subRes->_data.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
@@ -79,8 +78,7 @@ void OrderBy::computeResult(ResultTable* result) {
                        subRes->_data.end());
 
   int width = result->_data.cols();
-  // CALL_FIXED_SIZE_1(width, getEngine().sort, &result->_data,
-  //                   OBComp(_sortIndices));
+  // TODO(florian): Check if the lambda is a performance problem
   CALL_FIXED_SIZE_1(width, getEngine().sort, &result->_data,
                     [this](const auto& a, const auto& b) {
                       for (auto& entry : _sortIndices) {

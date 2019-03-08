@@ -34,6 +34,10 @@ class IdTableImpl {
     using iterator_category = std::forward_iterator_tag;
 
     iterator() : _data(nullptr), _row(0) {}
+    // This constructor has to take three arguments for compatibility with
+    // IdTableImpl<0> which doesn't know the number of columns at compile time.
+    // To prevent compiler warnings about unused parameters the third parameter
+    // (the number of columns) is not given a name.
     iterator(Id* data, size_t row, size_t) : _data(data), _row(row) {}
     virtual ~iterator() {}
 
@@ -205,6 +209,10 @@ class IdTableImpl<0> {
     }
 
     Row& operator=(const Row& other) {
+      // Check for self assignment.
+      if (&other == this) {
+        return *this;
+      }
       if (_allocated) {
         // If we manage our own storage recreate that to fit the other row
         delete[] _data;
@@ -219,6 +227,10 @@ class IdTableImpl<0> {
     }
 
     Row& operator=(Row&& other) {
+      // Check for self assignment.
+      if (&other == this) {
+        return *this;
+      }
       // This class cannot use move semantics if at least one of the two
       // rows invovled in an assigment does not manage it's data, but rather
       // functions as a view into an IdTable

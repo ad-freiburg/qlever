@@ -187,8 +187,7 @@ size_t HasPredicateScan::getCostEstimate() {
 
 void HasPredicateScan::computeResult(ResultTable* result) {
   LOG(DEBUG) << "HasPredicateScan result computation..." << std::endl;
-  result->_nofColumns = getResultWidth();
-  result->_data.setCols(result->_nofColumns);
+  result->_data.setCols(getResultWidth());
   result->_sortedBy = resultSortedOn();
 
   const std::vector<PatternID>& hasPattern = getIndex().getHasPattern();
@@ -233,7 +232,7 @@ void HasPredicateScan::computeResult(ResultTable* result) {
                                   subresult->_resultTypes.end());
       result->_resultTypes.push_back(ResultTable::ResultType::KB);
       int inWidth = subresult->_data.cols();
-      int outWidth = result->_nofColumns;
+      int outWidth = result->_data.cols();
       CALL_FIXED_SIZE_2(inWidth, outWidth, HasPredicateScan::computeSubqueryS,
                         &result->_data, subresult->_data, _subtreeColIndex,
                         hasPattern, hasPredicate, patterns);

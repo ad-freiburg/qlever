@@ -657,8 +657,7 @@ void GroupBy::computeResult(ResultTable* result) {
   std::vector<size_t> groupByColumns;
 
   result->_sortedBy = resultSortedOn();
-  result->_nofColumns = getResultWidth();
-  result->_data.setCols(result->_nofColumns);
+  result->_data.setCols(getResultWidth());
 
   std::vector<Aggregate> aggregates;
   aggregates.reserve(_aliases.size() + _groupByVariables.size());
@@ -795,8 +794,8 @@ void GroupBy::computeResult(ResultTable* result) {
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
 
   // populate the result type vector
-  result->_resultTypes.resize(result->_nofColumns);
-  for (size_t i = 0; i < result->_nofColumns; i++) {
+  result->_resultTypes.resize(result->_data.cols());
+  for (size_t i = 0; i < result->_data.cols(); i++) {
     switch (aggregates[i]._type) {
       case AggregateType::AVG:
         result->_resultTypes[i] = ResultTable::ResultType::FLOAT;
@@ -834,8 +833,8 @@ void GroupBy::computeResult(ResultTable* result) {
   }
 
   std::vector<ResultTable::ResultType> inputResultTypes;
-  inputResultTypes.reserve(subresult->_nofColumns);
-  for (size_t i = 0; i < subresult->_nofColumns; i++) {
+  inputResultTypes.reserve(subresult->_data.cols());
+  for (size_t i = 0; i < subresult->_data.cols(); i++) {
     inputResultTypes.push_back(subresult->getResultType(i));
   }
 

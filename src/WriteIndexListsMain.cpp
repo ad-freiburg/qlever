@@ -101,7 +101,7 @@ int main(int argc, char** argv) {
     auto qet = queryPlanner.createExecutionTree(q);
     const auto res = qet.getResult();
     AD_CHECK(res->size() > 0);
-    AD_CHECK(res->_nofColumns == 1);
+    AD_CHECK(res->_data.cols() == 1);
     string personlistFile = indexName + ".list.scientists";
     std::ofstream f(personlistFile.c_str());
     const IdTable& ids = res->_data;

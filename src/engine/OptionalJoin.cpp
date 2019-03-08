@@ -76,10 +76,9 @@ void OptionalJoin::computeResult(ResultTable* result) {
   runtimeInfo.setDescriptor("OptionalJoin on " + joinVars);
 
   result->_sortedBy = resultSortedOn();
-  result->_nofColumns = getResultWidth();
-  result->_data.setCols(result->_nofColumns);
+  result->_data.setCols(getResultWidth());
 
-  AD_CHECK_GE(result->_nofColumns, _joinColumns.size());
+  AD_CHECK_GE(result->_data.cols(), _joinColumns.size());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
@@ -89,11 +88,11 @@ void OptionalJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "OptionalJoin subresult computation done." << std::endl;
 
   // compute the result types
-  result->_resultTypes.reserve(result->_nofColumns);
+  result->_resultTypes.reserve(result->_data.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               leftResult->_resultTypes.begin(),
                               leftResult->_resultTypes.end());
-  for (size_t col = 0; col < rightResult->_nofColumns; col++) {
+  for (size_t col = 0; col < rightResult->_data.cols(); col++) {
     bool isJoinColumn = false;
     for (const std::array<Id, 2>& a : _joinColumns) {
       if (a[1] == col) {

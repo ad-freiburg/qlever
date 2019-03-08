@@ -40,8 +40,6 @@ class ResultTable {
     LOCAL_VOCAB
   };
 
-  size_t _nofColumns;
-
   /**
    * @brief This vector contains a list of column indices by which the result
    *        is sorted. This vector may be empty if the result is not sorted

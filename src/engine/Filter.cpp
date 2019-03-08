@@ -222,14 +222,13 @@ void Filter::computeResult(ResultTable* result) {
   runtimeInfo.setDescriptor(getDescriptor());
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "Filter result computation..." << endl;
-  result->_nofColumns = subRes->_nofColumns;
-  result->_data.setCols(result->_nofColumns);
+  result->_data.setCols(subRes->_data.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
   size_t lhsInd = _subtree->getVariableColumn(_lhs);
-  int width = result->_nofColumns;
+  int width = result->_data.cols();
   if (_rhs[0] == '?') {
     size_t rhsInd = _subtree->getVariableColumn(_rhs);
     CALL_FIXED_SIZE_1(width, computeResultDynamicValue, &result->_data, lhsInd,

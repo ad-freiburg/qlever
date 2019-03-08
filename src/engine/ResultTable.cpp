@@ -7,8 +7,7 @@
 
 // _____________________________________________________________________________
 ResultTable::ResultTable()
-    : _nofColumns(0),
-      _sortedBy(),
+    : _sortedBy(),
       _resultTypes(),
       _localVocab(std::make_shared<std::vector<std::string>>()),
       _status(ResultTable::IN_PROGRESS) {}

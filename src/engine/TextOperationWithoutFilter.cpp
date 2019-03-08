@@ -56,7 +56,6 @@ void TextOperationWithoutFilter::computeResult(ResultTable* result) {
 
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultNoVar(ResultTable* result) const {
-  result->_nofColumns = 2;
   result->_data.setCols(2);
   result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
@@ -67,7 +66,6 @@ void TextOperationWithoutFilter::computeResultNoVar(ResultTable* result) const {
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultOneVar(
     ResultTable* result) const {
-  result->_nofColumns = 3;
   result->_data.setCols(3);
   result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
@@ -79,12 +77,11 @@ void TextOperationWithoutFilter::computeResultOneVar(
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultMultVars(
     ResultTable* result) const {
-  result->_nofColumns = _nofVars + 2;
-  result->_data.setCols(result->_nofColumns);
-  result->_resultTypes.reserve(result->_nofColumns);
+  result->_data.setCols(_nofVars + 2);
+  result->_resultTypes.reserve(result->_data.cols());
   result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  for (size_t i = 2; i < result->_nofColumns; i++) {
+  for (size_t i = 2; i < result->_data.cols(); i++) {
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
   }
   getExecutionContext()->getIndex().getECListForWords(
