@@ -24,6 +24,11 @@ If you use QLever in your work, please cite this paper.
 If you want to skip the details and just get a running QLever instance to play
 around with. Follow the [quickstart guide](docs/quickstart.md).
 
+Alternatively to get started with a real (and really big) dataset we have prepared
+a [Wikidata Quickstart Guide](docs/wikidata.md). This guide takes you through the entire
+process of loading the full Wikidata Knowledge Base into QLever, but don't worry
+it is pretty.
+
 # Overview
 
 The rest of this page is organized in the following sections. Taking you
@@ -45,6 +50,8 @@ Further documentation is available on the following topics
 * [Advanced Features](docs/advanced_features.md)
 * [Native Setup](docs/native_setup.md)
 * [Troubleshooting](docs/troubleshooting.md)
+* [Quickstart Guide](docs/quickstart.md)
+* [Wikidata Quickstart Guide](docs/wikidata.md)
 
 # Building the QLever Docker Container
 
