@@ -238,9 +238,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
     vector<Id> eids;
     vector<Score> scores;
 
-    int width = result.cols();
-    CALL_FIXED_SIZE_1(width, FTSAlgorithms::aggScoresAndTakeTopKContexts, cids,
-                      eids, scores, 2, &result);
+    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
     ASSERT_EQ(0u, result.size());
 
     cids.push_back(0);
@@ -255,8 +253,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
     scores.push_back(1);
     scores.push_back(2);
 
-    CALL_FIXED_SIZE_1(width, FTSAlgorithms::aggScoresAndTakeTopKContexts, cids,
-                      eids, scores, 2, &result);
+    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
     ASSERT_EQ(2u, result.size());
     ASSERT_EQ(2u, result(0, 0));
     ASSERT_EQ(0u, result(0, 2));
@@ -270,8 +267,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
     scores.push_back(1);
 
     result.clear();
-    CALL_FIXED_SIZE_1(width, FTSAlgorithms::aggScoresAndTakeTopKContexts, cids,
-                      eids, scores, 2, &result);
+    FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, 2, &result);
     ASSERT_EQ(3u, result.size());
     std::sort(result.begin(), result.end(),
               [](const auto& a, const auto& b) { return a[0] < b[0]; });

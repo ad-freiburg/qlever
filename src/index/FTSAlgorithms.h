@@ -103,7 +103,6 @@ class FTSAlgorithms {
                               const vector<Score>& scores, size_t k,
                               WidthOneList* result);
 
-  template <int WIDTH>
   static void aggScoresAndTakeTopKContexts(const vector<Id>& cids,
                                            const vector<Id>& eids,
                                            const vector<Score>& scores,

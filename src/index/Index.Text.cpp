@@ -691,9 +691,8 @@ void Index::getECListForWordsOneVar(const string& words, size_t limit,
   vector<Id> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
-  int width = result->cols();
-  CALL_FIXED_SIZE_1(width, FTSAlgorithms::aggScoresAndTakeTopKContexts, cids,
-                    eids, scores, limit, result);
+  FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, limit,
+                                              result);
   LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
              << "\n";
 }

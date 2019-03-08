@@ -338,7 +338,6 @@ void FTSAlgorithms::getTopKByScores(const vector<Id>& cids,
 }
 
 // _____________________________________________________________________________
-template <int WIDTH>
 void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
                                                  const vector<Id>& eids,
                                                  const vector<Score>& scores,
@@ -351,7 +350,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
 
   // The default case where k == 1 can use a map for a O(n) solution
   if (k == 1) {
-    aggScoresAndTakeTopContext<WIDTH>(cids, eids, scores, dynResult);
+    aggScoresAndTakeTopContext<3>(cids, eids, scores, dynResult);
     return;
   }
 
@@ -381,7 +380,7 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
       };
     }
   }
-  IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
+  IdTableStatic<3> result = dynResult->moveToStatic<3>();
   result.reserve(map.size() * k + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     Id eid = it->first;
@@ -400,25 +399,6 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<Id>& cids,
   LOG(DEBUG) << "Done. There are " << dynResult->size()
              << " entity-score-context tuples now.\n";
 }
-
-template void FTSAlgorithms::aggScoresAndTakeTopKContexts<0>(
-    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
-    size_t k, IdTable* dynResult);
-template void FTSAlgorithms::aggScoresAndTakeTopKContexts<1>(
-    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
-    size_t k, IdTable* dynResult);
-template void FTSAlgorithms::aggScoresAndTakeTopKContexts<2>(
-    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
-    size_t k, IdTable* dynResult);
-template void FTSAlgorithms::aggScoresAndTakeTopKContexts<3>(
-    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
-    size_t k, IdTable* dynResult);
-template void FTSAlgorithms::aggScoresAndTakeTopKContexts<4>(
-    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
-    size_t k, IdTable* dynResult);
-template void FTSAlgorithms::aggScoresAndTakeTopKContexts<5>(
-    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
-    size_t k, IdTable* dynResult);
 
 // _____________________________________________________________________________
 template <typename Row>
