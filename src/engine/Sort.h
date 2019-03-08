@@ -48,6 +48,10 @@ class Sort : public Operation {
 
   virtual size_t getResultWidth() const;
 
+  template <int WIDTH>
+  static void sort(IdTable* dynTable, size_t sortCol,
+                   ResultTable::ResultType sortType);
+
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   size_t _sortCol;

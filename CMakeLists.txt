@@ -125,6 +125,9 @@ configure_file(src/web/style.css style.css)
 configure_file(src/web/script.js script.js)
 
 
+# add_executable(SpeedTest src/SpeedTest.cpp)
+# target_link_libraries(SpeedTest engine ${CMAKE_THREAD_LIBS_INIT})
+
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT})
 

@@ -279,6 +279,23 @@ TEST(IdTableTest, sortTest) {
   ASSERT_EQ(orig[1], test[5]);
 }
 
+TEST(IdTableTest, moveRow) {
+  IdTable init(3);
+  init.push_back({1, 2, 3});
+  init.push_back({4, 5, 6});
+  init.push_back({7, 8, 9});
+  init.push_back({10, 11, 12});
+
+  IdTable t = init;
+
+  t.moveRow(2, 0);
+  t.moveRow(1, 3);
+  ASSERT_EQ(init[0], t[3]);
+  ASSERT_EQ(init[1], t[1]);
+  ASSERT_EQ(init[2], t[0]);
+  ASSERT_EQ(init[3], t[2]);
+}
+
 // =============================================================================
 // IdTableStatic tests
 // =============================================================================
@@ -502,6 +519,23 @@ TEST(IdTableStaticTest, iterating) {
     }
     row_index++;
   }
+}
+
+TEST(IdTableStaticTest, moveRow) {
+  IdTableStatic<3> init;
+  init.push_back({1, 2, 3});
+  init.push_back({4, 5, 6});
+  init.push_back({7, 8, 9});
+  init.push_back({10, 11, 12});
+
+  IdTableStatic<3> t = init;
+
+  t.moveRow(2, 0);
+  t.moveRow(1, 3);
+  ASSERT_EQ(init[0], t[3]);
+  ASSERT_EQ(init[1], t[1]);
+  ASSERT_EQ(init[2], t[0]);
+  ASSERT_EQ(init[3], t[2]);
 }
 
 // =============================================================================

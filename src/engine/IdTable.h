@@ -271,6 +271,15 @@ class IdTableImpl<0> {
     size_t size() const { return _cols; }
     size_t cols() const { return _cols; }
 
+    friend void swap(Row& r1, Row& r2) {
+      assert(r1._cols == r2._cols);
+      Id* tmp = new Id[r1._cols];
+      std::memcpy(tmp, r1._data, sizeof(Id) * r1._cols);
+      std::memcpy(r1._data, r2._data, sizeof(Id) * r1._cols);
+      std::memcpy(r2._data, tmp, sizeof(Id) * r1._cols);
+      delete[] tmp;
+    }
+
     Id* _data;
     size_t _cols;
     bool _allocated;
@@ -431,8 +440,6 @@ class IdTableStatic : private IdTableImpl<COLS> {
   // Make all other instantiations of this template friends of this.
   template <int>
   friend class IdTableStatic;
-  template <int I>
-  friend void swap(IdTableStatic<I>& left, IdTableStatic<I>& right);
 
  private:
   static constexpr float GROWTH_FACTOR = 1.5;
@@ -694,6 +701,39 @@ class IdTableStatic : private IdTableImpl<COLS> {
   void clear() { IdTableImpl<COLS>::_size = 0; }
 
   /**
+   * @brief moves the row at row to newPos
+   **/
+  void moveRow(size_t row, size_t newPos) {
+    Id* tmp = new Id[cols()];
+    std::memcpy(tmp, IdTableImpl<COLS>::_data + row * cols(),
+                cols() * sizeof(Id));
+    if (row < newPos) {
+      std::memmove(IdTableImpl<COLS>::_data + row * cols(),
+                   IdTableImpl<COLS>::_data + (row + 1) * cols(),
+                   (newPos - row) * cols() * sizeof(Id));
+    } else if (row > newPos) {
+      std::memmove(IdTableImpl<COLS>::_data + (newPos + 1) * cols(),
+                   IdTableImpl<COLS>::_data + newPos * cols(),
+                   (row - newPos) * cols() * sizeof(Id));
+    }
+    std::memcpy(IdTableImpl<COLS>::_data + newPos * cols(), tmp,
+                cols() * sizeof(Id));
+    delete[] tmp;
+  }
+
+  void swapRows(size_t r1, size_t r2) {
+    Id* tmp = new Id[cols()];
+    std::memcpy(tmp, IdTableImpl<COLS>::_data + r1 * IdTableImpl<COLS>::_cols,
+                sizeof(Id) * IdTableImpl<COLS>::_cols);
+    std::memcpy(IdTableImpl<COLS>::_data + r1 * cols(),
+                IdTableImpl<COLS>::_data + r2 * cols(),
+                sizeof(Id) * IdTableImpl<COLS>::_cols);
+    std::memcpy(IdTableImpl<COLS>::_data + r2 * cols(), tmp,
+                sizeof(Id) * IdTableImpl<COLS>::_cols);
+    delete[] tmp;
+  }
+
+  /**
    * @brief Ensures this table has enough space allocated to store rows many
    *        rows of data
    **/
@@ -776,6 +816,19 @@ class IdTableStatic : private IdTableImpl<COLS> {
     return out;
   }
 
+  friend void swap(IdTableStatic<COLS>& left, IdTableStatic<COLS>& right) {
+    using std::swap;
+    swap(left._data, right._data);
+    swap(left._size, right._size);
+    swap(left._capacity, right._capacity);
+    if constexpr (COLS == 0) {
+      // Swapping the column count is only required for IdTables with a dynamic
+      // column count.
+      swap(left._cols, right._cols);
+    }
+    swap(left._manage_storage, right._manage_storage);
+  }
+
  private:
   /**
    * @brief Grows the storage of this IdTableStatic
@@ -809,18 +862,3 @@ class IdTableStatic : private IdTableImpl<COLS> {
     IdTableImpl<COLS>::_capacity = new_capacity;
   }
 };
-
-template <int COLS>
-void swap(IdTableStatic<COLS>& left, IdTableStatic<COLS>& right) {
-  using std::swap;
-  swap(left._data, right._data);
-  swap(left._size, right._size);
-  swap(left._capacity, right._capacity);
-  // As the cols member only exists for COLS = 0 we use the setCols
-  // method here. setCols is guaranteed to always be defined even
-  // if COLS != 0 (It might not have any effect though).
-  size_t rcols = right.cols();
-  right.IdTableImpl<COLS>::setCols(left.cols());
-  left.IdTableImpl<COLS>::setCols(rcols);
-  swap(left._manage_storage, right._manage_storage);
-}

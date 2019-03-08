@@ -4,6 +4,7 @@
 
 #include "./Sort.h"
 #include <sstream>
+#include "../util/kxsort.h"
 #include "CallFixedSize.h"
 #include "QueryExecutionTree.h"
 
@@ -25,6 +26,22 @@ string Sort::asString(size_t indent) const {
   }
   os << "SORT on column:" << _sortCol << "\n" << _subtree->asString(indent);
   return os.str();
+}
+
+template <int WIDTH>
+void Sort::sort(IdTable* dynTable, size_t sortCol,
+                ResultTable::ResultType sortType) {
+  switch (sortType) {
+    case ResultTable::ResultType::KB:
+    case ResultTable::ResultType::VERBATIM:
+    case ResultTable::ResultType::LOCAL_VOCAB: {
+      IdTableStatic<WIDTH> table = dynTable->moveToStatic<WIDTH>();
+      kx::radix_sort<WIDTH>(table, sortCol);
+      *dynTable = table.moveToDynamic();
+    } break;
+    default:
+      Engine::sort<WIDTH>(dynTable, sortCol);
+  }
 }
 
 // _____________________________________________________________________________
@@ -52,7 +69,9 @@ void Sort::computeResult(ResultTable* result) {
   result->_data.insert(result->_data.end(), subRes->_data.begin(),
                        subRes->_data.end());
   int width = result->_data.cols();
-  CALL_FIXED_SIZE_1(width, Engine::sort, &result->_data, _sortCol);
+  //  CALL_FIXED_SIZE_1(width, Engine::sort, &result->_data, _sortCol);
+  CALL_FIXED_SIZE_1(width, Sort::sort, &result->_data, _sortCol,
+                    result->getResultType(_sortCol));
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "Sort result computation done." << endl;
