@@ -143,23 +143,20 @@ class QueryExecutionTree {
   size_t _sizeEstimate;
 
   std::shared_ptr<const ResultTable> _cachedResult = nullptr;
-
-  template <typename Row>
   void writeJsonTable(
-      const vector<Row>& data, size_t from, size_t upperBound,
+      const IdTable& data, size_t from, size_t upperBound,
       const vector<pair<size_t, ResultTable::ResultType>>& validIndices,
       size_t maxSend, std::ostream& out) const {
     std::ostringstream throwaway;
     shared_ptr<const ResultTable> res = getResult();
     for (size_t i = from; i < upperBound; ++i) {
-      const auto& row = data[i];
       auto& os = (i < (maxSend + from) ? out : throwaway);
       os << "[";
       for (size_t j = 0; j + 1 < validIndices.size(); ++j) {
         switch (validIndices[j].second) {
           case ResultTable::ResultType::KB: {
-            std::optional<string> entity =
-                _qec->getIndex().idToOptionalString(row[validIndices[j].first]);
+            std::optional<string> entity = _qec->getIndex().idToOptionalString(
+                data(i, validIndices[j].first));
             if (entity) {
               string entitystr = entity.value();
               if (ad_utility::startsWith(entitystr, VALUE_PREFIX)) {
@@ -170,22 +167,22 @@ class QueryExecutionTree {
             break;
           }
           case ResultTable::ResultType::VERBATIM:
-            os << "\"" << row[validIndices[j].first] << "\",";
+            os << "\"" << data(i, validIndices[j].first) << "\",";
             break;
           case ResultTable::ResultType::TEXT:
             os << ad_utility::toJson(_qec->getIndex().getTextExcerpt(
-                      row[validIndices[j].first]))
+                      data(i, validIndices[j].first)))
                << ",";
             break;
           case ResultTable::ResultType::FLOAT: {
             float f;
-            std::memcpy(&f, &row[validIndices[j].first], sizeof(float));
+            std::memcpy(&f, &data(i, validIndices[j].first), sizeof(float));
             os << "\"" << f << "\",";
             break;
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
             std::optional<string> entity =
-                res->idToOptionalString(row[validIndices[j].first]);
+                res->idToOptionalString(data(i, validIndices[j].first));
             os << ad_utility::toJson(entity) << ",";
             break;
           }
@@ -197,7 +194,7 @@ class QueryExecutionTree {
       switch (validIndices[validIndices.size() - 1].second) {
         case ResultTable::ResultType::KB: {
           std::optional<string> entity = _qec->getIndex().idToOptionalString(
-              row[validIndices[validIndices.size() - 1].first]);
+              data(i, validIndices[validIndices.size() - 1].first));
           if (entity) {
             string entitystr = entity.value();
             if (ad_utility::startsWith(entitystr, VALUE_PREFIX)) {
@@ -208,24 +205,24 @@ class QueryExecutionTree {
           break;
         }
         case ResultTable::ResultType::VERBATIM:
-          os << "\"" << row[validIndices[validIndices.size() - 1].first]
+          os << "\"" << data(i, validIndices[validIndices.size() - 1].first)
              << "\"]";
           break;
         case ResultTable::ResultType::TEXT:
           os << ad_utility::toJson(_qec->getIndex().getTextExcerpt(
-                    row[validIndices[validIndices.size() - 1].first]))
+                    data(i, validIndices[validIndices.size() - 1].first)))
              << "]";
           break;
         case ResultTable::ResultType::FLOAT: {
           float f;
-          std::memcpy(&f, &row[validIndices[validIndices.size() - 1].first],
+          std::memcpy(&f, &data(i, validIndices[validIndices.size() - 1].first),
                       sizeof(float));
           os << "\"" << f << "\"]";
           break;
         }
         case ResultTable::ResultType::LOCAL_VOCAB: {
           std::optional<string> entity = res->idToOptionalString(
-              row[validIndices[validIndices.size() - 1].first]);
+              data(i, validIndices[validIndices.size() - 1].first));
           os << ad_utility::toJson(entity) << "]";
           break;
         }
@@ -240,20 +237,19 @@ class QueryExecutionTree {
     }
   }
 
-  template <typename Row>
   void writeTable(
-      const vector<Row>& data, char sep, size_t from, size_t upperBound,
+      const IdTable& data, char sep, size_t from, size_t upperBound,
       const vector<pair<size_t, ResultTable::ResultType>>& validIndices,
       std::ostream& out) const {
     shared_ptr<const ResultTable> res = getResult();
     for (size_t i = from; i < upperBound; ++i) {
-      const auto& row = data[i];
       for (size_t j = 0; j < validIndices.size(); ++j) {
         switch (validIndices[j].second) {
           case ResultTable::ResultType::KB: {
-            string entity = _qec->getIndex()
-                                .idToOptionalString(row[validIndices[j].first])
-                                .value_or("");
+            string entity =
+                _qec->getIndex()
+                    .idToOptionalString(data(i, validIndices[j].first))
+                    .value_or("");
             if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
               out << ad_utility::convertIndexWordToValueLiteral(entity);
             } else {
@@ -262,19 +258,20 @@ class QueryExecutionTree {
             break;
           }
           case ResultTable::ResultType::VERBATIM:
-            out << row[validIndices[j].first];
+            out << data(i, validIndices[j].first);
             break;
           case ResultTable::ResultType::TEXT:
-            out << _qec->getIndex().getTextExcerpt(row[validIndices[j].first]);
+            out << _qec->getIndex().getTextExcerpt(
+                data(i, validIndices[j].first));
             break;
           case ResultTable::ResultType::FLOAT: {
             float f;
-            std::memcpy(&f, &row[validIndices[j].first], sizeof(float));
+            std::memcpy(&f, &data(i, validIndices[j].first), sizeof(float));
             out << f;
             break;
           }
           case ResultTable::ResultType::LOCAL_VOCAB: {
-            out << res->idToOptionalString(row[validIndices[j].first])
+            out << res->idToOptionalString(data(i, validIndices[j].first))
                        .value_or("");
             break;
           }

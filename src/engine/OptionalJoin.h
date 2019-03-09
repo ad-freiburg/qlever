@@ -43,8 +43,45 @@ class OptionalJoin : public Operation {
 
   virtual size_t getCostEstimate() override;
 
+  /**
+   * @brief Joins two result tables on any number of columns, inserting the
+   *        special value ID_NO_VALUE for any entries marked as optional.
+   * @param a
+   * @param b
+   * @param aOptional
+   * @param bOptional
+   * @param joinColumns
+   * @param result
+   */
+  template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
+  static void optionalJoin(const IdTable& dynA, const IdTable& dynB,
+                           bool aOptional, bool bOptional,
+                           const vector<array<Id, 2>>& joinColumns,
+                           IdTable* dynResult);
+
  private:
   void computeSizeEstimateAndMultiplicities();
+
+  /**
+   * @brief Takes a row from each of the input tables and creates a result row
+   * @param a A row from table a.
+   * @param b A row from table b.
+   * @param sizeA The size of a row in table a.
+   * @param joinColumnBitmap_a A bitmap in which a bit is 1 if the corresponding
+   *                           column is a join column
+   * @param joinColumnBitmap_b A bitmap in which a bit is 1 if the corresponding
+   *                           column is a join column
+   * @param joinColumnAToB Maps join columns in a to their counterparts in b
+   * @param res the result row
+   */
+  template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
+  static void createOptionalResult(const IdTableStatic<A_WIDTH>& a, size_t aIdx,
+                                   bool aEmpty, const IdTableStatic<B_WIDTH>& b,
+                                   size_t bIdx, bool bEmpty,
+                                   int joinColumnBitmap_a,
+                                   int joinColumnBitmap_b,
+                                   const std::vector<Id>& joinColumnAToB,
+                                   IdTableStatic<OUT_WIDTH>* res);
 
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;

@@ -45,10 +45,10 @@ class MultiColumnJoin : public Operation {
    *        that should have resultWidth entries).
    *        This method is made public here for unit testing purposes.
    **/
-  template <typename A, typename B, typename R>
-  static void computeMultiColumnJoin(const A& a, const B& b,
+  template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
+  static void computeMultiColumnJoin(const IdTable& a, const IdTable& b,
                                      const vector<array<Id, 2>>& joinColumns,
-                                     vector<R>* result, size_t resultWidth);
+                                     IdTable* result);
 
  private:
   void computeSizeEstimateAndMultiplicities();

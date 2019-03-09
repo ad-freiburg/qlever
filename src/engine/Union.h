@@ -39,39 +39,14 @@ class Union : public Operation {
 
   const static size_t NO_COLUMN;
 
+  // The method is declared here to make it unit testable
+  template <int LEFT_WIDTH, int RIGHT_WIDTH, int OUT_WIDTH>
   static void computeUnion(
-      ResultTable* result, shared_ptr<const ResultTable> subRes1,
-      shared_ptr<const ResultTable> subRes2,
+      IdTable* res, const IdTable& left, const IdTable& right,
       const std::vector<std::array<size_t, 2>>& columnOrigins);
 
  private:
   virtual void computeResult(ResultTable* result) override;
-
-  /**
-   * @brief This method is used to convert runtime information about the
-   *        column count of _subtrees[0] to compile time information
-   */
-  template <typename Res>
-  static void computeUnion(
-      vector<Res>* res, shared_ptr<const ResultTable> subRes1,
-      shared_ptr<const ResultTable> subRes2,
-      const std::vector<std::array<size_t, 2>>& columnOrigins);
-
-  /**
-   * @brief This method is used to convert runtime information about the
-   *        column count of _subtrees[1] to compile time information
-   */
-  template <typename Res, typename L>
-  static void computeUnion(
-      vector<Res>* res, const vector<L>* left,
-      shared_ptr<const ResultTable> subRes2,
-      const std::vector<std::array<size_t, 2>>& columnOrigins);
-
-  // The method is declared here to make it unit testable
-  template <typename Res, typename L, typename R>
-  static void computeUnion(
-      vector<Res>* res, const vector<L>* left, const vector<R>* right,
-      const std::vector<std::array<size_t, 2>>& columnOrigins);
 
   /**
    * @brief This stores the input column from each of the two subtrees or

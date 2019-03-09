@@ -4,9 +4,10 @@
 
 #include <sstream>
 
-#include "./Comparators.h"
-#include "./OrderBy.h"
-#include "./QueryExecutionTree.h"
+#include "CallFixedSize.h"
+#include "Comparators.h"
+#include "OrderBy.h"
+#include "QueryExecutionTree.h"
 
 using std::string;
 
@@ -68,52 +69,28 @@ void OrderBy::computeResult(ResultTable* result) {
   runtimeInfo.setDescriptor("OrderBy on " + orderByVars);
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "OrderBy result computation..." << endl;
-  result->_nofColumns = subRes->_nofColumns;
+  result->_data.setCols(subRes->_data.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
-  switch (subRes->_nofColumns) {
-    case 1: {
-      auto res = new vector<array<Id, 1>>();
-      result->_fixedSizeData = res;
-      *res = *static_cast<vector<array<Id, 1>>*>(subRes->_fixedSizeData);
-      getEngine().sort(*res, OBComp<array<Id, 1>>(_sortIndices));
-    } break;
-    case 2: {
-      auto res = new vector<array<Id, 2>>();
-      result->_fixedSizeData = res;
-      *res = *static_cast<vector<array<Id, 2>>*>(subRes->_fixedSizeData);
-      getEngine().sort(*res, OBComp<array<Id, 2>>(_sortIndices));
-      break;
-    }
-    case 3: {
-      auto res = new vector<array<Id, 3>>();
-      result->_fixedSizeData = res;
-      *res = *static_cast<vector<array<Id, 3>>*>(subRes->_fixedSizeData);
-      getEngine().sort(*res, OBComp<array<Id, 3>>(_sortIndices));
-      break;
-    }
-    case 4: {
-      auto res = new vector<array<Id, 4>>();
-      result->_fixedSizeData = res;
-      *res = *static_cast<vector<array<Id, 4>>*>(subRes->_fixedSizeData);
-      getEngine().sort(*res, OBComp<array<Id, 4>>(_sortIndices));
-      break;
-    }
-    case 5: {
-      auto res = new vector<array<Id, 5>>();
-      result->_fixedSizeData = res;
-      *res = *static_cast<vector<array<Id, 5>>*>(subRes->_fixedSizeData);
-      getEngine().sort(*res, OBComp<array<Id, 5>>(_sortIndices));
-      break;
-    }
-    default: {
-      result->_varSizeData = subRes->_varSizeData;
-      getEngine().sort(result->_varSizeData, OBComp<vector<Id>>(_sortIndices));
-      break;
-    }
-  }
+  result->_data.insert(result->_data.end(), subRes->_data.begin(),
+                       subRes->_data.end());
+
+  int width = result->_data.cols();
+  // TODO(florian): Check if the lambda is a performance problem
+  CALL_FIXED_SIZE_1(width, getEngine().sort, &result->_data,
+                    [this](const auto& a, const auto& b) {
+                      for (auto& entry : _sortIndices) {
+                        if (a[entry.first] < b[entry.first]) {
+                          return !entry.second;
+                        }
+                        if (a[entry.first] > b[entry.first]) {
+                          return entry.second;
+                        }
+                      }
+                      return a[0] < b[0];
+                    });
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "OrderBy result computation done." << endl;

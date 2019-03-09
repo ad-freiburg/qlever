@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 #include "Union.h"
+#include "CallFixedSize.h"
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
 
@@ -139,162 +140,64 @@ void Union::computeResult(ResultTable* result) {
       result->_resultTypes.push_back(ResultTable::ResultType::KB);
     }
   }
-  result->_nofColumns = getResultWidth();
-  computeUnion(result, subRes1, subRes2, _columnOrigins);
+  result->_data.setCols(getResultWidth());
+  int leftWidth = subRes1->_data.cols();
+  int rightWidth = subRes2->_data.cols();
+  int outWidth = result->_data.cols();
+  CALL_FIXED_SIZE_3(leftWidth, rightWidth, outWidth, computeUnion,
+                    &result->_data, subRes1->_data, subRes2->_data,
+                    _columnOrigins);
 
   LOG(DEBUG) << "Union result computation done." << std::endl;
 }
 
+template <int LEFT_WIDTH, int RIGHT_WIDTH, int OUT_WIDTH>
 void Union::computeUnion(
-    ResultTable* result, shared_ptr<const ResultTable> subRes1,
-    shared_ptr<const ResultTable> subRes2,
+    IdTable* dynRes, const IdTable& dynLeft, const IdTable& dynRight,
     const std::vector<std::array<size_t, 2>>& columnOrigins) {
-  if (result->_nofColumns == 1) {
-    result->_fixedSizeData = new vector<array<Id, 1>>();
-    computeUnion(static_cast<vector<array<Id, 1>>*>(result->_fixedSizeData),
-                 subRes1, subRes2, columnOrigins);
-  } else if (result->_nofColumns == 2) {
-    result->_fixedSizeData = new vector<array<Id, 2>>();
-    computeUnion(static_cast<vector<array<Id, 2>>*>(result->_fixedSizeData),
-                 subRes1, subRes2, columnOrigins);
-  } else if (result->_nofColumns == 3) {
-    result->_fixedSizeData = new vector<array<Id, 3>>();
-    computeUnion(static_cast<vector<array<Id, 3>>*>(result->_fixedSizeData),
-                 subRes1, subRes2, columnOrigins);
-  } else if (result->_nofColumns == 4) {
-    result->_fixedSizeData = new vector<array<Id, 4>>();
-    computeUnion(static_cast<vector<array<Id, 4>>*>(result->_fixedSizeData),
-                 subRes1, subRes2, columnOrigins);
-  } else if (result->_nofColumns == 5) {
-    result->_fixedSizeData = new vector<array<Id, 5>>();
-    computeUnion(static_cast<vector<array<Id, 5>>*>(result->_fixedSizeData),
-                 subRes1, subRes2, columnOrigins);
-  } else {
-    computeUnion(&result->_varSizeData, subRes1, subRes2, columnOrigins);
-  }
-}
+  const IdTableStatic<LEFT_WIDTH> left = dynLeft.asStaticView<LEFT_WIDTH>();
+  const IdTableStatic<RIGHT_WIDTH> right = dynRight.asStaticView<RIGHT_WIDTH>();
+  IdTableStatic<OUT_WIDTH> res = dynRes->moveToStatic<OUT_WIDTH>();
 
-template <typename Res>
-void Union::computeUnion(
-    vector<Res>* res, shared_ptr<const ResultTable> subRes1,
-    shared_ptr<const ResultTable> subRes2,
-    const std::vector<std::array<size_t, 2>>& columnOrigins) {
-  if (subRes1->_nofColumns == 1) {
-    computeUnion(res,
-                 static_cast<vector<array<Id, 1>>*>(subRes1->_fixedSizeData),
-                 subRes2, columnOrigins);
-  } else if (subRes1->_nofColumns == 2) {
-    computeUnion(res,
-                 static_cast<vector<array<Id, 2>>*>(subRes1->_fixedSizeData),
-                 subRes2, columnOrigins);
-  } else if (subRes1->_nofColumns == 3) {
-    computeUnion(res,
-                 static_cast<vector<array<Id, 3>>*>(subRes1->_fixedSizeData),
-                 subRes2, columnOrigins);
-  } else if (subRes1->_nofColumns == 4) {
-    computeUnion(res,
-                 static_cast<vector<array<Id, 4>>*>(subRes1->_fixedSizeData),
-                 subRes2, columnOrigins);
-  } else if (subRes1->_nofColumns == 5) {
-    computeUnion(res,
-                 static_cast<vector<array<Id, 5>>*>(subRes1->_fixedSizeData),
-                 subRes2, columnOrigins);
-  } else {
-    computeUnion(res, &subRes1->_varSizeData, subRes2, columnOrigins);
-  }
-}
-
-template <typename Res, typename L>
-void Union::computeUnion(
-    vector<Res>* res, const vector<L>* left,
-    shared_ptr<const ResultTable> subRes2,
-    const std::vector<std::array<size_t, 2>>& columnOrigins) {
-  if (subRes2->_nofColumns == 1) {
-    computeUnion(res, left,
-                 static_cast<vector<array<Id, 1>>*>(subRes2->_fixedSizeData),
-                 columnOrigins);
-  } else if (subRes2->_nofColumns == 2) {
-    computeUnion(res, left,
-                 static_cast<vector<array<Id, 2>>*>(subRes2->_fixedSizeData),
-                 columnOrigins);
-  } else if (subRes2->_nofColumns == 3) {
-    computeUnion(res, left,
-                 static_cast<vector<array<Id, 3>>*>(subRes2->_fixedSizeData),
-                 columnOrigins);
-  } else if (subRes2->_nofColumns == 4) {
-    computeUnion(res, left,
-                 static_cast<vector<array<Id, 4>>*>(subRes2->_fixedSizeData),
-                 columnOrigins);
-  } else if (subRes2->_nofColumns == 5) {
-    computeUnion(res, left,
-                 static_cast<vector<array<Id, 5>>*>(subRes2->_fixedSizeData),
-                 columnOrigins);
-  } else {
-    computeUnion(res, left, &subRes2->_varSizeData, columnOrigins);
-  }
-}
-
-/**
- * @brief This struct creates a result row of the correct size
- */
-template <typename R>
-struct newResultRow {
-  static R create(unsigned int resultSize) {
-    (void)resultSize;
-    return R();
-  }
-};
-
-/**
- * @brief This struct creates a result row of the correct size, resizing
- *        the vector as requried.
- */
-template <>
-struct newResultRow<std::vector<Id>> {
-  static std::vector<Id> create(unsigned int resultSize) {
-    return vector<Id>(resultSize);
-  }
-};
-
-template <typename Res, typename L, typename R>
-void Union::computeUnion(
-    vector<Res>* res, const vector<L>* left, const vector<R>* right,
-    const std::vector<std::array<size_t, 2>>& columnOrigins) {
-  res->reserve(left->size() + right->size());
-  if (left->size() > 0) {
-    if ((*left)[0].size() == columnOrigins.size()) {
+  res.reserve(left.size() + right.size());
+  if (left.size() > 0) {
+    bool columnsMatch = left.cols() == columnOrigins.size();
+    // check if the order of the columns matches
+    for (size_t i = 0; columnsMatch && i < columnOrigins.size(); i++) {
+      const std::array<size_t, 2>& co = columnOrigins[i];
+      if (co[0] != i) {
+        columnsMatch = false;
+      }
+    }
+    if (columnsMatch) {
       // Left and right have the same columns, we can simply copy the entries.
       // As the variableColumnMap of left was simply copied over to create
       // this operations variableColumnMap the order of the columns will
       // be the same.
-      if constexpr (std::is_same<Res, L>::value) {
-        // This is only true iff the columns match, but the compiler
-        // would complain if Res != L.
-        res->insert(res->end(), left->begin(), left->end());
-      } else {
-        // This should never occur
-        AD_THROW(ad_semsearch::Exception::OTHER,
-                 "Error in " __FILE__
-                 ": Types Res and L differ but their size is the same.");
+      // This if clause is only here to avoid creating the call to insert when
+      // it would not be possible to call the function due to not matching
+      // columns.
+      if constexpr (LEFT_WIDTH == OUT_WIDTH) {
+        res.insert(res.end(), left.begin(), left.end());
       }
     } else {
-      for (const L& l : *left) {
-        Res row = newResultRow<Res>::create(columnOrigins.size());
+      for (const auto& l : left) {
+        res.emplace_back();
+        size_t backIdx = res.size() - 1;
         for (size_t i = 0; i < columnOrigins.size(); i++) {
           const std::array<size_t, 2>& co = columnOrigins[i];
           if (co[0] != Union::NO_COLUMN) {
-            row[i] = l[co[0]];
+            res(backIdx, i) = l[co[0]];
           } else {
-            row[i] = ID_NO_VALUE;
+            res(backIdx, i) = ID_NO_VALUE;
           }
         }
-        res->push_back(row);
       }
     }
   }
 
-  if (right->size() > 0) {
-    bool columnsMatch = (*right)[0].size() == columnOrigins.size();
+  if (right.size() > 0) {
+    bool columnsMatch = right.cols() == columnOrigins.size();
     // check if the order of the columns matches
     for (size_t i = 0; columnsMatch && i < columnOrigins.size(); i++) {
       const std::array<size_t, 2>& co = columnOrigins[i];
@@ -305,29 +208,23 @@ void Union::computeUnion(
     if (columnsMatch) {
       // The columns of the right subtree and the result match, we can
       // just copy the entries.
-      if constexpr (std::is_same<Res, R>::value) {
-        // This is only true iff the columns match, but the compiler
-        // would complain if Res != R.
-        res->insert(res->end(), right->begin(), right->end());
-      } else {
-        // This should never occur
-        AD_THROW(ad_semsearch::Exception::OTHER,
-                 "Error in " __FILE__
-                 ": Types Res and R differ but their size is the same.");
+      if constexpr (RIGHT_WIDTH == OUT_WIDTH) {
+        res.insert(res.end(), right.begin(), right.end());
       }
     } else {
-      for (const R& r : *right) {
-        Res row = newResultRow<Res>::create(columnOrigins.size());
+      for (const auto& r : right) {
+        res.emplace_back();
+        size_t backIdx = res.size() - 1;
         for (size_t i = 0; i < columnOrigins.size(); i++) {
           const std::array<size_t, 2>& co = columnOrigins[i];
           if (co[1] != Union::NO_COLUMN) {
-            row[i] = r[co[1]];
+            res(backIdx, i) = r[co[1]];
           } else {
-            row[i] = ID_NO_VALUE;
+            res(backIdx, i) = ID_NO_VALUE;
           }
         }
-        res->push_back(row);
       }
     }
   }
+  *dynRes = res.moveToDynamic();
 }

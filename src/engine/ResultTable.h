@@ -10,6 +10,7 @@
 #include <vector>
 #include "../global/Id.h"
 #include "../util/Exception.h"
+#include "IdTable.h"
 
 using std::array;
 using std::condition_variable;
@@ -39,8 +40,6 @@ class ResultTable {
     LOCAL_VOCAB
   };
 
-  size_t _nofColumns;
-
   /**
    * @brief This vector contains a list of column indices by which the result
    *        is sorted. This vector may be empty if the result is not sorted
@@ -49,8 +48,7 @@ class ResultTable {
    */
   vector<size_t> _sortedBy;
 
-  vector<vector<Id>> _varSizeData;
-  void* _fixedSizeData;
+  IdTable _data;
 
   vector<ResultType> _resultTypes;
 
@@ -117,44 +115,7 @@ class ResultTable {
 
   string asDebugString() const;
 
-  const vector<vector<Id>> getDataAsVarSize() const {
-    if (_varSizeData.size() > 0) {
-      return _varSizeData;
-    }
-
-    vector<vector<Id>> res;
-    if (_nofColumns == 1) {
-      const auto& data = *static_cast<vector<array<Id, 1>>*>(_fixedSizeData);
-      for (size_t i = 0; i < data.size(); ++i) {
-        res.emplace_back(vector<Id>{{data[i][0]}});
-      }
-    } else if (_nofColumns == 2) {
-      const auto& data = *static_cast<vector<array<Id, 2>>*>(_fixedSizeData);
-      for (size_t i = 0; i < data.size(); ++i) {
-        res.emplace_back(vector<Id>{{data[i][0], data[i][1]}});
-      }
-    } else if (_nofColumns == 3) {
-      const auto& data = *static_cast<vector<array<Id, 3>>*>(_fixedSizeData);
-      for (size_t i = 0; i < data.size(); ++i) {
-        res.emplace_back(vector<Id>{{data[i][0], data[i][1], data[i][2]}});
-      }
-    } else if (_nofColumns == 4) {
-      const auto& data = *static_cast<vector<array<Id, 4>>*>(_fixedSizeData);
-      for (size_t i = 0; i < data.size(); ++i) {
-        res.emplace_back(
-            vector<Id>{{data[i][0], data[i][1], data[i][2], data[i][3]}});
-      }
-    } else if (_nofColumns == 5) {
-      const auto& data = *static_cast<vector<array<Id, 5>>*>(_fixedSizeData);
-      for (size_t i = 0; i < data.size(); ++i) {
-        res.emplace_back(vector<Id>{
-            {data[i][0], data[i][1], data[i][2], data[i][3], data[i][4]}});
-      }
-    }
-    return res;
-  }
-
-  ResultType getResultType(unsigned int col) const {
+  ResultType getResultType(size_t col) const {
     if (col < _resultTypes.size()) {
       return _resultTypes[col];
     }

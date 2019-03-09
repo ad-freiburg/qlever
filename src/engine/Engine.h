@@ -15,6 +15,7 @@
 #include "../util/HashMap.h"
 #include "../util/Log.h"
 #include "./IndexSequence.h"
+#include "IdTable.h"
 
 using std::array;
 using std::vector;
@@ -95,21 +96,9 @@ class Engine {
   static vector<array<E, N>> filterRelationWithSingleId(
       const vector<array<E, N>>& relation, E entityId, size_t checkColumn);
 
-  template <typename E, size_t N, size_t M>
-  static void join(const vector<array<E, N>>& a, size_t joinColumn1,
-                   const vector<array<E, M>>& b, size_t joinColumn2,
-                   vector<array<E, (N + M - 1)>>* result);
-
-  template <typename E, typename A, typename B>
-  static void join(const A& a, size_t jc1, const B& b, size_t jc2,
-                   vector<vector<E>>* result);
-
-  template <typename E, typename A>
-  static void selfJoin(const A& a, size_t jc, vector<vector<E>>* result);
-
-  template <typename E, size_t N, typename Comp>
-  static void filter(const vector<array<E, N>>& v, const Comp& comp,
-                     vector<array<E, N>>* result) {
+  template <typename Comp, int WIDTH>
+  static void filter(const IdTableStatic<WIDTH>& v, const Comp& comp,
+                     IdTableStatic<WIDTH>* result) {
     AD_CHECK(result);
     AD_CHECK(result->size() == 0);
     LOG(DEBUG) << "Filtering " << v.size() << " elements.\n";
@@ -121,38 +110,24 @@ class Engine {
     LOG(DEBUG) << "Filter done, size now: " << result->size() << " elements.\n";
   }
 
-  template <typename E, typename Comp>
-  static void filter(const vector<vector<E>>& v, const Comp& comp,
-                     vector<vector<E>>* result) {
-    AD_CHECK(result);
-    AD_CHECK(result->size() == 0);
-    LOG(DEBUG) << "Filtering " << v.size() << " elements.\n";
-    for (const auto& e : v) {
-      if (comp(e)) {
-        result->push_back(e);
-      }
-    }
-    LOG(DEBUG) << "Filter done, size now: " << result->size() << " elements.\n";
-  }
-
-  template <typename T>
-  static void filter(const vector<T>& v, size_t fc1, size_t fc2,
-                     const vector<array<Id, 2>>& filter, vector<T>* result) {
-    AD_CHECK(result);
-    AD_CHECK(result->size() == 0);
-    LOG(DEBUG) << "Filtering " << v.size()
-               << " elements with a filter relation with " << filter.size()
+  template <int IN_WIDTH, int FILTER_WIDTH>
+  static void filter(const IdTable& dynV, size_t fc1, size_t fc2,
+                     const IdTable& dynFilter, IdTable* dynResult) {
+    AD_CHECK(dynResult);
+    AD_CHECK(dynResult->size() == 0);
+    LOG(DEBUG) << "Filtering " << dynV.size()
+               << " elements with a filter relation with " << dynFilter.size()
                << "elements\n";
 
     // Check trivial case.
-    if (v.size() == 0 || filter.size() == 0) {
+    if (dynV.size() == 0 || dynFilter.size() == 0) {
       return;
     }
 
     // Cast away constness so we can add sentinels that will be removed
     // in the end and create and add those sentinels.
-    vector<T>& l1 = const_cast<vector<T>&>(v);
-    vector<array<Id, 2>>& l2 = const_cast<vector<array<Id, 2>>&>(filter);
+    IdTable& l1 = const_cast<IdTable&>(dynV);
+    IdTable& l2 = const_cast<IdTable&>(dynFilter);
 
     Id sent1 = std::numeric_limits<Id>::max();
     Id sent2 = std::numeric_limits<Id>::max() - 1;
@@ -162,40 +137,47 @@ class Engine {
     auto match1 = l1[0];
     auto match2 = l2[0];
 
-    match1[fc1] = sentMatch;
-    match1[fc2] = sentMatch;
-    match2[0] = sentMatch;
-    match2[1] = sentMatch;
-    elem1[fc1] = sent1;
-    elem2[0] = sent2;
-    l1.push_back(match1);
-    l2.push_back(match2);
-    l1.push_back(elem1);
-    l2.push_back(elem2);
+    l1.emplace_back();
+    l1.back()[fc1] = sentMatch;
+    l1.back()[fc2] = sentMatch;
+    l1.emplace_back();
+    l1.back()[fc1] = sent1;
+
+    l2.emplace_back();
+    l2.back()[0] = sentMatch;
+    l2.back()[1] = sentMatch;
+    l2.emplace_back();
+    l2.back()[fc2] = sent2;
+
+    const IdTableStatic<IN_WIDTH> v = dynV.asStaticView<IN_WIDTH>();
+    const IdTableStatic<FILTER_WIDTH> filter =
+        dynFilter.asStaticView<FILTER_WIDTH>();
+    IdTableStatic<IN_WIDTH> result = dynResult->moveToStatic<IN_WIDTH>();
+
     // Intersect both lists.
     size_t i = 0;
     size_t j = 0;
 
-    while (l1[i][fc1] < sent1) {
-      while (l1[i][fc1] < l2[j][0]) {
+    while (v(i, fc1) < sent1) {
+      while (v(i, fc1) < filter(j, 0)) {
         ++i;
       }
-      while (l2[j][0] < l1[i][fc1]) {
+      while (filter(j, 0) < v(i, fc1)) {
         ++j;
       }
-      while (l1[i][fc1] == l2[j][0]) {
+      while (v(i, fc1) == filter(j, 0)) {
         // fc1 match, create cross-product
         // Check fc2
-        if (l1[i][fc2] == l2[j][1]) {
-          result->push_back(l1[i]);
+        if (v(i, fc2) == filter(j, 1)) {
+          result.push_back(v, i);
           ++i;
-          if (i == l1.size()) break;
-        } else if (l1[i][fc2] < l2[j][1]) {
+          if (i == v.size()) break;
+        } else if (v(i, fc2) < filter(j, 1)) {
           ++i;
-          if (i == l1.size()) break;
+          if (i == v.size()) break;
         } else {
           ++j;
-          if (j == l2.size()) break;
+          if (j == filter.size()) break;
         }
       }
     }
@@ -203,440 +185,167 @@ class Engine {
     // Remove sentinels
     l1.resize(l1.size() - 2);
     l2.resize(l2.size() - 2);
-    result->pop_back();
+    result.pop_back();
+    *dynResult = result.moveToDynamic();
 
-    LOG(DEBUG) << "Filter done, size now: " << result->size() << " elements.\n";
+    LOG(DEBUG) << "Filter done, size now: " << dynResult->size()
+               << " elements.\n";
   }
 
-  template <typename E, size_t N>
-  static void sort(vector<array<E, N>>& tab, size_t keyColumn) {
-    LOG(DEBUG) << "Sorting " << tab.size() << " elements.\n";
-    std::sort(tab.begin(), tab.end(),
-              [&keyColumn](const array<E, N>& a, const array<E, N>& b) {
+  template <int WIDTH>
+  static void sort(IdTable* tab, size_t keyColumn) {
+    LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
+    IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
+    std::sort(stab.begin(), stab.end(),
+              [&keyColumn](const auto& a, const auto& b) {
                 return a[keyColumn] < b[keyColumn];
               });
+    *tab = stab.moveToDynamic();
     LOG(DEBUG) << "Sort done.\n";
   }
 
-  template <typename E>
-  static void sort(vector<vector<E>>& tab, size_t keyColumn) {
-    LOG(DEBUG) << "Sorting " << tab.size() << " elements.\n";
-    std::sort(tab.begin(), tab.end(),
-              [&keyColumn](const vector<E>& a, const vector<E>& b) {
-                return a[keyColumn] < b[keyColumn];
-              });
+  template <int WIDTH, typename C>
+  static void sort(IdTable* tab, C comp) {
+    LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
+    IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
+    std::sort(stab.begin(), stab.end(), comp);
+    *tab = stab.moveToDynamic();
     LOG(DEBUG) << "Sort done.\n";
   }
 
-  template <typename E, size_t N, typename C>
-  static void sort(vector<array<E, N>>& tab, C comp) {
-    LOG(DEBUG) << "Sorting " << tab.size() << " elements.\n";
-    std::sort(tab.begin(), tab.end(), comp);
-    LOG(DEBUG) << "Sort done.\n";
-  }
+  /**
+   * @brief Removes all duplicates from input with regards to the columns
+   *        in keepIndices. The input needs to be sorted on the keep indices,
+   *        otherwise the result of this function is undefined.
+   **/
+  template <int WIDTH>
+  static void distinct(const IdTable& dynInput,
+                       const vector<size_t>& keepIndices, IdTable* dynResult) {
+    LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
+    const IdTableStatic<WIDTH> input = dynInput.asStaticView<WIDTH>();
+    IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
+    if (input.size() > 0) {
+      AD_CHECK_LE(keepIndices.size(), input.cols());
+      result = input;
 
-  template <typename E, typename C>
-  static void sort(vector<vector<E>>& tab, C comp) {
-    LOG(DEBUG) << "Sorting " << tab.size() << " elements.\n";
-    std::sort(tab.begin(), tab.end(), comp);
-    LOG(DEBUG) << "Sort done.\n";
-  }
-
-  template <typename E, size_t N>
-  static void distinct(const vector<array<E, N>>& v,
-                       const vector<size_t>& keepIndices,
-                       vector<array<E, N>>* result) {
-    LOG(DEBUG) << "Distinct on " << v.size() << " elements.\n";
-    AD_CHECK_LE(keepIndices.size(), N);
-    *result = v;
-    switch (keepIndices.size()) {
-      case 1: {
-        size_t keyCol = keepIndices[0];
-        auto last =
-            std::unique(result->begin(), result->end(),
-                        [&keyCol](const array<E, N>& a, const array<E, N>& b) {
-                          return a[keyCol] == b[keyCol];
-                        });
-        result->erase(last, result->end());
-        break;
-      }
-      case 2: {
-        size_t keyCol = keepIndices[0];
-        size_t keyCol2 = keepIndices[1];
-        auto last = std::unique(
-            result->begin(), result->end(),
-            [&keyCol, &keyCol2](const array<E, N>& a, const array<E, N>& b) {
-              return a[keyCol] == b[keyCol] && a[keyCol2] == b[keyCol2];
-            });
-        result->erase(last, result->end());
-        break;
-      }
-      case 3: {
-        size_t keyCol = keepIndices[0];
-        size_t keyCol2 = keepIndices[1];
-        size_t keyCol3 = keepIndices[2];
-        auto last = std::unique(
-            result->begin(), result->end(),
-            [&keyCol, &keyCol2, &keyCol3](const array<E, N>& a,
-                                          const array<E, N>& b) {
-              return a[keyCol] == b[keyCol] && a[keyCol2] == b[keyCol2] &&
-                     a[keyCol3] == b[keyCol3];
-            });
-        result->erase(last, result->end());
-        break;
-      }
-      case 4: {
-        size_t keyCol = keepIndices[0];
-        size_t keyCol2 = keepIndices[1];
-        size_t keyCol3 = keepIndices[2];
-        size_t keyCol4 = keepIndices[3];
-        auto last = std::unique(
-            result->begin(), result->end(),
-            [&keyCol, &keyCol2, &keyCol3, &keyCol4](const array<E, N>& a,
-                                                    const array<E, N>& b) {
-              return a[keyCol] == b[keyCol] && a[keyCol2] == b[keyCol2] &&
-                     a[keyCol3] == b[keyCol3] && a[keyCol4] == b[keyCol4];
-            });
-        result->erase(last, result->end());
-        break;
-      }
-      case 5: {
-        size_t keyCol = keepIndices[0];
-        size_t keyCol2 = keepIndices[1];
-        size_t keyCol3 = keepIndices[2];
-        size_t keyCol4 = keepIndices[3];
-        size_t keyCol5 = keepIndices[4];
-        auto last = std::unique(
-            result->begin(), result->end(),
-            [&keyCol, &keyCol2, &keyCol3, &keyCol4, &keyCol5](
-                const array<E, N>& a, const array<E, N>& b) {
-              return a[keyCol] == b[keyCol] && a[keyCol2] == b[keyCol2] &&
-                     a[keyCol3] == b[keyCol3] && a[keyCol4] == b[keyCol4] &&
-                     a[keyCol5] == b[keyCol5];
-            });
-        result->erase(last, result->end());
-        break;
-      }
-    }
-    LOG(DEBUG) << "Distinct done.\n";
-  }
-
-  template <typename E>
-  static void distinct(const vector<vector<E>>& v,
-                       const vector<size_t>& keepIndices,
-                       vector<vector<E>>* result) {
-    LOG(DEBUG) << "Distinct on " << v.size() << " elements.\n";
-    if (v.size() > 0) {
-      AD_CHECK_LE(keepIndices.size(), v[0].size());
-      *result = v;
-
-      auto last =
-          std::unique(result->begin(), result->end(),
-                      [&keepIndices](const vector<E>& a, const vector<E>& b) {
-                        for (auto& i : keepIndices) {
-                          if (a[i] != b[i]) {
-                            return false;
-                          }
-                        }
-                        return true;
-                      });
-      result->erase(last, result->end());
-
+      auto last = std::unique(result.begin(), result.end(),
+                              [&keepIndices](const auto& a, const auto& b) {
+                                for (auto& i : keepIndices) {
+                                  if (a[i] != b[i]) {
+                                    return false;
+                                  }
+                                }
+                                return true;
+                              });
+      result.erase(last, result.end());
+      *dynResult = result.moveToDynamic();
       LOG(DEBUG) << "Distinct done.\n";
     }
   }
 
-  /**
-   * @brief This struct creates a result row of the correct size
-   */
-  template <typename R, int K>
-  struct newOptionalResult {
-    R operator()(unsigned int resultSize) {
-      (void)resultSize;
-      return R();
-    }
-  };
+  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+  static void join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                   size_t jc2, IdTable* dynRes) {
+    const IdTableStatic<L_WIDTH> ai = dynA.asStaticView<L_WIDTH>();
+    const IdTableStatic<R_WIDTH> bi = dynB.asStaticView<R_WIDTH>();
+    IdTableStatic<OUT_WIDTH> result = dynRes->moveToStatic<OUT_WIDTH>();
 
-  /**
-   * @brief This struct creates a result row of the correct size, resizing
-   *        the vector as requried.
-   */
-  template <int K>
-  struct newOptionalResult<std::vector<Id>, K> {
-    std::vector<Id> operator()(unsigned int resultSize) {
-      return vector<Id>(resultSize);
-    }
-  };
+    LOG(DEBUG) << "Performing join between two tables.\n";
+    LOG(DEBUG) << "A: width = " << ai.cols() << ", size = " << ai.size()
+               << "\n";
+    LOG(DEBUG) << "B: width = " << bi.cols() << ", size = " << bi.size()
+               << "\n";
 
-  /**
-   * @brief Takes a row from each of the input tables and creates a result row
-   * @param a A row from table a.
-   * @param b A row from table b.
-   * @param sizeA The size of a row in table a.
-   * @param joinColumnBitmap_a A bitmap in which a bit is 1 if the corresponding
-   *                           column is a join column
-   * @param joinColumnBitmap_b A bitmap in which a bit is 1 if the corresponding
-   *                           column is a join column
-   * @param joinColumnAToB Maps join columns in a to their counterparts in b
-   * @param resultSize the size of the result row
-   * @param res the result row
-   */
-  template <typename A, typename B, typename R, bool aEmpty, bool bEmpty>
-  static void createOptionalResult(const typename A::value_type* a,
-                                   const typename B::value_type* b,
-                                   size_t sizeA, int joinColumnBitmap_a,
-                                   int joinColumnBitmap_b,
-                                   const std::vector<Id>& joinColumnAToB,
-                                   unsigned int resultSize, R& res) {
-    assert(!(aEmpty && bEmpty));
-    if (aEmpty) {
-      // Fill the columns of a with ID_NO_VALUE and the rest with b.
-      size_t i = 0;
-      for (size_t col = 0; col < sizeA; col++) {
-        if ((joinColumnBitmap_a & (1 << col)) == 0) {
-          res[col] = ID_NO_VALUE;
-        } else {
-          // if this is one of the join columns use the value in b
-          res[col] = (*b)[joinColumnAToB[col]];
-        }
-        i++;
-      }
-      for (size_t col = 0; col < b->size(); col++) {
-        if ((joinColumnBitmap_b & (1 << col)) == 0) {
-          // only write the value if it is not one of the join columns in b
-          res[i] = (*b)[col];
-          i++;
-        }
-      }
-    } else if (bEmpty) {
-      // Fill the columns of b with ID_NO_VALUE and the rest with a
-      for (size_t col = 0; col < sizeA; col++) {
-        res[col] = (*a)[col];
-      }
-      for (size_t col = sizeA; col < resultSize; col++) {
-        res[col] = ID_NO_VALUE;
-      }
-    } else {
-      // Use the values from both a and b
-      unsigned int i = 0;
-      for (size_t col = 0; col < a->size(); col++) {
-        res[col] = (*a)[col];
-        i++;
-      }
-      for (size_t col = 0; col < b->size(); col++) {
-        if ((joinColumnBitmap_b & (1 << col)) == 0) {
-          res[i] = (*b)[col];
-          i++;
-        }
-      }
-    }
-  }
-
-  /**
-   * @brief Joins two result tables on any number of columns, inserting the
-   *        special value ID_NO_VALUE for any entries marked as optional.
-   * @param a
-   * @param b
-   * @param aOptional
-   * @param bOptional
-   * @param joinColumns
-   * @param result
-   */
-  template <typename A, typename B, typename R, size_t K>
-  static void optionalJoin(const A& a, const B& b, bool aOptional,
-                           bool bOptional,
-                           const vector<array<Id, 2>>& joinColumns,
-                           vector<R>* result, size_t resultSize) {
-    // check for trivial cases
-    if ((a.size() == 0 && b.size() == 0) || (a.size() == 0 && !aOptional) ||
-        (b.size() == 0 && !bOptional)) {
+    // Check trivial case.
+    if (ai.size() == 0 || bi.size() == 0) {
+      *dynRes = result.moveToDynamic();
       return;
     }
-
-    int joinColumnBitmap_a = 0;
-    int joinColumnBitmap_b = 0;
-    for (const array<Id, 2>& jc : joinColumns) {
-      joinColumnBitmap_a |= (1 << jc[0]);
-      joinColumnBitmap_b |= (1 << jc[1]);
-    }
-
-    // When a is optional this is used to quickly determine
-    // in which column of b the value of a joined column can be found.
-    std::vector<Id> joinColumnAToB;
-    if (aOptional) {
-      uint32_t maxJoinColA = 0;
-      for (const array<Id, 2>& jc : joinColumns) {
-        if (jc[0] > maxJoinColA) {
-          maxJoinColA = jc[0];
-        }
-      }
-      joinColumnAToB.resize(maxJoinColA + 1);
-      for (const array<Id, 2>& jc : joinColumns) {
-        joinColumnAToB[jc[0]] = jc[1];
-      }
-    }
-
-    // Deal with one of the two tables beeing both empty and optional
-    if (a.size() == 0 && aOptional) {
-      size_t sizeA = resultSize - b[0].size() + joinColumns.size();
-      for (size_t ib = 0; ib < b.size(); ib++) {
-        R res = newOptionalResult<R, K>()(resultSize);
-        createOptionalResult<A, B, R, true, false>(
-            nullptr, &b[ib], sizeA, joinColumnBitmap_a, joinColumnBitmap_b,
-            joinColumnAToB, resultSize, res);
-        result->push_back(res);
-      }
-      return;
-    } else if (b.size() == 0 && bOptional) {
-      for (size_t ia = 0; ia < a.size(); ia++) {
-        R res = newOptionalResult<R, K>()(resultSize);
-        createOptionalResult<A, B, R, false, true>(
-            &a[ia], nullptr, a[ia].size(), joinColumnBitmap_a,
-            joinColumnBitmap_b, joinColumnAToB, resultSize, res);
-        result->push_back(res);
-      }
+    // Check for possible self join (dangerous with sentinels).
+    if (ai.cols() == bi.cols() && ai.data() == bi.data()) {
+      AD_CHECK_EQ(jc1, jc2);
+      doSelfJoin(ai, jc1, &result);
+      *dynRes = result.moveToDynamic();
       return;
     }
 
     // Cast away constness so we can add sentinels that will be removed
     // in the end and create and add those sentinels.
-    A& l1 = const_cast<A&>(a);
-    B& l2 = const_cast<B&>(b);
-    Id sentVal = std::numeric_limits<Id>::max() - 1;
-    auto v1 = l1[0];
-    auto v2 = l2[0];
-    for (size_t i = 0; i < v1.size(); i++) {
-      v1[i] = sentVal;
-    }
-    for (size_t i = 0; i < v2.size(); i++) {
-      v2[i] = sentVal;
-    }
-    l1.push_back(v1);
-    l2.push_back(v2);
+    IdTable& l1 = const_cast<IdTable&>(dynA);
+    IdTable& l2 = const_cast<IdTable&>(dynB);
 
-    bool matched = false;
-    size_t ia = 0, ib = 0;
-    while (ia < a.size() - 1 && ib < b.size() - 1) {
-      // Join columns 0 are the primary sort columns
-      while (a[ia][joinColumns[0][0]] < b[ib][joinColumns[0][1]]) {
-        if (bOptional) {
-          R res = newOptionalResult<R, K>()(resultSize);
-          createOptionalResult<A, B, R, false, true>(
-              &a[ia], nullptr, a[ia].size(), joinColumnBitmap_a,
-              joinColumnBitmap_b, joinColumnAToB, resultSize, res);
-          result->push_back(res);
+    Id sent1 = std::numeric_limits<Id>::max();
+    Id sent2 = std::numeric_limits<Id>::max() - 1;
+    Id sentMatch = std::numeric_limits<Id>::max() - 2;
+
+    l1.push_back();
+    l1.back()[jc1] = sentMatch;
+    l1.push_back();
+    l1.back()[jc1] = sent1;
+
+    l2.push_back();
+    l2.back()[jc2] = sentMatch;
+    l2.push_back();
+    l2.back()[jc2] = sent2;
+
+    // Update the views
+    const IdTableStatic<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
+    const IdTableStatic<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
+
+    // Cannot just switch l1 and l2 around because the order of
+    // items in the result tuples is important.
+    if (a.size() / b.size() > GALLOP_THRESHOLD) {
+      doGallopInnerJoinLeftLarge(a, jc1, b, jc2, &result);
+    } else if (b.size() / a.size() > GALLOP_THRESHOLD) {
+      doGallopInnerJoinRightLarge(a, jc1, b, jc2, &result);
+    } else {
+      // Intersect both lists.
+      size_t i = 0;
+      size_t j = 0;
+      while (a(i, jc1) < sent1) {
+        while (a(i, jc1) < b(j, jc2)) {
+          ++i;
         }
-        ia++;
-      }
-      while (b[ib][joinColumns[0][1]] < a[ia][joinColumns[0][0]]) {
-        if (aOptional) {
-          R res = newOptionalResult<R, K>()(resultSize);
-          createOptionalResult<A, B, R, true, false>(
-              nullptr, &b[ib], a[ia].size(), joinColumnBitmap_a,
-              joinColumnBitmap_b, joinColumnAToB, resultSize, res);
-          result->push_back(res);
+        while (b(j, jc2) < a(i, jc1)) {
+          ++j;
         }
-        ib++;
-      }
-
-      // check if the rest of the join columns also match
-      matched = true;
-      for (size_t joinColIndex = 0; joinColIndex < joinColumns.size();
-           joinColIndex++) {
-        const array<Id, 2>& joinColumn = joinColumns[joinColIndex];
-        if (a[ia][joinColumn[0]] < b[ib][joinColumn[1]]) {
-          if (bOptional) {
-            R res = newOptionalResult<R, K>()(resultSize);
-            createOptionalResult<A, B, R, false, true>(
-                &a[ia], nullptr, a[ia].size(), joinColumnBitmap_a,
-                joinColumnBitmap_b, joinColumnAToB, resultSize, res);
-            result->push_back(res);
-          }
-          ia++;
-          matched = false;
-          break;
-        }
-        if (b[ib][joinColumn[1]] < a[ia][joinColumn[0]]) {
-          if (aOptional) {
-            R res = newOptionalResult<R, K>()(resultSize);
-            createOptionalResult<A, B, R, true, false>(
-                nullptr, &b[ib], a[ia].size(), joinColumnBitmap_a,
-                joinColumnBitmap_b, joinColumnAToB, resultSize, res);
-            result->push_back(res);
-          }
-          ib++;
-          matched = false;
-          break;
-        }
-      }
-
-      // Compute the cross product of the row in a and all matching
-      // rows in b.
-      while (matched && ia < a.size() && ib < b.size()) {
-        // used to reset ib if another cross product needs to be computed
-        size_t initIb = ib;
-
-        while (matched) {
-          R res = newOptionalResult<R, K>()(resultSize);
-          createOptionalResult<A, B, R, false, false>(
-              &a[ia], &b[ib], a[ia].size(), joinColumnBitmap_a,
-              joinColumnBitmap_b, joinColumnAToB, resultSize, res);
-          result->push_back(res);
-          ib++;
-
-          // do the rows still match?
-          for (const array<Id, 2>& jc : joinColumns) {
-            if (ib == b.size() || a[ia][jc[0]] != b[ib][jc[1]]) {
-              matched = false;
-              break;
+        while (a(i, jc1) == b(j, jc2)) {
+          // In case of match, create cross-product
+          // Always fix a and go through b.
+          size_t keepJ = j;
+          while (a(i, jc1) == b(j, jc2)) {
+            result.push_back();
+            size_t backIndex = result.size() - 1;
+            size_t aCols = a.cols();
+            for (size_t h = 0; h < aCols; h++) {
+              result(backIndex, h) = a(i, h);
             }
+            for (size_t h = 0; h < b.cols(); h++) {
+              if (h < jc2) {
+                result(backIndex, h + aCols) = b(j, h);
+              } else if (h > jc2) {
+                result(backIndex, h + aCols - 1) = b(j, h);
+              }
+            }
+            ++j;
+          }
+          ++i;
+          // If the next i is still the same, reset j.
+          if (a(i, jc1) == b(keepJ, jc2)) {
+            j = keepJ;
           }
         }
-        ia++;
-        // Check if the next row in a also matches the initial row in b
-        matched = true;
-        for (const array<Id, 2>& jc : joinColumns) {
-          if (ia == a.size() || a[ia][jc[0]] != b[initIb][jc[1]]) {
-            matched = false;
-            break;
-          }
-        }
-        // If they match reset ib and compute another cross product
-        if (matched) {
-          ib = initIb;
-        }
       }
     }
+    // Remove sentinels
+    l1.resize(l1.size() - 2);
+    l2.resize(l2.size() - 2);
+    result.pop_back();
+    *dynRes = result.moveToDynamic();
 
-    // remove the sentinels
-    l1.pop_back();
-    l2.pop_back();
-    if (result->back()[joinColumns[0][0]] == sentVal) {
-      result->pop_back();
-    }
-
-    // If the table of which we reached the end is optional, add all entries
-    // of the other table.
-    if (aOptional && ib < b.size()) {
-      while (ib < b.size()) {
-        R res = newOptionalResult<R, K>()(resultSize);
-        createOptionalResult<A, B, R, true, false>(
-            nullptr, &b[ib], a[0].size(), joinColumnBitmap_a,
-            joinColumnBitmap_b, joinColumnAToB, resultSize, res);
-        result->push_back(res);
-        ++ib;
-      }
-    }
-    if (bOptional && ia < a.size()) {
-      while (ia < a.size()) {
-        R res = newOptionalResult<R, K>()(resultSize);
-        createOptionalResult<A, B, R, false, true>(
-            &a[ia], nullptr, a[ia].size(), joinColumnBitmap_a,
-            joinColumnBitmap_b, joinColumnAToB, resultSize, res);
-        result->push_back(res);
-        ++ia;
-      }
-    }
+    LOG(DEBUG) << "Join done.\n";
+    LOG(DEBUG) << "Result: width = " << dynRes->cols()
+               << ", size = " << dynRes->size() << "\n";
   }
 
  private:
@@ -660,311 +369,149 @@ class Engine {
     return result;
   }
 
-  template <typename E, size_t N, size_t I, size_t M, size_t J>
-  static void doJoin(const vector<array<E, N>>& a, const vector<array<E, M>>& b,
-                     vector<array<E, (N + M - 1)>>* result) {
-    LOG(DEBUG) << "Performing join between two fixed width tables.\n";
-    LOG(DEBUG) << "A: width = " << N << ", size = " << a.size() << "\n";
-    LOG(DEBUG) << "B: width = " << M << ", size = " << b.size() << "\n";
-
-    // Typedefs can hopefully prevent insanity. Read as:
-    // "Tuple 1", "Tuple 2", "Tuple for Result", etc.
-    typedef array<E, N> T1;
-    typedef array<E, M> T2;
-    typedef vector<T1> V1;
-    typedef vector<T2> V2;
-
-    // Check trivial case.
-    if (a.size() == 0 || b.size() == 0) {
-      return;
-    }
-    // Check for possible self join (dangerous with sentinels).
-    if (N == M) {
-      if (reinterpret_cast<uintptr_t>(&a) == reinterpret_cast<uintptr_t>(&b)) {
-        AD_CHECK_EQ(I, J);
-        doSelfJoin<E, N, I>(
-            a, reinterpret_cast<vector<array<E, (N + N - 1)>>*>(result));
-        return;
-      }
-    }
-
-    // Cast away constness so we can add sentinels that will be removed
-    // in the end and create and add those sentinels.
-    V1& l1 = const_cast<V1&>(a);
-    V2& l2 = const_cast<V2&>(b);
-
-    E sent1 = std::numeric_limits<E>::max();
-    E sent2 = std::numeric_limits<E>::max() - 1;
-    E sentMatch = std::numeric_limits<E>::max() - 2;
-    auto elem1 = l1[0];
-    auto elem2 = l2[0];
-    auto match1 = l1[0];
-    auto match2 = l2[0];
-
-    match1[I] = sentMatch;
-    match2[J] = sentMatch;
-    elem1[I] = sent1;
-    elem2[J] = sent2;
-    l1.push_back(match1);
-    l2.push_back(match2);
-    l1.push_back(elem1);
-    l2.push_back(elem2);
-
-    // Cannot just switch l1 and l2 around because the order of
-    // items in the result tuples is important.
-    if (l1.size() / l2.size() > GALLOP_THRESHOLD) {
-      doGallopInnerJoinLeftLarge<E, N, I, M, J>(l1, l2, result);
-    } else if (l2.size() / l1.size() > GALLOP_THRESHOLD) {
-      doGallopInnerJoinRightLarge<E, N, I, M, J>(l1, l2, result);
-    } else {
-      // Intersect both lists.
-      size_t i = 0;
-      size_t j = 0;
-      while (l1[i][I] < sent1) {
-        while (l1[i][I] < l2[j][J]) {
-          ++i;
-        }
-        while (l2[j][J] < l1[i][I]) {
-          ++j;
-        }
-        while (l1[i][I] == l2[j][J]) {
-          // In case of match, create cross-product
-          // Always fix l1 and go through l2.
-          size_t keepJ = j;
-          while (l1[i][I] == l2[j][J]) {
-            result->emplace_back(joinTuples(
-                l1[i], l2[j], GenSeq<N>(), GenSeqLo<M, (J < M ? J : M - 1)>()));
-            ++j;
-          }
-          ++i;
-          // If the next i is still the same, reset j.
-          if (l1[i][I] == l2[keepJ][J]) {
-            j = keepJ;
-          }
-        }
-      }
-    }
-    // Remove sentinels
-    l1.resize(l1.size() - 2);
-    l2.resize(l2.size() - 2);
-    result->pop_back();
-
-    LOG(DEBUG) << "Join done.\n";
-    LOG(DEBUG) << "Result: width = " << (N + M - 1)
-               << ", size = " << result->size() << "\n";
-  }
-
-  template <typename E, size_t N, size_t I, size_t M, size_t J>
-  static void doGallopInnerJoinRightLarge(
-      const vector<array<E, N>>& l1, const vector<array<E, M>>& l2,
-      vector<array<E, (N + M - 1)>>* result) {
-    LOG(DEBUG) << "Galloping case.\n";
-    size_t i = 0;
-    size_t j = 0;
-    E sent1 = std::numeric_limits<E>::max();
-    while (l1[i][I] < sent1) {
-      while (l1[i][I] < l2[j][J]) {
-        ++i;
-      }
-      if (l2[j][J] < l1[i][I]) {
-        array<E, M> val;
-        val[J] = l1[i][I];
-        j = std::lower_bound(
-                l2.begin() + j, l2.end(), val,
-                [](const array<E, M>& l, const array<E, M>& r) -> bool {
-                  return l[J] < r[J];
-                }) -
-            l2.begin();
-      }
-      while (l1[i][I] == l2[j][J]) {
-        // In case of match, create cross-product
-        // Always fix l1 and go through l2.
-        size_t keepJ = j;
-        while (l1[i][I] == l2[j][J]) {
-          result->emplace_back(joinTuples(l1[i], l2[j], GenSeq<N>(),
-                                          GenSeqLo<M, (J < M ? J : M - 1)>()));
-          ++j;
-        }
-        ++i;
-        // If the next i is still the same, reset j.
-        if (l1[i][I] == l2[keepJ][J]) {
-          j = keepJ;
-        }
-      }
-    }
-  };
-
-  template <typename E, size_t N, size_t I, size_t M, size_t J>
-  static void doGallopInnerJoinLeftLarge(
-      const vector<array<E, N>>& l1, const vector<array<E, M>>& l2,
-      vector<array<E, (N + M - 1)>>* result) {
-    LOG(DEBUG) << "Galloping case.\n";
-    size_t i = 0;
-    size_t j = 0;
-    E sent1 = std::numeric_limits<E>::max();
-    while (l1[i][I] < sent1) {
-      if (l2[j][J] > l1[i][I]) {
-        array<E, N> val;
-        val[I] = l2[j][J];
-        i = std::lower_bound(
-                l1.begin() + i, l1.end(), val,
-                [](const array<E, N>& l, const array<E, N>& r) -> bool {
-                  return l[I] < r[I];
-                }) -
-            l1.begin();
-      }
-      while (l1[i][I] > l2[j][J]) {
-        ++j;
-      }
-      while (l1[i][I] == l2[j][J]) {
-        // In case of match, create cross-product
-        // Always fix l1 and go through l2.
-        size_t keepJ = j;
-        while (l1[i][I] == l2[j][J]) {
-          result->emplace_back(joinTuples(l1[i], l2[j], GenSeq<N>(),
-                                          GenSeqLo<M, (J < M ? J : M - 1)>()));
-          ++j;
-        }
-        ++i;
-        // If the next i is still the same, reset j.
-        if (l1[i][I] == l2[keepJ][J]) {
-          j = keepJ;
-        }
-      }
-    }
-  };
-
-  template <typename E, size_t N, size_t I>
-  static void doSelfJoin(const vector<array<E, N>>& v,
-                         vector<array<E, N + N - 1>>* result) {
-    LOG(DEBUG) << "Performing self join on fixed width tables.\n";
-    LOG(DEBUG) << "TAB: width = " << N << ", size = " << v.size() << "\n";
+  template <int IN_WIDTH, int OUT_WIDTH>
+  static void doSelfJoin(const IdTableStatic<IN_WIDTH>& v, size_t jc,
+                         IdTableStatic<OUT_WIDTH>* result) {
+    LOG(DEBUG) << "Performing self join on var width table.\n";
+    LOG(DEBUG) << "TAB: size = " << v.size() << "\n";
 
     // Always detect ranges of equal join col values and then
     // build a cross product for each range.
     size_t i = 0;
     while (i < v.size()) {
-      const auto& val = v[i][I];
+      const auto& val = v(i, jc);
       size_t from = i++;
-      while (v[i][I] == val) {
+      while (v(i, jc) == val) {
         ++i;
       }
       // Range detected, now build cross product
       // v[i][I] is now != val and read to be the next one.
       for (size_t j = from; j < i; ++j) {
         for (size_t k = from; k < i; ++k) {
-          result->emplace_back(joinTuples(v[j], v[k], GenSeq<N>(),
-                                          GenSeqLo<N, (I < N ? I : N - 1)>()));
+          size_t rowIndex = result->size();
+          result->push_back();
+          size_t vCols = v.cols();
+          for (size_t h = 0; h < vCols; h++) {
+            (*result)(rowIndex, h) = v(j, h);
+          }
+          for (size_t h = 0; h < vCols; h++) {
+            if (h < jc) {
+              (*result)(rowIndex, h + vCols) = v(k, h);
+            } else if (h < jc) {
+              (*result)(rowIndex, h + vCols - 1) = v(k, h);
+            }
+          }
         }
       }
     }
 
     LOG(DEBUG) << "Join done.\n";
-    LOG(DEBUG) << "Result: width = " << (N + N - 1)
-               << ", size = " << result->size() << "\n";
-  }
-};
-
-template <typename E, typename A, typename B>
-void Engine::join(const A& a, size_t jc1, const B& b, size_t jc2,
-                  vector<vector<E>>* result) {
-  LOG(DEBUG) << "Performing join that leads to var size rows.\n";
-  LOG(DEBUG) << "A: size = " << a.size() << "\n";
-  LOG(DEBUG) << "B: size = " << b.size() << "\n";
-
-  // Check trivial case.
-  if (a.size() == 0 || b.size() == 0) {
-    return;
-  }
-  // Check for possible self join (dangerous with sentinels).
-  if (reinterpret_cast<uintptr_t>(&a) == reinterpret_cast<uintptr_t>(&b)) {
-    AD_CHECK_EQ(jc1, jc2)
-    selfJoin(a, jc1, result);
-    return;
+    LOG(DEBUG) << "Result:  size = " << result->size() << "\n";
   }
 
-  // Cast away constness so we can add sentinels that will be removed
-  // in the end and create and add those sentinels.
-  A& l1 = const_cast<A&>(a);
-  B& l2 = const_cast<B&>(b);
-  E sent1 = std::numeric_limits<E>::max();
-  E sent2 = std::numeric_limits<E>::max() - 1;
-  E sentMatch = std::numeric_limits<E>::max() - 2;
-  auto elem1 = l1[0];
-  auto elem2 = l2[0];
-  auto match1 = l1[0];
-  auto match2 = l2[0];
-
-  match1[jc1] = sentMatch;
-  match2[jc2] = sentMatch;
-  elem1[jc1] = sent1;
-  elem2[jc2] = sent2;
-  l1.push_back(match1);
-  l2.push_back(match2);
-  l1.push_back(elem1);
-  l2.push_back(elem2);
-
-  // Intersect both lists.
-  // TODO: Improve the start by a binary search in the bigger list.
-  // This could set the index in the smaller list to >= 0.
-  size_t i = 0;
-  size_t j = 0;
-
-  while (l1[i][jc1] < sent1) {
-    while (l2[j][jc2] < l1[i][jc1]) {
-      ++j;
+  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+  static void doGallopInnerJoinRightLarge(const IdTableStatic<L_WIDTH>& l1,
+                                          size_t jc1,
+                                          const IdTableStatic<R_WIDTH>& l2,
+                                          size_t jc2,
+                                          IdTableStatic<OUT_WIDTH>* result) {
+    LOG(DEBUG) << "Galloping case.\n";
+    size_t i = 0;
+    size_t j = 0;
+    Id sent1 = std::numeric_limits<Id>::max();
+    while (l1(i, jc1) < sent1) {
+      while (l1(i, jc1) < l2(j, jc2)) {
+        ++i;
+      }
+      if (l2(j, jc2) < l1(i, jc1)) {
+        Id* val = new Id[l2.cols()];
+        val[jc2] = l1(i, jc1);
+        j = std::lower_bound(l2.begin() + j, l2.end(), val,
+                             [jc2](const auto& l, const auto& r) -> bool {
+                               return l[jc2] < r[jc2];
+                             }) -
+            l2.begin();
+        delete[] val;
+      }
+      while (l1(i, jc1) == l2(j, jc2)) {
+        // In case of match, create cross-product
+        // Always fix l1 and go through l2.
+        size_t keepJ = j;
+        while (l1(i, jc1) == l2(j, jc2)) {
+          size_t rowIndex = result->size();
+          result->push_back();
+          size_t l1Cols = l1.cols();
+          for (size_t h = 0; h < l1Cols; h++) {
+            (*result)(rowIndex, h) = l1(i, h);
+          }
+          for (size_t h = 0; h < l2.cols(); h++) {
+            if (h < jc2) {
+              (*result)(rowIndex, h + l1Cols) = l2(j, h);
+            } else if (h > jc2) {
+              (*result)(rowIndex, h + l1Cols - 1) = l2(j, h);
+            }
+          }
+          ++j;
+        }
+        ++i;
+        // If the next i is still the same, reset j.
+        if (l1(i, jc1) == l2(keepJ, jc2)) {
+          j = keepJ;
+        }
+      }
     }
-    while (l1[i][jc1] < l2[j][jc2]) {
-      ++i;
-    }
-    while (l1[i][jc1] == l2[j][jc2]) {
-      // In case of match, create cross-product
-      // Always fix l1 and go through l2.
-      size_t keepJ = j;
-      while (l1[i][jc1] == l2[j][jc2]) {
-        result->emplace_back(joinTuplesInVec<Id>(l1[i], l2[j], jc2));
+  };
+
+  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+  static void doGallopInnerJoinLeftLarge(const IdTableStatic<L_WIDTH>& l1,
+                                         size_t jc1,
+                                         const IdTableStatic<R_WIDTH>& l2,
+                                         size_t jc2,
+                                         IdTableStatic<OUT_WIDTH>* result) {
+    LOG(DEBUG) << "Galloping case.\n";
+    size_t i = 0;
+    size_t j = 0;
+    Id sent1 = std::numeric_limits<Id>::max();
+    while (l1(i, jc1) < sent1) {
+      if (l2(j, jc2) > l1(i, jc1)) {
+        Id* val = new Id[l1.cols()];
+        val[jc1] = l2(j, jc2);
+        i = std::lower_bound(l1.begin() + i, l1.end(), val,
+                             [jc1](const auto& l, const auto& r) -> bool {
+                               return l[jc1] < r[jc1];
+                             }) -
+            l1.begin();
+        delete[] val;
+      }
+      while (l1(i, jc1) > l2(j, jc2)) {
         ++j;
       }
-      ++i;
-      // If the next i is still the same, reset j.
-      if (l1[i][jc1] == l2[keepJ][jc2]) {
-        j = keepJ;
+      while (l1(i, jc1) == l2(j, jc2)) {
+        // In case of match, create cross-product
+        // Always fix l1 and go through l2.
+        size_t keepJ = j;
+        while (l1(i, jc1) == l2(j, jc2)) {
+          size_t rowIndex = result->size();
+          result->push_back();
+          size_t l1Cols = l1.cols();
+          for (size_t h = 0; h < l1Cols; h++) {
+            (*result)(rowIndex, h) = l1(i, h);
+          }
+          for (size_t h = 0; h < l2.cols(); h++) {
+            if (h < jc2) {
+              (*result)(rowIndex, h + l1Cols) = l2(j, h);
+            } else if (h > jc2) {
+              (*result)(rowIndex, h + l1Cols - 1) = l2(j, h);
+            }
+          }
+          ++j;
+        }
+        ++i;
+        // If the next i is still the same, reset j.
+        if (l1(i, jc1) == l2(keepJ, jc2)) {
+          j = keepJ;
+        }
       }
     }
-  }
-
-  // Remove sentinels
-  l1.resize(l1.size() - 2);
-  l2.resize(l2.size() - 2);
-  result->resize(result->size() - 1);
-
-  LOG(DEBUG) << "Join done.\n";
-  LOG(DEBUG) << "Result: size = " << result->size() << "\n";
-}
-
-template <typename E, typename A>
-void Engine::selfJoin(const A& v, size_t jc, vector<vector<E>>* result) {
-  LOG(DEBUG) << "Performing self join on var width table.\n";
-  LOG(DEBUG) << "TAB: size = " << v.size() << "\n";
-
-  // Always detect ranges of equal join col values and then
-  // build a cross product for each range.
-  size_t i = 0;
-  while (i < v.size()) {
-    const auto& val = v[i][jc];
-    size_t from = i++;
-    while (v[i][jc] == val) {
-      ++i;
-    }
-    // Range detected, now build cross product
-    // v[i][I] is now != val and read to be the next one.
-    for (size_t j = from; j < i; ++j) {
-      for (size_t k = from; k < i; ++k) {
-        result->emplace_back(joinTuplesInVec<E>(v[j], v[k], jc));
-      }
-    }
-  }
-
-  LOG(DEBUG) << "Join done.\n";
-  LOG(DEBUG) << "Result:  size = " << result->size() << "\n";
-}
+  };
+};

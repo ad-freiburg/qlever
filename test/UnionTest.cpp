@@ -7,82 +7,69 @@
 
 #include <gtest/gtest.h>
 
+#include "../src/engine/CallFixedSize.h"
 #include "../src/engine/Union.h"
 #include "../src/global/Id.h"
 
 TEST(UnionTest, computeUnion) {
-  // the left and right data vectors will be deleted by the result tables
-  vector<array<Id, 1>>* leftData = new vector<array<Id, 1>>();
-  leftData->push_back({1});
-  leftData->push_back({2});
-  leftData->push_back({3});
+  IdTable left(1);
+  left.push_back({1});
+  left.push_back({2});
+  left.push_back({3});
 
-  vector<array<Id, 2>>* rightData = new vector<array<Id, 2>>();
-  rightData->push_back({4, 5});
-  rightData->push_back({6, 7});
+  IdTable right(2);
+  right.push_back({4, 5});
+  right.push_back({6, 7});
 
-  using std::array;
-  using std::vector;
-  ResultTable res;
-  res._nofColumns = 2;
-  std::shared_ptr<ResultTable> left = std::make_shared<ResultTable>();
-  left->_nofColumns = 1;
-  left->_fixedSizeData = leftData;
-  std::shared_ptr<ResultTable> right = std::make_shared<ResultTable>();
-  right->_nofColumns = 2;
-  right->_fixedSizeData = rightData;
+  IdTable result(2);
 
   const std::vector<std::array<size_t, 2>> columnOrigins = {
       {0, 1}, {Union::NO_COLUMN, 0}};
-  Union::computeUnion(&res, left, right, columnOrigins);
 
-  const vector<array<Id, 2>>* resData =
-      static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
-  ASSERT_EQ(5u, resData->size());
-  for (size_t i = 0; i < leftData->size(); i++) {
-    ASSERT_EQ((*leftData)[i][0], resData->at(i)[0]);
-    ASSERT_EQ(ID_NO_VALUE, resData->at(i)[1]);
+  int leftWidth = left.cols();
+  int rightWidth = right.cols();
+  int outWidth = result.cols();
+  CALL_FIXED_SIZE_3(leftWidth, rightWidth, outWidth, Union::computeUnion,
+                    &result, left, right, columnOrigins);
+
+  ASSERT_EQ(5u, result.size());
+  for (size_t i = 0; i < left.size(); i++) {
+    ASSERT_EQ(left[i][0], result(i, 0));
+    ASSERT_EQ(ID_NO_VALUE, result(i, 1));
   }
-  for (size_t i = 0; i < rightData->size(); i++) {
-    ASSERT_EQ((*rightData)[i][0], resData->at(i + leftData->size())[1]);
-    ASSERT_EQ((*rightData)[i][1], resData->at(i + leftData->size())[0]);
+  for (size_t i = 0; i < right.size(); i++) {
+    ASSERT_EQ(right[i][0], result(i + left.size(), 1));
+    ASSERT_EQ(right(i, 1), result(i + left.size(), 0));
   }
 }
 
 TEST(UnionTest, computeUnionOptimized) {
   // the left and right data vectors will be deleted by the result tables
-  vector<array<Id, 2>>* leftData = new vector<array<Id, 2>>();
-  leftData->push_back({1, 2});
-  leftData->push_back({2, 3});
-  leftData->push_back({3, 4});
+  IdTable left(2);
+  left.push_back({1, 2});
+  left.push_back({2, 3});
+  left.push_back({3, 4});
 
-  vector<array<Id, 2>>* rightData = new vector<array<Id, 2>>();
-  rightData->push_back({4, 5});
-  rightData->push_back({6, 7});
+  IdTable right(2);
+  right.push_back({4, 5});
+  right.push_back({6, 7});
 
-  using std::array;
-  using std::vector;
-  ResultTable res;
-  res._nofColumns = 2;
-  std::shared_ptr<ResultTable> left = std::make_shared<ResultTable>();
-  left->_nofColumns = 2;
-  left->_fixedSizeData = leftData;
-  std::shared_ptr<ResultTable> right = std::make_shared<ResultTable>();
-  right->_nofColumns = 2;
-  right->_fixedSizeData = rightData;
+  IdTable result(2);
 
   const std::vector<std::array<size_t, 2>> columnOrigins = {{0, 0}, {1, 1}};
-  Union::computeUnion(&res, left, right, columnOrigins);
+  int leftWidth = left.cols();
+  int rightWidth = right.cols();
+  int outWidth = result.cols();
+  CALL_FIXED_SIZE_3(leftWidth, rightWidth, outWidth, Union::computeUnion,
+                    &result, left, right, columnOrigins);
 
-  const vector<array<Id, 2>>* resData =
-      static_cast<vector<array<Id, 2>>*>(res._fixedSizeData);
-  ASSERT_EQ(5u, resData->size());
-  for (size_t i = 0; i < leftData->size(); i++) {
-    ASSERT_EQ((*leftData)[i][0], resData->at(i)[0]);
-    ASSERT_EQ((*leftData)[i][1], resData->at(i)[1]);
+  ASSERT_EQ(5u, result.size());
+  for (size_t i = 0; i < left.size(); i++) {
+    ASSERT_EQ(left[i][0], result(i, 0));
+    ASSERT_EQ(left[i][1], result(i, 1));
   }
-  for (size_t i = 0; i < rightData->size(); i++) {
-    ASSERT_EQ((*rightData)[i][0], resData->at(i + leftData->size())[0]);
-    ASSERT_EQ((*rightData)[i][1], resData->at(i + leftData->size())[1]);
+  for (size_t i = 0; i < right.size(); i++) {
+    ASSERT_EQ(right[i][0], result(i + left.size(), 0));
+    ASSERT_EQ(right(i, 1), result(i + left.size(), 1));
   }
 }

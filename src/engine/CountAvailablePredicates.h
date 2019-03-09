@@ -90,16 +90,16 @@ class CountAvailablePredicates : public Operation {
    * @param subjectColumn The column containing the entities for which the
    *                      relations should be counted.
    */
-  template <typename A>
+  template <int I>
   static void computePatternTrick(
-      const vector<A>* input, vector<array<Id, 2>>* result,
+      const IdTable& input, IdTable* result,
       const vector<PatternID>& hasPattern,
       const CompactStringVector<Id, Id>& hasPredicate,
       const CompactStringVector<size_t, Id>& patterns,
       const size_t subjectColumn, RuntimeInformation* runtimeInfo);
 
   static void computePatternTrickAllEntities(
-      vector<array<Id, 2>>* result, const vector<PatternID>& hasPattern,
+      IdTable* result, const vector<PatternID>& hasPattern,
       const CompactStringVector<Id, Id>& hasPredicate,
       const CompactStringVector<size_t, Id>& patterns);
 

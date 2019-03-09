@@ -5,6 +5,7 @@
 #include <stxxl/algorithm>
 #include <tuple>
 #include <utility>
+#include "../engine/CallFixedSize.h"
 #include "../parser/ContextFileParser.h"
 #include "../util/Simple8bCode.h"
 #include "./FTSAlgorithms.h"
@@ -519,7 +520,7 @@ const string& Index::wordIdToString(Id id) const {
 
 // _____________________________________________________________________________
 void Index::getContextListForWords(const string& words,
-                                   Index::WidthTwoList* result) const {
+                                   IdTable* dynResult) const {
   LOG(DEBUG) << "In getContextListForWords...\n";
   auto terms = ad_utility::split(words, ' ');
   AD_CHECK(terms.size() > 0);
@@ -547,11 +548,14 @@ void Index::getContextListForWords(const string& words,
   }
 
   LOG(DEBUG) << "Packing lists into a ResultTable\n...";
-  result->reserve(cids.size() + 2);
-  result->resize(cids.size());
+  IdTableStatic<2> result = dynResult->moveToStatic<2>();
+  result.reserve(cids.size() + 2);
+  result.resize(cids.size());
   for (size_t i = 0; i < cids.size(); ++i) {
-    (*result)[i] = {{cids[i], scores[i]}};
+    result(i, 0) = cids[i];
+    result(i, 1) = scores[i];
   }
+  *dynResult = result.moveToDynamic();
   LOG(DEBUG) << "Done with getContextListForWords.\n";
 }
 
@@ -680,8 +684,8 @@ void Index::getContextEntityScoreListsForWords(const string& words,
 }
 
 // _____________________________________________________________________________
-void Index::getECListForWords(const string& words, size_t limit,
-                              Index::WidthThreeList& result) const {
+void Index::getECListForWordsOneVar(const string& words, size_t limit,
+                                    IdTable* result) const {
   LOG(DEBUG) << "In getECListForWords...\n";
   vector<Id> cids;
   vector<Id> eids;
@@ -689,161 +693,93 @@ void Index::getECListForWords(const string& words, size_t limit,
   getContextEntityScoreListsForWords(words, cids, eids, scores);
   FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, limit,
                                               result);
-  LOG(DEBUG) << "Done with getECListForWords. Result size: " << result.size()
+  LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
              << "\n";
 }
 
 // _____________________________________________________________________________
-template <typename Result>
 void Index::getECListForWords(const string& words, size_t nofVars, size_t limit,
-                              Result& result) const {
+                              IdTable* result) const {
   LOG(DEBUG) << "In getECListForWords...\n";
   vector<Id> cids;
   vector<Id> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
-  FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(cids, eids, scores,
-                                                      nofVars, limit, result);
-  LOG(DEBUG) << "Done with getECListForWords. Result size: " << result.size()
+  int width = result->cols();
+  CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
+                    cids, eids, scores, nofVars, limit, result);
+  LOG(DEBUG) << "Done with getECListForWords. Result size: " << result->size()
              << "\n";
 }
 
 // _____________________________________________________________________________
-// Instantiate for width 4, 5 and var lists. 3 is covered by the simple case.
-template void Index::getECListForWords(const string&, size_t, size_t,
-                                       Index::WidthFourList& result) const;
-
-template void Index::getECListForWords(const string&, size_t, size_t,
-                                       Index::WidthFiveList& result) const;
-
-template void Index::getECListForWords(const string&, size_t, size_t,
-                                       Index::VarWidthList& result) const;
-
-// _____________________________________________________________________________
-template <typename FilterTable, typename ResultList>
 void Index::getFilteredECListForWords(const string& words,
-                                      const FilterTable& filter,
+                                      const IdTable& filter,
                                       size_t filterColumn, size_t nofVars,
-                                      size_t limit, ResultList& result) const {
+                                      size_t limit, IdTable* result) const {
   LOG(DEBUG) << "In getFilteredECListForWords...\n";
   if (filter.size() > 0) {
     // Build a map filterEid->set<Rows>
-    using FilterMap = ad_utility::HashMap<Id, FilterTable>;
+    using FilterMap = ad_utility::HashMap<Id, IdTable>;
     LOG(DEBUG) << "Constructing map...\n";
     FilterMap fMap;
     for (size_t i = 0; i < filter.size(); ++i) {
-      fMap[filter[i][filterColumn]].push_back(filter[i]);
+      Id eid = filter(i, filterColumn);
+      auto it = fMap.find(eid);
+      if (it == fMap.end()) {
+        fMap[eid] = IdTable(filter.cols());
+      } else {
+        it->second.push_back(filter, i);
+      }
     }
     vector<Id> cids;
     vector<Id> eids;
     vector<Score> scores;
     getContextEntityScoreListsForWords(words, cids, eids, scores);
+    int width = result->cols();
     if (nofVars == 1) {
-      FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
-          cids, eids, scores, fMap, limit, result);
+      CALL_FIXED_SIZE_1(width,
+                        FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
+                        cids, eids, scores, fMap, limit, result);
     } else {
-      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
+      CALL_FIXED_SIZE_1(
+          width, FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
           cids, eids, scores, fMap, nofVars, limit, result);
     }
   }
   LOG(DEBUG) << "Done with getFilteredECListForWords. Result size: "
-             << result.size() << "\n";
+             << result->size() << "\n";
 }
 
 // _____________________________________________________________________________
-template <typename ResultList>
-void Index::getFilteredECListForWords(const string& words,
-                                      const Index::WidthOneList& filter,
-                                      size_t nofVars, size_t limit,
-                                      ResultList& result) const {
+void Index::getFilteredECListForWordsWidthOne(const string& words,
+                                              const IdTable& filter,
+                                              size_t nofVars, size_t limit,
+                                              IdTable* result) const {
   LOG(DEBUG) << "In getFilteredECListForWords...\n";
   // Build a map filterEid->set<Rows>
   using FilterSet = ad_utility::HashSet<Id>;
   LOG(DEBUG) << "Constructing filter set...\n";
   FilterSet fSet;
   for (size_t i = 0; i < filter.size(); ++i) {
-    fSet.insert(filter[i][0]);
+    fSet.insert(filter(i, 0));
   }
   vector<Id> cids;
   vector<Id> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
+  int width = result->cols();
   if (nofVars == 1) {
     FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
         cids, eids, scores, fSet, limit, result);
   } else {
-    FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
-        cids, eids, scores, fSet, nofVars, limit, result);
+    CALL_FIXED_SIZE_1(width,
+                      FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,
+                      cids, eids, scores, fSet, nofVars, limit, result);
   }
   LOG(DEBUG) << "Done with getFilteredECListForWords. Result size: "
-             << result.size() << "\n";
+             << result->size() << "\n";
 }
-
-// _____________________________________________________________________________
-// Instantiate for different filter and result widths.
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthOneList&, size_t, size_t, size_t,
-    Index::WidthThreeList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthOneList&, size_t, size_t, size_t,
-    Index::WidthFourList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthOneList&, size_t, size_t, size_t,
-    Index::WidthFiveList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthOneList&, size_t, size_t, size_t,
-    Index::VarWidthList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthOneList&, size_t, size_t,
-    Index::WidthThreeList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthOneList&, size_t, size_t,
-    Index::WidthFourList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthOneList&, size_t, size_t,
-    Index::WidthFiveList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthOneList&, size_t, size_t,
-    Index::VarWidthList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthTwoList&, size_t, size_t, size_t,
-    Index::WidthFourList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthTwoList&, size_t, size_t, size_t,
-    Index::WidthFiveList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthTwoList&, size_t, size_t, size_t,
-    Index::VarWidthList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthThreeList&, size_t, size_t, size_t,
-    Index::WidthFiveList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthThreeList&, size_t, size_t, size_t,
-    Index::VarWidthList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthFourList&, size_t, size_t, size_t,
-    Index::VarWidthList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::WidthFiveList&, size_t, size_t, size_t,
-    Index::VarWidthList& result) const;
-
-template void Index::getFilteredECListForWords(
-    const string&, const Index::VarWidthList&, size_t, size_t, size_t,
-    Index::VarWidthList& result) const;
 
 // _____________________________________________________________________________
 void Index::getEntityPostingsForTerm(const string& term, vector<Id>& cids,
@@ -1456,19 +1392,20 @@ size_t Index::getSizeEstimate(const string& words) const {
 }
 
 // _____________________________________________________________________________
-void Index::getRhsForSingleLhs(const Index::WidthTwoList& in, Id lhsId,
-                               Index::WidthOneList* result) const {
+void Index::getRhsForSingleLhs(const IdTable& in, Id lhsId,
+                               IdTable* result) const {
   LOG(DEBUG) << "Getting only rhs from a relation with " << in.size()
              << " elements by an Id key.\n";
   AD_CHECK(result);
   AD_CHECK_EQ(0, result->size());
 
+  Id compareElem[] = {lhsId, 0};
   auto it = std::lower_bound(
-      in.begin(), in.end(), array<Id, 2>{{lhsId, 0}},
-      [](const array<Id, 2>& a, const array<Id, 2>& b) { return a[0] < b[0]; });
+      in.begin(), in.end(), compareElem,
+      [](const auto& a, const auto& b) { return a[0] < b[0]; });
 
-  while (it != in.end() && it->operator[](0) == lhsId) {
-    result->emplace_back(array<Id, 1>{{it->operator[](1)}});
+  while (it != in.end() && it[0] == lhsId) {
+    result->push_back({it[1]});
     ++it;
   }
 

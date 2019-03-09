@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
-#include "./MultiColumnJoin.h"
+#include "MultiColumnJoin.h"
+#include "CallFixedSize.h"
 
 using std::string;
 
@@ -53,122 +54,9 @@ string MultiColumnJoin::asString(size_t indent) const {
   return os.str();
 }
 
-// Used to generate all up to 125 combinations of left, right and result size.
-template <size_t I, size_t J, size_t K>
-struct MultiColumnJoinCaller {
-  static void call(const size_t i, const size_t j, const size_t k,
-                   shared_ptr<const ResultTable> leftResult,
-                   shared_ptr<const ResultTable> rightResult,
-                   const std::vector<std::array<Id, 2>>& joinColumns,
-                   ResultTable* result, size_t resultSize) {
-    if (I == i) {
-      if (J == j) {
-        if (K == k) {
-          result->_fixedSizeData = new vector<array<Id, K>>;
-          MultiColumnJoin::computeMultiColumnJoin<
-              vector<array<Id, I>>, vector<array<Id, J>>, array<Id, K>>(
-              *static_cast<vector<array<Id, I>>*>(leftResult->_fixedSizeData),
-              *static_cast<vector<array<Id, J>>*>(rightResult->_fixedSizeData),
-              joinColumns,
-              static_cast<vector<array<Id, K>>*>(result->_fixedSizeData),
-              resultSize);
-        } else {
-          MultiColumnJoinCaller<I, J, K + 1>::call(i, j, k, leftResult,
-                                                   rightResult, joinColumns,
-                                                   result, resultSize);
-        }
-      } else {
-        MultiColumnJoinCaller<I, J + 1, K>::call(
-            i, j, k, leftResult, rightResult, joinColumns, result, resultSize);
-      }
-    } else {
-      // K has to be at least as large as I (otherwise we couldn't store
-      // all columns).
-      MultiColumnJoinCaller<I + 1, J, K + 1>::call(
-          i, j, k, leftResult, rightResult, joinColumns, result, resultSize);
-    }
-  }
-};
-
-template <size_t I, size_t K>
-struct MultiColumnJoinCaller<I, 6, K> {
-  static void call(const size_t i, const size_t j, const size_t k,
-                   shared_ptr<const ResultTable> leftResult,
-                   shared_ptr<const ResultTable> rightResult,
-                   const std::vector<std::array<Id, 2>>& joinColumns,
-                   ResultTable* result, size_t resultSize) {
-    // avoid unused warnings from the compiler (there would be a lot of them)
-    (void)i;
-    (void)j;
-    (void)k;
-    MultiColumnJoin::computeMultiColumnJoin<vector<array<Id, I>>,
-                                            vector<vector<Id>>, vector<Id>>(
-        *static_cast<vector<array<Id, I>>*>(leftResult->_fixedSizeData),
-        rightResult->_varSizeData, joinColumns, &result->_varSizeData,
-        resultSize);
-  }
-};
-
-template <size_t I, size_t J>
-struct MultiColumnJoinCaller<I, J, 6> {
-  static void call(const size_t i, const size_t j, const size_t k,
-                   shared_ptr<const ResultTable> leftResult,
-                   shared_ptr<const ResultTable> rightResult,
-                   const std::vector<std::array<Id, 2>>& joinColumns,
-                   ResultTable* result, size_t resultSize) {
-    // avoid unused warnings from the compiler (there would be a lot of them)
-    (void)i;
-    (void)j;
-    (void)k;
-    MultiColumnJoin::computeMultiColumnJoin<vector<array<Id, I>>,
-                                            vector<array<Id, J>>, vector<Id>>(
-        *static_cast<vector<array<Id, I>>*>(leftResult->_fixedSizeData),
-        *static_cast<vector<array<Id, J>>*>(rightResult->_fixedSizeData),
-        joinColumns, &result->_varSizeData, resultSize);
-  }
-};
-
-template <size_t J>
-struct MultiColumnJoinCaller<6, J, 6> {
-  static void call(const size_t i, const size_t j, const size_t k,
-                   shared_ptr<const ResultTable> leftResult,
-                   shared_ptr<const ResultTable> rightResult,
-                   const std::vector<std::array<Id, 2>>& joinColumns,
-                   ResultTable* result, size_t resultSize) {
-    // avoid unused warnings from the compiler (there would be a lot of them)
-    (void)i;
-    (void)j;
-    (void)k;
-    MultiColumnJoin::computeMultiColumnJoin<vector<vector<Id>>,
-                                            vector<array<Id, J>>, vector<Id>>(
-        leftResult->_varSizeData,
-        *static_cast<vector<array<Id, J>>*>(rightResult->_fixedSizeData),
-        joinColumns, &result->_varSizeData, resultSize);
-  }
-};
-
-template <>
-struct MultiColumnJoinCaller<6, 6, 6> {
-  static void call(const size_t i, const size_t j, const size_t k,
-                   shared_ptr<const ResultTable> leftResult,
-                   shared_ptr<const ResultTable> rightResult,
-                   const std::vector<std::array<Id, 2>>& joinColumns,
-                   ResultTable* result, size_t resultSize) {
-    // avoid unused warnings from the compiler (there would be a lot of them)
-    (void)i;
-    (void)j;
-    (void)k;
-    MultiColumnJoin::computeMultiColumnJoin<vector<vector<Id>>,
-                                            vector<vector<Id>>, vector<Id>>(
-        leftResult->_varSizeData, rightResult->_varSizeData, joinColumns,
-        &result->_varSizeData, resultSize);
-  }
-};
-
 // _____________________________________________________________________________
 void MultiColumnJoin::computeResult(ResultTable* result) {
   AD_CHECK(result);
-  AD_CHECK(!result->_fixedSizeData);
   LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
@@ -185,9 +73,9 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
   runtimeInfo.setDescriptor("MultiColumnJoin on " + joinVars);
 
   result->_sortedBy = resultSortedOn();
-  result->_nofColumns = getResultWidth();
+  result->_data.setCols(getResultWidth());
 
-  AD_CHECK_GE(result->_nofColumns, _joinColumns.size());
+  AD_CHECK_GE(result->_data.cols(), _joinColumns.size());
 
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
@@ -198,11 +86,11 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "MultiColumnJoin subresult computation done." << std::endl;
 
   // compute the result types
-  result->_resultTypes.reserve(result->_nofColumns);
+  result->_resultTypes.reserve(result->_data.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               leftResult->_resultTypes.begin(),
                               leftResult->_resultTypes.end());
-  for (size_t col = 0; col < rightResult->_nofColumns; col++) {
+  for (size_t col = 0; col < rightResult->_data.cols(); col++) {
     bool isJoinColumn = false;
     for (const std::array<Id, 2>& a : _joinColumns) {
       if (a[1] == col) {
@@ -218,11 +106,12 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Computing a multi column join between results of size "
              << leftResult->size() << " and " << rightResult->size() << endl;
 
-  // Calls computeMultiColumnJoin with the right values for the array sizes.
-  MultiColumnJoinCaller<1, 1, 1>::call(
-      leftResult->_nofColumns, rightResult->_nofColumns, result->_nofColumns,
-      leftResult, rightResult, _joinColumns, result, result->_nofColumns);
-
+  int leftWidth = leftResult->_data.cols();
+  int rightWidth = rightResult->_data.cols();
+  int resWidth = result->_data.cols();
+  CALL_FIXED_SIZE_3(leftWidth, rightWidth, resWidth, computeMultiColumnJoin,
+                    leftResult->_data, rightResult->_data, _joinColumns,
+                    &result->_data);
   LOG(DEBUG) << "MultiColumnJoin result computation done." << endl;
 }
 
@@ -353,27 +242,12 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
   _multiplicitiesComputed = true;
 }
 
-template <typename R>
-struct MultiColumnJoinResultAllocator {
-  static R allocate(size_t width) {
-    (void)width;
-    return R();
-  }
-};
-
-template <>
-struct MultiColumnJoinResultAllocator<std::vector<Id>> {
-  static std::vector<Id> allocate(size_t width) {
-    return std::vector<Id>(width);
-  }
-};
-
-template <typename A, typename B, typename R>
+template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
 void MultiColumnJoin::computeMultiColumnJoin(
-    const A& a, const B& b, const vector<array<Id, 2>>& joinColumns,
-    vector<R>* result, size_t resultWidth) {
+    const IdTable& dynA, const IdTable& dynB,
+    const vector<array<Id, 2>>& joinColumns, IdTable* dynResult) {
   // check for trivial cases
-  if (a.size() == 0 || b.size() == 0) {
+  if (dynA.size() == 0 || dynB.size() == 0) {
     return;
   }
 
@@ -387,28 +261,32 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // TODO(florian): Check if this actually improves the performance.
   // Cast away constness so we can add sentinels that will be removed
   // in the end and create and add those sentinels.
-  A& l1 = const_cast<A&>(a);
-  B& l2 = const_cast<B&>(b);
+  //
+  IdTable& l1 = const_cast<IdTable&>(dynA);
+  IdTable& l2 = const_cast<IdTable&>(dynB);
   Id sentVal = std::numeric_limits<Id>::max() - 1;
-  auto v1 = l1[0];
-  auto v2 = l2[0];
-  for (size_t i = 0; i < v1.size(); i++) {
-    v1[i] = sentVal;
+
+  l1.emplace_back();
+  l2.emplace_back();
+  for (size_t i = 0; i < l1.cols(); i++) {
+    l1.back()[i] = sentVal;
   }
-  for (size_t i = 0; i < v2.size(); i++) {
-    v2[i] = sentVal;
+  for (size_t i = 0; i < l2.cols(); i++) {
+    l2.back()[i] = sentVal;
   }
-  l1.push_back(v1);
-  l2.push_back(v2);
+
+  IdTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
+  IdTableStatic<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
+  IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
 
   bool matched = false;
   size_t ia = 0, ib = 0;
   while (ia < a.size() - 1 && ib < b.size() - 1) {
     // Join columns 0 are the primary sort columns
-    while (a[ia][joinColumns[0][0]] < b[ib][joinColumns[0][1]]) {
+    while (a(ia, joinColumns[0][0]) < b(ib, joinColumns[0][1])) {
       ia++;
     }
-    while (b[ib][joinColumns[0][1]] < a[ia][joinColumns[0][0]]) {
+    while (b(ib, joinColumns[0][1]) < a(ia, joinColumns[0][0])) {
       ib++;
     }
 
@@ -417,12 +295,12 @@ void MultiColumnJoin::computeMultiColumnJoin(
     for (size_t joinColIndex = 0; joinColIndex < joinColumns.size();
          joinColIndex++) {
       const array<Id, 2>& joinColumn = joinColumns[joinColIndex];
-      if (a[ia][joinColumn[0]] < b[ib][joinColumn[1]]) {
+      if (a(ia, joinColumn[0]) < b(ib, joinColumn[1])) {
         ia++;
         matched = false;
         break;
       }
-      if (b[ib][joinColumn[1]] < a[ia][joinColumn[0]]) {
+      if (b(ib, joinColumn[1]) < a(ia, joinColumn[0])) {
         ib++;
         matched = false;
         break;
@@ -436,29 +314,27 @@ void MultiColumnJoin::computeMultiColumnJoin(
       size_t initIb = ib;
 
       while (matched) {
-        R res = MultiColumnJoinResultAllocator<R>::allocate(resultWidth);
+        result.emplace_back();
+        size_t backIdx = result.size() - 1;
 
         // fill the result
-        unsigned int rIndex = 0;
-        const typename A::value_type& a_row = a[ia];
-        const typename B::value_type& b_row = b[ib];
-        for (size_t col = 0; col < a_row.size(); col++) {
-          res[rIndex] = a_row[col];
+        size_t rIndex = 0;
+        for (size_t col = 0; col < a.cols(); col++) {
+          result(backIdx, rIndex) = a(ia, col);
           rIndex++;
         }
-        for (size_t col = 0; col < b_row.size(); col++) {
+        for (size_t col = 0; col < b.cols(); col++) {
           if ((joinColumnBitmap_b & (1 << col)) == 0) {
-            res[rIndex] = b_row[col];
+            result(backIdx, rIndex) = b(ib, col);
             rIndex++;
           }
         }
 
-        result->push_back(res);
         ib++;
 
         // do the rows still match?
         for (const array<Id, 2>& jc : joinColumns) {
-          if (ib == b.size() || a[ia][jc[0]] != b[ib][jc[1]]) {
+          if (ib == b.size() || a(ia, jc[0]) != b(ib, jc[1])) {
             matched = false;
             break;
           }
@@ -468,7 +344,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
       // Check if the next row in a also matches the initial row in b
       matched = true;
       for (const array<Id, 2>& jc : joinColumns) {
-        if (ia == a.size() || a[ia][jc[0]] != b[initIb][jc[1]]) {
+        if (ia == a.size() || a(ia, jc[0]) != b(initIb, jc[1])) {
           matched = false;
           break;
         }
@@ -483,7 +359,9 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // remove the sentinels
   l1.pop_back();
   l2.pop_back();
-  if (result->back()[joinColumns[0][0]] == sentVal) {
-    result->pop_back();
+  if (result.size() > 0 && result.back()[joinColumns[0][0]] == sentVal) {
+    result.pop_back();
   }
+
+  *dynResult = result.moveToDynamic();
 }

@@ -5,6 +5,7 @@
 #include "./Distinct.h"
 #include <sstream>
 #include "./QueryExecutionTree.h"
+#include "CallFixedSize.h"
 
 using std::string;
 
@@ -49,58 +50,13 @@ void Distinct::computeResult(ResultTable* result) {
   runtimeInfo.setDescriptor("DISTINCT");
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "Distinct result computation..." << endl;
-  result->_nofColumns = subRes->_nofColumns;
+  result->_data.setCols(subRes->_data.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
-  switch (subRes->_nofColumns) {
-    case 1: {
-      typedef array<Id, 1> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      getEngine().distinct(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                           _keepIndices, res);
-      break;
-    }
-    case 2: {
-      typedef array<Id, 2> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      getEngine().distinct(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                           _keepIndices, res);
-      break;
-    }
-    case 3: {
-      typedef array<Id, 3> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      getEngine().distinct(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                           _keepIndices, res);
-      break;
-    }
-    case 4: {
-      typedef array<Id, 4> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      getEngine().distinct(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                           _keepIndices, res);
-      break;
-    }
-    case 5: {
-      typedef array<Id, 5> RT;
-      auto res = new vector<RT>();
-      result->_fixedSizeData = res;
-      getEngine().distinct(*static_cast<vector<RT>*>(subRes->_fixedSizeData),
-                           _keepIndices, res);
-      break;
-    }
-    default: {
-      getEngine().distinct(subRes->_varSizeData, _keepIndices,
-                           &result->_varSizeData);
-      break;
-    }
-  }
-
+  int width = subRes->_data.size();
+  CALL_FIXED_SIZE_1(width, getEngine().distinct, subRes->_data, _keepIndices,
+                    &result->_data);
   LOG(DEBUG) << "Distinct result computation done." << endl;
 }

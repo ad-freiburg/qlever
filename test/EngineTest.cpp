@@ -5,53 +5,59 @@
 #include <gtest/gtest.h>
 #include <cstdio>
 #include <fstream>
+#include "../src/engine/CallFixedSize.h"
 #include "../src/engine/Engine.h"
+#include "../src/engine/OptionalJoin.h"
 
 TEST(EngineTest, joinTest) {
   Engine e;
-  vector<array<Id, 2>> a;
-  a.push_back(array<Id, 2>{{1, 1}});
-  a.push_back(array<Id, 2>{{1, 3}});
-  a.push_back(array<Id, 2>{{2, 1}});
-  a.push_back(array<Id, 2>{{2, 2}});
-  a.push_back(array<Id, 2>{{4, 1}});
-  vector<array<Id, 2>> b;
-  b.push_back(array<Id, 2>{{1, 3}});
-  b.push_back(array<Id, 2>{{1, 8}});
-  b.push_back(array<Id, 2>{{3, 1}});
-  b.push_back(array<Id, 2>{{4, 2}});
-  vector<array<Id, 3>> res;
-  e.join(a, 0, b, 0, &res);
+  IdTable a(2);
+  a.push_back({1, 1});
+  a.push_back({1, 3});
+  a.push_back({2, 1});
+  a.push_back({2, 2});
+  a.push_back({4, 1});
+  IdTable b(2);
+  b.push_back({1, 3});
+  b.push_back({1, 8});
+  b.push_back({3, 1});
+  b.push_back({4, 2});
+  IdTable res(3);
+  int lwidth = a.cols();
+  int rwidth = b.cols();
+  int reswidth = a.cols() + b.cols() - 1;
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, e.join, a, 0, b, 0, &res);
 
-  ASSERT_EQ(1u, res[0][0]);
-  ASSERT_EQ(1u, res[0][1]);
-  ASSERT_EQ(3u, res[0][2]);
+  ASSERT_EQ(1u, res(0, 0));
+  ASSERT_EQ(1u, res(0, 1));
+  ASSERT_EQ(3u, res(0, 2));
 
-  ASSERT_EQ(1u, res[1][0]);
-  ASSERT_EQ(1u, res[1][1]);
-  ASSERT_EQ(8u, res[1][2]);
+  ASSERT_EQ(1u, res(1, 0));
+  ASSERT_EQ(1u, res(1, 1));
+  ASSERT_EQ(8u, res(1, 2));
 
-  ASSERT_EQ(1u, res[2][0]);
-  ASSERT_EQ(3u, res[2][1]);
-  ASSERT_EQ(3u, res[2][2]);
+  ASSERT_EQ(1u, res(2, 0));
+  ASSERT_EQ(3u, res(2, 1));
+  ASSERT_EQ(3u, res(2, 2));
 
-  ASSERT_EQ(1u, res[3][0]);
-  ASSERT_EQ(3u, res[3][1]);
-  ASSERT_EQ(8u, res[3][2]);
+  ASSERT_EQ(1u, res(3, 0));
+  ASSERT_EQ(3u, res(3, 1));
+  ASSERT_EQ(8u, res(3, 2));
 
   ASSERT_EQ(5u, res.size());
 
-  ASSERT_EQ(4u, res[4][0]);
-  ASSERT_EQ(1u, res[4][1]);
-  ASSERT_EQ(2u, res[4][2]);
+  ASSERT_EQ(4u, res(4, 0));
+  ASSERT_EQ(1u, res(4, 1));
+  ASSERT_EQ(2u, res(4, 2));
 
   res.clear();
   for (size_t i = 1; i <= 10000; ++i) {
-    b.push_back(array<Id, 2>{{4 + i, 2 + i}});
+    b.push_back({4 + i, 2 + i});
   }
-  a.push_back(array<Id, 2>{{400000, 200000}});
-  b.push_back(array<Id, 2>{{400000, 200000}});
-  e.join(a, 0, b, 0, &res);
+  a.push_back({400000, 200000});
+  b.push_back({400000, 200000});
+
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, e.join, a, 0, b, 0, &res);
   ASSERT_EQ(6u, res.size());
 
   a.clear();
@@ -59,108 +65,136 @@ TEST(EngineTest, joinTest) {
   res.clear();
 
   for (size_t i = 1; i <= 10000; ++i) {
-    a.push_back(array<Id, 2>{{4 + i, 2 + i}});
+    a.push_back({4 + i, 2 + i});
   }
-  a.push_back(array<Id, 2>{{40000, 200000}});
-  b.push_back(array<Id, 2>{{40000, 200000}});
+  a.push_back({40000, 200000});
+  b.push_back({40000, 200000});
 
   for (size_t i = 1; i <= 10000; ++i) {
-    a.push_back(array<Id, 2>{{40000 + i, 2 + i}});
+    a.push_back({40000 + i, 2 + i});
   }
-  a.push_back(array<Id, 2>{{4000001, 200000}});
-  b.push_back(array<Id, 2>{{4000001, 200000}});
-  e.join(a, 0, b, 0, &res);
+  a.push_back({4000001, 200000});
+  b.push_back({4000001, 200000});
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, e.join, a, 0, b, 0, &res);
   ASSERT_EQ(2u, res.size());
 };
 
 TEST(EngineTest, optionalJoinTest) {
-  Engine e;
-  vector<array<Id, 3>> a;
-  a.push_back(array<Id, 3>{{4, 1, 2}});
-  a.push_back(array<Id, 3>{{2, 1, 3}});
-  a.push_back(array<Id, 3>{{1, 1, 4}});
-  a.push_back(array<Id, 3>{{2, 2, 1}});
-  a.push_back(array<Id, 3>{{1, 3, 1}});
-  vector<array<Id, 3>> b;
-  b.push_back(array<Id, 3>{{3, 3, 1}});
-  b.push_back(array<Id, 3>{{1, 8, 1}});
-  b.push_back(array<Id, 3>{{4, 2, 2}});
-  b.push_back(array<Id, 3>{{1, 1, 3}});
-  vector<array<Id, 4>> res;
+  IdTable a(3);
+  a.push_back({4, 1, 2});
+  a.push_back({2, 1, 3});
+  a.push_back({1, 1, 4});
+  a.push_back({2, 2, 1});
+  a.push_back({1, 3, 1});
+  IdTable b(3);
+  b.push_back({3, 3, 1});
+  b.push_back({1, 8, 1});
+  b.push_back({4, 2, 2});
+  b.push_back({1, 1, 3});
+  IdTable res(4);
   vector<array<Id, 2>> jcls;
   jcls.push_back(array<Id, 2>{{1, 2}});
   jcls.push_back(array<Id, 2>{{2, 1}});
 
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).
-  e.optionalJoin<vector<array<Id, 3>>, vector<array<Id, 3>>, array<Id, 4>, 4>(
-      a, b, false, true, jcls, &res, 4u);
+  int aWidth = a.cols();
+  int bWidth = b.cols();
+  int resWidth = res.cols();
+  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth, OptionalJoin::optionalJoin, a, b,
+                    false, true, jcls, &res);
 
   ASSERT_EQ(5u, res.size());
 
-  ASSERT_EQ(4u, res[0][0]);
-  ASSERT_EQ(1u, res[0][1]);
-  ASSERT_EQ(2u, res[0][2]);
-  ASSERT_EQ(ID_NO_VALUE, res[0][3]);
+  ASSERT_EQ(4u, res(0, 0));
+  ASSERT_EQ(1u, res(0, 1));
+  ASSERT_EQ(2u, res(0, 2));
+  ASSERT_EQ(ID_NO_VALUE, res(0, 3));
 
-  ASSERT_EQ(2u, res[1][0]);
-  ASSERT_EQ(1u, res[1][1]);
-  ASSERT_EQ(3u, res[1][2]);
-  ASSERT_EQ(3u, res[1][3]);
+  ASSERT_EQ(2u, res(1, 0));
+  ASSERT_EQ(1u, res(1, 1));
+  ASSERT_EQ(3u, res(1, 2));
+  ASSERT_EQ(3u, res(1, 3));
 
-  ASSERT_EQ(1u, res[2][0]);
-  ASSERT_EQ(1u, res[2][1]);
-  ASSERT_EQ(4u, res[2][2]);
-  ASSERT_EQ(ID_NO_VALUE, res[2][3]);
+  ASSERT_EQ(1u, res(2, 0));
+  ASSERT_EQ(1u, res(2, 1));
+  ASSERT_EQ(4u, res(2, 2));
+  ASSERT_EQ(ID_NO_VALUE, res(2, 3));
 
-  ASSERT_EQ(2u, res[3][0]);
-  ASSERT_EQ(2u, res[3][1]);
-  ASSERT_EQ(1u, res[3][2]);
-  ASSERT_EQ(ID_NO_VALUE, res[3][3]);
+  ASSERT_EQ(2u, res(3, 0));
+  ASSERT_EQ(2u, res(3, 1));
+  ASSERT_EQ(1u, res(3, 2));
+  ASSERT_EQ(ID_NO_VALUE, res(3, 3));
 
-  ASSERT_EQ(1u, res[4][0]);
-  ASSERT_EQ(3u, res[4][1]);
-  ASSERT_EQ(1u, res[4][2]);
-  ASSERT_EQ(1u, res[4][3]);
+  ASSERT_EQ(1u, res(4, 0));
+  ASSERT_EQ(3u, res(4, 1));
+  ASSERT_EQ(1u, res(4, 2));
+  ASSERT_EQ(1u, res(4, 3));
 
   // Test the optional join with variable sized data.
-  vector<vector<Id>> va;
-  va.push_back(vector<Id>{{1, 2, 3, 4, 5, 6}});
-  va.push_back(vector<Id>{{1, 2, 3, 7, 5, 6}});
-  va.push_back(vector<Id>{{7, 6, 5, 4, 3, 2}});
+  IdTable va(6);
+  va.push_back({1, 2, 3, 4, 5, 6});
+  va.push_back({1, 2, 3, 7, 5, 6});
+  va.push_back({7, 6, 5, 4, 3, 2});
 
-  vector<array<Id, 3>> vb;
-  vb.push_back(array<Id, 3>{{2, 3, 4}});
-  vb.push_back(array<Id, 3>{{2, 3, 5}});
-  vb.push_back(array<Id, 3>{{6, 7, 4}});
+  IdTable vb(3);
+  vb.push_back({2, 3, 4});
+  vb.push_back({2, 3, 5});
+  vb.push_back({6, 7, 4});
 
-  vector<vector<Id>> vres;
+  IdTable vres(7);
   jcls.clear();
   jcls.push_back(array<Id, 2>{{1, 0}});
   jcls.push_back(array<Id, 2>{{2, 1}});
 
-  // The template size parameter can be at most 6 (the maximum number
-  // of fixed size columns plus one).
-  e.optionalJoin<vector<vector<Id>>, vector<array<Id, 3>>, vector<Id>, 6>(
-      va, vb, true, false, jcls, &vres, 7u);
+  aWidth = va.cols();
+  bWidth = vb.cols();
+  resWidth = vres.cols();
+  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth, OptionalJoin::optionalJoin, va,
+                    vb, true, false, jcls, &vres);
 
   ASSERT_EQ(5u, vres.size());
-  ASSERT_EQ(7u, vres[0].size());
-  ASSERT_EQ(7u, vres[1].size());
-  ASSERT_EQ(7u, vres[2].size());
-  ASSERT_EQ(7u, vres[3].size());
-  ASSERT_EQ(7u, vres[4].size());
+  ASSERT_EQ(7u, vres.cols());
 
   vector<Id> r{1, 2, 3, 4, 5, 6, 4};
-  ASSERT_EQ(r, vres[0]);
+  for (size_t i = 0; i < 7; i++) {
+    ASSERT_EQ(r[i], vres[0][i]);
+  }
   r = {1, 2, 3, 4, 5, 6, 5};
-  ASSERT_EQ(r, vres[1]);
+  for (size_t i = 0; i < 7; i++) {
+    ASSERT_EQ(r[i], vres[1][i]);
+  }
   r = {1, 2, 3, 7, 5, 6, 4};
-  ASSERT_EQ(r, vres[2]);
+  for (size_t i = 0; i < 7; i++) {
+    ASSERT_EQ(r[i], vres(2, i));
+  }
   r = {1, 2, 3, 7, 5, 6, 5};
-  ASSERT_EQ(r, vres[3]);
+  for (size_t i = 0; i < 7; i++) {
+    ASSERT_EQ(r[i], vres(3, i));
+  }
   r = {ID_NO_VALUE, 6, 7, ID_NO_VALUE, ID_NO_VALUE, ID_NO_VALUE, 4};
-  ASSERT_EQ(r, vres[4]);
+  for (size_t i = 0; i < 7; i++) {
+    ASSERT_EQ(r[i], vres(4, i));
+  }
+}
+
+TEST(EngineTest, distinctTest) {
+  IdTable inp(4);
+  IdTable res(4);
+
+  inp.push_back({1, 1, 3, 7});
+  inp.push_back({6, 1, 3, 6});
+  inp.push_back({2, 2, 3, 5});
+  inp.push_back({3, 6, 5, 4});
+  inp.push_back({1, 6, 5, 1});
+
+  std::vector<size_t> keepIndices = {1, 2};
+  CALL_FIXED_SIZE_1(4, Engine::distinct, inp, keepIndices, &res);
+
+  ASSERT_EQ(3u, res.size());
+  ASSERT_EQ(inp[0], res[0]);
+  ASSERT_EQ(inp[2], res[1]);
+  ASSERT_EQ(inp[3], res[2]);
 }
 
 int main(int argc, char** argv) {

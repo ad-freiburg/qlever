@@ -128,33 +128,33 @@ class Index {
     return _vocab.idToOptionalString(id);
   }
 
-  void scanPSO(const string& predicate, WidthTwoList* result) const;
+  void scanPSO(const string& predicate, IdTable* result) const;
 
   void scanPSO(const string& predicate, const string& subject,
-               WidthOneList* result) const;
+               IdTable* result) const;
 
-  void scanPOS(const string& predicate, WidthTwoList* result) const;
+  void scanPOS(const string& predicate, IdTable* result) const;
 
   void scanPOS(const string& predicate, const string& object,
-               WidthOneList* result) const;
+               IdTable* result) const;
 
   void scanSOP(const string& subject, const string& object,
-               WidthOneList* result) const;
+               IdTable* result) const;
 
-  void scanSPO(const string& subject, WidthTwoList* result) const;
+  void scanSPO(const string& subject, IdTable* result) const;
 
-  void scanSOP(const string& subject, WidthTwoList* result) const;
+  void scanSOP(const string& subject, IdTable* result) const;
 
-  void scanOPS(const string& object, WidthTwoList* result) const;
+  void scanOPS(const string& object, IdTable* result) const;
 
-  void scanOSP(const string& object, WidthTwoList* result) const;
+  void scanOSP(const string& object, IdTable* result) const;
 
-  void scanPSO(Id predicate, WidthTwoList* result) const;
-  void scanPOS(Id predicate, WidthTwoList* result) const;
-  void scanSPO(Id subject, WidthTwoList* result) const;
-  void scanSOP(Id subject, WidthTwoList* result) const;
-  void scanOPS(Id object, WidthTwoList* result) const;
-  void scanOSP(Id object, WidthTwoList* result) const;
+  void scanPSO(Id predicate, IdTable* result) const;
+  void scanPOS(Id predicate, IdTable* result) const;
+  void scanSPO(Id subject, IdTable* result) const;
+  void scanSOP(Id subject, IdTable* result) const;
+  void scanOPS(Id object, IdTable* result) const;
+  void scanOSP(Id object, IdTable* result) const;
 
   const vector<PatternID>& getHasPattern() const;
   const CompactStringVector<Id, Id>& getHasPredicate() const;
@@ -200,29 +200,26 @@ class Index {
 
   size_t getSizeEstimate(const string& words) const;
 
-  void getContextListForWords(const string& words, WidthTwoList* result) const;
+  void getContextListForWords(const string& words, IdTable* result) const;
 
-  void getECListForWords(const string& words, size_t limit,
-                         WidthThreeList& result) const;
+  void getECListForWordsOneVar(const string& words, size_t limit,
+                               IdTable* result) const;
 
   // With two or more variables.
-  template <typename ResultList>
   void getECListForWords(const string& words, size_t nofVars, size_t limit,
-                         ResultList& result) const;
+                         IdTable* result) const;
 
   // With filtering. Needs many template instantiations but
   // only nofVars truly makes a difference. Others are just data types
   // of result tables.
-  template <typename FilterTable, typename ResultList>
-  void getFilteredECListForWords(const string& words, const FilterTable& filter,
+  void getFilteredECListForWords(const string& words, const IdTable& filter,
                                  size_t filterColumn, size_t nofVars,
-                                 size_t limit, ResultList& result) const;
+                                 size_t limit, IdTable* result) const;
 
   // Special cast with a width-one filter.
-  template <typename ResultList>
-  void getFilteredECListForWords(const string& words,
-                                 const WidthOneList& filter, size_t nofVars,
-                                 size_t limit, ResultList& result) const;
+  void getFilteredECListForWordsWidthOne(const string& words,
+                                         const IdTable& filter, size_t nofVars,
+                                         size_t limit, IdTable* result) const;
 
   void getContextEntityScoreListsForWords(const string& words, vector<Id>& cids,
                                           vector<Id>& eids,
@@ -510,12 +507,12 @@ class Index {
 
   void scanFunctionalRelation(const pair<off_t, size_t>& blockOff, Id lhsId,
                               ad_utility::File& indexFile,
-                              WidthOneList* result) const;
+                              IdTable* result) const;
 
   void scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                  const pair<off_t, size_t>& followBlock,
                                  Id lhsId, ad_utility::File& indexFile,
-                                 off_t upperBound, WidthOneList* result) const;
+                                 off_t upperBound, IdTable* result) const;
 
   void addContextToVector(TextVec::bufwriter_type& writer, Id context,
                           const ad_utility::HashMap<Id, Score>& words,
@@ -567,8 +564,7 @@ class Index {
   template <class T>
   void writeAsciiListFile(const string& filename, const T& ids) const;
 
-  void getRhsForSingleLhs(const WidthTwoList& in, Id lhsId,
-                          WidthOneList* result) const;
+  void getRhsForSingleLhs(const IdTable& in, Id lhsId, IdTable* result) const;
 
   bool isLiteral(const string& object);
 

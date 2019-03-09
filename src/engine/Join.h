@@ -75,44 +75,18 @@ class Join : public Operation {
 
   void computeResultForJoinWithFullScanDummy(ResultTable* result) const;
 
-  typedef void (Index::*ScanMethodType)(Id, Index::WidthTwoList*) const;
+  typedef void (Index::*ScanMethodType)(Id, IdTable*) const;
 
   ScanMethodType getScanMethod(
       std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const;
 
-  template <typename NonDummyResultList, typename ResultList>
-  void doComputeJoinWithFullScanDummyLeft(const NonDummyResultList& v,
-                                          ResultList* r) const;
+  void doComputeJoinWithFullScanDummyLeft(const IdTable& v, IdTable* r) const;
 
-  template <typename NonDummyResultList, typename ResultList>
-  void doComputeJoinWithFullScanDummyRight(const NonDummyResultList& v,
-                                           ResultList* r) const;
+  void doComputeJoinWithFullScanDummyRight(const IdTable& v, IdTable* r) const;
 
-  // In Header to avoid numerous instantiations.
-  template <typename LhsIt, typename RhsIt>
-  void appendCrossProduct(LhsIt lbeg, LhsIt lend, RhsIt rbeg, RhsIt rend,
-                          vector<vector<Id>>* res) const {
-    for (auto it = lbeg; it != lend; ++it) {
-      for (auto itt = rbeg; itt != rend; ++itt) {
-        const auto& l = *it;
-        const auto& r = *itt;
-        vector<Id> entry;
-        Engine::concatTuple(l, r, entry);
-        res->emplace_back(entry);
-      }
-    }
-  };
-  template <typename LhsIt, typename RhsIt, size_t Width>
-  void appendCrossProduct(LhsIt lbeg, LhsIt lend, RhsIt rbeg, RhsIt rend,
-                          vector<array<Id, Width>>* res) const {
-    for (auto it = lbeg; it != lend; ++it) {
-      for (auto itt = rbeg; itt != rend; ++itt) {
-        const auto& l = *it;
-        const auto& r = *itt;
-        array<Id, Width> entry;
-        Engine::concatTuple(l, r, entry);
-        res->emplace_back(entry);
-      }
-    }
-  };
+  void appendCrossProduct(IdTable::const_iterator& leftBegin,
+                          IdTable::const_iterator& leftEnd,
+                          IdTable::const_iterator& rightBegin,
+                          IdTable::const_iterator& rightEnd,
+                          IdTable* res) const;
 };

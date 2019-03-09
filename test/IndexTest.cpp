@@ -512,8 +512,8 @@ TEST(IndexTest, scanTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-    Index::WidthOneList wol;
-    Index::WidthTwoList wtl;
+    IdTable wol(1);
+    IdTable wtl(2);
 
     index.scanPSO("b", &wtl);
     ASSERT_EQ(2u, wtl.size());
@@ -596,8 +596,8 @@ TEST(IndexTest, scanTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-    Index::WidthOneList wol;
-    Index::WidthTwoList wtl;
+    IdTable wol(1);
+    IdTable wtl(2);
 
     index.scanPSO("is-a", &wtl);
     ASSERT_EQ(7u, wtl.size());

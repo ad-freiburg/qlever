@@ -6,33 +6,36 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include "../src/engine/CallFixedSize.h"
 #include "../src/engine/MultiColumnJoin.h"
 
 TEST(EngineTest, multiColumnJoinTest) {
   using std::array;
   using std::vector;
 
-  vector<array<Id, 3>> a;
-  a.push_back(array<Id, 3>{{4, 1, 2}});
-  a.push_back(array<Id, 3>{{2, 1, 3}});
-  a.push_back(array<Id, 3>{{1, 1, 4}});
-  a.push_back(array<Id, 3>{{2, 2, 1}});
-  a.push_back(array<Id, 3>{{1, 3, 1}});
-  vector<array<Id, 3>> b;
-  b.push_back(array<Id, 3>{{3, 3, 1}});
-  b.push_back(array<Id, 3>{{1, 8, 1}});
-  b.push_back(array<Id, 3>{{4, 2, 2}});
-  b.push_back(array<Id, 3>{{1, 1, 3}});
-  vector<array<Id, 4>> res;
+  IdTable a(3);
+  a.push_back({4, 1, 2});
+  a.push_back({2, 1, 3});
+  a.push_back({1, 1, 4});
+  a.push_back({2, 2, 1});
+  a.push_back({1, 3, 1});
+  IdTable b(3);
+  b.push_back({3, 3, 1});
+  b.push_back({1, 8, 1});
+  b.push_back({4, 2, 2});
+  b.push_back({1, 1, 3});
+  IdTable res(4);
   vector<array<Id, 2>> jcls;
   jcls.push_back(array<Id, 2>{{1, 2}});
   jcls.push_back(array<Id, 2>{{2, 1}});
 
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).
-  MultiColumnJoin::computeMultiColumnJoin<vector<array<Id, 3>>,
-                                          vector<array<Id, 3>>, array<Id, 4>>(
-      a, b, jcls, &res, 4u);
+  int aWidth = a.cols();
+  int bWidth = b.cols();
+  int resWidth = res.cols();
+  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth,
+                    MultiColumnJoin::computeMultiColumnJoin, a, b, jcls, &res);
 
   ASSERT_EQ(2u, res.size());
 
@@ -47,39 +50,41 @@ TEST(EngineTest, multiColumnJoinTest) {
   ASSERT_EQ(1u, res[1][3]);
 
   // Test the multi column join with variable sized data.
-  vector<vector<Id>> va;
-  va.push_back(vector<Id>{{1, 2, 3, 4, 5, 6}});
-  va.push_back(vector<Id>{{1, 2, 3, 7, 5, 6}});
-  va.push_back(vector<Id>{{7, 6, 5, 4, 3, 2}});
+  IdTable va(6);
+  va.push_back({1, 2, 3, 4, 5, 6});
+  va.push_back({1, 2, 3, 7, 5, 6});
+  va.push_back({7, 6, 5, 4, 3, 2});
 
-  vector<array<Id, 3>> vb;
-  vb.push_back(array<Id, 3>{{2, 3, 4}});
-  vb.push_back(array<Id, 3>{{2, 3, 5}});
-  vb.push_back(array<Id, 3>{{6, 7, 4}});
+  IdTable vb(3);
+  vb.push_back({2, 3, 4});
+  vb.push_back({2, 3, 5});
+  vb.push_back({6, 7, 4});
 
-  vector<vector<Id>> vres;
+  IdTable vres(7);
   jcls.clear();
-  jcls.push_back(array<Id, 2>{{1, 0}});
-  jcls.push_back(array<Id, 2>{{2, 1}});
+  jcls.push_back({1, 0});
+  jcls.push_back({2, 1});
 
   // The template size parameter can be at most 6 (the maximum number
   // of fixed size columns plus one).
-  MultiColumnJoin::computeMultiColumnJoin<vector<vector<Id>>,
-                                          vector<array<Id, 3>>, vector<Id>>(
-      va, vb, jcls, &vres, 7u);
+  aWidth = va.cols();
+  bWidth = vb.cols();
+  resWidth = vres.cols();
+  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth,
+                    MultiColumnJoin::computeMultiColumnJoin, va, vb, jcls,
+                    &vres);
 
   ASSERT_EQ(4u, vres.size());
-  ASSERT_EQ(7u, vres[0].size());
-  ASSERT_EQ(7u, vres[1].size());
-  ASSERT_EQ(7u, vres[2].size());
-  ASSERT_EQ(7u, vres[3].size());
+  ASSERT_EQ(7u, vres.cols());
 
-  vector<Id> r{1, 2, 3, 4, 5, 6, 4};
-  ASSERT_EQ(r, vres[0]);
-  r = {1, 2, 3, 4, 5, 6, 5};
-  ASSERT_EQ(r, vres[1]);
-  r = {1, 2, 3, 7, 5, 6, 4};
-  ASSERT_EQ(r, vres[2]);
-  r = {1, 2, 3, 7, 5, 6, 5};
-  ASSERT_EQ(r, vres[3]);
+  IdTable wantedRes(7);
+  wantedRes.push_back({1, 2, 3, 4, 5, 6, 4});
+  wantedRes.push_back({1, 2, 3, 4, 5, 6, 5});
+  wantedRes.push_back({1, 2, 3, 7, 5, 6, 4});
+  wantedRes.push_back({1, 2, 3, 7, 5, 6, 5});
+
+  ASSERT_EQ(wantedRes[0], vres[0]);
+  ASSERT_EQ(wantedRes[1], vres[1]);
+  ASSERT_EQ(wantedRes[2], vres[2]);
+  ASSERT_EQ(wantedRes[3], vres[3]);
 }

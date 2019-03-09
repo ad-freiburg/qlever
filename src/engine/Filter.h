@@ -94,38 +94,26 @@ class Filter : public Operation {
    * to subRes and store it in res.
    * @return The pointer res.
    */
-  template <class RT, ResultTable::ResultType T>
-  vector<RT>* computeFilterForResultType(vector<RT>* res, size_t lhs,
-                                         size_t rhs,
-                                         const vector<RT>& subRes) const;
+  template <ResultTable::ResultType T, int WIDTH>
+  void computeFilter(IdTableStatic<WIDTH>* dynResult, size_t lhs, size_t rhs,
+                     const IdTableStatic<WIDTH>& dynInput) const;
 
-  /**
-   * @brief Calls computeFilterForResultType with the correct template
-   *        arguments
-   */
-  template <class RT>
-  vector<RT>* computeFilter(vector<RT>* res, size_t lhs, size_t rhs,
-                            const vector<RT>& input,
-                            shared_ptr<const ResultTable> subRes) const;
+  template <int WIDTH>
+  void computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
+                                 size_t rhsInd, const IdTable& dynInput,
+                                 ResultTable::ResultType lhsType);
+
   /**
    * @brief Uses the result type and the filter type (_type) to apply the filter
    * to subRes and store it in res.
    * @return The pointer res.
    */
-  template <class RT, ResultTable::ResultType T>
-  vector<RT>* computeFilterFixedValueForResultType(
-      vector<RT>* res, size_t lhs, Id rhs, const vector<RT>& input,
-      shared_ptr<const ResultTable> subRes) const;
+  template <ResultTable::ResultType T, int WIDTH>
+  void computeFilterFixedValue(IdTableStatic<WIDTH>* res, size_t lhs, Id rhs,
+                               const IdTableStatic<WIDTH>& input,
+                               shared_ptr<const ResultTable> subRes) const;
 
-  /**
-   * @brief Calls computeFilterFixedValueForResultType with the correct template
-   *        arguments
-   */
-  template <class RT>
-  vector<RT>* computeFilterFixedValue(
-      vector<RT>* res, size_t lhs, Id rhs, const vector<RT>& input,
-      shared_ptr<const ResultTable> subRes) const;
-
+  template <int WIDTH>
   void computeResultFixedValue(
       ResultTable* result,
       const std::shared_ptr<const ResultTable> subRes) const;

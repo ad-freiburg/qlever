@@ -2,11 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./Filter.h"
+#include "Filter.h"
 #include <optional>
 #include <regex>
 #include <sstream>
-#include "./QueryExecutionTree.h"
+#include "CallFixedSize.h"
+#include "QueryExecutionTree.h"
 
 using std::string;
 
@@ -107,58 +108,57 @@ std::string Filter::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-template <class RT, ResultTable::ResultType T>
-vector<RT>* Filter::computeFilterForResultType(vector<RT>* res, size_t lhs,
-                                               size_t rhs,
-                                               const vector<RT>& input) const {
+template <ResultTable::ResultType T, int WIDTH>
+void Filter::computeFilter(IdTableStatic<WIDTH>* result, size_t lhs, size_t rhs,
+                           const IdTableStatic<WIDTH>& input) const {
   switch (_type) {
     case SparqlFilter::EQ:
       getEngine().filter(input,
-                         [lhs, rhs](const RT& e) {
+                         [lhs, rhs](const auto& e) {
                            return ValueReader<T>::get(e[lhs]) ==
                                   ValueReader<T>::get(e[rhs]);
                          },
-                         res);
+                         result);
       break;
     case SparqlFilter::NE:
       getEngine().filter(input,
-                         [lhs, rhs](const RT& e) {
+                         [lhs, rhs](const auto& e) {
                            return ValueReader<T>::get(e[lhs]) !=
                                   ValueReader<T>::get(e[rhs]);
                          },
-                         res);
+                         result);
       break;
     case SparqlFilter::LT:
       getEngine().filter(input,
-                         [lhs, rhs](const RT& e) {
+                         [lhs, rhs](const auto& e) {
                            return ValueReader<T>::get(e[lhs]) <
                                   ValueReader<T>::get(e[rhs]);
                          },
-                         res);
+                         result);
       break;
     case SparqlFilter::LE:
       getEngine().filter(input,
-                         [lhs, rhs](const RT& e) {
+                         [lhs, rhs](const auto& e) {
                            return ValueReader<T>::get(e[lhs]) <=
                                   ValueReader<T>::get(e[rhs]);
                          },
-                         res);
+                         result);
       break;
     case SparqlFilter::GT:
       getEngine().filter(input,
-                         [lhs, rhs](const RT& e) {
+                         [lhs, rhs](const auto& e) {
                            return ValueReader<T>::get(e[lhs]) >
                                   ValueReader<T>::get(e[rhs]);
                          },
-                         res);
+                         result);
       break;
     case SparqlFilter::GE:
       getEngine().filter(input,
-                         [lhs, rhs](const RT& e) {
+                         [lhs, rhs](const auto& e) {
                            return ValueReader<T>::get(e[lhs]) >=
                                   ValueReader<T>::get(e[rhs]);
                          },
-                         res);
+                         result);
       break;
     case SparqlFilter::LANG_MATCHES:
       AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
@@ -176,35 +176,42 @@ vector<RT>* Filter::computeFilterForResultType(vector<RT>* res, size_t lhs,
                "been implemented.");
       break;
   }
-  return res;
 }
 
-// _____________________________________________________________________________
-template <class RT>
-vector<RT>* Filter::computeFilter(vector<RT>* res, size_t lhs, size_t rhs,
-                                  const vector<RT>& input,
-                                  shared_ptr<const ResultTable> subRes) const {
-  switch (subRes->getResultType(lhs)) {
+template <int WIDTH>
+void Filter::computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
+                                       size_t rhsInd, const IdTable& dynInput,
+                                       ResultTable::ResultType lhsType) {
+  const IdTableStatic<WIDTH> input = dynInput.asStaticView<WIDTH>();
+  IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
+  switch (lhsType) {
     case ResultTable::ResultType::KB:
-      return computeFilterForResultType<RT, ResultTable::ResultType::KB>(
-          res, lhs, rhs, input);
+      computeFilter<ResultTable::ResultType::KB>(&result, lhsInd, rhsInd,
+                                                 input);
+      break;
     case ResultTable::ResultType::VERBATIM:
-      return computeFilterForResultType<RT, ResultTable::ResultType::VERBATIM>(
-          res, lhs, rhs, input);
+      computeFilter<ResultTable::ResultType::VERBATIM>(&result, lhsInd, rhsInd,
+                                                       input);
+      break;
     case ResultTable::ResultType::FLOAT:
-      return computeFilterForResultType<RT, ResultTable::ResultType::FLOAT>(
-          res, lhs, rhs, input);
+      computeFilter<ResultTable::ResultType::FLOAT>(&result, lhsInd, rhsInd,
+                                                    input);
+      break;
     case ResultTable::ResultType::LOCAL_VOCAB:
-      return computeFilterForResultType<RT,
-                                        ResultTable::ResultType::LOCAL_VOCAB>(
-          res, lhs, rhs, input);
+      computeFilter<ResultTable::ResultType::LOCAL_VOCAB>(&result, lhsInd,
+                                                          rhsInd, input);
+      break;
     case ResultTable::ResultType::TEXT:
-      return computeFilterForResultType<RT, ResultTable::ResultType::TEXT>(
-          res, lhs, rhs, input);
+      computeFilter<ResultTable::ResultType::TEXT>(&result, lhsInd, rhsInd,
+                                                   input);
+      break;
+    default:
+      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+               "Tried to compute a filter on an unknown result type " +
+                   std::to_string(static_cast<int>(lhsType)));
+      break;
   }
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-           "Tried to compute a filter on an unknown result type " +
-               std::to_string(static_cast<int>(subRes->getResultType(lhs))));
+  *dynResult = result.moveToDynamic();
 }
 
 // _____________________________________________________________________________
@@ -215,88 +222,50 @@ void Filter::computeResult(ResultTable* result) {
   runtimeInfo.setDescriptor(getDescriptor());
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "Filter result computation..." << endl;
-  result->_nofColumns = subRes->_nofColumns;
+  result->_data.setCols(subRes->_data.cols());
   result->_resultTypes.insert(result->_resultTypes.end(),
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
   size_t lhsInd = _subtree->getVariableColumn(_lhs);
-
+  int width = result->_data.cols();
   if (_rhs[0] == '?') {
     size_t rhsInd = _subtree->getVariableColumn(_rhs);
-    // compare two columns
-    switch (subRes->_nofColumns) {
-      case 1: {
-        typedef array<Id, 1> RT;
-        result->_fixedSizeData = computeFilter(
-            new vector<RT>(), lhsInd, rhsInd,
-            *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
-        break;
-      }
-      case 2: {
-        typedef array<Id, 2> RT;
-        result->_fixedSizeData = computeFilter(
-            new vector<RT>(), lhsInd, rhsInd,
-            *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
-        break;
-      }
-      case 3: {
-        typedef array<Id, 3> RT;
-        result->_fixedSizeData = computeFilter(
-            new vector<RT>(), lhsInd, rhsInd,
-            *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
-        break;
-      }
-      case 4: {
-        typedef array<Id, 4> RT;
-        result->_fixedSizeData = computeFilter(
-            new vector<RT>(), lhsInd, rhsInd,
-            *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
-        break;
-      }
-      case 5: {
-        typedef array<Id, 5> RT;
-        result->_fixedSizeData = computeFilter(
-            new vector<RT>(), lhsInd, rhsInd,
-            *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
-        break;
-      }
-      default:
-        computeFilter(&result->_varSizeData, lhsInd, rhsInd,
-                      subRes->_varSizeData, subRes);
-        break;
-    }
+    CALL_FIXED_SIZE_1(width, computeResultDynamicValue, &result->_data, lhsInd,
+                      rhsInd, subRes->_data, subRes->getResultType(lhsInd));
   } else {
     // compare the left column to a fixed value
-    return computeResultFixedValue(result, subRes);
+    CALL_FIXED_SIZE_1(width, computeResultFixedValue, result, subRes);
   }
 
   LOG(DEBUG) << "Filter result computation done." << endl;
 }
 
 // _____________________________________________________________________________
-template <class RT, ResultTable::ResultType T>
-vector<RT>* Filter::computeFilterFixedValueForResultType(
-    vector<RT>* res, size_t lhs, Id rhs, const vector<RT>& input,
+template <ResultTable::ResultType T, int WIDTH>
+void Filter::computeFilterFixedValue(
+    IdTableStatic<WIDTH>* res, size_t lhs, Id rhs,
+    const IdTableStatic<WIDTH>& input,
     shared_ptr<const ResultTable> subRes) const {
   bool lhs_is_sorted =
       subRes->_sortedBy.size() > 0 && subRes->_sortedBy[0] == lhs;
+  Id* rhs_array = new Id[res->cols()];
+  IdTable::Row rhs_row(rhs_array, res->cols());
   switch (_type) {
     case SparqlFilter::EQ:
       if (lhs_is_sorted) {
         // The input data is sorted, use binary search to locate the first
         // and last element that match rhs and copy the range.
-        RT rhs_array;
         rhs_array[lhs] = rhs;
-        const typename vector<RT>::const_iterator& lower = std::lower_bound(
-            input.begin(), input.end(), rhs_array,
-            [lhs](const RT& l, const RT& r) {
+        const auto& lower = std::lower_bound(
+            input.begin(), input.end(), rhs_row,
+            [lhs](const auto& l, const auto& r) {
               return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
             });
         if (lower != input.end() && (*lower)[lhs] == rhs) {
           // an element equal to rhs exists in the vector
           const auto& upper = std::upper_bound(
-              lower, input.end(), rhs_array, [lhs](const RT& l, const RT& r) {
+              lower, input.end(), rhs_row, [lhs](const auto& l, const auto& r) {
                 return ValueReader<T>::get(l[lhs]) <
                        ValueReader<T>::get(r[lhs]);
               });
@@ -304,24 +273,23 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         }
       } else {
         getEngine().filter(
-            input, [lhs, rhs](const RT& e) { return e[lhs] == rhs; }, res);
+            input, [lhs, rhs](const auto& e) { return e[lhs] == rhs; }, res);
       }
       break;
     case SparqlFilter::NE:
       if (lhs_is_sorted) {
         // The input data is sorted, use binary search to locate the first
         // and last element that match rhs and copy the range.
-        RT rhs_array;
         rhs_array[lhs] = rhs;
-        const typename vector<RT>::const_iterator& lower = std::lower_bound(
-            input.begin(), input.end(), rhs_array,
-            [lhs](const RT& l, const RT& r) {
+        const auto& lower = std::lower_bound(
+            input.begin(), input.end(), rhs_row,
+            [lhs](const auto& l, const auto& r) {
               return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
             });
         if (lower != input.end() && (*lower)[lhs] == rhs) {
           // rhs appears within the input, take all elements before and after it
-          const typename vector<RT>::const_iterator& upper = std::upper_bound(
-              lower, input.end(), rhs_array, [lhs](const RT& l, const RT& r) {
+          const auto& upper = std::upper_bound(
+              lower, input.end(), rhs_row, [lhs](const auto& l, const auto& r) {
                 return ValueReader<T>::get(l[lhs]) <
                        ValueReader<T>::get(r[lhs]);
               });
@@ -333,24 +301,23 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         }
       } else {
         getEngine().filter(
-            input, [lhs, rhs](const RT& e) { return e[lhs] != rhs; }, res);
+            input, [lhs, rhs](const auto& e) { return e[lhs] != rhs; }, res);
       }
       break;
     case SparqlFilter::LT:
       if (lhs_is_sorted) {
         // The input data is sorted, use binary search to locate the first
         // and last element that match rhs and copy the range.
-        RT rhs_array;
         rhs_array[lhs] = rhs;
-        const typename vector<RT>::const_iterator& lower = std::lower_bound(
-            input.begin(), input.end(), rhs_array,
-            [lhs](const RT& l, const RT& r) {
+        const auto& lower = std::lower_bound(
+            input.begin(), input.end(), rhs_row,
+            [lhs](const auto& l, const auto& r) {
               return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
             });
         res->insert(res->end(), input.begin(), lower);
       } else {
         getEngine().filter(input,
-                           [lhs, rhs](const RT& e) {
+                           [lhs, rhs](const auto& e) {
                              return ValueReader<T>::get(e[lhs]) <
                                     ValueReader<T>::get(rhs);
                            },
@@ -361,17 +328,16 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
       if (lhs_is_sorted) {
         // The input data is sorted, use binary search to locate the first
         // and last element that match rhs and copy the range.
-        RT rhs_array;
         rhs_array[lhs] = rhs;
-        const typename vector<RT>::const_iterator& upper = std::upper_bound(
-            input.begin(), input.end(), rhs_array,
-            [lhs](const RT& l, const RT& r) {
+        const auto& upper = std::upper_bound(
+            input.begin(), input.end(), rhs_row,
+            [lhs](const auto& l, const auto& r) {
               return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
             });
         res->insert(res->end(), input.begin(), upper);
       } else {
         getEngine().filter(input,
-                           [lhs, rhs](const RT& e) {
+                           [lhs, rhs](const auto& e) {
                              return ValueReader<T>::get(e[lhs]) <=
                                     ValueReader<T>::get(rhs);
                            },
@@ -382,18 +348,17 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
       if (lhs_is_sorted) {
         // The input data is sorted, use binary search to locate the first
         // and last element that match rhs and copy the range.
-        RT rhs_array;
         rhs_array[lhs] = rhs;
-        const typename vector<RT>::const_iterator& upper = std::upper_bound(
-            input.begin(), input.end(), rhs_array,
-            [lhs](const RT& l, const RT& r) {
+        const auto& upper = std::upper_bound(
+            input.begin(), input.end(), rhs_row,
+            [lhs](const auto& l, const auto& r) {
               return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
             });
         // an element equal to rhs exists in the vector
         res->insert(res->end(), upper, input.end());
       } else {
         getEngine().filter(input,
-                           [lhs, rhs](const RT& e) {
+                           [lhs, rhs](const auto& e) {
                              return ValueReader<T>::get(e[lhs]) >
                                     ValueReader<T>::get(rhs);
                            },
@@ -404,18 +369,17 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
       if (lhs_is_sorted) {
         // The input data is sorted, use binary search to locate the first
         // and last element that match rhs and copy the range.
-        RT rhs_array;
         rhs_array[lhs] = rhs;
-        const typename vector<RT>::const_iterator& lower = std::lower_bound(
-            input.begin(), input.end(), rhs_array,
-            [lhs](const RT& l, const RT& r) {
+        const auto& lower = std::lower_bound(
+            input.begin(), input.end(), rhs_row,
+            [lhs](const auto& l, const auto& r) {
               return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r[lhs]);
             });
         // an element equal to rhs exists in the vector
         res->insert(res->end(), lower, input.end());
       } else {
         getEngine().filter(input,
-                           [lhs, rhs](const RT& e) {
+                           [lhs, rhs](const auto& e) {
                              return ValueReader<T>::get(e[lhs]) >=
                                     ValueReader<T>::get(rhs);
                            },
@@ -425,7 +389,7 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
     case SparqlFilter::LANG_MATCHES:
       getEngine().filter(
           input,
-          [this, lhs, &subRes](const RT& e) {
+          [this, lhs, &subRes](const auto& e) {
             std::optional<string> entity;
             if constexpr (T == ResultTable::ResultType::KB) {
               entity = getIndex().idToOptionalString(e[lhs]);
@@ -453,28 +417,29 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
         if (lhs_is_sorted) {
           // The input data is sorted, use binary search to locate the first
           // and last element that match rhs and copy the range.
-          RT rhs_array;
           rhs_array[lhs] = lowerBound;
-          const typename vector<RT>::const_iterator& lower = std::lower_bound(
-              input.begin(), input.end(), rhs_array,
-              [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+          const auto& lower = std::lower_bound(
+              input.begin(), input.end(), rhs_row,
+              [lhs](const auto& l, const auto& r) { return l[lhs] < r[lhs]; });
           if (lower != input.end()) {
             // There is at least one element in the input that is also within
             // the range, look for the upper boundary and then copy all elements
             // within the range.
             rhs_array[lhs] = upperBound;
-            const typename vector<RT>::const_iterator& upper = std::upper_bound(
-                lower, input.end(), rhs_array,
-                [lhs](const RT& l, const RT& r) { return l[lhs] < r[lhs]; });
+            const auto& upper =
+                std::upper_bound(lower, input.end(), rhs_row,
+                                 [lhs](const auto& l, const auto& r) {
+                                   return l[lhs] < r[lhs];
+                                 });
             res->insert(res->end(), lower, upper);
           }
         } else {
-          getEngine().filter(input,
-                             [this, lhs, lowerBound, upperBound](const RT& e) {
-                               return lowerBound <= e[lhs] &&
-                                      e[lhs] < upperBound;
-                             },
-                             res);
+          getEngine().filter(
+              input,
+              [this, lhs, lowerBound, upperBound](const auto& e) {
+                return lowerBound <= e[lhs] && e[lhs] < upperBound;
+              },
+              res);
         }
         break;
       }
@@ -497,7 +462,7 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
       }
       getEngine().filter(
           input,
-          [this, self_regex, &lhs, &subRes](const RT& e) {
+          [this, self_regex, &lhs, &subRes](const auto& e) {
             std::optional<string> entity;
             if constexpr (T == ResultTable::ResultType::KB) {
               entity = getIndex().idToOptionalString(e[lhs]);
@@ -512,54 +477,17 @@ vector<RT>* Filter::computeFilterFixedValueForResultType(
           res);
     } break;
   }
-  return res;
+  delete[] rhs_array;
 }
 
 // _____________________________________________________________________________
-template <class RT>
-vector<RT>* Filter::computeFilterFixedValue(
-    vector<RT>* res, size_t lhs, Id rhs, const vector<RT>& input,
-    shared_ptr<const ResultTable> subRes) const {
-  ResultTable::ResultType resultType = subRes->getResultType(lhs);
-  // Catch some unsupported combinations
-  if (resultType != ResultTable::ResultType::KB &&
-      resultType != ResultTable::ResultType::LOCAL_VOCAB &&
-      (_type == SparqlFilter::PREFIX || _type == SparqlFilter::LANG_MATCHES ||
-       _type == SparqlFilter::REGEX)) {
-    AD_THROW(
-        ad_semsearch::Exception::BAD_QUERY,
-        "Requested to apply a string based filter on a non string column: " +
-            asString());
-  }
-  switch (resultType) {
-    case ResultTable::ResultType::KB:
-      return computeFilterFixedValueForResultType<RT,
-                                                  ResultTable::ResultType::KB>(
-          res, lhs, rhs, input, subRes);
-    case ResultTable::ResultType::VERBATIM:
-      return computeFilterFixedValueForResultType<
-          RT, ResultTable::ResultType::VERBATIM>(res, lhs, rhs, input, subRes);
-    case ResultTable::ResultType::FLOAT:
-      return computeFilterFixedValueForResultType<
-          RT, ResultTable::ResultType::FLOAT>(res, lhs, rhs, input, subRes);
-    case ResultTable::ResultType::LOCAL_VOCAB:
-      return computeFilterFixedValueForResultType<
-          RT, ResultTable::ResultType::LOCAL_VOCAB>(res, lhs, rhs, input,
-                                                    subRes);
-    case ResultTable::ResultType::TEXT:
-      return computeFilterFixedValueForResultType<
-          RT, ResultTable::ResultType::TEXT>(res, lhs, rhs, input, subRes);
-  }
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-           "Tried to compute a filter on an unknown result type " +
-               std::to_string(static_cast<int>(subRes->getResultType(lhs))));
-}
-
-// _____________________________________________________________________________
+template <int WIDTH>
 void Filter::computeResultFixedValue(
-    ResultTable* result,
+    ResultTable* resultTable,
     const std::shared_ptr<const ResultTable> subRes) const {
   LOG(DEBUG) << "Filter result computation..." << endl;
+  IdTableStatic<WIDTH> result = resultTable->_data.moveToStatic<WIDTH>();
+  const IdTableStatic<WIDTH> input = subRes->_data.asStaticView<WIDTH>();
 
   // interpret the filters right hand side
   size_t lhs = _subtree->getVariableColumn(_lhs);
@@ -643,48 +571,46 @@ void Filter::computeResultFixedValue(
                "Trying to filter on a not yet supported column type.");
       break;
   }
-  switch (subRes->_nofColumns) {
-    case 1: {
-      typedef array<Id, 1> RT;
-      result->_fixedSizeData = computeFilterFixedValue(
-          new vector<RT>(), lhs, rhs,
-          *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
-      break;
-    }
-    case 2: {
-      typedef array<Id, 2> RT;
-      result->_fixedSizeData = computeFilterFixedValue(
-          new vector<RT>(), lhs, rhs,
-          *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
-      break;
-    }
-    case 3: {
-      typedef array<Id, 3> RT;
-      result->_fixedSizeData = computeFilterFixedValue(
-          new vector<RT>(), lhs, rhs,
-          *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
-      break;
-    }
-    case 4: {
-      typedef array<Id, 4> RT;
-      result->_fixedSizeData = computeFilterFixedValue(
-          new vector<RT>(), lhs, rhs,
-          *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
-      break;
-    }
-    case 5: {
-      typedef array<Id, 5> RT;
-      result->_fixedSizeData = computeFilterFixedValue(
-          new vector<RT>(), lhs, rhs,
-          *static_cast<vector<RT>*>(subRes->_fixedSizeData), subRes);
-      break;
-    }
-    default: {
-      computeFilterFixedValue(&result->_varSizeData, lhs, rhs,
-                              subRes->_varSizeData, subRes);
-      break;
-    }
-  }
 
+  ResultTable::ResultType resultType = subRes->getResultType(lhs);
+  // Catch some unsupported combinations
+  if (resultType != ResultTable::ResultType::KB &&
+      resultType != ResultTable::ResultType::LOCAL_VOCAB &&
+      (_type == SparqlFilter::PREFIX || _type == SparqlFilter::LANG_MATCHES ||
+       _type == SparqlFilter::REGEX)) {
+    AD_THROW(
+        ad_semsearch::Exception::BAD_QUERY,
+        "Requested to apply a string based filter on a non string column: " +
+            asString());
+  }
+  switch (resultType) {
+    case ResultTable::ResultType::KB:
+      computeFilterFixedValue<ResultTable::ResultType::KB>(&result, lhs, rhs,
+                                                           input, subRes);
+      break;
+    case ResultTable::ResultType::VERBATIM:
+      computeFilterFixedValue<ResultTable::ResultType::VERBATIM>(
+          &result, lhs, rhs, input, subRes);
+      break;
+    case ResultTable::ResultType::FLOAT:
+      computeFilterFixedValue<ResultTable::ResultType::FLOAT>(&result, lhs, rhs,
+                                                              input, subRes);
+      break;
+    case ResultTable::ResultType::LOCAL_VOCAB:
+      computeFilterFixedValue<ResultTable::ResultType::LOCAL_VOCAB>(
+          &result, lhs, rhs, input, subRes);
+      break;
+    case ResultTable::ResultType::TEXT:
+      computeFilterFixedValue<ResultTable::ResultType::TEXT>(&result, lhs, rhs,
+                                                             input, subRes);
+      break;
+    default:
+      AD_THROW(
+          ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+          "Tried to compute a filter on an unknown result type " +
+              std::to_string(static_cast<int>(subRes->getResultType(lhs))));
+      break;
+  }
   LOG(DEBUG) << "Filter result computation done." << endl;
+  resultTable->_data = result.moveToDynamic();
 }

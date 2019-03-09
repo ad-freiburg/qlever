@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 #include <cstdio>
+#include "../src/engine/CallFixedSize.h"
 #include "../src/engine/GroupBy.h"
 
 // This fixture is used to create an Index for the tests.
@@ -93,18 +94,18 @@ TEST_F(GroupByTest, doGroupBy) {
   inTable._localVocab->push_back("<local2>");
   inTable._localVocab->push_back("<local3>");
 
-  vector<vector<Id>> inputData;
+  IdTable inputData(6);
   // The input data types are
   //                   KB, KB, VERBATIM, TEXT, FLOAT,           STRING
-  inputData.push_back({0, 3, 123, 0, floatBuffers[0], 0});
-  inputData.push_back({0, 4, 0, 1, floatBuffers[1], 1});
+  inputData.push_back({1, 4, 123, 0, floatBuffers[0], 0});
+  inputData.push_back({1, 5, 0, 1, floatBuffers[1], 1});
 
-  inputData.push_back({1, 5, 41223, 2, floatBuffers[2], 2});
-  inputData.push_back({1, 6, 123, 0, floatBuffers[0], 0});
-  inputData.push_back({1, 6, 123, 0, floatBuffers[0], 0});
+  inputData.push_back({2, 6, 41223, 2, floatBuffers[2], 2});
+  inputData.push_back({2, 7, 123, 0, floatBuffers[0], 0});
+  inputData.push_back({2, 7, 123, 0, floatBuffers[0], 0});
 
-  inputData.push_back({2, 7, 0, 1, floatBuffers[1], 1});
-  inputData.push_back({2, 8, 41223, 2, floatBuffers[2], 2});
+  inputData.push_back({3, 8, 0, 1, floatBuffers[1], 1});
+  inputData.push_back({3, 9, 41223, 2, floatBuffers[2], 2});
 
   std::vector<ResultTable::ResultType> inputTypes = {
       ResultTable::ResultType::KB,       ResultTable::ResultType::KB,
@@ -159,27 +160,33 @@ TEST_F(GroupByTest, doGroupBy) {
 
   ResultTable outTable;
 
-  doGroupBy<vector<Id>, vector<Id>>(&inputData, inputTypes, groupByCols,
-                                    aggregates, &outTable._varSizeData,
-                                    &inTable, &outTable, this->_index);
+  // This is normally done when calling computeResult in the GroupBy
+  // operation.
+  outTable._data.setCols(24);
 
-  ASSERT_EQ(3u, outTable._varSizeData.size());
+  int inWidth = inputData.cols();
+  int outWidth = outTable._data.cols();
+  CALL_FIXED_SIZE_2(inWidth, outWidth, doGroupBy, inputData, inputTypes,
+                    groupByCols, aggregates, &outTable._data, &inTable,
+                    &outTable, this->_index);
 
-  ASSERT_EQ(24u, outTable._varSizeData[0].size());
-  ASSERT_EQ(24u, outTable._varSizeData[1].size());
-  ASSERT_EQ(24u, outTable._varSizeData[2].size());
+  ASSERT_EQ(3u, outTable._data.size());
+
+  ASSERT_EQ(24u, outTable._data[0].size());
+  ASSERT_EQ(24u, outTable._data[1].size());
+  ASSERT_EQ(24u, outTable._data[2].size());
 
   // COUNT CHECKS
-  ASSERT_EQ(2u, outTable._varSizeData[0][1]);
-  ASSERT_EQ(3u, outTable._varSizeData[1][1]);
-  ASSERT_EQ(2u, outTable._varSizeData[2][1]);
+  ASSERT_EQ(2u, outTable._data[0][1]);
+  ASSERT_EQ(3u, outTable._data[1][1]);
+  ASSERT_EQ(2u, outTable._data[2][1]);
 
   // GROUP CONCAT CHECKS
   // check that the local vocab ids are ascending
   for (int i = 0; i < 5; i++) {
-    ASSERT_EQ(0u + i, outTable._varSizeData[0][2 + i]);
-    ASSERT_EQ(0u + i + 5, outTable._varSizeData[1][2 + i]);
-    ASSERT_EQ(0u + i + 10, outTable._varSizeData[2][2 + i]);
+    ASSERT_EQ(0u + i, outTable._data[0][2 + i]);
+    ASSERT_EQ(0u + i + 5, outTable._data[1][2 + i]);
+    ASSERT_EQ(0u + i + 10, outTable._data[2][2 + i]);
   }
   // check for a local vocab entry for each of the 5 input cols
   ASSERT_EQ(std::string("<entity1>, <entity2>"), (*outTable._localVocab)[0]);
@@ -191,106 +198,106 @@ TEST_F(GroupByTest, doGroupBy) {
   ASSERT_EQ(std::string("<local1>, <local2>"), (*outTable._localVocab)[4]);
 
   // SAMPLE CHECKS
-  ASSERT_EQ(4u, outTable._varSizeData[0][7]);
-  ASSERT_EQ(6u, outTable._varSizeData[1][7]);
-  ASSERT_EQ(8u, outTable._varSizeData[2][7]);
+  ASSERT_EQ(5u, outTable._data[0][7]);
+  ASSERT_EQ(7u, outTable._data[1][7]);
+  ASSERT_EQ(9u, outTable._data[2][7]);
 
   // MIN CHECKS
   float buffer;
-  ASSERT_EQ(3u, outTable._varSizeData[0][8]);
-  ASSERT_EQ(5u, outTable._varSizeData[1][8]);
-  ASSERT_EQ(7u, outTable._varSizeData[2][8]);
+  ASSERT_EQ(4u, outTable._data[0][8]);
+  ASSERT_EQ(6u, outTable._data[1][8]);
+  ASSERT_EQ(8u, outTable._data[2][8]);
 
-  ASSERT_EQ(0u, outTable._varSizeData[0][9]);
-  ASSERT_EQ(123u, outTable._varSizeData[1][9]);
-  ASSERT_EQ(0u, outTable._varSizeData[2][9]);
+  ASSERT_EQ(0u, outTable._data[0][9]);
+  ASSERT_EQ(123u, outTable._data[1][9]);
+  ASSERT_EQ(0u, outTable._data[2][9]);
 
-  ASSERT_EQ(ID_NO_VALUE, outTable._varSizeData[0][10]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._varSizeData[1][10]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._varSizeData[2][10]);
+  ASSERT_EQ(ID_NO_VALUE, outTable._data[0][10]);
+  ASSERT_EQ(ID_NO_VALUE, outTable._data[1][10]);
+  ASSERT_EQ(ID_NO_VALUE, outTable._data[2][10]);
 
-  std::memcpy(&buffer, &outTable._varSizeData[0][11], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[0][11], sizeof(float));
   ASSERT_FLOAT_EQ(-3, buffer);
-  std::memcpy(&buffer, &outTable._varSizeData[1][11], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[1][11], sizeof(float));
   ASSERT_FLOAT_EQ(-3, buffer);
-  std::memcpy(&buffer, &outTable._varSizeData[2][11], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[2][11], sizeof(float));
   ASSERT_FLOAT_EQ(2, buffer);
 
   // MAX CHECKS
-  ASSERT_EQ(4u, outTable._varSizeData[0][12]);
-  ASSERT_EQ(6u, outTable._varSizeData[1][12]);
-  ASSERT_EQ(8u, outTable._varSizeData[2][12]);
+  ASSERT_EQ(5u, outTable._data[0][12]);
+  ASSERT_EQ(7u, outTable._data[1][12]);
+  ASSERT_EQ(9u, outTable._data[2][12]);
 
-  ASSERT_EQ(123u, outTable._varSizeData[0][13]);
-  ASSERT_EQ(41223u, outTable._varSizeData[1][13]);
-  ASSERT_EQ(41223u, outTable._varSizeData[2][13]);
+  ASSERT_EQ(123u, outTable._data[0][13]);
+  ASSERT_EQ(41223u, outTable._data[1][13]);
+  ASSERT_EQ(41223u, outTable._data[2][13]);
 
-  ASSERT_EQ(ID_NO_VALUE, outTable._varSizeData[0][14]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._varSizeData[1][14]);
-  ASSERT_EQ(ID_NO_VALUE, outTable._varSizeData[2][14]);
+  ASSERT_EQ(ID_NO_VALUE, outTable._data[0][14]);
+  ASSERT_EQ(ID_NO_VALUE, outTable._data[1][14]);
+  ASSERT_EQ(ID_NO_VALUE, outTable._data[2][14]);
 
-  std::memcpy(&buffer, &outTable._varSizeData[0][15], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[0][15], sizeof(float));
   ASSERT_FLOAT_EQ(2, buffer);
-  std::memcpy(&buffer, &outTable._varSizeData[1][15], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[1][15], sizeof(float));
   ASSERT_FLOAT_EQ(1231, buffer);
-  std::memcpy(&buffer, &outTable._varSizeData[2][15], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[2][15], sizeof(float));
   ASSERT_FLOAT_EQ(1231, buffer);
 
   // SUM CHECKS
-  std::memcpy(&buffer, &outTable._varSizeData[0][16], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[0][16], sizeof(float));
   ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._varSizeData[1][16], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[1][16], sizeof(float));
   ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._varSizeData[2][16], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[2][16], sizeof(float));
   ASSERT_FLOAT_EQ(12, buffer);
 
-  std::memcpy(&buffer, &outTable._varSizeData[0][17], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[0][17], sizeof(float));
   ASSERT_FLOAT_EQ(123, buffer);
-  std::memcpy(&buffer, &outTable._varSizeData[1][17], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[1][17], sizeof(float));
   ASSERT_FLOAT_EQ(41469, buffer);
-  std::memcpy(&buffer, &outTable._varSizeData[2][17], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[2][17], sizeof(float));
   ASSERT_FLOAT_EQ(41223, buffer);
 
-  std::memcpy(&buffer, &outTable._varSizeData[0][18], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[0][18], sizeof(float));
   ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._varSizeData[1][18], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[1][18], sizeof(float));
   ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._varSizeData[2][18], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[2][18], sizeof(float));
   ASSERT_TRUE(std::isnan(buffer));
 
-  std::memcpy(&buffer, &outTable._varSizeData[0][19], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[0][19], sizeof(float));
   ASSERT_FLOAT_EQ(-1, buffer);
-  std::memcpy(&buffer, &outTable._varSizeData[1][19], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[1][19], sizeof(float));
   ASSERT_FLOAT_EQ(1225, buffer);
-  std::memcpy(&buffer, &outTable._varSizeData[2][19], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[2][19], sizeof(float));
   ASSERT_FLOAT_EQ(1233, buffer);
 
   // AVG CHECKS
-  std::memcpy(&buffer, &outTable._varSizeData[0][20], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[0][20], sizeof(float));
   ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._varSizeData[1][20], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[1][20], sizeof(float));
   ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._varSizeData[2][20], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[2][20], sizeof(float));
   ASSERT_FLOAT_EQ(6, buffer);
 
-  std::memcpy(&buffer, &outTable._varSizeData[0][21], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[0][21], sizeof(float));
   ASSERT_FLOAT_EQ(61.5, buffer);
-  std::memcpy(&buffer, &outTable._varSizeData[1][21], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[1][21], sizeof(float));
   ASSERT_FLOAT_EQ(13823, buffer);
-  std::memcpy(&buffer, &outTable._varSizeData[2][21], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[2][21], sizeof(float));
   ASSERT_FLOAT_EQ(20611.5, buffer);
 
-  std::memcpy(&buffer, &outTable._varSizeData[0][22], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[0][22], sizeof(float));
   ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._varSizeData[1][22], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[1][22], sizeof(float));
   ASSERT_TRUE(std::isnan(buffer));
-  std::memcpy(&buffer, &outTable._varSizeData[2][22], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[2][22], sizeof(float));
   ASSERT_TRUE(std::isnan(buffer));
 
-  std::memcpy(&buffer, &outTable._varSizeData[0][23], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[0][23], sizeof(float));
   ASSERT_FLOAT_EQ(-0.5, buffer);
-  std::memcpy(&buffer, &outTable._varSizeData[1][23], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[1][23], sizeof(float));
   ASSERT_FLOAT_EQ(408.3333333333333, buffer);
-  std::memcpy(&buffer, &outTable._varSizeData[2][23], sizeof(float));
+  std::memcpy(&buffer, &outTable._data[2][23], sizeof(float));
   ASSERT_FLOAT_EQ(616.5, buffer);
 }

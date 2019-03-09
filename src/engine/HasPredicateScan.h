@@ -71,11 +71,12 @@ class HasPredicateScan : public Operation {
                               const CompactStringVector<size_t, Id>& patterns,
                               size_t resultSize);
 
-  static void computeSubqueryS(
-      ResultTable* result, const std::shared_ptr<QueryExecutionTree> _subtree,
-      const size_t subtreeColIndex, const std::vector<PatternID>& hasPattern,
-      const CompactStringVector<Id, Id>& hasPredicate,
-      const CompactStringVector<size_t, Id>& patterns);
+  template <int IN_WIDTH, int OUT_WIDTH>
+  static void computeSubqueryS(IdTable* result, const IdTable& _subtree,
+                               const size_t subtreeColIndex,
+                               const std::vector<PatternID>& hasPattern,
+                               const CompactStringVector<Id, Id>& hasPredicate,
+                               const CompactStringVector<size_t, Id>& patterns);
 
  private:
   ScanType _type;
