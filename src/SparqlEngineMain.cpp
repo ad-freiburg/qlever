@@ -151,11 +151,12 @@ int main(int argc, char** argv) {
     index.setUsePatterns(usePatterns);
     index.setOnDiskLiterals(onDiskLiterals);
     index.createFromOnDiskIndex(indexName, allPermutations);
+    SubtreeCache cache(NOF_SUBTREES_TO_CACHE);
     if (text) {
       index.addTextFromOnDiskIndex();
     }
 
-    QueryExecutionContext qec(index, engine);
+    QueryExecutionContext qec(index, engine, &cache);
     if (costFactosFileName.size() > 0) {
       qec.readCostFactorsFromTSVFile(costFactosFileName);
     }

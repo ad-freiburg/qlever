@@ -30,6 +30,7 @@ class Server {
         _port(port),
         _index(),
         _engine(),
+        _cache(NOF_SUBTREES_TO_CACHE),
         _initialized(false) {}
 
   typedef ad_utility::HashMap<string, string> ParamValueMap;
@@ -53,6 +54,7 @@ class Server {
   Index _index;
   Engine _engine;
   RuntimeSettings _settings;
+  SubtreeCache _cache;
 
   bool _initialized;
 

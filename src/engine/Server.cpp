@@ -54,7 +54,7 @@ void Server::run() {
     LOG(ERROR) << "Cannot start an uninitialized server!" << std::endl;
     exit(1);
   }
-  QueryExecutionContext qec(_index, _engine, _settings);
+  QueryExecutionContext qec(_index, _engine, &_cache, _settings);
   std::vector<std::thread> threads;
   for (int i = 0; i < _numThreads; ++i) {
     threads.emplace_back(&Server::runAcceptLoop, this, &qec);
