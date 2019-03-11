@@ -1,53 +1,64 @@
 # Wikidata Full Quickstart
 
 The following instructions take you through loading the full Wikidata Knowledge
-Base in QLever. Since Wikidata is very large at over 7 billion triples, **we
+Base into QLever. Since Wikidata is very large at over 7 billion triples, **we
 recommend to run all of the following commands in a `tmux` or `screen` session**.
-Nevertheless we will note below when a command will take long to execute.
+Furthermore, commands that take a long time will be marked as such.
 
 ## Download and build QLever using `docker`
 
-We build QLever using `docker` which takes care of all necessary dependencies.
-This should only take a couple of minutes
+We build QLever using the `docker` container engine, which takes care of all the
+necessary dependencies. You can learn more about `docker` at
+[docker.com](https://www.docker.com).
+Instructions on setting it up on Ubuntu are provided
+[here](https://docs.docker.com/install/linux/docker-ce/ubuntu/).
+
+To download QLever we will clone the `git` repository from GitHub. As we
+create the QLever index in a subfolder of the repository in this tutorial, **make
+sure you have about 2 TB of available space** where you execute the following
+steps. Alternatively you can see the full
+[README](https://github.com/ad-freiburg/QLever#building-the-index) on how to
+build the index under a different path.
 
     git clone --recursive https://github.com/ad-freiburg/QLever.git qlever
     cd qlever
     docker build -t qlever .
 
-## Download Wikidata
+## Download and uncompress Wikidata
 
 If you already downloaded **and decrompressed** Wikidata to uncompressed Turtle
 format you can skip this step, otherwise we download and uncompress it.
 
-**Note:** This takes several hours as Wikidata is about 42 GB compressed and the
-servers are throttled. Also make sure you have enough space on the filesystem
-where you unpacked QLever or see the full
-[README](https://github.com/ad-freiburg/QLever#building-the-index) for
-instructions on using a different path for the index.
+**Note:** This takes several hours as Wikidata is about 42 GB compressed and
+their servers are throttled.
 
 **The index plus unpacked Wikidata will use up to about 2 TB.**
 
-    wget https://dumps.wikimedia.org/wikidatawiki/entities/latest-all.ttl.bz2
-    bunzip2 latest-all.ttl.bz2
+    mkdir wikidata-input
+    wget -O - \
+      https://dumps.wikimedia.org/wikidatawiki/entities/latest-all.ttl.bz2 \
+      | bzcat > wikidata-input/latest-all.ttl
 
 ## Build a QLever Index
 
-Now we can build a QLever Index from the `latest-all.ttl` Wikidata Turtle file
-using the `wikidata_settings.json` file for some useful default settings for
-relations that can be safely stored on disk because their actual values are
-rarely needed. If you're using a different path for the `latest-all.ttl` file
+Now we can build a QLever Index from the `latest-all.ttl` Wikidata Turtle file.
+For the process of building an index we can tune some settings to the particular
+Knowledge Base. The most important of these is a list of relations which can safely be
+stored on disk as their actual values are rarely accessed. For Wikidata these
+are all statements as their values are long string ids. Note that this does not
+affect the performance of using statements in intermediate results.
+
+These recommended tuning settings are provided in the `wikidata_settings.json`
+file.  If you're using a different path for the `latest-all.ttl` file
 **you must make sure that the settings file is accessible from within the
 container**.
 
-**Note (0):** If you are using `docker` with user namespaces or your user id (`id
+**Note:** If you are using `docker` with user namespaces or your user id (`id
 -u`) is not 1000 you have to make the `./index` folder writable for QLever
 inside the container e.g. by running `chmod -R o+rw ./index`
 
-**Note (1):** This takes about half a day but should be much faster than with most
-other Triple Stores.
-
     docker run -it --rm \
-        -v "$(pwd)/:/input" \  # If your latest-all.ttl is
+        -v "$(pwd)/wikidata-input/:/input" \
         -v "$(pwd)/index:/index" --entrypoint "bash" qlever
     qlever@xyz:/app$ IndexBuilderMain -a -l -i /index/wikidata-full \
         -n /input/latest-all.ttl \
@@ -66,10 +77,9 @@ index.
         --name qlever \
         qlever
 
-Then point your browser to [http://localhost:7001/](http://localhost:7001/) and
-enter the query.
+Then open [http://localhost:7001/](http://localhost:7001/) in your browser.
 
-For example the following query retrieves all mountains above 8000 m
+For example, the following query retrieves all mountains above 8000 m
 
     PREFIX wd: <http://www.wikidata.org/entity/>
     PREFIX wdt: <http://www.wikidata.org/prop/direct/>
