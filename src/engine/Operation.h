@@ -20,6 +20,9 @@ using std::endl;
 using std::pair;
 using std::shared_ptr;
 
+// forward declaration
+class QueryExecutionTree;
+
 class Operation {
  public:
   // Default Constructor.
@@ -183,6 +186,11 @@ class Operation {
    * @return The columns on which the result will be sorted.
    */
   virtual vector<size_t> resultSortedOn() const = 0;
+
+  // return all the child QueryExecution trees to be able to recursively
+  // pass information to them
+
+  virtual vector<QueryExecutionTree*> getChildTrees() = 0;
 
  private:
   //! Compute the result of the query-subtree rooted at this element..

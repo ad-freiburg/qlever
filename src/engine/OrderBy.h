@@ -54,6 +54,10 @@ class OrderBy : public Operation {
 
   virtual size_t getResultWidth() const override;
 
+  virtual std::vector<QueryExecutionTree*> getChildTrees() override{
+    return {_subtree.get()};
+  }
+
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<pair<size_t, bool>> _sortIndices;

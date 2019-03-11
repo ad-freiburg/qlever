@@ -44,6 +44,10 @@ class DummyOperation : public Operation {
   }
 
   virtual bool knownEmptyResult() { return false; }
+
+  virtual std::vector<QueryExecutionTree*> getChildTrees() override{
+    return {};
+  }
 };
 
 TEST(HasPredicateScan, freeS) {

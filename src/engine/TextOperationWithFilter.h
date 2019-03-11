@@ -53,6 +53,10 @@ class TextOperationWithFilter : public Operation {
 
   virtual float getMultiplicity(size_t col) override;
 
+  virtual std::vector<QueryExecutionTree*> getChildTrees() override{
+    return {_filterResult.get()};
+  }
+
  private:
   string _words;
   size_t _nofVars;

@@ -50,6 +50,10 @@ class TextOperationWithoutFilter : public Operation {
            _executionContext->getIndex().getSizeEstimate(_words) == 0;
   }
 
+  virtual std::vector<QueryExecutionTree*> getChildTrees() override{
+    return {};
+  }
+
  private:
   string _words;
   size_t _nofVars;

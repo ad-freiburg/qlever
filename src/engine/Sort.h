@@ -32,6 +32,9 @@ class Sort : public Operation {
   }
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; }
+  virtual std::vector<QueryExecutionTree*> getChildTrees() override{
+    return {_subtree.get()};
+  }
 
   virtual size_t getCostEstimate() override {
     size_t size = getSizeEstimate();

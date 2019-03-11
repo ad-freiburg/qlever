@@ -50,6 +50,9 @@ class MultiColumnJoin : public Operation {
                                      const vector<array<Id, 2>>& joinColumns,
                                      vector<R>* result, size_t resultWidth);
 
+  virtual std::vector<QueryExecutionTree*> getChildTrees() override{
+    return {_left.get(), _right.get()};
+  }
  private:
   void computeSizeEstimateAndMultiplicities();
 

@@ -77,6 +77,10 @@ class HasPredicateScan : public Operation {
       const CompactStringVector<Id, Id>& hasPredicate,
       const CompactStringVector<size_t, Id>& patterns);
 
+  virtual std::vector<QueryExecutionTree*> getChildTrees() override{
+    return {_subtree.get()};
+  }
+
  private:
   ScanType _type;
   std::shared_ptr<QueryExecutionTree> _subtree;

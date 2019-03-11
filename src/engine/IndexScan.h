@@ -5,6 +5,7 @@
 
 #include <string>
 #include "../util/Conversions.h"
+#include "./QueryExecutionTree.h"
 #include "./Operation.h"
 
 using std::string;
@@ -82,6 +83,9 @@ class IndexScan : public Operation {
   virtual bool knownEmptyResult() override { return getSizeEstimate() == 0; }
 
   ScanType getType() const { return _type; }
+  virtual std::vector<QueryExecutionTree*> getChildTrees() override{
+    return {};
+  }
 
  protected:
   ScanType _type;

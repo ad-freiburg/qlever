@@ -100,6 +100,9 @@ class GroupBy : public Operation {
   vector<pair<size_t, bool>> computeSortColumns(
       std::shared_ptr<QueryExecutionTree> inputTree);
 
+  virtual std::vector<QueryExecutionTree*> getChildTrees() override{
+    return {_subtree.get()};
+  }
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<string> _groupByVariables;

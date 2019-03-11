@@ -79,6 +79,9 @@ class Filter : public Operation {
   virtual float getMultiplicity(size_t col) override {
     return _subtree->getMultiplicity(col);
   }
+  virtual std::vector<QueryExecutionTree*> getChildTrees() override{
+    return {_subtree.get()};
+  }
 
  private:
   std::string getDescriptor() const;

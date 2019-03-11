@@ -44,6 +44,9 @@ class Union : public Operation {
       shared_ptr<const ResultTable> subRes2,
       const std::vector<std::array<size_t, 2>>& columnOrigins);
 
+   virtual std::vector<QueryExecutionTree*> getChildTrees() override{
+     return {_subtrees[0].get(), _subtrees[1].get()};
+   }
  private:
   virtual void computeResult(ResultTable* result) override;
 

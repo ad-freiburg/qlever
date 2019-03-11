@@ -43,6 +43,10 @@ class OptionalJoin : public Operation {
 
   virtual size_t getCostEstimate() override;
 
+  virtual std::vector<QueryExecutionTree*> getChildTrees() override{
+    return {_left.get(), _right.get()};
+  }
+
  private:
   void computeSizeEstimateAndMultiplicities();
 

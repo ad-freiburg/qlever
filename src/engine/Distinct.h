@@ -19,6 +19,9 @@ using std::vector;
 class Distinct : public Operation {
  public:
   virtual size_t getResultWidth() const;
+  virtual std::vector<QueryExecutionTree*> getChildTrees() override{
+    return {_subtree.get()};
+  }
 
  public:
   Distinct(QueryExecutionContext* qec,
