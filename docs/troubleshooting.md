@@ -1,20 +1,24 @@
 # Troubleshooting
 
-If you have problems, try to rebuild when compiling with `-DCMAKE_BUILD_TYPE=Debug`.
-In particular also rebuild the index.
-The release build assumes machine written words- and docsfiles and omits sanity checks for the sake of speed.
+If you have problems, try rebuilding QLever in debug mode (e.g. by changing the
+`cmake` line in the `Dockerfile` to `cmake -DCMAKE_BUILD_TYPE=Debug
+-DLOGLEVEL=DEBUG` or [building natively](docs/native_setup.md)),
+Then rebuild your index with the newly build docker container and
+`IndexBuilderMain` executable.
+The release build assumes machine written words- and docsfiles and omits sanity
+checks for the sake of speed.
 
 ## Run End-to-End Tests
 
-QLever includes a simple mechanism for testing the entire system from
-from building an index to running queries in a single command.
+QLever includes a simple mechanism for testing the entire system,
+from building an index to running queries.
 
-In fact this End-to-End Test is run on Travis CI for every commit and Pull
-Request. It is also useful for local development however since it allows you to
+In fact the End-to-End Test is run on Travis CI for every commit and Pull
+Request. It is also useful for local development, as it allows you to
 quickly test if something is horribly broken.
 
 Just like QLever itself the End-to-End Tests can be executed from a previously
-build QLever container
+build QLever docker container.
 
 **Note**: If you encounter permission issues e.g. if your UID is not 1000 or you
 are using docker with user namespaces, add the flag `-u root` to your `docker
@@ -23,25 +27,25 @@ run` command or do a `chmod -R o+rw e2e_data`
     docker build -t qlever .
     docker run -it --rm -v "$(pwd)/e2e_data:/app/e2e_data/" --name qlever-e2e --entrypoint e2e/e2e.sh qlever
 
-## Converting old Indices For Current QLever Versions
+## Converting old Indices For current QLever Versions
 
-We have recently updated the way the index meta data (offsets of relations
+When we make changes to the way the index meta data (e.g. offsets of relations
 within the permutations) is stored. Old index builds with 6 permutations will
-not work directly with the recent QLever version while 2 permutation indices
-will work but throw a warning at runtime.
+not work directly with newer QLever version while 2 permutation indices
+will work but throw a warning at runtime. This will be detected during startup.
 
-We have provided a converter which
-allows to only modify the meta data without having to rebuild the index. Just
-run `MetaDataConverterMain <index-prefix>` in the same way as the
-`IndexBuilderMain`.
+For these cases, we provide a converter which only modifies the
+meta data without having to rebuild the index. Run `MetaDataConverterMain
+<index-prefix>` in the same way as as running `IndexBuilderMain`.
 
 This will not automatically overwrite the old index but copy the permutations
 and create new files with the suffix `.converted` (e.g.
 `<index-prefix>.index.ops.converted` These suffixes have to be removed manually
 in order to use the converted index (rename to `<index-prefix>.index.ops` in our
 example).
-**Please consider creating backups of
-the "original" index files before overwriting them like this**.
+
+**Please consider creating backups of the "original" index files before
+overwriting them**.
 
 Please note that for 6 permutations the converter also builds new files
 `<index-prefix>.index.xxx.meta-mmap` where parts of the meta data of OPS and OSP
@@ -50,12 +54,12 @@ permutations will be stored.
 
 ## High RAM Usage During Runtime
 
-QLever uses an on-disk index and is usually able to operate with pretty low RAM
-usage. For example it can handle the full Wikidata KB + Wikipedia which is about
-1.5 TB of index with less than 46 GB of RAM
+QLever uses an on-disk index and usually requires only a moderate amount of RAM.
+For example, it can handle the full Wikidata KB + Wikipedia, which is about 1.5 TB
+of index with less than 46 GB of RAM
 
 However, there are data layouts that currently lead to an excessive
-amount of memory being used.
+amount of memory being used:
 
 * The size of the KB vocabulary. Using the -l flag while building the index
 causes long and rarely used strings to be externalized to

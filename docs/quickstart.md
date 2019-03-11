@@ -1,6 +1,6 @@
 # Quickstart
 The following instructions build an index from our scientists example Knowledge
-Base
+Base.
 
 ## Download and build QLever using `docker`
 
@@ -32,11 +32,10 @@ Base
         --name qlever \
         qlever
 
-Then point your browser to [http://localhost:7001/](http://localhost:7001/) and
-enter the query.
+Then open [http://localhost:7001/](http://localhost:7001/) in your browser.
 
-For example all female scientists occuring in the text with "algo*" can be
-obtained with the following
+For example all female scientists occuring in the text corpus with the regex
+"algo.*" can be obtained with the following query
 
     SELECT ?x TEXT(?t) SCORE(?t) WHERE {
         ?x <is-a> <Scientist> .

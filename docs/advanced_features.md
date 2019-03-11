@@ -4,7 +4,7 @@
 
 On top of the vanilla SPARQL functionality, QLever allows so-called SPARQL+Text
 queries on a text corpus linked to a knowledge base via entity recognition.  For
-example, the following query find all mentions of astronauts next to the words
+example, the following query finds all mentions of astronauts next to the words
 "moon" and "walk*" in the text corpus:
 
     SELECT ?a TEXT(?t) SCORE(?t) WHERE {
@@ -19,8 +19,8 @@ and the SPARQL+text query syntax and semantics can be found
 [here](docs/sparql_plus_text.md).
 
 QLever also supports efficient SPARQL autocompletion.  For example, the
-following query yields a list of all predicates associated with persons in the
-knowledge base, ordered by the number of persons which have that predicate.
+following query yields a list of all predicates associated with people in the
+knowledge base, ordered by the number of people which have that predicate.
 
     SELECT ?predicate (COUNT(?predicate) as ?count) WHERE {
       ?x <is-a> <Person> .
@@ -29,17 +29,16 @@ knowledge base, ordered by the number of persons which have that predicate.
     GROUP BY ?predicate
     ORDER BY DESC(?count)
 
-Note that this query could also be processed by standard SPARQL simply by
-replacing the second triple by ?x ?predicate ?object. However, that query is
-bound to produce a very large intermediate result (all triples of all persons)
-with a correspondingly huge query time.  In contrast, the query above takes only
-~ 100ms on a standard Linux machine for a dataset with ~ 360 million triples and
-~ 530 million text records.  More details on this feature set will be provided
-here soon.
+Note that this query could also be processed by a standard SPARQL engine simply
+by replacing the second triple with `?x ?predicate ?object`. However, that query
+will produce a very large intermediate result (all triples of all people) with
+a correspondingly long query time.  In contrast, the query above takes only
+about 100 ms on a standard Linux machine (with 16 GB memory) and a dataset with 360
+million triples and 530 million text records.
 
 ## Statistics:
 
-You can get stats for the currently active index in the following way:
+You can get statistics for the currently active index in the following way:
 
     <server>:<port>/?cmd=stats
 
@@ -51,21 +50,30 @@ This query will yield a JSON response that features:
 * The numbers of distinct subjects, predicates and objects (only available if 6 permutations are built)
 * The name of the text index (if one is present)
 * The number of text records in the text index (if text index present)
-* The number of word occurrences/postings in the text index (if text index present)
-* The number of entity occurrences/postings in the text index (if text index present)
+* The number of word occurrences/postings in the text index (if a text index is present)
+* The number of entity occurrences/postings in the text index (if a text index is present)
 
 
-The names of a index is the name of the input nt file (and wordsfile for the text index) but can also be specified manually while building an index.
-Therefore, IndexbuilderMain takes two optional arguments: --text-index-name (-T) and --kb-index-name (-K).
+The name of an index is the name of the input `.nt` file (and wordsfile for the
+text index) but can also be specified manually while building an index.
+Therefore, IndexbuilderMain takes two optional arguments: `--text-index-name` (`-T`)
+and `--kb-index-name` (`-K`).
 
 
 ## Send vs Compute
 
-Currently, QLever does not compute partial results if there is a LIMIT modifier.
-However, strings (for entities and text excerpts) are only resolved for those items that are actually send.
-Furthermore, in a UI, it is usually beneficial to get less than all result rows by default.
+Currently, QLever does not compute partial results if there is a `LIMIT` modifier.
 
-While it is recommended for applications to specify a LIMIT, some experiments want to measure the time to produce the full result but not block the UI.
-Therefore an additional HTTP parameter "&send=<x>" can be used to only send x result rows but to compute the fully readable result for everything according to LIMIT.
+However, strings (for entities and text excerpts) are only resolved for those
+items that are actually send.  Furthermore, a UI usually only requires a limited
+amount of rows at a time.
 
-**IMPORTANT: Unless you want to measure QLever's performance, using LIMIT (+ OFFSET for sequential loading) should be preferred in all applications. That way should be faster and standard SPARQL without downsides.**
+While specifying a `LIMIT` is recommended, some experiments may want
+to measure the time to produce the full result.
+Therefore an additional HTTP parameter `&send=<x>` can be used to send only
+k result rows while still computing the readable result for up to `LIMIT` rows.
+to LIMIT.
+
+**IMPORTANT: Unless you want to measure QLever's performance, using `LIMIT` (+
+`OFFSET` for sequential loading) is preferred in all applications. `LIMIT` is
+faster and produces the same output as the `send` parameter**
