@@ -52,25 +52,14 @@ class Operation {
       LOG(TRACE) << "Not in the cache, need to compute result" << endl;
       // Passing the raw pointer here is ok as the result shared_ptr remains
       // in scope
+      getExecutionContext()->registerComputationStart(newResult->_resTable);
+      newResult->_resTable->startComputation();
+
       try {
-        // lambda that computes the result
-        auto c = [this, &newResult]() {
-          this->computeResult(newResult->_resTable.get());
-        };
-        // deferred futures are never run in parallel
-        auto fut = std::async(std::launch::async, c);
-        // assign a time budget to this future
-        auto status = fut.wait_for(
-            _executionContext->getSettings()._timeoutQueryComputation);
-        if (status != std::future_status::ready) {
-          newResult->_resTable->timeout();
-          AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Operation time out");
-        }
-        // reaching here means the computation was succesful
-        // the call to _resTable->finish() is handled below
-        // together with the runtime information
+        computeResult(newResult->_resTable.get());
       } catch (const ad_semsearch::AbortException& e) {
         newResult->_resTable->abort();
+        getExecutionContext()->registerComputationEnd(newResult->_resTable);
         // AbortExceptions have already been printed simply rethrow to
         // unwind the callstack until the whole query is aborted
         throw;
@@ -81,6 +70,7 @@ class Operation {
         LOG(ERROR) << asString() << endl;
         LOG(ERROR) << e.what() << endl;
         newResult->_resTable->abort();
+        getExecutionContext()->registerComputationEnd(newResult->_resTable);
         // Rethrow as QUERY_ABORTED allowing us to print the Operation
         // only at innermost failure of a recursive call
         throw ad_semsearch::AbortException(e);
@@ -92,6 +82,7 @@ class Operation {
         LOG(ERROR) << "WEIRD_EXCEPTION not inheriting from std::exception"
                    << endl;
         newResult->_resTable->abort();
+        getExecutionContext()->registerComputationEnd(newResult->_resTable);
         // Rethrow as QUERY_ABORTED allowing us to print the Operation
         // only at innermost failure of a recursive call
         throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
@@ -106,6 +97,7 @@ class Operation {
       // Only now we can let other threads access the result
       // and runtime information
       newResult->_resTable->finish();
+      getExecutionContext()->registerComputationEnd(newResult->_resTable);
       return newResult->_resTable;
     }
     existingResult->_resTable->awaitFinished();

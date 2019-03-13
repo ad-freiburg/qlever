@@ -167,8 +167,12 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       // QueryGraph qg(qec);
       // qg.createFromParsedQuery(pq);
       // const QueryExecutionTree& qet = qg.getExecutionTree();
-      QueryPlanner qp(qec);
+      // TODO<joka921>: here we can insert perQuery timeouts
+      auto perQueryContext = std::make_shared<QueryExecutionContext>(*qec);
+      QueryPlanner qp(perQueryContext.get());
       QueryExecutionTree qet = qp.createExecutionTree(pq);
+      // now our per Query context will live together with the QET
+      qet.setOwnedContext(std::move(perQueryContext));
       LOG(TRACE) << qet.asString() << std::endl;
 
       if (ad_utility::getLowercase(params["action"]) == "csv_export") {
@@ -320,13 +324,36 @@ string Server::create400HttpResponse() const {
   return os.str();
 }
 
+shared_ptr<const ResultTable> Server::getResultWithTimeout(const QueryExecutionTree& qet) const {
+  // lambda that computes the result
+  auto c = [&qet]() {
+    return qet.getResult();
+  };
+
+  auto fut = std::async(std::launch::async, c);
+  auto status = fut.wait_for(
+          qet.getExecutionContext()->getSettings()._timeoutQueryComputation);
+
+  if (status != std::future_status::ready) {
+    for (auto& ptr: qet.getExecutionContext()->getRunningComputations()) {
+      if (ptr->status() == ResultTable::COMPUTATION_STARTED) {
+        ptr->timeout();
+      }
+    }
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Operation time out");
+  }
+  // this will also work if getResult caused an exception
+  return fut.get();
+}
+
 // _____________________________________________________________________________
 string Server::composeResponseJson(const ParsedQuery& query,
                                    const QueryExecutionTree& qet,
                                    size_t maxSend) const {
   // TODO(schnelle) we really should use a json library
   // such as https://github.com/nlohmann/json
-  shared_ptr<const ResultTable> rt = qet.getResult();
+  // timeout mechanism
+  shared_ptr<const ResultTable> rt = getResultWithTimeout(qet);
   _requestProcessingTimer.stop();
   off_t compResultUsecs = _requestProcessingTimer.usecs();
   size_t resultSize = rt->size();

@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <unordered_set>
 #include "../global/Constants.h"
 #include "../index/Index.h"
 #include "../util/LRUCache.h"
@@ -16,6 +17,7 @@
 #include "./RuntimeSettings.h"
 #include "QueryPlanningCostFactors.h"
 #include "RuntimeInformation.h"
+#include "ResultTable.h"
 
 using std::shared_ptr;
 using std::string;
@@ -59,7 +61,25 @@ class QueryExecutionContext {
     return _costFactors.getCostFactor(key);
   };
 
+  void registerComputationStart(shared_ptr<ResultTable> key){
+    _startedComputationKeys.insert(key);
+  }
+
+  void registerComputationEnd(shared_ptr<ResultTable> key){
+    if (_startedComputationKeys.count(key)) {
+      _startedComputationKeys.erase(key);
+    }
+  }
+
+  auto& getRunningComputations() { return _startedComputationKeys;}
+
  private:
+  // cache keys of all computations that have been started
+  // within this context. those are candidates for being cleaned up after
+  // a timeout.
+  // TODO: we should use a mutexed set here as soon as we are going
+  // parallel within a query this should be a mutexed hashSet.
+  std::unordered_set<std::shared_ptr<ResultTable>> _startedComputationKeys;
   SubtreeCache* _subtreeCache;
   const Index& _index;
   const Engine& _engine;

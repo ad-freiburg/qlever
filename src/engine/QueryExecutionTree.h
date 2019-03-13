@@ -132,8 +132,16 @@ class QueryExecutionTree {
   // to zero. Currently multiplicities are not affected
   void readFromCache();
 
+  void setOwnedContext(std::shared_ptr<QueryExecutionContext>&& context){
+    _ownedContext = context;
+  }
+
+  QueryExecutionContext*  getExecutionContext() const{return _qec;}
+
+
  private:
   QueryExecutionContext* _qec;  // No ownership
+  std::shared_ptr<QueryExecutionContext> _ownedContext; // for toplevel
   ad_utility::HashMap<string, size_t> _variableColumnMap;
   std::shared_ptr<Operation>
       _rootOperation;  // Owned child. Will be deleted at deconstruction.

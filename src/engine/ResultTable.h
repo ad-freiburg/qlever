@@ -20,7 +20,7 @@ using std::vector;
 
 class ResultTable {
  public:
-  enum Status { IN_PROGRESS = 0, FINISHED = 1, ABORTED = 2, TIMEOUT = 3 };
+  enum Status { IN_PROGRESS = 0, FINISHED = 1, ABORTED = 2, TIMEOUT = 3, COMPUTATION_STARTED = 4 };
 
   /**
    * @brief Describes the type of a columns data
@@ -92,6 +92,8 @@ class ResultTable {
   void abort() { setStatus(ResultTable::ABORTED, true); }
 
   void finish() { setStatus(ResultTable::FINISHED, false); }
+
+  void startComputation() {setStatus(ResultTable::COMPUTATION_STARTED, false);}
 
   // __________________________________________________________________
   void timeout() { setStatus(ResultTable::TIMEOUT, true); }

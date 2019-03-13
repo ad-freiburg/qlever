@@ -58,6 +58,8 @@ class Server {
 
   bool _initialized;
 
+  shared_ptr<const ResultTable> getResultWithTimeout(const QueryExecutionTree& qet) const;
+
   void runAcceptLoop(QueryExecutionContext* qec);
 
   void process(Socket* client, QueryExecutionContext* qec) const;
