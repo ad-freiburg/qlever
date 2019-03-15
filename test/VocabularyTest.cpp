@@ -26,6 +26,21 @@ TEST(VocabularyTest, getIdForWordTest) {
     ASSERT_EQ(Id(0), id);
     ASSERT_FALSE(v.getId("foo", &id));
   }
+
+  // with case insensitive ordering
+  Vocabulary<string> voc;
+  voc.setCaseInsensitiveOrdering(true);
+  voc.push_back("A");
+  voc.push_back("a");
+  voc.push_back("Ba");
+  voc.push_back("car");
+  Id id;
+  ASSERT_TRUE(voc.getId("Ba", &id));
+  ASSERT_EQ(Id(2), id);
+  ASSERT_TRUE(voc.getId("a", &id));
+  ASSERT_EQ(Id(1), id);
+  // getId only gets exact matches;
+  ASSERT_FALSE(voc.getId("ba", &id));
 };
 
 TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
@@ -93,6 +108,39 @@ TEST(VocabularyTest, createFromSetTest) {
   ASSERT_EQ(Id(0), id);
   ASSERT_FALSE(v.getId("foo", &id));
 };
+
+// ______________________________________________________________________________________________
+TEST(VocabularyTest, StringSortComparator) {
+  StringSortComparator comp(true);
+
+  // strange casings must not affect order
+  ASSERT_TRUE(comp("ALPHA", "beta"));
+  ASSERT_TRUE(comp("alpha", "BETA"));
+  ASSERT_TRUE(comp("AlPha", "bEtA"));
+  ASSERT_TRUE(comp("AlP", "alPha"));
+  ASSERT_TRUE(comp("alP", "ALPha"));
+
+  // inverse tests for completeness
+  ASSERT_FALSE(comp("beta", "ALPHA"));
+  ASSERT_FALSE(comp("BETA", "alpha"));
+  ASSERT_FALSE(comp("bEtA", "AlPha"));
+  ASSERT_FALSE(comp("alPha", "AlP"));
+  ASSERT_FALSE(comp("ALPha", "alP"));
+
+  // only if lowercased version is exactly the same we want to sort by the
+  // casing (upper-case letters have lower ascii values than lower-case)
+  ASSERT_FALSE(comp("alpha", "ALPHA"));
+  ASSERT_TRUE(comp("ALPHA", "alpha"));
+
+  ASSERT_TRUE(comp("\"Hannibal\"@en", "\"Hannibal Hamlin\"@en"));
+  ASSERT_TRUE(comp("\"Hannibal\"@af", "\"Hannibal\"@en"));
+  ASSERT_TRUE(comp("\"HAnnibal\"@en", "\"Hannibal\"@en"));
+
+  // TODO<joka921>: test cases for UTF-8
+
+  // something is not smaller thant itself
+  ASSERT_FALSE(comp("beta", "beta"));
+}
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);

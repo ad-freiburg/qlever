@@ -97,7 +97,7 @@ void Vocabulary<S>::createFromSet(const ad_utility::HashSet<S>& set) {
   _words.reserve(set.size());
   _words.insert(begin(_words), begin(set), end(set));
   LOG(INFO) << "... sorting ...\n";
-  std::sort(begin(_words), end(_words));
+  std::sort(begin(_words), end(_words), _caseComparator);
   LOG(INFO) << "Done creating vocabulary.\n";
 }
 
@@ -119,8 +119,9 @@ template <class S>
 template <typename>
 void Vocabulary<S>::externalizeLiterals(const string& fileName) {
   LOG(INFO) << "Externalizing literals..." << std::endl;
-  auto ext = std::lower_bound(_words.begin(), _words.end(),
-                              string({EXTERNALIZED_LITERALS_PREFIX}));
+  auto ext =
+      std::lower_bound(_words.begin(), _words.end(),
+                       string({EXTERNALIZED_LITERALS_PREFIX}), _caseComparator);
   size_t nofInternal = ext - _words.begin();
   vector<string> extVocab;
   while (ext != _words.end()) {
@@ -293,9 +294,16 @@ bool PrefixComparator<S>::operator()(const string& lhs,
 template <class S>
 bool PrefixComparator<S>::operator()(const string& lhs,
                                      const string& rhs) const {
-  // TODO<joka921> use string_view for the substrings
-  return (lhs.size() > _prefixLength ? lhs.substr(0, _prefixLength) : lhs) <
-         (rhs.size() > _prefixLength ? rhs.substr(0, _prefixLength) : rhs);
+  // we cannot use string_views as parameters as they will unfortunately lead
+  // to ambiguous overloads (even though the CompressedString overload wouldn't
+  // work.
+  return _vocab->getCaseComparator()(
+      lhs.size() > _prefixLength
+          ? std::string_view(lhs).substr(0, _prefixLength)
+          : lhs,
+      rhs.size() > _prefixLength
+          ? std::string_view(rhs).substr(0, _prefixLength)
+          : rhs);
 }
 
 // _____________________________________________________

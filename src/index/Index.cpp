@@ -82,7 +82,15 @@ void Index::createFromFile(const string& filename) {
   string vocabFileTmp = _onDiskBase + ".vocabularyTmp";
   std::vector<string> prefixes;
   if (_vocabPrefixCompressed) {
-    prefixes = calculatePrefixes(vocabFile, NUM_COMPRESSION_PREFIXES, 1, true);
+    string vocabFileForPrefixCalculation = vocabFile;
+    if (_vocab.getCaseInsensitiveOrdering()) {
+      // we have to use the "normally" sorted vocabulary for the prefix
+      // compression;
+      vocabFileForPrefixCalculation =
+          _onDiskBase + TMP_BASENAME_COMPRESSION + ".vocabulary";
+    }
+    prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
+                                 NUM_COMPRESSION_PREFIXES, 1, true);
     std::ofstream prefixFile(_onDiskBase + PREFIX_FILE);
     AD_CHECK(prefixFile.is_open());
     for (const auto& prefix : prefixes) {
@@ -165,18 +173,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
       LOG(INFO) << "Lines (from KB-file) processed: " << i << '\n';
     }
     if (i % linesPerPartial == 0) {
-      LOG(INFO) << "Lines (from KB-file) processed: " << i << '\n';
-      LOG(INFO) << "Actual number of Triples in this section (include "
-                   "langfilter triples): "
-                << actualCurrentPartialSize << '\n';
-      string partialFilename =
-          _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
-
-      LOG(INFO) << "writing partial vocabulary to " << partialFilename
-                << std::endl;
-      LOG(INFO) << "it contains " << items.size() << " elements\n";
-      writePartialIdMapToBinaryFileForMerging(items, partialFilename);
-      LOG(INFO) << "Done\n";
+      writeNextPartialVocabulary(i, numFiles, actualCurrentPartialSize, items);
       numFiles++;
       // Save the information how many triples this partial vocabulary actually
       // deals with we will use this later for mapping from partial to global
@@ -191,34 +188,45 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   }
   // deal with remainder
   if (items.size() > 0) {
-    LOG(INFO) << "Lines processed: " << i << '\n';
-    LOG(INFO) << "Actual number of Triples in this section: "
-              << actualCurrentPartialSize << '\n';
-    string partialFilename =
-        _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
-
-    LOG(INFO) << "writing partial vocabular to " << partialFilename
-              << std::endl;
-    LOG(INFO) << "it contains " << items.size() << " elements\n";
-    writePartialIdMapToBinaryFileForMerging(items, partialFilename);
-    LOG(INFO) << "Done\n";
+    writeNextPartialVocabulary(i, numFiles, actualCurrentPartialSize, items);
     numFiles++;
     actualPartialSizes.push_back(actualCurrentPartialSize);
   }
   writer.finish();
 
+  std::future<void> tmpVocFut;
+  if (_vocabPrefixCompressed && _vocab.getCaseInsensitiveOrdering()) {
+    LOG(INFO) << "Merging temporary vocabulary for prefix compression";
+    Id tmp1, tmp2;
+    auto f = [this, numFiles, &tmp1, &tmp2]() {
+      mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles, &tmp1,
+                      &tmp2, StringSortComparator(false));
+    };
+    tmpVocFut = std::async(f);
+    LOG(INFO) << "Pass done.\n";
+  }
+
   LOG(INFO) << "Merging vocabulary\n";
   VocabularyData res;
-  res.nofWords = mergeVocabulary(_onDiskBase, numFiles, &res.langPredLowerBound,
-                                 &res.langPredUpperBound);
+  res.nofWords =
+      mergeVocabulary(_onDiskBase, numFiles, &res.langPredLowerBound,
+                      &res.langPredUpperBound, _vocab.getCaseComparator());
+  res.idTriples = std::move(idTriples);
+  res.actualPartialSizes = std::move(actualPartialSizes);
+  LOG(INFO) << "Finished Merging Vocabulary.\n";
+
+  // if we had to create the additional vocabulary, wait for its completion
+  if (tmpVocFut.valid()) {
+    tmpVocFut.get();
+    LOG(INFO) << "Finished merging additional Vocabulary.";
+  }
+
   for (size_t i = 0; i < numFiles; ++i) {
     string partialFilename =
         _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(i);
     deleteTemporaryFile(partialFilename);
   }
-  res.idTriples = std::move(idTriples);
-  res.actualPartialSizes = std::move(actualPartialSizes);
-  LOG(INFO) << "Pass done.\n";
+
   return res;
 }
 
@@ -1269,6 +1277,10 @@ void Index::readConfiguration() {
         _configurationJson["prefixes-external"]);
   }
 
+  if (_configurationJson.count("ignore-case")) {
+    _vocab.setCaseInsensitiveOrdering(_configurationJson["ignore-case"]);
+  }
+
   if (_configurationJson.find("languages-internal") !=
       _configurationJson.end()) {
     _vocab.initializeInternalizedLangs(
@@ -1311,6 +1323,11 @@ void Index::initializeVocabularySettingsBuild() {
     _configurationJson["prefixes-external"] = j["prefixes-external"];
   }
 
+  if (j.count("ignore-case")) {
+    _vocab.setCaseInsensitiveOrdering(j["ignore-case"]);
+    _configurationJson["ignore-case"] = j["ignore-case"];
+  }
+
   if (j.find("languages-internal") != j.end()) {
     _vocab.initializeInternalizedLangs(j["languages-internal"]);
     _configurationJson["languages-internal"] = j["languages-internal"];
@@ -1328,4 +1345,46 @@ Id Index::assignNextId(Map* mapPtr, const string& key) {
   } else {
     return map[key];
   }
+}
+
+// ___________________________________________________________________________
+void Index::writeNextPartialVocabulary(
+    size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
+    const ad_utility::HashMap<string, Id>& items) {
+  LOG(INFO) << "Lines (from KB-file) processed: " << numLines << '\n';
+  LOG(INFO) << "Actual number of Triples in this section (include "
+               "langfilter triples): "
+            << actualCurrentPartialSize << '\n';
+  std::future<void> fut1, fut2;
+  string partialFilename =
+      _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
+
+  LOG(INFO) << "writing partial vocabulary to " << partialFilename << std::endl;
+  LOG(INFO) << "it contains " << items.size() << " elements\n";
+  fut1 = std::async([this, &items, partialFilename]() {
+    writePartialIdMapToBinaryFileForMerging(items, partialFilename,
+                                            _vocab.getCaseComparator());
+  });
+
+  if (_vocabPrefixCompressed && _vocab.getCaseInsensitiveOrdering()) {
+    // we also have to create the "ordinary" vocabulary order to make the
+    // prefix compression work
+    string partialTmpFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +
+                                PARTIAL_VOCAB_FILE_NAME +
+                                std::to_string(numFiles);
+    LOG(INFO) << "writing partial temporary vocabulary to "
+              << partialTmpFilename << std::endl;
+    LOG(INFO) << "it contains " << items.size() << " elements\n";
+    fut2 = std::async([&items, partialTmpFilename]() {
+      writePartialIdMapToBinaryFileForMerging(items, partialTmpFilename,
+                                              StringSortComparator(false));
+    });
+  }
+  if (fut1.valid()) {
+    fut1.get();
+  }
+  if (fut2.valid()) {
+    fut2.get();
+  }
+  LOG(INFO) << "Done.";
 }

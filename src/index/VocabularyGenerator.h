@@ -10,6 +10,7 @@
 #include "../global/Id.h"
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
+#include "Vocabulary.h"
 
 using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
@@ -24,12 +25,15 @@ using std::string;
 // Literals
 // Returns the number of total Words merged and via the parameters
 // the lower and upper bound of language tagged predicates
+// Argument comp gives the way to order strings (case-sensitive or not)
 size_t mergeVocabulary(const std::string& basename, size_t numFiles,
-                       Id* langPredLowerBound, Id* langPredUpperBound);
+                       Id* langPredLowerBound, Id* langPredUpperBound,
+                       StringSortComparator comp);
 
 // _________________________________________________________________________________________
 void writePartialIdMapToBinaryFileForMerging(
-    const ad_utility::HashMap<string, Id>& map, const string& fileName);
+    const ad_utility::HashMap<string, Id>& map, const string& fileName,
+    StringSortComparator comp);
 
 // _________________________________________________________________________________________
 ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
