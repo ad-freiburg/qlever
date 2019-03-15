@@ -1788,6 +1788,12 @@ void Index::readConfiguration() {
     _vocab.initializeExternalizePrefixes(
         _configurationJson["prefixes-external"]);
   }
+
+  if (_configurationJson.find("languages-internal") !=
+      _configurationJson.end()) {
+    _vocab.initializeInternalizedLangs(
+        _configurationJson["languages-internal"]);
+  }
 }
 
 // ___________________________________________________________________________
@@ -1823,6 +1829,11 @@ void Index::initializeVocabularySettingsBuild() {
   if (j.find("prefixes-external") != j.end()) {
     _vocab.initializeExternalizePrefixes(j["prefixes-external"]);
     _configurationJson["prefixes-external"] = j["prefixes-external"];
+  }
+
+  if (j.find("languages-internal") != j.end()) {
+    _vocab.initializeInternalizedLangs(j["languages-internal"]);
+    _configurationJson["languages-internal"] = j["languages-internal"];
   }
 }
 

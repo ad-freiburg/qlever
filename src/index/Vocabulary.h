@@ -96,6 +96,7 @@ class Vocabulary {
   template <
       typename = std::enable_if_t<std::is_same_v<StringType, string> ||
                                   std::is_same_v<StringType, CompressedString>>>
+
   Vocabulary(){};
 
   // variable for dispatching
@@ -260,10 +261,11 @@ class Vocabulary {
   static bool isLiteral(const string& word);
   static bool isExternalizedLiteral(const string& word);
 
-  template <bool isEntity = false>
   bool shouldBeExternalized(const string& word) const;
 
   bool shouldEntityBeExternalized(const string& word) const;
+
+  bool shouldLiteralBeExternalized(const string& word) const;
 
   // only still needed for text vocabulary
   template <typename = std::enable_if_t<!_isCompressed>>
@@ -306,6 +308,15 @@ class Vocabulary {
   // works
   template <class StringRange>
   void initializeExternalizePrefixes(const StringRange& prefixes);
+
+  // set the list of languages (in "en" language code format) that should be
+  // kept internalized. By default this is just English
+  //
+  // StringRange prefixes can be of any type where
+  // for (const string& el : prefixes {}
+  // works
+  template <class StringRange>
+  void initializeInternalizedLangs(const StringRange& prefixes);
 
   // Compress the file at path infile, write to file at outfile using the
   // specified prefixes.
@@ -396,6 +407,10 @@ class Vocabulary {
 
   // If a word starts with one of those prefixes it will be externalized
   vector<std::string> _externalizedPrefixes;
+
+  // If a word uses one of these language tags it will be internalized,
+  // defaults to English
+  vector<std::string> _internalizedLangs{"en"};
 
   vector<StringType> _words;
   ExternalVocabulary _externalLiterals;

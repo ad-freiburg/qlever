@@ -146,25 +146,12 @@ bool Vocabulary<S>::isExternalizedLiteral(const string& word) {
 
 // _____________________________________________________________________________
 template <class S>
-template <bool isEntity>
 bool Vocabulary<S>::shouldBeExternalized(const string& word) const {
-  if constexpr (isEntity) {
-    return shouldEntityBeExternalized(word);
-  }
-
   if (!isLiteral(word)) {
     return shouldEntityBeExternalized(word);
   } else {
-    if (word.size() > MAX_INTERNAL_LITERAL_BYTES) {
-      return true;
-    }
-    string lang = getLanguage(word);
-    if (lang != "") {
-      return (lang != "en");  // && lang != "en_gb" && lang != "en_us" &&
-      // lang != "de" && lang != "es" && lang != "fr");
-    }
+    return shouldLiteralBeExternalized(word);
   }
-  return false;
 }
 
 // ___________________________________________________________________
@@ -178,6 +165,25 @@ bool Vocabulary<S>::shouldEntityBeExternalized(const string& word) const {
   return false;
 }
 
+// ___________________________________________________________________
+template <class S>
+bool Vocabulary<S>::shouldLiteralBeExternalized(const string& word) const {
+  if (word.size() > MAX_INTERNAL_LITERAL_BYTES) {
+    return true;
+  }
+
+  const string lang = getLanguage(word);
+  if (lang == "") {
+    return false;
+  }
+
+  for (const auto& p : _internalizedLangs) {
+    if (lang == p) {
+      return false;
+    }
+  }
+  return true;
+}
 // _____________________________________________________________________________
 template <class S>
 string Vocabulary<S>::getLanguage(const string& literal) {
@@ -256,6 +262,16 @@ void Vocabulary<S>::initializeExternalizePrefixes(const StringRange& s) {
   _externalizedPrefixes.clear();
   for (const auto& el : s) {
     _externalizedPrefixes.push_back(el);
+  }
+}
+
+// ______________________________________________________________________________
+template <class S>
+template <class StringRange>
+void Vocabulary<S>::initializeInternalizedLangs(const StringRange& s) {
+  _internalizedLangs.clear();
+  for (const auto& el : s) {
+    _internalizedLangs.push_back(el);
   }
 }
 
