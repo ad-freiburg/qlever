@@ -102,14 +102,25 @@ uint8_t FullRelationMetaData::getCol2LogMultiplicity() const {
 // _____________________________________________________________________________
 pair<off_t, size_t> BlockBasedRelationMetaData::getBlockStartAndNofBytesForLhs(
     Id lhs) const {
+  // get the first block where the first Id is greater or equal to what we are
+  // looking for.
   auto it = std::lower_bound(
       _blocks.begin(), _blocks.end(), lhs,
       [](const BlockMetaData& a, Id lhs) { return a._firstLhs < lhs; });
 
   // Go back one block unless perfect lhs match.
   if (it == _blocks.end() || it->_firstLhs > lhs) {
-    AD_CHECK(it != _blocks.begin());
-    it--;
+    // if we already are at the first block this means that we
+    // will have an empty result since the first
+    // entry is already too big. In this case our result will
+    // be empty and we can perform a short cut.
+    if (it != _blocks.begin()) {
+      it--;
+    } else {
+      // always empty result, this results
+      // in scanning 0 bytes from a valid start index.
+      return {it->_startOffset, 0};
+    }
   }
 
   off_t after;
