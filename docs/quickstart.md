@@ -1,5 +1,5 @@
 # Quickstart
-The following instructions build an index from our scientists example Knowledge
+The following instructions build an index from our Scientists Example Knowledge
 Base.
 
 ## Download and build QLever using `docker`
@@ -34,7 +34,7 @@ Base.
 
 Then open [http://localhost:7001/](http://localhost:7001/) in your browser.
 
-For example all female scientists occuring in the text corpus with the regex
+For example, all female scientists occuring in the text corpus with the regex
 "algo.*" can be obtained with the following query
 
     SELECT ?x TEXT(?t) SCORE(?t) WHERE {

@@ -13,10 +13,12 @@ necessary dependencies. You can learn more about `docker` at
 Instructions on setting it up on Ubuntu are provided
 [here](https://docs.docker.com/install/linux/docker-ce/ubuntu/).
 
-To download QLever we will clone the `git` repository from GitHub. As we
-create the QLever index in a subfolder of the repository in this tutorial, **make
-sure you have about 2 TB of available space** where you execute the following
-steps. Alternatively you can see the full
+To download QLever we will clone the `git` repository from GitHub. As we create
+the QLever index in a subfolder of the repository, **you should make sure, that
+you have about 2 TB of space available** on the filesystem on which you execute
+the following steps.
+
+Alternatively, you can see the full
 [README](https://github.com/ad-freiburg/QLever#building-the-index) on how to
 build the index under a different path.
 
@@ -27,12 +29,14 @@ build the index under a different path.
 ## Download and uncompress Wikidata
 
 If you already downloaded **and decrompressed** Wikidata to uncompressed Turtle
-format you can skip this step, otherwise we download and uncompress it.
+format you can skip this step. Otherwise we download and uncompress it.
 
 **Note:** This takes several hours as Wikidata is about 42 GB compressed and
 their servers are throttled.
 
-**The index plus unpacked Wikidata will use up to about 2 TB.**
+**This is the first step that needs significant amounts of storage.**
+Together, the unpacked Wikidata Turtle file, created in this step, and the index
+we will create in the next section, will use up to about 2 TB.
 
     mkdir wikidata-input
     wget -O - \
@@ -44,7 +48,7 @@ their servers are throttled.
 Now we can build a QLever Index from the `latest-all.ttl` Wikidata Turtle file.
 For the process of building an index we can tune some settings to the particular
 Knowledge Base. The most important of these is a list of relations which can safely be
-stored on disk as their actual values are rarely accessed. For Wikidata these
+stored on disk, as their actual values are rarely accessed. For Wikidata these
 are all statements as their values are long string ids. Note that this does not
 affect the performance of using statements in intermediate results.
 

@@ -17,7 +17,7 @@ found [here](http://qlever.cs.uni-freiburg.de).
 
 The basic design behind QLever was described in this [CIKM'17
 paper](http://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf).
-If you use QLever in your work, please cite this paper.
+If you use QLever in your work, please cite that paper.
 
 # Quickstart
 
@@ -27,7 +27,7 @@ around with. Follow the [quickstart guide](docs/quickstart.md).
 Alternatively to get started with a real (and really big) dataset we have prepared
 a [Wikidata Quickstart Guide](docs/wikidata.md). This guide takes you through the entire
 process of loading the full Wikidata Knowledge Base into QLever, but don't worry
-it is pretty.
+it is pretty simple.
 
 # Overview
 
@@ -55,8 +55,9 @@ Further documentation is available on the following topics
 
 # Building the QLever Docker Container
 
-We recommend using QLever with `docker` if you absolutely want to run QLever
-directly on your host see [here](docs/native_setup.md).
+We recommend using QLever with [docker](https://www.docker.com) if you
+absolutely want to run QLever directly on your host see
+[here](docs/native_setup.md).
 
 The installation requires a 64-bit system, docker version 18.05 or newer and
 `git`.
@@ -80,7 +81,7 @@ sources](docs/knowledge_bases.md) or create your own knowledge base in standard
 *NTriple* or *Turtle* formats and (obtionally) add a [text
 corpus](docs/sparql_plus_text.md).
 
-Note that QLever only accepts UTF-8 encoded input files, then again [you should
+Note that QLever only accepts UTF-8 encoded input files. Then again [you should
 be using UTF-8 anyway](http://utf8everywhere.org/)
 
 ## Permissions
@@ -88,7 +89,7 @@ be using UTF-8 anyway](http://utf8everywhere.org/)
 By default and when running `docker` **without user namespaces**, the container
 will use the user ID 1000 which on Linux is almost always the first real user.
 If the default user does not work add `-u "$(id -u):$(id -g)"` to `docker run`
-to let QLever execute as the current user.
+so that QLever executes as the current user.
 
 When running `docker` **with user namespaces** you may need to make the index
 folder accessible to the user the QLever process is mapped to on the host (e.g.
@@ -110,8 +111,8 @@ To build a new index run a bash inside the QLever container as follows
                -v "$(pwd)/index:/index" --entrypoint "bash" qlever
 
 If you want to use a *separate path* you **MUST** change the `"$(pwd)/index`
-part in all `docker …` commands and replace it with the **absolute** path where
-your index will reside.
+part in all `docker …` commands and replace it with the **absolute** path to
+your index.
 
 From now on we are inside the container, make sure you follow all the coming instructions
 for creating an index and **only then** proceed to the [next
@@ -155,7 +156,7 @@ with `-d --restart=unless-stopped`
 
 ## Executing queries
 
-The quickest way to run queries is by using the minimal web interface available
+The quickest way to run queries is to use the minimal web interface, available
 at the port specified above (7001 in the example). For a more advanced web
 interface you can use the [QLever
 UI](http://ad-publications.informatik.uni-freiburg.de/student-projects/qlever-ui/).

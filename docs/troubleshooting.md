@@ -18,7 +18,7 @@ Request. It is also useful for local development, as it allows you to
 quickly test if something is horribly broken.
 
 Just like QLever itself the End-to-End Tests can be executed from a previously
-build QLever docker container.
+built QLever docker container.
 
 **Note**: If you encounter permission issues e.g. if your UID is not 1000 or you
 are using docker with user namespaces, add the flag `-u root` to your `docker
@@ -30,9 +30,11 @@ run` command or do a `chmod -R o+rw e2e_data`
 ## Converting old Indices For current QLever Versions
 
 When we make changes to the way the index meta data (e.g. offsets of relations
-within the permutations) is stored. Old index builds with 6 permutations will
-not work directly with newer QLever version while 2 permutation indices
-will work but throw a warning at runtime. This will be detected during startup.
+within the permutations) is stored, old indices may become incompatible with new
+executables.
+For example, some old index builds with 6 permutations will not work directly
+with newer QLever versions, while 2 permutation indices do work.
+In either case incompatible versions are detected during startup.
 
 For these cases, we provide a converter which only modifies the
 meta data without having to rebuild the index. Run `MetaDataConverterMain
@@ -61,17 +63,16 @@ of index with less than 46 GB of RAM
 However, there are data layouts that currently lead to an excessive
 amount of memory being used:
 
-* The size of the KB vocabulary. Using the -l flag while building the index
+* **The size of the KB vocabulary**. Using the -l flag while building the index
 causes long and rarely used strings to be externalized to
 disk. This saves a significant amount of memory at little to no time cost for
-typical queries. The strategy can be modified to be more aggressive (currently
-by editing directly in the code during index construction)
+typical queries. The strategy can be modified to be more aggressive.
 
-* Building all 6 permutations over large KBs (or generelly having a
+* **Building all 6 permutations over large KBs** (or generally having a
 permutation, where the primary ordering element takes many different values).
 To handle this issue, the meta data of OPS and OSP are not loaded into RAM but
 read from disk. This saves a lot of RAM with only little impact on the speed of
-the query execution. We will evaluate if it's  worth to also externalize SPO and
-SOP permutations in this way to further reduce the RAM usage or to let the user
+the query execution. We will evaluate if it's  worth also externalizing SPO and
+SOP permutations in this way to further reduce the RAM usage, or to let the user
 decide which permutations shall be stored in which format.
 

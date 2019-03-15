@@ -30,11 +30,13 @@ knowledge base, ordered by the number of people which have that predicate.
     ORDER BY DESC(?count)
 
 Note that this query could also be processed by a standard SPARQL engine simply
-by replacing the second triple with `?x ?predicate ?object`. However, that query
-will produce a very large intermediate result (all triples of all people) with
-a correspondingly long query time.  In contrast, the query above takes only
-about 100 ms on a standard Linux machine (with 16 GB memory) and a dataset with 360
-million triples and 530 million text records.
+by replacing the second triple with `?x ?predicate ?object` and add `DISTINCT`
+inside the `COUNT()`.
+
+However, that query will produce a very large intermediate result (all triples
+of all people) with a correspondingly long query time.  In contrast, the query
+above takes only about 100 ms on a standard Linux machine (with 16 GB memory)
+and a dataset with 360 million triples and 530 million text records.
 
 ## Statistics:
 
@@ -49,13 +51,13 @@ This query will yield a JSON response that features:
 * The number of index permutations build (usually 2 or 6)
 * The numbers of distinct subjects, predicates and objects (only available if 6 permutations are built)
 * The name of the text index (if one is present)
-* The number of text records in the text index (if text index present)
+* The number of text records in the text index (if a text index is present)
 * The number of word occurrences/postings in the text index (if a text index is present)
 * The number of entity occurrences/postings in the text index (if a text index is present)
 
 
 The name of an index is the name of the input `.nt` file (and wordsfile for the
-text index) but can also be specified manually while building an index.
+text index), but can also be specified manually while building an index.
 Therefore, IndexbuilderMain takes two optional arguments: `--text-index-name` (`-T`)
 and `--kb-index-name` (`-K`).
 
@@ -65,14 +67,13 @@ and `--kb-index-name` (`-K`).
 Currently, QLever does not compute partial results if there is a `LIMIT` modifier.
 
 However, strings (for entities and text excerpts) are only resolved for those
-items that are actually send.  Furthermore, a UI usually only requires a limited
-amount of rows at a time.
+items that that will be transmitted.  Furthermore, a UI usually only requires
+a limited amount of rows at a time.
 
 While specifying a `LIMIT` is recommended, some experiments may want
 to measure the time to produce the full result.
 Therefore an additional HTTP parameter `&send=<x>` can be used to send only
 k result rows while still computing the readable result for up to `LIMIT` rows.
-to LIMIT.
 
 **IMPORTANT: Unless you want to measure QLever's performance, using `LIMIT` (+
 `OFFSET` for sequential loading) is preferred in all applications. `LIMIT` is
