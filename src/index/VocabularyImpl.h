@@ -155,7 +155,7 @@ bool Vocabulary<S>::shouldBeExternalized(const string& word) const {
   if (!isLiteral(word)) {
     return shouldEntityBeExternalized(word);
   } else {
-    if (word.size() > 100) {
+    if (word.size() > MAX_INTERNAL_LITERAL_BYTES) {
       return true;
     }
     string lang = getLanguage(word);
