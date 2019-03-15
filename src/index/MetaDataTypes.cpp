@@ -114,12 +114,11 @@ pair<off_t, size_t> BlockBasedRelationMetaData::getBlockStartAndNofBytesForLhs(
     // will have an empty result since the first
     // entry is already too big. In this case our result will
     // be empty and we can perform a short cut.
-    if (it != _blocks.begin()) {
-      it--;
-    } else {
-      // always empty result, this results
-      // in scanning 0 bytes from a valid start index.
+    if (it == _blocks.begin()) {
+      // Empty result: scan 0 bytes from a valid start index.
       return {it->_startOffset, 0};
+    } else {
+      it--;
     }
   }
 
@@ -130,7 +129,7 @@ pair<off_t, size_t> BlockBasedRelationMetaData::getBlockStartAndNofBytesForLhs(
     after = _startRhs;
   }
 
-  return pair<off_t, size_t>(it->_startOffset, after - it->_startOffset);
+  return {it->_startOffset, after - it->_startOffset};
 }
 
 // _____________________________________________________________________________
