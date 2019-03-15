@@ -494,6 +494,24 @@ class Index {
   VocabularyData passFileForVocabulary(const string& ntFile,
                                        size_t linesPerPartial = 100000000);
 
+  /**
+   * @brief Everything that has to be done when we have seen all the triples
+   * that belong to one partial vocabulary, including Log output used inside
+   * passFileForVocabulary
+   *
+   * @param numLines How many Lines from the KB have we already parsed (only for
+   * Logging)
+   * @param numFiles How many partial vocabularies have we seen before/which is
+   * the index of the voc we are going to write
+   * @param actualCurrentPartialSize How many triples belong to this partition
+   * (including extra langfilter triples)
+   * @param items Contains our unsorted vocabulary. Maps words to their local
+   * ids within this vocabulary.
+   */
+  void writeNextPartialVocabulary(size_t numLines, size_t numFiles,
+                                  size_t actualCurrentPartialSize,
+                                  const ad_utility::HashMap<string, Id>& items);
+
   void convertPartialToGlobalIds(TripleVec& data,
                                  const vector<size_t>& actualLinesPerPartial,
                                  size_t linesPerPartial);

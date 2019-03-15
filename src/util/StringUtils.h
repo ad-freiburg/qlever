@@ -68,9 +68,9 @@ inline string getLowercase(const string& orig);
 
 inline string getUppercase(const string& orig);
 
-inline string getLowercaseUtf8(const string& orig);
+inline string getLowercaseUtf8(std::string_view orig);
 
-inline string getUppercaseUtf8(const string& orig);
+inline string getUppercaseUtf8(std::string_view orig);
 
 inline string firstCharToUpperUtf8(const string& orig);
 
@@ -234,7 +234,7 @@ string getUppercase(const string& orig) {
 }
 
 // ____________________________________________________________________________
-string getLowercaseUtf8(const string& orig) {
+string getLowercaseUtf8(std::string_view orig) {
   string retVal;
   retVal.reserve(orig.size());
   std::mbstate_t state = std::mbstate_t();
@@ -263,7 +263,7 @@ string getLowercaseUtf8(const string& orig) {
 }
 
 // ____________________________________________________________________________
-string getUppercaseUtf8(const string& orig) {
+string getUppercaseUtf8(std::string_view orig) {
   string retVal;
   retVal.reserve(orig.size());
   std::mbstate_t state = std::mbstate_t();

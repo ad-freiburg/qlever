@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "Filter.h"
+#include <algorithm>
 #include <optional>
 #include <regex>
 #include <sstream>
@@ -504,6 +505,41 @@ void Filter::computeResultFixedValue(
         rhs_string = ad_utility::convertValueLiteralToIndexWord(rhs_string);
       } else if (ad_utility::isNumeric(_rhs)) {
         rhs_string = ad_utility::convertNumericToIndexWord(rhs_string);
+      } else {
+        if (getIndex().getVocab().getCaseInsensitiveOrdering()) {
+          // We have to move to the correct end of the
+          // "same letters but different case" - range
+          // to make the filters work
+          // TODO<kalmbach, schnelle>: thoroughly test this
+          // (End-To-End or unit tests? probably both but the unit tests
+          // would also be in an end-to-end fashion for those nested
+          // mechanisms).
+          switch (_type) {
+            case SparqlFilter::GE:
+            case SparqlFilter::LT: {
+              rhs_string = ad_utility::getUppercaseUtf8(rhs_string);
+              auto split = StringSortComparator::extractComparable(rhs_string);
+              if (split.isLiteral && !split.langtag.empty()) {
+                // get rid of possible langtags to move to the beginning of the
+                // range
+                rhs_string = '\"' + std::string(split.val) + '\"';
+              }
+            }
+
+            break;
+            case SparqlFilter::GT:
+            case SparqlFilter::LE: {
+              rhs_string = ad_utility::getLowercaseUtf8(rhs_string);
+              auto split2 = StringSortComparator::extractComparable(rhs_string);
+              if (split2.isLiteral) {
+                rhs_string =
+                    '\"' + std::string(split2.val) + '\"' + "@" + char(127);
+              }
+            } break;
+            default:
+              break;
+          }
+        }
       }
       if (_type == SparqlFilter::EQ || _type == SparqlFilter::NE) {
         if (!getIndex().getVocab().getId(_rhs, &rhs)) {

@@ -33,14 +33,22 @@ struct QueueWord {
 // we sort alphabetically by the token
 class QueueCompare {
  public:
+  QueueCompare(StringSortComparator comp) : _comp(comp) {}
   bool operator()(const QueueWord& p1, const QueueWord& p2) {
-    return p1._value > p2._value;
+    // if p1 is smaller (alphabetically)
+    // _comp will return false if called like this
+    // and the priority queue will thus emit p1 first
+    return _comp(p2._value, p1._value);
   }
+
+ private:
+  StringSortComparator _comp;
 };
 
 // ___________________________________________________________________
 size_t mergeVocabulary(const std::string& basename, size_t numFiles,
-                       Id* langPredLowerBound, Id* langPredUpperBound) {
+                       Id* langPredLowerBound, Id* langPredUpperBound,
+                       StringSortComparator comp) {
   std::vector<std::ifstream> infiles;
 
   // we will store pairs of <partialId, globalId>
@@ -52,7 +60,8 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles,
   std::vector<bool> endOfFile(numFiles, false);
 
   // Priority queue for the k-way merge
-  std::priority_queue<QueueWord, std::vector<QueueWord>, QueueCompare> queue;
+  std::priority_queue<QueueWord, std::vector<QueueWord>, QueueCompare> queue(
+      comp);
 
   // open and prepare all infiles and mmap output vectors
   for (size_t i = 0; i < numFiles; i++) {
@@ -147,14 +156,16 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles,
 
 // ______________________________________________________________________________________________
 void writePartialIdMapToBinaryFileForMerging(
-    const ad_utility::HashMap<string, Id>& map, const string& fileName) {
+    const ad_utility::HashMap<string, Id>& map, const string& fileName,
+    StringSortComparator comp) {
   LOG(INFO) << "Creating partial vocabulary from set ...\n";
   std::vector<std::pair<string, Id>> els;
   els.reserve(map.size());
   els.insert(begin(els), begin(map), end(map));
   LOG(INFO) << "... sorting ...\n";
-  std::sort(begin(els), end(els),
-            [](const auto& p1, const auto& p2) { return p1.first < p2.first; });
+  std::sort(begin(els), end(els), [comp](const auto& p1, const auto& p2) {
+    return comp(p1.first, p2.first);
+  });
   LOG(INFO) << "Done creating vocabulary.\n";
 
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";

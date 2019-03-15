@@ -50,3 +50,6 @@ static const size_t THRESHOLD_RELATION_CREATION = 2 << 20;
 // ________________________________________________________________
 static const std::string PARTIAL_VOCAB_FILE_NAME = ".partial-vocabulary";
 static const std::string PARTIAL_MMAP_IDS = ".partial-ids-mmap";
+
+// ________________________________________________________________
+static const std::string TMP_BASENAME_COMPRESSION = ".tmp.compression_index";
