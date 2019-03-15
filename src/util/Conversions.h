@@ -49,17 +49,17 @@ enum class NumericType : char {
   DECIMAL = 'T'
 };
 
-//! Converts like "12.34" to :v:float:PP0*2E0*1234F and -0.123 to
-//! :v:float:M-0*1E9*876F with the last F used to indicate that the value
-//! was originally a float. ('I' if it was an int).
+//! Converts strings like "12.34" to :v:float:PP0*2E0*1234F and -0.123 to
+//! :v:float:M-0*1E9*876F with the last F used to indicate that the value was
+//! originally a float. ('I' if it was an int).
 inline string convertFloatStringToIndexWord(
     const string& value, const NumericType type = NumericType::FLOAT);
 
-//! Converts like this: :v:float:PP0*2E0*1234F to "12.34" and
+//! Converts strings like this: :v:float:PP0*2E0*1234F to "12.34" and
 //! :v:float:M-0*1E9*876F to "-0.123".
 inline string convertIndexWordToFloatString(const string& indexWord);
 
-//! Converts like this: ":v:float:PP0*2E0*1234F to "12.34 and
+//! Converts strings like this: ":v:float:PP0*2E0*1234F to "12.34 and
 //! :v:float:M-0*1E9*876F to -0.123".
 inline float convertIndexWordToFloat(const string& indexWord);
 
@@ -168,25 +168,25 @@ string convertIndexWordToValueLiteral(const string& indexWord) {
     return os.str();
   }
   if (startsWith(indexWord, VALUE_FLOAT_PREFIX)) {
-    if (endsWith(indexWord, "F")) {
+    if (NumericType(indexWord.back()) == NumericType::FLOAT) {
       std::ostringstream os;
       os << "\"" << convertIndexWordToFloatString(indexWord) << "\""
          << XSD_FLOAT_SUFFIX;
       return os.str();
     }
-    if (endsWith(indexWord, "D")) {
+    if (NumericType(indexWord.back()) == NumericType::DOUBLE) {
       std::ostringstream os;
       os << "\"" << convertIndexWordToFloatString(indexWord) << "\""
          << XSD_DOUBLE_SUFFIX;
       return os.str();
     }
-    if (endsWith(indexWord, "T")) {
+    if (NumericType(indexWord.back()) == NumericType::DECIMAL) {
       std::ostringstream os;
       os << "\"" << convertIndexWordToFloatString(indexWord) << "\""
          << XSD_DECIMAL_SUFFIX;
       return os.str();
     }
-    if (endsWith(indexWord, "I")) {
+    if (NumericType(indexWord.back()) == NumericType::INTEGER) {
       std::ostringstream os;
       string asFloat = convertIndexWordToFloatString(indexWord);
       os << "\"" << asFloat.substr(0, asFloat.find('.')) << "\""
