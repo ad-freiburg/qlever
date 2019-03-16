@@ -117,9 +117,9 @@ pair<off_t, size_t> BlockBasedRelationMetaData::getBlockStartAndNofBytesForLhs(
     if (it == _blocks.begin()) {
       // Empty result: scan 0 bytes from a valid start index.
       return {it->_startOffset, 0};
-    } else {
-      it--;
     }
+
+    it--;
   }
 
   off_t after;
