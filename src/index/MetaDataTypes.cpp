@@ -139,14 +139,15 @@ pair<off_t, size_t> BlockBasedRelationMetaData::getFollowBlockForLhs(
       _blocks.begin(), _blocks.end(), lhs,
       [](const BlockMetaData& a, Id lhs) { return a._firstLhs < lhs; });
 
-  // Go back one block unless perfect lhs match.
-  if (it == _blocks.end() || it->_firstLhs > lhs) {
-    AD_CHECK(it != _blocks.begin());
-    it--;
+  if (it == _blocks.begin() && it->_firstLhs > lhs) {
+    // We have an empty result as the first element of the first block
+    // is already too big. Indicate like hitting the end
+    AD_CHECK(false);
+    return {it->_startOffset, _startRhs - it->_startOffset};
   }
 
-  // Advance one block again is possible
-  if ((it + 1) != _blocks.end()) {
+  // Advance one block if we can and we don't have a perfect match
+  if (it != _blocks.end() && it->_firstLhs == lhs) {
     ++it;
   }
 
