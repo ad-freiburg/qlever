@@ -37,7 +37,7 @@ Includes a knowledge base as nt file, and a words- and docsfile as tsv.  Text
 and facts are basically equivalent to the
 [Broccoli](http://broccoli.cs.uni-freiburg.de) search engine.
 
-[wikipedia-freebase.zip](http://qlever.informatik.uni-freiburg.de/wikipedia-freebase.zip):
+[wikipedia-freebase-easy.zip](http://qlever.informatik.uni-freiburg.de/data/wikipedia-freebase-easy.zip):
 
 * 21 GB zipped
 * 103 GB unzipped
