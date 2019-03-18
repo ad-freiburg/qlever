@@ -10,7 +10,7 @@ Base.
 
 ## Download the example Knowledge Base
 
-    wget http://filicudi.informatik.uni-freiburg.de/bjoern-data/scientist-collection.zip
+    wget http://qlever.cs.uni-freiburg.de/data/scientist-collection.zip
     unzip -j scientist-collection.zip -d scientists
 
 ## Build a QLever Index
