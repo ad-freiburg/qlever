@@ -1423,6 +1423,12 @@ size_t Index::getHasPredicateFullSize() const {
 void Index::scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                    Id lhsId, ad_utility::File& indexFile,
                                    IdTable* result) const {
+  if (blockOff.second == 0) {
+    // TODO<joka921> this check should be in the callers, but for that I want to
+    // refactor the code duplication there first
+    // nothing to do if the result is empty
+    return;
+  }
   LOG(TRACE) << "Scanning functional relation ...\n";
   WidthTwoList block;
   block.resize(blockOff.second / (2 * sizeof(Id)));
@@ -1442,6 +1448,13 @@ void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                       Id lhsId, ad_utility::File& indexFile,
                                       off_t upperBound, IdTable* result) const {
   LOG(TRACE) << "Scanning non-functional relation ...\n";
+
+  if (blockOff.second == 0) {
+    // TODO<joka921> this check should be in the callers, but for that I want to
+    // refactor the code duplication there first
+    // nothing to do if the result is empty
+    return;
+  }
   vector<pair<Id, off_t>> block;
   block.resize(blockOff.second / (sizeof(Id) + sizeof(off_t)));
   indexFile.read(block.data(), blockOff.second, blockOff.first);
