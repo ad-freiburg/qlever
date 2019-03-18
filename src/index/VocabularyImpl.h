@@ -270,9 +270,7 @@ template <class S>
 template <class StringRange>
 void Vocabulary<S>::initializeInternalizedLangs(const StringRange& s) {
   _internalizedLangs.clear();
-  for (const auto& el : s) {
-    _internalizedLangs.push_back(el);
-  }
+  _internalizedLangs.insert(_internalizedLangs.begin(), s.begin(), s.end());
 }
 
 // __________________________________________________________________________
