@@ -1,0 +1,8 @@
+{
+  "languages-internal": ["en"],
+  "prefixes-external": [
+    "<http://www.wikidata.org/entity/statement",
+    "<http://www.wikidata.org/value",
+    "<http://www.wikidata.org/reference"
+  ]
+}
