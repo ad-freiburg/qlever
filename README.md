@@ -78,7 +78,7 @@ tests](docs/troubleshooting.md#run-end-to-end-tests)
 First make sure that you have your input data ready and accessible on your
 machine. If you have no input data yet obtain it from one of our [recommended
 sources](docs/knowledge_bases.md) or create your own knowledge base in standard
-*NTriple* or *Turtle* formats and (obtionally) add a [text
+*NTriple* or *Turtle* formats and (optionally) add a [text
 corpus](docs/sparql_plus_text.md).
 
 Note that QLever only accepts UTF-8 encoded input files. Then again [you should
