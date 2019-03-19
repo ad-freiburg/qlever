@@ -10,7 +10,7 @@ These files are of small size (facts about scientists - only one hop from
 a scientist in a knowledge graph. Text are Wikipedia articles about scientists.)
 Includes a knowledge base as nt file, and a words- and docsfile as tsv.
 
-[scientist-collection.zip](http://filicudi.informatik.uni-freiburg.de/bjoern-data/scientist-collection.zip):
+[scientist-collection.zip](http://qlever.informatik.uni-freiburg.de/data/scientist-collection.zip):
 
 * 78 MB zipped
 * 318 MB unzipped
@@ -37,7 +37,7 @@ Includes a knowledge base as nt file, and a words- and docsfile as tsv.  Text
 and facts are basically equivalent to the
 [Broccoli](http://broccoli.cs.uni-freiburg.de) search engine.
 
-[wikipedia-freebase.zip](http://filicudi.informatik.uni-freiburg.de/bjoern-data/wikipedia-freebase.zip):
+[wikipedia-freebase-easy.zip](http://qlever.informatik.uni-freiburg.de/data/wikipedia-freebase-easy.zip):
 
 * 21 GB zipped
 * 103 GB unzipped
