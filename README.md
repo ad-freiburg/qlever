@@ -55,7 +55,7 @@ Further documentation is available on the following topics
 
 # Building the QLever Docker Container
 
-We recommend using QLever with [docker](https://www.docker.com) if you
+We recommend using QLever with [docker](https://www.docker.com). If you
 absolutely want to run QLever directly on your host see
 [here](docs/native_setup.md).
 

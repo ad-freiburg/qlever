@@ -30,8 +30,8 @@ knowledge base, ordered by the number of people which have that predicate.
     ORDER BY DESC(?count)
 
 Note that this query could also be processed by a standard SPARQL engine simply
-by replacing the second triple with `?x ?predicate ?object` and add `DISTINCT`
-inside the `COUNT()`.
+by replacing the second triple with `?x ?predicate ?object` and adding
+`DISTINCT` inside the `COUNT()`.
 
 However, that query will produce a very large intermediate result (all triples
 of all people) with a correspondingly long query time.  In contrast, the query

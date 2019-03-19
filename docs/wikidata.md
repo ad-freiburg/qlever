@@ -28,8 +28,9 @@ build the index under a different path.
 
 ## Download and uncompress Wikidata
 
-If you already downloaded **and decrompressed** Wikidata to uncompressed Turtle
-format you can skip this step. Otherwise we download and uncompress it.
+If you already downloaded **and decrompressed** Wikidata to the uncompressed
+Turtle format, you can skip this step. Otherwise we will download and uncompress
+it in this step.
 
 **Note:** This takes several hours as Wikidata is about 42 GB compressed and
 their servers are throttled.
