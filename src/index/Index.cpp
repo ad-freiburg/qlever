@@ -83,26 +83,19 @@ VocabularyData Index::createIdTriplesAndVocab(const string& ntFile) {
 
 // _____________________________________________________________________________
 template <class Parser>
-void Index::createFromFile(const string& filename, bool allPermutations) {
+void Index::createFromFile(const string& filename) {
   string indexFilename = _onDiskBase + ".index";
   _configurationJson["external-literals"] = _onDiskLiterals;
 
   auto vocabData = createIdTriplesAndVocab<Parser>(filename);
 
   // also perform unique for first permutation
-  createPermutationPair<IndexMetaDataHmap>(&vocabData, Permutation::Pso,
-                                           Permutation::Pos, true);
-  if (allPermutations) {
-    // also create Patterns after the Spo permutation
-    createPermutationPair<IndexMetaDataMmap>(
-        &vocabData, Permutation::Spo, Permutation::Sop, false, _usePatterns);
-    createPermutationPair<IndexMetaDataMmap>(&vocabData, Permutation::Osp,
-                                             Permutation::Ops);
-  } else if (_usePatterns) {
-    // Not constructed with Spo, Sop, needs extra sort
-    createPatterns(false, &vocabData);
-  }
-  // move compression to end
+  createPermutationPair<IndexMetaDataHmapDispatcher>(&vocabData, _PSO, _POS,
+                                                     true);
+  // also create Patterns after the Spo permutation if specified
+  createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _SPO, _SOP,
+                                                     false, _usePatterns);
+  createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
 
   // if we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
@@ -133,12 +126,9 @@ void Index::createFromFile(const string& filename, bool allPermutations) {
 }
 
 // explicit instantiations
-template void Index::createFromFile<TsvParser>(const string& filename,
-                                               bool allPermutations);
-template void Index::createFromFile<NTriplesParser>(const string& filename,
-                                                    bool allPermutations);
-template void Index::createFromFile<TurtleParser>(const string& filename,
-                                                  bool allPermutations);
+template void Index::createFromFile<TsvParser>(const string& filename);
+template void Index::createFromFile<NTriplesParser>(const string& filename);
+template void Index::createFromFile<TurtleParser>(const string& filename);
 
 // _____________________________________________________________________________
 template <class Parser>
@@ -297,11 +287,12 @@ void Index::convertPartialToGlobalIds(
 }
 
 // _____________________________________________________________________________
-template <class MetaData>
-std::optional<MetaData> Index::createPermutationImpl(
-    const string& fileName, const Index::TripleVec& vec, size_t c0, size_t c1,
-    size_t c2) {
-  MetaData metaData;
+template <class MetaDataDispatcher>
+std::optional<typename MetaDataDispatcher::WriteType>
+Index::createPermutationImpl(const string& fileName,
+                             const Index::TripleVec& vec, size_t c0, size_t c1,
+                             size_t c2) {
+  typename MetaDataDispatcher::WriteType metaData;
   if constexpr (metaData._isMmapBased) {
     metaData.setup(_totalVocabularySize, FullRelationMetaData::empty,
                    fileName + MMAP_FILE_SUFFIX);
@@ -363,9 +354,10 @@ std::optional<MetaData> Index::createPermutationImpl(
 }
 
 // ________________________________________________________________________
-template <class MetaData, class Comparator>
-std::optional<MetaData> Index::createPermutation(
-    TripleVec* vec, const Permutation::PermutationImpl<Comparator>& p,
+template <class MetaDataDispatcher, class Comparator>
+std::optional<typename MetaDataDispatcher::WriteType> Index::createPermutation(
+    TripleVec* vec,
+    const PermutationImpl<Comparator, typename MetaDataDispatcher::ReadType>& p,
     bool performUnique) {
   LOG(INFO) << "Sorting for " << p._readableName << " permutation..."
             << std::endl;
@@ -382,24 +374,27 @@ std::optional<MetaData> Index::createPermutation(
     LOG(INFO) << "Size after: " << vec->size() << std::endl;
   }
 
-  return createPermutationImpl<MetaData>(_onDiskBase + ".index" + p._fileSuffix,
-                                         *vec, p._keyOrder[0], p._keyOrder[1],
-                                         p._keyOrder[2]);
+  return createPermutationImpl<MetaDataDispatcher>(
+      _onDiskBase + ".index" + p._fileSuffix, *vec, p._keyOrder[0],
+      p._keyOrder[1], p._keyOrder[2]);
 }
 
 // ________________________________________________________________________
-template <class MetaData, class Comparator1, class Comparator2>
+template <class MetaDataDispatcher, class Comparator1, class Comparator2>
 void Index::createPermutationPair(
     VocabularyData* vocabData,
-    const Permutation::PermutationImpl<Comparator1>& p1,
-    const Permutation::PermutationImpl<Comparator2>& p2, bool performUnique,
-    bool createPatternsAfterFirst) {
-  auto m1 =
-      createPermutation<MetaData>(&(*vocabData->idTriples), p1, performUnique);
+    const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
+        p1,
+    const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
+        p2,
+    bool performUnique, bool createPatternsAfterFirst) {
+  auto m1 = createPermutation<MetaDataDispatcher>(&(*vocabData->idTriples), p1,
+                                                  performUnique);
   if (createPatternsAfterFirst) {
     createPatterns(true, vocabData);
   }
-  auto m2 = createPermutation<MetaData>(&(*vocabData->idTriples), p2, false);
+  auto m2 = createPermutation<MetaDataDispatcher>(&(*vocabData->idTriples), p2,
+                                                  false);
   if (m1 && m2) {
     LOG(INFO) << "Exchanging Multiplicities for " << p1._readableName << " and "
               << p2._readableName << '\n';
@@ -442,8 +437,8 @@ void Index::addPatternsToExistingIndex() {
       _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
       _fullHasPredicateMultiplicityEntities,
       _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
-      _maxNumPatterns, langPredLowerBound, langPredUpperBound, _spoMeta,
-      _spoFile);
+      _maxNumPatterns, langPredLowerBound, langPredUpperBound, _SPO.metaData(),
+      _SPO._file);
 }
 
 // _____________________________________________________________________________
@@ -905,8 +900,7 @@ void Index::writeNonFunctionalRelation(
 }
 
 // _____________________________________________________________________________
-void Index::createFromOnDiskIndex(const string& onDiskBase,
-                                  bool allPermutations) {
+void Index::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
   _vocab.readFromFile(_onDiskBase + ".vocabulary",
@@ -914,62 +908,13 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
 
   _totalVocabularySize = _vocab.size() + _vocab.getExternalVocab().size();
   LOG(INFO) << "total vocab size is " << _totalVocabularySize << std::endl;
-  auto psoName = string(_onDiskBase + ".index.pso");
-  _psoFile.open(psoName, "r");
-  auto posName = string(_onDiskBase + ".index.pos");
-  _posFile.open(posName, "r");
-  AD_CHECK(_psoFile.isOpen() && _posFile.isOpen());
-  // PSO
+  _PSO.loadFromDisk(_onDiskBase);
+  _POS.loadFromDisk(_onDiskBase);
+  _OPS.loadFromDisk(_onDiskBase);
+  _OSP.loadFromDisk(_onDiskBase);
+  _SPO.loadFromDisk(_onDiskBase);
+  _SPO.loadFromDisk(_onDiskBase);
 
-  _psoMeta.readFromFile(&_psoFile);
-  LOG(INFO) << "Registered PSO permutation: " << _psoMeta.statistics()
-            << std::endl;
-  // POS
-  _posMeta.readFromFile(&_posFile);
-  LOG(INFO) << "Registered POS permutation: " << _posMeta.statistics()
-            << std::endl;
-
-  if (allPermutations) {
-    // TODO<joka921> also refactor this, similar to createFromFile
-    LOG(INFO) << "Setting up MmapBasedPermutations\n";
-    _spoMeta.setup(onDiskBase + ".index.spo" + MMAP_FILE_SUFFIX,
-                   ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-    _sopMeta.setup(onDiskBase + ".index.sop" + MMAP_FILE_SUFFIX,
-                   ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-    _opsMeta.setup(onDiskBase + ".index.ops" + MMAP_FILE_SUFFIX,
-                   ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-    _ospMeta.setup(onDiskBase + ".index.osp" + MMAP_FILE_SUFFIX,
-                   ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
-    LOG(INFO) << "Done\n";
-    // TODO<joka921>: Refactor (upcoming PR): there is so  so much code
-    // duplication in here
-    auto spoName = string(_onDiskBase + ".index.spo");
-    _spoFile.open(spoName, "r");
-    auto sopName = string(_onDiskBase + ".index.sop");
-    _sopFile.open(sopName, "r");
-    auto ospName = string(_onDiskBase + ".index.osp");
-    _ospFile.open(ospName, "r");
-    auto opsName = string(_onDiskBase + ".index.ops");
-    _opsFile.open(opsName, "r");
-    AD_CHECK(_spoFile.isOpen() && _sopFile.isOpen() && _ospFile.isOpen() &&
-             _opsFile.isOpen());
-    // SPO
-    _spoMeta.readFromFile(&_spoFile);
-    LOG(INFO) << "Registered SPO permutation: " << _spoMeta.statistics()
-              << std::endl;
-    // SOP
-    _sopMeta.readFromFile(&_sopFile);
-    LOG(INFO) << "Registered SOP permutation: " << _sopMeta.statistics()
-              << std::endl;
-    // OSP
-    _ospMeta.readFromFile(&_ospFile);
-    LOG(INFO) << "Registered OSP permutation: " << _ospMeta.statistics()
-              << std::endl;
-    // OPS
-    _opsMeta.readFromFile(&_opsFile);
-    LOG(INFO) << "Registered OPS permutation: " << _opsMeta.statistics()
-              << std::endl;
-  }
   if (_usePatterns) {
     // Read the pattern info from the patterns file
     std::string patternsFilePath = _onDiskBase + ".index.patterns";
@@ -1057,320 +1002,6 @@ void Index::createFromOnDiskIndex(const string& onDiskBase,
       }
       _hasPredicate.build(hasPredicateTmp);
     }
-  }
-}
-
-// _____________________________________________________________________________
-bool Index::ready() const { return _psoFile.isOpen() && _posFile.isOpen(); }
-
-// _____________________________________________________________________________
-void Index::openFileHandles() {
-  AD_CHECK(_onDiskBase.size() > 0);
-  _psoFile.open((_onDiskBase + ".index.pso"), "r");
-  _posFile.open((_onDiskBase + ".index.pos"), "r");
-  if (ad_utility::File::exists(_onDiskBase + ".index.spo")) {
-    _spoFile.open((_onDiskBase + ".index.spo"), "r");
-  }
-  if (ad_utility::File::exists(_onDiskBase + ".index.sop")) {
-    _sopFile.open((_onDiskBase + ".index.sop"), "r");
-  }
-  if (ad_utility::File::exists(_onDiskBase + ".index.osp")) {
-    _ospFile.open((_onDiskBase + ".index.osp"), "r");
-  }
-  if (ad_utility::File::exists(_onDiskBase + ".index.ops")) {
-    _opsFile.open((_onDiskBase + ".index.ops"), "r");
-  }
-  AD_CHECK(_psoFile.isOpen());
-  AD_CHECK(_posFile.isOpen());
-}
-
-// _____________________________________________________________________________
-void Index::scanPSO(const string& predicate, IdTable* result) const {
-  LOG(DEBUG) << "Performing PSO scan for full relation: " << predicate << "\n";
-  Id relId;
-  if (_vocab.getId(predicate, &relId)) {
-    LOG(TRACE) << "Successfully got key ID.\n";
-    scanPSO(relId, result);
-  }
-  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
-}
-
-// _____________________________________________________________________________
-void Index::scanPSO(const string& predicate, const string& subject,
-                    IdTable* result) const {
-  LOG(DEBUG) << "Performing PSO scan of relation " << predicate
-             << " with fixed subject: " << subject << "...\n";
-  Id relId;
-  Id subjId;
-  if (_vocab.getId(predicate, &relId) && _vocab.getId(subject, &subjId)) {
-    if (_psoMeta.relationExists(relId)) {
-      auto rmd = _psoMeta.getRmd(relId);
-      if (rmd.hasBlocks()) {
-        pair<off_t, size_t> blockOff =
-            rmd._rmdBlocks->getBlockStartAndNofBytesForLhs(subjId);
-        // Functional relations have blocks point into the pair index,
-        // non-functional relations have them point into lhs lists
-        if (rmd.isFunctional()) {
-          scanFunctionalRelation(blockOff, subjId, _psoFile, result);
-        } else {
-          pair<off_t, size_t> block2 =
-              rmd._rmdBlocks->getFollowBlockForLhs(subjId);
-          scanNonFunctionalRelation(blockOff, block2, subjId, _psoFile,
-                                    rmd._rmdBlocks->_offsetAfter, result);
-        }
-      } else {
-        // If we don't have blocks, scan the whole relation and filter /
-        // restrict.
-        IdTable fullRelation(2);
-        fullRelation.resize(rmd.getNofElements());
-        _psoFile.read(fullRelation.data(),
-                      rmd.getNofElements() * 2 * sizeof(Id),
-                      rmd._rmdPairs._startFullIndex);
-        getRhsForSingleLhs(fullRelation, subjId, result);
-      }
-    } else {
-      LOG(DEBUG) << "No such relation.\n";
-    }
-  } else {
-    LOG(DEBUG) << "No such subject.\n";
-  }
-  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
-}
-
-// _____________________________________________________________________________
-void Index::scanPOS(const string& predicate, IdTable* result) const {
-  LOG(DEBUG) << "Performing POS scan for full relation: " << predicate << "\n";
-  Id relId;
-  if (_vocab.getId(predicate, &relId)) {
-    LOG(TRACE) << "Successfully got key ID.\n";
-    scanPOS(relId, result);
-  }
-  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
-}
-
-// _____________________________________________________________________________
-void Index::scanPOS(const string& predicate, const string& object,
-                    IdTable* result) const {
-  LOG(DEBUG) << "Performing POS scan of relation " << predicate
-             << " with fixed object: " << object << "...\n";
-  Id relId;
-  Id objId;
-  if (_vocab.getId(predicate, &relId) && _vocab.getId(object, &objId)) {
-    LOG(TRACE) << "predicate Id " << relId << " object Id " << objId
-               << std::endl;
-    if (_posMeta.relationExists(relId)) {
-      auto rmd = _posMeta.getRmd(relId);
-      if (rmd.hasBlocks()) {
-        pair<off_t, size_t> blockOff =
-            rmd._rmdBlocks->getBlockStartAndNofBytesForLhs(objId);
-        // Functional relations have blocks point into the pair index,
-        // non-functional relations have them point into lhs lists
-        if (rmd.isFunctional()) {
-          scanFunctionalRelation(blockOff, objId, _posFile, result);
-        } else {
-          pair<off_t, size_t> block2 =
-              rmd._rmdBlocks->getFollowBlockForLhs(objId);
-          scanNonFunctionalRelation(blockOff, block2, objId, _posFile,
-                                    rmd._rmdBlocks->_offsetAfter, result);
-        }
-      } else {
-        // If we don't have blocks, scan the whole relation and filter /
-        // restrict.
-        IdTable fullRelation(2);
-        fullRelation.resize(rmd.getNofElements());
-        _posFile.read(fullRelation.data(),
-                      rmd.getNofElements() * 2 * sizeof(Id),
-                      rmd._rmdPairs._startFullIndex);
-        getRhsForSingleLhs(fullRelation, objId, result);
-      }
-    } else {
-      LOG(DEBUG) << "No such relation.\n";
-    }
-  } else {
-    LOG(DEBUG) << "No such object.\n";
-  }
-  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
-}
-
-// _____________________________________________________________________________
-void Index::scanSOP(const string& subject, const string& object,
-                    IdTable* result) const {
-  if (!_sopFile.isOpen()) {
-    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-             "Cannot use predicate variables without the required "
-             "index permutations. Build an index with option -a "
-             "to use this feature.");
-  }
-  LOG(DEBUG) << "Performing SOP scan of list for " << subject
-             << " with fixed object: " << object << "...\n";
-  Id relId;
-  Id objId;
-  if (_vocab.getId(subject, &relId) && _vocab.getId(object, &objId)) {
-    if (_sopMeta.relationExists(relId)) {
-      auto rmd = _sopMeta.getRmd(relId);
-      if (rmd.hasBlocks()) {
-        pair<off_t, size_t> blockOff =
-            rmd._rmdBlocks->getBlockStartAndNofBytesForLhs(objId);
-        // Functional relations have blocks point into the pair index,
-        // non-functional relations have them point into lhs lists
-        if (rmd.isFunctional()) {
-          scanFunctionalRelation(blockOff, objId, _sopFile, result);
-        } else {
-          pair<off_t, size_t> block2 =
-              rmd._rmdBlocks->getFollowBlockForLhs(objId);
-          scanNonFunctionalRelation(blockOff, block2, objId, _sopFile,
-                                    rmd._rmdBlocks->_offsetAfter, result);
-        }
-      } else {
-        // If we don't have blocks, scan the whole relation and filter /
-        // restrict.
-        IdTable fullRelation(2);
-        fullRelation.resize(rmd.getNofElements());
-        _sopFile.read(fullRelation.data(),
-                      rmd.getNofElements() * 2 * sizeof(Id),
-                      rmd._rmdPairs._startFullIndex);
-        getRhsForSingleLhs(fullRelation, objId, result);
-      }
-    } else {
-      LOG(DEBUG) << "No such relation.\n";
-    }
-  } else {
-    LOG(DEBUG) << "No such object.\n";
-  }
-  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
-}
-
-// _____________________________________________________________________________
-void Index::scanSPO(const string& subject, IdTable* result) const {
-  if (!_spoFile.isOpen()) {
-    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-             "Cannot use predicate variables without the required "
-             "index permutations. Build an index with option -a "
-             "to use this feature.");
-  }
-  LOG(DEBUG) << "Performing SPO scan for full list for: " << subject << "\n";
-  Id relId;
-  if (_vocab.getId(subject, &relId)) {
-    LOG(TRACE) << "Successfully got key ID.\n";
-    scanSPO(relId, result);
-  }
-  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
-}
-
-// _____________________________________________________________________________
-void Index::scanSOP(const string& subject, IdTable* result) const {
-  if (!_sopFile.isOpen()) {
-    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-             "Cannot use predicate variables without the required "
-             "index permutations. Build an index with option -a "
-             "to use this feature.");
-  }
-  LOG(DEBUG) << "Performing SOP scan for full list for: " << subject << "\n";
-  Id relId;
-  if (_vocab.getId(subject, &relId)) {
-    LOG(TRACE) << "Successfully got key ID.\n";
-    scanSOP(relId, result);
-  }
-  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
-}
-
-// _____________________________________________________________________________
-void Index::scanOPS(const string& object, IdTable* result) const {
-  if (!_opsFile.isOpen()) {
-    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-             "Cannot use predicate variables without the required "
-             "index permutations. Build an index with option -a "
-             "to use this feature.");
-  }
-  LOG(DEBUG) << "Performing OPS scan for full list for: " << object << "\n";
-  Id relId;
-  if (_vocab.getId(object, &relId)) {
-    LOG(TRACE) << "Successfully got key ID.\n";
-    scanOPS(relId, result);
-  }
-  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
-}
-
-// _____________________________________________________________________________
-void Index::scanOSP(const string& object, IdTable* result) const {
-  if (!_ospFile.isOpen()) {
-    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-             "Cannot use predicate variables without the required "
-             "index permutations. Build an index with option -a "
-             "to use this feature.");
-  }
-  LOG(DEBUG) << "Performing OSP scan for full list for: " << object << "\n";
-  Id relId;
-  if (_vocab.getId(object, &relId)) {
-    LOG(TRACE) << "Successfully got key ID.\n";
-    scanOSP(relId, result);
-  }
-  LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
-}
-
-// _____________________________________________________________________________
-void Index::scanPSO(Id predicate, IdTable* result) const {
-  if (_psoMeta.relationExists(predicate)) {
-    const FullRelationMetaData& rmd = _psoMeta.getRmd(predicate)._rmdPairs;
-    result->reserve(rmd.getNofElements() + 2);
-    result->resize(rmd.getNofElements());
-    _psoFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                  rmd._startFullIndex);
-  }
-}
-
-// _____________________________________________________________________________
-void Index::scanPOS(Id predicate, IdTable* result) const {
-  if (_posMeta.relationExists(predicate)) {
-    const FullRelationMetaData& rmd = _posMeta.getRmd(predicate)._rmdPairs;
-    result->reserve(rmd.getNofElements() + 2);
-    result->resize(rmd.getNofElements());
-    _posFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                  rmd._startFullIndex);
-  }
-}
-
-// _____________________________________________________________________________
-void Index::scanSPO(Id subject, IdTable* result) const {
-  if (_spoMeta.relationExists(subject)) {
-    const FullRelationMetaData& rmd = _spoMeta.getRmd(subject)._rmdPairs;
-    result->reserve(rmd.getNofElements() + 2);
-    result->resize(rmd.getNofElements());
-    _spoFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                  rmd._startFullIndex);
-  }
-}
-
-// _____________________________________________________________________________
-void Index::scanSOP(Id subject, IdTable* result) const {
-  if (_sopMeta.relationExists(subject)) {
-    const FullRelationMetaData& rmd = _sopMeta.getRmd(subject)._rmdPairs;
-    result->reserve(rmd.getNofElements() + 2);
-    result->resize(rmd.getNofElements());
-    _sopFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                  rmd._startFullIndex);
-  }
-}
-
-// _____________________________________________________________________________
-void Index::scanOSP(Id object, IdTable* result) const {
-  if (_ospMeta.relationExists(object)) {
-    const FullRelationMetaData& rmd = _ospMeta.getRmd(object)._rmdPairs;
-    result->reserve(rmd.getNofElements() + 2);
-    result->resize(rmd.getNofElements());
-    _ospFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                  rmd._startFullIndex);
-  }
-}
-
-// _____________________________________________________________________________
-void Index::scanOPS(Id object, IdTable* result) const {
-  if (_opsMeta.relationExists(object)) {
-    const FullRelationMetaData& rmd = _opsMeta.getRmd(object)._rmdPairs;
-    result->reserve(rmd.getNofElements() + 2);
-    result->resize(rmd.getNofElements());
-    _opsFile.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                  rmd._startFullIndex);
   }
 }
 
@@ -1493,8 +1124,8 @@ size_t Index::relationCardinality(const string& relationName) const {
   }
   Id relId;
   if (_vocab.getId(relationName, &relId)) {
-    if (this->_psoMeta.relationExists(relId)) {
-      return this->_psoMeta.getRmd(relId).getNofElements();
+    if (this->_PSO.metaData().relationExists(relId)) {
+      return this->_PSO.metaData().getRmd(relId).getNofElements();
     }
   }
   return 0;
@@ -1504,8 +1135,8 @@ size_t Index::relationCardinality(const string& relationName) const {
 size_t Index::subjectCardinality(const string& sub) const {
   Id relId;
   if (_vocab.getId(sub, &relId)) {
-    if (this->_spoMeta.relationExists(relId)) {
-      return this->_spoMeta.getRmd(relId).getNofElements();
+    if (this->_SPO.metaData().relationExists(relId)) {
+      return this->_SPO.metaData().getRmd(relId).getNofElements();
     }
   }
   return 0;
@@ -1515,8 +1146,8 @@ size_t Index::subjectCardinality(const string& sub) const {
 size_t Index::objectCardinality(const string& obj) const {
   Id relId;
   if (_vocab.getId(obj, &relId)) {
-    if (this->_ospMeta.relationExists(relId)) {
-      return this->_ospMeta.getRmd(relId).getNofElements();
+    if (this->_OSP.metaData().relationExists(relId)) {
+      return this->_OSP.metaData().getRmd(relId).getNofElements();
     }
   }
   return 0;
@@ -1578,163 +1209,13 @@ bool Index::shouldBeExternalized(const string& object) {
 }
 
 // _____________________________________________________________________________
-vector<float> Index::getPSOMultiplicities(const string& key) const {
-  Id keyId;
-  vector<float> res;
-  if (_vocab.getId(key, &keyId) && _psoMeta.relationExists(keyId)) {
-    auto rmd = _psoMeta.getRmd(keyId);
-    auto logM1 = rmd.getCol1LogMultiplicity();
-    res.push_back(static_cast<float>(pow(2, logM1)));
-    auto logM2 = rmd.getCol2LogMultiplicity();
-    res.push_back(static_cast<float>(pow(2, logM2)));
-  } else {
-    res.push_back(1);
-    res.push_back(1);
-  }
-  return res;
-}
-
-// _____________________________________________________________________________
-vector<float> Index::getPOSMultiplicities(const string& key) const {
-  Id keyId;
-  vector<float> res;
-  if (_vocab.getId(key, &keyId) && _posMeta.relationExists(keyId)) {
-    auto rmd = _posMeta.getRmd(keyId);
-    auto logM1 = rmd.getCol1LogMultiplicity();
-    res.push_back(static_cast<float>(pow(2, logM1)));
-    auto logM2 = rmd.getCol2LogMultiplicity();
-    res.push_back(static_cast<float>(pow(2, logM2)));
-  } else {
-    res.push_back(1);
-    res.push_back(1);
-  }
-  return res;
-}
-
-// _____________________________________________________________________________
-vector<float> Index::getSPOMultiplicities(const string& key) const {
-  Id keyId;
-  vector<float> res;
-  if (_vocab.getId(key, &keyId) && _spoMeta.relationExists(keyId)) {
-    auto rmd = _spoMeta.getRmd(keyId);
-    auto logM1 = rmd.getCol1LogMultiplicity();
-    res.push_back(static_cast<float>(pow(2, logM1)));
-    auto logM2 = rmd.getCol2LogMultiplicity();
-    res.push_back(static_cast<float>(pow(2, logM2)));
-  } else {
-    res.push_back(1);
-    res.push_back(1);
-  }
-  return res;
-}
-
-// _____________________________________________________________________________
-vector<float> Index::getSOPMultiplicities(const string& key) const {
-  Id keyId;
-  vector<float> res;
-  if (_vocab.getId(key, &keyId) && _sopMeta.relationExists(keyId)) {
-    auto rmd = _sopMeta.getRmd(keyId);
-    auto logM1 = rmd.getCol1LogMultiplicity();
-    res.push_back(static_cast<float>(pow(2, logM1)));
-    auto logM2 = rmd.getCol2LogMultiplicity();
-    res.push_back(static_cast<float>(pow(2, logM2)));
-  } else {
-    res.push_back(1);
-    res.push_back(1);
-  }
-  return res;
-}
-
-// _____________________________________________________________________________
-vector<float> Index::getOSPMultiplicities(const string& key) const {
-  Id keyId;
-  vector<float> res;
-  if (_vocab.getId(key, &keyId) && _ospMeta.relationExists(keyId)) {
-    auto rmd = _ospMeta.getRmd(keyId);
-    auto logM1 = rmd.getCol1LogMultiplicity();
-    res.push_back(static_cast<float>(pow(2, logM1)));
-    auto logM2 = rmd.getCol2LogMultiplicity();
-    res.push_back(static_cast<float>(pow(2, logM2)));
-  } else {
-    res.push_back(1);
-    res.push_back(1);
-  }
-  return res;
-}
-
-// _____________________________________________________________________________
-vector<float> Index::getOPSMultiplicities(const string& key) const {
-  Id keyId;
-  vector<float> res;
-  if (_vocab.getId(key, &keyId) && _opsMeta.relationExists(keyId)) {
-    auto rmd = _opsMeta.getRmd(keyId);
-    auto logM1 = rmd.getCol1LogMultiplicity();
-    res.push_back(static_cast<float>(pow(2, logM1)));
-    auto logM2 = rmd.getCol2LogMultiplicity();
-    res.push_back(static_cast<float>(pow(2, logM2)));
-  } else {
-    res.push_back(1);
-    res.push_back(1);
-  }
-  return res;
-}
-
-// _____________________________________________________________________________
-vector<float> Index::getSPOMultiplicities() const {
-  return vector<float>{
-      {static_cast<float>(getNofTriples() / getNofSubjects()),
-       static_cast<float>(getNofTriples() / getNofPredicates()),
-       static_cast<float>(getNofTriples() / getNofObjects())}};
-}
-
-// _____________________________________________________________________________
-vector<float> Index::getSOPMultiplicities() const {
-  return vector<float>{
-      {static_cast<float>(getNofTriples() / getNofSubjects()),
-       static_cast<float>(getNofTriples() / getNofObjects()),
-       static_cast<float>(getNofTriples() / getNofPredicates())}};
-}
-
-// _____________________________________________________________________________
-vector<float> Index::getPSOMultiplicities() const {
-  return vector<float>{
-      {static_cast<float>(getNofTriples() / getNofPredicates()),
-       static_cast<float>(getNofTriples() / getNofSubjects()),
-       static_cast<float>(getNofTriples() / getNofObjects())}};
-}
-
-// _____________________________________________________________________________
-vector<float> Index::getPOSMultiplicities() const {
-  return vector<float>{
-      {static_cast<float>(getNofTriples() / getNofPredicates()),
-       static_cast<float>(getNofTriples() / getNofObjects()),
-       static_cast<float>(getNofTriples() / getNofSubjects())}};
-}
-
-// _____________________________________________________________________________
-vector<float> Index::getOSPMultiplicities() const {
-  return vector<float>{
-      {static_cast<float>(getNofTriples() / getNofObjects()),
-       static_cast<float>(getNofTriples() / getNofSubjects()),
-       static_cast<float>(getNofTriples() / getNofPredicates())}};
-}
-
-// _____________________________________________________________________________
-vector<float> Index::getOPSMultiplicities() const {
-  return vector<float>{
-      {static_cast<float>(getNofTriples() / getNofObjects()),
-       static_cast<float>(getNofTriples() / getNofPredicates()),
-       static_cast<float>(getNofTriples() / getNofSubjects())}};
-}
-
-// _____________________________________________________________________________
 void Index::setKbName(const string& name) {
-  _psoMeta.setName(name);
-  _posMeta.setName(name);
-  _spoMeta.setName(name);
-  _sopMeta.setName(name);
-  _ospMeta.setName(name);
-  _opsMeta.setName(name);
+  _POS.setKbName(name);
+  _PSO.setKbName(name);
+  _SOP.setKbName(name);
+  _SPO.setKbName(name);
+  _OPS.setKbName(name);
+  _OSP.setKbName(name);
 }
 
 // ____________________________________________________________________________
@@ -1813,7 +1294,7 @@ void Index::readConfiguration() {
 string Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
   auto& spo = *triplePtr;
   size_t upperBound = 3;
-  string langtag = "";
+  string langtag;
   if (ad_utility::isXsdValue(spo[2])) {
     spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
     upperBound = 2;
@@ -1831,7 +1312,7 @@ string Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
 
 // ___________________________________________________________________________
 void Index::initializeVocabularySettingsBuild() {
-  if (_settingsFileName == "") {
+  if (_settingsFileName.empty()) {
     return;
   }
   std::ifstream f(_settingsFileName);

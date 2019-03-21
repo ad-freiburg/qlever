@@ -24,8 +24,7 @@ using std::vector;
 #define EMPH_OFF "\033[22m"
 
 // Available options.
-struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
-                           {"help", no_argument, NULL, 'h'},
+struct option options[] = {{"help", no_argument, NULL, 'h'},
                            {"index", required_argument, NULL, 'i'},
                            {"worker-threads", required_argument, NULL, 'j'},
                            {"on-disk-literals", no_argument, NULL, 'l'},
@@ -42,9 +41,6 @@ void printUsage(char* execName) {
   cout << "Usage: " << execName << " -p <PORT> -i <index> [OPTIONS]" << endl
        << endl;
   cout << "Options" << endl;
-  cout << "  " << std::setw(20) << "a, all-permutations" << std::setw(1)
-       << "    "
-       << "Load all six permuations of the index instead of only two." << endl;
   cout << "  " << std::setw(20) << "h, help" << std::setw(1) << "    "
        << "Show this help and exit." << endl;
   cout << "  " << std::setw(20) << "i, index" << std::setw(1) << "    "
@@ -74,7 +70,6 @@ int main(int argc, char** argv) {
   // filled / set depending on the options.
   string index = "";
   bool text = false;
-  bool allPermutations = false;
   int port = -1;
   int numThreads = 1;
   bool usePatterns = true;
@@ -96,9 +91,6 @@ int main(int argc, char** argv) {
         break;
       case 't':
         text = true;
-        break;
-      case 'a':
-        allPermutations = true;
         break;
       case 'j':
         numThreads = atoi(optarg);
@@ -142,7 +134,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numThreads);
-    server.initialize(index, text, allPermutations, usePatterns);
+    server.initialize(index, text, usePatterns);
     server.run();
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled

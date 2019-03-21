@@ -24,8 +24,7 @@ using std::string;
 #define EMPH_OFF "\033[22m"
 
 // Available options.
-struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
-                           {"cost-factors", required_argument, NULL, 'c'},
+struct option options[] = {{"cost-factors", required_argument, NULL, 'c'},
                            {"help", no_argument, NULL, 'h'},
                            {"index", required_argument, NULL, 'i'},
                            {"interactive", no_argument, NULL, 'I'},
@@ -45,9 +44,6 @@ void printUsage(char* execName) {
 
   cout << "Usage: " << execName << " -i <index> [OPTIONS]" << endl << endl;
   cout << "Options" << endl;
-  cout << "  " << std::setw(20) << "a, all-permutations" << std::setw(1)
-       << "    "
-       << "Load all six permuations of the index instead of only two." << endl;
   cout << "  " << std::setw(20) << "c, cost-factors" << std::setw(1) << "    "
        << "Path to a file containing cost factors." << endl;
   cout << "  " << std::setw(20) << "h, help" << std::setw(1) << "    "
@@ -86,7 +82,6 @@ int main(int argc, char** argv) {
   bool text = false;
   bool interactive = false;
   bool onDiskLiterals = false;
-  bool allPermutations = false;
   bool usePatterns = false;
 
   optind = 1;
@@ -112,9 +107,6 @@ int main(int argc, char** argv) {
         break;
       case 'l':
         onDiskLiterals = true;
-        break;
-      case 'a':
-        allPermutations = true;
         break;
       case 'h':
         printUsage(argv[0]);
@@ -150,7 +142,7 @@ int main(int argc, char** argv) {
     Index index;
     index.setUsePatterns(usePatterns);
     index.setOnDiskLiterals(onDiskLiterals);
-    index.createFromOnDiskIndex(indexName, allPermutations);
+    index.createFromOnDiskIndex(indexName);
     if (text) {
       index.addTextFromOnDiskIndex();
     }

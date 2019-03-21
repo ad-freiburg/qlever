@@ -4,10 +4,12 @@ PROJECT_DIR=$(readlink -f -- "$(dirname ${BASH_SOURCE[0]})/..")
 # Change to the project directory so we can use simple relative paths
 echo "Changing to project directory: $PROJECT_DIR"
 pushd $PROJECT_DIR
-BINARY_DIR=$(readlink -f -- ./build)
+BINARY_DIR=$(readlink -f -- ./cmake-build-debug/)
+
 if [ ! -e $BINARY_DIR ]; then
 	BINARY_DIR=$(readlink -f -- .)
 fi
+echo "Binary dir is $BINARY_DIR"
 function bail {
 	echo "$*"
 	exit 1
@@ -57,7 +59,7 @@ if [ "$1" != "no-index" ]; then
 	rm -f "$INDEX.*"
 	pushd "$BINARY_DIR"
 	echo "Building index $INDEX"
-	./IndexBuilderMain -a -l -i "$INDEX" \
+	./IndexBuilderMain -l -i "$INDEX" \
 		-n "$INPUT.nt" \
 		-w "$INPUT.wordsfile.tsv" \
 		-d "$INPUT.docsfile.tsv" || bail "Building Index failed"
@@ -68,7 +70,7 @@ fi
 # then we can't easily get the SERVER_PID out of that subshell
 pushd "$BINARY_DIR"
 echo "Launching server from path $(pwd)"
-./ServerMain -i "$INDEX" -p 9099 -t -a &> server_log.txt &
+./ServerMain -i "$INDEX" -p 9099 -t &> server_log.txt &
 SERVER_PID=$!
 popd
 

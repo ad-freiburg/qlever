@@ -107,7 +107,7 @@ int main(int argc, char** argv) {
   try {
     Index index;
     index.setUsePatterns(false);
-    index.createFromOnDiskIndex(baseName, true);
+    index.createFromOnDiskIndex(baseName);
     index.addPatternsToExistingIndex();
   } catch (const std::exception& e) {
     LOG(ERROR) << e.what() << std::endl;

@@ -68,10 +68,11 @@ class File {
   bool open(const char* filename, const char* mode) {
     _file = fopen(filename, mode);
     if (_file == NULL) {
-      cout << "! ERROR opening file \"" << filename << "\" with mode \"" << mode
-           << "\" (" << strerror(errno) << ")" << endl
-           << endl;
-      exit(1);
+      std::stringstream err;
+      err << "! ERROR opening file \"" << filename << "\" with mode \"" << mode
+          << "\" (" << strerror(errno) << ")" << endl
+          << endl;
+      throw std::runtime_error(err.str());
     }
     _name = filename;
     return true;

@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./Join.h"
+#include <functional>
 #include <sstream>
 #include <unordered_set>
 #include "./QueryExecutionTree.h"
@@ -274,24 +275,33 @@ Join::ScanMethodType Join::getScanMethod(
   ScanMethodType scanMethod;
   IndexScan& scan =
       *static_cast<IndexScan*>(fullScanDummyTree->getRootOperation().get());
+
+  // this works because the join operations execution Context never changes
+  // during its lifetime
+  const auto& idx = _executionContext->getIndex();
+  const auto scanLambda = [&idx](const auto& perm) {
+    return
+        [&idx, &perm](Id id, IdTable* idTable) { idx.scan(id, idTable, perm); };
+  };
+
   switch (scan.getType()) {
     case IndexScan::FULL_INDEX_SCAN_SPO:
-      scanMethod = &Index::scanSPO;
+      scanMethod = scanLambda(idx._SPO);
       break;
     case IndexScan::FULL_INDEX_SCAN_SOP:
-      scanMethod = &Index::scanSOP;
+      scanMethod = scanLambda(idx._SOP);
       break;
     case IndexScan::FULL_INDEX_SCAN_PSO:
-      scanMethod = &Index::scanPSO;
+      scanMethod = scanLambda(idx._PSO);
       break;
     case IndexScan::FULL_INDEX_SCAN_POS:
-      scanMethod = &Index::scanPOS;
+      scanMethod = scanLambda(idx._POS);
       break;
     case IndexScan::FULL_INDEX_SCAN_OSP:
-      scanMethod = &Index::scanOSP;
+      scanMethod = scanLambda(idx._OSP);
       break;
     case IndexScan::FULL_INDEX_SCAN_OPS:
-      scanMethod = &Index::scanOPS;
+      scanMethod = scanLambda(idx._OPS);
       break;
     default:
       AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
@@ -308,7 +318,6 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
   if (ndr.size() == 0) {
     return;
   }
-  const auto* index = &getIndex();
   const ScanMethodType scan = getScanMethod(_left);
   // Iterate through non-dummy.
   Id currentJoinId = ndr(0, _rightJoinCol);
@@ -322,7 +331,7 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
       IdTable jr(2);
-      (index->*scan)(currentJoinId, &jr);
+      scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
       appendCrossProduct(jr.begin(), jr.end(), joinItemFrom, joinItemEnd, res);
@@ -335,7 +344,7 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
   // Do the scan for the final element.
   LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
   IdTable jr(2);
-  (index->*scan)(currentJoinId, &jr);
+  scan(currentJoinId, &jr);
   LOG(TRACE) << "Got #items: " << jr.size() << endl;
   // Build the cross product.
   appendCrossProduct(jr.begin(), jr.end(), joinItemFrom, joinItemEnd, res);
@@ -351,7 +360,6 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
   }
   // Get the scan method (depends on type of dummy tree), use a function ptr.
   const ScanMethodType scan = getScanMethod(_right);
-  const auto* index = &getIndex();
   // Iterate through non-dummy.
   Id currentJoinId = ndr(0, _leftJoinCol);
   auto joinItemFrom = ndr.begin();
@@ -364,7 +372,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
       IdTable jr(2);
-      (index->*scan)(currentJoinId, &jr);
+      scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
       appendCrossProduct(joinItemFrom, joinItemEnd, jr.begin(), jr.end(), res);
@@ -377,7 +385,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
   // Do the scan for the final element.
   LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
   IdTable jr(2);
-  (index->*scan)(currentJoinId, &jr);
+  scan(currentJoinId, &jr);
   LOG(TRACE) << "Got #items: " << jr.size() << endl;
   // Build the cross product.
   appendCrossProduct(joinItemFrom, joinItemEnd, jr.begin(), jr.end(), res);
