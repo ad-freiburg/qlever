@@ -109,8 +109,12 @@ class IdTableImpl {
       return *reinterpret_cast<const value_type*>(_data + (_row * COLS));
     }
 
-    reference operator[](size_t i) { return *reinterpret_cast<value_type*>(_data + (_row + i) * COLS); }
-    const reference operator[](size_t i) const { return *reinterpret_cast<const value_type*>(_data + (_row + i) * COLS); }
+    reference operator[](size_t i) {
+      return *reinterpret_cast<value_type*>(_data + (_row + i) * COLS);
+    }
+    const reference operator[](size_t i) const {
+      return *reinterpret_cast<const value_type*>(_data + (_row + i) * COLS);
+    }
 
     size_t row() const { return _row; }
     size_t cols() const { return COLS; }

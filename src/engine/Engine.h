@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <vector>
 
+#include <parallel/algorithm>
 #include "../global/Constants.h"
 #include "../global/Id.h"
 #include "../global/Pattern.h"
@@ -16,7 +17,6 @@
 #include "../util/Log.h"
 #include "./IndexSequence.h"
 #include "IdTable.h"
-#include <parallel/algorithm>
 
 using std::array;
 using std::vector;
@@ -199,9 +199,10 @@ class Engine {
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
       __gnu_parallel::sort(stab.begin(), stab.end(),
-                [&keyColumn](const auto& a, const auto& b) {
-                  return a[keyColumn] < b[keyColumn];
-                }, __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
+                           [&keyColumn](const auto& a, const auto& b) {
+                             return a[keyColumn] < b[keyColumn];
+                           },
+                           __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
 
     } else {
       std::sort(stab.begin(), stab.end(),
@@ -218,7 +219,8 @@ class Engine {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
-      __gnu_parallel::sort(stab.begin(), stab.end(), comp, __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
+      __gnu_parallel::sort(stab.begin(), stab.end(), comp,
+                           __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
     } else {
       std::sort(stab.begin(), stab.end(), comp);
     }
