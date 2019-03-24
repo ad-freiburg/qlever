@@ -1404,8 +1404,8 @@ void Index::getRhsForSingleLhs(const IdTable& in, Id lhsId,
       in.begin(), in.end(), compareElem,
       [](const auto& a, const auto& b) { return a[0] < b[0]; });
 
-  while (it != in.end() && it[0] == lhsId) {
-    result->push_back({it[1]});
+  while (it != in.end() && (*it)[0] == lhsId) {
+    result->push_back({(*it)[1]});
     ++it;
   }
 

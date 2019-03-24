@@ -109,8 +109,14 @@ class IdTableImpl {
       return *reinterpret_cast<const value_type*>(_data + (_row * COLS));
     }
 
-    reference operator[](size_t i) { return *reinterpret_cast<value_type*>(_data + (_row + i) * COLS); }
-    const reference operator[](size_t i) const { return *reinterpret_cast<const value_type*>(_data + (_row + i) * COLS); }
+    // access the element that is i steps ahead
+    // used by the parallel sorting in GCC
+    reference operator[](size_t i) {
+      return *reinterpret_cast<value_type*>(_data + (_row + i) * COLS);
+    }
+    const reference operator[](size_t i) const {
+      return *reinterpret_cast<const value_type*>(_data + (_row + i) * COLS);
+    }
 
     size_t row() const { return _row; }
     size_t cols() const { return COLS; }
@@ -186,7 +192,8 @@ class IdTableImpl<0> {
    **/
   class Row {
    public:
-    Row(size_t cols) : _data(new Id[cols]), _cols(cols), _allocated(true) {}
+    explicit Row(size_t cols)
+        : _data(new Id[cols]), _cols(cols), _allocated(true) {}
     Row(Id* data, size_t cols) : _data(data), _cols(cols), _allocated(false) {}
     virtual ~Row() {
       if (_allocated) {
@@ -232,7 +239,7 @@ class IdTableImpl<0> {
         return *this;
       }
       // This class cannot use move semantics if at least one of the two
-      // rows invovled in an assigment does not manage it's data, but rather
+      // rows invovlved in an assigment does not manage it's data, but rather
       // functions as a view into an IdTable
       if (_allocated) {
         // If we manage our own storage recreate that to fit the other row
@@ -386,8 +393,13 @@ class IdTableImpl<0> {
     Row& operator*() { return _rowView; }
     const Row& operator*() const { return _rowView; }
 
-    //Row operator[](size_t i) { return Row(_data + (_row + i) * _cols , _cols); }
-    const Row operator[](size_t i) const { return Row(_data + (_row + i) * _cols , _cols); }
+    // access the element the is i steps ahead
+    // we need to construct now rows for this which should not be too expensive
+    Row operator[](size_t i) { return Row(_data + (_row + i) * _cols, _cols); }
+
+    const Row operator[](size_t i) const {
+      return Row(_data + (_row + i) * _cols, _cols);
+    }
 
     size_t row() const { return _row; }
     size_t cols() const { return _cols; }
