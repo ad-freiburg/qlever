@@ -23,7 +23,24 @@ static const int NUM_TRIPLES_PER_PARTIAL_VOCAB = 100000000;
 
 // How many Triples is the Buffer supposed to parse ahead.
 // If too big, the memory consumption is high, if too low we possibly lose speed
-static const size_t PARSER_BATCH_SIZE = 10000000;
+static const size_t PARSER_BATCH_SIZE = 1000000;
+
+// That many triples does the turtle parser have to buffer before the call to
+// getline returns (unless our input reaches EOF). This makes parsing from streams faster.
+static const size_t PARSER_MIN_TRIPLES_AT_ONCE = 1000;
+
+// When reading from a file, Chunks of this size will
+// be fed to the parser at once (100 << 20  is exactly 100 MiB
+static const size_t FILE_BUFFER_SIZE = 100 << 20;
+
+// When the BZIP2 parser encouters a parsing exception it will increase its
+// buffer and try again (we have no other way currently to determine if the
+// exception was "real" or only because we cut a statement in the middle. Once
+// it holds this many bytes in total, it will assume that there was indeed an
+// Exception. (Only works safely if no Turtle statement is longer than this
+// size. I think currently 1 GB should be enough for this., this is 10MB per
+// triple average over 1000 triples.
+static const size_t BZIP2_MAX_TOTAL_BUFFER_SIZE = 1 << 30;
 
 // If a single relation has more than this number of triples, it will be
 // buffered into an MmapVector during the creation of the relations;

@@ -159,9 +159,6 @@ target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_IN
 add_executable(TurtleParserMain src/TurtleParserMain.cpp)
 target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(Bzip2WrapperMain src/parser/Bzip2WrapperMain.cpp)
-target_link_libraries(Bzip2WrapperMain -lbz2)
-
 #add_executable(TextFilterComparison src/experiments/TextFilterComparison.cpp)
 #target_link_libraries (TextFilterComparison experiments)
 
