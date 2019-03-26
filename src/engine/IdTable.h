@@ -31,7 +31,7 @@ class IdTableImpl {
     using value_type = std::array<Id, COLS>;
     using pointer = value_type*;
     using reference = value_type&;
-    using iterator_category = std::forward_iterator_tag;
+    using iterator_category = std::random_access_iterator_tag;
 
     iterator() : _data(nullptr), _row(0) {}
     // This constructor has to take three arguments for compatibility with
@@ -47,6 +47,8 @@ class IdTableImpl {
     iterator(iterator&& other) : _data(other._data), _row(other._row) {}
 
     iterator& operator=(const iterator& other) {
+      // TODO<joka921, floriankramer> I think I don't like this use of placement new.
+      // It only works because this struct is simple anyway.
       new (this) iterator(other);
       return *this;
     }
@@ -61,6 +63,12 @@ class IdTableImpl {
       return *this;
     }
 
+    // multistep increment
+    iterator& operator+=(difference_type i) {
+      _row += i;
+      return *this;
+    }
+
     // postfix increment
     iterator operator++(int) {
       iterator tmp(*this);
@@ -68,9 +76,15 @@ class IdTableImpl {
       return tmp;
     }
 
-    // prefix increment
+    // prefix decrement
     iterator& operator--() {
       --_row;
+      return *this;
+    }
+
+    // multistep decrement
+    iterator& operator-=(difference_type i) {
+      _row -= i;
       return *this;
     }
 
@@ -81,13 +95,13 @@ class IdTableImpl {
       return tmp;
     }
 
-    iterator operator+(size_t i) const {
+    iterator operator+(difference_type i) const {
       return iterator(_data, _row + i, COLS);
     }
-    iterator operator-(size_t i) const {
+    iterator operator-(difference_type i) const {
       return iterator(_data, _row - i, COLS);
     }
-    ssize_t operator-(const iterator& other) const { return _row - other._row; }
+    difference_type operator-(const iterator& other) const { return _row - other._row; }
 
     bool operator==(iterator const& other) const {
       return _data == other._data && _row == other._row;
@@ -109,12 +123,22 @@ class IdTableImpl {
       return *reinterpret_cast<const value_type*>(_data + (_row * COLS));
     }
 
+    // This is indeed the correct way to implement such things
+    pointer operator->() {
+      return reinterpret_cast<value_type*>(_data + (_row * COLS));
+    }
+
+    const value_type* operator->() const {
+      return reinterpret_cast<const value_type*>(_data + (_row * COLS));
+    }
+
     // access the element that is i steps ahead
     // used by the parallel sorting in GCC
-    reference operator[](size_t i) {
+    reference operator[](difference_type i) {
       return *reinterpret_cast<value_type*>(_data + (_row + i) * COLS);
     }
-    const reference operator[](size_t i) const {
+
+    const reference operator[](difference_type i) const {
       return *reinterpret_cast<const value_type*>(_data + (_row + i) * COLS);
     }
 
@@ -204,6 +228,7 @@ class IdTableImpl<0> {
         : _data(new Id[other._cols]), _cols(other._cols), _allocated(true) {
       std::memcpy(_data, other._data, sizeof(Id) * _cols);
     }
+
     Row(Row&& other)
         : _data(other._allocated ? other._data : new Id[other._cols]),
           _cols(other._cols),
@@ -249,6 +274,10 @@ class IdTableImpl<0> {
           // of move semantics.
           _data = other._data;
           _cols = other._cols;
+
+          // otherwise the data will be deleted unexpectedly
+          other._data = nullptr;
+
           return *this;
         } else {
           _data = new Id[other._cols];
@@ -307,7 +336,7 @@ class IdTableImpl<0> {
     using value_type = Row;
     using pointer = Row*;
     using reference = Row&;
-    using iterator_category = std::forward_iterator_tag;
+    using iterator_category = std::random_access_iterator_tag;
 
     iterator() : _data(nullptr), _row(0), _cols(0), _rowView(nullptr, 0) {}
     iterator(Id* data, size_t row, size_t cols)
@@ -346,6 +375,13 @@ class IdTableImpl<0> {
       return *this;
     }
 
+    // multi-step increment
+    iterator& operator+=(difference_type i) {
+      _row += i;
+      _rowView._data = _data + (_row * _cols);
+      return *this;
+    }
+
     // postfix increment
     iterator operator++(int) {
       iterator tmp(*this);
@@ -354,9 +390,16 @@ class IdTableImpl<0> {
       return tmp;
     }
 
-    // prefix increment
+    // prefix decrement
     iterator& operator--() {
       --_row;
+      _rowView._data = _data + (_row * _cols);
+      return *this;
+    }
+
+    // multi-step decrement
+    iterator& operator-=(difference_type i) {
+      _row -= i;
       _rowView._data = _data + (_row * _cols);
       return *this;
     }
@@ -369,13 +412,13 @@ class IdTableImpl<0> {
       return tmp;
     }
 
-    iterator operator+(size_t i) const {
+    iterator operator+(difference_type i) const {
       return iterator(_data, _row + i, _cols);
     }
-    iterator operator-(size_t i) const {
+    iterator operator-(difference_type i) const {
       return iterator(_data, _row - i, _cols);
     }
-    ssize_t operator-(const iterator& other) const { return _row - other._row; }
+    difference_type operator-(const iterator& other) const { return _row - other._row; }
 
     bool operator==(iterator const& other) const {
       return _data == other._data && _row == other._row && _cols == other._cols;
@@ -393,11 +436,17 @@ class IdTableImpl<0> {
     Row& operator*() { return _rowView; }
     const Row& operator*() const { return _rowView; }
 
-    // access the element the is i steps ahead
-    // we need to construct now rows for this which should not be too expensive
-    Row operator[](size_t i) { return Row(_data + (_row + i) * _cols, _cols); }
+    pointer operator->() {return &_rowView;}
+    const value_type* operator->() const {return const_cast<const pointer>(&_rowView);}
 
-    const Row operator[](size_t i) const {
+
+    // access the element the is i steps ahead
+    // we need to construct new rows for this which should not be too expensive
+    // In addition: Non const rows behave like references since they hold pointers
+    // to specific parts of the _data. Thus they behave according to the standard.
+    Row operator[](difference_type i) { return Row(_data + (_row + i) * _cols, _cols); }
+
+    const Row operator[](difference_type i) const {
       return Row(_data + (_row + i) * _cols, _cols);
     }
 
