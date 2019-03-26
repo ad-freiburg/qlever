@@ -47,8 +47,8 @@ class IdTableImpl {
     iterator(iterator&& other) : _data(other._data), _row(other._row) {}
 
     iterator& operator=(const iterator& other) {
-      // TODO<joka921, floriankramer> I think I don't like this use of placement new.
-      // It only works because this struct is simple anyway.
+      // TODO<joka921, floriankramer> I think I don't like this use of placement
+      // new. It only works because this struct is simple anyway.
       new (this) iterator(other);
       return *this;
     }
@@ -101,7 +101,9 @@ class IdTableImpl {
     iterator operator-(difference_type i) const {
       return iterator(_data, _row - i, COLS);
     }
-    difference_type operator-(const iterator& other) const { return _row - other._row; }
+    difference_type operator-(const iterator& other) const {
+      return _row - other._row;
+    }
 
     bool operator==(iterator const& other) const {
       return _data == other._data && _row == other._row;
@@ -418,7 +420,9 @@ class IdTableImpl<0> {
     iterator operator-(difference_type i) const {
       return iterator(_data, _row - i, _cols);
     }
-    difference_type operator-(const iterator& other) const { return _row - other._row; }
+    difference_type operator-(const iterator& other) const {
+      return _row - other._row;
+    }
 
     bool operator==(iterator const& other) const {
       return _data == other._data && _row == other._row && _cols == other._cols;
@@ -436,15 +440,19 @@ class IdTableImpl<0> {
     Row& operator*() { return _rowView; }
     const Row& operator*() const { return _rowView; }
 
-    pointer operator->() {return &_rowView;}
-    const value_type* operator->() const {return const_cast<const pointer>(&_rowView);}
-
+    pointer operator->() { return &_rowView; }
+    const value_type* operator->() const {
+      return const_cast<const pointer>(&_rowView);
+    }
 
     // access the element the is i steps ahead
     // we need to construct new rows for this which should not be too expensive
-    // In addition: Non const rows behave like references since they hold pointers
-    // to specific parts of the _data. Thus they behave according to the standard.
-    Row operator[](difference_type i) { return Row(_data + (_row + i) * _cols, _cols); }
+    // In addition: Non const rows behave like references since they hold
+    // pointers to specific parts of the _data. Thus they behave according to
+    // the standard.
+    Row operator[](difference_type i) {
+      return Row(_data + (_row + i) * _cols, _cols);
+    }
 
     const Row operator[](difference_type i) const {
       return Row(_data + (_row + i) * _cols, _cols);
