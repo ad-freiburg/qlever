@@ -4,8 +4,7 @@ PROJECT_DIR=$(readlink -f -- "$(dirname ${BASH_SOURCE[0]})/..")
 # Change to the project directory so we can use simple relative paths
 echo "Changing to project directory: $PROJECT_DIR"
 pushd $PROJECT_DIR
-BINARY_DIR=$(readlink -f -- ./cmake-build-debug/)
-
+BINARY_DIR=$(readlink -f -- ./build)
 if [ ! -e $BINARY_DIR ]; then
 	BINARY_DIR=$(readlink -f -- .)
 fi

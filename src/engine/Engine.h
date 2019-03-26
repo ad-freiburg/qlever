@@ -203,7 +203,6 @@ class Engine {
                              return a[keyColumn] < b[keyColumn];
                            },
                            __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
-
     } else {
       std::sort(stab.begin(), stab.end(),
                 [&keyColumn](const auto& a, const auto& b) {
