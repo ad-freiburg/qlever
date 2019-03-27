@@ -47,13 +47,16 @@ class IdTableImpl {
     iterator(iterator&& other) : _data(other._data), _row(other._row) {}
 
     iterator& operator=(const iterator& other) {
-      // TODO<joka921, floriankramer> I think I don't like this use of placement
-      // new. It only works because this struct is simple anyway.
-      new (this) iterator(other);
+      _data = other._data;
+      _row = other._row;
       return *this;
     }
+
+    // <joka92> I don't think iterators usually need or have move semantics,
+    // But they do not hurt.
     iterator& operator=(iterator&& other) {
-      new (this) iterator(other);
+      _data = other._data;
+      _row = other._row;
       return *this;
     }
 
@@ -125,14 +128,11 @@ class IdTableImpl {
       return *reinterpret_cast<const value_type*>(_data + (_row * COLS));
     }
 
-    // This is indeed the correct way to implement such things
-    pointer operator->() {
-      return reinterpret_cast<value_type*>(_data + (_row * COLS));
-    }
+    // This has to return a pointer to the current element to meet standard
+    // semantics.
+    pointer operator->() { return _data + (_row * COLS); }
 
-    const value_type* operator->() const {
-      return reinterpret_cast<const value_type*>(_data + (_row * COLS));
-    }
+    const value_type* operator->() const { return _data + (_row * COLS); }
 
     // access the element that is i steps ahead
     // used by the parallel sorting in GCC
@@ -441,15 +441,14 @@ class IdTableImpl<0> {
     const Row& operator*() const { return _rowView; }
 
     pointer operator->() { return &_rowView; }
-    const value_type* operator->() const {
-      return const_cast<const pointer>(&_rowView);
-    }
+    const value_type* operator->() const { return &_rowView; }
 
     // access the element the is i steps ahead
     // we need to construct new rows for this which should not be too expensive
     // In addition: Non const rows behave like references since they hold
     // pointers to specific parts of the _data. Thus they behave according to
     // the standard.
+
     Row operator[](difference_type i) {
       return Row(_data + (_row + i) * _cols, _cols);
     }

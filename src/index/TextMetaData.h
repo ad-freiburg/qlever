@@ -138,11 +138,11 @@ class TextMetaData {
  private:
   vector<Id> _blockUpperBoundWordIds;
   vector<Id> _blockUpperBoundEntityIds;
-  size_t _nofEntities;
-  size_t _nofEntityContexts;
-  size_t _nofTextRecords;
-  size_t _nofWordPostings;
-  size_t _nofEntityPostings;
+  size_t _nofEntities = 0;
+  size_t _nofEntityContexts = 0;
+  size_t _nofTextRecords = 0;
+  size_t _nofWordPostings = 0;
+  size_t _nofEntityPostings = 0;
   string _name;
   vector<TextBlockMetaData> _blocks;
 
