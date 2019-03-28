@@ -42,11 +42,9 @@ class Operation {
     timer.start();
     LOG(TRACE) << "Check cache for Operation result" << endl;
     LOG(TRACE) << "Using key: \n" << asString() << endl;
-    /*  auto [newResult, existingResult] =
-          _executionContext->getQueryTreeCache().tryEmplace(asString()); */
+    auto [newResult, existingResult] =
+      _executionContext->getQueryTreeCache().tryEmplace(asString());
 
-    std::shared_ptr<CacheValue> existingResult = nullptr;
-    auto newResult = std::make_shared<CacheValue>();
     if (newResult) {
       LOG(TRACE) << "Not in the cache, need to compute result" << endl;
       // Passing the raw pointer here is ok as the result shared_ptr remains
