@@ -23,79 +23,6 @@ using std::vector;
 
 class Engine {
  public:
-  template <size_t N, size_t M, size_t LEAVE_OUT_IN_B>
-  static inline array<Id, N + M - 1> joinTuple(const array<Id, N>& a,
-                                               const array<Id, M>& b) {
-    array<Id, N + M - 1> res;
-    std::copy(a.begin(), a.end(), res.begin());
-    std::copy(b.begin(), b.begin() + LEAVE_OUT_IN_B, res.begin() + N);
-    std::copy(b.begin() + LEAVE_OUT_IN_B + 1, b.end(),
-              res.begin() + N + LEAVE_OUT_IN_B);
-    return res;
-  }
-
-  template <typename E, size_t N, size_t... I, size_t M, size_t... J>
-  static inline array<E, sizeof...(I) + sizeof...(J)> joinTuples(
-      const array<E, N>& a, const array<E, M>& b, IndexSequence<I...>,
-      IndexSequence<J...>) {
-    return array<E, sizeof...(I) + sizeof...(J)>{{a[I]..., b[J]...}};
-  };
-
-  template <typename E, typename A, typename B>
-  static inline vector<E> joinTuplesInVec(const A& a, const B& b,
-                                          size_t leaveOutInB) {
-    vector<E> res;
-    res.reserve(a.size() + b.size() - 1);
-    res.insert(res.end(), a.begin(), a.end());
-    res.insert(res.end(), b.begin(), b.begin() + leaveOutInB);
-    res.insert(res.end(), b.begin() + leaveOutInB + 1, b.end());
-    return res;
-  };
-
-  template <size_t N, size_t M>
-  static inline void concatTuple(const array<Id, N>& a, const array<Id, M>& b,
-                                 array<Id, N + M>& res) {
-    std::copy(a.begin(), a.end(), res.begin());
-    std::copy(b.begin(), b.end(), res.begin() + N);
-  }
-
-  template <typename A, typename B>
-  static void concatTuple(const A& a, const B& b, vector<Id>& res) {
-    res.reserve(a.size() + b.size());
-    res.insert(res.end(), a.begin(), a.end());
-    res.insert(res.end(), b.begin(), b.end());
-  };
-
-  template <typename E, size_t N, size_t... I>
-  static vector<array<E, sizeof...(I)>> project(const vector<array<E, N>>& tab,
-                                                IndexSequence<I...>) {
-    vector<array<E, sizeof...(I)>> res;
-    res.reserve(tab.size());
-    for (const auto& e : tab) {
-      res.emplace_back(array<E, sizeof...(I)>{{e[I]...}});
-    }
-    return res;
-  }
-
-  template <typename E>
-  static vector<vector<E>> project(const vector<vector<E>>& tab,
-                                   const vector<size_t> indexSeq) {
-    vector<vector<E>> res;
-    res.reserve(tab.size());
-    for (const auto& e : tab) {
-      vector<E> newEle;
-      newEle.reserve(indexSeq.size());
-      for (auto i : indexSeq) {
-        newEle.push_back(e[i]);
-      }
-      res.emplace_back(newEle);
-    }
-    return res;
-  }
-
-  template <typename E, size_t N>
-  static vector<array<E, N>> filterRelationWithSingleId(
-      const vector<array<E, N>>& relation, E entityId, size_t checkColumn);
 
   template <typename Comp, int WIDTH>
   static void filter(const IdTableStatic<WIDTH>& v, const Comp& comp,
@@ -329,23 +256,6 @@ class Engine {
   }
 
  private:
-  template <typename E, size_t N, size_t I>
-  static vector<array<E, N>> doFilterRelationWithSingleId(
-      const vector<array<E, N>>& relation, E entityId) {
-    vector<array<E, N>> result;
-
-    // Binary search for start.
-    auto itt = std::lower_bound(
-        relation.begin(), relation.end(), entityId,
-        [](const array<E, N>& a, const Id entityId) { return a[I] < entityId; });
-
-    while (itt != relation.end() && (*itt)[I] == entityId) {
-      result.push_back(*itt);
-      ++itt;
-    }
-
-    return result;
-  }
 
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
   static void doGallopInnerJoinRightLarge(const IdTableStatic<L_WIDTH>& l1,

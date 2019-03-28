@@ -1,5 +1,5 @@
 add_library(engine
-        Engine.h Engine.cpp
+        Engine.h
         IndexSequence.h
         QueryExecutionTree.h QueryExecutionTree.cpp
         Operation.h
