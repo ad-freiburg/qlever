@@ -4,26 +4,19 @@
 #pragma once
 
 #include <algorithm>
-#include <array>
 #include <iomanip>
 #include <vector>
 
 #include <parallel/algorithm>
 #include "../global/Constants.h"
 #include "../global/Id.h"
-#include "../global/Pattern.h"
 #include "../util/Exception.h"
-#include "../util/HashMap.h"
 #include "../util/Log.h"
 #include "./IndexSequence.h"
 #include "IdTable.h"
 
-using std::array;
-using std::vector;
-
 class Engine {
  public:
-
   template <typename Comp, int WIDTH>
   static void filter(const IdTableStatic<WIDTH>& v, const Comp& comp,
                      IdTableStatic<WIDTH>* result) {
@@ -104,18 +97,18 @@ class Engine {
   }
 
   template <int WIDTH>
-  static void sort(IdTable* tab, size_t keyColumn) {
+  static void sort(IdTable* tab, const size_t keyColumn) {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
       __gnu_parallel::sort(stab.begin(), stab.end(),
-                           [&keyColumn](const auto& a, const auto& b) {
+                           [keyColumn](const auto& a, const auto& b) {
                              return a[keyColumn] < b[keyColumn];
                            },
                            __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
     } else {
       std::sort(stab.begin(), stab.end(),
-                [&keyColumn](const auto& a, const auto& b) {
+                [keyColumn](const auto& a, const auto& b) {
                   return a[keyColumn] < b[keyColumn];
                 });
     }
@@ -144,7 +137,8 @@ class Engine {
    **/
   template <int WIDTH>
   static void distinct(const IdTable& dynInput,
-                       const vector<size_t>& keepIndices, IdTable* dynResult) {
+                       const std::vector<size_t>& keepIndices,
+                       IdTable* dynResult) {
     LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
     const IdTableStatic<WIDTH> input = dynInput.asStaticView<WIDTH>();
     IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
@@ -154,7 +148,7 @@ class Engine {
 
       auto last = std::unique(result.begin(), result.end(),
                               [&keepIndices](const auto& a, const auto& b) {
-                                for (auto& i : keepIndices) {
+                                for (size_t i : keepIndices) {
                                   if (a[i] != b[i]) {
                                     return false;
                                   }
@@ -167,12 +161,15 @@ class Engine {
     }
   }
 
+  /**
+   * @brief Joins IdTables dynA and dynB on join column jc2, returning
+   * the result in dynRes. Creates a cross product for matching rows
+   **/
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
   static void join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
                    size_t jc2, IdTable* dynRes) {
     const IdTableStatic<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
     const IdTableStatic<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
-    IdTableStatic<OUT_WIDTH> result = dynRes->moveToStatic<OUT_WIDTH>();
 
     LOG(DEBUG) << "Performing join between two tables.\n";
     LOG(DEBUG) << "A: width = " << a.cols() << ", size = " << a.size() << "\n";
@@ -180,10 +177,10 @@ class Engine {
 
     // Check trivial case.
     if (a.size() == 0 || b.size() == 0) {
-      *dynRes = result.moveToDynamic();
       return;
     }
 
+    IdTableStatic<OUT_WIDTH> result = dynRes->moveToStatic<OUT_WIDTH>();
     // Cannot just switch l1 and l2 around because the order of
     // items in the result tuples is important.
     if (a.size() / b.size() > GALLOP_THRESHOLD) {
@@ -256,14 +253,13 @@ class Engine {
   }
 
  private:
-
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
   static void doGallopInnerJoinRightLarge(const IdTableStatic<L_WIDTH>& l1,
                                           const size_t jc1,
                                           const IdTableStatic<R_WIDTH>& l2,
                                           const size_t jc2,
                                           IdTableStatic<OUT_WIDTH>* result) {
-    // TODO(schnelle) t rid of goto by using return
+    // TODO(schnelle) this doesn't actually gallop
     LOG(DEBUG) << "Galloping case.\n";
     size_t i = 0;
     size_t j = 0;
@@ -327,6 +323,7 @@ class Engine {
                                          const IdTableStatic<R_WIDTH>& l2,
                                          const size_t jc2,
                                          IdTableStatic<OUT_WIDTH>* result) {
+    // TODO(schnelle) this doesn't actually gallop
     LOG(DEBUG) << "Galloping case.\n";
     size_t i = 0;
     size_t j = 0;
