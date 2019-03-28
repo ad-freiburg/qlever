@@ -243,33 +243,19 @@ class Engine {
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
   static void join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
                    size_t jc2, IdTable* dynRes) {
-    const IdTableStatic<L_WIDTH> ai = dynA.asStaticView<L_WIDTH>();
-    const IdTableStatic<R_WIDTH> bi = dynB.asStaticView<R_WIDTH>();
+    const IdTableStatic<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
+    const IdTableStatic<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
     IdTableStatic<OUT_WIDTH> result = dynRes->moveToStatic<OUT_WIDTH>();
 
     LOG(DEBUG) << "Performing join between two tables.\n";
-    LOG(DEBUG) << "A: width = " << ai.cols() << ", size = " << ai.size()
-               << "\n";
-    LOG(DEBUG) << "B: width = " << bi.cols() << ", size = " << bi.size()
-               << "\n";
+    LOG(DEBUG) << "A: width = " << a.cols() << ", size = " << a.size() << "\n";
+    LOG(DEBUG) << "B: width = " << b.cols() << ", size = " << b.size() << "\n";
 
     // Check trivial case.
-    if (ai.size() == 0 || bi.size() == 0) {
+    if (a.size() == 0 || b.size() == 0) {
       *dynRes = result.moveToDynamic();
       return;
     }
-    // Check for possible self join (dangerous with sentinels).
-    if (ai.cols() == bi.cols() && ai.data() == bi.data()) {
-      AD_CHECK_EQ(jc1, jc2);
-      doSelfJoin(ai, jc1, &result);
-      *dynRes = result.moveToDynamic();
-      return;
-    }
-
-    // Update the views
-    const IdTableStatic<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
-    const IdTableStatic<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
-    // TODO(schnelle) get rid of goto by using return
 
     // Cannot just switch l1 and l2 around because the order of
     // items in the result tuples is important.
@@ -303,20 +289,21 @@ class Engine {
           size_t keepJ = j;
           while (a(i, jc1) == b(j, jc2)) {
             result.push_back();
-            size_t backIndex = result.size() - 1;
-            size_t aCols = a.cols();
-            for (size_t h = 0; h < aCols; h++) {
+            const size_t backIndex = result.size() - 1;
+            for (size_t h = 0; h < a.cols(); h++) {
               result(backIndex, h) = a(i, h);
             }
-            // TODO(schnelle): Maybe we can tighten the loop
-            // below by doing smaller/larger separately
-            for (size_t h = 0; h < b.cols(); h++) {
-              if (h < jc2) {
-                result(backIndex, h + aCols) = b(j, h);
-              } else if (h > jc2) {
-                result(backIndex, h + aCols - 1) = b(j, h);
-              }
+
+            // Copy bs columns before the join column
+            for (size_t h = 0; h < jc2; h++) {
+              result(backIndex, h + a.cols()) = b(j, h);
             }
+
+            // Copy bs columns after the join column
+            for (size_t h = jc2 + 1; h < b.cols(); h++) {
+              result(backIndex, h + a.cols() - 1) = b(j, h);
+            }
+
             ++j;
             if (j >= b.size()) {
               break;
@@ -346,13 +333,11 @@ class Engine {
   static vector<array<E, N>> doFilterRelationWithSingleId(
       const vector<array<E, N>>& relation, E entityId) {
     vector<array<E, N>> result;
-    auto key = relation[0];
-    key[I] = entityId;
 
     // Binary search for start.
     auto itt = std::lower_bound(
-        relation.begin(), relation.end(), key,
-        [](const array<E, N>& a, const array<E, N>& b) { return a[I] < b[I]; });
+        relation.begin(), relation.end(), entityId,
+        [](const array<E, N>& a, const Id entityId) { return a[I] < entityId; });
 
     while (itt != relation.end() && (*itt)[I] == entityId) {
       result.push_back(*itt);
@@ -362,58 +347,16 @@ class Engine {
     return result;
   }
 
-  template <int IN_WIDTH, int OUT_WIDTH>
-  static void doSelfJoin(const IdTableStatic<IN_WIDTH>& v, size_t jc,
-                         IdTableStatic<OUT_WIDTH>* result) {
-    LOG(DEBUG) << "Performing self join on var width table.\n";
-    LOG(DEBUG) << "TAB: size = " << v.size() << "\n";
-
-    // Always detect ranges of equal join col values and then
-    // build a cross product for each range.
-    size_t i = 0;
-    while (i < v.size()) {
-      const auto& val = v(i, jc);
-      size_t from = i++;
-      while (v(i, jc) == val) {
-        ++i;
-      }
-      // Range detected, now build cross product
-      // v[i][I] is now != val and read to be the next one.
-      for (size_t j = from; j < i; ++j) {
-        for (size_t k = from; k < i; ++k) {
-          size_t rowIndex = result->size();
-          result->push_back();
-          size_t vCols = v.cols();
-          for (size_t h = 0; h < vCols; h++) {
-            (*result)(rowIndex, h) = v(j, h);
-          }
-          for (size_t h = 0; h < vCols; h++) {
-            if (h < jc) {
-              (*result)(rowIndex, h + vCols) = v(k, h);
-            } else if (h < jc) {
-              (*result)(rowIndex, h + vCols - 1) = v(k, h);
-            }
-          }
-        }
-      }
-    }
-
-    LOG(DEBUG) << "Join done.\n";
-    LOG(DEBUG) << "Result:  size = " << result->size() << "\n";
-  }
-
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
   static void doGallopInnerJoinRightLarge(const IdTableStatic<L_WIDTH>& l1,
-                                          size_t jc1,
+                                          const size_t jc1,
                                           const IdTableStatic<R_WIDTH>& l2,
-                                          size_t jc2,
+                                          const size_t jc2,
                                           IdTableStatic<OUT_WIDTH>* result) {
-    // TODO(schnelle) get rid of goto by using return
+    // TODO(schnelle) t rid of goto by using return
     LOG(DEBUG) << "Galloping case.\n";
     size_t i = 0;
     size_t j = 0;
-    // TODO(schnelle) when we have fixed cols we could constexpr if this
-    // and use stack allocation which should be much faster
     while (i < l1.size() && j < l2.size()) {
       while (l1(i, jc1) < l2(j, jc2)) {
         ++i;
@@ -435,20 +378,21 @@ class Engine {
       while (l1(i, jc1) == l2(j, jc2)) {
         // In case of match, create cross-product
         // Always fix l1 and go through l2.
-        size_t keepJ = j;
+        const size_t keepJ = j;
         while (l1(i, jc1) == l2(j, jc2)) {
           size_t rowIndex = result->size();
           result->push_back();
-          size_t l1Cols = l1.cols();
-          for (size_t h = 0; h < l1Cols; h++) {
+          for (size_t h = 0; h < l1.cols(); h++) {
             (*result)(rowIndex, h) = l1(i, h);
           }
-          for (size_t h = 0; h < l2.cols(); h++) {
-            if (h < jc2) {
-              (*result)(rowIndex, h + l1Cols) = l2(j, h);
-            } else if (h > jc2) {
-              (*result)(rowIndex, h + l1Cols - 1) = l2(j, h);
-            }
+          // Copy l2s columns before the join column
+          for (size_t h = 0; h < jc2; h++) {
+            (*result)(rowIndex, h + l1.cols()) = l2(j, h);
+          }
+
+          // Copy l2s columns after the join column
+          for (size_t h = jc2 + 1; h < l2.cols(); h++) {
+            (*result)(rowIndex, h + l1.cols() - 1) = l2(j, h);
           }
           ++j;
           if (j >= l2.size()) {
@@ -469,16 +413,13 @@ class Engine {
 
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
   static void doGallopInnerJoinLeftLarge(const IdTableStatic<L_WIDTH>& l1,
-                                         size_t jc1,
+                                         const size_t jc1,
                                          const IdTableStatic<R_WIDTH>& l2,
-                                         size_t jc2,
+                                         const size_t jc2,
                                          IdTableStatic<OUT_WIDTH>* result) {
-    // TODO(schnelle) get rid of goto by using return
     LOG(DEBUG) << "Galloping case.\n";
     size_t i = 0;
     size_t j = 0;
-    // TODO(schnelle) when we have fixed cols we could constexpr if this
-    // and use stack allocation which should be much faster
     while (i < l1.size() && j < l2.size()) {
       if (l2(j, jc2) > l1(i, jc1)) {
         const Id needle = l2(j, jc2);
@@ -500,20 +441,21 @@ class Engine {
       while (l1(i, jc1) == l2(j, jc2)) {
         // In case of match, create cross-product
         // Always fix l1 and go through l2.
-        size_t keepJ = j;
+        const size_t keepJ = j;
         while (l1(i, jc1) == l2(j, jc2)) {
           size_t rowIndex = result->size();
           result->push_back();
-          size_t l1Cols = l1.cols();
-          for (size_t h = 0; h < l1Cols; h++) {
+          for (size_t h = 0; h < l1.cols(); h++) {
             (*result)(rowIndex, h) = l1(i, h);
           }
-          for (size_t h = 0; h < l2.cols(); h++) {
-            if (h < jc2) {
-              (*result)(rowIndex, h + l1Cols) = l2(j, h);
-            } else if (h > jc2) {
-              (*result)(rowIndex, h + l1Cols - 1) = l2(j, h);
-            }
+          // Copy l2s columns before the join column
+          for (size_t h = 0; h < jc2; h++) {
+            (*result)(rowIndex, h + l1.cols()) = l2(j, h);
+          }
+
+          // Copy l2s columns after the join column
+          for (size_t h = jc2 + 1; h < l2.cols(); h++) {
+            (*result)(rowIndex, h + l1.cols() - 1) = l2(j, h);
           }
           ++j;
           if (j >= l2.size()) {
