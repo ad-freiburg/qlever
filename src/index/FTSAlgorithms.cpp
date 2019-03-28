@@ -60,6 +60,8 @@ void FTSAlgorithms::intersect(const vector<Id>& matchingContexts,
   resultCids.resize(eBlockCids.size());
   resultEids.resize(eBlockCids.size());
   resultScores.resize(eBlockCids.size());
+  // TODO(schnelle): This use of sentinels needs to go, it's not thread safe.
+  // This is a BUG!!
   // Cast away constness so we can add sentinels that will be removed
   // in the end and create and add those sentinels.
   // Note: this is only efficient if capacity + 2 >= size for the input
@@ -130,6 +132,8 @@ void FTSAlgorithms::intersectTwoPostingLists(const vector<Id>& cids1,
   resultScores.reserve(cids1.size() + 2);
   resultCids.resize(cids1.size());
   resultScores.resize(cids1.size());
+  // TODO(schnelle): This use of sentinels needs to go, it's not thread safe.
+  // This is a BUG!!
   // Cast away constness so we can add sentinels that will be removed
   // in the end and create and add those sentinels.
   // Note: this is only efficient if capacity + 2 >= size for the input

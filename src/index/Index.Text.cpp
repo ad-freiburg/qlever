@@ -549,7 +549,6 @@ void Index::getContextListForWords(const string& words,
 
   LOG(DEBUG) << "Packing lists into a ResultTable\n...";
   IdTableStatic<2> result = dynResult->moveToStatic<2>();
-  result.reserve(cids.size() + 2);
   result.resize(cids.size());
   for (size_t i = 0; i < cids.size(); ++i) {
     result(i, 0) = cids[i];

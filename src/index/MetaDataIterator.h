@@ -42,7 +42,6 @@ class MetaDataIterator {
  private:
   void scanCurrentPos() {
     const FullRelationMetaData& rmd = _iterator->second.get();
-    _buffer.reserve(rmd.getNofElements() + 2);
     _buffer.resize(rmd.getNofElements());
     _file.read(_buffer.data(), rmd.getNofElements() * 2 * sizeof(Id),
                rmd._startFullIndex);
