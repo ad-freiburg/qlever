@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <iomanip>
+#include <type_traits>
 #include <vector>
 
 #include <parallel/algorithm>
@@ -184,9 +185,9 @@ class Engine {
     // Cannot just switch l1 and l2 around because the order of
     // items in the result tuples is important.
     if (a.size() / b.size() > GALLOP_THRESHOLD) {
-      doGallopInnerJoinLeftLarge(a, jc1, b, jc2, &result);
+      doGallopInnerJoin(LeftLargerTag{}, a, jc1, b, jc2, &result);
     } else if (b.size() / a.size() > GALLOP_THRESHOLD) {
-      doGallopInnerJoinRightLarge(a, jc1, b, jc2, &result);
+      doGallopInnerJoin(RightLargerTag{}, a, jc1, b, jc2, &result);
     } else {
       // Intersect both lists.
       size_t i = 0;
@@ -253,96 +254,56 @@ class Engine {
   }
 
  private:
-  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  static void doGallopInnerJoinRightLarge(const IdTableStatic<L_WIDTH>& l1,
-                                          const size_t jc1,
-                                          const IdTableStatic<R_WIDTH>& l2,
-                                          const size_t jc2,
-                                          IdTableStatic<OUT_WIDTH>* result) {
+  class RightLargerTag {};
+  class LeftLargerTag {};
+
+  template <typename TagType, int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+  static void doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
+                                const size_t jc1,
+                                const IdTableStatic<R_WIDTH>& l2,
+                                const size_t jc2,
+                                IdTableStatic<OUT_WIDTH>* result) {
     // TODO(schnelle) this doesn't actually gallop
     LOG(DEBUG) << "Galloping case.\n";
+
     size_t i = 0;
     size_t j = 0;
     while (i < l1.size() && j < l2.size()) {
-      while (l1(i, jc1) < l2(j, jc2)) {
-        ++i;
-        if (i >= l1.size()) {
-          return;
+      if constexpr (std::is_same<TagType, RightLargerTag>::value) {
+        while (l1(i, jc1) < l2(j, jc2)) {
+          ++i;
+          if (i >= l1.size()) {
+            return;
+          }
         }
-      }
-      if (l2(j, jc2) < l1(i, jc1)) {
-        const Id needle = l1(i, jc1);
-        j = std::lower_bound(l2.begin() + j, l2.end(), needle,
-                             [jc2](const auto& l, const Id& needle) -> bool {
-                               return l[jc2] < needle;
-                             }) -
-            l2.begin();
-        if (j >= l2.size()) {
-          return;
-        }
-      }
-      while (l1(i, jc1) == l2(j, jc2)) {
-        // In case of match, create cross-product
-        // Always fix l1 and go through l2.
-        const size_t keepJ = j;
-        while (l1(i, jc1) == l2(j, jc2)) {
-          size_t rowIndex = result->size();
-          result->push_back();
-          for (size_t h = 0; h < l1.cols(); h++) {
-            (*result)(rowIndex, h) = l1(i, h);
-          }
-          // Copy l2s columns before the join column
-          for (size_t h = 0; h < jc2; h++) {
-            (*result)(rowIndex, h + l1.cols()) = l2(j, h);
-          }
-
-          // Copy l2s columns after the join column
-          for (size_t h = jc2 + 1; h < l2.cols(); h++) {
-            (*result)(rowIndex, h + l1.cols() - 1) = l2(j, h);
-          }
-          ++j;
+        if (l2(j, jc2) < l1(i, jc1)) {
+          const Id needle = l1(i, jc1);
+          j = std::lower_bound(l2.begin() + j, l2.end(), needle,
+                               [jc2](const auto& l, const Id& needle) -> bool {
+                                 return l[jc2] < needle;
+                               }) -
+              l2.begin();
           if (j >= l2.size()) {
             return;
           }
         }
-        ++i;
-        if (i >= l1.size()) {
-          return;
+      } else {
+        if (l2(j, jc2) > l1(i, jc1)) {
+          const Id needle = l2(j, jc2);
+          i = std::lower_bound(l1.begin() + i, l1.end(), needle,
+                               [jc1](const auto& l, const Id needle) -> bool {
+                                 return l[jc1] < needle;
+                               }) -
+              l1.begin();
+          if (i >= l1.size()) {
+            return;
+          }
         }
-        // If the next i is still the same, reset j.
-        if (l1(i, jc1) == l2(keepJ, jc2)) {
-          j = keepJ;
-        }
-      }
-    }
-  };
-
-  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  static void doGallopInnerJoinLeftLarge(const IdTableStatic<L_WIDTH>& l1,
-                                         const size_t jc1,
-                                         const IdTableStatic<R_WIDTH>& l2,
-                                         const size_t jc2,
-                                         IdTableStatic<OUT_WIDTH>* result) {
-    // TODO(schnelle) this doesn't actually gallop
-    LOG(DEBUG) << "Galloping case.\n";
-    size_t i = 0;
-    size_t j = 0;
-    while (i < l1.size() && j < l2.size()) {
-      if (l2(j, jc2) > l1(i, jc1)) {
-        const Id needle = l2(j, jc2);
-        i = std::lower_bound(l1.begin() + i, l1.end(), needle,
-                             [jc1](const auto& l, const Id needle) -> bool {
-                               return l[jc1] < needle;
-                             }) -
-            l1.begin();
-        if (i >= l1.size()) {
-          return;
-        }
-      }
-      while (l1(i, jc1) > l2(j, jc2)) {
-        ++j;
-        if (j >= l2.size()) {
-          return;
+        while (l1(i, jc1) > l2(j, jc2)) {
+          ++j;
+          if (j >= l2.size()) {
+            return;
+          }
         }
       }
       while (l1(i, jc1) == l2(j, jc2)) {
