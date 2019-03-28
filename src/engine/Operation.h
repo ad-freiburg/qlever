@@ -43,7 +43,7 @@ class Operation {
     LOG(TRACE) << "Check cache for Operation result" << endl;
     LOG(TRACE) << "Using key: \n" << asString() << endl;
     auto [newResult, existingResult] =
-      _executionContext->getQueryTreeCache().tryEmplace(asString());
+        _executionContext->getQueryTreeCache().tryEmplace(asString());
 
     if (newResult) {
       LOG(TRACE) << "Not in the cache, need to compute result" << endl;
