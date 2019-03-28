@@ -69,21 +69,62 @@ class Index {
 
   Index();
 
+  struct IndexMetaDataMmapDispatcher {
+    using WriteType = IndexMetaDataMmap;
+    using ReadType = IndexMetaDataMmapView;
+  };
+
+  struct IndexMetaDataHmapDispatcher {
+    using WriteType = IndexMetaDataHmap;
+    using ReadType = IndexMetaDataHmap;
+  };
+
+  template <class A, class B>
+  using PermutationImpl = Permutation::PermutationImpl<A, B>;
+
+  // TODO: make those private and allow only const access
+  // instantiations for the 6 Permutations used in QLever
+  // They simplify the creation of permutations in the index class
+  PermutationImpl<SortByPOS, IndexMetaDataHmap> _POS =
+      Permutation::PermutationImpl<SortByPOS, IndexMetaDataHmap>(
+          SortByPOS(), "POS", ".pos", {1, 2, 0});
+  PermutationImpl<SortByPSO, IndexMetaDataHmap> _PSO =
+      Permutation::PermutationImpl<SortByPSO, IndexMetaDataHmap>(
+          SortByPSO(), "PSO", ".pso", {1, 0, 2});
+  PermutationImpl<SortBySOP, IndexMetaDataMmapView> _SOP =
+      Permutation::PermutationImpl<SortBySOP, IndexMetaDataMmapView>(
+          SortBySOP(), "SOP", ".sop", {0, 2, 1});
+  PermutationImpl<SortBySPO, IndexMetaDataMmapView> _SPO =
+      Permutation::PermutationImpl<SortBySPO, IndexMetaDataMmapView>(
+          SortBySPO(), "SPO", ".spo", {0, 1, 2});
+  PermutationImpl<SortByOPS, IndexMetaDataMmapView> _OPS =
+      Permutation::PermutationImpl<SortByOPS, IndexMetaDataMmapView>(
+          SortByOPS(), "OPS", ".ops", {2, 1, 0});
+  PermutationImpl<SortByOSP, IndexMetaDataMmapView> _OSP =
+      Permutation::PermutationImpl<SortByOSP, IndexMetaDataMmapView>(
+          SortByOSP(), "OSP", ".osp", {2, 0, 1});
+
+  const auto& POS() const { return _POS; }
+  const auto& PSO() const { return _PSO; }
+  const auto& SPO() const { return _SPO; }
+  const auto& SOP() const { return _SOP; }
+  const auto& OPS() const { return _OPS; }
+  const auto& OSP() const { return _OSP; }
+
   // Creates an index from a file. Parameter Parser must be able to split the
   // file's format into triples.
   // Will write vocabulary and on-disk index data.
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
   template <class Parser>
-  void createFromFile(const string& filename, bool allPermutations);
+  void createFromFile(const string& filename);
 
   void addPatternsToExistingIndex();
 
   // Creates an index object from an on disk index
   // that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
-  void createFromOnDiskIndex(const string& onDiskBase,
-                             bool allPermutations = false);
+  void createFromOnDiskIndex(const string& onDiskBase);
 
   // Adds a text index to a fully initialized KB index.
   // Reads a context file and builds the index for the first time.
@@ -94,9 +135,6 @@ class Index {
   // Adds text index from on disk index that has previously been constructed.
   // Read necessary meta data into memory and opens file handles.
   void addTextFromOnDiskIndex();
-
-  // Checks if the index is ready for use, i.e. it is properly intitialized.
-  bool ready() const;
 
   const auto& getVocab() const { return _vocab; };
 
@@ -128,34 +166,6 @@ class Index {
     return _vocab.idToOptionalString(id);
   }
 
-  void scanPSO(const string& predicate, IdTable* result) const;
-
-  void scanPSO(const string& predicate, const string& subject,
-               IdTable* result) const;
-
-  void scanPOS(const string& predicate, IdTable* result) const;
-
-  void scanPOS(const string& predicate, const string& object,
-               IdTable* result) const;
-
-  void scanSOP(const string& subject, const string& object,
-               IdTable* result) const;
-
-  void scanSPO(const string& subject, IdTable* result) const;
-
-  void scanSOP(const string& subject, IdTable* result) const;
-
-  void scanOPS(const string& object, IdTable* result) const;
-
-  void scanOSP(const string& object, IdTable* result) const;
-
-  void scanPSO(Id predicate, IdTable* result) const;
-  void scanPOS(Id predicate, IdTable* result) const;
-  void scanSPO(Id subject, IdTable* result) const;
-  void scanSOP(Id subject, IdTable* result) const;
-  void scanOPS(Id object, IdTable* result) const;
-  void scanOSP(Id object, IdTable* result) const;
-
   const vector<PatternID>& getHasPattern() const;
   const CompactStringVector<Id, Id>& getHasPredicate() const;
   const CompactStringVector<size_t, Id>& getPatterns() const;
@@ -176,22 +186,6 @@ class Index {
    *         patterns.
    */
   size_t getHasPredicateFullSize() const;
-
-  // Get multiplicities with given var (SCAN for 2 cols)
-  vector<float> getPSOMultiplicities(const string& key) const;
-  vector<float> getPOSMultiplicities(const string& key) const;
-  vector<float> getSPOMultiplicities(const string& key) const;
-  vector<float> getSOPMultiplicities(const string& key) const;
-  vector<float> getOSPMultiplicities(const string& key) const;
-  vector<float> getOPSMultiplicities(const string& key) const;
-
-  // Get multiplicities for full scans (dummy)
-  vector<float> getPSOMultiplicities() const;
-  vector<float> getPOSMultiplicities() const;
-  vector<float> getSPOMultiplicities() const;
-  vector<float> getSOPMultiplicities() const;
-  vector<float> getOSPMultiplicities() const;
-  vector<float> getOPSMultiplicities() const;
 
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
@@ -284,9 +278,9 @@ class Index {
 
   const string& getTextName() const { return _textMeta.getName(); }
 
-  const string& getKbName() const { return _psoMeta.getName(); }
+  const string& getKbName() const { return _PSO.metaData().getName(); }
 
-  size_t getNofTriples() const { return _psoMeta.getNofTriples(); }
+  size_t getNofTriples() const { return _PSO.metaData().getNofTriples(); }
 
   size_t getNofTextRecords() const { return _textMeta.getNofTextRecords(); }
   size_t getNofWordPostings() const { return _textMeta.getNofWordPostings(); }
@@ -296,7 +290,7 @@ class Index {
 
   size_t getNofSubjects() const {
     if (hasAllPermutations()) {
-      return _spoMeta.getNofDistinctC1();
+      return _SPO.metaData().getNofDistinctC1();
     } else {
       AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
                "Can only get # distinct subjects if all 6 permutations "
@@ -307,7 +301,7 @@ class Index {
 
   size_t getNofObjects() const {
     if (hasAllPermutations()) {
-      return _ospMeta.getNofDistinctC1();
+      return _OSP.metaData().getNofDistinctC1();
     } else {
       AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
                "Can only get # distinct subjects if all 6 permutations "
@@ -316,9 +310,139 @@ class Index {
     }
   }
 
-  size_t getNofPredicates() const { return _psoMeta.getNofDistinctC1(); }
+  size_t getNofPredicates() const { return _PSO.metaData().getNofDistinctC1(); }
 
-  bool hasAllPermutations() const { return _spoFile.isOpen(); }
+  bool hasAllPermutations() const { return SPO()._file.isOpen(); }
+
+  // _____________________________________________________________________________
+  template <class PermutationImpl>
+  vector<float> getMultiplicities(const string& key,
+                                  const PermutationImpl& p) const {
+    Id keyId;
+    vector<float> res;
+    if (_vocab.getId(key, &keyId) && p._meta.relationExists(keyId)) {
+      auto rmd = p._meta.getRmd(keyId);
+      auto logM1 = rmd.getCol1LogMultiplicity();
+      res.push_back(static_cast<float>(pow(2, logM1)));
+      auto logM2 = rmd.getCol2LogMultiplicity();
+      res.push_back(static_cast<float>(pow(2, logM2)));
+    } else {
+      res.push_back(1);
+      res.push_back(1);
+    }
+    return res;
+  }
+
+  // ___________________________________________________________________
+  template <class PermutationImpl>
+  vector<float> getMultiplicities(const PermutationImpl& p) const {
+    std::array<float, 3> m{
+        static_cast<float>(getNofTriples() / getNofSubjects()),
+        static_cast<float>(getNofTriples() / getNofPredicates()),
+        static_cast<float>(getNofTriples() / getNofObjects())};
+
+    return {m[p._keyOrder[0]], m[p._keyOrder[1]], m[p._keyOrder[2]]};
+  }
+
+  /**
+   * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
+   * permutation for a specific key value of X
+   * @tparam Permutation The permutations Index::POS()... have different types
+   * @param key The key (in Id space) for which to search, e.g. fixed value for
+   * O in OSP permutation.
+   * @param result The Id table to which we will write. Must have 2 columns.
+   * @param p The Permutation to use (in particularly POS(), SOP,... members of
+   * Index class).
+   */
+  template <class Permutation>
+  void scan(Id key, IdTable* result, const Permutation& p) const {
+    if (p._meta.relationExists(key)) {
+      const FullRelationMetaData& rmd = p._meta.getRmd(key)._rmdPairs;
+      result->reserve(rmd.getNofElements() + 2);
+      result->resize(rmd.getNofElements());
+      p._file.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
+                   rmd._startFullIndex);
+    }
+  }
+
+  /**
+   * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
+   * permutation for a specific key value of X
+   * @tparam Permutation The permutations Index::POS()... have different types
+   * @param key The key (as a raw string that is yet to be transformed to index
+   * space) for which to search, e.g. fixed value for O in OSP permutation.
+   * @param result The Id table to which we will write. Must have 2 columns.
+   * @param p The Permutation to use (in particularly POS(), SOP,... members of
+   * Index class).
+   */
+  template <class Permutation>
+  void scan(const string& key, IdTable* result, const Permutation& p) const {
+    LOG(DEBUG) << "Performing " << p._readableName
+               << " scan for full list for: " << key << "\n";
+    Id relId;
+    if (_vocab.getId(key, &relId)) {
+      LOG(TRACE) << "Successfully got key ID.\n";
+      scan(relId, result, p);
+    }
+    LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
+  }
+
+  /**
+   * @brief Perform a scan for two keys i.e. retrieve all Z from the XYZ
+   * permutation for specific key values of X and Y.
+   * @tparam Permutation The permutations Index::POS()... have different types
+   * @param keyFirst The first key (as a raw string that is yet to be
+   * transformed to index space) for which to search, e.g. fixed value for O in
+   * OSP permutation.
+   * @param keySecond The second key (as a raw string that is yet to be
+   * transformed to index space) for which to search, e.g. fixed value for S in
+   * OSP permutation.
+   * @param result The Id table to which we will write. Must have 2 columns.
+   * @param p The Permutation to use (in particularly POS(), SOP,... members of
+   * Index class).
+   */
+  // _____________________________________________________________________________
+  template <class PermutationInfo>
+  void scan(const string& keyFirst, const string& keySecond, IdTable* result,
+            const PermutationInfo& p) const {
+    LOG(DEBUG) << "Performing " << p._readableName << "  scan of relation "
+               << keyFirst << " with fixed subject: " << keySecond << "...\n";
+    Id relId;
+    Id subjId;
+    if (_vocab.getId(keyFirst, &relId) && _vocab.getId(keySecond, &subjId)) {
+      if (p._meta.relationExists(relId)) {
+        auto rmd = p._meta.getRmd(relId);
+        if (rmd.hasBlocks()) {
+          pair<off_t, size_t> blockOff =
+              rmd._rmdBlocks->getBlockStartAndNofBytesForLhs(subjId);
+          // Functional relations have blocks point into the pair index,
+          // non-functional relations have them point into lhs lists
+          if (rmd.isFunctional()) {
+            scanFunctionalRelation(blockOff, subjId, p._file, result);
+          } else {
+            pair<off_t, size_t> block2 =
+                rmd._rmdBlocks->getFollowBlockForLhs(subjId);
+            scanNonFunctionalRelation(blockOff, block2, subjId, p._file,
+                                      rmd._rmdBlocks->_offsetAfter, result);
+          }
+        } else {
+          // If we don't have blocks, scan the whole relation and filter /
+          // restrict.
+          IdTable fullRelation(2);
+          fullRelation.resize(rmd.getNofElements());
+          p._file.read(fullRelation.data(),
+                       rmd.getNofElements() * 2 * sizeof(Id),
+                       rmd._rmdPairs._startFullIndex);
+          getRhsForSingleLhs(fullRelation, subjId, result);
+        }
+      } else {
+        LOG(DEBUG) << "No such relation.\n";
+      }
+    } else {
+      LOG(DEBUG) << "No such second order key.\n";
+    }
+    LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
+  }
 
  private:
   string _onDiskBase;
@@ -331,22 +455,10 @@ class Index {
   bool _vocabPrefixCompressed = true;
   Vocabulary<std::string> _textVocab;
 
-  IndexMetaDataHmap _psoMeta;
-  IndexMetaDataHmap _posMeta;
-  IndexMetaDataMmapView _spoMeta;
-  IndexMetaDataMmapView _sopMeta;
-  IndexMetaDataMmapView _ospMeta;
-  IndexMetaDataMmapView _opsMeta;
   TextMetaData _textMeta;
   DocsDB _docsDB;
   vector<Id> _blockBoundaries;
   off_t _currentoff_t;
-  mutable ad_utility::File _psoFile;
-  mutable ad_utility::File _posFile;
-  mutable ad_utility::File _spoFile;
-  mutable ad_utility::File _sopFile;
-  mutable ad_utility::File _ospFile;
-  mutable ad_utility::File _opsFile;
   mutable ad_utility::File _textIndexFile;
 
   // Pattern trick data
@@ -395,11 +507,11 @@ class Index {
   void passContextFileIntoVector(const string& contextFile, TextVec& vec);
 
   // no need for explicit instatiation since this function is private
-  template <class MetaData>
-  std::optional<MetaData> createPermutationImpl(const string& fileName,
-                                                const TripleVec& vec, size_t c0,
-                                                size_t c1, size_t c2);
-  template <class MetaData, class Comparator1, class Comparator2>
+  template <class MetaDataDispatcher>
+  std::optional<typename MetaDataDispatcher::WriteType> createPermutationImpl(
+      const string& fileName, const TripleVec& vec, size_t c0, size_t c1,
+      size_t c2);
+  template <class MetaDataDispatcher, class Comparator1, class Comparator2>
 
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
@@ -412,8 +524,11 @@ class Index {
   // the SPO permutation is also needed for patterns (see usage in
   // Index::createFromFile function)
   void createPermutationPair(
-      VocabularyData* vec, const Permutation::PermutationImpl<Comparator1>& p1,
-      const Permutation::PermutationImpl<Comparator2>& p2,
+      VocabularyData* vec,
+      const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
+          p1,
+      const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
+          p2,
       bool performUnique = false, bool createPatternsAfterFirst = false);
 
   // The pairs of permutations are PSO-POS, OSP-OPS and SPO-SOP
@@ -433,10 +548,11 @@ class Index {
   // Careful: only multiplicities for first column is valid after call, need to
   // call exchangeMultiplicities as done by createPermutationPair
   // the optional is std::nullopt if vec and thus the index is empty
-  template <class MetaData, class Comparator>
-  std::optional<MetaData> createPermutation(
+  template <class MetaDataDispatcher, class Comparator>
+  std::optional<typename MetaDataDispatcher::WriteType> createPermutation(
       TripleVec* vec,
-      const Permutation::PermutationImpl<Comparator>& permutation,
+      const PermutationImpl<Comparator, typename MetaDataDispatcher::ReadType>&
+          permutation,
       bool performUnique = false);
 
   /**
@@ -500,8 +616,6 @@ class Index {
   static void writeNonFunctionalRelation(
       ad_utility::File& out, const BufferedVector<array<Id, 2>>& data,
       pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd);
-
-  void openFileHandles();
 
   void openTextFileHandle();
 

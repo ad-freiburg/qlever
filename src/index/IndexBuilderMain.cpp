@@ -27,8 +27,7 @@ using std::string;
 #define EMPH_OFF "\033[22m"
 
 // Available options.
-struct option options[] = {{"all-permutations", no_argument, NULL, 'a'},
-                           {"docs-by-contexts", required_argument, NULL, 'd'},
+struct option options[] = {{"docs-by-contexts", required_argument, NULL, 'd'},
                            {"help", no_argument, NULL, 'h'},
                            {"index-basename", required_argument, NULL, 'i'},
                            {"kb-index-name", required_argument, NULL, 'K'},
@@ -71,9 +70,6 @@ void printUsage(char* execName) {
 
   cout << "Usage: " << execName << " -i <index> [OPTIONS]" << endl << endl;
   cout << "Options" << endl;
-  cout << "  " << std::setw(20) << "a, all-permutations" << std::setw(1)
-       << "    "
-       << "Build all 6 (not only 2) KB index permutations." << endl;
   cout << "  " << std::setw(20) << "d, docs-by-contexts" << std::setw(1)
        << "    "
        << "docs-file to build text index from." << endl;
@@ -139,7 +135,6 @@ int main(int argc, char** argv) {
   string kbIndexName;
   string settingsFile = "";
   bool useCompression = true;
-  bool allPermutations = false;
   bool onDiskLiterals = false;
   bool usePatterns = true;
   bool onlyAddTextIndex = false;
@@ -170,9 +165,6 @@ int main(int argc, char** argv) {
         break;
       case 'd':
         docsfile = optarg;
-        break;
-      case 'a':
-        allPermutations = true;
         break;
       case 'l':
         onDiskLiterals = true;
@@ -268,14 +260,14 @@ int main(int argc, char** argv) {
       if (ntFile.size() > 0) {
         if (ad_utility::endsWith(ntFile, ".ttl") ||
             ad_utility::endsWith(ntFile, ".ttl.bz2")) {
-          index.createFromFile<TurtleParser>(ntFile, allPermutations);
+          index.createFromFile<TurtleParser>(ntFile);
         } else {
-          index.createFromFile<NTriplesParser>(ntFile, allPermutations);
+          index.createFromFile<NTriplesParser>(ntFile);
         }
       } else if (tsvFile.size() > 0) {
-        index.createFromFile<TsvParser>(tsvFile, allPermutations);
+        index.createFromFile<TsvParser>(tsvFile);
       } else {
-        index.createFromOnDiskIndex(baseName, allPermutations);
+        index.createFromOnDiskIndex(baseName);
       }
     }
 

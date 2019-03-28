@@ -5,6 +5,9 @@
 
 #include <array>
 #include <string>
+#include "../global/Constants.h"
+#include "../util/File.h"
+#include "../util/Log.h"
 #include "./StxxlSortFunctors.h"
 
 namespace Permutation {
@@ -14,7 +17,7 @@ using std::string;
 // helper class to store static properties of the different permutations
 // to avoid code duplication
 // The template Parameter is a STXXL search functor
-template <class Comparator>
+template <class Comparator, class MetaData>
 class PermutationImpl {
  public:
   PermutationImpl(const Comparator& comp, string name, string suffix,
@@ -23,6 +26,29 @@ class PermutationImpl {
         _readableName(std::move(name)),
         _fileSuffix(std::move(suffix)),
         _keyOrder(order) {}
+
+  // everything that has to be done when reading an index from disk
+  void loadFromDisk(const std::string& onDiskBase) {
+    if constexpr (MetaData::_isMmapBased) {
+      _meta.setup(onDiskBase + ".index" + _fileSuffix + MMAP_FILE_SUFFIX,
+                  ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
+    }
+    auto filename = string(onDiskBase + ".index" + _fileSuffix);
+    try {
+      _file.open(filename, "r");
+    } catch (const std::runtime_error& e) {
+      AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+               "Could not open the index file " + filename +
+                   " for reading. Please check that you have read access to "
+                   "this file. If it does not exist, your index is broken.");
+    }
+    _meta.readFromFile(&_file);
+    LOG(INFO) << "Registered SPO permutation: " << _meta.statistics()
+              << std::endl;
+  }
+
+  // _______________________________________________________
+  void setKbName(const string& name) { _meta.setName(name); }
 
   // stxxl comparison functor
   const Comparator _comp;
@@ -34,14 +60,11 @@ class PermutationImpl {
   // sorted. Needed for the createPermutation function in the Index class
   // e.g. {1, 0, 2} for PsO
   const array<unsigned short, 3> _keyOrder;
+
+  const MetaData& metaData() const { return _meta; }
+  MetaData _meta;
+
+  mutable ad_utility::File _file;
 };
 
-// instantiations for the 6 Permutations used in QLever
-// They simplify the creation of permutations in the index class
-const PermutationImpl<SortByPOS> Pos(SortByPOS(), "POS", ".pos", {1, 2, 0});
-const PermutationImpl<SortByPSO> Pso(SortByPSO(), "PSO", ".pso", {1, 0, 2});
-const PermutationImpl<SortBySOP> Sop(SortBySOP(), "SOP", ".sop", {0, 2, 1});
-const PermutationImpl<SortBySPO> Spo(SortBySPO(), "SPO", ".spo", {0, 1, 2});
-const PermutationImpl<SortByOPS> Ops(SortByOPS(), "OPS", ".ops", {2, 1, 0});
-const PermutationImpl<SortByOSP> Osp(SortByOSP(), "OSP", ".osp", {2, 0, 1});
 }  // namespace Permutation

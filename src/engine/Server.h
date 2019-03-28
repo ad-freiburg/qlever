@@ -36,7 +36,7 @@ class Server {
 
   // Initialize the server.
   void initialize(const string& ontologyBaseName, bool useText,
-                  bool allPermutations = false, bool usePatterns = false);
+                  bool usePatterns = false);
 
   //! Loop, wait for requests and trigger processing. This method never returns
   //! except when throwing an exceptiob
