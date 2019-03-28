@@ -414,23 +414,22 @@ class Engine {
     size_t j = 0;
     // TODO(schnelle) when we have fixed cols we could constexpr if this
     // and use stack allocation which should be much faster
-    Id* val = new Id[l2.cols()];
     while (i < l1.size() && j < l2.size()) {
       while (l1(i, jc1) < l2(j, jc2)) {
         ++i;
         if (i >= l1.size()) {
-          goto finish;
+          return;
         }
       }
       if (l2(j, jc2) < l1(i, jc1)) {
-        val[jc2] = l1(i, jc1);
-        j = std::lower_bound(l2.begin() + j, l2.end(), val,
-                             [jc2](const auto& l, const auto& r) -> bool {
-                               return l[jc2] < r[jc2];
+        const Id needle = l1(i, jc1);
+        j = std::lower_bound(l2.begin() + j, l2.end(), needle,
+                             [jc2](const auto& l, const Id& needle) -> bool {
+                               return l[jc2] < needle;
                              }) -
             l2.begin();
         if (j >= l2.size()) {
-          goto finish;
+          return;
         }
       }
       while (l1(i, jc1) == l2(j, jc2)) {
@@ -453,12 +452,12 @@ class Engine {
           }
           ++j;
           if (j >= l2.size()) {
-            goto finish;
+            return;
           }
         }
         ++i;
         if (i >= l1.size()) {
-          goto finish;
+          return;
         }
         // If the next i is still the same, reset j.
         if (l1(i, jc1) == l2(keepJ, jc2)) {
@@ -466,8 +465,6 @@ class Engine {
         }
       }
     }
-  finish:
-    delete[] val;
   };
 
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
@@ -482,23 +479,22 @@ class Engine {
     size_t j = 0;
     // TODO(schnelle) when we have fixed cols we could constexpr if this
     // and use stack allocation which should be much faster
-    Id* val = new Id[l1.cols()];
     while (i < l1.size() && j < l2.size()) {
       if (l2(j, jc2) > l1(i, jc1)) {
-        val[jc1] = l2(j, jc2);
-        i = std::lower_bound(l1.begin() + i, l1.end(), val,
-                             [jc1](const auto& l, const auto& r) -> bool {
-                               return l[jc1] < r[jc1];
+        const Id needle = l2(j, jc2);
+        i = std::lower_bound(l1.begin() + i, l1.end(), needle,
+                             [jc1](const auto& l, const Id needle) -> bool {
+                               return l[jc1] < needle;
                              }) -
             l1.begin();
         if (i >= l1.size()) {
-          goto finish;
+          return;
         }
       }
       while (l1(i, jc1) > l2(j, jc2)) {
         ++j;
         if (j >= l2.size()) {
-          goto finish;
+          return;
         }
       }
       while (l1(i, jc1) == l2(j, jc2)) {
@@ -521,12 +517,12 @@ class Engine {
           }
           ++j;
           if (j >= l2.size()) {
-            goto finish;
+            return;
           }
         }
         ++i;
         if (i >= l1.size()) {
-          goto finish;
+          return;
         }
         // If the next i is still the same, reset j.
         if (l1(i, jc1) == l2(keepJ, jc2)) {
@@ -534,7 +530,5 @@ class Engine {
         }
       }
     }
-  finish:
-    delete[] val;
   };
 };
