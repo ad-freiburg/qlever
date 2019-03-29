@@ -17,6 +17,13 @@
 #include "QueryPlanner.h"
 
 // _____________________________________________________________________________
+Server::~Server() {
+  if (_initialized) {
+    _serverSocket.close();
+  }
+}
+
+// _____________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
                         bool usePatterns) {
   LOG(INFO) << "Initializing server..." << std::endl;

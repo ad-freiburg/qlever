@@ -330,8 +330,8 @@ void OptionalJoin::optionalJoin(const IdTable& dynA, const IdTable& dynB,
     return;
   }
 
-  const IdTableStatic<A_WIDTH> ai = dynA.asStaticView<A_WIDTH>();
-  const IdTableStatic<B_WIDTH> bi = dynB.asStaticView<B_WIDTH>();
+  const IdTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
+  const IdTableStatic<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = dynResult->asStaticView<OUT_WIDTH>();
 
   int joinColumnBitmap_a = 0;
@@ -358,44 +358,25 @@ void OptionalJoin::optionalJoin(const IdTable& dynA, const IdTable& dynB,
   }
 
   // Deal with one of the two tables beeing both empty and optional
-  if (ai.size() == 0 && aOptional) {
-    for (size_t ib = 0; ib < bi.size(); ib++) {
-      createOptionalResult(ai, 0, true, bi, ib, false, joinColumnBitmap_a,
+  if (a.size() == 0 && aOptional) {
+    for (size_t ib = 0; ib < b.size(); ib++) {
+      createOptionalResult(a, 0, true, b, ib, false, joinColumnBitmap_a,
                            joinColumnBitmap_b, joinColumnAToB, &result);
     }
     *dynResult = result.moveToDynamic();
     return;
-  } else if (bi.size() == 0 && bOptional) {
-    for (size_t ia = 0; ia < ai.size(); ia++) {
-      createOptionalResult(ai, ia, false, bi, 0, true, joinColumnBitmap_a,
+  } else if (b.size() == 0 && bOptional) {
+    for (size_t ia = 0; ia < a.size(); ia++) {
+      createOptionalResult(a, ia, false, b, 0, true, joinColumnBitmap_a,
                            joinColumnBitmap_b, joinColumnAToB, &result);
     }
     *dynResult = result.moveToDynamic();
     return;
   }
-
-  // Cast away constness so we can add sentinels that will be removed
-  // in the end and create and add those sentinels.
-  IdTable& l1 = const_cast<IdTable&>(dynA);
-  IdTable& l2 = const_cast<IdTable&>(dynB);
-  Id sentVal = std::numeric_limits<Id>::max() - 1;
-
-  l1.emplace_back();
-  l2.emplace_back();
-  for (size_t i = 0; i < l1.cols(); i++) {
-    l1.back()[i] = sentVal;
-  }
-  for (size_t i = 0; i < l2.cols(); i++) {
-    l2.back()[i] = sentVal;
-  }
-
-  // update a and b after the sentinals were added
-  const IdTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
-  const IdTableStatic<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
 
   bool matched = false;
   size_t ia = 0, ib = 0;
-  while (ia < a.size() - 1 && ib < b.size() - 1) {
+  while (ia < a.size() && ib < b.size()) {
     // Join columns 0 are the primary sort columns
     while (a(ia, joinColumns[0][0]) < b(ib, joinColumns[0][1])) {
       if (bOptional) {
@@ -403,6 +384,9 @@ void OptionalJoin::optionalJoin(const IdTable& dynA, const IdTable& dynB,
                              joinColumnBitmap_b, joinColumnAToB, &result);
       }
       ia++;
+      if (ia >= a.size()) {
+        goto finish;
+      }
     }
     while (b[ib][joinColumns[0][1]] < a[ia][joinColumns[0][0]]) {
       if (aOptional) {
@@ -410,6 +394,9 @@ void OptionalJoin::optionalJoin(const IdTable& dynA, const IdTable& dynB,
                              joinColumnBitmap_b, joinColumnAToB, &result);
       }
       ib++;
+      if (ib >= b.size()) {
+        goto finish;
+      }
     }
 
     // check if the rest of the join columns also match
@@ -451,7 +438,7 @@ void OptionalJoin::optionalJoin(const IdTable& dynA, const IdTable& dynB,
 
         // do the rows still match?
         for (const array<Id, 2>& jc : joinColumns) {
-          if (ib == b.size() || a[ia][jc[0]] != b[ib][jc[1]]) {
+          if (ib >= b.size() || a[ia][jc[0]] != b[ib][jc[1]]) {
             matched = false;
             break;
           }
@@ -461,7 +448,7 @@ void OptionalJoin::optionalJoin(const IdTable& dynA, const IdTable& dynB,
       // Check if the next row in a also matches the initial row in b
       matched = true;
       for (const array<Id, 2>& jc : joinColumns) {
-        if (ia == a.size() || a[ia][jc[0]] != b[initIb][jc[1]]) {
+        if (ia >= a.size() || a[ia][jc[0]] != b[initIb][jc[1]]) {
           matched = false;
           break;
         }
@@ -472,28 +459,20 @@ void OptionalJoin::optionalJoin(const IdTable& dynA, const IdTable& dynB,
       }
     }
   }
-
-  // remove the sentinels
-  l1.pop_back();
-  l2.pop_back();
-  if (result.size() > 0 && result.back()[joinColumns[0][0]] == sentVal) {
-    result.pop_back();
-  }
+finish:
 
   // If the table of which we reached the end is optional, add all entries
   // of the other table.
-  // As a and b are views from before the removal of the sentials their size
-  // still contains the sentinels.
-  if (aOptional && ib < b.size() - 1) {
-    while (ib < b.size() - 1) {
+  if (aOptional && ib < b.size()) {
+    while (ib < b.size()) {
       createOptionalResult(a, ia, true, b, ib, false, joinColumnBitmap_a,
                            joinColumnBitmap_b, joinColumnAToB, &result);
 
       ++ib;
     }
   }
-  if (bOptional && ia < a.size() - 1) {
-    while (ia < a.size() - 1) {
+  if (bOptional && ia < a.size()) {
+    while (ia < a.size()) {
       createOptionalResult(a, ia, false, b, ib, true, joinColumnBitmap_a,
                            joinColumnBitmap_b, joinColumnAToB, &result);
       ++ia;

@@ -258,36 +258,25 @@ void MultiColumnJoin::computeMultiColumnJoin(
     joinColumnBitmap_b |= (1 << jc[1]);
   }
 
-  // TODO(florian): Check if this actually improves the performance.
-  // Cast away constness so we can add sentinels that will be removed
-  // in the end and create and add those sentinels.
-  //
-  IdTable& l1 = const_cast<IdTable&>(dynA);
-  IdTable& l2 = const_cast<IdTable&>(dynB);
-  Id sentVal = std::numeric_limits<Id>::max() - 1;
-
-  l1.emplace_back();
-  l2.emplace_back();
-  for (size_t i = 0; i < l1.cols(); i++) {
-    l1.back()[i] = sentVal;
-  }
-  for (size_t i = 0; i < l2.cols(); i++) {
-    l2.back()[i] = sentVal;
-  }
-
   IdTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
   IdTableStatic<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
 
   bool matched = false;
   size_t ia = 0, ib = 0;
-  while (ia < a.size() - 1 && ib < b.size() - 1) {
+  while (ia < a.size() && ib < b.size()) {
     // Join columns 0 are the primary sort columns
     while (a(ia, joinColumns[0][0]) < b(ib, joinColumns[0][1])) {
       ia++;
+      if (ia >= a.size()) {
+        goto finish;
+      }
     }
     while (b(ib, joinColumns[0][1]) < a(ia, joinColumns[0][0])) {
       ib++;
+      if (ib >= b.size()) {
+        goto finish;
+      }
     }
 
     // check if the rest of the join columns also match
@@ -334,7 +323,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
 
         // do the rows still match?
         for (const array<Id, 2>& jc : joinColumns) {
-          if (ib == b.size() || a(ia, jc[0]) != b(ib, jc[1])) {
+          if (ib >= b.size() || a(ia, jc[0]) != b(ib, jc[1])) {
             matched = false;
             break;
           }
@@ -344,7 +333,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
       // Check if the next row in a also matches the initial row in b
       matched = true;
       for (const array<Id, 2>& jc : joinColumns) {
-        if (ia == a.size() || a(ia, jc[0]) != b(initIb, jc[1])) {
+        if (ia >= a.size() || a(ia, jc[0]) != b(initIb, jc[1])) {
           matched = false;
           break;
         }
@@ -355,13 +344,6 @@ void MultiColumnJoin::computeMultiColumnJoin(
       }
     }
   }
-
-  // remove the sentinels
-  l1.pop_back();
-  l2.pop_back();
-  if (result.size() > 0 && result.back()[joinColumns[0][0]] == sentVal) {
-    result.pop_back();
-  }
-
+finish:
   *dynResult = result.moveToDynamic();
 }

@@ -18,7 +18,12 @@ size_t Filter::getResultWidth() const { return _subtree->getResultWidth(); }
 Filter::Filter(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> subtree,
                SparqlFilter::FilterType type, string lhs, string rhs)
-    : Operation(qec), _subtree(subtree), _type(type), _lhs(lhs), _rhs(rhs) {}
+    : Operation(qec),
+      _subtree(subtree),
+      _type(type),
+      _lhs(lhs),
+      _rhs(rhs),
+      _regexIgnoreCase(false) {}
 
 // _____________________________________________________________________________
 string Filter::asString(size_t indent) const {

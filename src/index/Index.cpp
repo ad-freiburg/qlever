@@ -1109,7 +1109,6 @@ void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
         nofBytes = static_cast<size_t>(follower.second - it->second);
       }
     }
-    result->reserve((nofBytes / sizeof(Id)) + 2);
     result->resize(nofBytes / sizeof(Id));
     indexFile.read(result->data(), nofBytes, it->second);
   } else {

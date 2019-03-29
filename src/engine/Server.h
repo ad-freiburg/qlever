@@ -32,6 +32,8 @@ class Server {
         _engine(),
         _initialized(false) {}
 
+  virtual ~Server();
+
   typedef ad_utility::HashMap<string, string> ParamValueMap;
 
   // Initialize the server.
