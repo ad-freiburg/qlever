@@ -43,8 +43,8 @@ class PermutationImpl {
                    "this file. If it does not exist, your index is broken.");
     }
     _meta.readFromFile(&_file);
-    LOG(INFO) << "Registered SPO permutation: " << _meta.statistics()
-              << std::endl;
+    LOG(INFO) << "Registered " << _readableName
+              << " permutation: " << _meta.statistics() << std::endl;
   }
 
   // _______________________________________________________
