@@ -913,7 +913,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   _OPS.loadFromDisk(_onDiskBase);
   _OSP.loadFromDisk(_onDiskBase);
   _SPO.loadFromDisk(_onDiskBase);
-  _SPO.loadFromDisk(_onDiskBase);
+  _SOP.loadFromDisk(_onDiskBase);
 
   if (_usePatterns) {
     // Read the pattern info from the patterns file

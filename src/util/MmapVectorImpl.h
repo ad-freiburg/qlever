@@ -353,4 +353,17 @@ MmapVectorView<T>& MmapVectorView<T>::operator=(
   return *this;
 }
 
+template <class T>
+void MmapVectorView<T>::close() {
+  // we need the correct size to make the file persistent
+  if (this->_ptr != nullptr) {
+    MmapVector<T>::unmap();
+  }
+  this->_filename = "";
+  this->_size = 0;
+  this->_ptr = nullptr;
+  this->_bytesize = 0;
+  this->_capacity = 0;
+}
+
 }  // namespace ad_utility
