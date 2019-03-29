@@ -92,7 +92,9 @@ class Socket {
     getaddrinfo(NULL, os.str().c_str(), &hints, &res);
 
     // bind it to the port we passed in to getaddrinfo():
-    return ::bind(_fd, res->ai_addr, res->ai_addrlen) != -1;
+    bool success = ::bind(_fd, res->ai_addr, res->ai_addrlen) != -1;
+    freeaddrinfo(res);
+    return success;
   }
 
   //! Make it a listening socket.

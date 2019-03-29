@@ -231,7 +231,7 @@ class Engine {
 
             ++j;
             if (j >= b.size()) {
-              break;
+              goto finish;
             }
           }
           ++i;

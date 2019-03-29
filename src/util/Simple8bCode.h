@@ -136,15 +136,17 @@ class Simple8bCode {
   static void decode(uint64_t* encoded, size_t nofElements, Numeric* decoded) {
     uint64_t word;
     // Loop over full 64bit codewords and
-    for (size_t nofElementsDone(0), nofCodeWordsDone(0),
-         selector(encoded[nofCodeWordsDone] & SIMPLE8B_SELECTOR_MASK);
-         nofElementsDone < nofElements;
-         ++nofCodeWordsDone,
-         selector = encoded[nofCodeWordsDone] & SIMPLE8B_SELECTOR_MASK) {
+    size_t nofElementsDone(0), nofCodeWordsDone(0);
+    size_t selector(encoded[nofCodeWordsDone] & SIMPLE8B_SELECTOR_MASK);
+    while (nofElementsDone < nofElements) {
       word = encoded[nofCodeWordsDone] >> 4;
       for (size_t i(0); i < SIMPLE8B_SELECTORS[selector]._groupSize; ++i) {
         decoded[nofElementsDone++] = word & SIMPLE8B_SELECTORS[selector]._mask;
         word >>= SIMPLE8B_SELECTORS[selector]._itemWidth;
+      }
+      ++nofCodeWordsDone;
+      if (nofElementsDone < nofElements) {
+        selector = encoded[nofCodeWordsDone] & SIMPLE8B_SELECTOR_MASK;
       }
     }
   }
