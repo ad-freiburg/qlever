@@ -438,7 +438,7 @@ void OptionalJoin::optionalJoin(const IdTable& dynA, const IdTable& dynB,
 
         // do the rows still match?
         for (const array<Id, 2>& jc : joinColumns) {
-          if (ib == b.size() || a[ia][jc[0]] != b[ib][jc[1]]) {
+          if (ib >= b.size() || a[ia][jc[0]] != b[ib][jc[1]]) {
             matched = false;
             break;
           }
@@ -448,7 +448,7 @@ void OptionalJoin::optionalJoin(const IdTable& dynA, const IdTable& dynB,
       // Check if the next row in a also matches the initial row in b
       matched = true;
       for (const array<Id, 2>& jc : joinColumns) {
-        if (ia == a.size() || a[ia][jc[0]] != b[initIb][jc[1]]) {
+        if (ia >= a.size() || a[ia][jc[0]] != b[initIb][jc[1]]) {
           matched = false;
           break;
         }
