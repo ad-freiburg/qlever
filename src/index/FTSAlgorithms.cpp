@@ -54,69 +54,49 @@ void FTSAlgorithms::intersect(const vector<Id>& matchingContexts,
              << "so that only matching ones remain\n";
   LOG(DEBUG) << "matchingContexts size: " << matchingContexts.size() << '\n';
   LOG(DEBUG) << "eBlockCids size: " << eBlockCids.size() << '\n';
-  resultCids.reserve(eBlockCids.size() + 2);
-  resultEids.reserve(eBlockCids.size() + 2);
-  resultScores.reserve(eBlockCids.size() + 2);
-  resultCids.resize(eBlockCids.size());
-  resultEids.resize(eBlockCids.size());
-  resultScores.resize(eBlockCids.size());
-  // TODO(schnelle): This use of sentinels needs to go, it's not thread safe.
-  // This is a BUG!!
-  // Cast away constness so we can add sentinels that will be removed
-  // in the end and create and add those sentinels.
-  // Note: this is only efficient if capacity + 2 >= size for the input
-  // context lists. For now, we assume that all lists are read from disk
-  // where they had more than enough size allocated.
-  auto& l1 = const_cast<vector<Id>&>(matchingContexts);
-  auto& l2 = const_cast<vector<Id>&>(eBlockCids);
-  // The two below are needed for the final sentinel match
-  auto& wids = const_cast<vector<Id>&>(eBlockWids);
-  auto& scores = const_cast<vector<Score>&>(eBlockScores);
-
-  Id sent1 = std::numeric_limits<Id>::max();
-  Id sent2 = std::numeric_limits<Id>::max() - 1;
-  Id sentMatch = std::numeric_limits<Id>::max() - 2;
-
-  l1.push_back(sentMatch);
-  l2.push_back(sentMatch);
-  l1.push_back(sent1);
-  l2.push_back(sent2);
-  wids.push_back(0);
-  scores.push_back(0);
+  // Handle trivial empty case
+  if (matchingContexts.empty() || eBlockCids.empty()) {
+    return;
+  }
+  resultCids.reserve(eBlockCids.size());
+  resultCids.clear();
+  resultEids.reserve(eBlockCids.size());
+  resultEids.clear();
+  resultScores.reserve(eBlockCids.size());
+  resultScores.clear();
 
   size_t i = 0;
   size_t j = 0;
-  size_t n = 0;
 
-  while (l1[i] < sent1) {
-    while (l1[i] < l2[j]) {
+  while (i < matchingContexts.size() && j < eBlockCids.size()) {
+    while (matchingContexts[i] < eBlockCids[j]) {
       ++i;
+      if (i >= matchingContexts.size()) {
+        return;
+      }
     }
-    while (l2[j] < l1[i]) {
+    while (eBlockCids[j] < matchingContexts[i]) {
       ++j;
+      if (j >= eBlockCids.size()) {
+        return;
+      }
     }
-    while (l1[i] == l2[j]) {
+    while (matchingContexts[i] == eBlockCids[j]) {
       // Make sure we get all matching elements from the entity list (l2)
       // that match the current context.
       // If there are multiple elements for that context in l1,
       // we can safely skip them unless we want to incorporate the scores
       // later on.
-      resultCids[n] = l2[j];
-      resultEids[n] = wids[j];
-      resultScores[n++] = scores[j++];
+      resultCids.push_back(matchingContexts[j]);
+      resultEids.push_back(eBlockWids[j]);
+      resultScores.push_back(eBlockScores[j]);
+      j++;
+      if (j >= eBlockCids.size()) {
+        break;
+      }
     }
     ++i;
   }
-
-  // Remove sentinels
-  l1.resize(l1.size() - 2);
-  l2.resize(l2.size() - 2);
-  wids.resize(wids.size() - 1);
-  scores.resize(scores.size() - 1);
-  resultCids.resize(n - 1);
-  resultEids.resize(n - 1);
-  resultScores.resize(n - 1);
-  LOG(DEBUG) << "Intersection done. Size: " << resultCids.size() << "\n";
 }
 
 // _____________________________________________________________________________
@@ -128,62 +108,43 @@ void FTSAlgorithms::intersectTwoPostingLists(const vector<Id>& cids1,
                                              vector<Score>& resultScores) {
   LOG(DEBUG) << "Intersection of words lists of sizes " << cids1.size()
              << " and " << cids2.size() << '\n';
-  resultCids.reserve(cids1.size() + 2);
-  resultScores.reserve(cids1.size() + 2);
-  resultCids.resize(cids1.size());
-  resultScores.resize(cids1.size());
-  // TODO(schnelle): This use of sentinels needs to go, it's not thread safe.
-  // This is a BUG!!
-  // Cast away constness so we can add sentinels that will be removed
-  // in the end and create and add those sentinels.
-  // Note: this is only efficient if capacity + 2 >= size for the input
-  // context lists. For now, we assume that all lists are read from disk
-  // where they had more than enough size allocated.
-  auto& l1 = const_cast<vector<Id>&>(cids1);
-  auto& l2 = const_cast<vector<Id>&>(cids2);
-  // The two below are needed for the final sentinel match
-  auto& s1 = const_cast<vector<Score>&>(scores1);
-  auto& s2 = const_cast<vector<Score>&>(scores2);
-
-  Id sent1 = std::numeric_limits<Id>::max();
-  Id sent2 = std::numeric_limits<Id>::max() - 1;
-  Id sentMatch = std::numeric_limits<Id>::max() - 2;
-
-  l1.push_back(sentMatch);
-  l2.push_back(sentMatch);
-  l1.push_back(sent1);
-  l2.push_back(sent2);
-  s1.push_back(0);
-  s2.push_back(0);
+  // Handle trivial empty case
+  if (cids1.empty() || cids2.empty()) {
+    return;
+  }
+  // TODO(schnelle): Need clear because a test reuses the result
+  // vectors. we should probably just specify that it appends
+  resultCids.reserve(cids1.size());
+  resultCids.clear();
+  resultScores.reserve(cids1.size());
+  resultScores.clear();
 
   size_t i = 0;
   size_t j = 0;
-  size_t n = 0;
 
-  while (l1[i] < sent1) {
-    while (l1[i] < l2[j]) {
+  while (i < cids1.size() && j < cids2.size()) {
+    while (cids1[i] < cids2[j]) {
       ++i;
+      if (i >= cids1.size()) {
+        return;
+      }
     }
-    while (l2[j] < l1[i]) {
+    while (cids2[j] < cids1[i]) {
       ++j;
+      if (j >= cids2.size()) {
+        return;
+      }
     }
-    while (l1[i] == l2[j]) {
-      resultCids[n] = l2[j];
-      resultScores[n++] = s1[i] + s2[j];
+    while (cids1[i] == cids2[j]) {
+      resultCids.push_back(cids2[j]);
+      resultScores.push_back(scores1[i] + scores2[j]);
       ++i;
       ++j;
+      if (i >= cids1.size() || j >= cids2.size()) {
+        break;
+      }
     }
   }
-
-  // Remove sentinels
-  l1.resize(l1.size() - 2);
-  l2.resize(l2.size() - 2);
-  s1.resize(s1.size() - 1);
-  s2.resize(s2.size() - 1);
-  resultCids.resize(n - 1);
-  resultScores.resize(n - 1);
-
-  LOG(DEBUG) << "Intersection done. Size: " << resultCids.size() << "\n";
 }
 
 // _____________________________________________________________________________
