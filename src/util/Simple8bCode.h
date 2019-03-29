@@ -134,6 +134,10 @@ class Simple8bCode {
   // ! is necessary inside the decoding of a single codeword.
   template <typename Numeric>
   static void decode(uint64_t* encoded, size_t nofElements, Numeric* decoded) {
+    // Handle trivial empty case
+    if (!nofElements) {
+      return;
+    }
     uint64_t word;
     // Loop over full 64bit codewords and
     size_t nofElementsDone(0), nofCodeWordsDone(0);
