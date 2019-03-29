@@ -44,6 +44,7 @@ class Operation {
     LOG(TRACE) << "Using key: \n" << asString() << endl;
     auto [newResult, existingResult] =
         _executionContext->getQueryTreeCache().tryEmplace(asString());
+
     if (newResult) {
       LOG(TRACE) << "Not in the cache, need to compute result" << endl;
       // Passing the raw pointer here is ok as the result shared_ptr remains

@@ -13,12 +13,12 @@ WORKDIR /app/
 RUN misc/format-check.sh
 
 WORKDIR /app/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG .. && make -j $(nproc) && make test
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG -DUSE_PARALLEL=true .. && make -j $(nproc) && make test
 
 FROM base as runtime
 WORKDIR /app
 RUN apt-get update && apt-get install -y wget python3-yaml unzip curl
-RUN apt-get update && apt-get install -y bzip2
+RUN apt-get update && apt-get install -y bzip2 libgomp1
 
 ARG UID=1000
 RUN groupadd -r qlever && useradd --no-log-init -r -u $UID -g qlever qlever && chown qlever:qlever /app

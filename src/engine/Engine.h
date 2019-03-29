@@ -8,6 +8,7 @@
 #include <iomanip>
 #include <vector>
 
+#include <parallel/algorithm>
 #include "../global/Constants.h"
 #include "../global/Id.h"
 #include "../global/Pattern.h"
@@ -196,10 +197,18 @@ class Engine {
   static void sort(IdTable* tab, size_t keyColumn) {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
-    std::sort(stab.begin(), stab.end(),
-              [&keyColumn](const auto& a, const auto& b) {
-                return a[keyColumn] < b[keyColumn];
-              });
+    if constexpr (USE_PARALLEL_SORT) {
+      __gnu_parallel::sort(stab.begin(), stab.end(),
+                           [&keyColumn](const auto& a, const auto& b) {
+                             return a[keyColumn] < b[keyColumn];
+                           },
+                           __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
+    } else {
+      std::sort(stab.begin(), stab.end(),
+                [&keyColumn](const auto& a, const auto& b) {
+                  return a[keyColumn] < b[keyColumn];
+                });
+    }
     *tab = stab.moveToDynamic();
     LOG(DEBUG) << "Sort done.\n";
   }
@@ -208,7 +217,12 @@ class Engine {
   static void sort(IdTable* tab, C comp) {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
-    std::sort(stab.begin(), stab.end(), comp);
+    if constexpr (USE_PARALLEL_SORT) {
+      __gnu_parallel::sort(stab.begin(), stab.end(), comp,
+                           __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
+    } else {
+      std::sort(stab.begin(), stab.end(), comp);
+    }
     *tab = stab.moveToDynamic();
     LOG(DEBUG) << "Sort done.\n";
   }
