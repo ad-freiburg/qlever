@@ -324,7 +324,7 @@ class MmapVectorView : private MmapVector<T> {
 
   // explicitly close the vector to an unitialized state and free the associated
   // ressources
-  void close() { MmapVector<T>::close(); }
+  void close();
 
   // destructor
   ~MmapVectorView() { close(); }
