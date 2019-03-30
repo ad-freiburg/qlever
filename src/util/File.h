@@ -15,6 +15,7 @@
 #include <vector>
 
 #include "./Exception.h"
+#include "Log.h"
 
 using std::cerr;
 using std::cout;
@@ -244,4 +245,19 @@ class File {
     return (stat(path.c_str(), &buffer) == 0);
   }
 };
+
+/**
+ * @brief Delete the file at a given path
+ * Currently uses the linux rm command until we support std::filesystem
+ * @param path
+ */
+inline void deleteFile(const string& path) {
+  // TODO<all>: As soon as we have GCC 8, we can use std::filesystem
+  string command = "rm -- " + path;
+  if (system(command.c_str())) {
+    LOG(WARN) << "Deletion of file " << path << " was probably not successful"
+              << std::endl;
+  }
+}
+
 }  // namespace ad_utility

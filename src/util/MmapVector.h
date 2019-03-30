@@ -10,6 +10,7 @@
 #include <fstream>
 #include <sstream>
 #include "../util/Exception.h"
+#include "File.h"
 
 using std::string;
 
@@ -332,5 +333,25 @@ class MmapVectorView : private MmapVector<T> {
   // _____________________________________________________________
   std::string getFilename() const { return this->_filename; }
 };
+
+// MmapVector that deletes the underlying file on destruction.
+// This is the only difference to the ordinary MmapVector(which is persistent)
+template <class T>
+class MmapVectorTmp : public MmapVector<T> {
+ public:
+  using MmapVector<T>::MmapVector;
+
+  // If we still own a file, delete it after cleaning up
+  // everything else
+  ~MmapVectorTmp() {
+    // if the filename is not empty, we still own a file
+    std::string oldFilename = this->_filename;
+    this->close();
+    if (!oldFilename.empty()) {
+      ad_utility::deleteFile(oldFilename);
+    }
+  }
+};
+
 }  // namespace ad_utility
 #include "./MmapVectorImpl.h"

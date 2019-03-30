@@ -713,4 +713,14 @@ class Index {
     }
     LOG(INFO) << "Done" << std::endl;
   }
+
+  /**
+   * Delete a temporary file unless the _keepTempFiles flag is set
+   * @param path
+   */
+  void deleteTemporaryFile(const string& path) {
+    if (!_keepTempFiles) {
+      ad_utility::deleteFile(path);
+    }
+  }
 };
