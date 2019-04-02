@@ -546,60 +546,6 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
         // or not a literal.
         rhs = parseLiteral(rhs, true);
       }
-      if (pred == "langMatches") {
-        if (!pattern) {
-          AD_THROW(
-              ad_semsearch::Exception::BAD_QUERY,
-              "Invalid position for language filter. Probable cause: language "
-              "filters are currently not supported in HAVING clauses.");
-        }
-        if (!ad_utility::startsWith(lhs, "lang(")) {
-          AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                   "langMatches filters"
-                   "are only supported"
-                   "when used with the "
-                   "lang function.");
-        }
-        std::string lvar = lhs.substr(5, lhs.size() - 6);
-
-        auto langTag = rhs.substr(1, rhs.size() - 2);
-        // first find a predicate for the given variable
-        auto it =
-            std::find_if(pattern->_whereClauseTriples.begin(),
-                         pattern->_whereClauseTriples.end(),
-                         [&lvar](const auto& tr) { return tr._o == lvar; });
-        while (it != pattern->_whereClauseTriples.end() &&
-               ad_utility::startsWith(it->_p, "?")) {
-          it = std::find_if(it + 1, pattern->_whereClauseTriples.end(),
-                            [&lvar](const auto& tr) { return tr._o == lvar; });
-        }
-        if (it == pattern->_whereClauseTriples.end()) {
-          LOG(INFO)
-              << "language filter variable " + rhs +
-                     "that did not appear as object in any suitable triple. "
-                     "using special literal-to-language triple instead.\n";
-          auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-          SparqlTriple triple(lvar, LANGUAGE_PREDICATE, langEntity);
-          // Quadratic in number of triples in query.
-          // Shouldn't be a problem here, though.
-          // Could use a (hash)-set instead of vector.
-          if (std::find(pattern->_whereClauseTriples.begin(),
-                        pattern->_whereClauseTriples.end(),
-                        triple) != pattern->_whereClauseTriples.end()) {
-            LOG(INFO) << "Ignoring duplicate triple: " << str << std::endl;
-          } else {
-            pattern->_whereClauseTriples.push_back(triple);
-          }
-        } else {
-          // replace the triple
-          string taggedPredicate = '@' + langTag + '@' + it->_p;
-          *it = SparqlTriple(it->_s, taggedPredicate, it->_o);
-        }
-
-        // Convert the language filter to a special triple
-        // to make it more efficient (no need for string resolution)
-        return;
-      }
       if (pred == "regex") {
         SparqlFilter f;
         f._type = SparqlFilter::REGEX;
@@ -660,6 +606,8 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
         _filters->emplace_back(f2);
         return;
       }
+      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+               "Unknown keyword at beginning of filter: " + str);
     }
   }
 
@@ -688,10 +636,61 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "Unknown syntax for filter: " + filter);
   }
+
+  // Check if we filter on the language of the left side of the
+  // filter.
+  if (ad_utility::startsWith(tokens[0], "lang") && tokens[1] == "=") {
+    if (!pattern) {
+      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+               "Invalid position for language filter. Probable cause: language "
+               "filters are currently not supported in HAVING clauses.");
+    }
+    std::string lhs = tokens[0];
+    std::string rhs = tokens[1];
+    std::string lvar = lhs.substr(5, lhs.size() - 6);
+
+    auto langTag = rhs.substr(1, rhs.size() - 2);
+    // first find a predicate for the given variable
+    auto it = std::find_if(pattern->_whereClauseTriples.begin(),
+                           pattern->_whereClauseTriples.end(),
+                           [&lvar](const auto& tr) { return tr._o == lvar; });
+    while (it != pattern->_whereClauseTriples.end() &&
+           ad_utility::startsWith(it->_p, "?")) {
+      it = std::find_if(it + 1, pattern->_whereClauseTriples.end(),
+                        [&lvar](const auto& tr) { return tr._o == lvar; });
+    }
+    if (it == pattern->_whereClauseTriples.end()) {
+      LOG(INFO) << "language filter variable " + rhs +
+                       "that did not appear as object in any suitable triple. "
+                       "using special literal-to-language triple instead.\n";
+      auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
+      SparqlTriple triple(lvar, LANGUAGE_PREDICATE, langEntity);
+      // Quadratic in number of triples in query.
+      // Shouldn't be a problem here, though.
+      // Could use a (hash)-set instead of vector.
+      if (std::find(pattern->_whereClauseTriples.begin(),
+                    pattern->_whereClauseTriples.end(),
+                    triple) != pattern->_whereClauseTriples.end()) {
+        LOG(INFO) << "Ignoring duplicate triple: " << str << std::endl;
+      } else {
+        pattern->_whereClauseTriples.push_back(triple);
+      }
+    } else {
+      // replace the triple
+      string taggedPredicate = '@' + langTag + '@' + it->_p;
+      *it = SparqlTriple(it->_s, taggedPredicate, it->_o);
+    }
+
+    // Convert the language filter to a special triple
+    // to make it more efficient (no need for string resolution)
+    return;
+  }
+
   if (tokens[0].size() == 0 || tokens[0][0] != '?' || tokens[2].size() == 0) {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
              "Filter not supported yet: " + filter);
   }
+
   SparqlFilter f;
   f._lhs = tokens[0];
   f._rhs = tokens[2];
