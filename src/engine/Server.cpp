@@ -348,7 +348,8 @@ string Server::composeResponseJson(const ParsedQuery& query,
   }
 
   os << "\"runtimeInformation\" : ";
-  os << nlohmann::json(qet.getRootOperation()->getRuntimeInfo());
+  os << RuntimeInformation::ordered_json(
+      qet.getRootOperation()->getRuntimeInfo());
   os << ", \n";
 
   os << "\"res\": ";

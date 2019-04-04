@@ -5,6 +5,7 @@
 #pragma once
 
 #include <iostream>
+#include <nlohmann/fifo_map.hpp>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
@@ -15,7 +16,18 @@
 
 class RuntimeInformation {
  public:
-  friend void to_json(nlohmann::json& j, const RuntimeInformation& rti);
+  // The following declarations introduce an ordered_json type
+  // that functions exactly like nlohmann::json but keeps
+  // object keys in insertion order.
+  // This helps to make the JSON more readable as it forces children to be
+  // printed after their parents. See also
+  // https://github.com/nlohmann/json/issues/485#issuecomment-333652309
+  template <class K, class V, class dummy_compare, class A>
+  using fifo_map = nlohmann::fifo_map<K, V, nlohmann::fifo_map_compare<K>, A>;
+  using ordered_json = nlohmann::basic_json<fifo_map>;
+
+  friend inline void to_json(RuntimeInformation::ordered_json& j,
+                             const RuntimeInformation& rti);
 
   RuntimeInformation()
       : _time(0),
@@ -131,14 +143,15 @@ class RuntimeInformation {
   std::vector<RuntimeInformation> _children;
 };
 
-inline void to_json(nlohmann::json& j, const RuntimeInformation& rti) {
-  using nlohmann::json;
-  j = json{{"description", rti._descriptor},
-           {"result_rows", rti._rows},
-           {"result_cols", rti._cols},
-           {"total_time", rti._time},
-           {"operation_time", rti.getOperationTime()},
-           {"was_cached", rti._wasCached},
-           {"details", rti._details},
-           {"children", rti._children}};
+inline void to_json(RuntimeInformation::ordered_json& j,
+                    const RuntimeInformation& rti) {
+  j = RuntimeInformation::ordered_json{
+      {"description", rti._descriptor},
+      {"result_rows", rti._rows},
+      {"result_cols", rti._cols},
+      {"total_time", rti._time},
+      {"operation_time", rti.getOperationTime()},
+      {"was_cached", rti._wasCached},
+      {"details", rti._details},
+      {"children", rti._children}};
 }
