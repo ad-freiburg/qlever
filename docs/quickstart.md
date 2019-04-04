@@ -18,7 +18,7 @@ Base.
     docker run -it --rm \
         -v "$(pwd)/scientists:/input" \
         -v "$(pwd)/index:/index" --entrypoint "bash" qlever
-    qlever@xyz:/app$ IndexBuilderMain -a -l -i /index/scientists \
+    qlever@xyz:/app$ IndexBuilderMain -l -i /index/scientists \
         -n /input/scientists.nt \
         -w /input/scientists.wordsfile.tsv \
         -d /input/scientists.docsfile.tsv
