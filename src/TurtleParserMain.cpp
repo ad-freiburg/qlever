@@ -136,17 +136,17 @@ int main(int argc, char** argv) {
       filetypeDeduced = true;
     } else {
       LOG(WARN)
-        << " Could not deduce the type of the input knowledge-base-file by "
-           "its extension. Assuming the input to be turtle. Please specify "
-           "--file-format (-F)\n";
+          << " Could not deduce the type of the input knowledge-base-file by "
+             "its extension. Assuming the input to be turtle. Please specify "
+             "--file-format (-F)\n";
       LOG(WARN) << "In case this is not correct \n";
     }
     if (filetypeDeduced) {
       LOG(INFO) << "Assuming input file format to be " << fileFormat
                 << " due to the input file's extension.\n";
       LOG(INFO)
-        << "If this is wrong, please manually specify the --file-format "
-           "(-F) flag.\n";
+          << "If this is wrong, please manually specify the --file-format "
+             "(-F) flag.\n";
     }
   }
 

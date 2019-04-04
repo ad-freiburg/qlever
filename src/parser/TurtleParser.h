@@ -83,7 +83,7 @@ class TurtleParser {
   bool statement();
   /* Data Members */
 
-  //Stores the triples that have been parsed but not retrieved yet.
+  // Stores the triples that have been parsed but not retrieved yet.
   std::vector<std::array<string, 3>> _triples;
 
   // if this is set, there is nothing else to parse and we will only
