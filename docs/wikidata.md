@@ -26,15 +26,15 @@ build the index under a different path.
     cd qlever
     docker build -t qlever .
 
-## Download and Wikidata
+## Download Wikidata
 
 If you already downloaded Wikidata in the bzip2-compressed
-Turtle format, you can skip this step. Otherwise we will download in this step.
+Turtle format, you can skip this step. Otherwise we will download it in this step.
 
 **Note:** This takes several hours as Wikidata is about 42 GB compressed and
-their servers are throttled. In case you are in a hurry you can directly pipe the file
-into the index-building pipeline (see next section). But in this case you'll have to redownload
-if something goes wrong during the index build.
+their servers are throttled. In case you are in a hurry and don't need to save a copy of the original input
+(e.g. for reproducibility), you can directly pipe the file
+into the index-building pipeline (see next section).
 
     mkdir wikidata-input
     wget -O wikidata-input/latest-all.ttl.bz2 \
@@ -42,7 +42,7 @@ if something goes wrong during the index build.
 
 ## Build a QLever Index
 
-Now we can build a QLever Index from the `latest-all.ttl.bzip2` Wikidata Turtle file.
+Now we can build a QLever Index from the `latest-all.ttl.bz2` Wikidata Turtle file.
 For the process of building an index we can tune some settings to the particular
 Knowledge Base. The most important of these is a list of relations which can safely be
 stored on disk, as their actual values are rarely accessed. For Wikidata these

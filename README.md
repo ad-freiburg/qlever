@@ -121,7 +121,7 @@ section](#running-qlever).
 If your input knowledge base is in the standard *NTriple* or *Turtle* format
 create the index with the following command
 
-    IndexBuilderMain  -l -i /index/<prefix> -f /input/knowledge_base.ttl
+    IndexBuilderMain -l -i /index/<prefix> -f /input/knowledge_base.ttl
 
 Where `<prefix>` is the base name for all index files and `-l` externalizes long literals to disk.
 If you use `index` as the prefix you can later skip the `-e
