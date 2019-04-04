@@ -14,6 +14,7 @@ namespace ad_utility {
 // is big The switching threshold can be set when creating the vector Currently
 // only push_back and clear are supported (+ all kinds of access to existing
 // elements) Can be trivially extended to complete the interface
+// The backup file is temporary and will be deleted in the destructor
 template <class T>
 class BufferedVector {
  public:
@@ -109,6 +110,6 @@ class BufferedVector {
 
   // the two possible data storages
   std::vector<T> _vec;
-  ad_utility::MmapVector<T> _extVec;
+  ad_utility::MmapVectorTmp<T> _extVec;
 };
 }  // namespace ad_utility

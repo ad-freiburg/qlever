@@ -41,7 +41,7 @@ class QueueCompare {
 // ___________________________________________________________________
 size_t mergeVocabulary(const std::string& basename, size_t numFiles,
                        Id* langPredLowerBound, Id* langPredUpperBound) {
-  std::vector<std::fstream> infiles;
+  std::vector<std::ifstream> infiles;
 
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> idVecs;
@@ -56,8 +56,8 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles,
 
   // open and prepare all infiles and mmap output vectors
   for (size_t i = 0; i < numFiles; i++) {
-    infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME + std::to_string(i),
-                         std::ios_base::in | std::ios_base::out);
+    infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME +
+                         std::to_string(i));
     idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
     AD_CHECK(infiles.back().is_open());
 

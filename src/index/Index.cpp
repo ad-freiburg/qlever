@@ -48,6 +48,7 @@ VocabularyData Index::createIdTriplesAndVocab(const string& ntFile) {
         _onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME,
         _onDiskBase + ".literals-index");
   }
+  deleteTemporaryFile(_onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME);
   // clear vocabulary to save ram (only information from partial binary files
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
@@ -55,29 +56,6 @@ VocabularyData Index::createIdTriplesAndVocab(const string& ntFile) {
   convertPartialToGlobalIds(*vocabData.idTriples, vocabData.actualPartialSizes,
                             NUM_TRIPLES_PER_PARTIAL_VOCAB);
 
-  if (!_keepTempFiles) {
-    // remove temporary files only used during index creation
-    LOG(INFO) << "Removing temporary files (partial vocabulary and external "
-                 "text file...\n";
-
-    // TODO(all): using system and rm is not really elegant nor portable.
-    // use std::filesystem as soon as QLever is ported to C++17
-    string removeCommand1 =
-        "rm -- " + _onDiskBase + EXTERNAL_LITS_TEXT_FILE_NAME;
-    bool w1 = system(removeCommand1.c_str());
-    string removeCommand2 =
-        "rm -- " + _onDiskBase + PARTIAL_VOCAB_FILE_NAME + "*";
-    bool w2 = system(removeCommand2.c_str());
-    if (w1 || w2) {
-      LOG(INFO)
-          << "Warning. Deleting of temporary files probably not successful\n";
-    } else {
-      LOG(INFO) << "Done.\n";
-    }
-  } else {
-    LOG(INFO) << "Keeping temporary files (partial vocabulary and external "
-                 "text file...\n";
-  }
   return vocabData;
 }
 
@@ -232,6 +210,11 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   VocabularyData res;
   res.nofWords = mergeVocabulary(_onDiskBase, numFiles, &res.langPredLowerBound,
                                  &res.langPredUpperBound);
+  for (size_t i = 0; i < numFiles; ++i) {
+    string partialFilename =
+        _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(i);
+    deleteTemporaryFile(partialFilename);
+  }
   res.idTriples = std::move(idTriples);
   res.actualPartialSizes = std::move(actualPartialSizes);
   LOG(INFO) << "Pass done.\n";
@@ -257,6 +240,9 @@ void Index::convertPartialToGlobalIds(
     LOG(INFO) << "Reading IdMap from " << mmapFilename << " ...\n";
     ad_utility::HashMap<Id, Id> idMap = IdMapFromPartialIdMapFile(mmapFilename);
     LOG(INFO) << "Done reading idMap\n";
+    // Delete the temporary file in which we stored this map
+    deleteTemporaryFile(mmapFilename);
+
     // update the triples for which this partial vocabulary was responsible
     for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[partialNum];
          ++tmpNum) {
@@ -586,9 +572,9 @@ void Index::createPatternsImpl(const string& fileName,
   LOG(DEBUG) << "Pattern set size: " << patternSet.size() << std::endl;
 
   // Associate entities with patterns if possible, store has-relation otherwise
-  ad_utility::MmapVector<std::array<Id, 2>> entityHasPattern(
+  ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPattern(
       0, fileName + ".mmap.entityHasPattern.tmp");
-  ad_utility::MmapVector<std::array<Id, 2>> entityHasPredicate(
+  ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPredicate(
       0, fileName + ".mmap.entityHasPredicate.tmp");
 
   size_t numEntitiesWithPatterns = 0;
