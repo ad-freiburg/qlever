@@ -536,6 +536,8 @@ void Filter::computeResultFixedValue(
                     '\"' + std::string(split2.val) + '\"' + "@" + char(127);
               }
             } break;
+            default:
+              break;
           }
         }
       }

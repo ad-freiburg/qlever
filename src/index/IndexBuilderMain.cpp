@@ -207,6 +207,8 @@ int main(int argc, char** argv) {
         cout << endl
              << "! ERROR in processing options (getopt returned '" << c
              << "' = 0x" << std::setbase(16) << c << ")" << endl
+             << "Corresponding ascii option : -" << std::string(1, c) << endl
+             << "This is either an unsupported option or there was an error"
              << endl;
         exit(1);
     }
