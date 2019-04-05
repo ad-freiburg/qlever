@@ -59,7 +59,8 @@ if [ "$1" != "no-index" ]; then
 	pushd "$BINARY_DIR"
 	echo "Building index $INDEX"
 	./IndexBuilderMain -l -i "$INDEX" \
-		-n "$INPUT.nt" \
+	    -F ttl \
+		-f "$INPUT.nt" \
 		-w "$INPUT.wordsfile.tsv" \
 		-d "$INPUT.docsfile.tsv" || bail "Building Index failed"
 	popd

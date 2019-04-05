@@ -9,56 +9,56 @@
 
 using std::string;
 TEST(TurtleParserTest, prefixedName) {
-  TurtleParser p;
+  TurtleStringParser p;
   p._prefixMap["wd"] = "www.wikidata.org/";
-  p.reset("wd:Q430 someotherContent");
+  p.setInputStream("wd:Q430 someotherContent");
   ASSERT_TRUE(p.prefixedName());
   ASSERT_EQ(p._lastParseResult, "<www.wikidata.org/Q430>");
   ASSERT_EQ(p.getPosition(), size_t(7));
 
-  p.reset(" wd:Q430 someotherContent");
+  p.setInputStream(" wd:Q430 someotherContent");
   ASSERT_TRUE(p.prefixedName());
   ASSERT_EQ(p._lastParseResult, "<www.wikidata.org/Q430>");
   ASSERT_EQ(p.getPosition(), 8u);
 
   // empty name
-  p.reset("wd: someotherContent");
+  p.setInputStream("wd: someotherContent");
   ASSERT_TRUE(p.prefixedName());
   ASSERT_EQ(p._lastParseResult, "<www.wikidata.org/>");
   ASSERT_EQ(p.getPosition(), size_t(3));
 
-  p.reset("<wd.de> rest");
+  p.setInputStream("<wd.de> rest");
   p._lastParseResult = "comp1";
   ASSERT_FALSE(p.prefixedName());
   ASSERT_EQ(p._lastParseResult, "comp1");
   ASSERT_EQ(p.getPosition(), 0u);
 
-  p.reset("unregistered:bla");
+  p.setInputStream("unregistered:bla");
   ASSERT_THROW(p.prefixedName(), TurtleParser::ParseException);
 }
 
 TEST(TurtleParserTest, prefixID) {
-  TurtleParser p;
+  TurtleStringParser p;
   string s = "@prefix bla:<www.bla.org/> .";
-  p.reset(s);
+  p.setInputStream(s);
   ASSERT_TRUE(p.prefixID());
   ASSERT_EQ(p._prefixMap["bla"], "www.bla.org/");
   ASSERT_EQ(p.getPosition(), s.size());
 
   // different spaces that don't change meaning
   s = "@prefix bla: <www.bla.org/>.";
-  p.reset(s);
+  p.setInputStream(s);
   ASSERT_TRUE(p.prefixID());
   ASSERT_EQ(p._prefixMap["bla"], "www.bla.org/");
   ASSERT_EQ(p.getPosition(), s.size());
 
   // invalid LL1
   s = "@prefix bla<www.bla.org/>.";
-  p.reset(s);
+  p.setInputStream(s);
   ASSERT_THROW(p.prefixID(), TurtleParser::ParseException);
 
   s = "@prefxxix bla<www.bla.org/>.";
-  p.reset(s);
+  p.setInputStream(s);
   p._lastParseResult = "comp1";
   ASSERT_FALSE(p.prefixID());
   ASSERT_EQ(p._lastParseResult, "comp1");
@@ -66,7 +66,7 @@ TEST(TurtleParserTest, prefixID) {
 }
 
 TEST(TurtleParserTest, stringParse) {
-  TurtleParser p;
+  TurtleStringParser p;
   string s1("\"double quote\"");
   string s2("\'single quote\'");
   string s3("\"\"\"multiline \n double quote\"\"\"");
@@ -75,22 +75,22 @@ TEST(TurtleParserTest, stringParse) {
   // the main thing to test here is that s3 does not prefix-match the simple
   // string "" but the complex string """..."""
 
-  p.reset(s1);
+  p.setInputStream(s1);
   ASSERT_TRUE(p.stringParse());
   ASSERT_EQ(p._lastParseResult, s1);
   ASSERT_EQ(p.getPosition(), s1.size());
 
-  p.reset(s2);
+  p.setInputStream(s2);
   ASSERT_TRUE(p.stringParse());
   ASSERT_EQ(p._lastParseResult, s2);
   ASSERT_EQ(p.getPosition(), s2.size());
 
-  p.reset(s3);
+  p.setInputStream(s3);
   ASSERT_TRUE(p.stringParse());
   ASSERT_EQ(p._lastParseResult, s3);
   ASSERT_EQ(p.getPosition(), s3.size());
 
-  p.reset(s4);
+  p.setInputStream(s4);
   ASSERT_TRUE(p.stringParse());
   ASSERT_EQ(p._lastParseResult, s4);
   ASSERT_EQ(p.getPosition(), s4.size());
@@ -103,9 +103,9 @@ TEST(TurtleParserTest, rdfLiteral) {
   literals.push_back("\"langtag\"@en-gb");
   literals.push_back("\"valueLong\"^^<www.xsd.org/integer>");
 
-  TurtleParser p;
+  TurtleStringParser p;
   for (const auto& s : literals) {
-    p.reset(s);
+    p.setInputStream(s);
     ASSERT_TRUE(p.rdfLiteral());
     ASSERT_EQ(p._lastParseResult, s);
     ASSERT_EQ(p.getPosition(), s.size());
@@ -113,15 +113,15 @@ TEST(TurtleParserTest, rdfLiteral) {
 
   p._prefixMap["xsd"] = "www.xsd.org/";
   string s("\"valuePrefixed\"^^xsd:integer");
-  p.reset(s);
+  p.setInputStream(s);
   ASSERT_TRUE(p.rdfLiteral());
   ASSERT_EQ(p._lastParseResult, "\"valuePrefixed\"^^<www.xsd.org/integer>");
   ASSERT_EQ(p.getPosition(), s.size());
 }
 
 TEST(TurtleParserTest, blankNode) {
-  TurtleParser p;
-  p.reset(" _:blank1");
+  TurtleStringParser p;
+  p.setInputStream(" _:blank1");
   ASSERT_TRUE(p.blankNode());
   ASSERT_EQ(p._lastParseResult, "_:0");
   ASSERT_EQ(p._blankNodeMap["_:blank1"], "_:0");
@@ -129,7 +129,7 @@ TEST(TurtleParserTest, blankNode) {
   ASSERT_EQ(p._numBlankNodes, 1u);
   ASSERT_EQ(p.getPosition(), 9u);
 
-  p.reset(" _:blank1 someRemainder");
+  p.setInputStream(" _:blank1 someRemainder");
   ASSERT_TRUE(p.blankNode());
   ASSERT_EQ(p._lastParseResult, "_:0");
   ASSERT_EQ(p._blankNodeMap["_:blank1"], "_:0");
@@ -137,7 +137,7 @@ TEST(TurtleParserTest, blankNode) {
   ASSERT_EQ(p._numBlankNodes, 1u);
   ASSERT_EQ(p.getPosition(), 9u);
 
-  p.reset("  _:blank2 someOtherStuff");
+  p.setInputStream("  _:blank2 someOtherStuff");
   ASSERT_TRUE(p.blankNode());
   ASSERT_EQ(p._lastParseResult, "_:1");
   ASSERT_EQ(p._blankNodeMap["_:blank2"], "_:1");
@@ -146,7 +146,7 @@ TEST(TurtleParserTest, blankNode) {
   ASSERT_EQ(p.getPosition(), 10u);
 
   // anonymous blank node
-  p.reset(" [    \n\t  ]");
+  p.setInputStream(" [    \n\t  ]");
   ASSERT_TRUE(p.blankNode());
   ASSERT_EQ(p._lastParseResult, "_:2");
   ASSERT_EQ(p._blankNodeMap.size(), 2u);
@@ -155,7 +155,7 @@ TEST(TurtleParserTest, blankNode) {
 }
 
 TEST(TurtleParserTest, blankNodePropertyList) {
-  TurtleParser p;
+  TurtleStringParser p;
   p._activeSubject = "<s>";
   p._activePredicate = "<p1>";
 
@@ -164,18 +164,18 @@ TEST(TurtleParserTest, blankNodePropertyList) {
   exp.push_back({"<s>", "<p1>", "_:0"});
   exp.push_back({"_:0", "<p2>", "<ob2>"});
   exp.push_back({"_:0", "<p3>", "<ob3>"});
-  p.reset(blankNodeL);
+  p.setInputStream(blankNodeL);
   ASSERT_TRUE(p.blankNodePropertyList());
   ASSERT_EQ(p._triples, exp);
   ASSERT_EQ(p.getPosition(), blankNodeL.size());
 
   blankNodeL = "[<2> <ob2>; \"invalidPred\" <ob3>]";
-  p.reset(blankNodeL);
+  p.setInputStream(blankNodeL);
   ASSERT_THROW(p.blankNodePropertyList(), TurtleParser::ParseException);
 }
 
 TEST(TurtleParserTest, object) {
-  TurtleParser p;
+  TurtleStringParser p;
   string sub = "<sub>";
   string pred = "<pred>";
   using triple = std::array<string, 3>;
@@ -183,21 +183,21 @@ TEST(TurtleParserTest, object) {
   p._activePredicate = pred;
   p._prefixMap["b"] = "bla/";
   string iri = " b:iri";
-  p.reset(iri);
+  p.setInputStream(iri);
   ASSERT_TRUE(p.object());
   ASSERT_EQ(p._lastParseResult, "<bla/iri>");
   auto exp = triple{sub, pred, "<bla/iri>"};
   ASSERT_EQ(p._triples.back(), exp);
 
   string literal = "\"literal\"";
-  p.reset(literal);
+  p.setInputStream(literal);
   ASSERT_TRUE(p.object());
   ASSERT_EQ(p._lastParseResult, literal);
   exp = triple{sub, pred, literal};
   ASSERT_EQ(p._triples.back(), exp);
 
   string blank = "_:someblank";
-  p.reset(blank);
+  p.setInputStream(blank);
   ASSERT_TRUE(p.object());
   ASSERT_EQ(p._lastParseResult, "_:0");
 
@@ -206,7 +206,7 @@ TEST(TurtleParserTest, object) {
 }
 
 TEST(TurtleParserTest, objectList) {
-  TurtleParser p;
+  TurtleStringParser p;
   p._activeSubject = "<s>";
   p._activePredicate = "<p>";
   string objectL = " <ob1>, <ob2>, <ob3>";
@@ -214,27 +214,27 @@ TEST(TurtleParserTest, objectList) {
   exp.push_back({"<s>", "<p>", "<ob1>"});
   exp.push_back({"<s>", "<p>", "<ob2>"});
   exp.push_back({"<s>", "<p>", "<ob3>"});
-  p.reset(objectL);
+  p.setInputStream(objectL);
   ASSERT_TRUE(p.objectList());
   ASSERT_EQ(p._triples, exp);
   ASSERT_EQ(p.getPosition(), objectL.size());
 
-  p.reset("@noObject");
+  p.setInputStream("@noObject");
   ASSERT_FALSE(p.objectList());
 
-  p.reset("<obj1>, @illFormed");
+  p.setInputStream("<obj1>, @illFormed");
   ASSERT_THROW(p.objectList(), TurtleParser::ParseException);
 }
 
 TEST(TurtleParserTest, predicateObjectList) {
-  TurtleParser p;
+  TurtleStringParser p;
   p._activeSubject = "<s>";
   string predL = "\n <p1> <ob1>;<p2> \"ob2\",\n <ob3>";
   std::vector<std::array<string, 3>> exp;
   exp.push_back({"<s>", "<p1>", "<ob1>"});
   exp.push_back({"<s>", "<p2>", "\"ob2\""});
   exp.push_back({"<s>", "<p2>", "<ob3>"});
-  p.reset(predL);
+  p.setInputStream(predL);
   ASSERT_TRUE(p.predicateObjectList());
   ASSERT_EQ(p._triples, exp);
   ASSERT_EQ(p.getPosition(), predL.size());

@@ -26,27 +26,23 @@ build the index under a different path.
     cd qlever
     docker build -t qlever .
 
-## Download and uncompress Wikidata
+## Download Wikidata
 
-If you already downloaded **and decrompressed** Wikidata to the uncompressed
-Turtle format, you can skip this step. Otherwise we will download and uncompress
-it in this step.
+If you already downloaded Wikidata in the bzip2-compressed
+Turtle format, you can skip this step. Otherwise we will download it in this step.
 
 **Note:** This takes several hours as Wikidata is about 42 GB compressed and
-their servers are throttled.
-
-**This is the first step that needs significant amounts of storage.**
-Together, the unpacked Wikidata Turtle file, created in this step, and the index
-we will create in the next section, will use up to about 2 TB.
+their servers are throttled. In case you are in a hurry and don't need to save a copy of the original input
+(e.g. for reproducibility), you can directly pipe the file
+into the index-building pipeline (see next section).
 
     mkdir wikidata-input
-    wget -O - \
-      https://dumps.wikimedia.org/wikidatawiki/entities/latest-all.ttl.bz2 \
-      | bzcat > wikidata-input/latest-all.ttl
+    wget -O wikidata-input/latest-all.ttl.bz2 \
+      https://dumps.wikimedia.org/wikidatawiki/entities/latest-all.ttl.bz2
 
 ## Build a QLever Index
 
-Now we can build a QLever Index from the `latest-all.ttl` Wikidata Turtle file.
+Now we can build a QLever Index from the `latest-all.ttl.bz2` Wikidata Turtle file.
 For the process of building an index we can tune some settings to the particular
 Knowledge Base. The most important of these is a list of relations which can safely be
 stored on disk, as their actual values are rarely accessed. For Wikidata these
@@ -65,12 +61,19 @@ inside the container e.g. by running `chmod -R o+rw ./index`
     docker run -it --rm \
         -v "$(pwd)/wikidata-input/:/input" \
         -v "$(pwd)/index:/index" --entrypoint "bash" qlever
-    qlever@xyz:/app$ IndexBuilderMain -a -l -i /index/wikidata-full \
-        -n /input/latest-all.ttl \
+    qlever@xyz:/app$ bzcat /input/latest-all.ttl.bz2 | IndexBuilderMain -l -i /index/wikidata-full \
+        -f - \
         -s /input/wikidata_settings.json
     … wait for about half a day …
     qlever@xyz:/app$ exit
 
+In case you don't want to download and save the `.ttl.bz2` file first the second step becomes
+
+    qlever@xyz:/app$ wget -O - https://dumps.wikimedia.org/wikidatawiki/entities/latest-all.ttl.bz2 \
+                   | bzcat /input/latest-all.ttl.bz2 
+                   | IndexBuilderMain -l -i /index/wikidata-full -f - \
+                                      -s /input/wikidata_settings.json
+        
 ## Run QLever
 
 Finally we are ready to launch a QLever instance using the newly build Wikidata

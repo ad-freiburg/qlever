@@ -121,10 +121,9 @@ section](#running-qlever).
 If your input knowledge base is in the standard *NTriple* or *Turtle* format
 create the index with the following command
 
-    IndexBuilderMain -a -l -i /index/<prefix> -n /input/knowledge_base.ttl
+    IndexBuilderMain -l -i /index/<prefix> -f /input/knowledge_base.ttl
 
-Where `<prefix>` is the base name for all index files, `-a` enables certain
-queries using predicate variables and `-l` externalizes long literals to disk.
+Where `<prefix>` is the base name for all index files and `-l` externalizes long literals to disk.
 If you use `index` as the prefix you can later skip the `-e
 INDEX_PREFIX=<prefix>` flag.
 
@@ -134,11 +133,11 @@ To include a text collection, the wordsfile and docsfiles (see
 
 Then the full command will look like this:
 
-    IndexBuilderMain -l -a -i /index/<prefix> -n /input/knowledge_base.ttl \
+    IndexBuilderMain -l -i /index/<prefix> -f /input/knowledge_base.ttl \
       -w /input/wordsfile.tsv -d /input/docsfile.tsv
 
 You can also add a text index to an existing knowledge base index by adding the
-`-A` flag and ommitting the `-n` flag.
+`-A` flag and ommitting the `-f` flag.
 
 # Running QLever
 

@@ -106,7 +106,8 @@ void Index::createFromFile(const string& filename) {
 // explicit instantiations
 template void Index::createFromFile<TsvParser>(const string& filename);
 template void Index::createFromFile<NTriplesParser>(const string& filename);
-template void Index::createFromFile<TurtleParser>(const string& filename);
+template void Index::createFromFile<TurtleStreamParser>(const string& filename);
+template void Index::createFromFile<TurtleMmapParser>(const string& filename);
 
 // _____________________________________________________________________________
 template <class Parser>

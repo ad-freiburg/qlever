@@ -35,6 +35,37 @@
 #define FATAL 0
 
 namespace ad_utility {
+/* A singleton (According to Scott Meyer's pattern that holds
+ * a pointer to a single std::ostream. This enables us to globally
+ * redirect the LOG(LEVEL) Makros to another location.
+ */
+struct LogstreamChoice {
+  std::ostream& getStream() { return *_stream; }
+  void setStream(std::ostream* stream) { _stream = stream; }
+
+  static LogstreamChoice& get() {
+    static LogstreamChoice s;
+    return s;
+  }  // instance
+  LogstreamChoice(const LogstreamChoice&) = delete;
+  LogstreamChoice& operator=(const LogstreamChoice&) = delete;
+
+ private:
+  LogstreamChoice() {}
+  ~LogstreamChoice() {}
+
+  // default to cout since it was the default before
+  std::ostream* _stream = &std::cout;
+
+};  // struct LogstreamChoice
+
+/** @brief Redirect every LOG(LEVEL) macro that is called afterwards
+ *         to the stream that the argument points to.
+ *         Typically called in the main function of an executable.
+ */
+inline void setGlobalLogginStream(std::ostream* streamPtr) {
+  LogstreamChoice::get().setStream(streamPtr);
+}
 
 using std::string;
 //! Helper class to get thousandth separators in a locale
@@ -68,8 +99,10 @@ class Log {
  public:
   template <unsigned char LEVEL>
   static std::ostream& getLog() {
-    return std::cout << ad_utility::Log::getTimeStamp() << "\t- "
-                     << ad_utility::Log::getLevel<LEVEL>();
+    // use the singleton logging stream as target.
+    return LogstreamChoice::get().getStream()
+           << ad_utility::Log::getTimeStamp() << "\t- "
+           << ad_utility::Log::getLevel<LEVEL>();
   }
 
   static void imbue(const std::locale& locale) { std::cout.imbue(locale); }
