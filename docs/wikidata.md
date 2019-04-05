@@ -62,7 +62,7 @@ inside the container e.g. by running `chmod -R o+rw ./index`
         -v "$(pwd)/wikidata-input/:/input" \
         -v "$(pwd)/index:/index" --entrypoint "bash" qlever
     qlever@xyz:/app$ bzcat /input/latest-all.ttl.bz2 | IndexBuilderMain -l -i /index/wikidata-full \
-        -f - \
+        -F ttl -f - \
         -s /input/wikidata_settings.json
     … wait for about half a day …
     qlever@xyz:/app$ exit
@@ -70,10 +70,10 @@ inside the container e.g. by running `chmod -R o+rw ./index`
 In case you don't want to download and save the `.ttl.bz2` file first the second step becomes
 
     qlever@xyz:/app$ wget -O - https://dumps.wikimedia.org/wikidatawiki/entities/latest-all.ttl.bz2 \
-                   | bzcat /input/latest-all.ttl.bz2 
-                   | IndexBuilderMain -l -i /index/wikidata-full -f - \
+                   | bzcat /input/latest-all.ttl.bz2
+                   | IndexBuilderMain -l -i /index/wikidata-full -F ttl -f - \
                                       -s /input/wikidata_settings.json
-        
+
 ## Run QLever
 
 Finally we are ready to launch a QLever instance using the newly build Wikidata
