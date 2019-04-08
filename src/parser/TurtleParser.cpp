@@ -428,8 +428,8 @@ bool TurtleStreamParser::resetStateAndRead(
   _byteVec = std::move(buf);
   _tok.reset(_byteVec.data(), _byteVec.size());
 
-  LOG(INFO) << "Succesfully decompressed next batch of " << nextBytes.size()
-            << " << bytes to parser\n";
+  LOG(TRACE) << "Succesfully decompressed next batch of " << nextBytes.size()
+             << " << bytes to parser\n";
   return true;
 }
 

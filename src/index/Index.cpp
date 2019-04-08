@@ -1403,6 +1403,8 @@ void Index::initializeVocabularySettingsBuild() {
   if (j.find("prefixes-external") != j.end()) {
     _vocab.initializeExternalizePrefixes(j["prefixes-external"]);
     _configurationJson["prefixes-external"] = j["prefixes-external"];
+    _onDiskLiterals = true;
+    _configurationJson["external-literals"] = true;
   }
 
   if (j.count("ignore-case")) {
@@ -1413,6 +1415,8 @@ void Index::initializeVocabularySettingsBuild() {
   if (j.find("languages-internal") != j.end()) {
     _vocab.initializeInternalizedLangs(j["languages-internal"]);
     _configurationJson["languages-internal"] = j["languages-internal"];
+    _onDiskLiterals = true;
+    _configurationJson["external-literals"] = true;
   }
 }
 
