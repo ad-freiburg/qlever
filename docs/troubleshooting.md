@@ -78,8 +78,14 @@ decide which permutations shall be stored in which format.
 
 ## Note when using Docker on Mac or Windows
 
-When building an index, QLever will create scratch space for on-disc sorting. This space is allocated as a large 1 TB sparse file. On standard Linux file systems such as Ext4 sparse files are optimized and this will only take as much disk space as is actually used.
-With some systems such as Docker on macOS or when using unsupported file systems such as NTFS or APFS, this may lead to problems as these do not properly support sparse files.
+When building an index, QLever will create scratch space for on-disc sorting.
+This space is allocated as a large 1 TB sparse file. On standard Linux file
+systems such as Ext4 sparse files are optimized and this will only take as much
+disk space as is actually used.
+
+With some systems such as Docker on Mac or when using unsupported file
+systems such as NTFS or APFS, this may lead to problems as these do not
+properly support sparse files.
 
 One possible error may be the following:
 
@@ -88,6 +94,7 @@ One possible error may be the following:
     terminate called after throwing an instance of 'foxxll::io_error'
       what():  Error in void foxxll::ufs_file_base::_set_size(foxxll::file::offset_type) : ftruncate() path=/index/scientists-stxxl.disk fd=4 : No space left on device: iostream error
     Aborted
+
 While macOS including Docker on Mac is not supported there are some workarounds.
 You can manually change the constant `static const size_t STXXL_DISK_SIZE_INDEX_BUILDER` 
 in [file](../src/global/Constants.h) or 
