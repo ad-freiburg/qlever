@@ -219,8 +219,11 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     s["car"] = 8;
     Vocabulary<string> v;
     std::string basename = "_tmp_testidx";
+    auto ptr =
+        std::make_shared<const ad_utility::HashMap<string, Id>>(std::move(s));
     writePartialIdMapToBinaryFileForMerging(
-        s, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator());
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(),
+        false);
     Id tmp1;
     Id tmp2;
 
@@ -244,8 +247,11 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     Vocabulary<string> v;
     v.setCaseInsensitiveOrdering(true);
     std::string basename = "_tmp_testidx";
+    auto ptr =
+        std::make_shared<const ad_utility::HashMap<string, Id>>(std::move(s));
     writePartialIdMapToBinaryFileForMerging(
-        s, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator());
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(),
+        false);
     Id tmp1;
     Id tmp2;
 

@@ -28,7 +28,7 @@ static const size_t PARSER_BATCH_SIZE = 1000000;
 // That many triples does the turtle parser have to buffer before the call to
 // getline returns (unless our input reaches EOF). This makes parsing from
 // streams faster.
-static const size_t PARSER_MIN_TRIPLES_AT_ONCE = 1000;
+static const size_t PARSER_MIN_TRIPLES_AT_ONCE = 100000;
 
 // When reading from a file, Chunks of this size will
 // be fed to the parser at once (100 << 20  is exactly 100 MiB

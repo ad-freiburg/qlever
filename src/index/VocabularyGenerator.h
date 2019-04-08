@@ -32,8 +32,8 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles,
 
 // _________________________________________________________________________________________
 void writePartialIdMapToBinaryFileForMerging(
-    const ad_utility::HashMap<string, Id>& map, const string& fileName,
-    StringSortComparator comp);
+    std::shared_ptr<const ad_utility::HashMap<string, Id>> map,
+    const string& fileName, StringSortComparator comp, bool doParallelSort);
 
 // _________________________________________________________________________________________
 ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(

@@ -12,6 +12,7 @@
 #include <future>
 #include <locale>
 #include <string_view>
+#include "../global/Constants.h"
 #include "../index/ConstantsIndexCreation.h"
 #include "../util/Exception.h"
 #include "../util/File.h"
@@ -19,7 +20,6 @@
 #include "../util/Log.h"
 #include "./Tokenizer.h"
 #include "ParallelBuffer.h"
-#include "../global/Constants.h"
 
 using std::string;
 

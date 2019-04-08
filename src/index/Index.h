@@ -508,9 +508,9 @@ class Index {
    * @param items Contains our unsorted vocabulary. Maps words to their local
    * ids within this vocabulary.
    */
-  void writeNextPartialVocabulary(size_t numLines, size_t numFiles,
-                                  size_t actualCurrentPartialSize,
-                                  const ad_utility::HashMap<string, Id>& items);
+  pair<std::future<void>, std::future<void>> writeNextPartialVocabulary(
+      size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
+      std::shared_ptr<const ad_utility::HashMap<string, Id>> items);
 
   void convertPartialToGlobalIds(TripleVec& data,
                                  const vector<size_t>& actualLinesPerPartial,

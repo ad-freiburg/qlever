@@ -138,6 +138,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   // insert the special  ql:langtag predicate into all partial vocabularies
   auto langPredId = assignNextId(&items, LANGUAGE_PREDICATE);
   std::array<string, 3> spo;
+
+  std::pair<std::future<void>, std::future<void>> sortFutures;
   while (true) {
     auto opt = p.getTriple();
     if (!opt) {
@@ -173,7 +175,18 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
       LOG(INFO) << "Lines (from KB-file) processed: " << i << '\n';
     }
     if (i % linesPerPartial == 0) {
-      writeNextPartialVocabulary(i, numFiles, actualCurrentPartialSize, items);
+      // only allow one sorting procedure in parallel to control memory usage.
+      if (sortFutures.first.valid()) {
+        sortFutures.first.get();
+      }
+      if (sortFutures.second.valid()) {
+        sortFutures.second.get();
+      }
+
+      auto oldItemPtr = std::make_shared<const ad_utility::HashMap<string, Id>>(
+          std::move(items));
+      sortFutures = writeNextPartialVocabulary(
+          i, numFiles, actualCurrentPartialSize, oldItemPtr);
       numFiles++;
       // Save the information how many triples this partial vocabulary actually
       // deals with we will use this later for mapping from partial to global
@@ -188,9 +201,24 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   }
   // deal with remainder
   if (items.size() > 0) {
-    writeNextPartialVocabulary(i, numFiles, actualCurrentPartialSize, items);
+    if (sortFutures.first.valid()) {
+      sortFutures.first.get();
+    }
+    if (sortFutures.second.valid()) {
+      sortFutures.second.get();
+    }
+    auto oldItemPtr = std::make_shared<const ad_utility::HashMap<string, Id>>(
+        std::move(items));
+    sortFutures = writeNextPartialVocabulary(
+        i, numFiles, actualCurrentPartialSize, oldItemPtr);
     numFiles++;
     actualPartialSizes.push_back(actualCurrentPartialSize);
+    if (sortFutures.first.valid()) {
+      sortFutures.first.get();
+    }
+    if (sortFutures.second.valid()) {
+      sortFutures.second.get();
+    }
   }
   writer.finish();
 
@@ -1348,9 +1376,9 @@ Id Index::assignNextId(Map* mapPtr, const string& key) {
 }
 
 // ___________________________________________________________________________
-void Index::writeNextPartialVocabulary(
+pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-    const ad_utility::HashMap<string, Id>& items) {
+    std::shared_ptr<const ad_utility::HashMap<string, Id>> items) {
   LOG(INFO) << "Lines (from KB-file) processed: " << numLines << '\n';
   LOG(INFO) << "Actual number of Triples in this section (include "
                "langfilter triples): "
@@ -1360,10 +1388,10 @@ void Index::writeNextPartialVocabulary(
       _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
 
   LOG(INFO) << "writing partial vocabulary to " << partialFilename << std::endl;
-  LOG(INFO) << "it contains " << items.size() << " elements\n";
+  LOG(INFO) << "it contains " << items->size() << " elements\n";
   fut1 = std::async([this, &items, partialFilename]() {
     writePartialIdMapToBinaryFileForMerging(items, partialFilename,
-                                            _vocab.getCaseComparator());
+                                            _vocab.getCaseComparator(), true);
   });
 
   if (_vocabPrefixCompressed && _vocab.getCaseInsensitiveOrdering()) {
@@ -1374,17 +1402,11 @@ void Index::writeNextPartialVocabulary(
                                 std::to_string(numFiles);
     LOG(INFO) << "writing partial temporary vocabulary to "
               << partialTmpFilename << std::endl;
-    LOG(INFO) << "it contains " << items.size() << " elements\n";
+    LOG(INFO) << "it contains " << items->size() << " elements\n";
     fut2 = std::async([&items, partialTmpFilename]() {
-      writePartialIdMapToBinaryFileForMerging(items, partialTmpFilename,
-                                              StringSortComparator(false));
+      writePartialIdMapToBinaryFileForMerging(
+          items, partialTmpFilename, StringSortComparator(false), false);
     });
   }
-  if (fut1.valid()) {
-    fut1.get();
-  }
-  if (fut2.valid()) {
-    fut2.get();
-  }
-  LOG(INFO) << "Done.";
+  return {std::move(fut1), std::move(fut2)};
 }

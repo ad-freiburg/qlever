@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include <parallel/algorithm>
 #include "../util/Conversions.h"
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
@@ -156,16 +157,23 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles,
 
 // ______________________________________________________________________________________________
 void writePartialIdMapToBinaryFileForMerging(
-    const ad_utility::HashMap<string, Id>& map, const string& fileName,
-    StringSortComparator comp) {
+    std::shared_ptr<const ad_utility::HashMap<string, Id>> map,
+    const string& fileName, StringSortComparator comp, bool doParallelSort) {
   LOG(INFO) << "Creating partial vocabulary from set ...\n";
   std::vector<std::pair<string, Id>> els;
-  els.reserve(map.size());
-  els.insert(begin(els), begin(map), end(map));
+  els.reserve(map->size());
+  els.insert(begin(els), begin(*map), end(*map));
   LOG(INFO) << "... sorting ...\n";
-  std::sort(begin(els), end(els), [comp](const auto& p1, const auto& p2) {
+
+  auto pred = [comp](const auto& p1, const auto& p2) {
     return comp(p1.first, p2.first);
-  });
+  };
+  if (USE_PARALLEL_SORT && doParallelSort) {
+    __gnu_parallel::sort(begin(els), end(els), pred,
+                         __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
+  } else {
+    std::sort(begin(els), end(els), pred);
+  }
   LOG(INFO) << "Done creating vocabulary.\n";
 
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
