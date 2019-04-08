@@ -2,6 +2,9 @@
 The following instructions build an index from our Scientists Example Knowledge
 Base.
 
+**Note:** If you experience an error check the [troubleshooting](./troubleshooting.md) document 
+for known issues such as problems with Docker on Mac.
+
 ## Download and build QLever using `docker`
 
     git clone --recursive https://github.com/ad-freiburg/QLever.git qlever

@@ -34,7 +34,7 @@ Run ctest. All tests should pass:
     ctest
 
 ## Create or reuse an index
-See the main [README](README.md#create_or_reuse_an_index) but make sure to
+See the main [README](../README.md#creating-an-index) but make sure to
 either add `./build/` to your path or prefix all commands with `./` and that
 `/index` and `/input` need to be the path to the index and input on your host.
 
