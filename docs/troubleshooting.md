@@ -76,3 +76,26 @@ the query execution. We will evaluate if it's  worth also externalizing SPO and
 SOP permutations in this way to further reduce the RAM usage, or to let the user
 decide which permutations shall be stored in which format.
 
+## Note when using Docker on Mac or Windows
+
+When building an index, QLever will create scratch space for on-disc sorting.
+This space is allocated as a large 1 TB sparse file. On standard Linux file
+systems such as Ext4 sparse files are optimized and this will only take as much
+disk space as is actually used.
+
+With some systems such as Docker on Mac or when using unsupported file
+systems such as NTFS or APFS, this may lead to problems as these do not
+properly support sparse files.
+
+One possible error may be the following:
+
+    open() error on path=/index/scientists-stxxl.disk flags=16450, retrying without O_DIRECT.
+    Disk '/index/scientists-stxxl.disk' is allocated, space: 500000 MiB, I/O implementation: syscall queue=0 devid=0
+    terminate called after throwing an instance of 'foxxll::io_error'
+      what():  Error in void foxxll::ufs_file_base::_set_size(foxxll::file::offset_type) : ftruncate() path=/index/scientists-stxxl.disk fd=4 : No space left on device: iostream error
+    Aborted
+
+While macOS including Docker on Mac is not supported there are some workarounds.
+You can manually change the constant `static const size_t STXXL_DISK_SIZE_INDEX_BUILDER` 
+in [file](../src/global/Constants.h) or 
+you can try using a named volume instead of a path on the host.
