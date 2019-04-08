@@ -32,10 +32,10 @@ class HashSet : private google::dense_hash_set<T, HashFcn, EqualKey, Alloc> {
   }
 
   // Iterator type of this set, it.first is the key, it.second the value
-  using Base::iterator;
+  using typename Base::iterator;
 
   // Const Iterator type of this set, it.first is the key, it.second the value
-  using Base::const_iterator;
+  using typename Base::const_iterator;
 
   // Returns an iterator to the first element of the set if it exists and an
   // iterator equal to end() otherwise
