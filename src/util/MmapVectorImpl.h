@@ -286,11 +286,15 @@ MmapVector<T>::MmapVector(MmapVector<T>&& other) noexcept
       _pattern(other._pattern) {
   // we take exclusive ownership of the arguments mapping, setting
   other._ptr = nullptr;
+  other._filename = "";
 }
 
 // ________________________________________________________________
 template <class T>
 MmapVector<T>& MmapVector<T>::operator=(MmapVector<T>&& other) noexcept {
+  if (this == &other) {
+    return *this;
+  }
   // if this vector already has a mapping, close it correctly
   close();
   _ptr = other._ptr;
@@ -301,6 +305,7 @@ MmapVector<T>& MmapVector<T>::operator=(MmapVector<T>&& other) noexcept {
   _pattern = other._pattern;
   // we take exclusive ownership of the arguments mapping, setting
   other._ptr = nullptr;
+  other._filename = "";
   return *this;
 }
 
@@ -334,6 +339,7 @@ MmapVectorView<T>::MmapVectorView(MmapVectorView<T>&& other) noexcept {
   this->_pattern = std::move(other._pattern);
   // we take exclusive ownership of the arguments mapping, setting
   other._ptr = nullptr;
+  other._filename = "";
 }
 
 // ________________________________________________________________
@@ -350,6 +356,7 @@ MmapVectorView<T>& MmapVectorView<T>::operator=(
   this->_pattern = std::move(other._pattern);
   // we take exclusive ownership of the arguments mapping, setting
   other._ptr = nullptr;
+  other._filename = "";
   return *this;
 }
 

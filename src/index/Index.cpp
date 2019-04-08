@@ -309,43 +309,83 @@ void Index::convertPartialToGlobalIds(
   LOG(INFO) << "Pass done.\n";
 }
 
+pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeSwitchedRel(
+    ad_utility::File& out, off_t lastOffset, Id currentRel,
+    ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
+  // sort according to the "switched" relation.
+  auto& buffer = *bufPtr;
+
+  for (auto& el : buffer) {
+    std::swap(el[0], el[1]);
+  }
+  std::sort(buffer.begin(), buffer.end(), [](const auto& a, const auto& b) {
+    return a[0] == b[0] ? a[1] < b[1] : a[0] < b[0];
+  });
+
+  Id lastLhs = std::numeric_limits<Id>::max();
+
+  bool functional = true;
+  size_t distinctC1 = 0;
+  for (const auto& el : buffer) {
+    if (el[0] == lastLhs) {
+      functional = false;
+    } else {
+      distinctC1++;
+    }
+    lastLhs = el[0];
+  }
+
+  return writeRel(out, lastOffset, currentRel, buffer, distinctC1, functional);
+}
+
 // _____________________________________________________________________________
 template <class MetaDataDispatcher>
-std::optional<typename MetaDataDispatcher::WriteType>
-Index::createPermutationImpl(const string& fileName,
-                             const Index::TripleVec& vec, size_t c0, size_t c1,
-                             size_t c2) {
-  typename MetaDataDispatcher::WriteType metaData;
-  if constexpr (metaData._isMmapBased) {
-    metaData.setup(_totalVocabularySize, FullRelationMetaData::empty,
-                   fileName + MMAP_FILE_SUFFIX);
+std::optional<std::pair<typename MetaDataDispatcher::WriteType,
+                        typename MetaDataDispatcher::WriteType>>
+Index::createPermutationPairImpl(const string& fileName1,
+                                 const string& fileName2,
+                                 const Index::TripleVec& vec, size_t c0,
+                                 size_t c1, size_t c2) {
+  typename MetaDataDispatcher::WriteType metaData1;
+  typename MetaDataDispatcher::WriteType metaData2;
+  if constexpr (metaData1._isMmapBased) {
+    metaData1.setup(_totalVocabularySize, FullRelationMetaData::empty,
+                    fileName1 + MMAP_FILE_SUFFIX);
+    metaData2.setup(_totalVocabularySize, FullRelationMetaData::empty,
+                    fileName2 + MMAP_FILE_SUFFIX);
   }
 
   if (vec.size() == 0) {
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
     return std::nullopt;
   }
-  ad_utility::File out(fileName, "w");
-  LOG(INFO) << "Creating an on-disk index permutation of " << vec.size()
+  ad_utility::File out1(fileName1, "w");
+  ad_utility::File out2(fileName2, "w");
+
+  LOG(INFO) << "Creating a pair of on-disk index permutation of " << vec.size()
             << " elements / facts." << std::endl;
   // Iterate over the vector and identify relation boundaries
   size_t from = 0;
   Id currentRel = vec[0][c0];
-  off_t lastOffset = 0;
-  ad_utility::BufferedVector<array<Id, 2>> buffer(THRESHOLD_RELATION_CREATION,
-                                                  fileName + ".tmp.MmapBuffer");
+  off_t lastOffset1 = 0;
+  off_t lastOffset2 = 0;
+  ad_utility::BufferedVector<array<Id, 2>> buffer(
+      THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.MmapBuffer");
   bool functional = true;
   size_t distinctC1 = 1;
   size_t sizeOfRelation = 0;
   Id lastLhs = std::numeric_limits<Id>::max();
   for (TripleVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if ((*reader)[c0] != currentRel) {
-      auto md =
-          writeRel(out, lastOffset, currentRel, buffer, distinctC1, functional);
-      metaData.add(md.first, md.second);
+      auto md = writeRel(out1, lastOffset1, currentRel, buffer, distinctC1,
+                         functional);
+      metaData1.add(md.first, md.second);
+      auto md2 = writeSwitchedRel(out2, lastOffset2, currentRel, &buffer);
+      metaData2.add(md2.first, md2.second);
       buffer.clear();
       distinctC1 = 1;
-      lastOffset = metaData.getOffsetAfter();
+      lastOffset1 = metaData1.getOffsetAfter();
+      lastOffset2 = metaData2.getOffsetAfter();
       currentRel = (*reader)[c0];
       functional = true;
     } else {
@@ -361,30 +401,42 @@ Index::createPermutationImpl(const string& fileName,
   }
   if (from < vec.size()) {
     auto md =
-        writeRel(out, lastOffset, currentRel, buffer, distinctC1, functional);
-    metaData.add(md.first, md.second);
+        writeRel(out1, lastOffset1, currentRel, buffer, distinctC1, functional);
+    metaData1.add(md.first, md.second);
+
+    auto md2 = writeSwitchedRel(out2, lastOffset2, currentRel, &buffer);
+    metaData2.add(md2.first, md2.second);
   }
 
   LOG(INFO) << "Done creating index permutation." << std::endl;
-  LOG(INFO) << "Calculating statistics for this permutation.\n";
-  metaData.calculateExpensiveStatistics();
+  LOG(INFO) << "Calculating statistics for these permutation.\n";
+  metaData1.calculateExpensiveStatistics();
+  metaData2.calculateExpensiveStatistics();
   LOG(INFO) << "Writing statistics for this permutation:\n"
-            << metaData.statistics() << std::endl;
+            << metaData1.statistics() << std::endl;
+  LOG(INFO) << "Writing statistics for this permutation:\n"
+            << metaData2.statistics() << std::endl;
 
-  out.close();
+  out1.close();
+  out2.close();
   LOG(INFO) << "Permutation done.\n";
-  return std::move(metaData);
+  return std::make_pair(std::move(metaData1), std::move(metaData2));
 }
 
 // ________________________________________________________________________
-template <class MetaDataDispatcher, class Comparator>
-std::optional<typename MetaDataDispatcher::WriteType> Index::createPermutation(
+template <class MetaDataDispatcher, class Comparator1, class Comparator2>
+std::optional<std::pair<typename MetaDataDispatcher::WriteType,
+                        typename MetaDataDispatcher::WriteType>>
+Index::createPermutations(
     TripleVec* vec,
-    const PermutationImpl<Comparator, typename MetaDataDispatcher::ReadType>& p,
+    const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
+        p1,
+    const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
+        p2,
     bool performUnique) {
-  LOG(INFO) << "Sorting for " << p._readableName << " permutation..."
+  LOG(INFO) << "Sorting for " << p1._readableName << " permutation..."
             << std::endl;
-  stxxl::sort(begin(*vec), end(*vec), p._comp, STXXL_MEMORY_TO_USE);
+  stxxl::sort(begin(*vec), end(*vec), p1._comp, STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
 
   if (performUnique) {
@@ -397,9 +449,10 @@ std::optional<typename MetaDataDispatcher::WriteType> Index::createPermutation(
     LOG(INFO) << "Size after: " << vec->size() << std::endl;
   }
 
-  return createPermutationImpl<MetaDataDispatcher>(
-      _onDiskBase + ".index" + p._fileSuffix, *vec, p._keyOrder[0],
-      p._keyOrder[1], p._keyOrder[2]);
+  return createPermutationPairImpl<MetaDataDispatcher>(
+      _onDiskBase + ".index" + p1._fileSuffix,
+      _onDiskBase + ".index" + p2._fileSuffix, *vec, p1._keyOrder[0],
+      p1._keyOrder[1], p1._keyOrder[2]);
 }
 
 // ________________________________________________________________________
@@ -411,24 +464,25 @@ void Index::createPermutationPair(
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
     bool performUnique, bool createPatternsAfterFirst) {
-  auto m1 = createPermutation<MetaDataDispatcher>(&(*vocabData->idTriples), p1,
-                                                  performUnique);
+  auto metaData = createPermutations<MetaDataDispatcher>(
+      &(*vocabData->idTriples), p1, p2, performUnique);
   if (createPatternsAfterFirst) {
+    // the second permutation does not alter the original triple vector,
+    // so this does still work.
     createPatterns(true, vocabData);
   }
-  auto m2 = createPermutation<MetaDataDispatcher>(&(*vocabData->idTriples), p2,
-                                                  false);
-  if (m1 && m2) {
+  if (metaData) {
     LOG(INFO) << "Exchanging Multiplicities for " << p1._readableName << " and "
               << p2._readableName << '\n';
-    exchangeMultiplicities(&m1.value(), &m2.value());
+    exchangeMultiplicities(&(metaData.value().first),
+                           &(metaData.value().second));
     LOG(INFO) << "Done" << '\n';
     LOG(INFO) << "Writing MetaData for " << p1._readableName << " and "
               << p2._readableName << '\n';
     ad_utility::File f1(_onDiskBase + ".index" + p1._fileSuffix, "r+");
-    m1.value().appendToFile(&f1);
+    metaData.value().first.appendToFile(&f1);
     ad_utility::File f2(_onDiskBase + ".index" + p2._fileSuffix, "r+");
-    m2.value().appendToFile(&f2);
+    metaData.value().second.appendToFile(&f2);
     LOG(INFO) << "Done" << '\n';
   }
 }
@@ -610,9 +664,9 @@ void Index::createPatternsImpl(const string& fileName,
 
   // Associate entities with patterns if possible, store has-relation otherwise
   ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPattern(
-      0, fileName + ".mmap.entityHasPattern.tmp");
+      fileName + ".mmap.entityHasPattern.tmp");
   ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPredicate(
-      0, fileName + ".mmap.entityHasPredicate.tmp");
+      fileName + ".mmap.entityHasPredicate.tmp");
 
   size_t numEntitiesWithPatterns = 0;
   size_t numEntitiesWithoutPatterns = 0;

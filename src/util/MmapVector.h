@@ -148,9 +148,19 @@ class MmapVector {
 
   // default construct and open
   // all the arguments are passed to the call to open()
+  /*
   template <typename... Args>
   MmapVector(Args&&... args) : MmapVector() {
     open(std::forward<Args>(args)...);
+  }
+   */
+
+  template <class U>
+  using isNotMmapVector =
+      std::enable_if_t<!std::is_base_of_v<MmapVector<T>, std::decay_t<U>>>;
+  template <class First, typename... Args, typename = isNotMmapVector<First>>
+  MmapVector(First&& first, Args&&... args) : MmapVector<T>() {
+    this->open(std::forward<First>(first), std::forward<Args>(args)...);
   }
 
   // create Array of given size  fill with default value
@@ -195,6 +205,15 @@ class MmapVector {
   // iterators are possibly invalidated
   void resize(size_t newSize);
   void clear() { resize(0); }
+
+  // make sure that this vector has capacity for at least newCapacity elements
+  // before having to allocate again. If n <= the current capacity,
+  // this has no effect
+  void reserve(size_t newCapacity) {
+    if (newCapacity > _capacity) {
+      adaptCapacity(newCapacity);
+    }
+  }
 
   // add element specified by arg el at the end of the array
   // possibly invalidates iterators
@@ -339,7 +358,28 @@ class MmapVectorView : private MmapVector<T> {
 template <class T>
 class MmapVectorTmp : public MmapVector<T> {
  public:
-  using MmapVector<T>::MmapVector;
+  void open(std::string filename) {
+    MmapVector<T>::open(std::move(filename), CreateTag());
+  }
+
+  MmapVectorTmp<T>& operator=(MmapVectorTmp<T>&& rhs) noexcept {
+    MmapVector<T>::operator=(rhs);
+    return *this;
+  }
+
+  MmapVectorTmp& operator=(const MmapVectorTmp<T>&) = delete;
+
+  MmapVectorTmp(MmapVectorTmp<T>&& rhs) noexcept
+      : MmapVector<T>(std::move(rhs)) {}
+  MmapVectorTmp(const MmapVectorTmp<T>& rhs) = delete;
+
+  template <class U>
+  using isNotMmapVectorTmp =
+      std::enable_if_t<!std::is_base_of_v<MmapVectorTmp<T>, std::decay_t<U>>>;
+  template <class First, typename... Args, typename = isNotMmapVectorTmp<First>>
+  MmapVectorTmp(First&& first, Args&&... args) : MmapVector<T>() {
+    this->open(std::forward<First>(first), std::forward<Args>(args)...);
+  }
 
   // If we still own a file, delete it after cleaning up
   // everything else
