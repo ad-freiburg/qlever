@@ -299,7 +299,7 @@ Index::createPermutationImpl(const string& fileName,
   ad_utility::BufferedVector<array<Id, 2>> buffer(THRESHOLD_RELATION_CREATION,
                                                   fileName + ".tmp.MmapBuffer");
   bool functional = true;
-  size_t distinctC1 = 0;
+  size_t distinctC1 = 1;
   size_t sizeOfRelation = 0;
   Id lastLhs = std::numeric_limits<Id>::max();
   for (TripleVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
@@ -308,7 +308,7 @@ Index::createPermutationImpl(const string& fileName,
           writeRel(out, lastOffset, currentRel, buffer, distinctC1, functional);
       metaData.add(md.first, md.second);
       buffer.clear();
-      distinctC1 = 0;
+      distinctC1 = 1;
       lastOffset = metaData.getOffsetAfter();
       currentRel = (*reader)[c0];
       functional = true;
