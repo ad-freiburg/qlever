@@ -61,7 +61,7 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   std::string joinVars = "";
-  for (auto p : _left->getVariableColumnMap()) {
+  for (auto p : _left->getVariableColumns()) {
     for (auto jc : _joinColumns) {
       // If the left join column matches the index of a variable in the left
       // subresult.
@@ -118,9 +118,9 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
 // _____________________________________________________________________________
 ad_utility::HashMap<string, size_t> MultiColumnJoin::getVariableColumns()
     const {
-  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumnMap());
+  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
   size_t columnIndex = retVal.size();
-  for (const auto& it : _right->getVariableColumnMap()) {
+  for (const auto& it : _right->getVariableColumns()) {
     bool isJoinColumn = false;
     for (const std::array<Id, 2>& a : _joinColumns) {
       if (a[1] == it.second) {

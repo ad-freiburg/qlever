@@ -120,6 +120,22 @@ vector<size_t> IndexScan::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
+ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
+  ad_utility::HashMap<string, size_t> res;
+  size_t colIdx = 0;
+  if (_subject[0] == '?') {
+    res[_subject] = colIdx++;
+  }
+  if (_predicate[0] == '?') {
+    res[_predicate] = colIdx++;
+  }
+
+  if (_object[0] == '?') {
+    res[_object] = colIdx++;
+  }
+  return res;
+}
+// _____________________________________________________________________________
 void IndexScan::computeResult(ResultTable* result) {
   LOG(DEBUG) << "IndexScan result computation...\n";
 

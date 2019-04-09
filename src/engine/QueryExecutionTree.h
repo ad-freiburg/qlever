@@ -49,7 +49,7 @@ class QueryExecutionTree {
 
   QueryExecutionContext* getQec() const { return _qec; }
 
-  const ad_utility::HashMap<string, size_t>& getVariableColumnMap() const {
+  const ad_utility::HashMap<string, size_t>& getVariableColumns() const {
     return _variableColumnMap;
   }
 

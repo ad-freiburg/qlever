@@ -10,20 +10,35 @@ using std::string;
 
 // _____________________________________________________________________________
 size_t TextOperationWithoutFilter::getResultWidth() const {
-  size_t width = 2 + _nofVars;
+  size_t width = 2 + getNofVars();
   return width;
 }
 
 // _____________________________________________________________________________
 TextOperationWithoutFilter::TextOperationWithoutFilter(
-    QueryExecutionContext* qec, const string& words, size_t nofVars,
-    size_t textLimit)
+    QueryExecutionContext* qec, const string& words,
+    const std::set<string>& variables, const string& cvar, size_t textLimit)
     : Operation(qec),
       _words(words),
-      _nofVars(nofVars),
+      _variables(variables),
+      _cvar(cvar),
       _textLimit(textLimit),
       _sizeEstimate(std::numeric_limits<size_t>::max()) {}
 
+// _____________________________________________________________________________
+ad_utility::HashMap<string, size_t>
+TextOperationWithoutFilter::getVariableColumns() const {
+  ad_utility::HashMap<string, size_t> vcmap;
+  size_t index = 0;
+  vcmap[_cvar] = index++;
+  vcmap["SCORE(" + _cvar + ")"] = index++;
+  for (const auto& var : _variables) {
+    if (var != _cvar) {
+      vcmap[var] = index++;
+    }
+  }
+  return vcmap;
+}
 // _____________________________________________________________________________
 string TextOperationWithoutFilter::asString(size_t indent) const {
   std::ostringstream os;
@@ -31,7 +46,7 @@ string TextOperationWithoutFilter::asString(size_t indent) const {
     os << " ";
   }
   os << "TEXT OPERATION WITHOUT FILTER:"
-     << " co-occurrence with words: \"" << _words << "\" and " << _nofVars
+     << " co-occurrence with words: \"" << _words << "\" and " << getNofVars()
      << " variables";
   ;
   os << " with textLimit = " << _textLimit;
@@ -43,9 +58,9 @@ void TextOperationWithoutFilter::computeResult(ResultTable* result) {
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   runtimeInfo.setDescriptor("Text operation without filter: " + _words);
   LOG(DEBUG) << "TextOperationWithoutFilter result computation..." << endl;
-  if (_nofVars == 0) {
+  if (getNofVars() == 0) {
     computeResultNoVar(result);
-  } else if (_nofVars == 1) {
+  } else if (getNofVars() == 1) {
     computeResultOneVar(result);
   } else {
     computeResultMultVars(result);
@@ -77,7 +92,7 @@ void TextOperationWithoutFilter::computeResultOneVar(
 // _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResultMultVars(
     ResultTable* result) const {
-  result->_data.setCols(_nofVars + 2);
+  result->_data.setCols(getNofVars() + 2);
   result->_resultTypes.reserve(result->_data.cols());
   result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
@@ -85,7 +100,7 @@ void TextOperationWithoutFilter::computeResultMultVars(
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
   }
   getExecutionContext()->getIndex().getECListForWords(
-      _words, _nofVars, _textLimit, &result->_data);
+      _words, getNofVars(), _textLimit, &result->_data);
 }
 
 // _____________________________________________________________________________
@@ -100,7 +115,8 @@ size_t TextOperationWithoutFilter::getSizeEstimate() {
     } else {
       nofEntitiesSingleVar = 10000 * 0.8;
     }
-    _sizeEstimate = static_cast<size_t>(pow(nofEntitiesSingleVar, _nofVars));
+    _sizeEstimate =
+        static_cast<size_t>(pow(nofEntitiesSingleVar, getNofVars()));
   }
   return _sizeEstimate;
 }
@@ -110,9 +126,9 @@ size_t TextOperationWithoutFilter::getCostEstimate() {
   if (_executionContext) {
     return static_cast<size_t>(
         _executionContext->getCostFactor("NO_FILTER_PUNISH") *
-        (getSizeEstimate() * _nofVars));
+        (getSizeEstimate() * getNofVars()));
   } else {
-    return getSizeEstimate() * _nofVars;
+    return getSizeEstimate() * getNofVars();
   }
 }
 
@@ -137,7 +153,7 @@ void TextOperationWithoutFilter::computeMultiplicities() {
     } else {
       nofEntitiesSingleVar = 10000 * 0.8;
     }
-    _multiplicities.emplace_back(pow(nofEntitiesSingleVar, _nofVars - 1));
+    _multiplicities.emplace_back(pow(nofEntitiesSingleVar, getNofVars() - 1));
   }
   assert(getResultWidth() == _multiplicities.size());
 }

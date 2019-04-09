@@ -80,6 +80,11 @@ class Filter : public Operation {
     return _subtree->getMultiplicity(col);
   }
 
+  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
+      const override {
+    return _subtree->getVariableColumns();
+  }
+
  private:
   std::string getDescriptor() const;
 

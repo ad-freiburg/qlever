@@ -44,6 +44,11 @@ class DummyOperation : public Operation {
   }
 
   virtual bool knownEmptyResult() { return false; }
+
+  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
+      const override {
+    return {{"?a", 0}, {"?b", 1}};
+  }
 };
 
 TEST(HasPredicateScan, freeS) {

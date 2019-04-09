@@ -86,7 +86,7 @@ ad_utility::HashMap<string, size_t> HasPredicateScan::getVariableColumns()
       varCols.insert(std::make_pair(_object, 1));
       break;
     case ScanType::SUBQUERY_S:
-      varCols = _subtree->getVariableColumnMap();
+      varCols = _subtree->getVariableColumns();
       varCols.insert(std::make_pair(_object, getResultWidth() - 1));
       break;
   }

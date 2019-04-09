@@ -81,6 +81,7 @@ class Operation {
       timer.stop();
       _runtimeInformation.setRows(newResult->_resTable->size());
       _runtimeInformation.setCols(getResultWidth());
+      _runtimeInformation.setColumnNames(getVariableColumns());
       _runtimeInformation.setTime(timer.msecs());
       _runtimeInformation.setWasCached(false);
       // cache the runtime information for the execution as well
@@ -97,16 +98,15 @@ class Operation {
                "Operation was found aborted in the cache");
     }
     timer.stop();
-    if (!newResult) {
-      // If the result for this Operation came from the cache we take the
-      // original runtime information and only update the time and caching
-      // information.
-      _runtimeInformation = existingResult->_runtimeInfo;
-      _runtimeInformation.addDetail("OriginalTime",
-                                    _runtimeInformation.getTime());
-      _runtimeInformation.setTime(timer.msecs());
-      _runtimeInformation.setWasCached(true);
-    }
+    // If the result for this Operation came from the cache we
+    // need to update get column names as caching is invariant to renames
+    _runtimeInformation = existingResult->_runtimeInfo;
+    _runtimeInformation.setColumnNames(getVariableColumns());
+    _runtimeInformation.setTime(timer.msecs());
+    _runtimeInformation.addDetail("OriginalTime",
+                                  existingResult->_runtimeInfo.getTime());
+    _runtimeInformation.setTime(timer.msecs());
+    _runtimeInformation.setWasCached(true);
     return existingResult->_resTable;
   }
 
@@ -139,6 +139,7 @@ class Operation {
   virtual size_t getSizeEstimate() = 0;
   virtual float getMultiplicity(size_t col) = 0;
   virtual bool knownEmptyResult() = 0;
+  virtual ad_utility::HashMap<string, size_t> getVariableColumns() const = 0;
 
   RuntimeInformation& getRuntimeInfo() { return _runtimeInformation; }
 

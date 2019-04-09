@@ -3,14 +3,12 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <list>
+#include <set>
 #include <utility>
 #include <vector>
 
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
-
-using std::list;
 
 using std::pair;
 using std::vector;
@@ -18,7 +16,8 @@ using std::vector;
 class TextOperationWithoutFilter : public Operation {
  public:
   TextOperationWithoutFilter(QueryExecutionContext* qec, const string& words,
-                             size_t nofVars, size_t textLimit = 1);
+                             const std::set<string>& variables,
+                             const string& cvar, size_t textLimit = 1);
 
   virtual string asString(size_t indent = 0) const override;
 
@@ -43,16 +42,28 @@ class TextOperationWithoutFilter : public Operation {
 
   const string& getWordPart() const { return _words; }
 
-  size_t getNofVars() const { return _nofVars; }
+  size_t getNofVars() const {
+    // -1 because _variables also contains the context var
+    return _variables.size() - 1;
+  }
+
+  const std::set<string>& getVars() const { return _variables; }
+
+  const string getCVar() const { return _cvar; }
 
   virtual bool knownEmptyResult() override {
     return _executionContext &&
            _executionContext->getIndex().getSizeEstimate(_words) == 0;
   }
 
+  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
+      const override;
+
  private:
-  string _words;
-  size_t _nofVars;
+  const string _words;
+  const std::set<string> _variables;
+  const string _cvar;
+
   size_t _textLimit;
 
   size_t _sizeEstimate;

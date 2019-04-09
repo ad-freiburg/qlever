@@ -48,6 +48,11 @@ class Sort : public Operation {
 
   virtual size_t getResultWidth() const;
 
+  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
+      const override {
+    return _subtree->getVariableColumns();
+  }
+
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   size_t _sortCol;

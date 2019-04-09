@@ -64,7 +64,7 @@ void OptionalJoin::computeResult(ResultTable* result) {
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   std::string joinVars = "";
-  for (auto p : _left->getVariableColumnMap()) {
+  for (auto p : _left->getVariableColumns()) {
     for (auto jc : _joinColumns) {
       // If the left join column matches the index of a variable in the left
       // subresult.
@@ -121,10 +121,10 @@ void OptionalJoin::computeResult(ResultTable* result) {
 
 // _____________________________________________________________________________
 ad_utility::HashMap<string, size_t> OptionalJoin::getVariableColumns() const {
-  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumnMap());
+  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
   size_t leftSize = _left->getResultWidth();
-  for (auto it = _right->getVariableColumnMap().begin();
-       it != _right->getVariableColumnMap().end(); ++it) {
+  for (auto it = _right->getVariableColumns().begin();
+       it != _right->getVariableColumns().end(); ++it) {
     size_t columnIndex = leftSize + it->second;
     bool isJoinColumn = false;
     // Reduce the index for every column of _right that is beeing joined on,

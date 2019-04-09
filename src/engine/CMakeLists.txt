@@ -12,7 +12,6 @@ add_library(engine
         IndexScan.h IndexScan.cpp
         Join.h Join.cpp
         Sort.h Sort.cpp
-        TextOperationForContexts.h TextOperationForContexts.cpp
         TextOperationWithoutFilter.h TextOperationWithoutFilter.cpp
         TextOperationWithFilter.h TextOperationWithFilter.cpp
         Distinct.h Distinct.cpp

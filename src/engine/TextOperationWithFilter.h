@@ -3,7 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <list>
+#include <set>
 #include <utility>
 #include <vector>
 
@@ -18,7 +18,7 @@ using std::vector;
 class TextOperationWithFilter : public Operation {
  public:
   TextOperationWithFilter(QueryExecutionContext* qec, const string& words,
-                          size_t nofVars,
+                          const std::set<string>& variables, const string& cvar,
                           std::shared_ptr<QueryExecutionTree> filterResult,
                           size_t filterColumn, size_t textLimit = 1);
 
@@ -43,7 +43,14 @@ class TextOperationWithFilter : public Operation {
 
   const string& getWordPart() const { return _words; }
 
-  size_t getNofVars() const { return _nofVars; }
+  size_t getNofVars() const {
+    // -1 because _variables includes the cvar
+    return _variables.size() - 1;
+  }
+
+  const std::set<string>& getVars() const { return _variables; }
+
+  const string getCVar() const { return _cvar; }
 
   virtual bool knownEmptyResult() override {
     return _filterResult->knownEmptyResult() ||
@@ -53,9 +60,13 @@ class TextOperationWithFilter : public Operation {
 
   virtual float getMultiplicity(size_t col) override;
 
+  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
+      const override;
+
  private:
-  string _words;
-  size_t _nofVars;
+  const string _words;
+  const std::set<string> _variables;
+  const string _cvar;
   size_t _textLimit;
 
   std::shared_ptr<QueryExecutionTree> _filterResult;

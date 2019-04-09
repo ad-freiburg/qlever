@@ -17,16 +17,16 @@ Union::Union(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   _columnOrigins.resize(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
   for (auto it : variableColumns) {
     // look for the corresponding column in t1
-    auto it1 = t1->getVariableColumnMap().find(it.first);
-    if (it1 != t1->getVariableColumnMap().end()) {
+    auto it1 = t1->getVariableColumns().find(it.first);
+    if (it1 != t1->getVariableColumns().end()) {
       _columnOrigins[it.second][0] = it1->second;
     } else {
       _columnOrigins[it.second][0] = NO_COLUMN;
     }
 
     // look for the corresponding column in t2
-    auto it2 = t2->getVariableColumnMap().find(it.first);
-    if (it2 != t2->getVariableColumnMap().end()) {
+    auto it2 = t2->getVariableColumns().find(it.first);
+    if (it2 != t2->getVariableColumns().end()) {
       _columnOrigins[it.second][1] = it2->second;
     } else {
       _columnOrigins[it.second][1] = NO_COLUMN;
@@ -56,10 +56,10 @@ vector<size_t> Union::resultSortedOn() const { return {}; }
 
 ad_utility::HashMap<string, size_t> Union::getVariableColumns() const {
   ad_utility::HashMap<string, size_t> variableColumns(
-      _subtrees[0]->getVariableColumnMap());
+      _subtrees[0]->getVariableColumns());
 
   size_t column = variableColumns.size();
-  for (auto it : _subtrees[1]->getVariableColumnMap()) {
+  for (auto it : _subtrees[1]->getVariableColumns()) {
     if (variableColumns.find(it.first) == variableColumns.end()) {
       variableColumns[it.first] = column;
       column++;

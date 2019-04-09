@@ -84,7 +84,7 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   std::string joinVars = "";
-  for (auto p : _left->getVariableColumnMap()) {
+  for (auto p : _left->getVariableColumns()) {
     if (p.second == _jc1Left || p.second == _jc2Left) {
       joinVars += p.first + " ";
     }
@@ -137,10 +137,10 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
 
 // _____________________________________________________________________________
 ad_utility::HashMap<string, size_t> TwoColumnJoin::getVariableColumns() const {
-  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumnMap());
+  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
   size_t leftSize = _left->getResultWidth();
-  for (auto it = _right->getVariableColumnMap().begin();
-       it != _right->getVariableColumnMap().end(); ++it) {
+  for (auto it = _right->getVariableColumns().begin();
+       it != _right->getVariableColumns().end(); ++it) {
     if (it->second < _jc1Right) {
       if (it->second < _jc2Right) {
         retVal[it->first] = leftSize + it->second;

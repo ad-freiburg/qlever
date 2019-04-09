@@ -54,7 +54,7 @@ void OrderBy::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
   std::string orderByVars = "";
-  for (auto p : _subtree->getVariableColumnMap()) {
+  for (auto p : _subtree->getVariableColumns()) {
     for (auto oc : _sortIndices) {
       if (oc.first == p.second) {
         if (oc.second) {

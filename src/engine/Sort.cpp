@@ -33,7 +33,7 @@ void Sort::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
   std::string orderByVars = "";
-  for (auto p : _subtree->getVariableColumnMap()) {
+  for (auto p : _subtree->getVariableColumns()) {
     if (p.second == _sortCol) {
       orderByVars = "ASC(" + p.first + ")";
       break;

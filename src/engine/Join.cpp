@@ -54,7 +54,7 @@ string Join::asString(size_t indent) const {
 void Join::computeResult(ResultTable* result) {
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   std::string joinVar = "";
-  for (auto p : _left->getVariableColumnMap()) {
+  for (auto p : _left->getVariableColumns()) {
     if (p.second == _leftJoinCol) {
       joinVar = p.first;
       break;
@@ -134,10 +134,10 @@ void Join::computeResult(ResultTable* result) {
 ad_utility::HashMap<string, size_t> Join::getVariableColumns() const {
   ad_utility::HashMap<string, size_t> retVal;
   if (!isFullScanDummy(_left) && !isFullScanDummy(_right)) {
-    retVal = _left->getVariableColumnMap();
+    retVal = _left->getVariableColumns();
     size_t leftSize = _left->getResultWidth();
-    for (auto it = _right->getVariableColumnMap().begin();
-         it != _right->getVariableColumnMap().end(); ++it) {
+    for (auto it = _right->getVariableColumns().begin();
+         it != _right->getVariableColumns().end(); ++it) {
       if (it->second < _rightJoinCol) {
         retVal[it->first] = leftSize + it->second;
       }
@@ -147,25 +147,25 @@ ad_utility::HashMap<string, size_t> Join::getVariableColumns() const {
     }
   } else {
     if (isFullScanDummy(_right)) {
-      retVal = _left->getVariableColumnMap();
+      retVal = _left->getVariableColumns();
       size_t leftSize = _left->getResultWidth();
-      for (auto it = _right->getVariableColumnMap().begin();
-           it != _right->getVariableColumnMap().end(); ++it) {
+      for (auto it = _right->getVariableColumns().begin();
+           it != _right->getVariableColumns().end(); ++it) {
         // Skip the first col for the dummy
         if (it->second != 0) {
           retVal[it->first] = leftSize + it->second - 1;
         }
       }
     } else {
-      for (auto it = _left->getVariableColumnMap().begin();
-           it != _left->getVariableColumnMap().end(); ++it) {
+      for (auto it = _left->getVariableColumns().begin();
+           it != _left->getVariableColumns().end(); ++it) {
         // Skip+drop the first col for the dummy and subtract one from others.
         if (it->second != 0) {
           retVal[it->first] = it->second - 1;
         }
       }
-      for (auto it = _right->getVariableColumnMap().begin();
-           it != _right->getVariableColumnMap().end(); ++it) {
+      for (auto it = _right->getVariableColumns().begin();
+           it != _right->getVariableColumns().end(); ++it) {
         retVal[it->first] = 2 + it->second;
       }
     }

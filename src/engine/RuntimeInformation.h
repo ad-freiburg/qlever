@@ -35,6 +35,7 @@ class RuntimeInformation {
         _cols(0),
         _wasCached(false),
         _descriptor(),
+        _columnNames(),
         _details(),
         _children() {}
 
@@ -55,6 +56,8 @@ class RuntimeInformation {
     out << std::string(indent * 2, ' ') << _descriptor << std::endl;
     out << std::string(indent * 2, ' ') << "result_size: " << _rows << " x "
         << _cols << std::endl;
+    out << std::string(indent * 2, ' ')
+        << "columns: " << ad_utility::join(_columnNames, ", ") << std::endl;
     out << std::string(indent * 2, ' ') << "total_time: " << _time << " ms"
         << std::endl;
     out << std::string(indent * 2, ' ')
@@ -62,7 +65,7 @@ class RuntimeInformation {
     out << std::string(indent * 2, ' ')
         << "cached: " << ((_wasCached) ? "true" : "false") << std::endl;
     for (const auto& el : _details.items()) {
-      out << std::string((indent + 2) * 2, ' ') << el.key() << ": ";
+      out << std::string(indent * 2 + 1, ' ') << el.key() << ": ";
       // We want to print doubles with fixed precision and stream ints as their
       // native type so they get thousands separators. For everything else we
       // let nlohmann::json handle it
@@ -87,6 +90,14 @@ class RuntimeInformation {
 
   void setDescriptor(const std::string& descriptor) {
     _descriptor = descriptor;
+  }
+
+  void setColumnNames(
+      const ad_utility::HashMap<std::string, size_t>& columnMap) {
+    _columnNames.resize(columnMap.size());
+    for (const auto& column : columnMap) {
+      _columnNames[column.second] = column.first;
+    }
   }
 
   // Set the overall time in milliseconds
@@ -139,6 +150,7 @@ class RuntimeInformation {
   size_t _cols;
   bool _wasCached;
   std::string _descriptor;
+  std::vector<std::string> _columnNames;
   nlohmann::json _details;
   std::vector<RuntimeInformation> _children;
 };
@@ -149,6 +161,7 @@ inline void to_json(RuntimeInformation::ordered_json& j,
       {"description", rti._descriptor},
       {"result_rows", rti._rows},
       {"result_cols", rti._cols},
+      {"column_names", rti._columnNames},
       {"total_time", rti._time},
       {"operation_time", rti.getOperationTime()},
       {"was_cached", rti._wasCached},

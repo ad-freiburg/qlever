@@ -30,15 +30,7 @@ string Distinct::asString(size_t indent) const {
 
 // _____________________________________________________________________________
 ad_utility::HashMap<string, size_t> Distinct::getVariableColumns() const {
-  ad_utility::HashMap<string, size_t> map;
-  for (size_t index : _keepIndices) {
-    for (const auto& it : _subtree->getVariableColumnMap()) {
-      if (it.second == index) {
-        map.insert(it);
-      }
-    }
-  }
-  return map;
+  return _subtree->getVariableColumns();
 }
 
 // _____________________________________________________________________________
