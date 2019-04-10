@@ -24,6 +24,8 @@ class TextOperationWithFilter : public Operation {
 
   virtual string asString(size_t indent) const override;
 
+  virtual string getDescriptor() const override;
+
   virtual size_t getResultWidth() const override;
 
   virtual vector<size_t> resultSortedOn() const override {

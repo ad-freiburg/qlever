@@ -45,6 +45,8 @@ string Union::asString(size_t indent) const {
   return os.str();
 }
 
+string Union::getDescriptor() const { return "Union"; }
+
 size_t Union::getResultWidth() const {
   // The width depends on the number of unique variables (as the columns of
   // two variables from the left and right subtree will end up in the same
@@ -126,7 +128,6 @@ void Union::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Union subresult computation done." << std::endl;
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.setDescriptor("Union");
   runtimeInfo.addChild(_subtrees[0]->getRootOperation()->getRuntimeInfo());
   runtimeInfo.addChild(_subtrees[1]->getRootOperation()->getRuntimeInfo());
 

@@ -79,13 +79,14 @@ class Operation {
         throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
       }
       timer.stop();
-      _runtimeInformation.setRows(newResult->_resTable->size());
-      _runtimeInformation.setCols(getResultWidth());
-      _runtimeInformation.setColumnNames(getVariableColumns());
-      _runtimeInformation.setTime(timer.msecs());
-      _runtimeInformation.setWasCached(false);
+      _runtimeInfo.setDescriptor(getDescriptor());
+      _runtimeInfo.setRows(newResult->_resTable->size());
+      _runtimeInfo.setCols(getResultWidth());
+      _runtimeInfo.setColumnNames(getVariableColumns());
+      _runtimeInfo.setTime(timer.msecs());
+      _runtimeInfo.setWasCached(false);
       // cache the runtime information for the execution as well
-      newResult->_runtimeInfo = _runtimeInformation;
+      newResult->_runtimeInfo = _runtimeInfo;
       // Only now we can let other threads access the result
       // and runtime information
       newResult->_resTable->finish();
@@ -98,19 +99,20 @@ class Operation {
                "Operation was found aborted in the cache");
     }
     timer.stop();
+    _runtimeInfo = existingResult->_runtimeInfo;
     // If the result for this Operation came from the cache we
-    // need to update get column names as caching is invariant to renames
-    _runtimeInformation = existingResult->_runtimeInfo;
-    _runtimeInformation.setColumnNames(getVariableColumns());
-    _runtimeInformation.setTime(timer.msecs());
-    _runtimeInformation.addDetail("OriginalTime",
-                                  existingResult->_runtimeInfo.getTime());
-    _runtimeInformation.setTime(timer.msecs());
-    _runtimeInformation.setWasCached(true);
+    // need to update column names and descriptor as we may have
+    // cached with different variable names
+    _runtimeInfo.setDescriptor(getDescriptor());
+    _runtimeInfo.setColumnNames(getVariableColumns());
+    _runtimeInfo.setTime(timer.msecs());
+    _runtimeInfo.setWasCached(true);
+    _runtimeInfo.addDetail("OriginalTime",
+                           existingResult->_runtimeInfo.getTime());
     return existingResult->_resTable;
   }
 
-  //! Set the QueryExecutionContext for this particular element.
+  // Set the QueryExecutionContext for this particular element.
   void setQueryExecutionContext(QueryExecutionContext* executionContext) {
     _executionContext = executionContext;
   }
@@ -133,6 +135,10 @@ class Operation {
   // Get a unique, not ambiguous string representation for a subtree.
   // This should possible act like an ID for each subtree.
   virtual string asString(size_t indent = 0) const = 0;
+
+  // Gets a very short (one line without line ending) descriptor string for
+  // this Operation.  This string is used in the RuntimeInformation
+  virtual string getDescriptor() const = 0;
   virtual size_t getResultWidth() const = 0;
   virtual void setTextLimit(size_t limit) = 0;
   virtual size_t getCostEstimate() = 0;
@@ -141,7 +147,7 @@ class Operation {
   virtual bool knownEmptyResult() = 0;
   virtual ad_utility::HashMap<string, size_t> getVariableColumns() const = 0;
 
-  RuntimeInformation& getRuntimeInfo() { return _runtimeInformation; }
+  RuntimeInformation& getRuntimeInfo() { return _runtimeInfo; }
 
  protected:
   QueryExecutionContext* getExecutionContext() const {
@@ -174,5 +180,5 @@ class Operation {
 
   vector<size_t> _resultSortedColumns;
   bool _hasComputedSortColumns;
-  RuntimeInformation _runtimeInformation;
+  RuntimeInformation _runtimeInfo;
 };

@@ -31,6 +31,8 @@ class IndexScan : public Operation {
 
   virtual string asString(size_t indent = 0) const override;
 
+  virtual string getDescriptor() const override;
+
   IndexScan(QueryExecutionContext* qec, ScanType type)
       : Operation(qec),
         _type(type),

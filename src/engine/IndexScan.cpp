@@ -68,6 +68,11 @@ string IndexScan::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
+string IndexScan::getDescriptor() const {
+  return "IndexScan " + _subject + " " + _predicate + " " + _object;
+}
+
+// _____________________________________________________________________________
 size_t IndexScan::getResultWidth() const {
   switch (_type) {
     case PSO_BOUND_S:
@@ -139,9 +144,6 @@ ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
 void IndexScan::computeResult(ResultTable* result) {
   LOG(DEBUG) << "IndexScan result computation...\n";
 
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.setDescriptor("IndexScan " + _subject + " " + _predicate + " " +
-                            _object);
   switch (_type) {
     case PSO_BOUND_S:
       computePSOboundS(result);

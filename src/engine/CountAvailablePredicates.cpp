@@ -43,12 +43,22 @@ string CountAvailablePredicates::asString(size_t indent) const {
   if (_subjectEntityName) {
     os << "COUNT_AVAILABLE_PREDICATES for " << _subjectEntityName.value();
   } else if (_subtree == nullptr) {
-    os << "COUNT_AVAILABLE_PREDICATES for all entities.";
+    os << "COUNT_AVAILABLE_PREDICATES for all entities";
   } else {
     os << "COUNT_AVAILABLE_PREDICATES (col " << _subjectColumnIndex << ")\n"
        << _subtree->asString(indent);
   }
   return os.str();
+}
+
+// _____________________________________________________________________________
+string CountAvailablePredicates::getDescriptor() const {
+  if (_subjectEntityName) {
+    return "CountAvailablePredicates for a single entity";
+  } else if (_subtree == nullptr) {
+    return "CountAvailablePredicates for a all entities";
+  }
+  return "CountAvailablePredicates";
 }
 
 // _____________________________________________________________________________
@@ -138,7 +148,6 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
       _executionContext->getIndex().getPatterns();
 
   if (_subjectEntityName) {
-    runtimeInfo.setDescriptor("CountAvailablePredicates for a single entity.");
     size_t entityId;
     // If the entity exists return the all predicates for that entitity,
     // otherwise return an empty result.
@@ -151,13 +160,11 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
                         patterns, 0, &runtimeInfo);
     }
   } else if (_subtree == nullptr) {
-    runtimeInfo.setDescriptor("CountAvailablePredicates for all entities");
     // Compute the predicates for all entities
     CountAvailablePredicates::computePatternTrickAllEntities(
         &result->_data, hasPattern, hasPredicate, patterns);
   } else {
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
-    runtimeInfo.setDescriptor("CountAvailablePredicates");
     runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;

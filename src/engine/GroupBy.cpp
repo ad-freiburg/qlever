@@ -62,6 +62,10 @@ string GroupBy::asString(size_t indent) const {
   return os.str();
 }
 
+string GroupBy::getDescriptor() const {
+  return "GroupBy on " + ad_utility::join(_groupByVariables, ' ');
+}
+
 size_t GroupBy::getResultWidth() const { return _varColMap.size(); }
 
 vector<size_t> GroupBy::resultSortedOn() const {
@@ -784,7 +788,6 @@ void GroupBy::computeResult(ResultTable* result) {
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.setDescriptor("GROUP BY");
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
 
   // populate the result type vector

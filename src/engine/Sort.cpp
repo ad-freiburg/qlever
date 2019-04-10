@@ -28,10 +28,7 @@ string Sort::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-void Sort::computeResult(ResultTable* result) {
-  LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
-  shared_ptr<const ResultTable> subRes = _subtree->getResult();
-
+string Sort::getDescriptor() const {
   std::string orderByVars = "";
   for (auto p : _subtree->getVariableColumns()) {
     if (p.second == _sortCol) {
@@ -39,8 +36,16 @@ void Sort::computeResult(ResultTable* result) {
       break;
     }
   }
+
+  return "Sort on " + orderByVars;
+}
+
+// _____________________________________________________________________________
+void Sort::computeResult(ResultTable* result) {
+  LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
+  shared_ptr<const ResultTable> subRes = _subtree->getResult();
+
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.setDescriptor("Sort on " + orderByVars);
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
 
   LOG(DEBUG) << "Sort result computation..." << endl;

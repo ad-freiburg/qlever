@@ -42,6 +42,21 @@ string HasPredicateScan::asString(size_t indent) const {
   return os.str();
 }
 
+string HasPredicateScan::getDescriptor() const {
+  switch (_type) {
+    case ScanType::FREE_S:
+      return "HasPredicateScan free subject: " + _subject;
+    case ScanType::FREE_O:
+      return "HasPredicateScan free object: " + _object;
+    case ScanType::FULL_SCAN:
+      return "HasPredicateScan full scan";
+    case ScanType::SUBQUERY_S:
+      return "HasPredicateScan with a subquery on " + _subject;
+    default:
+      return "HasPredicateScan";
+  }
+}
+
 size_t HasPredicateScan::getResultWidth() const {
   switch (_type) {
     case ScanType::FREE_S:

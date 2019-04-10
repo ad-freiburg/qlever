@@ -54,9 +54,12 @@ string TextOperationWithoutFilter::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
+string TextOperationWithoutFilter::getDescriptor() const {
+  return "TextOperationWithoutFilter with " + _words;
+}
+
+// _____________________________________________________________________________
 void TextOperationWithoutFilter::computeResult(ResultTable* result) {
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.setDescriptor("Text operation without filter: " + _words);
   LOG(DEBUG) << "TextOperationWithoutFilter result computation..." << endl;
   if (getNofVars() == 0) {
     computeResultNoVar(result);

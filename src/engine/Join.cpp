@@ -51,8 +51,7 @@ string Join::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-void Join::computeResult(ResultTable* result) {
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+string Join::getDescriptor() const {
   std::string joinVar = "";
   for (auto p : _left->getVariableColumns()) {
     if (p.second == _leftJoinCol) {
@@ -60,7 +59,12 @@ void Join::computeResult(ResultTable* result) {
       break;
     }
   }
-  runtimeInfo.setDescriptor("Join on " + joinVar);
+  return "Join on " + joinVar;
+}
+
+// _____________________________________________________________________________
+void Join::computeResult(ResultTable* result) {
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
 
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
   size_t leftWidth = _left->getResultWidth();

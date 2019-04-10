@@ -72,9 +72,9 @@ string Filter::asString(size_t indent) const {
   return os.str();
 }
 
-std::string Filter::getDescriptor() const {
+string Filter::getDescriptor() const {
   std::ostringstream os;
-  os << "FILTER ";
+  os << "Filter ";
   os << _lhs;
   switch (_type) {
     case SparqlFilter::EQ:
@@ -96,10 +96,10 @@ std::string Filter::getDescriptor() const {
       os << " >= ";
       break;
     case SparqlFilter::LANG_MATCHES:
-      os << " LANG_MATCHES ";
+      os << " langMatches ";
       break;
     case SparqlFilter::REGEX:
-      os << " REGEX ";
+      os << " regex ";
       if (_regexIgnoreCase) {
         os << "ignoring case ";
       };

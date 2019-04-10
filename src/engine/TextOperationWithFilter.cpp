@@ -52,6 +52,7 @@ TextOperationWithFilter::getVariableColumns() const {
   }
   return vcmap;
 }
+
 // _____________________________________________________________________________
 string TextOperationWithFilter::asString(size_t indent) const {
   std::ostringstream os;
@@ -70,6 +71,11 @@ string TextOperationWithFilter::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
+string TextOperationWithFilter::getDescriptor() const {
+  return "TextOperationWithFilter with  " + _words;
+}
+
+// _____________________________________________________________________________
 void TextOperationWithFilter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "TextOperationWithFilter result computation..." << endl;
   AD_CHECK_GE(getNofVars(), 1);
@@ -77,7 +83,6 @@ void TextOperationWithFilter::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.setDescriptor("Text operation with filter: " + _words);
   runtimeInfo.addChild(_filterResult->getRootOperation()->getRuntimeInfo());
 
   result->_resultTypes.reserve(result->_data.cols());

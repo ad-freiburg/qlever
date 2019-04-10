@@ -13,7 +13,7 @@
 class DummyOperation : public Operation {
  public:
   DummyOperation(QueryExecutionContext* ctx) : Operation(ctx) {}
-  virtual void computeResult(ResultTable* result) {
+  void computeResult(ResultTable* result) {
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_data.setCols(2);
@@ -23,10 +23,12 @@ class DummyOperation : public Operation {
     result->finish();
   }
 
-  virtual string asString(size_t indent = 0) const {
+  string asString(size_t indent = 0) const {
     (void)indent;
     return "dummy";
   }
+
+  string getDescriptor() const override { return "dummy"; }
 
   virtual size_t getResultWidth() const { return 2; }
 

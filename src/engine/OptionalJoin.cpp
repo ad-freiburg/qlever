@@ -58,11 +58,7 @@ string OptionalJoin::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-void OptionalJoin::computeResult(ResultTable* result) {
-  AD_CHECK(result);
-  LOG(DEBUG) << "OptionalJoin result computation..." << endl;
-
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+string OptionalJoin::getDescriptor() const {
   std::string joinVars = "";
   for (auto p : _left->getVariableColumns()) {
     for (auto jc : _joinColumns) {
@@ -73,7 +69,15 @@ void OptionalJoin::computeResult(ResultTable* result) {
       }
     }
   }
-  runtimeInfo.setDescriptor("OptionalJoin on " + joinVars);
+  return "OptionalJoin on " + joinVars;
+}
+
+// _____________________________________________________________________________
+void OptionalJoin::computeResult(ResultTable* result) {
+  AD_CHECK(result);
+  LOG(DEBUG) << "OptionalJoin result computation..." << endl;
+
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
 
   result->_sortedBy = resultSortedOn();
   result->_data.setCols(getResultWidth());

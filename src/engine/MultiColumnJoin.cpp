@@ -55,11 +55,7 @@ string MultiColumnJoin::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-void MultiColumnJoin::computeResult(ResultTable* result) {
-  AD_CHECK(result);
-  LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
-
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+string MultiColumnJoin::getDescriptor() const {
   std::string joinVars = "";
   for (auto p : _left->getVariableColumns()) {
     for (auto jc : _joinColumns) {
@@ -70,8 +66,15 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
       }
     }
   }
-  runtimeInfo.setDescriptor("MultiColumnJoin on " + joinVars);
+  return "MultiColumnJoin on " + joinVars;
+}
 
+// _____________________________________________________________________________
+void MultiColumnJoin::computeResult(ResultTable* result) {
+  AD_CHECK(result);
+  LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
+
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
   result->_sortedBy = resultSortedOn();
   result->_data.setCols(getResultWidth());
 

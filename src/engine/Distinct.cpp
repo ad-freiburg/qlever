@@ -29,6 +29,9 @@ string Distinct::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
+string Distinct::getDescriptor() const { return "Distinct"; }
+
+// _____________________________________________________________________________
 ad_utility::HashMap<string, size_t> Distinct::getVariableColumns() const {
   return _subtree->getVariableColumns();
 }
@@ -39,7 +42,6 @@ void Distinct::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.setDescriptor("DISTINCT");
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "Distinct result computation..." << endl;
   result->_data.setCols(subRes->_data.cols());

@@ -35,6 +35,23 @@ string OrderBy::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
+string OrderBy::getDescriptor() const {
+  std::string orderByVars = "";
+  for (auto p : _subtree->getVariableColumns()) {
+    for (auto oc : _sortIndices) {
+      if (oc.first == p.second) {
+        if (oc.second) {
+          orderByVars += "DESC(" + p.first + ") ";
+        } else {
+          orderByVars += "ASC(" + p.first + ") ";
+        }
+      }
+    }
+  }
+  return "OrderBy on " + orderByVars;
+}
+
+// _____________________________________________________________________________
 vector<size_t> OrderBy::resultSortedOn() const {
   std::vector<size_t> sortedOn;
   sortedOn.reserve(_sortIndices.size());
@@ -53,20 +70,7 @@ void OrderBy::computeResult(ResultTable* result) {
   AD_CHECK(_sortIndices.size() > 0);
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
-  std::string orderByVars = "";
-  for (auto p : _subtree->getVariableColumns()) {
-    for (auto oc : _sortIndices) {
-      if (oc.first == p.second) {
-        if (oc.second) {
-          orderByVars += "DESC(" + p.first + ") ";
-        } else {
-          orderByVars += "ASC(" + p.first + ") ";
-        }
-      }
-    }
-  }
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.setDescriptor("OrderBy on " + orderByVars);
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "OrderBy result computation..." << endl;
   result->_data.setCols(subRes->_data.cols());
