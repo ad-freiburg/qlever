@@ -46,26 +46,25 @@ class RuntimeInformation {
     buffer.imbue(ad_utility::commaLocale);
     // So floats use fixed precision
     buffer << std::fixed << std::setprecision(2);
-    writeToStream(buffer, 0);
+    writeToStream(buffer);
     return buffer.str();
   }
 
-  void writeToStream(std::ostream& out, size_t indent) const {
+  void writeToStream(std::ostream& out, size_t indent = 1) const {
     using json = nlohmann::json;
-    out << '\n';
-    out << std::string(indent * 2, ' ') << _descriptor << std::endl;
-    out << std::string(indent * 2, ' ') << "result_size: " << _rows << " x "
-        << _cols << std::endl;
-    out << std::string(indent * 2, ' ')
-        << "columns: " << ad_utility::join(_columnNames, ", ") << std::endl;
-    out << std::string(indent * 2, ' ') << "total_time: " << _time << " ms"
-        << std::endl;
-    out << std::string(indent * 2, ' ')
-        << "operation_time: " << getOperationTime() << " ms" << std::endl;
-    out << std::string(indent * 2, ' ')
-        << "cached: " << ((_wasCached) ? "true" : "false") << std::endl;
+    out << indentStr(indent) << '\n';
+    out << indentStr(indent - 1) << "├─ " << _descriptor << '\n';
+    out << indentStr(indent) << "result_size: " << _rows << " x " << _cols
+        << '\n';
+    out << indentStr(indent)
+        << "columns: " << ad_utility::join(_columnNames, ", ") << '\n';
+    out << indentStr(indent) << "total_time: " << _time << " ms" << '\n';
+    out << indentStr(indent) << "operation_time: " << getOperationTime()
+        << " ms" << '\n';
+    out << indentStr(indent) << "cached: " << ((_wasCached) ? "true" : "false")
+        << '\n';
     for (const auto& el : _details.items()) {
-      out << std::string(indent * 2 + 1, ' ') << el.key() << ": ";
+      out << indentStr(indent) << "  " << el.key() << ": ";
       // We want to print doubles with fixed precision and stream ints as their
       // native type so they get thousands separators. For everything else we
       // let nlohmann::json handle it
@@ -81,10 +80,13 @@ class RuntimeInformation {
       if (ad_utility::endsWith(el.key(), "Time")) {
         out << " ms";
       }
-      out << std::endl;
+      out << '\n';
     }
-    for (const RuntimeInformation& child : _children) {
-      child.writeToStream(out, indent + 1);
+    if (_children.size()) {
+      out << indentStr(indent) << "┬\n";
+      for (const RuntimeInformation& child : _children) {
+        child.writeToStream(out, indent + 1);
+      }
     }
   }
 
@@ -145,6 +147,14 @@ class RuntimeInformation {
   }
 
  private:
+  static std::string indentStr(size_t indent) {
+    std::string ind;
+    for (size_t i = 0; i < indent; i++) {
+      ind += "│  ";
+    }
+    return ind;
+  }
+
   double _time;
   size_t _rows;
   size_t _cols;
