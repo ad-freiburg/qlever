@@ -159,6 +159,9 @@ target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_IN
 add_executable(TurtleParserMain src/TurtleParserMain.cpp)
 target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT})
 
+add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
+target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
+
 #add_executable(TextFilterComparison src/experiments/TextFilterComparison.cpp)
 #target_link_libraries (TextFilterComparison experiments)
 

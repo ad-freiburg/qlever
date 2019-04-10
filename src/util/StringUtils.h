@@ -664,6 +664,35 @@ inline size_t findClosingBracket(const string& haystack, size_t start,
   return -1;
 }
 
+// return the first position where <literalEnd> was found in the <input> without
+// being escaped by backslashes. If it is not found at all, string::npos is
+// returned.
+inline size_t findLiteralEnd(std::string_view input,
+                             std::string_view literalEnd) {
+  auto endPos = input.find(literalEnd, 0);
+  while (endPos != string::npos) {
+    if (endPos > 0 && input[endPos - 1] == '\\') {
+      size_t numBackslash = 1;
+      auto slashPos = endPos - 2;
+      // the first condition checks > 0 for unsigned numbers
+      while (slashPos < input.size() && input[slashPos] == '\\') {
+        slashPos--;
+        numBackslash++;
+      }
+      if (numBackslash % 2 == 0) {
+        // even number of backslashes means that the quote we found has not
+        // been escaped
+        break;
+      }
+      endPos = input.find(literalEnd, endPos + 1);
+    } else {
+      // no backslash before " , the string has definitely ended
+      break;
+    }
+  }
+  return endPos;
+}
+
 }  // namespace ad_utility
 
 // these overloads are missing in the STL

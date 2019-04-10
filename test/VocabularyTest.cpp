@@ -142,6 +142,12 @@ TEST(VocabularyTest, StringSortComparator) {
   ASSERT_FALSE(comp("beta", "beta"));
 }
 
+TEST(VocabularyTest, IncompleteLiterals) {
+  StringSortComparator comp(true);
+
+  ASSERT_TRUE(comp("\"fieldofwork", "\"GOLD\"@en"));
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

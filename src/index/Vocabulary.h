@@ -101,6 +101,26 @@ class PrefixComparator {
  */
 class StringSortComparator {
  public:
+  static std::string rdfLiteralToValueForLT(const std::string& input) {
+    auto rhs_string = ad_utility::getUppercaseUtf8(input);
+    auto split = StringSortComparator::extractComparable(rhs_string);
+    if (split.isLiteral && !split.langtag.empty()) {
+      // get rid of possible langtags to move to the beginning of the
+      // range
+      rhs_string = '\"' + std::string(split.val) + '\"';
+    }
+    return rhs_string;
+  }
+
+  static std::string rdfLiteralToValueForGT(const std::string& input) {
+    auto rhs_string = ad_utility::getLowercaseUtf8(input);
+    auto split2 = StringSortComparator::extractComparable(rhs_string);
+    if (split2.isLiteral) {
+      rhs_string = '\"' + std::string(split2.val) + '\"' + "@" + char(127);
+    }
+    return rhs_string;
+  }
+
   StringSortComparator(bool ignoreCase = false) : _ignoreCase(ignoreCase) {}
 
   bool getIgnoreCase() const { return _ignoreCase; }
@@ -136,15 +156,19 @@ class StringSortComparator {
     bool isLiteral = false;
     std::string_view langtag;
     if (ad_utility::startsWith(res, "\"")) {
-      // note: this only works for valid SPARQL literals with at least two
-      // quotation marks but this is ensured for all the vocabulary words.
+      // In the case of prefix filters we might also have
+      // Literals that do not have the closing quotation mark
       isLiteral = true;
-      auto pos = res.rfind('\"');
-      // this should also be fine if there is no langtag (pos == size() ok
-      // according to cppreference.com
-      langtag = res.substr(pos + 1);
-      res.remove_suffix(res.size() - pos);
       res.remove_prefix(1);
+      auto endPos = ad_utility::findLiteralEnd(res, "\"");
+      if (endPos != string::npos) {
+        // this should also be fine if there is no langtag (endPos == size()
+        // according to cppreference.com
+        langtag = res.substr(endPos + 1);
+        res.remove_suffix(res.size() - endPos);
+      } else {
+        langtag = "";
+      }
     }
     return {isLiteral, res, langtag};
   }

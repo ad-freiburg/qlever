@@ -190,12 +190,15 @@ class MergeVocabularyTest : public ::testing::Test {
 // Test for merge Vocabulary
 TEST_F(MergeVocabularyTest, bla) {
   // mergeVocabulary only gets name of directory and number of files.
-  Id langPredLowerBound, langPredUpperBound;
-  mergeVocabulary(_basePath, 2, &langPredLowerBound, &langPredUpperBound,
-                  StringSortComparator());
+  VocabularyMerger::VocMergeRes res;
+  {
+    VocabularyMerger m;
+    m.mergeVocabulary(_basePath, 2, StringSortComparator());
+  }
+
   // No language tags in text file
-  ASSERT_EQ(langPredLowerBound, 0ul);
-  ASSERT_EQ(langPredUpperBound, 0ul);
+  ASSERT_EQ(res._langPredLowerBound, 0ul);
+  ASSERT_EQ(res._langPredUpperBound, 0ul);
   // Assert that partial vocabularies have the expected ids
   ASSERT_TRUE(areBinaryFilesEqual(_path0, _pathExp0));
   ASSERT_TRUE(areBinaryFilesEqual(_path1, _pathExp1));
@@ -224,10 +227,11 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     writePartialIdMapToBinaryFileForMerging(
         ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(),
         false);
-    Id tmp1;
-    Id tmp2;
 
-    mergeVocabulary(basename, 1, &tmp1, &tmp2, v.getCaseComparator());
+    {
+      VocabularyMerger m;
+      m.mergeVocabulary(basename, 1, v.getCaseComparator());
+    }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
     ASSERT_EQ(0u, idMap[5]);
     ASSERT_EQ(1u, idMap[7]);
@@ -252,10 +256,11 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     writePartialIdMapToBinaryFileForMerging(
         ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(),
         false);
-    Id tmp1;
-    Id tmp2;
 
-    mergeVocabulary(basename, 1, &tmp1, &tmp2, v.getCaseComparator());
+    {
+      VocabularyMerger m;
+      m.mergeVocabulary(basename, 1, v.getCaseComparator());
+    }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
     ASSERT_EQ(0u, idMap[5]);
     ASSERT_EQ(1u, idMap[6]);

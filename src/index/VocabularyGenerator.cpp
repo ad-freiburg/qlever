@@ -4,6 +4,7 @@
 
 #include "./VocabularyGenerator.h"
 #include <fstream>
+#include <future>
 #include <iostream>
 #include <queue>
 #include <string>
@@ -19,45 +20,29 @@
 #include "./ConstantsIndexCreation.h"
 #include "./Vocabulary.h"
 
-// helper struct used in the priority queue for merging.
-// represents tokens/words in a certain partial vocabulary
-struct QueueWord {
-  QueueWord() = default;
-  QueueWord(const string& v, size_t file, Id word)
-      : _value(v), _partialFileId(file), _partialWordId(word) {}
-  string _value;          // the word
-  size_t _partialFileId;  // from which partial vocabulary did this word come
-  Id _partialWordId;      // which partial id did the word have in this partial
-                          // vocabulary
-};
-
-// we sort alphabetically by the token
-class QueueCompare {
- public:
-  QueueCompare(StringSortComparator comp) : _comp(comp) {}
-  bool operator()(const QueueWord& p1, const QueueWord& p2) {
-    // if p1 is smaller (alphabetically)
-    // _comp will return false if called like this
-    // and the priority queue will thus emit p1 first
-    return _comp(p2._value, p1._value);
-  }
-
- private:
-  StringSortComparator _comp;
-};
-
 // ___________________________________________________________________
-size_t mergeVocabulary(const std::string& basename, size_t numFiles,
-                       Id* langPredLowerBound, Id* langPredUpperBound,
-                       StringSortComparator comp) {
+VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
+    const std::string& basename, size_t numFiles, StringSortComparator comp) {
+  // we sort alphabetically by the token
+  class QueueCompare {
+   public:
+    QueueCompare(StringSortComparator comp) : _comp(comp) {}
+    bool operator()(const QueueWord& p1, const QueueWord& p2) {
+      // if p1 is smaller (alphabetically)
+      // _comp will return false if called like this
+      // and the priority queue will thus emit p1 first
+      return _comp(p2._value, p1._value);
+    }
+
+   private:
+    StringSortComparator _comp;
+  };
   std::vector<std::ifstream> infiles;
 
-  // we will store pairs of <partialId, globalId>
-  std::vector<IdPairMMapVec> idVecs;
-  std::ofstream outfile(basename + ".vocabulary");
-  AD_CHECK(outfile.is_open());
-  std::ofstream outfileExternal(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
-  AD_CHECK(outfileExternal.is_open());
+  _outfile.open(basename + ".vocabulary");
+  AD_CHECK(_outfile.is_open());
+  _outfileExternal.open(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
+  AD_CHECK(_outfileExternal.is_open());
   std::vector<bool> endOfFile(numFiles, false);
 
   // Priority queue for the k-way merge
@@ -68,7 +53,7 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles,
   for (size_t i = 0; i < numFiles; i++) {
     infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME +
                          std::to_string(i));
-    idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
+    _idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
     AD_CHECK(infiles.back().is_open());
 
     // read the first entry of the vocabulary and add it to the queue
@@ -85,62 +70,38 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles,
     }
   }
 
-  // keep track of the last seen word to correctly handle duplicates
-  std::string lastWritten = "";
-  // the number of words we have written. This also is the global Id of the next
-  // word we see, unless it is is equal to the previous word
-  size_t totalWritten = 0;
-  bool firstLangPredSeen = false;
-  *langPredLowerBound = 0;
-  *langPredUpperBound = 0;
+  std::vector<QueueWord> sortedBuffer;
+  sortedBuffer.reserve(_bufferSize + 2);
+
+  std::future<void> writeFuture;
 
   // start k-way merge
   while (!queue.empty()) {
-    auto top = queue.top();
+    sortedBuffer.push_back(std::move(queue.top()));
     queue.pop();
+    auto i = sortedBuffer.back()._partialFileId;
 
-    // avoid duplicates
-    if (top._value != lastWritten) {
-      lastWritten = top._value;
+    if (sortedBuffer.size() >= _bufferSize) {
+      auto task = [this, buf = std::move(sortedBuffer)]() {
+        this->writeQueueWordsToIdVec(buf);
+      };
+      sortedBuffer.clear();
+      sortedBuffer.reserve(_bufferSize + 2);
+      // wait for the last batch
 
-      // write the new word to the vocabulary
-      if (top._value < string({EXTERNALIZED_LITERALS_PREFIX})) {
-        outfile << top._value << std::endl;
-      } else {
-        // we have to strip the externalization character again
-        outfileExternal << top._value.substr(1) << std::endl;
+      if (writeFuture.valid()) {
+        LOG(INFO) << "Waiting for the asynchronous write to finish\n";
+        writeFuture.get();
       }
-
-      // write id to corresponding vec
-      idVecs[top._partialFileId].push_back(
-          std::make_pair(top._partialWordId, totalWritten));
-
-      if (top._value.size() > 0 && top._value[0] == '@') {
-        if (!firstLangPredSeen) {
-          // inclusive
-          *langPredLowerBound = totalWritten;
-          firstLangPredSeen = true;
-        }
-        // exclusive
-        *langPredUpperBound = totalWritten + 1;
-      }
-      totalWritten++;
-    } else {
-      // this is a duplicate which already occured in another partial vocabulary
-      // in the last step.
-      // we already have increased total written, so for the duplicate
-      // we have to subtract one again
-      size_t minusOne = totalWritten - 1;
-      idVecs[top._partialFileId].push_back(
-          std::make_pair(top._partialWordId, minusOne));
+      writeFuture = std::async(task);
+      // we have moved away our buffer, start over
     }
 
     // add next word from the same infile to the priority queue
-    if (endOfFile[top._partialFileId]) {
+    if (endOfFile[i]) {
       continue;
     }  // file is exhausted, nothing to add
 
-    size_t i = top._partialFileId;
     endOfFile[i] = true;
     uint32_t len;
     if (infiles[i].read((char*)&len, sizeof(len))) {
@@ -152,7 +113,98 @@ size_t mergeVocabulary(const std::string& basename, size_t numFiles,
       endOfFile[i] = false;
     }
   }
-  return totalWritten;
+  if (writeFuture.valid()) {
+    writeFuture.get();
+  }
+  if (!sortedBuffer.empty()) {
+    writeQueueWordsToIdVec(sortedBuffer);
+  }
+  VocMergeRes result;
+  result._numWordsTotal = _totalWritten;
+  result._langPredLowerBound = _langPredLowerBound;
+  result._langPredUpperBound = _langPredUpperBound;
+  return result;
+}
+
+// ________________________________________________________________________________
+void VocabularyMerger::writeQueueWordsToIdVec(
+    const std::vector<QueueWord>& buffer) {
+  LOG(INFO) << "Start writing a batch of merged words\n";
+
+  auto bufSize = _bufferSize / 5;
+  std::future<void> writeFut;
+  std::vector<std::pair<size_t, std::pair<size_t, size_t>>> writeBuf;
+  writeBuf.reserve(bufSize);
+  // avoid duplicates
+  for (const auto& top : buffer) {
+    if (top._value != _lastWritten) {
+      _lastWritten = top._value;
+
+      // write the new word to the vocabulary
+      if (top._value < string({EXTERNALIZED_LITERALS_PREFIX})) {
+        _outfile << top._value << '\n';
+      } else {
+        // we have to strip the externalization character again
+        _outfileExternal << top._value.substr(1) << '\n';
+      }
+
+      // write id to corresponding vec
+      writeBuf.emplace_back(top._partialFileId,
+                            std::make_pair(top._partialWordId, _totalWritten));
+
+      if (top._value.size() > 0 && top._value[0] == '@') {
+        if (!_firstLangPredSeen) {
+          // inclusive
+          _langPredLowerBound = _totalWritten;
+          _firstLangPredSeen = true;
+        }
+        // exclusive
+        _langPredUpperBound = _totalWritten + 1;
+      }
+      _totalWritten++;
+      if (_totalWritten % _bufferSize == 0) {
+        LOG(INFO) << "Merged " << _totalWritten << "Words" << std::endl;
+      }
+    } else {
+      // this is a duplicate which already occured in another partial vocabulary
+      // in the last step.
+      // we already have increased total written, so for the duplicate
+      // we have to subtract one again
+      size_t minusOne = _totalWritten - 1;
+      writeBuf.emplace_back(top._partialFileId,
+                            std::make_pair(top._partialWordId, minusOne));
+    }
+
+    if (writeBuf.size() >= bufSize) {
+      auto task = [this, buf = std::move(writeBuf)]() {
+        this->doActualWrite(buf);
+      };
+      if (writeFut.valid()) {
+        writeFut.get();
+      }
+      writeFut = std::async(task);
+      writeBuf.clear();
+      writeBuf.reserve(bufSize + 2);
+    }
+  }
+
+  if (writeFut.valid()) {
+    writeFut.get();
+  }
+
+  if (!writeBuf.empty()) {
+    doActualWrite(writeBuf);
+  }
+
+  LOG(INFO) << "Finished writing batch of merged words\n";
+}
+
+// ____________________________________________________________________________________________________________
+void VocabularyMerger::doActualWrite(
+    const std::vector<std::pair<size_t, std::pair<size_t, size_t>>>& buffer) {
+  for (const auto& [id, value] : buffer) {
+    _idVecs[id].push_back(value);
+  }
 }
 
 // ______________________________________________________________________________________________

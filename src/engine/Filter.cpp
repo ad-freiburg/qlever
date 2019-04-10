@@ -416,7 +416,16 @@ void Filter::computeFilterFixedValue(
         // remove the leading '^' symbol
         std::string rhs = _rhs.substr(1);
         std::string upperBoundStr = rhs;
-        upperBoundStr[upperBoundStr.size() - 1]++;
+        if (getIndex().getVocab().getCaseInsensitiveOrdering()) {
+          upperBoundStr = ad_utility::getUppercaseUtf8(upperBoundStr);
+          upperBoundStr[upperBoundStr.size() - 1]++;
+          upperBoundStr =
+              StringSortComparator::rdfLiteralToValueForLT(upperBoundStr);
+          rhs = StringSortComparator::rdfLiteralToValueForGT(rhs);
+        } else {
+          upperBoundStr[upperBoundStr.size() - 1]++;
+        }
+
         size_t upperBound =
             getIndex().getVocab().getValueIdForLT(upperBoundStr);
         size_t lowerBound = getIndex().getVocab().getValueIdForGE(rhs);
@@ -507,6 +516,8 @@ void Filter::computeResultFixedValue(
         rhs_string = ad_utility::convertNumericToIndexWord(rhs_string);
       } else {
         if (getIndex().getVocab().getCaseInsensitiveOrdering()) {
+          LOG(INFO) << "Starting conversion of filter value" << rhs_string
+                    << std::endl;
           // We have to move to the correct end of the
           // "same letters but different case" - range
           // to make the filters work
@@ -517,29 +528,22 @@ void Filter::computeResultFixedValue(
           switch (_type) {
             case SparqlFilter::GE:
             case SparqlFilter::LT: {
-              rhs_string = ad_utility::getUppercaseUtf8(rhs_string);
-              auto split = StringSortComparator::extractComparable(rhs_string);
-              if (split.isLiteral && !split.langtag.empty()) {
-                // get rid of possible langtags to move to the beginning of the
-                // range
-                rhs_string = '\"' + std::string(split.val) + '\"';
-              }
+              rhs_string =
+                  StringSortComparator::rdfLiteralToValueForLT(rhs_string);
             }
 
             break;
             case SparqlFilter::GT:
             case SparqlFilter::LE: {
-              rhs_string = ad_utility::getLowercaseUtf8(rhs_string);
-              auto split2 = StringSortComparator::extractComparable(rhs_string);
-              if (split2.isLiteral) {
-                rhs_string =
-                    '\"' + std::string(split2.val) + '\"' + "@" + char(127);
-              }
+              rhs_string =
+                  StringSortComparator::rdfLiteralToValueForGT(rhs_string);
             } break;
             default:
               break;
           }
         }
+        LOG(INFO) << "Finished conversion of filter value" << rhs_string
+                  << std::endl;
       }
       if (_type == SparqlFilter::EQ || _type == SparqlFilter::NE) {
         if (!getIndex().getVocab().getId(_rhs, &rhs)) {

@@ -221,24 +221,31 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     }
   }
   writer.finish();
+  LOG(INFO) << "Pass done." << endl;
 
   std::future<void> tmpVocFut;
   if (_vocabPrefixCompressed && _vocab.getCaseInsensitiveOrdering()) {
     LOG(INFO) << "Merging temporary vocabulary for prefix compression";
-    Id tmp1, tmp2;
-    auto f = [this, numFiles, &tmp1, &tmp2]() {
-      mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles, &tmp1,
-                      &tmp2, StringSortComparator(false));
+    auto f = [this, numFiles]() {
+      VocabularyMerger m;
+      m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
+                        StringSortComparator(false));
     };
     tmpVocFut = std::async(f);
-    LOG(INFO) << "Pass done.\n";
   }
 
   LOG(INFO) << "Merging vocabulary\n";
+  VocabularyMerger::VocMergeRes mergeRes;
+  {
+    VocabularyMerger v;
+    mergeRes =
+        v.mergeVocabulary(_onDiskBase, numFiles, _vocab.getCaseComparator());
+  }
   VocabularyData res;
-  res.nofWords =
-      mergeVocabulary(_onDiskBase, numFiles, &res.langPredLowerBound,
-                      &res.langPredUpperBound, _vocab.getCaseComparator());
+  res.nofWords = mergeRes._numWordsTotal;
+  res.langPredLowerBound = mergeRes._langPredLowerBound;
+  res.langPredUpperBound = mergeRes._langPredUpperBound;
+
   res.idTriples = std::move(idTriples);
   res.actualPartialSizes = std::move(actualPartialSizes);
   LOG(INFO) << "Finished Merging Vocabulary.\n";
