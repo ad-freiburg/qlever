@@ -220,9 +220,13 @@ void writePartialIdMapToBinaryFileForMerging(
   auto pred = [comp](const auto& p1, const auto& p2) {
     return comp(p1.first, p2.first);
   };
-  if (USE_PARALLEL_SORT && doParallelSort) {
-    __gnu_parallel::sort(begin(els), end(els), pred,
-                         __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
+  if constexpr (USE_PARALLEL_SORT) {
+    if (USE_PARALLEL_SORT && doParallelSort) {
+      __gnu_parallel::sort(begin(els), end(els), pred,
+                           __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
+    } else {
+      std::sort(begin(els), end(els), pred);
+    }
   } else {
     std::sort(begin(els), end(els), pred);
   }

@@ -55,7 +55,7 @@ void Distinct::computeResult(ResultTable* result) {
                               subRes->_resultTypes.begin(),
                               subRes->_resultTypes.end());
   result->_localVocab = subRes->_localVocab;
-  int width = subRes->_data.size();
+  int width = subRes->_data.cols();
   CALL_FIXED_SIZE_1(width, getEngine().distinct, subRes->_data, _keepIndices,
                     &result->_data);
   LOG(DEBUG) << "Distinct result computation done." << endl;

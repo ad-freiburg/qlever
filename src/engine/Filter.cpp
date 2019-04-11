@@ -421,7 +421,11 @@ void Filter::computeFilterFixedValue(
           upperBoundStr[upperBoundStr.size() - 1]++;
           upperBoundStr =
               StringSortComparator::rdfLiteralToValueForLT(upperBoundStr);
-          rhs = StringSortComparator::rdfLiteralToValueForGT(rhs);
+          // less than and greater equal require the same value
+          rhs = StringSortComparator::rdfLiteralToValueForLT(rhs);
+
+          LOG(INFO) << "upperBound was converted to " << upperBoundStr << '\n';
+          LOG(INFO) << "lowerBound was converted to " << rhs << '\n';
         } else {
           upperBoundStr[upperBoundStr.size() - 1]++;
         }
@@ -429,6 +433,8 @@ void Filter::computeFilterFixedValue(
         size_t upperBound =
             getIndex().getVocab().getValueIdForLT(upperBoundStr);
         size_t lowerBound = getIndex().getVocab().getValueIdForGE(rhs);
+        LOG(INFO) << "upper and lower bound are " << upperBound << ' '
+                  << lowerBound << std::endl;
         if (lhs_is_sorted) {
           // The input data is sorted, use binary search to locate the first
           // and last element that match rhs and copy the range.

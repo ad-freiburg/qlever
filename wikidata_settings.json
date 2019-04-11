@@ -5,5 +5,5 @@
     "<http://www.wikidata.org/value",
     "<http://www.wikidata.org/reference"
   ],
-  "ignore-case": true
+  "ignore-case": false
 }
