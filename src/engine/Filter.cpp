@@ -416,7 +416,7 @@ void Filter::computeFilterFixedValue(
         // remove the leading '^' symbol
         std::string rhs = _rhs.substr(1);
         std::string upperBoundStr = rhs;
-        if (getIndex().getVocab().getCaseInsensitiveOrdering()) {
+        if (getIndex().getVocab().isCaseInsensitiveOrdering()) {
           upperBoundStr = ad_utility::getUppercaseUtf8(upperBoundStr);
           upperBoundStr[upperBoundStr.size() - 1]++;
           upperBoundStr =
@@ -433,8 +433,8 @@ void Filter::computeFilterFixedValue(
         size_t upperBound =
             getIndex().getVocab().getValueIdForLT(upperBoundStr);
         size_t lowerBound = getIndex().getVocab().getValueIdForGE(rhs);
-        LOG(INFO) << "upper and lower bound are " << upperBound << ' '
-                  << lowerBound << std::endl;
+        LOG(DEBUG) << "upper and lower bound are " << upperBound << ' '
+                   << lowerBound << std::endl;
         if (lhs_is_sorted) {
           // The input data is sorted, use binary search to locate the first
           // and last element that match rhs and copy the range.
@@ -521,16 +521,10 @@ void Filter::computeResultFixedValue(
       } else if (ad_utility::isNumeric(_rhs)) {
         rhs_string = ad_utility::convertNumericToIndexWord(rhs_string);
       } else {
-        if (getIndex().getVocab().getCaseInsensitiveOrdering()) {
-          LOG(INFO) << "Starting conversion of filter value" << rhs_string
-                    << std::endl;
+        if (getIndex().getVocab().isCaseInsensitiveOrdering()) {
           // We have to move to the correct end of the
           // "same letters but different case" - range
           // to make the filters work
-          // TODO<kalmbach, schnelle>: thoroughly test this
-          // (End-To-End or unit tests? probably both but the unit tests
-          // would also be in an end-to-end fashion for those nested
-          // mechanisms).
           switch (_type) {
             case SparqlFilter::GE:
             case SparqlFilter::LT: {
@@ -548,8 +542,6 @@ void Filter::computeResultFixedValue(
               break;
           }
         }
-        LOG(INFO) << "Finished conversion of filter value" << rhs_string
-                  << std::endl;
       }
       if (_type == SparqlFilter::EQ || _type == SparqlFilter::NE) {
         if (!getIndex().getVocab().getId(_rhs, &rhs)) {

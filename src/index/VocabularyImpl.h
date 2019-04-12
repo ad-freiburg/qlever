@@ -119,9 +119,8 @@ template <class S>
 template <typename>
 void Vocabulary<S>::externalizeLiterals(const string& fileName) {
   LOG(INFO) << "Externalizing literals..." << std::endl;
-  auto ext =
-      std::lower_bound(_words.begin(), _words.end(),
-                       string({EXTERNALIZED_LITERALS_PREFIX}), _caseComparator);
+  auto ext = std::lower_bound(_words.begin(), _words.end(),
+                              EXTERNALIZED_LITERALS_PREFIX, _caseComparator);
   size_t nofInternal = ext - _words.begin();
   vector<string> extVocab;
   while (ext != _words.end()) {
@@ -141,8 +140,8 @@ bool Vocabulary<S>::isLiteral(const string& word) {
 // _____________________________________________________________________________
 template <class S>
 bool Vocabulary<S>::isExternalizedLiteral(const string& word) {
-  return word.size() > 1 && word[0] == EXTERNALIZED_LITERALS_PREFIX &&
-         word[1] == '\"';
+  return word.size() > 1 &&
+         ad_utility::startsWith(word, EXTERNALIZED_LITERALS_PREFIX + '\"');
 }
 
 // _____________________________________________________________________________

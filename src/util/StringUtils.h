@@ -148,6 +148,14 @@ inline size_t findClosingBracket(const string& haystack, size_t start = 0,
 
 inline string decodeUrl(const string& orig);
 
+/**
+ * @brief Return the first position where <literalEnd> was found in the <input>
+ * without being escaped by backslashes. If it is not found at all, string::npos
+ * is returned.
+ */
+inline size_t findLiteralEnd(std::string_view input,
+                             std::string_view literalEnd);
+
 // *****************************************************************************
 // Definitions:
 // *****************************************************************************
@@ -234,7 +242,7 @@ string getUppercase(const string& orig) {
 }
 
 // ____________________________________________________________________________
-string getLowercaseUtf8(std::string_view orig) {
+string getLowercaseUtf8(const std::string_view orig) {
   string retVal;
   retVal.reserve(orig.size());
   std::mbstate_t state = std::mbstate_t();
@@ -263,7 +271,7 @@ string getLowercaseUtf8(std::string_view orig) {
 }
 
 // ____________________________________________________________________________
-string getUppercaseUtf8(std::string_view orig) {
+string getUppercaseUtf8(const std::string_view orig) {
   string retVal;
   retVal.reserve(orig.size());
   std::mbstate_t state = std::mbstate_t();
@@ -664,11 +672,8 @@ inline size_t findClosingBracket(const string& haystack, size_t start,
   return -1;
 }
 
-// return the first position where <literalEnd> was found in the <input> without
-// being escaped by backslashes. If it is not found at all, string::npos is
-// returned.
-inline size_t findLiteralEnd(std::string_view input,
-                             std::string_view literalEnd) {
+inline size_t findLiteralEnd(const std::string_view input,
+                             const std::string_view literalEnd) {
   auto endPos = input.find(literalEnd, 0);
   while (endPos != string::npos) {
     if (endPos > 0 && input[endPos - 1] == '\\') {

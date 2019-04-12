@@ -83,7 +83,7 @@ void Index::createFromFile(const string& filename) {
   std::vector<string> prefixes;
   if (_vocabPrefixCompressed) {
     string vocabFileForPrefixCalculation = vocabFile;
-    if (_vocab.getCaseInsensitiveOrdering()) {
+    if (_vocab.isCaseInsensitiveOrdering()) {
       // we have to use the "normally" sorted vocabulary for the prefix
       // compression;
       vocabFileForPrefixCalculation =
@@ -175,7 +175,10 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
       LOG(INFO) << "Lines (from KB-file) processed: " << i << '\n';
     }
     if (i % linesPerPartial == 0) {
-      // only allow one sorting procedure in parallel to control memory usage.
+      // wait until sorting the last partial vocabulary has finished
+      // to control the number of threads and the amount of memory used at the
+      // same time. typically sorting is finished before we reach again here so
+      // it is not a bottleneck.
       if (sortFutures.first.valid()) {
         sortFutures.first.get();
       }
@@ -223,15 +226,14 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   writer.finish();
   LOG(INFO) << "Pass done." << endl;
 
-  std::future<void> tmpVocFut;
-  if (_vocabPrefixCompressed && _vocab.getCaseInsensitiveOrdering()) {
+  if (_vocabPrefixCompressed && _vocab.isCaseInsensitiveOrdering()) {
     LOG(INFO) << "Merging temporary vocabulary for prefix compression";
-    auto f = [this, numFiles]() {
+    {
       VocabularyMerger m;
       m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
                         StringSortComparator(false));
-    };
-    tmpVocFut = std::async(f);
+      LOG(INFO) << "Finished merging additional Vocabulary.";
+    }
   }
 
   LOG(INFO) << "Merging vocabulary\n";
@@ -240,6 +242,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     VocabularyMerger v;
     mergeRes =
         v.mergeVocabulary(_onDiskBase, numFiles, _vocab.getCaseComparator());
+    LOG(INFO) << "Finished Merging Vocabulary.\n";
   }
   VocabularyData res;
   res.nofWords = mergeRes._numWordsTotal;
@@ -248,17 +251,15 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
 
   res.idTriples = std::move(idTriples);
   res.actualPartialSizes = std::move(actualPartialSizes);
-  LOG(INFO) << "Finished Merging Vocabulary.\n";
-
-  // if we had to create the additional vocabulary, wait for its completion
-  if (tmpVocFut.valid()) {
-    tmpVocFut.get();
-    LOG(INFO) << "Finished merging additional Vocabulary.";
-  }
 
   for (size_t i = 0; i < numFiles; ++i) {
     string partialFilename =
         _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(i);
+    deleteTemporaryFile(partialFilename);
+  }
+  if (_vocabPrefixCompressed && _vocab.isCaseInsensitiveOrdering()) {
+    string partialFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +
+                             PARTIAL_VOCAB_FILE_NAME + std::to_string(i);
     deleteTemporaryFile(partialFilename);
   }
 
@@ -317,7 +318,7 @@ void Index::convertPartialToGlobalIds(
 }
 
 pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeSwitchedRel(
-    ad_utility::File& out, off_t lastOffset, Id currentRel,
+    ad_utility::File* out, off_t lastOffset, Id currentRel,
     ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
   // sort according to the "switched" relation.
   auto& buffer = *bufPtr;
@@ -342,7 +343,7 @@ pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeSwitchedRel(
     lastLhs = el[0];
   }
 
-  return writeRel(out, lastOffset, currentRel, buffer, distinctC1, functional);
+  return writeRel(*out, lastOffset, currentRel, buffer, distinctC1, functional);
 }
 
 // _____________________________________________________________________________
@@ -387,7 +388,7 @@ Index::createPermutationPairImpl(const string& fileName1,
       auto md = writeRel(out1, lastOffset1, currentRel, buffer, distinctC1,
                          functional);
       metaData1.add(md.first, md.second);
-      auto md2 = writeSwitchedRel(out2, lastOffset2, currentRel, &buffer);
+      auto md2 = writeSwitchedRel(&out2, lastOffset2, currentRel, &buffer);
       metaData2.add(md2.first, md2.second);
       buffer.clear();
       distinctC1 = 1;
@@ -411,7 +412,7 @@ Index::createPermutationPairImpl(const string& fileName1,
         writeRel(out1, lastOffset1, currentRel, buffer, distinctC1, functional);
     metaData1.add(md.first, md.second);
 
-    auto md2 = writeSwitchedRel(out2, lastOffset2, currentRel, &buffer);
+    auto md2 = writeSwitchedRel(&out2, lastOffset2, currentRel, &buffer);
     metaData2.add(md2.first, md2.second);
   }
 
@@ -1391,7 +1392,7 @@ string Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
 
   for (size_t k = 0; k < upperBound; ++k) {
     if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k])) {
-      spo[k] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[k];
+      spo[k] = EXTERNALIZED_LITERALS_PREFIX + spo[k];
     }
   }
   return langtag;
@@ -1459,7 +1460,7 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
                                             _vocab.getCaseComparator(), true);
   });
 
-  if (_vocabPrefixCompressed && _vocab.getCaseInsensitiveOrdering()) {
+  if (_vocabPrefixCompressed && _vocab.isCaseInsensitiveOrdering()) {
     // we also have to create the "ordinary" vocabulary order to make the
     // prefix compression work
     string partialTmpFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +

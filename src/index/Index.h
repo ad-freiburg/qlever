@@ -532,7 +532,7 @@ class Index {
                             size_t c2);
 
   pair<FullRelationMetaData, BlockBasedRelationMetaData> writeSwitchedRel(
-      ad_utility::File& out, off_t lastOffset, Id currentRel,
+      ad_utility::File* out, off_t lastOffset, Id currentRel,
       ad_utility::BufferedVector<array<Id, 2>>* buffer);
 
   // _______________________________________________________________________

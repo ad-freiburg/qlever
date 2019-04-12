@@ -146,15 +146,6 @@ class MmapVector {
   MmapVector(MmapVector<T>&& other) noexcept;
   MmapVector& operator=(MmapVector<T>&& other) noexcept;
 
-  // default construct and open
-  // all the arguments are passed to the call to open()
-  /*
-  template <typename... Args>
-  MmapVector(Args&&... args) : MmapVector() {
-    open(std::forward<Args>(args)...);
-  }
-   */
-
   template <class U>
   using isNotMmapVector =
       std::enable_if_t<!std::is_base_of_v<MmapVector<T>, std::decay_t<U>>>;

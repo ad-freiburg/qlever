@@ -90,17 +90,31 @@ class PrefixComparator {
  * case-insensitivity.
  *
  * If the constructor is called with ignoreCase=false it is an ordinary string
- * compare If ignoreCase=True the operator behaves as follows:
+ * compare using std::less<std::string>.
+ * If ignoreCase=True the operator behaves as follows:
  *
- * - compare the strings according to their lowercase version
- * - in case the lowercase versions are equal, return the order of the original
- * strings
- * - (including case)
+ * - the inputs can either be Literals or non-literals like IRIs
+ *   In case the type is different, return the standard ordering to keep
+ *   literals and IRIs disjoint in the order
+ *
+ * - split both literals "vaLue"@lang into its vaLue and possibly empty
+ *   langtag. For IRIs, the value is the complete string and the langtag is
+ * empty
+ * - compare the strings according to the lowercase version of their value
+ * - in case the lowercase versions are equal, return the order of the language
+ * tags
+ * - If the strings are still the same, return the order of the original inner
+ * values.
  *
  * This gives us a strict ordering on strings.
  */
 class StringSortComparator {
  public:
+  // Convert an rdf-literal "value"@lang (langtag is optional)
+  // to the first possible literal with the same case-insensitive value
+  // ("VALUE") in this case. This is done by conversion to uppercase
+  // (uppercase comes before lowercase in ASCII/Utf) and removing
+  // possible language tags.
   static std::string rdfLiteralToValueForLT(const std::string& input) {
     auto rhs_string = ad_utility::getUppercaseUtf8(input);
     auto split = StringSortComparator::extractComparable(rhs_string);
@@ -112,6 +126,13 @@ class StringSortComparator {
     return rhs_string;
   }
 
+  // Convert an rdf-literal "value"@lang (langtag is optional)
+  // to the last possible literal with the same case-insensitive value
+  // ("value"@^?) in this case where ^? denotes the highest possible ASCII value
+  // of 127. This is done by conversion to lowercase
+  // (uppercase comes before lowercase in ASCII/Utf) and adding
+  // the said artificial language tag with a higher ascii value than all
+  // possible other langtags. (valid RDF langtags only contain ascii characters)
   static std::string rdfLiteralToValueForGT(const std::string& input) {
     auto rhs_string = ad_utility::getLowercaseUtf8(input);
     auto split2 = StringSortComparator::extractComparable(rhs_string);
@@ -123,15 +144,15 @@ class StringSortComparator {
 
   StringSortComparator(bool ignoreCase = false) : _ignoreCase(ignoreCase) {}
 
-  bool getIgnoreCase() const { return _ignoreCase; }
+  bool isIgnoreCase() const { return _ignoreCase; }
 
+  /*
+   * @brief The actual comparison operator.
+   */
   bool operator()(std::string_view a, std::string_view b) const {
     if (!_ignoreCase) {
       return a < b;
     } else {
-      // TODO<Johannes> Ideally we want to have this also when doing
-      // case-insensitive compare, but it currently breaks the prefix
-      // compression (there we really need ordering by correct bytes)
       auto splitA = extractComparable(a);
       auto splitB = extractComparable(b);
       if (splitA.isLiteral != splitB.isLiteral) {
@@ -143,14 +164,25 @@ class StringSortComparator {
     }
   }
 
+  // we want to have the member const, but still be able
+  // to copy assign in other places
+  StringSortComparator& operator=(const StringSortComparator& other) {
+    *const_cast<bool*>(&_ignoreCase) = other._ignoreCase;
+    return *this;
+  }
+
+ private:
+  // A rdf literal or iri split into its components
   struct SplitVal {
     SplitVal(bool lit, std::string_view v, std::string_view l)
         : isLiteral(lit), val(v), langtag(l) {}
-    bool isLiteral;
-    std::string_view val;
-    std::string_view langtag;
+    bool isLiteral;  // was the value an rdf-literal
+    std::string_view
+        val;  // the inner value, possibly stripped by trailing quotation marks
+    std::string_view langtag;  // the language tag, possibly empty
   };
 
+  /// @brief split a literal or iri into its components
   static SplitVal extractComparable(std::string_view a) {
     std::string_view res = a;
     bool isLiteral = false;
@@ -173,6 +205,7 @@ class StringSortComparator {
     return {isLiteral, res, langtag};
   }
 
+  /// @brief the inner comparison logic
   static bool caseInsensitiveCompare(const SplitVal& a, const SplitVal& b) {
     auto aLower = ad_utility::getLowercaseUtf8(a.val);
     auto bLower = ad_utility::getLowercaseUtf8(b.val);
@@ -199,7 +232,7 @@ class StringSortComparator {
     // character if we have reach here, both iterators are save to dereference.
     return *result.first < *result.second;
   }
-  bool _ignoreCase;
+  const bool _ignoreCase;
 };
 
 //! A vocabulary. Wraps a vector of strings
@@ -454,8 +487,8 @@ class Vocabulary {
   }
 
   // ___________________________________________________________________
-  bool getCaseInsensitiveOrdering() const {
-    return _caseComparator.getIgnoreCase();
+  bool isCaseInsensitiveOrdering() const {
+    return _caseComparator.isIgnoreCase();
   }
 
   // _____________________________________________________________________
