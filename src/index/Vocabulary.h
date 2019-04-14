@@ -85,6 +85,156 @@ class PrefixComparator {
   const Vocabulary<S>* _vocab;
 };
 
+/**
+ * \brief Comparator for std::strings that optionally supports
+ * case-insensitivity.
+ *
+ * If the constructor is called with ignoreCase=false it is an ordinary string
+ * compare using std::less<std::string>.
+ * If ignoreCase=True the operator behaves as follows:
+ *
+ * - the inputs can either be Literals or non-literals like IRIs
+ *   In case the type is different, return the standard ordering to keep
+ *   literals and IRIs disjoint in the order
+ *
+ * - split both literals "vaLue"@lang into its vaLue and possibly empty
+ *   langtag. For IRIs, the value is the complete string and the langtag is
+ * empty
+ * - compare the strings according to the lowercase version of their value
+ * - in case the lowercase versions are equal, return the order of the language
+ * tags
+ * - If the strings are still the same, return the order of the original inner
+ * values.
+ *
+ * This gives us a strict ordering on strings.
+ */
+class StringSortComparator {
+ public:
+  // Convert an rdf-literal "value"@lang (langtag is optional)
+  // to the first possible literal with the same case-insensitive value
+  // ("VALUE") in this case. This is done by conversion to uppercase
+  // (uppercase comes before lowercase in ASCII/Utf) and removing
+  // possible language tags.
+  static std::string rdfLiteralToValueForLT(const std::string& input) {
+    auto rhs_string = ad_utility::getUppercaseUtf8(input);
+    auto split = StringSortComparator::extractComparable(rhs_string);
+    if (split.isLiteral && !split.langtag.empty()) {
+      // get rid of possible langtags to move to the beginning of the
+      // range
+      rhs_string = '\"' + std::string(split.val) + '\"';
+    }
+    return rhs_string;
+  }
+
+  // Convert an rdf-literal "value"@lang (langtag is optional)
+  // to the last possible literal with the same case-insensitive value
+  // ("value"@^?) in this case where ^? denotes the highest possible ASCII value
+  // of 127. This is done by conversion to lowercase
+  // (uppercase comes before lowercase in ASCII/Utf) and adding
+  // the said artificial language tag with a higher ascii value than all
+  // possible other langtags. (valid RDF langtags only contain ascii characters)
+  static std::string rdfLiteralToValueForGT(const std::string& input) {
+    auto rhs_string = ad_utility::getLowercaseUtf8(input);
+    auto split2 = StringSortComparator::extractComparable(rhs_string);
+    if (split2.isLiteral) {
+      rhs_string = '\"' + std::string(split2.val) + '\"' + "@" + char(127);
+    }
+    return rhs_string;
+  }
+
+  StringSortComparator(bool ignoreCase = false) : _ignoreCase(ignoreCase) {}
+
+  bool isIgnoreCase() const { return _ignoreCase; }
+
+  /*
+   * @brief The actual comparison operator.
+   */
+  bool operator()(std::string_view a, std::string_view b) const {
+    if (!_ignoreCase) {
+      return a < b;
+    } else {
+      auto splitA = extractComparable(a);
+      auto splitB = extractComparable(b);
+      if (splitA.isLiteral != splitB.isLiteral) {
+        // only one is a literal, compare by the first character to separate
+        // datatypes.
+        return a < b;
+      }
+      return caseInsensitiveCompare(splitA, splitB);
+    }
+  }
+
+  // we want to have the member const, but still be able
+  // to copy assign in other places
+  StringSortComparator& operator=(const StringSortComparator& other) {
+    *const_cast<bool*>(&_ignoreCase) = other._ignoreCase;
+    return *this;
+  }
+
+ private:
+  // A rdf literal or iri split into its components
+  struct SplitVal {
+    SplitVal(bool lit, std::string_view v, std::string_view l)
+        : isLiteral(lit), val(v), langtag(l) {}
+    bool isLiteral;  // was the value an rdf-literal
+    std::string_view
+        val;  // the inner value, possibly stripped by trailing quotation marks
+    std::string_view langtag;  // the language tag, possibly empty
+  };
+
+  /// @brief split a literal or iri into its components
+  static SplitVal extractComparable(std::string_view a) {
+    std::string_view res = a;
+    bool isLiteral = false;
+    std::string_view langtag;
+    if (ad_utility::startsWith(res, "\"")) {
+      // In the case of prefix filters we might also have
+      // Literals that do not have the closing quotation mark
+      isLiteral = true;
+      res.remove_prefix(1);
+      auto endPos = ad_utility::findLiteralEnd(res, "\"");
+      if (endPos != string::npos) {
+        // this should also be fine if there is no langtag (endPos == size()
+        // according to cppreference.com
+        langtag = res.substr(endPos + 1);
+        res.remove_suffix(res.size() - endPos);
+      } else {
+        langtag = "";
+      }
+    }
+    return {isLiteral, res, langtag};
+  }
+
+  /// @brief the inner comparison logic
+  static bool caseInsensitiveCompare(const SplitVal& a, const SplitVal& b) {
+    auto aLower = ad_utility::getLowercaseUtf8(a.val);
+    auto bLower = ad_utility::getLowercaseUtf8(b.val);
+    const auto result = std::mismatch(aLower.cbegin(), aLower.cend(),
+                                      bLower.cbegin(), bLower.cend());
+    if (result.second == bLower.end()) {
+      if (result.first == aLower.end()) {
+        // In case a and b are equal wrt case-insensitivity we sort by the
+        // language tag. If this also matches we return the actual order of the
+        // inner string value. Thus we have a unique ordering that makes life
+        // easier.
+        return a.langtag != b.langtag ? a.langtag < b.langtag : a.val < b.val;
+      }
+      // b is a prefix of a, thus a is strictly "bigger"
+      return false;
+    }
+
+    if (result.first == aLower.end()) {
+      // a is a prefix of b
+      return true;
+    }
+
+    // neither string is a prefix of the other, look at the first mismatch
+    // character if we have reach here, both iterators are save to dereference.
+    return *result.first < *result.second;
+  }
+  const bool _ignoreCase;
+};
+
 //! A vocabulary. Wraps a vector of strings
 //! and provides additional methods for retrieval.
 //! Template parameters that are supported are:
@@ -187,6 +337,8 @@ class Vocabulary {
   bool getId(const string& word, Id* id) const {
     if (!shouldBeExternalized(word)) {
       *id = lower_bound(word);
+      // works for the case insensitive version because
+      // of the strict ordering.
       return *id < _words.size() && at(*id) == word;
     }
     bool success = _externalLiterals.getId(word, id);
@@ -329,20 +481,35 @@ class Vocabulary {
   static void prefixCompressFile(const string& infile, const string& outfile,
                                  const vector<string>& prefixes);
 
+  // ___________________________________________________________________
+  void setCaseInsensitiveOrdering(bool ignoreCase) {
+    _caseComparator = StringSortComparator(ignoreCase);
+  }
+
+  // ___________________________________________________________________
+  bool isCaseInsensitiveOrdering() const {
+    return _caseComparator.isIgnoreCase();
+  }
+
+  // _____________________________________________________________________
+  const StringSortComparator& getCaseComparator() const {
+    return _caseComparator;
+  }
+
  private:
   // Wraps std::lower_bound and returns an index instead of an iterator
   Id lower_bound(const string& word) const {
     if constexpr (_isCompressed) {
       auto pred = [this](const CompressedString& a, const string& b) {
-        return this->expandPrefix(a) < b;
+        return this->_caseComparator(this->expandPrefix(a), b);
       };
       return static_cast<Id>(
           std::lower_bound(_words.begin(), _words.end(), word, pred) -
           _words.begin());
     } else {
-      return static_cast<Id>(
-          std::lower_bound(_words.begin(), _words.end(), word) -
-          _words.begin());
+      return static_cast<Id>(std::lower_bound(_words.begin(), _words.end(),
+                                              word, _caseComparator) -
+                             _words.begin());
     }
   }
 
@@ -350,15 +517,15 @@ class Vocabulary {
   Id upper_bound(const string& word) const {
     if constexpr (_isCompressed) {
       auto pred = [this](const string& a, const CompressedString& b) {
-        return a < this->expandPrefix(b);
+        return this->_caseComparator(a, this->expandPrefix(b));
       };
       return static_cast<Id>(
           std::upper_bound(_words.begin(), _words.end(), word, pred) -
           _words.begin());
     } else {
       return static_cast<Id>(
-          std::upper_bound(_words.begin(), _words.end(), word) -
-          _words.begin());
+          std::upper_bound(_words.begin(), _words.end(), word) - _words.begin(),
+          _caseComparator);
     }
   }
 
@@ -366,15 +533,16 @@ class Vocabulary {
   Id lower_bound(const string& word, size_t first) const {
     if constexpr (_isCompressed) {
       auto pred = [this](const CompressedString& a, const string& b) {
-        return this->expandPrefix(a) < b;
+        return this->_caseComparator(this->expandPrefix(a), b);
       };
       return static_cast<Id>(
           std::lower_bound(_words.begin() + first, _words.end(), word, pred) -
           _words.begin());
     } else {
-      return static_cast<Id>(
-          std::lower_bound(_words.begin() + first, _words.end(), word) -
-          _words.begin());
+      return static_cast<Id>(std::lower_bound(_words.begin() + first,
+                                              _words.end(), word,
+                                              _caseComparator) -
+                             _words.begin());
     }
   }
 
@@ -385,6 +553,7 @@ class Vocabulary {
   Id upper_bound(const string& word, size_t first,
                  PrefixComparator<StringType> comp) const {
     AD_CHECK_LE(first, _words.size());
+    // the prefix comparator handles the case-insensitive compare if activated
     typename vector<StringType>::const_iterator it =
         std::upper_bound(_words.begin() + first, _words.end(), word, comp);
     Id retVal =
@@ -414,6 +583,7 @@ class Vocabulary {
 
   vector<StringType> _words;
   ExternalVocabulary _externalLiterals;
+  StringSortComparator _caseComparator;
 };
 
 #include "./VocabularyImpl.h"

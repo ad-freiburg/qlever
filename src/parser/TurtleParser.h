@@ -12,6 +12,7 @@
 #include <future>
 #include <locale>
 #include <string_view>
+#include "../global/Constants.h"
 #include "../index/ConstantsIndexCreation.h"
 #include "../util/Exception.h"
 #include "../util/File.h"
@@ -60,7 +61,6 @@ class TurtleParser {
     _activePrefix.clear();
 
     _prefixMap.clear();
-    _blankNodeMap.clear();
 
     _tok.reset(nullptr, 0);
     _triples.clear();
@@ -102,9 +102,6 @@ class TurtleParser {
 
   // maps prefixes to their expanded form
   ad_utility::HashMap<std::string, std::string> _prefixMap;
-  // maps blank node representations from the input to their representation
-  // in the output
-  ad_utility::HashMap<std::string, std::string> _blankNodeMap;
 
   // there are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones
@@ -161,7 +158,7 @@ class TurtleParser {
     if (!parseTerminal(_tokens.Anon)) {
       return false;
     }
-    _lastParseResult = createBlankNode();
+    _lastParseResult = createAnonNode();
     return true;
   }
 
@@ -205,8 +202,8 @@ class TurtleParser {
   }
 
   // create a new, unused, unique blank node string
-  string createBlankNode() {
-    string res = "_:" + std::to_string(_numBlankNodes);
+  string createAnonNode() {
+    string res = ANON_NODE_PREFIX + ":" + std::to_string(_numBlankNodes);
     _numBlankNodes++;
     return res;
   }
@@ -296,7 +293,6 @@ class TurtleStreamParser : public TurtleParser {
   // but only the number of triples that were already present
   // before the backup
   struct TurtleParserBackupState {
-    ad_utility::HashMap<std::string, std::string> _blankNodeMap;
     size_t _numBlankNodes = 0;
     size_t _numTriples;
     const char* _tokenizerPosition;

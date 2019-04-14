@@ -82,7 +82,15 @@ void Index::createFromFile(const string& filename) {
   string vocabFileTmp = _onDiskBase + ".vocabularyTmp";
   std::vector<string> prefixes;
   if (_vocabPrefixCompressed) {
-    prefixes = calculatePrefixes(vocabFile, NUM_COMPRESSION_PREFIXES, 1, true);
+    string vocabFileForPrefixCalculation = vocabFile;
+    if (_vocab.isCaseInsensitiveOrdering()) {
+      // we have to use the "normally" sorted vocabulary for the prefix
+      // compression;
+      vocabFileForPrefixCalculation =
+          _onDiskBase + TMP_BASENAME_COMPRESSION + ".vocabulary";
+    }
+    prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
+                                 NUM_COMPRESSION_PREFIXES, 1, true);
     std::ofstream prefixFile(_onDiskBase + PREFIX_FILE);
     AD_CHECK(prefixFile.is_open());
     for (const auto& prefix : prefixes) {
@@ -130,6 +138,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   // insert the special  ql:langtag predicate into all partial vocabularies
   auto langPredId = assignNextId(&items, LANGUAGE_PREDICATE);
   std::array<string, 3> spo;
+
+  std::pair<std::future<void>, std::future<void>> sortFutures;
   while (true) {
     auto opt = p.getTriple();
     if (!opt) {
@@ -165,18 +175,21 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
       LOG(INFO) << "Lines (from KB-file) processed: " << i << '\n';
     }
     if (i % linesPerPartial == 0) {
-      LOG(INFO) << "Lines (from KB-file) processed: " << i << '\n';
-      LOG(INFO) << "Actual number of Triples in this section (include "
-                   "langfilter triples): "
-                << actualCurrentPartialSize << '\n';
-      string partialFilename =
-          _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
+      // wait until sorting the last partial vocabulary has finished
+      // to control the number of threads and the amount of memory used at the
+      // same time. typically sorting is finished before we reach again here so
+      // it is not a bottleneck.
+      if (sortFutures.first.valid()) {
+        sortFutures.first.get();
+      }
+      if (sortFutures.second.valid()) {
+        sortFutures.second.get();
+      }
 
-      LOG(INFO) << "writing partial vocabulary to " << partialFilename
-                << std::endl;
-      LOG(INFO) << "it contains " << items.size() << " elements\n";
-      writePartialIdMapToBinaryFileForMerging(items, partialFilename);
-      LOG(INFO) << "Done\n";
+      auto oldItemPtr = std::make_shared<const ad_utility::HashMap<string, Id>>(
+          std::move(items));
+      sortFutures = writeNextPartialVocabulary(
+          i, numFiles, actualCurrentPartialSize, oldItemPtr);
       numFiles++;
       // Save the information how many triples this partial vocabulary actually
       // deals with we will use this later for mapping from partial to global
@@ -191,34 +204,65 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   }
   // deal with remainder
   if (items.size() > 0) {
-    LOG(INFO) << "Lines processed: " << i << '\n';
-    LOG(INFO) << "Actual number of Triples in this section: "
-              << actualCurrentPartialSize << '\n';
-    string partialFilename =
-        _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
-
-    LOG(INFO) << "writing partial vocabular to " << partialFilename
-              << std::endl;
-    LOG(INFO) << "it contains " << items.size() << " elements\n";
-    writePartialIdMapToBinaryFileForMerging(items, partialFilename);
-    LOG(INFO) << "Done\n";
+    if (sortFutures.first.valid()) {
+      sortFutures.first.get();
+    }
+    if (sortFutures.second.valid()) {
+      sortFutures.second.get();
+    }
+    auto oldItemPtr = std::make_shared<const ad_utility::HashMap<string, Id>>(
+        std::move(items));
+    sortFutures = writeNextPartialVocabulary(
+        i, numFiles, actualCurrentPartialSize, oldItemPtr);
     numFiles++;
     actualPartialSizes.push_back(actualCurrentPartialSize);
+    if (sortFutures.first.valid()) {
+      sortFutures.first.get();
+    }
+    if (sortFutures.second.valid()) {
+      sortFutures.second.get();
+    }
   }
   writer.finish();
+  LOG(INFO) << "Pass done." << endl;
+
+  if (_vocabPrefixCompressed && _vocab.isCaseInsensitiveOrdering()) {
+    LOG(INFO) << "Merging temporary vocabulary for prefix compression";
+    {
+      VocabularyMerger m;
+      m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
+                        StringSortComparator(false));
+      LOG(INFO) << "Finished merging additional Vocabulary.";
+    }
+  }
 
   LOG(INFO) << "Merging vocabulary\n";
+  VocabularyMerger::VocMergeRes mergeRes;
+  {
+    VocabularyMerger v;
+    mergeRes =
+        v.mergeVocabulary(_onDiskBase, numFiles, _vocab.getCaseComparator());
+    LOG(INFO) << "Finished Merging Vocabulary.\n";
+  }
   VocabularyData res;
-  res.nofWords = mergeVocabulary(_onDiskBase, numFiles, &res.langPredLowerBound,
-                                 &res.langPredUpperBound);
+  res.nofWords = mergeRes._numWordsTotal;
+  res.langPredLowerBound = mergeRes._langPredLowerBound;
+  res.langPredUpperBound = mergeRes._langPredUpperBound;
+
+  res.idTriples = std::move(idTriples);
+  res.actualPartialSizes = std::move(actualPartialSizes);
+
   for (size_t i = 0; i < numFiles; ++i) {
     string partialFilename =
         _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(i);
     deleteTemporaryFile(partialFilename);
   }
-  res.idTriples = std::move(idTriples);
-  res.actualPartialSizes = std::move(actualPartialSizes);
-  LOG(INFO) << "Pass done.\n";
+  if (_vocabPrefixCompressed && _vocab.isCaseInsensitiveOrdering()) {
+    string partialFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +
+                             PARTIAL_VOCAB_FILE_NAME + std::to_string(i);
+    deleteTemporaryFile(partialFilename);
+  }
+
   return res;
 }
 
@@ -273,43 +317,83 @@ void Index::convertPartialToGlobalIds(
   LOG(INFO) << "Pass done.\n";
 }
 
+pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeSwitchedRel(
+    ad_utility::File* out, off_t lastOffset, Id currentRel,
+    ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
+  // sort according to the "switched" relation.
+  auto& buffer = *bufPtr;
+
+  for (auto& el : buffer) {
+    std::swap(el[0], el[1]);
+  }
+  std::sort(buffer.begin(), buffer.end(), [](const auto& a, const auto& b) {
+    return a[0] == b[0] ? a[1] < b[1] : a[0] < b[0];
+  });
+
+  Id lastLhs = std::numeric_limits<Id>::max();
+
+  bool functional = true;
+  size_t distinctC1 = 0;
+  for (const auto& el : buffer) {
+    if (el[0] == lastLhs) {
+      functional = false;
+    } else {
+      distinctC1++;
+    }
+    lastLhs = el[0];
+  }
+
+  return writeRel(*out, lastOffset, currentRel, buffer, distinctC1, functional);
+}
+
 // _____________________________________________________________________________
 template <class MetaDataDispatcher>
-std::optional<typename MetaDataDispatcher::WriteType>
-Index::createPermutationImpl(const string& fileName,
-                             const Index::TripleVec& vec, size_t c0, size_t c1,
-                             size_t c2) {
-  typename MetaDataDispatcher::WriteType metaData;
-  if constexpr (metaData._isMmapBased) {
-    metaData.setup(_totalVocabularySize, FullRelationMetaData::empty,
-                   fileName + MMAP_FILE_SUFFIX);
+std::optional<std::pair<typename MetaDataDispatcher::WriteType,
+                        typename MetaDataDispatcher::WriteType>>
+Index::createPermutationPairImpl(const string& fileName1,
+                                 const string& fileName2,
+                                 const Index::TripleVec& vec, size_t c0,
+                                 size_t c1, size_t c2) {
+  typename MetaDataDispatcher::WriteType metaData1;
+  typename MetaDataDispatcher::WriteType metaData2;
+  if constexpr (metaData1._isMmapBased) {
+    metaData1.setup(_totalVocabularySize, FullRelationMetaData::empty,
+                    fileName1 + MMAP_FILE_SUFFIX);
+    metaData2.setup(_totalVocabularySize, FullRelationMetaData::empty,
+                    fileName2 + MMAP_FILE_SUFFIX);
   }
 
   if (vec.size() == 0) {
     LOG(WARN) << "Attempt to write an empty index!" << std::endl;
     return std::nullopt;
   }
-  ad_utility::File out(fileName, "w");
-  LOG(INFO) << "Creating an on-disk index permutation of " << vec.size()
+  ad_utility::File out1(fileName1, "w");
+  ad_utility::File out2(fileName2, "w");
+
+  LOG(INFO) << "Creating a pair of on-disk index permutation of " << vec.size()
             << " elements / facts." << std::endl;
   // Iterate over the vector and identify relation boundaries
   size_t from = 0;
   Id currentRel = vec[0][c0];
-  off_t lastOffset = 0;
-  ad_utility::BufferedVector<array<Id, 2>> buffer(THRESHOLD_RELATION_CREATION,
-                                                  fileName + ".tmp.MmapBuffer");
+  off_t lastOffset1 = 0;
+  off_t lastOffset2 = 0;
+  ad_utility::BufferedVector<array<Id, 2>> buffer(
+      THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.MmapBuffer");
   bool functional = true;
   size_t distinctC1 = 1;
   size_t sizeOfRelation = 0;
   Id lastLhs = std::numeric_limits<Id>::max();
   for (TripleVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if ((*reader)[c0] != currentRel) {
-      auto md =
-          writeRel(out, lastOffset, currentRel, buffer, distinctC1, functional);
-      metaData.add(md.first, md.second);
+      auto md = writeRel(out1, lastOffset1, currentRel, buffer, distinctC1,
+                         functional);
+      metaData1.add(md.first, md.second);
+      auto md2 = writeSwitchedRel(&out2, lastOffset2, currentRel, &buffer);
+      metaData2.add(md2.first, md2.second);
       buffer.clear();
       distinctC1 = 1;
-      lastOffset = metaData.getOffsetAfter();
+      lastOffset1 = metaData1.getOffsetAfter();
+      lastOffset2 = metaData2.getOffsetAfter();
       currentRel = (*reader)[c0];
       functional = true;
     } else {
@@ -325,30 +409,42 @@ Index::createPermutationImpl(const string& fileName,
   }
   if (from < vec.size()) {
     auto md =
-        writeRel(out, lastOffset, currentRel, buffer, distinctC1, functional);
-    metaData.add(md.first, md.second);
+        writeRel(out1, lastOffset1, currentRel, buffer, distinctC1, functional);
+    metaData1.add(md.first, md.second);
+
+    auto md2 = writeSwitchedRel(&out2, lastOffset2, currentRel, &buffer);
+    metaData2.add(md2.first, md2.second);
   }
 
   LOG(INFO) << "Done creating index permutation." << std::endl;
-  LOG(INFO) << "Calculating statistics for this permutation.\n";
-  metaData.calculateExpensiveStatistics();
+  LOG(INFO) << "Calculating statistics for these permutation.\n";
+  metaData1.calculateExpensiveStatistics();
+  metaData2.calculateExpensiveStatistics();
   LOG(INFO) << "Writing statistics for this permutation:\n"
-            << metaData.statistics() << std::endl;
+            << metaData1.statistics() << std::endl;
+  LOG(INFO) << "Writing statistics for this permutation:\n"
+            << metaData2.statistics() << std::endl;
 
-  out.close();
+  out1.close();
+  out2.close();
   LOG(INFO) << "Permutation done.\n";
-  return std::move(metaData);
+  return std::make_pair(std::move(metaData1), std::move(metaData2));
 }
 
 // ________________________________________________________________________
-template <class MetaDataDispatcher, class Comparator>
-std::optional<typename MetaDataDispatcher::WriteType> Index::createPermutation(
+template <class MetaDataDispatcher, class Comparator1, class Comparator2>
+std::optional<std::pair<typename MetaDataDispatcher::WriteType,
+                        typename MetaDataDispatcher::WriteType>>
+Index::createPermutations(
     TripleVec* vec,
-    const PermutationImpl<Comparator, typename MetaDataDispatcher::ReadType>& p,
+    const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
+        p1,
+    const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
+        p2,
     bool performUnique) {
-  LOG(INFO) << "Sorting for " << p._readableName << " permutation..."
+  LOG(INFO) << "Sorting for " << p1._readableName << " permutation..."
             << std::endl;
-  stxxl::sort(begin(*vec), end(*vec), p._comp, STXXL_MEMORY_TO_USE);
+  stxxl::sort(begin(*vec), end(*vec), p1._comp, STXXL_MEMORY_TO_USE);
   LOG(INFO) << "Sort done." << std::endl;
 
   if (performUnique) {
@@ -361,9 +457,10 @@ std::optional<typename MetaDataDispatcher::WriteType> Index::createPermutation(
     LOG(INFO) << "Size after: " << vec->size() << std::endl;
   }
 
-  return createPermutationImpl<MetaDataDispatcher>(
-      _onDiskBase + ".index" + p._fileSuffix, *vec, p._keyOrder[0],
-      p._keyOrder[1], p._keyOrder[2]);
+  return createPermutationPairImpl<MetaDataDispatcher>(
+      _onDiskBase + ".index" + p1._fileSuffix,
+      _onDiskBase + ".index" + p2._fileSuffix, *vec, p1._keyOrder[0],
+      p1._keyOrder[1], p1._keyOrder[2]);
 }
 
 // ________________________________________________________________________
@@ -375,24 +472,25 @@ void Index::createPermutationPair(
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
     bool performUnique, bool createPatternsAfterFirst) {
-  auto m1 = createPermutation<MetaDataDispatcher>(&(*vocabData->idTriples), p1,
-                                                  performUnique);
+  auto metaData = createPermutations<MetaDataDispatcher>(
+      &(*vocabData->idTriples), p1, p2, performUnique);
   if (createPatternsAfterFirst) {
+    // the second permutation does not alter the original triple vector,
+    // so this does still work.
     createPatterns(true, vocabData);
   }
-  auto m2 = createPermutation<MetaDataDispatcher>(&(*vocabData->idTriples), p2,
-                                                  false);
-  if (m1 && m2) {
+  if (metaData) {
     LOG(INFO) << "Exchanging Multiplicities for " << p1._readableName << " and "
               << p2._readableName << '\n';
-    exchangeMultiplicities(&m1.value(), &m2.value());
+    exchangeMultiplicities(&(metaData.value().first),
+                           &(metaData.value().second));
     LOG(INFO) << "Done" << '\n';
     LOG(INFO) << "Writing MetaData for " << p1._readableName << " and "
               << p2._readableName << '\n';
     ad_utility::File f1(_onDiskBase + ".index" + p1._fileSuffix, "r+");
-    m1.value().appendToFile(&f1);
+    metaData.value().first.appendToFile(&f1);
     ad_utility::File f2(_onDiskBase + ".index" + p2._fileSuffix, "r+");
-    m2.value().appendToFile(&f2);
+    metaData.value().second.appendToFile(&f2);
     LOG(INFO) << "Done" << '\n';
   }
 }
@@ -574,9 +672,9 @@ void Index::createPatternsImpl(const string& fileName,
 
   // Associate entities with patterns if possible, store has-relation otherwise
   ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPattern(
-      0, fileName + ".mmap.entityHasPattern.tmp");
+      fileName + ".mmap.entityHasPattern.tmp");
   ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPredicate(
-      0, fileName + ".mmap.entityHasPredicate.tmp");
+      fileName + ".mmap.entityHasPredicate.tmp");
 
   size_t numEntitiesWithPatterns = 0;
   size_t numEntitiesWithoutPatterns = 0;
@@ -1269,6 +1367,10 @@ void Index::readConfiguration() {
         _configurationJson["prefixes-external"]);
   }
 
+  if (_configurationJson.count("ignore-case")) {
+    _vocab.setCaseInsensitiveOrdering(_configurationJson["ignore-case"]);
+  }
+
   if (_configurationJson.find("languages-internal") !=
       _configurationJson.end()) {
     _vocab.initializeInternalizedLangs(
@@ -1290,7 +1392,7 @@ string Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
 
   for (size_t k = 0; k < upperBound; ++k) {
     if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k])) {
-      spo[k] = string({EXTERNALIZED_LITERALS_PREFIX}) + spo[k];
+      spo[k] = EXTERNALIZED_LITERALS_PREFIX + spo[k];
     }
   }
   return langtag;
@@ -1309,11 +1411,20 @@ void Index::initializeVocabularySettingsBuild() {
   if (j.find("prefixes-external") != j.end()) {
     _vocab.initializeExternalizePrefixes(j["prefixes-external"]);
     _configurationJson["prefixes-external"] = j["prefixes-external"];
+    _onDiskLiterals = true;
+    _configurationJson["external-literals"] = true;
+  }
+
+  if (j.count("ignore-case")) {
+    _vocab.setCaseInsensitiveOrdering(j["ignore-case"]);
+    _configurationJson["ignore-case"] = j["ignore-case"];
   }
 
   if (j.find("languages-internal") != j.end()) {
     _vocab.initializeInternalizedLangs(j["languages-internal"]);
     _configurationJson["languages-internal"] = j["languages-internal"];
+    _onDiskLiterals = true;
+    _configurationJson["external-literals"] = true;
   }
 }
 
@@ -1328,4 +1439,40 @@ Id Index::assignNextId(Map* mapPtr, const string& key) {
   } else {
     return map[key];
   }
+}
+
+// ___________________________________________________________________________
+pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
+    size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
+    std::shared_ptr<const ad_utility::HashMap<string, Id>> items) {
+  LOG(INFO) << "Lines (from KB-file) processed: " << numLines << '\n';
+  LOG(INFO) << "Actual number of Triples in this section (include "
+               "langfilter triples): "
+            << actualCurrentPartialSize << '\n';
+  std::future<void> fut1, fut2;
+  string partialFilename =
+      _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
+
+  LOG(INFO) << "writing partial vocabulary to " << partialFilename << std::endl;
+  LOG(INFO) << "it contains " << items->size() << " elements\n";
+  fut1 = std::async([this, &items, partialFilename]() {
+    writePartialIdMapToBinaryFileForMerging(items, partialFilename,
+                                            _vocab.getCaseComparator(), true);
+  });
+
+  if (_vocabPrefixCompressed && _vocab.isCaseInsensitiveOrdering()) {
+    // we also have to create the "ordinary" vocabulary order to make the
+    // prefix compression work
+    string partialTmpFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +
+                                PARTIAL_VOCAB_FILE_NAME +
+                                std::to_string(numFiles);
+    LOG(INFO) << "writing partial temporary vocabulary to "
+              << partialTmpFilename << std::endl;
+    LOG(INFO) << "it contains " << items->size() << " elements\n";
+    fut2 = std::async([&items, partialTmpFilename]() {
+      writePartialIdMapToBinaryFileForMerging(
+          items, partialTmpFilename, StringSortComparator(false), false);
+    });
+  }
+  return {std::move(fut1), std::move(fut2)};
 }

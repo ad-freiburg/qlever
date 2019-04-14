@@ -190,11 +190,15 @@ class MergeVocabularyTest : public ::testing::Test {
 // Test for merge Vocabulary
 TEST_F(MergeVocabularyTest, bla) {
   // mergeVocabulary only gets name of directory and number of files.
-  Id langPredLowerBound, langPredUpperBound;
-  mergeVocabulary(_basePath, 2, &langPredLowerBound, &langPredUpperBound);
+  VocabularyMerger::VocMergeRes res;
+  {
+    VocabularyMerger m;
+    m.mergeVocabulary(_basePath, 2, StringSortComparator());
+  }
+
   // No language tags in text file
-  ASSERT_EQ(langPredLowerBound, 0ul);
-  ASSERT_EQ(langPredUpperBound, 0ul);
+  ASSERT_EQ(res._langPredLowerBound, 0ul);
+  ASSERT_EQ(res._langPredUpperBound, 0ul);
   // Assert that partial vocabularies have the expected ids
   ASSERT_TRUE(areBinaryFilesEqual(_path0, _pathExp0));
   ASSERT_TRUE(areBinaryFilesEqual(_path1, _pathExp1));
@@ -207,4 +211,62 @@ TEST_F(MergeVocabularyTest, bla) {
   ASSERT_TRUE(vocabTestCompare(mapping0, _expMapping0));
   IdPairMMapVecView mapping1(_basePath + PARTIAL_MMAP_IDS + std::to_string(1));
   ASSERT_TRUE(vocabTestCompare(mapping1, _expMapping1));
+}
+
+TEST(VocabularyGenerator, ReadAndWritePartial) {
+  {
+    ad_utility::HashMap<string, Id> s;
+    s["A"] = 5;
+    s["a"] = 6;
+    s["Ba"] = 7;
+    s["car"] = 8;
+    Vocabulary<string> v;
+    std::string basename = "_tmp_testidx";
+    auto ptr =
+        std::make_shared<const ad_utility::HashMap<string, Id>>(std::move(s));
+    writePartialIdMapToBinaryFileForMerging(
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(),
+        false);
+
+    {
+      VocabularyMerger m;
+      m.mergeVocabulary(basename, 1, v.getCaseComparator());
+    }
+    auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
+    ASSERT_EQ(0u, idMap[5]);
+    ASSERT_EQ(1u, idMap[7]);
+    ASSERT_EQ(2u, idMap[6]);
+    ASSERT_EQ(3u, idMap[8]);
+    auto res = system("rm _tmp_testidx*");
+    (void)res;
+  }
+
+  // again with the case insensitive variant.
+  {
+    ad_utility::HashMap<string, Id> s;
+    s["A"] = 5;
+    s["a"] = 6;
+    s["Ba"] = 7;
+    s["car"] = 8;
+    Vocabulary<string> v;
+    v.setCaseInsensitiveOrdering(true);
+    std::string basename = "_tmp_testidx";
+    auto ptr =
+        std::make_shared<const ad_utility::HashMap<string, Id>>(std::move(s));
+    writePartialIdMapToBinaryFileForMerging(
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(),
+        false);
+
+    {
+      VocabularyMerger m;
+      m.mergeVocabulary(basename, 1, v.getCaseComparator());
+    }
+    auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
+    ASSERT_EQ(0u, idMap[5]);
+    ASSERT_EQ(1u, idMap[6]);
+    ASSERT_EQ(2u, idMap[7]);
+    ASSERT_EQ(3u, idMap[8]);
+    auto res = system("rm _tmp_testidx*");
+    (void)res;
+  }
 }

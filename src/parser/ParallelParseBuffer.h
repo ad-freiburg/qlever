@@ -83,7 +83,7 @@ class ParallelParseBuffer {
   // that were parsed before the parser was done, so we still have to consider
   // these.
   std::pair<bool, std::vector<array<string, 3>>> parseBatch() {
-    LOG(INFO) << "Parsing next batch in parallel" << std::endl;
+    LOG(TRACE) << "Parsing next batch in parallel" << std::endl;
     std::vector<array<string, 3>> buf;
     // for small knowledge bases on small systems that fit in one
     // batch (e.g. during tests) the reserve may fail which is not bad in this

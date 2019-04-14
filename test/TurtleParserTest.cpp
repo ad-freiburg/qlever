@@ -123,34 +123,25 @@ TEST(TurtleParserTest, blankNode) {
   TurtleStringParser p;
   p.setInputStream(" _:blank1");
   ASSERT_TRUE(p.blankNode());
-  ASSERT_EQ(p._lastParseResult, "_:0");
-  ASSERT_EQ(p._blankNodeMap["_:blank1"], "_:0");
-  ASSERT_EQ(p._blankNodeMap.size(), 1u);
-  ASSERT_EQ(p._numBlankNodes, 1u);
+  ASSERT_EQ(p._lastParseResult, "_:blank1");
   ASSERT_EQ(p.getPosition(), 9u);
 
   p.setInputStream(" _:blank1 someRemainder");
   ASSERT_TRUE(p.blankNode());
-  ASSERT_EQ(p._lastParseResult, "_:0");
-  ASSERT_EQ(p._blankNodeMap["_:blank1"], "_:0");
-  ASSERT_EQ(p._blankNodeMap.size(), 1u);
-  ASSERT_EQ(p._numBlankNodes, 1u);
+  ASSERT_EQ(p._lastParseResult, "_:blank1");
   ASSERT_EQ(p.getPosition(), 9u);
 
   p.setInputStream("  _:blank2 someOtherStuff");
   ASSERT_TRUE(p.blankNode());
-  ASSERT_EQ(p._lastParseResult, "_:1");
-  ASSERT_EQ(p._blankNodeMap["_:blank2"], "_:1");
-  ASSERT_EQ(p._blankNodeMap.size(), 2u);
-  ASSERT_EQ(p._numBlankNodes, 2u);
+  ASSERT_EQ(p._lastParseResult, "_:blank2");
+  ASSERT_EQ(p._numBlankNodes, 0u);
   ASSERT_EQ(p.getPosition(), 10u);
 
   // anonymous blank node
   p.setInputStream(" [    \n\t  ]");
   ASSERT_TRUE(p.blankNode());
-  ASSERT_EQ(p._lastParseResult, "_:2");
-  ASSERT_EQ(p._blankNodeMap.size(), 2u);
-  ASSERT_EQ(p._numBlankNodes, 3u);
+  ASSERT_EQ(p._lastParseResult, "QLever-Anon-Node:0");
+  ASSERT_EQ(p._numBlankNodes, 1u);
   ASSERT_EQ(p.getPosition(), 11u);
 }
 
@@ -161,9 +152,9 @@ TEST(TurtleParserTest, blankNodePropertyList) {
 
   string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
   std::vector<std::array<string, 3>> exp;
-  exp.push_back({"<s>", "<p1>", "_:0"});
-  exp.push_back({"_:0", "<p2>", "<ob2>"});
-  exp.push_back({"_:0", "<p3>", "<ob3>"});
+  exp.push_back({"<s>", "<p1>", "QLever-Anon-Node:0"});
+  exp.push_back({"QLever-Anon-Node:0", "<p2>", "<ob2>"});
+  exp.push_back({"QLever-Anon-Node:0", "<p3>", "<ob3>"});
   p.setInputStream(blankNodeL);
   ASSERT_TRUE(p.blankNodePropertyList());
   ASSERT_EQ(p._triples, exp);
@@ -199,9 +190,9 @@ TEST(TurtleParserTest, object) {
   string blank = "_:someblank";
   p.setInputStream(blank);
   ASSERT_TRUE(p.object());
-  ASSERT_EQ(p._lastParseResult, "_:0");
+  ASSERT_EQ(p._lastParseResult, "_:someblank");
 
-  exp = triple{sub, pred, "_:0"};
+  exp = triple{sub, pred, "_:someblank"};
   ASSERT_EQ(p._triples.back(), exp);
 }
 

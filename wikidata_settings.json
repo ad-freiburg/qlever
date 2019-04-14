@@ -4,5 +4,6 @@
     "<http://www.wikidata.org/entity/statement",
     "<http://www.wikidata.org/value",
     "<http://www.wikidata.org/reference"
-  ]
+  ],
+  "ignore-case": false
 }

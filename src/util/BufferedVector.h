@@ -24,7 +24,7 @@ class BufferedVector {
   // Constructor needs the wanted threshold (how many elements until we
   // externalize) and the filename Where we will initialize the mmapVector
   BufferedVector(size_t threshold, std::string extFilename)
-      : _threshold(threshold), _extVec(0, std::move(extFilename)) {}
+      : _threshold(threshold), _extVec(std::move(extFilename)) {}
 
   // __________________________________________________________________
   size_t size() const { return _isInternal ? _vec.size() : _extVec.size(); }

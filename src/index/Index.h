@@ -494,6 +494,24 @@ class Index {
   VocabularyData passFileForVocabulary(const string& ntFile,
                                        size_t linesPerPartial = 100000000);
 
+  /**
+   * @brief Everything that has to be done when we have seen all the triples
+   * that belong to one partial vocabulary, including Log output used inside
+   * passFileForVocabulary
+   *
+   * @param numLines How many Lines from the KB have we already parsed (only for
+   * Logging)
+   * @param numFiles How many partial vocabularies have we seen before/which is
+   * the index of the voc we are going to write
+   * @param actualCurrentPartialSize How many triples belong to this partition
+   * (including extra langfilter triples)
+   * @param items Contains our unsorted vocabulary. Maps words to their local
+   * ids within this vocabulary.
+   */
+  pair<std::future<void>, std::future<void>> writeNextPartialVocabulary(
+      size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
+      std::shared_ptr<const ad_utility::HashMap<string, Id>> items);
+
   void convertPartialToGlobalIds(TripleVec& data,
                                  const vector<size_t>& actualLinesPerPartial,
                                  size_t linesPerPartial);
@@ -506,12 +524,16 @@ class Index {
 
   void passContextFileIntoVector(const string& contextFile, TextVec& vec);
 
-  // no need for explicit instatiation since this function is private
   template <class MetaDataDispatcher>
-  std::optional<typename MetaDataDispatcher::WriteType> createPermutationImpl(
-      const string& fileName, const TripleVec& vec, size_t c0, size_t c1,
-      size_t c2);
-  template <class MetaDataDispatcher, class Comparator1, class Comparator2>
+  std::optional<std::pair<typename MetaDataDispatcher::WriteType,
+                          typename MetaDataDispatcher::WriteType>>
+  createPermutationPairImpl(const string& fileName1, const string& fileName2,
+                            const Index::TripleVec& vec, size_t c0, size_t c1,
+                            size_t c2);
+
+  pair<FullRelationMetaData, BlockBasedRelationMetaData> writeSwitchedRel(
+      ad_utility::File* out, off_t lastOffset, Id currentRel,
+      ad_utility::BufferedVector<array<Id, 2>>* buffer);
 
   // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
@@ -523,6 +545,7 @@ class Index {
   // createPatternsAfterFirst is only valid when  the pair is SPO-SOP because
   // the SPO permutation is also needed for patterns (see usage in
   // Index::createFromFile function)
+  template <class MetaDataDispatcher, class Comparator1, class Comparator2>
   void createPermutationPair(
       VocabularyData* vec,
       const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
@@ -548,12 +571,16 @@ class Index {
   // Careful: only multiplicities for first column is valid after call, need to
   // call exchangeMultiplicities as done by createPermutationPair
   // the optional is std::nullopt if vec and thus the index is empty
-  template <class MetaDataDispatcher, class Comparator>
-  std::optional<typename MetaDataDispatcher::WriteType> createPermutation(
+  template <class MetaDataDispatcher, class Comparator1, class Comparator2>
+  std::optional<std::pair<typename MetaDataDispatcher::WriteType,
+                          typename MetaDataDispatcher::WriteType>>
+  createPermutations(
       TripleVec* vec,
-      const PermutationImpl<Comparator, typename MetaDataDispatcher::ReadType>&
-          permutation,
-      bool performUnique = false);
+      const PermutationImpl<Comparator1, typename MetaDataDispatcher::ReadType>&
+          p1,
+      const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
+          p2,
+      bool performUnique);
 
   /**
    * @brief Creates the data required for the "pattern-trick" used for fast

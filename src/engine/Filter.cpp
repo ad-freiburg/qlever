@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "Filter.h"
+#include <algorithm>
 #include <optional>
 #include <regex>
 #include <sstream>
@@ -415,10 +416,25 @@ void Filter::computeFilterFixedValue(
         // remove the leading '^' symbol
         std::string rhs = _rhs.substr(1);
         std::string upperBoundStr = rhs;
-        upperBoundStr[upperBoundStr.size() - 1]++;
+        if (getIndex().getVocab().isCaseInsensitiveOrdering()) {
+          upperBoundStr = ad_utility::getUppercaseUtf8(upperBoundStr);
+          upperBoundStr[upperBoundStr.size() - 1]++;
+          upperBoundStr =
+              StringSortComparator::rdfLiteralToValueForLT(upperBoundStr);
+          // less than and greater equal require the same value
+          rhs = StringSortComparator::rdfLiteralToValueForLT(rhs);
+
+          LOG(INFO) << "upperBound was converted to " << upperBoundStr << '\n';
+          LOG(INFO) << "lowerBound was converted to " << rhs << '\n';
+        } else {
+          upperBoundStr[upperBoundStr.size() - 1]++;
+        }
+
         size_t upperBound =
             getIndex().getVocab().getValueIdForLT(upperBoundStr);
         size_t lowerBound = getIndex().getVocab().getValueIdForGE(rhs);
+        LOG(DEBUG) << "upper and lower bound are " << upperBound << ' '
+                   << lowerBound << std::endl;
         if (lhs_is_sorted) {
           // The input data is sorted, use binary search to locate the first
           // and last element that match rhs and copy the range.
@@ -504,6 +520,28 @@ void Filter::computeResultFixedValue(
         rhs_string = ad_utility::convertValueLiteralToIndexWord(rhs_string);
       } else if (ad_utility::isNumeric(_rhs)) {
         rhs_string = ad_utility::convertNumericToIndexWord(rhs_string);
+      } else {
+        if (getIndex().getVocab().isCaseInsensitiveOrdering()) {
+          // We have to move to the correct end of the
+          // "same letters but different case" - range
+          // to make the filters work
+          switch (_type) {
+            case SparqlFilter::GE:
+            case SparqlFilter::LT: {
+              rhs_string =
+                  StringSortComparator::rdfLiteralToValueForLT(rhs_string);
+            }
+
+            break;
+            case SparqlFilter::GT:
+            case SparqlFilter::LE: {
+              rhs_string =
+                  StringSortComparator::rdfLiteralToValueForGT(rhs_string);
+            } break;
+            default:
+              break;
+          }
+        }
       }
       if (_type == SparqlFilter::EQ || _type == SparqlFilter::NE) {
         if (!getIndex().getVocab().getId(_rhs, &rhs)) {

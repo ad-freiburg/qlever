@@ -184,7 +184,7 @@ bool TurtleParser::blankNodePropertyList() {
   string savedSubject = _activeSubject;
   string savedPredicate = _activePredicate;
   // new triple with blank node as object
-  string blank = createBlankNode();
+  string blank = createAnonNode();
   _lastParseResult = blank;
   emitTriple();
   // the following triples have the blank node as subject
@@ -330,19 +330,7 @@ bool TurtleParser::parseTerminal(const RE2& terminal) {
 
 // ________________________________________________________________________
 bool TurtleParser::blankNodeLabel() {
-  if (!parseTerminal(_tokens.BlankNodeLabel)) {
-    return false;
-  }
-
-  if (_blankNodeMap.count(_lastParseResult)) {
-    // the same blank node has been used before, reuse it
-    _lastParseResult = _blankNodeMap[_lastParseResult];
-  } else {
-    string blank = createBlankNode();
-    _blankNodeMap[_lastParseResult] = blank;
-    _lastParseResult = blank;
-  }
-  return true;
+  return parseTerminal(_tokens.BlankNodeLabel);
 }
 
 // __________________________________________________________________________
@@ -409,7 +397,6 @@ TurtleStreamParser::TurtleParserBackupState TurtleStreamParser::backupState()
     const {
   TurtleParserBackupState b;
   b._numBlankNodes = _numBlankNodes;
-  b._blankNodeMap = _blankNodeMap;
   b._numTriples = _triples.size();
   b._tokenizerPosition = _tok.data().begin();
   b._tokenizerSize = _tok.data().size();
@@ -430,7 +417,6 @@ bool TurtleStreamParser::resetStateAndRead(
 
   // return to the state of the last backup
   _numBlankNodes = b._numBlankNodes;
-  _blankNodeMap = b._blankNodeMap;
   AD_CHECK(_triples.size() >= b._numTriples);
   _triples.resize(b._numTriples);
   _tok.reset(b._tokenizerPosition, b._tokenizerSize);
@@ -442,8 +428,8 @@ bool TurtleStreamParser::resetStateAndRead(
   _byteVec = std::move(buf);
   _tok.reset(_byteVec.data(), _byteVec.size());
 
-  LOG(INFO) << "Succesfully decompressed next batch of " << nextBytes.size()
-            << " << bytes to parser\n";
+  LOG(TRACE) << "Succesfully decompressed next batch of " << nextBytes.size()
+             << " << bytes to parser\n";
   return true;
 }
 
