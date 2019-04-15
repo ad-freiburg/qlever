@@ -15,18 +15,20 @@ Union::Union(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   // compute the column origins
   ad_utility::HashMap<string, size_t> variableColumns = getVariableColumns();
   _columnOrigins.resize(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
+  const auto& t1VarCols = t1->getVariableColumns();
+  const auto& t2VarCols = t2->getVariableColumns();
   for (auto it : variableColumns) {
     // look for the corresponding column in t1
-    auto it1 = t1->getVariableColumnMap().find(it.first);
-    if (it1 != t1->getVariableColumnMap().end()) {
+    auto it1 = t1VarCols.find(it.first);
+    if (it1 != t1VarCols.end()) {
       _columnOrigins[it.second][0] = it1->second;
     } else {
       _columnOrigins[it.second][0] = NO_COLUMN;
     }
 
     // look for the corresponding column in t2
-    auto it2 = t2->getVariableColumnMap().find(it.first);
-    if (it2 != t2->getVariableColumnMap().end()) {
+    const auto it2 = t2VarCols.find(it.first);
+    if (it2 != t2VarCols.end()) {
       _columnOrigins[it.second][1] = it2->second;
     } else {
       _columnOrigins[it.second][1] = NO_COLUMN;
@@ -45,6 +47,8 @@ string Union::asString(size_t indent) const {
   return os.str();
 }
 
+string Union::getDescriptor() const { return "Union"; }
+
 size_t Union::getResultWidth() const {
   // The width depends on the number of unique variables (as the columns of
   // two variables from the left and right subtree will end up in the same
@@ -56,10 +60,10 @@ vector<size_t> Union::resultSortedOn() const { return {}; }
 
 ad_utility::HashMap<string, size_t> Union::getVariableColumns() const {
   ad_utility::HashMap<string, size_t> variableColumns(
-      _subtrees[0]->getVariableColumnMap());
+      _subtrees[0]->getVariableColumns());
 
   size_t column = variableColumns.size();
-  for (auto it : _subtrees[1]->getVariableColumnMap()) {
+  for (auto it : _subtrees[1]->getVariableColumns()) {
     if (variableColumns.find(it.first) == variableColumns.end()) {
       variableColumns[it.first] = column;
       column++;
@@ -126,7 +130,6 @@ void Union::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Union subresult computation done." << std::endl;
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.setDescriptor("Union");
   runtimeInfo.addChild(_subtrees[0]->getRootOperation()->getRuntimeInfo());
   runtimeInfo.addChild(_subtrees[1]->getRootOperation()->getRuntimeInfo());
 

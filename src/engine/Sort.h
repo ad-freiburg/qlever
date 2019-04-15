@@ -17,6 +17,8 @@ class Sort : public Operation {
 
   virtual string asString(size_t indent = 0) const override;
 
+  virtual string getDescriptor() const override;
+
   virtual vector<size_t> resultSortedOn() const override { return {_sortCol}; }
 
   virtual void setTextLimit(size_t limit) override {
@@ -47,6 +49,11 @@ class Sort : public Operation {
   }
 
   virtual size_t getResultWidth() const;
+
+  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
+      const override {
+    return _subtree->getVariableColumns();
+  }
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;

@@ -25,8 +25,7 @@ class QueryPlanner {
 
     TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
 
-    class Node {
-     public:
+    struct Node {
       Node(size_t id, const SparqlTriple& t)
           : _id(id), _triple(t), _variables(), _cvar(), _wordPart() {
         if (isVariable(t._s)) {

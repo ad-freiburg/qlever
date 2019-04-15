@@ -11,20 +11,46 @@ using std::string;
 
 // _____________________________________________________________________________
 size_t TextOperationWithFilter::getResultWidth() const {
-  return 1 + _nofVars + _filterResult->getResultWidth();
+  return 1 + getNofVars() + _filterResult->getResultWidth();
 }
 
 // _____________________________________________________________________________
 TextOperationWithFilter::TextOperationWithFilter(
-    QueryExecutionContext* qec, const string& words, size_t nofVars,
+    QueryExecutionContext* qec, const string& words,
+    const std::set<string>& variables, const string& cvar,
     std::shared_ptr<QueryExecutionTree> filterResult, size_t filterColumn,
     size_t textLimit)
     : Operation(qec),
       _words(words),
-      _nofVars(nofVars),
+      _variables(variables),
+      _cvar(cvar),
       _filterResult(filterResult),
       _filterColumn(filterColumn) {
   setTextLimit(textLimit);
+}
+
+// _____________________________________________________________________________
+ad_utility::HashMap<string, size_t>
+TextOperationWithFilter::getVariableColumns() const {
+  ad_utility::HashMap<string, size_t> vcmap;
+  // Subtract one because the entity that we filtered on
+  // is provided by the filter table and still has the same place there.
+  vcmap[_cvar] = 0;
+  vcmap["SCORE(" + _cvar + ")"] = 1;
+  size_t colN = 2;
+  const auto& filterColumns = _filterResult.get()->getVariableColumns();
+  for (const string& var : _variables) {
+    if (var == _cvar) {
+      continue;
+    }
+    if (filterColumns.count(var) == 0) {
+      vcmap[var] = colN++;
+    }
+  }
+  for (const auto& varcol : filterColumns) {
+    vcmap[varcol.first] = colN + varcol.second;
+  }
+  return vcmap;
 }
 
 // _____________________________________________________________________________
@@ -34,7 +60,7 @@ string TextOperationWithFilter::asString(size_t indent) const {
     os << " ";
   }
   os << "TEXT OPERATION WITH FILTER:"
-     << " co-occurrence with words: \"" << _words << "\" and " << _nofVars
+     << " co-occurrence with words: \"" << _words << "\" and " << getNofVars()
      << " variables with textLimit = " << _textLimit << " filtered by\n"
      << _filterResult->asString(indent) << "\n";
   for (size_t i = 0; i < indent; ++i) {
@@ -45,14 +71,18 @@ string TextOperationWithFilter::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
+string TextOperationWithFilter::getDescriptor() const {
+  return "TextOperationWithFilter with  " + _words;
+}
+
+// _____________________________________________________________________________
 void TextOperationWithFilter::computeResult(ResultTable* result) {
   LOG(DEBUG) << "TextOperationWithFilter result computation..." << endl;
-  AD_CHECK_GE(_nofVars, 1);
-  result->_data.setCols(1 + _filterResult->getResultWidth() + _nofVars);
+  AD_CHECK_GE(getNofVars(), 1);
+  result->_data.setCols(getResultWidth());
   shared_ptr<const ResultTable> filterResult = _filterResult->getResult();
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.setDescriptor("Text operation with filter: " + _words);
   runtimeInfo.addChild(_filterResult->getRootOperation()->getRuntimeInfo());
 
   result->_resultTypes.reserve(result->_data.cols());
@@ -63,10 +93,10 @@ void TextOperationWithFilter::computeResult(ResultTable* result) {
   }
   if (filterResult->_data.cols() == 1) {
     getExecutionContext()->getIndex().getFilteredECListForWordsWidthOne(
-        _words, filterResult->_data, _nofVars, _textLimit, &result->_data);
+        _words, filterResult->_data, getNofVars(), _textLimit, &result->_data);
   } else {
     getExecutionContext()->getIndex().getFilteredECListForWords(
-        _words, filterResult->_data, _filterColumn, _nofVars, _textLimit,
+        _words, filterResult->_data, _filterColumn, getNofVars(), _textLimit,
         &result->_data);
   }
 
@@ -100,7 +130,7 @@ void TextOperationWithFilter::computeMultiplicities() {
         nofEntitiesSingleVar = 10000 * 0.8;
       }
       multiplicitiesNoFilter.emplace_back(
-          pow(nofEntitiesSingleVar, _nofVars - 1));
+          pow(nofEntitiesSingleVar, getNofVars() - 1));
     }
 
     if (multiplicitiesNoFilter.size() <= 2) {
@@ -141,14 +171,15 @@ size_t TextOperationWithFilter::getSizeEstimate() {
           std::min(float(_textLimit),
                    _executionContext->getIndex().getAverageNofEntityContexts());
 
-      auto estNoFil = static_cast<size_t>(pow(nofEntitiesSingleVar, _nofVars));
+      auto estNoFil =
+          static_cast<size_t>(pow(nofEntitiesSingleVar, getNofVars()));
 
       size_t nofDistinctFilter =
           static_cast<size_t>(_filterResult->getSizeEstimate() /
                               _filterResult->getMultiplicity(_filterColumn));
 
       float joinColMultiplicity =
-          getMultiplicity(2 + (_nofVars - 1) + _filterColumn);
+          getMultiplicity(2 + (getNofVars() - 1) + _filterColumn);
 
       _sizeEstimate = std::max(
           size_t(1),
@@ -171,7 +202,7 @@ size_t TextOperationWithFilter::getCostEstimate() {
   if (_executionContext) {
     return static_cast<size_t>(
         _executionContext->getCostFactor("FILTER_PUNISH") *
-        (getSizeEstimate() * _nofVars +
+        (getSizeEstimate() * getNofVars() +
          _filterResult->getSizeEstimate() *
              _executionContext->getCostFactor("HASH_MAP_OPERATION_COST") +
          _filterResult->getCostEstimate()));

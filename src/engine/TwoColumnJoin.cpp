@@ -78,18 +78,20 @@ string TwoColumnJoin::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-void TwoColumnJoin::computeResult(ResultTable* result) {
-  AD_CHECK(result);
-  LOG(DEBUG) << "TwoColumnJoin result computation..." << endl;
-
-  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+string TwoColumnJoin::getDescriptor() const {
   std::string joinVars = "";
-  for (auto p : _left->getVariableColumnMap()) {
+  for (auto p : _left->getVariableColumns()) {
     if (p.second == _jc1Left || p.second == _jc2Left) {
       joinVars += p.first + " ";
     }
   }
-  runtimeInfo.setDescriptor("TwoColumnJoin on " + joinVars);
+  return "TwoColumnJoin on " + joinVars;
+}
+
+// _____________________________________________________________________________
+void TwoColumnJoin::computeResult(ResultTable* result) {
+  AD_CHECK(result);
+  LOG(DEBUG) << "TwoColumnJoin result computation..." << endl;
 
   // Deal with the case that one of the lists is width two and
   // with join columns 0 1. This means we can use the filter method.
@@ -100,6 +102,7 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
     const auto& v = rightFilter ? _left : _right;
     const auto leftResult = _left->getResult();
     const auto rightResult = _right->getResult();
+    RuntimeInformation& runtimeInfo = getRuntimeInfo();
     runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
     runtimeInfo.addChild(_right->getRootOperation()->getRuntimeInfo());
     const IdTable& filter =
@@ -137,22 +140,22 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
 
 // _____________________________________________________________________________
 ad_utility::HashMap<string, size_t> TwoColumnJoin::getVariableColumns() const {
-  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumnMap());
+  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
   size_t leftSize = _left->getResultWidth();
-  for (auto it = _right->getVariableColumnMap().begin();
-       it != _right->getVariableColumnMap().end(); ++it) {
-    if (it->second < _jc1Right) {
-      if (it->second < _jc2Right) {
-        retVal[it->first] = leftSize + it->second;
-      } else if (it->second > _jc2Right) {
-        retVal[it->first] = leftSize + it->second - 1;
+  const auto& rightVarCols = _right->getVariableColumns();
+  for (const auto& rightVarCol : rightVarCols) {
+    if (rightVarCol.second < _jc1Right) {
+      if (rightVarCol.second < _jc2Right) {
+        retVal[rightVarCol.first] = leftSize + rightVarCol.second;
+      } else if (rightVarCol.second > _jc2Right) {
+        retVal[rightVarCol.first] = leftSize + rightVarCol.second - 1;
       }
     }
-    if (it->second > _jc1Right) {
-      if (it->second < _jc2Right) {
-        retVal[it->first] = leftSize + it->second - 1;
-      } else if (it->second > _jc2Right) {
-        retVal[it->first] = leftSize + it->second - 2;
+    if (rightVarCol.second > _jc1Right) {
+      if (rightVarCol.second < _jc2Right) {
+        retVal[rightVarCol.first] = leftSize + rightVarCol.second - 1;
+      } else if (rightVarCol.second > _jc2Right) {
+        retVal[rightVarCol.first] = leftSize + rightVarCol.second - 2;
       }
     }
   }

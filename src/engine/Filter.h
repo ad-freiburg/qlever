@@ -25,6 +25,8 @@ class Filter : public Operation {
 
   virtual string asString(size_t indent = 0) const override;
 
+  virtual string getDescriptor() const override;
+
   virtual vector<size_t> resultSortedOn() const override {
     return _subtree->resultSortedOn();
   }
@@ -80,9 +82,12 @@ class Filter : public Operation {
     return _subtree->getMultiplicity(col);
   }
 
- private:
-  std::string getDescriptor() const;
+  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
+      const override {
+    return _subtree->getVariableColumns();
+  }
 
+ private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   SparqlFilter::FilterType _type;
   string _lhs;

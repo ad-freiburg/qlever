@@ -31,6 +31,8 @@ class IndexScan : public Operation {
 
   virtual string asString(size_t indent = 0) const override;
 
+  virtual string getDescriptor() const override;
+
   IndexScan(QueryExecutionContext* qec, ScanType type)
       : Operation(qec),
         _type(type),
@@ -80,6 +82,9 @@ class IndexScan : public Operation {
   void precomputeSizeEstimate() { _sizeEstimate = computeSizeEstimate(); }
 
   virtual bool knownEmptyResult() override { return getSizeEstimate() == 0; }
+
+  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
+      const override;
 
   ScanType getType() const { return _type; }
 

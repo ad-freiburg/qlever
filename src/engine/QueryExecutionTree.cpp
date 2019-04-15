@@ -12,7 +12,6 @@
 #include "./Join.h"
 #include "./OrderBy.h"
 #include "./Sort.h"
-#include "TextOperationForContexts.h"
 #include "TextOperationWithFilter.h"
 #include "TextOperationWithoutFilter.h"
 #include "TwoColumnJoin.h"
@@ -98,8 +97,8 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
     if (ad_utility::startsWith(var, "TEXT(")) {
       var = var.substr(5, var.rfind(')') - 5);
     }
-    auto it = getVariableColumnMap().find(var);
-    if (it != getVariableColumnMap().end()) {
+    auto it = getVariableColumns().find(var);
+    if (it != getVariableColumns().end()) {
       validIndices.push_back(pair<size_t, ResultTable::ResultType>(
           it->second, res->getResultType(it->second)));
     }
@@ -128,8 +127,8 @@ void QueryExecutionTree::writeResultToStreamAsJson(
     if (ad_utility::startsWith(var, "TEXT(")) {
       var = var.substr(5, var.rfind(')') - 5);
     }
-    auto vc = getVariableColumnMap().find(var);
-    if (vc != getVariableColumnMap().end()) {
+    auto vc = getVariableColumns().find(var);
+    if (vc != getVariableColumns().end()) {
       validIndices.push_back(pair<size_t, ResultTable::ResultType>(
           vc->second, res->getResultType(vc->second)));
     }

@@ -62,12 +62,16 @@ string GroupBy::asString(size_t indent) const {
   return os.str();
 }
 
+string GroupBy::getDescriptor() const {
+  return "GroupBy on " + ad_utility::join(_groupByVariables, ' ');
+}
+
 size_t GroupBy::getResultWidth() const { return _varColMap.size(); }
 
 vector<size_t> GroupBy::resultSortedOn() const {
   vector<size_t> sortedOn;
   ad_utility::HashMap<string, size_t> subtreeVarCols =
-      _subtree->getVariableColumnMap();
+      _subtree->getVariableColumns();
   sortedOn.reserve(subtreeVarCols.size());
   for (std::string var : _groupByVariables) {
     sortedOn.push_back(subtreeVarCols[var]);
@@ -84,7 +88,7 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
   }
 
   ad_utility::HashMap<string, size_t> inVarColMap =
-      inputTree->getVariableColumnMap();
+      inputTree->getVariableColumns();
 
   std::unordered_set<size_t> sortColSet;
 
@@ -658,7 +662,7 @@ void GroupBy::computeResult(ResultTable* result) {
 
   // parse the group by columns
   ad_utility::HashMap<string, size_t> subtreeVarCols =
-      _subtree->getVariableColumnMap();
+      _subtree->getVariableColumns();
   for (const string& var : _groupByVariables) {
     auto it = subtreeVarCols.find(var);
     if (it == subtreeVarCols.end()) {
@@ -784,7 +788,6 @@ void GroupBy::computeResult(ResultTable* result) {
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
-  runtimeInfo.setDescriptor("GROUP BY");
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
 
   // populate the result type vector

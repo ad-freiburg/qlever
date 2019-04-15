@@ -376,10 +376,11 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
     SubtreePlan distinctPlan(_qec);
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
+    const auto& colMap = parent._qet->getVariableColumns();
     for (const auto& var : pq._selectedVariables) {
-      if (parent._qet.get()->getVariableColumnMap().find(var) !=
-          parent._qet.get()->getVariableColumnMap().end()) {
-        auto ind = parent._qet.get()->getVariableColumnMap().find(var)->second;
+      const auto it = colMap.find(var);
+      if (it != colMap.end()) {
+        auto ind = it->second;
         if (indDone.count(ind) == 0) {
           keepIndices.push_back(ind);
           indDone.insert(ind);
@@ -388,10 +389,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
                  ad_utility::startsWith(var, "TEXT(")) {
         auto varInd = var.find('?');
         auto cVar = var.substr(varInd, var.rfind(')') - varInd);
-        if (parent._qet.get()->getVariableColumnMap().find(cVar) !=
-            parent._qet.get()->getVariableColumnMap().end()) {
-          auto ind =
-              parent._qet.get()->getVariableColumnMap().find(cVar)->second;
+        const auto it = colMap.find(cVar);
+        if (it != colMap.end()) {
+          auto ind = it->second;
           if (indDone.count(ind) == 0) {
             keepIndices.push_back(ind);
             indDone.insert(ind);
@@ -419,7 +419,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
         std::shared_ptr<QueryExecutionTree> tree(new QueryExecutionTree(_qec));
         std::shared_ptr<Operation> sort(
             new Sort(_qec, parent._qet, keepIndices[0]));
-        tree->setVariableColumns(parent._qet->getVariableColumnMap());
+        tree->setVariableColumns(parent._qet->getVariableColumns());
         tree->setOperation(QueryExecutionTree::SORT, sort);
         tree->setContextVars(parent._qet.get()->getContextVars());
         std::shared_ptr<Operation> distinct(
@@ -435,7 +435,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
           obCols.emplace_back(std::make_pair(i, false));
         }
         std::shared_ptr<Operation> ob(new OrderBy(_qec, parent._qet, obCols));
-        tree->setVariableColumns(parent._qet->getVariableColumnMap());
+        tree->setVariableColumns(parent._qet->getVariableColumns());
         tree->setOperation(QueryExecutionTree::ORDER_BY, ob);
         tree->setContextVars(parent._qet.get()->getContextVars());
         std::shared_ptr<Operation> distinct(
@@ -467,8 +467,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       // Determine the column containing the subjects for which we are
       // interested in their predicates.
       auto it =
-          parent._qet.get()->getVariableColumnMap().find(patternTrickTriple._s);
-      if (it == parent._qet.get()->getVariableColumnMap().end()) {
+          parent._qet.get()->getVariableColumns().find(patternTrickTriple._s);
+      if (it == parent._qet.get()->getVariableColumns().end()) {
         AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                  "The root operation of the "
                  "query excecution tree does "
@@ -491,8 +491,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       if (!isSorted) {
         std::shared_ptr<Operation> orderByOp =
             std::make_shared<OrderBy>(_qec, parent._qet, sortIndices);
-        orderByPlan._qet->setVariableColumns(
-            parent._qet->getVariableColumnMap());
+        orderByPlan._qet->setVariableColumns(parent._qet->getVariableColumns());
         orderByPlan._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByOp);
       }
       SubtreePlan patternTrickPlan(_qec);
@@ -554,7 +553,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getHavingRow(
     for (const SparqlFilter& filter : pq._havingClauses) {
       SubtreePlan plan(_qec);
       auto& tree = *plan._qet.get();
-      tree.setVariableColumns(parent._qet.get()->getVariableColumnMap());
+      tree.setVariableColumns(parent._qet.get()->getVariableColumns());
       tree.setOperation(QueryExecutionTree::FILTER,
                         createFilterOperation(filter, parent));
       tree.setContextVars(parent._qet.get()->getContextVars());
@@ -600,7 +599,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
       std::shared_ptr<Operation> orderBy =
           std::make_shared<OrderBy>(_qec, parent->_qet, sortColumns);
       QueryExecutionTree& orderByTree = *orderByPlan._qet.get();
-      orderByTree.setVariableColumns(parent->_qet->getVariableColumnMap());
+      orderByTree.setVariableColumns(parent->_qet->getVariableColumns());
       orderByTree.setOperation(QueryExecutionTree::ORDER_BY, orderBy);
       parent = &orderByPlan;
     }
@@ -635,7 +634,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
         added.push_back(previous[i]);
       } else {
         std::shared_ptr<Operation> sort(new Sort(_qec, previous[i]._qet, col));
-        tree.setVariableColumns(previous[i]._qet.get()->getVariableColumnMap());
+        tree.setVariableColumns(previous[i]._qet.get()->getVariableColumns());
         tree.setOperation(QueryExecutionTree::SORT, sort);
         tree.setContextVars(previous[i]._qet.get()->getContextVars());
         added.push_back(plan);
@@ -659,7 +658,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
       } else {
         std::shared_ptr<Operation> ob(
             new OrderBy(_qec, previous[i]._qet, sortIndices));
-        tree.setVariableColumns(previous[i]._qet.get()->getVariableColumnMap());
+        tree.setVariableColumns(previous[i]._qet.get()->getVariableColumns());
         tree.setOperation(QueryExecutionTree::ORDER_BY, ob);
         tree.setContextVars(previous[i]._qet.get()->getContextVars());
 
@@ -1037,21 +1036,11 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   plan._idsOfIncludedNodes |= (size_t(1) << node._id);
   auto& tree = *plan._qet.get();
   AD_CHECK(node._wordPart.size() > 0);
-  // Subtract 1 for variables.size() for the context var.
   std::shared_ptr<Operation> textOp(new TextOperationWithoutFilter(
-      _qec, node._wordPart, node._variables.size() - 1));
+      _qec, node._wordPart, node._variables, node._cvar));
   tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
                     textOp);
-  ad_utility::HashMap<string, size_t> vcmap;
-  size_t index = 0;
-  vcmap[node._cvar] = index++;
-  vcmap[string("SCORE(") + node._cvar + ")"] = index++;
-  for (const auto& var : node._variables) {
-    if (var != node._cvar) {
-      vcmap[var] = index++;
-    }
-  }
-  tree.setVariableColumns(vcmap);
+  tree.setVariableColumns(textOp->getVariableColumns());
   tree.addContextVar(node._cvar);
   return plan;
 }
@@ -1138,7 +1127,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
                   std::make_pair(jcs[(c + 1) % 2][(0 + swap) % 2], false));
               std::shared_ptr<Operation> orderBy(
                   new OrderBy(_qec, a[i]._qet, sortIndices));
-              left->setVariableColumns(a[i]._qet->getVariableColumnMap());
+              left->setVariableColumns(a[i]._qet->getVariableColumns());
               left->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
             }
             const vector<size_t>& bSortedOn = b[j]._qet.get()->resultSortedOn();
@@ -1156,7 +1145,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
                   std::make_pair(jcs[(c + 1) % 2][(1 + swap) % 2], false));
               std::shared_ptr<Operation> orderBy(
                   new OrderBy(_qec, b[j]._qet, sortIndices));
-              right->setVariableColumns(b[j]._qet->getVariableColumnMap());
+              right->setVariableColumns(b[j]._qet->getVariableColumns());
               right->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
             }
             // TODO(florian): consider replacing this with a multicolumn join.
@@ -1213,38 +1202,17 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           plan._idsOfIncludedNodes |= textPlan._idsOfIncludedNodes;
           plan._idsOfIncludedFilters = filterPlan._idsOfIncludedFilters;
           auto& tree = *plan._qet.get();
-          // Subtract 1 for variables.size() for the context var.
           const TextOperationWithoutFilter& noFilter =
               *static_cast<const TextOperationWithoutFilter*>(
                   textPlan._qet->getRootOperation().get());
           std::shared_ptr<Operation> textOp(new TextOperationWithFilter(
-              _qec, noFilter.getWordPart(), noFilter.getNofVars(),
-              filterPlan._qet, otherPlanJc));
+              _qec, noFilter.getWordPart(), noFilter.getVars(),
+              noFilter.getCVar(), filterPlan._qet, otherPlanJc));
           tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITH_FILTER,
                             textOp);
-          ad_utility::HashMap<string, size_t> vcmap;
-          // Subtract one because the entity that we filtered on
-          // is provided by the filter table and still has the same place there.
-          size_t colN = 2;
-          string cvar = *textPlan._qet.get()->getContextVars().begin();
-          for (auto it = textPlan._qet.get()->getVariableColumnMap().begin();
-               it != textPlan._qet.get()->getVariableColumnMap().end(); ++it) {
-            if (it->first == cvar ||
-                it->first == string("SCORE(") + cvar + ")") {
-              vcmap[it->first] = it->second;
-            } else if (filterPlan._qet.get()->getVariableColumnMap().count(
-                           it->first) == 0) {
-              vcmap[it->first] = colN++;
-            }
-          }
-          for (auto it = filterPlan._qet.get()->getVariableColumnMap().begin();
-               it != filterPlan._qet.get()->getVariableColumnMap().end();
-               ++it) {
-            vcmap[it->first] = colN + it->second;
-          }
-          tree.setVariableColumns(vcmap);
+          tree.setVariableColumns(textOp->getVariableColumns());
           tree.setContextVars(filterPlan._qet.get()->getContextVars());
-          tree.addContextVar(cvar);
+          tree.addContextVar(noFilter.getCVar());
           candidates[getPruningKey(plan, {jcs[0][0]})].emplace_back(plan);
         }
         // Skip if we have two dummies
@@ -1335,8 +1303,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
             continue;
           }
           std::shared_ptr<Operation> sort(new Sort(_qec, a[i]._qet, jcs[0][0]));
-          left.get()->setVariableColumns(
-              a[i]._qet.get()->getVariableColumnMap());
+          left.get()->setVariableColumns(a[i]._qet.get()->getVariableColumns());
           left.get()->setContextVars(a[i]._qet.get()->getContextVars());
           left.get()->setOperation(QueryExecutionTree::SORT, sort);
         }
@@ -1351,7 +1318,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           }
           std::shared_ptr<Operation> sort(new Sort(_qec, b[j]._qet, jcs[0][1]));
           right.get()->setVariableColumns(
-              b[j]._qet.get()->getVariableColumnMap());
+              b[j]._qet.get()->getVariableColumns());
           right.get()->setContextVars(b[j]._qet.get()->getContextVars());
           right.get()->setOperation(QueryExecutionTree::SORT, sort);
         }
@@ -1435,11 +1402,11 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
   std::shared_ptr<Operation> orderByB(new OrderBy(_qec, b._qet, sortIndicesB));
 
   if (!aSorted) {
-    orderByPlanA._qet->setVariableColumns(a._qet->getVariableColumnMap());
+    orderByPlanA._qet->setVariableColumns(a._qet->getVariableColumns());
     orderByPlanA._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByA);
   }
   if (!bSorted) {
-    orderByPlanB._qet->setVariableColumns(b._qet->getVariableColumnMap());
+    orderByPlanB._qet->setVariableColumns(b._qet->getVariableColumns());
     orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
   }
 
@@ -1489,11 +1456,11 @@ QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
   std::shared_ptr<Operation> orderByB(new OrderBy(_qec, b._qet, sortIndicesB));
 
   if (!aSorted) {
-    orderByPlanA._qet->setVariableColumns(a._qet->getVariableColumnMap());
+    orderByPlanA._qet->setVariableColumns(a._qet->getVariableColumns());
     orderByPlanA._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByA);
   }
   if (!bSorted) {
-    orderByPlanB._qet->setVariableColumns(b._qet->getVariableColumnMap());
+    orderByPlanB._qet->setVariableColumns(b._qet->getVariableColumns());
     orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
   }
 
@@ -1584,11 +1551,12 @@ vector<array<Id, 2>> QueryPlanner::getJoinColumns(
     const QueryPlanner::SubtreePlan& a,
     const QueryPlanner::SubtreePlan& b) const {
   vector<array<Id, 2>> jcs;
-  for (auto it = a._qet.get()->getVariableColumnMap().begin();
-       it != a._qet.get()->getVariableColumnMap().end(); ++it) {
-    auto itt = b._qet.get()->getVariableColumnMap().find(it->first);
-    if (itt != b._qet.get()->getVariableColumnMap().end()) {
-      jcs.push_back(array<Id, 2>{{it->second, itt->second}});
+  const auto& aVarCols = a._qet->getVariableColumns();
+  const auto& bVarCols = b._qet->getVariableColumns();
+  for (const auto& aVarCol : aVarCols) {
+    auto itt = bVarCols.find(aVarCol.first);
+    if (itt != bVarCols.end()) {
+      jcs.push_back(array<Id, 2>{{aVarCol.second, itt->second}});
     }
   }
   return jcs;
@@ -1600,11 +1568,11 @@ string QueryPlanner::getPruningKey(
     const vector<size_t>& orderedOnColumns) const {
   // Get the ordered var
   std::ostringstream os;
+  const auto& varCols = plan._qet->getVariableColumns();
   for (size_t orderedOnCol : orderedOnColumns) {
-    for (auto it = plan._qet.get()->getVariableColumnMap().begin();
-         it != plan._qet.get()->getVariableColumnMap().end(); ++it) {
-      if (it->second == orderedOnCol) {
-        os << it->first << ", ";
+    for (const auto& varCol : varCols) {
+      if (varCol.second == orderedOnCol) {
+        os << varCol.first << ", ";
         break;
       }
     }
@@ -1663,7 +1631,7 @@ void QueryPlanner::applyFiltersIfPossible(
         auto& tree = *newPlan._qet.get();
         tree.setOperation(QueryExecutionTree::FILTER,
                           createFilterOperation(filters[i], row[n]));
-        tree.setVariableColumns(row[n]._qet.get()->getVariableColumnMap());
+        tree.setVariableColumns(row[n]._qet.get()->getVariableColumns());
         tree.setContextVars(row[n]._qet.get()->getContextVars());
         if (replace) {
           row[n] = newPlan;
@@ -2068,8 +2036,8 @@ QueryPlanner::createVariableColumnsMapForTextOperation(
 
   for (size_t i = 0; i < subtrees.size(); ++i) {
     size_t offset = n;
-    for (auto it = subtrees[i].first.getVariableColumnMap().begin();
-         it != subtrees[i].first.getVariableColumnMap().end(); ++it) {
+    for (auto it = subtrees[i].first.getVariableColumns().begin();
+         it != subtrees[i].first.getVariableColumns().end(); ++it) {
       map[it->first] = offset + it->second;
       ++n;
     }

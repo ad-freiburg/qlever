@@ -192,7 +192,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       }
       // Print the runtime info. This needs to be done after the query
       // was computed.
-      LOG(INFO) << qet.getRootOperation()->getRuntimeInfo().toString();
+      LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
     } catch (const ad_semsearch::Exception& e) {
       response = composeResponseJson(query, e);
     } catch (const std::exception& e) {

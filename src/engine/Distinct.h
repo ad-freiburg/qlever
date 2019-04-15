@@ -27,6 +27,8 @@ class Distinct : public Operation {
 
   virtual string asString(size_t indent = 0) const override;
 
+  virtual string getDescriptor() const override;
+
   virtual vector<size_t> resultSortedOn() const override {
     return _subtree->resultSortedOn();
   }

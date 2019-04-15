@@ -13,7 +13,7 @@
 class DummyOperation : public Operation {
  public:
   DummyOperation(QueryExecutionContext* ctx) : Operation(ctx) {}
-  virtual void computeResult(ResultTable* result) {
+  virtual void computeResult(ResultTable* result) override {
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_data.setCols(2);
@@ -23,27 +23,34 @@ class DummyOperation : public Operation {
     result->finish();
   }
 
-  virtual string asString(size_t indent = 0) const {
+  string asString(size_t indent = 0) const override {
     (void)indent;
     return "dummy";
   }
 
-  virtual size_t getResultWidth() const { return 2; }
+  string getDescriptor() const override { return "dummy"; }
 
-  virtual vector<size_t> resultSortedOn() const { return {1}; }
+  virtual size_t getResultWidth() const override { return 2; }
 
-  virtual void setTextLimit(size_t limit) { (void)limit; }
+  virtual vector<size_t> resultSortedOn() const override { return {1}; }
 
-  virtual size_t getCostEstimate() { return 10; }
+  virtual void setTextLimit(size_t limit) override { (void)limit; }
 
-  virtual size_t getSizeEstimate() { return 10; }
+  virtual size_t getCostEstimate() override { return 10; }
 
-  virtual float getMultiplicity(size_t col) {
+  virtual size_t getSizeEstimate() override { return 10; }
+
+  virtual float getMultiplicity(size_t col) override {
     (void)col;
     return 1;
   }
 
-  virtual bool knownEmptyResult() { return false; }
+  virtual bool knownEmptyResult() override { return false; }
+
+  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
+      const override {
+    return {{"?a", 0}, {"?b", 1}};
+  }
 };
 
 TEST(HasPredicateScan, freeS) {
