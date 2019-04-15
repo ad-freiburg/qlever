@@ -376,10 +376,11 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
     SubtreePlan distinctPlan(_qec);
     vector<size_t> keepIndices;
     ad_utility::HashSet<size_t> indDone;
+    const auto& colMap = parent._qet->getVariableColumns();
     for (const auto& var : pq._selectedVariables) {
-      if (parent._qet.get()->getVariableColumns().find(var) !=
-          parent._qet.get()->getVariableColumns().end()) {
-        auto ind = parent._qet.get()->getVariableColumns().find(var)->second;
+      const auto it = colMap.find(var);
+      if (it != colMap.end()) {
+        auto ind = it->second;
         if (indDone.count(ind) == 0) {
           keepIndices.push_back(ind);
           indDone.insert(ind);
@@ -388,9 +389,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
                  ad_utility::startsWith(var, "TEXT(")) {
         auto varInd = var.find('?');
         auto cVar = var.substr(varInd, var.rfind(')') - varInd);
-        if (parent._qet.get()->getVariableColumns().find(cVar) !=
-            parent._qet.get()->getVariableColumns().end()) {
-          auto ind = parent._qet.get()->getVariableColumns().find(cVar)->second;
+        const auto it = colMap.find(cVar);
+        if (it != colMap.end()) {
+          auto ind = it->second;
           if (indDone.count(ind) == 0) {
             keepIndices.push_back(ind);
             indDone.insert(ind);
@@ -1035,7 +1036,6 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   plan._idsOfIncludedNodes |= (size_t(1) << node._id);
   auto& tree = *plan._qet.get();
   AD_CHECK(node._wordPart.size() > 0);
-  // Subtract 1 for variables.size() for the context var.
   std::shared_ptr<Operation> textOp(new TextOperationWithoutFilter(
       _qec, node._wordPart, node._variables, node._cvar));
   tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
@@ -1202,7 +1202,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           plan._idsOfIncludedNodes |= textPlan._idsOfIncludedNodes;
           plan._idsOfIncludedFilters = filterPlan._idsOfIncludedFilters;
           auto& tree = *plan._qet.get();
-          // Subtract 1 for variables.size() for the context var.
           const TextOperationWithoutFilter& noFilter =
               *static_cast<const TextOperationWithoutFilter*>(
                   textPlan._qet->getRootOperation().get());
@@ -1552,11 +1551,12 @@ vector<array<Id, 2>> QueryPlanner::getJoinColumns(
     const QueryPlanner::SubtreePlan& a,
     const QueryPlanner::SubtreePlan& b) const {
   vector<array<Id, 2>> jcs;
-  for (auto it = a._qet.get()->getVariableColumns().begin();
-       it != a._qet.get()->getVariableColumns().end(); ++it) {
-    auto itt = b._qet.get()->getVariableColumns().find(it->first);
-    if (itt != b._qet.get()->getVariableColumns().end()) {
-      jcs.push_back(array<Id, 2>{{it->second, itt->second}});
+  const auto& aVarCols = a._qet->getVariableColumns();
+  const auto& bVarCols = b._qet->getVariableColumns();
+  for (const auto& aVarCol : aVarCols) {
+    auto itt = bVarCols.find(aVarCol.first);
+    if (itt != bVarCols.end()) {
+      jcs.push_back(array<Id, 2>{{aVarCol.second, itt->second}});
     }
   }
   return jcs;
@@ -1568,11 +1568,11 @@ string QueryPlanner::getPruningKey(
     const vector<size_t>& orderedOnColumns) const {
   // Get the ordered var
   std::ostringstream os;
+  const auto& varCols = plan._qet->getVariableColumns();
   for (size_t orderedOnCol : orderedOnColumns) {
-    for (auto it = plan._qet.get()->getVariableColumns().begin();
-         it != plan._qet.get()->getVariableColumns().end(); ++it) {
-      if (it->second == orderedOnCol) {
-        os << it->first << ", ";
+    for (const auto& varCol : varCols) {
+      if (varCol.second == orderedOnCol) {
+        os << varCol.first << ", ";
         break;
       }
     }

@@ -30,7 +30,7 @@ string Sort::asString(size_t indent) const {
 // _____________________________________________________________________________
 string Sort::getDescriptor() const {
   std::string orderByVars = "";
-  for (auto p : _subtree->getVariableColumns()) {
+  for (const auto& p : _subtree->getVariableColumns()) {
     if (p.second == _sortCol) {
       orderByVars = "ASC(" + p.first + ")";
       break;

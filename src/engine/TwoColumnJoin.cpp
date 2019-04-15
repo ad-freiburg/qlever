@@ -142,20 +142,20 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
 ad_utility::HashMap<string, size_t> TwoColumnJoin::getVariableColumns() const {
   ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
   size_t leftSize = _left->getResultWidth();
-  for (auto it = _right->getVariableColumns().begin();
-       it != _right->getVariableColumns().end(); ++it) {
-    if (it->second < _jc1Right) {
-      if (it->second < _jc2Right) {
-        retVal[it->first] = leftSize + it->second;
-      } else if (it->second > _jc2Right) {
-        retVal[it->first] = leftSize + it->second - 1;
+  const auto& rightVarCols = _right->getVariableColumns();
+  for (const auto& rightVarCol : rightVarCols) {
+    if (rightVarCol.second < _jc1Right) {
+      if (rightVarCol.second < _jc2Right) {
+        retVal[rightVarCol.first] = leftSize + rightVarCol.second;
+      } else if (rightVarCol.second > _jc2Right) {
+        retVal[rightVarCol.first] = leftSize + rightVarCol.second - 1;
       }
     }
-    if (it->second > _jc1Right) {
-      if (it->second < _jc2Right) {
-        retVal[it->first] = leftSize + it->second - 1;
-      } else if (it->second > _jc2Right) {
-        retVal[it->first] = leftSize + it->second - 2;
+    if (rightVarCol.second > _jc1Right) {
+      if (rightVarCol.second < _jc2Right) {
+        retVal[rightVarCol.first] = leftSize + rightVarCol.second - 1;
+      } else if (rightVarCol.second > _jc2Right) {
+        retVal[rightVarCol.first] = leftSize + rightVarCol.second - 2;
       }
     }
   }

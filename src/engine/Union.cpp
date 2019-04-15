@@ -15,18 +15,20 @@ Union::Union(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   // compute the column origins
   ad_utility::HashMap<string, size_t> variableColumns = getVariableColumns();
   _columnOrigins.resize(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
+  const auto& t1VarCols = t1->getVariableColumns();
+  const auto& t2VarCols = t2->getVariableColumns();
   for (auto it : variableColumns) {
     // look for the corresponding column in t1
-    auto it1 = t1->getVariableColumns().find(it.first);
-    if (it1 != t1->getVariableColumns().end()) {
+    auto it1 = t1VarCols.find(it.first);
+    if (it1 != t1VarCols.end()) {
       _columnOrigins[it.second][0] = it1->second;
     } else {
       _columnOrigins[it.second][0] = NO_COLUMN;
     }
 
     // look for the corresponding column in t2
-    auto it2 = t2->getVariableColumns().find(it.first);
-    if (it2 != t2->getVariableColumns().end()) {
+    const auto it2 = t2VarCols.find(it.first);
+    if (it2 != t2VarCols.end()) {
       _columnOrigins[it.second][1] = it2->second;
     } else {
       _columnOrigins[it.second][1] = NO_COLUMN;
