@@ -700,7 +700,7 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
                "filters are currently not supported in HAVING clauses.");
     }
     std::string lhs = tokens[0];
-    std::string rhs = tokens[1];
+    std::string rhs = tokens[2];
     std::string lvar = lhs.substr(5, lhs.size() - 6);
 
     auto langTag = rhs.substr(1, rhs.size() - 2);
