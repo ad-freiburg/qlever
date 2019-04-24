@@ -87,7 +87,7 @@ void FTSAlgorithms::intersect(const vector<Id>& matchingContexts,
       // If there are multiple elements for that context in l1,
       // we can safely skip them unless we want to incorporate the scores
       // later on.
-      resultCids.push_back(matchingContexts[j]);
+      resultCids.push_back(eBlockCids[j]);
       resultEids.push_back(eBlockWids[j]);
       resultScores.push_back(eBlockScores[j]);
       j++;
