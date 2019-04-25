@@ -230,18 +230,7 @@ size_t IndexScan::computeSizeEstimate() {
 
     // We have to do a simple scan anyway so might as well do it now
     if (getResultWidth() == 1) {
-      RuntimeInformation& runtimeInfo = getRuntimeInfo();
-      size_t size = getResult()->size();
-      // When a cached result is loaded but the runtimeInfo for that
-      // Operation object was already computed the old values are
-      // used (instead of the time for the cache access. This breaks
-      // the output of the operation time for any operation that has
-      // a single column scan as its child, as that operation itself
-      // would measure the time of the cache access for the result
-      // of that scan, while the scan itself would report the time
-      // required for the actual scan that is done in here.
-      runtimeInfo.setTime(0);
-      return size;
+      return getResult()->size();
     }
     if (_type == SPO_FREE_P || _type == SOP_FREE_O) {
       return getIndex().sizeEstimate(_subject, "", "");
