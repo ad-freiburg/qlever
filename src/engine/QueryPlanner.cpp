@@ -699,6 +699,10 @@ bool QueryPlanner::isVariable(const string& elem) {
   return ad_utility::startsWith(elem, "?");
 }
 
+bool QueryPlanner::isVariable(const PropertyPath& elem) {
+  return elem._operation == PropertyPath::Operation::IRI &&
+         isVariable(elem._iri);
+}
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     const ParsedQuery::GraphPattern* pattern) const {

@@ -69,6 +69,103 @@ string SparqlPrefix::asString() const {
 }
 
 // _____________________________________________________________________________
+PropertyPath::PropertyPath(Operation op, uint16_t limit, const std::string& iri,
+                           std::initializer_list<PropertyPath> children)
+    : _operation(op), _limit(limit), _iri(iri), _children(children) {}
+
+// _____________________________________________________________________________
+void PropertyPath::writeToStream(std::ostream& out) const {
+  switch (_operation) {
+    case Operation::ALTERNATIVE:
+      out << "(";
+      if (_children.size() > 0) {
+        _children[0].writeToStream(out);
+      } else {
+        out << "missing" << std::endl;
+      }
+      out << ")|(";
+      if (_children.size() > 1) {
+        _children[1].writeToStream(out);
+      } else {
+        out << "missing" << std::endl;
+      }
+      out << ")";
+      break;
+    case Operation::INVERSE:
+      out << "^(";
+      if (_children.size() > 0) {
+        _children[0].writeToStream(out);
+      } else {
+        out << "missing" << std::endl;
+      }
+      out << ")";
+      break;
+    case Operation::IRI:
+      out << _iri;
+      break;
+    case Operation::SEQUENCE:
+      out << "(";
+      if (_children.size() > 0) {
+        _children[0].writeToStream(out);
+      } else {
+        out << "missing" << std::endl;
+      }
+      out << ")/(";
+      if (_children.size() > 1) {
+        _children[1].writeToStream(out);
+      } else {
+        out << "missing" << std::endl;
+      }
+      out << ")";
+      break;
+    case Operation::TRANSITIVE:
+      out << "(";
+      if (_children.size() > 0) {
+        _children[0].writeToStream(out);
+      } else {
+        out << "missing" << std::endl;
+      }
+      out << ")*";
+      break;
+    case Operation::TRANSITIVE_MAX:
+      out << "(";
+      if (_children.size() > 0) {
+        _children[0].writeToStream(out);
+      } else {
+        out << "missing" << std::endl;
+      }
+      out << ")";
+      if (_limit == 1) {
+        out << "?";
+      } else {
+        out << "*" << _limit;
+      }
+      break;
+    case Operation::TRANSITIVE_MIN:
+      out << "(";
+      if (_children.size() > 0) {
+        _children[0].writeToStream(out);
+      } else {
+        out << "missing" << std::endl;
+      }
+      out << ")+";
+      break;
+  }
+}
+
+// _____________________________________________________________________________
+std::string PropertyPath::asString() const {
+  std::stringstream s;
+  writeToStream(s);
+  return s.str();
+}
+
+std::ostream& operator<<(std::ostream& out, const PropertyPath& p) {
+  p.writeToStream(out);
+  return out;
+}
+
+// _____________________________________________________________________________
 string SparqlTriple::asString() const {
   std::ostringstream os;
   os << "{s: " << _s << ", p: " << _p << ", o: " << _o << "}";
@@ -145,7 +242,8 @@ void ParsedQuery::expandPrefixes() {
     for (auto& trip : pattern->_whereClauseTriples) {
       expandPrefix(trip._s, prefixMap);
       expandPrefix(trip._p, prefixMap);
-      if (trip._p.find("in-context") != string::npos) {
+      if (trip._p._operation == PropertyPath::Operation::IRI &&
+          trip._p._iri.find("in-context") != string::npos) {
         auto tokens = ad_utility::split(trip._o, ' ');
         trip._o = "";
         for (size_t i = 0; i < tokens.size(); ++i) {
@@ -162,6 +260,25 @@ void ParsedQuery::expandPrefixes() {
     for (auto& f : pattern->_filters) {
       expandPrefix(f._lhs, prefixMap);
       expandPrefix(f._rhs, prefixMap);
+    }
+  }
+}
+
+// _____________________________________________________________________________
+void ParsedQuery::expandPrefix(
+    PropertyPath& item, const ad_utility::HashMap<string, string>& prefixMap) {
+  // Use dfs to process all leaves of the proprety path tree.
+  std::vector<PropertyPath*> to_process;
+  to_process.push_back(&item);
+  while (!to_process.empty()) {
+    PropertyPath* p = to_process.back();
+    to_process.pop_back();
+    if (p->_operation == PropertyPath::Operation::IRI) {
+      expandPrefix(p->_iri, prefixMap);
+    } else {
+      for (PropertyPath& c : p->_children) {
+        to_process.push_back(&c);
+      }
     }
   }
 }

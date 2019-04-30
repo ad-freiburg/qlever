@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -25,16 +26,56 @@ class SparqlPrefix {
   string asString() const;
 };
 
+class PropertyPath {
+ public:
+  enum class Operation {
+    SEQUENCE,
+    ALTERNATIVE,
+    TRANSITIVE,
+    TRANSITIVE_MIN,  // e.g. +
+    TRANSITIVE_MAX,  // e.g. *n or ?
+    INVERSE,
+    IRI
+  };
+
+  PropertyPath() : _operation(Operation::IRI), _limit(0), _iri(), _children() {}
+  explicit PropertyPath(Operation op)
+      : _operation(op), _limit(0), _iri(), _children() {}
+  PropertyPath(Operation op, uint16_t limit, const std::string& iri,
+               std::initializer_list<PropertyPath> children);
+
+  bool operator==(const PropertyPath& other) const {
+    return _operation == other._operation && _limit == other._limit &&
+           _iri == other._iri && _children == other._children;
+  }
+
+  void writeToStream(std::ostream& out) const;
+  std::string asString() const;
+
+  Operation _operation;
+  // For the limited transitive operations
+  uint16_t _limit;
+
+  // In case of an iri
+  std::string _iri;
+
+  std::vector<PropertyPath> _children;
+};
+
+std::ostream& operator<<(std::ostream& out, const PropertyPath& p);
+
 // Data container for parsed triples from the where clause
 class SparqlTriple {
  public:
-  SparqlTriple(const string& s, const string& p, const string& o)
+  SparqlTriple(const string& s, const PropertyPath& p, const string& o)
       : _s(s), _p(p), _o(o) {}
 
   bool operator==(const SparqlTriple& other) const {
     return _s == other._s && _p == other._p && _o == other._o;
   }
-  string _s, _p, _o;
+  string _s;
+  PropertyPath _p;
+  string _o;
 
   string asString() const;
 };
@@ -215,6 +256,8 @@ class ParsedQuery {
   string asString() const;
 
  private:
+  static void expandPrefix(
+      PropertyPath& item, const ad_utility::HashMap<string, string>& prefixMap);
   static void expandPrefix(
       string& item, const ad_utility::HashMap<string, string>& prefixMap);
 

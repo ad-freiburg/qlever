@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <set>
 #include <vector>
 #include "../parser/ParsedQuery.h"
 #include "QueryExecutionTree.h"
@@ -32,7 +33,7 @@ class QueryPlanner {
           _variables.insert(t._s);
         }
         if (isVariable(t._p)) {
-          _variables.insert(t._p);
+          _variables.insert(t._p._iri);
         }
         if (isVariable(t._o)) {
           _variables.insert(t._o);
@@ -42,7 +43,10 @@ class QueryPlanner {
       Node(size_t id, const string& cvar, const string& wordPart,
            const vector<SparqlTriple>& trips)
           : _id(id),
-            _triple(cvar, INTERNAL_TEXT_MATCH_PREDICATE, wordPart),
+            _triple(cvar,
+                    PropertyPath(PropertyPath::Operation::IRI, 0,
+                                 INTERNAL_TEXT_MATCH_PREDICATE, {}),
+                    wordPart),
             _variables(),
             _cvar(cvar),
             _wordPart(wordPart) {
@@ -52,7 +56,7 @@ class QueryPlanner {
             _variables.insert(t._s);
           }
           if (isVariable(t._p)) {
-            _variables.insert(t._p);
+            _variables.insert(t._p._iri);
           }
           if (isVariable(t._o)) {
             _variables.insert(t._o);
@@ -66,7 +70,7 @@ class QueryPlanner {
 
       size_t _id;
       SparqlTriple _triple;
-      std::set<string> _variables;
+      std::set<std::string> _variables;
       string _cvar;
       string _wordPart;
     };
@@ -156,6 +160,7 @@ class QueryPlanner {
   QueryExecutionContext* _qec;
 
   static bool isVariable(const string& elem);
+  static bool isVariable(const PropertyPath& elem);
 
   void getVarTripleMap(
       const ParsedQuery& pq,

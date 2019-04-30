@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 #include "../src/global/Constants.h"
+#include "../src/parser/PropertyPathParser.h"
 #include "../src/parser/SparqlParser.h"
 #include "../src/util/Exception.h"
 
@@ -32,13 +33,13 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ("?x", pq._selectedVariables[0]);
     ASSERT_EQ("?z", pq._selectedVariables[1]);
     ASSERT_EQ("?x", pq._rootGraphPattern._whereClauseTriples[0]._s);
-    ASSERT_EQ(":myrel", pq._rootGraphPattern._whereClauseTriples[0]._p);
+    ASSERT_EQ(":myrel", pq._rootGraphPattern._whereClauseTriples[0]._p._iri);
     ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[0]._o);
     ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[1]._s);
-    ASSERT_EQ("ns:myrel", pq._rootGraphPattern._whereClauseTriples[1]._p);
+    ASSERT_EQ("ns:myrel", pq._rootGraphPattern._whereClauseTriples[1]._p._iri);
     ASSERT_EQ("?z", pq._rootGraphPattern._whereClauseTriples[1]._o);
     ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[2]._s);
-    ASSERT_EQ("nsx:rel2", pq._rootGraphPattern._whereClauseTriples[2]._p);
+    ASSERT_EQ("nsx:rel2", pq._rootGraphPattern._whereClauseTriples[2]._p._iri);
     ASSERT_EQ("<http://abc.de>",
               pq._rootGraphPattern._whereClauseTriples[2]._o);
     ASSERT_EQ("", pq._limit);
@@ -62,13 +63,13 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ("?x", pq._selectedVariables[0]);
     ASSERT_EQ("?z", pq._selectedVariables[1]);
     ASSERT_EQ("?x", pq._rootGraphPattern._whereClauseTriples[0]._s);
-    ASSERT_EQ(":myrel", pq._rootGraphPattern._whereClauseTriples[0]._p);
+    ASSERT_EQ(":myrel", pq._rootGraphPattern._whereClauseTriples[0]._p._iri);
     ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[0]._o);
     ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[1]._s);
-    ASSERT_EQ("ns:myrel", pq._rootGraphPattern._whereClauseTriples[1]._p);
+    ASSERT_EQ("ns:myrel", pq._rootGraphPattern._whereClauseTriples[1]._p._iri);
     ASSERT_EQ("?z", pq._rootGraphPattern._whereClauseTriples[1]._o);
     ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[2]._s);
-    ASSERT_EQ("nsx:rel2", pq._rootGraphPattern._whereClauseTriples[2]._p);
+    ASSERT_EQ("nsx:rel2", pq._rootGraphPattern._whereClauseTriples[2]._p._iri);
     ASSERT_EQ("<http://abc.de>",
               pq._rootGraphPattern._whereClauseTriples[2]._o);
     ASSERT_EQ("", pq._limit);
@@ -88,14 +89,15 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ("?x", pq._selectedVariables[0]);
     ASSERT_EQ("?z", pq._selectedVariables[1]);
     ASSERT_EQ("?x", pq._rootGraphPattern._whereClauseTriples[0]._s);
-    ASSERT_EQ("<Directed_by>", pq._rootGraphPattern._whereClauseTriples[0]._p);
+    ASSERT_EQ("<Directed_by>",
+              pq._rootGraphPattern._whereClauseTriples[0]._p._iri);
     ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[0]._o);
     ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[1]._s);
     ASSERT_EQ("<http://ns/myrel.extend>",
-              pq._rootGraphPattern._whereClauseTriples[1]._p);
+              pq._rootGraphPattern._whereClauseTriples[1]._p._iri);
     ASSERT_EQ("?z", pq._rootGraphPattern._whereClauseTriples[1]._o);
     ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[2]._s);
-    ASSERT_EQ("nsx:rel2", pq._rootGraphPattern._whereClauseTriples[2]._p);
+    ASSERT_EQ("nsx:rel2", pq._rootGraphPattern._whereClauseTriples[2]._p._iri);
     ASSERT_EQ("\"Hello... World\"",
               pq._rootGraphPattern._whereClauseTriples[2]._o);
     ASSERT_EQ("", pq._limit);
@@ -140,11 +142,11 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(4u, pq._rootGraphPattern._whereClauseTriples.size());
     ASSERT_EQ("?c", pq._rootGraphPattern._whereClauseTriples[2]._s);
     ASSERT_EQ(CONTAINS_ENTITY_PREDICATE,
-              pq._rootGraphPattern._whereClauseTriples[2]._p);
+              pq._rootGraphPattern._whereClauseTriples[2]._p._iri);
     ASSERT_EQ("?x", pq._rootGraphPattern._whereClauseTriples[2]._o);
     ASSERT_EQ("?c", pq._rootGraphPattern._whereClauseTriples[3]._s);
     ASSERT_EQ(CONTAINS_WORD_PREDICATE,
-              pq._rootGraphPattern._whereClauseTriples[3]._p);
+              pq._rootGraphPattern._whereClauseTriples[3]._p._iri);
     ASSERT_EQ("coca* abuse", pq._rootGraphPattern._whereClauseTriples[3]._o);
 
     pq = SparqlParser::parse(
@@ -175,7 +177,7 @@ TEST(ParserTest, testParse) {
         pq._rootGraphPattern._children[0]->_childGraphPatterns[0];
     ASSERT_EQ(1u, child->_whereClauseTriples.size());
     ASSERT_EQ("?y", child->_whereClauseTriples[0]._s);
-    ASSERT_EQ("<test2>", child->_whereClauseTriples[0]._p);
+    ASSERT_EQ("<test2>", child->_whereClauseTriples[0]._p._iri);
     ASSERT_EQ("?z", child->_whereClauseTriples[0]._o);
     ASSERT_EQ(0u, child->_filters.size());
     ASSERT_TRUE(child->_optional);
@@ -272,14 +274,14 @@ TEST(ParserTest, testExpandPrefixes) {
   ASSERT_EQ("?z", pq._selectedVariables[1]);
   ASSERT_EQ("?x", pq._rootGraphPattern._whereClauseTriples[0]._s);
   ASSERT_EQ("<http://rdf.myprefix.com/myrel>",
-            pq._rootGraphPattern._whereClauseTriples[0]._p);
+            pq._rootGraphPattern._whereClauseTriples[0]._p._iri);
   ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[0]._o);
   ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[1]._s);
   ASSERT_EQ("<http://rdf.myprefix.com/ns/myrel>",
-            pq._rootGraphPattern._whereClauseTriples[1]._p);
+            pq._rootGraphPattern._whereClauseTriples[1]._p._iri);
   ASSERT_EQ("?z", pq._rootGraphPattern._whereClauseTriples[1]._o);
   ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[2]._s);
-  ASSERT_EQ("nsx:rel2", pq._rootGraphPattern._whereClauseTriples[2]._p);
+  ASSERT_EQ("nsx:rel2", pq._rootGraphPattern._whereClauseTriples[2]._p._iri);
   ASSERT_EQ("<http://abc.de>", pq._rootGraphPattern._whereClauseTriples[2]._o);
   ASSERT_EQ("", pq._limit);
   ASSERT_EQ("", pq._offset);
@@ -387,11 +389,12 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_EQ("?movie", pq._selectedVariables[0]);
   ASSERT_EQ(2u, pq._rootGraphPattern._whereClauseTriples.size());
   ASSERT_EQ("?movie", pq._rootGraphPattern._whereClauseTriples[0]._s);
-  ASSERT_EQ("<from-year>", pq._rootGraphPattern._whereClauseTriples[0]._p);
+  ASSERT_EQ("<from-year>", pq._rootGraphPattern._whereClauseTriples[0]._p._iri);
   ASSERT_EQ("\"00-00-2000\"^^xsd:date",
             pq._rootGraphPattern._whereClauseTriples[0]._o);
   ASSERT_EQ("?movie", pq._rootGraphPattern._whereClauseTriples[1]._s);
-  ASSERT_EQ("<directed-by>", pq._rootGraphPattern._whereClauseTriples[1]._p);
+  ASSERT_EQ("<directed-by>",
+            pq._rootGraphPattern._whereClauseTriples[1]._p._iri);
   ASSERT_EQ("<Scott%2C%20Ridley>",
             pq._rootGraphPattern._whereClauseTriples[1]._o);
 
@@ -408,11 +411,12 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_EQ("?movie", pq._selectedVariables[0]);
   ASSERT_EQ(2u, pq._rootGraphPattern._whereClauseTriples.size());
   ASSERT_EQ("?movie", pq._rootGraphPattern._whereClauseTriples[0]._s);
-  ASSERT_EQ("<from-year>", pq._rootGraphPattern._whereClauseTriples[0]._p);
+  ASSERT_EQ("<from-year>", pq._rootGraphPattern._whereClauseTriples[0]._p._iri);
   ASSERT_EQ("\"00-00-2000\"^^<http://www.w3.org/2010/XMLSchema#date>",
             pq._rootGraphPattern._whereClauseTriples[0]._o);
   ASSERT_EQ("?movie", pq._rootGraphPattern._whereClauseTriples[1]._s);
-  ASSERT_EQ("<directed-by>", pq._rootGraphPattern._whereClauseTriples[1]._p);
+  ASSERT_EQ("<directed-by>",
+            pq._rootGraphPattern._whereClauseTriples[1]._p._iri);
   ASSERT_EQ("<Scott%2C%20Ridley>",
             pq._rootGraphPattern._whereClauseTriples[1]._o);
 
@@ -513,6 +517,38 @@ TEST(ParserTest, testParseLiteral) {
     caught_exception = true;
   }
   ASSERT_TRUE(caught_exception);
+}
+
+TEST(ParserTest, propertyPaths) {
+  using Op = PropertyPath::Operation;
+  std::string inp = "a/b*|c|(a/b/<a/b/c>)+";
+  PropertyPath result = PropertyPathParser(inp).parse();
+  PropertyPath expected = PropertyPath(
+      Op::ALTERNATIVE, 0, std::string(),
+      {PropertyPath(Op::SEQUENCE, 0, std::string(),
+                    {
+                        PropertyPath(Op::IRI, 0, "a", {}),
+                        PropertyPath(Op::TRANSITIVE, 0, std::string(),
+                                     {PropertyPath(Op::IRI, 0, "b", {})}),
+                    }),
+       PropertyPath(Op::IRI, 0, "c", {}),
+       PropertyPath(
+           Op::TRANSITIVE_MIN, 1, std::string(),
+           {PropertyPath(Op::SEQUENCE, 0, std::string(),
+                         {PropertyPath(Op::IRI, 0, "a", {}),
+                          PropertyPath(Op::IRI, 0, "b", {}),
+                          PropertyPath(Op::IRI, 0, "<a/b/c>", {})})})});
+  ASSERT_EQ(expected, result);
+
+  // Ensure whitespace is not accepted
+  inp = "a | b\t / \nc";
+  bool failed = false;
+  try {
+    result = PropertyPathParser(inp).parse();
+  } catch (const ParseException& e) {
+    failed = true;
+  }
+  ASSERT_TRUE(failed);
 }
 
 int main(int argc, char** argv) {

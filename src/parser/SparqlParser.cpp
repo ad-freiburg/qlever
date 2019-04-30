@@ -12,6 +12,7 @@
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
 #include "./ParseException.h"
+#include "PropertyPathParser.h"
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parse(const string& query) {
@@ -454,7 +455,7 @@ void SparqlParser::addWhereTriple(const string& str,
     o = stripAndLowercaseKeywordLiteral(o);
   }
 
-  SparqlTriple triple(s, p, o);
+  SparqlTriple triple(s, PropertyPathParser(p).parse(), o);
   // Quadratic in number of triples in query.
   // Shouldn't be a problem here, though.
   // Could use a (hash)-set instead of vector.
@@ -629,7 +630,8 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
                          pattern->_whereClauseTriples.end(),
                          [&lvar](const auto& tr) { return tr._o == lvar; });
         while (it != pattern->_whereClauseTriples.end() &&
-               ad_utility::startsWith(it->_p, "?")) {
+               it->_p._operation == PropertyPath::Operation::IRI &&
+               ad_utility::startsWith(it->_p._iri, "?")) {
           it = std::find_if(it + 1, pattern->_whereClauseTriples.end(),
                             [&lvar](const auto& tr) { return tr._o == lvar; });
         }
@@ -639,7 +641,9 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
                      "that did not appear as object in any suitable triple. "
                      "using special literal-to-language triple instead.\n";
           auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-          SparqlTriple triple(lvar, LANGUAGE_PREDICATE, langEntity);
+          PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
+          taggedPredicate._iri = LANGUAGE_PREDICATE;
+          SparqlTriple triple(lvar, taggedPredicate, langEntity);
           // Quadratic in number of triples in query.
           // Shouldn't be a problem here, though.
           // Could use a (hash)-set instead of vector.
@@ -652,7 +656,8 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
           }
         } else {
           // replace the triple
-          string taggedPredicate = '@' + langTag + '@' + it->_p;
+          PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
+          taggedPredicate._iri = '@' + langTag + '@' + it->_p._iri;
           *it = SparqlTriple(it->_s, taggedPredicate, it->_o);
         }
 
@@ -709,7 +714,8 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
                            pattern->_whereClauseTriples.end(),
                            [&lvar](const auto& tr) { return tr._o == lvar; });
     while (it != pattern->_whereClauseTriples.end() &&
-           ad_utility::startsWith(it->_p, "?")) {
+           it->_p._operation == PropertyPath::Operation::IRI &&
+           ad_utility::startsWith(it->_p._iri, "?")) {
       it = std::find_if(it + 1, pattern->_whereClauseTriples.end(),
                         [&lvar](const auto& tr) { return tr._o == lvar; });
     }
@@ -718,7 +724,9 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
                        "that did not appear as object in any suitable triple. "
                        "using special literal-to-language triple instead.\n";
       auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-      SparqlTriple triple(lvar, LANGUAGE_PREDICATE, langEntity);
+      PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
+      taggedPredicate._iri = LANGUAGE_PREDICATE;
+      SparqlTriple triple(lvar, taggedPredicate, langEntity);
       // Quadratic in number of triples in query.
       // Shouldn't be a problem here, though.
       // Could use a (hash)-set instead of vector.
@@ -731,7 +739,9 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
       }
     } else {
       // replace the triple
-      string taggedPredicate = '@' + langTag + '@' + it->_p;
+      PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
+      taggedPredicate._iri = '@' + langTag + '@' + it->_p._iri;
+
       *it = SparqlTriple(it->_s, taggedPredicate, it->_o);
     }
 
