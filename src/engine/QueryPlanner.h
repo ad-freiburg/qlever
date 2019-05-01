@@ -14,7 +14,7 @@ class QueryPlanner {
  public:
   explicit QueryPlanner(QueryExecutionContext* qec);
 
-  QueryExecutionTree createExecutionTree(ParsedQuery& pq) const;
+  QueryExecutionTree createExecutionTree(ParsedQuery& pq);
 
   class TripleGraph {
    public:
@@ -158,19 +158,74 @@ class QueryPlanner {
 
  private:
   QueryExecutionContext* _qec;
+  // Used to generate random variables.
+  unsigned int _randomSeed;
 
   static bool isVariable(const string& elem);
   static bool isVariable(const PropertyPath& elem);
 
+  /**
+   * @brief Fills varToTrip with a mapping from all variables in the root graph
+   * pattern (no matter whether they are in the subject, predicate or object) to
+   * the triple they occur in. Fills contextVars with all subject variables for
+   * which the predicate is either 'contains-word' or 'contains-entity'.
+   */
   void getVarTripleMap(
       const ParsedQuery& pq,
-      ad_utility::HashMap<string, vector<SparqlTriple>>& varToTrip,
-      ad_utility::HashSet<string>& contextVars) const;
+      ad_utility::HashMap<string, vector<SparqlTriple>>* varToTrip,
+      ad_utility::HashSet<string>* contextVars) const;
 
+  /**
+   * @brief Fills children with all operations that are associated with a single
+   * node in the triple graph (e.g. IndexScans).
+   */
   vector<SubtreePlan> seedWithScansAndText(
       const TripleGraph& tg,
-      const vector<QueryPlanner::SubtreePlan*>& children) const;
+      const vector<QueryPlanner::SubtreePlan*>& children);
 
+  /**
+   * @brief Returns a subtree plan that will compute the values for the
+   * variables in this single triple. Depending on the triple's PropertyPath
+   * this subtree can be arbitrarily large.
+   */
+  SubtreePlan seedFromPropertyPathTriple(const SparqlTriple& triple);
+
+  /**
+   * @brief Returns a subtree plan for a triple of the form 'left path right'.
+   *        Path must not be a variable.
+   */
+  SubtreePlan seedFromPropertyPath(const std::string& left,
+                                   const PropertyPath& path,
+                                   const std::string& right);
+
+  SubtreePlan seedFromSequence(const std::string& left,
+                               const PropertyPath& path,
+                               const std::string& right);
+  SubtreePlan seedFromAlternative(const std::string& left,
+                                  const PropertyPath& path,
+                                  const std::string& right);
+  SubtreePlan seedFromTransitive(const std::string& left,
+                                 const PropertyPath& path,
+                                 const std::string& right);
+  SubtreePlan seedFromTransitiveMin(const std::string& left,
+                                    const PropertyPath& path,
+                                    const std::string& right);
+  SubtreePlan seedFromTransitiveMax(const std::string& left,
+                                    const PropertyPath& path,
+                                    const std::string& right);
+  SubtreePlan seedFromInverse(const std::string& left, const PropertyPath& path,
+                              const std::string& right);
+  SubtreePlan seedFromIri(const std::string& left, const PropertyPath& path,
+                          const std::string& right);
+
+  std::string generateRandomVarName();
+
+  /**
+   * @brief Merges two rows of the dp optimization table using various types of
+   * joins.
+   * @return A new row for the dp table that contains plans created by joining
+   * the result of a plan in a and a plan in b.
+   */
   vector<SubtreePlan> merge(const vector<SubtreePlan>& a,
                             const vector<SubtreePlan>& b,
                             const TripleGraph& tg) const;
@@ -209,7 +264,7 @@ class QueryPlanner {
 
   vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
-      const vector<SubtreePlan*>& children) const;
+      const vector<SubtreePlan*>& children);
 
   size_t getTextLimit(const string& textLimitString) const;
 

@@ -4,6 +4,7 @@
 
 #include "./QueryPlanner.h"
 #include <algorithm>
+#include <ctime>
 #include "../parser/ParseException.h"
 #include "CountAvailablePredicates.h"
 #include "Distinct.h"
@@ -22,10 +23,12 @@
 #include "Union.h"
 
 // _____________________________________________________________________________
-QueryPlanner::QueryPlanner(QueryExecutionContext* qec) : _qec(qec) {}
+QueryPlanner::QueryPlanner(QueryExecutionContext* qec) : _qec(qec) {
+  _randomSeed = time(NULL);
+}
 
 // _____________________________________________________________________________
-QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
+QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   // Create a topological sorting of the trees GraphPatterns where children are
   // in the list after their parents. This allows for ensuring that children are
   // already optimized when their parents need to be optimized
@@ -62,7 +65,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) const {
   // If the pattern trick is used the ql:has-predicate triple will be removed
   // from the list of where clause triples. Otherwise the ql:has-relation triple
   // will be handled using a HasRelationScan.
-  SparqlTriple patternTrickTriple("", "", "");
+  SparqlTriple patternTrickTriple("", PropertyPath(), "");
   bool usePatternTrick = checkUsePatternTrick(&pq, &patternTrickTriple);
 
   bool doGrouping = pq._groupByVariables.size() > 0 || usePatternTrick;
@@ -264,7 +267,7 @@ bool QueryPlanner::checkUsePatternTrick(
         // Check that the triples predicates is the HAS_PREDICATE_PREDICATE.
         // Also check that the triples object matches the aliases input variable
         // and the group by variable.
-        if (t._p == HAS_PREDICATE_PREDICATE && alias._inVarName == t._o &&
+        if (t._p._iri == HAS_PREDICATE_PREDICATE && alias._inVarName == t._o &&
             pq->_groupByVariables[0] == t._o) {
           // Assume we will use the pattern trick for now but run several more
           // checks before actually modifying the query.
@@ -284,8 +287,8 @@ bool QueryPlanner::checkUsePatternTrick(
                j++) {
             const SparqlTriple& other =
                 pq->_rootGraphPattern._whereClauseTriples[j];
-            if (j != i &&
-                (other._s == t._o || other._p == t._o || other._o == t._o)) {
+            if (j != i && (other._s == t._o || other._p._iri == t._o ||
+                           other._o == t._o)) {
               usePatternTrick = false;
             }
           }
@@ -329,7 +332,8 @@ bool QueryPlanner::checkUsePatternTrick(
               }
 
               for (const SparqlTriple& other : pattern->_whereClauseTriples) {
-                if (other._s == t._o || other._p == t._o || other._o == t._o) {
+                if (other._s == t._o || other._p._iri == t._o ||
+                    other._o == t._o) {
                   usePatternTrick = false;
                   break;
                 }
@@ -672,24 +676,25 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
 // _____________________________________________________________________________
 void QueryPlanner::getVarTripleMap(
     const ParsedQuery& pq,
-    ad_utility::HashMap<string, vector<SparqlTriple>>& varToTrip,
-    ad_utility::HashSet<string>& contextVars) const {
+    ad_utility::HashMap<string, vector<SparqlTriple>>* varToTrip,
+    ad_utility::HashSet<string>* contextVars) const {
   for (auto& t : pq._rootGraphPattern._whereClauseTriples) {
     if (isVariable(t._s)) {
-      varToTrip[t._s].push_back(t);
+      (*varToTrip)[t._s].push_back(t);
     }
     if (isVariable(t._p)) {
-      varToTrip[t._p].push_back(t);
+      (*varToTrip)[t._p._iri].push_back(t);
     }
     if (isVariable(t._o)) {
-      varToTrip[t._o].push_back(t);
+      (*varToTrip)[t._o].push_back(t);
     }
     // TODO: Could use more refactoring.
     // In Earlier versions there were no ql:contains... predicates but
     // a symmetric <in-text> predicate. Therefore some parts are still more
     // complex than need be.
-    if (t._p == CONTAINS_WORD_PREDICATE || t._p == CONTAINS_ENTITY_PREDICATE) {
-      contextVars.insert(t._s);
+    if (t._p._iri == CONTAINS_WORD_PREDICATE ||
+        t._p._iri == CONTAINS_ENTITY_PREDICATE) {
+      contextVars->insert(t._s);
     }
   }
 }
@@ -741,7 +746,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
-    const vector<QueryPlanner::SubtreePlan*>& children) const {
+    const vector<QueryPlanner::SubtreePlan*>& children) {
   vector<SubtreePlan> seeds;
   // add all child plans as seeds
   uint32_t idShift = tg._nodeMap.size();
@@ -763,274 +768,462 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             ad_semsearch::Exception::BAD_QUERY,
             "Triples should have at least one variable. Not the case in: " +
                 node._triple.asString());
-      } else if (node._variables.size() == 1) {
-        // Just pick one direction, they should be equivalent.
-        SubtreePlan plan(_qec);
-        plan._idsOfIncludedNodes |= (size_t(1) << i);
-        auto& tree = *plan._qet.get();
-        if (node._triple._p == HAS_PREDICATE_PREDICATE) {
-          // Add a has relation scan instead of a normal IndexScan
-          if (isVariable(node._triple._s)) {
-            std::shared_ptr<Operation> scan =
-                std::make_shared<HasPredicateScan>(
-                    _qec, HasPredicateScan::ScanType::FREE_S);
-            static_cast<HasPredicateScan*>(scan.get())
-                ->setSubject(node._triple._s);
-            static_cast<HasPredicateScan*>(scan.get())
-                ->setObject(node._triple._o);
-            tree.setOperation(
-                QueryExecutionTree::OperationType::HAS_RELATION_SCAN, scan);
-            tree.setVariableColumns(static_cast<HasPredicateScan*>(scan.get())
-                                        ->getVariableColumns());
-          } else if (isVariable(node._triple._o)) {
-            std::shared_ptr<Operation> scan =
-                std::make_shared<HasPredicateScan>(
-                    _qec, HasPredicateScan::ScanType::FREE_O);
-            static_cast<HasPredicateScan*>(scan.get())
-                ->setSubject(node._triple._s);
-            static_cast<HasPredicateScan*>(scan.get())
-                ->setObject(node._triple._o);
-            tree.setOperation(
-                QueryExecutionTree::OperationType::HAS_RELATION_SCAN, scan);
-            tree.setVariableColumns(static_cast<HasPredicateScan*>(scan.get())
-                                        ->getVariableColumns());
-          }
-        } else if (isVariable(node._triple._s)) {
-          std::shared_ptr<Operation> scan(
-              new IndexScan(_qec, IndexScan::ScanType::POS_BOUND_O));
-          static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
-          static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
-          static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
-          tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-          tree.setVariableColumn(node._triple._s, 0);
-        } else if (isVariable(node._triple._o)) {
-          std::shared_ptr<Operation> scan(
-              new IndexScan(_qec, IndexScan::ScanType::PSO_BOUND_S));
-          static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
-          static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
-          static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
-          tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-          tree.setVariableColumn(node._triple._o, 0);
-        } else {
+      }
+      // If the predicate is a variable deal with it by creating an IndexScan.
+      if (isVariable(node._triple._p)) {
+        if (node._variables.size() == 1) {
+          SubtreePlan plan(_qec);
+          plan._idsOfIncludedNodes |= (uint64_t(1) << i);
+          auto& tree = *plan._qet.get();
           std::shared_ptr<Operation> scan(
               new IndexScan(_qec, IndexScan::ScanType::SOP_BOUND_O));
           static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
-          static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
+          static_cast<IndexScan*>(scan.get())
+              ->setPredicate(node._triple._p._iri);
           static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
           tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-          tree.setVariableColumn(node._triple._p, 0);
-        }
-        seeds.push_back(plan);
-      } else if (node._variables.size() == 2) {
-        // Add plans for both possible scan directions.
-        if (node._triple._p == HAS_PREDICATE_PREDICATE) {
-          // Add a has relation scan instead of a normal IndexScan
-          SubtreePlan plan(_qec);
-          plan._idsOfIncludedNodes |= (size_t(1) << i);
-          auto& tree = *plan._qet.get();
-          std::shared_ptr<Operation> scan(new HasPredicateScan(
-              _qec, HasPredicateScan::ScanType::FULL_SCAN));
-          static_cast<HasPredicateScan*>(scan.get())
-              ->setSubject(node._triple._s);
-          static_cast<HasPredicateScan*>(scan.get())
-              ->setObject(node._triple._o);
-          tree.setOperation(
-              QueryExecutionTree::OperationType::HAS_RELATION_SCAN, scan);
-          tree.setVariableColumns(
-              static_cast<HasPredicateScan*>(scan.get())->getVariableColumns());
+          tree.setVariableColumn(node._triple._p._iri, 0);
           seeds.push_back(plan);
-        } else if (!isVariable(node._triple._p)) {
-          {
-            SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (size_t(1) << i);
-            auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> scan(
-                new IndexScan(_qec, IndexScan::ScanType::PSO_FREE_S));
-            static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
-            static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
-            static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
-            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._s, 0);
-            tree.setVariableColumn(node._triple._o, 1);
-            seeds.push_back(plan);
+        } else if (node._variables.size() == 2) {
+          // Add plans for both possible scan directions.
+          if (!isVariable(node._triple._s)) {
+            {
+              SubtreePlan plan(_qec);
+              plan._idsOfIncludedNodes |= (uint64_t(1) << i);
+              auto& tree = *plan._qet.get();
+              std::shared_ptr<Operation> scan(
+                  new IndexScan(_qec, IndexScan::ScanType::SPO_FREE_P));
+              static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
+              static_cast<IndexScan*>(scan.get())
+                  ->setPredicate(node._triple._p._iri);
+              static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
+              static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+              tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
+              tree.setVariableColumn(node._triple._p._iri, 0);
+              tree.setVariableColumn(node._triple._o, 1);
+              seeds.push_back(plan);
+            }
+            {
+              SubtreePlan plan(_qec);
+              plan._idsOfIncludedNodes |= (uint64_t(1) << i);
+              auto& tree = *plan._qet.get();
+              std::shared_ptr<Operation> scan(
+                  new IndexScan(_qec, IndexScan::ScanType::SOP_FREE_O));
+              static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
+              static_cast<IndexScan*>(scan.get())
+                  ->setPredicate(node._triple._p._iri);
+              static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
+              static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+              tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
+              tree.setVariableColumn(node._triple._o, 0);
+              tree.setVariableColumn(node._triple._p._iri, 1);
+              seeds.push_back(plan);
+            }
+          } else if (!isVariable(node._triple._o)) {
+            {
+              SubtreePlan plan(_qec);
+              plan._idsOfIncludedNodes |= (uint64_t(1) << i);
+              auto& tree = *plan._qet.get();
+              std::shared_ptr<Operation> scan(
+                  new IndexScan(_qec, IndexScan::ScanType::OSP_FREE_S));
+              static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
+              static_cast<IndexScan*>(scan.get())
+                  ->setPredicate(node._triple._p._iri);
+              static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
+              static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+              tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
+              tree.setVariableColumn(node._triple._s, 0);
+              tree.setVariableColumn(node._triple._p._iri, 1);
+              seeds.push_back(plan);
+            }
+            {
+              SubtreePlan plan(_qec);
+              plan._idsOfIncludedNodes |= (uint64_t(1) << i);
+              auto& tree = *plan._qet.get();
+              std::shared_ptr<Operation> scan(
+                  new IndexScan(_qec, IndexScan::ScanType::OPS_FREE_P));
+              static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
+              static_cast<IndexScan*>(scan.get())
+                  ->setPredicate(node._triple._p._iri);
+              static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
+              static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+              tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
+              tree.setVariableColumn(node._triple._p._iri, 0);
+              tree.setVariableColumn(node._triple._s, 1);
+              seeds.push_back(plan);
+            }
           }
-          {
-            SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (size_t(1) << i);
-            auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> scan(
-                new IndexScan(_qec, IndexScan::ScanType::POS_FREE_O));
-            static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
-            static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
-            static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
-            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._o, 0);
-            tree.setVariableColumn(node._triple._s, 1);
-            seeds.push_back(plan);
-          }
-        } else if (!isVariable(node._triple._s)) {
-          {
-            SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (size_t(1) << i);
-            auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> scan(
-                new IndexScan(_qec, IndexScan::ScanType::SPO_FREE_P));
-            static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
-            static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
-            static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
-            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._p, 0);
-            tree.setVariableColumn(node._triple._o, 1);
-            seeds.push_back(plan);
-          }
-          {
-            SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (size_t(1) << i);
-            auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> scan(
-                new IndexScan(_qec, IndexScan::ScanType::SOP_FREE_O));
-            static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
-            static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
-            static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
-            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._o, 0);
-            tree.setVariableColumn(node._triple._p, 1);
-            seeds.push_back(plan);
-          }
-        } else if (!isVariable(node._triple._o)) {
-          {
-            SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (size_t(1) << i);
-            auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> scan(
-                new IndexScan(_qec, IndexScan::ScanType::OSP_FREE_S));
-            static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
-            static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
-            static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
-            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._s, 0);
-            tree.setVariableColumn(node._triple._p, 1);
-            seeds.push_back(plan);
-          }
-          {
-            SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (size_t(1) << i);
-            auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> scan(
-                new IndexScan(_qec, IndexScan::ScanType::OPS_FREE_P));
-            static_cast<IndexScan*>(scan.get())->setSubject(node._triple._s);
-            static_cast<IndexScan*>(scan.get())->setPredicate(node._triple._p);
-            static_cast<IndexScan*>(scan.get())->setObject(node._triple._o);
-            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._p, 0);
-            tree.setVariableColumn(node._triple._s, 1);
-            seeds.push_back(plan);
+        } else {
+          if (!_qec || _qec->getIndex().hasAllPermutations()) {
+            // Add plans for all six permutations.
+            // SPO
+            {
+              SubtreePlan plan(_qec);
+              plan._idsOfIncludedNodes |= (uint64_t(1) << i);
+              auto& tree = *plan._qet.get();
+              std::shared_ptr<Operation> scan(new IndexScan(
+                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_SPO));
+              static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+              tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
+              tree.setVariableColumn(node._triple._s, 0);
+              tree.setVariableColumn(node._triple._p._iri, 1);
+              tree.setVariableColumn(node._triple._o, 2);
+              seeds.push_back(plan);
+            }
+            // SOP
+            {
+              SubtreePlan plan(_qec);
+              plan._idsOfIncludedNodes |= (uint64_t(1) << i);
+              auto& tree = *plan._qet.get();
+              std::shared_ptr<Operation> scan(new IndexScan(
+                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_SOP));
+              static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+              tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
+              tree.setVariableColumn(node._triple._s, 0);
+              tree.setVariableColumn(node._triple._o, 1);
+              tree.setVariableColumn(node._triple._p._iri, 2);
+              seeds.push_back(plan);
+            }
+            // PSO
+            {
+              SubtreePlan plan(_qec);
+              plan._idsOfIncludedNodes |= (uint64_t(1) << i);
+              auto& tree = *plan._qet.get();
+              std::shared_ptr<Operation> scan(new IndexScan(
+                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_PSO));
+              static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+              tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
+              tree.setVariableColumn(node._triple._p._iri, 0);
+              tree.setVariableColumn(node._triple._s, 1);
+              tree.setVariableColumn(node._triple._o, 2);
+              seeds.push_back(plan);
+            }
+            // POS
+            {
+              SubtreePlan plan(_qec);
+              plan._idsOfIncludedNodes |= (uint64_t(1) << i);
+              auto& tree = *plan._qet.get();
+              std::shared_ptr<Operation> scan(new IndexScan(
+                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_POS));
+              static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+              tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
+              tree.setVariableColumn(node._triple._p._iri, 0);
+              tree.setVariableColumn(node._triple._o, 1);
+              tree.setVariableColumn(node._triple._s, 2);
+              seeds.push_back(plan);
+            }
+            // OSP
+            {
+              SubtreePlan plan(_qec);
+              plan._idsOfIncludedNodes |= (uint64_t(1) << i);
+              auto& tree = *plan._qet.get();
+              std::shared_ptr<Operation> scan(new IndexScan(
+                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_OSP));
+              static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+              tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
+              tree.setVariableColumn(node._triple._o, 0);
+              tree.setVariableColumn(node._triple._s, 1);
+              tree.setVariableColumn(node._triple._p._iri, 2);
+              seeds.push_back(plan);
+            }
+            // OPS
+            {
+              SubtreePlan plan(_qec);
+              plan._idsOfIncludedNodes |= (uint64_t(1) << i);
+              auto& tree = *plan._qet.get();
+              std::shared_ptr<Operation> scan(new IndexScan(
+                  _qec, IndexScan::ScanType::FULL_INDEX_SCAN_OPS));
+              static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+              tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
+              tree.setVariableColumn(node._triple._o, 0);
+              tree.setVariableColumn(node._triple._p._iri, 1);
+              tree.setVariableColumn(node._triple._s, 2);
+              seeds.push_back(plan);
+            }
+          } else {
+            AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+                     "With only 2 permutations registered (no -a option), "
+                     "triples should have at most two variables. "
+                     "Not the case in: " +
+                         node._triple.asString());
           }
         }
       } else {
-        if (!_qec || _qec->getIndex().hasAllPermutations()) {
-          // Add plans for all six permutations.
-          // SPO
-          {
-            SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (size_t(1) << i);
-            auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> scan(
-                new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_SPO));
-            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._s, 0);
-            tree.setVariableColumn(node._triple._p, 1);
-            tree.setVariableColumn(node._triple._o, 2);
-            seeds.push_back(plan);
-          }
-          // SOP
-          {
-            SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (size_t(1) << i);
-            auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> scan(
-                new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_SOP));
-            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._s, 0);
-            tree.setVariableColumn(node._triple._o, 1);
-            tree.setVariableColumn(node._triple._p, 2);
-            seeds.push_back(plan);
-          }
-          // PSO
-          {
-            SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (size_t(1) << i);
-            auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> scan(
-                new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_PSO));
-            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._p, 0);
-            tree.setVariableColumn(node._triple._s, 1);
-            tree.setVariableColumn(node._triple._o, 2);
-            seeds.push_back(plan);
-          }
-          // POS
-          {
-            SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (size_t(1) << i);
-            auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> scan(
-                new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_POS));
-            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._p, 0);
-            tree.setVariableColumn(node._triple._o, 1);
-            tree.setVariableColumn(node._triple._s, 2);
-            seeds.push_back(plan);
-          }
-          // OSP
-          {
-            SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (size_t(1) << i);
-            auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> scan(
-                new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_OSP));
-            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._o, 0);
-            tree.setVariableColumn(node._triple._s, 1);
-            tree.setVariableColumn(node._triple._p, 2);
-            seeds.push_back(plan);
-          }
-          // OPS
-          {
-            SubtreePlan plan(_qec);
-            plan._idsOfIncludedNodes |= (size_t(1) << i);
-            auto& tree = *plan._qet.get();
-            std::shared_ptr<Operation> scan(
-                new IndexScan(_qec, IndexScan::ScanType::FULL_INDEX_SCAN_OPS));
-            static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
-            tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
-            tree.setVariableColumn(node._triple._o, 0);
-            tree.setVariableColumn(node._triple._p, 1);
-            tree.setVariableColumn(node._triple._s, 2);
-            seeds.push_back(plan);
-          }
-        } else {
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                   "With only 2 permutations registered (no -a option), "
-                   "triples should have at most two variables. "
-                   "Not the case in: " +
-                       node._triple.asString());
-        }
+        // The Property path is complex
+        SubtreePlan plan = seedFromPropertyPathTriple(node._triple);
+        plan._idsOfIncludedNodes |= (uint64_t(1) << i);
+        seeds.push_back(plan);
       }
     }
   }
   return seeds;
+}
+
+// _____________________________________________________________________________
+QueryPlanner::SubtreePlan QueryPlanner::seedFromPropertyPathTriple(
+    const SparqlTriple& triple) {
+  return seedFromPropertyPath(triple._s, triple._p, triple._o);
+}
+
+QueryPlanner::SubtreePlan QueryPlanner::seedFromPropertyPath(
+    const std::string& left, const PropertyPath& path,
+    const std::string& right) {
+  switch (path._operation) {
+    case PropertyPath::Operation::ALTERNATIVE:
+      return seedFromAlternative(left, path, right);
+    case PropertyPath::Operation::INVERSE:
+      return seedFromInverse(left, path, right);
+    case PropertyPath::Operation::IRI:
+      return seedFromIri(left, path, right);
+    case PropertyPath::Operation::SEQUENCE:
+      return seedFromSequence(left, path, right);
+    case PropertyPath::Operation::TRANSITIVE:
+      return seedFromTransitive(left, path, right);
+    case PropertyPath::Operation::TRANSITIVE_MAX:
+      return seedFromTransitiveMax(left, path, right);
+    case PropertyPath::Operation::TRANSITIVE_MIN:
+      return seedFromTransitiveMin(left, path, right);
+  }
+  AD_THROW(
+      ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+      "No implementation for creating a seed from a property path of type " +
+          ((int)path._operation));
+}
+
+// _____________________________________________________________________________
+QueryPlanner::SubtreePlan QueryPlanner::seedFromSequence(
+    const std::string& left, const PropertyPath& path,
+    const std::string& right) {
+  if (path._children.size() == 0) {
+    AD_THROW(
+        ad_semsearch::Exception::BAD_INPUT,
+        "Tried processing a sequence property path node without any children.");
+  } else if (path._children.size() == 1) {
+    LOG(WARN) << "Processing a sequence property path that has only one child."
+              << std::endl;
+    return seedFromPropertyPath(left, path, right);
+  }
+  //TODO: optimize the join order instead of taking an arbitrary order
+  // Create temporary variables in between the sequence elements and join them
+  std::string randVarL = generateRandomVarName();
+  SubtreePlan current = seedFromPropertyPath(left, path._children[0], randVarL);
+  for (size_t i = 1; i < path._children.size(); i++) {
+    std::string r;
+    if (i + 1 == path._children.size()) {
+      r = right;
+    } else {
+      r = generateRandomVarName();
+    }
+    SubtreePlan child = seedFromPropertyPath(randVarL, path._children[i], r);
+
+    SubtreePlan joinPlan(_qec);
+    auto jcs = getJoinColumns(current, child);
+    AD_CHECK_EQ(jcs.size(), 1);
+    std::shared_ptr<Operation> joinOp = std::make_shared<Join>(
+        _qec, current._qet, child._qet, jcs[0][0], jcs[0][1]);
+    joinPlan._qet->setOperation(QueryExecutionTree::JOIN, joinOp);
+    joinPlan._qet->setVariableColumns(
+        static_cast<Join*>(joinOp.get())->getVariableColumns());
+    current = joinPlan;
+    randVarL = r;
+  }
+  return current;
+}
+
+// _____________________________________________________________________________
+QueryPlanner::SubtreePlan QueryPlanner::seedFromAlternative(
+    const std::string& left, const PropertyPath& path,
+    const std::string& right) {
+  if (path._children.size() == 0) {
+    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+             "Tried processing an alternative property path node without any "
+             "children.");
+  } else if (path._children.size() == 1) {
+    LOG(WARN)
+        << "Processing an alternative property path that has only one child."
+        << std::endl;
+    return seedFromPropertyPath(left, path, right);
+  }
+  std::vector<SubtreePlan> childPlans;
+  childPlans.reserve(path._children.size());
+  for (size_t i = 0; i < path._children.size(); i++) {
+    childPlans.push_back(seedFromPropertyPath(left, path._children[i], right));
+  }
+  // Start with merging the smallest subresults first.
+  std::sort(childPlans.begin(), childPlans.end(), [](const SubtreePlan &p1, const SubtreePlan &p2) {
+    return p1.getSizeEstimate() < p2.getSizeEstimate();
+  });
+
+  // Create temporary variables in between the sequence elements and join them
+  SubtreePlan current = childPlans[0];
+  for (size_t i = 1; i < childPlans.size(); i++) {
+    SubtreePlan child = childPlans[i];
+
+    SubtreePlan unionPlan(_qec);
+    std::shared_ptr<Operation> unionOp =
+        std::make_shared<Union>(_qec, current._qet, child._qet);
+    unionPlan._qet->setOperation(QueryExecutionTree::UNION, unionOp);
+    unionPlan._qet->setVariableColumns(
+        static_cast<Union*>(unionOp.get())->getVariableColumns());
+    current = unionPlan;
+  }
+  return current;
+}
+
+// _____________________________________________________________________________
+QueryPlanner::SubtreePlan QueryPlanner::seedFromTransitive(
+    const std::string& left, const PropertyPath& path,
+    const std::string& right) {
+  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+           "Property paths with unconstrained transitive operations are not "
+           "yet implemented.");
+}
+
+// _____________________________________________________________________________
+QueryPlanner::SubtreePlan QueryPlanner::seedFromTransitiveMin(
+    const std::string& left, const PropertyPath& path,
+    const std::string& right) {
+  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+           "Property paths with minimum distance transitive operations are not "
+           "yet implemented.");
+}
+
+// _____________________________________________________________________________
+QueryPlanner::SubtreePlan QueryPlanner::seedFromTransitiveMax(
+    const std::string& left, const PropertyPath& path,
+    const std::string& right) {
+  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+           "Property paths with maximum distance transitive operations are not "
+           "yet implemented.");
+}
+
+// _____________________________________________________________________________
+QueryPlanner::SubtreePlan QueryPlanner::seedFromInverse(
+    const std::string& left, const PropertyPath& path,
+    const std::string& right) {
+  return seedFromPropertyPath(right, path, left);
+}
+
+// _____________________________________________________________________________
+QueryPlanner::SubtreePlan QueryPlanner::seedFromIri(const std::string& left,
+                                                    const PropertyPath& path,
+                                                    const std::string& right) {
+  int numVars = (isVariable(left) ? 1 : 0) + (isVariable(right) ? 1 : 0);
+  if (numVars == 1) {
+    // Just pick one direction, they should be equivalent.
+    SubtreePlan plan(_qec);
+
+    auto& tree = *plan._qet.get();
+    if (path._iri == HAS_PREDICATE_PREDICATE) {
+      // Add a has relation scan instead of a normal IndexScan
+      HasPredicateScan::ScanType scanType;
+      if (isVariable(left)) {
+        scanType = HasPredicateScan::ScanType::FREE_S;
+      } else if (isVariable(right)) {
+        scanType = HasPredicateScan::ScanType::FREE_O;
+      }
+      std::shared_ptr<Operation> scan =
+          std::make_shared<HasPredicateScan>(_qec, scanType);
+      static_cast<HasPredicateScan*>(scan.get())->setSubject(left);
+      static_cast<HasPredicateScan*>(scan.get())->setObject(right);
+      tree.setOperation(QueryExecutionTree::OperationType::HAS_RELATION_SCAN,
+                        scan);
+      tree.setVariableColumns(
+          static_cast<HasPredicateScan*>(scan.get())->getVariableColumns());
+    } else if (isVariable(left)) {
+      std::shared_ptr<Operation> scan(
+          new IndexScan(_qec, IndexScan::ScanType::POS_BOUND_O));
+      static_cast<IndexScan*>(scan.get())->setSubject(left);
+      static_cast<IndexScan*>(scan.get())->setPredicate(path._iri);
+      static_cast<IndexScan*>(scan.get())->setObject(right);
+      tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
+      tree.setVariableColumn(left, 0);
+    } else if (isVariable(right)) {
+      std::shared_ptr<Operation> scan(
+          new IndexScan(_qec, IndexScan::ScanType::PSO_BOUND_S));
+      static_cast<IndexScan*>(scan.get())->setSubject(left);
+      static_cast<IndexScan*>(scan.get())->setPredicate(path._iri);
+      static_cast<IndexScan*>(scan.get())->setObject(right);
+      tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
+      tree.setVariableColumn(right, 0);
+    }
+    return plan;
+  } else if (numVars == 2) {
+    // Add plans for both possible scan directions.
+    if (path._iri == HAS_PREDICATE_PREDICATE) {
+      // Add a has relation scan instead of a normal IndexScan
+      SubtreePlan plan(_qec);
+      auto& tree = *plan._qet.get();
+      std::shared_ptr<Operation> scan(
+          new HasPredicateScan(_qec, HasPredicateScan::ScanType::FULL_SCAN));
+      static_cast<HasPredicateScan*>(scan.get())->setSubject(left);
+      static_cast<HasPredicateScan*>(scan.get())->setObject(right);
+      tree.setOperation(QueryExecutionTree::OperationType::HAS_RELATION_SCAN,
+                        scan);
+      tree.setVariableColumns(
+          static_cast<HasPredicateScan*>(scan.get())->getVariableColumns());
+      return plan;
+    } else {
+      {
+        SubtreePlan plan(_qec);
+        auto& tree = *plan._qet.get();
+        std::shared_ptr<Operation> scan(
+            new IndexScan(_qec, IndexScan::ScanType::PSO_FREE_S));
+        static_cast<IndexScan*>(scan.get())->setSubject(left);
+        static_cast<IndexScan*>(scan.get())->setPredicate(path._iri);
+        static_cast<IndexScan*>(scan.get())->setObject(right);
+        static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+        tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
+        tree.setVariableColumn(left, 0);
+        tree.setVariableColumn(right, 1);
+        return plan;
+      }
+      {
+        SubtreePlan plan(_qec);
+        auto& tree = *plan._qet.get();
+        std::shared_ptr<Operation> scan(
+            new IndexScan(_qec, IndexScan::ScanType::POS_FREE_O));
+        static_cast<IndexScan*>(scan.get())->setSubject(left);
+        static_cast<IndexScan*>(scan.get())->setPredicate(path._iri);
+        static_cast<IndexScan*>(scan.get())->setObject(right);
+        static_cast<IndexScan*>(scan.get())->precomputeSizeEstimate();
+        tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
+        tree.setVariableColumn(right, 0);
+        tree.setVariableColumn(left, 1);
+        return plan;
+      }
+    }
+  }
+  AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+           "Requested to create a seed plan from an iri property path that had "
+           "a variable as its predicate.");
+}
+
+// _____________________________________________________________________________
+std::string QueryPlanner::generateRandomVarName() {
+  std::string name(64, ' ');
+  // pick random characters in the range [65-90] and [97-122]
+
+  // How many random characters we can extract from a single call to rand
+  int rand_bytes = (int)(std::log(RAND_MAX) / std::log(52));
+  int current_rand = rand_r(&_randomSeed);
+  int bytes_left = rand_bytes;
+  for (int i = 0; i < 64; i++) {
+    if (bytes_left <= 0) {
+      current_rand = rand_r(&_randomSeed);
+      bytes_left = rand_bytes;
+    }
+    uint8_t v = (rand_bytes & 0xFF) % 52;
+    if (v >= 26) {
+      // Characters a-z
+      v += 'a' - 26;
+    } else {
+      // Characters A-Z
+      v += 'A';
+    }
+    current_rand /= 52;
+  }
+  return name;
 }
 
 // _____________________________________________________________________________
@@ -1661,7 +1854,7 @@ std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
 // _____________________________________________________________________________
 vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, const vector<SparqlFilter>& filters,
-    const vector<QueryPlanner::SubtreePlan*>& children) const {
+    const vector<QueryPlanner::SubtreePlan*>& children) {
   LOG(TRACE) << "Fill DP table... (there are "
              << tg._nodeMap.size() + children.size() << " triples to join)"
              << std::endl;
@@ -1706,11 +1899,12 @@ size_t QueryPlanner::getTextLimit(const string& textLimitString) const {
 
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
-  return _nodeMap.count(i) > 0 &&
-         (_nodeMap.find(i)->second->_triple._p == CONTAINS_ENTITY_PREDICATE ||
-          _nodeMap.find(i)->second->_triple._p == CONTAINS_WORD_PREDICATE ||
-          _nodeMap.find(i)->second->_triple._p ==
-              INTERNAL_TEXT_MATCH_PREDICATE);
+  return _nodeMap.count(i) > 0 && (_nodeMap.find(i)->second->_triple._p._iri ==
+                                       CONTAINS_ENTITY_PREDICATE ||
+                                   _nodeMap.find(i)->second->_triple._p._iri ==
+                                       CONTAINS_WORD_PREDICATE ||
+                                   _nodeMap.find(i)->second->_triple._p._iri ==
+                                       INTERNAL_TEXT_MATCH_PREDICATE);
 }
 
 // _____________________________________________________________________________
