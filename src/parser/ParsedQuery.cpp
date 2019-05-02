@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "ParsedQuery.h"
+
 #include <optional>
 #include <sstream>
 #include <string>
@@ -10,7 +12,6 @@
 #include "../util/Conversions.h"
 #include "../util/StringUtils.h"
 #include "ParseException.h"
-#include "ParsedQuery.h"
 
 using std::string;
 using std::vector;
@@ -512,6 +513,39 @@ void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
 }
 
 // _____________________________________________________________________________
+void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
+  bool allocatedIdCounter = false;
+  if (id_count == nullptr) {
+    id_count = new size_t(0);
+    allocatedIdCounter = true;
+  }
+  _id = *id_count;
+  (*id_count)++;
+  for (GraphPatternOperation* op : _children) {
+    switch (op->_type) {
+      case GraphPatternOperation::Type::OPTIONAL:
+      case GraphPatternOperation::Type::UNION:
+        for (GraphPattern* p : op->_childGraphPatterns) {
+          p->recomputeIds(id_count);
+        }
+        break;
+      case GraphPatternOperation::Type::TRANS_PATH:
+        if (op->_pathData._childGraphPattern != nullptr) {
+          op->_pathData._childGraphPattern->recomputeIds(id_count);
+        }
+        break;
+      case GraphPatternOperation::Type::SUBQUERY:
+        // subquery children have their own id space
+        break;
+    }
+  }
+
+  if (allocatedIdCounter) {
+    delete id_count;
+  }
+}
+
+// _____________________________________________________________________________
 ParsedQuery::GraphPatternOperation::GraphPatternOperation(
     ParsedQuery::GraphPatternOperation::Type type,
     std::initializer_list<ParsedQuery::GraphPattern*> children)
@@ -546,6 +580,13 @@ ParsedQuery::GraphPatternOperation::GraphPatternOperation(
     case Type::SUBQUERY:
       _subquery = nullptr;
       break;
+    case Type::TRANS_PATH:
+      new (&_pathData._left) std::string();
+      new (&_pathData._right) std::string();
+      _pathData._max = 0;
+      _pathData._min = 0;
+      _pathData._childGraphPattern = nullptr;
+      break;
     default:
       AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
                "This constructor should only be used for SUBQUERY"
@@ -560,6 +601,9 @@ ParsedQuery::GraphPatternOperation::GraphPatternOperation(
   if (_type == Type::SUBQUERY) {
     _subquery = other._subquery;
     other._subquery = nullptr;
+  } else if (_type == Type::TRANS_PATH) {
+    _pathData = std::move(other._pathData);
+    other._pathData._childGraphPattern = nullptr;
   } else {
     new (&_childGraphPatterns) std::vector<GraphPattern*>();
     _childGraphPatterns = std::move(other._childGraphPatterns);
@@ -573,6 +617,13 @@ ParsedQuery::GraphPatternOperation::GraphPatternOperation(
     : _type(other._type) {
   if (_type == Type::SUBQUERY) {
     _subquery = new ParsedQuery(*other._subquery);
+  } else if (_type == Type::TRANS_PATH) {
+    _pathData._childGraphPattern =
+        new GraphPattern(*other._pathData._childGraphPattern);
+    _pathData._min = other._pathData._min;
+    _pathData._max = other._pathData._max;
+    _pathData._left = other._pathData._left;
+    _pathData._right = other._pathData._right;
   } else {
     new (&_childGraphPatterns) std::vector<GraphPattern*>();
     _childGraphPatterns.reserve(other._childGraphPatterns.size());
@@ -587,6 +638,8 @@ ParsedQuery::GraphPatternOperation& ParsedQuery::GraphPatternOperation::
 operator=(const ParsedQuery::GraphPatternOperation& other) {
   if (_type == Type::SUBQUERY) {
     delete _subquery;
+  } else if (_type == Type::TRANS_PATH) {
+    delete _pathData._childGraphPattern;
   } else {
     for (GraphPattern* p : _childGraphPatterns) {
       delete p;
@@ -596,6 +649,13 @@ operator=(const ParsedQuery::GraphPatternOperation& other) {
   _type = other._type;
   if (_type == Type::SUBQUERY) {
     _subquery = new ParsedQuery(*other._subquery);
+  } else if (_type == Type::TRANS_PATH) {
+    _pathData._childGraphPattern =
+        new GraphPattern(*other._pathData._childGraphPattern);
+    _pathData._min = other._pathData._min;
+    _pathData._max = other._pathData._max;
+    _pathData._left = other._pathData._left;
+    _pathData._right = other._pathData._right;
   } else {
     new (&_childGraphPatterns) std::vector<GraphPattern*>();
     _childGraphPatterns.reserve(other._childGraphPatterns.size());
@@ -610,6 +670,8 @@ operator=(const ParsedQuery::GraphPatternOperation& other) {
 ParsedQuery::GraphPatternOperation::~GraphPatternOperation() {
   if (_type == Type::SUBQUERY) {
     delete _subquery;
+  } else if (_type == Type::TRANS_PATH) {
+    delete _pathData._childGraphPattern;
   } else {
     for (GraphPattern* child : _childGraphPatterns) {
       delete child;
@@ -637,6 +699,16 @@ void ParsedQuery::GraphPatternOperation::toString(std::ostringstream& os,
         os << _subquery->asString();
       } else {
         os << "Missing Subquery\n";
+      }
+      break;
+    case Type::TRANS_PATH:
+      os << "TRANS PATH from " << _pathData._left << " to " << _pathData._right
+         << " with at least " << _pathData._min << " and at most "
+         << _pathData._max << "steps of ";
+      if (_pathData._childGraphPattern != nullptr) {
+        _pathData._childGraphPattern->toString(os, indentation);
+      } else {
+        os << "Missing graph pattern.";
       }
       break;
   }

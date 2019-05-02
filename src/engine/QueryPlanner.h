@@ -160,9 +160,12 @@ class QueryPlanner {
   QueryExecutionContext* _qec;
   // Used to generate random variables.
   unsigned int _randomSeed;
+  size_t _randVarCount;
 
   static bool isVariable(const string& elem);
   static bool isVariable(const PropertyPath& elem);
+
+  std::vector<SubtreePlan> optimize(const ParsedQuery::GraphPattern *pattern);
 
   /**
    * @brief Fills varToTrip with a mapping from all variables in the root graph
@@ -181,42 +184,46 @@ class QueryPlanner {
    */
   vector<SubtreePlan> seedWithScansAndText(
       const TripleGraph& tg,
-      const vector<QueryPlanner::SubtreePlan*>& children);
+      const vector<const QueryPlanner::SubtreePlan*>& children);
 
   /**
    * @brief Returns a subtree plan that will compute the values for the
    * variables in this single triple. Depending on the triple's PropertyPath
    * this subtree can be arbitrarily large.
    */
-  SubtreePlan seedFromPropertyPathTriple(const SparqlTriple& triple);
+  vector<SubtreePlan> seedFromPropertyPathTriple(const SparqlTriple& triple);
 
   /**
-   * @brief Returns a subtree plan for a triple of the form 'left path right'.
-   *        Path must not be a variable.
+   * @brief Returns a parsed query for the property path. Optimizing that query will yield
+   *        an execution plan for every possible ordering of left and right (which is sufficient
+   *        for optimality, as left and right are the only connections of this property
+   *        path to the rest of the query).
    */
-  SubtreePlan seedFromPropertyPath(const std::string& left,
-                                   const PropertyPath& path,
-                                   const std::string& right);
+  ParsedQuery::GraphPattern seedFromPropertyPath(const std::string& left,
+                                                 const PropertyPath& path,
+                                                 const std::string& right);
 
-  SubtreePlan seedFromSequence(const std::string& left,
-                               const PropertyPath& path,
-                               const std::string& right);
-  SubtreePlan seedFromAlternative(const std::string& left,
-                                  const PropertyPath& path,
-                                  const std::string& right);
-  SubtreePlan seedFromTransitive(const std::string& left,
-                                 const PropertyPath& path,
-                                 const std::string& right);
-  SubtreePlan seedFromTransitiveMin(const std::string& left,
-                                    const PropertyPath& path,
-                                    const std::string& right);
-  SubtreePlan seedFromTransitiveMax(const std::string& left,
-                                    const PropertyPath& path,
-                                    const std::string& right);
-  SubtreePlan seedFromInverse(const std::string& left, const PropertyPath& path,
-                              const std::string& right);
-  SubtreePlan seedFromIri(const std::string& left, const PropertyPath& path,
-                          const std::string& right);
+  ParsedQuery::GraphPattern seedFromSequence(const std::string& left,
+                                             const PropertyPath& path,
+                                             const std::string& right);
+  ParsedQuery::GraphPattern seedFromAlternative(const std::string& left,
+                                                const PropertyPath& path,
+                                                const std::string& right);
+  ParsedQuery::GraphPattern seedFromTransitive(const std::string& left,
+                                               const PropertyPath& path,
+                                               const std::string& right);
+  ParsedQuery::GraphPattern seedFromTransitiveMin(const std::string& left,
+                                                  const PropertyPath& path,
+                                                  const std::string& right);
+  ParsedQuery::GraphPattern seedFromTransitiveMax(const std::string& left,
+                                                  const PropertyPath& path,
+                                                  const std::string& right);
+  ParsedQuery::GraphPattern seedFromInverse(const std::string& left,
+                                            const PropertyPath& path,
+                                            const std::string& right);
+  ParsedQuery::GraphPattern seedFromIri(const std::string& left,
+                                        const PropertyPath& path,
+                                        const std::string& right);
 
   std::string generateRandomVarName();
 
@@ -262,9 +269,9 @@ class QueryPlanner {
   std::shared_ptr<Operation> createFilterOperation(
       const SparqlFilter& filter, const SubtreePlan& parent) const;
 
-  vector<vector<SubtreePlan>> fillDpTab(
-      const TripleGraph& graph, const vector<SparqlFilter>& fs,
-      const vector<SubtreePlan*>& children);
+  vector<vector<SubtreePlan>> fillDpTab(const TripleGraph& graph,
+                                        const vector<SparqlFilter>& fs,
+                                        const vector<const SubtreePlan*>& children);
 
   size_t getTextLimit(const string& textLimitString) const;
 

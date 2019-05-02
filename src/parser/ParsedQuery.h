@@ -54,7 +54,7 @@ class PropertyPath {
 
   Operation _operation;
   // For the limited transitive operations
-  uint16_t _limit;
+  uint_fast16_t _limit;
 
   // In case of an iri
   std::string _iri;
@@ -180,7 +180,7 @@ class ParsedQuery {
 
   class GraphPatternOperation {
    public:
-    enum class Type { OPTIONAL, UNION, SUBQUERY };
+    enum class Type { OPTIONAL, UNION, SUBQUERY, TRANS_PATH };
     GraphPatternOperation(Type type,
                           std::initializer_list<GraphPattern*> children);
     GraphPatternOperation(Type type);
@@ -197,6 +197,14 @@ class ParsedQuery {
     union {
       std::vector<GraphPattern*> _childGraphPatterns;
       ParsedQuery* _subquery;
+      struct {
+        // The name of the left and right end of the subpath
+        std::string _left;
+        std::string _right;
+        size_t _min = 0;
+        size_t _max = 0;
+        GraphPattern* _childGraphPattern;
+      } _pathData;
     };
   };
 
@@ -212,6 +220,9 @@ class ParsedQuery {
     GraphPattern& operator=(const GraphPattern& other);
     virtual ~GraphPattern();
     void toString(std::ostringstream& os, int indentation = 0) const;
+    // Traverses the graph pattern tree and assigns a unique id to every graph
+    // pattern
+    void recomputeIds(size_t* id_count = nullptr);
 
     vector<SparqlTriple> _whereClauseTriples;
     vector<SparqlFilter> _filters;

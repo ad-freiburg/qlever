@@ -333,7 +333,6 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
         start = (posOfDelim == string::npos ? end + 1 : posOfDelim + 1);
         continue;
       }
-    } else if (inner[k] == 'S' || inner[k] == 's') {
     }
     while (k < inner.size()) {
       if (!insideUri && !insideLiteral && !insideNsThing) {
@@ -454,7 +453,6 @@ void SparqlParser::addWhereTriple(const string& str,
   if (p == CONTAINS_WORD_PREDICATE || p == CONTAINS_WORD_PREDICATE_NS) {
     o = stripAndLowercaseKeywordLiteral(o);
   }
-
   SparqlTriple triple(s, PropertyPathParser(p).parse(), o);
   // Quadratic in number of triples in query.
   // Shouldn't be a problem here, though.
