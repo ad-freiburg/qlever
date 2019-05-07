@@ -11,8 +11,9 @@
 class TransitivePath : public Operation {
  public:
   TransitivePath(QueryExecutionContext* qec,
-                 std::shared_ptr<QueryExecutionTree> child, size_t leftCol,
-                 size_t rightCol, size_t minDist, size_t maxDist);
+                 std::shared_ptr<QueryExecutionTree> child, bool leftIsVar,
+                 bool rightIsVar, size_t left, size_t right, size_t minDist,
+                 size_t maxDist);
 
   virtual std::string asString(size_t indent = 0) const override;
 
@@ -35,17 +36,23 @@ class TransitivePath : public Operation {
   virtual size_t getCostEstimate() override;
 
   // The method is declared here to make it unit testable
+  /**
+   * @brief If leftIsVar is true left is interpreted as a column index in sub,
+   * otherwise it is interpreted as the id of a single entity.
+   */
   template <int SUB_WIDTH>
   static void computeTransitivePath(IdTable* res, const IdTable& sub,
-                                    size_t leftCol, size_t rightCol,
-                                    size_t minDist, size_t maxDist);
+                                    bool leftIsVar, bool rightIsVar, Id left,
+                                    Id right, size_t minDist, size_t maxDist);
 
  private:
   virtual void computeResult(ResultTable* result) override;
 
   std::shared_ptr<QueryExecutionTree> _subtree;
-  size_t _leftCol;
-  size_t _rightCol;
+  bool _leftIsVar;
+  bool _rightIsVar;
+  size_t _left;
+  size_t _right;
   size_t _minDist;
   size_t _maxDist;
 };

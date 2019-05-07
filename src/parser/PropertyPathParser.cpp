@@ -59,7 +59,7 @@ std::vector<PropertyPathParser::Token> PropertyPathParser::tokenize(
       inside_iri = false;
     }
 
-    if (!inside_iri && DELIMITER_CHARS[(uint8_t)str[pos]] && pos > 0) {
+    if (!inside_iri && DELIMITER_CHARS[(uint8_t)str[pos]]) {
       if (start != pos) {
         // add the string up to but not including the new token
         tokens.push_back({str.substr(start, pos - start), start});
@@ -194,7 +194,7 @@ PropertyPath PropertyPathParser::pathElt() {
     return p;
   } else if (acceptPrefix(TRANSITIVE, &transitive_count)) {
     PropertyPath p(PropertyPath::Operation::TRANSITIVE_MAX);
-    p._limit = std::stoi(std::string(transitive_count));
+    p._limit = std::stoi(std::string(transitive_count).substr(1));
     p._children.push_back(child);
     return p;
   } else {

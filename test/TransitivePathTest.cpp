@@ -40,7 +40,7 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({7, 2});
   expected.push_back({7, 4});
 
-  TransitivePath::computeTransitivePath<2>(&result, sub, 0, 1, 0,
+  TransitivePath::computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0,
                                            std::numeric_limits<size_t>::max());
   ASSERT_EQ(expected, result);
 
@@ -59,6 +59,31 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({7, 2});
   expected.push_back({7, 7});
 
-  TransitivePath::computeTransitivePath<2>(&result, sub, 0, 1, 1, 2);
+  TransitivePath::computeTransitivePath<2>(&result, sub, true, true, 0, 1, 1,
+                                           2);
+  ASSERT_EQ(expected, result);
+
+  result.clear();
+  expected.clear();
+  expected.push_back({7, 2});
+  expected.push_back({7, 4});
+  expected.push_back({7, 7});
+  expected.push_back({7, 3});
+  expected.push_back({7, 0});
+
+  TransitivePath::computeTransitivePath<2>(&result, sub, false, true, 7, 1, 1,
+                                           2);
+  ASSERT_EQ(expected, result);
+
+  result.clear();
+  expected.clear();
+  expected.push_back({0, 2});
+  expected.push_back({2, 2});
+  expected.push_back({4, 2});
+  expected.push_back({3, 2});
+  expected.push_back({7, 2});
+
+  TransitivePath::computeTransitivePath<2>(&result, sub, true, false, 0, 2, 1,
+                                           2);
   ASSERT_EQ(expected, result);
 }

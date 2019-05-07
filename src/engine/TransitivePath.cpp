@@ -11,12 +11,14 @@
 // _____________________________________________________________________________
 TransitivePath::TransitivePath(QueryExecutionContext* qec,
                                std::shared_ptr<QueryExecutionTree> child,
-                               size_t leftCol, size_t rightCol, size_t minDist,
-                               size_t maxDist)
+                               bool leftIsVar, bool rightIsVar, size_t left,
+                               size_t right, size_t minDist, size_t maxDist)
     : Operation(qec),
       _subtree(child),
-      _leftCol(leftCol),
-      _rightCol(rightCol),
+      _leftIsVar(leftIsVar),
+      _rightIsVar(rightIsVar),
+      _left(left),
+      _right(right),
       _minDist(minDist),
       _maxDist(maxDist) {}
 
@@ -26,7 +28,7 @@ std::string TransitivePath::asString(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  os << "TRANSITIVE left " << _leftCol << " right " << _rightCol << " minDist "
+  os << "TRANSITIVE left " << _left << " right " << _right << " minDist "
      << _minDist << " maxDist " << _maxDist << "\n";
   os << _subtree->asString(indent) << "\n";
   return os.str();
@@ -35,7 +37,7 @@ std::string TransitivePath::asString(size_t indent) const {
 // _____________________________________________________________________________
 std::string TransitivePath::getDescriptor() const {
   std::ostringstream os;
-  os << "TRANSITIVE left " << _leftCol << " right " << _rightCol << " minDist "
+  os << "TRANSITIVE left " << _left << " right " << _right << " minDist "
      << _minDist << " maxDist " << _maxDist;
   return os.str();
 }
@@ -47,7 +49,7 @@ size_t TransitivePath::getResultWidth() const { return 2; }
 vector<size_t> TransitivePath::resultSortedOn() const {
   const std::vector<size_t>& subSortedOn =
       _subtree->getRootOperation()->getResultSortedOn();
-  if (subSortedOn.size() > 0 && subSortedOn[0] == _leftCol) {
+  if (_leftIsVar && subSortedOn.size() > 0 && subSortedOn[0] == _left) {
     // This operation preserves the order of the _leftCol of the subtree.
     return {0};
   }
@@ -58,14 +60,20 @@ vector<size_t> TransitivePath::resultSortedOn() const {
 ad_utility::HashMap<std::string, size_t> TransitivePath::getVariableColumns()
     const {
   ad_utility::HashMap<std::string, size_t> map;
-  ad_utility::HashMap<std::string, size_t> subMap =
+  const ad_utility::HashMap<std::string, size_t>& subMap =
       _subtree->getVariableColumns();
   for (const std::pair<std::string, size_t>& p : subMap) {
-    if (p.second == _leftCol) {
+    if (_leftIsVar && p.second == _left) {
       map[p.first] = 0;
-    } else if (p.second == _rightCol) {
+    } else if (_rightIsVar && p.second == _right) {
       map[p.first] = 1;
     }
+  }
+  if (!_leftIsVar) {
+    map["fixedLeft"] = 0;
+  }
+  if (!_rightIsVar) {
+    map["fixedRight"] = 0;
   }
   return map;
 }
@@ -88,7 +96,10 @@ float TransitivePath::getMultiplicity(size_t col) {
 // _____________________________________________________________________________
 size_t TransitivePath::getSizeEstimate() {
   // TODO(Florian): this is not necessarily a good estimator
-  return _subtree->getSizeEstimate() / _subtree->getMultiplicity(_leftCol);
+  if (_leftIsVar) {
+    return _subtree->getSizeEstimate() / _subtree->getMultiplicity(_left);
+  }
+  return _subtree->getSizeEstimate();
 }
 
 // _____________________________________________________________________________
@@ -98,8 +109,9 @@ size_t TransitivePath::getCostEstimate() { return getSizeEstimate(); }
 template <int SUB_WIDTH>
 void TransitivePath::computeTransitivePath(IdTable* dynRes,
                                            const IdTable& dynSub,
-                                           size_t leftCol, size_t rightCol,
-                                           size_t minDist, size_t maxDist) {
+                                           bool leftIsVar, bool rightIsVar,
+                                           Id left, Id right, size_t minDist,
+                                           size_t maxDist) {
   using Map = ad_utility::HashMap<Id, std::shared_ptr<std::vector<size_t>>>;
   using MapIt = Map::iterator;
 
@@ -111,10 +123,14 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
   // All nodes on the graph from which an edge leads to another node
   std::vector<Id> nodes;
 
+  if (!leftIsVar && !rightIsVar) {
+    return;
+  }
+
   // initialize the map from the subresult
   for (size_t i = 0; i < sub.size(); i++) {
-    size_t l = sub(i, leftCol);
-    size_t r = sub(i, rightCol);
+    size_t l = leftIsVar ? sub(i, left) : left;
+    size_t r = rightIsVar ? sub(i, right) : right;
     MapIt it = edges.find(l);
     if (it == edges.end()) {
       nodes.push_back(l);
@@ -205,13 +221,22 @@ void TransitivePath::computeResult(ResultTable* result) {
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
 
   result->_sortedBy = resultSortedOn();
-  result->_resultTypes.push_back(subRes->getResultType(_leftCol));
-  result->_resultTypes.push_back(subRes->getResultType(_rightCol));
+  if (_leftIsVar) {
+    result->_resultTypes.push_back(subRes->getResultType(_left));
+  } else {
+    result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  }
+  if (_rightIsVar) {
+    result->_resultTypes.push_back(subRes->getResultType(_right));
+  } else {
+    result->_resultTypes.push_back(ResultTable::ResultType::KB);
+  }
   result->_data.setCols(getResultWidth());
 
   int subWidth = subRes->_data.cols();
   CALL_FIXED_SIZE_1(subWidth, computeTransitivePath, &result->_data,
-                    subRes->_data, _leftCol, _rightCol, _minDist, _maxDist);
+                    subRes->_data, _leftIsVar, _rightIsVar, _left, _right,
+                    _minDist, _maxDist);
 
   LOG(DEBUG) << "TransitivePath result computation done." << std::endl;
 }

@@ -202,13 +202,35 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           const SubtreePlan* sub =
               &patternPlans[child->_pathData._childGraphPattern->_id];
           childPlanStorage.emplace_back(_qec);
-          size_t leftCol, rightCol, min, max;
-          leftCol = sub->_qet->getVariableColumn(child->_pathData._left);
-          rightCol = sub->_qet->getVariableColumn(child->_pathData._right);
+          Id leftCol, rightCol;
+          size_t min, max;
+          bool leftVar, rightVar;
+          if (isVariable(child->_pathData._left)) {
+            leftVar = true;
+            leftCol = sub->_qet->getVariableColumn(child->_pathData._left);
+          } else {
+            leftVar = false;
+            if (!_qec->getIndex().getVocab().getId(child->_pathData._left,
+                                                   &leftCol)) {
+              AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                       "No vocabulary entry for " + child->_pathData._left);
+            }
+          }
+          if (isVariable(child->_pathData._right)) {
+            rightVar = true;
+            rightCol = sub->_qet->getVariableColumn(child->_pathData._right);
+          } else {
+            rightVar = false;
+            if (!_qec->getIndex().getVocab().getId(child->_pathData._right,
+                                                   &rightCol)) {
+              AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                       "No vocabulary entry for " + child->_pathData._right);
+            }
+          }
           min = child->_pathData._min;
           max = child->_pathData._max;
           std::shared_ptr<Operation> transOp = std::make_shared<TransitivePath>(
-              _qec, sub->_qet, leftCol, rightCol, min, max);
+              _qec, sub->_qet, leftVar, rightVar, leftCol, rightCol, min, max);
 
           QueryExecutionTree& tree = *childPlanStorage.back()._qet.get();
           tree.setVariableColumns(
@@ -1111,8 +1133,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
       seedFromPropertyPath(triple._s, triple._p, triple._o);
   std::ostringstream out;
   pattern.toString(out, 0);
-  std::cout << "Turned " << triple.asString() << " into " << std::endl;
-  std::cout << out.str() << std::endl << std::endl;
+  LOG(TRACE) << "Turned " << triple.asString() << " into " << std::endl;
+  LOG(TRACE) << out.str() << std::endl << std::endl;
   pattern.recomputeIds();
   return optimize(&pattern);
 }
