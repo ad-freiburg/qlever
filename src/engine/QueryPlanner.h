@@ -158,14 +158,15 @@ class QueryPlanner {
 
  private:
   QueryExecutionContext* _qec;
-  // Used to generate random variables.
-  unsigned int _randomSeed;
-  size_t _randVarCount;
+
+  // Used to count the number of unique variables created using
+  // generateUniqueVarName
+  size_t _internalVarCount;
 
   static bool isVariable(const string& elem);
   static bool isVariable(const PropertyPath& elem);
 
-  std::vector<SubtreePlan> optimize(const ParsedQuery::GraphPattern *pattern);
+  std::vector<SubtreePlan> optimize(const ParsedQuery::GraphPattern* pattern);
 
   /**
    * @brief Fills varToTrip with a mapping from all variables in the root graph
@@ -194,10 +195,7 @@ class QueryPlanner {
   vector<SubtreePlan> seedFromPropertyPathTriple(const SparqlTriple& triple);
 
   /**
-   * @brief Returns a parsed query for the property path. Optimizing that query will yield
-   *        an execution plan for every possible ordering of left and right (which is sufficient
-   *        for optimality, as left and right are the only connections of this property
-   *        path to the rest of the query).
+   * @brief Returns a parsed query for the property path.
    */
   ParsedQuery::GraphPattern seedFromPropertyPath(const std::string& left,
                                                  const PropertyPath& path,
@@ -225,7 +223,7 @@ class QueryPlanner {
                                         const PropertyPath& path,
                                         const std::string& right);
 
-  std::string generateRandomVarName();
+  std::string generateUniqueVarName();
 
   /**
    * @brief Merges two rows of the dp optimization table using various types of
@@ -269,9 +267,9 @@ class QueryPlanner {
   std::shared_ptr<Operation> createFilterOperation(
       const SparqlFilter& filter, const SubtreePlan& parent) const;
 
-  vector<vector<SubtreePlan>> fillDpTab(const TripleGraph& graph,
-                                        const vector<SparqlFilter>& fs,
-                                        const vector<const SubtreePlan*>& children);
+  vector<vector<SubtreePlan>> fillDpTab(
+      const TripleGraph& graph, const vector<SparqlFilter>& fs,
+      const vector<const SubtreePlan*>& children);
 
   size_t getTextLimit(const string& textLimitString) const;
 

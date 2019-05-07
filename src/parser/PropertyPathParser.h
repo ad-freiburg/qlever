@@ -33,7 +33,7 @@ class PropertyPathParser {
   bool accept(const std::string& token);
 
   /**
-   * If the next token beginsWith tokenPrefix returns true and consumes the
+   * If the next token begins with tokenPrefix returns true and consumes the
    * token. Returns false and does nothing otherwise. If the token matches the
    * prefix it is stored in token.
    */

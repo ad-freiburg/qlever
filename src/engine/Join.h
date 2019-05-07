@@ -86,9 +86,9 @@ class Join : public Operation {
 
   void doComputeJoinWithFullScanDummyRight(const IdTable& v, IdTable* r) const;
 
-  void appendCrossProduct(IdTable::const_iterator& leftBegin,
-                          IdTable::const_iterator& leftEnd,
-                          IdTable::const_iterator& rightBegin,
-                          IdTable::const_iterator& rightEnd,
+  void appendCrossProduct(const IdTable::const_iterator& leftBegin,
+                          const IdTable::const_iterator& leftEnd,
+                          const IdTable::const_iterator& rightBegin,
+                          const IdTable::const_iterator& rightEnd,
                           IdTable* res) const;
 };

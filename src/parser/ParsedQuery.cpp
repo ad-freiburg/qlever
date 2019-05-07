@@ -704,7 +704,7 @@ void ParsedQuery::GraphPatternOperation::toString(std::ostringstream& os,
     case Type::TRANS_PATH:
       os << "TRANS PATH from " << _pathData._left << " to " << _pathData._right
          << " with at least " << _pathData._min << " and at most "
-         << _pathData._max << "steps of ";
+         << _pathData._max << " steps of ";
       if (_pathData._childGraphPattern != nullptr) {
         _pathData._childGraphPattern->toString(os, indentation);
       } else {

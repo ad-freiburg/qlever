@@ -508,7 +508,7 @@ class IdTableStatic : private IdTableImpl<COLS> {
   using Row = typename IdTableImpl<COLS>::row_type;
   using ConstRow = typename IdTableImpl<COLS>::const_row_type;
   using iterator = typename IdTableImpl<COLS>::iterator;
-  using const_iterator = const typename IdTableImpl<COLS>::iterator;
+  using const_iterator = typename IdTableImpl<COLS>::iterator;
 
   IdTableStatic() {
     IdTableImpl<COLS>::_data = nullptr;
@@ -561,6 +561,20 @@ class IdTableStatic : private IdTableImpl<COLS> {
   IdTableStatic<COLS>& operator=(IdTableStatic<COLS> other) {
     swap(*this, other);
     return *this;
+  }
+
+  bool operator==(const IdTableStatic<COLS>& other) const {
+    if (other.size() != size()) {
+      return false;
+    }
+    for (size_t row = 0; row < size(); row++) {
+      for (size_t col = 0; col < cols(); col++) {
+        if ((*this)(row, col) != other(row, col)) {
+          return false;
+        }
+      }
+    }
+    return true;
   }
 
   // Element access
@@ -736,8 +750,8 @@ class IdTableStatic : private IdTableImpl<COLS> {
   /**
    * @brief Erases all rows in the range [begin;end)
    **/
-  void erase(const_iterator& begin,
-             const_iterator& end = iterator(nullptr, 0, 0)) {
+  void erase(const const_iterator& begin,
+             const const_iterator& end = iterator(nullptr, 0, 0)) {
     iterator actualEnd = end;
     if (actualEnd == iterator(nullptr, 0, 0)) {
       actualEnd = iterator(IdTableImpl<COLS>::_data, begin.row() + 1,

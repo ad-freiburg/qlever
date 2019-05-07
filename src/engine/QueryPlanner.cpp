@@ -19,14 +19,13 @@
 #include "Sort.h"
 #include "TextOperationWithFilter.h"
 #include "TextOperationWithoutFilter.h"
+#include "TransitivePath.h"
 #include "TwoColumnJoin.h"
 #include "Union.h"
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec)
-    : _qec(qec), _randVarCount(0) {
-  _randomSeed = time(NULL);
-}
+    : _qec(qec), _internalVarCount(0) {}
 
 // _____________________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
@@ -92,7 +91,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   for (size_t i = 1; i < lastRow.size(); ++i) {
     size_t thisCost = lastRow[i].getCostEstimate();
     if (thisCost < minCost) {
-      minCost = lastRow[i].getCostEstimate();
+      minCost = thisCost;
       minInd = i;
     }
   }
@@ -133,11 +132,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         default:
           break;
       }
-      if (op->_type != ParsedQuery::GraphPatternOperation::Type::SUBQUERY) {
-        childrenToAdd.insert(childrenToAdd.end(),
-                             op->_childGraphPatterns.begin(),
-                             op->_childGraphPatterns.end());
-      }
     }
   }
 
@@ -165,11 +159,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     // vector. These will be treated the same as a node in the triple graph
     // later on (so the same as a simple triple).
     vector<const SubtreePlan*> childPlans;
-    std::vector<SubtreePlan> unionPlans;
+    std::vector<SubtreePlan> childPlanStorage;
     std::vector<SubtreePlan> subqueryPlans;
     // Ensure the vectors won't reallocate (this is an upper bound on the actual
     // size)
-    unionPlans.reserve(pattern->_children.size());
+    childPlanStorage.reserve(pattern->_children.size());
     subqueryPlans.reserve(pattern->_children.size());
     for (ParsedQuery::GraphPatternOperation* child : pattern->_children) {
       switch (child->_type) {
@@ -189,14 +183,14 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
               &patternPlans[child->_childGraphPatterns[1]->_id];
 
           // create a new subtree plan
-          unionPlans.emplace_back(_qec);
+          childPlanStorage.emplace_back(_qec);
           std::shared_ptr<Operation> unionOp(
               new Union(_qec, left->_qet, right->_qet));
-          QueryExecutionTree& tree = *unionPlans.back()._qet.get();
+          QueryExecutionTree& tree = *childPlanStorage.back()._qet.get();
           tree.setVariableColumns(
               static_cast<Union*>(unionOp.get())->getVariableColumns());
           tree.setOperation(QueryExecutionTree::UNION, unionOp);
-          childPlans.push_back(&unionPlans.back());
+          childPlans.push_back(&childPlanStorage.back());
         } break;
         case ParsedQuery::GraphPatternOperation::Type::SUBQUERY: {
           subqueryPlans.emplace_back(_qec);
@@ -205,8 +199,22 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           childPlans.push_back(&subqueryPlans.back());
         } break;
         case ParsedQuery::GraphPatternOperation::Type::TRANS_PATH: {
-          AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-                   "The * family of operators is not yet implemented");
+          const SubtreePlan* sub =
+              &patternPlans[child->_pathData._childGraphPattern->_id];
+          childPlanStorage.emplace_back(_qec);
+          size_t leftCol, rightCol, min, max;
+          leftCol = sub->_qet->getVariableColumn(child->_pathData._left);
+          rightCol = sub->_qet->getVariableColumn(child->_pathData._right);
+          min = child->_pathData._min;
+          max = child->_pathData._max;
+          std::shared_ptr<Operation> transOp = std::make_shared<TransitivePath>(
+              _qec, sub->_qet, leftCol, rightCol, min, max);
+
+          QueryExecutionTree& tree = *childPlanStorage.back()._qet.get();
+          tree.setVariableColumns(
+              static_cast<Union*>(transOp.get())->getVariableColumns());
+          tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, transOp);
+          childPlans.push_back(&childPlanStorage.back());
         } break;
       }
     }
@@ -1153,14 +1161,14 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromSequence(
   std::vector<std::string> tmpVarNames;
   for (size_t i = 0; i < path._children.size(); i++) {
     if (i == 0) {
-      tmpVarNames.push_back(generateRandomVarName());
+      tmpVarNames.push_back(generateUniqueVarName());
       childPlans.push_back(
           seedFromPropertyPath(left, path._children[i], tmpVarNames.back()));
     } else if (i + 1 == path._children.size()) {
       childPlans.push_back(
           seedFromPropertyPath(tmpVarNames.back(), path._children[i], right));
     } else {
-      tmpVarNames.push_back(generateRandomVarName());
+      tmpVarNames.push_back(generateUniqueVarName());
       childPlans.push_back(
           seedFromPropertyPath(tmpVarNames[tmpVarNames.size() - 2],
                                path._children[i], tmpVarNames.back()));
@@ -1172,6 +1180,8 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromSequence(
   for (ParsedQuery::GraphPattern& child : childPlans) {
     p._children.insert(p._children.end(), child._children.begin(),
                        child._children.end());
+    // TODO(Florian): Use reference counting through std::shared_ptr to
+    // simplify the memory management of the children.
     // Ensure the child does not try to delete the pointers
     child._children.clear();
     p._filters.insert(p._filters.end(), child._filters.begin(),
@@ -1209,12 +1219,14 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromAlternative(
   GraphPattern p;
   p._children.push_back(new ParsedQuery::GraphPatternOperation(
       ParsedQuery::GraphPatternOperation::Type::UNION,
-      {new GraphPattern(std::move(childPlans[0])), new GraphPattern(std::move(childPlans[1]))}));
+      {new GraphPattern(std::move(childPlans[0])),
+       new GraphPattern(std::move(childPlans[1]))}));
   for (size_t i = 2; i < childPlans.size(); i++) {
     GraphPattern next;
     next._children.push_back(new ParsedQuery::GraphPatternOperation(
         ParsedQuery::GraphPatternOperation::Type::UNION,
-        {new GraphPattern(std::move(p)), new GraphPattern(std::move(childPlans[i]))}));
+        {new GraphPattern(std::move(p)),
+         new GraphPattern(std::move(childPlans[i]))}));
     p = next;
   }
   return p;
@@ -1224,12 +1236,18 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromAlternative(
 ParsedQuery::GraphPattern QueryPlanner::seedFromTransitive(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
-  ParsedQuery::GraphPattern childPlan = seedFromPropertyPath(left, path._children[0], right);
+  ParsedQuery::GraphPattern childPlan =
+      seedFromPropertyPath(left, path._children[0], right);
   ParsedQuery::GraphPattern p;
-  ParsedQuery::GraphPatternOperation* op = new ParsedQuery::GraphPatternOperation(ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
+  ParsedQuery::GraphPatternOperation* op =
+      new ParsedQuery::GraphPatternOperation(
+          ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
   op->_pathData._left = left;
   op->_pathData._right = right;
-  op->_pathData._childGraphPattern = new ParsedQuery::GraphPattern(std::move(childPlan));
+  op->_pathData._min = 0;
+  op->_pathData._max = std::numeric_limits<size_t>::max();
+  op->_pathData._childGraphPattern =
+      new ParsedQuery::GraphPattern(std::move(childPlan));
   p._children.push_back(op);
   return p;
 }
@@ -1238,13 +1256,18 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromTransitive(
 ParsedQuery::GraphPattern QueryPlanner::seedFromTransitiveMin(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
-  ParsedQuery::GraphPattern childPlan = seedFromPropertyPath(left, path._children[0], right);
+  ParsedQuery::GraphPattern childPlan =
+      seedFromPropertyPath(left, path._children[0], right);
   ParsedQuery::GraphPattern p;
-  ParsedQuery::GraphPatternOperation* op = new ParsedQuery::GraphPatternOperation(ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
+  ParsedQuery::GraphPatternOperation* op =
+      new ParsedQuery::GraphPatternOperation(
+          ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
   op->_pathData._left = left;
   op->_pathData._right = right;
   op->_pathData._min = path._limit;
-  op->_pathData._childGraphPattern = new ParsedQuery::GraphPattern(std::move(childPlan));
+  op->_pathData._max = std::numeric_limits<size_t>::max();
+  op->_pathData._childGraphPattern =
+      new ParsedQuery::GraphPattern(std::move(childPlan));
   p._children.push_back(op);
   return p;
 }
@@ -1253,13 +1276,18 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromTransitiveMin(
 ParsedQuery::GraphPattern QueryPlanner::seedFromTransitiveMax(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
-  ParsedQuery::GraphPattern childPlan = seedFromPropertyPath(left, path._children[0], right);
+  ParsedQuery::GraphPattern childPlan =
+      seedFromPropertyPath(left, path._children[0], right);
   ParsedQuery::GraphPattern p;
-  ParsedQuery::GraphPatternOperation* op = new ParsedQuery::GraphPatternOperation(ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
+  ParsedQuery::GraphPatternOperation* op =
+      new ParsedQuery::GraphPatternOperation(
+          ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
   op->_pathData._left = left;
   op->_pathData._right = right;
+  op->_pathData._min = 0;
   op->_pathData._max = path._limit;
-  op->_pathData._childGraphPattern = new ParsedQuery::GraphPattern(std::move(childPlan));
+  op->_pathData._childGraphPattern =
+      new ParsedQuery::GraphPattern(std::move(childPlan));
   p._children.push_back(op);
   return p;
 }
@@ -1281,33 +1309,8 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromIri(const std::string& left,
 }
 
 // _____________________________________________________________________________
-std::string QueryPlanner::generateRandomVarName() {
-  constexpr int VAR_NAME_LENGTH = 32;
-  std::string name(VAR_NAME_LENGTH, ' ');
-  // pick random characters in the range [65-90] and [97-122]
-
-  // How many random characters we can extract from a single call to rand
-  int rand_bytes = (unsigned int)(std::log(RAND_MAX) / std::log(52));
-  int current_rand;
-  int bytes_left = 0;
-  for (int i = 0; i < VAR_NAME_LENGTH; i++) {
-    if (bytes_left <= 0) {
-      current_rand = rand_r(&_randomSeed);
-      bytes_left = rand_bytes;
-    }
-    uint8_t v = current_rand % 52;
-    if (v >= 26) {
-      // Characters a-z
-      v += 'a' - 26;
-    } else {
-      // Characters A-Z
-      v += 'A';
-    }
-    name[i] = v;
-    current_rand /= 52;
-  }
-  _randVarCount++;
-  return "?" + name + std::to_string(_randVarCount);
+std::string QueryPlanner::generateUniqueVarName() {
+  return "?:" + std::to_string(_internalVarCount);
 }
 
 // _____________________________________________________________________________

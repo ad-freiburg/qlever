@@ -28,6 +28,7 @@ add_library(engine
         HasPredicateScan.cpp HasPredicateScan.h
         Union.cpp Union.h
         MultiColumnJoin.cpp MultiColumnJoin.h
+        TransitivePath.cpp TransitivePath.h
         IdTable.h
         )
 

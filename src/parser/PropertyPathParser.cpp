@@ -94,7 +94,7 @@ std::vector<PropertyPathParser::Token> PropertyPathParser::tokenize(
 
 // _____________________________________________________________________________
 void PropertyPathParser::initDelimiters() {
-  std::memset(DELIMITER_CHARS.data(), 0, 256);
+  DELIMITER_CHARS.fill(0);
   DELIMITER_CHARS['?'] = true;
   DELIMITER_CHARS['*'] = true;
   DELIMITER_CHARS['+'] = true;
@@ -105,7 +105,7 @@ void PropertyPathParser::initDelimiters() {
   DELIMITER_CHARS['^'] = true;
 
   // Init the valid characters with all delimiters
-  std::memcpy(VALID_CHARS.data(), DELIMITER_CHARS.data(), 256);
+  VALID_CHARS = DELIMITER_CHARS;
   // Iterate all ascii characters and add the valid ones
   for (uint8_t c = 0; c < 128; c++) {
     if (std::isgraph(c)) {
