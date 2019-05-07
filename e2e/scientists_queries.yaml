@@ -608,4 +608,29 @@ queries:
       - selected: ["?p", "?count"]
       - contains_row: ["<Hall_of_fame_induction>", 1] 
       - contains_row: ["<Weight>", 1]
+  - query : property_path_trans_and_or 
+    type: no-text
+    sparql: |
+      SELECT ?b WHERE {
+        <Al_Gore> <is-a>*/<is-a>|<Height> ?b .
+      }
+    checks:
+      - num_rows: 43 
+      - num_cols: 1
+      - selected: ["?b"]
+      - contains_row: ["<Politician>"] 
+      - contains_row: ["<Character_Occupation>"] 
+      - contains_row: ["1.87"]
+  - query : property_path_inverse
+    type: no-text
+    sparql: |
+      SELECT ?b WHERE {
+        <Geologist> ^<is-a> ?b .
+      }
+    checks:
+      - num_rows: 1154 
+      - num_cols: 1
+      - selected: ["?b"]
+      - contains_row: ["<Albert_Heim>"] 
+      - contains_row: ["<Walter_Alvarez>"] 
 

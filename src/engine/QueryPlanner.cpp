@@ -1318,7 +1318,7 @@ ParsedQuery::GraphPattern QueryPlanner::seedFromTransitiveMax(
 ParsedQuery::GraphPattern QueryPlanner::seedFromInverse(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
-  return seedFromPropertyPath(right, path, left);
+  return seedFromPropertyPath(right, path._children[0], left);
 }
 
 // _____________________________________________________________________________
