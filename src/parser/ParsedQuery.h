@@ -181,8 +181,9 @@ class ParsedQuery {
   class GraphPatternOperation {
    public:
     enum class Type { OPTIONAL, UNION, SUBQUERY, TRANS_PATH };
-    GraphPatternOperation(Type type,
-                          std::initializer_list<GraphPattern*> children);
+    GraphPatternOperation(
+        Type type,
+        std::initializer_list<std::shared_ptr<GraphPattern>> children);
     GraphPatternOperation(Type type);
 
     // Move and copyconstructors to avoid double deletes on the trees children
@@ -195,15 +196,15 @@ class ParsedQuery {
 
     Type _type;
     union {
-      std::vector<GraphPattern*> _childGraphPatterns;
-      ParsedQuery* _subquery;
+      std::vector<std::shared_ptr<GraphPattern>> _childGraphPatterns;
+      std::shared_ptr<ParsedQuery> _subquery;
       struct {
         // The name of the left and right end of the subpath
         std::string _left;
         std::string _right;
         size_t _min = 0;
         size_t _max = 0;
-        GraphPattern* _childGraphPattern;
+        std::shared_ptr<GraphPattern> _childGraphPattern;
       } _pathData;
     };
   };
@@ -233,7 +234,7 @@ class ParsedQuery {
      */
     size_t _id;
 
-    vector<GraphPatternOperation*> _children;
+    vector<std::shared_ptr<GraphPatternOperation>> _children;
   };
 
   struct Alias {
@@ -244,11 +245,15 @@ class ParsedQuery {
     string _function;
   };
 
-  ParsedQuery() : _numGraphPatterns(1), _reduced(false), _distinct(false) {}
+  ParsedQuery()
+      : _rootGraphPattern(std::make_shared<GraphPattern>()),
+        _numGraphPatterns(1),
+        _reduced(false),
+        _distinct(false) {}
 
   vector<SparqlPrefix> _prefixes;
   vector<string> _selectedVariables;
-  GraphPattern _rootGraphPattern;
+  std::shared_ptr<GraphPattern> _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns;
   vector<OrderKey> _orderBy;

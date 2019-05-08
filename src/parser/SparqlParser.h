@@ -26,14 +26,16 @@ class SparqlParser {
  private:
   static void parsePrologue(string str, ParsedQuery& query);
   static void parseSelect(string const& str, ParsedQuery& query);
-  static void parseWhere(string const& str, ParsedQuery& query,
-                         ParsedQuery::GraphPattern* currentPattern = nullptr);
+  static void parseWhere(
+      string const& str, ParsedQuery& query,
+      std::shared_ptr<ParsedQuery::GraphPattern> currentPattern = nullptr);
   static void parseSolutionModifiers(const string& str, ParsedQuery& query);
   static void addPrefix(const string& str, ParsedQuery& query);
-  static void addWhereTriple(const string& str,
-                             ParsedQuery::GraphPattern* pattern);
-  static void addFilter(const string& str, vector<SparqlFilter>* _filters,
-                        ParsedQuery::GraphPattern* pattern = nullptr);
+  static void addWhereTriple(
+      const string& str, std::shared_ptr<ParsedQuery::GraphPattern> pattern);
+  static void addFilter(
+      const string& str, vector<SparqlFilter>* _filters,
+      std::shared_ptr<ParsedQuery::GraphPattern> pattern = nullptr);
 
   static string stripAndLowercaseKeywordLiteral(const string& lit);
 };

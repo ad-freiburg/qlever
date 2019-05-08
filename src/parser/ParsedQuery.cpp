@@ -42,7 +42,7 @@ string ParsedQuery::asString() const {
 
   // WHERE
   os << "\nWHERE: \n";
-  _rootGraphPattern.toString(os, 1);
+  _rootGraphPattern->toString(os, 1);
 
   os << "\nLIMIT: " << (_limit.size() > 0 ? _limit : "no limit specified");
   os << "\nTEXTLIMIT: "
@@ -222,21 +222,22 @@ void ParsedQuery::expandPrefixes() {
   }
 
   vector<GraphPattern*> graphPatterns;
-  graphPatterns.push_back(&_rootGraphPattern);
+  graphPatterns.push_back(_rootGraphPattern.get());
   // Traverse the graph pattern tree using dfs expanding the prefixes in every
   // pattern.
   while (!graphPatterns.empty()) {
     GraphPattern* pattern = graphPatterns.back();
     graphPatterns.pop_back();
-    for (GraphPatternOperation* p : pattern->_children) {
+    for (const std::shared_ptr<GraphPatternOperation>& p : pattern->_children) {
       if (p->_type == GraphPatternOperation::Type::SUBQUERY) {
         // Pass the prefixes to the subquery and expand them.
         p->_subquery->_prefixes = _prefixes;
         p->_subquery->expandPrefixes();
       } else {
-        graphPatterns.insert(graphPatterns.end(),
-                             p->_childGraphPatterns.begin(),
-                             p->_childGraphPatterns.end());
+        for (const std::shared_ptr<GraphPattern>& pattern :
+             p->_childGraphPatterns) {
+          graphPatterns.push_back(pattern.get());
+        }
       }
     }
 
@@ -435,11 +436,7 @@ std::string ParsedQuery::parseAlias(const std::string& alias) {
 }
 
 // _____________________________________________________________________________
-ParsedQuery::GraphPattern::~GraphPattern() {
-  for (GraphPatternOperation* child : _children) {
-    delete child;
-  }
-}
+ParsedQuery::GraphPattern::~GraphPattern() {}
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPattern::GraphPattern(GraphPattern&& other)
@@ -456,8 +453,8 @@ ParsedQuery::GraphPattern::GraphPattern(const GraphPattern& other)
       _filters(other._filters),
       _optional(other._optional) {
   _children.reserve(other._children.size());
-  for (const GraphPatternOperation* g : other._children) {
-    _children.push_back(new GraphPatternOperation(*g));
+  for (const std::shared_ptr<GraphPatternOperation>& g : other._children) {
+    _children.push_back(std::make_shared<GraphPatternOperation>(*g));
   }
 }
 
@@ -467,13 +464,10 @@ ParsedQuery::GraphPattern& ParsedQuery::GraphPattern::operator=(
   _whereClauseTriples = std::vector<SparqlTriple>(other._whereClauseTriples);
   _filters = std::vector<SparqlFilter>(other._filters);
   _optional = other._optional;
-  for (GraphPatternOperation* child : _children) {
-    delete child;
-  }
   _children.clear();
   _children.reserve(other._children.size());
-  for (const GraphPatternOperation* g : other._children) {
-    _children.push_back(new GraphPatternOperation(*g));
+  for (const std::shared_ptr<GraphPatternOperation>& g : other._children) {
+    _children.push_back(std::make_shared<GraphPatternOperation>(*g));
   }
   return *this;
 }
@@ -503,7 +497,7 @@ void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
     for (int j = 0; j < indentation; ++j) os << "  ";
     os << _filters.back().asString();
   }
-  for (GraphPatternOperation* child : _children) {
+  for (const std::shared_ptr<GraphPatternOperation>& child : _children) {
     os << "\n";
     child->toString(os, indentation + 1);
   }
@@ -521,11 +515,11 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
   }
   _id = *id_count;
   (*id_count)++;
-  for (GraphPatternOperation* op : _children) {
+  for (const std::shared_ptr<GraphPatternOperation>& op : _children) {
     switch (op->_type) {
       case GraphPatternOperation::Type::OPTIONAL:
       case GraphPatternOperation::Type::UNION:
-        for (GraphPattern* p : op->_childGraphPatterns) {
+        for (const std::shared_ptr<GraphPattern>& p : op->_childGraphPatterns) {
           p->recomputeIds(id_count);
         }
         break;
@@ -548,7 +542,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
 // _____________________________________________________________________________
 ParsedQuery::GraphPatternOperation::GraphPatternOperation(
     ParsedQuery::GraphPatternOperation::Type type,
-    std::initializer_list<ParsedQuery::GraphPattern*> children)
+    std::initializer_list<std::shared_ptr<ParsedQuery::GraphPattern>> children)
     : _type(type), _childGraphPatterns() {
   switch (_type) {
     case Type::OPTIONAL:
@@ -578,14 +572,15 @@ ParsedQuery::GraphPatternOperation::GraphPatternOperation(
     : _type(type) {
   switch (_type) {
     case Type::SUBQUERY:
-      _subquery = nullptr;
+      new (&_subquery) std::shared_ptr<ParsedQuery>(nullptr);
       break;
     case Type::TRANS_PATH:
       new (&_pathData._left) std::string();
       new (&_pathData._right) std::string();
+      new (&_pathData._childGraphPattern)
+          std::shared_ptr<GraphPattern>(nullptr);
       _pathData._max = 0;
       _pathData._min = 0;
-      _pathData._childGraphPattern = nullptr;
       break;
     default:
       AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
@@ -599,13 +594,17 @@ ParsedQuery::GraphPatternOperation::GraphPatternOperation(
     GraphPatternOperation&& other)
     : _type(other._type) {
   if (_type == Type::SUBQUERY) {
+    new (&_subquery) std::shared_ptr<ParsedQuery>(nullptr);
     _subquery = other._subquery;
     other._subquery = nullptr;
   } else if (_type == Type::TRANS_PATH) {
+    new (&_pathData._left) std::string();
+    new (&_pathData._right) std::string();
+    new (&_pathData._childGraphPattern) std::shared_ptr<GraphPattern>(nullptr);
     _pathData = std::move(other._pathData);
     other._pathData._childGraphPattern = nullptr;
   } else {
-    new (&_childGraphPatterns) std::vector<GraphPattern*>();
+    new (&_childGraphPatterns) std::vector<std::shared_ptr<GraphPattern>>();
     _childGraphPatterns = std::move(other._childGraphPatterns);
     other._childGraphPatterns.clear();
   }
@@ -616,19 +615,24 @@ ParsedQuery::GraphPatternOperation::GraphPatternOperation(
     const GraphPatternOperation& other)
     : _type(other._type) {
   if (_type == Type::SUBQUERY) {
-    _subquery = new ParsedQuery(*other._subquery);
+    new (&_subquery) std::shared_ptr<ParsedQuery>(nullptr);
+    _subquery = std::make_shared<ParsedQuery>(*other._subquery);
   } else if (_type == Type::TRANS_PATH) {
+    new (&_pathData._left) std::string();
+    new (&_pathData._right) std::string();
+    new (&_pathData._childGraphPattern) std::shared_ptr<GraphPattern>(nullptr);
     _pathData._childGraphPattern =
-        new GraphPattern(*other._pathData._childGraphPattern);
+        std::make_shared<GraphPattern>(*other._pathData._childGraphPattern);
     _pathData._min = other._pathData._min;
     _pathData._max = other._pathData._max;
     _pathData._left = other._pathData._left;
     _pathData._right = other._pathData._right;
   } else {
-    new (&_childGraphPatterns) std::vector<GraphPattern*>();
+    new (&_childGraphPatterns) std::vector<std::shared_ptr<GraphPattern>>();
     _childGraphPatterns.reserve(other._childGraphPatterns.size());
-    for (const GraphPattern* child : other._childGraphPatterns) {
-      _childGraphPatterns.push_back(new GraphPattern(*child));
+    for (const std::shared_ptr<GraphPattern>& child :
+         other._childGraphPatterns) {
+      _childGraphPatterns.push_back(std::make_shared<GraphPattern>(*child));
     }
   }
 }
@@ -637,30 +641,33 @@ ParsedQuery::GraphPatternOperation::GraphPatternOperation(
 ParsedQuery::GraphPatternOperation& ParsedQuery::GraphPatternOperation::
 operator=(const ParsedQuery::GraphPatternOperation& other) {
   if (_type == Type::SUBQUERY) {
-    delete _subquery;
+    _subquery.~shared_ptr();
   } else if (_type == Type::TRANS_PATH) {
-    delete _pathData._childGraphPattern;
+    _pathData._childGraphPattern.~shared_ptr();
+    _pathData._left.~string();
+    _pathData._right.~string();
   } else {
-    for (GraphPattern* p : _childGraphPatterns) {
-      delete p;
-    }
-    _childGraphPatterns.~vector<GraphPattern*>();
+    _childGraphPatterns.~vector();
   }
   _type = other._type;
   if (_type == Type::SUBQUERY) {
-    _subquery = new ParsedQuery(*other._subquery);
+    new (&_subquery) std::shared_ptr<ParsedQuery>(nullptr);
+    _subquery = std::make_shared<ParsedQuery>(*other._subquery);
   } else if (_type == Type::TRANS_PATH) {
+    new (&_pathData._left) std::string();
+    new (&_pathData._right) std::string();
+    new (&_pathData._childGraphPattern) std::shared_ptr<GraphPattern>(nullptr);
     _pathData._childGraphPattern =
-        new GraphPattern(*other._pathData._childGraphPattern);
+        std::make_shared<GraphPattern>(*other._pathData._childGraphPattern);
     _pathData._min = other._pathData._min;
     _pathData._max = other._pathData._max;
     _pathData._left = other._pathData._left;
     _pathData._right = other._pathData._right;
   } else {
-    new (&_childGraphPatterns) std::vector<GraphPattern*>();
+    new (&_childGraphPatterns) std::vector<std::shared_ptr<GraphPattern>>();
     _childGraphPatterns.reserve(other._childGraphPatterns.size());
-    for (const GraphPattern* p : other._childGraphPatterns) {
-      _childGraphPatterns.push_back(new GraphPattern(*p));
+    for (const std::shared_ptr<GraphPattern>& p : other._childGraphPatterns) {
+      _childGraphPatterns.push_back(std::make_shared<GraphPattern>(*p));
     }
   }
   return *this;
@@ -669,14 +676,13 @@ operator=(const ParsedQuery::GraphPatternOperation& other) {
 // _____________________________________________________________________________
 ParsedQuery::GraphPatternOperation::~GraphPatternOperation() {
   if (_type == Type::SUBQUERY) {
-    delete _subquery;
+    _subquery.~shared_ptr();
   } else if (_type == Type::TRANS_PATH) {
-    delete _pathData._childGraphPattern;
+    _pathData._childGraphPattern.~shared_ptr();
+    _pathData._left.~string();
+    _pathData._right.~string();
   } else {
-    for (GraphPattern* child : _childGraphPatterns) {
-      delete child;
-    }
-    _childGraphPatterns.~vector<GraphPattern*>();
+    _childGraphPatterns.~vector();
   }
 }
 
