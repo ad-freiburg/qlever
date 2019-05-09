@@ -45,6 +45,12 @@ struct option options[] = {
     {"no-compressed-vocabulary", no_argument, NULL, 'N'},
     {NULL, 0, NULL, 0}};
 
+string getStxxlConfigFileName(const string& location) {
+  std::ostringstream os;
+  os << location << ".stxxl";
+  return os.str();
+}
+
 string getStxxlDiskFileName(const string& location, const string& tail) {
   std::ostringstream os;
   os << location << tail << "-stxxl.disk";
@@ -54,11 +60,11 @@ string getStxxlDiskFileName(const string& location, const string& tail) {
 // Write a .stxxl config-file.
 // All we want is sufficient space somewhere with enough space.
 // We can use the location of input files and use a constant size for now.
-// The required size can only ben estimation anyway, since index size
+// The required size can only be estimated anyway, since index size
 // depends on the structure of words files rather than their size only,
 // because of the "multiplications" performed.
 void writeStxxlConfigFile(const string& location, const string& tail) {
-  ad_utility::File stxxlConfig(".stxxl", "w");
+  ad_utility::File stxxlConfig(getStxxlConfigFileName(location), "w");
   std::ostringstream config;
   config << "disk=" << getStxxlDiskFileName(location, tail) << ","
          << STXXL_DISK_SIZE_INDEX_BUILDER << ",syscall";
