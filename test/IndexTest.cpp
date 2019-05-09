@@ -27,7 +27,10 @@ string getStxxlDiskFileName(const string& location, const string& tail) {
 // depends on the structure of words files rather than their size only,
 // because of the "multiplications" performed.
 void writeStxxlConfigFile(const string& location, const string& tail) {
-  ad_utility::File stxxlConfig(getStxxlConfigFileName(location), "w");
+  string stxxlConfigFileName = getStxxlConfigFileName(location);
+  ad_utility::File stxxlConfig(stxxlConfigFileName, "w");
+  // Inform stxxl about .stxxl location
+  setenv("STXXLCFG", stxxlConfigFileName.c_str(), true);
   std::ostringstream config;
   config << "disk=" << getStxxlDiskFileName(location, tail) << ","
          << STXXL_DISK_SIZE_INDEX_TEST << ",syscall";
