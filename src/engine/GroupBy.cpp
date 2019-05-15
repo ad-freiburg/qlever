@@ -69,12 +69,11 @@ string GroupBy::getDescriptor() const {
 size_t GroupBy::getResultWidth() const { return _varColMap.size(); }
 
 vector<size_t> GroupBy::resultSortedOn() const {
+  auto varCols = getVariableColumns();
   vector<size_t> sortedOn;
-  ad_utility::HashMap<string, size_t> subtreeVarCols =
-      _subtree->getVariableColumns();
-  sortedOn.reserve(subtreeVarCols.size());
+  sortedOn.reserve(_groupByVariables.size());
   for (std::string var : _groupByVariables) {
-    sortedOn.push_back(subtreeVarCols[var]);
+    sortedOn.push_back(varCols[var]);
   }
   return sortedOn;
 }
@@ -92,7 +91,6 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
 
   std::unordered_set<size_t> sortColSet;
 
-  // The returned columns are all groupByVariables followed by aggregrates
   for (std::string var : _groupByVariables) {
     size_t col = inVarColMap[var];
     // avoid sorting by a column twice
@@ -101,6 +99,7 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
       cols.push_back({col, false});
     }
   }
+
   for (const ParsedQuery::Alias& a : _aliases) {
     size_t col = inVarColMap[a._inVarName];
     if (sortColSet.find(col) == sortColSet.end()) {

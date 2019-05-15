@@ -633,4 +633,20 @@ queries:
       - selected: ["?b"]
       - contains_row: ["<Albert_Heim>"] 
       - contains_row: ["<Walter_Alvarez>"] 
-
+  - query: birth-place-group-count-order
+    type: no-text
+    sparql: |
+      SELECT ?place (COUNT(?person) AS ?count) WHERE {
+        ?person <is-a> <Person> .
+        ?person <Place_of_birth> ?place
+      }
+      GROUP BY ?place
+      HAVING (?count > 5)
+      ORDER BY ASC(?count)
+    checks:
+      - num_cols: 2
+      #- num_rows: 5296 # We currently limit to 4096
+      - selected: ["?place", "?count"]
+      - contains_row: ["<Aachen>", 8]
+      - contains_row: ["<Aarhus>", 6]
+      - order_numeric: {"dir" : "ASC", "var": "?count"}
