@@ -333,7 +333,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
 
 bool QueryPlanner::checkUsePatternTrick(
     ParsedQuery* pq, SparqlTriple* patternTrickTriple) const {
-  bool usePatternTrick = false;
   // Check if the query has the right number of variables for aliases and
   // group by.
   if (pq->_groupByVariables.size() == 1 && pq->_aliases.size() == 1) {
@@ -349,15 +348,13 @@ bool QueryPlanner::checkUsePatternTrick(
       // look for a HAS_RELATION_PREDICATE triple
       for (size_t i = 0; i < pq->_rootGraphPattern->_whereClauseTriples.size();
            i++) {
+        bool usePatternTrick = true;
         const SparqlTriple& t = pq->_rootGraphPattern->_whereClauseTriples[i];
         // Check that the triples predicates is the HAS_PREDICATE_PREDICATE.
         // Also check that the triples object matches the aliases input
         // variable and the group by variable.
         if (t._p._iri == HAS_PREDICATE_PREDICATE && alias._inVarName == t._o &&
             pq->_groupByVariables[0] == t._o) {
-          // Assume we will use the pattern trick for now but run several more
-          // checks before actually modifying the query.
-          usePatternTrick = true;
           // check that all selected variables are outputs of
           // CountAvailablePredicates
           for (const std::string& s : pq->_selectedVariables) {
@@ -453,12 +450,112 @@ bool QueryPlanner::checkUsePatternTrick(
                 i--;
               }
             }
+            return true;
+          }
+        }
+      }
+
+      LOG(TRACE) << "Considering a subquery as a patterntrick candidate"
+                 << std::endl;
+
+      // Check if the queries single child is a subquery that contains a triple
+      // of the form ?s ?p ?o with constraints solely on ?s and a select on
+      // distinct ?s and ?p
+      std::string predVar = pq->_selectedVariables[0];
+      std::string subjVar = alias._inVarName;
+      LOG(TRACE) << "The subject is " << subjVar << " the predicate " << predVar
+                 << std::endl;
+      std::string objVar;
+      std::shared_ptr<ParsedQuery::GraphPattern> root = pq->_rootGraphPattern;
+
+      // Check that pq does not have where clause triples or filters, but
+      // contains a single subquery child
+      if (root->_filters.empty() && root->_whereClauseTriples.empty() &&
+          root->_children.size() == 1 &&
+          root->_children[0]->_type ==
+              ParsedQuery::GraphPatternOperation::Type::SUBQUERY) {
+        LOG(TRACE) << "Query has a single subquery of the right type"
+                   << std::endl;
+        std::shared_ptr<ParsedQuery> sub = root->_children[0]->_subquery;
+        // Check that the subquery returns the correct variables and does not do
+        // any grouping
+        if (sub->_distinct &&
+            std::find(sub->_selectedVariables.begin(),
+                      sub->_selectedVariables.end(),
+                      predVar) != sub->_selectedVariables.end() &&
+            std::find(sub->_selectedVariables.begin(),
+                      sub->_selectedVariables.end(),
+                      subjVar) != sub->_selectedVariables.end() &&
+            sub->_aliases.size() == 0 && sub->_groupByVariables.size() == 0) {
+          LOG(TRACE) << "The subquery has the correct variables" << std::endl;
+          // Look for a triple in the subquery of the form 'predVar subjVar ?o'
+          std::shared_ptr<ParsedQuery::GraphPattern> subroot =
+              sub->_rootGraphPattern;
+          for (size_t i = 0; i < subroot->_whereClauseTriples.size(); i++) {
+            const SparqlTriple& t = subroot->_whereClauseTriples[i];
+            if (t._s == subjVar && t._p._iri == predVar && isVariable(t._o)) {
+              LOG(TRACE) << "Found a triple matching the subject and predicate "
+                            "with object "
+                         << t._o << std::endl;
+              // The triple at i has the correct subject and predicate and a
+              // variable as an object
+              objVar = t._o;
+              // Check if either the predicate or the object are constrained in
+              // any way
+              bool isConstrained = false;
+              for (size_t j = 0; j < subroot->_whereClauseTriples.size(); j++) {
+                if (j != i) {
+                  const SparqlTriple& t2 = subroot->_whereClauseTriples[j];
+                  if (t2._s == predVar || t2._p._iri == predVar ||
+                      t2._o == predVar || t2._s == objVar ||
+                      t2._p._iri == objVar || t2._o == objVar) {
+                    LOG(TRACE) << "There is another triple " << t2.asString()
+                               << " which constraints " << predVar << " or "
+                               << objVar << std::endl;
+                    isConstrained = true;
+                    break;
+                  }
+                }
+              }
+              // Ensure the triple is not being filtered on either
+              for (size_t j = 0; j < subroot->_filters.size() && !isConstrained;
+                   j++) {
+                const SparqlFilter& f = subroot->_filters[j];
+                if (f._lhs == subjVar || f._lhs == predVar ||
+                    f._lhs == objVar || f._rhs == subjVar ||
+                    f._rhs == predVar || f._rhs == objVar) {
+                  LOG(TRACE)
+                      << "There is a filter on one of the three variables"
+                      << std::endl;
+                  isConstrained = true;
+                  break;
+                }
+              }
+              if (!isConstrained) {
+                LOG(TRACE) << "Removing the triple and merging the subquery "
+                              "with its parent."
+                           << std::endl;
+                LOG(DEBUG) << "Using the pattern trick to answer the query."
+                           << endl;
+                // If this used ql:has-predicate predVar would be the object
+                patternTrickTriple->_s = subjVar;
+                patternTrickTriple->_o = predVar;
+                // merge the subquery without the selected triple into the
+                // parent.
+                subroot->_whereClauseTriples.erase(
+                    subroot->_whereClauseTriples.begin() + i);
+                root->_children.clear();
+                pq->merge(*sub);
+                return true;
+              }
+              break;
+            }
           }
         }
       }
     }
   }
-  return usePatternTrick;
+  return false;
 }
 
 // _____________________________________________________________________________
