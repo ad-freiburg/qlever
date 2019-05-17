@@ -29,6 +29,8 @@ PropertyPath PropertyPathParser::parse() {
   PropertyPath p = path();
   // Check that we parsed the entire input
   expectNone();
+  // This marks all subtrees that can evaluate to the empty path
+  p.computeCanBeNull();
   return p;
 }
 

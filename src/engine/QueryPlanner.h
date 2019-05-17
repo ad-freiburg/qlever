@@ -227,6 +227,11 @@ class QueryPlanner {
 
   std::string generateUniqueVarName();
 
+  // Creates a tree of unions with the given patterns as the trees leaves
+  std::shared_ptr<ParsedQuery::GraphPattern> uniteGraphPatterns(
+      const std::vector<std::shared_ptr<ParsedQuery::GraphPattern>>& patterns)
+      const;
+
   /**
    * @brief Merges two rows of the dp optimization table using various types of
    * joins.

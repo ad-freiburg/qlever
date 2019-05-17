@@ -6,19 +6,24 @@
 
 #include <limits>
 
+#include "../util/Exception.h"
 #include "CallFixedSize.h"
 
 // _____________________________________________________________________________
 TransitivePath::TransitivePath(QueryExecutionContext* qec,
                                std::shared_ptr<QueryExecutionTree> child,
                                bool leftIsVar, bool rightIsVar, size_t left,
-                               size_t right, size_t minDist, size_t maxDist)
+                               size_t right, const std::string& leftColName,
+                               const std::string& rightColName, size_t minDist,
+                               size_t maxDist)
     : Operation(qec),
       _subtree(child),
       _leftIsVar(leftIsVar),
       _rightIsVar(rightIsVar),
       _left(left),
       _right(right),
+      _leftColName(leftColName),
+      _rightColName(rightColName),
       _minDist(minDist),
       _maxDist(maxDist) {}
 
@@ -60,21 +65,8 @@ vector<size_t> TransitivePath::resultSortedOn() const {
 ad_utility::HashMap<std::string, size_t> TransitivePath::getVariableColumns()
     const {
   ad_utility::HashMap<std::string, size_t> map;
-  const ad_utility::HashMap<std::string, size_t>& subMap =
-      _subtree->getVariableColumns();
-  for (const std::pair<std::string, size_t>& p : subMap) {
-    if (_leftIsVar && p.second == _left) {
-      map[p.first] = 0;
-    } else if (_rightIsVar && p.second == _right) {
-      map[p.first] = 1;
-    }
-  }
-  if (!_leftIsVar) {
-    map["fixedLeft"] = 0;
-  }
-  if (!_rightIsVar) {
-    map["fixedRight"] = 0;
-  }
+  map[_leftColName] = 0;
+  map[_rightColName] = 1;
   return map;
 }
 
@@ -164,9 +156,9 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
       edgeCache.push_back(rootEdges->second);
     }
     if (minDist == 0) {
-      // add the node itself to its result
-      res.push_back({nodes[i], nodes[i]});
-      marks.insert(nodes[i]);
+      AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+               "The TransitivePath operation does not support a minimum "
+               "distance of 0 (use at least one instead).");
     }
 
     // While we have not found the entire transitive hull and have not reached

@@ -161,6 +161,21 @@ std::string PropertyPath::asString() const {
   return s.str();
 }
 
+// _____________________________________________________________________________
+void PropertyPath::computeCanBeNull() {
+  _can_be_null = _children.size() > 0;
+  for (PropertyPath& p : _children) {
+    p.computeCanBeNull();
+    _can_be_null &= p._can_be_null;
+  }
+  if (_operation == Operation::TRANSITIVE ||
+      _operation == Operation::TRANSITIVE_MAX ||
+      (_operation == Operation::TRANSITIVE_MIN && _limit == 0)) {
+    _can_be_null = true;
+  }
+}
+
+// _____________________________________________________________________________
 std::ostream& operator<<(std::ostream& out, const PropertyPath& p) {
   p.writeToStream(out);
   return out;

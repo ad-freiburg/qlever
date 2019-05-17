@@ -22,25 +22,25 @@ TEST(TransitivePathTest, computeTransitivePath) {
   IdTable result(2);
 
   IdTable expected(2);
-  expected.push_back({0, 0});
   expected.push_back({0, 2});
   expected.push_back({0, 4});
   expected.push_back({0, 7});
-  expected.push_back({2, 2});
+  expected.push_back({0, 0});
   expected.push_back({2, 4});
   expected.push_back({2, 7});
   expected.push_back({2, 0});
-  expected.push_back({4, 4});
+  expected.push_back({2, 2});
   expected.push_back({4, 7});
   expected.push_back({4, 0});
   expected.push_back({4, 2});
+  expected.push_back({4, 4});
   expected.push_back({3, 3});
-  expected.push_back({7, 7});
   expected.push_back({7, 0});
   expected.push_back({7, 2});
   expected.push_back({7, 4});
+  expected.push_back({7, 7});
 
-  TransitivePath::computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0,
+  TransitivePath::computeTransitivePath<2>(&result, sub, true, true, 0, 1, 1,
                                            std::numeric_limits<size_t>::max());
   ASSERT_EQ(expected, result);
 

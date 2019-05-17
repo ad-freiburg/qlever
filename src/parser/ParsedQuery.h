@@ -38,19 +38,27 @@ class PropertyPath {
     IRI
   };
 
-  PropertyPath() : _operation(Operation::IRI), _limit(0), _iri(), _children() {}
+  PropertyPath()
+      : _operation(Operation::IRI),
+        _limit(0),
+        _iri(),
+        _children(),
+        _can_be_null(false) {}
   explicit PropertyPath(Operation op)
-      : _operation(op), _limit(0), _iri(), _children() {}
+      : _operation(op), _limit(0), _iri(), _children(), _can_be_null(false) {}
   PropertyPath(Operation op, uint16_t limit, const std::string& iri,
                std::initializer_list<PropertyPath> children);
 
   bool operator==(const PropertyPath& other) const {
     return _operation == other._operation && _limit == other._limit &&
-           _iri == other._iri && _children == other._children;
+           _iri == other._iri && _children == other._children &&
+           _can_be_null == other._can_be_null;
   }
 
   void writeToStream(std::ostream& out) const;
   std::string asString() const;
+
+  void computeCanBeNull();
 
   Operation _operation;
   // For the limited transitive operations
@@ -60,6 +68,12 @@ class PropertyPath {
   std::string _iri;
 
   std::vector<PropertyPath> _children;
+
+  /**
+   * True iff this property path is either a transitive path with minimum length
+   * of 0, or if all of this transitive path's children can be null.
+   */
+  bool _can_be_null;
 };
 
 std::ostream& operator<<(std::ostream& out, const PropertyPath& p);

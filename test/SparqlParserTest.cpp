@@ -540,6 +540,8 @@ TEST(ParserTest, propertyPaths) {
                          {PropertyPath(Op::IRI, 0, "a", {}),
                           PropertyPath(Op::IRI, 0, "b", {}),
                           PropertyPath(Op::IRI, 0, "<a/b/c>", {})})})});
+  expected.computeCanBeNull();
+  expected._can_be_null = false;
   ASSERT_EQ(expected, result);
 
   // Ensure whitespace is not accepted

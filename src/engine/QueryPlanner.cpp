@@ -3,8 +3,10 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./QueryPlanner.h"
+
 #include <algorithm>
 #include <ctime>
+
 #include "../parser/ParseException.h"
 #include "CountAvailablePredicates.h"
 #include "Distinct.h"
@@ -208,13 +210,16 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
               &patternPlans[child->_pathData._childGraphPattern->_id];
           childPlanStorage.emplace_back(_qec);
           Id leftCol, rightCol;
+          std::string leftColName, rightColName;
           size_t min, max;
           bool leftVar, rightVar;
           if (isVariable(child->_pathData._left)) {
             leftVar = true;
             leftCol = sub->_qet->getVariableColumn(child->_pathData._left);
+            leftColName = child->_pathData._left;
           } else {
             leftVar = false;
+            leftColName = generateUniqueVarName();
             if (!_qec->getIndex().getVocab().getId(child->_pathData._left,
                                                    &leftCol)) {
               AD_THROW(ad_semsearch::Exception::BAD_QUERY,
@@ -224,8 +229,10 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           if (isVariable(child->_pathData._right)) {
             rightVar = true;
             rightCol = sub->_qet->getVariableColumn(child->_pathData._right);
+            rightColName = child->_pathData._right;
           } else {
             rightVar = false;
+            rightColName = generateUniqueVarName();
             if (!_qec->getIndex().getVocab().getId(child->_pathData._right,
                                                    &rightCol)) {
               AD_THROW(ad_semsearch::Exception::BAD_QUERY,
@@ -235,7 +242,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           min = child->_pathData._min;
           max = child->_pathData._max;
           std::shared_ptr<Operation> transOp = std::make_shared<TransitivePath>(
-              _qec, sub->_qet, leftVar, rightVar, leftCol, rightCol, min, max);
+              _qec, sub->_qet, leftVar, rightVar, leftCol, rightCol,
+              leftColName, rightColName, min, max);
 
           QueryExecutionTree& tree = *childPlanStorage.back()._qet.get();
           tree.setVariableColumns(
@@ -1139,6 +1147,13 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
     const SparqlTriple& triple) {
+  if (triple._p._can_be_null) {
+    std::stringstream buf;
+    buf << "The property path ";
+    triple._p.writeToStream(buf);
+    buf << " can evaluate to the empty path which is not yet supported.";
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED, buf.str());
+  }
   std::shared_ptr<ParsedQuery::GraphPattern> pattern =
       seedFromPropertyPath(triple._s, triple._p, triple._o);
 #if LOGLEVEL >= TRACE
@@ -1189,50 +1204,89 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
               << std::endl;
     return seedFromPropertyPath(left, path, right);
   }
-  std::vector<std::shared_ptr<ParsedQuery::GraphPattern>> childPlans;
-  childPlans.reserve(path._children.size());
 
-  std::vector<std::string> tmpVarNames;
+  // This vector maps the indices of child paths that can be null
+  // to a bit in a bitmask. This information is later used
+  // on to create a union over every possible combination of including and
+  // excluding the child paths that can be null.
+  std::vector<size_t> null_child_indices(path._children.size(), -1);
+  size_t num_null_children = 0;
+
   for (size_t i = 0; i < path._children.size(); i++) {
-    if (i == 0) {
-      tmpVarNames.push_back(generateUniqueVarName());
-      childPlans.push_back(
-          seedFromPropertyPath(left, path._children[i], tmpVarNames.back()));
-    } else if (i + 1 == path._children.size()) {
-      childPlans.push_back(
-          seedFromPropertyPath(tmpVarNames.back(), path._children[i], right));
-    } else {
-      tmpVarNames.push_back(generateUniqueVarName());
-      childPlans.push_back(
-          seedFromPropertyPath(tmpVarNames[tmpVarNames.size() - 2],
-                               path._children[i], tmpVarNames.back()));
+    if (path._children[i]._can_be_null) {
+      null_child_indices[i] = num_null_children;
+      ++num_null_children;
     }
   }
-
-  // Merge all the child plans into one graph pattern
-  std::shared_ptr<ParsedQuery::GraphPattern> p =
-      std::make_shared<ParsedQuery::GraphPattern>();
-  for (const std::shared_ptr<ParsedQuery::GraphPattern>& child : childPlans) {
-    p->_children.insert(p->_children.end(), child->_children.begin(),
-                        child->_children.end());
-    // TODO(Florian): Use reference counting through std::shared_ptr to
-    // simplify the memory management of the children.
-    // Ensure the child does not try to delete the pointers
-    child->_children.clear();
-    p->_filters.insert(p->_filters.end(), child->_filters.begin(),
-                       child->_filters.end());
-    p->_whereClauseTriples.insert(p->_whereClauseTriples.begin(),
-                                  child->_whereClauseTriples.begin(),
-                                  child->_whereClauseTriples.end());
+  if (num_null_children > 63) {
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+             "More than 64 children of a sequence path that can be null are "
+             "not yet supported.");
   }
-  return p;
+
+  // We need a union over every combination of joins that exclude any subset the
+  // child paths which are marked as can_be_null.
+  std::vector<std::shared_ptr<ParsedQuery::GraphPattern>> join_patterns;
+  join_patterns.reserve((1 << num_null_children));
+
+  std::vector<size_t> included_ids(path._children.size());
+  for (uint64_t bitmask = 0; bitmask < (size_t(1) << num_null_children);
+       ++bitmask) {
+    included_ids.clear();
+    for (size_t i = 0; i < path._children.size(); i++) {
+      if (!path._children[i]._can_be_null ||
+          (bitmask & (1 << null_child_indices[i])) > 0) {
+        included_ids.push_back(i);
+      }
+    }
+    // Avoid creating an empty graph pattern
+    if (included_ids.empty()) {
+      continue;
+    }
+    std::string l = left;
+    std::string r;
+    if (included_ids.size() > 1) {
+      r = generateUniqueVarName();
+    } else {
+      r = right;
+    }
+
+    // Merge all the child plans into one graph pattern
+    // excluding those that can be null and are not marked in the bitmask
+    std::shared_ptr<ParsedQuery::GraphPattern> p =
+        std::make_shared<ParsedQuery::GraphPattern>();
+    for (size_t i = 0; i < included_ids.size(); i++) {
+      std::shared_ptr<ParsedQuery::GraphPattern> child =
+          seedFromPropertyPath(l, path._children[included_ids[i]], r);
+      p->_children.insert(p->_children.end(), child->_children.begin(),
+                          child->_children.end());
+      p->_filters.insert(p->_filters.end(), child->_filters.begin(),
+                         child->_filters.end());
+      p->_whereClauseTriples.insert(p->_whereClauseTriples.begin(),
+                                    child->_whereClauseTriples.begin(),
+                                    child->_whereClauseTriples.end());
+      // Update the variables used on the left and right of the child path
+      l = r;
+      if (i + 2 < included_ids.size()) {
+        r = generateUniqueVarName();
+      } else {
+        r = right;
+      }
+    }
+    join_patterns.push_back(p);
+  }
+
+  if (join_patterns.size() == 1) {
+    return join_patterns[0];
+  } else {
+    return uniteGraphPatterns(join_patterns);
+  }
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
-  using GraphPattern = ParsedQuery::GraphPattern;
   if (path._children.size() == 0) {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "Tried processing an alternative property path node without any "
@@ -1250,24 +1304,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
     childPlans.push_back(seedFromPropertyPath(left, path._children[i], right));
   }
 
-  // Build a tree of union operations
-  std::shared_ptr<ParsedQuery::GraphPattern> p =
-      std::make_shared<ParsedQuery::GraphPattern>();
-  p->_children.push_back(std::make_shared<ParsedQuery::GraphPatternOperation>(
-      ParsedQuery::GraphPatternOperation::Type::UNION,
-      std::initializer_list<std::shared_ptr<GraphPattern>>{childPlans[0],
-                                                           childPlans[1]}));
-  for (size_t i = 2; i < childPlans.size(); i++) {
-    std::shared_ptr<ParsedQuery::GraphPattern> next =
-        std::make_shared<ParsedQuery::GraphPattern>();
-    next->_children.push_back(
-        std::make_shared<ParsedQuery::GraphPatternOperation>(
-            ParsedQuery::GraphPatternOperation::Type::UNION,
-            std::initializer_list<std::shared_ptr<GraphPattern>>{
-                p, childPlans[i]}));
-    p = next;
-  }
-  return p;
+  return uniteGraphPatterns(childPlans);
 }
 
 // _____________________________________________________________________________
@@ -1283,7 +1320,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
           ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
   op->_pathData._left = left;
   op->_pathData._right = right;
-  op->_pathData._min = 0;
+  op->_pathData._min = 1;
   op->_pathData._max = std::numeric_limits<size_t>::max();
   op->_pathData._childGraphPattern = childPlan;
   p->_children.push_back(op);
@@ -1303,7 +1340,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
           ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
   op->_pathData._left = left;
   op->_pathData._right = right;
-  op->_pathData._min = path._limit;
+  op->_pathData._min = std::max(uint_fast16_t(1), path._limit);
   op->_pathData._max = std::numeric_limits<size_t>::max();
   op->_pathData._childGraphPattern = childPlan;
   p->_children.push_back(op);
@@ -1323,7 +1360,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
           ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
   op->_pathData._left = left;
   op->_pathData._right = right;
-  op->_pathData._min = 0;
+  op->_pathData._min = 1;
   op->_pathData._max = path._limit;
   op->_pathData._childGraphPattern = childPlan;
   p->_children.push_back(op);
@@ -1347,9 +1384,30 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromIri(
   return p;
 }
 
+std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::uniteGraphPatterns(
+    const std::vector<std::shared_ptr<ParsedQuery::GraphPattern>>& patterns)
+    const {
+  using GraphPattern = ParsedQuery::GraphPattern;
+  using GraphPatternOperation = ParsedQuery::GraphPatternOperation;
+  // Build a tree of union operations
+  std::shared_ptr<GraphPattern> p = std::make_shared<GraphPattern>();
+  p->_children.push_back(std::make_shared<GraphPatternOperation>(
+      GraphPatternOperation::Type::UNION,
+      std::initializer_list<std::shared_ptr<GraphPattern>>{patterns[0],
+                                                           patterns[1]}));
+  for (size_t i = 2; i < patterns.size(); i++) {
+    std::shared_ptr<GraphPattern> next = std::make_shared<GraphPattern>();
+    next->_children.push_back(std::make_shared<GraphPatternOperation>(
+        GraphPatternOperation::Type::UNION,
+        std::initializer_list<std::shared_ptr<GraphPattern>>{p, patterns[i]}));
+    p = next;
+  }
+  return p;
+}
+
 // _____________________________________________________________________________
 std::string QueryPlanner::generateUniqueVarName() {
-  return "?:" + std::to_string(_internalVarCount);
+  return "?:" + std::to_string(_internalVarCount++);
 }
 
 // _____________________________________________________________________________
