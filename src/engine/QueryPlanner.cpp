@@ -241,7 +241,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           }
           min = child->_pathData._min;
           max = child->_pathData._max;
-          std::shared_ptr<Operation> transOp = std::make_shared<TransitivePath>(
+          auto transOp = std::make_shared<TransitivePath>(
               _qec, sub->_qet, leftVar, rightVar, leftCol, rightCol,
               leftColName, rightColName, min, max);
 
@@ -1205,82 +1205,159 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
     return seedFromPropertyPath(left, path, right);
   }
 
-  // This vector maps the indices of child paths that can be null
-  // to a bit in a bitmask. This information is later used
-  // on to create a union over every possible combination of including and
-  // excluding the child paths that can be null.
-  std::vector<size_t> null_child_indices(path._children.size(), -1);
-  size_t num_null_children = 0;
-
-  for (size_t i = 0; i < path._children.size(); i++) {
-    if (path._children[i]._can_be_null) {
-      null_child_indices[i] = num_null_children;
-      ++num_null_children;
-    }
-  }
-  if (num_null_children > 63) {
-    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-             "More than 64 children of a sequence path that can be null are "
-             "not yet supported.");
-  }
-
-  // We need a union over every combination of joins that exclude any subset the
-  // child paths which are marked as can_be_null.
-  std::vector<std::shared_ptr<ParsedQuery::GraphPattern>> join_patterns;
-  join_patterns.reserve((1 << num_null_children));
-
-  std::vector<size_t> included_ids(path._children.size());
-  for (uint64_t bitmask = 0; bitmask < (size_t(1) << num_null_children);
-       ++bitmask) {
-    included_ids.clear();
-    for (size_t i = 0; i < path._children.size(); i++) {
-      if (!path._children[i]._can_be_null ||
-          (bitmask & (1 << null_child_indices[i])) > 0) {
-        included_ids.push_back(i);
+  // Split the child paths into groups that can not be null (have at least one
+  // node that can not be null). If all children can be null create a single
+  // group.
+  std::vector<std::array<size_t, 2>> nonNullChunks;
+  size_t start = 0;
+  while (start < path._children.size()) {
+    bool has_non_null = false;
+    bool has_null = false;
+    size_t end = start;
+    for (end = start; end < path._children.size(); end++) {
+      if (path._children[end]._can_be_null) {
+        has_null = true;
+      } else {
+        if (has_null && has_non_null) {
+          // We already have a non null node and we have the maximum
+          // number of null nodes while using the least possible number of
+          // non null nodes (for a greedy approach)
+          --end;
+          break;
+        }
+        has_non_null = true;
       }
     }
-    // Avoid creating an empty graph pattern
-    if (included_ids.empty()) {
-      continue;
+    bool wasAtEnd = false;
+    if (end == path._children.size()) {
+      --end;
+      wasAtEnd = true;
     }
-    std::string l = left;
-    std::string r;
-    if (included_ids.size() > 1) {
-      r = generateUniqueVarName();
+    if (wasAtEnd && nonNullChunks.size() > 0 && !has_non_null) {
+      // Avoid creating an empty chunk by expanding the previous one
+      nonNullChunks.back()[1] = end + 1;
     } else {
-      r = right;
+      nonNullChunks.push_back({start, end + 1});
+    }
+    start = end + 1;
+  }
+
+  // Generate unique variable names that connect the nunNullChunks
+  std::vector<std::string> connectionVarNames(nonNullChunks.size() + 1);
+  connectionVarNames[0] = left;
+  connectionVarNames.back() = right;
+  for (size_t i = 1; i + 1 < connectionVarNames.size(); i++) {
+    connectionVarNames[i] = generateUniqueVarName();
+  }
+
+  // Stores the pattern for every non null chunk
+  std::vector<std::shared_ptr<ParsedQuery::GraphPattern>> chunkPatterns;
+  chunkPatterns.reserve(nonNullChunks.size());
+
+  for (size_t chunkIdx = 0; chunkIdx < nonNullChunks.size(); ++chunkIdx) {
+    std::array<size_t, 2> chunk = nonNullChunks[chunkIdx];
+    std::string chunkLeft = connectionVarNames[chunkIdx];
+    std::string chunkRight = connectionVarNames[chunkIdx + 1];
+    size_t numChildren = chunk[1] - chunk[0];
+
+    // This vector maps the indices of child paths that can be null
+    // to a bit in a bitmask. This information is later used
+    // on to create a union over every possible combination of including and
+    // excluding the child paths that can be null.
+    std::vector<size_t> null_child_indices(numChildren, -1);
+    size_t num_null_children = 0;
+
+    for (size_t i = chunk[0]; i < chunk[1]; i++) {
+      if (path._children[i]._can_be_null) {
+        null_child_indices[i] = num_null_children;
+        ++num_null_children;
+      }
+    }
+    if (num_null_children > 10) {
+      AD_THROW(
+          ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+          "More than 10 consecutive children of a sequence path that can be "
+          "null are "
+          "not yet supported.");
     }
 
-    // Merge all the child plans into one graph pattern
-    // excluding those that can be null and are not marked in the bitmask
-    std::shared_ptr<ParsedQuery::GraphPattern> p =
-        std::make_shared<ParsedQuery::GraphPattern>();
-    for (size_t i = 0; i < included_ids.size(); i++) {
-      std::shared_ptr<ParsedQuery::GraphPattern> child =
-          seedFromPropertyPath(l, path._children[included_ids[i]], r);
-      p->_children.insert(p->_children.end(), child->_children.begin(),
-                          child->_children.end());
-      p->_filters.insert(p->_filters.end(), child->_filters.begin(),
-                         child->_filters.end());
-      p->_whereClauseTriples.insert(p->_whereClauseTriples.begin(),
-                                    child->_whereClauseTriples.begin(),
-                                    child->_whereClauseTriples.end());
-      // Update the variables used on the left and right of the child path
-      l = r;
-      if (i + 2 < included_ids.size()) {
+    // We need a union over every combination of joins that exclude any subset
+    // the child paths which are marked as can_be_null.
+    std::vector<std::shared_ptr<ParsedQuery::GraphPattern>> join_patterns;
+    join_patterns.reserve((1 << num_null_children));
+
+    std::vector<size_t> included_ids(numChildren);
+    for (uint64_t bitmask = 0; bitmask < (size_t(1) << num_null_children);
+         ++bitmask) {
+      included_ids.clear();
+      for (size_t i = chunk[0]; i < chunk[1]; i++) {
+        if (!path._children[i]._can_be_null ||
+            (bitmask & (1 << null_child_indices[i])) > 0) {
+          included_ids.push_back(i);
+        }
+      }
+      // Avoid creating an empty graph pattern
+      if (included_ids.empty()) {
+        continue;
+      }
+      std::string l = left;
+      std::string r;
+      if (included_ids.size() > 1) {
         r = generateUniqueVarName();
       } else {
         r = right;
       }
+
+      // Merge all the child plans into one graph pattern
+      // excluding those that can be null and are not marked in the bitmask
+      auto p = std::make_shared<ParsedQuery::GraphPattern>();
+      for (size_t i = 0; i < included_ids.size(); i++) {
+        std::shared_ptr<ParsedQuery::GraphPattern> child =
+            seedFromPropertyPath(l, path._children[included_ids[i]], r);
+        p->_children.insert(p->_children.end(), child->_children.begin(),
+                            child->_children.end());
+        p->_filters.insert(p->_filters.end(), child->_filters.begin(),
+                           child->_filters.end());
+        p->_whereClauseTriples.insert(p->_whereClauseTriples.begin(),
+                                      child->_whereClauseTriples.begin(),
+                                      child->_whereClauseTriples.end());
+        // Update the variables used on the left and right of the child path
+        l = r;
+        if (i + 2 < included_ids.size()) {
+          r = generateUniqueVarName();
+        } else {
+          r = right;
+        }
+      }
+      join_patterns.push_back(p);
     }
-    join_patterns.push_back(p);
+
+    if (join_patterns.size() == 1) {
+      chunkPatterns.push_back(join_patterns[0]);
+    } else {
+      chunkPatterns.push_back(uniteGraphPatterns(join_patterns));
+    }
   }
 
-  if (join_patterns.size() == 1) {
-    return join_patterns[0];
-  } else {
-    return uniteGraphPatterns(join_patterns);
+  if (chunkPatterns.size() == 1) {
+    return chunkPatterns[0];
   }
+
+  // Join the chunk patterns
+  std::shared_ptr<ParsedQuery::GraphPattern> fp =
+      std::make_shared<ParsedQuery::GraphPattern>();
+
+  for (const std::shared_ptr<ParsedQuery::GraphPattern>& p : chunkPatterns) {
+    fp->_children.insert(fp->_children.begin(), p->_children.begin(),
+                         p->_children.end());
+    fp->_whereClauseTriples.insert(fp->_whereClauseTriples.begin(),
+                                   p->_whereClauseTriples.begin(),
+                                   p->_whereClauseTriples.end());
+    fp->_filters.insert(fp->_filters.begin(), p->_filters.begin(),
+                        p->_filters.end());
+  }
+
+  return fp;
 }
 
 // _____________________________________________________________________________

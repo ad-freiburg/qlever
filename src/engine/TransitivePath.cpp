@@ -33,7 +33,7 @@ std::string TransitivePath::asString(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  os << "TRANSITIVE left " << _left << " right " << _right << " minDist "
+  os << "TRANSITIVE_PATH left " << _left << " right " << _right << " minDist "
      << _minDist << " maxDist " << _maxDist << "\n";
   os << _subtree->asString(indent) << "\n";
   return os.str();
@@ -42,7 +42,7 @@ std::string TransitivePath::asString(size_t indent) const {
 // _____________________________________________________________________________
 std::string TransitivePath::getDescriptor() const {
   std::ostringstream os;
-  os << "TRANSITIVE left " << _left << " right " << _right << " minDist "
+  os << "TRANSITIVE_PATH left " << _left << " right " << _right << " minDist "
      << _minDist << " maxDist " << _maxDist;
   return os.str();
 }
