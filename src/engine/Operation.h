@@ -79,10 +79,11 @@ class Operation {
         throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
       }
       timer.stop();
-      _runtimeInfo.setDescriptor(getDescriptor());
       _runtimeInfo.setRows(newResult->_resTable->size());
       _runtimeInfo.setCols(getResultWidth());
+      _runtimeInfo.setDescriptor(getDescriptor());
       _runtimeInfo.setColumnNames(getVariableColumns());
+
       _runtimeInfo.setTime(timer.msecs());
       _runtimeInfo.setWasCached(false);
       // cache the runtime information for the execution as well
@@ -100,15 +101,16 @@ class Operation {
     }
     timer.stop();
     _runtimeInfo = existingResult->_runtimeInfo;
-    // If the result for this Operation came from the cache we
-    // need to update column names and descriptor as we may have
-    // cached with different variable names
+    // We need to update column names and descriptor as we may have cached with
+    // different variable names
     _runtimeInfo.setDescriptor(getDescriptor());
     _runtimeInfo.setColumnNames(getVariableColumns());
     _runtimeInfo.setTime(timer.msecs());
     _runtimeInfo.setWasCached(true);
-    _runtimeInfo.addDetail("OriginalTime",
+    _runtimeInfo.addDetail("original_total_time",
                            existingResult->_runtimeInfo.getTime());
+    _runtimeInfo.addDetail("original_operation_time",
+                           existingResult->_runtimeInfo.getOperationTime());
     return existingResult->_resTable;
   }
 
