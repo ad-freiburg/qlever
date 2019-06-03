@@ -246,8 +246,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
               leftColName, rightColName, min, max);
 
           QueryExecutionTree& tree = *childPlanStorage.back()._qet.get();
-          tree.setVariableColumns(
-              static_cast<Union*>(transOp.get())->getVariableColumns());
+          tree.setVariableColumns(static_cast<TransitivePath*>(transOp.get())
+                                      ->getVariableColumns());
           tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, transOp);
           childPlans.push_back(&childPlanStorage.back());
         } break;
