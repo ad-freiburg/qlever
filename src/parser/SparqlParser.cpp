@@ -179,7 +179,7 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
   vector<string> filters;
   size_t start = 0;
   bool insideUri = false;
-  bool insideNsThing = false;
+  bool insidePrefixed = false;
   bool insideLiteral = false;
   while (start < inner.size()) {
     size_t k = start;
@@ -335,32 +335,38 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
     } else if (inner[k] == 'S' || inner[k] == 's') {
     }
     while (k < inner.size()) {
-      if (!insideUri && !insideLiteral && !insideNsThing) {
+      if (!insideUri && !insideLiteral && !insidePrefixed) {
         if (inner[k] == '.') {
           clauses.emplace_back(inner.substr(start, k - start));
           break;
-        }
-        if (inner[k] == '<') {
+        } else if (inner[k] == '<') {
           insideUri = true;
-        }
-        if (inner[k] == '\"') {
+        } else if (inner[k] == '\"') {
           insideLiteral = true;
-        }
-        if (inner[k] == ':') {
-          insideNsThing = true;
+        } else if (inner[k] == ':') {
+          insidePrefixed = true;
         }
       } else {
         if (insideUri && inner[k] == '>') {
           insideUri = false;
-        }
-        if (insideLiteral && inner[k] == '\"') {
+        } else if (insideLiteral && inner[k] == '\"') {
           insideLiteral = false;
-        }
-        if (insideNsThing && (inner[k] == ' ' || inner[k] == '\t')) {
-          insideNsThing = false;
+        } else if (insidePrefixed) {
+          if (std::isspace(static_cast<unsigned char>(inner[k]))) {
+            insidePrefixed = false;
+          } else if (inner[k] == '.') {
+            if (k + 1 >= inner.size() ||
+                (inner[k + 1] == '?' || inner[k + 1] == '<' ||
+                 inner[k + 1] == '\"' ||
+                 std::isspace(static_cast<unsigned char>(inner[k + 1])))) {
+              insidePrefixed = false;
+              // Need to reevaluate the dot as a separator
+              k--;
+            }
+          }
         }
       }
-      ++k;
+      k++;
     }
     if (k == inner.size()) {
       clauses.emplace_back(inner.substr(start));
@@ -368,9 +374,9 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
     start = k + 1;
   }
   for (const string& clause : clauses) {
-    string c = ad_utility::strip(clause, ' ');
-    if (c.size() > 0) {
-      addWhereTriple(c, currentPattern);
+    string cleanClause = ad_utility::strip(clause, ' ');
+    if (cleanClause.size() > 0) {
+      addWhereTriple(cleanClause, currentPattern);
     }
   }
   for (const string& filter : filters) {
