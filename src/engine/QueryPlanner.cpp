@@ -852,6 +852,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           plan._idsOfIncludedNodes |= (uint64_t(1) << i);
           auto& tree = *plan._qet.get();
           if (node._triple._p._iri == HAS_PREDICATE_PREDICATE) {
+            // TODO(schnelle): Handle ?p ql:has-prediacte ?p
             // Add a has relation scan instead of a normal IndexScan
             HasPredicateScan::ScanType scanType;
             if (isVariable(node._triple._s)) {
@@ -865,6 +866,36 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             tree.setOperation(
                 QueryExecutionTree::OperationType::HAS_RELATION_SCAN, scan);
             tree.setVariableColumns(scan->getVariableColumns());
+          } else if (isVariable(node._triple._s) &&
+                     isVariable(node._triple._o) &&
+                     node._triple._s == node._triple._o) {
+            if (isVariable(node._triple._p._iri)) {
+              AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+                       "Triple with one variable repated 3 times");
+            }
+            LOG(DEBUG) << "Subject variable same as object variable"
+                       << std::endl;
+            // Need to handle this as IndexScan with a new unique
+            // variable + Filter. Works in both directions
+            std::string filterVar = generateUniqueVarName();
+
+            auto scanTree = std::make_shared<QueryExecutionTree>(_qec);
+            auto scan = std::make_shared<IndexScan>(
+                _qec, IndexScan::ScanType::PSO_FREE_S);
+            scan->setSubject(node._triple._s);
+            scan->setPredicate(node._triple._p._iri);
+            scan->setObject(filterVar);
+            scan->precomputeSizeEstimate();
+            scanTree->setOperation(QueryExecutionTree::OperationType::SCAN,
+                                   scan);
+            scanTree->setVariableColumn(node._triple._s, 0);
+            scanTree->setVariableColumn(filterVar, 1);
+            auto filter = std::make_shared<Filter>(_qec, scanTree,
+                                                   SparqlFilter::FilterType::EQ,
+                                                   node._triple._s, filterVar);
+            tree.setOperation(QueryExecutionTree::OperationType::FILTER,
+                              filter);
+            tree.setVariableColumns(filter->getVariableColumns());
           } else if (isVariable(node._triple._s)) {
             auto scan = std::make_shared<IndexScan>(
                 _qec, IndexScan::ScanType::POS_BOUND_O);
@@ -882,6 +913,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             tree.setOperation(QueryExecutionTree::OperationType::SCAN, scan);
             tree.setVariableColumn(node._triple._o, 0);
           } else {
+            assert(isVariable(node._triple._p));
             auto scan = std::make_shared<IndexScan>(
                 _qec, IndexScan::ScanType::SOP_BOUND_O);
             scan->setSubject(node._triple._s);
