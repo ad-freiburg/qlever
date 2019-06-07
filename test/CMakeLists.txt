@@ -109,3 +109,7 @@ target_link_libraries(MultiColumnJoinTest gtest_main engine ${CMAKE_THREAD_LIBS_
 add_executable(IdTableTest IdTableTest.cpp)
 add_test(IdTableTest IdTableTest)
 target_link_libraries(IdTableTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(TransitivePathTest TransitivePathTest.cpp)
+add_test(TransitivePathTest TransitivePathTest)
+target_link_libraries(TransitivePathTest engine gtest_main ${CMAKE_THREAD_LIBS_INIT})

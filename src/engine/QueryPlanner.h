@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <set>
 #include <vector>
 #include "../parser/ParsedQuery.h"
 #include "QueryExecutionTree.h"
@@ -13,7 +14,7 @@ class QueryPlanner {
  public:
   explicit QueryPlanner(QueryExecutionContext* qec);
 
-  QueryExecutionTree createExecutionTree(ParsedQuery& pq) const;
+  QueryExecutionTree createExecutionTree(ParsedQuery& pq);
 
   class TripleGraph {
    public:
@@ -32,7 +33,7 @@ class QueryPlanner {
           _variables.insert(t._s);
         }
         if (isVariable(t._p)) {
-          _variables.insert(t._p);
+          _variables.insert(t._p._iri);
         }
         if (isVariable(t._o)) {
           _variables.insert(t._o);
@@ -42,7 +43,10 @@ class QueryPlanner {
       Node(size_t id, const string& cvar, const string& wordPart,
            const vector<SparqlTriple>& trips)
           : _id(id),
-            _triple(cvar, INTERNAL_TEXT_MATCH_PREDICATE, wordPart),
+            _triple(cvar,
+                    PropertyPath(PropertyPath::Operation::IRI, 0,
+                                 INTERNAL_TEXT_MATCH_PREDICATE, {}),
+                    wordPart),
             _variables(),
             _cvar(cvar),
             _wordPart(wordPart) {
@@ -52,7 +56,7 @@ class QueryPlanner {
             _variables.insert(t._s);
           }
           if (isVariable(t._p)) {
-            _variables.insert(t._p);
+            _variables.insert(t._p._iri);
           }
           if (isVariable(t._o)) {
             _variables.insert(t._o);
@@ -66,7 +70,7 @@ class QueryPlanner {
 
       size_t _id;
       SparqlTriple _triple;
-      std::set<string> _variables;
+      std::set<std::string> _variables;
       string _cvar;
       string _wordPart;
     };
@@ -120,7 +124,8 @@ class QueryPlanner {
     void addAllNodes(uint64_t otherNodes);
   };
 
-  TripleGraph createTripleGraph(const ParsedQuery::GraphPattern* pattern) const;
+  TripleGraph createTripleGraph(
+      std::shared_ptr<const ParsedQuery::GraphPattern> pattern) const;
 
   static ad_utility::HashMap<string, size_t>
   createVariableColumnsMapForTextOperation(
@@ -155,17 +160,84 @@ class QueryPlanner {
  private:
   QueryExecutionContext* _qec;
 
-  static bool isVariable(const string& elem);
+  // Used to count the number of unique variables created using
+  // generateUniqueVarName
+  size_t _internalVarCount;
 
+  static bool isVariable(const string& elem);
+  static bool isVariable(const PropertyPath& elem);
+
+  std::vector<SubtreePlan> optimize(
+      std::shared_ptr<const ParsedQuery::GraphPattern> pattern);
+
+  /**
+   * @brief Fills varToTrip with a mapping from all variables in the root graph
+   * pattern (no matter whether they are in the subject, predicate or object) to
+   * the triple they occur in. Fills contextVars with all subject variables for
+   * which the predicate is either 'contains-word' or 'contains-entity'.
+   */
   void getVarTripleMap(
       const ParsedQuery& pq,
-      ad_utility::HashMap<string, vector<SparqlTriple>>& varToTrip,
-      ad_utility::HashSet<string>& contextVars) const;
+      ad_utility::HashMap<string, vector<SparqlTriple>>* varToTrip,
+      ad_utility::HashSet<string>* contextVars) const;
 
+  /**
+   * @brief Fills children with all operations that are associated with a single
+   * node in the triple graph (e.g. IndexScans).
+   */
   vector<SubtreePlan> seedWithScansAndText(
       const TripleGraph& tg,
-      const vector<QueryPlanner::SubtreePlan*>& children) const;
+      const vector<const QueryPlanner::SubtreePlan*>& children);
 
+  /**
+   * @brief Returns a subtree plan that will compute the values for the
+   * variables in this single triple. Depending on the triple's PropertyPath
+   * this subtree can be arbitrarily large.
+   */
+  vector<SubtreePlan> seedFromPropertyPathTriple(const SparqlTriple& triple);
+
+  /**
+   * @brief Returns a parsed query for the property path.
+   */
+  std::shared_ptr<ParsedQuery::GraphPattern> seedFromPropertyPath(
+      const std::string& left, const PropertyPath& path,
+      const std::string& right);
+
+  std::shared_ptr<ParsedQuery::GraphPattern> seedFromSequence(
+      const std::string& left, const PropertyPath& path,
+      const std::string& right);
+  std::shared_ptr<ParsedQuery::GraphPattern> seedFromAlternative(
+      const std::string& left, const PropertyPath& path,
+      const std::string& right);
+  std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitive(
+      const std::string& left, const PropertyPath& path,
+      const std::string& right);
+  std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitiveMin(
+      const std::string& left, const PropertyPath& path,
+      const std::string& right);
+  std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitiveMax(
+      const std::string& left, const PropertyPath& path,
+      const std::string& right);
+  std::shared_ptr<ParsedQuery::GraphPattern> seedFromInverse(
+      const std::string& left, const PropertyPath& path,
+      const std::string& right);
+  std::shared_ptr<ParsedQuery::GraphPattern> seedFromIri(
+      const std::string& left, const PropertyPath& path,
+      const std::string& right);
+
+  std::string generateUniqueVarName();
+
+  // Creates a tree of unions with the given patterns as the trees leaves
+  std::shared_ptr<ParsedQuery::GraphPattern> uniteGraphPatterns(
+      const std::vector<std::shared_ptr<ParsedQuery::GraphPattern>>& patterns)
+      const;
+
+  /**
+   * @brief Merges two rows of the dp optimization table using various types of
+   * joins.
+   * @return A new row for the dp table that contains plans created by joining
+   * the result of a plan in a and a plan in b.
+   */
   vector<SubtreePlan> merge(const vector<SubtreePlan>& a,
                             const vector<SubtreePlan>& b,
                             const TripleGraph& tg) const;
@@ -204,7 +276,7 @@ class QueryPlanner {
 
   vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
-      const vector<SubtreePlan*>& children) const;
+      const vector<const SubtreePlan*>& children);
 
   size_t getTextLimit(const string& textLimitString) const;
 

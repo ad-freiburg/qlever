@@ -7,5 +7,6 @@ add_library(parser
               TurtleParser.h TurtleParser.cpp
               Tokenizer.h Tokenizer.cpp
               ContextFileParser.cpp ContextFileParser.h
-              ParallelParseBuffer.h)
+              ParallelParseBuffer.h
+              PropertyPathParser.h PropertyPathParser.cpp)
 target_link_libraries(parser re2)

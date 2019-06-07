@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <initializer_list>
 #include <string>
 #include <vector>
 
@@ -25,16 +26,70 @@ class SparqlPrefix {
   string asString() const;
 };
 
+class PropertyPath {
+ public:
+  enum class Operation {
+    SEQUENCE,
+    ALTERNATIVE,
+    TRANSITIVE,
+    TRANSITIVE_MIN,  // e.g. +
+    TRANSITIVE_MAX,  // e.g. *n or ?
+    INVERSE,
+    IRI
+  };
+
+  PropertyPath()
+      : _operation(Operation::IRI),
+        _limit(0),
+        _iri(),
+        _children(),
+        _can_be_null(false) {}
+  explicit PropertyPath(Operation op)
+      : _operation(op), _limit(0), _iri(), _children(), _can_be_null(false) {}
+  PropertyPath(Operation op, uint16_t limit, const std::string& iri,
+               std::initializer_list<PropertyPath> children);
+
+  bool operator==(const PropertyPath& other) const {
+    return _operation == other._operation && _limit == other._limit &&
+           _iri == other._iri && _children == other._children &&
+           _can_be_null == other._can_be_null;
+  }
+
+  void writeToStream(std::ostream& out) const;
+  std::string asString() const;
+
+  void computeCanBeNull();
+
+  Operation _operation;
+  // For the limited transitive operations
+  uint_fast16_t _limit;
+
+  // In case of an iri
+  std::string _iri;
+
+  std::vector<PropertyPath> _children;
+
+  /**
+   * True iff this property path is either a transitive path with minimum length
+   * of 0, or if all of this transitive path's children can be null.
+   */
+  bool _can_be_null;
+};
+
+std::ostream& operator<<(std::ostream& out, const PropertyPath& p);
+
 // Data container for parsed triples from the where clause
 class SparqlTriple {
  public:
-  SparqlTriple(const string& s, const string& p, const string& o)
+  SparqlTriple(const string& s, const PropertyPath& p, const string& o)
       : _s(s), _p(p), _o(o) {}
 
   bool operator==(const SparqlTriple& other) const {
     return _s == other._s && _p == other._p && _o == other._o;
   }
-  string _s, _p, _o;
+  string _s;
+  PropertyPath _p;
+  string _o;
 
   string asString() const;
 };
@@ -139,9 +194,10 @@ class ParsedQuery {
 
   class GraphPatternOperation {
    public:
-    enum class Type { OPTIONAL, UNION, SUBQUERY };
-    GraphPatternOperation(Type type,
-                          std::initializer_list<GraphPattern*> children);
+    enum class Type { OPTIONAL, UNION, SUBQUERY, TRANS_PATH };
+    GraphPatternOperation(
+        Type type,
+        std::initializer_list<std::shared_ptr<GraphPattern>> children);
     GraphPatternOperation(Type type);
 
     // Move and copyconstructors to avoid double deletes on the trees children
@@ -154,8 +210,16 @@ class ParsedQuery {
 
     Type _type;
     union {
-      std::vector<GraphPattern*> _childGraphPatterns;
-      ParsedQuery* _subquery;
+      std::vector<std::shared_ptr<GraphPattern>> _childGraphPatterns;
+      std::shared_ptr<ParsedQuery> _subquery;
+      struct {
+        // The name of the left and right end of the subpath
+        std::string _left;
+        std::string _right;
+        size_t _min = 0;
+        size_t _max = 0;
+        std::shared_ptr<GraphPattern> _childGraphPattern;
+      } _pathData;
     };
   };
 
@@ -171,6 +235,9 @@ class ParsedQuery {
     GraphPattern& operator=(const GraphPattern& other);
     virtual ~GraphPattern();
     void toString(std::ostringstream& os, int indentation = 0) const;
+    // Traverses the graph pattern tree and assigns a unique id to every graph
+    // pattern
+    void recomputeIds(size_t* id_count = nullptr);
 
     vector<SparqlTriple> _whereClauseTriples;
     vector<SparqlFilter> _filters;
@@ -181,7 +248,7 @@ class ParsedQuery {
      */
     size_t _id;
 
-    vector<GraphPatternOperation*> _children;
+    vector<std::shared_ptr<GraphPatternOperation>> _children;
   };
 
   struct Alias {
@@ -192,11 +259,15 @@ class ParsedQuery {
     string _function;
   };
 
-  ParsedQuery() : _numGraphPatterns(1), _reduced(false), _distinct(false) {}
+  ParsedQuery()
+      : _rootGraphPattern(std::make_shared<GraphPattern>()),
+        _numGraphPatterns(1),
+        _reduced(false),
+        _distinct(false) {}
 
   vector<SparqlPrefix> _prefixes;
   vector<string> _selectedVariables;
-  GraphPattern _rootGraphPattern;
+  std::shared_ptr<GraphPattern> _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns;
   vector<OrderKey> _orderBy;
@@ -215,6 +286,8 @@ class ParsedQuery {
   string asString() const;
 
  private:
+  static void expandPrefix(
+      PropertyPath& item, const ad_utility::HashMap<string, string>& prefixMap);
   static void expandPrefix(
       string& item, const ad_utility::HashMap<string, string>& prefixMap);
 

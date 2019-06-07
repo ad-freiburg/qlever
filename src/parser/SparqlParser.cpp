@@ -12,6 +12,7 @@
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
 #include "./ParseException.h"
+#include "PropertyPathParser.h"
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parse(const string& query) {
@@ -159,11 +160,14 @@ void SparqlParser::parseSelect(const string& str, ParsedQuery& query) {
 }
 
 // _____________________________________________________________________________
-void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
-                              ParsedQuery::GraphPattern* currentPattern) {
+void SparqlParser::parseWhere(
+    const string& str, ParsedQuery& query,
+    std::shared_ptr<ParsedQuery::GraphPattern> currentPattern) {
   if (currentPattern == nullptr) {
-    currentPattern = &query._rootGraphPattern;
-    query._rootGraphPattern._id = 0;
+    // Make the shared pointer point to the root graphpattern without deleting
+    // it.
+    currentPattern = query._rootGraphPattern;
+    query._rootGraphPattern->_id = 0;
   }
   size_t i = str.find('{');
   size_t j = str.rfind('}');
@@ -192,10 +196,11 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
         // find opening and closing brackets of optional part
         size_t ob = inner.find('{', k);
         size_t cb = ad_utility::findClosingBracket(inner, ob, '{', '}');
-        currentPattern->_children.push_back(
-            new ParsedQuery::GraphPatternOperation(
-                ParsedQuery::GraphPatternOperation::Type::OPTIONAL,
-                {new ParsedQuery::GraphPattern()}));
+        currentPattern->_children.push_back(std::make_shared<
+                                            ParsedQuery::GraphPatternOperation>(
+            ParsedQuery::GraphPatternOperation::Type::OPTIONAL,
+            std::initializer_list<std::shared_ptr<ParsedQuery::GraphPattern>>{
+                std::make_shared<ParsedQuery::GraphPattern>()}));
         currentPattern->_children.back()->_childGraphPatterns[0]->_optional =
             true;
         currentPattern->_children.back()->_childGraphPatterns[0]->_id =
@@ -244,10 +249,10 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
         LOG(DEBUG) << "Found subquery:\n" << subquery_string << std::endl;
 
         // create the subquery operation
-        ParsedQuery::GraphPatternOperation* u =
-            new ParsedQuery::GraphPatternOperation(
+        std::shared_ptr<ParsedQuery::GraphPatternOperation> u =
+            std::make_shared<ParsedQuery::GraphPatternOperation>(
                 ParsedQuery::GraphPatternOperation::Type::SUBQUERY);
-        u->_subquery = new ParsedQuery(parse(subquery_string));
+        u->_subquery = std::make_shared<ParsedQuery>(parse(subquery_string));
         // Remove all manual ordering from the subquery as it would be changed
         // by the parent query.
         u->_subquery->_orderBy.clear();
@@ -284,11 +289,12 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
           ad_utility::findClosingBracket(inner, k, '{', '}');
 
       // create the union operation
-      ParsedQuery::GraphPatternOperation* u =
-          new ParsedQuery::GraphPatternOperation(
+      std::shared_ptr<ParsedQuery::GraphPatternOperation> u =
+          std::make_shared<ParsedQuery::GraphPatternOperation>(
               ParsedQuery::GraphPatternOperation::Type::UNION,
-              {new ParsedQuery::GraphPattern(),
-               new ParsedQuery::GraphPattern()});
+              std::initializer_list<std::shared_ptr<ParsedQuery::GraphPattern>>{
+                  std::make_shared<ParsedQuery::GraphPattern>(),
+                  std::make_shared<ParsedQuery::GraphPattern>()});
       u->_childGraphPatterns[0]->_optional = false;
       u->_childGraphPatterns[1]->_optional = false;
       u->_childGraphPatterns[0]->_id = query._numGraphPatterns;
@@ -332,7 +338,6 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
         start = (posOfDelim == string::npos ? end + 1 : posOfDelim + 1);
         continue;
       }
-    } else if (inner[k] == 'S' || inner[k] == 's') {
     }
     while (k < inner.size()) {
       if (!insideUri && !insideLiteral && !insideNsThing) {
@@ -380,8 +385,8 @@ void SparqlParser::parseWhere(const string& str, ParsedQuery& query,
 }
 
 // _____________________________________________________________________________
-void SparqlParser::addWhereTriple(const string& str,
-                                  ParsedQuery::GraphPattern* pattern) {
+void SparqlParser::addWhereTriple(
+    const string& str, std::shared_ptr<ParsedQuery::GraphPattern> pattern) {
   size_t i = 0;
   while (i < str.size() &&
          (str[i] == ' ' || str[i] == '\t' || str[i] == '\n')) {
@@ -453,8 +458,7 @@ void SparqlParser::addWhereTriple(const string& str,
   if (p == CONTAINS_WORD_PREDICATE || p == CONTAINS_WORD_PREDICATE_NS) {
     o = stripAndLowercaseKeywordLiteral(o);
   }
-
-  SparqlTriple triple(s, p, o);
+  SparqlTriple triple(s, PropertyPathParser(p).parse(), o);
   // Quadratic in number of triples in query.
   // Shouldn't be a problem here, though.
   // Could use a (hash)-set instead of vector.
@@ -516,8 +520,9 @@ void SparqlParser::parseSolutionModifiers(const string& str,
 }
 
 // _____________________________________________________________________________
-void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
-                             ParsedQuery::GraphPattern* pattern) {
+void SparqlParser::addFilter(
+    const string& str, vector<SparqlFilter>* _filters,
+    std::shared_ptr<ParsedQuery::GraphPattern> pattern) {
   size_t i = str.find('(');
   AD_CHECK(i != string::npos);
   size_t j = str.rfind(')');
@@ -629,7 +634,8 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
                          pattern->_whereClauseTriples.end(),
                          [&lvar](const auto& tr) { return tr._o == lvar; });
         while (it != pattern->_whereClauseTriples.end() &&
-               ad_utility::startsWith(it->_p, "?")) {
+               it->_p._operation == PropertyPath::Operation::IRI &&
+               ad_utility::startsWith(it->_p._iri, "?")) {
           it = std::find_if(it + 1, pattern->_whereClauseTriples.end(),
                             [&lvar](const auto& tr) { return tr._o == lvar; });
         }
@@ -639,7 +645,9 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
                      "that did not appear as object in any suitable triple. "
                      "using special literal-to-language triple instead.\n";
           auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-          SparqlTriple triple(lvar, LANGUAGE_PREDICATE, langEntity);
+          PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
+          taggedPredicate._iri = LANGUAGE_PREDICATE;
+          SparqlTriple triple(lvar, taggedPredicate, langEntity);
           // Quadratic in number of triples in query.
           // Shouldn't be a problem here, though.
           // Could use a (hash)-set instead of vector.
@@ -652,7 +660,8 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
           }
         } else {
           // replace the triple
-          string taggedPredicate = '@' + langTag + '@' + it->_p;
+          PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
+          taggedPredicate._iri = '@' + langTag + '@' + it->_p._iri;
           *it = SparqlTriple(it->_s, taggedPredicate, it->_o);
         }
 
@@ -709,7 +718,8 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
                            pattern->_whereClauseTriples.end(),
                            [&lvar](const auto& tr) { return tr._o == lvar; });
     while (it != pattern->_whereClauseTriples.end() &&
-           ad_utility::startsWith(it->_p, "?")) {
+           it->_p._operation == PropertyPath::Operation::IRI &&
+           ad_utility::startsWith(it->_p._iri, "?")) {
       it = std::find_if(it + 1, pattern->_whereClauseTriples.end(),
                         [&lvar](const auto& tr) { return tr._o == lvar; });
     }
@@ -718,7 +728,9 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
                        "that did not appear as object in any suitable triple. "
                        "using special literal-to-language triple instead.\n";
       auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-      SparqlTriple triple(lvar, LANGUAGE_PREDICATE, langEntity);
+      PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
+      taggedPredicate._iri = LANGUAGE_PREDICATE;
+      SparqlTriple triple(lvar, taggedPredicate, langEntity);
       // Quadratic in number of triples in query.
       // Shouldn't be a problem here, though.
       // Could use a (hash)-set instead of vector.
@@ -731,7 +743,9 @@ void SparqlParser::addFilter(const string& str, vector<SparqlFilter>* _filters,
       }
     } else {
       // replace the triple
-      string taggedPredicate = '@' + langTag + '@' + it->_p;
+      PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
+      taggedPredicate._iri = '@' + langTag + '@' + it->_p._iri;
+
       *it = SparqlTriple(it->_s, taggedPredicate, it->_o);
     }
 

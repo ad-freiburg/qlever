@@ -471,10 +471,10 @@ void Join::computeSizeEstimateAndMultiplicities() {
 }
 
 // ______________________________________________________________________________
-void Join::appendCrossProduct(IdTable::const_iterator& leftBegin,
-                              IdTable::const_iterator& leftEnd,
-                              IdTable::const_iterator& rightBegin,
-                              IdTable::const_iterator& rightEnd,
+void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
+                              const IdTable::const_iterator& leftEnd,
+                              const IdTable::const_iterator& rightBegin,
+                              const IdTable::const_iterator& rightEnd,
                               IdTable* res) const {
   for (auto itl = leftBegin; itl != leftEnd; ++itl) {
     for (auto itr = rightBegin; itr != rightEnd; ++itr) {
