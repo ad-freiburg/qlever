@@ -38,7 +38,7 @@ class Server {
 
   // Initialize the server.
   void initialize(const string& ontologyBaseName, bool useText,
-                  bool usePatterns = false);
+                  bool usePatterns = true, bool usePatternTrick = true);
 
   //! Loop, wait for requests and trigger processing. This method never returns
   //! except when throwing an exceptiob
@@ -52,6 +52,7 @@ class Server {
   Engine _engine;
 
   bool _initialized;
+  bool _enablePatternTrick;
 
   void runAcceptLoop(QueryExecutionContext* qec);
 

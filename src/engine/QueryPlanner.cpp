@@ -27,7 +27,7 @@
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec)
-    : _qec(qec), _internalVarCount(0) {}
+    : _qec(qec), _internalVarCount(0), _enablePatternTrick(true) {}
 
 // _____________________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
@@ -36,7 +36,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   // from the list of where clause triples. Otherwise the ql:has-relation triple
   // will be handled using a HasRelationScan.
   SparqlTriple patternTrickTriple("", PropertyPath(), "");
-  bool usePatternTrick = checkUsePatternTrick(&pq, &patternTrickTriple);
+  bool usePatternTrick =
+      _enablePatternTrick && checkUsePatternTrick(&pq, &patternTrickTriple);
 
   bool doGrouping = pq._groupByVariables.size() > 0 || usePatternTrick;
   if (!doGrouping) {
@@ -2588,4 +2589,9 @@ QueryPlanner::createVariableColumnsMapForTextOperation(
     }
   }
   return map;
+}
+
+// _____________________________________________________________________________
+void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
+  _enablePatternTrick = enablePatternTrick;
 }
