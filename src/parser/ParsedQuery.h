@@ -187,6 +187,15 @@ class SparqlFilter {
   bool _regexIgnoreCase;
 };
 
+// Represents a VALUES statement in the query.
+class SparqlValues {
+ public:
+  // The variables to which the values will be bound
+  vector<string> _variables;
+  // A table storing the values in their string form
+  vector<vector<string>> _values;
+};
+
 // A parsed SPARQL query. To be extended.
 class ParsedQuery {
  public:
@@ -241,6 +250,7 @@ class ParsedQuery {
 
     vector<SparqlTriple> _whereClauseTriples;
     vector<SparqlFilter> _filters;
+    vector<SparqlValues> _inlineValues;
     bool _optional;
     /**
      * @brief A id that is unique for the ParsedQuery. Ids are guaranteed to
