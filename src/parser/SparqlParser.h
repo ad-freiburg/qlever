@@ -37,5 +37,11 @@ class SparqlParser {
       const string& str, vector<SparqlFilter>* _filters,
       std::shared_ptr<ParsedQuery::GraphPattern> pattern = nullptr);
 
+  // Reads the next element of a triple (an iri, a variable, a property path,
+  // etc.) out of s beginning at the current value of pos. Sets pos to the
+  // position after the read value, and returns a string view of the triple part
+  // in s.
+  static std::string_view readTriplePart(const std::string& s, size_t* pos);
+
   static string stripAndLowercaseKeywordLiteral(const string& lit);
 };
