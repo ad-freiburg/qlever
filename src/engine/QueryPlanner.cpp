@@ -24,6 +24,7 @@
 #include "TransitivePath.h"
 #include "TwoColumnJoin.h"
 #include "Union.h"
+#include "Values.h"
 
 // _____________________________________________________________________________
 QueryPlanner::QueryPlanner(QueryExecutionContext* qec)
@@ -307,7 +308,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     // Cycles have to be avoided (by previously removing a triple and using it
     // as a filter later on).
     std::vector<SubtreePlan> lastRow =
-        fillDpTab(tg, pattern->_filters, childPlans).back();
+        fillDpTab(tg, pattern->_filters, childPlans, pattern->_inlineValues)
+            .back();
 
     if (pattern == rootPattern) {
       return lastRow;
@@ -994,16 +996,28 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
-    const vector<const QueryPlanner::SubtreePlan*>& children) {
+    const vector<const QueryPlanner::SubtreePlan*>& children,
+    const vector<SparqlValues>& values) {
   vector<SubtreePlan> seeds;
   // add all child plans as seeds
-  uint32_t idShift = tg._nodeMap.size();
+  uint64_t idShift = tg._nodeMap.size();
   for (const SubtreePlan* plan : children) {
     SubtreePlan newIdPlan = *plan;
     // give the plan a unique id bit
-    newIdPlan._idsOfIncludedNodes = size_t(1) << idShift;
+    newIdPlan._idsOfIncludedNodes = uint64_t(1) << idShift;
     newIdPlan._idsOfIncludedFilters = 0;
-    seeds.push_back(newIdPlan);
+    seeds.emplace_back(newIdPlan);
+    idShift++;
+  }
+  for (const SparqlValues& val : values) {
+    SubtreePlan valuesPlan(_qec);
+    std::shared_ptr<Values> op = std::make_shared<Values>(_qec, val);
+    valuesPlan._qet->setOperation(QueryExecutionTree::OperationType::VALUES,
+                                  op);
+    valuesPlan._qet->setVariableColumns(op->getVariableColumns());
+    valuesPlan._idsOfIncludedNodes = uint64_t(1) << idShift;
+    valuesPlan._idsOfIncludedFilters = 0;
+    seeds.emplace_back(valuesPlan);
     idShift++;
   }
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
@@ -2276,16 +2290,16 @@ std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
 // _____________________________________________________________________________
 vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, const vector<SparqlFilter>& filters,
-    const vector<const QueryPlanner::SubtreePlan*>& children) {
-  LOG(TRACE) << "Fill DP table... (there are "
-             << tg._nodeMap.size() + children.size() << " triples to join)"
-             << std::endl;
+    const vector<const QueryPlanner::SubtreePlan*>& children,
+    const vector<SparqlValues>& values) {
+  size_t numSeeds = tg._nodeMap.size() + children.size() + values.size();
+  LOG(TRACE) << "Fill DP table... (there are " << numSeeds
+             << " operations to join)" << std::endl;
   vector<vector<SubtreePlan>> dpTab;
-  dpTab.emplace_back(seedWithScansAndText(tg, children));
-  applyFiltersIfPossible(dpTab.back(), filters,
-                         tg._nodeMap.size() + children.size() == 1);
+  dpTab.emplace_back(seedWithScansAndText(tg, children, values));
+  applyFiltersIfPossible(dpTab.back(), filters, numSeeds == 1);
 
-  for (size_t k = 2; k <= tg._nodeMap.size() + children.size(); ++k) {
+  for (size_t k = 2; k <= numSeeds; ++k) {
     LOG(TRACE) << "Producing plans that unite " << k << " triples."
                << std::endl;
     dpTab.emplace_back(vector<SubtreePlan>());
@@ -2295,8 +2309,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
         continue;
       }
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
-      applyFiltersIfPossible(dpTab.back(), filters,
-                             tg._nodeMap.size() + children.size() == k);
+      applyFiltersIfPossible(dpTab.back(), filters, numSeeds == k);
     }
     if (dpTab[k - 1].size() == 0) {
       AD_THROW(ad_semsearch::Exception::BAD_QUERY,

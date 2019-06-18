@@ -361,7 +361,7 @@ void SparqlParser::parseWhere(
           k++;
           // find the end of the variables
           size_t varStart = k;
-          while (k < inner.size() && k != ')') {
+          while (k < inner.size() && inner[k] != ')') {
             k++;
           }
           if (k >= inner.size()) {
@@ -373,9 +373,11 @@ void SparqlParser::parseWhere(
               ad_utility::splitWs(inner.substr(varStart, k - varStart));
 
           // find the beginning of the data
-          while (k < inner.size() && k != '{') {
+          while (k < inner.size() && inner[k] != '{') {
             k++;
           }
+          // Skip the opening brace
+          k++;
           if (k >= inner.size()) {
             throw ParseException(
                 "Missing opening bracket '{' for values statement: " +
@@ -383,7 +385,7 @@ void SparqlParser::parseWhere(
           }
 
           while (k < inner.size() && inner[k] != '}') {
-            while (k < inner.size() && k != '(' && k != '}') {
+            while (k < inner.size() && inner[k] != '(' && inner[k] != '}') {
               if (!std::isspace(inner[k])) {
                 throw ParseException(
                     "Expected another row of values in values statement: " +
@@ -391,7 +393,7 @@ void SparqlParser::parseWhere(
               }
               k++;
             }
-            if (k == '}') {
+            if (inner[k] == '}') {
               break;
             }
             if (k >= inner.size()) {
@@ -400,9 +402,10 @@ void SparqlParser::parseWhere(
                   inner.substr(valuesStatementStart, 256));
             }
             size_t valuesStart = k + 1;
-            while (k < inner.size() && k != ')') {
+            while (k < inner.size() && inner[k] != ')') {
               k++;
             }
+            k++;
             if (k >= inner.size()) {
               throw ParseException(
                   "Missing closing bracket ')' for the values of: " +
@@ -445,6 +448,8 @@ void SparqlParser::parseWhere(
           while (k < inner.size() && inner[k] != '{') {
             k++;
           }
+          // Skip the opening brace
+          k++;
           if (k == inner.size()) {
             throw ParseException(
                 "Expected values after the variable definition of the VALUES "
@@ -469,7 +474,8 @@ void SparqlParser::parseWhere(
                                  inner.substr(valuesStatementStart, 256));
           }
         }
-        currentPattern->_inlineValues.push_back(values);
+        currentPattern->_inlineValues.emplace_back(values);
+        start = k + 1;
         continue;
       }
     }
@@ -503,7 +509,6 @@ void SparqlParser::parseWhere(
       predicate = lastPredicate;
       lastPredicate.clear();
     }
-    std::cout << "remaining '" << inner.substr(k) << "'" << std::endl;
     std::string clause =
         subject + " " + predicate + " " + readTriplePart(inner, &k);
     clauses.emplace_back(clause);
@@ -551,7 +556,8 @@ std::string_view SparqlParser::readTriplePart(const std::string& s,
   while (*pos < s.size()) {
     if (!insideUri && !insideLiteral && !insidePrefixed) {
       if (s[*pos] == '.' || std::isspace(static_cast<unsigned char>(s[*pos])) ||
-          s[*pos] == ';' || s[*pos] == ',') {
+          s[*pos] == ';' || s[*pos] == ',' || s[*pos] == '}' ||
+          s[*pos] == ')') {
         return std::string_view(s.data() + start, (*pos) - start);
       }
       if (s[*pos] == '<') {

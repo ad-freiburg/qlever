@@ -214,6 +214,54 @@ TEST(ParserTest, testParse) {
     ASSERT_TRUE(child->_optional);
     ASSERT_TRUE(child2->_optional);
     ASSERT_TRUE(child3->_optional);
+
+    pq = SparqlParser::parse(
+        "SELECT ?a WHERE {\n"
+        "  VALUES ?a { <1> \"2\"}\n"
+        "  VALUES (?b ?c) {(<1> <2>) (\"1\" \"2\")}\n"
+        "  ?a <rel> ?b ."
+        "}");
+    ASSERT_EQ(0u, pq._rootGraphPattern->_children.size());
+    ASSERT_EQ(1u, pq._rootGraphPattern->_whereClauseTriples.size());
+    ASSERT_EQ(0u, pq._rootGraphPattern->_filters.size());
+    ASSERT_EQ(2u, pq._rootGraphPattern->_inlineValues.size());
+
+    SparqlValues values1 = pq._rootGraphPattern->_inlineValues[0];
+    vector<string> vvars = {"?a"};
+    ASSERT_EQ(vvars, values1._variables);
+    vector<vector<string>> vvals = {{"<1>"}, {"\"2\""}};
+    ASSERT_EQ(vvals, values1._values);
+
+    SparqlValues values2 = pq._rootGraphPattern->_inlineValues[1];
+    vvars = {"?b", "?c"};
+    ASSERT_EQ(vvars, values2._variables);
+    vvals = {{"<1>", "<2>"}, {"\"1\"", "\"2\""}};
+    ASSERT_EQ(vvals, values2._values);
+
+    pq = SparqlParser::parse(R"(
+SELECT ?a ?b ?c WHERE {
+  VALUES ?a { <Albert_Einstein>}
+  VALUES (?b ?c) { (<Marie_Curie> <Joseph_Jacobson>) (<Freiherr> <Lord_of_the_Isles>) }
+}
+        )");
+
+    ASSERT_EQ(0u, pq._rootGraphPattern->_children.size());
+    ASSERT_EQ(0u, pq._rootGraphPattern->_whereClauseTriples.size());
+    ASSERT_EQ(0u, pq._rootGraphPattern->_filters.size());
+    ASSERT_EQ(2u, pq._rootGraphPattern->_inlineValues.size());
+
+    values1 = pq._rootGraphPattern->_inlineValues[0];
+    vvars = {"?a"};
+    ASSERT_EQ(vvars, values1._variables);
+    vvals = {{"<Albert_Einstein>"}};
+    ASSERT_EQ(vvals, values1._values);
+
+    values2 = pq._rootGraphPattern->_inlineValues[1];
+    vvars = {"?b", "?c"};
+    ASSERT_EQ(vvars, values2._variables);
+    vvals = {{"<Marie_Curie>", "<Joseph_Jacobson>"},
+             {"<Freiherr>", "<Lord_of_the_Isles>"}};
+    ASSERT_EQ(vvals, values2._values);
   } catch (const ad_semsearch::Exception& e) {
     FAIL() << e.getFullErrorMessage();
   }

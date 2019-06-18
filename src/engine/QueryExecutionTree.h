@@ -41,7 +41,8 @@ class QueryExecutionTree {
     HAS_RELATION_SCAN = 14,
     UNION = 15,
     MULTICOLUMN_JOIN = 16,
-    TRANSITIVE_PATH = 17
+    TRANSITIVE_PATH = 17,
+    VALUES = 18
   };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
