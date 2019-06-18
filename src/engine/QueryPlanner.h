@@ -191,7 +191,8 @@ class QueryPlanner {
    */
   vector<SubtreePlan> seedWithScansAndText(
       const TripleGraph& tg,
-      const vector<const QueryPlanner::SubtreePlan*>& children);
+      const vector<const QueryPlanner::SubtreePlan*>& children,
+      const vector<SparqlValues>& values);
 
   /**
    * @brief Returns a subtree plan that will compute the values for the
@@ -280,7 +281,8 @@ class QueryPlanner {
 
   vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
-      const vector<const SubtreePlan*>& children);
+      const vector<const SubtreePlan*>& children,
+      const vector<SparqlValues>& values);
 
   size_t getTextLimit(const string& textLimitString) const;
 
