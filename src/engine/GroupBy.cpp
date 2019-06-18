@@ -665,9 +665,10 @@ void GroupBy::computeResult(ResultTable* result) {
   for (const string& var : _groupByVariables) {
     auto it = subtreeVarCols.find(var);
     if (it == subtreeVarCols.end()) {
-      LOG(WARN) << "Group by variable " << var << " is not part of the query."
+      LOG(WARN) << "Group by variable " << var << " is not groupable."
                 << std::endl;
-      return;
+      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+               "Groupby variable " + var + " is not groupable");
     }
     groupByColumns.push_back(it->second);
     // Add an "identity" aggregate in the form of a sample aggregate to
