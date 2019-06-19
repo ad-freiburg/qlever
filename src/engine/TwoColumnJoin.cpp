@@ -99,9 +99,9 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
       (_right->getResultWidth() == 2 && _jc1Right == 0 && _jc2Right == 1)) {
     bool rightFilter =
         (_right->getResultWidth() == 2 && _jc1Right == 0 && _jc2Right == 1);
-    const auto& v = rightFilter ? _left : _right;
     const auto leftResult = _left->getResult();
     const auto rightResult = _right->getResult();
+    const auto& toFilter = rightFilter ? leftResult : rightResult;
     RuntimeInformation& runtimeInfo = getRuntimeInfo();
     runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
     runtimeInfo.addChild(_right->getRootOperation()->getRuntimeInfo());
@@ -109,21 +109,15 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
         rightFilter ? rightResult->_data : leftResult->_data;
     size_t jc1 = rightFilter ? _jc1Left : _jc1Right;
     size_t jc2 = rightFilter ? _jc2Left : _jc2Right;
-    result->_sortedBy = {jc1};
-    result->_data.setCols(v->getResultWidth());
+    // TODO(schnelle) Are we sorted on both columns? The old code only had jc1
+    // here but we do add OrderBy on both
+    result->_sortedBy = {jc1, jc2};
+    result->_data.setCols(toFilter->_data.cols());
     result->_resultTypes.reserve(result->_data.cols());
     result->_resultTypes.insert(result->_resultTypes.end(),
-                                leftResult->_resultTypes.begin(),
-                                leftResult->_resultTypes.end());
-    for (size_t col = 0; col < rightResult->_data.cols(); col++) {
-      if (col != _jc1Right && col != _jc2Right) {
-        result->_resultTypes.push_back(rightResult->_resultTypes[col]);
-      }
-    }
-
+                                toFilter->_resultTypes.begin(),
+                                toFilter->_resultTypes.end());
     AD_CHECK_GE(result->_data.cols(), 2);
-
-    const auto& toFilter = rightFilter ? leftResult : rightResult;
 
     int inWidth = toFilter->_data.cols();
     int filterWidth = filter.cols();
@@ -140,26 +134,41 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
 
 // _____________________________________________________________________________
 ad_utility::HashMap<string, size_t> TwoColumnJoin::getVariableColumns() const {
-  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
-  size_t leftSize = _left->getResultWidth();
-  const auto& rightVarCols = _right->getVariableColumns();
-  for (const auto& rightVarCol : rightVarCols) {
-    if (rightVarCol.second < _jc1Right) {
-      if (rightVarCol.second < _jc2Right) {
-        retVal[rightVarCol.first] = leftSize + rightVarCol.second;
-      } else if (rightVarCol.second > _jc2Right) {
-        retVal[rightVarCol.first] = leftSize + rightVarCol.second - 1;
+  if ((_left->getResultWidth() == 2 && _jc1Left == 0 && _jc2Left == 1) ||
+      (_right->getResultWidth() == 2 && _jc1Right == 0 && _jc2Right == 1)) {
+    // This is for the implemented filter case from computeResult()
+    bool rightFilter =
+        (_right->getResultWidth() == 2 && _jc1Right == 0 && _jc2Right == 1);
+    const auto& toFilter = rightFilter ? _left : _right;
+    return toFilter->getVariableColumns();
+  } else {
+    // NOTE: While one can get the variable mapping of this else
+    // case it is currently not implemented (see computeResult())
+    // Still if we don't have this mapping the query optimizer thinks
+    // that variables are missing from the query if it tries to use
+    // TwoColumnJoin in the unsupported (super expensive variant)
+    // it then gives up and we don't find a working alternative.
+    ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
+    size_t leftSize = _left->getResultWidth();
+    const auto& rightVarCols = _right->getVariableColumns();
+    for (const auto& rightVarCol : rightVarCols) {
+      if (rightVarCol.second < _jc1Right) {
+        if (rightVarCol.second < _jc2Right) {
+          retVal[rightVarCol.first] = leftSize + rightVarCol.second;
+        } else if (rightVarCol.second > _jc2Right) {
+          retVal[rightVarCol.first] = leftSize + rightVarCol.second - 1;
+        }
+      }
+      if (rightVarCol.second > _jc1Right) {
+        if (rightVarCol.second < _jc2Right) {
+          retVal[rightVarCol.first] = leftSize + rightVarCol.second - 1;
+        } else if (rightVarCol.second > _jc2Right) {
+          retVal[rightVarCol.first] = leftSize + rightVarCol.second - 2;
+        }
       }
     }
-    if (rightVarCol.second > _jc1Right) {
-      if (rightVarCol.second < _jc2Right) {
-        retVal[rightVarCol.first] = leftSize + rightVarCol.second - 1;
-      } else if (rightVarCol.second > _jc2Right) {
-        retVal[rightVarCol.first] = leftSize + rightVarCol.second - 2;
-      }
-    }
+    return retVal;
   }
-  return retVal;
 }
 
 // _____________________________________________________________________________
@@ -171,7 +180,17 @@ size_t TwoColumnJoin::getResultWidth() const {
 
 // _____________________________________________________________________________
 vector<size_t> TwoColumnJoin::resultSortedOn() const {
-  return {_jc1Left, _jc2Left};
+  bool rightFilter =
+      (_right->getResultWidth() == 2 && _jc1Right == 0 && _jc2Right == 1);
+  vector<size_t> sortedOn(2);
+  if (rightFilter) {
+    sortedOn[0] = _jc1Left;
+    sortedOn[1] = _jc2Left;
+  } else {
+    sortedOn[0] = _jc1Right;
+    sortedOn[1] = _jc2Right;
+  }
+  return sortedOn;
 }
 
 // _____________________________________________________________________________

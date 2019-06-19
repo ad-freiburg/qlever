@@ -42,7 +42,10 @@ class TwoColumnJoin : public Operation {
       return _left->getSizeEstimate() + _left->getCostEstimate() +
              _right->getSizeEstimate() + _right->getCostEstimate();
     }
-    // PUNISH IF NO DIRECT JOIN IS AVAILABLE FOR FILTER
+    // The case where the above condition does not hold is currently
+    // not implemented so really don't use it!
+    // Important: The / 1000000 prevents overflow
+    // TODO(schnelle) this is pretty fragile
     return std::numeric_limits<size_t>::max() / 1000000;
   }
 
