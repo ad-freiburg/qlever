@@ -262,6 +262,36 @@ SELECT ?a ?b ?c WHERE {
     vvals = {{"<Marie_Curie>", "<Joseph_Jacobson>"},
              {"<Freiherr>", "<Lord_of_the_Isles>"}};
     ASSERT_EQ(vvals, values2._values);
+
+    pq = SparqlParser::parse(""
+        "PREFIX wd: <http://www.wikidata.org/entity/>\n"
+        "PREFIX wdt: <http://www.wikidata.org/prop/direct/>\n"
+        "SELECT ?city WHERE {\n"
+        "  VALUES ?citytype { wd:Q515 wd:Q262166}\n"
+        "  ?city wdt:P31 ?citytype .\n"
+        "}\n");
+
+    ASSERT_EQ(0u, pq._rootGraphPattern->_children.size());
+    ASSERT_EQ(1u, pq._rootGraphPattern->_whereClauseTriples.size());
+    ASSERT_EQ(0u, pq._rootGraphPattern->_filters.size());
+    ASSERT_EQ(1u, pq._rootGraphPattern->_inlineValues.size());
+
+    ASSERT_EQ(pq._rootGraphPattern->_whereClauseTriples[0]._s, "?city");
+    ASSERT_EQ(pq._rootGraphPattern->_whereClauseTriples[0]._p._iri, "wdt:P31");
+    ASSERT_EQ(pq._rootGraphPattern->_whereClauseTriples[0]._s, "?citytype");
+
+    values1 = pq._rootGraphPattern->_inlineValues[0];
+    vvars = {"?citytype"};
+    ASSERT_EQ(vvars, values1._variables);
+    vvals = {{"wd:Q515"}, {"wd:Q262166"}};
+    ASSERT_EQ(vvals, values1._values);
+
+    values2 = pq._rootGraphPattern->_inlineValues[1];
+    vvars = {"?b", "?c"};
+    ASSERT_EQ(vvars, values2._variables);
+    vvals = {{"<Marie_Curie>", "<Joseph_Jacobson>"},
+             {"<Freiherr>", "<Lord_of_the_Isles>"}};
+    ASSERT_EQ(vvals, values2._values);
   } catch (const ad_semsearch::Exception& e) {
     FAIL() << e.getFullErrorMessage();
   }
