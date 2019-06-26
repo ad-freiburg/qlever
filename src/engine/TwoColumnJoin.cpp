@@ -109,8 +109,6 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
         rightFilter ? rightResult->_data : leftResult->_data;
     size_t jc1 = rightFilter ? _jc1Left : _jc1Right;
     size_t jc2 = rightFilter ? _jc2Left : _jc2Right;
-    // TODO(schnelle) Are we sorted on both columns? The old code only had jc1
-    // here but we do add OrderBy on both
     result->_sortedBy = {jc1, jc2};
     result->_data.setCols(toFilter->_data.cols());
     result->_resultTypes.reserve(result->_data.cols());
