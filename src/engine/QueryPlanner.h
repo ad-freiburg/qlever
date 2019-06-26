@@ -157,12 +157,16 @@ class QueryPlanner {
         vector<pair<QueryExecutionTree, size_t>>());
   };
 
+  void setEnablePatternTrick(bool enablePatternTrick);
+
  private:
   QueryExecutionContext* _qec;
 
   // Used to count the number of unique variables created using
   // generateUniqueVarName
   size_t _internalVarCount;
+
+  bool _enablePatternTrick;
 
   static bool isVariable(const string& elem);
   static bool isVariable(const PropertyPath& elem);
@@ -253,7 +257,7 @@ class QueryPlanner {
 
   vector<SubtreePlan> getPatternTrickRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab,
-      const SparqlTriple& patternTrickTriple) const;
+      const SparqlTriple& patternTrickTriple);
 
   vector<SubtreePlan> getHavingRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;

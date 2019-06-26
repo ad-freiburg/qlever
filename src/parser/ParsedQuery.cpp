@@ -450,6 +450,26 @@ std::string ParsedQuery::parseAlias(const std::string& alias) {
   return newVarName;
 }
 
+void ParsedQuery::merge(const ParsedQuery& p) {
+  _prefixes.insert(_prefixes.begin(), p._prefixes.begin(), p._prefixes.end());
+  _rootGraphPattern->_filters.insert(_rootGraphPattern->_filters.begin(),
+                                     p._rootGraphPattern->_filters.begin(),
+                                     p._rootGraphPattern->_filters.end());
+  _rootGraphPattern->_whereClauseTriples.insert(
+      _rootGraphPattern->_whereClauseTriples.begin(),
+      p._rootGraphPattern->_whereClauseTriples.begin(),
+      p._rootGraphPattern->_whereClauseTriples.end());
+
+  for (const std::shared_ptr<GraphPatternOperation>& op :
+       p._rootGraphPattern->_children) {
+    _rootGraphPattern->_children.push_back(
+        std::make_shared<GraphPatternOperation>(*op));
+  }
+  // update the ids
+  _numGraphPatterns = 0;
+  _rootGraphPattern->recomputeIds(&_numGraphPatterns);
+}
+
 // _____________________________________________________________________________
 ParsedQuery::GraphPattern::~GraphPattern() {}
 

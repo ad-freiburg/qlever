@@ -283,6 +283,12 @@ class ParsedQuery {
   void expandPrefixes();
   void parseAliases();
 
+  /**
+   * @brief Adds all elements from p's rootGraphPattern to this parsed query's
+   * root graph pattern. This changes the graph patterns ids.
+   */
+  void merge(const ParsedQuery& p);
+
   string asString() const;
 
  private:

@@ -209,6 +209,25 @@ queries:
       - selected: ["?r", "?count"]
       - contains_row: ["<Religion>", 1185]
       - order_numeric: {"dir": "DESC", "var": "?count"}
+  - query : pattern-trick-without-has-predicate
+    type: no-text
+    sparql: |
+      SELECT ?r (COUNT(?a) as ?count) WHERE {
+        {
+          SELECT DISTINCT ?a ?r WHERE {
+            ?a <is-a> <Scientist> .
+            ?a ?r ?o .
+          }
+        }
+      }
+      GROUP BY ?r
+      ORDER BY DESC(?count)
+    checks:
+      - num_rows: 156
+      - num_cols: 2
+      - selected: ["?r", "?count"]
+      - contains_row: ["<Religion>", 1185]
+      - order_numeric: {"dir": "DESC", "var": "?count"}
   - query : has-predicate-full
     type: no-text
     sparql: |

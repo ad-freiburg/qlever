@@ -30,6 +30,7 @@ struct option options[] = {{"help", no_argument, NULL, 'h'},
                            {"on-disk-literals", no_argument, NULL, 'l'},
                            {"port", required_argument, NULL, 'p'},
                            {"no-patterns", no_argument, NULL, 'P'},
+                           {"no-pattern-trick", no_argument, NULL, 'T'},
                            {"text", no_argument, NULL, 't'},
                            {NULL, 0, NULL, 0}};
 
@@ -50,6 +51,10 @@ void printUsage(char* execName) {
   cout << "  " << std::setw(20) << "no-patterns" << std::setw(1) << "    "
        << "Disable the use of patterns. This disables ql:has-predicate."
        << endl;
+  cout << "  " << std::setw(20) << "no-pattern-trick" << std::setw(1) << "    "
+       << "Disable the use of the pattern trick. This disables \n"
+       << std::setw(26) << " " << std::setw(1)
+       << "certain optimizations related to ql:has-predicate" << endl;
   cout << "  " << std::setw(20) << "t, text" << std::setw(1) << "    "
        << "Enables the usage of text." << endl;
   cout << "  " << std::setw(20) << "j, worker-threads" << std::setw(1) << "    "
@@ -73,11 +78,12 @@ int main(int argc, char** argv) {
   int port = -1;
   int numThreads = 1;
   bool usePatterns = true;
+  bool enablePatternTrick = true;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "i:p:j:tauhml", options, NULL);
+    int c = getopt_long(argc, argv, "i:p:j:tauhmlT", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'i':
@@ -88,6 +94,9 @@ int main(int argc, char** argv) {
         break;
       case 'P':
         usePatterns = false;
+        break;
+      case 'T':
+        enablePatternTrick = false;
         break;
       case 't':
         text = true;
@@ -134,7 +143,7 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numThreads);
-    server.initialize(index, text, usePatterns);
+    server.initialize(index, text, usePatterns, enablePatternTrick);
     server.run();
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled

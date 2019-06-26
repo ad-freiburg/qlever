@@ -25,9 +25,10 @@ Server::~Server() {
 
 // _____________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
-                        bool usePatterns) {
+                        bool usePatterns, bool usePatternTrick) {
   LOG(INFO) << "Initializing server..." << std::endl;
 
+  _enablePatternTrick = usePatternTrick;
   _index.setUsePatterns(usePatterns);
 
   // Init the index.
@@ -170,6 +171,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       // qg.createFromParsedQuery(pq);
       // const QueryExecutionTree& qet = qg.getExecutionTree();
       QueryPlanner qp(qec);
+      qp.setEnablePatternTrick(_enablePatternTrick);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
       LOG(TRACE) << qet.asString() << std::endl;
 
