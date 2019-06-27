@@ -135,7 +135,7 @@ template <class MapType>
 ad_utility::File& operator<<(ad_utility::File& f,
                              const IndexMetaData<MapType>& imd) {
   // first write magic number
-  if constexpr (imd._isMmapBased) {
+  if constexpr (IndexMetaData<MapType>::_isMmapBased) {
     f.write(&MAGIC_NUMBER_MMAP_META_DATA_VERSION,
             sizeof(MAGIC_NUMBER_MMAP_META_DATA_VERSION));
   } else {
@@ -150,7 +150,7 @@ ad_utility::File& operator<<(ad_utility::File& f,
   size_t nofElements = imd._data.size();
   f.write(&nofElements, sizeof(nofElements));
   f.write(&imd._offsetAfter, sizeof(imd._offsetAfter));
-  if constexpr (!imd._isMmapBased) {
+  if constexpr (!IndexMetaData<MapType>::_isMmapBased) {
     for (auto it = imd._data.cbegin(); it != imd._data.cend(); ++it) {
       const auto el = *it;
       f << el.second;
