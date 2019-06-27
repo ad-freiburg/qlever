@@ -110,6 +110,7 @@ class PrefixComparator {
  */
 class StringSortComparator {
  public:
+  constexpr StringSortComparator(const StringSortComparator&) = default;
   // Convert an rdf-literal "value"@lang (langtag is optional)
   // to the first possible literal with the same case-insensitive value
   // ("VALUE") in this case. This is done by conversion to uppercase
