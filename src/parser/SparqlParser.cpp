@@ -570,7 +570,7 @@ std::string_view SparqlParser::readTriplePart(const std::string& s,
         insidePrefixed = true;
       }
     } else if (insidePrefixed) {
-      if (std::isspace(static_cast<unsigned char>(s[*pos]))) {
+      if (std::isspace(static_cast<unsigned char>(s[*pos])) || s[*pos] == '}') {
         return std::string_view(s.data() + start, (*pos) - start);
       } else if (s[*pos] == '.' || s[*pos] == ';' || s[*pos] == ',') {
         if ((*pos) + 1 >= s.size() ||
