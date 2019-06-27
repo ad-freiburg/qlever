@@ -52,7 +52,7 @@ void Vocabulary<S>::readFromFile(const string& fileName,
 
 // _____________________________________________________________________________
 template <class S>
-template <typename>
+template <typename, typename>
 void Vocabulary<S>::writeToFile(const string& fileName) const {
   LOG(INFO) << "Writing vocabulary to file " << fileName << "\n";
   std::ofstream out(fileName.c_str(), std::ios_base::out);
@@ -69,7 +69,7 @@ void Vocabulary<S>::writeToFile(const string& fileName) const {
 
 // _____________________________________________________________________________
 template <class S>
-template <typename>
+template <typename, typename>
 void Vocabulary<S>::writeToBinaryFileForMerging(const string& fileName) const {
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
   std::ofstream out(fileName.c_str(),
@@ -90,7 +90,7 @@ void Vocabulary<S>::writeToBinaryFileForMerging(const string& fileName) const {
 
 // _____________________________________________________________________________
 template <class S>
-template <typename>
+template <typename, typename>
 void Vocabulary<S>::createFromSet(const ad_utility::HashSet<S>& set) {
   LOG(INFO) << "Creating vocabulary from set ...\n";
   _words.clear();
@@ -105,7 +105,7 @@ void Vocabulary<S>::createFromSet(const ad_utility::HashSet<S>& set) {
 // TODO<joka921> is this used? if no, throw out, if yes, transform to
 // compressedString as key type
 template <class S>
-template <typename>
+template <typename, typename>
 ad_utility::HashMap<string, Id> Vocabulary<S>::asMap() {
   ad_utility::HashMap<string, Id> map;
   for (size_t i = 0; i < _words.size(); ++i) {
@@ -116,7 +116,7 @@ ad_utility::HashMap<string, Id> Vocabulary<S>::asMap() {
 
 // _____________________________________________________________________________
 template <class S>
-template <typename>
+template <typename, typename>
 void Vocabulary<S>::externalizeLiterals(const string& fileName) {
   LOG(INFO) << "Externalizing literals..." << std::endl;
   auto ext = std::lower_bound(_words.begin(), _words.end(),
@@ -199,7 +199,7 @@ string Vocabulary<S>::getLanguage(const string& literal) {
 
 // ____________________________________________________________________________
 template <class S>
-template <typename>
+template <typename, typename>
 string Vocabulary<S>::expandPrefix(const CompressedString& word) const {
   assert(!word.empty());
   auto idx = static_cast<uint8_t>(word[0]) - MIN_COMPRESSION_PREFIX;
@@ -212,7 +212,7 @@ string Vocabulary<S>::expandPrefix(const CompressedString& word) const {
 
 // _____________________________________________________________________________
 template <class S>
-template <typename>
+template <typename, typename>
 CompressedString Vocabulary<S>::compressPrefix(const string& word) const {
   for (const auto& p : _prefixVec) {
     if (ad_utility::startsWith(word, p._fulltext)) {
@@ -227,7 +227,7 @@ CompressedString Vocabulary<S>::compressPrefix(const string& word) const {
 
 // _____________________________________________________________________________
 template <class S>
-template <class StringRange, typename>
+template <class StringRange, typename, typename>
 void Vocabulary<S>::initializePrefixes(const StringRange& prefixes) {
   for (auto& el : _prefixMap) {
     el = "";
@@ -307,7 +307,7 @@ bool PrefixComparator<S>::operator()(const string& lhs,
 
 // _____________________________________________________
 template <class S>
-template <typename>
+template <typename, typename>
 void Vocabulary<S>::prefixCompressFile(const string& infile,
                                        const string& outfile,
                                        const vector<string>& prefixes) {
