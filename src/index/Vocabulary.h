@@ -110,6 +110,7 @@ class PrefixComparator {
  */
 class StringSortComparator {
  public:
+  constexpr StringSortComparator(const StringSortComparator&) = default;
   // Convert an rdf-literal "value"@lang (langtag is optional)
   // to the first possible literal with the same case-insensitive value
   // ("VALUE") in this case. This is done by conversion to uppercase
@@ -242,6 +243,14 @@ class StringSortComparator {
 //! CompressedString -> prefix compression is applied
 template <class StringType>
 class Vocabulary {
+  template <typename T, typename R = void>
+  using enable_if_compressed =
+      std::enable_if_t<std::is_same_v<T, CompressedString>>;
+
+  template <typename T, typename R = void>
+  using enable_if_uncompressed =
+      std::enable_if_t<!std::is_same_v<T, CompressedString>>;
+
  public:
   template <
       typename = std::enable_if_t<std::is_same_v<StringType, string> ||
@@ -266,12 +275,12 @@ class Vocabulary {
   //! Write the vocabulary to a file.
   // We don't need to write compressed vocabularies with the current index
   // building procedure
-  template <typename = std::enable_if_t<!_isCompressed>>
+  template <typename U = StringType, typename = enable_if_uncompressed<U>>
   void writeToFile(const string& fileName) const;
 
   //! Write to binary file to prepare the merging. Format:
   // 4 Bytes strlen, then character bytes, then 8 bytes zeros for global id
-  template <typename = std::enable_if_t<!_isCompressed>>
+  template <typename U = StringType, typename = enable_if_uncompressed<U>>
   void writeToBinaryFileForMerging(const string& fileName) const;
 
   //! Append a word to the vocabulary. Wraps the std::vector method.
@@ -286,7 +295,7 @@ class Vocabulary {
   //! Get the word with the given id or an empty optional if the
   //! word is not in the vocabulary.
   //! Only enabled when uncompressed which also means no externalization
-  template <typename = std::enable_if_t<!_isCompressed>>
+  template <typename U = StringType, typename = enable_if_uncompressed<U>>
   const std::optional<std::reference_wrapper<const string>> operator[](
       Id id) const {
     if (id < _words.size()) {
@@ -299,7 +308,7 @@ class Vocabulary {
   //! Get the word with the given id or an empty optional if the
   //! word is not in the vocabulary. Returns an lvalue because compressed or
   //! externalized words don't allow references
-  template <typename = std::enable_if_t<_isCompressed>>
+  template <typename U = StringType, typename = enable_if_compressed<U>>
   const std::optional<string> idToOptionalString(Id id) const {
     if (id < _words.size()) {
       // internal, prefixCompressed word
@@ -404,10 +413,10 @@ class Vocabulary {
   }
 
   // only used during Index building, not needed for compressed vocabulary
-  template <typename = std::enable_if_t<!_isCompressed>>
+  template <typename U = StringType, typename = enable_if_uncompressed<U>>
   void createFromSet(const ad_utility::HashSet<StringType>& set);
 
-  template <typename = std::enable_if_t<!_isCompressed>>
+  template <typename U = StringType, typename = enable_if_uncompressed<U>>
   ad_utility::HashMap<string, Id> asMap();
 
   static bool isLiteral(const string& word);
@@ -420,7 +429,7 @@ class Vocabulary {
   bool shouldLiteralBeExternalized(const string& word) const;
 
   // only still needed for text vocabulary
-  template <typename = std::enable_if_t<!_isCompressed>>
+  template <typename U = StringType, typename = enable_if_uncompressed<U>>
   void externalizeLiterals(const string& fileName);
 
   void externalizeLiteralsFromTextFile(const string& textFileName,
@@ -435,11 +444,11 @@ class Vocabulary {
   static string getLanguage(const string& literal);
 
   // _____________________________________________________
-  template <typename = std::enable_if_t<_isCompressed>>
+  template <typename U = StringType, typename = enable_if_compressed<U>>
   string expandPrefix(const CompressedString& word) const;
 
   // _____________________________________________
-  template <typename = std::enable_if_t<_isCompressed>>
+  template <typename U = StringType, typename = enable_if_compressed<U>>
   CompressedString compressPrefix(const string& word) const;
 
   // initialize compression with a list of prefixes
@@ -448,7 +457,8 @@ class Vocabulary {
   // StringRange prefixes can be of any type where
   // for (const string& el : prefixes {}
   // works
-  template <class StringRange, typename = std::enable_if_t<_isCompressed>>
+  template <typename StringRange, typename U = StringType,
+            typename = enable_if_compressed<U>>
   void initializePrefixes(const StringRange& prefixes);
 
   // set the list of prefixes for words which will become part of the
@@ -477,7 +487,7 @@ class Vocabulary {
   //   outfile- output path. Will be overwritten by also one word per line
   //            in the same order as the infile
   //   prefixes - a list of prefixes which we will compress
-  template <typename = std::enable_if_t<_isCompressed>>
+  template <typename U = StringType, typename = enable_if_compressed<U>>
   static void prefixCompressFile(const string& infile, const string& outfile,
                                  const vector<string>& prefixes);
 

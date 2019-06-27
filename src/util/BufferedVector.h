@@ -68,8 +68,8 @@ class BufferedVector {
   BufferedVector& operator=(const BufferedVector<T>&) = delete;
 
   // move construction and assignment
-  BufferedVector(BufferedVector<T>&& other) noexcept = default;
-  BufferedVector& operator=(BufferedVector<T>&& other) noexcept = default;
+  BufferedVector(BufferedVector<T>&& other) = default;
+  BufferedVector& operator=(BufferedVector<T>&& other) = default;
 
   // _________________________________________________________________________
   void clear() {

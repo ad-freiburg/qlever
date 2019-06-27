@@ -34,10 +34,10 @@ class HashMap : private google::dense_hash_map<K, V, HashFcn, EqualKey, Alloc> {
   }
 
   // Iterator type of this map, it.first is the key, it.second the value
-  using Base::iterator;
+  using typename Base::iterator;
 
   // Const Iterator type of this map, it.first is the key, it.second the value
-  using Base::const_iterator;
+  using typename Base::const_iterator;
 
   // Returns an iterator to the first element of the map if it exists and an
   // iterator equal to end() otherwise

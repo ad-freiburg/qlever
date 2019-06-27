@@ -140,7 +140,7 @@ class IdTableImpl {
       return *reinterpret_cast<value_type*>(_data + (_row + i) * COLS);
     }
 
-    const reference operator[](difference_type i) const {
+    reference operator[](difference_type i) const {
       return *reinterpret_cast<const value_type*>(_data + (_row + i) * COLS);
     }
 

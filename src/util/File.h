@@ -52,6 +52,8 @@ class File {
     open(filename, mode);
   }
 
+  File& operator=(const File&) = default;
+
   //! Copy constructor.
   //! Does not copy the file in the file system!
   File(const File& orig) {

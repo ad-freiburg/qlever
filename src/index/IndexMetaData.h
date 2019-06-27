@@ -191,8 +191,8 @@ class IndexMetaData {
   // this way all instantations will be friends with each other,
   // but this should not be an issue.
   template <class U>
-  friend inline ad_utility::File& operator<<(ad_utility::File& f,
-                                             const IndexMetaData<U>& rmd);
+  friend ad_utility::File& operator<<(ad_utility::File& f,
+                                      const IndexMetaData<U>& rmd);
 
   size_t getNofBlocksForRelation(const Id relId) const;
 
