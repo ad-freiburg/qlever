@@ -561,17 +561,21 @@ void Index::createPatternsImpl(const string& fileName,
   typedef std::unordered_map<Pattern, size_t> PatternsCountMap;
 
   LOG(INFO) << "Creating patterns file..." << std::endl;
-  PatternsCountMap patternCounts;
+  VecReaderType reader(vecReaderArgs...);
+  if (reader.empty()) {
+    LOG(WARN) << "Triple vector was empty, no patterns created" << std::endl;
+    return;
+  }
 
+  PatternsCountMap patternCounts;
   // determine the most common patterns
   Pattern pattern;
 
   size_t patternIndex = 0;
-  Id currentSubj;
-  currentSubj = (*VecReaderType(vecReaderArgs...))[0];
   size_t numValidPatterns = 0;
+  Id currentSubj = (*reader)[0];
 
-  for (VecReaderType reader(vecReaderArgs...); !reader.empty(); ++reader) {
+  for (; !reader.empty(); ++reader) {
     auto triple = *reader;
     if (triple[0] != currentSubj) {
       currentSubj = triple[0];
