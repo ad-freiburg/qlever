@@ -3,12 +3,21 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 
 #include <re2/re2.h>
-#include <string>
 #include <iostream>
+#include <string>
 
 struct SparqlToken {
   enum class Type {
-    IRI, WS, CONTROL, VARIABLE, SYMBOL, PROPERTYPATH, AGGREGATE, RDFLITERAL
+    IRI,
+    WS,
+    KEYWORD,
+    VARIABLE,
+    SYMBOL,
+    PROPERTYPATH,
+    AGGREGATE,
+    RDFLITERAL,
+    INTEGER,
+    FLOAT
   };
   static const std::string TYPE_NAMES[];
 
@@ -16,15 +25,15 @@ struct SparqlToken {
   Type type = Type::IRI;
   size_t pos;
 
-  friend std::ostream& operator<<(std::ostream &os, const SparqlToken &t) {
-    os << t.raw << " : " << TYPE_NAMES[(int) t.type];
+  friend std::ostream& operator<<(std::ostream& os, const SparqlToken& t) {
+    os << t.raw << " : " << TYPE_NAMES[(int)t.type];
     return os;
   }
 };
 
 class SparqlLexer {
-private:
-// The rules for the lexer
+ private:
+  // The rules for the lexer
   static const std::string IRIREF;
   static const std::string IRI;
   static const std::string PN_CHARS_BASE;
@@ -35,7 +44,7 @@ private:
   static const std::string PN_LOCAL;
   static const std::string VARNAME;
   static const std::string WS;
-  static const std::string CONTROL;
+  static const std::string KEYWORD;
   static const std::string VARIABLE;
   static const std::string SYMBOL;
   static const std::string PPATH;
@@ -46,34 +55,38 @@ private:
   static const std::string RDFLITERAL;
   static const std::string PNAME_NS;
   static const std::string PNAME_LN;
+  static const std::string INTEGER;
+  static const std::string FLOAT;
 
   static const re2::RE2 RE_IRI;
   static const re2::RE2 RE_WS;
-  static const re2::RE2 RE_CONTROL;
+  static const re2::RE2 RE_KEYWORD;
   static const re2::RE2 RE_VARIABLE;
   static const re2::RE2 RE_SYMBOL;
   static const re2::RE2 RE_PPATH;
   static const re2::RE2 RE_AGGREGATE;
   static const re2::RE2 RE_RDFLITERAL;
+  static const re2::RE2 RE_INTEGER;
+  static const re2::RE2 RE_FLOAT;
 
-public:
-  SparqlLexer(const std::string &sparql);
+ public:
+  SparqlLexer(const std::string& sparql);
 
   // True if the entire input stream was consumed
   bool empty() const;
 
   bool accept(SparqlToken::Type type);
-  bool accept(const std::string &raw, bool match_case = true);
+  bool accept(const std::string& raw, bool match_case = true);
   // Accepts any token
   void accept();
 
   void expect(SparqlToken::Type type);
-  void expect(const std::string &raw, bool match_case = true);
+  void expect(const std::string& raw, bool match_case = true);
   void expectEmpty();
 
-  const SparqlToken &current();
+  const SparqlToken& current();
 
-private:
+ private:
   void readNext();
 
   const std::string _sparql;
