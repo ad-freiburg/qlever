@@ -5,6 +5,7 @@
 #include <getopt.h>
 #include <cstdio>
 #include <cstdlib>
+#include <exception>
 #include <iomanip>
 #include <iostream>
 #include <sstream>
@@ -244,14 +245,6 @@ int main(int argc, char** argv) {
             << __TIME__ << EMPH_OFF << std::endl
             << std::endl;
   cout << "Set locale LC_CTYPE to: " << locale << endl;
-  LOG(DEBUG) << "Configuring STXXL..." << std::endl;
-  string stxxlFileName;
-  size_t posOfLastSlash = baseName.rfind('/');
-  string location = baseName.substr(0, posOfLastSlash + 1);
-  string tail = baseName.substr(posOfLastSlash + 1);
-  writeStxxlConfigFile(location, tail);
-  stxxlFileName = getStxxlDiskFileName(location, tail);
-  LOG(DEBUG) << "done." << std::endl;
 
   if (inputFile.empty()) {
     LOG(INFO) << "No input knowledge-base-file specified. Parsing from stdin\n";
@@ -289,6 +282,14 @@ int main(int argc, char** argv) {
   }
 
   try {
+    LOG(TRACE) << "Configuring STXXL..." << std::endl;
+    size_t posOfLastSlash = baseName.rfind('/');
+    string location = baseName.substr(0, posOfLastSlash + 1);
+    string tail = baseName.substr(posOfLastSlash + 1);
+    writeStxxlConfigFile(location, tail);
+    string stxxlFileName = getStxxlDiskFileName(location, tail);
+    LOG(TRACE) << "done." << std::endl;
+
     Index index;
     index.setKbName(kbIndexName);
     index.setTextName(textIndexName);
@@ -339,9 +340,10 @@ int main(int argc, char** argv) {
     if (docsfile.size() > 0) {
       index.buildDocsDB(docsfile);
     }
-  } catch (ad_semsearch::Exception& e) {
-    LOG(ERROR) << e.getFullErrorMessage() << std::endl;
+    std::remove(stxxlFileName.c_str());
+  } catch (std::exception& e) {
+    LOG(ERROR) << e.what() << std::endl;
+    exit(2);
   }
-  std::remove(stxxlFileName.c_str());
   return 0;
 }
