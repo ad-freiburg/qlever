@@ -10,18 +10,20 @@
 
 TEST(ParserTest, testParse) {
   try {
-    ParsedQuery pq = SparqlParser::parse("SELECT ?x WHERE {?x ?y ?z}");
+    ParsedQuery pq = SparqlParser("SELECT ?x WHERE {?x ?y ?z}").parse();
     ASSERT_GT(pq.asString().size(), 0u);
     ASSERT_EQ(0u, pq._prefixes.size());
     ASSERT_EQ(1u, pq._selectedVariables.size());
     ASSERT_EQ(1u, pq._rootGraphPattern->_whereClauseTriples.size());
 
-    pq = SparqlParser::parse(
-        "PREFIX : <http://rdf.myprefix.com/>\n"
-        "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
-        "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
-        "SELECT ?x ?z \n "
-        "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y nsx:rel2 <http://abc.de>}");
+    pq = SparqlParser(
+             "PREFIX : <http://rdf.myprefix.com/>\n"
+             "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
+             "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
+             "SELECT ?x ?z \n "
+             "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y nsx:rel2 "
+             "<http://abc.de>}")
+             .parse();
     ASSERT_EQ(3u, pq._prefixes.size());
     ASSERT_EQ(2u, pq._selectedVariables.size());
     ASSERT_EQ(3u, pq._rootGraphPattern->_whereClauseTriples.size());
@@ -45,13 +47,14 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ("", pq._limit);
     ASSERT_EQ("", pq._offset);
 
-    pq = SparqlParser::parse(
-        "PREFIX : <http://rdf.myprefix.com/>\n"
-        "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
-        "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
-        "SELECT ?x ?z \n "
-        "WHERE \t {\n?x :myrel ?y. ?y ns:myrel ?z.\n?y nsx:rel2 "
-        "<http://abc.de>\n}");
+    pq = SparqlParser(
+             "PREFIX : <http://rdf.myprefix.com/>\n"
+             "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
+             "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
+             "SELECT ?x ?z \n "
+             "WHERE \t {\n?x :myrel ?y. ?y ns:myrel ?z.\n?y nsx:rel2 "
+             "<http://abc.de>\n}")
+             .parse();
     ASSERT_EQ(3u, pq._prefixes.size());
     ASSERT_EQ(2u, pq._selectedVariables.size());
     ASSERT_EQ(3u, pq._rootGraphPattern->_whereClauseTriples.size());
@@ -75,11 +78,12 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ("", pq._limit);
     ASSERT_EQ("", pq._offset);
 
-    pq = SparqlParser::parse(
-        "PREFIX ns: <http://ns/>"
-        "SELECT ?x ?z \n "
-        "WHERE \t {\n?x <Directed_by> ?y. ?y ns:myrel.extend ?z.\n"
-        "?y nsx:rel2 \"Hello... World\"}");
+    pq = SparqlParser(
+             "PREFIX ns: <http://ns/>"
+             "SELECT ?x ?z \n "
+             "WHERE \t {\n?x <Directed_by> ?y. ?y ns:myrel.extend ?z.\n"
+             "?y nsx:rel2 \"Hello... World\"}")
+             .parse();
     ASSERT_EQ(1u, pq._prefixes.size());
     ASSERT_EQ(2u, pq._selectedVariables.size());
     ASSERT_EQ(3u, pq._rootGraphPattern->_whereClauseTriples.size());
@@ -103,9 +107,10 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ("", pq._limit);
     ASSERT_EQ("", pq._offset);
 
-    pq = SparqlParser::parse(
-        "SELECT ?x ?y WHERE {?x is-a Actor .  FILTER(?x != ?y)."
-        "?y is-a Actor . FILTER(?y < ?x)} LIMIT 10");
+    pq = SparqlParser(
+             "SELECT ?x ?y WHERE {?x is-a Actor .  FILTER(?x != ?y)."
+             "?y is-a Actor . FILTER(?y < ?x)} LIMIT 10")
+             .parse();
     pq.expandPrefixes();
     ASSERT_EQ(2u, pq._rootGraphPattern->_filters.size());
     ASSERT_EQ("?x", pq._rootGraphPattern->_filters[0]._lhs);
@@ -118,9 +123,10 @@ TEST(ParserTest, testParse) {
               pq._rootGraphPattern->_filters[1]._type);
     ASSERT_EQ(2u, pq._rootGraphPattern->_whereClauseTriples.size());
 
-    pq = SparqlParser::parse(
-        "SELECT ?x ?y WHERE {?x is-a Actor .  FILTER(?x != ?y)."
-        "?y is-a Actor} LIMIT 10");
+    pq = SparqlParser(
+             "SELECT ?x ?y WHERE {?x is-a Actor .  FILTER(?x != ?y)."
+             "?y is-a Actor} LIMIT 10")
+             .parse();
     pq.expandPrefixes();
     ASSERT_EQ(1u, pq._rootGraphPattern->_filters.size());
     ASSERT_EQ("?x", pq._rootGraphPattern->_filters[0]._lhs);
@@ -129,10 +135,11 @@ TEST(ParserTest, testParse) {
               pq._rootGraphPattern->_filters[0]._type);
     ASSERT_EQ(2u, pq._rootGraphPattern->_whereClauseTriples.size());
 
-    pq = SparqlParser::parse(
-        "SELECT ?x ?y WHERE {?x is-a Actor .  FILTER(?x != ?y)."
-        "?y is-a Actor. ?c ql:contains-entity ?x."
-        "?c ql:contains-word \"coca* abuse\"} LIMIT 10");
+    pq = SparqlParser(
+             "SELECT ?x ?y WHERE {?x is-a Actor .  FILTER(?x != ?y)."
+             "?y is-a Actor. ?c ql:contains-entity ?x."
+             "?c ql:contains-word \"coca* abuse\"} LIMIT 10")
+             .parse();
     pq.expandPrefixes();
     ASSERT_EQ(1u, pq._rootGraphPattern->_filters.size());
     ASSERT_EQ("?x", pq._rootGraphPattern->_filters[0]._lhs);
@@ -149,26 +156,28 @@ TEST(ParserTest, testParse) {
               pq._rootGraphPattern->_whereClauseTriples[3]._p._iri);
     ASSERT_EQ("coca* abuse", pq._rootGraphPattern->_whereClauseTriples[3]._o);
 
-    pq = SparqlParser::parse(
-        "PREFIX : <>\n"
-        "SELECT ?x ?y ?z TEXT(?c) SCORE(?c) ?c WHERE {\n"
-        "?x :is-a :Politician .\n"
-        "?c ql:contains-entity ?x .\n"
-        "?c ql:contains-word friend .\n"
-        "?c ql:contains-entity ?y .\n"
-        "?y :is-a :Scientist .\n"
-        "FILTER(?x != ?y) .\n"
-        "} ORDER BY ?c");
+    pq = SparqlParser(
+             "PREFIX : <>\n"
+             "SELECT ?x ?y ?z TEXT(?c) SCORE(?c) ?c WHERE {\n"
+             "?x :is-a :Politician .\n"
+             "?c ql:contains-entity ?x .\n"
+             "?c ql:contains-word friend .\n"
+             "?c ql:contains-entity ?y .\n"
+             "?y :is-a :Scientist .\n"
+             "FILTER(?x != ?y) .\n"
+             "} ORDER BY ?c")
+             .parse();
     pq.expandPrefixes();
     ASSERT_EQ(1u, pq._rootGraphPattern->_filters.size());
 
-    pq = SparqlParser::parse(
-        "SELECT ?x ?z WHERE {\n"
-        "  ?x <test> ?y .\n"
-        "  OPTIONAL {\n"
-        "    ?y <test2> ?z .\n"
-        "  }\n"
-        "}");
+    pq = SparqlParser(
+             "SELECT ?x ?z WHERE {\n"
+             "  ?x <test> ?y .\n"
+             "  OPTIONAL {\n"
+             "    ?y <test2> ?z .\n"
+             "  }\n"
+             "}")
+             .parse();
 
     ASSERT_EQ(1u, pq._rootGraphPattern->_children.size());
     ASSERT_EQ(1u,
@@ -182,20 +191,21 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(0u, child->_filters.size());
     ASSERT_TRUE(child->_optional);
 
-    pq = SparqlParser::parse(
-        "SELECT ?x ?z WHERE {\n"
-        "  ?x <test> ?y .\n"
-        "  OPTIONAL {\n"
-        "    ?y <test2> ?z .\n"
-        "    optional {\n"
-        "      ?a ?b ?c .\n"
-        "      FILTER(?c > 3)\n"
-        "    }\n"
-        "    optional {\n"
-        "      ?d ?e ?f\n"
-        "    }\n"
-        "  }\n"
-        "}");
+    pq = SparqlParser(
+             "SELECT ?x ?z WHERE {\n"
+             "  ?x <test> ?y .\n"
+             "  OPTIONAL {\n"
+             "    ?y <test2> ?z .\n"
+             "    optional {\n"
+             "      ?a ?b ?c .\n"
+             "      FILTER(?c > 3)\n"
+             "    }\n"
+             "    optional {\n"
+             "      ?d ?e ?f\n"
+             "    }\n"
+             "  }\n"
+             "}")
+             .parse();
     ASSERT_EQ(1u, pq._rootGraphPattern->_children.size());
     ASSERT_EQ(1u,
               pq._rootGraphPattern->_children[0]->_childGraphPatterns.size());
@@ -215,12 +225,13 @@ TEST(ParserTest, testParse) {
     ASSERT_TRUE(child2->_optional);
     ASSERT_TRUE(child3->_optional);
 
-    pq = SparqlParser::parse(
-        "SELECT ?a WHERE {\n"
-        "  VALUES ?a { <1> \"2\"}\n"
-        "  VALUES (?b ?c) {(<1> <2>) (\"1\" \"2\")}\n"
-        "  ?a <rel> ?b ."
-        "}");
+    pq = SparqlParser(
+             "SELECT ?a WHERE {\n"
+             "  VALUES ?a { <1> \"2\"}\n"
+             "  VALUES (?b ?c) {(<1> <2>) (\"1\" \"2\")}\n"
+             "  ?a <rel> ?b ."
+             "}")
+             .parse();
     ASSERT_EQ(0u, pq._rootGraphPattern->_children.size());
     ASSERT_EQ(1u, pq._rootGraphPattern->_whereClauseTriples.size());
     ASSERT_EQ(0u, pq._rootGraphPattern->_filters.size());
@@ -238,12 +249,13 @@ TEST(ParserTest, testParse) {
     vvals = {{"<1>", "<2>"}, {"\"1\"", "\"2\""}};
     ASSERT_EQ(vvals, values2._values);
 
-    pq = SparqlParser::parse(R"(
+    pq = SparqlParser(R"(
 SELECT ?a ?b ?c WHERE {
   VALUES ?a { <Albert_Einstein>}
   VALUES (?b ?c) { (<Marie_Curie> <Joseph_Jacobson>) (<Freiherr> <Lord_of_the_Isles>) }
 }
-        )");
+        )")
+             .parse();
 
     ASSERT_EQ(0u, pq._rootGraphPattern->_children.size());
     ASSERT_EQ(0u, pq._rootGraphPattern->_whereClauseTriples.size());
@@ -263,14 +275,15 @@ SELECT ?a ?b ?c WHERE {
              {"<Freiherr>", "<Lord_of_the_Isles>"}};
     ASSERT_EQ(vvals, values2._values);
 
-    pq = SparqlParser::parse(
-        ""
-        "PREFIX wd: <http://www.wikidata.org/entity/>\n"
-        "PREFIX wdt: <http://www.wikidata.org/prop/direct/>\n"
-        "SELECT ?city WHERE {\n"
-        "  VALUES ?citytype { wd:Q515 wd:Q262166}\n"
-        "  ?city wdt:P31 ?citytype .\n"
-        "}\n");
+    pq = SparqlParser(
+             ""
+             "PREFIX wd: <http://www.wikidata.org/entity/>\n"
+             "PREFIX wdt: <http://www.wikidata.org/prop/direct/>\n"
+             "SELECT ?city WHERE {\n"
+             "  VALUES ?citytype { wd:Q515 wd:Q262166}\n"
+             "  ?city wdt:P31 ?citytype .\n"
+             "}\n")
+             .parse();
 
     ASSERT_EQ(0u, pq._rootGraphPattern->_children.size());
     ASSERT_EQ(1u, pq._rootGraphPattern->_whereClauseTriples.size());
@@ -292,19 +305,22 @@ SELECT ?a ?b ?c WHERE {
 }
 
 TEST(ParserTest, testFilterWithoutDot) {
-  ParsedQuery pq = SparqlParser::parse(
-      "PREFIX fb: <http://rdf.freebase.com/ns/>\n"
-      "\n"
-      "SELECT DISTINCT ?1 WHERE {\n"
-      " fb:m.0fkvn fb:government.government_office_category.officeholders ?0 "
-      ".\n"
-      " ?0 fb:government.government_position_held.jurisdiction_of_office "
-      "fb:m.0vmt .\n"
-      " ?0 fb:government.government_position_held.office_holder ?1 .\n"
-      " FILTER (?1 != fb:m.0fkvn)\n"
-      " FILTER (?1 != fb:m.0vmt)\n"
-      "FILTER (?1 != fb:m.018mts) \n"
-      "} LIMIT 300");
+  ParsedQuery pq =
+      SparqlParser(
+          "PREFIX fb: <http://rdf.freebase.com/ns/>\n"
+          "\n"
+          "SELECT DISTINCT ?1 WHERE {\n"
+          " fb:m.0fkvn fb:government.government_office_category.officeholders "
+          "?0 "
+          ".\n"
+          " ?0 fb:government.government_position_held.jurisdiction_of_office "
+          "fb:m.0vmt .\n"
+          " ?0 fb:government.government_position_held.office_holder ?1 .\n"
+          " FILTER (?1 != fb:m.0fkvn)\n"
+          " FILTER (?1 != fb:m.0vmt)\n"
+          "FILTER (?1 != fb:m.018mts) \n"
+          "} LIMIT 300")
+          .parse();
   pq.expandPrefixes();
   ASSERT_EQ(1u, pq._prefixes.size());
   ASSERT_EQ(1u, pq._selectedVariables.size());
@@ -328,12 +344,14 @@ TEST(ParserTest, testFilterWithoutDot) {
 }
 
 TEST(ParserTest, testExpandPrefixes) {
-  ParsedQuery pq = SparqlParser::parse(
-      "PREFIX : <http://rdf.myprefix.com/>\n"
-      "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
-      "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
-      "SELECT ?x ?z \n "
-      "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y nsx:rel2 <http://abc.de>}");
+  ParsedQuery pq =
+      SparqlParser(
+          "PREFIX : <http://rdf.myprefix.com/>\n"
+          "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
+          "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
+          "SELECT ?x ?z \n "
+          "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y nsx:rel2 <http://abc.de>}")
+          .parse();
   pq.expandPrefixes();
   ASSERT_EQ(3u, pq._prefixes.size());
   ASSERT_EQ(2u, pq._selectedVariables.size());
@@ -360,7 +378,7 @@ TEST(ParserTest, testExpandPrefixes) {
 }
 
 TEST(ParserTest, testSolutionModifiers) {
-  ParsedQuery pq = SparqlParser::parse("SELECT ?x WHERE \t {?x :myrel ?y}");
+  ParsedQuery pq = SparqlParser("SELECT ?x WHERE \t {?x :myrel ?y}").parse();
   pq.expandPrefixes();
   ASSERT_EQ(0u, pq._prefixes.size());
   ASSERT_EQ(1u, pq._selectedVariables.size());
@@ -371,7 +389,7 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_FALSE(pq._distinct);
   ASSERT_FALSE(pq._reduced);
 
-  pq = SparqlParser::parse("SELECT ?x WHERE \t {?x :myrel ?y} LIMIT 10");
+  pq = SparqlParser("SELECT ?x WHERE \t {?x :myrel ?y} LIMIT 10").parse();
   pq.expandPrefixes();
   ASSERT_EQ(0u, pq._prefixes.size());
   ASSERT_EQ(1u, pq._selectedVariables.size());
@@ -382,9 +400,10 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_FALSE(pq._distinct);
   ASSERT_FALSE(pq._reduced);
 
-  pq = SparqlParser::parse(
-      "SELECT ?x WHERE \t {?x :myrel ?y}\n"
-      "LIMIT 10 OFFSET 15");
+  pq = SparqlParser(
+           "SELECT ?x WHERE \t {?x :myrel ?y}\n"
+           "LIMIT 10 OFFSET 15")
+           .parse();
   pq.expandPrefixes();
   ASSERT_EQ(0u, pq._prefixes.size());
   ASSERT_EQ(1u, pq._selectedVariables.size());
@@ -395,9 +414,10 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_FALSE(pq._distinct);
   ASSERT_FALSE(pq._reduced);
 
-  pq = SparqlParser::parse(
-      "SELECT DISTINCT ?x ?y WHERE \t {?x :myrel ?y}\n"
-      "ORDER BY ?y LIMIT 10 OFFSET 15");
+  pq = SparqlParser(
+           "SELECT DISTINCT ?x ?y WHERE \t {?x :myrel ?y}\n"
+           "ORDER BY ?y LIMIT 10 OFFSET 15")
+           .parse();
   pq.expandPrefixes();
   ASSERT_EQ(0u, pq._prefixes.size());
   ASSERT_EQ(2u, pq._selectedVariables.size());
@@ -410,9 +430,10 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_TRUE(pq._distinct);
   ASSERT_FALSE(pq._reduced);
 
-  pq = SparqlParser::parse(
-      "SELECT DISTINCT ?x SCORE(?x|?c) ?y WHERE \t {?x :myrel ?y}\n"
-      "ORDER BY ASC(?y) DESC(SCORE(?x|?c)) LIMIT 10 OFFSET 15");
+  pq = SparqlParser(
+           "SELECT DISTINCT ?x SCORE(?x|?c) ?y WHERE \t {?x :myrel ?y}\n"
+           "ORDER BY ASC(?y) DESC(SCORE(?x|?c)) LIMIT 10 OFFSET 15")
+           .parse();
   pq.expandPrefixes();
   ASSERT_EQ(0u, pq._prefixes.size());
   ASSERT_EQ(3u, pq._selectedVariables.size());
@@ -428,9 +449,10 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_TRUE(pq._distinct);
   ASSERT_FALSE(pq._reduced);
 
-  pq = SparqlParser::parse(
-      "SELECT REDUCED ?x ?y WHERE \t {?x :myrel ?y}\n"
-      "ORDER BY DESC(?x) ASC(?y) LIMIT 10 OFFSET 15");
+  pq = SparqlParser(
+           "SELECT REDUCED ?x ?y WHERE \t {?x :myrel ?y}\n"
+           "ORDER BY DESC(?x) ASC(?y) LIMIT 10 OFFSET 15")
+           .parse();
   pq.expandPrefixes();
   ASSERT_EQ(0u, pq._prefixes.size());
   ASSERT_EQ(2u, pq._selectedVariables.size());
@@ -445,16 +467,17 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_FALSE(pq._distinct);
   ASSERT_TRUE(pq._reduced);
 
-  pq = SparqlParser::parse("SELECT ?x ?y WHERE {?x is-a Actor} LIMIT 10");
+  pq = SparqlParser("SELECT ?x ?y WHERE {?x is-a Actor} LIMIT 10").parse();
   pq.expandPrefixes();
   ASSERT_EQ("10", pq._limit);
 
-  pq = SparqlParser::parse(
-      "SELECT DISTINCT ?movie WHERE { \n"
-      "\n"
-      "?movie <from-year> \"00-00-2000\"^^xsd:date .\n"
-      "\n"
-      "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50");
+  pq = SparqlParser(
+           "SELECT DISTINCT ?movie WHERE { \n"
+           "\n"
+           "?movie <from-year> \"00-00-2000\"^^xsd:date .\n"
+           "\n"
+           "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50")
+           .parse();
   pq.expandPrefixes();
   ASSERT_EQ(0u, pq._prefixes.size());
   ASSERT_EQ(1u, pq._selectedVariables.size());
@@ -471,13 +494,14 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_EQ("<Scott%2C%20Ridley>",
             pq._rootGraphPattern->_whereClauseTriples[1]._o);
 
-  pq = SparqlParser::parse(
-      "PREFIX xsd: <http://www.w3.org/2010/XMLSchema#>"
-      "SELECT DISTINCT ?movie WHERE { \n"
-      "\n"
-      "?movie <from-year> \"00-00-2000\"^^xsd:date .\n"
-      "\n"
-      "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50");
+  pq = SparqlParser(
+           "PREFIX xsd: <http://www.w3.org/2010/XMLSchema#>"
+           "SELECT DISTINCT ?movie WHERE { \n"
+           "\n"
+           "?movie <from-year> \"00-00-2000\"^^xsd:date .\n"
+           "\n"
+           "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50")
+           .parse();
   pq.expandPrefixes();
   ASSERT_EQ(1u, pq._prefixes.size());
   ASSERT_EQ(1u, pq._selectedVariables.size());
@@ -494,24 +518,26 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_EQ("<Scott%2C%20Ridley>",
             pq._rootGraphPattern->_whereClauseTriples[1]._o);
 
-  pq = SparqlParser::parse(
-      "SELECT ?r (AVG(?r) as ?avg) WHERE {"
-      "?a <http://schema.org/name> ?b ."
-      "?a ql:has-relation ?r }"
-      "GROUP BY ?r "
-      "ORDER BY ?avg");
+  pq = SparqlParser(
+           "SELECT ?r (AVG(?r) as ?avg) WHERE {"
+           "?a <http://schema.org/name> ?b ."
+           "?a ql:has-relation ?r }"
+           "GROUP BY ?r "
+           "ORDER BY ?avg")
+           .parse();
   ASSERT_EQ(1u, pq._groupByVariables.size());
   ASSERT_EQ(1u, pq._orderBy.size());
   ASSERT_EQ("?r", pq._groupByVariables[0]);
   ASSERT_EQ("?avg", pq._orderBy[0]._key);
   ASSERT_FALSE(pq._orderBy[0]._desc);
 
-  pq = SparqlParser::parse(
-      "SELECT ?r (COUNT(DISTINCT ?r) as ?count) WHERE {"
-      "?a <http://schema.org/name> ?b ."
-      "?a ql:has-relation ?r }"
-      "GROUP BY ?r "
-      "ORDER BY ?count");
+  pq = SparqlParser(
+           "SELECT ?r (COUNT(DISTINCT ?r) as ?count) WHERE {"
+           "?a <http://schema.org/name> ?b ."
+           "?a ql:has-relation ?r }"
+           "GROUP BY ?r "
+           "ORDER BY ?count")
+           .parse();
   ASSERT_EQ(1u, pq._groupByVariables.size());
   ASSERT_EQ(1u, pq._orderBy.size());
   ASSERT_EQ("?r", pq._groupByVariables[0]);
@@ -519,9 +545,10 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_FALSE(pq._orderBy[0]._desc);
 
   // Test for an alias in the order by statement
-  pq = SparqlParser::parse(
-      "SELECT DISTINCT ?x ?y WHERE \t {?x :myrel ?y}\n"
-      "ORDER BY DESC((COUNT(?x) as ?count)) LIMIT 10 OFFSET 15");
+  pq = SparqlParser(
+           "SELECT DISTINCT ?x ?y WHERE \t {?x :myrel ?y}\n"
+           "ORDER BY DESC((COUNT(?x) as ?count)) LIMIT 10 OFFSET 15")
+           .parse();
   pq.expandPrefixes();
   ASSERT_EQ(0u, pq._prefixes.size());
   ASSERT_EQ(2u, pq._selectedVariables.size());
@@ -541,8 +568,10 @@ TEST(ParserTest, testSolutionModifiers) {
 }
 
 TEST(ParserTest, testGroupByAndAlias) {
-  ParsedQuery pq = SparqlParser::parse(
-      "SELECT (COUNT(?a) as ?count) WHERE { ?b <rel> ?a } GROUP BY ?b");
+  ParsedQuery pq =
+      SparqlParser(
+          "SELECT (COUNT(?a) as ?count) WHERE { ?b <rel> ?a } GROUP BY ?b")
+          .parse();
   ASSERT_EQ(1u, pq._selectedVariables.size());
   ASSERT_EQ("?count", pq._selectedVariables[0]);
   ASSERT_EQ(1u, pq._aliases.size());

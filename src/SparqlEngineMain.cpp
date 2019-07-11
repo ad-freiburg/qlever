@@ -192,8 +192,8 @@ int main(int argc, char** argv) {
 void processQuery(QueryExecutionContext& qec, const string& query) {
   ad_utility::Timer t;
   t.start();
-  SparqlParser sp;
-  ParsedQuery pq = sp.parse(query);
+  SparqlParser sp(query);
+  ParsedQuery pq = sp.parse();
   pq.expandPrefixes();
   QueryPlanner qp(&qec);
   ad_utility::Timer timer;

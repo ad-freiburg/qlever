@@ -90,11 +90,12 @@ int main(int argc, char** argv) {
     QueryExecutionContext qec(index, engine);
     ParsedQuery q;
     if (!freebase) {
-      q = SparqlParser::parse("SELECT ?x WHERE {?x <is-a> <Scientist>}");
+      q = SparqlParser("SELECT ?x WHERE {?x <is-a> <Scientist>}").parse();
     } else {
-      q = SparqlParser::parse(
-          "PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?p WHERE {?p "
-          "fb:people.person.profession fb:m.06q2q}");
+      q = SparqlParser(
+              "PREFIX fb: <http://rdf.freebase.com/ns/> SELECT ?p WHERE {?p "
+              "fb:people.person.profession fb:m.06q2q}")
+              .parse();
       q.expandPrefixes();
     }
     QueryPlanner queryPlanner(&qec);

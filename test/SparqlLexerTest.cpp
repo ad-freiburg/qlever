@@ -8,14 +8,16 @@
 #include <re2/re2.h>
 
 TEST(SparqlLexerTest, basicTest) {
-//  ASSERT_TRUE(
-//      re2::RE2::FullMatch("<is-a>/(<a>|<b>)*+0^", "(((<[^<>\"{}|^`\\[\\]\\-\\x00-\\x20]*>)|[?*+/|()^0-9])+)"));
+  //  ASSERT_TRUE(
+  //      re2::RE2::FullMatch("<is-a>/(<a>|<b>)*+0^",
+  //      "(((<[^<>\"{}|^`\\[\\]\\-\\x00-\\x20]*>)|[?*+/|()^0-9])+)"));
 
+  //    ASSERT_TRUE(
+  //        re2::RE2::FullMatch("<is-a>/(<a>|<b>)*",
+  //        "(((<[^<>\"{}|^`\\[\\]\x00-\\x20]*>)|[?*+/|()^0-9])+)"));
 
-//    ASSERT_TRUE(
-//        re2::RE2::FullMatch("<is-a>/(<a>|<b>)*", "(((<[^<>\"{}|^`\\[\\]\x00-\\x20]*>)|[?*+/|()^0-9])+)"));
-
-  std::string query = ""
+  std::string query =
+      ""
       "PREFIX wd: <http://www.wikidata.org/entity/>"
       "SELECT ?a ?b (COUNT(?c) as ?count) WHERE {"
       "  ?a wd:test ?b ."
@@ -99,11 +101,11 @@ TEST(SparqlLexerTest, basicTest) {
   lexer.expect(")");
 
   SparqlLexer lexer2(query);
-  lexer2.expect(SparqlToken::Type::CONTROL);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
   lexer2.expect(SparqlToken::Type::IRI);
   lexer2.expect(SparqlToken::Type::IRI);
 
-  lexer2.expect(SparqlToken::Type::CONTROL);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
   lexer2.expect(SparqlToken::Type::VARIABLE);
   lexer2.expect(SparqlToken::Type::VARIABLE);
   lexer2.expect(SparqlToken::Type::SYMBOL);
@@ -111,10 +113,10 @@ TEST(SparqlLexerTest, basicTest) {
   lexer2.expect(SparqlToken::Type::SYMBOL);
   lexer2.expect(SparqlToken::Type::VARIABLE);
   lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::CONTROL);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
   lexer2.expect(SparqlToken::Type::VARIABLE);
   lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::CONTROL);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
   lexer2.expect(SparqlToken::Type::SYMBOL);
 
   lexer2.expect(SparqlToken::Type::VARIABLE);
@@ -122,7 +124,7 @@ TEST(SparqlLexerTest, basicTest) {
   lexer2.expect(SparqlToken::Type::VARIABLE);
   lexer2.expect(SparqlToken::Type::SYMBOL);
 
-  lexer2.expect(SparqlToken::Type::CONTROL);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
   lexer2.expect(SparqlToken::Type::SYMBOL);
 
   lexer2.expect(SparqlToken::Type::SYMBOL);
@@ -130,17 +132,17 @@ TEST(SparqlLexerTest, basicTest) {
   lexer2.expect(SparqlToken::Type::IRI);
   lexer2.expect(SparqlToken::Type::VARIABLE);
   lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::CONTROL);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
   lexer2.expect(SparqlToken::Type::SYMBOL);
   lexer2.expect(SparqlToken::Type::VARIABLE);
   lexer2.expect(SparqlToken::Type::IRI);
   lexer2.expect(SparqlToken::Type::VARIABLE);
   lexer2.expect(SparqlToken::Type::SYMBOL);
 
-  lexer2.expect(SparqlToken::Type::CONTROL);
-  lexer2.expect(SparqlToken::Type::CONTROL);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
   lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::CONTROL);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
   lexer2.expect(SparqlToken::Type::SYMBOL);
   lexer2.expect(SparqlToken::Type::VARIABLE);
   lexer2.expect(SparqlToken::Type::SYMBOL);
@@ -152,19 +154,19 @@ TEST(SparqlLexerTest, basicTest) {
 
   lexer2.expect(SparqlToken::Type::SYMBOL);
 
-  lexer2.expect(SparqlToken::Type::CONTROL);
-  lexer2.expect(SparqlToken::Type::CONTROL);
-  lexer2.expect(SparqlToken::Type::CONTROL);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
   lexer2.expect(SparqlToken::Type::SYMBOL);
   lexer2.expect(SparqlToken::Type::VARIABLE);
   lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::CONTROL);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
   lexer2.expect(SparqlToken::Type::SYMBOL);
   lexer2.expect(SparqlToken::Type::VARIABLE);
   lexer2.expect(SparqlToken::Type::SYMBOL);
 
-  lexer2.expect(SparqlToken::Type::CONTROL);
-  lexer2.expect(SparqlToken::Type::CONTROL);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
+  lexer2.expect(SparqlToken::Type::KEYWORD);
   lexer2.expect(SparqlToken::Type::SYMBOL);
   lexer2.expect(SparqlToken::Type::VARIABLE);
   lexer2.expect(SparqlToken::Type::SYMBOL);
