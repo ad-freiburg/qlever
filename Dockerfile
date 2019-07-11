@@ -1,5 +1,5 @@
 FROM ubuntu:18.04 as base
-MAINTAINER Niklas Schnelle <schnelle@informatik.uni-freiburg.de>
+LABEL maintainer="Niklas Schnelle <schnelle@informatik.uni-freiburg.de>"
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 ENV LC_CTYPE C.UTF-8
@@ -36,7 +36,6 @@ VOLUME ["/input", "/index"]
 ENV INDEX_PREFIX index
 # Need the shell to get the INDEX_PREFIX envirionment variable
 ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -p 7001 \"$@\"", "--"]
-CMD ["-t"]
 
 # docker build -t qlever-<name> .
 # # When running with user namespaces you may need to make the index folder accessible
