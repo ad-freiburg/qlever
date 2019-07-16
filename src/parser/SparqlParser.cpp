@@ -15,8 +15,9 @@
 #include "./ParseException.h"
 #include "PropertyPathParser.h"
 
-SparqlParser::SparqlParser(const string& query)
-    : _lexer(query), _query(query) {}
+SparqlParser::SparqlParser(const string& query) : _lexer(query), _query(query) {
+  LOG(DEBUG) << "Parsing " << query << std::endl;
+}
 
 // _____________________________________________________________________________
 ParsedQuery SparqlParser::parse() {
@@ -25,19 +26,9 @@ ParsedQuery SparqlParser::parse() {
   parsePrologue(&result);
   _lexer.expect("select");
   parseQuery(&result);
+  _lexer.expectEmpty();
 
-  ad_utility::HashSet<std::string> variable_names;
-  for (const std::string& s : result._selectedVariables) {
-    variable_names.insert(s);
-  }
-  for (const ParsedQuery::Alias& a : result._aliases) {
-    if (variable_names.count(a._outVarName)) {
-      throw ParseException("The variable name " + a._outVarName +
-                           " used in "
-                           "an alias was already selected on.");
-    }
-    variable_names.insert(a._outVarName);
-  }
+  std::cout << result.asString() << std::endl;
   return result;
 }
 
@@ -45,6 +36,7 @@ ParsedQuery SparqlParser::parse() {
 void SparqlParser::parseQuery(ParsedQuery* query) {
   parseSelect(query);
 
+  _lexer.expect("{");
   parseWhere(query);
 
   parseSolutionModifiers(query);
@@ -54,17 +46,43 @@ void SparqlParser::parseQuery(ParsedQuery* query) {
     // part of the group by statement.
     for (const string& var : query->_selectedVariables) {
       if (var[0] == '?') {
+        bool is_alias = false;
+        for (const ParsedQuery::Alias& a : query->_aliases) {
+          if (a._outVarName == var) {
+            is_alias = true;
+            break;
+          }
+        }
+        if (is_alias) {
+          continue;
+        }
         if (std::find(query->_groupByVariables.begin(),
                       query->_groupByVariables.end(),
                       var) == query->_groupByVariables.end()) {
           throw ParseException("Variable " + var +
                                " is selected but not "
-                               "aggregated despite the query not being"
+                               "aggregated despite the query not being "
                                "grouped by " +
-                               var + ".");
+                               var + ".\n" + _lexer.input());
         }
       }
     }
+  }
+
+  ad_utility::HashMap<std::string, size_t> variable_counts;
+  for (const std::string& s : query->_selectedVariables) {
+    variable_counts[s]++;
+  }
+  for (const ParsedQuery::Alias& a : query->_aliases) {
+    // The variable was already added to the selected variables while
+    // parsing the alias, thus it should appear exactly once
+    if (variable_counts[a._outVarName] > 1) {
+      throw ParseException("The variable name " + a._outVarName +
+                           " used in "
+                           "an alias was already selected on.\n" +
+                           _lexer.input());
+    }
+    variable_counts[a._outVarName];
   }
 }
 
@@ -82,7 +100,8 @@ void SparqlParser::parsePrologue(ParsedQuery* query) {
 // _____________________________________________________________________________
 void SparqlParser::addPrefix(const string& key, const string& value,
                              ParsedQuery* query) {
-  SparqlPrefix p{key, value};
+  // Remove the trailing : from the key
+  SparqlPrefix p{key.substr(0, key.size() - 1), value};
   query->_prefixes.emplace_back(p);
 }
 
@@ -117,7 +136,9 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       query->_selectedVariables.push_back(s.str());
     } else if (_lexer.accept("(")) {
       // expect an alias
-      parseAlias(query);
+      ParsedQuery::Alias a = parseAlias();
+      query->_aliases.push_back(a);
+      query->_selectedVariables.emplace_back(a._outVarName);
       _lexer.expect(")");
     }
     if (_lexer.empty()) {
@@ -127,12 +148,94 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
 }
 
 // _____________________________________________________________________________
-void SparqlParser::parseAlias(ParsedQuery* query) {
+OrderKey SparqlParser::parseOrderKey(const std::string& order,
+                                     ParsedQuery* query) {
+  _lexer.expect("(");
+  std::ostringstream s;
+  s << order << "(";
+  if (_lexer.accept("score")) {
+    _lexer.expect("(");
+    s << "SCORE(";
+    _lexer.expect(SparqlToken::Type::VARIABLE);
+    s << _lexer.current().raw;
+    _lexer.expect(")");
+    s << ")";
+  } else if (_lexer.accept("(")) {
+    ParsedQuery::Alias a = parseAlias();
+    for (const std::string& s : query->_selectedVariables) {
+      if (s == a._outVarName) {
+        throw ParseException("A variable with name " + s +
+                             " is already used, but the order by with alias " +
+                             a._function + " tries to use it again.");
+      }
+    }
+    _lexer.expect(")");
+    s << a._outVarName;
+    query->_aliases.emplace_back(a);
+  } else {
+    _lexer.expect(SparqlToken::Type::VARIABLE);
+    s << _lexer.current().raw;
+  }
+  _lexer.expect(")");
+  s << ")";
+  return OrderKey(s.str());
+}
+
+// _____________________________________________________________________________
+ParsedQuery::Alias SparqlParser::parseAlias() {
   _lexer.expect(SparqlToken::Type::AGGREGATE);
+  std::ostringstream func;
+  func << ad_utility::getUppercaseUtf8(_lexer.current().raw);
+  const std::string agg = _lexer.current().raw;
   ParsedQuery::Alias a;
+  if (agg == "count") {
+    a._type = ParsedQuery::AggregateType::COUNT;
+  } else if (agg == "sample") {
+    a._type = ParsedQuery::AggregateType::SAMPLE;
+  } else if (agg == "min") {
+    a._type = ParsedQuery::AggregateType::MIN;
+  } else if (agg == "max") {
+    a._type = ParsedQuery::AggregateType::MAX;
+  } else if (agg == "sum") {
+    a._type = ParsedQuery::AggregateType::SUM;
+  } else if (agg == "avg") {
+    a._type = ParsedQuery::AggregateType::AVG;
+  } else if (agg == "group_concat") {
+    a._type = ParsedQuery::AggregateType::GROUP_CONCAT;
+  } else {
+    throw ParseException("Unknown aggregate " + agg);
+  }
   a._isAggregate = true;
-  // TODO(florian): parse the alias
-  query->_aliases.push_back(a);
+
+  _lexer.expect("(");
+  if (_lexer.accept("distinct")) {
+    func << "DISTINCT ";
+    a._isDistinct = true;
+  }
+  _lexer.expect(SparqlToken::Type::VARIABLE);
+  a._inVarName = _lexer.current().raw;
+  func << "(" << a._inVarName;
+  if (_lexer.accept(";")) {
+    if (agg != "group_concat") {
+      throw ParseException(
+          "Only GROUP_CONCAT may have additional arguments passed to it.");
+    }
+    _lexer.expect("separator");
+    _lexer.expect("=");
+    _lexer.expect(SparqlToken::Type::RDFLITERAL);
+    func << ";SEPARATOR=" << _lexer.current().raw;
+    a._delimiter = _lexer.current().raw;
+    // Remove the enclosing quotation marks
+    a._delimiter = a._delimiter.substr(1, a._delimiter.size() - 2);
+  }
+  _lexer.expect(")");
+  _lexer.expect("as");
+  _lexer.expect(SparqlToken::Type::VARIABLE);
+  a._outVarName = _lexer.current().raw;
+  func << ") as " << a._outVarName;
+
+  a._function = func.str();
+  return a;
 }
 
 // _____________________________________________________________________________
@@ -145,7 +248,6 @@ void SparqlParser::parseWhere(
     currentPattern = query->_rootGraphPattern;
     query->_rootGraphPattern->_id = 0;
   }
-  _lexer.expect("{");
 
   // If these are not empty the last subject and / or predicate is reused
   std::string lastSubject;
@@ -153,7 +255,7 @@ void SparqlParser::parseWhere(
   while (!_lexer.accept("}")) {
     if (_lexer.empty()) {
       throw ParseException(
-          "Expected a closing bracket for WHERE but reached"
+          "Expected a closing bracket for WHERE but reached "
           "the end of the input.");
     }
     if (_lexer.accept("optional")) {
@@ -167,10 +269,11 @@ void SparqlParser::parseWhere(
       currentPattern->_children.back()->_childGraphPatterns[0]->_id =
           query->_numGraphPatterns;
       query->_numGraphPatterns++;
+      _lexer.expect("{");
       // Recursively call parseWhere to parse the optional part.
       parseWhere(query,
                  currentPattern->_children.back()->_childGraphPatterns[0]);
-      _lexer.expect("}");
+      _lexer.accept(".");
     } else if (_lexer.accept("{")) {
       // Subquery or union
       if (_lexer.accept("select")) {
@@ -185,6 +288,8 @@ void SparqlParser::parseWhere(
         // by the parent query.
         u->_subquery->_orderBy.clear();
         currentPattern->_children.push_back(u);
+        // The closing bracked } is consumed by the subquery
+        _lexer.accept(".");
       } else {
         // union
         // create the union operation
@@ -205,11 +310,14 @@ void SparqlParser::parseWhere(
         // parse the left and right bracket
         parseWhere(query, u->_childGraphPatterns[0]);
         _lexer.expect("union");
+        _lexer.expect("{");
         parseWhere(query, u->_childGraphPatterns[1]);
+        _lexer.accept(".");
       }
-      _lexer.expect("}");
     } else if (_lexer.accept("filter")) {
       parseFilter(&currentPattern->_filters, true, currentPattern);
+      // A filter may have an optional dot after it
+      _lexer.accept(".");
     } else if (_lexer.accept("values")) {
       SparqlValues values;
       if (_lexer.accept("(")) {
@@ -222,7 +330,9 @@ void SparqlParser::parseWhere(
         while (_lexer.accept("(")) {
           values._values.emplace_back(values._variables.size());
           for (size_t i = 0; i < values._variables.size(); i++) {
-            _lexer.expect(SparqlToken::Type::IRI);
+            if (!_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+              _lexer.expect(SparqlToken::Type::IRI);
+            }
             values._values.back()[i] = _lexer.current().raw;
           }
           _lexer.expect(")");
@@ -230,11 +340,12 @@ void SparqlParser::parseWhere(
         _lexer.expect("}");
       } else if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         // values with a single variable
-        _lexer.expect(SparqlToken::Type::VARIABLE);
         values._variables.push_back(_lexer.current().raw);
-        while (_lexer.accept(SparqlToken::Type::IRI)) {
+        _lexer.expect("{");
+        while (_lexer.accept(SparqlToken::Type::IRI) ||
+               _lexer.accept(SparqlToken::Type::RDFLITERAL)) {
           values._values.emplace_back(1);
-          values._values.back().emplace_back(_lexer.current().raw);
+          values._values.back()[0] = _lexer.current().raw;
         }
         _lexer.expect("}");
       } else {
@@ -243,64 +354,80 @@ void SparqlParser::parseWhere(
             "after VALUES");
       }
       currentPattern->_inlineValues.emplace_back(values);
-    }
+      _lexer.accept(".");
+    } else {
+      std::string subject;
+      if (lastSubject.empty()) {
+        if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+          subject = _lexer.current().raw;
+        } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+          subject = parseLiteral(_lexer.current().raw, true);
+        } else {
+          _lexer.expect(SparqlToken::Type::IRI);
+          subject = _lexer.current().raw;
+        }
+      } else {
+        subject = lastSubject;
+        lastSubject.clear();
+      }
 
-    std::string subject;
-    if (lastSubject.empty()) {
+      std::string predicate;
+      if (lastPredicate.empty()) {
+        if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+          predicate = _lexer.current().raw;
+        } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+          predicate = parseLiteral(_lexer.current().raw, true);
+        } else {
+          // Assume the token is a predicate path. This will be verified
+          // separately later.
+          _lexer.expandNextUntilWhitespace();
+          _lexer.accept();
+          predicate = _lexer.current().raw;
+        }
+      } else {
+        predicate = lastPredicate;
+        lastPredicate.clear();
+      }
+
+      std::string object;
       if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-        subject = _lexer.current().raw;
+        object = _lexer.current().raw;
+      } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+        object = parseLiteral(_lexer.current().raw, true);
       } else {
         _lexer.expect(SparqlToken::Type::IRI);
-        subject = _lexer.current().raw;
+        object = _lexer.current().raw;
       }
-    } else {
-      subject = lastSubject;
-      lastSubject.clear();
-    }
 
-    std::string predicate;
-    if (lastPredicate.empty()) {
-      if (_lexer.accept(SparqlToken::Type::PROPERTYPATH)) {
-        predicate = _lexer.current().raw;
-      } else if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-        predicate = _lexer.current().raw;
+      if (predicate == CONTAINS_WORD_PREDICATE ||
+          predicate == CONTAINS_WORD_PREDICATE_NS) {
+        object = stripAndLowercaseKeywordLiteral(object);
+      }
+
+      SparqlTriple triple(subject, PropertyPathParser(predicate).parse(),
+                          object);
+      std::cout << "Found Triple '" << triple._s << "' '" << triple._p._iri
+                << "' '" << triple._o << "'" << std::endl;
+
+      if (std::find(currentPattern->_whereClauseTriples.begin(),
+                    currentPattern->_whereClauseTriples.end(),
+                    triple) != currentPattern->_whereClauseTriples.end()) {
+        LOG(INFO) << "Ignoring duplicate triple: " << subject << ' '
+                  << predicate << ' ' << object << std::endl;
       } else {
-        _lexer.expect(SparqlToken::Type::IRI);
-        predicate = _lexer.current().raw;
+        currentPattern->_whereClauseTriples.push_back(triple);
       }
-    } else {
-      predicate = lastPredicate;
-      lastPredicate.clear();
-    }
 
-    std::string object;
-    if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-      object = _lexer.current().raw;
-    } else {
-      _lexer.expect(SparqlToken::Type::IRI);
-      object = _lexer.current().raw;
-    }
-
-    SparqlTriple triple(subject, PropertyPathParser(predicate).parse(), object);
-
-    if (std::find(currentPattern->_whereClauseTriples.begin(),
-                  currentPattern->_whereClauseTriples.end(),
-                  triple) != currentPattern->_whereClauseTriples.end()) {
-      LOG(INFO) << "Ignoring duplicate triple: " << subject << ' ' << predicate
-                << ' ' << object << std::endl;
-    } else {
-      currentPattern->_whereClauseTriples.push_back(triple);
-    }
-
-    if (_lexer.accept(";")) {
-      lastSubject = subject;
-    } else if (_lexer.accept(",")) {
-      lastSubject = subject;
-      lastPredicate = predicate;
-    } else if (_lexer.accept("}")) {
-      break;
-    } else {
-      _lexer.expect(".");
+      if (_lexer.accept(";")) {
+        lastSubject = subject;
+      } else if (_lexer.accept(",")) {
+        lastSubject = subject;
+        lastPredicate = predicate;
+      } else if (_lexer.accept("}")) {
+        break;
+      } else {
+        _lexer.expect(".");
+      }
     }
   }
 }
@@ -443,53 +570,56 @@ void SparqlParser::addWhereTriple(
 
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
-  if (_lexer.accept("order")) {
-    _lexer.expect("by");
-    if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-      query->_orderBy.emplace_back(OrderKey(_lexer.current().raw));
-    } else if (_lexer.accept("asc")) {
-      _lexer.expect("(");
+  while (!_lexer.empty() && !_lexer.accept("}")) {
+    if (_lexer.accept("order")) {
+      _lexer.expect("by");
+      bool reached_end = false;
+      while (!reached_end) {
+        if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+          query->_orderBy.emplace_back(OrderKey(_lexer.current().raw));
+        } else if (_lexer.accept("asc")) {
+          query->_orderBy.emplace_back(parseOrderKey("ASC", query));
+        } else if (_lexer.accept("desc")) {
+          query->_orderBy.emplace_back(parseOrderKey("DESC", query));
+        } else {
+          reached_end = true;
+          if (query->_orderBy.empty()) {
+            // Need at least one statement after the order by
+            throw ParseException(
+                "Expected either a variable or ASC/DESC after "
+                "ORDER BY.");
+          }
+        }
+      }
+    } else if (_lexer.accept("limit")) {
+      _lexer.expect(SparqlToken::Type::INTEGER);
+      query->_limit = _lexer.current().raw;
+    } else if (_lexer.accept("textlimit")) {
+      _lexer.expect(SparqlToken::Type::INTEGER);
+      query->_textLimit = _lexer.current().raw;
+    } else if (_lexer.accept("offset")) {
+      _lexer.expect(SparqlToken::Type::INTEGER);
+      query->_offset = _lexer.current().raw;
+    } else if (_lexer.accept("group")) {
+      _lexer.expect("by");
       _lexer.expect(SparqlToken::Type::VARIABLE);
-      query->_orderBy.emplace_back(
-          OrderKey("ASC(" + _lexer.current().raw + ")"));
-      _lexer.expect(")");
-    } else if (_lexer.accept("desc")) {
-      _lexer.expect("(");
-      _lexer.expect(SparqlToken::Type::VARIABLE);
-      query->_orderBy.emplace_back(
-          OrderKey("DESC(" + _lexer.current().raw + ")"));
-      _lexer.expect(")");
-    } else {
-      throw ParseException(
-          "Expected either a variable or ASC/DESC after "
-          "ORDER BY.");
-    }
-  } else if (_lexer.accept("limit")) {
-    _lexer.expect(SparqlToken::Type::INTEGER);
-    query->_limit = _lexer.current().raw;
-  } else if (_lexer.accept("textlimit")) {
-    _lexer.expect(SparqlToken::Type::INTEGER);
-    query->_textLimit = _lexer.current().raw;
-  } else if (_lexer.accept("offset")) {
-    _lexer.expect(SparqlToken::Type::INTEGER);
-    query->_offset = _lexer.current().raw;
-  } else if (_lexer.accept("group")) {
-    _lexer.expect("by");
-    _lexer.expect(SparqlToken::Type::VARIABLE);
-    query->_groupByVariables.emplace_back(_lexer.current().raw);
-    while (_lexer.accept(SparqlToken::Type::VARIABLE)) {
       query->_groupByVariables.emplace_back(_lexer.current().raw);
+      while (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+        query->_groupByVariables.emplace_back(_lexer.current().raw);
+      }
+    } else if (_lexer.accept("having")) {
+      parseFilter(&query->_havingClauses, true, query->_rootGraphPattern);
+      while (parseFilter(&query->_havingClauses, false,
+                         query->_rootGraphPattern)) {
+      }
+    } else if (_lexer.accept("textlimit")) {
+      _lexer.expect(SparqlToken::Type::INTEGER);
+      query->_textLimit = std::stoi(_lexer.current().raw);
+    } else {
+      _lexer.accept();
+      throw ParseException("Expected a solution modifier but got " +
+                           _lexer.current().raw);
     }
-  } else if (_lexer.accept("having")) {
-    parseFilter(&query->_rootGraphPattern->_filters, true,
-                query->_rootGraphPattern);
-    while (parseFilter(&query->_rootGraphPattern->_filters, false,
-                       query->_rootGraphPattern)) {
-    }
-  } else {
-    _lexer.accept();
-    throw ParseException("Expected a solution modifier but got " +
-                         _lexer.current().raw);
   }
 }
 
@@ -597,6 +727,7 @@ bool SparqlParser::parseFilter(
       _lexer.expect("\"i\"");
       f._regexIgnoreCase = true;
     }
+    _lexer.expect(")");
     if (f._rhs[0] == '^' && !f._regexIgnoreCase) {
       // Check if we can use the more efficient prefix filter instead
       // of an expensive regex filter.

@@ -189,7 +189,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
         ParsedQuery pq =
             SparqlParser(
                 "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
-                "ql:contains-word abc}")
+                "ql:contains-word \"abc\"}")
                 .parse();
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
@@ -214,7 +214,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             SparqlParser(
                 "SELECT ?x WHERE {?x <p> <X>. ?c "
                 "<QLever-internal-function/contains-entity> ?x. ?c "
-                "<QLever-internal-function/contains-word> abc . ?c "
+                "<QLever-internal-function/contains-word> \"abc\" . ?c "
                 "ql:contains-entity ?y}")
                 .parse();
         pq.expandPrefixes();
@@ -241,7 +241,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
         ParsedQuery pq =
             SparqlParser(
                 "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
-                "ql:contains-word abc . ?c ql:contains-entity ?y. ?y <P2> "
+                "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?y <P2> "
                 "<X2>}")
                 .parse();
         pq.expandPrefixes();
@@ -270,9 +270,9 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
       {
         ParsedQuery pq =
             SparqlParser(
-                "(SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
+                "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
                 "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?c2 "
-                "ql:contains-entity ?y. ?c2 ql:contains-word \"xx\"})")
+                "ql:contains-entity ?y. ?c2 ql:contains-word \"xx\"}")
                 .parse();
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
@@ -304,7 +304,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
         ParsedQuery pq =
             SparqlParser(
                 "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
-                "ql:contains-word abc . ?c ql:contains-entity ?y. ?c2 "
+                "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?c2 "
                 "ql:contains-entity ?y. ?c2 ql:contains-word xx. ?y <P2> <X2>}")
                 .parse();
         pq.expandPrefixes();

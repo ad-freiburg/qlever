@@ -40,6 +40,17 @@ string ParsedQuery::asString() const {
   }
   os << "\n}";
 
+  // ALIASES
+  os << "\nALIASES: {\n\t";
+  for (size_t i = 0; i < _aliases.size(); ++i) {
+    const Alias& a = _aliases[i];
+    os << a._function;
+    if (i + 1 < _aliases.size()) {
+      os << "\n\t";
+    }
+  }
+  os << "{";
+
   // WHERE
   os << "\nWHERE: \n";
   _rootGraphPattern->toString(os, 1);

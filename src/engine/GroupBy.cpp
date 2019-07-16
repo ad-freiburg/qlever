@@ -174,7 +174,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
                   const Index& index,
                   ad_utility::HashSet<size_t>& distinctHashSet) {
   switch (a._type) {
-    case GroupBy::AggregateType::AVG: {
+    case ParsedQuery::AggregateType::AVG: {
       float res = 0;
       if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
         if (a._distinct) {
@@ -253,7 +253,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       std::memcpy(&(*result)(resultRow, a._outCol), &res, sizeof(float));
       break;
     }
-    case GroupBy::AggregateType::COUNT:
+    case ParsedQuery::AggregateType::COUNT:
       if (a._distinct) {
         size_t count = 0;
         for (size_t i = blockStart; i <= blockEnd; i++) {
@@ -269,7 +269,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
         (*result)(resultRow, a._outCol) = blockEnd - blockStart + 1;
       }
       break;
-    case GroupBy::AggregateType::GROUP_CONCAT: {
+    case ParsedQuery::AggregateType::GROUP_CONCAT: {
       std::ostringstream out;
       std::string* delim = reinterpret_cast<string*>(a._userData);
       if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
@@ -421,7 +421,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       outTable->_localVocab->push_back(out.str());
       break;
     }
-    case GroupBy::AggregateType::MAX: {
+    case ParsedQuery::AggregateType::MAX: {
       if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
         Id res = std::numeric_limits<Id>::lowest();
         for (size_t i = blockStart; i <= blockEnd; i++) {
@@ -451,7 +451,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       }
       break;
     }
-    case GroupBy::AggregateType::MIN: {
+    case ParsedQuery::AggregateType::MIN: {
       if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
         Id res = std::numeric_limits<Id>::max();
         for (size_t i = blockStart; i <= blockEnd; i++) {
@@ -481,10 +481,10 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       }
       break;
     }
-    case GroupBy::AggregateType::SAMPLE:
+    case ParsedQuery::AggregateType::SAMPLE:
       (*result)(resultRow, a._outCol) = input(blockEnd, a._inCol);
       break;
-    case GroupBy::AggregateType::SUM: {
+    case ParsedQuery::AggregateType::SUM: {
       float res = 0;
       if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
         if (a._distinct) {
@@ -561,12 +561,12 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       std::memcpy(&(*result)(resultRow, a._outCol), &res, sizeof(float));
       break;
     }
-    case GroupBy::AggregateType::FIRST:
+    case ParsedQuery::AggregateType::FIRST:
       // This does the same as sample, as the non grouping rows have no
       // inherent order.
       (*result)(resultRow, a._outCol) = input(blockStart, a._inCol);
       break;
-    case GroupBy::AggregateType::LAST:
+    case ParsedQuery::AggregateType::LAST:
       // This does the same as sample, as the non grouping rows have no
       // inherent order.
       (*result)(resultRow, a._outCol) = input(blockEnd, a._inCol);
@@ -674,7 +674,7 @@ void GroupBy::computeResult(ResultTable* result) {
     // Add an "identity" aggregate in the form of a sample aggregate to
     // facilitate the passthrough of the groupBy columns into the result
     aggregates.emplace_back();
-    aggregates.back()._type = AggregateType::SAMPLE;
+    aggregates.back()._type = ParsedQuery::AggregateType::SAMPLE;
     aggregates.back()._inCol = it->second;
     aggregates.back()._outCol = _varColMap.find(var)->second;
     aggregates.back()._userData = nullptr;
@@ -685,95 +685,14 @@ void GroupBy::computeResult(ResultTable* result) {
   for (const ParsedQuery::Alias& alias : _aliases) {
     if (alias._isAggregate) {
       aggregates.emplace_back();
-      if (ad_utility::startsWith(alias._function, "COUNT")) {
-        aggregates.back()._type = AggregateType::COUNT;
-      } else if (ad_utility::startsWith(alias._function, "GROUP_CONCAT")) {
-        aggregates.back()._type = AggregateType::GROUP_CONCAT;
-      } else if (ad_utility::startsWith(alias._function, "SAMPLE")) {
-        aggregates.back()._type = AggregateType::SAMPLE;
-      } else if (ad_utility::startsWith(alias._function, "MIN")) {
-        aggregates.back()._type = AggregateType::MIN;
-      } else if (ad_utility::startsWith(alias._function, "MAX")) {
-        aggregates.back()._type = AggregateType::MAX;
-      } else if (ad_utility::startsWith(alias._function, "SUM")) {
-        aggregates.back()._type = AggregateType::SUM;
-      } else if (ad_utility::startsWith(alias._function, "AVG")) {
-        aggregates.back()._type = AggregateType::AVG;
+      aggregates.back()._type = alias._type;
+      aggregates.back()._distinct = alias._isDistinct;
+      if (alias._type == ParsedQuery::AggregateType::GROUP_CONCAT) {
+        aggregates.back()._userData = new std::string(alias._delimiter);
       } else {
-        LOG(WARN) << "Unknown aggregate " << alias._function << std::endl;
-        aggregates.pop_back();
-        continue;
+        aggregates.back()._userData = nullptr;
       }
-
-      std::string inVarName;
-      if (aggregates.back()._type == AggregateType::GROUP_CONCAT) {
-        size_t varStart = alias._function.find('(');
-        size_t varStop = alias._function.rfind(')');
-        size_t delimitorPos = alias._function.find(';');
-        if (varStop > varStart && varStop != std::string::npos &&
-            varStart != std::string::npos) {
-          // found a matching pair of brackets
-          // look for a distinct keyword
-
-          if (alias._function.find("DISTINCT") != std::string::npos ||
-              alias._function.find("distinct") != std::string::npos) {
-            aggregates.back()._distinct = true;
-          } else {
-            aggregates.back()._distinct = false;
-          }
-
-          if (delimitorPos != std::string::npos) {
-            // found a delimiter, need to look for a separator assignment
-            inVarName = alias._function.substr(varStart + 1,
-                                               delimitorPos - varStart - 1);
-            if (aggregates.back()._distinct) {
-              inVarName = ad_utility::strip(inVarName, " \t").substr(8);
-            }
-            std::string concatString = alias._function.substr(
-                delimitorPos + 1, varStop - delimitorPos - 1);
-            concatString = ad_utility::strip(concatString, " ");
-            size_t startConcat = concatString.find('"');
-            size_t stopConcat = concatString.rfind('"');
-            if (stopConcat > startConcat && stopConcat != std::string::npos &&
-                startConcat != std::string::npos) {
-              aggregates.back()._userData = new std::string(concatString.substr(
-                  startConcat + 1, stopConcat - startConcat - 1));
-            } else {
-              LOG(WARN) << "Unable to parse the delimiter in GROUP_CONCAT"
-                           "aggregrate "
-                        << alias._function;
-              aggregates.back()._userData = new std::string(" ");
-            }
-          } else {
-            // found no delimiter, using the default separator ' '
-            inVarName =
-                alias._function.substr(varStart + 1, varStop - varStart - 1);
-            if (aggregates.back()._distinct) {
-              inVarName = ad_utility::strip(inVarName, " \t").substr(8);
-            }
-            aggregates.back()._userData = new std::string(" ");
-          }
-        }
-      } else {
-        size_t varStart = alias._function.find('(');
-        size_t varStop = alias._function.rfind(')');
-        if (varStop > varStart && varStop != std::string::npos &&
-            varStart != std::string::npos) {
-          if (alias._function.find("DISTINCT") != std::string::npos ||
-              alias._function.find("distinct") != std::string::npos) {
-            aggregates.back()._distinct = true;
-          } else {
-            aggregates.back()._distinct = false;
-          }
-          inVarName =
-              alias._function.substr(varStart + 1, varStop - varStart - 1);
-          if (aggregates.back()._distinct) {
-            inVarName = ad_utility::strip(inVarName, " \t").substr(8);
-          }
-        }
-      }
-      inVarName = ad_utility::strip(inVarName, " \t");
-      auto inIt = subtreeVarCols.find(inVarName);
+      auto inIt = subtreeVarCols.find(alias._inVarName);
       if (inIt == subtreeVarCols.end()) {
         LOG(WARN) << "The aggregate alias " << alias._function << " refers to "
                   << "a column not present in the query." << std::endl;
@@ -794,28 +713,28 @@ void GroupBy::computeResult(ResultTable* result) {
   result->_resultTypes.resize(result->_data.cols());
   for (size_t i = 0; i < result->_data.cols(); i++) {
     switch (aggregates[i]._type) {
-      case AggregateType::AVG:
+      case ParsedQuery::AggregateType::AVG:
         result->_resultTypes[i] = ResultTable::ResultType::FLOAT;
         break;
-      case AggregateType::COUNT:
+      case ParsedQuery::AggregateType::COUNT:
         result->_resultTypes[i] = ResultTable::ResultType::VERBATIM;
         break;
-      case AggregateType::GROUP_CONCAT:
+      case ParsedQuery::AggregateType::GROUP_CONCAT:
         result->_resultTypes[i] = ResultTable::ResultType::LOCAL_VOCAB;
         break;
-      case AggregateType::MAX:
+      case ParsedQuery::AggregateType::MAX:
         result->_resultTypes[i] =
             subresult->getResultType(aggregates[i]._inCol);
         break;
-      case AggregateType::MIN:
+      case ParsedQuery::AggregateType::MIN:
         result->_resultTypes[i] =
             subresult->getResultType(aggregates[i]._inCol);
         break;
-      case AggregateType::SAMPLE:
+      case ParsedQuery::AggregateType::SAMPLE:
         result->_resultTypes[i] =
             subresult->getResultType(aggregates[i]._inCol);
         break;
-      case AggregateType::SUM:
+      case ParsedQuery::AggregateType::SUM:
         result->_resultTypes[i] = ResultTable::ResultType::FLOAT;
         break;
       default:
@@ -843,7 +762,7 @@ void GroupBy::computeResult(ResultTable* result) {
 
   // Free the user data used by GROUP_CONCAT aggregates.
   for (Aggregate& a : aggregates) {
-    if (a._type == AggregateType::GROUP_CONCAT) {
+    if (a._type == ParsedQuery::AggregateType::GROUP_CONCAT) {
       delete static_cast<std::string*>(a._userData);
     }
   }

@@ -261,12 +261,30 @@ class ParsedQuery {
     vector<std::shared_ptr<GraphPatternOperation>> _children;
   };
 
+  /**
+   * @brief All supported types of aggregate aliases
+   */
+  enum class AggregateType {
+    COUNT,
+    GROUP_CONCAT,
+    FIRST,
+    LAST,
+    SAMPLE,
+    MIN,
+    MAX,
+    SUM,
+    AVG
+  };
+
   struct Alias {
+    AggregateType _type;
     string _inVarName;
     string _outVarName;
     bool _isAggregate;
-    // The mapping from the original var to the new one
-    string _function;
+    bool _isDistinct;
+    std::string _function;
+    // The deilimiter used by group concat
+    std::string _delimiter = " ";
   };
 
   ParsedQuery()

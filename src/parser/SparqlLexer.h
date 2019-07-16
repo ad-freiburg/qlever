@@ -13,7 +13,6 @@ struct SparqlToken {
     KEYWORD,
     VARIABLE,
     SYMBOL,
-    PROPERTYPATH,
     AGGREGATE,
     RDFLITERAL,
     INTEGER,
@@ -47,7 +46,6 @@ class SparqlLexer {
   static const std::string KEYWORD;
   static const std::string VARIABLE;
   static const std::string SYMBOL;
-  static const std::string PPATH;
   static const std::string AGGREGATE;
   static const std::string ECHAR;
   static const std::string LANGTAG;
@@ -63,7 +61,6 @@ class SparqlLexer {
   static const re2::RE2 RE_KEYWORD;
   static const re2::RE2 RE_VARIABLE;
   static const re2::RE2 RE_SYMBOL;
-  static const re2::RE2 RE_PPATH;
   static const re2::RE2 RE_AGGREGATE;
   static const re2::RE2 RE_RDFLITERAL;
   static const re2::RE2 RE_INTEGER;
@@ -80,11 +77,15 @@ class SparqlLexer {
   // Accepts any token
   void accept();
 
+  // Adds all symbols up to the next whitespace to the next token
+  void expandNextUntilWhitespace();
+
   void expect(SparqlToken::Type type);
   void expect(const std::string& raw, bool match_case = true);
   void expectEmpty();
 
   const SparqlToken& current();
+  const std::string& input() const;
 
  private:
   void readNext();

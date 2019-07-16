@@ -403,7 +403,7 @@ queries:
         ?x ql:has-predicate ?predicate .
       }
       GROUP BY ?predicate
-      HAVING (?predicate < <Z) (?predicate = <Religion>)
+      HAVING (?predicate < <Z-Cars>) (?predicate = <Religion>)
     checks:
       - num_rows: 1
       - num_cols: 2
@@ -535,7 +535,7 @@ queries:
               ?subject <Profession> ?object
       }
       GROUP BY ?object
-      ORDER BY DESC((COUNT(?object) AS ?count))
+      ORDER BY DESC(?count)
     checks:
       - num_rows: 836 
       - num_cols: 2

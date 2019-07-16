@@ -128,35 +128,35 @@ TEST_F(GroupByTest, doGroupBy) {
   std::string delim1(", ");
   std::vector<GroupBy::Aggregate> aggregates = {
       // type                                in out userdata
-      {GroupBy::AggregateType::COUNT, 1, 1, nullptr},
+      {ParsedQuery::AggregateType::COUNT, 1, 1, nullptr},
 
-      {GroupBy::AggregateType::GROUP_CONCAT, 1, 2, &delim1},
-      {GroupBy::AggregateType::GROUP_CONCAT, 2, 3, &delim1},
-      {GroupBy::AggregateType::GROUP_CONCAT, 3, 4, &delim1},
-      {GroupBy::AggregateType::GROUP_CONCAT, 4, 5, &delim1},
-      {GroupBy::AggregateType::GROUP_CONCAT, 5, 6, &delim1},
+      {ParsedQuery::AggregateType::GROUP_CONCAT, 1, 2, &delim1},
+      {ParsedQuery::AggregateType::GROUP_CONCAT, 2, 3, &delim1},
+      {ParsedQuery::AggregateType::GROUP_CONCAT, 3, 4, &delim1},
+      {ParsedQuery::AggregateType::GROUP_CONCAT, 4, 5, &delim1},
+      {ParsedQuery::AggregateType::GROUP_CONCAT, 5, 6, &delim1},
 
-      {GroupBy::AggregateType::SAMPLE, 1, 7, nullptr},
+      {ParsedQuery::AggregateType::SAMPLE, 1, 7, nullptr},
 
-      {GroupBy::AggregateType::MIN, 1, 8, nullptr},
-      {GroupBy::AggregateType::MIN, 2, 9, nullptr},
-      {GroupBy::AggregateType::MIN, 3, 10, nullptr},
-      {GroupBy::AggregateType::MIN, 4, 11, nullptr},
+      {ParsedQuery::AggregateType::MIN, 1, 8, nullptr},
+      {ParsedQuery::AggregateType::MIN, 2, 9, nullptr},
+      {ParsedQuery::AggregateType::MIN, 3, 10, nullptr},
+      {ParsedQuery::AggregateType::MIN, 4, 11, nullptr},
 
-      {GroupBy::AggregateType::MAX, 1, 12, nullptr},
-      {GroupBy::AggregateType::MAX, 2, 13, nullptr},
-      {GroupBy::AggregateType::MAX, 3, 14, nullptr},
-      {GroupBy::AggregateType::MAX, 4, 15, nullptr},
+      {ParsedQuery::AggregateType::MAX, 1, 12, nullptr},
+      {ParsedQuery::AggregateType::MAX, 2, 13, nullptr},
+      {ParsedQuery::AggregateType::MAX, 3, 14, nullptr},
+      {ParsedQuery::AggregateType::MAX, 4, 15, nullptr},
 
-      {GroupBy::AggregateType::SUM, 1, 16, nullptr},
-      {GroupBy::AggregateType::SUM, 2, 17, nullptr},
-      {GroupBy::AggregateType::SUM, 3, 18, nullptr},
-      {GroupBy::AggregateType::SUM, 4, 19, nullptr},
+      {ParsedQuery::AggregateType::SUM, 1, 16, nullptr},
+      {ParsedQuery::AggregateType::SUM, 2, 17, nullptr},
+      {ParsedQuery::AggregateType::SUM, 3, 18, nullptr},
+      {ParsedQuery::AggregateType::SUM, 4, 19, nullptr},
 
-      {GroupBy::AggregateType::AVG, 1, 20, nullptr},
-      {GroupBy::AggregateType::AVG, 2, 21, nullptr},
-      {GroupBy::AggregateType::AVG, 3, 22, nullptr},
-      {GroupBy::AggregateType::AVG, 4, 23, nullptr}};
+      {ParsedQuery::AggregateType::AVG, 1, 20, nullptr},
+      {ParsedQuery::AggregateType::AVG, 2, 21, nullptr},
+      {ParsedQuery::AggregateType::AVG, 3, 22, nullptr},
+      {ParsedQuery::AggregateType::AVG, 4, 23, nullptr}};
 
   ResultTable outTable;
 

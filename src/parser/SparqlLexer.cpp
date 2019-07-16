@@ -7,8 +7,8 @@
 #include "ParseException.h"
 
 const std::string SparqlToken::TYPE_NAMES[] = {
-    "IRIREF", "WS",           "KEYWORD",   "VARIABLE",
-    "SYMBOL", "PROPERTYPATH", "AGGREGATE", "RDFLITERAL"};
+    "IRI",       "WS",         "KEYWORD", "VARIABLE", "SYMBOL",
+    "AGGREGATE", "RDFLITERAL", "INTEGER", "FLOAT"};
 
 const std::string SparqlLexer::IRIREF =
     "(<[^<>\"{}|^`\\\\\\[\\]\\x00-\\x20]*>)";
@@ -47,30 +47,31 @@ const std::string SparqlLexer::VARNAME =
     "(" + PN_CHARS_U + "|[0-9])(" + PN_CHARS_U +
     "|[0-9]|\\x{00B7}|[\\x{0300}-\\x{036F}]|[\\x{203F}-\\x{2040}])*";
 const std::string SparqlLexer::KEYWORD =
-    "(?i)(PREFIX|SELECT|DISTINCT|REDUCED|"
+    "(?i)(TEXTLIMIT|PREFIX|SELECT|DISTINCT|REDUCED|"
     "HAVING|WHERE|ASC|AS|GROUP|BY|LIMIT|OFFSET|ORDER|DESC|FILTER|VALUES|"
-    "OPTIONAL|UNION|LANGMATCHES|LANG|TEXT|SCORE|REGEX|PREFIX)";
+    "OPTIONAL|UNION|LANGMATCHES|LANG|TEXT|SCORE|REGEX|PREFIX|SEPARATOR)";
 const std::string SparqlLexer::AGGREGATE =
     "(?i)(SAMPLE|COUNT|MIN|MAX|AVG|SUM|GROUP_CONCAT)";
-const std::string SparqlLexer::VARIABLE = "(\\?" + VARNAME + ")";
-const std::string SparqlLexer::SYMBOL = "([\\.\\{\\}\\(\\)\\=\\*,<>!])";
-const std::string SparqlLexer::PPATH = "((" + IRIREF + "|[?*+/|()^0-9])*" +
-                                       IRIREF + "(" + IRIREF +
-                                       "|[?*+/|()^0-9])*)";
+// The |?VARNAME part is in here to support some non standard syntax the
+// old parser supported according to the unit tests.
+const std::string SparqlLexer::VARIABLE =
+    "(\\?" + VARNAME + "(\\|\\?" + VARNAME + ")*)";
+const std::string SparqlLexer::SYMBOL =
+    "([\\.\\{\\}\\(\\)\\=\\*,;:<>!\\|/\\^\\?\\*\\+])";
+
 const std::string SparqlLexer::STRING_LITERAL =
-    "(('([^\\x27\\{x5C}\\x0A\\x0D]|(" + ECHAR +
+    "(('([^\\x27\\x5C\\x0A\\x0D]|(" + ECHAR +
     "))*')|"
-    "(\"([^\\x27\\{x5C}\\x0A\\x0D]|(" +
+    "(\"([^\\x22\\x5C\\x0A\\x0D]|(" +
     ECHAR + "))*\"))";
 const std::string SparqlLexer::RDFLITERAL =
-    STRING_LITERAL + "((" + LANGTAG + ")|(^^" + IRI + "))?";
+    STRING_LITERAL + "((" + LANGTAG + ")|(\\^\\^" + IRI + "))?";
 
 const re2::RE2 SparqlLexer::RE_IRI = re2::RE2(IRI);
 const re2::RE2 SparqlLexer::RE_WS = re2::RE2("(" + WS + "+)");
 const re2::RE2 SparqlLexer::RE_KEYWORD = re2::RE2(KEYWORD);
 const re2::RE2 SparqlLexer::RE_VARIABLE = re2::RE2(VARIABLE);
 const re2::RE2 SparqlLexer::RE_SYMBOL = re2::RE2(SYMBOL);
-const re2::RE2 SparqlLexer::RE_PPATH = re2::RE2(PPATH);
 const re2::RE2 SparqlLexer::RE_AGGREGATE = re2::RE2(AGGREGATE);
 const re2::RE2 SparqlLexer::RE_RDFLITERAL = re2::RE2("(" + RDFLITERAL + ")");
 const re2::RE2 SparqlLexer::RE_INTEGER = re2::RE2(INTEGER);
@@ -89,11 +90,11 @@ void SparqlLexer::readNext() {
   std::string raw;
   while (_next.type == SparqlToken::Type::WS && !empty()) {
     _next.pos = _sparql.size() - _re_string.size();
-    if (re2::RE2::Consume(&_re_string, RE_KEYWORD, &raw)) {
-      _next.type = SparqlToken::Type::KEYWORD;
-      raw = ad_utility::getLowercaseUtf8(raw);
-    } else if (re2::RE2::Consume(&_re_string, RE_AGGREGATE, &raw)) {
+    if (re2::RE2::Consume(&_re_string, RE_AGGREGATE, &raw)) {
       _next.type = SparqlToken::Type::AGGREGATE;
+      raw = ad_utility::getLowercaseUtf8(raw);
+    } else if (re2::RE2::Consume(&_re_string, RE_KEYWORD, &raw)) {
+      _next.type = SparqlToken::Type::KEYWORD;
       raw = ad_utility::getLowercaseUtf8(raw);
     } else if (re2::RE2::Consume(&_re_string, RE_VARIABLE, &raw)) {
       _next.type = SparqlToken::Type::VARIABLE;
@@ -101,12 +102,10 @@ void SparqlLexer::readNext() {
       _next.type = SparqlToken::Type::IRI;
     } else if (re2::RE2::Consume(&_re_string, RE_RDFLITERAL, &raw)) {
       _next.type = SparqlToken::Type::RDFLITERAL;
-    } else if (re2::RE2::Consume(&_re_string, RE_INTEGER, &raw)) {
-      _next.type = SparqlToken::Type::INTEGER;
     } else if (re2::RE2::Consume(&_re_string, RE_FLOAT, &raw)) {
       _next.type = SparqlToken::Type::FLOAT;
-    } else if (re2::RE2::Consume(&_re_string, RE_PPATH, &raw)) {
-      _next.type = SparqlToken::Type::PROPERTYPATH;
+    } else if (re2::RE2::Consume(&_re_string, RE_INTEGER, &raw)) {
+      _next.type = SparqlToken::Type::INTEGER;
     } else if (re2::RE2::Consume(&_re_string, RE_SYMBOL, &raw)) {
       _next.type = SparqlToken::Type::SYMBOL;
     } else if (re2::RE2::Consume(&_re_string, RE_WS, &raw)) {
@@ -116,6 +115,16 @@ void SparqlLexer::readNext() {
     }
   }
   _next.raw = raw;
+  std::cout << "Next: " << _next << std::endl;
+}
+
+void SparqlLexer::expandNextUntilWhitespace() {
+  std::ostringstream s;
+  while (_re_string.size() > 0 && !std::isspace(*_re_string.begin())) {
+    s << *_re_string.begin();
+    _re_string.remove_prefix(1);
+  }
+  _next.raw += s.str();
 }
 
 bool SparqlLexer::accept(SparqlToken::Type type) {
@@ -178,3 +187,5 @@ void SparqlLexer::expectEmpty() {
 }
 
 const SparqlToken& SparqlLexer::current() { return _current; }
+
+const std::string& SparqlLexer::input() const { return _sparql; }
