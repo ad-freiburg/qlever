@@ -44,7 +44,9 @@ class SparqlParser {
   void addLangFilter(const std::string& lhs, const std::string& rhs,
                      std::shared_ptr<ParsedQuery::GraphPattern> pattern);
 
-  void parseAlias(ParsedQuery* query);
+  // takes either DESC or ASC as the parameter
+  OrderKey parseOrderKey(const std::string& order, ParsedQuery* query);
+  ParsedQuery::Alias parseAlias();
 
   // Reads the next element of a triple (an iri, a variable, a property path,
   // etc.) out of s beginning at the current value of pos. Sets pos to the

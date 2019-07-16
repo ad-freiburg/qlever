@@ -108,8 +108,8 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ("", pq._offset);
 
     pq = SparqlParser(
-             "SELECT ?x ?y WHERE {?x is-a Actor .  FILTER(?x != ?y)."
-             "?y is-a Actor . FILTER(?y < ?x)} LIMIT 10")
+             "SELECT ?x ?y WHERE {?x <is-a> <Actor> .  FILTER(?x != ?y)."
+             "?y <is-a> <Actor> . FILTER(?y < ?x)} LIMIT 10")
              .parse();
     pq.expandPrefixes();
     ASSERT_EQ(2u, pq._rootGraphPattern->_filters.size());
@@ -124,8 +124,8 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(2u, pq._rootGraphPattern->_whereClauseTriples.size());
 
     pq = SparqlParser(
-             "SELECT ?x ?y WHERE {?x is-a Actor .  FILTER(?x != ?y)."
-             "?y is-a Actor} LIMIT 10")
+             "SELECT ?x ?y WHERE {?x <is-a> <Actor> .  FILTER(?x != ?y)."
+             "?y <is-a> <Actor>} LIMIT 10")
              .parse();
     pq.expandPrefixes();
     ASSERT_EQ(1u, pq._rootGraphPattern->_filters.size());
@@ -136,8 +136,8 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(2u, pq._rootGraphPattern->_whereClauseTriples.size());
 
     pq = SparqlParser(
-             "SELECT ?x ?y WHERE {?x is-a Actor .  FILTER(?x != ?y)."
-             "?y is-a Actor. ?c ql:contains-entity ?x."
+             "SELECT ?x ?y WHERE {?x <is-a> <Actor> .  FILTER(?x != ?y)."
+             "?y <is-a> <Actor>. ?c ql:contains-entity ?x."
              "?c ql:contains-word \"coca* abuse\"} LIMIT 10")
              .parse();
     pq.expandPrefixes();
@@ -161,7 +161,7 @@ TEST(ParserTest, testParse) {
              "SELECT ?x ?y ?z TEXT(?c) SCORE(?c) ?c WHERE {\n"
              "?x :is-a :Politician .\n"
              "?c ql:contains-entity ?x .\n"
-             "?c ql:contains-word friend .\n"
+             "?c ql:contains-word \"friend\" .\n"
              "?c ql:contains-entity ?y .\n"
              "?y :is-a :Scientist .\n"
              "FILTER(?x != ?y) .\n"
@@ -467,7 +467,7 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_FALSE(pq._distinct);
   ASSERT_TRUE(pq._reduced);
 
-  pq = SparqlParser("SELECT ?x ?y WHERE {?x is-a Actor} LIMIT 10").parse();
+  pq = SparqlParser("SELECT ?x ?y WHERE {?x <is-a> <Actor>} LIMIT 10").parse();
   pq.expandPrefixes();
   ASSERT_EQ("10", pq._limit);
 
@@ -543,6 +543,17 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_EQ("?r", pq._groupByVariables[0]);
   ASSERT_EQ("?count", pq._orderBy[0]._key);
   ASSERT_FALSE(pq._orderBy[0]._desc);
+
+  pq = SparqlParser(
+           "SELECT ?r (GROUP_CONCAT(?r;SEPARATOR=\"Cake\") as ?concat) WHERE {"
+           "?a <http://schema.org/name> ?b ."
+           "?a ql:has-relation ?r }"
+           "GROUP BY ?r "
+           "ORDER BY ?count")
+           .parse();
+  ASSERT_EQ(1u, pq._aliases.size());
+  ASSERT_EQ("GROUP_CONCAT(?r;SEPARATOR=\"Cake\") as ?concat",
+            pq._aliases[0]._function);
 
   // Test for an alias in the order by statement
   pq = SparqlParser(

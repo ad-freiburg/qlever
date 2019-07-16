@@ -19,25 +19,10 @@ using std::vector;
 class GroupBy : public Operation {
  public:
   /**
-   * @brief All supported types of aggregate aliases
-   */
-  enum class AggregateType {
-    COUNT,
-    GROUP_CONCAT,
-    FIRST,
-    LAST,
-    SAMPLE,
-    MIN,
-    MAX,
-    SUM,
-    AVG
-  };
-
-  /**
    * @brief Represents an aggregate alias in the select part of the query.
    */
   struct Aggregate {
-    AggregateType _type;
+    ParsedQuery::AggregateType _type;
     size_t _inCol, _outCol;
     // Used to store the string necessary for the group concat aggregate.
     // A void pointer is used to allow for storing arbitrary data should any
