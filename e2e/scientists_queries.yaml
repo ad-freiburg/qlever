@@ -403,7 +403,7 @@ queries:
         ?x ql:has-predicate ?predicate .
       }
       GROUP BY ?predicate
-      HAVING (?predicate < <Z-Cars>) (?predicate = <Religion>)
+      HAVING (?predicate < "<Z") (?predicate = <Religion>)
     checks:
       - num_rows: 1
       - num_cols: 2

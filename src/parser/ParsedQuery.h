@@ -185,6 +185,8 @@ class SparqlFilter {
   string _lhs;
   string _rhs;
   bool _regexIgnoreCase;
+  // True if the str function was applied to the left side.
+  bool _lhsAsString = false;
 };
 
 // Represents a VALUES statement in the query.
