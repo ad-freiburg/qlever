@@ -115,7 +115,6 @@ void SparqlLexer::readNext() {
     }
   }
   _next.raw = raw;
-  std::cout << "Next: " << _next << std::endl;
 }
 
 void SparqlLexer::expandNextUntilWhitespace() {

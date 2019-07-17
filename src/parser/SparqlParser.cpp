@@ -28,7 +28,6 @@ ParsedQuery SparqlParser::parse() {
   parseQuery(&result);
   _lexer.expectEmpty();
 
-  std::cout << result.asString() << std::endl;
   return result;
 }
 
@@ -406,9 +405,6 @@ void SparqlParser::parseWhere(
 
       SparqlTriple triple(subject, PropertyPathParser(predicate).parse(),
                           object);
-      std::cout << "Found Triple '" << triple._s << "' '" << triple._p._iri
-                << "' '" << triple._o << "'" << std::endl;
-
       if (std::find(currentPattern->_whereClauseTriples.begin(),
                     currentPattern->_whereClauseTriples.end(),
                     triple) != currentPattern->_whereClauseTriples.end()) {

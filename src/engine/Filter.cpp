@@ -511,8 +511,6 @@ void Filter::computeResultFixedValue(
   IdTableStatic<WIDTH> result = resultTable->_data.moveToStatic<WIDTH>();
   const IdTableStatic<WIDTH> input = subRes->_data.asStaticView<WIDTH>();
 
-  std::cout << "Filter rhs '" << _rhs << "'" << std::endl;
-
   if (_lhsAsString) {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
              "The str function is not yet supported within filters.");
