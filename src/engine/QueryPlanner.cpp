@@ -2479,6 +2479,16 @@ vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
 }
 
 // _____________________________________________________________________________
+QueryPlanner::TripleGraph::TripleGraph(
+    const std::vector<std::pair<Node, std::vector<size_t>>>& init) {
+  for (const std::pair<Node, std::vector<size_t>>& p : init) {
+    _nodeStorage.push_back(p.first);
+    _nodeMap[p.first._id] = &_nodeStorage.back();
+    _adjLists.push_back(p.second);
+  }
+}
+
+// _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
                                        vector<size_t> keepNodes) {
   ad_utility::HashSet<size_t> keep;
@@ -2640,6 +2650,85 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
     adjList.insert(adjList.begin(), adjNodes.begin(), adjNodes.end());
     _adjLists.emplace_back(adjList);
   }
+}
+
+// _____________________________________________________________________________
+bool QueryPlanner::TripleGraph::isSimilar(
+    const QueryPlanner::TripleGraph& other) const {
+  // This method is very verbose as it is currently only intended for
+  // testing
+  if (_nodeStorage.size() != other._nodeStorage.size()) {
+    std::cout << asString() << std::endl;
+    std::cout << other.asString() << std::endl;
+    std::cout << "The two triple graphs are not of the same size: "
+              << _nodeStorage.size() << " != " << other._nodeStorage.size()
+              << std::endl;
+    return false;
+  }
+  ad_utility::HashMap<size_t, size_t> id_map;
+  ad_utility::HashMap<size_t, size_t> id_map_reverse;
+  for (const Node& n : _nodeStorage) {
+    bool hasMatch = false;
+    for (const Node& n2 : other._nodeStorage) {
+      if (n.isSimilar(n2)) {
+        id_map[n._id] = n2._id;
+        id_map_reverse[n2._id] = n._id;
+        hasMatch = true;
+        break;
+      } else {
+      }
+    }
+    if (!hasMatch) {
+      std::cout << asString() << std::endl;
+      std::cout << other.asString() << std::endl;
+      std::cout << "The node " << n << " has no match in the other graph"
+                << std::endl;
+      return false;
+    }
+  }
+  if (id_map.size() != _nodeStorage.size() ||
+      id_map_reverse.size() != _nodeStorage.size()) {
+    std::cout << asString() << std::endl;
+    std::cout << other.asString() << std::endl;
+    std::cout << "Two nodes in this graph were matches to the same node in "
+                 "the other grap"
+              << std::endl;
+    return false;
+  }
+  for (size_t id = 0; id < _adjLists.size(); ++id) {
+    size_t other_id = id_map[id];
+    ad_utility::HashSet<size_t> adj_set;
+    ad_utility::HashSet<size_t> other_adj_set;
+    for (size_t a : _adjLists[id]) {
+      adj_set.insert(a);
+    }
+    for (size_t a : other._adjLists[other_id]) {
+      other_adj_set.insert(a);
+    }
+    for (size_t a : _adjLists[id]) {
+      if (other_adj_set.count(id_map[a]) == 0) {
+        std::cout << asString() << std::endl;
+        std::cout << other.asString() << std::endl;
+        std::cout << "The node with id " << id << " is connected to " << a
+                  << " in this graph graph but not to the equivalent "
+                     "node in the other graph."
+                  << std::endl;
+        return false;
+      }
+    }
+    for (size_t a : other._adjLists[other_id]) {
+      if (adj_set.count(id_map_reverse[a]) == 0) {
+        std::cout << asString() << std::endl;
+        std::cout << other.asString() << std::endl;
+        std::cout << "The node with id " << id << " is connected to " << a
+                  << " in the other graph graph but not to the equivalent "
+                     "node in this graph."
+                  << std::endl;
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 // _____________________________________________________________________________

@@ -68,6 +68,23 @@ class QueryPlanner {
 
       Node& operator=(const Node& other) = default;
 
+      // Returns true if tje two nodes equal apart from the id
+      // and the order of variables
+      bool isSimilar(const Node& other) const {
+        return _triple == other._triple && _cvar == other._cvar &&
+               _wordPart == other._wordPart && _variables == other._variables;
+      }
+
+      friend std::ostream& operator<<(std::ostream& out, const Node& n) {
+        out << "id: " << n._id << " triple: " << n._triple.asString()
+            << " _vars ";
+        for (const std::string& s : n._variables) {
+          out << s << ", ";
+        }
+        out << " cvar " << n._cvar << " wordPart " << n._wordPart;
+        return out;
+      }
+
       size_t _id;
       SparqlTriple _triple;
       std::set<std::string> _variables;
@@ -75,6 +92,11 @@ class QueryPlanner {
       string _wordPart;
     };
 
+    // Allows for manually building triple graphs for testing
+    TripleGraph(const std::vector<std::pair<Node, std::vector<size_t>>>& init);
+
+    // Checks for id and order independent equality
+    bool isSimilar(const TripleGraph& other) const;
     string asString() const;
 
     bool isTextNode(size_t i) const;

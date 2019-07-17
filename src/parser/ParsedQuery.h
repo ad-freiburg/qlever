@@ -84,6 +84,9 @@ class SparqlTriple {
   SparqlTriple(const string& s, const PropertyPath& p, const string& o)
       : _s(s), _p(p), _o(o) {}
 
+  SparqlTriple(const string& s, const std::string& p_iri, const string& o)
+      : _s(s), _p(PropertyPath::Operation::IRI, 0, p_iri, {}), _o(o) {}
+
   bool operator==(const SparqlTriple& other) const {
     return _s == other._s && _p == other._p && _o == other._o;
   }
