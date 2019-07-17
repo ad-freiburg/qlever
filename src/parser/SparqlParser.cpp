@@ -641,6 +641,10 @@ bool SparqlParser::parseFilter(
       return true;
     }
     SparqlFilter f;
+    if (_lexer.accept("str")) {
+      _lexer.expect("(");
+      f._lhsAsString = true;
+    }
     // LHS
     if (_lexer.accept(SparqlToken::Type::IRI)) {
       f._lhs = _lexer.current().raw;
@@ -656,6 +660,9 @@ bool SparqlParser::parseFilter(
       _lexer.accept();
       throw ParseException(_lexer.current().raw +
                            " is not a valid left hand side for a filter.");
+    }
+    if (f._lhsAsString) {
+      _lexer.expect(")");
     }
     // TYPE
     if (_lexer.accept("=")) {
@@ -686,7 +693,8 @@ bool SparqlParser::parseFilter(
     } else if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
       f._rhs = _lexer.current().raw;
     } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
-      f._rhs = _lexer.current().raw;
+      // Resolve escaped characters
+      f._rhs = parseLiteral(_lexer.current().raw, true);
     } else if (_lexer.accept(SparqlToken::Type::INTEGER)) {
       f._rhs = _lexer.current().raw;
     } else if (_lexer.accept(SparqlToken::Type::FLOAT)) {
@@ -708,7 +716,7 @@ bool SparqlParser::parseFilter(
     _lexer.expect(")");
     _lexer.expect(",");
     _lexer.expect(SparqlToken::Type::RDFLITERAL);
-    std::string rhs = _lexer.current().raw;
+    std::string rhs = parseLiteral(_lexer.current().raw, true);
     _lexer.expect(")");
     addLangFilter(lhs, rhs, pattern);
     return true;
@@ -716,11 +724,18 @@ bool SparqlParser::parseFilter(
     SparqlFilter f;
     f._type = SparqlFilter::REGEX;
     _lexer.expect("(");
+    if (_lexer.accept("str")) {
+      _lexer.expect("(");
+      f._lhsAsString = true;
+    }
     _lexer.expect(SparqlToken::Type::VARIABLE);
+    if (f._lhsAsString) {
+      _lexer.expect(")");
+    }
     f._lhs = _lexer.current().raw;
     _lexer.expect(",");
     _lexer.expect(SparqlToken::Type::RDFLITERAL);
-    f._rhs = _lexer.current().raw;
+    f._rhs = parseLiteral(_lexer.current().raw, true);
     // Remove the enlcosing quotation marks
     f._rhs = f._rhs.substr(1, f._rhs.size() - 2);
     if (_lexer.accept(",")) {

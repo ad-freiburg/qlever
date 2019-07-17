@@ -24,7 +24,8 @@ Filter::Filter(QueryExecutionContext* qec,
       _type(type),
       _lhs(lhs),
       _rhs(rhs),
-      _regexIgnoreCase(false) {}
+      _regexIgnoreCase(false),
+      _lhsAsString(false) {}
 
 // _____________________________________________________________________________
 string Filter::asString(size_t indent) const {
@@ -510,6 +511,13 @@ void Filter::computeResultFixedValue(
   IdTableStatic<WIDTH> result = resultTable->_data.moveToStatic<WIDTH>();
   const IdTableStatic<WIDTH> input = subRes->_data.asStaticView<WIDTH>();
 
+  std::cout << "Filter rhs '" << _rhs << "'" << std::endl;
+
+  if (_lhsAsString) {
+    AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
+             "The str function is not yet supported within filters.");
+  }
+
   // interpret the filters right hand side
   size_t lhs = _subtree->getVariableColumn(_lhs);
   Id rhs;
@@ -521,6 +529,19 @@ void Filter::computeResultFixedValue(
       } else if (ad_utility::isNumeric(_rhs)) {
         rhs_string = ad_utility::convertNumericToIndexWord(rhs_string);
       } else {
+        // TODO: This is not standard conform, but currently required due to
+        // our vocabulary storing iris with the greater than and
+        // literals with their quotation marks.
+        if (rhs_string.find('<') != std::string::npos &&
+            rhs_string.back() == '"' && rhs_string.size() > 1) {
+          // Remove the quotation marks surrounding the string.
+          rhs_string = rhs_string.substr(1, rhs_string.size() - 2);
+        } else if (std::count(rhs_string.begin(), rhs_string.end(), '"') > 2 &&
+                   rhs_string.back() == '"') {
+          // Remove the quotation marks surrounding the string.
+          rhs_string = rhs_string.substr(1, rhs_string.size() - 2);
+        }
+
         if (getIndex().getVocab().isCaseInsensitiveOrdering()) {
           // We have to move to the correct end of the
           // "same letters but different case" - range
@@ -544,7 +565,7 @@ void Filter::computeResultFixedValue(
         }
       }
       if (_type == SparqlFilter::EQ || _type == SparqlFilter::NE) {
-        if (!getIndex().getVocab().getId(_rhs, &rhs)) {
+        if (!getIndex().getVocab().getId(rhs_string, &rhs)) {
           rhs = std::numeric_limits<size_t>::max() - 1;
         }
       } else if (_type == SparqlFilter::GE) {
@@ -656,4 +677,28 @@ void Filter::computeResultFixedValue(
   }
   LOG(DEBUG) << "Filter result computation done." << endl;
   resultTable->_data = result.moveToDynamic();
+}
+
+std::string Filter::stringToUri(const std::string& s) {
+  size_t r = s.rfind('"');
+  return "<" + s.substr(1, r - 1) + ">";
+}
+
+std::string Filter::stringRemoveTrailingQuotationMark(const std::string& s) {
+  size_t r = s.rfind('"');
+  if (r + 1 == s.size()) {
+    // Remove the trailing ". This is required to ensure the order of
+    // elements matches the order sparql required (e.g. "cake" < "cake!" which
+    // is only true if the last quotation mark is removed form "cake".
+    return s.substr(0, r);
+  }
+  return s;
+}
+
+std::string Filter::uriRemoveTrailingGreaterThan(const std::string& s) {
+  size_t r = s.rfind('>');
+  if (r + 1 == s.size()) {
+    return s.substr(0, r);
+  }
+  return s;
 }

@@ -71,6 +71,7 @@ class Filter : public Operation {
   }
 
   void setRegexIgnoreCase(bool i) { _regexIgnoreCase = i; }
+  void setLhsAsString(bool i) { _lhsAsString = i; }
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
 
@@ -93,6 +94,7 @@ class Filter : public Operation {
   string _lhs;
   string _rhs;
   bool _regexIgnoreCase;
+  bool _lhsAsString;
 
   /**
    * @brief Uses the result type and the filter type (_type) to apply the filter
@@ -132,6 +134,10 @@ class Filter : public Operation {
   struct ValueReader {
     static Id get(size_t in) { return in; }
   };
+
+  static std::string stringToUri(const std::string& s);
+  static std::string stringRemoveTrailingQuotationMark(const std::string& s);
+  static std::string uriRemoveTrailingGreaterThan(const std::string& s);
 };
 
 template <>
