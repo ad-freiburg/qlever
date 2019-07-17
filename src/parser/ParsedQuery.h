@@ -280,8 +280,8 @@ class ParsedQuery {
     AggregateType _type;
     string _inVarName;
     string _outVarName;
-    bool _isAggregate;
-    bool _isDistinct;
+    bool _isAggregate = true;
+    bool _isDistinct = false;
     std::string _function;
     // The deilimiter used by group concat
     std::string _delimiter = " ";
