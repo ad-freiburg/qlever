@@ -8,6 +8,10 @@
 #include "../src/parser/SparqlParser.h"
 
 TEST(QueryPlannerTest, createTripleGraph) {
+  using TripleGraph = QueryPlanner::TripleGraph;
+  using Node = QueryPlanner::TripleGraph::Node;
+  using std::vector;
+
   try {
     {
       ParsedQuery pq = SparqlParser(
@@ -21,12 +25,27 @@ TEST(QueryPlannerTest, createTripleGraph) {
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(pq._rootGraphPattern);
-      ASSERT_EQ(
-          "0 {s: ?x, p: <http://rdf.myprefix.com/myrel>, o: ?y} : (1, 2)\n"
-          "1 {s: ?y, p: <http://rdf.myprefix.com/ns/myrel>, o: ?z} : (0, 2)\n"
-          "2 {s: ?y, p: <http://rdf.myprefix.com/xxx/rel2>, o: "
-          "<http://abc.de>} : (0, 1)",
-          tg.asString());
+      TripleGraph expected =
+          TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+              {std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       0, SparqlTriple("?x", "<http://rdf.myprefix.com/myrel>",
+                                       "?y")),
+                   {1, 2}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       1,
+                       SparqlTriple("?y", "<http://rdf.myprefix.com/ns/myrel>",
+                                    "?z")),
+                   {0, 2}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       2,
+                       SparqlTriple("?y", "<http://rdf.myprefix.com/xxx/rel2>",
+                                    "<http://abc.de>")),
+                   {0, 1})}));
+
+      ASSERT_TRUE(tg.isSimilar(expected));
     }
 
     {
@@ -36,11 +55,21 @@ TEST(QueryPlannerTest, createTripleGraph) {
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(pq._rootGraphPattern);
-      ASSERT_EQ(
-          "0 {s: ?x, p: ?p, o: <X>} : (1, 2)\n"
-          "1 {s: ?x, p: ?p2, o: <Y>} : (0)\n"
-          "2 {s: <X>, p: ?p, o: <Y>} : (0)",
-          tg.asString());
+      TripleGraph expected =
+          TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+              {std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       0, SparqlTriple("?x", "?p", "<X>")),
+                   {1, 2}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       1, SparqlTriple("?x", "?p2", "<Y>")),
+                   {0}),
+               std::make_pair<Node, vector<size_t>>(
+                   QueryPlanner::TripleGraph::Node(
+                       2, SparqlTriple("<X>", "?p", "<Y>")),
+                   {0})}));
+      ASSERT_TRUE(tg.isSimilar(expected));
     }
 
     {
@@ -51,10 +80,20 @@ TEST(QueryPlannerTest, createTripleGraph) {
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
       auto tg = qp.createTripleGraph(pq._rootGraphPattern);
-      ASSERT_EQ(
-          "0 {s: ?x, p: <is-a>, o: <Book>} : (1)\n"
-          "1 {s: ?x, p: <Author>, o: <Anthony_Newman_(Author)>} : (0)",
-          tg.asString());
+
+      TripleGraph expected =
+          TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>({
+              std::make_pair<Node, vector<size_t>>(
+                  QueryPlanner::TripleGraph::Node(
+                      0, SparqlTriple("?x", "<is-a>", "<Book>")),
+                  {1}),
+              std::make_pair<Node, vector<size_t>>(
+                  QueryPlanner::TripleGraph::Node(
+                      1, SparqlTriple("?x", "<Author>",
+                                      "<Anthony_Newman_(Author)>")),
+                  {0}),
+          }));
+      ASSERT_TRUE(tg.isSimilar(expected));
     }
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
@@ -183,6 +222,9 @@ TEST(QueryPlannerTest, testBFSLeaveOut) {
 }
 
 TEST(QueryPlannerTest, testcollapseTextCliques) {
+  using TripleGraph = QueryPlanner::TripleGraph;
+  using Node = QueryPlanner::TripleGraph::Node;
+  using std::vector;
   try {
     {
       {
@@ -202,12 +244,27 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             "(1)",
             tg.asString());
         tg.collapseTextCliques();
-        ASSERT_EQ(
-            "0 {TextOP for ?c, wordPart: \"abc\"} : (1)\n"
-            "1 {s: ?x, p: <p>, o: <X>} : (0)",
-            tg.asString());
-        ASSERT_EQ(2ul, tg._nodeMap[0]->_variables.size());
-        ASSERT_EQ(1ul, tg._nodeMap[1]->_variables.size());
+        TripleGraph expected =
+            TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+                {std::make_pair<Node, vector<size_t>>(
+                     QueryPlanner::TripleGraph::Node(
+                         0, "?c", "abc",
+                         {
+                             SparqlTriple(
+                                 "?c",
+                                 "<QLever-internal-function/contains-entity>",
+                                 "?x"),
+                             SparqlTriple(
+                                 "?c",
+                                 "<QLever-internal-function/contains-word>",
+                                 "abc"),
+                         }),
+                     {1}),
+                 std::make_pair<Node, vector<size_t>>(
+                     QueryPlanner::TripleGraph::Node(
+                         1, SparqlTriple("?x", "<p>", "<X>")),
+                     {0})}));
+        ASSERT_TRUE(tg.isSimilar(expected));
       }
       {
         ParsedQuery pq =
@@ -230,12 +287,28 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             "(1, 2)",
             tg.asString());
         tg.collapseTextCliques();
-        ASSERT_EQ(
-            "0 {TextOP for ?c, wordPart: \"abc\"} : (1)\n"
-            "1 {s: ?x, p: <p>, o: <X>} : (0)",
-            tg.asString());
-        ASSERT_EQ(3ul, tg._nodeMap[0]->_variables.size());
-        ASSERT_EQ(1ul, tg._nodeMap[1]->_variables.size());
+        TripleGraph expected =
+            TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+                {std::make_pair<Node, vector<size_t>>(
+                     QueryPlanner::TripleGraph::Node(
+                         0, "?c", "abc",
+                         {SparqlTriple(
+                              "?c",
+                              "<QLever-internal-function/contains-entity>",
+                              "?x"),
+                          SparqlTriple(
+                              "?c", "<QLever-internal-function/contains-word>",
+                              "abc"),
+                          SparqlTriple(
+                              "?c",
+                              "<QLever-internal-function/contains-entity>",
+                              "?y")}),
+                     {1}),
+                 std::make_pair<Node, vector<size_t>>(
+                     QueryPlanner::TripleGraph::Node(
+                         1, SparqlTriple("?x", "<p>", "<X>")),
+                     {0})}));
+        ASSERT_TRUE(tg.isSimilar(expected));
       }
       {
         ParsedQuery pq =
@@ -258,14 +331,32 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             "4 {s: ?y, p: <P2>, o: <X2>} : (3)",
             tg.asString());
         tg.collapseTextCliques();
-        ASSERT_EQ(
-            "0 {TextOP for ?c, wordPart: \"abc\"} : (1, 2)\n"
-            "1 {s: ?x, p: <p>, o: <X>} : (0)\n"
-            "2 {s: ?y, p: <P2>, o: <X2>} : (0)",
-            tg.asString());
-        ASSERT_EQ(3ul, tg._nodeMap[0]->_variables.size());
-        ASSERT_EQ(1ul, tg._nodeMap[1]->_variables.size());
-        ASSERT_EQ(1ul, tg._nodeMap[2]->_variables.size());
+        TripleGraph expected =
+            TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+                {std::make_pair<Node, vector<size_t>>(
+                     QueryPlanner::TripleGraph::Node(
+                         0, "?c", "abc",
+                         {SparqlTriple(
+                              "?c",
+                              "<QLever-internal-function/contains-entity>",
+                              "?x"),
+                          SparqlTriple(
+                              "?c", "<QLever-internal-function/contains-word>",
+                              "abc"),
+                          SparqlTriple(
+                              "?c",
+                              "<QLever-internal-function/contains-entity>",
+                              "?y")}),
+                     {1, 2}),
+                 std::make_pair<Node, vector<size_t>>(
+                     QueryPlanner::TripleGraph::Node(
+                         1, SparqlTriple("?x", "<p>", "<X>")),
+                     {0}),
+                 std::make_pair<Node, vector<size_t>>(
+                     QueryPlanner::TripleGraph::Node(
+                         2, SparqlTriple("?y", "<P2>", "<X2>")),
+                     {0})}));
+        ASSERT_TRUE(tg.isSimilar(expected));
       }
       {
         ParsedQuery pq =
@@ -277,35 +368,86 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
         auto tg = qp.createTripleGraph(pq._rootGraphPattern);
-        ASSERT_EQ(
-            "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
-            "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
-            "(0, 2, 3)\n"
-            "2 {s: ?c, p: <QLever-internal-function/contains-word>, o: abc} : "
-            "(1, 3)\n"
-            "3 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?y} : "
-            "(1, 2, 4)\n"
-            "4 {s: ?c2, p: <QLever-internal-function/contains-entity>, o: ?y} "
-            ": (3, 5)\n"
-            "5 {s: ?c2, p: <QLever-internal-function/contains-word>, o: xx} : "
-            "(4)",
-            tg.asString());
+        TripleGraph expected = TripleGraph(std::vector<std::pair<
+                                               Node, std::vector<size_t>>>(
+            {std::make_pair<Node, vector<size_t>>(
+                 QueryPlanner::TripleGraph::Node(
+                     0, SparqlTriple("?x", "<p>", "<X>")),
+                 {1}),
+             std::make_pair<Node, vector<size_t>>(
+                 QueryPlanner::TripleGraph::Node(
+                     1, SparqlTriple(
+                            "?c", "<QLever-internal-function/contains-entity>",
+                            "?x")),
+                 {0, 2, 3}),
+             std::make_pair<Node, vector<size_t>>(
+                 QueryPlanner::TripleGraph::Node(
+                     2, SparqlTriple("?c",
+                                     "<QLever-internal-function/contains-word>",
+                                     "abc")),
+                 {1, 3}),
+             std::make_pair<Node, vector<size_t>>(
+                 QueryPlanner::TripleGraph::Node(
+                     3, SparqlTriple(
+                            "?c", "<QLever-internal-function/contains-entity>",
+                            "?y")),
+                 {1, 2, 4}),
+             std::make_pair<Node, vector<size_t>>(
+                 QueryPlanner::TripleGraph::Node(
+                     4, SparqlTriple(
+                            "?c2", "<QLever-internal-function/contains-entity>",
+                            "?y")),
+                 {3, 5}),
+             std::make_pair<Node, vector<size_t>>(
+                 QueryPlanner::TripleGraph::Node(
+                     5, SparqlTriple("?c2",
+                                     "<QLever-internal-function/contains-word>",
+                                     "xx")),
+                 {4})}));
+
+        ASSERT_TRUE(tg.isSimilar(expected));
         tg.collapseTextCliques();
-        ASSERT_EQ(
-            "0 {TextOP for ?c, wordPart: \"abc\"} : (1, 2)\n"
-            "1 {TextOP for ?c2, wordPart: \"xx\"} : (0)\n"
-            "2 {s: ?x, p: <p>, o: <X>} : (0)",
-            tg.asString());
-        ASSERT_EQ(3ul, tg._nodeMap[0]->_variables.size());
-        ASSERT_EQ(2ul, tg._nodeMap[1]->_variables.size());
-        ASSERT_EQ(1ul, tg._nodeMap[2]->_variables.size());
+        TripleGraph expected2 =
+            TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+                {std::make_pair<Node, vector<size_t>>(
+                     QueryPlanner::TripleGraph::Node(
+                         0, "?c", "abc",
+                         {SparqlTriple(
+                              "?c",
+                              "<QLever-internal-function/contains-entity>",
+                              "?x"),
+                          SparqlTriple(
+                              "?c", "<QLever-internal-function/contains-word>",
+                              "abc"),
+                          SparqlTriple(
+                              "?c",
+                              "<QLever-internal-function/contains-entity>",
+                              "?y")}),
+                     {1, 2}),
+                 std::make_pair<Node, vector<size_t>>(
+                     QueryPlanner::TripleGraph::Node(
+                         1, "?c2", "xx",
+                         {SparqlTriple(
+                              "?c2",
+                              "<QLever-internal-function/contains-entity>",
+                              "?y"),
+                          SparqlTriple(
+                              "?c2", "<QLever-internal-function/contains-word>",
+                              "xx")}),
+                     {0}),
+                 std::make_pair<Node, vector<size_t>>(
+                     QueryPlanner::TripleGraph::Node(
+                         2, SparqlTriple("?x", "<p>", "<X>")),
+                     {0})}));
+        ASSERT_TRUE(tg.isSimilar(expected2));
       }
       {
         ParsedQuery pq =
             SparqlParser(
                 "SELECT ?x WHERE {?x <p> <X>. ?c ql:contains-entity ?x. ?c "
                 "ql:contains-word \"abc\" . ?c ql:contains-entity ?y. ?c2 "
-                "ql:contains-entity ?y. ?c2 ql:contains-word xx. ?y <P2> <X2>}")
+                "ql:contains-entity ?y. ?c2 ql:contains-word \"xx\". ?y <P2> "
+                "<X2>}")
                 .parse();
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
@@ -325,16 +467,43 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             "6 {s: ?y, p: <P2>, o: <X2>} : (3, 4)",
             tg.asString());
         tg.collapseTextCliques();
-        ASSERT_EQ(
-            "0 {TextOP for ?c, wordPart: \"abc\"} : (1, 2, 3)\n"
-            "1 {TextOP for ?c2, wordPart: \"xx\"} : (0, 3)\n"
-            "2 {s: ?x, p: <p>, o: <X>} : (0)\n"
-            "3 {s: ?y, p: <P2>, o: <X2>} : (0, 1)",
-            tg.asString());
-        ASSERT_EQ(3ul, tg._nodeMap[0]->_variables.size());
-        ASSERT_EQ(2ul, tg._nodeMap[1]->_variables.size());
-        ASSERT_EQ(1ul, tg._nodeMap[2]->_variables.size());
-        ASSERT_EQ(1ul, tg._nodeMap[3]->_variables.size());
+        TripleGraph expected2 =
+            TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
+                {std::make_pair<Node, vector<size_t>>(
+                     QueryPlanner::TripleGraph::Node(
+                         0, "?c", "abc",
+                         {SparqlTriple(
+                              "?c",
+                              "<QLever-internal-function/contains-entity>",
+                              "?x"),
+                          SparqlTriple(
+                              "?c", "<QLever-internal-function/contains-word>",
+                              "abc"),
+                          SparqlTriple(
+                              "?c",
+                              "<QLever-internal-function/contains-entity>",
+                              "?y")}),
+                     {1, 2, 3}),
+                 std::make_pair<Node, vector<size_t>>(
+                     QueryPlanner::TripleGraph::Node(
+                         1, "?c2", "xx",
+                         {SparqlTriple(
+                              "?c2",
+                              "<QLever-internal-function/contains-entity>",
+                              "?y"),
+                          SparqlTriple(
+                              "?c2", "<QLever-internal-function/contains-word>",
+                              "xx")}),
+                     {0, 3}),
+                 std::make_pair<Node, vector<size_t>>(
+                     QueryPlanner::TripleGraph::Node(
+                         2, SparqlTriple("?x", "<p>", "<X>")),
+                     {0}),
+                 std::make_pair<Node, vector<size_t>>(
+                     QueryPlanner::TripleGraph::Node(
+                         3, SparqlTriple("?y", "<P2>", "<X2>")),
+                     {0, 1})}));
+        ASSERT_TRUE(tg.isSimilar(expected2));
       }
     }
   } catch (const std::exception& e) {

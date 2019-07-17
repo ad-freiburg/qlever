@@ -83,7 +83,11 @@ string SparqlPrefix::asString() const {
 // _____________________________________________________________________________
 PropertyPath::PropertyPath(Operation op, uint16_t limit, const std::string& iri,
                            std::initializer_list<PropertyPath> children)
-    : _operation(op), _limit(limit), _iri(iri), _children(children) {}
+    : _operation(op),
+      _limit(limit),
+      _iri(iri),
+      _children(children),
+      _can_be_null(false) {}
 
 // _____________________________________________________________________________
 void PropertyPath::writeToStream(std::ostream& out) const {
