@@ -10,8 +10,9 @@ const std::string SparqlToken::TYPE_NAMES[] = {
     "IRI",       "WS",         "KEYWORD", "VARIABLE", "SYMBOL",
     "AGGREGATE", "RDFLITERAL", "INTEGER", "FLOAT"};
 
+const std::string SparqlLexer::LANGTAG = "@[a-zA-Z]+(-[a-zA-Z0-9]+)*";
 const std::string SparqlLexer::IRIREF =
-    "(<[^<>\"{}|^`\\\\\\[\\]\\x00-\\x20]*>)";
+    "((" + LANGTAG + "@)?<[^<>\"{}|^`\\\\\\[\\]\\x00-\\x20]*>)";
 const std::string SparqlLexer::PN_CHARS_BASE =
     "[A-Z]|[a-z]|[\\x{00C0}-\\x{00D6}]|[\\x{00D8}-\\x{00F6}]|"
     "[\\x{00F8}-\\x{02FF}]|[\\x{0370}-\\x{037D}]|[\\x{037F}-\\x{1FFF}]|"
@@ -20,7 +21,6 @@ const std::string SparqlLexer::PN_CHARS_BASE =
     "[\\x{10000}-\\x{EFFFF}]";
 const std::string SparqlLexer::WS = "(\\x20|\\x09|\\x0D|\\x0A)";
 const std::string SparqlLexer::ECHAR = "\\\\[tbnrf\"']";
-const std::string SparqlLexer::LANGTAG = "@[a-zA-Z]+(-[a-zA-Z0-9]+)*";
 const std::string SparqlLexer::INTEGER = "(-?[0-9]+)";
 const std::string SparqlLexer::FLOAT = "(-?[0-9]+\\.[0-9]+)";
 
