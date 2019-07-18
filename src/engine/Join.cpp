@@ -601,7 +601,7 @@ void Join::doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
         }
       }
       size_t step = 1;
-      size_t last;
+      size_t last = j;
       while (l1(i, jc1) > l2(j, jc2)) {
         last = j;
         j += step;
@@ -631,7 +631,7 @@ void Join::doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
       }
     } else {
       size_t step = 1;
-      size_t last;
+      size_t last = j;
       while (l2(j, jc2) > l1(i, jc1)) {
         last = i;
         i += step;
