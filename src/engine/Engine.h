@@ -276,27 +276,47 @@ class Engine {
             return;
           }
         }
-        if (l2(j, jc2) < l1(i, jc1)) {
-          const Id needle = l1(i, jc1);
-          j = std::lower_bound(l2.begin() + j, l2.end(), needle,
-                               [jc2](const auto& l, const Id& needle) -> bool {
-                                 return l[jc2] < needle;
-                               }) -
-              l2.begin();
+        size_t step = 1;
+        size_t last;
+        while (l1(i, jc1) > l2(j, jc2)) {
+          last = j;
+          j += step;
+          step *= 2;
           if (j >= l2.size()) {
-            return;
+            j = l2.size() - 1;
+            if (l1(i, jc1) < l2(j, jc2)) {
+              return;
+            }
+          }
+          if (l1(i, jc1) < l2(j, jc2)) {
+            const Id needle = l1(i, jc1);
+            j = std::lower_bound(l2.begin() + last, l2.begin() + j, needle,
+                                 [jc2](const auto& l, const Id needle) -> bool {
+                                   return l[jc2] < needle;
+                                 }) -
+                l2.begin();
           }
         }
       } else {
-        if (l2(j, jc2) > l1(i, jc1)) {
-          const Id needle = l2(j, jc2);
-          i = std::lower_bound(l1.begin() + i, l1.end(), needle,
-                               [jc1](const auto& l, const Id needle) -> bool {
-                                 return l[jc1] < needle;
-                               }) -
-              l1.begin();
+        size_t step = 1;
+        size_t last;
+        while (l2(j, jc2) > l1(i, jc1)) {
+          last = i;
+          i += step;
+          step *= 2;
           if (i >= l1.size()) {
-            return;
+            i = l1.size() - 1;
+            if (l2(j, jc2) > l1(i, jc1)) {
+              return;
+            }
+          }
+          if (l2(j, jc2) < l1(i, jc1)) {
+            const Id needle = l2(j, jc2);
+            i = std::lower_bound(l1.begin() + last, l1.begin() + i, needle,
+                                 [jc1](const auto& l, const Id needle) -> bool {
+                                   return l[jc1] < needle;
+                                 }) -
+                l1.begin();
           }
         }
         while (l1(i, jc1) > l2(j, jc2)) {
@@ -327,12 +347,12 @@ class Engine {
           }
           ++j;
           if (j >= l2.size()) {
-            return;
+            break;
           }
         }
         ++i;
         if (i >= l1.size()) {
-          return;
+          break;
         }
         // If the next i is still the same, reset j.
         if (l1(i, jc1) == l2(keepJ, jc2)) {
