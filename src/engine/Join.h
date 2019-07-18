@@ -54,6 +54,23 @@ class Join : public Operation {
 
   virtual float getMultiplicity(size_t col) override;
 
+  /**
+   * @brief Joins IdTables dynA and dynB on join column jc2, returning
+   * the result in dynRes. Creates a cross product for matching rows
+   **/
+  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+  static void join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                   size_t jc2, IdTable* dynRes);
+
+  class RightLargerTag {};
+  class LeftLargerTag {};
+  template <typename TagType, int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+  static void doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
+                                const size_t jc1,
+                                const IdTableStatic<R_WIDTH>& l2,
+                                const size_t jc2,
+                                IdTableStatic<OUT_WIDTH>* result);
+
  private:
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;

@@ -34,3 +34,6 @@ e2e_data/*
 
 # vim files
 *.swp
+
+# ctags generated tag file
+src/tags
