@@ -2658,9 +2658,9 @@ bool QueryPlanner::TripleGraph::isSimilar(
   // This method is very verbose as it is currently only intended for
   // testing
   if (_nodeStorage.size() != other._nodeStorage.size()) {
-    std::cout << asString() << std::endl;
-    std::cout << other.asString() << std::endl;
-    std::cout << "The two triple graphs are not of the same size: "
+    LOG(INFO) << asString() << std::endl;
+    LOG(INFO) << other.asString() << std::endl;
+    LOG(INFO) << "The two triple graphs are not of the same size: "
               << _nodeStorage.size() << " != " << other._nodeStorage.size()
               << std::endl;
     return false;
@@ -2679,18 +2679,18 @@ bool QueryPlanner::TripleGraph::isSimilar(
       }
     }
     if (!hasMatch) {
-      std::cout << asString() << std::endl;
-      std::cout << other.asString() << std::endl;
-      std::cout << "The node " << n << " has no match in the other graph"
+      LOG(INFO) << asString() << std::endl;
+      LOG(INFO) << other.asString() << std::endl;
+      LOG(INFO) << "The node " << n << " has no match in the other graph"
                 << std::endl;
       return false;
     }
   }
   if (id_map.size() != _nodeStorage.size() ||
       id_map_reverse.size() != _nodeStorage.size()) {
-    std::cout << asString() << std::endl;
-    std::cout << other.asString() << std::endl;
-    std::cout << "Two nodes in this graph were matches to the same node in "
+    LOG(INFO) << asString() << std::endl;
+    LOG(INFO) << other.asString() << std::endl;
+    LOG(INFO) << "Two nodes in this graph were matches to the same node in "
                  "the other grap"
               << std::endl;
     return false;
@@ -2707,9 +2707,9 @@ bool QueryPlanner::TripleGraph::isSimilar(
     }
     for (size_t a : _adjLists[id]) {
       if (other_adj_set.count(id_map[a]) == 0) {
-        std::cout << asString() << std::endl;
-        std::cout << other.asString() << std::endl;
-        std::cout << "The node with id " << id << " is connected to " << a
+        LOG(INFO) << asString() << std::endl;
+        LOG(INFO) << other.asString() << std::endl;
+        LOG(INFO) << "The node with id " << id << " is connected to " << a
                   << " in this graph graph but not to the equivalent "
                      "node in the other graph."
                   << std::endl;
@@ -2718,9 +2718,9 @@ bool QueryPlanner::TripleGraph::isSimilar(
     }
     for (size_t a : other._adjLists[other_id]) {
       if (adj_set.count(id_map_reverse[a]) == 0) {
-        std::cout << asString() << std::endl;
-        std::cout << other.asString() << std::endl;
-        std::cout << "The node with id " << id << " is connected to " << a
+        LOG(INFO) << asString() << std::endl;
+        LOG(INFO) << other.asString() << std::endl;
+        LOG(INFO) << "The node with id " << id << " is connected to " << a
                   << " in the other graph graph but not to the equivalent "
                      "node in this graph."
                   << std::endl;
