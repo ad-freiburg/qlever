@@ -187,7 +187,7 @@ class SparqlFilter {
   FilterType _type;
   string _lhs;
   string _rhs;
-  bool _regexIgnoreCase;
+  bool _regexIgnoreCase = false;
   // True if the str function was applied to the left side.
   bool _lhsAsString = false;
 };
