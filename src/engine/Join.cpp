@@ -5,6 +5,7 @@
 #include "./Join.h"
 #include <functional>
 #include <sstream>
+#include <type_traits>
 #include <unordered_set>
 #include "./QueryExecutionTree.h"
 #include "CallFixedSize.h"
@@ -127,7 +128,7 @@ void Join::computeResult(ResultTable* result) {
   int lwidth = leftRes->_data.cols();
   int rwidth = rightRes->_data.cols();
   int reswidth = result->_data.cols();
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, getEngine().join, leftRes->_data,
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, join, leftRes->_data,
                     _leftJoinCol, rightRes->_data, _rightJoinCol,
                     &result->_data);
 
@@ -487,6 +488,215 @@ void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
       }
       for (size_t i = 0; i < itr.cols(); i++) {
         (*res)(backIdx, itl.cols() + i) = r[i];
+      }
+    }
+  }
+}
+
+// ______________________________________________________________________________
+
+template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                size_t jc2, IdTable* dynRes) {
+  const IdTableStatic<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
+  const IdTableStatic<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
+
+  LOG(DEBUG) << "Performing join between two tables.\n";
+  LOG(DEBUG) << "A: width = " << a.cols() << ", size = " << a.size() << "\n";
+  LOG(DEBUG) << "B: width = " << b.cols() << ", size = " << b.size() << "\n";
+
+  // Check trivial case.
+  if (a.size() == 0 || b.size() == 0) {
+    return;
+  }
+
+  IdTableStatic<OUT_WIDTH> result = dynRes->moveToStatic<OUT_WIDTH>();
+  // Cannot just switch l1 and l2 around because the order of
+  // items in the result tuples is important.
+  if (a.size() / b.size() > GALLOP_THRESHOLD) {
+    doGallopInnerJoin(LeftLargerTag{}, a, jc1, b, jc2, &result);
+  } else if (b.size() / a.size() > GALLOP_THRESHOLD) {
+    doGallopInnerJoin(RightLargerTag{}, a, jc1, b, jc2, &result);
+  } else {
+    // Intersect both lists.
+    size_t i = 0;
+    size_t j = 0;
+    // while (a(i, jc1) < sent1) {
+    while (i < a.size() && j < b.size()) {
+      while (a(i, jc1) < b(j, jc2)) {
+        ++i;
+        if (i >= a.size()) {
+          goto finish;
+        }
+      }
+
+      while (b(j, jc2) < a(i, jc1)) {
+        ++j;
+        if (j >= b.size()) {
+          goto finish;
+        }
+      }
+
+      while (a(i, jc1) == b(j, jc2)) {
+        // In case of match, create cross-product
+        // Always fix a and go through b.
+        size_t keepJ = j;
+        while (a(i, jc1) == b(j, jc2)) {
+          result.push_back();
+          const size_t backIndex = result.size() - 1;
+          for (size_t h = 0; h < a.cols(); h++) {
+            result(backIndex, h) = a(i, h);
+          }
+
+          // Copy bs columns before the join column
+          for (size_t h = 0; h < jc2; h++) {
+            result(backIndex, h + a.cols()) = b(j, h);
+          }
+
+          // Copy bs columns after the join column
+          for (size_t h = jc2 + 1; h < b.cols(); h++) {
+            result(backIndex, h + a.cols() - 1) = b(j, h);
+          }
+
+          ++j;
+          if (j >= b.size()) {
+            // The next i might still match
+            break;
+          }
+        }
+        ++i;
+        if (i >= a.size()) {
+          goto finish;
+        }
+        // If the next i is still the same, reset j.
+        if (a(i, jc1) == b(keepJ, jc2)) {
+          j = keepJ;
+        }
+      }
+    }
+  }
+finish:
+  *dynRes = result.moveToDynamic();
+
+  LOG(DEBUG) << "Join done.\n";
+  LOG(DEBUG) << "Result: width = " << dynRes->cols()
+             << ", size = " << dynRes->size() << "\n";
+}
+
+// _____________________________________________________________________________
+template <typename TagType, int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+void Join::doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
+                             const size_t jc1, const IdTableStatic<R_WIDTH>& l2,
+                             const size_t jc2,
+                             IdTableStatic<OUT_WIDTH>* result) {
+  LOG(DEBUG) << "Galloping case.\n";
+  size_t i = 0;
+  size_t j = 0;
+  while (i < l1.size() && j < l2.size()) {
+    if constexpr (std::is_same<TagType, RightLargerTag>::value) {
+      while (l1(i, jc1) < l2(j, jc2)) {
+        ++i;
+        if (i >= l1.size()) {
+          return;
+        }
+      }
+      size_t step = 1;
+      size_t last = j;
+      while (l1(i, jc1) > l2(j, jc2)) {
+        last = j;
+        j += step;
+        step *= 2;
+        if (j >= l2.size()) {
+          j = l2.size() - 1;
+          if (l1(i, jc1) > l2(j, jc2)) {
+            return;
+          }
+        }
+      }
+      if (l1(i, jc1) == l2(j, jc2)) {
+        // We stepped into a block where l1 and l2 are equal. We need to
+        // find the beginning of this block
+        while (j > 0 && l1(i, jc1) == l2(j - 1, jc2)) {
+          j--;
+        }
+      } else if (l1(i, jc1) < l2(j, jc2)) {
+        // We stepped over the location where l1 and l2 may be equal.
+        // Use binary search to locate that spot
+        const Id needle = l1(i, jc1);
+        j = std::lower_bound(l2.begin() + last, l2.begin() + j, needle,
+                             [jc2](const auto& l, const Id needle) -> bool {
+                               return l[jc2] < needle;
+                             }) -
+            l2.begin();
+      }
+    } else {
+      size_t step = 1;
+      size_t last = j;
+      while (l2(j, jc2) > l1(i, jc1)) {
+        last = i;
+        i += step;
+        step *= 2;
+        if (i >= l1.size()) {
+          i = l1.size() - 1;
+          if (l2(j, jc2) > l1(i, jc1)) {
+            return;
+          }
+        }
+      }
+      if (l2(j, jc2) == l1(i, jc1)) {
+        // We stepped into a block where l1 and l2 are equal. We need to
+        // find the beginning of this block
+        while (i > 0 && l1(i - 1, jc1) == l2(j, jc2)) {
+          i--;
+        }
+      } else if (l2(j, jc2) < l1(i, jc1)) {
+        // We stepped over the location where l1 and l2 may be equal.
+        // Use binary search to locate that spot
+        const Id needle = l2(j, jc2);
+        i = std::lower_bound(l1.begin() + last, l1.begin() + i, needle,
+                             [jc1](const auto& l, const Id needle) -> bool {
+                               return l[jc1] < needle;
+                             }) -
+            l1.begin();
+      }
+      while (l1(i, jc1) > l2(j, jc2)) {
+        ++j;
+        if (j >= l2.size()) {
+          return;
+        }
+      }
+    }
+    while (l1(i, jc1) == l2(j, jc2)) {
+      // In case of match, create cross-product
+      // Always fix l1 and go through l2.
+      const size_t keepJ = j;
+      while (l1(i, jc1) == l2(j, jc2)) {
+        size_t rowIndex = result->size();
+        result->push_back();
+        for (size_t h = 0; h < l1.cols(); h++) {
+          (*result)(rowIndex, h) = l1(i, h);
+        }
+        // Copy l2s columns before the join column
+        for (size_t h = 0; h < jc2; h++) {
+          (*result)(rowIndex, h + l1.cols()) = l2(j, h);
+        }
+
+        // Copy l2s columns after the join column
+        for (size_t h = jc2 + 1; h < l2.cols(); h++) {
+          (*result)(rowIndex, h + l1.cols() - 1) = l2(j, h);
+        }
+        ++j;
+        if (j >= l2.size()) {
+          break;
+        }
+      }
+      ++i;
+      if (i >= l1.size()) {
+        return;
+      }
+      // If the next i is still the same, reset j.
+      if (l1(i, jc1) == l2(keepJ, jc2)) {
+        j = keepJ;
       }
     }
   }

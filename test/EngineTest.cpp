@@ -7,10 +7,10 @@
 #include <fstream>
 #include "../src/engine/CallFixedSize.h"
 #include "../src/engine/Engine.h"
+#include "../src/engine/Join.h"
 #include "../src/engine/OptionalJoin.h"
 
 TEST(EngineTest, joinTest) {
-  Engine e;
   IdTable a(2);
   a.push_back({1, 1});
   a.push_back({1, 3});
@@ -26,7 +26,7 @@ TEST(EngineTest, joinTest) {
   int lwidth = a.cols();
   int rwidth = b.cols();
   int reswidth = a.cols() + b.cols() - 1;
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, e.join, a, 0, b, 0, &res);
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, Join::join, a, 0, b, 0, &res);
 
   ASSERT_EQ(1u, res(0, 0));
   ASSERT_EQ(1u, res(0, 1));
@@ -57,7 +57,7 @@ TEST(EngineTest, joinTest) {
   a.push_back({400000, 200000});
   b.push_back({400000, 200000});
 
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, e.join, a, 0, b, 0, &res);
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, Join::join, a, 0, b, 0, &res);
   ASSERT_EQ(6u, res.size());
 
   a.clear();
@@ -75,8 +75,33 @@ TEST(EngineTest, joinTest) {
   }
   a.push_back({4000001, 200000});
   b.push_back({4000001, 200000});
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, e.join, a, 0, b, 0, &res);
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, Join::join, a, 0, b, 0, &res);
   ASSERT_EQ(2u, res.size());
+
+  a.clear();
+  b.clear();
+  res.clear();
+
+  IdTable c(1);
+  c.push_back({0});
+
+  b.push_back({0, 1});
+  b.push_back({0, 2});
+  b.push_back({1, 3});
+  b.push_back({1, 4});
+
+  lwidth = b.cols();
+  rwidth = c.cols();
+  reswidth = b.cols() + c.cols() - 1;
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, Join::join, b, 0, c, 0, &res);
+
+  ASSERT_EQ(2u, res.size());
+
+  ASSERT_EQ(0u, res(0, 0));
+  ASSERT_EQ(1u, res(0, 1));
+
+  ASSERT_EQ(0u, res(1, 0));
+  ASSERT_EQ(2u, res(1, 1));
 };
 
 TEST(EngineTest, optionalJoinTest) {
