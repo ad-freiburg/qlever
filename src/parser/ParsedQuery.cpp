@@ -278,6 +278,14 @@ void ParsedQuery::expandPrefixes() {
       expandPrefix(f._lhs, prefixMap);
       expandPrefix(f._rhs, prefixMap);
     }
+
+    for (SparqlValues& v : pattern->_inlineValues) {
+      for (auto& row : v._values) {
+        for (std::string& value : row) {
+          expandPrefix(value, prefixMap);
+        }
+      }
+    }
   }
 }
 

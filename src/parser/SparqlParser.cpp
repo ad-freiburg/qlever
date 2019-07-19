@@ -182,13 +182,17 @@ void SparqlParser::parseWhere(
   vector<string> clauses;
   vector<string> filters;
   size_t start = 0;
-  bool insideUri = false;
-  bool insideNsThing = false;
-  bool insideLiteral = false;
+
+  // If these are not empty the last subject and / or predicate is reused
+  std::string lastSubject;
+  std::string lastPredicate;
   while (start < inner.size()) {
     size_t k = start;
-    while (inner[k] == ' ' || inner[k] == '\t' || inner[k] == '\n') {
+    while (k < inner.size() && std::isspace(inner[k])) {
       ++k;
+    }
+    if (k == inner.size()) {
+      break;
     }
     if (inner[k] == 'O' || inner[k] == 'o') {
       if (inner.substr(k, 8) == "OPTIONAL" ||
@@ -338,38 +342,197 @@ void SparqlParser::parseWhere(
         start = (posOfDelim == string::npos ? end + 1 : posOfDelim + 1);
         continue;
       }
-    }
-    while (k < inner.size()) {
-      if (!insideUri && !insideLiteral && !insideNsThing) {
-        if (inner[k] == '.') {
-          clauses.emplace_back(inner.substr(start, k - start));
-          break;
+    } else if (inner[k] == 'V' || inner[k] == 'v') {
+      if (inner.substr(k, 6) == "VALUES" || inner.substr(k, 6) == "values") {
+        size_t valuesStatementStart = k;
+        k += 6;
+        while (k < inner.size() && inner[k] != '(' && inner[k] != '?') {
+          k++;
         }
-        if (inner[k] == '<') {
-          insideUri = true;
+        if (k == inner.size()) {
+          throw ParseException(
+              "Expected a variable name or a set of variable names after "
+              "VALUES, but got " +
+              inner.substr(valuesStatementStart, 16));
         }
-        if (inner[k] == '\"') {
-          insideLiteral = true;
+        SparqlValues values;
+        if (inner[k] == '(') {
+          // The values statement has several variables
+          k++;
+          // find the end of the variables
+          size_t varStart = k;
+          while (k < inner.size() && inner[k] != ')') {
+            k++;
+          }
+          if (k >= inner.size()) {
+            throw ParseException(
+                "Unterminated variable list for VALUES statement: " +
+                inner.substr(valuesStatementStart, 256));
+          }
+          values._variables =
+              ad_utility::splitWs(inner.substr(varStart, k - varStart));
+
+          // find the beginning of the data
+          while (k < inner.size() && inner[k] != '{') {
+            k++;
+          }
+          // Skip the opening brace
+          k++;
+          if (k >= inner.size()) {
+            throw ParseException(
+                "Missing opening bracket '{' for values statement: " +
+                inner.substr(valuesStatementStart, 256));
+          }
+
+          while (k < inner.size() && inner[k] != '}') {
+            while (k < inner.size() && inner[k] != '(' && inner[k] != '}') {
+              if (!std::isspace(inner[k])) {
+                throw ParseException(
+                    "Expected another row of values in values statement: " +
+                    inner.substr(valuesStatementStart, 256));
+              }
+              k++;
+            }
+            if (inner[k] == '}') {
+              break;
+            }
+            if (k >= inner.size()) {
+              throw ParseException(
+                  "Expected an opening bracket '(' for the values of: " +
+                  inner.substr(valuesStatementStart, 256));
+            }
+            size_t valuesStart = k + 1;
+            while (k < inner.size() && inner[k] != ')') {
+              k++;
+            }
+            k++;
+            if (k >= inner.size()) {
+              throw ParseException(
+                  "Missing closing bracket ')' for the values of: " +
+                  inner.substr(valuesStatementStart, 256));
+            }
+            values._values.emplace_back(values._variables.size());
+            for (size_t i = 0; i < values._variables.size(); i++) {
+              while (valuesStart < inner.size() &&
+                     std::isspace(inner[valuesStart])) {
+                valuesStart++;
+              }
+              values._values.back()[i] = readTriplePart(inner, &valuesStart);
+              if (valuesStart >= inner.size() || valuesStart >= k) {
+                throw ParseException(
+                    "Expected " + std::to_string(values._variables.size()) +
+                    " values in every row of the VALUES block of " +
+                    inner.substr(valuesStatementStart, 256));
+              }
+            }
+          }
+          if (k == inner.size()) {
+            throw ParseException("A values block is not properly terminated: " +
+                                 inner.substr(valuesStatementStart, 256));
+          }
+
+        } else {
+          // The values statement has only one variable
+          size_t var_start = k;
+          while (k < inner.size() && !std::isspace(inner[k]) &&
+                 inner[k] != '{') {
+            k++;
+          }
+          if (k == inner.size()) {
+            throw ParseException(
+                "Expected values after the variable definition of the VALUES "
+                "block, but reached the end of the input instead.");
+          }
+          values._variables.emplace_back(
+              inner.substr(var_start, k - var_start));
+          while (k < inner.size() && inner[k] != '{') {
+            k++;
+          }
+          // Skip the opening brace
+          k++;
+          if (k == inner.size()) {
+            throw ParseException(
+                "Expected values after the variable definition of the VALUES "
+                "block, but reached the end of the input instead.");
+          }
+          while (k < inner.size() && inner[k] != '}') {
+            while (k < inner.size() && std::isspace(inner[k])) {
+              ++k;
+            }
+            if (k == inner.size()) {
+              throw ParseException(
+                  "Expected a closing bracket but got no input for values "
+                  "statement " +
+                  inner.substr(valuesStatementStart, 256));
+            }
+            values._values.emplace_back();
+            values._values.back().push_back(
+                std::string(readTriplePart(inner, &k)));
+          }
+          if (k == inner.size()) {
+            throw ParseException("A values block is not properly terminated: " +
+                                 inner.substr(valuesStatementStart, 256));
+          }
         }
-        if (inner[k] == ':') {
-          insideNsThing = true;
-        }
-      } else {
-        if (insideUri && inner[k] == '>') {
-          insideUri = false;
-        }
-        if (insideLiteral && inner[k] == '\"') {
-          insideLiteral = false;
-        }
-        if (insideNsThing && (inner[k] == ' ' || inner[k] == '\t')) {
-          insideNsThing = false;
-        }
+        currentPattern->_inlineValues.emplace_back(values);
+        start = k + 1;
+        continue;
       }
-      ++k;
     }
-    if (k == inner.size()) {
-      clauses.emplace_back(inner.substr(start));
+
+    std::string subject;
+    if (lastSubject.empty()) {
+      subject = readTriplePart(inner, &k);
+      while (k < inner.size() && std::isspace(inner[k])) {
+        ++k;
+      }
+      if (k == inner.size()) {
+        throw ParseException(
+            "Expected a subject but reached the end of input.");
+      }
+    } else {
+      subject = lastSubject;
+      lastSubject.clear();
     }
+    std::string predicate;
+    if (lastPredicate.empty()) {
+      predicate = readTriplePart(inner, &k);
+      while (k < inner.size() && std::isspace(inner[k])) {
+        ++k;
+      }
+      if (k == inner.size()) {
+        throw ParseException(
+            "Expected a predicate but reached the end of input after subject " +
+            subject);
+      }
+    } else {
+      predicate = lastPredicate;
+      lastPredicate.clear();
+    }
+    std::string clause =
+        subject + " " + predicate + " " + readTriplePart(inner, &k);
+    clauses.emplace_back(clause);
+
+    // In case there is whitespace in front of the next separator skip it
+    while (k < inner.size() && inner[k] != '.' && inner[k] != ';' &&
+           inner[k] != ',') {
+      if (!std::isspace(inner[k])) {
+        throw ParseException(
+            "Expected either '.', ',' or ';' after the triple " + clause);
+      }
+      k++;
+    }
+
+    if (k < inner.size()) {
+      // Repeat the subject or the subject and predicate
+      if (inner[k] == ';') {
+        lastSubject = subject;
+      } else if (inner[k] == ',') {
+        lastSubject = subject;
+        lastPredicate = predicate;
+      }
+    }
+
     start = k + 1;
   }
   for (const string& clause : clauses) {
@@ -382,6 +545,55 @@ void SparqlParser::parseWhere(
     // We might add a language filter, those need the GraphPattern
     addFilter(filter, &currentPattern->_filters, currentPattern);
   }
+}
+
+std::string_view SparqlParser::readTriplePart(const std::string& s,
+                                              size_t* pos) {
+  size_t start = *pos;
+  bool insideUri = false;
+  bool insidePrefixed = false;
+  bool insideLiteral = false;
+  while (*pos < s.size()) {
+    if (!insideUri && !insideLiteral && !insidePrefixed) {
+      if (s[*pos] == '.' || std::isspace(static_cast<unsigned char>(s[*pos])) ||
+          s[*pos] == ';' || s[*pos] == ',' || s[*pos] == '}' ||
+          s[*pos] == ')') {
+        return std::string_view(s.data() + start, (*pos) - start);
+      }
+      if (s[*pos] == '<') {
+        insideUri = true;
+      }
+      if (s[*pos] == '\"') {
+        insideLiteral = true;
+      }
+      if (s[*pos] == ':') {
+        insidePrefixed = true;
+      }
+    } else if (insidePrefixed) {
+      if (std::isspace(static_cast<unsigned char>(s[*pos])) || s[*pos] == '}') {
+        return std::string_view(s.data() + start, (*pos) - start);
+      } else if (s[*pos] == '.' || s[*pos] == ';' || s[*pos] == ',') {
+        if ((*pos) + 1 >= s.size() ||
+            (s[(*pos) + 1] == '?' || s[(*pos) + 1] == '<' ||
+             s[(*pos) + 1] == '\"' ||
+             std::isspace(static_cast<unsigned char>(s[(*pos) + 1])))) {
+          insidePrefixed = false;
+          // Need to reevaluate the dot as a separator
+          (*pos)--;
+        }
+      }
+    } else {
+      if (insideUri && s[*pos] == '>') {
+        insideUri = false;
+      }
+      if (insideLiteral && s[*pos] == '\"') {
+        insideLiteral = false;
+      }
+    }
+    (*pos)++;
+  }
+
+  return std::string_view(s.data() + start, (*pos) - start);
 }
 
 // _____________________________________________________________________________
@@ -474,8 +686,8 @@ void SparqlParser::addWhereTriple(
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(const string& str,
                                           ParsedQuery& query) {
-  // Split the string at any whitespace but ignore whitespace inside brackets
-  // to allow for alias parsing.
+  // Split the string at any whitespace but ignore whitespace inside
+  // brackets to allow for alias parsing.
   auto tokens = ad_utility::splitWsWithEscape(str, '(', ')');
   for (size_t i = 0; i < tokens.size(); ++i) {
     if (tokens[i] == "ORDER" && i < tokens.size() - 2 &&
@@ -579,8 +791,8 @@ void SparqlParser::addFilter(
             escaped = false;
           }
           if (isSimple) {
-            // There are no regex special chars apart from the leading '^' so
-            // we can use a prefix filter.
+            // There are no regex special chars apart from the leading '^'
+            // so we can use a prefix filter.
             f._type = SparqlFilter::PREFIX;
           }
         }
@@ -613,10 +825,10 @@ void SparqlParser::addFilter(
       }
       if (pred == "langMatches") {
         if (!pattern) {
-          AD_THROW(
-              ad_semsearch::Exception::BAD_QUERY,
-              "Invalid position for language filter. Probable cause: language "
-              "filters are currently not supported in HAVING clauses.");
+          AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                   "Invalid position for language filter. Probable cause: "
+                   "language "
+                   "filters are currently not supported in HAVING clauses.");
         }
         if (!ad_utility::startsWith(lhs, "lang(")) {
           AD_THROW(ad_semsearch::Exception::BAD_QUERY,
@@ -642,7 +854,8 @@ void SparqlParser::addFilter(
         if (it == pattern->_whereClauseTriples.end()) {
           LOG(INFO)
               << "language filter variable " + rhs +
-                     "that did not appear as object in any suitable triple. "
+                     "that did not appear as object in any suitable "
+                     "triple. "
                      "using special literal-to-language triple instead.\n";
           auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
           PropertyPath taggedPredicate(PropertyPath::Operation::IRI);

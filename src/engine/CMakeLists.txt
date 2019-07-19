@@ -29,6 +29,7 @@ add_library(engine
         Union.cpp Union.h
         MultiColumnJoin.cpp MultiColumnJoin.h
         TransitivePath.cpp TransitivePath.h
+        Values.cpp Values.h
         IdTable.h
         )
 
