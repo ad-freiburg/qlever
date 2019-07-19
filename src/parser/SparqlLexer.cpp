@@ -12,7 +12,7 @@ const std::string SparqlToken::TYPE_NAMES[] = {
 
 const std::string SparqlLexer::LANGTAG = "@[a-zA-Z]+(-[a-zA-Z0-9]+)*";
 const std::string SparqlLexer::IRIREF =
-    "((" + LANGTAG + "@)?<[^<>\"{}|^`\\\\\\[\\]\\x00-\\x20]*>)";
+    "(<[^<>\"{}|^`\\\\\\[\\]\\x00-\\x20]*>)";
 const std::string SparqlLexer::PN_CHARS_BASE =
     "[A-Z]|[a-z]|[\\x{00C0}-\\x{00D6}]|[\\x{00D8}-\\x{00F6}]|"
     "[\\x{00F8}-\\x{02FF}]|[\\x{0370}-\\x{037D}]|[\\x{037F}-\\x{1FFF}]|"
@@ -41,8 +41,8 @@ const std::string SparqlLexer::PNAME_NS = "(" + PN_PREFIX + ")?:";
 const std::string SparqlLexer::PNAME_LN =
     "(" + PNAME_NS + ")(" + PN_LOCAL + ")";
 
-const std::string SparqlLexer::IRI =
-    "((" + IRIREF + ")|(" + PNAME_LN + ")|(" + PNAME_NS + "))";
+const std::string SparqlLexer::IRI = "((" + LANGTAG + "@)?((" + IRIREF + ")|(" +
+                                     PNAME_LN + ")|(" + PNAME_NS + ")))";
 const std::string SparqlLexer::VARNAME =
     "(" + PN_CHARS_U + "|[0-9])(" + PN_CHARS_U +
     "|[0-9]|\\x{00B7}|[\\x{0300}-\\x{036F}]|[\\x{203F}-\\x{2040}])*";
@@ -52,10 +52,7 @@ const std::string SparqlLexer::KEYWORD =
     "OPTIONAL|UNION|LANGMATCHES|LANG|TEXT|SCORE|REGEX|PREFIX|SEPARATOR|STR)";
 const std::string SparqlLexer::AGGREGATE =
     "(?i)(SAMPLE|COUNT|MIN|MAX|AVG|SUM|GROUP_CONCAT)";
-// The |?VARNAME part is in here to support some non standard syntax the
-// old parser supported according to the unit tests.
-const std::string SparqlLexer::VARIABLE =
-    "(\\?" + VARNAME + "(\\|\\?" + VARNAME + ")*)";
+const std::string SparqlLexer::VARIABLE = "(\\?" + VARNAME + ")";
 const std::string SparqlLexer::SYMBOL =
     "([\\.\\{\\}\\(\\)\\=\\*,;:<>!\\|/\\^\\?\\*\\+])";
 
