@@ -139,6 +139,10 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       query->_aliases.push_back(a);
       query->_selectedVariables.emplace_back(a._outVarName);
       _lexer.expect(")");
+    } else {
+      _lexer.accept();
+      throw ParseException("Error in SELECT: unexpected token: " +
+                           _lexer.current().raw);
     }
     if (_lexer.empty()) {
       throw ParseException("Keyword WHERE expected after SELECT.");
