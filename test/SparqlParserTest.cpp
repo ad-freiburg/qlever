@@ -431,20 +431,20 @@ TEST(ParserTest, testSolutionModifiers) {
   ASSERT_FALSE(pq._reduced);
 
   pq = SparqlParser(
-           "SELECT DISTINCT ?x SCORE(?x|?c) ?y WHERE \t {?x :myrel ?y}\n"
-           "ORDER BY ASC(?y) DESC(SCORE(?x|?c)) LIMIT 10 OFFSET 15")
+           "SELECT DISTINCT ?x SCORE(?x) ?y WHERE \t {?x :myrel ?y}\n"
+           "ORDER BY ASC(?y) DESC(SCORE(?x)) LIMIT 10 OFFSET 15")
            .parse();
   pq.expandPrefixes();
   ASSERT_EQ(0u, pq._prefixes.size());
   ASSERT_EQ(3u, pq._selectedVariables.size());
-  ASSERT_EQ("SCORE(?x|?c)", pq._selectedVariables[1]);
+  ASSERT_EQ("SCORE(?x)", pq._selectedVariables[1]);
   ASSERT_EQ(1u, pq._rootGraphPattern->_whereClauseTriples.size());
   ASSERT_EQ("10", pq._limit);
   ASSERT_EQ("15", pq._offset);
   ASSERT_EQ(size_t(2), pq._orderBy.size());
   ASSERT_EQ("?y", pq._orderBy[0]._key);
   ASSERT_FALSE(pq._orderBy[0]._desc);
-  ASSERT_EQ("SCORE(?x|?c)", pq._orderBy[1]._key);
+  ASSERT_EQ("SCORE(?x)", pq._orderBy[1]._key);
   ASSERT_TRUE(pq._orderBy[1]._desc);
   ASSERT_TRUE(pq._distinct);
   ASSERT_FALSE(pq._reduced);
