@@ -68,7 +68,7 @@ class QueryPlanner {
 
       Node& operator=(const Node& other) = default;
 
-      // Returns true if tje two nodes equal apart from the id
+      // Returns true if the two nodes equal apart from the id
       // and the order of variables
       bool isSimilar(const Node& other) const {
         return _triple == other._triple && _cvar == other._cvar &&

@@ -530,8 +530,8 @@ void Filter::computeResultFixedValue(
         // TODO: This is not standard conform, but currently required due to
         // our vocabulary storing iris with the greater than and
         // literals with their quotation marks.
-        if (rhs_string.find('<') != std::string::npos &&
-            rhs_string.back() == '"' && rhs_string.size() > 1) {
+        if (rhs_string.size() > 2 && rhs_string[1] == '<' &&
+            rhs_string[0] == '"' && rhs_string.back() == '"') {
           // Remove the quotation marks surrounding the string.
           rhs_string = rhs_string.substr(1, rhs_string.size() - 2);
         } else if (std::count(rhs_string.begin(), rhs_string.end(), '"') > 2 &&
@@ -675,28 +675,4 @@ void Filter::computeResultFixedValue(
   }
   LOG(DEBUG) << "Filter result computation done." << endl;
   resultTable->_data = result.moveToDynamic();
-}
-
-std::string Filter::stringToUri(const std::string& s) {
-  size_t r = s.rfind('"');
-  return "<" + s.substr(1, r - 1) + ">";
-}
-
-std::string Filter::stringRemoveTrailingQuotationMark(const std::string& s) {
-  size_t r = s.rfind('"');
-  if (r + 1 == s.size()) {
-    // Remove the trailing ". This is required to ensure the order of
-    // elements matches the order sparql required (e.g. "cake" < "cake!" which
-    // is only true if the last quotation mark is removed form "cake".
-    return s.substr(0, r);
-  }
-  return s;
-}
-
-std::string Filter::uriRemoveTrailingGreaterThan(const std::string& s) {
-  size_t r = s.rfind('>');
-  if (r + 1 == s.size()) {
-    return s.substr(0, r);
-  }
-  return s;
 }

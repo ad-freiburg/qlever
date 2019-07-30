@@ -134,10 +134,6 @@ class Filter : public Operation {
   struct ValueReader {
     static Id get(size_t in) { return in; }
   };
-
-  static std::string stringToUri(const std::string& s);
-  static std::string stringRemoveTrailingQuotationMark(const std::string& s);
-  static std::string uriRemoveTrailingGreaterThan(const std::string& s);
 };
 
 template <>

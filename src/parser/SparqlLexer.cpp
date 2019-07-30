@@ -85,6 +85,7 @@ void SparqlLexer::readNext() {
   _current = _next;
   _next.type = SparqlToken::Type::WS;
   std::string raw;
+  // Return the first token type matched.
   while (_next.type == SparqlToken::Type::WS && !empty()) {
     _next.pos = _sparql.size() - _re_string.size();
     if (re2::RE2::Consume(&_re_string, RE_AGGREGATE, &raw)) {
