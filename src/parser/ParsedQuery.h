@@ -227,9 +227,12 @@ class ParsedQuery {
       std::vector<std::shared_ptr<GraphPattern>> _childGraphPatterns;
       std::shared_ptr<ParsedQuery> _subquery;
       struct {
-        // The name of the left and right end of the subpath
+        // The name of the left and right end of the transitive operation
         std::string _left;
         std::string _right;
+        // The name of the left and right end of the subpath
+        std::string _innerLeft;
+        std::string _innerRight;
         size_t _min = 0;
         size_t _max = 0;
         std::shared_ptr<GraphPattern> _childGraphPattern;

@@ -209,32 +209,37 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           const SubtreePlan* sub =
               &patternPlans[child->_pathData._childGraphPattern->_id];
           childPlanStorage.emplace_back(_qec);
-          Id leftCol, rightCol;
+          size_t leftCol, rightCol;
+          Id leftValue, rightValue;
           std::string leftColName, rightColName;
           size_t min, max;
           bool leftVar, rightVar;
           if (isVariable(child->_pathData._left)) {
             leftVar = true;
-            leftCol = sub->_qet->getVariableColumn(child->_pathData._left);
+            leftCol = sub->_qet->getVariableColumn(child->_pathData._innerLeft);
             leftColName = child->_pathData._left;
           } else {
             leftVar = false;
             leftColName = generateUniqueVarName();
+            leftCol = sub->_qet->getVariableColumn(child->_pathData._innerLeft);
             if (!_qec->getIndex().getVocab().getId(child->_pathData._left,
-                                                   &leftCol)) {
+                                                   &leftValue)) {
               AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                        "No vocabulary entry for " + child->_pathData._left);
             }
           }
           if (isVariable(child->_pathData._right)) {
             rightVar = true;
-            rightCol = sub->_qet->getVariableColumn(child->_pathData._right);
+            rightCol =
+                sub->_qet->getVariableColumn(child->_pathData._innerRight);
             rightColName = child->_pathData._right;
           } else {
             rightVar = false;
+            rightCol =
+                sub->_qet->getVariableColumn(child->_pathData._innerRight);
             rightColName = generateUniqueVarName();
             if (!_qec->getIndex().getVocab().getId(child->_pathData._right,
-                                                   &rightCol)) {
+                                                   &rightValue)) {
               AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                        "No vocabulary entry for " + child->_pathData._right);
             }
@@ -242,8 +247,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           min = child->_pathData._min;
           max = child->_pathData._max;
           auto transOp = std::make_shared<TransitivePath>(
-              _qec, sub->_qet, leftVar, rightVar, leftCol, rightCol,
-              leftColName, rightColName, min, max);
+              _qec, sub->_qet, leftVar, rightVar, leftCol, rightCol, leftValue,
+              rightValue, leftColName, rightColName, min, max);
 
           QueryExecutionTree& tree = *childPlanStorage.back()._qet.get();
           tree.setVariableColumns(static_cast<TransitivePath*>(transOp.get())
@@ -1572,15 +1577,19 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
+  std::string innerLeft = generateUniqueVarName();
+  std::string innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
-      seedFromPropertyPath(left, path._children[0], right);
+      seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
       std::make_shared<ParsedQuery::GraphPattern>();
   std::shared_ptr<ParsedQuery::GraphPatternOperation> op =
       std::make_shared<ParsedQuery::GraphPatternOperation>(
           ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
-  op->_pathData._left = left;
-  op->_pathData._right = right;
+  new (&op->_pathData._left) std::string(left);
+  new (&op->_pathData._right) std::string(right);
+  new (&op->_pathData._innerLeft) std::string(innerLeft);
+  new (&op->_pathData._innerRight) std::string(innerRight);
   op->_pathData._min = 1;
   op->_pathData._max = std::numeric_limits<size_t>::max();
   op->_pathData._childGraphPattern = childPlan;
@@ -1592,15 +1601,20 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
+  std::string innerLeft = generateUniqueVarName();
+  std::string innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
-      seedFromPropertyPath(left, path._children[0], right);
+      seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
       std::make_shared<ParsedQuery::GraphPattern>();
   std::shared_ptr<ParsedQuery::GraphPatternOperation> op =
       std::make_shared<ParsedQuery::GraphPatternOperation>(
           ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
-  op->_pathData._left = left;
-  op->_pathData._right = right;
+  // The strings are inside of a union, they need to be constructed in place
+  new (&op->_pathData._left) std::string(left);
+  new (&op->_pathData._right) std::string(right);
+  new (&op->_pathData._innerLeft) std::string(innerLeft);
+  new (&op->_pathData._innerRight) std::string(innerRight);
   op->_pathData._min = std::max(uint_fast16_t(1), path._limit);
   op->_pathData._max = std::numeric_limits<size_t>::max();
   op->_pathData._childGraphPattern = childPlan;
@@ -1612,15 +1626,19 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
+  std::string innerLeft = generateUniqueVarName();
+  std::string innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
-      seedFromPropertyPath(left, path._children[0], right);
+      seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
       std::make_shared<ParsedQuery::GraphPattern>();
   std::shared_ptr<ParsedQuery::GraphPatternOperation> op =
       std::make_shared<ParsedQuery::GraphPatternOperation>(
           ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
-  op->_pathData._left = left;
-  op->_pathData._right = right;
+  new (&op->_pathData._left) std::string(left);
+  new (&op->_pathData._right) std::string(right);
+  new (&op->_pathData._innerLeft) std::string(innerLeft);
+  new (&op->_pathData._innerRight) std::string(innerRight);
   op->_pathData._min = 1;
   op->_pathData._max = path._limit;
   op->_pathData._childGraphPattern = childPlan;
