@@ -860,31 +860,35 @@ string SparqlParser::parseLiteral(const string& literal, bool isEntireString,
                                   size_t off /*defaults to 0*/) {
   std::stringstream out;
   size_t pos = off;
+  // The delimiter of the string. Either ' or "
+  char delimiter = '"';
   if (isEntireString) {
     // check for a leading qutation mark
     while (pos < literal.size() &&
            std::isspace(static_cast<unsigned char>(literal[pos]))) {
       pos++;
     }
-    if (pos == literal.size() || literal[pos] != '"') {
+    if (pos == literal.size() ||
+        (literal[pos] != '"' && literal[pos] != '\'')) {
       throw ParseException("The literal: " + literal +
                            " does not begin with a quotation mark.");
     }
   }
-  while (pos < literal.size() && literal[pos] != '"') {
+  while (pos < literal.size() && literal[pos] != '"' && literal[pos] != '\'') {
     pos++;
   }
   if (pos == literal.size()) {
     // the string does not contain a literal
     return "";
   }
+  delimiter = literal[pos];
   out << '"';
   pos++;
   bool escaped = false;
-  while (pos < literal.size() && (escaped || literal[pos] != '"')) {
+  while (pos < literal.size() && (escaped || literal[pos] != delimiter)) {
     escaped = false;
     if (literal[pos] == '\\' && pos + 1 < literal.size() &&
-        literal[pos + 1] == '"') {
+        literal[pos + 1] == delimiter) {
       // Allow for escaping " using \ but do not change any other form of
       // escaping.
       escaped = true;
