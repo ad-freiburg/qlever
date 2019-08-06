@@ -113,3 +113,7 @@ target_link_libraries(IdTableTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 add_executable(TransitivePathTest TransitivePathTest.cpp)
 add_test(TransitivePathTest TransitivePathTest)
 target_link_libraries(TransitivePathTest engine gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(SparqlLexerTest SparqlLexerTest.cpp)
+add_test(SparqlLexerTest SparqlLexerTest)
+target_link_libraries(SparqlLexerTest parser gtest_main ${CMAKE_THREAD_LIBS_INIT})

@@ -40,6 +40,17 @@ string ParsedQuery::asString() const {
   }
   os << "\n}";
 
+  // ALIASES
+  os << "\nALIASES: {\n\t";
+  for (size_t i = 0; i < _aliases.size(); ++i) {
+    const Alias& a = _aliases[i];
+    os << a._function;
+    if (i + 1 < _aliases.size()) {
+      os << "\n\t";
+    }
+  }
+  os << "{";
+
   // WHERE
   os << "\nWHERE: \n";
   _rootGraphPattern->toString(os, 1);
@@ -72,7 +83,11 @@ string SparqlPrefix::asString() const {
 // _____________________________________________________________________________
 PropertyPath::PropertyPath(Operation op, uint16_t limit, const std::string& iri,
                            std::initializer_list<PropertyPath> children)
-    : _operation(op), _limit(limit), _iri(iri), _children(children) {}
+    : _operation(op),
+      _limit(limit),
+      _iri(iri),
+      _children(children),
+      _can_be_null(false) {}
 
 // _____________________________________________________________________________
 void PropertyPath::writeToStream(std::ostream& out) const {

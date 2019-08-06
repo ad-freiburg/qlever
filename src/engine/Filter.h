@@ -71,6 +71,7 @@ class Filter : public Operation {
   }
 
   void setRegexIgnoreCase(bool i) { _regexIgnoreCase = i; }
+  void setLhsAsString(bool i) { _lhsAsString = i; }
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
 
@@ -93,6 +94,7 @@ class Filter : public Operation {
   string _lhs;
   string _rhs;
   bool _regexIgnoreCase;
+  bool _lhsAsString;
 
   /**
    * @brief Uses the result type and the filter type (_type) to apply the filter

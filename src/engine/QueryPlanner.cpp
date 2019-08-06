@@ -209,32 +209,37 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           const SubtreePlan* sub =
               &patternPlans[child->_pathData._childGraphPattern->_id];
           childPlanStorage.emplace_back(_qec);
-          Id leftCol, rightCol;
+          size_t leftCol, rightCol;
+          Id leftValue, rightValue;
           std::string leftColName, rightColName;
           size_t min, max;
           bool leftVar, rightVar;
           if (isVariable(child->_pathData._left)) {
             leftVar = true;
-            leftCol = sub->_qet->getVariableColumn(child->_pathData._left);
+            leftCol = sub->_qet->getVariableColumn(child->_pathData._innerLeft);
             leftColName = child->_pathData._left;
           } else {
             leftVar = false;
             leftColName = generateUniqueVarName();
+            leftCol = sub->_qet->getVariableColumn(child->_pathData._innerLeft);
             if (!_qec->getIndex().getVocab().getId(child->_pathData._left,
-                                                   &leftCol)) {
+                                                   &leftValue)) {
               AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                        "No vocabulary entry for " + child->_pathData._left);
             }
           }
           if (isVariable(child->_pathData._right)) {
             rightVar = true;
-            rightCol = sub->_qet->getVariableColumn(child->_pathData._right);
+            rightCol =
+                sub->_qet->getVariableColumn(child->_pathData._innerRight);
             rightColName = child->_pathData._right;
           } else {
             rightVar = false;
+            rightCol =
+                sub->_qet->getVariableColumn(child->_pathData._innerRight);
             rightColName = generateUniqueVarName();
             if (!_qec->getIndex().getVocab().getId(child->_pathData._right,
-                                                   &rightCol)) {
+                                                   &rightValue)) {
               AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                        "No vocabulary entry for " + child->_pathData._right);
             }
@@ -242,8 +247,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           min = child->_pathData._min;
           max = child->_pathData._max;
           auto transOp = std::make_shared<TransitivePath>(
-              _qec, sub->_qet, leftVar, rightVar, leftCol, rightCol,
-              leftColName, rightColName, min, max);
+              _qec, sub->_qet, leftVar, rightVar, leftCol, rightCol, leftValue,
+              rightValue, leftColName, rightColName, min, max);
 
           QueryExecutionTree& tree = *childPlanStorage.back()._qet.get();
           tree.setVariableColumns(static_cast<TransitivePath*>(transOp.get())
@@ -1572,15 +1577,19 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
+  std::string innerLeft = generateUniqueVarName();
+  std::string innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
-      seedFromPropertyPath(left, path._children[0], right);
+      seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
       std::make_shared<ParsedQuery::GraphPattern>();
   std::shared_ptr<ParsedQuery::GraphPatternOperation> op =
       std::make_shared<ParsedQuery::GraphPatternOperation>(
           ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
-  op->_pathData._left = left;
-  op->_pathData._right = right;
+  new (&op->_pathData._left) std::string(left);
+  new (&op->_pathData._right) std::string(right);
+  new (&op->_pathData._innerLeft) std::string(innerLeft);
+  new (&op->_pathData._innerRight) std::string(innerRight);
   op->_pathData._min = 1;
   op->_pathData._max = std::numeric_limits<size_t>::max();
   op->_pathData._childGraphPattern = childPlan;
@@ -1592,15 +1601,20 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
+  std::string innerLeft = generateUniqueVarName();
+  std::string innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
-      seedFromPropertyPath(left, path._children[0], right);
+      seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
       std::make_shared<ParsedQuery::GraphPattern>();
   std::shared_ptr<ParsedQuery::GraphPatternOperation> op =
       std::make_shared<ParsedQuery::GraphPatternOperation>(
           ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
-  op->_pathData._left = left;
-  op->_pathData._right = right;
+  // The strings are inside of a union, they need to be constructed in place
+  new (&op->_pathData._left) std::string(left);
+  new (&op->_pathData._right) std::string(right);
+  new (&op->_pathData._innerLeft) std::string(innerLeft);
+  new (&op->_pathData._innerRight) std::string(innerRight);
   op->_pathData._min = std::max(uint_fast16_t(1), path._limit);
   op->_pathData._max = std::numeric_limits<size_t>::max();
   op->_pathData._childGraphPattern = childPlan;
@@ -1612,15 +1626,19 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
+  std::string innerLeft = generateUniqueVarName();
+  std::string innerRight = generateUniqueVarName();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
-      seedFromPropertyPath(left, path._children[0], right);
+      seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
       std::make_shared<ParsedQuery::GraphPattern>();
   std::shared_ptr<ParsedQuery::GraphPatternOperation> op =
       std::make_shared<ParsedQuery::GraphPatternOperation>(
           ParsedQuery::GraphPatternOperation::Type::TRANS_PATH);
-  op->_pathData._left = left;
-  op->_pathData._right = right;
+  new (&op->_pathData._left) std::string(left);
+  new (&op->_pathData._right) std::string(right);
+  new (&op->_pathData._innerLeft) std::string(innerLeft);
+  new (&op->_pathData._innerRight) std::string(innerRight);
   op->_pathData._min = 1;
   op->_pathData._max = path._limit;
   op->_pathData._childGraphPattern = childPlan;
@@ -2281,6 +2299,7 @@ std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
     const SparqlFilter& filter, const SubtreePlan& parent) const {
   std::shared_ptr<Filter> op = std::make_shared<Filter>(
       _qec, parent._qet, filter._type, filter._lhs, filter._rhs);
+  op->setLhsAsString(filter._lhsAsString);
   if (filter._type == SparqlFilter::REGEX) {
     op->setRegexIgnoreCase(filter._regexIgnoreCase);
   }
@@ -2478,6 +2497,16 @@ vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
 }
 
 // _____________________________________________________________________________
+QueryPlanner::TripleGraph::TripleGraph(
+    const std::vector<std::pair<Node, std::vector<size_t>>>& init) {
+  for (const std::pair<Node, std::vector<size_t>>& p : init) {
+    _nodeStorage.push_back(p.first);
+    _nodeMap[p.first._id] = &_nodeStorage.back();
+    _adjLists.push_back(p.second);
+  }
+}
+
+// _____________________________________________________________________________
 QueryPlanner::TripleGraph::TripleGraph(const QueryPlanner::TripleGraph& other,
                                        vector<size_t> keepNodes) {
   ad_utility::HashSet<size_t> keep;
@@ -2639,6 +2668,85 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
     adjList.insert(adjList.begin(), adjNodes.begin(), adjNodes.end());
     _adjLists.emplace_back(adjList);
   }
+}
+
+// _____________________________________________________________________________
+bool QueryPlanner::TripleGraph::isSimilar(
+    const QueryPlanner::TripleGraph& other) const {
+  // This method is very verbose as it is currently only intended for
+  // testing
+  if (_nodeStorage.size() != other._nodeStorage.size()) {
+    LOG(INFO) << asString() << std::endl;
+    LOG(INFO) << other.asString() << std::endl;
+    LOG(INFO) << "The two triple graphs are not of the same size: "
+              << _nodeStorage.size() << " != " << other._nodeStorage.size()
+              << std::endl;
+    return false;
+  }
+  ad_utility::HashMap<size_t, size_t> id_map;
+  ad_utility::HashMap<size_t, size_t> id_map_reverse;
+  for (const Node& n : _nodeStorage) {
+    bool hasMatch = false;
+    for (const Node& n2 : other._nodeStorage) {
+      if (n.isSimilar(n2)) {
+        id_map[n._id] = n2._id;
+        id_map_reverse[n2._id] = n._id;
+        hasMatch = true;
+        break;
+      } else {
+      }
+    }
+    if (!hasMatch) {
+      LOG(INFO) << asString() << std::endl;
+      LOG(INFO) << other.asString() << std::endl;
+      LOG(INFO) << "The node " << n << " has no match in the other graph"
+                << std::endl;
+      return false;
+    }
+  }
+  if (id_map.size() != _nodeStorage.size() ||
+      id_map_reverse.size() != _nodeStorage.size()) {
+    LOG(INFO) << asString() << std::endl;
+    LOG(INFO) << other.asString() << std::endl;
+    LOG(INFO) << "Two nodes in this graph were matches to the same node in "
+                 "the other grap"
+              << std::endl;
+    return false;
+  }
+  for (size_t id = 0; id < _adjLists.size(); ++id) {
+    size_t other_id = id_map[id];
+    ad_utility::HashSet<size_t> adj_set;
+    ad_utility::HashSet<size_t> other_adj_set;
+    for (size_t a : _adjLists[id]) {
+      adj_set.insert(a);
+    }
+    for (size_t a : other._adjLists[other_id]) {
+      other_adj_set.insert(a);
+    }
+    for (size_t a : _adjLists[id]) {
+      if (other_adj_set.count(id_map[a]) == 0) {
+        LOG(INFO) << asString() << std::endl;
+        LOG(INFO) << other.asString() << std::endl;
+        LOG(INFO) << "The node with id " << id << " is connected to " << a
+                  << " in this graph graph but not to the equivalent "
+                     "node in the other graph."
+                  << std::endl;
+        return false;
+      }
+    }
+    for (size_t a : other._adjLists[other_id]) {
+      if (adj_set.count(id_map_reverse[a]) == 0) {
+        LOG(INFO) << asString() << std::endl;
+        LOG(INFO) << other.asString() << std::endl;
+        LOG(INFO) << "The node with id " << id << " is connected to " << a
+                  << " in the other graph graph but not to the equivalent "
+                     "node in this graph."
+                  << std::endl;
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 // _____________________________________________________________________________

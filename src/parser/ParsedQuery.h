@@ -84,6 +84,9 @@ class SparqlTriple {
   SparqlTriple(const string& s, const PropertyPath& p, const string& o)
       : _s(s), _p(p), _o(o) {}
 
+  SparqlTriple(const string& s, const std::string& p_iri, const string& o)
+      : _s(s), _p(PropertyPath::Operation::IRI, 0, p_iri, {}), _o(o) {}
+
   bool operator==(const SparqlTriple& other) const {
     return _s == other._s && _p == other._p && _o == other._o;
   }
@@ -184,7 +187,9 @@ class SparqlFilter {
   FilterType _type;
   string _lhs;
   string _rhs;
-  bool _regexIgnoreCase;
+  bool _regexIgnoreCase = false;
+  // True if the str function was applied to the left side.
+  bool _lhsAsString = false;
 };
 
 // Represents a VALUES statement in the query.
@@ -222,9 +227,12 @@ class ParsedQuery {
       std::vector<std::shared_ptr<GraphPattern>> _childGraphPatterns;
       std::shared_ptr<ParsedQuery> _subquery;
       struct {
-        // The name of the left and right end of the subpath
+        // The name of the left and right end of the transitive operation
         std::string _left;
         std::string _right;
+        // The name of the left and right end of the subpath
+        std::string _innerLeft;
+        std::string _innerRight;
         size_t _min = 0;
         size_t _max = 0;
         std::shared_ptr<GraphPattern> _childGraphPattern;
@@ -261,12 +269,30 @@ class ParsedQuery {
     vector<std::shared_ptr<GraphPatternOperation>> _children;
   };
 
+  /**
+   * @brief All supported types of aggregate aliases
+   */
+  enum class AggregateType {
+    COUNT,
+    GROUP_CONCAT,
+    FIRST,
+    LAST,
+    SAMPLE,
+    MIN,
+    MAX,
+    SUM,
+    AVG
+  };
+
   struct Alias {
+    AggregateType _type;
     string _inVarName;
     string _outVarName;
-    bool _isAggregate;
-    // The mapping from the original var to the new one
-    string _function;
+    bool _isAggregate = true;
+    bool _isDistinct = false;
+    std::string _function;
+    // The deilimiter used by group concat
+    std::string _delimiter = " ";
   };
 
   ParsedQuery()

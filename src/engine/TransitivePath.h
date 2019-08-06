@@ -12,7 +12,8 @@ class TransitivePath : public Operation {
  public:
   TransitivePath(QueryExecutionContext* qec,
                  std::shared_ptr<QueryExecutionTree> child, bool leftIsVar,
-                 bool rightIsVar, size_t left, size_t right,
+                 bool rightIsVar, size_t leftSubCol, size_t rightSubCol,
+                 size_t leftValue, size_t rightValue,
                  const std::string& leftColName,
                  const std::string& rightColName, size_t minDist,
                  size_t maxDist);
@@ -44,8 +45,10 @@ class TransitivePath : public Operation {
    */
   template <int SUB_WIDTH>
   static void computeTransitivePath(IdTable* res, const IdTable& sub,
-                                    bool leftIsVar, bool rightIsVar, Id left,
-                                    Id right, size_t minDist, size_t maxDist);
+                                    bool leftIsVar, bool rightIsVar,
+                                    size_t leftSubCol, size_t rightSubCol,
+                                    Id leftValue, Id rightValue, size_t minDist,
+                                    size_t maxDist);
 
  private:
   virtual void computeResult(ResultTable* result) override;
@@ -53,8 +56,10 @@ class TransitivePath : public Operation {
   std::shared_ptr<QueryExecutionTree> _subtree;
   bool _leftIsVar;
   bool _rightIsVar;
-  size_t _left;
-  size_t _right;
+  size_t _leftSubCol;
+  size_t _rightSubCol;
+  size_t _leftValue;
+  size_t _rightValue;
   std::string _leftColName;
   std::string _rightColName;
   size_t _minDist;
