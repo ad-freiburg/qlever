@@ -729,10 +729,10 @@ bool SparqlParser::parseFilter(
       f._lhsAsString = true;
     }
     _lexer.expect(SparqlToken::Type::VARIABLE);
+    f._lhs = _lexer.current().raw;
     if (f._lhsAsString) {
       _lexer.expect(")");
     }
-    f._lhs = _lexer.current().raw;
     _lexer.expect(",");
     _lexer.expect(SparqlToken::Type::RDFLITERAL);
     f._rhs = parseLiteral(_lexer.current().raw, true);

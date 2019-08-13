@@ -33,10 +33,7 @@ string Filter::asString(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  os << "FILTER " << _subtree->asString(indent) << "\n";
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
+  os << "FILTER " << _subtree->asString(indent);
   os << " with " << _lhs;
   switch (_type) {
     case SparqlFilter::EQ:
@@ -70,7 +67,10 @@ string Filter::asString(size_t indent) const {
       os << " PREFIX ";
       break;
   }
-  os << _rhs;
+  if (_lhsAsString) {
+    os << "LHS_AS_STR ";
+  }
+  os << _rhs << "\n";
   return os.str();
 }
 
