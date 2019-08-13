@@ -210,7 +210,7 @@ def main() -> None:
     endpoint_url = sys.argv[2]
     error_detected = False
     with open(inpath, 'rb') if inpath != '-' else sys.stdin as infile:
-        yaml_tree = yaml.load(infile)
+        yaml_tree = yaml.safe_load(infile)
         queries = yaml_tree['queries']
         for query in queries:
             query_name = query['query']
