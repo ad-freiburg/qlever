@@ -25,8 +25,9 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
 
   if (upper > *it) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-             "The ID Range seems to exceed the range possible "
-             "given to the current min prefix size.");
+             "No words found for the given prefix. This usually means that the "
+             "prefix "
+             "is smaller than the configured minimum prefix size.");
   }
 
   // Use the info to retrieve an index.
