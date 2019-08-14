@@ -108,6 +108,11 @@ void SparqlLexer::readNext() {
       _next.type = SparqlToken::Type::SYMBOL;
     } else if (re2::RE2::Consume(&_re_string, RE_WS, &raw)) {
       _next.type = SparqlToken::Type::WS;
+    } else if (_re_string[0] == '#') {
+      // Start of a comment. Consume everything up to the next newline.
+      while (!_re_string.empty() && _re_string[0] != '\n') {
+        _re_string.remove_prefix(1);
+      }
     } else {
       throw ParseException("Unexpected input: " + _re_string.as_string());
     }
