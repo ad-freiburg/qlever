@@ -449,7 +449,8 @@ Index::createPermutations(
 
   if (performUnique) {
     // this only has to be done for the first permutation (PSO)
-    LOG(INFO) << "Performing unique to ensure RDF semantics..." << std::endl;
+    LOG(INFO) << "Removing duplicate triples as these are not supported in RDF"
+              << std::endl;
     LOG(INFO) << "Size before: " << vec->size() << std::endl;
     auto last = std::unique(begin(*vec), end(*vec));
     vec->resize(size_t(last - vec->begin()));

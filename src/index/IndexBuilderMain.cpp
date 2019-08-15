@@ -76,21 +76,21 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
 }
 
 void printUsage(char* execName) {
-  std::ios coutState(nullptr);
-  coutState.copyfmt(cout);
-  cout << std::setfill(' ') << std::left;
+  std::ios cerrState(nullptr);
+  cerrState.copyfmt(cerr);
+  cerr << std::setfill(' ') << std::left;
 
-  cout << "Usage: " << execName << " -i <index> [OPTIONS]" << endl << endl;
-  cout << "Options" << endl;
-  cout << "  " << std::setw(20) << "d, docs-by-contexts" << std::setw(1)
+  cerr << "Usage: " << execName << " -i <index> [OPTIONS]" << endl << endl;
+  cerr << "Options" << endl;
+  cerr << "  " << std::setw(20) << "d, docs-by-contexts" << std::setw(1)
        << "    "
        << "docs-file to build text index from." << endl;
-  cout << "  " << std::setw(20) << "h, help" << std::setw(1) << "    "
+  cerr << "  " << std::setw(20) << "h, help" << std::setw(1) << "    "
        << "Print this help and exit." << endl;
-  cout << "  " << std::setw(20) << "i, index-basename" << std::setw(1) << "    "
+  cerr << "  " << std::setw(20) << "i, index-basename" << std::setw(1) << "    "
        << "(designated) name and path of the index to build." << endl;
 
-  cout << "  " << std::setw(20) << "F, file-format" << std::setw(1) << "    "
+  cerr << "  " << std::setw(20) << "F, file-format" << std::setw(1) << "    "
        << " Specify format of the input file. Must be one of "
           "[tsv|nt|ttl|mmap]."
        << " " << std::setw(36)
@@ -98,46 +98,46 @@ void printUsage(char* execName) {
        << " " << std::setw(36)
        << "(mmap assumes an on-disk turtle file that can be mmapped to memory)"
        << endl;
-  cout << "  " << std::setw(20) << "f, knowledge-base-input-file"
+  cerr << "  " << std::setw(20) << "f, knowledge-base-input-file"
        << std::setw(1) << "    "
        << " The file to be parsed from. If omitted, we will read from stdin"
        << endl;
-  cout << "  " << std::setw(20) << "K, kb-index-name" << std::setw(1) << "    "
+  cerr << "  " << std::setw(20) << "K, kb-index-name" << std::setw(1) << "    "
        << "Assign a name to be displayed in the UI (default: name of nt-file)"
        << endl;
-  cout << "  " << std::setw(20) << "l, on-disk-literals" << std::setw(1)
+  cerr << "  " << std::setw(20) << "l, on-disk-literals" << std::setw(1)
        << "    "
        << "Externalize parts of the KB vocab." << endl;
-  cout << "  " << std::setw(20) << "n, ntriples-file" << std::setw(1) << "    "
+  cerr << "  " << std::setw(20) << "n, ntriples-file" << std::setw(1) << "    "
        << "NT file to build KB index from." << endl;
-  cout << "  " << std::setw(20) << "no-patterns" << std::setw(1) << "    "
+  cerr << "  " << std::setw(20) << "no-patterns" << std::setw(1) << "    "
        << "Disable the use of patterns. This disables ql:has-predicate."
        << endl;
-  cout << "  " << std::setw(20) << "T, text-index-name" << std::setw(1)
+  cerr << "  " << std::setw(20) << "T, text-index-name" << std::setw(1)
        << "    "
        << "Assign a name to be displayed in the UI "
           "(default: name of words-file)."
        << endl;
-  cout << "  " << std::setw(20) << "w, words-by-contexts" << std::setw(1)
+  cerr << "  " << std::setw(20) << "w, words-by-contexts" << std::setw(1)
        << "    "
        << "words-file to build text index from." << endl;
-  cout << "  " << std::setw(20) << "A, add-text-index" << std::setw(1) << "    "
+  cerr << "  " << std::setw(20) << "A, add-text-index" << std::setw(1) << "    "
        << "Add text index to already existing kb-index" << endl;
-  cout
+  cerr
       << "  " << std::setw(20) << "k, keep-temporary-files" << std::setw(1)
       << "    "
       << "Keep Temporary Files from IndexCreation (normally only for debugging)"
       << endl;
-  cout << "  " << std::setw(20) << "s, settings-file" << std::setw(1) << "    "
+  cerr << "  " << std::setw(20) << "s, settings-file" << std::setw(1) << "    "
        << "Specify a input settings file where prefixes that are to be "
           "externalized etc can be specified"
        << endl;
-  cout << "  " << std::setw(20) << "N, no-compressed-vocabulary" << std::setw(1)
+  cerr << "  " << std::setw(20) << "N, no-compressed-vocabulary" << std::setw(1)
        << "    "
        << "Do NOT use prefix compression on the vocabulary (default is to "
           "compress)."
        << endl;
-  cout.copyfmt(coutState);
+  cerr.copyfmt(cerrState);
 }
 
 // Main function.
@@ -214,7 +214,7 @@ int main(int argc, char** argv) {
         useCompression = false;
         break;
       default:
-        cout << endl
+        cerr << endl
              << "! ERROR in processing options (getopt returned '" << c
              << "' = 0x" << std::setbase(16) << c << ")" << endl
              << "Corresponding ascii option : -" << std::string(1, c) << endl
@@ -235,51 +235,14 @@ int main(int argc, char** argv) {
   }
 
   if (baseName.size() == 0) {
-    cout << "Missing required argument --index-basename (-i)..." << endl;
+    std::cerr << "Missing required argument --index-basename (-i)..." << endl;
     printUsage(argv[0]);
     exit(1);
   }
 
-  std::cout << std::endl
-            << EMPH_ON << "IndexBuilderMain, version " << __DATE__ << " "
-            << __TIME__ << EMPH_OFF << std::endl
-            << std::endl;
-  cout << "Set locale LC_CTYPE to: " << locale << endl;
-
-  if (inputFile.empty()) {
-    LOG(INFO) << "No input knowledge-base-file specified. Parsing from stdin\n";
-    inputFile = "/dev/stdin";
-  } else if (inputFile == "-") {
-    LOG(INFO) << "Parsing from stdin.\n";
-    inputFile = "/dev/stdin";
-  }
-
-  if (filetype.empty()) {
-    bool filetypeDeduced = false;
-    if (ad_utility::endsWith(inputFile, ".tsv")) {
-      filetype = "tsv";
-      filetypeDeduced = true;
-    } else if (ad_utility::endsWith(inputFile, ".nt")) {
-      filetype = "nt";
-      filetypeDeduced = true;
-    } else if (ad_utility::endsWith(inputFile, ".ttl")) {
-      filetype = "ttl";
-      filetypeDeduced = true;
-    } else {
-      LOG(WARN)
-          << " Could not deduce the type of the input knowledge-base-file by "
-             "its extension. Assuming the input to be turtle. Please specify "
-             "--file-format (-F)\n";
-      LOG(WARN) << "In case this is not correct \n";
-    }
-    if (filetypeDeduced) {
-      LOG(INFO) << "Assuming input file format to be " << filetype
-                << " due to the input file's extension.\n";
-      LOG(INFO)
-          << "If this is wrong, please manually specify the --file-format "
-             "(-F) flag.\n";
-    }
-  }
+  LOG(INFO) << EMPH_ON << "IndexBuilderMain, version " << __DATE__ << " "
+            << __TIME__ << EMPH_OFF << std::endl;
+  LOG(TRACE) << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
     LOG(TRACE) << "Configuring STXXL..." << std::endl;
@@ -303,6 +266,42 @@ int main(int argc, char** argv) {
       // if onlyAddTextIndex is true, we do not want to construct an index,
       // but assume that it  already exists (especially we need a valid
       // vocabulary for  text  index  creation)
+      if (inputFile.empty()) {
+        LOG(INFO)
+            << "No input knowledge-base-file specified. Parsing from stdin\n";
+        inputFile = "/dev/stdin";
+      } else if (inputFile == "-") {
+        LOG(INFO) << "Parsing from stdin.\n";
+        inputFile = "/dev/stdin";
+      }
+
+      if (filetype.empty()) {
+        bool filetypeDeduced = false;
+        if (ad_utility::endsWith(inputFile, ".tsv")) {
+          filetype = "tsv";
+          filetypeDeduced = true;
+        } else if (ad_utility::endsWith(inputFile, ".nt")) {
+          filetype = "nt";
+          filetypeDeduced = true;
+        } else if (ad_utility::endsWith(inputFile, ".ttl")) {
+          filetype = "ttl";
+          filetypeDeduced = true;
+        } else {
+          LOG(WARN) << " Could not deduce the type of the input "
+                       "knowledge-base-file by "
+                       "its extension. Assuming the input to be turtle. Please "
+                       "specify "
+                       "--file-format (-F)\n";
+          LOG(WARN) << "In case this is not correct \n";
+        }
+        if (filetypeDeduced) {
+          LOG(INFO) << "Assuming input file format to be " << filetype
+                    << " due to the input file's extension.\n";
+          LOG(INFO)
+              << "If this is wrong, please manually specify the --file-format "
+                 "(-F) flag.\n";
+        }
+      }
 
       if (filetype == "ttl") {
         LOG(INFO) << "Reading from uncompressed turtle file or stream "

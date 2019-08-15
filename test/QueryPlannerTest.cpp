@@ -712,7 +712,7 @@ TEST(QueryPlannerTest, testFilterAfterSeed) {
     ASSERT_EQ(
         "{\n  JOIN\n  {\n    FILTER     {\n      "
         "SCAN POS with P = \"<r>\"\n      qet-width: 2 \n   "
-        " }\n     with ?x != ?y\n    qet-width: 2 \n  }"
+        " } with ?x != ?y\n\n    qet-width: 2 \n  }"
         " join-column: [0]\n  |X|\n  {\n    SCAN PSO with P = \""
         "<r>\"\n    qet-width: 2 \n  } join-column: [0]\n "
         " qet-width: 3 \n}",
@@ -740,8 +740,8 @@ TEST(QueryPlannerTest, testFilterAfterJoin) {
         "SCAN POS with P = \"<r>\"\n      qet-width: 2 \n"
         "    } join-column: [0]\n    |X|\n    {\n      "
         "SCAN PSO with P = \"<r>\"\n      qet-width: 2 \n"
-        "    } join-column: [0]\n    qet-width: 3 \n  }\n"
-        "   with ?x != ?z\n  qet-width: 3 \n}",
+        "    } join-column: [0]\n    qet-width: 3 \n  }"
+        " with ?x != ?z\n\n  qet-width: 3 \n}",
         qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
