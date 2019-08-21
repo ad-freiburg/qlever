@@ -806,21 +806,21 @@ void SparqlParser::addLangFilter(
     const std::string& lhs, const std::string& rhs,
     std::shared_ptr<ParsedQuery::GraphPattern> pattern) {
   auto langTag = rhs.substr(1, rhs.size() - 2);
-  // first find a predicate for the given variable
-  auto it = std::find_if(pattern->_whereClauseTriples.begin(),
-                         pattern->_whereClauseTriples.end(),
-                         [&lhs](const auto& tr) { return tr._o == lhs; });
-  while (it != pattern->_whereClauseTriples.end() &&
-         it->_p._operation == PropertyPath::Operation::IRI &&
-         ad_utility::startsWith(it->_p._iri, "?")) {
-    it = std::find_if(it + 1, pattern->_whereClauseTriples.end(),
-                      [&lhs](const auto& tr) { return tr._o == lhs; });
-  }
+  // First find a suitabke triple for the given variable. It
+  // must use a predicate that is not a variable or complex
+  // predicate path
+  auto it =
+      std::find_if(pattern->_whereClauseTriples.begin(),
+                   pattern->_whereClauseTriples.end(), [&lhs](const auto& tr) {
+                     return tr._o == lhs &&
+                            (tr._p._operation == PropertyPath::Operation::IRI &&
+                             !isVariable(tr._p));
+                   });
   if (it == pattern->_whereClauseTriples.end()) {
-    LOG(INFO) << "language filter variable " + rhs +
-                     "that did not appear as object in any suitable "
-                     "triple. "
-                     "using special literal-to-language triple instead.\n";
+    LOG(DEBUG) << "language filter variable " + lhs +
+                      " did not appear as object in any suitable "
+                      "triple. "
+                      "Using literal-to-language predicate instead.\n";
     auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
     PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
     taggedPredicate._iri = LANGUAGE_PREDICATE;
@@ -831,8 +831,8 @@ void SparqlParser::addLangFilter(
     if (std::find(pattern->_whereClauseTriples.begin(),
                   pattern->_whereClauseTriples.end(),
                   triple) != pattern->_whereClauseTriples.end()) {
-      LOG(INFO) << "Ignoring duplicate triple: lang(" << lhs << ") = " << rhs
-                << std::endl;
+      LOG(DEBUG) << "Ignoring duplicate triple: lang(" << lhs << ") = " << rhs
+                 << std::endl;
     } else {
       pattern->_whereClauseTriples.push_back(triple);
     }
@@ -840,7 +840,10 @@ void SparqlParser::addLangFilter(
     // replace the triple
     PropertyPath taggedPredicate(PropertyPath::Operation::IRI);
     taggedPredicate._iri = '@' + langTag + '@' + it->_p._iri;
-    *it = SparqlTriple(it->_s, taggedPredicate, it->_o);
+    SparqlTriple taggedTriple(it->_s, taggedPredicate, it->_o);
+    LOG(DEBUG) << "replacing predicate " << it->_p.asString() << " with "
+               << taggedTriple._p.asString() << std::endl;
+    *it = taggedTriple;
   }
 }
 

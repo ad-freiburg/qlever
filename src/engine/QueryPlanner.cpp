@@ -8,6 +8,7 @@
 #include <ctime>
 
 #include "../parser/ParseException.h"
+#include "../parser/ParsedQuery.h"
 #include "CountAvailablePredicates.h"
 #include "Distinct.h"
 #include "Filter.h"
@@ -954,15 +955,6 @@ void QueryPlanner::getVarTripleMap(
   }
 }
 
-// _____________________________________________________________________________
-bool QueryPlanner::isVariable(const string& elem) {
-  return ad_utility::startsWith(elem, "?");
-}
-
-bool QueryPlanner::isVariable(const PropertyPath& elem) {
-  return elem._operation == PropertyPath::Operation::IRI &&
-         isVariable(elem._iri);
-}
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     std::shared_ptr<const ParsedQuery::GraphPattern> pattern) const {

@@ -76,6 +76,15 @@ class PropertyPath {
   bool _can_be_null;
 };
 
+inline bool isVariable(const string& elem) {
+  return ad_utility::startsWith(elem, "?");
+}
+
+inline bool isVariable(const PropertyPath& elem) {
+  return elem._operation == PropertyPath::Operation::IRI &&
+         isVariable(elem._iri);
+}
+
 std::ostream& operator<<(std::ostream& out, const PropertyPath& p);
 
 // Data container for parsed triples from the where clause
