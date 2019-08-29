@@ -21,10 +21,23 @@ using std::string;
 using std::vector;
 
 struct CacheValue {
-  CacheValue() : _resTable(std::make_shared<ResultTable>()), _runtimeInfo() {}
-  std::shared_ptr<ResultTable> _resTable;
-  RuntimeInformation _runtimeInfo;
+  CacheValue() : resTable(std::make_shared<ResultTable>()), runtimeInfo() {}
+  std::shared_ptr<ResultTable> resTable;
+  RuntimeInformation runtimeInfo;
 };
+
+/**
+ * This only needs to be approximately correct the size of _runtimeInfo
+ * is often negligible compared to the resTable so we only add its
+ * empty size as part of the CacheValue not its heap memory
+ */
+namespace ad_utility {
+template <>
+inline size_t memorySizeOf(const CacheValue& cv) {
+  return cv.resTable->rows() * cv.resTable->cols() * sizeof(Id) +
+         sizeof(CacheValue);
+}
+}  // namespace ad_utility
 
 typedef ad_utility::LRUCache<string, CacheValue> SubtreeCache;
 
@@ -33,7 +46,7 @@ typedef ad_utility::LRUCache<string, CacheValue> SubtreeCache;
 class QueryExecutionContext {
  public:
   QueryExecutionContext(const Index& index, const Engine& engine)
-      : _subtreeCache(NOF_SUBTREES_TO_CACHE),
+      : _subtreeCache(CACHE_SIZE_BYTES),
         _index(index),
         _engine(engine),
         _costFactors() {}

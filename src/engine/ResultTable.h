@@ -109,7 +109,11 @@ class ResultTable {
     return std::nullopt;
   }
 
-  size_t size() const;
+  size_t size() const { return _data.size(); };
+
+  size_t rows() const { return _data.rows(); };
+
+  size_t cols() const { return _data.cols(); };
 
   void clear();
 

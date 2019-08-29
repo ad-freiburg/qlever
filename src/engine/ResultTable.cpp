@@ -34,6 +34,3 @@ string ResultTable::asDebugString() const {
   }
   return os.str();
 }
-
-// _____________________________________________________________________________
-size_t ResultTable::size() const { return _data.size(); }

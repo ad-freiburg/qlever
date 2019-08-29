@@ -40,17 +40,19 @@ class Operation {
   shared_ptr<const ResultTable> getResult() {
     ad_utility::Timer timer;
     timer.start();
+    string cacheKey = asString();
     LOG(TRACE) << "Check cache for Operation result" << endl;
-    LOG(TRACE) << "Using key: \n" << asString() << endl;
-    auto [newResult, existingResult] =
-        _executionContext->getQueryTreeCache().tryEmplace(asString());
+    LOG(TRACE) << "Using key: \n" << cacheKey << endl;
+    auto& cache = _executionContext->getQueryTreeCache();
+    auto [newResult, existingResult] = cache.tryEmplace(cacheKey);
 
     if (newResult) {
       LOG(TRACE) << "Not in the cache, need to compute result" << endl;
       // Passing the raw pointer here is ok as the result shared_ptr remains
       // in scope
       try {
-        computeResult(newResult->_resTable.get());
+        computeResult(newResult->resTable.get());
+        cache.finalizeMemorySize(cacheKey);
       } catch (const ad_semsearch::AbortException& e) {
         // A child Operation was aborted, abort this Operation
         // as well. The child already printed
@@ -73,7 +75,7 @@ class Operation {
         throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
       }
       timer.stop();
-      _runtimeInfo.setRows(newResult->_resTable->size());
+      _runtimeInfo.setRows(newResult->resTable->size());
       _runtimeInfo.setCols(getResultWidth());
       _runtimeInfo.setDescriptor(getDescriptor());
       _runtimeInfo.setColumnNames(getVariableColumns());
@@ -81,21 +83,21 @@ class Operation {
       _runtimeInfo.setTime(timer.msecs());
       _runtimeInfo.setWasCached(false);
       // cache the runtime information for the execution as well
-      newResult->_runtimeInfo = _runtimeInfo;
+      newResult->runtimeInfo = _runtimeInfo;
       // Only now we can let other threads access the result
       // and runtime information
-      newResult->_resTable->finish();
-      return newResult->_resTable;
+      newResult->resTable->finish();
+      return newResult->resTable;
     }
 
-    existingResult->_resTable->awaitFinished();
-    if (existingResult->_resTable->status() == ResultTable::ABORTED) {
+    existingResult->resTable->awaitFinished();
+    if (existingResult->resTable->status() == ResultTable::ABORTED) {
       LOG(ERROR) << "Operation aborted while awaiting result" << endl;
       AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                "Operation aborted while awaiting result");
     }
     timer.stop();
-    _runtimeInfo = existingResult->_runtimeInfo;
+    _runtimeInfo = existingResult->runtimeInfo;
     // We need to update column names and descriptor as we may have cached with
     // different variable names
     _runtimeInfo.setDescriptor(getDescriptor());
@@ -103,10 +105,10 @@ class Operation {
     _runtimeInfo.setTime(timer.msecs());
     _runtimeInfo.setWasCached(true);
     _runtimeInfo.addDetail("original_total_time",
-                           existingResult->_runtimeInfo.getTime());
+                           existingResult->runtimeInfo.getTime());
     _runtimeInfo.addDetail("original_operation_time",
-                           existingResult->_runtimeInfo.getOperationTime());
-    return existingResult->_resTable;
+                           existingResult->runtimeInfo.getOperationTime());
+    return existingResult->resTable;
   }
 
   /**
@@ -125,7 +127,7 @@ class Operation {
     // Remove Operation from cache so we may retry it later. Anyone with a live
     // pointer will be waiting and register the abort.
     _executionContext->getQueryTreeCache().erase(opString);
-    cachedResult->_resTable->abort();
+    cachedResult->resTable->abort();
   }
 
   // Set the QueryExecutionContext for this particular element.
