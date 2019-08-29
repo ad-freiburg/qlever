@@ -149,6 +149,19 @@ class LRUCache {
     return _accessMap.count(key) > 0;
   }
 
+  //! Erase an item from the cache if it exists, do nothing otherwise
+  void erase(const Key& key) {
+    std::lock_guard<std::mutex> lock(_lock);
+    const auto mapIt = _accessMap.find(key);
+    if (mapIt == _accessMap.end()) {
+      // Item already erased do nothing
+      return;
+    }
+    const auto listIt = mapIt->second;
+    _data.erase(listIt);
+    _accessMap.erase(mapIt);
+  }
+
   //! Clear the cache
   void clear() {
     std::lock_guard<std::mutex> lock(_lock);

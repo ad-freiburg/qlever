@@ -52,28 +52,22 @@ class Operation {
       try {
         computeResult(newResult->_resTable.get());
       } catch (const ad_semsearch::AbortException& e) {
-        newResult->_resTable->abort();
-        // AbortExceptions have already been printed simply rethrow to
-        // unwind the callstack until the whole query is aborted
+        // A child Operation was aborted, abort this Operation
+        // as well. The child already printed
+        abort(newResult, false);
+        // Continue unwinding the stack
         throw;
       } catch (const std::exception& e) {
-        // Only print the Operation at the innermost (original) failure
-        // then "rethrow" as special ad_semsearch::AbortException
-        LOG(ERROR) << "Failed to compute Operation result for:" << endl;
-        LOG(ERROR) << asString() << endl;
-        LOG(ERROR) << e.what() << endl;
-        newResult->_resTable->abort();
+        // We are in the innermost level of the exception, so print
+        abort(newResult, true);
         // Rethrow as QUERY_ABORTED allowing us to print the Operation
         // only at innermost failure of a recursive call
         throw ad_semsearch::AbortException(e);
       } catch (...) {
-        // Only print the Operation at the innermost (original) failure
-        // then create not so weird AbortException
-        LOG(ERROR) << "Failed to compute Operation result for:" << endl;
-        LOG(ERROR) << asString() << endl;
+        // We are in the innermost level of the exception, so print
+        abort(newResult, true);
         LOG(ERROR) << "WEIRD_EXCEPTION not inheriting from std::exception"
                    << endl;
-        newResult->_resTable->abort();
         // Rethrow as QUERY_ABORTED allowing us to print the Operation
         // only at innermost failure of a recursive call
         throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
@@ -93,11 +87,12 @@ class Operation {
       newResult->_resTable->finish();
       return newResult->_resTable;
     }
+
     existingResult->_resTable->awaitFinished();
     if (existingResult->_resTable->status() == ResultTable::ABORTED) {
-      LOG(ERROR) << "Result in the cache was aborted" << endl;
+      LOG(ERROR) << "Operation aborted while awaiting result" << endl;
       AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-               "Operation was found aborted in the cache");
+               "Operation aborted while awaiting result");
     }
     timer.stop();
     _runtimeInfo = existingResult->_runtimeInfo;
@@ -112,6 +107,25 @@ class Operation {
     _runtimeInfo.addDetail("original_operation_time",
                            existingResult->_runtimeInfo.getOperationTime());
     return existingResult->_resTable;
+  }
+
+  /**
+   * Abort this Operation.  Removes the Operation's result from the cache so
+   * that it can be retried. The result must be owned meaning only the
+   * computing thread can abort an Operation. Retrying may succeed for example
+   * when memory pressure was lowered in the meantime.  When print is true the
+   * Operation is printed to the ERROR LOG
+   */
+  void abort(const shared_ptr<CacheValue>& cachedResult, bool print) {
+    const std::string opString = asString();
+    if (print) {
+      LOG(ERROR) << "Aborted Operation:" << endl;
+      LOG(ERROR) << opString << endl;
+    }
+    // Remove Operation from cache so we may retry it later. Anyone with a live
+    // pointer will be waiting and register the abort.
+    _executionContext->getQueryTreeCache().erase(opString);
+    cachedResult->_resTable->abort();
   }
 
   // Set the QueryExecutionContext for this particular element.
