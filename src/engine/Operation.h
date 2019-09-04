@@ -22,7 +22,7 @@ using std::shared_ptr;
 class Operation {
  public:
   // Default Constructor.
-  Operation() : _executionContext(NULL), _hasComputedSortColumns(false) {}
+  Operation() : _executionContext(nullptr), _hasComputedSortColumns(false) {}
 
   // Typical Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
@@ -40,10 +40,11 @@ class Operation {
   shared_ptr<const ResultTable> getResult() {
     ad_utility::Timer timer;
     timer.start();
+    auto& cache = _executionContext->getQueryTreeCache();
+    const string cacheKey = asString();
     LOG(TRACE) << "Check cache for Operation result" << endl;
-    LOG(TRACE) << "Using key: \n" << asString() << endl;
-    auto [newResult, existingResult] =
-        _executionContext->getQueryTreeCache().tryEmplace(asString());
+    LOG(TRACE) << "Using key: \n" << cacheKey << endl;
+    auto [newResult, existingResult] = cache.tryEmplace(cacheKey);
 
     if (newResult) {
       LOG(TRACE) << "Not in the cache, need to compute result" << endl;
@@ -128,11 +129,6 @@ class Operation {
     cachedResult->_resTable->abort();
   }
 
-  // Set the QueryExecutionContext for this particular element.
-  void setQueryExecutionContext(QueryExecutionContext* executionContext) {
-    _executionContext = executionContext;
-  }
-
   /**
    * @return A list of columns on which the result of this operation is sorted.
    */
@@ -195,6 +191,7 @@ class Operation {
   virtual void computeResult(ResultTable* result) = 0;
 
   vector<size_t> _resultSortedColumns;
-  bool _hasComputedSortColumns;
   RuntimeInformation _runtimeInfo;
+
+  bool _hasComputedSortColumns;
 };

@@ -1,6 +1,7 @@
 // Copyright 2011, University of Freiburg, Chair of Algorithms and Data
 // Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+// Author: Niklas Schnelle (schnelle@informatik.uni-freiburg.de)
 
 #pragma once
 
@@ -11,12 +12,11 @@
 #include <utility>
 #include "./HashMap.h"
 
+namespace ad_utility {
 using std::list;
 using std::make_shared;
 using std::pair;
 using std::shared_ptr;
-
-namespace ad_utility {
 //! Associative array for almost arbitrary keys and values that acts as a cache.
 //! Hash a fixed capacity and applies a least recently used (LRU) strategy
 //! for removing elements once the capacity is exceeded.
@@ -34,18 +34,24 @@ namespace ad_utility {
 //! one thread getting write access. It uses shared_ptrs so as to ensure
 //! that deletes do not free in-use memory.
 template <class Key, class Value,
-          class AccessMap = ad_utility::HashMap<
-              Key, typename list<pair<Key, shared_ptr<const Value>>>::iterator>>
+          template <typename K, typename V> typename MapType =
+              ad_utility::HashMap>
 class LRUCache {
  private:
-  typedef pair<Key, shared_ptr<const Value>> Entry;
-  typedef pair<shared_ptr<Value>, shared_ptr<const Value>> EmplacePair;
-  typedef list<Entry> EntryList;
+  using EntryValue = shared_ptr<const Value>;
+  using EmplacedValue = shared_ptr<Value>;
+  using Entry = pair<Key, EntryValue>;
+  using EntryList = list<Entry>;
+
+  using AccessMap = MapType<Key, typename EntryList::iterator>;
+  using PinnedMap = MapType<Key, EntryValue>;
+
+  using TryEmplaceResult = pair<EmplacedValue, EntryValue>;
 
  public:
   //! Typical constructor. A default value may be added in time.
   explicit LRUCache(size_t capacity)
-      : _capacity(capacity), _data(), _accessMap(), _lock() {}
+      : _capacity(capacity), _data(), _pinnedMap(), _accessMap(), _lock() {}
 
   // tryEmplace allows for race-free adding of items to the cache. Iff no item
   // in the cache is associated with the key a new item is created and
@@ -60,59 +66,99 @@ class LRUCache {
   // This needs to happen in a single operation because otherwise we may find
   // an item in the cash now but it may already be deleted when trying to
   // retrieve  it in another operation.
+  //
+  // If the optional parameter pin is true the emplaced element will
+  // never be thrown out of the cache unless removed explicitly.
   template <class... Args>
-  EmplacePair tryEmplace(const Key& key, Args&&... args) {
+  TryEmplaceResult tryEmplace(const Key& key, Args&&... args) {
     std::lock_guard<std::mutex> lock(_lock);
-    EmplacePair result;
-    typename AccessMap::const_iterator mapIt = _accessMap.find(key);
-    if (mapIt == _accessMap.end()) {
-      // Insert without taking mutex recursively
-      shared_ptr<Value> emplaced =
-          make_shared<Value>(std::forward<Args>(args)...);
-      _data.emplace_front(key, emplaced);
-      _accessMap[key] = _data.begin();
-      if (_data.size() > _capacity) {
-        // Remove the last element.
-        // Since we are using shared_ptr this does not free the underlying
-        // memory if it is still accessible through a previously returned
-        // shared_ptr
-        _accessMap.erase(_data.back().first);
-        _data.pop_back();
-      }
-      assert(_data.size() <= _capacity);
-      result = EmplacePair(emplaced, emplaced);
-      return result;
+
+    if (const auto pinnedIt = _pinnedMap.find(key);
+        pinnedIt != _pinnedMap.end()) {
+      return TryEmplaceResult(shared_ptr<Value>(nullptr), pinnedIt->second);
     }
-    // Move it to the front.
-    typename EntryList::iterator listIt = mapIt->second;
-    _data.splice(_data.begin(), _data, listIt);
+
+    if (const auto mapIt = _accessMap.find(key); mapIt != _accessMap.end()) {
+      typename EntryList::const_iterator listIt = mapIt->second;
+      const EntryValue cached = listIt->second;
+      // Move element to the front as it is now least recently used
+      _data.splice(_data.begin(), _data, listIt);
+      _accessMap[key] = _data.begin();
+      return TryEmplaceResult(shared_ptr<Value>(nullptr), cached);
+    }
+
+    // Insert without taking mutex recursively
+    EmplacedValue emplaced = make_shared<Value>(std::forward<Args>(args)...);
+
+    _data.emplace_front(key, emplaced);
     _accessMap[key] = _data.begin();
-    result = EmplacePair(shared_ptr<Value>(nullptr), _data.begin()->second);
-    return result;
+    if (_data.size() > _capacity) {
+      // Remove the last element.
+      // Since we are using shared_ptr this does not free the underlying
+      // memory if it is still accessible through a previously returned
+      // shared_ptr
+      _accessMap.erase(_data.back().first);
+      _data.pop_back();
+    }
+    assert(_data.size() <= _capacity);
+    return TryEmplaceResult(emplaced, emplaced);
   }
 
-  //! Lookup a read-only value without creating a new one if non exists
-  //! instead shared_ptr<const Value>(nullptr) is returned in that case
-  shared_ptr<const Value> operator[](const Key& key) {
+  // tryEmplacePinned acts like tryEmplace but if the pin paramater is true
+  // also marks the emplaced element so that it can only be removed explicitly
+  // and not dropped from the cache otherwise. If the element already was in the
+  // cache it is also marked as pinned.
+  template <class... Args>
+  TryEmplaceResult tryEmplacePinned(const Key& key, Args&&... args) {
     std::lock_guard<std::mutex> lock(_lock);
-    shared_ptr<const Value> result;
-    typename AccessMap::const_iterator mapIt = _accessMap.find(key);
+
+    if (const auto pinnedIt = _pinnedMap.find(key);
+        pinnedIt != _pinnedMap.end()) {
+      return TryEmplaceResult(shared_ptr<Value>(nullptr), pinnedIt->second);
+    }
+
+    if (const auto mapIt = _accessMap.find(key); mapIt != _accessMap.end()) {
+      typename EntryList::const_iterator listIt = mapIt->second;
+      const EntryValue cached = listIt->second;
+      // Move the element to the _pinnedMap and remove
+      // unnecessary _accessMap entry
+      _pinnedMap[key] = cached;
+      _data.erase(listIt);
+      _accessMap.erase(key);
+      return TryEmplaceResult(shared_ptr<Value>(nullptr), cached);
+    }
+
+    // Insert without taking mutex recursively
+    EmplacedValue emplaced = make_shared<Value>(std::forward<Args>(args)...);
+    _pinnedMap[key] = emplaced;
+    return TryEmplaceResult(emplaced, emplaced);
+  }
+
+  // Lookup a read-only value without creating a new one if non exists
+  // instead shared_ptr<const Value>(nullptr) is returned in that case
+  EntryValue operator[](const Key& key) {
+    std::lock_guard<std::mutex> lock(_lock);
+    if (const auto pinnedIt = _pinnedMap.find(key);
+        pinnedIt != _pinnedMap.end()) {
+      return pinnedIt->second;
+    }
+
+    const auto mapIt = _accessMap.find(key);
     if (mapIt == _accessMap.end()) {
       // Returning a null pointer allows to easily check if the element
       // existed and crash misuses.
-      result = shared_ptr<Value>(nullptr);
-      return result;
+      return shared_ptr<Value>(nullptr);
     }
 
     // Move it to the front.
     typename EntryList::iterator listIt = mapIt->second;
     _data.splice(_data.begin(), _data, listIt);
     _accessMap[key] = _data.begin();
-    result = _data.front().second;
-    return result;
+    return _data.front().second;
   }
 
-  //! Insert a key value pair to the cache.
+  // Insert a key value pair to the cache.
+  // TODO(schnelle) add pinned variant and check pinned
   void insert(const Key& key, Value value) {
     std::lock_guard<std::mutex> lock(_lock);
     _data.emplace_front(key, make_shared<const Value>(std::move(value)));
@@ -133,10 +179,7 @@ class LRUCache {
     std::lock_guard<std::mutex> lock(_lock);
     _capacity = nofElements;
     while (_data.size() > _capacity) {
-      // Remove the last element.
-      // Since we are using shared_ptr this does not free the underlying
-      // memory if it is still accessible through a previously returned
-      // shared_ptr
+      // Remove elements from the back until we meet the capacity requirement
       _accessMap.erase(_data.back().first);
       _data.pop_back();
     }
@@ -146,12 +189,19 @@ class LRUCache {
   //! Checks if there is an entry with the given key.
   bool contains(const Key& key) {
     std::lock_guard<std::mutex> lock(_lock);
-    return _accessMap.count(key) > 0;
+    return _pinnedMap.count(key) > 0 || _accessMap.count(key) > 0;
   }
 
-  //! Erase an item from the cache if it exists, do nothing otherwise
+  // Erase an item from the cache if it exists, do nothing otherwise. As this
+  // erase is explicit do remove pinned elements as well.
   void erase(const Key& key) {
     std::lock_guard<std::mutex> lock(_lock);
+    const auto pinnedIt = _pinnedMap.find(key);
+    if (pinnedIt != _pinnedMap.end()) {
+      _pinnedMap.erase(pinnedIt);
+      return;
+    }
+
     const auto mapIt = _accessMap.find(key);
     if (mapIt == _accessMap.end()) {
       // Item already erased do nothing
@@ -162,7 +212,7 @@ class LRUCache {
     _accessMap.erase(mapIt);
   }
 
-  //! Clear the cache
+  //! Clear the cache but leave pinned elements alone
   void clear() {
     std::lock_guard<std::mutex> lock(_lock);
     // Since we are using shared_ptr this does not free the underlying
@@ -175,6 +225,7 @@ class LRUCache {
  private:
   size_t _capacity;
   EntryList _data;
+  PinnedMap _pinnedMap;
   AccessMap _accessMap;
   // TODO(schnelle): It would be nice to use std::shared_mutex to only exclude
   // multiple writers.
@@ -182,5 +233,5 @@ class LRUCache {
   // exclusive lock. Thus using a shared_lock here would conflict with moving to
   // the front of the queue in operator[]
   std::mutex _lock;
-};
+};  // namespace ad_utility
 }  // namespace ad_utility
