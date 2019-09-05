@@ -40,7 +40,7 @@ class LRUCache {
  private:
   using EntryValue = shared_ptr<const Value>;
   using EmplacedValue = shared_ptr<Value>;
-  using Entry = pair<const Key*, EntryValue>;
+  using Entry = pair<Key, EntryValue>;
   using EntryList = list<Entry>;
 
   using AccessMap = MapType<Key, typename EntryList::iterator>;
@@ -51,7 +51,7 @@ class LRUCache {
  public:
   //! Typical constructor. A default value may be added in time.
   explicit LRUCache(size_t capacity)
-      : _capacity(capacity), _entries(), _pinnedMap(), _accessMap(), _lock() {}
+      : _capacity(capacity), _data(), _pinnedMap(), _accessMap(), _lock() {}
 
   // tryEmplace allows for race-free adding of items to the cache. Iff no item
   // in the cache is associated with the key a new item is created and
@@ -81,32 +81,26 @@ class LRUCache {
     if (const auto mapIt = _accessMap.find(key); mapIt != _accessMap.end()) {
       typename EntryList::const_iterator listIt = mapIt->second;
       const EntryValue cached = listIt->second;
-      // Move element to the front as it is now least recently used,
-      // no need to update the _accessMap as iterators stay valid in a linked
-      // list
-      _entries.splice(_entries.begin(), _entries, listIt);
-      _accessMap[key] = _entries.begin();
+      // Move element to the front as it is now least recently used
+      _data.splice(_data.begin(), _data, listIt);
+      _accessMap[key] = _data.begin();
       return TryEmplaceResult(shared_ptr<Value>(nullptr), cached);
     }
 
     // Insert without taking mutex recursively
     EmplacedValue emplaced = make_shared<Value>(std::forward<Args>(args)...);
 
-    // We only want to store the key once but need access to it when removing
-    // from the entries so we store a pointer. We must then be careful not to
-    // access it after removal from the map that holds the actual value
-    _entries.emplace_front(nullptr, emplaced);
-    const auto mapIt = _accessMap.insert({key, _entries.begin()}).first;
-    _entries.front().first = &mapIt->first;
-    if (_entries.size() > _capacity) {
+    _data.emplace_front(key, emplaced);
+    _accessMap[key] = _data.begin();
+    if (_data.size() > _capacity) {
       // Remove the last element.
       // Since we are using shared_ptr this does not free the underlying
       // memory if it is still accessible through a previously returned
       // shared_ptr
-      _accessMap.erase(*_entries.back().first);
-      _entries.pop_back();
+      _accessMap.erase(_data.back().first);
+      _data.pop_back();
     }
-    assert(_entries.size() <= _capacity);
+    assert(_data.size() <= _capacity);
     return TryEmplaceResult(emplaced, emplaced);
   }
 
@@ -129,8 +123,8 @@ class LRUCache {
       // Move the element to the _pinnedMap and remove
       // unnecessary _accessMap entry
       _pinnedMap[key] = cached;
-      _accessMap.erase(mapIt);
-      _entries.erase(listIt);
+      _data.erase(listIt);
+      _accessMap.erase(key);
       return TryEmplaceResult(shared_ptr<Value>(nullptr), cached);
     }
 
@@ -158,55 +152,38 @@ class LRUCache {
 
     // Move it to the front.
     typename EntryList::iterator listIt = mapIt->second;
-    // list iterator in _accessMap stays valid
-    _entries.splice(_entries.begin(), _entries, listIt);
-    return _entries.front().second;
+    _data.splice(_data.begin(), _data, listIt);
+    _accessMap[key] = _data.begin();
+    return _data.front().second;
   }
 
-  // Insert a key value pair to the cache, if a value already exists for the
-  // key it is overwritten.
-  // TODO(schnelle) add pinned variant
+  // Insert a key value pair to the cache.
+  // TODO(schnelle) add pinned variant and check pinned
   void insert(const Key& key, Value value) {
     std::lock_guard<std::mutex> lock(_lock);
-    if (const auto pinnedIt = _pinnedMap.find(key);
-        pinnedIt != _pinnedMap.end()) {
-      // already in _pinnedMap only set value
-      pinnedIt->second = make_shared<const Value>(std::move(value));
-      return;
-    }
-
-    if (const auto mapIt = _accessMap.find(key); mapIt != _accessMap.end()) {
-      // Already exists move to front and set value
-      typename EntryList::iterator listIt = mapIt->second;
-      // list iterator in _accessMap stays valid
-      _entries.splice(_entries.begin(), _entries, listIt);
-      listIt->second = make_shared<const Value>(std::move(value));
-      return;
-    }
-    _entries.emplace_front(nullptr, make_shared<const Value>(std::move(value)));
-    const auto mapIt = _accessMap.insert({key, _entries.begin()}).first;
-    _entries.front().first = &mapIt->first;
-    if (_entries.size() > _capacity) {
+    _data.emplace_front(key, make_shared<const Value>(std::move(value)));
+    _accessMap[key] = _data.begin();
+    if (_data.size() > _capacity) {
       // Remove the last element.
       // Since we are using shared_ptr this does not free the underlying
       // memory if it is still accessible through a previously returned
       // shared_ptr
-      _accessMap.erase(*_entries.back().first);
-      _entries.pop_back();
+      _accessMap.erase(_data.back().first);
+      _data.pop_back();
     }
-    assert(_entries.size() <= _capacity);
+    assert(_data.size() <= _capacity);
   }
 
   //! Set the capacity.
   void setCapacity(const size_t nofElements) {
     std::lock_guard<std::mutex> lock(_lock);
     _capacity = nofElements;
-    while (_entries.size() > _capacity) {
+    while (_data.size() > _capacity) {
       // Remove elements from the back until we meet the capacity requirement
-      _accessMap.erase(*_entries.back().first);
-      _entries.pop_back();
+      _accessMap.erase(_data.back().first);
+      _data.pop_back();
     }
-    assert(_entries.size() <= _capacity);
+    assert(_data.size() <= _capacity);
   }
 
   //! Checks if there is an entry with the given key.
@@ -231,7 +208,7 @@ class LRUCache {
       return;
     }
     const auto listIt = mapIt->second;
-    _entries.erase(listIt);
+    _data.erase(listIt);
     _accessMap.erase(mapIt);
   }
 
@@ -241,13 +218,13 @@ class LRUCache {
     // Since we are using shared_ptr this does not free the underlying
     // memory if it is still accessible through a previously returned
     // shared_ptr
-    _entries.clear();
+    _data.clear();
     _accessMap.clear();
   }
 
  private:
   size_t _capacity;
-  EntryList _entries;
+  EntryList _data;
   PinnedMap _pinnedMap;
   AccessMap _accessMap;
   // TODO(schnelle): It would be nice to use std::shared_mutex to only exclude
