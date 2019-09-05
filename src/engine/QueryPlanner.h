@@ -14,7 +14,7 @@ class QueryPlanner {
  public:
   explicit QueryPlanner(QueryExecutionContext* qec);
 
-  QueryExecutionTree createExecutionTree(ParsedQuery& pq);
+  shared_ptr<QueryExecutionTree> createExecutionTree(ParsedQuery& pq);
 
   class TripleGraph {
    public:
@@ -298,7 +298,7 @@ class QueryPlanner {
                               const vector<SparqlFilter>& filters,
                               bool replaceInsteadOfAddPlans) const;
 
-  std::shared_ptr<Operation> createFilterOperation(
+  std::unique_ptr<Operation> createFilterOperation(
       const SparqlFilter& filter, const SubtreePlan& parent) const;
 
   vector<vector<SubtreePlan>> fillDpTab(

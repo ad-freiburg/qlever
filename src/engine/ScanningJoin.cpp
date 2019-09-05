@@ -6,34 +6,12 @@
 
 // _____________________________________________________________________________
 ScanningJoin::ScanningJoin(QueryExecutionContext* qec,
-                           const QueryExecutionTree& subtree,
+                           shared_ptr<QueryExecutionTree> subtree,
                            size_t subtreeJoinCol, IndexScan::ScanType scanType)
     : IndexScan(qec, scanType) {
-  _subtree = new QueryExecutionTree(subtree);
+  _subtree = subtree;
   _subtreeJoinCol = subtreeJoinCol;
 }
-
-// _____________________________________________________________________________
-ScanningJoin::ScanningJoin(const ScanningJoin& other)
-    : IndexScan(other._executionContext, other._type) {
-  _subtree = new QueryExecutionTree(*other._subtree);
-  _subtreeJoinCol = other._subtreeJoinCol;
-}
-
-// _____________________________________________________________________________
-ScanningJoin& ScanningJoin::operator=(const ScanningJoin& other) {
-  delete _subtree;
-  _subtree = new QueryExecutionTree(*other._subtree);
-  _subtreeJoinCol = other._subtreeJoinCol;
-  _subject = other._subject;
-  _predicate = other._predicate;
-  _object = other._object;
-  _type = other._type;
-  return *this;
-}
-
-// _____________________________________________________________________________
-ScanningJoin::~ScanningJoin() { delete _subtree; }
 
 // _____________________________________________________________________________
 string ScanningJoin::asString(size_t indent) const {

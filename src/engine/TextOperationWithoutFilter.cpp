@@ -77,8 +77,7 @@ void TextOperationWithoutFilter::computeResultNoVar(ResultTable* result) const {
   result->_data.setCols(2);
   result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-  getExecutionContext()->getIndex().getContextListForWords(_words,
-                                                           &result->_data);
+  _executionContext->getIndex().getContextListForWords(_words, &result->_data);
 }
 
 // _____________________________________________________________________________
@@ -88,8 +87,8 @@ void TextOperationWithoutFilter::computeResultOneVar(
   result->_resultTypes.push_back(ResultTable::ResultType::TEXT);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
-  getExecutionContext()->getIndex().getECListForWordsOneVar(_words, _textLimit,
-                                                            &result->_data);
+  _executionContext->getIndex().getECListForWordsOneVar(_words, _textLimit,
+                                                        &result->_data);
 }
 
 // _____________________________________________________________________________
@@ -102,8 +101,8 @@ void TextOperationWithoutFilter::computeResultMultVars(
   for (size_t i = 2; i < result->_data.cols(); i++) {
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
   }
-  getExecutionContext()->getIndex().getECListForWords(
-      _words, getNofVars(), _textLimit, &result->_data);
+  _executionContext->getIndex().getECListForWords(_words, getNofVars(),
+                                                  _textLimit, &result->_data);
 }
 
 // _____________________________________________________________________________

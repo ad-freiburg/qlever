@@ -201,7 +201,7 @@ void processQuery(QueryExecutionContext& qec, const string& query) {
   auto qet = qp.createExecutionTree(pq);
   timer.stop();
   LOG(INFO) << "Time to create Execution Tree: " << timer.msecs() << "ms\n";
-  LOG(INFO) << "Execution Tree: " << qet.asString() << "ms\n";
+  LOG(INFO) << "Execution Tree: " << qet->asString() << "ms\n";
   size_t limit = MAX_NOF_ROWS_IN_RESULT;
   size_t offset = 0;
   if (pq._limit.size() > 0) {
@@ -210,10 +210,10 @@ void processQuery(QueryExecutionContext& qec, const string& query) {
   if (pq._offset.size() > 0) {
     offset = static_cast<size_t>(atol(pq._offset.c_str()));
   }
-  qet.writeResultToStream(cout, pq._selectedVariables, limit, offset);
+  qet->writeResultToStream(cout, pq._selectedVariables, limit, offset);
   t.stop();
   std::cout << "\nDone. Time: " << t.usecs() / 1000.0 << " ms\n";
-  size_t numMatches = qet.getResult()->size();
+  size_t numMatches = qet->getResult()->size();
   std::cout << "\nNumber of matches (no limit): " << numMatches << "\n";
   size_t effectiveLimit =
       atoi(pq._limit.c_str()) > 0 ? atoi(pq._limit.c_str()) : numMatches;

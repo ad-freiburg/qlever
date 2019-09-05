@@ -520,11 +520,11 @@ TEST(QueryPlannerTest, testSPX) {
                        .parse();
   pq.expandPrefixes();
   QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  auto qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
       "{\n  SCAN POS with P = \"<http://rdf.myprefix.com/myrel>\","
       " O = \"<http://rdf.myprefix.com/obj>\"\n  qet-width: 1 \n}",
-      qet.asString());
+      qet->asString());
 }
 
 TEST(QueryPlannerTest, testXPO) {
@@ -535,11 +535,11 @@ TEST(QueryPlannerTest, testXPO) {
                        .parse();
   pq.expandPrefixes();
   QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  auto qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
       "{\n  SCAN PSO with P = \"<http://rdf.myprefix.com/myrel>\", "
       "S = \"<http://rdf.myprefix.com/subj>\"\n  qet-width: 1 \n}",
-      qet.asString());
+      qet->asString());
 }
 
 TEST(QueryPlannerTest, testSP_free_) {
@@ -550,11 +550,11 @@ TEST(QueryPlannerTest, testSP_free_) {
                        .parse();
   pq.expandPrefixes();
   QueryPlanner qp(nullptr);
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
+  auto qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
       "{\n  SCAN PSO with P = \"<http://rdf.myprefix.com/myrel>\"\n  "
       "qet-width: 2 \n}",
-      qet.asString());
+      qet->asString());
 }
 
 TEST(QueryPlannerTest, testSPX_SPX) {
@@ -566,13 +566,13 @@ TEST(QueryPlannerTest, testSPX_SPX) {
                          .parse();
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  JOIN\n  {\n    SCAN PSO with P = \"<pre/r>\", S = \"<pre/s1>\"\n "
         "   qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n    S"
         "CAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\"\n    qet-w"
         "idth: 1 \n  } join-column: [0]\n  qet-width: 1 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -591,13 +591,13 @@ TEST(QueryPlannerTest, test_free_PX_SPX) {
                          .parse();
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/r>\"\n    "
         "qet-width: 2 \n  } join-column: [0]\n  |X|\n  {\n   "
         " SCAN PSO with P = \"<pre/r>\", S = \"<pre/s2>\"\n  "
         "  qet-width: 1 \n  } join-column: [0]\n  qet-width: 2 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -616,13 +616,13 @@ TEST(QueryPlannerTest, test_free_PX__free_PX) {
                          .parse();
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/r>\"\n    "
         "qet-width: 2 \n  } join-column: [0]\n  |X|\n  {\n    "
         "SCAN POS with P = \"<pre/r>\"\n    qet-width: 2 \n"
         "  } join-column: [0]\n  qet-width: 3 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -643,7 +643,7 @@ TEST(QueryPlannerTest, testActorsBornInEurope) {
             .parse();
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/profession>\", "
         "O = \"<pre/Actor>\"\n    qet-width: 1 \n  } join-column:"
@@ -654,7 +654,7 @@ TEST(QueryPlannerTest, testActorsBornInEurope) {
         ", O = \"<pre/Europe>\"\n        qet-width: 1 \n      }"
         " join-column: [0]\n      qet-width: 2 \n    }\n    "
         "qet-width: 2 \n  } join-column: [1]\n  qet-width: 2 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -678,7 +678,7 @@ TEST(QueryPlannerTest, testStarTwoFree) {
               .parse();
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
-      QueryExecutionTree qet = qp.createExecutionTree(pq);
+      auto qet = qp.createExecutionTree(pq);
       ASSERT_EQ(
           "{\n  JOIN\n  {\n    JOIN\n    {\n      SCAN POS with P = \""
           "<http://rdf.myprefix.com/myrel>\"\n      qet-width: 2 \n "
@@ -689,7 +689,7 @@ TEST(QueryPlannerTest, testStarTwoFree) {
           "\"<http://rdf.myprefix.com/xxx/rel2>\", O = \"<http://a"
           "bc.de>\"\n    qet-width: 1 \n  } join-column: [0]\n  qet"
           "-width: 3 \n}",
-          qet.asString());
+          qet->asString());
     }
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
@@ -708,7 +708,7 @@ TEST(QueryPlannerTest, testFilterAfterSeed) {
                          "FILTER(?x != ?y) }")
                          .parse();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  JOIN\n  {\n    FILTER     {\n      "
         "SCAN POS with P = \"<r>\"\n      qet-width: 2 \n   "
@@ -716,7 +716,7 @@ TEST(QueryPlannerTest, testFilterAfterSeed) {
         " join-column: [0]\n  |X|\n  {\n    SCAN PSO with P = \""
         "<r>\"\n    qet-width: 2 \n  } join-column: [0]\n "
         " qet-width: 3 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -734,7 +734,7 @@ TEST(QueryPlannerTest, testFilterAfterJoin) {
                          "FILTER(?x != ?z) }")
                          .parse();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  FILTER   {\n    JOIN\n    {\n      "
         "SCAN POS with P = \"<r>\"\n      qet-width: 2 \n"
@@ -742,7 +742,7 @@ TEST(QueryPlannerTest, testFilterAfterJoin) {
         "SCAN PSO with P = \"<r>\"\n      qet-width: 2 \n"
         "    } join-column: [0]\n    qet-width: 3 \n  }"
         " with ?x != ?z\n\n  qet-width: 3 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -759,13 +759,13 @@ TEST(QueryPlannerTest, threeVarTriples) {
                          "<s> <p> ?x . ?x ?p ?o }")
                          .parse();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  JOIN\n  {\n    SCAN FOR FULL INDEX SPO (DUMMY OPERATION)\n   "
         " qet-width: 3 \n  } join-column: [0]\n  |X|\n  {\n    SCAN"
         " PSO with P = \"<p>\", S = \"<s>\"\n    qet-width: 1 \n  }"
         " join-column: [0]\n  qet-width: 3 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -780,13 +780,13 @@ TEST(QueryPlannerTest, threeVarTriples) {
                          "<s> ?x <o> . ?x ?p ?o }")
                          .parse();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  JOIN\n  {\n    SCAN FOR FULL INDEX SPO (DUMMY OP"
         "ERATION)\n    qet-width: 3 \n  } join-column: [0]"
         "\n  |X|\n  {\n    SCAN SOP with S = \"<s>\", O = \"<o>\"\n "
         "   qet-width: 1 \n  } join-column: [0]\n  qet-width: 3 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -801,13 +801,13 @@ TEST(QueryPlannerTest, threeVarTriples) {
                          "<s> <p> ?p . ?s ?p ?o }")
                          .parse();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  JOIN\n  {\n    SCAN FOR FULL INDEX PSO (DUMMY OPERATION)\n"
         "    qet-width: 3 \n  } join-column: [0]\n  |X|\n  {\n "
         "   SCAN PSO with P = \"<p>\", S = \"<s>\"\n  "
         "  qet-width: 1 \n  } join-column: [0]\n  qet-width: 3 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -824,14 +824,14 @@ TEST(QueryPlannerTest, threeVarTriplesTCJ) {
                          "<s> ?p ?x . ?x ?p ?o }")
                          .parse();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  TWO_COLUMN_JOIN\n    {\n    "
         "SCAN FOR FULL INDEX SPO (DUMMY OPERATION)\n    qet-width: 3 \n  }"
         "\n  join-columns: [0 & 1]\n  |X|\n    {\n    SCAN SOP with S ="
         " \"<s>\"\n    qet-width: 2 \n  }\n  join-columns: [0 & 1]\n "
         " qet-width: 3 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -846,14 +846,14 @@ TEST(QueryPlannerTest, threeVarTriplesTCJ) {
                          "?s ?p ?o . ?s ?p <x> }")
                          .parse();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  TWO_COLUMN_JOIN\n    {\n    SCAN FOR FULL INDEX SPO"
         " (DUMMY OPERATION)\n    qet-width: 3 \n  }\n  join-"
         "columns: [0 & 1]\n  |X|\n    {\n    SCAN OSP with "
         "O = \"<x>\"\n    qet-width: 2 \n  }\n  join-columns"
         ": [0 & 1]\n  qet-width: 3 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -870,7 +870,7 @@ TEST(QueryPlannerTest, threeVarXthreeVarException) {
                          "?s ?p ?o . ?s2 ?p ?o }")
                          .parse();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     FAIL() << "Was expecting exception" << std::endl;
   } catch (const ad_semsearch::Exception& e) {
     ASSERT_EQ(
@@ -892,14 +892,14 @@ TEST(QueryExecutionTreeTest, testBooksbyNewman) {
                          .parse();
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  JOIN\n  {\n    SCAN POS with "
         "P = \"<Author>\", O = \"<Anthony_Newman_(Author)>\"\n   "
         " qet-width: 1 \n  } join-column: [0]\n  |X|\n  {\n  "
         "  SCAN POS with P = \"<is-a>\", O = \"<Book>\"\n  "
         "  qet-width: 1 \n  } join-column: [0]\n  qet-width: 1 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -920,8 +920,8 @@ TEST(QueryExecutionTreeTest, testBooksGermanAwardNomAuth) {
                          .parse();
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_GT(qet.asString().size(), 0u);
+    auto qet = qp.createExecutionTree(pq);
+    ASSERT_GT(qet->asString().size(), 0u);
     // Just check that ther is no exception, here.
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
@@ -944,14 +944,14 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
     QueryPlanner qp(nullptr);
     QueryPlanner::TripleGraph tg = qp.createTripleGraph(pq._rootGraphPattern);
     ASSERT_EQ(1u, tg._nodeMap.find(0)->second->_variables.size());
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
         "\"edible leaves\" and 1 variables with textLimit = 5 "
         "filtered by\n  {\n    SCAN POS with P = \"<is-a>\", "
         "O = \"<Plant>\"\n    qet-width: 1 \n  }\n   filtered on "
         "column 0\n  qet-width: 3 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -969,12 +969,12 @@ TEST(QueryExecutionTreeTest, testTextQuerySE) {
                          .parse();
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  TEXT OPERATION WITHOUT FILTER: co-occurrence with words:"
         " \"search engine\" and 0 variables with textLimit = 1\n"
         "  qet-width: 2 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -998,7 +998,7 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
                          .parse();
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
         "\"cocaine\" and 1 variables with textLimit = 1 filtered by\n  "
@@ -1007,10 +1007,10 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
         "    |X|\n    {\n      SCAN POS with P = \"<Place_of_birth>\"\n"
         "      qet-width: 2 \n    } join-column: [0]\n    qet-width: 2 \n"
         "  }\n   filtered on column 1\n  qet-width: 4 \n}",
-        qet.asString());
-    ASSERT_EQ(0u, qet.getVariableColumn("?c"));
-    ASSERT_EQ(1u, qet.getVariableColumn("SCORE(?c)"));
-    ASSERT_EQ(2u, qet.getVariableColumn("?y"));
+        qet->asString());
+    ASSERT_EQ(0u, qet->getVariableColumn("?c"));
+    ASSERT_EQ(1u, qet->getVariableColumn("SCORE(?c)"));
+    ASSERT_EQ(2u, qet->getVariableColumn("?y"));
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -1033,14 +1033,14 @@ TEST(QueryExecutionTreeTest, testCoOccFreeVar) {
                          .parse();
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  TEXT OPERATION WITH FILTER: co-occurrence with words: "
         "\"friend*\" and 2 variables with textLimit = 1 filtered by\n"
         "  {\n    SCAN POS with P = \"<is-a>\", O = \"<Politician>"
         "\"\n    qet-width: 1 \n  }\n   filtered on column 0\n "
         " qet-width: 4 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -1065,7 +1065,7 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
                          .parse();
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  JOIN\n  {\n    SCAN POS with P = \"<is-a>\", O = "
         "\"<Scientist>\"\n    qet-width: 1 \n  } join-column: [0]\n  |X|\n  "
@@ -1078,7 +1078,7 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
         "}\n         filtered on column 0\n        qet-width: 4 \n      }\n    "
         "   filtered on column 2\n      qet-width: 6 \n    }\n    qet-width: 6 "
         "\n  } join-column: [4]\n  qet-width: 6 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -1097,7 +1097,7 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
             .parse();
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  TWO_COLUMN_JOIN\n    {\n    ORDER_BY\n    {\n      JOIN\n"
         "      {\n        SCAN PSO with P = \"<Film_performance>\"\n"
@@ -1110,7 +1110,7 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
         "    {\n    SCAN PSO with P = \"<Film_performance>\"\n"
         "    qet-width: 2 \n  }\n  join-columns: [0 & 1]\n"
         "  qet-width: 3 \n}",
-        qet.asString());
+        qet->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -1139,9 +1139,9 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
             .parse();
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_TRUE(qet.varCovered("?1"));
-    ASSERT_TRUE(qet.varCovered("?0"));
+    auto qet = qp.createExecutionTree(pq);
+    ASSERT_TRUE(qet->varCovered("?1"));
+    ASSERT_TRUE(qet->varCovered("?0"));
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -1160,7 +1160,7 @@ TEST(QueryPlannerTest, testSimpleOptional) {
                          "WHERE  {?a <rel1> ?b . OPTIONAL { ?a <rel2> ?c }}")
                          .parse();
     pq.expandPrefixes();
-    QueryExecutionTree qet = qp.createExecutionTree(pq);
+    auto qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n"
         "  OPTIONAL_JOIN\n"
@@ -1175,7 +1175,7 @@ TEST(QueryPlannerTest, testSimpleOptional) {
         "  } join-columns: [0]\n"
         "  qet-width: 3 \n"
         "}",
-        qet.asString());
+        qet->asString());
 
     ParsedQuery pq2 = SparqlParser(
                           "SELECT ?a ?b \n "
@@ -1183,7 +1183,7 @@ TEST(QueryPlannerTest, testSimpleOptional) {
                           "OPTIONAL { ?a <rel2> ?c }} ORDER BY ?b")
                           .parse();
     pq2.expandPrefixes();
-    QueryExecutionTree qet2 = qp.createExecutionTree(pq2);
+    auto qet2 = qp.createExecutionTree(pq2);
     ASSERT_EQ(
         "{\n"
         "  SORT on column:1\n"
@@ -1202,7 +1202,7 @@ TEST(QueryPlannerTest, testSimpleOptional) {
         "  }\n"
         "  qet-width: 3 \n"
         "}",
-        qet2.asString());
+        qet2->asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();

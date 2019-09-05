@@ -92,10 +92,10 @@ void TextOperationWithFilter::computeResult(ResultTable* result) {
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
   }
   if (filterResult->_data.cols() == 1) {
-    getExecutionContext()->getIndex().getFilteredECListForWordsWidthOne(
+    _executionContext->getIndex().getFilteredECListForWordsWidthOne(
         _words, filterResult->_data, getNofVars(), _textLimit, &result->_data);
   } else {
-    getExecutionContext()->getIndex().getFilteredECListForWords(
+    _executionContext->getIndex().getFilteredECListForWords(
         _words, filterResult->_data, _filterColumn, getNofVars(), _textLimit,
         &result->_data);
   }

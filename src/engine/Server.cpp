@@ -167,34 +167,31 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       ParsedQuery pq = SparqlParser(query).parse();
       pq.expandPrefixes();
 
-      // QueryGraph qg(qec);
-      // qg.createFromParsedQuery(pq);
-      // const QueryExecutionTree& qet = qg.getExecutionTree();
       QueryPlanner qp(qec);
       qp.setEnablePatternTrick(_enablePatternTrick);
-      QueryExecutionTree qet = qp.createExecutionTree(pq);
-      LOG(TRACE) << qet.asString() << std::endl;
+      auto qet = qp.createExecutionTree(pq);
+      LOG(TRACE) << qet->asString() << std::endl;
 
       if (ad_utility::getLowercase(params["action"]) == "csv_export") {
         // CSV export
-        response = composeResponseSepValues(pq, qet, ',');
+        response = composeResponseSepValues(pq, *qet, ',');
         contentType =
             "text/csv\r\n"
             "Content-Disposition: attachment;filename=export.csv";
       } else if (ad_utility::getLowercase(params["action"]) == "tsv_export") {
         // TSV export
-        response = composeResponseSepValues(pq, qet, '\t');
+        response = composeResponseSepValues(pq, *qet, '\t');
         contentType =
             "text/tsv\r\n"
             "Content-Disposition: attachment;filename=export.tsv";
       } else {
         // Normal case: JSON response
-        response = composeResponseJson(pq, qet, maxSend);
+        response = composeResponseJson(pq, *qet, maxSend);
         contentType = "application/json";
       }
       // Print the runtime info. This needs to be done after the query
       // was computed.
-      LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
+      LOG(INFO) << '\n' << qet->getRootOperation()->getRuntimeInfo().toString();
     } catch (const ad_semsearch::Exception& e) {
       response = composeResponseJson(query, e);
     } catch (const std::exception& e) {

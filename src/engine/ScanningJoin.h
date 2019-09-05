@@ -15,14 +15,11 @@ using std::list;
 // by performing a scan for each row in the sub-result and thus creating
 // the result of the Join without ever scanning the full, huge relation.
 class ScanningJoin : public IndexScan {
-  ScanningJoin(QueryExecutionContext* qec, const QueryExecutionTree& subtree,
-               size_t subtreeJoinCol, IndexScan::ScanType scanType);
+  ScanningJoin(QueryExecutionContext* qec,
+               shared_ptr<QueryExecutionTree> subtree, size_t subtreeJoinCol,
+               IndexScan::ScanType scanType);
 
-  ScanningJoin(const ScanningJoin& other);
-
-  ScanningJoin& operator=(const ScanningJoin& other);
-
-  virtual ~ScanningJoin();
+  virtual ~ScanningJoin(){};
 
   virtual string asString(size_t indent = 0) const override;
 
@@ -49,7 +46,7 @@ class ScanningJoin : public IndexScan {
   }
 
  private:
-  QueryExecutionTree* _subtree;
+  shared_ptr<QueryExecutionTree> _subtree;
   size_t _subtreeJoinCol;
   virtual void computeResult(ResultTable* result) override;
 };

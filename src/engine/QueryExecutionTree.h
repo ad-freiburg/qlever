@@ -45,17 +45,17 @@ class QueryExecutionTree {
     VALUES = 18
   };
 
-  void setOperation(OperationType type, std::shared_ptr<Operation> op);
+  void setOperation(OperationType type, std::unique_ptr<Operation> op);
 
   string asString(size_t indent = 0);
-
-  QueryExecutionContext* getQec() const { return _qec; }
 
   const ad_utility::HashMap<string, size_t>& getVariableColumns() const {
     return _variableColumnMap;
   }
 
-  std::shared_ptr<Operation> getRootOperation() const { return _rootOperation; }
+  const std::unique_ptr<Operation>& getRootOperation() const {
+    return _rootOperation;
+  }
 
   const OperationType& getType() const { return _type; }
 
@@ -136,7 +136,7 @@ class QueryExecutionTree {
  private:
   QueryExecutionContext* _qec;  // No ownership
   ad_utility::HashMap<string, size_t> _variableColumnMap;
-  std::shared_ptr<Operation>
+  std::unique_ptr<Operation>
       _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
   std::unordered_set<string> _contextVars;

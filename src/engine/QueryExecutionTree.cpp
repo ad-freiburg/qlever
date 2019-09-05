@@ -53,9 +53,9 @@ string QueryExecutionTree::asString(size_t indent) {
 
 // _____________________________________________________________________________
 void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
-                                      std::shared_ptr<Operation> op) {
+                                      std::unique_ptr<Operation> op) {
   _type = type;
-  _rootOperation = op;
+  _rootOperation = std::move(op);
   _asString = "";
   _sizeEstimate = std::numeric_limits<size_t>::max();
   // with setting the operation the initialization is done and we can try to
@@ -71,11 +71,12 @@ void QueryExecutionTree::setVariableColumn(const string& variable,
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getVariableColumn(const string& variable) const {
-  if (_variableColumnMap.count(variable) == 0) {
+  const auto mapIt = _variableColumnMap.find(variable);
+  if (mapIt == _variableColumnMap.end()) {
     AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
              "Variable could not be mapped to result column. Var: " + variable);
   }
-  return _variableColumnMap.find(variable)->second;
+  return mapIt->second;
 }
 
 // _____________________________________________________________________________

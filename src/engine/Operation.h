@@ -162,10 +162,6 @@ class Operation {
   RuntimeInformation& getRuntimeInfo() { return _runtimeInfo; }
 
  protected:
-  QueryExecutionContext* getExecutionContext() const {
-    return _executionContext;
-  }
-
   // The QueryExecutionContext for this particular element.
   // No ownership.
   QueryExecutionContext* _executionContext;

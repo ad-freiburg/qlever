@@ -100,7 +100,7 @@ int main(int argc, char** argv) {
     }
     QueryPlanner queryPlanner(&qec);
     auto qet = queryPlanner.createExecutionTree(q);
-    const auto res = qet.getResult();
+    const auto res = qet->getResult();
     AD_CHECK(res->size() > 0);
     AD_CHECK(res->_data.cols() == 1);
     string personlistFile = indexName + ".list.scientists";

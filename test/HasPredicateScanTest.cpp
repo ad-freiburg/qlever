@@ -223,10 +223,10 @@ TEST(HasPredicateScan, subtreeS) {
   // create the subtree operation
   std::shared_ptr<QueryExecutionTree> subtree =
       std::make_shared<QueryExecutionTree>(&ctx);
-  std::shared_ptr<Operation> operation = std::make_shared<DummyOperation>(&ctx);
+  auto operation = std::make_unique<DummyOperation>(&ctx);
 
   subtree->setOperation(QueryExecutionTree::OperationType::HAS_RELATION_SCAN,
-                        operation);
+                        std::move(operation));
 
   std::shared_ptr<const ResultTable> subresult = subtree->getResult();
   int in_width = 2;
