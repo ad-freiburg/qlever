@@ -127,18 +127,97 @@ vector<size_t> IndexScan::resultSortedOn() const {
 // _____________________________________________________________________________
 ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
   ad_utility::HashMap<string, size_t> res;
-  size_t colIdx = 0;
-  if (_subject[0] == '?') {
-    res[_subject] = colIdx++;
-  }
-  if (_predicate[0] == '?') {
-    res[_predicate] = colIdx++;
-  }
+  size_t col = 0;
 
-  if (_object[0] == '?') {
-    res[_object] = colIdx++;
+  switch (_type) {
+    case SPO_FREE_P:
+    case FULL_INDEX_SCAN_SPO:
+      if (_subject[0] == '?') {
+        res[_subject] = col++;
+      }
+      if (_predicate[0] == '?') {
+        res[_predicate] = col++;
+      }
+
+      if (_object[0] == '?') {
+        res[_object] = col++;
+      }
+      return res;
+    case SOP_FREE_O:
+    case SOP_BOUND_O:
+    case FULL_INDEX_SCAN_SOP:
+      if (_subject[0] == '?') {
+        res[_subject] = col++;
+      }
+
+      if (_object[0] == '?') {
+        res[_object] = col++;
+      }
+
+      if (_predicate[0] == '?') {
+        res[_predicate] = col++;
+      }
+      return res;
+    case PSO_BOUND_S:
+    case PSO_FREE_S:
+    case FULL_INDEX_SCAN_PSO:
+      if (_predicate[0] == '?') {
+        res[_predicate] = col++;
+      }
+      if (_subject[0] == '?') {
+        res[_subject] = col++;
+      }
+
+      if (_object[0] == '?') {
+        res[_object] = col++;
+      }
+      return res;
+    case POS_BOUND_O:
+    case POS_FREE_O:
+    case FULL_INDEX_SCAN_POS:
+      if (_predicate[0] == '?') {
+        res[_predicate] = col++;
+      }
+
+      if (_object[0] == '?') {
+        res[_object] = col++;
+      }
+
+      if (_subject[0] == '?') {
+        res[_subject] = col++;
+      }
+      return res;
+    case OPS_FREE_P:
+    case FULL_INDEX_SCAN_OPS:
+      if (_object[0] == '?') {
+        res[_object] = col++;
+      }
+
+      if (_predicate[0] == '?') {
+        res[_predicate] = col++;
+      }
+
+      if (_subject[0] == '?') {
+        res[_subject] = col++;
+      }
+      return res;
+    case OSP_FREE_S:
+    case FULL_INDEX_SCAN_OSP:
+      if (_object[0] == '?') {
+        res[_object] = col++;
+      }
+
+      if (_subject[0] == '?') {
+        res[_subject] = col++;
+      }
+
+      if (_predicate[0] == '?') {
+        res[_predicate] = col++;
+      }
+      return res;
+    default:
+      AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Should be unreachable.");
   }
-  return res;
 }
 // _____________________________________________________________________________
 void IndexScan::computeResult(ResultTable* result) {
