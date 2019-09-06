@@ -2,7 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include "./QueryExecutionTree.h"
 #include <algorithm>
 #include <sstream>
 #include <string>
@@ -11,6 +10,7 @@
 #include "./IndexScan.h"
 #include "./Join.h"
 #include "./OrderBy.h"
+#include "./QueryExecutionTree.h"
 #include "./Sort.h"
 #include "TextOperationWithFilter.h"
 #include "TextOperationWithoutFilter.h"
@@ -19,7 +19,7 @@
 using std::string;
 
 // _____________________________________________________________________________
-QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* qec)
+QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
     : _qec(qec),
       _variableColumnMap(),
       _rootOperation(nullptr),

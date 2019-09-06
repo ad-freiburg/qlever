@@ -140,6 +140,7 @@ int main(int argc, char** argv) {
   try {
     Engine engine;
     Index index;
+    SubtreeCache cache(NOF_SUBTREES_TO_CACHE);
     index.setUsePatterns(usePatterns);
     index.setOnDiskLiterals(onDiskLiterals);
     index.createFromOnDiskIndex(indexName);
@@ -147,7 +148,7 @@ int main(int argc, char** argv) {
       index.addTextFromOnDiskIndex();
     }
 
-    QueryExecutionContext qec(index, engine);
+    QueryExecutionContext qec(index, engine, &cache);
     if (costFactosFileName.size() > 0) {
       qec.readCostFactorsFromTSVFile(costFactosFileName);
     }
