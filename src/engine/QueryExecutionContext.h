@@ -33,8 +33,13 @@ typedef ad_utility::LRUCache<string, CacheValue> SubtreeCache;
 class QueryExecutionContext {
  public:
   QueryExecutionContext(const Index& index, const Engine& engine,
-                        SubtreeCache* const cache)
-      : _index(index), _engine(engine), _subtreeCache(cache), _costFactors() {}
+                        SubtreeCache* const cache,
+                        const bool pinSubtrees = false)
+      : pin(pinSubtrees),
+        _index(index),
+        _engine(engine),
+        _subtreeCache(cache),
+        _costFactors() {}
 
   SubtreeCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -51,6 +56,8 @@ class QueryExecutionContext {
   float getCostFactor(const string& key) const {
     return _costFactors.getCostFactor(key);
   };
+
+  const bool pin;
 
  private:
   const Index& _index;

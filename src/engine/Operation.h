@@ -42,9 +42,12 @@ class Operation {
     timer.start();
     auto& cache = _executionContext->getQueryTreeCache();
     const string cacheKey = asString();
+    const bool pinResult = _executionContext->pin;
     LOG(TRACE) << "Check cache for Operation result" << endl;
     LOG(TRACE) << "Using key: \n" << cacheKey << endl;
-    auto [newResult, existingResult] = cache.tryEmplace(cacheKey);
+    auto [newResult, existingResult] = (pinResult)
+                                           ? cache.tryEmplacePinned(cacheKey)
+                                           : cache.tryEmplace(cacheKey);
 
     if (newResult) {
       LOG(TRACE) << "Not in the cache, need to compute result" << endl;
