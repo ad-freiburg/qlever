@@ -21,7 +21,7 @@ using std::string;
 // needed to solve a query.
 class QueryExecutionTree {
  public:
-  explicit QueryExecutionTree(QueryExecutionContext* qec);
+  explicit QueryExecutionTree(QueryExecutionContext* const qec);
 
   enum OperationType {
     UNDEFINED = 0,
@@ -134,7 +134,7 @@ class QueryExecutionTree {
   void readFromCache();
 
  private:
-  QueryExecutionContext* _qec;  // No ownership
+  QueryExecutionContext* const _qec;  // No ownership
   ad_utility::HashMap<string, size_t> _variableColumnMap;
   std::shared_ptr<Operation>
       _rootOperation;  // Owned child. Will be deleted at deconstruction.

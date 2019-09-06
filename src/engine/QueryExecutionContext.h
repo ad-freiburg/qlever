@@ -32,19 +32,17 @@ typedef ad_utility::LRUCache<string, CacheValue> SubtreeCache;
 // Holds references to index and engine, implements caching.
 class QueryExecutionContext {
  public:
-  QueryExecutionContext(const Index& index, const Engine& engine)
-      : _subtreeCache(NOF_SUBTREES_TO_CACHE),
-        _index(index),
-        _engine(engine),
-        _costFactors() {}
+  QueryExecutionContext(const Index& index, const Engine& engine,
+                        SubtreeCache* const cache)
+      : _index(index), _engine(engine), _subtreeCache(cache), _costFactors() {}
 
-  SubtreeCache& getQueryTreeCache() { return _subtreeCache; }
+  SubtreeCache& getQueryTreeCache() { return *_subtreeCache; }
 
   const Engine& getEngine() const { return _engine; }
 
   const Index& getIndex() const { return _index; }
 
-  void clearCache() { _subtreeCache.clear(); }
+  void clearCache() { getQueryTreeCache().clear(); }
 
   void readCostFactorsFromTSVFile(const string& fileName) {
     _costFactors.readFromFile(fileName);
@@ -55,8 +53,8 @@ class QueryExecutionContext {
   };
 
  private:
-  SubtreeCache _subtreeCache;
   const Index& _index;
   const Engine& _engine;
+  SubtreeCache* const _subtreeCache;
   QueryPlanningCostFactors _costFactors;
 };
