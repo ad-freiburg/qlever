@@ -49,10 +49,7 @@ class QueryExecutionTree {
 
   string asString(size_t indent = 0);
 
-  const ad_utility::HashMap<string, size_t>& getVariableColumns() const {
-    return _variableColumnMap;
-  }
-
+  const ad_utility::HashMap<string, size_t>& getVariableColumns() const;
   const std::unique_ptr<Operation>& getRootOperation() const {
     return _rootOperation;
   }
@@ -63,11 +60,9 @@ class QueryExecutionTree {
     return _type == OperationType::UNDEFINED || !_rootOperation;
   }
 
-  void setVariableColumn(const string& var, size_t i);
-
   size_t getVariableColumn(const string& var) const;
 
-  void setVariableColumns(const ad_utility::HashMap<string, size_t>& map);
+  void setVariableColumn(const string& var, size_t i);
 
   void setContextVars(const std::unordered_set<string>& set) {
     _contextVars = set;
@@ -135,10 +130,10 @@ class QueryExecutionTree {
 
  private:
   QueryExecutionContext* const _qec;  // No ownership
-  ad_utility::HashMap<string, size_t> _variableColumnMap;
   std::unique_ptr<Operation>
       _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
+  ad_utility::HashMap<string, size_t> _variableColumnMap;
   std::unordered_set<string> _contextVars;
   string _asString;
   size_t _indent = 0;  // the indent with which the _asString repr was formatted

@@ -51,6 +51,9 @@ class HashMap : private google::dense_hash_map<K, V, HashFcn, EqualKey, Alloc> {
   // end() if it is not found
   using Base::find;
 
+  // Check if the map is empty i.e. has no elements
+  using Base::empty;
+
   // Erases an element for a given key
   using Base::erase;
 

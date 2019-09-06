@@ -21,9 +21,9 @@ using std::string;
 // _____________________________________________________________________________
 QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
     : _qec(qec),
-      _variableColumnMap(),
       _rootOperation(nullptr),
       _type(OperationType::UNDEFINED),
+      _variableColumnMap(),
       _contextVars(),
       _asString(),
       _sizeEstimate(std::numeric_limits<size_t>::max()) {}
@@ -58,15 +58,17 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
   _rootOperation = std::move(op);
   _asString = "";
   _sizeEstimate = std::numeric_limits<size_t>::max();
+
+  _variableColumnMap = _rootOperation->getVariableColumns();
   // with setting the operation the initialization is done and we can try to
   // find our result in the cache.
   readFromCache();
 }
 
 // _____________________________________________________________________________
-void QueryExecutionTree::setVariableColumn(const string& variable,
-                                           size_t column) {
-  _variableColumnMap[variable] = column;
+const ad_utility::HashMap<string, size_t>&
+QueryExecutionTree::getVariableColumns() const {
+  return _variableColumnMap;
 }
 
 // _____________________________________________________________________________
@@ -80,9 +82,8 @@ size_t QueryExecutionTree::getVariableColumn(const string& variable) const {
 }
 
 // _____________________________________________________________________________
-void QueryExecutionTree::setVariableColumns(
-    ad_utility::HashMap<string, size_t> const& map) {
-  _variableColumnMap = map;
+void QueryExecutionTree::setVariableColumn(const string& var, size_t i) {
+  _variableColumnMap[var] = i;
 }
 
 // _____________________________________________________________________________
