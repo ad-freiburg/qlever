@@ -161,13 +161,15 @@ void Server::process(Socket* client) {
         exit(0);
       }
 #endif
+      const bool pinSubtrees =
+          ad_utility::getLowercase(params["pinsubtrees"]) == "true";
       query = createQueryFromHttpParams(params);
-      bool pinSubtrees = params.find("pinall") != params.end();
-      LOG(INFO) << "Query:\n" << query << '\n';
+      LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned): " : ": ")
+                << query << '\n';
       ParsedQuery pq = SparqlParser(query).parse();
       pq.expandPrefixes();
 
-      QueryExecutionContext qec(_index, _engine, &_cache);
+      QueryExecutionContext qec(_index, _engine, &_cache, pinSubtrees);
       QueryPlanner qp(&qec);
       qp.setEnablePatternTrick(_enablePatternTrick);
       QueryExecutionTree qet = qp.createExecutionTree(pq);

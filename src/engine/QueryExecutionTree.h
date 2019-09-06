@@ -134,7 +134,7 @@ class QueryExecutionTree {
   void readFromCache();
 
  private:
-  QueryExecutionContext* const _qec;  // No ownership
+  QueryExecutionContext* _qec;  // No ownership
   ad_utility::HashMap<string, size_t> _variableColumnMap;
   std::shared_ptr<Operation>
       _rootOperation;  // Owned child. Will be deleted at deconstruction.
