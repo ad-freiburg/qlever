@@ -1948,7 +1948,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
             (b[j]._qet.get()->getType() ==
                  QueryExecutionTree::OperationType::TRANSITIVE_PATH &&
              jcs[0][1] == 0)) {
-          std::shared_ptr<const TransitivePath> srcpath;
+          std::shared_ptr<TransitivePath> srcpath;
           std::shared_ptr<QueryExecutionTree> other;
           size_t otherCol;
           if (a[i]._qet.get()->getType() ==
@@ -1963,13 +1963,18 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
                 b[j]._qet->getRootOperation());
             otherCol = jcs[0][0];
           }
+
           // Do not bind the side of a path twice
-          if (!srcpath->isBound()) {
+          if (!srcpath->isBound() &&
+              other->getSizeEstimate() < srcpath->getSizeEstimate()) {
             // The left or right side is a TRANSITIVE_PATH and its join column
             // corresponds to the left side of its input.
 
             const vector<size_t>& otherSortedOn = other->resultSortedOn();
             if (otherSortedOn.size() == 0 || otherSortedOn[0] != otherCol) {
+              if (other->getType() == QueryExecutionTree::SCAN) {
+                continue;
+              }
               auto sort = std::make_shared<Sort>(_qec, other, jcs[0][0]);
               std::shared_ptr<QueryExecutionTree> sortedOther =
                   std::make_shared<QueryExecutionTree>(_qec);
@@ -2002,7 +2007,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
             (b[j]._qet.get()->getType() ==
                  QueryExecutionTree::OperationType::TRANSITIVE_PATH &&
              jcs[0][1] == 1)) {
-          std::shared_ptr<const TransitivePath> srcpath;
+          std::shared_ptr<TransitivePath> srcpath;
           std::shared_ptr<QueryExecutionTree> other;
           size_t otherCol;
           if (a[i]._qet.get()->getType() ==
@@ -2018,12 +2023,16 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
             otherCol = jcs[0][0];
           }
           // Do not bind the side of a path twice
-          if (!srcpath->isBound()) {
+          if (!srcpath->isBound() &&
+              other->getSizeEstimate() < srcpath->getSizeEstimate()) {
             // The left or right side is a TRANSITIVE_PATH and its join column
             // corresponds to the left side of its input.
 
             const vector<size_t>& otherSortedOn = other->resultSortedOn();
             if (otherSortedOn.size() == 0 || otherSortedOn[0] != otherCol) {
+              if (other->getType() == QueryExecutionTree::SCAN) {
+                continue;
+              }
               auto sort = std::make_shared<Sort>(_qec, other, jcs[0][0]);
               std::shared_ptr<QueryExecutionTree> sortedOther =
                   std::make_shared<QueryExecutionTree>(_qec);
