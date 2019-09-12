@@ -1940,6 +1940,114 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           }
         }
 
+        // Test for binding the other operation to the left side of the
+        // transitive path
+        if ((a[i]._qet.get()->getType() ==
+                 QueryExecutionTree::OperationType::TRANSITIVE_PATH &&
+             jcs[0][0] == 0) ||
+            (b[j]._qet.get()->getType() ==
+                 QueryExecutionTree::OperationType::TRANSITIVE_PATH &&
+             jcs[0][1] == 0)) {
+          std::shared_ptr<const TransitivePath> srcpath;
+          std::shared_ptr<QueryExecutionTree> other;
+          size_t otherCol;
+          if (a[i]._qet.get()->getType() ==
+              QueryExecutionTree::OperationType::TRANSITIVE_PATH) {
+            srcpath = std::reinterpret_pointer_cast<TransitivePath>(
+                a[i]._qet->getRootOperation());
+            other = b[j]._qet;
+            otherCol = jcs[0][1];
+          } else {
+            other = a[i]._qet;
+            srcpath = std::reinterpret_pointer_cast<TransitivePath>(
+                b[j]._qet->getRootOperation());
+            otherCol = jcs[0][0];
+          }
+          // Do not bind the side of a path twice
+          if (!srcpath->isBound()) {
+            // The left or right side is a TRANSITIVE_PATH and its join column
+            // corresponds to the left side of its input.
+
+            const vector<size_t>& otherSortedOn = other->resultSortedOn();
+            if (otherSortedOn.size() == 0 || otherSortedOn[0] != otherCol) {
+              auto sort = std::make_shared<Sort>(_qec, other, jcs[0][0]);
+              std::shared_ptr<QueryExecutionTree> sortedOther =
+                  std::make_shared<QueryExecutionTree>(_qec);
+              sortedOther->setVariableColumns(other->getVariableColumns());
+              sortedOther->setContextVars(other->getContextVars());
+              sortedOther->setOperation(QueryExecutionTree::SORT, sort);
+              other = sortedOther;
+            }
+
+            SubtreePlan plan(_qec);
+            auto& tree = *plan._qet.get();
+            auto newpath = srcpath->bindLeftSide(other, otherCol);
+            tree.setVariableColumns(newpath->getVariableColumns());
+            tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, newpath);
+            plan._idsOfIncludedNodes = a[i]._idsOfIncludedNodes;
+            plan.addAllNodes(b[j]._idsOfIncludedNodes);
+            plan._idsOfIncludedFilters = a[i]._idsOfIncludedFilters;
+            plan._idsOfIncludedFilters |= b[j]._idsOfIncludedFilters;
+            candidates[getPruningKey(plan, newpath->resultSortedOn())]
+                .emplace_back(plan);
+            continue;
+          }
+        }
+
+        // Test for binding the other operation to the right side of the
+        // transitive path
+        if ((a[i]._qet.get()->getType() ==
+                 QueryExecutionTree::OperationType::TRANSITIVE_PATH &&
+             jcs[0][0] == 1) ||
+            (b[j]._qet.get()->getType() ==
+                 QueryExecutionTree::OperationType::TRANSITIVE_PATH &&
+             jcs[0][1] == 1)) {
+          std::shared_ptr<const TransitivePath> srcpath;
+          std::shared_ptr<QueryExecutionTree> other;
+          size_t otherCol;
+          if (a[i]._qet.get()->getType() ==
+              QueryExecutionTree::OperationType::TRANSITIVE_PATH) {
+            srcpath = std::reinterpret_pointer_cast<TransitivePath>(
+                a[i]._qet->getRootOperation());
+            other = b[j]._qet;
+            otherCol = jcs[0][1];
+          } else {
+            other = a[i]._qet;
+            srcpath = std::reinterpret_pointer_cast<TransitivePath>(
+                b[j]._qet->getRootOperation());
+            otherCol = jcs[0][0];
+          }
+          // Do not bind the side of a path twice
+          if (!srcpath->isBound()) {
+            // The left or right side is a TRANSITIVE_PATH and its join column
+            // corresponds to the left side of its input.
+
+            const vector<size_t>& otherSortedOn = other->resultSortedOn();
+            if (otherSortedOn.size() == 0 || otherSortedOn[0] != otherCol) {
+              auto sort = std::make_shared<Sort>(_qec, other, jcs[0][0]);
+              std::shared_ptr<QueryExecutionTree> sortedOther =
+                  std::make_shared<QueryExecutionTree>(_qec);
+              sortedOther->setVariableColumns(other->getVariableColumns());
+              sortedOther->setContextVars(other->getContextVars());
+              sortedOther->setOperation(QueryExecutionTree::SORT, sort);
+              other = sortedOther;
+            }
+
+            SubtreePlan plan(_qec);
+            auto& tree = *plan._qet.get();
+            auto newpath = srcpath->bindRightSide(other, otherCol);
+            tree.setVariableColumns(newpath->getVariableColumns());
+            tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, newpath);
+            plan._idsOfIncludedNodes = a[i]._idsOfIncludedNodes;
+            plan.addAllNodes(b[j]._idsOfIncludedNodes);
+            plan._idsOfIncludedFilters = a[i]._idsOfIncludedFilters;
+            plan._idsOfIncludedFilters |= b[j]._idsOfIncludedFilters;
+            candidates[getPruningKey(plan, newpath->resultSortedOn())]
+                .emplace_back(plan);
+            continue;
+          }
+        }
+
         // "NORMAL" CASE:
         // Check if a sub-result has to be re-sorted
         // TODO: replace with HashJoin maybe (or add variant to possible
