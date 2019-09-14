@@ -94,9 +94,23 @@ vector<size_t> TransitivePath::resultSortedOn() const {
   const std::vector<size_t>& subSortedOn =
       _subtree->getRootOperation()->getResultSortedOn();
   if (_leftSideTree == nullptr && _rightSideTree == nullptr && _leftIsVar &&
-      subSortedOn.size() > 0 && subSortedOn[0] == _leftSubCol) {
+      _rightIsVar && subSortedOn.size() > 0 && subSortedOn[0] == _leftSubCol) {
     // This operation preserves the order of the _leftCol of the subtree.
     return {0};
+  }
+  if (_leftSideTree != nullptr) {
+    const std::vector<size_t>& leftSortedOn =
+        _leftSideTree->getRootOperation()->getResultSortedOn();
+    if (leftSortedOn.size() > 0 && leftSortedOn[0] == _leftSideCol) {
+      return {0};
+    }
+  }
+  if (_rightSideTree != nullptr) {
+    const std::vector<size_t>& rightSortedOn =
+        _rightSideTree->getRootOperation()->getResultSortedOn();
+    if (rightSortedOn.size() > 0 && rightSortedOn[0] == _rightSideCol) {
+      return {1};
+    }
   }
   return {};
 }
