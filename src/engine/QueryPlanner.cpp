@@ -2070,6 +2070,7 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
   tree.setVariableColumns(join->getVariableColumns());
   tree.setOperation(QueryExecutionTree::OPTIONAL_JOIN, join);
 
+  plan._isOptional = a._isOptional && b._isOptional;
   return plan;
 }
 
