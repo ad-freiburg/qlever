@@ -26,12 +26,9 @@ class Color:
 
 
 def eprint(*args, color=Color.FAIL, **kwargs):
-    """
-    Like print but to stderr
-    """
-    sys.stderr.write(color)
-    print(*args, file=sys.stderr, **kwargs)
-    print(Color.ENDC, file=sys.stderr)
+    sys.stdout.write(color)
+    print(*args, **kwargs)
+    print(Color.ENDC)
 
 def exec_query(endpoint_url: str, sparql: str,
                max_send: int = 4096) -> Dict[str, Any]:
@@ -220,6 +217,7 @@ def main() -> None:
                   '(%s)' % query_type + Color.ENDC)
             print('SPARQL:')
             print(query_sparql)
+            sys.stdout.flush()
             result = exec_query(endpoint_url, query_sparql)
             if not result:
                 # A print was already done in exec_query()
