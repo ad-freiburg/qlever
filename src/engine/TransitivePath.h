@@ -31,10 +31,10 @@ class TransitivePath : public Operation {
       std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol) const;
 
   /**
-   * Returns a new TransitivePath operation that uses the fact that leftop
-   * generates all possible values for the left side of the paths. If the
-   * results of leftop is smaller than all possible values this will result in a
-   * faster transitive path operation (as the transitive paths has to be
+   * Returns a new TransitivePath operation that uses the fact that rightop
+   * generates all possible values for the right side of the paths. If the
+   * results of rightop is smaller than all possible values this will result in
+   * a faster transitive path operation (as the transitive paths has to be
    * computed for fewer elements).
    */
   std::shared_ptr<TransitivePath> bindRightSide(
@@ -104,8 +104,8 @@ class TransitivePath : public Operation {
   std::shared_ptr<QueryExecutionTree> _leftSideTree;
   size_t _leftSideCol;
 
-  // If this is not nullptr then the left side of all paths is within the result
-  // of this tree.
+  // If this is not nullptr then the right side of all paths is within the
+  // result of this tree.
   std::shared_ptr<QueryExecutionTree> _rightSideTree;
   size_t _rightSideCol;
 
