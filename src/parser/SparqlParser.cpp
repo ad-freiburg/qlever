@@ -806,7 +806,7 @@ void SparqlParser::addLangFilter(
     const std::string& lhs, const std::string& rhs,
     std::shared_ptr<ParsedQuery::GraphPattern> pattern) {
   auto langTag = rhs.substr(1, rhs.size() - 2);
-  // First find a suitabke triple for the given variable. It
+  // First find a suitable triple for the given variable. It
   // must use a predicate that is not a variable or complex
   // predicate path
   auto it =
