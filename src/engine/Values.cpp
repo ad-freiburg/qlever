@@ -144,7 +144,7 @@ void Values::writeValues(IdTable* res, const Index& index,
       size_t id;
       if (!index.getVocab().getId(row[colIdx], &id)) {
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-                 "The word " + row[colIdx] + "is not part of the vocabulary.")
+                 "The word " + row[colIdx] + " is not part of the vocabulary.")
       }
       result(rowIdx, colIdx) = id;
     }
