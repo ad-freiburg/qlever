@@ -193,7 +193,7 @@ TEST_F(MergeVocabularyTest, bla) {
   VocabularyMerger::VocMergeRes res;
   {
     VocabularyMerger m;
-    m.mergeVocabulary(_basePath, 2, StringSortComparator());
+    res = m.mergeVocabulary(_basePath, 2, StringSortComparator());
   }
 
   // No language tags in text file
