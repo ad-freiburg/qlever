@@ -190,9 +190,6 @@ class QueryPlanner {
 
   bool _enablePatternTrick;
 
-  static bool isVariable(const string& elem);
-  static bool isVariable(const PropertyPath& elem);
-
   std::vector<SubtreePlan> optimize(
       std::shared_ptr<const ParsedQuery::GraphPattern> pattern);
 
