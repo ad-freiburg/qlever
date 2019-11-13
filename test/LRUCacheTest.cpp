@@ -105,6 +105,24 @@ TEST(LRUCacheTest, testTryEmplacePinnedExisting) {
   ASSERT_EQ(*cache["4"], "xxxx");   // second newest still there
   ASSERT_EQ(*cache["5"], "xxxxx");  // newest still there
 }
+// _____________________________________________________________________________
+TEST(LRUCacheTest, testTryEmplacePinnedExistingInternal) {
+  LRUCache<string, string> cache(2);
+  cache.insert("1", "x");
+  cache.insert("2", "xx");
+  // ensure value is only in normal cache, size_t conversion needed to suppress
+  // warning: comparison between signed and unsigned integer expressions
+  ASSERT_EQ(cache._accessMap.count("2"), size_t(1));
+  ASSERT_EQ(cache._pinnedMap.count("2"), size_t(0));
+  // tryEmplacePinned on an existing element doesn't emplace but it does pin
+  ASSERT_FALSE(cache.tryEmplacePinned("2", "yy").first);
+  // ensure value is now only in pinned cache
+  ASSERT_EQ(cache._accessMap.count("2"), size_t(0));
+  ASSERT_EQ(cache._pinnedMap.count("2"), size_t(1));
+  // check access of elements
+  ASSERT_EQ(*cache["1"], "x");   // normal value still there
+  ASSERT_EQ(*cache["2"], "xx");  // pinned still there
+}
 
 // _____________________________________________________________________________
 TEST(LRUCacheTest, testTryEmplacePinnedClear) {

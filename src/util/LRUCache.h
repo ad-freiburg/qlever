@@ -233,5 +233,7 @@ class LRUCache {
   // exclusive lock. Thus using a shared_lock here would conflict with moving to
   // the front of the queue in operator[]
   std::mutex _lock;
+
+  FRIEND_TEST(LRUCacheTest, testTryEmplacePinnedExistingInternal);
 };  // namespace ad_utility
 }  // namespace ad_utility
