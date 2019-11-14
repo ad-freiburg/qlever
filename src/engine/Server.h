@@ -28,6 +28,7 @@ class Server {
       : _numThreads(numThreads),
         _serverSocket(),
         _port(port),
+        _cache(NOF_SUBTREES_TO_CACHE),
         _index(),
         _engine(),
         _initialized(false) {}
@@ -48,15 +49,16 @@ class Server {
   const int _numThreads;
   Socket _serverSocket;
   int _port;
+  SubtreeCache _cache;
   Index _index;
   Engine _engine;
 
   bool _initialized;
   bool _enablePatternTrick;
 
-  void runAcceptLoop(QueryExecutionContext* qec);
+  void runAcceptLoop();
 
-  void process(Socket* client, QueryExecutionContext* qec) const;
+  void process(Socket* client);
 
   void serveFile(Socket* client, const string& requestedFile) const;
 

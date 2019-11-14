@@ -57,17 +57,16 @@ void Server::run() {
     LOG(ERROR) << "Cannot start an uninitialized server!" << std::endl;
     exit(1);
   }
-  QueryExecutionContext qec(_index, _engine);
   std::vector<std::thread> threads;
   for (int i = 0; i < _numThreads; ++i) {
-    threads.emplace_back(&Server::runAcceptLoop, this, &qec);
+    threads.emplace_back(&Server::runAcceptLoop, this);
   }
   for (std::thread& worker : threads) {
     worker.join();
   }
 }
 // _____________________________________________________________________________
-void Server::runAcceptLoop(QueryExecutionContext* qec) {
+void Server::runAcceptLoop() {
   // Loop and wait for queries. Run forever, for now.
   while (true) {
     // Wait for new query
@@ -85,19 +84,19 @@ void Server::runAcceptLoop(QueryExecutionContext* qec) {
     }
     client.setKeepAlive(true);
     LOG(INFO) << "Incoming connection, processing..." << std::endl;
-    process(&client, qec);
+    process(&client);
     client.close();
   }
 }
 
 // _____________________________________________________________________________
-void Server::process(Socket* client, QueryExecutionContext* qec) const {
-  string response;
-  string query;
+void Server::process(Socket* client) {
   string contentType;
   LOG(DEBUG) << "Waiting for receive call to complete." << endl;
   string request;
+  string response;
   string headers;
+  string query;
   client->getHTTPRequest(request, headers);
   LOG(DEBUG) << "Got request from client with size: " << request.size()
              << " and headers with total size: " << headers.size() << endl;
@@ -147,7 +146,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
       }
 
       if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
-        qec->clearCache();
+        _cache.clear();
       }
       auto it = params.find("send");
       size_t maxSend = MAX_NOF_ROWS_IN_RESULT;
@@ -162,15 +161,16 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
         exit(0);
       }
 #endif
+      const bool pinSubtrees =
+          ad_utility::getLowercase(params["pinsubtrees"]) == "true";
       query = createQueryFromHttpParams(params);
-      LOG(INFO) << "Query:\n" << query << '\n';
+      LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned): " : ": ")
+                << query << '\n';
       ParsedQuery pq = SparqlParser(query).parse();
       pq.expandPrefixes();
 
-      // QueryGraph qg(qec);
-      // qg.createFromParsedQuery(pq);
-      // const QueryExecutionTree& qet = qg.getExecutionTree();
-      QueryPlanner qp(qec);
+      QueryExecutionContext qec(_index, _engine, &_cache, pinSubtrees);
+      QueryPlanner qp(&qec);
       qp.setEnablePatternTrick(_enablePatternTrick);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
       LOG(TRACE) << qet.asString() << std::endl;
@@ -183,7 +183,7 @@ void Server::process(Socket* client, QueryExecutionContext* qec) const {
             "Content-Disposition: attachment;filename=export.csv";
       } else if (ad_utility::getLowercase(params["action"]) == "tsv_export") {
         // TSV export
-        response = composeResponseSepValues(pq, qet, '\t');
+        string response = composeResponseSepValues(pq, qet, '\t');
         contentType =
             "text/tsv\r\n"
             "Content-Disposition: attachment;filename=export.tsv";

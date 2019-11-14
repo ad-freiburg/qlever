@@ -21,7 +21,7 @@ using std::string;
 // needed to solve a query.
 class QueryExecutionTree {
  public:
-  explicit QueryExecutionTree(QueryExecutionContext* qec);
+  explicit QueryExecutionTree(QueryExecutionContext* const qec);
 
   enum OperationType {
     UNDEFINED = 0,

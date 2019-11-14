@@ -19,7 +19,7 @@
 using std::string;
 
 // _____________________________________________________________________________
-QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* qec)
+QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
     : _qec(qec),
       _variableColumnMap(),
       _rootOperation(nullptr),

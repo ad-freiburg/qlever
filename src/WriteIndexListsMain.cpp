@@ -87,7 +87,8 @@ int main(int argc, char** argv) {
     index.dumpAsciiLists(lists, decodeGapsAndFrequency);
 
     Engine engine;
-    QueryExecutionContext qec(index, engine);
+    SubtreeCache cache(NOF_SUBTREES_TO_CACHE);
+    QueryExecutionContext qec(index, engine, &cache);
     ParsedQuery q;
     if (!freebase) {
       q = SparqlParser("SELECT ?x WHERE {?x <is-a> <Scientist>}").parse();
