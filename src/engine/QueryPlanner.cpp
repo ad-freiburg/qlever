@@ -1884,6 +1884,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
             b[j]._qet.get()->getType() ==
                 QueryExecutionTree::OperationType::HAS_RELATION_SCAN) {
           bool replaceJoin = false;
+          size_t subtree_col = 0;
 
           std::shared_ptr<QueryExecutionTree> hasPredicateScan =
               std::make_shared<QueryExecutionTree>(_qec);
@@ -1897,6 +1898,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
             if (op->getType() == HasPredicateScan::ScanType::FULL_SCAN) {
               hasPredicateScan = a[i]._qet;
               other = b[j]._qet;
+              subtree_col = jcs[0][1];
               replaceJoin = true;
             }
           } else if (b[j]._qet.get()->getType() ==
@@ -1907,6 +1909,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
             if (op->getType() == HasPredicateScan::ScanType::FULL_SCAN) {
               other = a[i]._qet;
               hasPredicateScan = b[j]._qet;
+              subtree_col = jcs[0][0];
               replaceJoin = true;
             }
           }
@@ -1916,7 +1919,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
             auto scan = std::make_shared<HasPredicateScan>(
                 _qec, HasPredicateScan::ScanType::SUBQUERY_S);
             scan->setSubtree(other);
-            scan->setSubtreeSubjectColumn(jcs[0][1]);
+            scan->setSubtreeSubjectColumn(subtree_col);
             scan->setObject(static_cast<HasPredicateScan*>(
                                 hasPredicateScan->getRootOperation().get())
                                 ->getObject());
