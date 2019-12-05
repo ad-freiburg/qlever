@@ -108,7 +108,7 @@ class VocabularyMerger {
 // _________________________________________________________________________________________
 void writePartialIdMapToBinaryFileForMerging(
     std::shared_ptr<const ad_utility::HashMap<string, std::pair<Id, std::string>>> map,
-    const string& fileName, StringSortComparator comp, bool doParallelSort);
+    const string& fileName, StringSortComparator comp, std::locale loc, bool doParallelSort);
 
 // _________________________________________________________________________________________
 ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(

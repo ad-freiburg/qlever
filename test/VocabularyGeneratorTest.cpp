@@ -225,7 +225,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     auto ptr =
         std::make_shared<const ad_utility::HashMap<string, std::pair<Id, std::string>>>(std::move(s));
     writePartialIdMapToBinaryFileForMerging(
-        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(),
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(), v.getLocale(),
         false);
 
     {
@@ -254,7 +254,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     auto ptr =
         std::make_shared<const ad_utility::HashMap<string, std::pair<Id, std::string>>>(std::move(s));
     writePartialIdMapToBinaryFileForMerging(
-        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(),
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(), v.getLocale(),
         false);
 
     {

@@ -226,7 +226,7 @@ void VocabularyMerger::doActualWrite(
 // ______________________________________________________________________________________________
 void writePartialIdMapToBinaryFileForMerging(
     std::shared_ptr<const ad_utility::HashMap<string, std::pair<Id, std::string>>> map,
-    const string& fileName, StringSortComparator comp,
+    const string& fileName, StringSortComparator comp, std::locale loc,
     const bool doParallelSort) {
   LOG(INFO) << "Creating partial vocabulary from set ...\n";
   std::vector<std::pair<string, std::pair<Id, std::string>>> els;
@@ -234,8 +234,8 @@ void writePartialIdMapToBinaryFileForMerging(
   els.insert(begin(els), begin(*map), end(*map));
   LOG(INFO) << "... sorting ...\n";
 
-  auto pred = [](const auto& p1, const auto& p2) {
-    return (p1.second.second <  p2.second.second);
+  auto pred = [&loc](const auto& p1, const auto& p2) {
+    return loc(p1.first, p2.first);
   };
 
   if constexpr (USE_PARALLEL_SORT) {

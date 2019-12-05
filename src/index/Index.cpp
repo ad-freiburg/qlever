@@ -1472,9 +1472,9 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
 
   LOG(INFO) << "writing partial vocabulary to " << partialFilename << std::endl;
   LOG(INFO) << "it contains " << items->size() << " elements\n";
-  fut1 = std::async([this, &items, partialFilename]() {
+  fut1 = std::async([comp = _vocab.getCaseComparator(), loc = _vocab.getLocale(), &items, partialFilename]() {
     writePartialIdMapToBinaryFileForMerging(items, partialFilename,
-                                            _vocab.getCaseComparator(), true);
+                                            comp, loc, true);
   });
 
   if (_vocabPrefixCompressed && _vocab.isCaseInsensitiveOrdering()) {
@@ -1486,9 +1486,9 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
     LOG(INFO) << "writing partial temporary vocabulary to "
               << partialTmpFilename << std::endl;
     LOG(INFO) << "it contains " << items->size() << " elements\n";
-    fut2 = std::async([&items, partialTmpFilename]() {
+    fut2 = std::async([loc = _vocab.getLocale(), &items, partialTmpFilename]() {
       writePartialIdMapToBinaryFileForMerging(
-          items, partialTmpFilename, StringSortComparator(false), false);
+          items, partialTmpFilename, StringSortComparator(false), loc, false);
     });
   }
   return {std::move(fut1), std::move(fut2)};
