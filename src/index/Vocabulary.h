@@ -496,6 +496,14 @@ class Vocabulary {
     _caseComparator = StringSortComparator(ignoreCase);
   }
 
+  void setLocale(const std::string& localeName) {
+    _locale = std::locale(localeName);
+  }
+
+  std::locale getLocale() const {
+    return _locale;
+  }
+
   // ___________________________________________________________________
   bool isCaseInsensitiveOrdering() const {
     return _caseComparator.isIgnoreCase();
@@ -594,6 +602,7 @@ class Vocabulary {
   vector<StringType> _words;
   ExternalVocabulary _externalLiterals;
   StringSortComparator _caseComparator;
+  std::locale _locale;  // default constructed as c locale
 };
 
 #include "./VocabularyImpl.h"

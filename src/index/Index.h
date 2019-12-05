@@ -445,6 +445,7 @@ class Index {
   }
 
  private:
+  using ItemMap = ad_utility::HashMap<string, std::pair<Id, std::string>>;
   string _onDiskBase;
   string _settingsFileName;
   bool _onDiskLiterals = false;
@@ -510,15 +511,15 @@ class Index {
    */
   pair<std::future<void>, std::future<void>> writeNextPartialVocabulary(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      std::shared_ptr<const ad_utility::HashMap<string, Id>> items);
+      std::shared_ptr<const ItemMap> items);
 
   void convertPartialToGlobalIds(TripleVec& data,
                                  const vector<size_t>& actualLinesPerPartial,
                                  size_t linesPerPartial);
 
   // ___________________________________________________________________________
-  template <class Map>
-  static Id assignNextId(Map* mapPtr, const string& key);
+  template <class Map, class Facet>
+  static Id assignNextId(Map* mapPtr, const string& key, const Facet& facet);
 
   size_t passContextFileForVocabulary(const string& contextFile);
 

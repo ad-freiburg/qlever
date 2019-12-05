@@ -64,6 +64,8 @@ class HashMap : private google::dense_hash_map<K, V, HashFcn, EqualKey, Alloc> {
   // Returns the size of the map
   using Base::size;
 
+  using Base::empty;
+
   // Clears the contents of the map
   using Base::clear;
 

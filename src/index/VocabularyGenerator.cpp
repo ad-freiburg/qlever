@@ -225,18 +225,19 @@ void VocabularyMerger::doActualWrite(
 
 // ______________________________________________________________________________________________
 void writePartialIdMapToBinaryFileForMerging(
-    std::shared_ptr<const ad_utility::HashMap<string, Id>> map,
+    std::shared_ptr<const ad_utility::HashMap<string, std::pair<Id, std::string>>> map,
     const string& fileName, StringSortComparator comp,
     const bool doParallelSort) {
   LOG(INFO) << "Creating partial vocabulary from set ...\n";
-  std::vector<std::pair<string, Id>> els;
+  std::vector<std::pair<string, std::pair<Id, std::string>>> els;
   els.reserve(map->size());
   els.insert(begin(els), begin(*map), end(*map));
   LOG(INFO) << "... sorting ...\n";
 
-  auto pred = [comp](const auto& p1, const auto& p2) {
-    return comp(p1.first, p2.first);
+  auto pred = [](const auto& p1, const auto& p2) {
+    return (p1.second.second <  p2.second.second);
   };
+
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {
       __gnu_parallel::sort(begin(els), end(els), pred,
@@ -254,13 +255,13 @@ void writePartialIdMapToBinaryFileForMerging(
   std::ofstream out(fileName.c_str(),
                     std::ios_base::out | std::ios_base::binary);
   AD_CHECK(out.is_open());
-  for (size_t i = 0; i < els.size(); ++i) {
+  for (const auto& el : els) {
     // 32 bits should be enough for len of string
-    std::string_view word = els[i].first;
+    std::string_view word = el.first;
     uint32_t len = word.size();
     out.write((char*)&len, sizeof(len));
     out.write(word.data(), len);
-    Id id = els[i].second;
+    Id id = el.second.first;
     out.write((char*)&id, sizeof(id));
   }
   out.close();

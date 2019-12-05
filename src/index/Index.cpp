@@ -121,6 +121,8 @@ template void Index::createFromFile<TurtleMmapParser>(const string& filename);
 template <class Parser>
 VocabularyData Index::passFileForVocabulary(const string& filename,
                                             size_t linesPerPartial) {
+
+  auto& facet = std::use_facet<std::collate<char>>(_vocab.getLocale());
   ParallelParseBuffer<Parser> p(PARSER_BATCH_SIZE, filename);
   size_t i = 0;
   // already count the numbers of triples that will be used for the language
@@ -133,10 +135,10 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   std::unique_ptr<TripleVec> idTriples(new TripleVec());
   TripleVec::bufwriter_type writer(*idTriples);
 
-  ad_utility::HashMap<string, Id> items;
+  ItemMap items;
 
   // insert the special  ql:langtag predicate into all partial vocabularies
-  auto langPredId = assignNextId(&items, LANGUAGE_PREDICATE);
+  auto langPredId = assignNextId(&items, LANGUAGE_PREDICATE, facet);
   std::array<string, 3> spo;
 
   std::pair<std::future<void>, std::future<void>> sortFutures;
@@ -152,7 +154,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     // these are sorted by order of appearance and only valid in the current
     // partial vocabulary
     for (size_t k = 0; k < 3; ++k) {
-      spoIds[k] = assignNextId(&items, spo[k]);
+      spoIds[k] = assignNextId(&items, spo[k], facet);
     }
     writer << array<Id, 3>{{spoIds[0], spoIds[1], spoIds[2]}};
     actualCurrentPartialSize++;
@@ -161,10 +163,10 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     // the language filter
     if (!langtag.empty()) {
       auto langTagId =
-          assignNextId(&items, ad_utility::convertLangtagToEntityUri(langtag));
+          assignNextId(&items, ad_utility::convertLangtagToEntityUri(langtag), facet);
       auto langTaggedPredId = assignNextId(
           &items,
-          ad_utility::convertToLanguageTaggedPredicate(spo[1], langtag));
+          ad_utility::convertToLanguageTaggedPredicate(spo[1], langtag), facet);
       writer << array<Id, 3>{{spoIds[0], langTaggedPredId, spoIds[2]}};
       writer << array<Id, 3>{{spoIds[2], langPredId, langTagId}};
       actualCurrentPartialSize += 2;
@@ -186,7 +188,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
         sortFutures.second.get();
       }
 
-      auto oldItemPtr = std::make_shared<const ad_utility::HashMap<string, Id>>(
+      auto oldItemPtr = std::make_shared<const ItemMap>(
           std::move(items));
       sortFutures = writeNextPartialVocabulary(
           i, numFiles, actualCurrentPartialSize, oldItemPtr);
@@ -199,18 +201,18 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
       actualCurrentPartialSize = 0;
       items.clear();
       // insert the special predicate into all partial vocabularies
-      langPredId = assignNextId(&items, LANGUAGE_PREDICATE);
+      langPredId = assignNextId(&items, LANGUAGE_PREDICATE, facet);
     }
   }
   // deal with remainder
-  if (items.size() > 0) {
+  if (!items.empty()) {
     if (sortFutures.first.valid()) {
       sortFutures.first.get();
     }
     if (sortFutures.second.valid()) {
       sortFutures.second.get();
     }
-    auto oldItemPtr = std::make_shared<const ad_utility::HashMap<string, Id>>(
+    auto oldItemPtr = std::make_shared<const ItemMap>(
         std::move(items));
     sortFutures = writeNextPartialVocabulary(
         i, numFiles, actualCurrentPartialSize, oldItemPtr);
@@ -1376,6 +1378,10 @@ void Index::readConfiguration() {
     _vocab.setCaseInsensitiveOrdering(_configurationJson["ignore-case"]);
   }
 
+  if (_configurationJson.count("locale")) {
+    _vocab.setLocale(_configurationJson["locale"]);
+  }
+
   if (_configurationJson.find("languages-internal") !=
       _configurationJson.end()) {
     _vocab.initializeInternalizedLangs(
@@ -1425,6 +1431,12 @@ void Index::initializeVocabularySettingsBuild() {
     _configurationJson["ignore-case"] = j["ignore-case"];
   }
 
+  if (j.count("locale")) {
+    _vocab.setLocale(j["locale"]);
+    _configurationJson["locale"] = j["locale"];
+
+  }
+
   if (j.find("languages-internal") != j.end()) {
     _vocab.initializeInternalizedLangs(j["languages-internal"]);
     _configurationJson["languages-internal"] = j["languages-internal"];
@@ -1434,22 +1446,22 @@ void Index::initializeVocabularySettingsBuild() {
 }
 
 // ___________________________________________________________________________
-template <class Map>
-Id Index::assignNextId(Map* mapPtr, const string& key) {
+template <class Map, class Facet>
+Id Index::assignNextId(Map* mapPtr, const string& key, const Facet& facet) {
   Map& map = *mapPtr;
-  if (map.find(key) == map.end()) {
+  if (!map.count(key)) {
     Id res = map.size();
-    map[key] = map.size();
+    map[key] = std::pair(map.size(), facet.transform(key.data(), key.data() + key.size()));
     return res;
   } else {
-    return map[key];
+    return map[key].first;
   }
 }
 
 // ___________________________________________________________________________
 pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-    std::shared_ptr<const ad_utility::HashMap<string, Id>> items) {
+    std::shared_ptr<const Index::ItemMap> items) {
   LOG(INFO) << "Lines (from KB-file) processed: " << numLines << '\n';
   LOG(INFO) << "Actual number of Triples in this section (include "
                "langfilter triples): "

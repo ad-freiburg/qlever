@@ -215,15 +215,15 @@ TEST_F(MergeVocabularyTest, bla) {
 
 TEST(VocabularyGenerator, ReadAndWritePartial) {
   {
-    ad_utility::HashMap<string, Id> s;
-    s["A"] = 5;
-    s["a"] = 6;
-    s["Ba"] = 7;
-    s["car"] = 8;
+    ad_utility::HashMap<string, std::pair<Id, std::string>> s;
+    s["A"] = std::make_pair(5, "A");
+    s["a"] = std::make_pair(6, "a");
+    s["Ba"] = std::make_pair(7, "Ba");
+    s["car"] = std::make_pair(8, "car");
     Vocabulary<string> v;
     std::string basename = "_tmp_testidx";
     auto ptr =
-        std::make_shared<const ad_utility::HashMap<string, Id>>(std::move(s));
+        std::make_shared<const ad_utility::HashMap<string, std::pair<Id, std::string>>>(std::move(s));
     writePartialIdMapToBinaryFileForMerging(
         ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(),
         false);
@@ -243,16 +243,16 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
 
   // again with the case insensitive variant.
   {
-    ad_utility::HashMap<string, Id> s;
-    s["A"] = 5;
-    s["a"] = 6;
-    s["Ba"] = 7;
-    s["car"] = 8;
+    ad_utility::HashMap<string, std::pair<Id, std::string>> s;
+    s["A"] = std::make_pair(5, "A");
+    s["a"] = std::make_pair(6, "a");
+    s["Ba"] = std::make_pair(7, "Ba");
+    s["car"] = std::make_pair(8, "car");
     Vocabulary<string> v;
     v.setCaseInsensitiveOrdering(true);
     std::string basename = "_tmp_testidx";
     auto ptr =
-        std::make_shared<const ad_utility::HashMap<string, Id>>(std::move(s));
+        std::make_shared<const ad_utility::HashMap<string, std::pair<Id, std::string>>>(std::move(s));
     writePartialIdMapToBinaryFileForMerging(
         ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(),
         false);
