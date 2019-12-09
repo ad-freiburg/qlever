@@ -349,7 +349,6 @@ bool QueryPlanner::checkUsePatternTrick(
   }
 
   bool returns_counts = pq->_aliases.size() == 1;
-  bool usePatternTrick = true;
 
   // These will only be set if the query returns the count of predicates
   // The varialbe the COUNT alias counts
@@ -380,6 +379,7 @@ bool QueryPlanner::checkUsePatternTrick(
   // look for a HAS_RELATION_PREDICATE triple which satisfies all constraints
   for (size_t i = 0; i < pq->_rootGraphPattern->_whereClauseTriples.size();
        i++) {
+    bool usePatternTrick = true;
     const SparqlTriple& t = pq->_rootGraphPattern->_whereClauseTriples[i];
     // Check that the triples predicates is the HAS_PREDICATE_PREDICATE.
     // Also check that the triples object or subject matches the aliases input
