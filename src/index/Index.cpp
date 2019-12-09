@@ -82,13 +82,10 @@ void Index::createFromFile(const string& filename) {
   string vocabFileTmp = _onDiskBase + ".vocabularyTmp";
   std::vector<string> prefixes;
   if (_vocabPrefixCompressed) {
-    string vocabFileForPrefixCalculation = vocabFile;
-    if (_vocab.isCaseInsensitiveOrdering()) {
-      // we have to use the "normally" sorted vocabulary for the prefix
-      // compression;
-      vocabFileForPrefixCalculation =
-          _onDiskBase + TMP_BASENAME_COMPRESSION + ".vocabulary";
-    }
+    // we have to use the "normally" sorted vocabulary for the prefix
+    // compression;
+    std::string vocabFileForPrefixCalculation =
+        _onDiskBase + TMP_BASENAME_COMPRESSION + ".vocabulary";
     prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
                                  NUM_COMPRESSION_PREFIXES, 1, true);
     std::ofstream prefixFile(_onDiskBase + PREFIX_FILE);
@@ -122,7 +119,6 @@ template <class Parser>
 VocabularyData Index::passFileForVocabulary(const string& filename,
                                             size_t linesPerPartial) {
 
-  auto& facet = std::use_facet<std::collate<char>>(_vocab.getLocale());
   ParallelParseBuffer<Parser> p(PARSER_BATCH_SIZE, filename);
   size_t i = 0;
   // already count the numbers of triples that will be used for the language
@@ -138,7 +134,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   ItemMap items;
 
   // insert the special  ql:langtag predicate into all partial vocabularies
-  auto langPredId = assignNextId(&items, LANGUAGE_PREDICATE, facet);
+  auto langPredId = assignNextId(&items, LANGUAGE_PREDICATE);
   std::array<string, 3> spo;
 
   std::pair<std::future<void>, std::future<void>> sortFutures;
@@ -154,7 +150,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     // these are sorted by order of appearance and only valid in the current
     // partial vocabulary
     for (size_t k = 0; k < 3; ++k) {
-      spoIds[k] = assignNextId(&items, spo[k], facet);
+      spoIds[k] = assignNextId(&items, spo[k]);
     }
     writer << array<Id, 3>{{spoIds[0], spoIds[1], spoIds[2]}};
     actualCurrentPartialSize++;
@@ -163,10 +159,10 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     // the language filter
     if (!langtag.empty()) {
       auto langTagId =
-          assignNextId(&items, ad_utility::convertLangtagToEntityUri(langtag), facet);
+          assignNextId(&items, ad_utility::convertLangtagToEntityUri(langtag));
       auto langTaggedPredId = assignNextId(
           &items,
-          ad_utility::convertToLanguageTaggedPredicate(spo[1], langtag), facet);
+          ad_utility::convertToLanguageTaggedPredicate(spo[1], langtag));
       writer << array<Id, 3>{{spoIds[0], langTaggedPredId, spoIds[2]}};
       writer << array<Id, 3>{{spoIds[2], langPredId, langTagId}};
       actualCurrentPartialSize += 2;
@@ -201,7 +197,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
       actualCurrentPartialSize = 0;
       items.clear();
       // insert the special predicate into all partial vocabularies
-      langPredId = assignNextId(&items, LANGUAGE_PREDICATE, facet);
+      langPredId = assignNextId(&items, LANGUAGE_PREDICATE);
     }
   }
   // deal with remainder
@@ -228,12 +224,12 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   writer.finish();
   LOG(INFO) << "Pass done." << endl;
 
-  if (_vocabPrefixCompressed && _vocab.isCaseInsensitiveOrdering()) {
+  if (_vocabPrefixCompressed) {
     LOG(INFO) << "Merging temporary vocabulary for prefix compression";
     {
       VocabularyMerger m;
       m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
-                        StringSortComparator(false));
+                        std::less<std::string>());
       LOG(INFO) << "Finished merging additional Vocabulary.";
     }
   }
@@ -1374,10 +1370,6 @@ void Index::readConfiguration() {
         _configurationJson["prefixes-external"]);
   }
 
-  if (_configurationJson.count("ignore-case")) {
-    _vocab.setCaseInsensitiveOrdering(_configurationJson["ignore-case"]);
-  }
-
   if (_configurationJson.count("locale")) {
     _vocab.setLocale(_configurationJson["locale"]);
   }
@@ -1426,11 +1418,6 @@ void Index::initializeVocabularySettingsBuild() {
     _configurationJson["external-literals"] = true;
   }
 
-  if (j.count("ignore-case")) {
-    _vocab.setCaseInsensitiveOrdering(j["ignore-case"]);
-    _configurationJson["ignore-case"] = j["ignore-case"];
-  }
-
   if (j.count("locale")) {
     _vocab.setLocale(j["locale"]);
     _configurationJson["locale"] = j["locale"];
@@ -1446,12 +1433,11 @@ void Index::initializeVocabularySettingsBuild() {
 }
 
 // ___________________________________________________________________________
-template <class Map, class Facet>
-Id Index::assignNextId(Map* mapPtr, const string& key, const Facet& facet) {
-  Map& map = *mapPtr;
+Id Index::assignNextId(Index::ItemMap* mapPtr, const string& key) {
+  ItemMap& map = *mapPtr;
   if (!map.count(key)) {
     Id res = map.size();
-    map[key] = std::pair(map.size(), facet.transform(key.data(), key.data() + key.size()));
+    map[key] = std::pair(map.size(), _vocab.getCaseComparator().extractComparable(key));
     return res;
   } else {
     return map[key].first;
@@ -1474,10 +1460,10 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
   LOG(INFO) << "it contains " << items->size() << " elements\n";
   fut1 = std::async([comp = _vocab.getCaseComparator(), loc = _vocab.getLocale(), &items, partialFilename]() {
     writePartialIdMapToBinaryFileForMerging(items, partialFilename,
-                                            comp, loc, true);
+                                            SortMode::StringComparator);
   });
 
-  if (_vocabPrefixCompressed && _vocab.isCaseInsensitiveOrdering()) {
+  if (_vocabPrefixCompressed) {
     // we also have to create the "ordinary" vocabulary order to make the
     // prefix compression work
     string partialTmpFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +
@@ -1488,7 +1474,7 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
     LOG(INFO) << "it contains " << items->size() << " elements\n";
     fut2 = std::async([loc = _vocab.getLocale(), &items, partialTmpFilename]() {
       writePartialIdMapToBinaryFileForMerging(
-          items, partialTmpFilename, StringSortComparator(false), loc, false);
+          items, partialTmpFilename, SortMode::Simple);
     });
   }
   return {std::move(fut1), std::move(fut2)};

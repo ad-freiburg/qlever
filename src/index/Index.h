@@ -444,8 +444,8 @@ class Index {
     LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
   }
 
+  using ItemMap = ad_utility::HashMap<string, std::pair<Id, StringSortComparator::SplitVal>>;
  private:
-  using ItemMap = ad_utility::HashMap<string, std::pair<Id, std::string>>;
   string _onDiskBase;
   string _settingsFileName;
   bool _onDiskLiterals = false;
@@ -518,8 +518,7 @@ class Index {
                                  size_t linesPerPartial);
 
   // ___________________________________________________________________________
-  template <class Map, class Facet>
-  static Id assignNextId(Map* mapPtr, const string& key, const Facet& facet);
+  Id assignNextId(ItemMap* mapPtr, const string& key);
 
   size_t passContextFileForVocabulary(const string& contextFile);
 

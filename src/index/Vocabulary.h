@@ -110,19 +110,21 @@ class PrefixComparator {
  */
 class StringSortComparator {
  public:
-  constexpr StringSortComparator(const StringSortComparator&) = default;
+  using Facet = decltype(std::use_facet<std::collate<char>>(std::locale()));
+  StringSortComparator(const StringSortComparator&) = default;
   // Convert an rdf-literal "value"@lang (langtag is optional)
   // to the first possible literal with the same case-insensitive value
   // ("VALUE") in this case. This is done by conversion to uppercase
   // (uppercase comes before lowercase in ASCII/Utf) and removing
   // possible language tags.
   static std::string rdfLiteralToValueForLT(const std::string& input) {
+    static Facet facet = std::use_facet<std::collate<char>>(std::locale());
     auto rhs_string = ad_utility::getUppercaseUtf8(input);
-    auto split = StringSortComparator::extractComparable(rhs_string);
+    auto split = StringSortComparator::extractComparable(rhs_string, facet);
     if (split.isLiteral && !split.langtag.empty()) {
       // get rid of possible langtags to move to the beginning of the
       // range
-      rhs_string = '\"' + std::string(split.val) + '\"';
+      rhs_string = '\"' + std::string(split.transformedVal) + '\"';
     }
     return rhs_string;
   }
@@ -135,56 +137,53 @@ class StringSortComparator {
   // the said artificial language tag with a higher ascii value than all
   // possible other langtags. (valid RDF langtags only contain ascii characters)
   static std::string rdfLiteralToValueForGT(const std::string& input) {
+    static Facet facet = std::use_facet<std::collate<char>>(std::locale());
     auto rhs_string = ad_utility::getLowercaseUtf8(input);
-    auto split2 = StringSortComparator::extractComparable(rhs_string);
+    auto split2 = StringSortComparator::extractComparable(rhs_string, facet);
     if (split2.isLiteral) {
-      rhs_string = '\"' + std::string(split2.val) + '\"' + "@" + char(127);
+      rhs_string = '\"' + std::string(split2.transformedVal) + '\"' + "@" + char(127);
     }
     return rhs_string;
   }
 
-  StringSortComparator(bool ignoreCase = false) : _ignoreCase(ignoreCase) {}
-
-  bool isIgnoreCase() const { return _ignoreCase; }
+  StringSortComparator() = default;
+  StringSortComparator(const std::locale& loc) : _locale(loc) {}
+  StringSortComparator& operator=(const StringSortComparator& other) {
+    _locale = other._locale;
+    return *this;
+  }
 
   /*
    * @brief The actual comparison operator.
    */
   bool operator()(std::string_view a, std::string_view b) const {
-    if (!_ignoreCase) {
+    auto splitA = extractComparable(a, getFacet());
+    auto splitB = extractComparable(b, getFacet());
+    if (splitA.isLiteral != splitB.isLiteral) {
+      // only one is a literal, compare by the first character to separate
+      // datatypes.
       return a < b;
-    } else {
-      auto splitA = extractComparable(a);
-      auto splitB = extractComparable(b);
-      if (splitA.isLiteral != splitB.isLiteral) {
-        // only one is a literal, compare by the first character to separate
-        // datatypes.
-        return a < b;
-      }
-      return caseInsensitiveCompare(splitA, splitB);
     }
+    return compare(splitA, splitB);
   }
 
-  // we want to have the member const, but still be able
-  // to copy assign in other places
-  StringSortComparator& operator=(const StringSortComparator& other) {
-    *const_cast<bool*>(&_ignoreCase) = other._ignoreCase;
-    return *this;
-  }
 
- private:
   // A rdf literal or iri split into its components
   struct SplitVal {
-    SplitVal(bool lit, std::string_view v, std::string_view l)
-        : isLiteral(lit), val(v), langtag(l) {}
+    SplitVal() = default;
+    SplitVal(bool lit, std::string trans, std::string_view l)
+        : isLiteral(lit), transformedVal(std::move(trans)), langtag(l) {}
     bool isLiteral;  // was the value an rdf-literal
-    std::string_view
-        val;  // the inner value, possibly stripped by trailing quotation marks
+    std::string transformedVal;  // the original inner value, transformed by a locale()
     std::string_view langtag;  // the language tag, possibly empty
   };
 
-  /// @brief split a literal or iri into its components
-  static SplitVal extractComparable(std::string_view a) {
+  /// @brief split a literal or iri into its components and convert the inner value
+  ///           accor
+  SplitVal extractComparable(std::string_view a) const {
+    return extractComparable(a, getFacet());
+  }
+  static SplitVal extractComparable(std::string_view a, Facet& facet) {
     std::string_view res = a;
     bool isLiteral = false;
     std::string_view langtag;
@@ -203,37 +202,34 @@ class StringSortComparator {
         langtag = "";
       }
     }
-    return {isLiteral, res, langtag};
+    return {isLiteral, facet.transform(res.data(), res.data() + res.size()), langtag};
   }
 
   /// @brief the inner comparison logic
-  static bool caseInsensitiveCompare(const SplitVal& a, const SplitVal& b) {
-    auto aLower = ad_utility::getLowercaseUtf8(a.val);
-    auto bLower = ad_utility::getLowercaseUtf8(b.val);
-    const auto result = std::mismatch(aLower.cbegin(), aLower.cend(),
-                                      bLower.cbegin(), bLower.cend());
-    if (result.second == bLower.end()) {
-      if (result.first == aLower.end()) {
-        // In case a and b are equal wrt case-insensitivity we sort by the
-        // language tag. If this also matches we return the actual order of the
-        // inner string value. Thus we have a unique ordering that makes life
-        // easier.
-        return a.langtag != b.langtag ? a.langtag < b.langtag : a.val < b.val;
+  static bool compare(const SplitVal& a, const SplitVal& b) {
+    const auto result = std::mismatch(a.transformedVal.cbegin(), a.transformedVal.cend(),
+                                      b.transformedVal.cbegin(), b.transformedVal.cend());
+    if (result.second == b.transformedVal.cend()) {
+      if (result.first == a.transformedVal.cend()) {
+        // the values are exactly the same, sort by langtag
+        return a.langtag < b.langtag;
       }
       // b is a prefix of a, thus a is strictly "bigger"
       return false;
     }
 
-    if (result.first == aLower.end()) {
+    if (result.first == a.transformedVal.cend()) {
       // a is a prefix of b
       return true;
     }
 
     // neither string is a prefix of the other, look at the first mismatch
-    // character if we have reach here, both iterators are save to dereference.
+    // character if we have reached here, both iterators are save to dereference.
     return *result.first < *result.second;
   }
-  const bool _ignoreCase;
+private:
+  std::locale _locale;
+  Facet& getFacet() const {return std::use_facet<std::collate<char>>(_locale);}
 };
 
 //! A vocabulary. Wraps a vector of strings
@@ -491,13 +487,9 @@ class Vocabulary {
   static void prefixCompressFile(const string& infile, const string& outfile,
                                  const vector<string>& prefixes);
 
-  // ___________________________________________________________________
-  void setCaseInsensitiveOrdering(bool ignoreCase) {
-    _caseComparator = StringSortComparator(ignoreCase);
-  }
-
   void setLocale(const std::string& localeName) {
     _locale = std::locale(localeName);
+    _caseComparator = StringSortComparator(_locale);
   }
 
   std::locale getLocale() const {
@@ -506,7 +498,7 @@ class Vocabulary {
 
   // ___________________________________________________________________
   bool isCaseInsensitiveOrdering() const {
-    return _caseComparator.isIgnoreCase();
+    return _locale != std::locale();
   }
 
   // _____________________________________________________________________

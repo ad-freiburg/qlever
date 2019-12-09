@@ -2,6 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
+#pragma once
+
+
 #include "./VocabularyGenerator.h"
 #include <fstream>
 #include <future>
@@ -21,23 +24,19 @@
 #include "./Vocabulary.h"
 
 // ___________________________________________________________________
+template<class Comp>
 VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
-    const std::string& basename, size_t numFiles, StringSortComparator comp) {
+    const std::string& basename, size_t numFiles, Comp comp) {
   // we sort alphabetically by the token according to the comparator that was
   // given to us
-  class QueueCompare {
-   public:
-    QueueCompare(StringSortComparator comp) : _comp(comp) {}
-    bool operator()(const QueueWord& p1, const QueueWord& p2) {
-      // if p1 is smaller (alphabetically)
-      // _comp will return false if called like this
-      // and the priority queue will thus emit p1 first
-      return _comp(p2._value, p1._value);
-    }
 
-   private:
-    StringSortComparator _comp;
+  auto queueCompare = [&comp](const QueueWord& p1, const QueueWord& p2) {
+    // if p1 is smaller (alphabetically)
+    // _comp will return false if called like this
+    // and the priority queue will thus emit p1 first
+    return comp(p2._value, p1._value);
   };
+
   std::vector<std::ifstream> infiles;
 
   _outfile.open(basename + ".vocabulary");
@@ -47,8 +46,8 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
   std::vector<bool> endOfFile(numFiles, false);
 
   // Priority queue for the k-way merge
-  std::priority_queue<QueueWord, std::vector<QueueWord>, QueueCompare> queue(
-      comp);
+  std::priority_queue<QueueWord, std::vector<QueueWord>, decltype(queueCompare)> queue(
+      queueCompare);
 
   // open and prepare all infiles and mmap output vectors
   for (size_t i = 0; i < numFiles; i++) {
@@ -225,30 +224,40 @@ void VocabularyMerger::doActualWrite(
 
 // ______________________________________________________________________________________________
 void writePartialIdMapToBinaryFileForMerging(
-    std::shared_ptr<const ad_utility::HashMap<string, std::pair<Id, std::string>>> map,
-    const string& fileName, StringSortComparator comp, std::locale loc,
-    const bool doParallelSort) {
+    std::shared_ptr<const Index::ItemMap> map,
+    const string& fileName, const SortMode mode) {
   LOG(INFO) << "Creating partial vocabulary from set ...\n";
-  std::vector<std::pair<string, std::pair<Id, std::string>>> els;
+  std::vector<std::pair<string, std::pair<Id, StringSortComparator::SplitVal>>> els;
   els.reserve(map->size());
   els.insert(begin(els), begin(*map), end(*map));
   LOG(INFO) << "... sorting ...\n";
 
-  auto pred = [&loc](const auto& p1, const auto& p2) {
-    return loc(p1.first, p2.first);
-  };
-
-  if constexpr (USE_PARALLEL_SORT) {
-    if (doParallelSort) {
+  auto sort = [&els](const auto& pred) {
+    if constexpr (USE_PARALLEL_SORT) {
       __gnu_parallel::sort(begin(els), end(els), pred,
                            __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
     } else {
       std::sort(begin(els), end(els), pred);
     }
-  } else {
-    std::sort(begin(els), end(els), pred);
-    (void)doParallelSort;  // avoid compiler warning for unused value.
+  };
+
+  switch (mode) {
+    case SortMode::Simple : {
+      auto pred = [](const auto& p1, const auto& p2) {
+        return p1.first < p2.first;
+      };
+      sort(pred);
+      break;
+    }
+    case SortMode::StringComparator : {
+      auto pred = [](const auto& p1, const auto& p2) {
+        return StringSortComparator::compare(p1.second.second,p2.second.second);
+      };
+      sort(pred);
+      break;
+    }
   }
+
   LOG(INFO) << "Done creating vocabulary.\n";
 
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
