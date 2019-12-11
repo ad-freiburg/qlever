@@ -251,7 +251,7 @@ void writePartialIdMapToBinaryFileForMerging(
     }
     case SortMode::StringComparator : {
       auto pred = [](const auto& p1, const auto& p2) {
-        return StringSortComparator::compare(p1.second.second,p2.second.second);
+        return StringSortComparator::compareCStyle(p1.second.second, p2.second.second);
       };
       sort(pred);
       break;

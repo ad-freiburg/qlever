@@ -416,24 +416,9 @@ void Filter::computeFilterFixedValue(
       if constexpr (T == ResultTable::ResultType::KB) {
         // remove the leading '^' symbol
         std::string rhs = _rhs.substr(1);
-        std::string upperBoundStr = rhs;
-        if (getIndex().getVocab().isCaseInsensitiveOrdering()) {
-          upperBoundStr = ad_utility::getUppercaseUtf8(upperBoundStr);
-          upperBoundStr[upperBoundStr.size() - 1]++;
-          upperBoundStr =
-              StringSortComparator::rdfLiteralToValueForLT(upperBoundStr);
-          // less than and greater equal require the same value
-          rhs = StringSortComparator::rdfLiteralToValueForLT(rhs);
+        // TODO<joka921>: handle Levels correctly;
+        auto [lowerBound, upperBound] = getIndex().getVocab().prefix_range(rhs, StringSortComparator::Level::primary);
 
-          LOG(INFO) << "upperBound was converted to " << upperBoundStr << '\n';
-          LOG(INFO) << "lowerBound was converted to " << rhs << '\n';
-        } else {
-          upperBoundStr[upperBoundStr.size() - 1]++;
-        }
-
-        size_t upperBound =
-            getIndex().getVocab().getValueIdForLT(upperBoundStr);
-        size_t lowerBound = getIndex().getVocab().getValueIdForGE(rhs);
         LOG(DEBUG) << "upper and lower bound are " << upperBound << ' '
                    << lowerBound << std::endl;
         if (lhs_is_sorted) {
@@ -540,40 +525,22 @@ void Filter::computeResultFixedValue(
           rhs_string = rhs_string.substr(1, rhs_string.size() - 2);
         }
 
-        if (getIndex().getVocab().isCaseInsensitiveOrdering()) {
-          // We have to move to the correct end of the
-          // "same letters but different case" - range
-          // to make the filters work
-          switch (_type) {
-            case SparqlFilter::GE:
-            case SparqlFilter::LT: {
-              rhs_string =
-                  StringSortComparator::rdfLiteralToValueForLT(rhs_string);
-            }
-
-            break;
-            case SparqlFilter::GT:
-            case SparqlFilter::LE: {
-              rhs_string =
-                  StringSortComparator::rdfLiteralToValueForGT(rhs_string);
-            } break;
-            default:
-              break;
-          }
-        }
       }
+
+      // TODO<joka921> which level do we want for these filters
+      auto level = StringSortComparator::Level::identical;
       if (_type == SparqlFilter::EQ || _type == SparqlFilter::NE) {
         if (!getIndex().getVocab().getId(rhs_string, &rhs)) {
           rhs = std::numeric_limits<size_t>::max() - 1;
         }
       } else if (_type == SparqlFilter::GE) {
-        rhs = getIndex().getVocab().getValueIdForGE(rhs_string);
+        rhs = getIndex().getVocab().getValueIdForGE(rhs_string, level);
       } else if (_type == SparqlFilter::GT) {
-        rhs = getIndex().getVocab().getValueIdForGT(rhs_string);
+        rhs = getIndex().getVocab().getValueIdForGT(rhs_string, level);
       } else if (_type == SparqlFilter::LT) {
-        rhs = getIndex().getVocab().getValueIdForLT(rhs_string);
+        rhs = getIndex().getVocab().getValueIdForLT(rhs_string, level);
       } else if (_type == SparqlFilter::LE) {
-        rhs = getIndex().getVocab().getValueIdForLE(rhs_string);
+        rhs = getIndex().getVocab().getValueIdForLE(rhs_string, level);
       }
       // All other types of filters do not use r and work on _rhs directly
       break;

@@ -514,8 +514,7 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
-  Id langPredUpperBound = _vocab.getValueIdForLT(std::string(1, '@' + 1));
-  Id langPredLowerBound = _vocab.getValueIdForGE("@");
+  auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@", StringSortComparator::Level::identical);
   createPatternsImpl<MetaDataIterator<IndexMetaDataMmapView>,
                      IndexMetaDataMmapView, ad_utility::File>(
       _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
@@ -1421,7 +1420,6 @@ void Index::initializeVocabularySettingsBuild() {
   if (j.count("locale")) {
     _vocab.setLocale(j["locale"]);
     _configurationJson["locale"] = j["locale"];
-
   }
 
   if (j.find("languages-internal") != j.end()) {
@@ -1437,7 +1435,7 @@ Id Index::assignNextId(Index::ItemMap* mapPtr, const string& key) {
   ItemMap& map = *mapPtr;
   if (!map.count(key)) {
     Id res = map.size();
-    map[key] = std::pair(map.size(), _vocab.getCaseComparator().extractComparable(key));
+    map[key] = std::pair(map.size(), _vocab.getCaseComparator().extractAndTransformComparable(key, StringSortComparator::Level::identical));
     return res;
   } else {
     return map[key].first;
