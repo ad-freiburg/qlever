@@ -255,7 +255,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
         _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(i);
     deleteTemporaryFile(partialFilename);
   }
-  if (_vocabPrefixCompressed && _vocab.isCaseInsensitiveOrdering()) {
+  if (_vocabPrefixCompressed) {
     string partialFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +
                              PARTIAL_VOCAB_FILE_NAME + std::to_string(i);
     deleteTemporaryFile(partialFilename);

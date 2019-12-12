@@ -121,12 +121,17 @@ class StringSortComparator {
   // (uppercase comes before lowercase in ASCII/Utf) and removing
   // possible language tags.
 
-  StringSortComparator() = default;
-  StringSortComparator(const std::locale& loc) : _locale(loc) {}
+  StringSortComparator() : StringSortComparator("en_US.utf8") {};
+  StringSortComparator(const string& locname) {
+    boost::locale::generator gen;
+    _locale = gen(locname);
+  }
   StringSortComparator& operator=(const StringSortComparator& other) {
     _locale = other._locale;
     return *this;
   }
+
+  std::locale getLocale() const { return _locale;}
 
   // A rdf literal or iri split into its components
   struct SplitVal {
@@ -209,7 +214,7 @@ class StringSortComparator {
     if (res == 0) {
       return a.langtag.compare(b.langtag);
     }
-    return res < 0;
+    return res;
   }
 private:
   std::locale _locale;
@@ -492,18 +497,12 @@ class Vocabulary {
                                  const vector<string>& prefixes);
 
   void setLocale(const std::string& localeName) {
-    boost::locale::generator gen;
-    _locale = std::locale(gen(localeName));
-    _caseComparator = StringSortComparator(_locale);
+
+    _caseComparator = StringSortComparator(localeName);
   }
 
   std::locale getLocale() const {
-    return _locale;
-  }
-
-  // ___________________________________________________________________
-  bool isCaseInsensitiveOrdering() const {
-    return _locale != std::locale();
+    return _caseComparator.getLocale();
   }
 
   // _____________________________________________________________________

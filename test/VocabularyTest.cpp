@@ -30,15 +30,15 @@ TEST(VocabularyTest, getIdForWordTest) {
   // with case insensitive ordering
   Vocabulary<string> voc;
   voc.setLocale("en_US.utf-8");
-  voc.push_back("A");
   voc.push_back("a");
+  voc.push_back("A");
   voc.push_back("Ba");
   voc.push_back("car");
   Id id;
   ASSERT_TRUE(voc.getId("Ba", &id));
   ASSERT_EQ(Id(2), id);
   ASSERT_TRUE(voc.getId("a", &id));
-  ASSERT_EQ(Id(1), id);
+  ASSERT_EQ(Id(0), id);
   // getId only gets exact matches;
   ASSERT_FALSE(voc.getId("ba", &id));
 };
@@ -111,7 +111,7 @@ TEST(VocabularyTest, createFromSetTest) {
 
 // ______________________________________________________________________________________________
 TEST(VocabularyTest, StringSortComparator) {
-  StringSortComparator comp(std::locale("en_US.utf-8"));
+  StringSortComparator comp("en_US.utf-8");
 
   // strange casings must not affect order
   ASSERT_TRUE(comp("ALPHA", "beta"));
@@ -128,13 +128,13 @@ TEST(VocabularyTest, StringSortComparator) {
   ASSERT_FALSE(comp("ALPha", "alP"));
 
   // only if lowercased version is exactly the same we want to sort by the
-  // casing (upper-case letters have lower ascii values than lower-case)
-  ASSERT_FALSE(comp("alpha", "ALPHA"));
-  ASSERT_TRUE(comp("ALPHA", "alpha"));
+  // casing (lowercase comes first in the default en_US.utf8-locale
+  ASSERT_TRUE(comp("alpha", "ALPHA"));
+  ASSERT_FALSE(comp("ALPHA", "alpha"));
 
   ASSERT_TRUE(comp("\"Hannibal\"@en", "\"Hannibal Hamlin\"@en"));
   ASSERT_TRUE(comp("\"Hannibal\"@af", "\"Hannibal\"@en"));
-  ASSERT_TRUE(comp("\"HAnnibal\"@en", "\"Hannibal\"@en"));
+  ASSERT_TRUE(comp("\"Hannibal\"@en", "\"HanNibal\"@en"));
 
   // TODO<joka921>: test cases for UTF-8
 
@@ -143,7 +143,7 @@ TEST(VocabularyTest, StringSortComparator) {
 }
 
 TEST(VocabularyTest, IncompleteLiterals) {
-  StringSortComparator comp(std::locale("en_US_utf-8"));
+  StringSortComparator comp("en_US_utf-8");
 
   ASSERT_TRUE(comp("\"fieldofwork", "\"GOLD\"@en"));
 }

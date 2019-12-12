@@ -215,18 +215,18 @@ TEST_F(MergeVocabularyTest, bla) {
 
 TEST(VocabularyGenerator, ReadAndWritePartial) {
   {
-    ad_utility::HashMap<string, std::pair<Id, std::string>> s;
-    s["A"] = std::make_pair(5, "A");
-    s["a"] = std::make_pair(6, "a");
-    s["Ba"] = std::make_pair(7, "Ba");
-    s["car"] = std::make_pair(8, "car");
+    using SP = StringSortComparator::SplitVal;
+    ad_utility::HashMap<string, std::pair<Id, SP>> s;
+    s["A"] = std::make_pair(5, SP{});
+    s["a"] = std::make_pair(6, SP{});
+    s["Ba"] = std::make_pair(7, SP{});
+    s["car"] = std::make_pair(8, SP{});
     Vocabulary<string> v;
     std::string basename = "_tmp_testidx";
     auto ptr =
-        std::make_shared<const ad_utility::HashMap<string, std::pair<Id, std::string>>>(std::move(s));
+        std::make_shared<const decltype(s)>(std::move(s));
     writePartialIdMapToBinaryFileForMerging(
-        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(), v.getLocale(),
-        false);
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", SortMode::Simple);
 
     {
       VocabularyMerger m;
@@ -242,31 +242,38 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
   }
 
   // again with the case insensitive variant.
-  {
-    ad_utility::HashMap<string, std::pair<Id, std::string>> s;
-    s["A"] = std::make_pair(5, "A");
-    s["a"] = std::make_pair(6, "a");
-    s["Ba"] = std::make_pair(7, "Ba");
-    s["car"] = std::make_pair(8, "car");
+  try {
     Vocabulary<string> v;
-    v.setCaseInsensitiveOrdering(true);
+    v.setLocale("en_US.utf8");
+    auto extr = [&v](std::string_view s) {
+      return v.getCaseComparator().extractAndTransformComparable(s, StringSortComparator::Level::identical);
+    };
+    Index::ItemMap s;
+    s["A"] = std::make_pair(5, extr("A"));
+    s["a"] = std::make_pair(6, extr("a"));
+    s["Ba"] = std::make_pair(7, extr("Ba"));
+    s["car"] = std::make_pair(8, extr("car"));
+    s["Ä"] = std::make_pair(9, extr("Ä"));
     std::string basename = "_tmp_testidx";
     auto ptr =
-        std::make_shared<const ad_utility::HashMap<string, std::pair<Id, std::string>>>(std::move(s));
+        std::make_shared<const Index::ItemMap>(std::move(s));
     writePartialIdMapToBinaryFileForMerging(
-        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(), v.getLocale(),
-        false);
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", SortMode::StringComparator);
 
     {
       VocabularyMerger m;
       m.mergeVocabulary(basename, 1, v.getCaseComparator());
     }
-    auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
-    ASSERT_EQ(0u, idMap[5]);
-    ASSERT_EQ(1u, idMap[6]);
-    ASSERT_EQ(2u, idMap[7]);
-    ASSERT_EQ(3u, idMap[8]);
-    auto res = system("rm _tmp_testidx*");
-    (void)res;
+      auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
+      ASSERT_EQ(0u, idMap[6]);
+      ASSERT_EQ(1u, idMap[5]);
+      ASSERT_EQ(2u, idMap[9]);
+      ASSERT_EQ(3u, idMap[7]);
+      ASSERT_EQ(4u, idMap[8]);
+      auto res = system("rm _tmp_testidx*");
+      (void) res;
+
+  } catch (const std::bad_cast& b) {
+    std::cerr << "What the fuck\n";
   }
 }
