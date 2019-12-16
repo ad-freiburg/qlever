@@ -221,7 +221,7 @@ private:
   Facet& getFacet() const {return std::use_facet<boost::locale::collator<char>>(_locale);}
 
   template<class SplitValType>
-  static SplitValType extractComparable(std::string_view a, Facet facet, const Level level) {
+  static SplitValType extractComparable(std::string_view a, [[maybe_unused]] Facet facet, [[maybe_unused]] const Level level) {
     std::string_view res = a;
     bool isLiteral = false;
     std::string_view langtag;

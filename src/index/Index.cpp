@@ -1369,8 +1369,16 @@ void Index::readConfiguration() {
         _configurationJson["prefixes-external"]);
   }
 
+  if (_configurationJson.count("ignore-case")) {
+    LOG(ERROR) << "Key \"ignore-case\" is no longer supported. This is an old index build that is no longer supported. Please rebuild your index using the \"locale\" key  \n";
+    throw std::runtime_error("Deprecated key \"ignore-case\" in index build");
+  }
+
   if (_configurationJson.count("locale")) {
     _vocab.setLocale(_configurationJson["locale"]);
+  } else {
+    LOG(ERROR) << "Key \"locale\" is missing in the metadata. This is probably and old index build that is no longer supported by QLever. Please rebuild your index\n";
+    throw std::runtime_error("Missing required key \"ignore-case\" in index build's metadata");
   }
 
   if (_configurationJson.find("languages-internal") !=
@@ -1417,10 +1425,24 @@ void Index::initializeVocabularySettingsBuild() {
     _configurationJson["external-literals"] = true;
   }
 
+  if (j.count("ignore-case")) {
+    LOG(ERROR) << "Key \"ignore-case\" is no longer supported for the settings JSON. Please specify a \"locale\" instead (or remove the key for the default locale, see doc)\n";
+    throw std::runtime_error("Deprecated key \"ignore-case\" in settings JSON");
+  }
+
+
+  std::string locale;
   if (j.count("locale")) {
+    locale = j["locale"];
     _vocab.setLocale(j["locale"]);
     _configurationJson["locale"] = j["locale"];
+  } else {
+    LOG(INFO) << "locale was not specified by the settings JSON, defaulting to en_US.utf8\n";
+    locale = "en_US.utf8";
   }
+  LOG(INFO) << "Using Locale " << locale << '\n';
+  _vocab.setLocale(locale);
+  _configurationJson["locale"] = locale;
 
   if (j.find("languages-internal") != j.end()) {
     _vocab.initializeInternalizedLangs(j["languages-internal"]);
