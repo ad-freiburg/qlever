@@ -29,7 +29,7 @@ TEST(VocabularyTest, getIdForWordTest) {
 
   // with case insensitive ordering
   Vocabulary<string> voc;
-  voc.setLocale("en_US.utf-8");
+  voc.setLocale("en", "US", false);
   voc.push_back("a");
   voc.push_back("A");
   voc.push_back("Ba");
@@ -111,7 +111,7 @@ TEST(VocabularyTest, createFromSetTest) {
 
 // ______________________________________________________________________________________________
 TEST(VocabularyTest, StringSortComparator) {
-  StringSortComparator comp("en_US.utf-8");
+  StringSortComparator comp("en", "US", false);
 
   // strange casings must not affect order
   ASSERT_TRUE(comp("ALPHA", "beta"));
@@ -143,7 +143,7 @@ TEST(VocabularyTest, StringSortComparator) {
 }
 
 TEST(VocabularyTest, IncompleteLiterals) {
-  StringSortComparator comp("en_US_utf-8");
+  StringSortComparator comp("en", "US", false);
 
   ASSERT_TRUE(comp("\"fieldofwork", "\"GOLD\"@en"));
 }

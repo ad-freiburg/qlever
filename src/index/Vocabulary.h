@@ -25,6 +25,7 @@
 #include "../util/StringUtils.h"
 #include "./CompressedString.h"
 #include "ExternalVocabulary.h"
+#include "./StringSortComparator.h"
 
 using std::string;
 using std::vector;
@@ -110,145 +111,6 @@ class PrefixComparator {
  *
  * This gives us a strict ordering on strings.
  */
-class StringSortComparator {
- public:
-  using Facet = decltype(std::use_facet<boost::locale::collator<char>>(std::locale()));
-  using Level = boost::locale::collator_base::level_type;
-  StringSortComparator(const StringSortComparator&) = default;
-  // Convert an rdf-literal "value"@lang (langtag is optional)
-  // to the first possible literal with the same case-insensitive value
-  // ("VALUE") in this case. This is done by conversion to uppercase
-  // (uppercase comes before lowercase in ASCII/Utf) and removing
-  // possible language tags.
-
-  StringSortComparator() : StringSortComparator("en_US.utf8") {};
-  StringSortComparator(const string& locname) {
-    boost::locale::generator gen;
-    _locale = gen(locname);
-  }
-  StringSortComparator& operator=(const StringSortComparator& other) {
-    _locale = other._locale;
-    return *this;
-  }
-
-  std::locale getLocale() const { return _locale;}
-
-  // A rdf literal or iri split into its components
-  struct SplitVal {
-    SplitVal() = default;
-    SplitVal(bool lit, std::string trans, std::string_view l)
-            : isLiteral(lit), transformedVal(std::move(trans)), langtag(l) {}
-    bool isLiteral;  // was the value an rdf-literal
-    std::string transformedVal;  // the original inner value, transformed by a locale()
-    std::string langtag;  // the language tag, possibly empty
-  };
-
-
-
-  /*
-   * @brief The actual comparison operator.
-   */
-  bool operator()(std::string_view a, std::string_view b, const boost::locale::collator_base::level_type level = boost::locale::collator_base::identical) const {
-    return compareViews(a, b, level) < 0;
-  }
-
-  bool operator()(std::string_view a , const SplitVal& spB, const boost::locale::collator_base::level_type level) const {
-    auto spA = extractAndTransformComparable(a, level);
-    return compareCStyle(spA, spB);
-  }
-
-
-  bool equals(std::string_view a, std::string_view b, const boost::locale::collator_base::level_type level = boost::locale::collator_base::identical) const {
-    return compareViews(a, b, level) == 0;
-  }
-
-  int compareViews(std::string_view a, std::string_view b, const boost::locale::collator_base::level_type level = boost::locale::collator_base::identical) const {
-    // the facet and level argument are actually ignored TODO: fix this.
-    auto splitA = extractComparable<SplitValNonOwning>(a, getFacet(), level);
-    auto splitB = extractComparable<SplitValNonOwning>(b, getFacet(), level);
-    if (splitA.isLiteral != splitB.isLiteral) {
-      // only one is a literal, compare by the first character to separate
-      // datatypes.
-      return a < b;
-    }
-    return compareByLocale(splitA, splitB, level);
-  }
-
-
-  struct SplitValNonOwning {
-    SplitValNonOwning() = default;
-    SplitValNonOwning(bool lit, std::string_view trans, std::string_view l)
-            : isLiteral(lit), transformedVal(std::move(trans)), langtag(l) {}
-    bool isLiteral;  // was the value an rdf-literal
-    std::string_view transformedVal;  // the original inner value, transformed by a locale()
-    std::string_view langtag;  // the language tag, possibly empty
-  };
-
-  /// @brief split a literal or iri into its components and convert the inner value
-  ///           accor
-  SplitVal extractAndTransformComparable(std::string_view a, const Level level) const {
-    return extractComparable<SplitVal>(a, getFacet(), level);
-  }
-
-  SplitValNonOwning extractNonTransformingComparable(std::string_view a, const Level level) const {
-    return extractComparable<SplitValNonOwning>(a, getFacet(), level);
-  }
-
-  template<class SplitValType>
-  static bool compareCStyle(const SplitValType& a, const SplitValType& b) {
-    return compare(a, b, [](const std::string& a, const std::string& b){ return std::strcmp(a.c_str(), b.c_str());}) < 0;
-  }
-
-  template<class SplitValType>
-  int compareByLocale(const SplitValType& a, const SplitValType& b, const Level level = Level::identical) const {
-    const auto c = [this, level](const auto& a, const auto& b) {return getFacet().compare(level, a.data(), a.data() + a.size(), b.data(), b.data() + b.size());};
-    return compare(a, b, c);
-  }
-
-
-  /// @brief the inner comparison logic
-  /// Comp must return 0 on equality of inner strings, <0 if a < b and >0 if  a > b
-  template<class SplitValType, class Comp>
-  static int compare(const SplitValType& a, const SplitValType& b, Comp comp) {
-    int res = comp(a.transformedVal, b.transformedVal);
-    if (res == 0) {
-      return a.langtag.compare(b.langtag);
-    }
-    return res;
-  }
-private:
-  std::locale _locale;
-  Facet& getFacet() const {return std::use_facet<boost::locale::collator<char>>(_locale);}
-
-  template<class SplitValType>
-  static SplitValType extractComparable(std::string_view a, [[maybe_unused]] Facet facet, [[maybe_unused]] const Level level) {
-    std::string_view res = a;
-    bool isLiteral = false;
-    std::string_view langtag;
-    if (ad_utility::startsWith(res, "\"")) {
-      // In the case of prefix filters we might also have
-      // Literals that do not have the closing quotation mark
-      isLiteral = true;
-      res.remove_prefix(1);
-      auto endPos = ad_utility::findLiteralEnd(res, "\"");
-      if (endPos != string::npos) {
-        // this should also be fine if there is no langtag (endPos == size()
-        // according to cppreference.com
-        langtag = res.substr(endPos + 1);
-        res.remove_suffix(res.size() - endPos);
-      } else {
-        langtag = "";
-      }
-    }
-    if constexpr (std::is_same_v<SplitValType, SplitVal>) {
-      return {isLiteral, facet.transform(level, res.data(), res.data() + res.size()), langtag};
-    } else if constexpr (std::is_same_v<SplitValType, SplitValNonOwning>) {
-      return {isLiteral, res, langtag};
-    } else {
-      SplitValType().ThisShouldNotCompile();
-    }
-  }
-};
 
 //! A vocabulary. Wraps a vector of strings
 //! and provides additional methods for retrieval.
@@ -496,13 +358,9 @@ class Vocabulary {
   static void prefixCompressFile(const string& infile, const string& outfile,
                                  const vector<string>& prefixes);
 
-  void setLocale(const std::string& localeName) {
+  void setLocale(const std::string& language, const std::string& country, bool ignorePunctuation) {
 
-    _caseComparator = StringSortComparator(localeName);
-  }
-
-  std::locale getLocale() const {
-    return _caseComparator.getLocale();
+    _caseComparator = StringSortComparator(language, country, ignorePunctuation);
   }
 
   // _____________________________________________________________________
@@ -510,18 +368,13 @@ class Vocabulary {
     return _caseComparator;
   }
 
+  // TODO: comment
   std::pair<Id, Id> prefix_range(const string& prefix, const StringSortComparator::Level level) const {
     if (prefix.empty()) {
       return {0, _words.size()};
     }
     Id lb = lower_bound(prefix, level);
-    auto transformed = _caseComparator.extractAndTransformComparable(prefix, level);
-    unsigned char last = transformed.transformedVal.back();
-    if (last < 255) {
-      transformed.transformedVal.back() += 1;
-    } else {
-      transformed.transformedVal.push_back('\0');
-    }
+    auto transformed = _caseComparator.transformToFirstPossibleBiggerValue(prefix, level);
 
     auto pred = getLowerBoundLambda<StringSortComparator::SplitVal>(level);
     auto ub =  static_cast<Id>(
@@ -529,12 +382,6 @@ class Vocabulary {
             _words.begin());
 
     return {lb, ub};
-  }
-
-
-  std::pair<Id, Id> equal_range(const string& word, const StringSortComparator::Level level = StringSortComparator::Level::identical) {
-    const auto& [beg, end] = std::equal_range(_words.begin(), _words.end(), word, getLowerBoundLambda(level));
-    return {beg - _words.begin(), end - _words.begin()};
   }
 
  private:
@@ -558,11 +405,11 @@ class Vocabulary {
         return this->_caseComparator(a, this->expandPrefix(b), level);
       };
     } else {
-      return getLowerBoundLambda();
+      return getLowerBoundLambda(level);
     }
   }
   // Wraps std::lower_bound and returns an index instead of an iterator
-  Id lower_bound(const string& word, const SortLevel level = SortLevel::identical) const {
+  Id lower_bound(const string& word, const SortLevel level = SortLevel::IDENTICAL) const {
     return static_cast<Id>(
             std::lower_bound(_words.begin(), _words.end(), word, getLowerBoundLambda(level)) -
             _words.begin());
@@ -618,4 +465,4 @@ class Vocabulary {
   std::locale _locale;  // default constructed as c locale
 };
 
-#include "./VocabularyImpl.h"
+#include "VocabularyImpl.h"

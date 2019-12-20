@@ -514,7 +514,7 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
-  auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@", StringSortComparator::Level::identical);
+  auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@", StringSortComparator::Level::IDENTICAL);
   createPatternsImpl<MetaDataIterator<IndexMetaDataMmapView>,
                      IndexMetaDataMmapView, ad_utility::File>(
       _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
@@ -1375,10 +1375,13 @@ void Index::readConfiguration() {
   }
 
   if (_configurationJson.count("locale")) {
-    _vocab.setLocale(_configurationJson["locale"]);
+    std::string lang = _configurationJson["locale"]["language"];
+    std::string country = _configurationJson["locale"]["country"];
+    bool ignorePunctuation = _configurationJson["locale"]["ignore-punctuation"];
+    _vocab.setLocale(lang, country, ignorePunctuation);
   } else {
     LOG(ERROR) << "Key \"locale\" is missing in the metadata. This is probably and old index build that is no longer supported by QLever. Please rebuild your index\n";
-    throw std::runtime_error("Missing required key \"ignore-case\" in index build's metadata");
+    throw std::runtime_error("Missing required key \"locale\" in index build's metadata");
   }
 
   if (_configurationJson.find("languages-internal") !=
@@ -1410,13 +1413,12 @@ string Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
 
 // ___________________________________________________________________________
 void Index::initializeVocabularySettingsBuild() {
-  if (_settingsFileName.empty()) {
-    return;
-  }
+  json j; // if we have no settings, we still have to initialize some default values
+  if (!_settingsFileName.empty()) {
   std::ifstream f(_settingsFileName);
   AD_CHECK(f.is_open());
-  json j;
   f >> j;
+  }
 
   if (j.find("prefixes-external") != j.end()) {
     _vocab.initializeExternalizePrefixes(j["prefixes-external"]);
@@ -1431,18 +1433,24 @@ void Index::initializeVocabularySettingsBuild() {
   }
 
 
-  std::string locale;
-  if (j.count("locale")) {
-    locale = j["locale"];
-    _vocab.setLocale(j["locale"]);
-    _configurationJson["locale"] = j["locale"];
-  } else {
-    LOG(INFO) << "locale was not specified by the settings JSON, defaulting to en_US.utf8\n";
-    locale = "en_US.utf8";
+  {
+    std::string lang = "en";
+    std::string country = "US";
+    bool ignorePunctuation = false;
+    if (j.count("locale")) {
+      // TODO: proper exceptions
+      lang = j["locale"]["language"];
+      country = j["locale"]["country"];
+      ignorePunctuation = j["locale"]["ignore-punctuation"];
+    } else {
+      LOG(INFO) << "locale was not specified by the settings JSON, defaulting to en US\n";
+    }
+    LOG(INFO) << "Using Locale " << lang << " " << country << " with ignore-punctuation: " << ignorePunctuation<< '\n';
+    _vocab.setLocale(lang, country, ignorePunctuation);
+    _configurationJson["locale"]["language"] = lang;
+    _configurationJson["locale"]["country"] = country;
+    _configurationJson["locale"]["ignore-punctuation"] = ignorePunctuation;
   }
-  LOG(INFO) << "Using Locale " << locale << '\n';
-  _vocab.setLocale(locale);
-  _configurationJson["locale"] = locale;
 
   if (j.find("languages-internal") != j.end()) {
     _vocab.initializeInternalizedLangs(j["languages-internal"]);
@@ -1457,7 +1465,7 @@ Id Index::assignNextId(Index::ItemMap* mapPtr, const string& key) {
   ItemMap& map = *mapPtr;
   if (!map.count(key)) {
     Id res = map.size();
-    map[key] = std::pair(map.size(), _vocab.getCaseComparator().extractAndTransformComparable(key, StringSortComparator::Level::identical));
+    map[key] = std::pair(map.size(), _vocab.getCaseComparator().extractAndTransformComparable(key, StringSortComparator::Level::IDENTICAL));
     return res;
   } else {
     return map[key].first;
@@ -1478,7 +1486,7 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
 
   LOG(INFO) << "writing partial vocabulary to " << partialFilename << std::endl;
   LOG(INFO) << "it contains " << items->size() << " elements\n";
-  fut1 = std::async([comp = _vocab.getCaseComparator(), loc = _vocab.getLocale(), &items, partialFilename]() {
+  fut1 = std::async([&items, partialFilename]() {
     writePartialIdMapToBinaryFileForMerging(items, partialFilename,
                                             SortMode::StringComparator);
   });
@@ -1492,7 +1500,7 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
     LOG(INFO) << "writing partial temporary vocabulary to "
               << partialTmpFilename << std::endl;
     LOG(INFO) << "it contains " << items->size() << " elements\n";
-    fut2 = std::async([loc = _vocab.getLocale(), &items, partialTmpFilename]() {
+    fut2 = std::async([&items, partialTmpFilename]() {
       writePartialIdMapToBinaryFileForMerging(
           items, partialTmpFilename, SortMode::Simple);
     });

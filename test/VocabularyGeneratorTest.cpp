@@ -244,9 +244,9 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
   // again with the case insensitive variant.
   try {
     Vocabulary<string> v;
-    v.setLocale("en_US.utf8");
+    v.setLocale("en", "US", false);
     auto extr = [&v](std::string_view s) {
-      return v.getCaseComparator().extractAndTransformComparable(s, StringSortComparator::Level::identical);
+      return v.getCaseComparator().extractAndTransformComparable(s, StringSortComparator::Level::IDENTICAL);
     };
     Index::ItemMap s;
     s["A"] = std::make_pair(5, extr("A"));

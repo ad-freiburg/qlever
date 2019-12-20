@@ -417,7 +417,7 @@ void Filter::computeFilterFixedValue(
         // remove the leading '^' symbol
         std::string rhs = _rhs.substr(1);
         // TODO<joka921>: handle Levels correctly;
-        auto [lowerBound, upperBound] = getIndex().getVocab().prefix_range(rhs, StringSortComparator::Level::primary);
+        auto [lowerBound, upperBound] = getIndex().getVocab().prefix_range(rhs, StringSortComparator::Level::PRIMARY);
 
         LOG(DEBUG) << "upper and lower bound are " << upperBound << ' '
                    << lowerBound << std::endl;
@@ -528,7 +528,7 @@ void Filter::computeResultFixedValue(
       }
 
       // TODO<joka921> which level do we want for these filters
-      auto level = StringSortComparator::Level::identical;
+      auto level = StringSortComparator::Level::IDENTICAL;
       if (_type == SparqlFilter::EQ || _type == SparqlFilter::NE) {
         if (!getIndex().getVocab().getId(rhs_string, &rhs)) {
           rhs = std::numeric_limits<size_t>::max() - 1;

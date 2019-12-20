@@ -24,11 +24,23 @@ void Vocabulary<S>::readFromFile(const string& fileName,
   _words.clear();
   std::fstream in(fileName.c_str(), std::ios_base::in);
   string line;
+  [[maybe_unused]] bool first = true;
+  std::string lastExpandedString;
   while (std::getline(in, line)) {
     if constexpr (_isCompressed) {
       // when we read from file it means that all preprocessing has been done
       // and the prefixes are already stripped in the file
       _words.push_back(CompressedString::fromString(line));
+      auto str = expandPrefix(_words.back());
+      if (!first) {
+        if (!(_caseComparator.compareViews(lastExpandedString, str) <= 0))  {
+          LOG(ERROR) << "Vocabulary is not sorted in ascending order for words " << lastExpandedString << " and " << str << std::endl;
+          //AD_CHECK(false);
+        }
+      } else {
+        first = false;
+      }
+      lastExpandedString = std::move(str);
     } else {
       _words.push_back(line);
     }
