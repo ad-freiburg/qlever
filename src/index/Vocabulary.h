@@ -128,7 +128,7 @@ class Vocabulary {
       std::enable_if_t<!std::is_same_v<T, CompressedString>>;
 
  public:
-  using SortLevel = StringSortComparator::Level;
+  using SortLevel = TripleComponentComparator::Level;
   template <
       typename = std::enable_if_t<std::is_same_v<StringType, string> ||
                                   std::is_same_v<StringType, CompressedString>>>
@@ -257,20 +257,16 @@ class Vocabulary {
 
   //! Get an Id range that matches a prefix.
   //! Return value signals if something was found at all.
+  //! CAVEAT! TODO<discovered by joka921>: This is only used for the text index, and uses a range, where
+  //! the last index is still within the range which is against C++ conventions!
+  // consider using the prefixRange function.
   bool getIdRangeForFullTextPrefix(const string& word, IdRange* range) const {
     AD_CHECK_EQ(word[word.size() - 1], PREFIX_CHAR);
-    range->_first = lower_bound(word.substr(0, word.size() - 1));
-    range->_last =
-        upper_bound(word.substr(0, word.size() - 1), range->_first,
-                    PrefixComparator<StringType>(word.size() - 1, this)) -
-        1;
-    bool success = range->_first < _words.size() &&
-                   ad_utility::startsWith(at(range->_first),
-                                          word.substr(0, word.size() - 1)) &&
-                   range->_last < _words.size() &&
-                   ad_utility::startsWith(at(range->_last),
-                                          word.substr(0, word.size() - 1)) &&
-                   range->_first <= range->_last;
+    auto prefixRange = prefix_range(word.substr(0, word.size() - 1), TripleComponentComparator::Level::IDENTICAL);
+    bool success = prefixRange.second > prefixRange.first;
+    range->_first = prefixRange.first;
+    range->_last = prefixRange.second - 1;
+
     if (success) {
       AD_CHECK_LT(range->_first, _words.size());
       AD_CHECK_LT(range->_last, _words.size());
@@ -360,23 +356,24 @@ class Vocabulary {
 
   void setLocale(const std::string& language, const std::string& country, bool ignorePunctuation) {
 
-    _caseComparator = StringSortComparator(language, country, ignorePunctuation);
+    _caseComparator = TripleComponentComparator(language, country, ignorePunctuation);
   }
 
   // _____________________________________________________________________
-  const StringSortComparator& getCaseComparator() const {
+  const TripleComponentComparator& getCaseComparator() const {
     return _caseComparator;
   }
 
-  // TODO: comment
-  std::pair<Id, Id> prefix_range(const string& prefix, const StringSortComparator::Level level) const {
+  /// returns the range of IDs where strings of the vocabulary start with the prefix according to the collation level
+  /// the first Id is included in the range, the last one not.
+  std::pair<Id, Id> prefix_range(const string& prefix, const TripleComponentComparator::Level level) const {
     if (prefix.empty()) {
       return {0, _words.size()};
     }
     Id lb = lower_bound(prefix, level);
     auto transformed = _caseComparator.transformToFirstPossibleBiggerValue(prefix, level);
 
-    auto pred = getLowerBoundLambda<StringSortComparator::SplitVal>(level);
+    auto pred = getLowerBoundLambda<TripleComponentComparator::SplitVal>(level);
     auto ub =  static_cast<Id>(
             std::lower_bound(_words.begin(), _words.end(), transformed, pred) -
             _words.begin());
@@ -387,7 +384,7 @@ class Vocabulary {
  private:
 
   template<class R = std::string>
-  auto getLowerBoundLambda(const StringSortComparator::Level level) const {
+  auto getLowerBoundLambda(const TripleComponentComparator::Level level) const {
     if constexpr (_isCompressed) {
       return [this, level](const CompressedString& a, const R& b) {
         return this->_caseComparator(this->expandPrefix(a), b, level);
@@ -399,7 +396,7 @@ class Vocabulary {
     }
   }
 
-  auto getUpperBoundLambda(const StringSortComparator::Level level) const {
+  auto getUpperBoundLambda(const TripleComponentComparator::Level level) const {
     if constexpr (_isCompressed) {
       return [this, level](const std::string &a, const CompressedString &b) {
         return this->_caseComparator(a, this->expandPrefix(b), level);
@@ -422,21 +419,6 @@ class Vocabulary {
             _words.begin());
   }
 
-  // Wraps std::upper_bound and returns an index instead of an iterator
-  // Only compares words that have at most word.size() or to prefixes of
-  //
-  // that length otherwise.
-  Id upper_bound(const string& word, size_t first,
-                 PrefixComparator<StringType> comp) const {
-    AD_CHECK_LE(first, _words.size());
-    // the prefix comparator handles the case-insensitive compare if activated
-    typename vector<StringType>::const_iterator it =
-            std::upper_bound(_words.begin() + first, _words.end(), word, comp);
-    Id retVal =
-            (it == _words.end()) ? size() : static_cast<Id>(it - _words.begin());
-    AD_CHECK_LE(retVal, size());
-    return retVal;
-  }
 
 
 
@@ -461,7 +443,7 @@ class Vocabulary {
 
   vector<StringType> _words;
   ExternalVocabulary _externalLiterals;
-  StringSortComparator _caseComparator;
+  TripleComponentComparator _caseComparator;
   std::locale _locale;  // default constructed as c locale
 };
 

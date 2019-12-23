@@ -227,7 +227,7 @@ void writePartialIdMapToBinaryFileForMerging(
     std::shared_ptr<const Index::ItemMap> map,
     const string& fileName, const SortMode mode) {
   LOG(INFO) << "Creating partial vocabulary from set ...\n";
-  std::vector<std::pair<string, std::pair<Id, StringSortComparator::SplitVal>>> els;
+  std::vector<std::pair<string, std::pair<Id, TripleComponentComparator::SplitVal>>> els;
   els.reserve(map->size());
   els.insert(begin(els), begin(*map), end(*map));
   LOG(INFO) << "... sorting ...\n";
@@ -250,8 +250,9 @@ void writePartialIdMapToBinaryFileForMerging(
       break;
     }
     case SortMode::StringComparator : {
-      auto pred = [](const auto& p1, const auto& p2) {
-        return StringSortComparator::compareCStyle(p1.second.second, p2.second.second);
+      TripleComponentComparator trip; // the compare function behaves statically in this case, but we have no static(bool)
+      auto pred = [&trip](const auto& p1, const auto& p2) {
+        return trip.compare(p1.second.second, p2.second.second, TripleComponentComparator::Level::IDENTICAL);
       };
       sort(pred);
       break;

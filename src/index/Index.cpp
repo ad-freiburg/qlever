@@ -514,7 +514,7 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
-  auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@", StringSortComparator::Level::IDENTICAL);
+  auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@", TripleComponentComparator::Level::IDENTICAL);
   createPatternsImpl<MetaDataIterator<IndexMetaDataMmapView>,
                      IndexMetaDataMmapView, ad_utility::File>(
       _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
@@ -1379,6 +1379,7 @@ void Index::readConfiguration() {
     std::string country = _configurationJson["locale"]["country"];
     bool ignorePunctuation = _configurationJson["locale"]["ignore-punctuation"];
     _vocab.setLocale(lang, country, ignorePunctuation);
+    _textVocab.setLocale(lang, country, ignorePunctuation);
   } else {
     LOG(ERROR) << "Key \"locale\" is missing in the metadata. This is probably and old index build that is no longer supported by QLever. Please rebuild your index\n";
     throw std::runtime_error("Missing required key \"locale\" in index build's metadata");
@@ -1447,6 +1448,7 @@ void Index::initializeVocabularySettingsBuild() {
     }
     LOG(INFO) << "Using Locale " << lang << " " << country << " with ignore-punctuation: " << ignorePunctuation<< '\n';
     _vocab.setLocale(lang, country, ignorePunctuation);
+    _textVocab.setLocale(lang, country, ignorePunctuation);
     _configurationJson["locale"]["language"] = lang;
     _configurationJson["locale"]["country"] = country;
     _configurationJson["locale"]["ignore-punctuation"] = ignorePunctuation;
@@ -1465,7 +1467,7 @@ Id Index::assignNextId(Index::ItemMap* mapPtr, const string& key) {
   ItemMap& map = *mapPtr;
   if (!map.count(key)) {
     Id res = map.size();
-    map[key] = std::pair(map.size(), _vocab.getCaseComparator().extractAndTransformComparable(key, StringSortComparator::Level::IDENTICAL));
+    map[key] = std::pair(map.size(), _vocab.getCaseComparator().extractAndTransformComparable(key, TripleComponentComparator::Level::IDENTICAL));
     return res;
   } else {
     return map[key].first;

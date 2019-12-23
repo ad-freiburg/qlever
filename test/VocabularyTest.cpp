@@ -111,7 +111,7 @@ TEST(VocabularyTest, createFromSetTest) {
 
 // ______________________________________________________________________________________________
 TEST(VocabularyTest, StringSortComparator) {
-  StringSortComparator comp("en", "US", false);
+  TripleComponentComparator comp("en", "US", false);
 
   // strange casings must not affect order
   ASSERT_TRUE(comp("ALPHA", "beta"));
@@ -143,7 +143,7 @@ TEST(VocabularyTest, StringSortComparator) {
 }
 
 TEST(VocabularyTest, IncompleteLiterals) {
-  StringSortComparator comp("en", "US", false);
+  TripleComponentComparator comp("en", "US", false);
 
   ASSERT_TRUE(comp("\"fieldofwork", "\"GOLD\"@en"));
 }

@@ -33,7 +33,7 @@ void Vocabulary<S>::readFromFile(const string& fileName,
       _words.push_back(CompressedString::fromString(line));
       auto str = expandPrefix(_words.back());
       if (!first) {
-        if (!(_caseComparator.compareViews(lastExpandedString, str) <= 0))  {
+        if (!(_caseComparator.compare(lastExpandedString, str) <= 0))  {
           LOG(ERROR) << "Vocabulary is not sorted in ascending order for words " << lastExpandedString << " and " << str << std::endl;
           //AD_CHECK(false);
         }
@@ -283,38 +283,6 @@ template <class StringRange>
 void Vocabulary<S>::initializeInternalizedLangs(const StringRange& s) {
   _internalizedLangs.clear();
   _internalizedLangs.insert(_internalizedLangs.begin(), s.begin(), s.end());
-}
-
-// __________________________________________________________________________
-template <class S>
-bool PrefixComparator<S>::operator()(const CompressedString& lhsComp,
-                                     const string& rhs) const {
-  string lhs = _vocab->expandPrefix(lhsComp);
-  return this->operator()(lhs, rhs);
-}
-
-// __________________________________________________________________________
-template <class S>
-bool PrefixComparator<S>::operator()(const string& lhs,
-                                     const CompressedString& rhsComp) const {
-  string rhs = _vocab->expandPrefix(rhsComp);
-  return this->operator()(lhs, rhs);
-}
-
-// __________________________________________________________________________
-template <class S>
-bool PrefixComparator<S>::operator()(const string& lhs,
-                                     const string& rhs) const {
-  // we cannot use string_views as parameters as they will unfortunately lead
-  // to ambiguous overloads (even though the CompressedString overload wouldn't
-  // work.
-  return _vocab->getCaseComparator()(
-      lhs.size() > _prefixLength
-          ? std::string_view(lhs).substr(0, _prefixLength)
-          : lhs,
-      rhs.size() > _prefixLength
-          ? std::string_view(rhs).substr(0, _prefixLength)
-          : rhs);
 }
 
 // _____________________________________________________

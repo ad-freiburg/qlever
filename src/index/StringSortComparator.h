@@ -10,28 +10,37 @@
 #include <unicode/coll.h>
 #include <unicode/unistr.h>
 
-/**
- * \brief Handles the comparisons between the vocabulary's entries according to their data types and proper Unicode collation.
- *
- *  General Approach: First Sort by the datatype, then by the actual value and then by the language tag.
- */
-class StringSortComparator {
-public:
+enum class VocabularyType {
+  PLAIN_STRING, TRIPLE_COMPONENTS
+};
 
+class LocaleManager {
+public:
   // The five collation levels supported by icu, forwarded in a typesafe manner
   enum class Level : uint8_t {
     PRIMARY = 0, SECONDARY = 1, TERTIARY = 2, QUARTERNARY = 3, IDENTICAL = 4
   };
 
+  // Wraps a string that contains unicode collation weights for another string
+  // Only needed for making interfaces explicit and less errorProne
+  class WeightString {
+  public:
+    WeightString() = default;
+    explicit WeightString(std::string_view contents) : _content(contents) {}
+    [[nodiscard]] const std::string& get() const {return _content;}
+    std::string& get() {return _content;}
+  private:
+    std::string _content;
+  };
+
   // ____________________________________________________________________________________________________________
-  StringSortComparator(const StringSortComparator& rhs) : _icuLocale(rhs._icuLocale), _ignorePunctuationStatus(rhs._ignorePunctuationStatus) {
+  LocaleManager(const LocaleManager& rhs) : _icuLocale(rhs._icuLocale), _ignorePunctuationStatus(rhs._ignorePunctuationStatus) {
     setupCollators();
     setIgnorePunctuationOnFirstLevels(_ignorePunctuationStatus);
   }
 
   // Current usage requires default-constructibility. Default to "en_US" and respecting symbols on all the levels
-  StringSortComparator() : StringSortComparator("en", "US" , false) {};
-
+  LocaleManager() : LocaleManager("en", "US" , false) {};
 
   /**
    * @param lang The language of the locale, e.g. "en" or "de"
@@ -41,7 +50,7 @@ public:
    *
    * \todo: make the exact punctuation level configurable.
    */
-  StringSortComparator(const std::string& lang, const std::string& country, bool ignorePunctuationAtFirstLevel) {
+  LocaleManager(const std::string& lang, const std::string& country, bool ignorePunctuationAtFirstLevel) {
     _icuLocale = icu::Locale(lang.c_str(), country.c_str());
     _ignorePunctuationStatus = ignorePunctuationAtFirstLevel ? UCOL_SHIFTED : UCOL_NON_IGNORABLE;
 
@@ -53,7 +62,7 @@ public:
   }
 
   // ____________________________________________________________________
-  StringSortComparator& operator=(const StringSortComparator& other) {
+  LocaleManager& operator=(const LocaleManager& other) {
     if (this == &other) return *this;
     _icuLocale = other._icuLocale;
     _ignorePunctuationStatus = other._ignorePunctuationStatus;
@@ -62,120 +71,44 @@ public:
     return *this;
   }
 
-  /**
-   * \brief An entry of the Vocabulary, split up into its components and possibly converted to a
-   *        format that is easier to compare
-   *
-   * @tparam ST either std::string or std::string_view. Since both variants differ greatly in their usage
-   *            they are commented with the template instantiations
-   */
-  template<class ST>
-  struct SplitValBase {
-    SplitValBase() = default;
-    SplitValBase(char fst, ST trans, ST l)
-            : firstOriginalChar(fst), transformedVal(std::move(trans)), langtag(std::move(l)) {}
-    char firstOriginalChar = '\0';  // The first char of the original value, used to distinguish between different datatypes
-    ST transformedVal;  // the original inner value, possibly transformed by a locale().
-    ST langtag;  // the language tag, possibly empty
-  };
-
-  /**
-   * This value owns all its contents. This is used to transform the inner value and to safely pass it around.
-   */
-  using SplitVal = SplitValBase<std::string>;
-
-  // only used within the class.
-  using SplitValNonOwning = SplitValBase<std::string_view>;
-
-
-  /**
-   * \brief Compare two elements from the vocabulary.
-   * @return false iff a comes before b in the vocabulary
-   */
-  bool operator()(std::string_view a, std::string_view b, const Level level=Level::IDENTICAL) const {
-    return compareViews(a, b, level) < 0;
-  }
-
-  /**
-   * @brief Compare a string_view from the vocabulary to a SplitVal that was previously transformed
-   * @param a Element of the vocabulary
-   * @param spB this splitVal must have been obtained by a call to extractAndTransformComparable
-   * @param level
-   * @return a comes before the originial value of spB in the vocabulary
-   */
-  bool operator()(std::string_view a , const SplitVal& spB, const Level level) const {
-    auto spA = extractAndTransformComparable(a, level);
-    return compareCStyle(spA, spB);
-  }
-
-
-  /// Compare to string_views. Return value according to std::strcmp
-  int compareViews(std::string_view a, std::string_view b, const Level level=Level::IDENTICAL) const {
-    // The level argument is actually ignored TODO: fix this.
-    auto splitA = extractComparable<SplitValNonOwning>(a, level);
-    auto splitB = extractComparable<SplitValNonOwning>(b, level);
-    return compareByLocale(splitA, splitB, level);
-  }
-
-
-  /// @brief split a literal or iri into its components and convert the inner value
-  ///           according to the held locale
-  SplitVal extractAndTransformComparable(std::string_view a, const Level level) const {
-    return extractComparable<SplitVal>(a, level);
-  }
-
-
-  /// Compare a and b. For the comparison of the inner values std::strcmp is used. This is correct iff
-  /// a and b were obtained by calls to extractAndTransformComparable
-  template<class SplitValType>
-  static bool compareCStyle(const SplitValType& a, const SplitValType& b) {
-    return compare(a, b, [](const std::string& a, const std::string& b){ return std::strcmp(a.c_str(), b.c_str());}) < 0;
-  }
-
-  /// Compare a and b. The inner values are treated as UTF8-Strings that are compared according to the held
-  /// locale and the specified level.
-  template<class SplitValType>
-  int compareByLocale(const SplitValType& a, const SplitValType& b, const Level level = Level::IDENTICAL) const {
-    const auto c = [this, level](const auto& a, const auto& b) {
+  // _____________________________________________________________________
+  [[nodiscard]] int compare(std::string_view a, std::string_view b, const Level level) const {
       UErrorCode err = U_ZERO_ERROR;
       auto idx = static_cast<uint8_t>(level);
       auto res = compToInd(_collator[idx]->compareUTF8(toStringPiece(a), toStringPiece(b), err));
       raise(err);
       return res;
-    };
-
-    return compare(a, b, c);
   }
 
-  /// @brief the inner comparison logic
-  /// Comp must return 0 on equality of inner strings, <0 if a < b and >0 if  a > b
-  template<class SplitValType, class Comp>
-  static int compare(const SplitValType& a, const SplitValType& b, Comp comp) {
-    if (auto res = std::strncmp(&a.firstOriginalChar, &b.firstOriginalChar, 1); res != 0) {
-      return res; // different data types, decide on the datatype
-    }
-
-    if (int res = comp(a.transformedVal, b.transformedVal) ;res != 0) {
-      return res; // actual value differs
-    }
-    return a.langtag.compare(b.langtag); // if everything else matches, we sort by the langtag
+  // _____________________________________________________________________
+  static int compare(WeightString a, WeightString b, [[maybe_unused]] const Level) {
+    return std::strcmp(a.get().c_str(), b.get().c_str());
   }
 
-  /// transform element s from the vocabulary to the first possible entry that compares greater to s
-  /// according to the held locale and level. Needed for Prefix search.
-  [[nodiscard]] SplitVal transformToFirstPossibleBiggerValue(std::string_view s, Level level) const {
-    auto transformed = extractAndTransformComparable(s, level);
-    unsigned char last = transformed.transformedVal.back();
-    if (last < std::numeric_limits<unsigned char>::max()) {
-      transformed.transformedVal.back() += 1;
-    } else {
-      transformed.transformedVal.push_back('\0');
-    }
-    return transformed;
+
+
+  // transform a UTF-8 string into a weight string that can be compared using std::strcmp.
+  // needed because ICU only works on utf16 and does not create a std::string.
+  [[nodiscard]] WeightString getSortKey(std::string_view s, const Level level) const {
+    auto utf16 = icu::UnicodeString::fromUTF8(toStringPiece(s));
+    auto& col = *_collator[static_cast<uint8_t>(level)];
+    auto sz = col.getSortKey(utf16, nullptr, 0);
+    WeightString finalRes;
+    std::string& res = finalRes.get();
+    res.resize(sz);
+    static_assert(sizeof(uint8_t) == sizeof(std::string::value_type));
+    sz = col.getSortKey(utf16, reinterpret_cast<uint8_t*>(res.data()), res.size());
+    AD_CHECK(sz == static_cast<decltype(sz)>(res.size())); // this is save by the way we obtained sz
+    // since this is a c-api we still have a trailing '\0'. Trimming this is necessary for the prefix range to work correct.
+    res.resize(res.size()-1);
+    return finalRes;
   }
+
 private:
   icu::Locale _icuLocale; /// the held locale
-  std::unique_ptr<icu::Collator> _collator[5]; /// one collator for each collation Level to make this class threadsafe
+  /// one collator for each collation Level to make this class threadsafe
+  /// needed because setting the collation level and comparing strings are 2 different steps in icu.
+  std::unique_ptr<icu::Collator> _collator[5];
   UColAttributeValue _ignorePunctuationStatus = UCOL_NON_IGNORABLE; /// how to sort punctuations etc.
 
   // raise an exception if the error code holds an error.
@@ -200,22 +133,184 @@ private:
     _collator[static_cast<uint8_t >(Level::IDENTICAL)]->setStrength(icu::Collator::IDENTICAL);
   }
 
-
+  // ______________________________________________________________________________
   void setIgnorePunctuationOnFirstLevels(UColAttributeValue val) {
     _ignorePunctuationStatus = val;
     UErrorCode err = U_ZERO_ERROR;
     for (auto& col : _collator) {
       col->setAttribute(UCOL_ALTERNATE_HANDLING, val, err);
       raise(err);
-      // todo<johannes> : make this customizable for future versions
+      // todo<joka921> : make this customizable for future versions
       col->setMaxVariable(UCOL_REORDER_CODE_SYMBOL, err);
       raise(err);
     }
-
   }
 
+  // convert LESS EQUAL GREATER from icu to -1, 0, +1 to make it equivalent to
+  // results from std::strcmp
+  static int compToInd(const UCollationResult res) {
+    switch (res) {
+      case UCOL_LESS :
+        return -1;
+      case UCOL_EQUAL :
+        return 0;
+      case UCOL_GREATER :
+        return 1;
+    }
+    throw std::runtime_error("Illegal value for UCollationResult. This should never happen!");
+  }
+
+
+  /// This conversion is needed for "older" versions of ICU, e.g. ICU60 which is contained in Ubuntu's LTS repositories
+  static icu::StringPiece toStringPiece(std::string_view s) {
+    return icu::StringPiece(s.data(), s.size());
+  }
+
+};
+
+/**
+ * \brief This class compares strings according to proper Unicode collation, e.g. Strings from the text index vocabulary
+ *        To Compare components of RDFS triples use the TripleComponentComparator defined below
+ */
+class SimpleStringComparator {
+  using Level = LocaleManager::Level;
+  SimpleStringComparator(const std::string& lang, const std::string& country, bool ignorePunctuationAtFirstLevel) : _locManager(lang, country, ignorePunctuationAtFirstLevel) {}
+  SimpleStringComparator() = default;
+
+  /**
+   * \brief Compare two Strings
+   * @return True iff a comes before b
+   */
+  bool operator()(std::string_view a, std::string_view b, const Level level=Level::IDENTICAL) const {
+    return _locManager.compare(a, b, level) < 0;
+  }
+
+  /// transform a string s to the collation weight string of the first possible string that compares greater to s
+  /// according to the held locale and level. Needed for Prefix search.
+  [[nodiscard]] LocaleManager::WeightString transformToFirstPossibleBiggerValue(std::string_view s, Level level) const {
+    auto transformed = _locManager.getSortKey(s, level);
+    unsigned char last = transformed.get().back();
+    if (last < std::numeric_limits<unsigned char>::max()) {
+      transformed.get().back() += 1;
+    } else {
+      transformed.get().push_back('\0');
+    }
+    return transformed;
+  }
+
+private:
+  LocaleManager _locManager;
+};
+
+/**
+ * \brief Handles the comparisons between the vocabulary's entries according to their data types and proper Unicode collation.
+ *
+ *  General Approach: First Sort by the datatype, then by the actual value and then by the language tag.
+ */
+class TripleComponentComparator {
+public:
+  using Level = LocaleManager::Level;
+
+  TripleComponentComparator(const std::string& lang, const std::string& country, bool ignorePunctuationAtFirstLevel) : _locManager(lang, country, ignorePunctuationAtFirstLevel) {}
+  TripleComponentComparator() = default;
+
+  /**
+   * \brief An entry of the Vocabulary, split up into its components and possibly converted to a
+   *        format that is easier to compare
+   *
+   * @tparam ST either std::string or std::string_view. Since both variants differ greatly in their usage
+   *            they are commented with the template instantiations
+   */
+  template<class InnerString, class LanguageTag>
+  struct SplitValBase {
+    SplitValBase() = default;
+    SplitValBase(char fst, InnerString trans, LanguageTag l)
+            : firstOriginalChar(fst), transformedVal(std::move(trans)), langtag(std::move(l)) {}
+    char firstOriginalChar = '\0';  // The first char of the original value, used to distinguish between different datatypes
+    InnerString transformedVal;  // the original inner value, possibly transformed by a locale().
+    LanguageTag langtag;  // the language tag, possibly empty
+  };
+
+  /**
+   * This value owns all its contents. This is used to transform the inner value and to safely pass it around.
+   */
+  using SplitVal = SplitValBase<LocaleManager::WeightString, std::string>;
+
+  // only used within the class.
+  using SplitValNonOwning = SplitValBase<std::string_view, std::string_view>;
+
+
+  /**
+   * \brief Compare two elements from the vocabulary.
+   * @return false iff a comes before b in the vocabulary
+   */
+  bool operator()(std::string_view a, std::string_view b, const Level level=Level::IDENTICAL) const {
+    return compare(a, b, level) < 0;
+  }
+
+  /**
+   * @brief Compare a string_view from the vocabulary to a SplitVal that was previously transformed
+   * @param a Element of the vocabulary
+   * @param spB this splitVal must have been obtained by a call to extractAndTransformComparable
+   * @param level
+   * @return a comes before the original value of spB in the vocabulary
+   */
+  bool operator()(std::string_view a , const SplitVal& spB, const Level level) const {
+    auto spA = extractAndTransformComparable(a, level);
+    return compare(spA, spB, level) < 0;
+  }
+
+
+  /// Compare to string_views. Return value according to std::strcmp
+  [[nodiscard]] int compare(std::string_view a, std::string_view b, const Level level=Level::IDENTICAL) const {
+    // The level argument is actually ignored TODO: fix this.
+    auto splitA = extractComparable<SplitValNonOwning>(a, level);
+    auto splitB = extractComparable<SplitValNonOwning>(b, level);
+    return compare(splitA, splitB, level);
+  }
+
+  /// @brief split a literal or iri into its components and convert the inner value
+  ///           according to the held locale
+  [[nodiscard]] SplitVal extractAndTransformComparable(std::string_view a, const Level level) const {
+    return extractComparable<SplitVal>(a, level);
+  }
+
+
+
+  /// @brief the inner comparison logic
+  /// Comp must return 0 on equality of inner strings, <0 if a < b and >0 if  a > b
+  template<class A, class B>
+  [[nodiscard]] int compare(const SplitValBase<A,B>& a, const SplitValBase<A,B>& b, const Level level) const {
+    if (auto res = std::strncmp(&a.firstOriginalChar, &b.firstOriginalChar, 1); res != 0) {
+      return res; // different data types, decide on the datatype
+    }
+
+    if (int res = _locManager.compare(a.transformedVal, b.transformedVal, level) ;res != 0) {
+      return res; // actual value differs
+    }
+    return a.langtag.compare(b.langtag); // if everything else matches, we sort by the langtag
+  }
+
+  /// transform element s from the vocabulary to the first possible entry that compares greater to s
+  /// according to the held locale and level. Needed for Prefix search.
+  [[nodiscard]] SplitVal transformToFirstPossibleBiggerValue(std::string_view s, Level level) const {
+    auto transformed = extractAndTransformComparable(s, level);
+    unsigned char last = transformed.transformedVal.get().back();
+    if (last < std::numeric_limits<unsigned char>::max()) {
+      transformed.transformedVal.get().back() += 1;
+    } else {
+      transformed.transformedVal.get().push_back('\0');
+    }
+    return transformed;
+  }
+private:
+  LocaleManager _locManager;
+
+  /// Split a string into its components to prepare collation.
+  /// SplitValType = SplitVal will transform the inner string according to the locale
+  /// SplitValTye = SplitValNonOwning will leave the inner string as is.
   template<class SplitValType>
-  SplitValType extractComparable(std::string_view a, [[maybe_unused]] const Level level) const {
+  [[nodiscard]] SplitValType extractComparable(std::string_view a, [[maybe_unused]] const Level level) const {
     std::string_view res = a;
     const char first = a.empty() ? char(0) : a[0];
     std::string_view langtag;
@@ -234,7 +329,7 @@ private:
       }
     }
     if constexpr (std::is_same_v<SplitValType, SplitVal>) {
-      return {first, getSortKey(res, level), std::string(langtag)};
+      return {first, _locManager.getSortKey(res, level), std::string(langtag)};
     } else if constexpr (std::is_same_v<SplitValType, SplitValNonOwning>) {
       return {first, res, langtag};
     } else {
@@ -242,41 +337,6 @@ private:
     }
   }
 
-  static int compToInd(const UCollationResult res) {
-    switch (res) {
-      case UCOL_LESS :
-        return -1;
-      case UCOL_EQUAL :
-        return 0;
-      case UCOL_GREATER :
-        return 1;
-    }
-    throw std::runtime_error("Illegal value for UCollationResult. This should never happen!");
-
-
-  }
-
-  // _________________________________________________________________
-  [[nodiscard]] std::string getSortKey(std::string_view s, const Level level) const {
-    auto utf16 = icu::UnicodeString::fromUTF8(toStringPiece(s));
-    auto& col = *_collator[static_cast<uint8_t>(level)];
-    auto sz = col.getSortKey(utf16, nullptr, 0);
-    std::string res;
-    res.resize(sz);
-    static_assert(sizeof(uint8_t) == sizeof(std::string::value_type));
-    sz = col.getSortKey(utf16, reinterpret_cast<uint8_t*>(res.data()), res.size());
-    AD_CHECK(sz == static_cast<decltype(sz)>(res.size())); // this is save by the way we obtained sz
-    // since this is a c-api we still have a trailing '\0'. Trimming this is necessary for the prefix range to work correct.
-    res.resize(res.size()-1);
-    return res;
-  }
-
-  static icu::StringPiece toStringPiece(std::string_view s) {
-    return icu::StringPiece(s.data(), s.size());
-  }
-
-
 };
-
 
 #endif //QLEVER_STRINGSORTCOMPARATOR_H

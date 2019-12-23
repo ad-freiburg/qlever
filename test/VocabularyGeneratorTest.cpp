@@ -193,7 +193,7 @@ TEST_F(MergeVocabularyTest, bla) {
   VocabularyMerger::VocMergeRes res;
   {
     VocabularyMerger m;
-    res = m.mergeVocabulary(_basePath, 2, StringSortComparator());
+    res = m.mergeVocabulary(_basePath, 2, TripleComponentComparator());
   }
 
   // No language tags in text file
@@ -215,7 +215,7 @@ TEST_F(MergeVocabularyTest, bla) {
 
 TEST(VocabularyGenerator, ReadAndWritePartial) {
   {
-    using SP = StringSortComparator::SplitVal;
+    using SP = TripleComponentComparator::SplitVal;
     ad_utility::HashMap<string, std::pair<Id, SP>> s;
     s["A"] = std::make_pair(5, SP{});
     s["a"] = std::make_pair(6, SP{});
@@ -246,7 +246,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     Vocabulary<string> v;
     v.setLocale("en", "US", false);
     auto extr = [&v](std::string_view s) {
-      return v.getCaseComparator().extractAndTransformComparable(s, StringSortComparator::Level::IDENTICAL);
+      return v.getCaseComparator().extractAndTransformComparable(s, TripleComponentComparator::Level::IDENTICAL);
     };
     Index::ItemMap s;
     s["A"] = std::make_pair(5, extr("A"));

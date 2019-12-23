@@ -19,5 +19,5 @@ int main(int argc, char** argv) {
   size_t numFiles = atoi(argv[2]);
 
   VocabularyMerger m;
-  m.mergeVocabulary(basename, numFiles, StringSortComparator());
+  m.mergeVocabulary(basename, numFiles, TripleComponentComparator());
 }

@@ -444,7 +444,7 @@ class Index {
     LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
   }
 
-  using ItemMap = ad_utility::HashMap<string, std::pair<Id, StringSortComparator::SplitVal>>;
+  using ItemMap = ad_utility::HashMap<string, std::pair<Id, TripleComponentComparator::SplitVal>>;
  private:
   string _onDiskBase;
   string _settingsFileName;
