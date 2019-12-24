@@ -32,8 +32,6 @@ if [ -f "/usr/bin/python3.6" ]; then
 else
 	export PYTHON_BINARY=`which python3`
 fi
-export PYTHON_BINARY=`which python3`
-echo "Python is $PYTHON_BINARY"
 
 INDEX_DIR="$PROJECT_DIR/e2e_data"
 INPUT_DIR="$INDEX_DIR/scientist-collection"
