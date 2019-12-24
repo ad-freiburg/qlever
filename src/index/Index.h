@@ -444,17 +444,20 @@ class Index {
     LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
   }
 
-  using ItemMap = ad_utility::HashMap<string, std::pair<Id, TripleComponentComparator::SplitVal>>;
+  using ItemMap =
+      ad_utility::HashMap<string,
+                          std::pair<Id, TripleComponentComparator::SplitVal>>;
+
  private:
   string _onDiskBase;
   string _settingsFileName;
   bool _onDiskLiterals = false;
   bool _keepTempFiles = false;
   json _configurationJson;
-  Vocabulary<CompressedString> _vocab;
+  Vocabulary<CompressedString, TripleComponentComparator> _vocab;
   size_t _totalVocabularySize = 0;
   bool _vocabPrefixCompressed = true;
-  Vocabulary<std::string> _textVocab;
+  Vocabulary<std::string, SimpleStringComparator> _textVocab;
 
   TextMetaData _textMeta;
   DocsDB _docsDB;

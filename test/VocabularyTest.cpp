@@ -12,7 +12,7 @@ using json = nlohmann::json;
 using std::string;
 
 TEST(VocabularyTest, getIdForWordTest) {
-  std::vector<Vocabulary<string>> vec(2);
+  std::vector<TextVocabulary> vec(2);
 
   for (auto& v : vec) {
     v.push_back("a");
@@ -28,7 +28,7 @@ TEST(VocabularyTest, getIdForWordTest) {
   }
 
   // with case insensitive ordering
-  Vocabulary<string> voc;
+  TextVocabulary voc;
   voc.setLocale("en", "US", false);
   voc.push_back("a");
   voc.push_back("A");
@@ -44,7 +44,7 @@ TEST(VocabularyTest, getIdForWordTest) {
 };
 
 TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
-  Vocabulary<string> v;
+  TextVocabulary v;
   v.push_back("wordA0");
   v.push_back("wordA1");
   v.push_back("wordB2");
@@ -77,7 +77,7 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
 }
 
 TEST(VocabularyTest, readWriteTest) {
-  Vocabulary<string> v;
+  TextVocabulary v;
   v.push_back("wordA0");
   v.push_back("wordA1");
   v.push_back("wordB2");
@@ -99,7 +99,7 @@ TEST(VocabularyTest, createFromSetTest) {
   s.insert("ab");
   s.insert("ba");
   s.insert("car");
-  Vocabulary<string> v;
+  TextVocabulary v;
   v.createFromSet(s);
   Id id;
   ASSERT_TRUE(v.getId("ba", &id));
@@ -110,8 +110,41 @@ TEST(VocabularyTest, createFromSetTest) {
 };
 
 // ______________________________________________________________________________________________
-TEST(VocabularyTest, StringSortComparator) {
+TEST(VocabularyTest, TripleComponentComparator) {
   TripleComponentComparator comp("en", "US", false);
+
+  // strange casings must not affect order
+  ASSERT_TRUE(comp("\"ALPHA\"", "\"beta\""));
+  ASSERT_TRUE(comp("\"alpha\"", "\"BETA\""));
+  ASSERT_TRUE(comp("\"AlPha\"", "\"bEtA\""));
+  ASSERT_TRUE(comp("\"AlP\"", "\"alPha\""));
+  ASSERT_TRUE(comp("\"alP\"", "\"ALPha\""));
+
+  // inverse tests for completeness
+  ASSERT_FALSE(comp("\"beta\"", "\"ALPHA\""));
+  ASSERT_FALSE(comp("\"BETA\"", "\"alpha\""));
+  ASSERT_FALSE(comp("\"bEtA\"", "\"AlPha\""));
+  ASSERT_FALSE(comp("\"alPha\"", "\"AlP\""));
+  ASSERT_FALSE(comp("\"ALPha\"", "\"alP\""));
+
+  // only if lowercased version is exactly the same we want to sort by the
+  // casing (lowercase comes first in the default en_US.utf8-locale
+  ASSERT_TRUE(comp("\"alpha\"", "\"ALPHA\""));
+  ASSERT_FALSE(comp("\"ALPHA\"", "\"alpha\""));
+
+  ASSERT_TRUE(comp("\"Hannibal\"@en", "\"Hannibal Hamlin\"@en"));
+  ASSERT_TRUE(comp("\"Hannibal\"@af", "\"Hannibal\"@en"));
+  ASSERT_TRUE(comp("\"Hannibal\"@en", "\"HanNibal\"@en"));
+
+  // TODO<joka921>: test cases for UTF-8
+
+  // something is not smaller thant itself
+  ASSERT_FALSE(comp("\"beta\"", "\"beta\""));
+}
+
+// ______________________________________________________________________________________________
+TEST(VocabularyTest, SimpleStringComparator) {
+  SimpleStringComparator comp("en", "US", false);
 
   // strange casings must not affect order
   ASSERT_TRUE(comp("ALPHA", "beta"));
@@ -131,10 +164,6 @@ TEST(VocabularyTest, StringSortComparator) {
   // casing (lowercase comes first in the default en_US.utf8-locale
   ASSERT_TRUE(comp("alpha", "ALPHA"));
   ASSERT_FALSE(comp("ALPHA", "alpha"));
-
-  ASSERT_TRUE(comp("\"Hannibal\"@en", "\"Hannibal Hamlin\"@en"));
-  ASSERT_TRUE(comp("\"Hannibal\"@af", "\"Hannibal\"@en"));
-  ASSERT_TRUE(comp("\"Hannibal\"@en", "\"HanNibal\"@en"));
 
   // TODO<joka921>: test cases for UTF-8
 

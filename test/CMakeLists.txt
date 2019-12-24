@@ -36,7 +36,7 @@ target_link_libraries(NTriplesParserTest gtest_main parser ${CMAKE_THREAD_LIBS_I
 
 add_executable(ContextFileParserTest ContextFileParserTest.cpp)
 add_test(ContextFileParserTest ContextFileParserTest)
-target_link_libraries(ContextFileParserTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(ContextFileParserTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT} ${ICU_LIBRARIES})
 
 add_executable(IndexMetaDataTest IndexMetaDataTest.cpp)
 add_test(IndexMetaDataTest IndexMetaDataTest)

@@ -4,10 +4,12 @@
 
 #pragma once
 
+#include <unicode/locid.h>
 #include <fstream>
 #include <string>
 
 #include "../global/Id.h"
+#include "../index/StringSortComparator.h"
 
 using std::string;
 
@@ -20,7 +22,8 @@ class ContextFileParser {
     Score _score;
   };
 
-  explicit ContextFileParser(const string& contextFile);
+  explicit ContextFileParser(const string& contextFile,
+                             LocaleManager localeManager);
   ~ContextFileParser();
   // Don't allow copy & assignment
   explicit ContextFileParser(const ContextFileParser& other) = delete;
@@ -33,4 +36,5 @@ class ContextFileParser {
  private:
   std::ifstream _in;
   Id _lastCId;
+  LocaleManager _localeManager;
 };

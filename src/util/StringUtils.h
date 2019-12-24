@@ -69,11 +69,11 @@ inline string getLowercase(const string& orig);
 
 inline string getUppercase(const string& orig);
 
-inline string getLowercaseUtf8(std::string_view orig, const std::locale& loc = std::locale());
+inline string getLowercaseUtf8(std::string_view orig);
 
-inline string getUppercaseUtf8(std::string_view orig, const std::locale& loc = std::locale());
+inline string getUppercaseUtf8(std::string_view orig);
 
-inline string firstCharToUpperUtf8(const string& orig, const std::locale& loc = std::locale());
+inline string firstCharToUpperUtf8(const string& orig);
 
 //! Gets the last part of a string that is somehow split by the given separator.
 inline string getLastPartOfString(const string& text, const char separator);
@@ -241,9 +241,8 @@ string getUppercase(const string& orig) {
   }
   return retVal;
 }
-
 // ____________________________________________________________________________
-string getLowercaseUtf8(const std::string_view orig, const std::locale& locale){
+string getLowercaseUtf8(const std::string_view orig) {
   string retVal;
   retVal.reserve(orig.size());
   std::mbstate_t state = std::mbstate_t();
@@ -261,7 +260,7 @@ string getLowercaseUtf8(const std::string_view orig, const std::locale& locale){
       assert(len > 0 && len <= static_cast<size_t>(MB_CUR_MAX));
       i += len - 1;
       size_t ret = wcrtomb(
-          buf, std::tolower(wChar, locale),
+          buf, static_cast<wchar_t>(towlower(static_cast<wint_t>(wChar))),
           &state);
       assert(ret > 0 && ret <= static_cast<size_t>(MB_CUR_MAX));
       buf[ret] = 0;
@@ -272,7 +271,7 @@ string getLowercaseUtf8(const std::string_view orig, const std::locale& locale){
 }
 
 // ____________________________________________________________________________
-string getUppercaseUtf8(const std::string_view orig, const std::locale& locale) {
+string getUppercaseUtf8(const std::string_view orig) {
   string retVal;
   retVal.reserve(orig.size());
   std::mbstate_t state = std::mbstate_t();
@@ -290,7 +289,7 @@ string getUppercaseUtf8(const std::string_view orig, const std::locale& locale) 
       assert(len > 0 && len <= static_cast<size_t>(MB_CUR_MAX));
       i += len - 1;
       size_t ret = wcrtomb(
-          buf, std::toupper(wChar, locale),
+          buf, static_cast<wchar_t>(towupper(static_cast<wint_t>(wChar))),
           &state);
       assert(ret > 0 && ret <= static_cast<size_t>(MB_CUR_MAX));
       buf[ret] = 0;
@@ -299,9 +298,8 @@ string getUppercaseUtf8(const std::string_view orig, const std::locale& locale) 
   }
   return retVal;
 }
-
 // ____________________________________________________________________________
-inline string firstCharToUpperUtf8(const string& orig, const std::locale& locale) {
+inline string firstCharToUpperUtf8(const string& orig) {
   string retVal;
   retVal.reserve(orig.size());
   std::mbstate_t state = std::mbstate_t();
@@ -321,7 +319,7 @@ inline string firstCharToUpperUtf8(const string& orig, const std::locale& locale
       assert(len > 0 && len <= static_cast<size_t>(MB_CUR_MAX));
       i += len;
       size_t ret = wcrtomb(
-          buf, std::toupper(wChar, locale),
+          buf, static_cast<wchar_t>(towupper(static_cast<wint_t>(wChar))),
           &state);
       assert(ret > 0 && ret <= static_cast<size_t>(MB_CUR_MAX));
       buf[ret] = 0;

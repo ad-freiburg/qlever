@@ -79,8 +79,7 @@ TEST_F(GroupByTest, doGroupBy) {
   }
 
   // add some words to the index's vocabulary
-  Vocabulary<CompressedString>& vocab =
-      const_cast<Vocabulary<CompressedString>&>(_index.getVocab());
+  auto& vocab = const_cast<RdfsVocabulary&>(_index.getVocab());
   vocab.push_back("<entity1>");
   vocab.push_back("<entity2>");
   vocab.push_back("<entity3>");

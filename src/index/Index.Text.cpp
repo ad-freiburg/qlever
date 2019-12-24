@@ -97,7 +97,7 @@ size_t Index::passContextFileForVocabulary(string const& contextFile) {
   LOG(INFO) << "Making pass over ContextFile " << contextFile
             << " for vocabulary." << std::endl;
   ContextFileParser::Line line;
-  ContextFileParser p(contextFile);
+  ContextFileParser p(contextFile, _textVocab.getLocaleManager());
   ad_utility::HashSet<string> items;
   size_t i = 0;
   while (p.getLine(line)) {
@@ -120,7 +120,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
   LOG(INFO) << "Making pass over ContextFile " << contextFile
             << " and creating stxxl vector.\n";
   ContextFileParser::Line line;
-  ContextFileParser p(contextFile);
+  ContextFileParser p(contextFile, _textVocab.getLocaleManager());
   size_t i = 0;
   // write using vector_bufwriter
 
@@ -131,7 +131,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
   // this has to be repeated completely here because we have the possibility to
   // only add a text index. In that case the Vocabulary has never been
   // initialized before
-  _vocab = Vocabulary<CompressedString>();
+  _vocab = Vocabulary<CompressedString, TripleComponentComparator>();
   readConfiguration();
   _vocab.readFromFile(_onDiskBase + ".vocabulary",
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
@@ -397,14 +397,24 @@ void Index::calculateBlockBoundaries() {
   // 4) word.substring(0, MIN_PREFIX_LENGTH) is different from the next.
   // A block boundary is always the last WordId in the block.
   // this way std::lower_bound will point to the correct bracket.
+  if (_textVocab.size() == 0) {
+    LOG(WARN) << "You are trying to call calculateBlockBoundaries on an empty "
+                 "text vocabulary\n";
+    return;
+  }
+  const auto& locManager = _textVocab.getLocaleManager();
+  auto currentLenAndPrefix = LocaleManager::getUTF8Prefix(
+      _textVocab[0].value().get(), MIN_WORD_PREFIX_SIZE);
   for (size_t i = 0; i < _textVocab.size() - 1; ++i) {
     // we need foo.value().get() because the vocab returns
     // a std::optional<std::reference_wrapper<string>> and the "." currently
     // doesn't implicitly convert to a true reference (unlike function calls)
-    if (_textVocab[i].value().get().size() < MIN_WORD_PREFIX_SIZE ||
-        (_textVocab[i + 1].value().get().size() < MIN_WORD_PREFIX_SIZE) ||
-        _textVocab[i].value().get().substr(0, MIN_WORD_PREFIX_SIZE) !=
-            _textVocab[i + 1].value().get().substr(0, MIN_WORD_PREFIX_SIZE)) {
+    auto nextLenAndPrefix = LocaleManager::getUTF8Prefix(
+        _textVocab[i + 1].value().get(), MIN_WORD_PREFIX_SIZE);
+    if (currentLenAndPrefix.first < MIN_WORD_PREFIX_SIZE ||
+        (nextLenAndPrefix.first < MIN_WORD_PREFIX_SIZE) ||
+        locManager.compare(currentLenAndPrefix.second, nextLenAndPrefix.second,
+                           LocaleManager::Level::PRIMARY) > 0) {
       _blockBoundaries.push_back(i);
     }
   }

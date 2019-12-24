@@ -221,10 +221,9 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     s["a"] = std::make_pair(6, SP{});
     s["Ba"] = std::make_pair(7, SP{});
     s["car"] = std::make_pair(8, SP{});
-    Vocabulary<string> v;
+    TextVocabulary v;
     std::string basename = "_tmp_testidx";
-    auto ptr =
-        std::make_shared<const decltype(s)>(std::move(s));
+    auto ptr = std::make_shared<const decltype(s)>(std::move(s));
     writePartialIdMapToBinaryFileForMerging(
         ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", SortMode::Simple);
 
@@ -243,35 +242,36 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
 
   // again with the case insensitive variant.
   try {
-    Vocabulary<string> v;
+    RdfsVocabulary v;
     v.setLocale("en", "US", false);
     auto extr = [&v](std::string_view s) {
-      return v.getCaseComparator().extractAndTransformComparable(s, TripleComponentComparator::Level::IDENTICAL);
+      return v.getCaseComparator().extractAndTransformComparable(
+          s, TripleComponentComparator::Level::IDENTICAL);
     };
     Index::ItemMap s;
-    s["A"] = std::make_pair(5, extr("A"));
-    s["a"] = std::make_pair(6, extr("a"));
-    s["Ba"] = std::make_pair(7, extr("Ba"));
-    s["car"] = std::make_pair(8, extr("car"));
-    s["Ä"] = std::make_pair(9, extr("Ä"));
+    s["\"A\""] = std::make_pair(5, extr("\"A\""));
+    s["\"a\""] = std::make_pair(6, extr("\"a\""));
+    s["\"Ba\""] = std::make_pair(7, extr("\"Ba\""));
+    s["\"car\""] = std::make_pair(8, extr("\"car\""));
+    s["\"Ä\""] = std::make_pair(9, extr("\"Ä\""));
     std::string basename = "_tmp_testidx";
-    auto ptr =
-        std::make_shared<const Index::ItemMap>(std::move(s));
+    auto ptr = std::make_shared<const Index::ItemMap>(std::move(s));
     writePartialIdMapToBinaryFileForMerging(
-        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", SortMode::StringComparator);
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0",
+        SortMode::StringComparator);
 
     {
       VocabularyMerger m;
       m.mergeVocabulary(basename, 1, v.getCaseComparator());
     }
-      auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
-      ASSERT_EQ(0u, idMap[6]);
-      ASSERT_EQ(1u, idMap[5]);
-      ASSERT_EQ(2u, idMap[9]);
-      ASSERT_EQ(3u, idMap[7]);
-      ASSERT_EQ(4u, idMap[8]);
-      auto res = system("rm _tmp_testidx*");
-      (void) res;
+    auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
+    EXPECT_EQ(0u, idMap[6]);
+    EXPECT_EQ(1u, idMap[5]);
+    EXPECT_EQ(2u, idMap[9]);
+    EXPECT_EQ(3u, idMap[7]);
+    EXPECT_EQ(4u, idMap[8]);
+    auto res = system("rm _tmp_testidx*");
+    (void)res;
 
   } catch (const std::bad_cast& b) {
     std::cerr << "What the fuck\n";

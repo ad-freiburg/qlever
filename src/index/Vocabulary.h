@@ -14,8 +14,6 @@
 #include <string_view>
 #include <vector>
 
-#include <boost/locale.hpp>
-
 #include "../global/Constants.h"
 #include "../global/Id.h"
 #include "../util/Exception.h"
@@ -24,8 +22,8 @@
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
 #include "./CompressedString.h"
-#include "ExternalVocabulary.h"
 #include "./StringSortComparator.h"
+#include "ExternalVocabulary.h"
 
 using std::string;
 using std::vector;
@@ -69,55 +67,12 @@ struct Prefix {
   string _fulltext;
 };
 
-// forward declaration for PrefixComparator
-template <class StringType>
-class Vocabulary;
-
-template <class S>
-class PrefixComparator {
- public:
-  explicit PrefixComparator(size_t prefixLength, const Vocabulary<S>* vocab)
-      : _prefixLength(prefixLength), _vocab(vocab) {}
-
-  bool operator()(const string& lhs, const string& rhs) const;
-  bool operator()(const CompressedString& lhs, const string& rhs) const;
-  bool operator()(const string& lhs, const CompressedString& rhs) const;
-
- private:
-  const size_t _prefixLength;
-  const Vocabulary<S>* _vocab;
-};
-
-/**
- * \brief Comparator for std::strings that optionally supports
- * case-insensitivity.
- *
- * If the constructor is called with ignoreCase=false it is an ordinary string
- * compare using std::less<std::string>.
- * If ignoreCase=True the operator behaves as follows:
- *
- * - the inputs can either be Literals or non-literals like IRIs
- *   In case the type is different, return the standard ordering to keep
- *   literals and IRIs disjoint in the order
- *
- * - split both literals "vaLue"@lang into its vaLue and possibly empty
- *   langtag. For IRIs, the value is the complete string and the langtag is
- * empty
- * - compare the strings according to the lowercase version of their value
- * - in case the lowercase versions are equal, return the order of the language
- * tags
- * - If the strings are still the same, return the order of the original inner
- * values.
- *
- * This gives us a strict ordering on strings.
- */
-
 //! A vocabulary. Wraps a vector of strings
 //! and provides additional methods for retrieval.
 //! Template parameters that are supported are:
 //! std::string -> no compression is applied
 //! CompressedString -> prefix compression is applied
-template <class StringType>
+template <class StringType, class ComparatorType>
 class Vocabulary {
   template <typename T, typename R = void>
   using enable_if_compressed =
@@ -128,7 +83,7 @@ class Vocabulary {
       std::enable_if_t<!std::is_same_v<T, CompressedString>>;
 
  public:
-  using SortLevel = TripleComponentComparator::Level;
+  using SortLevel = typename ComparatorType::Level;
   template <
       typename = std::enable_if_t<std::is_same_v<StringType, string> ||
                                   std::is_same_v<StringType, CompressedString>>>
@@ -254,15 +209,15 @@ class Vocabulary {
     return getValueIdForLE(indexWord, level);
   }
 
-
   //! Get an Id range that matches a prefix.
   //! Return value signals if something was found at all.
-  //! CAVEAT! TODO<discovered by joka921>: This is only used for the text index, and uses a range, where
-  //! the last index is still within the range which is against C++ conventions!
+  //! CAVEAT! TODO<discovered by joka921>: This is only used for the text index,
+  //! and uses a range, where the last index is still within the range which is
+  //! against C++ conventions!
   // consider using the prefixRange function.
   bool getIdRangeForFullTextPrefix(const string& word, IdRange* range) const {
     AD_CHECK_EQ(word[word.size() - 1], PREFIX_CHAR);
-    auto prefixRange = prefix_range(word.substr(0, word.size() - 1), TripleComponentComparator::Level::IDENTICAL);
+    auto prefixRange = prefix_range(word.substr(0, word.size() - 1));
     bool success = prefixRange.second > prefixRange.first;
     range->_first = prefixRange.first;
     range->_last = prefixRange.second - 1;
@@ -354,37 +309,43 @@ class Vocabulary {
   static void prefixCompressFile(const string& infile, const string& outfile,
                                  const vector<string>& prefixes);
 
-  void setLocale(const std::string& language, const std::string& country, bool ignorePunctuation) {
-
-    _caseComparator = TripleComponentComparator(language, country, ignorePunctuation);
+  void setLocale(const std::string& language, const std::string& country,
+                 bool ignorePunctuation) {
+    _caseComparator = ComparatorType(language, country, ignorePunctuation);
   }
 
   // _____________________________________________________________________
-  const TripleComponentComparator& getCaseComparator() const {
-    return _caseComparator;
-  }
+  const ComparatorType& getCaseComparator() const { return _caseComparator; }
 
-  /// returns the range of IDs where strings of the vocabulary start with the prefix according to the collation level
-  /// the first Id is included in the range, the last one not.
-  std::pair<Id, Id> prefix_range(const string& prefix, const TripleComponentComparator::Level level) const {
+  /// returns the range of IDs where strings of the vocabulary start with the
+  /// prefix according to the collation level the first Id is included in the
+  /// range, the last one not. Currently only supports the Primary collation
+  /// level, due to limitations in the StringSortComparators
+  std::pair<Id, Id> prefix_range(const string& prefix) const {
     if (prefix.empty()) {
       return {0, _words.size()};
     }
-    Id lb = lower_bound(prefix, level);
-    auto transformed = _caseComparator.transformToFirstPossibleBiggerValue(prefix, level);
+    Id lb = lower_bound(prefix, SortLevel::PRIMARY);
+    auto transformed =
+        _caseComparator.transformToFirstPossibleBiggerValue(prefix);
 
-    auto pred = getLowerBoundLambda<TripleComponentComparator::SplitVal>(level);
-    auto ub =  static_cast<Id>(
-            std::lower_bound(_words.begin(), _words.end(), transformed, pred) -
-            _words.begin());
+    auto pred = getLowerBoundLambda<typename ComparatorType::Transformed_T>(
+        SortLevel::PRIMARY);
+    auto ub = static_cast<Id>(
+        std::lower_bound(_words.begin(), _words.end(), transformed, pred) -
+        _words.begin());
 
     return {lb, ub};
   }
 
- private:
+  [[nodiscard]] const LocaleManager& getLocaleManager() const {
+    return _caseComparator.getLocaleManager();
+  }
 
-  template<class R = std::string>
-  auto getLowerBoundLambda(const TripleComponentComparator::Level level) const {
+  private :
+
+      template <class R = std::string>
+      auto getLowerBoundLambda(const SortLevel level) const {
     if constexpr (_isCompressed) {
       return [this, level](const CompressedString& a, const R& b) {
         return this->_caseComparator(this->expandPrefix(a), b, level);
@@ -396,9 +357,9 @@ class Vocabulary {
     }
   }
 
-  auto getUpperBoundLambda(const TripleComponentComparator::Level level) const {
+  auto getUpperBoundLambda(const SortLevel level) const {
     if constexpr (_isCompressed) {
-      return [this, level](const std::string &a, const CompressedString &b) {
+      return [this, level](const std::string& a, const CompressedString& b) {
         return this->_caseComparator(a, this->expandPrefix(b), level);
       };
     } else {
@@ -406,21 +367,19 @@ class Vocabulary {
     }
   }
   // Wraps std::lower_bound and returns an index instead of an iterator
-  Id lower_bound(const string& word, const SortLevel level = SortLevel::IDENTICAL) const {
-    return static_cast<Id>(
-            std::lower_bound(_words.begin(), _words.end(), word, getLowerBoundLambda(level)) -
-            _words.begin());
+  Id lower_bound(const string& word,
+                 const SortLevel level = SortLevel::IDENTICAL) const {
+    return static_cast<Id>(std::lower_bound(_words.begin(), _words.end(), word,
+                                            getLowerBoundLambda(level)) -
+                           _words.begin());
   }
 
   // _______________________________________________________________
   Id upper_bound(const string& word, const SortLevel level) const {
-    return static_cast<Id>(
-            std::upper_bound(_words.begin(), _words.end(), word, getUpperBoundLambda(level)) -
-            _words.begin());
+    return static_cast<Id>(std::upper_bound(_words.begin(), _words.end(), word,
+                                            getUpperBoundLambda(level)) -
+                           _words.begin());
   }
-
-
-
 
   // TODO<joka921> these following two members are only used with the
   // compressed vocabulary. They don't use much space if empty, but still it
@@ -443,8 +402,11 @@ class Vocabulary {
 
   vector<StringType> _words;
   ExternalVocabulary _externalLiterals;
-  TripleComponentComparator _caseComparator;
+  ComparatorType _caseComparator;
   std::locale _locale;  // default constructed as c locale
 };
+
+using RdfsVocabulary = Vocabulary<CompressedString, TripleComponentComparator>;
+using TextVocabulary = Vocabulary<std::string, SimpleStringComparator>;
 
 #include "VocabularyImpl.h"

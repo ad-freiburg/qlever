@@ -4,8 +4,6 @@
 
 #pragma once
 
-
-#include "./VocabularyGenerator.h"
 #include <fstream>
 #include <future>
 #include <iostream>
@@ -14,6 +12,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include "./VocabularyGenerator.h"
 
 #include <parallel/algorithm>
 #include "../util/Conversions.h"
@@ -24,7 +23,7 @@
 #include "./Vocabulary.h"
 
 // ___________________________________________________________________
-template<class Comp>
+template <class Comp>
 VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles, Comp comp) {
   // we sort alphabetically by the token according to the comparator that was
@@ -46,8 +45,8 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
   std::vector<bool> endOfFile(numFiles, false);
 
   // Priority queue for the k-way merge
-  std::priority_queue<QueueWord, std::vector<QueueWord>, decltype(queueCompare)> queue(
-      queueCompare);
+  std::priority_queue<QueueWord, std::vector<QueueWord>, decltype(queueCompare)>
+      queue(queueCompare);
 
   // open and prepare all infiles and mmap output vectors
   for (size_t i = 0; i < numFiles; i++) {
@@ -224,10 +223,12 @@ void VocabularyMerger::doActualWrite(
 
 // ______________________________________________________________________________________________
 void writePartialIdMapToBinaryFileForMerging(
-    std::shared_ptr<const Index::ItemMap> map,
-    const string& fileName, const SortMode mode) {
+    std::shared_ptr<const Index::ItemMap> map, const string& fileName,
+    const SortMode mode) {
   LOG(INFO) << "Creating partial vocabulary from set ...\n";
-  std::vector<std::pair<string, std::pair<Id, TripleComponentComparator::SplitVal>>> els;
+  std::vector<
+      std::pair<string, std::pair<Id, TripleComponentComparator::SplitVal>>>
+      els;
   els.reserve(map->size());
   els.insert(begin(els), begin(*map), end(*map));
   LOG(INFO) << "... sorting ...\n";
@@ -242,17 +243,20 @@ void writePartialIdMapToBinaryFileForMerging(
   };
 
   switch (mode) {
-    case SortMode::Simple : {
+    case SortMode::Simple: {
       auto pred = [](const auto& p1, const auto& p2) {
         return p1.first < p2.first;
       };
       sort(pred);
       break;
     }
-    case SortMode::StringComparator : {
-      TripleComponentComparator trip; // the compare function behaves statically in this case, but we have no static(bool)
+    case SortMode::StringComparator: {
+      TripleComponentComparator
+          trip;  // the compare function behaves statically in this case, but we
+                 // have no static(bool)
       auto pred = [&trip](const auto& p1, const auto& p2) {
-        return trip.compare(p1.second.second, p2.second.second, TripleComponentComparator::Level::IDENTICAL);
+        return trip(p1.second.second, p2.second.second,
+                    TripleComponentComparator::Level::IDENTICAL);
       };
       sort(pred);
       break;

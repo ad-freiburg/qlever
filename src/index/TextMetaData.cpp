@@ -23,11 +23,17 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
     --it;
   }
 
+  // Binary search in the sorted _blockUpperBoundWordIds vector.
+  auto upperIt = std::lower_bound(_blockUpperBoundWordIds.begin(),
+                                  _blockUpperBoundWordIds.end(), upper);
+
   if (upper > *it) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "No words found for the given prefix. This usually means that the "
              "prefix "
-             "is smaller than the configured minimum prefix size.");
+             "is smaller than the configured minimum prefix size. This range "
+             "spans over " +
+                 std::to_string(upperIt - it) + " blocks");
   }
 
   // Use the info to retrieve an index.

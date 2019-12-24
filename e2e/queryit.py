@@ -10,6 +10,7 @@ from typing import Dict, Any, List
 from enum import Enum
 import json
 import yaml
+import icu
 
 class Color:
     """
@@ -97,6 +98,8 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
     """
     Test if the named result check holds. Returns True if it does
     """
+
+    collator = icu.Collator.createInstance(icu.Locale('de_DE.UTF-8'))
     res = result['res']
     for check, value in check_dict.items():
         if check == 'num_rows':
@@ -156,13 +159,13 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
                         previous_value = float(quotes_inner(previous))
                         current_value = float(quotes_inner(current))
                     elif col_type == 'string':
-                        previous_value = previous
-                        current_value = current
+                        previous_value = collator.getSortKey(previous)
+                        current_value = collator.getSortKey(current)
                     if direction.lower() == 'asc' and previous_value > current_value:
-                        eprint('order_numeric check failed:\n\tnot ascending')
+                        eprint('order_numeric check failed:\n\tnot ascending for {} and {}'.format(previous_value, current_value))
                         return False
                     if direction.lower() == 'desc' and previous_value < current_value:
-                        eprint('order_numeric check failed:\n\tnot descending')
+                        eprint('order_numeric check failed:\n\tnot ascending for {} and {}'.format(previous_value, current_value))
                         return False
             except ValueError as ex:
                 eprint('order_numeric check failed:\n\t' + str(ex))

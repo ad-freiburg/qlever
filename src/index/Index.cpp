@@ -95,8 +95,8 @@ void Index::createFromFile(const string& filename) {
     }
   }
   _configurationJson["prefixes"] = _vocabPrefixCompressed;
-  Vocabulary<CompressedString>::prefixCompressFile(vocabFile, vocabFileTmp,
-                                                   prefixes);
+  Vocabulary<CompressedString, TripleComponentComparator>::prefixCompressFile(
+      vocabFile, vocabFileTmp, prefixes);
 
   // TODO<joka921> maybe move this to its own function
   if (std::rename(vocabFileTmp.c_str(), vocabFile.c_str())) {
@@ -118,7 +118,6 @@ template void Index::createFromFile<TurtleMmapParser>(const string& filename);
 template <class Parser>
 VocabularyData Index::passFileForVocabulary(const string& filename,
                                             size_t linesPerPartial) {
-
   ParallelParseBuffer<Parser> p(PARSER_BATCH_SIZE, filename);
   size_t i = 0;
   // already count the numbers of triples that will be used for the language
@@ -184,8 +183,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
         sortFutures.second.get();
       }
 
-      auto oldItemPtr = std::make_shared<const ItemMap>(
-          std::move(items));
+      auto oldItemPtr = std::make_shared<const ItemMap>(std::move(items));
       sortFutures = writeNextPartialVocabulary(
           i, numFiles, actualCurrentPartialSize, oldItemPtr);
       numFiles++;
@@ -208,8 +206,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     if (sortFutures.second.valid()) {
       sortFutures.second.get();
     }
-    auto oldItemPtr = std::make_shared<const ItemMap>(
-        std::move(items));
+    auto oldItemPtr = std::make_shared<const ItemMap>(std::move(items));
     sortFutures = writeNextPartialVocabulary(
         i, numFiles, actualCurrentPartialSize, oldItemPtr);
     numFiles++;
@@ -514,7 +511,7 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
-  auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@", TripleComponentComparator::Level::IDENTICAL);
+  auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
   createPatternsImpl<MetaDataIterator<IndexMetaDataMmapView>,
                      IndexMetaDataMmapView, ad_utility::File>(
       _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
@@ -1286,7 +1283,7 @@ template void Index::writeAsciiListFile<vector<Score>>(
 
 // _____________________________________________________________________________
 bool Index::isLiteral(const string& object) {
-  return Vocabulary<string>::isLiteral(object);
+  return decltype(_vocab)::isLiteral(object);
 }
 
 // _____________________________________________________________________________
@@ -1370,7 +1367,9 @@ void Index::readConfiguration() {
   }
 
   if (_configurationJson.count("ignore-case")) {
-    LOG(ERROR) << "Key \"ignore-case\" is no longer supported. This is an old index build that is no longer supported. Please rebuild your index using the \"locale\" key  \n";
+    LOG(ERROR) << "Key \"ignore-case\" is no longer supported. This is an old "
+                  "index build that is no longer supported. Please rebuild "
+                  "your index using the \"locale\" key  \n";
     throw std::runtime_error("Deprecated key \"ignore-case\" in index build");
   }
 
@@ -1381,8 +1380,11 @@ void Index::readConfiguration() {
     _vocab.setLocale(lang, country, ignorePunctuation);
     _textVocab.setLocale(lang, country, ignorePunctuation);
   } else {
-    LOG(ERROR) << "Key \"locale\" is missing in the metadata. This is probably and old index build that is no longer supported by QLever. Please rebuild your index\n";
-    throw std::runtime_error("Missing required key \"locale\" in index build's metadata");
+    LOG(ERROR) << "Key \"locale\" is missing in the metadata. This is probably "
+                  "and old index build that is no longer supported by QLever. "
+                  "Please rebuild your index\n";
+    throw std::runtime_error(
+        "Missing required key \"locale\" in index build's metadata");
   }
 
   if (_configurationJson.find("languages-internal") !=
@@ -1401,7 +1403,7 @@ string Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
     spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
     upperBound = 2;
   } else if (isLiteral(spo[2])) {
-    langtag = Vocabulary<string>::getLanguage(spo[2]);
+    langtag = decltype(_vocab)::getLanguage(spo[2]);
   }
 
   for (size_t k = 0; k < upperBound; ++k) {
@@ -1414,11 +1416,12 @@ string Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
 
 // ___________________________________________________________________________
 void Index::initializeVocabularySettingsBuild() {
-  json j; // if we have no settings, we still have to initialize some default values
+  json j;  // if we have no settings, we still have to initialize some default
+           // values
   if (!_settingsFileName.empty()) {
-  std::ifstream f(_settingsFileName);
-  AD_CHECK(f.is_open());
-  f >> j;
+    std::ifstream f(_settingsFileName);
+    AD_CHECK(f.is_open());
+    f >> j;
   }
 
   if (j.find("prefixes-external") != j.end()) {
@@ -1429,10 +1432,11 @@ void Index::initializeVocabularySettingsBuild() {
   }
 
   if (j.count("ignore-case")) {
-    LOG(ERROR) << "Key \"ignore-case\" is no longer supported for the settings JSON. Please specify a \"locale\" instead (or remove the key for the default locale, see doc)\n";
+    LOG(ERROR) << "Key \"ignore-case\" is no longer supported for the settings "
+                  "JSON. Please specify a \"locale\" instead (or remove the "
+                  "key for the default locale, see doc)\n";
     throw std::runtime_error("Deprecated key \"ignore-case\" in settings JSON");
   }
-
 
   {
     std::string lang = "en";
@@ -1444,9 +1448,11 @@ void Index::initializeVocabularySettingsBuild() {
       country = j["locale"]["country"];
       ignorePunctuation = j["locale"]["ignore-punctuation"];
     } else {
-      LOG(INFO) << "locale was not specified by the settings JSON, defaulting to en US\n";
+      LOG(INFO) << "locale was not specified by the settings JSON, defaulting "
+                   "to en US\n";
     }
-    LOG(INFO) << "Using Locale " << lang << " " << country << " with ignore-punctuation: " << ignorePunctuation<< '\n';
+    LOG(INFO) << "Using Locale " << lang << " " << country
+              << " with ignore-punctuation: " << ignorePunctuation << '\n';
     _vocab.setLocale(lang, country, ignorePunctuation);
     _textVocab.setLocale(lang, country, ignorePunctuation);
     _configurationJson["locale"]["language"] = lang;
@@ -1467,7 +1473,9 @@ Id Index::assignNextId(Index::ItemMap* mapPtr, const string& key) {
   ItemMap& map = *mapPtr;
   if (!map.count(key)) {
     Id res = map.size();
-    map[key] = std::pair(map.size(), _vocab.getCaseComparator().extractAndTransformComparable(key, TripleComponentComparator::Level::IDENTICAL));
+    map[key] = std::pair(
+        map.size(), _vocab.getCaseComparator().extractAndTransformComparable(
+                        key, TripleComponentComparator::Level::IDENTICAL));
     return res;
   } else {
     return map[key].first;
@@ -1503,8 +1511,8 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
               << partialTmpFilename << std::endl;
     LOG(INFO) << "it contains " << items->size() << " elements\n";
     fut2 = std::async([&items, partialTmpFilename]() {
-      writePartialIdMapToBinaryFileForMerging(
-          items, partialTmpFilename, SortMode::Simple);
+      writePartialIdMapToBinaryFileForMerging(items, partialTmpFilename,
+                                              SortMode::Simple);
     });
   }
   return {std::move(fut1), std::move(fut2)};

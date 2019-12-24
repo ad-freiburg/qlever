@@ -10,8 +10,8 @@
 #include "../global/Id.h"
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
-#include "Vocabulary.h"
 #include "Index.h"
+#include "Vocabulary.h"
 
 using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
@@ -49,7 +49,7 @@ class VocabularyMerger {
   // Argument comp gives the way to order strings (case-sensitive or not)
   // This automatically resets the inner members after finishing, to leave the
   // external interface stateless
-  template<class Comp>
+  template <class Comp>
   VocMergeRes mergeVocabulary(const std::string& basename, size_t numFiles,
                               Comp comp);
 
@@ -107,14 +107,11 @@ class VocabularyMerger {
       const std::vector<std::pair<size_t, std::pair<size_t, size_t>>>& buffer);
 };
 
-enum class SortMode {
-  Simple,
-  StringComparator
-};
+enum class SortMode { Simple, StringComparator };
 // _________________________________________________________________________________________
 void writePartialIdMapToBinaryFileForMerging(
-    std::shared_ptr<const Index::ItemMap> map,
-    const string& fileName, SortMode mode);
+    std::shared_ptr<const Index::ItemMap> map, const string& fileName,
+    SortMode mode);
 
 // _________________________________________________________________________________________
 ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(

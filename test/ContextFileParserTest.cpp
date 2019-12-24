@@ -19,7 +19,8 @@ TEST(ContextFileParserTest, getLineTest) {
        "X\t0\t1\t1\n";
 
   f.close();
-  ContextFileParser p("_testtmp.contexts.tsv");
+  ContextFileParser p("_testtmp.contexts.tsv",
+                      LocaleManager("en", "US", false));
   ContextFileParser::Line a;
   ASSERT_TRUE(p.getLine(a));
   ASSERT_EQ("foo", a._word);

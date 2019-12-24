@@ -417,7 +417,7 @@ void Filter::computeFilterFixedValue(
         // remove the leading '^' symbol
         std::string rhs = _rhs.substr(1);
         // TODO<joka921>: handle Levels correctly;
-        auto [lowerBound, upperBound] = getIndex().getVocab().prefix_range(rhs, TripleComponentComparator::Level::PRIMARY);
+        auto [lowerBound, upperBound] = getIndex().getVocab().prefix_range(rhs);
 
         LOG(DEBUG) << "upper and lower bound are " << upperBound << ' '
                    << lowerBound << std::endl;
@@ -524,7 +524,6 @@ void Filter::computeResultFixedValue(
           // Remove the quotation marks surrounding the string.
           rhs_string = rhs_string.substr(1, rhs_string.size() - 2);
         }
-
       }
 
       // TODO<joka921> which level do we want for these filters
