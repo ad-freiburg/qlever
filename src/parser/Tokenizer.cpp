@@ -50,3 +50,66 @@ std::tuple<bool, size_t, std::string> Tokenizer::getNextToken(
   reset(beg + maxMatchSize, dataSize - maxMatchSize);
   return {success, maxMatchIndex, maxMatch};
 }
+
+// ______________________________________________________________________________________________________
+const RE2& Tokenizer::idToRegex(const TokId reg) {
+  switch (reg) {
+    case TokId::TurtlePrefix:
+      return _tokens.TurtlePrefix;
+    case TokId::SparqlPrefix:
+      return _tokens.SparqlPrefix;
+    case TokId::TurtleBase:
+      return _tokens.TurtleBase;
+    case TokId::SparqlBase:
+      return _tokens.SparqlBase;
+    case TokId::Dot:
+      return _tokens.Dot;
+    case TokId::Comma:
+      return _tokens.Comma;
+    case TokId::Semicolon:
+      return _tokens.Semicolon;
+    case TokId::OpenSquared:
+      return _tokens.OpenSquared;
+    case TokId::CloseSquared:
+      return _tokens.CloseSquared;
+    case TokId::OpenRound:
+      return _tokens.OpenRound;
+    case TokId::CloseRound:
+      return _tokens.CloseRound;
+    case TokId::A:
+      return _tokens.A;
+    case TokId::DoubleCircumflex:
+      return _tokens.DoubleCircumflex;
+    case TokId::True:
+      return _tokens.True;
+    case TokId::False:
+      return _tokens.False;
+    case TokId::Langtag:
+      return _tokens.Langtag;
+    case TokId::Decimal:
+      return _tokens.Decimal;
+    case TokId::Exponent:
+      return _tokens.Exponent;
+    case TokId::Double:
+      return _tokens.Double;
+    case TokId::Iriref:
+      return _tokens.Iriref;
+    case TokId::PnameNS:
+      return _tokens.PnameNS;
+    case TokId::PnameLN:
+      return _tokens.PnameLN;
+    case TokId::BlankNodeLabel:
+      return _tokens.BlankNodeLabel;
+    case TokId::WsMultiple:
+      return _tokens.WsMultiple;
+    case TokId::Anon:
+      return _tokens.Anon;
+    case TokId::Comment:
+      return _tokens.Comment;
+    case TokId::Integer:
+      return _tokens.Integer;
+  }
+  throw std::runtime_error(
+      "Illegal switch value in Tokenizer::getNextToken. This should never "
+      "happen");
+}

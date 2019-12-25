@@ -56,6 +56,12 @@ struct VocabularyData {
   std::unique_ptr<TripleVec> idTriples;
 };
 
+/**
+ * Used as a Template Argument to the createFromFile method, when we do not yet
+ * know, which Tokenizer Specialization of the TurtleParser we are going to use
+ */
+class TurtleParserDummy {};
+
 class Index {
  public:
   using TripleVec = stxxl::vector<array<Id, 3>>;
@@ -119,6 +125,14 @@ class Index {
   // by createFromOnDiskIndex after this call.
   template <class Parser>
   void createFromFile(const string& filename);
+
+  /**
+   * @brief create an Index from a turtle file
+   * Determine from the settings, which Tokenizer regex engine (google re2 or
+   * ctre) should be used
+   * @param filename
+   */
+  void createFromTurtleFile(const string& filename);
 
   void addPatternsToExistingIndex();
 
@@ -448,6 +462,7 @@ class Index {
  private:
   string _onDiskBase;
   string _settingsFileName;
+  bool _onlyAsciiTurtlePrefixes = false;
   bool _onDiskLiterals = false;
   bool _keepTempFiles = false;
   json _configurationJson;
@@ -729,6 +744,7 @@ class Index {
   void readConfiguration();
 
   // initialize the index-build-time settings for the vocabulary
+  template <class Parser>
   void initializeVocabularySettingsBuild();
 
   // Helper function for Debugging during the index build.

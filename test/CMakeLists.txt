@@ -118,6 +118,10 @@ add_executable(SparqlLexerTest SparqlLexerTest.cpp)
 add_test(SparqlLexerTest SparqlLexerTest)
 target_link_libraries(SparqlLexerTest parser gtest_main ${CMAKE_THREAD_LIBS_INIT})
 
+add_executable(Utf8RegexTest Utf8RegexTest.cpp)
+add_test(Utf8RegexTest Utf8RegexTest)
+target_link_libraries(Utf8RegexTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
 add_executable(BatchedPipelineTest BatchedPipelineTest.cpp)
 add_test(BatchedPipelineTest BatchedPipelineTest)
 target_link_libraries(BatchedPipelineTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT})

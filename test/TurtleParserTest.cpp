@@ -9,7 +9,7 @@
 
 using std::string;
 TEST(TurtleParserTest, prefixedName) {
-  TurtleStringParser p;
+  TurtleStringParser<Tokenizer> p;
   p._prefixMap["wd"] = "www.wikidata.org/";
   p.setInputStream("wd:Q430 someotherContent");
   ASSERT_TRUE(p.prefixedName());
@@ -34,11 +34,11 @@ TEST(TurtleParserTest, prefixedName) {
   ASSERT_EQ(p.getPosition(), 0u);
 
   p.setInputStream("unregistered:bla");
-  ASSERT_THROW(p.prefixedName(), TurtleParser::ParseException);
+  ASSERT_THROW(p.prefixedName(), TurtleParser<Tokenizer>::ParseException);
 }
 
 TEST(TurtleParserTest, prefixID) {
-  TurtleStringParser p;
+  TurtleStringParser<Tokenizer> p;
   string s = "@prefix bla:<www.bla.org/> .";
   p.setInputStream(s);
   ASSERT_TRUE(p.prefixID());
@@ -55,7 +55,7 @@ TEST(TurtleParserTest, prefixID) {
   // invalid LL1
   s = "@prefix bla<www.bla.org/>.";
   p.setInputStream(s);
-  ASSERT_THROW(p.prefixID(), TurtleParser::ParseException);
+  ASSERT_THROW(p.prefixID(), TurtleParser<Tokenizer>::ParseException);
 
   s = "@prefxxix bla<www.bla.org/>.";
   p.setInputStream(s);
@@ -66,7 +66,7 @@ TEST(TurtleParserTest, prefixID) {
 }
 
 TEST(TurtleParserTest, stringParse) {
-  TurtleStringParser p;
+  TurtleStringParser<Tokenizer> p;
   string s1("\"double quote\"");
   string s2("\'single quote\'");
   string s3("\"\"\"multiline \n double quote\"\"\"");
@@ -103,7 +103,7 @@ TEST(TurtleParserTest, rdfLiteral) {
   literals.push_back("\"langtag\"@en-gb");
   literals.push_back("\"valueLong\"^^<www.xsd.org/integer>");
 
-  TurtleStringParser p;
+  TurtleStringParser<Tokenizer> p;
   for (const auto& s : literals) {
     p.setInputStream(s);
     ASSERT_TRUE(p.rdfLiteral());
@@ -120,7 +120,7 @@ TEST(TurtleParserTest, rdfLiteral) {
 }
 
 TEST(TurtleParserTest, blankNode) {
-  TurtleStringParser p;
+  TurtleStringParser<Tokenizer> p;
   p.setInputStream(" _:blank1");
   ASSERT_TRUE(p.blankNode());
   ASSERT_EQ(p._lastParseResult, "_:blank1");
@@ -146,7 +146,7 @@ TEST(TurtleParserTest, blankNode) {
 }
 
 TEST(TurtleParserTest, blankNodePropertyList) {
-  TurtleStringParser p;
+  TurtleStringParser<Tokenizer> p;
   p._activeSubject = "<s>";
   p._activePredicate = "<p1>";
 
@@ -162,11 +162,12 @@ TEST(TurtleParserTest, blankNodePropertyList) {
 
   blankNodeL = "[<2> <ob2>; \"invalidPred\" <ob3>]";
   p.setInputStream(blankNodeL);
-  ASSERT_THROW(p.blankNodePropertyList(), TurtleParser::ParseException);
+  ASSERT_THROW(p.blankNodePropertyList(),
+               TurtleParser<Tokenizer>::ParseException);
 }
 
 TEST(TurtleParserTest, object) {
-  TurtleStringParser p;
+  TurtleStringParser<Tokenizer> p;
   string sub = "<sub>";
   string pred = "<pred>";
   using triple = std::array<string, 3>;
@@ -197,7 +198,7 @@ TEST(TurtleParserTest, object) {
 }
 
 TEST(TurtleParserTest, objectList) {
-  TurtleStringParser p;
+  TurtleStringParser<Tokenizer> p;
   p._activeSubject = "<s>";
   p._activePredicate = "<p>";
   string objectL = " <ob1>, <ob2>, <ob3>";
@@ -214,11 +215,11 @@ TEST(TurtleParserTest, objectList) {
   ASSERT_FALSE(p.objectList());
 
   p.setInputStream("<obj1>, @illFormed");
-  ASSERT_THROW(p.objectList(), TurtleParser::ParseException);
+  ASSERT_THROW(p.objectList(), TurtleParser<Tokenizer>::ParseException);
 }
 
 TEST(TurtleParserTest, predicateObjectList) {
-  TurtleStringParser p;
+  TurtleStringParser<Tokenizer> p;
   p._activeSubject = "<s>";
   string predL = "\n <p1> <ob1>;<p2> \"ob2\",\n <ob3>";
   std::vector<std::array<string, 3>> exp;
