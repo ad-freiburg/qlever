@@ -222,13 +222,12 @@ void VocabularyMerger::doActualWrite(
 }
 
 // ______________________________________________________________________________________________
+template <class Pred>
 void writePartialIdMapToBinaryFileForMerging(
     std::shared_ptr<const Index::ItemMap> map, const string& fileName,
-    const SortMode mode) {
+    Pred pred) {
   LOG(INFO) << "Creating partial vocabulary from set ...\n";
-  std::vector<
-      std::pair<string, std::pair<Id, TripleComponentComparator::SplitVal>>>
-      els;
+  std::vector<std::pair<string, Id>> els;
   els.reserve(map->size());
   els.insert(begin(els), begin(*map), end(*map));
   LOG(INFO) << "... sorting ...\n";
@@ -242,29 +241,13 @@ void writePartialIdMapToBinaryFileForMerging(
     }
   };
 
-  switch (mode) {
-    case SortMode::Simple: {
-      auto pred = [](const auto& p1, const auto& p2) {
-        return p1.first < p2.first;
-      };
-      sort(pred);
-      break;
-    }
-    case SortMode::StringComparator: {
-      TripleComponentComparator
-          trip;  // the compare function behaves statically in this case, but we
-                 // have no static(bool)
-      auto pred = [&trip](const auto& p1, const auto& p2) {
-        return trip(p1.second.second, p2.second.second,
-                    TripleComponentComparator::Level::IDENTICAL);
-      };
-      sort(pred);
-      break;
-    }
-  }
+  auto comp = [&pred](const auto& a, const auto& b) {
+    return pred(a.first, b.first);
+  };
+
+  sort(comp);
 
   LOG(INFO) << "Done creating vocabulary.\n";
-
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
   std::ofstream out(fileName.c_str(),
                     std::ios_base::out | std::ios_base::binary);
@@ -275,7 +258,7 @@ void writePartialIdMapToBinaryFileForMerging(
     uint32_t len = word.size();
     out.write((char*)&len, sizeof(len));
     out.write(word.data(), len);
-    Id id = el.second.first;
+    Id id = el.second;
     out.write((char*)&id, sizeof(id));
   }
   out.close();

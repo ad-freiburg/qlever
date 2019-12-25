@@ -1473,12 +1473,10 @@ Id Index::assignNextId(Index::ItemMap* mapPtr, const string& key) {
   ItemMap& map = *mapPtr;
   if (!map.count(key)) {
     Id res = map.size();
-    map[key] = std::pair(
-        map.size(), _vocab.getCaseComparator().extractAndTransformComparable(
-                        key, TripleComponentComparator::Level::IDENTICAL));
+    map[key] = map.size();
     return res;
   } else {
-    return map[key].first;
+    return map[key];
   }
 }
 
@@ -1496,10 +1494,10 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
 
   LOG(INFO) << "writing partial vocabulary to " << partialFilename << std::endl;
   LOG(INFO) << "it contains " << items->size() << " elements\n";
-  fut1 = std::async([&items, partialFilename]() {
-    writePartialIdMapToBinaryFileForMerging(items, partialFilename,
-                                            SortMode::StringComparator);
-  });
+  fut1 = std::async(
+      [&items, partialFilename, comp = _vocab.getCaseComparator()]() {
+        writePartialIdMapToBinaryFileForMerging(items, partialFilename, comp);
+      });
 
   if (_vocabPrefixCompressed) {
     // we also have to create the "ordinary" vocabulary order to make the
@@ -1512,7 +1510,7 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
     LOG(INFO) << "it contains " << items->size() << " elements\n";
     fut2 = std::async([&items, partialTmpFilename]() {
       writePartialIdMapToBinaryFileForMerging(items, partialTmpFilename,
-                                              SortMode::Simple);
+                                              std::less<std::string>());
     });
   }
   return {std::move(fut1), std::move(fut2)};

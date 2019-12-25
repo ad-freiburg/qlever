@@ -107,11 +107,11 @@ class VocabularyMerger {
       const std::vector<std::pair<size_t, std::pair<size_t, size_t>>>& buffer);
 };
 
-enum class SortMode { Simple, StringComparator };
 // _________________________________________________________________________________________
+template <class Comp>
 void writePartialIdMapToBinaryFileForMerging(
     std::shared_ptr<const Index::ItemMap> map, const string& fileName,
-    SortMode mode);
+    Comp comp);
 
 // _________________________________________________________________________________________
 ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(

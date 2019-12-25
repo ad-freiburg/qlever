@@ -216,16 +216,17 @@ TEST_F(MergeVocabularyTest, bla) {
 TEST(VocabularyGenerator, ReadAndWritePartial) {
   {
     using SP = TripleComponentComparator::SplitVal;
-    ad_utility::HashMap<string, std::pair<Id, SP>> s;
-    s["A"] = std::make_pair(5, SP{});
-    s["a"] = std::make_pair(6, SP{});
-    s["Ba"] = std::make_pair(7, SP{});
-    s["car"] = std::make_pair(8, SP{});
+    Index::ItemMap s;
+    s["A"] = 5;
+    s["a"] = 6;
+    s["Ba"] = 7;
+    s["car"] = 8;
     TextVocabulary v;
     std::string basename = "_tmp_testidx";
     auto ptr = std::make_shared<const decltype(s)>(std::move(s));
     writePartialIdMapToBinaryFileForMerging(
-        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", SortMode::Simple);
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0",
+        std::less<std::string>());
 
     {
       VocabularyMerger m;
@@ -249,16 +250,15 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
           s, TripleComponentComparator::Level::IDENTICAL);
     };
     Index::ItemMap s;
-    s["\"A\""] = std::make_pair(5, extr("\"A\""));
-    s["\"a\""] = std::make_pair(6, extr("\"a\""));
-    s["\"Ba\""] = std::make_pair(7, extr("\"Ba\""));
-    s["\"car\""] = std::make_pair(8, extr("\"car\""));
-    s["\"Ä\""] = std::make_pair(9, extr("\"Ä\""));
+    s["\"A\""] = 5;
+    s["\"a\""] = 6;
+    s["\"Ba\""] = 7;
+    s["\"car\""] = 8;
+    s["\"Ä\""] = 9;
     std::string basename = "_tmp_testidx";
     auto ptr = std::make_shared<const Index::ItemMap>(std::move(s));
     writePartialIdMapToBinaryFileForMerging(
-        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0",
-        SortMode::StringComparator);
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator());
 
     {
       VocabularyMerger m;
