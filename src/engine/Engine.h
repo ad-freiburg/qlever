@@ -102,11 +102,12 @@ class Engine {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
-      __gnu_parallel::sort(stab.begin(), stab.end(),
-                           [keyColumn](const auto& a, const auto& b) {
-                             return a[keyColumn] < b[keyColumn];
-                           },
-                           __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
+      __gnu_parallel::sort(
+          stab.begin(), stab.end(),
+          [keyColumn](const auto& a, const auto& b) {
+            return a[keyColumn] < b[keyColumn];
+          },
+          __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
     } else {
       std::sort(stab.begin(), stab.end(),
                 [keyColumn](const auto& a, const auto& b) {
