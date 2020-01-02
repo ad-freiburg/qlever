@@ -120,52 +120,52 @@ void Filter::computeFilter(IdTableStatic<WIDTH>* result, size_t lhs, size_t rhs,
                            const IdTableStatic<WIDTH>& input) const {
   switch (_type) {
     case SparqlFilter::EQ:
-      getEngine().filter(input,
-                         [lhs, rhs](const auto& e) {
-                           return ValueReader<T>::get(e[lhs]) ==
-                                  ValueReader<T>::get(e[rhs]);
-                         },
-                         result);
+      getEngine().filter(
+          input,
+          [lhs, rhs](const auto& e) {
+            return ValueReader<T>::get(e[lhs]) == ValueReader<T>::get(e[rhs]);
+          },
+          result);
       break;
     case SparqlFilter::NE:
-      getEngine().filter(input,
-                         [lhs, rhs](const auto& e) {
-                           return ValueReader<T>::get(e[lhs]) !=
-                                  ValueReader<T>::get(e[rhs]);
-                         },
-                         result);
+      getEngine().filter(
+          input,
+          [lhs, rhs](const auto& e) {
+            return ValueReader<T>::get(e[lhs]) != ValueReader<T>::get(e[rhs]);
+          },
+          result);
       break;
     case SparqlFilter::LT:
-      getEngine().filter(input,
-                         [lhs, rhs](const auto& e) {
-                           return ValueReader<T>::get(e[lhs]) <
-                                  ValueReader<T>::get(e[rhs]);
-                         },
-                         result);
+      getEngine().filter(
+          input,
+          [lhs, rhs](const auto& e) {
+            return ValueReader<T>::get(e[lhs]) < ValueReader<T>::get(e[rhs]);
+          },
+          result);
       break;
     case SparqlFilter::LE:
-      getEngine().filter(input,
-                         [lhs, rhs](const auto& e) {
-                           return ValueReader<T>::get(e[lhs]) <=
-                                  ValueReader<T>::get(e[rhs]);
-                         },
-                         result);
+      getEngine().filter(
+          input,
+          [lhs, rhs](const auto& e) {
+            return ValueReader<T>::get(e[lhs]) <= ValueReader<T>::get(e[rhs]);
+          },
+          result);
       break;
     case SparqlFilter::GT:
-      getEngine().filter(input,
-                         [lhs, rhs](const auto& e) {
-                           return ValueReader<T>::get(e[lhs]) >
-                                  ValueReader<T>::get(e[rhs]);
-                         },
-                         result);
+      getEngine().filter(
+          input,
+          [lhs, rhs](const auto& e) {
+            return ValueReader<T>::get(e[lhs]) > ValueReader<T>::get(e[rhs]);
+          },
+          result);
       break;
     case SparqlFilter::GE:
-      getEngine().filter(input,
-                         [lhs, rhs](const auto& e) {
-                           return ValueReader<T>::get(e[lhs]) >=
-                                  ValueReader<T>::get(e[rhs]);
-                         },
-                         result);
+      getEngine().filter(
+          input,
+          [lhs, rhs](const auto& e) {
+            return ValueReader<T>::get(e[lhs]) >= ValueReader<T>::get(e[rhs]);
+          },
+          result);
       break;
     case SparqlFilter::LANG_MATCHES:
       AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
@@ -323,12 +323,12 @@ void Filter::computeFilterFixedValue(
             });
         res->insert(res->end(), input.begin(), lower);
       } else {
-        getEngine().filter(input,
-                           [lhs, rhs](const auto& e) {
-                             return ValueReader<T>::get(e[lhs]) <
-                                    ValueReader<T>::get(rhs);
-                           },
-                           res);
+        getEngine().filter(
+            input,
+            [lhs, rhs](const auto& e) {
+              return ValueReader<T>::get(e[lhs]) < ValueReader<T>::get(rhs);
+            },
+            res);
       }
       break;
     case SparqlFilter::LE:
@@ -343,12 +343,12 @@ void Filter::computeFilterFixedValue(
             });
         res->insert(res->end(), input.begin(), upper);
       } else {
-        getEngine().filter(input,
-                           [lhs, rhs](const auto& e) {
-                             return ValueReader<T>::get(e[lhs]) <=
-                                    ValueReader<T>::get(rhs);
-                           },
-                           res);
+        getEngine().filter(
+            input,
+            [lhs, rhs](const auto& e) {
+              return ValueReader<T>::get(e[lhs]) <= ValueReader<T>::get(rhs);
+            },
+            res);
       }
       break;
     case SparqlFilter::GT:
@@ -364,12 +364,12 @@ void Filter::computeFilterFixedValue(
         // an element equal to rhs exists in the vector
         res->insert(res->end(), upper, input.end());
       } else {
-        getEngine().filter(input,
-                           [lhs, rhs](const auto& e) {
-                             return ValueReader<T>::get(e[lhs]) >
-                                    ValueReader<T>::get(rhs);
-                           },
-                           res);
+        getEngine().filter(
+            input,
+            [lhs, rhs](const auto& e) {
+              return ValueReader<T>::get(e[lhs]) > ValueReader<T>::get(rhs);
+            },
+            res);
       }
       break;
     case SparqlFilter::GE:
@@ -385,12 +385,12 @@ void Filter::computeFilterFixedValue(
         // an element equal to rhs exists in the vector
         res->insert(res->end(), lower, input.end());
       } else {
-        getEngine().filter(input,
-                           [lhs, rhs](const auto& e) {
-                             return ValueReader<T>::get(e[lhs]) >=
-                                    ValueReader<T>::get(rhs);
-                           },
-                           res);
+        getEngine().filter(
+            input,
+            [lhs, rhs](const auto& e) {
+              return ValueReader<T>::get(e[lhs]) >= ValueReader<T>::get(rhs);
+            },
+            res);
       }
       break;
     case SparqlFilter::LANG_MATCHES:
