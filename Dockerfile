@@ -17,9 +17,7 @@ RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG -DUSE_PARALLEL=true .. && 
 
 FROM base as runtime
 WORKDIR /app
-RUN apt-get update && apt-get install -y wget python3-yaml python3-pip unzip curl bzip2 pkg-config libicu-dev
-RUN pip3 install PyICU
-RUN apt-get update && apt-get install -y libgomp1 libicu-dev
+RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu libgomp1
 
 ARG UID=1000
 RUN groupadd -r qlever && useradd --no-log-init -r -u $UID -g qlever qlever && chown qlever:qlever /app

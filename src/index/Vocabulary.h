@@ -327,10 +327,9 @@ class Vocabulary {
     }
     Id lb = lower_bound(prefix, SortLevel::PRIMARY);
     auto transformed =
-        _caseComparator.transformToFirstPossibleBiggerValue(prefix);
+        _caseComparator.transformToFirstPossibleBiggerValue(prefix, SortLevel::PRIMARY);
 
-    auto pred = getLowerBoundLambda<typename ComparatorType::Transformed_T>(
-        SortLevel::PRIMARY);
+    auto pred = getLowerBoundLambda<decltype(transformed)>(SortLevel::PRIMARY);
     auto ub = static_cast<Id>(
         std::lower_bound(_words.begin(), _words.end(), transformed, pred) -
         _words.begin());
@@ -342,10 +341,9 @@ class Vocabulary {
     return _caseComparator.getLocaleManager();
   }
 
-  private :
-
-      template <class R = std::string>
-      auto getLowerBoundLambda(const SortLevel level) const {
+ private:
+  template <class R = std::string>
+  auto getLowerBoundLambda(const SortLevel level) const {
     if constexpr (_isCompressed) {
       return [this, level](const CompressedString& a, const R& b) {
         return this->_caseComparator(this->expandPrefix(a), b, level);

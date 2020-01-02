@@ -65,6 +65,15 @@ static const std::string MMAP_FILE_SUFFIX = ".meta-mmap";
 static const std::string CONFIGURATION_FILE = ".meta-data.json";
 static const std::string PREFIX_FILE = ".prefixes";
 
+static const std::string ERROR_IGNORE_CASE_UNSUPPORTED =
+    "Key \"ignore-case\" is no longer supported. Please remove this key from "
+    "your settings.json and rebuild your index. You can optionally specify the "
+    "\"locale\" key, otherwise \"en.US\" will be used as default";
+
+static const std::string LOCALE_DEFAULT_LANG = "en";
+static const std::string LOCALE_DEFAULT_COUNTRY = "US";
+static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;
+
 // Constants for the range of valid compression prefixes
 // all ASCII- printable characters are left out.
 // when adding more special characters to the vocabulary make sure to leave out

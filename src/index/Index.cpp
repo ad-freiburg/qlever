@@ -1367,9 +1367,7 @@ void Index::readConfiguration() {
   }
 
   if (_configurationJson.count("ignore-case")) {
-    LOG(ERROR) << "Key \"ignore-case\" is no longer supported. This is an old "
-                  "index build that is no longer supported. Please rebuild "
-                  "your index using the \"locale\" key  \n";
+    LOG(ERROR) << ERROR_IGNORE_CASE_UNSUPPORTED << '\n';
     throw std::runtime_error("Deprecated key \"ignore-case\" in index build");
   }
 
@@ -1432,18 +1430,22 @@ void Index::initializeVocabularySettingsBuild() {
   }
 
   if (j.count("ignore-case")) {
-    LOG(ERROR) << "Key \"ignore-case\" is no longer supported for the settings "
-                  "JSON. Please specify a \"locale\" instead (or remove the "
-                  "key for the default locale, see doc)\n";
+    LOG(ERROR) << ERROR_IGNORE_CASE_UNSUPPORTED << '\n';
     throw std::runtime_error("Deprecated key \"ignore-case\" in settings JSON");
   }
 
+  /**
+   * ICU uses two separate arguments for each Locale, the language ("en" or
+   * "fr"...) and the country ("GB", "CA"...). The encoding has to be known at
+   * compile time for ICU and will always be UTF-8 so it is not part of the
+   * locale setting.
+   */
+
   {
-    std::string lang = "en";
-    std::string country = "US";
-    bool ignorePunctuation = false;
+    std::string lang = LOCALE_DEFAULT_LANG;
+    std::string country = LOCALE_DEFAULT_COUNTRY;
+    bool ignorePunctuation = LOCALE_DEFAULT_IGNORE_PUNCTUATION;
     if (j.count("locale")) {
-      // TODO: proper exceptions
       lang = j["locale"]["language"];
       country = j["locale"]["country"];
       ignorePunctuation = j["locale"]["ignore-punctuation"];
