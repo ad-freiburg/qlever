@@ -527,7 +527,7 @@ void Filter::computeResultFixedValue(
       }
 
       // TODO<joka921> which level do we want for these filters
-      auto level = TripleComponentComparator::Level::IDENTICAL;
+      auto level = TripleComponentComparator::Level::QUARTERNARY;
       if (_type == SparqlFilter::EQ || _type == SparqlFilter::NE) {
         if (!getIndex().getVocab().getId(rhs_string, &rhs)) {
           rhs = std::numeric_limits<size_t>::max() - 1;

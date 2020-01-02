@@ -307,7 +307,7 @@ class SimpleStringComparator {
    * @return True iff a comes before b
    */
   bool operator()(std::string_view a, std::string_view b,
-                  const Level level = Level::IDENTICAL) const {
+                  const Level level = Level::QUARTERNARY) const {
     return _locManager.compare(a, b, level) < 0;
   }
 
@@ -327,7 +327,8 @@ class SimpleStringComparator {
    * @
    * @return true iff a comes before the string whose SortKey is b
    */
-  bool operator()(std::string_view a, const LocaleManager::SortKey& b, [[maybe_unused]] const Level l) const {
+  bool operator()(std::string_view a, const LocaleManager::SortKey& b,
+                  [[maybe_unused]] const Level l) const {
     auto aTrans = _locManager.getSortKey(a, Level::PRIMARY);
     auto cmp = LocaleManager::compare(aTrans, b, Level::PRIMARY);
     return cmp < 0;
@@ -349,7 +350,7 @@ class SimpleStringComparator {
    */
   [[nodiscard]] LocaleManager::SortKey transformToFirstPossibleBiggerValue(
       std::string_view s, const Level level) const {
-    AD_CHECK(level==Level::PRIMARY);
+    AD_CHECK(level == Level::PRIMARY);
     auto transformed = _locManager.getSortKey(s, Level::PRIMARY);
     unsigned char last = transformed.get().back();
     if (last < std::numeric_limits<unsigned char>::max()) {
@@ -401,8 +402,8 @@ class TripleComponentComparator {
    * @brief An entry of the Vocabulary, split up into its components and
    * possibly converted to a format that is easier to compare
    *
-   * @tparam ST either LocaleManager::SortKey or std::string_view. Since both variants
-   * differ greatly in their usage they are commented with the template
+   * @tparam ST either LocaleManager::SortKey or std::string_view. Since both
+   * variants differ greatly in their usage they are commented with the template
    * instantiations
    */
   template <class InnerString, class LanguageTag>
@@ -413,17 +414,19 @@ class TripleComponentComparator {
           transformedVal(std::move(trans)),
           langtag(std::move(l)) {}
 
-    /// The first char of the original value, used to distinguish between different datatypes
+    /// The first char of the original value, used to distinguish between
+    /// different datatypes
     char firstOriginalChar = '\0';
-    InnerString transformedVal;  /// The original inner value, possibly transformed by a locale().
+    InnerString transformedVal;  /// The original inner value, possibly
+                                 /// transformed by a locale().
     LanguageTag langtag;         /// the language tag, possibly empty
   };
 
   /**
    * This value owns all its contents.
-   * The inner value is the SortKey of the original inner value according to the held Locale.
-   * This is used to transform the inner value
-   * and to safely pass it around, e.g. when performing prefix comparisons in the vocabulary
+   * The inner value is the SortKey of the original inner value according to the
+   * held Locale. This is used to transform the inner value and to safely pass
+   * it around, e.g. when performing prefix comparisons in the vocabulary
    */
   using SplitVal = SplitValBase<LocaleManager::SortKey, std::string>;
 
@@ -438,7 +441,7 @@ class TripleComponentComparator {
    * @return false iff a comes before b in the vocabulary
    */
   bool operator()(std::string_view a, std::string_view b,
-                  const Level level = Level::IDENTICAL) const {
+                  const Level level = Level::QUARTERNARY) const {
     return compare(a, b, level) < 0;
   }
 
@@ -462,17 +465,18 @@ class TripleComponentComparator {
     return compare(a, b, level) < 0;
   }
 
-  /// Compare two string_views from the Vocabulary. Return value according to std::strcmp
+  /// Compare two string_views from the Vocabulary. Return value according to
+  /// std::strcmp
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
-                            const Level level = Level::IDENTICAL) const {
+                            const Level level = Level::QUARTERNARY) const {
     auto splitA = extractComparable<SplitValNonOwning>(a, level);
     auto splitB = extractComparable<SplitValNonOwning>(b, level);
     return compare(splitA, splitB, level);
   }
 
   /**
-   * @brief Split a literal or iri into its components and convert the inner value according to
-   *        the held locale
+   * @brief Split a literal or iri into its components and convert the inner
+   * value according to the held locale
    */
   [[nodiscard]] SplitVal extractAndTransformComparable(
       std::string_view a, const Level level) const {
@@ -498,7 +502,7 @@ class TripleComponentComparator {
     if (int res =
             // this correctly dispatches between SortKeys (already transformed)
             // and string_views (not-transformed, perform unicode collation)
-            _locManager.compare(a.transformedVal, b.transformedVal, level);
+        _locManager.compare(a.transformedVal, b.transformedVal, level);
         res != 0) {
       return res;  // actual value differs
     }
@@ -508,9 +512,10 @@ class TripleComponentComparator {
 
   /**
    *
-   * @brief Transform a string s from the vocabulary to the SplitVal of the first possible
-   * vocabulary string that compares greater to s according to the held locale on the
-   * PRIMARY level (other levels will cause an assertion fail.)
+   * @brief Transform a string s from the vocabulary to the SplitVal of the
+   * first possible vocabulary string that compares greater to s according to
+   * the held locale on the PRIMARY level (other levels will cause an assertion
+   * fail.)
    *
    * This is needed for calculating whether one string is a prefix of another
    * CAVEAT: This currently only supports the primary collation Level!!!
@@ -524,7 +529,7 @@ class TripleComponentComparator {
    */
   [[nodiscard]] SplitVal transformToFirstPossibleBiggerValue(
       std::string_view s, const Level level) const {
-    AD_CHECK(level==Level::PRIMARY);
+    AD_CHECK(level == Level::PRIMARY);
     auto transformed = extractAndTransformComparable(s, Level::PRIMARY);
     unsigned char last = transformed.transformedVal.get().back();
     if (last < std::numeric_limits<unsigned char>::max()) {

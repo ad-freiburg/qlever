@@ -247,7 +247,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     v.setLocale("en", "US", false);
     auto extr = [&v](std::string_view s) {
       return v.getCaseComparator().extractAndTransformComparable(
-          s, TripleComponentComparator::Level::IDENTICAL);
+          s, TripleComponentComparator::Level::QUARTERNARY);
     };
     Index::ItemMap s;
     s["\"A\""] = 5;

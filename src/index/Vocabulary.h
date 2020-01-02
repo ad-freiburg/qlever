@@ -326,8 +326,8 @@ class Vocabulary {
       return {0, _words.size()};
     }
     Id lb = lower_bound(prefix, SortLevel::PRIMARY);
-    auto transformed =
-        _caseComparator.transformToFirstPossibleBiggerValue(prefix, SortLevel::PRIMARY);
+    auto transformed = _caseComparator.transformToFirstPossibleBiggerValue(
+        prefix, SortLevel::PRIMARY);
 
     auto pred = getLowerBoundLambda<decltype(transformed)>(SortLevel::PRIMARY);
     auto ub = static_cast<Id>(
@@ -366,7 +366,7 @@ class Vocabulary {
   }
   // Wraps std::lower_bound and returns an index instead of an iterator
   Id lower_bound(const string& word,
-                 const SortLevel level = SortLevel::IDENTICAL) const {
+                 const SortLevel level = SortLevel::QUARTERNARY) const {
     return static_cast<Id>(std::lower_bound(_words.begin(), _words.end(), word,
                                             getLowerBoundLambda(level)) -
                            _words.begin());
@@ -401,7 +401,6 @@ class Vocabulary {
   vector<StringType> _words;
   ExternalVocabulary _externalLiterals;
   ComparatorType _caseComparator;
-  std::locale _locale;  // default constructed as c locale
 };
 
 using RdfsVocabulary = Vocabulary<CompressedString, TripleComponentComparator>;

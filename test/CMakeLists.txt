@@ -117,3 +117,7 @@ target_link_libraries(TransitivePathTest engine gtest_main ${CMAKE_THREAD_LIBS_I
 add_executable(SparqlLexerTest SparqlLexerTest.cpp)
 add_test(SparqlLexerTest SparqlLexerTest)
 target_link_libraries(SparqlLexerTest parser gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(StringSortComparatorTest StringSortComparatorTest.cpp)
+add_test(StringSortComparatorTest StringSortComparatorTest)
+target_link_libraries(StringSortComparatorTest gtest_main ${CMAKE_THREAD_LIBS_INIT} ${ICU_LIBRARIES})
