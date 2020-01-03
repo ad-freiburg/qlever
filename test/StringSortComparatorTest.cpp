@@ -68,10 +68,20 @@ TEST(StringSortComparatorTest, TripleComponentComparator) {
   ASSERT_TRUE(comp("\"Hannibal\"@af", "\"Hannibal\"@en"));
   ASSERT_TRUE(comp("\"Hannibal\"@en", "\"HanNibal\"@en"));
 
-  // TODO<joka921>: test cases for UTF-8
-
   // something is not smaller thant itself
   ASSERT_FALSE(comp("\"beta\"", "\"beta\""));
+
+  // Testing that latin and Hindi numbers mean exactly the same up to the
+  // Quarternary level
+  using L = TripleComponentComparator::Level;
+  ASSERT_FALSE(
+      comp("\"151\"", "\"१५१\"", L::QUARTERNARY));  // that is 151 in Hindi
+  ASSERT_FALSE(comp("\"१५१\"", "\"151\"", L::QUARTERNARY));
+  ASSERT_TRUE(comp("\"151\"", "\"१५१\"", L::IDENTICAL));
+  ASSERT_FALSE(comp("\"१५१\"", "\"151\"", L::IDENTICAL));
+
+  ASSERT_TRUE(comp("\"151\"@en", "\"१५१\"", L::IDENTICAL));
+  ASSERT_TRUE(comp("\"१५१\"", "\"151\"@en", L::QUARTERNARY));
 }
 
 // ______________________________________________________________________________________________
