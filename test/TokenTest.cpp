@@ -271,4 +271,37 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     std::string l4 = R"("""si\"mple\'Li\n\rt\t\b\fer\\""")";
     ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
   }
+  {
+    std::string t = "\"si\"mple\'Li\n\rt\t\b\fer\\\"@de-us";
+    std::string l1 = R"("si\"mple\'Li\n\rt\t\b\fer\\"@de-us)";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l1));
+    std::string l2 = R"('si\"mple\'Li\n\rt\t\b\fer\\'@de-us)";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l2));
+    std::string l3 = R"('''si\"mple\'Li\n\rt\t\b\fer\\'''@de-us)";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l3));
+    std::string l4 = R"("""si\"mple\'Li\n\rt\t\b\fer\\"""@de-us)";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
+  }
+
+  {
+    std::string t = "\"si\"mple\'Li\n\rt\t\b\fer\\\"^^xsd::integer";
+    std::string l1 = R"("si\"mple\'Li\n\rt\t\b\fer\\"^^xsd::integer)";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l1));
+    std::string l2 = R"('si\"mple\'Li\n\rt\t\b\fer\\'^^xsd::integer)";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l2));
+    std::string l3 = R"('''si\"mple\'Li\n\rt\t\b\fer\\'''^^xsd::integer)";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l3));
+    std::string l4 = R"("""si\"mple\'Li\n\rt\t\b\fer\\"""^^xsd::integer)";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
+  }
+
+  {
+    std::string t = "\"si\"mple\'Li\n\rt\t\b\fer\\\"^^xsd::integer";
+    std::string l3 = "\"\"\"si\"mple\'Li\n\rt\t\b\fer\\\\\"\"\"^^xsd::integer";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l3));
+    std::string l4 = "\'\'\'si\"mple\'Li\n\rt\t\b\fer\\\\\'\'\'^^xsd::integer";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
+  }
+
+
 }
