@@ -239,10 +239,14 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     std::string l4 = R"("""simpleLiteral""")";
     ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l4));
 
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l1)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l2)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l4)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l1)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l2)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l3)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l4)));
   }
   {
     std::string l1 = "\"simpleLiteral\"@en-ca";
@@ -253,10 +257,14 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l3));
     std::string l4 = R"("""simpleLiteral"""@en-ca)";
     ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l4));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l1)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l2)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l4)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l1)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l2)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l3)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l4)));
   }
   {
     std::string l1 = "\"simpleLiteral\"^^xsd::boolean";
@@ -268,10 +276,14 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     std::string l4 = R"("""simpleLiteral"""^^xsd::boolean)";
     ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l4));
 
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l1)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l2)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l4)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l1)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l2)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l3)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l4)));
   }
 
   {
@@ -286,10 +298,14 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
 
     ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(t));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l1)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l2)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l4)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l1)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l2)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l3)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l4)));
   }
   {
     std::string t = "\"si\"mple\'Li\n\rt\t\b\fer\\\"@de-us";
@@ -303,10 +319,14 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
 
     ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(t));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l1)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l2)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l4)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l1)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l2)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l3)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l4)));
   }
 
   {
@@ -321,10 +341,14 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
 
     ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(t));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l1)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l2)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l4)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l1)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l2)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l3)));
+    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+                      TurtleToken::normalizeRDFLiteral(l4)));
   }
 
   {
@@ -336,7 +360,9 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
 
     ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(t));
-    ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(TurtleToken::normalizeRDFLiteral(l4)));
+    ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(
+                            TurtleToken::normalizeRDFLiteral(l3)));
+    ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(
+                            TurtleToken::normalizeRDFLiteral(l4)));
   }
 }

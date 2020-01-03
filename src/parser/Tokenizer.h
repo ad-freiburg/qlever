@@ -100,8 +100,8 @@ struct TurtleToken {
   }
 
   /**
-   * @brief take an unescaped rdfLiteral that has single "" quotes as created by normalizeRDFLiteral
-   *        and escape it again
+   * @brief take an unescaped rdfLiteral that has single "" quotes as created by
+   * normalizeRDFLiteral and escape it again
    */
   static std::string escapeRDFLiteral(std::string_view literal) {
     AD_CHECK(ad_utility::startsWith(literal, "\""));
@@ -143,8 +143,8 @@ struct TurtleToken {
 
         default:
           throw std::runtime_error(
-                  "Illegal switch value in escapeRDFLiteral. This should never "
-                  "happen, please report this");
+              "Illegal switch value in escapeRDFLiteral. This should never "
+              "happen, please report this");
       }
       literal.remove_prefix(pos + 1);
       pos = literal.find_first_of(charactersToEscape);
