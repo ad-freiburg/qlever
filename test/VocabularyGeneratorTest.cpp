@@ -215,7 +215,6 @@ TEST_F(MergeVocabularyTest, bla) {
 
 TEST(VocabularyGenerator, ReadAndWritePartial) {
   {
-    using SP = TripleComponentComparator::SplitVal;
     Index::ItemMap s;
     s["A"] = 5;
     s["a"] = 6;
@@ -245,10 +244,6 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
   try {
     RdfsVocabulary v;
     v.setLocale("en", "US", false);
-    auto extr = [&v](std::string_view s) {
-      return v.getCaseComparator().extractAndTransformComparable(
-          s, TripleComponentComparator::Level::QUARTERNARY);
-    };
     Index::ItemMap s;
     s["\"A\""] = 5;
     s["\"a\""] = 6;
