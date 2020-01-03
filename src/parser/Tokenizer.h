@@ -8,6 +8,7 @@
 #include <re2/re2.h>
 #include <regex>
 #include "../util/Log.h"
+#include "../util/Exception.h"
 
 using re2::RE2;
 using namespace std::string_literals;
@@ -38,15 +39,19 @@ struct TurtleToken {
     auto langtagOrDatatype = literal.substr(lastQuot + 1);
     literal.remove_suffix(literal.size() - lastQuot - 1);
     if (ad_utility::startsWith(literal, "\"\"\"") || ad_utility::startsWith(literal, "'''")) {
+      AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 3)));
       literal.remove_prefix(3);
       literal.remove_suffix(3);
     } else {
+      AD_CHECK(ad_utility::startsWith(literal, "\"") || ad_utility::startsWith(literal, "'"));
+      AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 1)));
       literal.remove_prefix(1);
       literal.remove_suffix(1);
     }
     auto pos = literal.find('\\');
     while (pos != literal.npos) {
       res.append(literal.begin(), literal.begin() + pos);
+      AD_CHECK(pos + 1 <= literal.size());
       switch (literal[pos + 1]) {
         case 't':
           res.push_back('\t');
@@ -72,12 +77,12 @@ struct TurtleToken {
         case '\\':
           res.push_back('\\');
           break;
+
+        default:
+          throw std::runtime_error("Illegal escape sequence in RDF Literal. This should never happen, please report this");
       }
       literal.remove_prefix(pos + 2);
       pos = literal.find('\\');
-
-
-
     }
     res.append(literal);
     res.push_back('"');
