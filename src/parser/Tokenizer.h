@@ -16,6 +16,75 @@ using namespace std::string_literals;
 // turtle grammar cannot be static since google regexes have to be constructed
 // at runtime
 struct TurtleToken {
+  /**
+   * @brief convert a RDF Literal to a unified form that is used inside QLever
+   *
+   * RDFLiterals in Turtle or Sparql can have several forms: Either starting with one (" or ') quotation mark
+   * and containing escape sequences like "\\\t" or with three (""" or ''') quotation marks and allowing most
+   * control sequences to be contained in the string directly.
+   *
+   * This function converts any of this forms to a literal that starts and ends with a single quotation mark '"'
+   * and contains the originally escaped characters directly, e.g. "al\"pha" becomes "al"pha".
+   *
+   * This is NOT a valid RDF form of literals, but this format is only used inside QLever. By stripping the leading and trailing quotation mark and possible
+   * langtags or datatype URIS one can directly obtain the actual content of the literal.
+   *
+   * @param literal
+   * @return
+   */
+  static std::string normalizeRDFLiteral(std::string_view literal) {
+    std::string res = "\"";
+    auto lastQuot = literal.find_last_of("\"\'");
+    auto langtagOrDatatype = literal.substr(lastQuot + 1);
+    literal.remove_suffix(literal.size() - lastQuot - 1);
+    if (ad_utility::startsWith(literal, "\"\"\"") || ad_utility::startsWith(literal, "'''")) {
+      literal.remove_prefix(3);
+      literal.remove_suffix(3);
+    } else {
+      literal.remove_prefix(1);
+      literal.remove_suffix(1);
+    }
+    auto pos = literal.find('\\');
+    while (pos != literal.npos) {
+      res.append(literal.begin(), literal.begin() + pos);
+      switch (literal[pos + 1]) {
+        case 't':
+          res.push_back('\t');
+          break;
+        case 'n':
+          res.push_back('\n');
+          break;
+        case 'r':
+          res.push_back('\r');
+          break;
+        case 'b':
+          res.push_back('\b');
+          break;
+        case 'f':
+          res.push_back('\f');
+          break;
+        case '"':
+          res.push_back('\"');
+          break;
+        case '\'':
+          res.push_back('\'');
+          break;
+        case '\\':
+          res.push_back('\\');
+          break;
+      }
+      literal.remove_prefix(pos + 2);
+      pos = literal.find('\\');
+
+
+
+    }
+    res.append(literal);
+    res.push_back('"');
+    res.append(langtagOrDatatype);
+    return res;
+  }
+
   using string = std::string;
   TurtleToken()
       // those constants are always skipped, so they don't need a group around

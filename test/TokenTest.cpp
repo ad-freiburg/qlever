@@ -227,3 +227,48 @@ TEST(TokenizerTest, WhitespaceAndComments) {
   tok.skipWhitespaceAndComments();
   ASSERT_EQ(tok.data().begin() - s.data(), 27);
 }
+
+TEST(TokenizerTest, normalizeRDFLiteral) {
+  {
+    std::string l1 = "\"simpleLiteral\"";
+    ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l1));
+    std::string l2 = "\'simpleLiteral\'";
+    ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l2));
+    std::string l3 = R"('''simpleLiteral''')";
+    ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l3));
+    std::string l4 = R"("""simpleLiteral""")";
+    ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l4));
+  }
+  {
+    std::string l1 = "\"simpleLiteral\"@en-ca";
+    ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l1));
+    std::string l2 = "\'simpleLiteral\'@en-ca";
+    ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l2));
+    std::string l3 = R"('''simpleLiteral'''@en-ca)";
+    ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l3));
+    std::string l4 = R"("""simpleLiteral"""@en-ca)";
+    ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l4));
+  }
+  {
+    std::string l1 = "\"simpleLiteral\"^^xsd::boolean";
+    ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l1));
+    std::string l2 = "\'simpleLiteral\'^^xsd::boolean";
+    ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l2));
+    std::string l3 = R"('''simpleLiteral'''^^xsd::boolean)";
+    ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l3));
+    std::string l4 = R"("""simpleLiteral"""^^xsd::boolean)";
+    ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l4));
+  }
+
+  {
+    std::string t = "\"si\"mple\'Li\n\rt\t\b\fer\\\"";
+    std::string l1 = R"("si\"mple\'Li\n\rt\t\b\fer\\")";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l1));
+    std::string l2 = R"('si\"mple\'Li\n\rt\t\b\fer\\')";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l2));
+    std::string l3 = R"('''si\"mple\'Li\n\rt\t\b\fer\\''')";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l3));
+    std::string l4 = R"("""si\"mple\'Li\n\rt\t\b\fer\\""")";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
+  }
+}
