@@ -302,6 +302,4 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     std::string l4 = "\'\'\'si\"mple\'Li\n\rt\t\b\fer\\\\\'\'\'^^xsd::integer";
     ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
   }
-
-
 }

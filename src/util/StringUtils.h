@@ -48,8 +48,7 @@ inline bool startsWith(string_view text, string_view prefix, size_t prefixSize);
 //! Safe endsWith function. Returns true iff suffix is a
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
-inline bool endsWith(string_view text, const char* suffix,
-                     size_t patternSize);
+inline bool endsWith(string_view text, const char* suffix, size_t patternSize);
 
 //! Safe endsWith function. Returns true iff suffix is a
 //! prefix of text. Using a larger pattern than text.size()

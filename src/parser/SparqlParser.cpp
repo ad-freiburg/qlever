@@ -748,7 +748,9 @@ bool SparqlParser::parseFilter(
       // of an expensive regex filter.
       bool isSimple = true;
       bool escaped = false;
-      std::vector<size_t> escapePositions;  // position of backslashes that are used for escaping within the regex
+      std::vector<size_t>
+          escapePositions;  // position of backslashes that are used for
+                            // escaping within the regex
       // these have to be removed if the regex is simply a prefix filter.
 
       // Check if the regex is only a prefix regex or also does
@@ -776,7 +778,8 @@ bool SparqlParser::parseFilter(
         f._type = SparqlFilter::PREFIX;
 
         // we have to remove the escaping backslashes
-        for (auto it = escapePositions.rbegin(); it != escapePositions.rend(); ++it) {
+        for (auto it = escapePositions.rbegin(); it != escapePositions.rend();
+             ++it) {
           f._rhs.erase(f._rhs.begin() + *it);
         }
       }

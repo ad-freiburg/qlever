@@ -7,8 +7,8 @@
 #include <gtest/gtest.h>
 #include <re2/re2.h>
 #include <regex>
-#include "../util/Log.h"
 #include "../util/Exception.h"
+#include "../util/Log.h"
 
 using re2::RE2;
 using namespace std::string_literals;
@@ -20,15 +20,19 @@ struct TurtleToken {
   /**
    * @brief convert a RDF Literal to a unified form that is used inside QLever
    *
-   * RDFLiterals in Turtle or Sparql can have several forms: Either starting with one (" or ') quotation mark
-   * and containing escape sequences like "\\\t" or with three (""" or ''') quotation marks and allowing most
-   * control sequences to be contained in the string directly.
+   * RDFLiterals in Turtle or Sparql can have several forms: Either starting
+   * with one (" or ') quotation mark and containing escape sequences like
+   * "\\\t" or with three (""" or ''') quotation marks and allowing most control
+   * sequences to be contained in the string directly.
    *
-   * This function converts any of this forms to a literal that starts and ends with a single quotation mark '"'
-   * and contains the originally escaped characters directly, e.g. "al\"pha" becomes "al"pha".
+   * This function converts any of this forms to a literal that starts and ends
+   * with a single quotation mark '"' and contains the originally escaped
+   * characters directly, e.g. "al\"pha" becomes "al"pha".
    *
-   * This is NOT a valid RDF form of literals, but this format is only used inside QLever. By stripping the leading and trailing quotation mark and possible
-   * langtags or datatype URIS one can directly obtain the actual content of the literal.
+   * This is NOT a valid RDF form of literals, but this format is only used
+   * inside QLever. By stripping the leading and trailing quotation mark and
+   * possible langtags or datatype URIS one can directly obtain the actual
+   * content of the literal.
    *
    * @param literal
    * @return
@@ -38,12 +42,14 @@ struct TurtleToken {
     auto lastQuot = literal.find_last_of("\"\'");
     auto langtagOrDatatype = literal.substr(lastQuot + 1);
     literal.remove_suffix(literal.size() - lastQuot - 1);
-    if (ad_utility::startsWith(literal, "\"\"\"") || ad_utility::startsWith(literal, "'''")) {
+    if (ad_utility::startsWith(literal, "\"\"\"") ||
+        ad_utility::startsWith(literal, "'''")) {
       AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 3)));
       literal.remove_prefix(3);
       literal.remove_suffix(3);
     } else {
-      AD_CHECK(ad_utility::startsWith(literal, "\"") || ad_utility::startsWith(literal, "'"));
+      AD_CHECK(ad_utility::startsWith(literal, "\"") ||
+               ad_utility::startsWith(literal, "'"));
       AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 1)));
       literal.remove_prefix(1);
       literal.remove_suffix(1);
@@ -79,7 +85,9 @@ struct TurtleToken {
           break;
 
         default:
-          throw std::runtime_error("Illegal escape sequence in RDF Literal. This should never happen, please report this");
+          throw std::runtime_error(
+              "Illegal escape sequence in RDF Literal. This should never "
+              "happen, please report this");
       }
       literal.remove_prefix(pos + 2);
       pos = literal.find('\\');
