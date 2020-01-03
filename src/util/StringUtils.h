@@ -54,12 +54,12 @@ inline bool endsWith(string_view text, const char* suffix,
 //! Safe endsWith function. Returns true iff suffix is a
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
-inline bool endsWith(string_view text, const string& suffix);
+inline bool endsWith(string_view text, string_view suffix);
 
 //! Safe endsWith function. Returns true iff suffix is a
 //! prefix of text. Using a larger pattern than text.size()
 //! will return false. Case sensitive.
-inline bool endsWith(string_view & text, const char* suffix);
+inline bool endsWith(string_view text, const char* suffix);
 
 //! Returns the longest prefix that the two arguments have in common
 inline string_view commonPrefix(string_view a, const string_view b);
@@ -200,12 +200,12 @@ bool endsWith(string_view text, const char* suffix, size_t suffixSize) {
 }
 
 // ____________________________________________________________________________
-inline bool endsWith(string_view text, std::string_view suffix) {
+bool endsWith(string_view text, std::string_view suffix) {
   return endsWith(text, suffix.data(), suffix.size());
 }
 
 // ____________________________________________________________________________
-inline bool endsWith(string_view text, const char* suffix) {
+bool endsWith(string_view text, const char* suffix) {
   return endsWith(text, suffix, std::char_traits<char>::length(suffix));
 }
 
