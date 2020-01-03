@@ -1455,6 +1455,16 @@ void Index::initializeVocabularySettingsBuild() {
     }
     LOG(INFO) << "Using Locale " << lang << " " << country
               << " with ignore-punctuation: " << ignorePunctuation << '\n';
+
+    if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
+      LOG(WARN) << "You are using Locale settings that differ from the default "
+                   "language or country.\n\t"
+                << "This should work but is untested by the QLever team. If "
+                   "you are running into unexpected problems,\n\t"
+                << "Please make sure to also report your used locale when "
+                   "filing a bug report. Also note that changing the\n\t"
+                << "locale requires to completely rebuild the index\n";
+    }
     _vocab.setLocale(lang, country, ignorePunctuation);
     _textVocab.setLocale(lang, country, ignorePunctuation);
     _configurationJson["locale"]["language"] = lang;
