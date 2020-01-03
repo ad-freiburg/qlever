@@ -748,13 +748,18 @@ bool SparqlParser::parseFilter(
       // of an expensive regex filter.
       bool isSimple = true;
       bool escaped = false;
+      std::vector<size_t> escapePositions;  // position of backslashes that are used for escaping within the regex
+      // these have to be removed if the regex is simply a prefix filter.
 
       // Check if the regex is only a prefix regex or also does
       // anything else.
       const static string regexControlChars = "[]^$.|?*+()";
       for (size_t i = 1; isSimple && i < f._rhs.size(); i++) {
         if (f._rhs[i] == '\\') {
-          escaped = true;
+          if (!escaped) {
+            escapePositions.push_back(i);
+          }
+          escaped = !escaped;  // correctly deal with consecutive backslashes
           continue;
         }
         if (!escaped) {
@@ -769,6 +774,11 @@ bool SparqlParser::parseFilter(
         // There are no regex special chars apart from the leading '^'
         // so we can use a prefix filter.
         f._type = SparqlFilter::PREFIX;
+
+        // we have to remove the escaping backslashes
+        for (auto it = escapePositions.rbegin(); it != escapePositions.rend(); ++it) {
+          f._rhs.erase(f._rhs.begin() + *it);
+        }
       }
     }
     _filters->emplace_back(f);
