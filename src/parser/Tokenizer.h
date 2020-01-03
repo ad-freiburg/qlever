@@ -40,6 +40,7 @@ struct TurtleToken {
   static std::string normalizeRDFLiteral(std::string_view literal) {
     std::string res = "\"";
     auto lastQuot = literal.find_last_of("\"\'");
+    AD_CHECK(lastQuot != std::string_view::npos);
     auto langtagOrDatatype = literal.substr(lastQuot + 1);
     literal.remove_suffix(literal.size() - lastQuot - 1);
     if (ad_utility::startsWith(literal, "\"\"\"") ||
@@ -91,6 +92,62 @@ struct TurtleToken {
       }
       literal.remove_prefix(pos + 2);
       pos = literal.find('\\');
+    }
+    res.append(literal);
+    res.push_back('"');
+    res.append(langtagOrDatatype);
+    return res;
+  }
+
+  /**
+   * @brief take an unescaped rdfLiteral that has single "" quotes as created by normalizeRDFLiteral
+   *        and escape it again
+   */
+  static std::string escapeRDFLiteral(std::string_view literal) {
+    AD_CHECK(ad_utility::startsWith(literal, "\""));
+    std::string res = "\"";
+    auto lastQuot = literal.find_last_of('"');
+    AD_CHECK(lastQuot != std::string_view::npos);
+    auto langtagOrDatatype = literal.substr(lastQuot + 1);
+    literal.remove_suffix(literal.size() - lastQuot);
+    literal.remove_prefix(1);
+    const string charactersToEscape = "\f\n\t\b\r\\\"\'";
+    auto pos = literal.find_first_of(charactersToEscape);
+    while (pos != literal.npos) {
+      res.append(literal.begin(), literal.begin() + pos);
+      switch (literal[pos]) {
+        case '\t':
+          res.append("\\t");
+          break;
+        case '\n':
+          res.append("\\n");
+          break;
+        case '\r':
+          res.append("\\r");
+          break;
+        case '\b':
+          res.append("\\b");
+          break;
+        case '\f':
+          res.append("\\f");
+          break;
+        case '"':
+          res.append("\\\"");
+          break;
+        case '\'':
+          res.append("\\\'");
+          break;
+        case '\\':
+          res.append("\\\\");
+          break;
+
+        default:
+          throw std::runtime_error(
+                  "Illegal switch value in escapeRDFLiteral. This should never "
+                  "happen, please report this");
+      }
+      literal.remove_prefix(pos + 1);
+      pos = literal.find_first_of(charactersToEscape);
     }
     res.append(literal);
     res.push_back('"');
