@@ -53,3 +53,7 @@ static const std::string PARTIAL_MMAP_IDS = ".partial-ids-mmap";
 
 // ________________________________________________________________
 static const std::string TMP_BASENAME_COMPRESSION = ".tmp.compression_index";
+
+// _________________________________________________________________
+// TODO: Comment
+constexpr size_t NUM_PARALLEL_ITEM_MAPS = 4;

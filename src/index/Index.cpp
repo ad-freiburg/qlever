@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include <absl/container/flat_hash_map.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -14,8 +15,10 @@
 #include "../parser/NTriplesParser.h"
 #include "../parser/ParallelParseBuffer.h"
 #include "../parser/TsvParser.h"
+#include "../util/BatchedPipeline.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
+#include "../util/TupleHelpers.h"
 #include "./Index.h"
 #include "./PrefixHeuristic.h"
 #include "./VocabularyGenerator.h"
@@ -36,7 +39,7 @@ VocabularyData Index::createIdTriplesAndVocab(const string& ntFile) {
   initializeVocabularySettingsBuild();
 
   auto vocabData =
-      passFileForVocabulary<Parser>(ntFile, NUM_TRIPLES_PER_PARTIAL_VOCAB);
+      passFileForVocabulary<Parser>(ntFile, _numTriplesPerPartialVocab);
   // first save the total number of words, this is needed to initialize the
   // dense IndexMetaData variants
   _totalVocabularySize = vocabData.nofWords;
@@ -118,7 +121,12 @@ template void Index::createFromFile<TurtleMmapParser>(const string& filename);
 template <class Parser>
 VocabularyData Index::passFileForVocabulary(const string& filename,
                                             size_t linesPerPartial) {
-  ParallelParseBuffer<Parser> p(PARSER_BATCH_SIZE, filename);
+  Parser parser(filename);
+  std::unique_ptr<TripleVec> idTriples(new TripleVec());
+  TripleVec::bufwriter_type writer(*idTriples);
+  bool parserExhausted = false;
+  using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
+
   size_t i = 0;
   // already count the numbers of triples that will be used for the language
   // filter
@@ -126,97 +134,110 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
 
   // we add extra triples
   std::vector<size_t> actualPartialSizes;
-  size_t actualCurrentPartialSize = 0;
-  std::unique_ptr<TripleVec> idTriples(new TripleVec());
-  TripleVec::bufwriter_type writer(*idTriples);
 
-  ItemMap items;
+  std::future<void> sortFuture;
+  while (!parserExhausted) {
+    size_t actualCurrentPartialSize = 0;
 
-  // insert the special  ql:langtag predicate into all partial vocabularies
-  auto langPredId = assignNextId(&items, LANGUAGE_PREDICATE);
-  std::array<string, 3> spo;
+    std::unique_ptr<TripleVec> localIdTriples(new TripleVec());
+    TripleVec::bufwriter_type localWriter(*localIdTriples);
 
-  std::pair<std::future<void>, std::future<void>> sortFutures;
-  while (true) {
-    auto opt = p.getTriple();
-    if (!opt) {
-      break;
-    }
-    auto& spo = opt.value();
-    auto langtag = tripleToInternalRepresentation(&spo);
-    std::array<Id, 3> spoIds;
-    // immediately get or reuse ids for the elements of the triple
-    // these are sorted by order of appearance and only valid in the current
-    // partial vocabulary
-    for (size_t k = 0; k < 3; ++k) {
-      spoIds[k] = assignNextId(&items, spo[k]);
-    }
-    writer << array<Id, 3>{{spoIds[0], spoIds[1], spoIds[2]}};
-    actualCurrentPartialSize++;
+    std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
-    // if we have a language-tagged object we also add the special triples for
-    // the language filter
-    if (!langtag.empty()) {
-      auto langTagId =
-          assignNextId(&items, ad_utility::convertLangtagToEntityUri(langtag));
-      auto langTaggedPredId = assignNextId(
-          &items,
-          ad_utility::convertToLanguageTaggedPredicate(spo[1], langtag));
-      writer << array<Id, 3>{{spoIds[0], langTaggedPredId, spoIds[2]}};
-      writer << array<Id, 3>{{spoIds[2], langPredId, langTagId}};
-      actualCurrentPartialSize += 2;
+    // that way the different ids won't interfere
+    for (size_t j = 0; j < NUM_PARALLEL_ITEM_MAPS; ++j) {
+      itemArray[j] = ItemMapManager(j * 100 * linesPerPartial);
     }
 
-    ++i;
-    if (i % 10000000 == 0) {
-      LOG(INFO) << "Lines (from KB-file) processed: " << i << '\n';
-    }
-    if (i % linesPerPartial == 0) {
-      // wait until sorting the last partial vocabulary has finished
-      // to control the number of threads and the amount of memory used at the
-      // same time. typically sorting is finished before we reach again here so
-      // it is not a bottleneck.
-      if (sortFutures.first.valid()) {
-        sortFutures.first.get();
+    const auto itemMapLamdaCreator = [&itemArray](const size_t idx) {
+      return [itPtr = &(itemArray[idx])](LangtagAndTriple&& lt) {
+        OptionalIds res;
+        res[0] = itPtr->assignNextId(lt._triple);
+        if (!lt._langtag.empty()) {
+          auto langTagId = itPtr->assignNextId(
+              ad_utility::convertLangtagToEntityUri(lt._langtag));
+          auto langTaggedPredId =
+              itPtr->assignNextId(ad_utility::convertToLanguageTaggedPredicate(
+                  lt._triple[1], lt._langtag));
+          auto& spoIds = *(res[0]);
+          res[1].emplace(array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
+          res[2].emplace(array<Id, 3>{
+              spoIds[2], itPtr->getLanguagePredicateId(), langTagId});
+        }
+        return res;
+      };
+    };
+
+    auto itemMapLambdaTuple =
+        ad_tuple_helpers::setupTupleFromCallable<NUM_PARALLEL_ITEM_MAPS>(
+            itemMapLamdaCreator);
+
+    {
+      auto p = ad_pipeline::setupParallelPipeline<1, NUM_PARALLEL_ITEM_MAPS>(
+          _parserBatchSize,
+          [parserPtr = &parser, i = 0ull, linesPerPartial,
+           &parserExhausted]() mutable -> std::optional<Triple> {
+            if (i >= linesPerPartial) {
+              return std::nullopt;
+            }
+            Triple t;
+            if (parserPtr->getLine(t)) {
+              i++;
+              return std::optional(std::move(t));
+            } else {
+              parserExhausted = true;
+              return std::nullopt;
+            }
+          },
+          [this](Triple&& t) {
+            return tripleToInternalRepresentation(std::move(t));
+          },
+          std::move(itemMapLambdaTuple));
+
+      while (auto opt = p.getNextValue()) {
+        i++;
+        for (const auto& innerOpt : opt.value()) {
+          if (innerOpt) {
+            actualCurrentPartialSize++;
+            localWriter << innerOpt.value();
+          }
+        }
+        if (i % 10000000 == 0) {
+          LOG(INFO) << "Lines (from KB-file) processed: " << i << '\n';
+        }
       }
-      if (sortFutures.second.valid()) {
-        sortFutures.second.get();
+      LOG(INFO) << "WaitTimes for Pipeline in msecs\n";
+      for (const auto& t : p.getWaitingTime()) {
+        LOG(INFO) << t << " msecs\n";
       }
+    }
 
-      auto oldItemPtr = std::make_shared<const ItemMap>(std::move(items));
-      sortFutures = writeNextPartialVocabulary(
-          i, numFiles, actualCurrentPartialSize, oldItemPtr);
-      numFiles++;
-      // Save the information how many triples this partial vocabulary actually
-      // deals with we will use this later for mapping from partial to global
-      // ids
-      actualPartialSizes.push_back(actualCurrentPartialSize);
-      // reset data structures for next partial vocab
-      actualCurrentPartialSize = 0;
-      items.clear();
-      // insert the special predicate into all partial vocabularies
-      langPredId = assignNextId(&items, LANGUAGE_PREDICATE);
+    localWriter.finish();
+    // wait until sorting the last partial vocabulary has finished
+    // to control the number of threads and the amount of memory used at the
+    // same time. typically sorting is finished before we reach again here so
+    // it is not a bottleneck.
+    if (sortFuture.valid()) {
+      sortFuture.get();
     }
-  }
-  // deal with remainder
-  if (!items.empty()) {
-    if (sortFutures.first.valid()) {
-      sortFutures.first.get();
+    std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS> convertedMaps;
+    for (size_t j = 0; j < NUM_PARALLEL_ITEM_MAPS; ++j) {
+      convertedMaps[j] = std::move(itemArray[j].moveMap());
     }
-    if (sortFutures.second.valid()) {
-      sortFutures.second.get();
-    }
-    auto oldItemPtr = std::make_shared<const ItemMap>(std::move(items));
-    sortFutures = writeNextPartialVocabulary(
-        i, numFiles, actualCurrentPartialSize, oldItemPtr);
+    auto oldItemPtr =
+        std::make_shared<const std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS>>(
+            std::move(convertedMaps));
+    sortFuture = writeNextPartialVocabulary(
+        i, numFiles, actualCurrentPartialSize, oldItemPtr,
+        std::move(localIdTriples), &writer);
     numFiles++;
+    // Save the information how many triples this partial vocabulary actually
+    // deals with we will use this later for mapping from partial to global
+    // ids
     actualPartialSizes.push_back(actualCurrentPartialSize);
-    if (sortFutures.first.valid()) {
-      sortFutures.first.get();
-    }
-    if (sortFutures.second.valid()) {
-      sortFutures.second.get();
-    }
+  }
+  if (sortFuture.valid()) {
+    sortFuture.get();
   }
   writer.finish();
   LOG(INFO) << "Pass done." << endl;
@@ -1393,15 +1414,16 @@ void Index::readConfiguration() {
 }
 
 // ___________________________________________________________________________
-string Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
-  auto& spo = *triplePtr;
+Index::LangtagAndTriple Index::tripleToInternalRepresentation(
+    Index::Triple&& tripleIn) {
+  LangtagAndTriple res{"", std::move(tripleIn)};
+  auto& spo = res._triple;
   size_t upperBound = 3;
-  string langtag;
   if (ad_utility::isXsdValue(spo[2])) {
     spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
     upperBound = 2;
   } else if (isLiteral(spo[2])) {
-    langtag = decltype(_vocab)::getLanguage(spo[2]);
+    res._langtag = decltype(_vocab)::getLanguage(spo[2]);
   }
 
   for (size_t k = 0; k < upperBound; ++k) {
@@ -1409,7 +1431,7 @@ string Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
       spo[k] = EXTERNALIZED_LITERALS_PREFIX + spo[k];
     }
   }
-  return langtag;
+  return res;
 }
 
 // ___________________________________________________________________________
@@ -1478,11 +1500,28 @@ void Index::initializeVocabularySettingsBuild() {
     _onDiskLiterals = true;
     _configurationJson["external-literals"] = true;
   }
+
+  if (j.count("num-triples-per-partial-vocab")) {
+    _numTriplesPerPartialVocab = j["num-triples-per-partial-vocab"];
+    LOG(INFO) << "Overriding setting num-triples-per-partial-vocab to "
+              << _numTriplesPerPartialVocab
+              << " This might influence performance / memory usage during "
+                 "index build\n";
+  }
+
+  if (j.count("parser-batch-size")) {
+    _parserBatchSize = j["parser-batch-size"];
+    LOG(INFO) << "Overriding setting parser-batch-size to " << _parserBatchSize
+              << " This might influence performance during index build\n";
+  }
 }
 
-// ___________________________________________________________________________
-Id Index::assignNextId(Index::ItemMap* mapPtr, const string& key) {
-  ItemMap& map = *mapPtr;
+// ____
+// TODO<joka921: are those unused now and can be
+// removed?>_______________________________________________________________________
+template <class Map>
+Id Index::assignNextId(Map* mapPtr, const string& key) {
+  Map& map = *mapPtr;
   if (!map.count(key)) {
     Id res = map.size();
     map[key] = map.size();
@@ -1493,37 +1532,46 @@ Id Index::assignNextId(Index::ItemMap* mapPtr, const string& key) {
 }
 
 // ___________________________________________________________________________
-pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
+template <class Map>
+std::array<Id, 3> Index::assignNextId(Map* m, const Index::Triple& t) {
+  return {assignNextId(m, t[0]), assignNextId(m, t[1]), assignNextId(m, t[2])};
+}
+
+// ___________________________________________________________________________
+std::future<void> Index::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-    std::shared_ptr<const Index::ItemMap> items) {
+    std::shared_ptr<const std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS>> items,
+    std::unique_ptr<TripleVec> localIds,
+    TripleVec::bufwriter_type* globalWritePtr) {
   LOG(INFO) << "Lines (from KB-file) processed: " << numLines << '\n';
   LOG(INFO) << "Actual number of Triples in this section (include "
                "langfilter triples): "
             << actualCurrentPartialSize << '\n';
-  std::future<void> fut1, fut2;
+  std::future<void> resultFuture;
   string partialFilename =
       _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(numFiles);
+  string partialCompressionFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +
+                                      PARTIAL_VOCAB_FILE_NAME +
+                                      std::to_string(numFiles);
 
-  LOG(INFO) << "writing partial vocabulary to " << partialFilename << std::endl;
-  LOG(INFO) << "it contains " << items->size() << " elements\n";
-  fut1 = std::async(
-      [&items, partialFilename, comp = _vocab.getCaseComparator()]() {
-        writePartialIdMapToBinaryFileForMerging(items, partialFilename, comp);
-      });
+  auto lambda = [localIds = std::move(localIds), globalWritePtr, items,
+                 vocab = &_vocab, partialFilename, partialCompressionFilename,
+                 vocabPrefixCompressed = _vocabPrefixCompressed]() {
+    auto vec = vocabMapsToVector(items);
+    sortVocabVector(&vec, vocab->getCaseComparator(), false);
+    auto mapping = createInternalMapping(&vec);
+    auto sz = vec.size();
+    vec.erase(std::unique(vec.begin(), vec.end()), vec.end());
+    LOG(INFO) << "Removed " << sz - vec.size()
+              << " Duplicates from the local partial vocabularies\n";
+    writeMappedIdsToExtVec(*localIds, mapping, globalWritePtr);
+    writePartialVocabularyToFile(vec, partialFilename);
+    if (vocabPrefixCompressed) {
+      sortVocabVector(&vec, std::less<std::string>(), false);
+      writePartialVocabularyToFile(vec, partialCompressionFilename);
+    }
+    LOG(INFO) << "Finished writing the partial vocabulary" << std::endl;
+  };
 
-  if (_vocabPrefixCompressed) {
-    // we also have to create the "ordinary" vocabulary order to make the
-    // prefix compression work
-    string partialTmpFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +
-                                PARTIAL_VOCAB_FILE_NAME +
-                                std::to_string(numFiles);
-    LOG(INFO) << "writing partial temporary vocabulary to "
-              << partialTmpFilename << std::endl;
-    LOG(INFO) << "it contains " << items->size() << " elements\n";
-    fut2 = std::async([&items, partialTmpFilename]() {
-      writePartialIdMapToBinaryFileForMerging(items, partialTmpFilename,
-                                              std::less<std::string>());
-    });
-  }
-  return {std::move(fut1), std::move(fut2)};
+  return std::async(std::launch::async, std::move(lambda));
 }

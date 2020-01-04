@@ -14,7 +14,7 @@ add_library(index
         FTSAlgorithms.cpp FTSAlgorithms.h
         PrefixHeuristic.cpp PrefixHeuristic.h)
 
-target_link_libraries(index parser ${STXXL_LIBRARIES} ${ICU_LIBRARIES})
+target_link_libraries(index parser ${STXXL_LIBRARIES} absl::flat_hash_map ${ICU_LIBRARIES})
 
 add_library(metaConverter
             MetaDataConverter.cpp MetaDataConverter.h)

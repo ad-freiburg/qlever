@@ -9,7 +9,7 @@
 // _______________________________________________________________
 bool TurtleParser::statement() {
   _tok.skipWhitespaceAndComments();
-  return directive() || (triples() && skip(_tokens.Dot));
+  return directive() || (triples() && skip(tokens().Dot));
 }
 
 // ______________________________________________________________
@@ -19,8 +19,8 @@ bool TurtleParser::directive() {
 
 // ________________________________________________________________
 bool TurtleParser::prefixID() {
-  if (skip(_tokens.TurtlePrefix)) {
-    if (check(pnameNS()) && check(iriref()) && check(skip(_tokens.Dot))) {
+  if (skip(tokens().TurtlePrefix)) {
+    if (check(pnameNS()) && check(iriref()) && check(skip(tokens().Dot))) {
       // strip  the angled brackes <bla> -> bla
       _prefixMap[_activePrefix] =
           _lastParseResult.substr(1, _lastParseResult.size() - 2);
@@ -35,7 +35,7 @@ bool TurtleParser::prefixID() {
 
 // ________________________________________________________________
 bool TurtleParser::base() {
-  if (skip(_tokens.TurtleBase)) {
+  if (skip(tokens().TurtleBase)) {
     if (iriref()) {
       _baseIRI = _lastParseResult;
       return true;
@@ -49,7 +49,7 @@ bool TurtleParser::base() {
 
 // ________________________________________________________________
 bool TurtleParser::sparqlPrefix() {
-  if (skip(_tokens.SparqlPrefix)) {
+  if (skip(tokens().SparqlPrefix)) {
     if (pnameNS() && iriref()) {
       _prefixMap[_activePrefix] = _lastParseResult;
       return true;
@@ -63,7 +63,7 @@ bool TurtleParser::sparqlPrefix() {
 
 // ________________________________________________________________
 bool TurtleParser::sparqlBase() {
-  if (skip(_tokens.SparqlBase)) {
+  if (skip(tokens().SparqlBase)) {
     if (iriref()) {
       _baseIRI = _lastParseResult;
       return true;
@@ -97,7 +97,7 @@ bool TurtleParser::triples() {
 // __________________________________________________
 bool TurtleParser::predicateObjectList() {
   if (verb() && check(objectList())) {
-    while (skip(_tokens.Semicolon)) {
+    while (skip(tokens().Semicolon)) {
       if (verb() && check(objectList())) {
         continue;
       }
@@ -111,7 +111,7 @@ bool TurtleParser::predicateObjectList() {
 // _____________________________________________________
 bool TurtleParser::objectList() {
   if (object()) {
-    while (skip(_tokens.Comma) && check(object())) {
+    while (skip(tokens().Comma) && check(object())) {
       continue;
     }
     return true;
@@ -126,7 +126,7 @@ bool TurtleParser::verb() { return predicateSpecialA() || predicate(); }
 // ___________________________________________________________________
 bool TurtleParser::predicateSpecialA() {
   _tok.skipWhitespaceAndComments();
-  if (auto [success, word] = _tok.getNextToken(_tokens.A); success) {
+  if (auto [success, word] = _tok.getNextToken(tokens().A); success) {
     (void)word;
     _activePredicate = u8"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
     return true;
@@ -177,7 +177,7 @@ bool TurtleParser::literal() {
 
 // _____________________________________________________________________
 bool TurtleParser::blankNodePropertyList() {
-  if (!skip(_tokens.OpenSquared)) {
+  if (!skip(tokens().OpenSquared)) {
     return false;
   }
   // save subject and predicate
@@ -190,7 +190,7 @@ bool TurtleParser::blankNodePropertyList() {
   // the following triples have the blank node as subject
   _activeSubject = blank;
   check(predicateObjectList());
-  check(skip(_tokens.CloseSquared));
+  check(skip(tokens().CloseSquared));
   // restore subject and predicate
   _activeSubject = savedSubject;
   _activePredicate = savedPredicate;
@@ -199,7 +199,7 @@ bool TurtleParser::blankNodePropertyList() {
 
 // _____________________________________________________________________
 bool TurtleParser::collection() {
-  if (!skip(_tokens.OpenRound)) {
+  if (!skip(tokens().OpenRound)) {
     return false;
   }
   throw ParseException(
@@ -223,7 +223,7 @@ bool TurtleParser::rdfLiteral() {
     return true;
     // TODO<joka921> this allows spaces here since the ^^ is unique in the
     // sparql syntax. is this correct?
-  } else if (skip(_tokens.DoubleCircumflex) && check(iri())) {
+  } else if (skip(tokens().DoubleCircumflex) && check(iri())) {
     _lastParseResult = s + "^^" + _lastParseResult;
     return true;
   } else {
@@ -235,8 +235,8 @@ bool TurtleParser::rdfLiteral() {
 // ______________________________________________________________________
 bool TurtleParser::booleanLiteral() {
   std::vector<const RE2*> candidates;
-  candidates.push_back(&(_tokens.True));
-  candidates.push_back(&(_tokens.False));
+  candidates.push_back(&(tokens().True));
+  candidates.push_back(&(tokens().False));
   if (auto [success, index, word] = _tok.getNextToken(candidates); success) {
     (void)index;
     _lastParseResult = word;
@@ -330,12 +330,12 @@ bool TurtleParser::parseTerminal(const RE2& terminal) {
 
 // ________________________________________________________________________
 bool TurtleParser::blankNodeLabel() {
-  return parseTerminal(_tokens.BlankNodeLabel);
+  return parseTerminal(tokens().BlankNodeLabel);
 }
 
 // __________________________________________________________________________
 bool TurtleParser::pnameNS() {
-  if (parseTerminal(_tokens.PnameNS)) {
+  if (parseTerminal(tokens().PnameNS)) {
     // this also includes a ":" which we do not need, hence the "-1"
     _activePrefix = _lastParseResult.substr(0, _lastParseResult.size() - 1);
     _lastParseResult = "";

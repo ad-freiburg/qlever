@@ -60,6 +60,13 @@ add_subdirectory(third_party/googletest/googletest)
 include_directories(third_party/googletest/googletest/include)
 
 ################################
+# ABSEIL
+################################
+set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
+add_subdirectory(third_party/abseil-cpp)
+include_directories(third_party/abseil-cpp/)
+
+################################
 # NLOHNMANN-JSON
 ################################
 # Header only, nothing to include
