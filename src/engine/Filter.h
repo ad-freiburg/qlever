@@ -66,6 +66,11 @@ class Filter : public Operation {
     if (_type == SparqlFilter::FilterType::REGEX) {
       return std::numeric_limits<Id>::max();
     }
+    if (isLhsSorted()) {
+      // we can apply the very cheap binary sort filter
+      return getSizeEstimate() + _subtree->getCostEstimate();
+    }
+    // we have to look at each element of the result
     return getSizeEstimate() + _subtree->getSizeEstimate() +
            _subtree->getCostEstimate();
   }
@@ -96,6 +101,11 @@ class Filter : public Operation {
   bool _regexIgnoreCase;
   bool _lhsAsString;
 
+  [[nodiscard]] bool isLhsSorted() const {
+    const auto& subresSortedOn = _subtree->resultSortedOn();
+    size_t lhsInd = _subtree->getVariableColumn(_lhs);
+    return !subresSortedOn.empty() && subresSortedOn[0] == lhsInd;
+  }
   /**
    * @brief Uses the result type and the filter type (_type) to apply the filter
    * to subRes and store it in res.

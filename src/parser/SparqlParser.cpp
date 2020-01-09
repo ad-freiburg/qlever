@@ -287,9 +287,6 @@ void SparqlParser::parseWhere(
                 ParsedQuery::GraphPatternOperation::Type::SUBQUERY);
         u->_subquery = std::make_shared<ParsedQuery>();
         parseQuery(u->_subquery.get());
-        // Remove all manual ordering from the subquery as it would be changed
-        // by the parent query.
-        u->_subquery->_orderBy.clear();
         currentPattern->_children.push_back(u);
         // The closing bracked } is consumed by the subquery
         _lexer.accept(".");
