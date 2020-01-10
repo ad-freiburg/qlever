@@ -449,7 +449,7 @@ void Filter::computeFilterFixedValue(
             // within the range.
             rhs_array[lhs] = upperBound;
             const auto& upper =
-                std::upper_bound(lower, input.end(), rhs_row,
+                std::lower_bound(lower, input.end(), rhs_row,
                                  [lhs](const auto& l, const auto& r) {
                                    return l[lhs] < r[lhs];
                                  });
