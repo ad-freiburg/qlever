@@ -193,7 +193,7 @@ TEST_F(MergeVocabularyTest, bla) {
   VocabularyMerger::VocMergeRes res;
   {
     VocabularyMerger m;
-    res = m.mergeVocabulary(_basePath, 2, StringSortComparator());
+    res = m.mergeVocabulary(_basePath, 2, TripleComponentComparator());
   }
 
   // No language tags in text file
@@ -215,18 +215,17 @@ TEST_F(MergeVocabularyTest, bla) {
 
 TEST(VocabularyGenerator, ReadAndWritePartial) {
   {
-    ad_utility::HashMap<string, Id> s;
+    Index::ItemMap s;
     s["A"] = 5;
     s["a"] = 6;
     s["Ba"] = 7;
     s["car"] = 8;
-    Vocabulary<string> v;
+    TextVocabulary v;
     std::string basename = "_tmp_testidx";
-    auto ptr =
-        std::make_shared<const ad_utility::HashMap<string, Id>>(std::move(s));
+    auto ptr = std::make_shared<const decltype(s)>(std::move(s));
     writePartialIdMapToBinaryFileForMerging(
-        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(),
-        false);
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0",
+        std::less<std::string>());
 
     {
       VocabularyMerger m;
@@ -242,31 +241,34 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
   }
 
   // again with the case insensitive variant.
-  {
-    ad_utility::HashMap<string, Id> s;
-    s["A"] = 5;
-    s["a"] = 6;
-    s["Ba"] = 7;
-    s["car"] = 8;
-    Vocabulary<string> v;
-    v.setCaseInsensitiveOrdering(true);
+  try {
+    RdfsVocabulary v;
+    v.setLocale("en", "US", false);
+    Index::ItemMap s;
+    s["\"A\""] = 5;
+    s["\"a\""] = 6;
+    s["\"Ba\""] = 7;
+    s["\"car\""] = 8;
+    s["\"Ä\""] = 9;
     std::string basename = "_tmp_testidx";
-    auto ptr =
-        std::make_shared<const ad_utility::HashMap<string, Id>>(std::move(s));
+    auto ptr = std::make_shared<const Index::ItemMap>(std::move(s));
     writePartialIdMapToBinaryFileForMerging(
-        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(),
-        false);
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator());
 
     {
       VocabularyMerger m;
       m.mergeVocabulary(basename, 1, v.getCaseComparator());
     }
     auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
-    ASSERT_EQ(0u, idMap[5]);
-    ASSERT_EQ(1u, idMap[6]);
-    ASSERT_EQ(2u, idMap[7]);
-    ASSERT_EQ(3u, idMap[8]);
+    EXPECT_EQ(0u, idMap[6]);
+    EXPECT_EQ(1u, idMap[5]);
+    EXPECT_EQ(2u, idMap[9]);
+    EXPECT_EQ(3u, idMap[7]);
+    EXPECT_EQ(4u, idMap[8]);
     auto res = system("rm _tmp_testidx*");
     (void)res;
+
+  } catch (const std::bad_cast& b) {
+    std::cerr << "What the fuck\n";
   }
 }

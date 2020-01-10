@@ -222,7 +222,7 @@ void CompressVocabAndCreateConfigurationFile(const string& indexPrefix) {
     auto prefixes =
         calculatePrefixes(vocabFilename, NUM_COMPRESSION_PREFIXES, 1);
     j["prefixes"] = prefixes;
-    Vocabulary<CompressedString>::prefixCompressFile(
+    Vocabulary<CompressedString, TripleComponentComparator>::prefixCompressFile(
         vocabFilename, vocabFilename + ".converted", prefixes);
     notifyCreated(vocabFilename, true);
     std::ofstream f(confFilename);

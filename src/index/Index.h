@@ -444,16 +444,18 @@ class Index {
     LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
   }
 
+  using ItemMap = ad_utility::HashMap<string, Id>;
+
  private:
   string _onDiskBase;
   string _settingsFileName;
   bool _onDiskLiterals = false;
   bool _keepTempFiles = false;
   json _configurationJson;
-  Vocabulary<CompressedString> _vocab;
+  Vocabulary<CompressedString, TripleComponentComparator> _vocab;
   size_t _totalVocabularySize = 0;
   bool _vocabPrefixCompressed = true;
-  Vocabulary<std::string> _textVocab;
+  Vocabulary<std::string, SimpleStringComparator> _textVocab;
 
   TextMetaData _textMeta;
   DocsDB _docsDB;
@@ -510,15 +512,14 @@ class Index {
    */
   pair<std::future<void>, std::future<void>> writeNextPartialVocabulary(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      std::shared_ptr<const ad_utility::HashMap<string, Id>> items);
+      std::shared_ptr<const ItemMap> items);
 
   void convertPartialToGlobalIds(TripleVec& data,
                                  const vector<size_t>& actualLinesPerPartial,
                                  size_t linesPerPartial);
 
   // ___________________________________________________________________________
-  template <class Map>
-  static Id assignNextId(Map* mapPtr, const string& key);
+  Id assignNextId(ItemMap* mapPtr, const string& key);
 
   size_t passContextFileForVocabulary(const string& contextFile);
 

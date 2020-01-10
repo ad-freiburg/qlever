@@ -240,7 +240,6 @@ string getUppercase(const string& orig) {
   }
   return retVal;
 }
-
 // ____________________________________________________________________________
 string getLowercaseUtf8(const std::string_view orig) {
   string retVal;
@@ -298,7 +297,6 @@ string getUppercaseUtf8(const std::string_view orig) {
   }
   return retVal;
 }
-
 // ____________________________________________________________________________
 inline string firstCharToUpperUtf8(const string& orig) {
   string retVal;

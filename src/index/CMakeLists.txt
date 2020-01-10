@@ -2,7 +2,7 @@
 add_library(index
         Index.h Index.cpp Index.Text.cpp
         Vocabulary.h VocabularyImpl.h
-        VocabularyGenerator.h VocabularyGenerator.cpp
+        VocabularyGenerator.h VocabularyGeneratorImpl.h
         ConstantsIndexCreation.h
         ExternalVocabulary.h ExternalVocabulary.cpp
         IndexMetaData.h IndexMetaDataImpl.h
@@ -14,7 +14,7 @@ add_library(index
         FTSAlgorithms.cpp FTSAlgorithms.h
         PrefixHeuristic.cpp PrefixHeuristic.h)
 
-target_link_libraries(index parser ${STXXL_LIBRARIES})
+target_link_libraries(index parser ${STXXL_LIBRARIES} ${ICU_LIBRARIES})
 
 add_library(metaConverter
             MetaDataConverter.cpp MetaDataConverter.h)

@@ -8,8 +8,9 @@
 #include "../util/StringUtils.h"
 
 // _____________________________________________________________________________
-ContextFileParser::ContextFileParser(const string& contextFile)
-    : _in(contextFile), _lastCId(0) {}
+ContextFileParser::ContextFileParser(const string& contextFile,
+                                     LocaleManager localeManager)
+    : _in(contextFile), _lastCId(0), _localeManager(std::move(localeManager)) {}
 
 // _____________________________________________________________________________
 ContextFileParser::~ContextFileParser() { _in.close(); }
@@ -27,7 +28,7 @@ bool ContextFileParser::getLine(ContextFileParser::Line& line) {
     line._isEntity = (l[i + 1] == '1');
     line._word =
         (line._isEntity ? l.substr(0, i)
-                        : ad_utility::getLowercaseUtf8(l.substr(0, i)));
+                        : _localeManager.getLowercaseUtf8(l.substr(0, i)));
     line._contextId = static_cast<Id>(atol(l.substr(j + 1, k - j - 1).c_str()));
     line._score = static_cast<Score>(atol(l.substr(k + 1).c_str()));
 #ifndef NDEBUG

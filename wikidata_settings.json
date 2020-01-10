@@ -5,5 +5,9 @@
     "<http://www.wikidata.org/value",
     "<http://www.wikidata.org/reference"
   ],
-  "ignore-case": false
+  "locale": {
+	  "language": "en",
+	  "country": "US",
+	  "ignore-punctuation": true
+  }
 }

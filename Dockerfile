@@ -5,7 +5,7 @@ ENV LC_ALL C.UTF-8
 ENV LC_CTYPE C.UTF-8
 
 FROM base as builder
-RUN apt-get update && apt-get install -y build-essential cmake clang-format-8 libsparsehash-dev
+RUN apt-get update && apt-get install -y build-essential cmake clang-format-8 libsparsehash-dev libicu-dev
 COPY . /app/
 
 # Check formatting with the .clang-format project style
@@ -17,8 +17,7 @@ RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG -DUSE_PARALLEL=true .. && 
 
 FROM base as runtime
 WORKDIR /app
-RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2
-RUN apt-get update && apt-get install -y libgomp1
+RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu libgomp1
 
 ARG UID=1000
 RUN groupadd -r qlever && useradd --no-log-init -r -u $UID -g qlever qlever && chown qlever:qlever /app
@@ -43,7 +42,7 @@ ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -p 7
 # chmod -R o+rw ./index
 # # For an existing index copy it into the ./index folder and make sure to either name it
 # # index.* or
-# # set the envirionment variable "INDEX_PREFIX" during `docker run` using `-e INDEX_PREFIX=<prefix>`
+# # set the environment variable "INDEX_PREFIX" during `docker run` using `-e INDEX_PREFIX=<prefix>`
 # # To build an index run a bash inside the container as follows
 # docker run -it --rm --entrypoint bash -v "<path_to_input>:/input" -v "$(pwd)/index:/index" qlever-<name>
 # # Then inside that shell IndexBuilder is in the path and can be used like

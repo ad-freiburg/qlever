@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#include "./VocabularyGenerator.h"
+#pragma once
+
 #include <fstream>
 #include <future>
 #include <iostream>
@@ -11,6 +12,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include "./VocabularyGenerator.h"
 
 #include <parallel/algorithm>
 #include "../util/Conversions.h"
@@ -21,23 +23,19 @@
 #include "./Vocabulary.h"
 
 // ___________________________________________________________________
-VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
-    const std::string& basename, size_t numFiles, StringSortComparator comp) {
+template <class Comp>
+VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::string& basename,
+                                                                size_t numFiles, Comp comp) {
   // we sort alphabetically by the token according to the comparator that was
   // given to us
-  class QueueCompare {
-   public:
-    QueueCompare(StringSortComparator comp) : _comp(comp) {}
-    bool operator()(const QueueWord& p1, const QueueWord& p2) {
-      // if p1 is smaller (alphabetically)
-      // _comp will return false if called like this
-      // and the priority queue will thus emit p1 first
-      return _comp(p2._value, p1._value);
-    }
 
-   private:
-    StringSortComparator _comp;
+  auto queueCompare = [&comp](const QueueWord& p1, const QueueWord& p2) {
+    // if p1 is smaller (alphabetically)
+    // _comp will return false if called like this
+    // and the priority queue will thus emit p1 first
+    return comp(p2._value, p1._value);
   };
+
   std::vector<std::ifstream> infiles;
 
   _outfile.open(basename + ".vocabulary");
@@ -47,13 +45,12 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
   std::vector<bool> endOfFile(numFiles, false);
 
   // Priority queue for the k-way merge
-  std::priority_queue<QueueWord, std::vector<QueueWord>, QueueCompare> queue(
-      comp);
+  std::priority_queue<QueueWord, std::vector<QueueWord>, decltype(queueCompare)> queue(
+      queueCompare);
 
   // open and prepare all infiles and mmap output vectors
   for (size_t i = 0; i < numFiles; i++) {
-    infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME +
-                         std::to_string(i));
+    infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME + std::to_string(i));
     _idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
     AD_CHECK(infiles.back().is_open());
 
@@ -138,8 +135,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 }
 
 // ________________________________________________________________________________
-void VocabularyMerger::writeQueueWordsToIdVec(
-    const std::vector<QueueWord>& buffer) {
+void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer) {
   LOG(TRACE) << "Start writing a batch of merged words\n";
 
   // smaller grained buffer for the actual inner write
@@ -165,8 +161,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       }
 
       // write id to corresponding vec
-      writeBuf.emplace_back(top._partialFileId,
-                            std::make_pair(top._partialWordId, _totalWritten));
+      writeBuf.emplace_back(top._partialFileId, std::make_pair(top._partialWordId, _totalWritten));
 
       if (top._value.size() > 0 && top._value[0] == '@') {
         if (!_firstLangPredSeen) {
@@ -187,14 +182,11 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       // we already have increased total written, so for the duplicate
       // we have to subtract one again
       size_t minusOne = _totalWritten - 1;
-      writeBuf.emplace_back(top._partialFileId,
-                            std::make_pair(top._partialWordId, minusOne));
+      writeBuf.emplace_back(top._partialFileId, std::make_pair(top._partialWordId, minusOne));
     }
 
     if (writeBuf.size() >= bufSize) {
-      auto task = [this, buf = std::move(writeBuf)]() {
-        this->doActualWrite(buf);
-      };
+      auto task = [this, buf = std::move(writeBuf)]() { this->doActualWrite(buf); };
       if (writeFut.valid()) {
         writeFut.get();
       }
@@ -224,43 +216,39 @@ void VocabularyMerger::doActualWrite(
 }
 
 // ______________________________________________________________________________________________
-void writePartialIdMapToBinaryFileForMerging(
-    std::shared_ptr<const ad_utility::HashMap<string, Id>> map,
-    const string& fileName, StringSortComparator comp,
-    const bool doParallelSort) {
+template <class Pred>
+void writePartialIdMapToBinaryFileForMerging(std::shared_ptr<const Index::ItemMap> map,
+                                             const string& fileName, Pred pred) {
   LOG(INFO) << "Creating partial vocabulary from set ...\n";
   std::vector<std::pair<string, Id>> els;
   els.reserve(map->size());
   els.insert(begin(els), begin(*map), end(*map));
   LOG(INFO) << "... sorting ...\n";
 
-  auto pred = [comp](const auto& p1, const auto& p2) {
-    return comp(p1.first, p2.first);
-  };
-  if constexpr (USE_PARALLEL_SORT) {
-    if (doParallelSort) {
+  auto sort = [&els](const auto& pred) {
+    if constexpr (USE_PARALLEL_SORT) {
       __gnu_parallel::sort(begin(els), end(els), pred,
                            __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
     } else {
       std::sort(begin(els), end(els), pred);
     }
-  } else {
-    std::sort(begin(els), end(els), pred);
-    (void)doParallelSort;  // avoid compiler warning for unused value.
-  }
-  LOG(INFO) << "Done creating vocabulary.\n";
+  };
 
+  const auto comp = [&pred](const auto& a, const auto& b) { return pred(a.first, b.first); };
+
+  sort(comp);
+
+  LOG(INFO) << "Done creating vocabulary.\n";
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
-  std::ofstream out(fileName.c_str(),
-                    std::ios_base::out | std::ios_base::binary);
+  std::ofstream out(fileName.c_str(), std::ios_base::out | std::ios_base::binary);
   AD_CHECK(out.is_open());
-  for (size_t i = 0; i < els.size(); ++i) {
+  for (const auto& el : els) {
     // 32 bits should be enough for len of string
-    std::string_view word = els[i].first;
+    std::string_view word = el.first;
     uint32_t len = word.size();
     out.write((char*)&len, sizeof(len));
     out.write(word.data(), len);
-    Id id = els[i].second;
+    Id id = el.second;
     out.write((char*)&id, sizeof(id));
   }
   out.close();
@@ -268,8 +256,7 @@ void writePartialIdMapToBinaryFileForMerging(
 }
 
 // _____________________________________________________________________
-ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
-    const string& mmapFilename) {
+ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(const string& mmapFilename) {
   ad_utility::HashMap<Id, Id> res;
   IdPairMMapVecView vec(mmapFilename);
   for (const auto [partialId, globalId] : vec) {

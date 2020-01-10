@@ -17,18 +17,31 @@
 using std::string;
 
 // _____________________________________________________________________________
-template <class S>
-void Vocabulary<S>::readFromFile(const string& fileName,
-                                 const string& extLitsFileName) {
+template <class S, class C>
+void Vocabulary<S, C>::readFromFile(const string& fileName,
+                                    const string& extLitsFileName) {
   LOG(INFO) << "Reading vocabulary from file " << fileName << "\n";
   _words.clear();
   std::fstream in(fileName.c_str(), std::ios_base::in);
   string line;
+  [[maybe_unused]] bool first = true;
+  std::string lastExpandedString;
   while (std::getline(in, line)) {
     if constexpr (_isCompressed) {
       // when we read from file it means that all preprocessing has been done
       // and the prefixes are already stripped in the file
       _words.push_back(CompressedString::fromString(line));
+      auto str = expandPrefix(_words.back());
+      if (!first) {
+        if (!(_caseComparator.compare(lastExpandedString, str) <= 0)) {
+          LOG(ERROR) << "Vocabulary is not sorted in ascending order for words "
+                     << lastExpandedString << " and " << str << std::endl;
+          // AD_CHECK(false);
+        }
+      } else {
+        first = false;
+      }
+      lastExpandedString = std::move(str);
     } else {
       _words.push_back(line);
     }
@@ -51,9 +64,9 @@ void Vocabulary<S>::readFromFile(const string& fileName,
 }
 
 // _____________________________________________________________________________
-template <class S>
+template <class S, class C>
 template <typename, typename>
-void Vocabulary<S>::writeToFile(const string& fileName) const {
+void Vocabulary<S, C>::writeToFile(const string& fileName) const {
   LOG(INFO) << "Writing vocabulary to file " << fileName << "\n";
   std::ofstream out(fileName.c_str(), std::ios_base::out);
   // on disk we save the compressed version, so do not  expand prefixes
@@ -68,9 +81,10 @@ void Vocabulary<S>::writeToFile(const string& fileName) const {
 }
 
 // _____________________________________________________________________________
-template <class S>
+template <class S, class C>
 template <typename, typename>
-void Vocabulary<S>::writeToBinaryFileForMerging(const string& fileName) const {
+void Vocabulary<S, C>::writeToBinaryFileForMerging(
+    const string& fileName) const {
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
   std::ofstream out(fileName.c_str(),
                     std::ios_base::out | std::ios_base::binary);
@@ -89,9 +103,9 @@ void Vocabulary<S>::writeToBinaryFileForMerging(const string& fileName) const {
 }
 
 // _____________________________________________________________________________
-template <class S>
+template <class S, class C>
 template <typename, typename>
-void Vocabulary<S>::createFromSet(const ad_utility::HashSet<S>& set) {
+void Vocabulary<S, C>::createFromSet(const ad_utility::HashSet<S>& set) {
   LOG(INFO) << "Creating vocabulary from set ...\n";
   _words.clear();
   _words.reserve(set.size());
@@ -104,9 +118,9 @@ void Vocabulary<S>::createFromSet(const ad_utility::HashSet<S>& set) {
 // _____________________________________________________________________________
 // TODO<joka921> is this used? if no, throw out, if yes, transform to
 // compressedString as key type
-template <class S>
+template <class S, class C>
 template <typename, typename>
-ad_utility::HashMap<string, Id> Vocabulary<S>::asMap() {
+ad_utility::HashMap<string, Id> Vocabulary<S, C>::asMap() {
   ad_utility::HashMap<string, Id> map;
   for (size_t i = 0; i < _words.size(); ++i) {
     map[_words[i]] = i;
@@ -115,9 +129,9 @@ ad_utility::HashMap<string, Id> Vocabulary<S>::asMap() {
 }
 
 // _____________________________________________________________________________
-template <class S>
+template <class S, class C>
 template <typename, typename>
-void Vocabulary<S>::externalizeLiterals(const string& fileName) {
+void Vocabulary<S, C>::externalizeLiterals(const string& fileName) {
   LOG(INFO) << "Externalizing literals..." << std::endl;
   auto ext = std::lower_bound(_words.begin(), _words.end(),
                               EXTERNALIZED_LITERALS_PREFIX, _caseComparator);
@@ -132,21 +146,21 @@ void Vocabulary<S>::externalizeLiterals(const string& fileName) {
 }
 
 // _____________________________________________________________________________
-template <class S>
-bool Vocabulary<S>::isLiteral(const string& word) {
+template <class S, class C>
+bool Vocabulary<S, C>::isLiteral(const string& word) {
   return word.size() > 0 && word[0] == '\"';
 }
 
 // _____________________________________________________________________________
-template <class S>
-bool Vocabulary<S>::isExternalizedLiteral(const string& word) {
+template <class S, class C>
+bool Vocabulary<S, C>::isExternalizedLiteral(const string& word) {
   return word.size() > 1 &&
          ad_utility::startsWith(word, EXTERNALIZED_LITERALS_PREFIX + '\"');
 }
 
 // _____________________________________________________________________________
-template <class S>
-bool Vocabulary<S>::shouldBeExternalized(const string& word) const {
+template <class S, class C>
+bool Vocabulary<S, C>::shouldBeExternalized(const string& word) const {
   if (!isLiteral(word)) {
     return shouldEntityBeExternalized(word);
   } else {
@@ -155,8 +169,8 @@ bool Vocabulary<S>::shouldBeExternalized(const string& word) const {
 }
 
 // ___________________________________________________________________
-template <class S>
-bool Vocabulary<S>::shouldEntityBeExternalized(const string& word) const {
+template <class S, class C>
+bool Vocabulary<S, C>::shouldEntityBeExternalized(const string& word) const {
   for (const auto& p : _externalizedPrefixes) {
     if (ad_utility::startsWith(word, p)) {
       return true;
@@ -166,8 +180,8 @@ bool Vocabulary<S>::shouldEntityBeExternalized(const string& word) const {
 }
 
 // ___________________________________________________________________
-template <class S>
-bool Vocabulary<S>::shouldLiteralBeExternalized(const string& word) const {
+template <class S, class C>
+bool Vocabulary<S, C>::shouldLiteralBeExternalized(const string& word) const {
   if (word.size() > MAX_INTERNAL_LITERAL_BYTES) {
     return true;
   }
@@ -185,8 +199,8 @@ bool Vocabulary<S>::shouldLiteralBeExternalized(const string& word) const {
   return true;
 }
 // _____________________________________________________________________________
-template <class S>
-string Vocabulary<S>::getLanguage(const string& literal) {
+template <class S, class C>
+string Vocabulary<S, C>::getLanguage(const string& literal) {
   auto lioAt = literal.rfind('@');
   if (lioAt != string::npos) {
     auto lioQ = literal.rfind('\"');
@@ -198,9 +212,9 @@ string Vocabulary<S>::getLanguage(const string& literal) {
 }
 
 // ____________________________________________________________________________
-template <class S>
+template <class S, class C>
 template <typename, typename>
-string Vocabulary<S>::expandPrefix(const CompressedString& word) const {
+string Vocabulary<S, C>::expandPrefix(const CompressedString& word) const {
   assert(!word.empty());
   auto idx = static_cast<uint8_t>(word[0]) - MIN_COMPRESSION_PREFIX;
   if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
@@ -211,9 +225,9 @@ string Vocabulary<S>::expandPrefix(const CompressedString& word) const {
 }
 
 // _____________________________________________________________________________
-template <class S>
+template <class S, class C>
 template <typename, typename>
-CompressedString Vocabulary<S>::compressPrefix(const string& word) const {
+CompressedString Vocabulary<S, C>::compressPrefix(const string& word) const {
   for (const auto& p : _prefixVec) {
     if (ad_utility::startsWith(word, p._fulltext)) {
       auto res = CompressedString::fromString(
@@ -226,9 +240,9 @@ CompressedString Vocabulary<S>::compressPrefix(const string& word) const {
 }
 
 // _____________________________________________________________________________
-template <class S>
+template <class S, class C>
 template <class StringRange, typename, typename>
-void Vocabulary<S>::initializePrefixes(const StringRange& prefixes) {
+void Vocabulary<S, C>::initializePrefixes(const StringRange& prefixes) {
   for (auto& el : _prefixMap) {
     el = "";
   }
@@ -256,9 +270,9 @@ void Vocabulary<S>::initializePrefixes(const StringRange& prefixes) {
 }
 
 // ______________________________________________________________________________
-template <class S>
+template <class S, class C>
 template <class StringRange>
-void Vocabulary<S>::initializeExternalizePrefixes(const StringRange& s) {
+void Vocabulary<S, C>::initializeExternalizePrefixes(const StringRange& s) {
   _externalizedPrefixes.clear();
   for (const auto& el : s) {
     _externalizedPrefixes.push_back(el);
@@ -266,51 +280,19 @@ void Vocabulary<S>::initializeExternalizePrefixes(const StringRange& s) {
 }
 
 // ______________________________________________________________________________
-template <class S>
+template <class S, class C>
 template <class StringRange>
-void Vocabulary<S>::initializeInternalizedLangs(const StringRange& s) {
+void Vocabulary<S, C>::initializeInternalizedLangs(const StringRange& s) {
   _internalizedLangs.clear();
   _internalizedLangs.insert(_internalizedLangs.begin(), s.begin(), s.end());
 }
 
-// __________________________________________________________________________
-template <class S>
-bool PrefixComparator<S>::operator()(const CompressedString& lhsComp,
-                                     const string& rhs) const {
-  string lhs = _vocab->expandPrefix(lhsComp);
-  return this->operator()(lhs, rhs);
-}
-
-// __________________________________________________________________________
-template <class S>
-bool PrefixComparator<S>::operator()(const string& lhs,
-                                     const CompressedString& rhsComp) const {
-  string rhs = _vocab->expandPrefix(rhsComp);
-  return this->operator()(lhs, rhs);
-}
-
-// __________________________________________________________________________
-template <class S>
-bool PrefixComparator<S>::operator()(const string& lhs,
-                                     const string& rhs) const {
-  // we cannot use string_views as parameters as they will unfortunately lead
-  // to ambiguous overloads (even though the CompressedString overload wouldn't
-  // work.
-  return _vocab->getCaseComparator()(
-      lhs.size() > _prefixLength
-          ? std::string_view(lhs).substr(0, _prefixLength)
-          : lhs,
-      rhs.size() > _prefixLength
-          ? std::string_view(rhs).substr(0, _prefixLength)
-          : rhs);
-}
-
 // _____________________________________________________
-template <class S>
+template <class S, class C>
 template <typename, typename>
-void Vocabulary<S>::prefixCompressFile(const string& infile,
-                                       const string& outfile,
-                                       const vector<string>& prefixes) {
+void Vocabulary<S, C>::prefixCompressFile(const string& infile,
+                                          const string& outfile,
+                                          const vector<string>& prefixes) {
   std::ifstream in(infile);
   std::ofstream out(outfile);
   AD_CHECK(in.is_open() && out.is_open());
