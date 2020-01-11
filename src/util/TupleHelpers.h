@@ -9,23 +9,22 @@
 namespace ad_tuple_helpers {
 
 namespace detail {
-// Recursive implementation of setupTupleFromCallable (see below)
-template <size_t NumEntries, size_t Current, class F>
-auto setupTupleFromCallableImpl(F&& f) {
-  if constexpr (Current == NumEntries - 1) {
-    return std::tuple(f(Current));
-  } else {
-    auto fst = std::tuple(f(Current));
-    return std::tuple_cat(std::move(fst),
-                          setupTupleFromCallableImpl<NumEntries, Current + 1>(
-                              std::forward<F>(f)));
-  }
+/* Implementation of setupTupleFromCallable (see below)
+ * Needed because we need the Pattern matching on the index_sequence
+ * TODO<joka921> In C++ 20 this could be done in place with templated
+ * lambdas
+ */
+template <class F, size_t... I>
+auto setupTupleFromCallableImpl(F&& f, std::index_sequence<I...>) {
+  return std::tuple(f(I)...);
 }
 }  // namespace detail
 
 /**
  * @brief create a Tuple with numEntries entries where the i-th entry is created
- * by a call to f(i)
+ * by a call to f(i). Note that the evaluation order of the calls to f is
+ * unspecified, so if f has side effects /state you might run into undefined
+ * behavior.
  * @tparam numEntries the size of the tuple to be created
  * @tparam F A function object that takes a single size_t as an argument
  * @param f
@@ -34,8 +33,9 @@ auto setupTupleFromCallableImpl(F&& f) {
  */
 template <size_t numEntries, class F>
 auto setupTupleFromCallable(F&& f) {
+  auto idxSeq = std::make_index_sequence<numEntries>{};
   static_assert(numEntries > 0);
-  return detail::setupTupleFromCallableImpl<numEntries, 0>(std::forward<F>(f));
+  return detail::setupTupleFromCallableImpl(std::forward<F>(f), idxSeq);
 }
 
 /**
@@ -49,37 +49,16 @@ auto setupTupleFromCallable(F&& f) {
  * @return std::tuple(std::make_unique<First>(std::forward<First>(l),
  * std::make_unique<FirstOfRem.....
  */
-template <typename First, typename... Rest>
-auto toUniquePtrTuple(First&& l, Rest&&... rem) {
-  if constexpr (sizeof...(Rest) == 0) {
-    return std::tuple(
-        std::make_unique<std::decay_t<First>>(std::forward<First>(l)));
-  } else {
-    return std::tuple_cat(std::tuple(std::make_unique<std::decay_t<First>>(
-                              std::forward<First>(l))),
-                          toUniquePtrTuple(std::forward<Rest>(rem)...));
-  }
+template <typename... Rest>
+auto toUniquePtrTuple(Rest&&... rem) {
+  return std::tuple(
+      std::make_unique<std::decay_t<Rest>>(std::forward<Rest>(rem))...);
 }
 
 /// For a pack of types returns the return type of a call to toUniquePtrTuple
 /// with arguments of that type
 template <typename... ts>
 using toUniquePtrTuple_t = decltype(toUniquePtrTuple(std::declval<ts>()...));
-
-namespace detail {
-// the implementation of toRawPtrTuple, idx denotes the next index to deal with
-// (initially 0)
-template <size_t idx, typename Tuple>
-auto toRawPtrTupleImpl(Tuple&& tuple) {
-  if constexpr (idx == std::tuple_size_v<std::decay_t<Tuple>> - 1) {
-    return std::tuple(std::get<idx>(tuple).get());
-  } else {
-    return std::tuple_cat(
-        std::tuple(std::get<idx>(tuple).get()),
-        toRawPtrTupleImpl<idx + 1>(std::forward<Tuple>(tuple)));
-  }
-}
-}  // namespace detail
 
 /**
  * @brief converts a tuple of smart pointers (or other types that have a .get()
@@ -93,17 +72,21 @@ auto toRawPtrTupleImpl(Tuple&& tuple) {
  * @return std::tuple(std::get<0>(tuple).get(), std::get<1>(tuple).get(), ...
  * std::get<std::tuple_size_v<Tuple>>(tuple).get());
  */
-template <typename Tuple>
+template <typename Tuple, bool safe = true>
 auto toRawPtrTuple(Tuple&& tuple) {
-  static_assert(!std::is_rvalue_reference_v<decltype(tuple)>,
-                "You can't pass an rvalue reference to toRawPtrTuple, because "
-                "the argument preserves the ownership to the pointers");
-  return detail::toRawPtrTupleImpl<0>(std::forward<Tuple>(tuple));
+  if constexpr (safe) {
+    static_assert(
+        !std::is_rvalue_reference_v<decltype(tuple)>,
+        "You can't pass an rvalue reference to toRawPtrTuple, because "
+        "the argument preserves the ownership to the pointers");
+  }
+  auto f = [](auto&&... args) { return std::tuple(args.get()...); };
+  return std::apply(f, tuple);  // std::forward<Tuple>(tuple));
 }
 
 /// The return type of toRawPtrTuple<T>(T&& t);
 template <typename T>
-using toRawPtrTuple_t = decltype(detail::toRawPtrTupleImpl<0>(
+using toRawPtrTuple_t = decltype(toRawPtrTuple<T, false>(
     std::declval<T>()));  // we have to bypass the toRawPtrTuple function since
                           // declval returns an rvalue reference
 

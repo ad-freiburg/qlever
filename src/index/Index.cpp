@@ -256,9 +256,11 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   VocabularyMerger::VocMergeRes mergeRes;
   {
     VocabularyMerger v;
-    auto identicalPred = [c = _vocab.getCaseComparator()](const auto& a, const auto&b) {return c(a, b, decltype(c)::Level::IDENTICAL);};
-    mergeRes =
-        v.mergeVocabulary(_onDiskBase, numFiles, identicalPred);
+    auto identicalPred = [c = _vocab.getCaseComparator()](const auto& a,
+                                                          const auto& b) {
+      return c(a, b, decltype(c)::Level::IDENTICAL);
+    };
+    mergeRes = v.mergeVocabulary(_onDiskBase, numFiles, identicalPred);
     LOG(INFO) << "Finished Merging Vocabulary.\n";
   }
   VocabularyData res;
@@ -1559,7 +1561,10 @@ std::future<void> Index::writeNextPartialVocabulary(
                  vocab = &_vocab, partialFilename, partialCompressionFilename,
                  vocabPrefixCompressed = _vocabPrefixCompressed]() {
     auto vec = vocabMapsToVector(items);
-    auto identicalPred = [c = vocab->getCaseComparator()](const auto& a, const auto&b) {return c(a, b, decltype(c)::Level::IDENTICAL);};
+    auto identicalPred = [c = vocab->getCaseComparator()](const auto& a,
+                                                          const auto& b) {
+      return c(a, b, decltype(c)::Level::IDENTICAL);
+    };
     sortVocabVector(&vec, identicalPred, false);
     auto mapping = createInternalMapping(&vec);
     auto sz = vec.size();

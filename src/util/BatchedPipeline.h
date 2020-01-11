@@ -21,7 +21,10 @@ namespace detail {
  * pipeline is exhausted and there is no point in asking it for further batches.
  */
 template <class T>
-using VecT = std::pair<bool, std::vector<T>>;
+struct VecT {
+  bool _isLast;             // was this the last (and possibly incomplete) batch
+  std::vector<T> _content;  // the actual payload
+};
 
 /*
  * The Batcher class takes a Creator (A Functor that returns a std::optional<T>
@@ -60,9 +63,7 @@ class Batcher {
    */
   detail::VecT<ValueT> produceBatch() {
     try {
-      _timer.cont();
       auto res = _fut.get();
-      _timer.stop();
       orderNextBatch();
       return res;
     } catch (const std::future_error& e) {
@@ -74,7 +75,7 @@ class Batcher {
 
   // get the accumulated time that calls to produceBatch had to block until they
   // could return the next batch
-  std::vector<off_t> getWaitingTime() const { return {_timer.msecs()}; }
+  std::vector<off_t> getWaitingTime() const { return {_timer->msecs()}; }
 
   // returns the batchSize. The last batch might be smaller
   [[nodiscard]] size_t getBatchSize() const { return _batchSize; }
@@ -82,18 +83,20 @@ class Batcher {
  private:
   size_t _batchSize;
   std::unique_ptr<Creator> _creator;
+  std::unique_ptr<ad_utility::Timer> _timer =
+      std::make_unique<ad_utility::Timer>();
   std::future<detail::VecT<ValueT>> _fut;
-  ad_utility::Timer _timer;
 
   // start assembling the next batch in parallel
   void orderNextBatch() {
     // since the unique_ptr _creator owns the creator,
     // the captured pointer will stay valid even while this
     // class is moved.
-    _fut = std::async(std::launch::async,
-                      [bs = _batchSize, ptr = _creator.get()]() {
-                        return produceBatchInternal(bs, ptr);
-                      });
+    _fut =
+        std::async(std::launch::async,
+                   [bs = _batchSize, ptr = _creator.get(), t = _timer.get()]() {
+                     return produceBatchInternal(bs, t, ptr);
+                   });
   }
 
   /* retrieve values from the creator and store them in the VecT result.
@@ -101,18 +104,21 @@ class Batcher {
    * we return. In the latter case, result.first is false
    */
   static detail::VecT<ValueT> produceBatchInternal(size_t batchSize,
+                                                   ad_utility::Timer* timer,
                                                    Creator* creator) {
+    timer->cont();
     detail::VecT<ValueT> res;
-    res.first = true;
-    res.second.reserve(batchSize);
+    res._isLast = true;
+    res._content.reserve(batchSize);
     for (size_t i = 0; i < batchSize; ++i) {
       auto opt = (*creator)();
       if (!opt) {
-        res.first = false;
+        res._isLast = false;
         return res;
       }
-      res.second.push_back(std::move(opt.value()));
+      res._content.push_back(std::move(opt.value()));
     }
+    timer->stop();
     return res;
   }
 };
@@ -147,7 +153,7 @@ class BatchedPipeline {
 
   // the value type our producer delivers to us
   using InT = std::decay_t<decltype(
-      std::declval<Producer&>().produceBatch().second[0])>;
+      std::declval<Producer&>().produceBatch()._content[0])>;
 
   // the value type this BatchedPipeline produces
   using ResT = std::invoke_result_t<FirstTransformer, InT>;
@@ -167,9 +173,7 @@ class BatchedPipeline {
   // _____________________________________________________________________
   VecT<ResT> produceBatch() {
     try {
-      _timer.cont();
       auto res = _fut.get();
-      _timer.stop();
       orderNextBatch();
       return res;
     } catch (std::future_error& e) {
@@ -181,11 +185,11 @@ class BatchedPipeline {
 
   // asynchronously prepare the next Batch in a different thread
   void orderNextBatch() {
-    auto lambda = [p = _producer.get(), batchSize = _producer->getBatchSize()](
-                      auto... transformerPtrs) {
+    auto lambda = [p = _producer.get(), batchSize = _producer->getBatchSize(),
+                   t = _timer.get()](auto... transformerPtrs) {
       return std::async(
-          std::launch::async, [p, batchSize, transformerPtrs...]() {
-            return produceBatchInternal(p, batchSize, transformerPtrs...);
+          std::launch::async, [p, batchSize, t, transformerPtrs...]() {
+            return produceBatchInternal(p, batchSize, t, transformerPtrs...);
           });
     };
     _fut = std::apply(lambda, _rawTransformers);
@@ -195,7 +199,7 @@ class BatchedPipeline {
   // time in calls to produce batch
   std::vector<off_t> getWaitingTime() const {
     auto res = _producer->getWaitingTime();
-    res.push_back(_timer.msecs());
+    res.push_back(_timer->msecs());
     return res;
   }
 
@@ -214,70 +218,60 @@ class BatchedPipeline {
    * apply the correct transformer to the correct element even for the last
    * (possibly incomplete batch)
    */
-  template <typename FirstPtr, typename... OtherPtrs>
+  template <typename... TransformerPtrs>
   static VecT<ResT> produceBatchInternal(Producer* producer, size_t inBatchSize,
-                                         FirstPtr fst, OtherPtrs... other) {
+                                         ad_utility::Timer* timer,
+                                         TransformerPtrs... transformers) {
     auto inBatch = producer->produceBatch();
-    auto& in = inBatch.second;
+    timer->cont();
     VecT<ResT> result;
-    auto& out = result.second;
-    result.first = inBatch.first;
-    out.reserve(in.size());
-    if constexpr (Parallelism == 1) {
-      // simplest case, only one thread and one transformer
-      std::transform(std::make_move_iterator(in.begin()),
-                     std::make_move_iterator(in.end()), std::back_inserter(out),
-                     [transformer = fst](
-                         typename std::decay_t<decltype(in)>::value_type&& x) {
-                       return (*transformer)(std::move(x));
-                     });
-    } else {
-      // currently each of the <parallelism> threads first creates its own VecT
-      // and later we merge doing this in place would require something like a
-      // std::vector without default construction on insert.
-      std::array<std::future<std::vector<ResT>>, Parallelism> futures;
-      const size_t batchSize = inBatchSize / Parallelism;
-      if constexpr (sizeof...(OtherPtrs) == 0) {
-        // only one transformer, but multiple threads that all use the same
-        // transformer
-        for (size_t i = 0; i < Parallelism; ++i) {
-          // correctly calculate the boundaries for the subbatch
-          auto startIt = std::min(in.begin() + i * batchSize, in.end());
-          auto endIt =
-              i < Parallelism - 1
-                  ? std::min(in.begin() + (i + 1) * batchSize, in.end())
-                  : in.end();
-          // start a thread returns a transformed version of all the elements in
-          // [startIt, endIt)
-          futures[i] = std::async(
-              std::launch::async,
-              [i, transformer = fst, batchSize, startIt, endIt] {
-                std::vector<ResT> res;
-                res.reserve(endIt - startIt);
-                std::transform(
-                    std::make_move_iterator(startIt),
-                    std::make_move_iterator(endIt), std::back_inserter(res),
-                    [transformer](
-                        typename std::decay_t<decltype(in)>::value_type&& x) {
-                      return (*transformer)(std::move(x));
-                    });
-                return res;
-              });
-        }
-      } else {  // we have one transformer per parallel Branch
-        // this was outsourced since we need template magic for the different
-        // transformers
-        createInternalParallelism(&futures, batchSize, 0, in, fst, other...);
-      }
-      // if we had multiple threads, we have to merge the partial results in the
-      // correct order.
-      for (size_t i = 0; i < Parallelism; ++i) {
-        auto vec = futures[i].get();
-        out.insert(out.end(), std::make_move_iterator(vec.begin()),
-                   std::make_move_iterator(vec.end()));
-      }
+    result._isLast = inBatch._isLast;
+    // currently each of the <parallelism> threads first creates its own VecT
+    // and later we merge. <TODO>(joka921) Doing this in place would require
+    // something like a std::vector without default construction on insert.
+    const size_t batchSize = inBatchSize / Parallelism;
+    auto futures = setupParallelismImpl(batchSize, inBatch._content,
+                                        std::make_index_sequence<Parallelism>{},
+                                        transformers...);
+    // if we had multiple threads, we have to merge the partial results in the
+    // correct order.
+    for (size_t i = 0; i < Parallelism; ++i) {
+      auto vec = futures[i].get();
+      result._content.insert(result._content.end(),
+                             std::make_move_iterator(vec.begin()),
+                             std::make_move_iterator(vec.end()));
     }
+    timer->stop();
     return result;
+  }
+
+  // If the range [beg, end) is to be divided into <Parallelism> subranges of
+  // size <batchSize> returns the iterator pair belonging to the subrange number
+  // <idx>. if batchSize * Parallelism > end-beg then the first ranges will have
+  // size batchSize, then there will be an incomplete batch with the remaining
+  // range and all other ranges will be empty.
+  template <typename It>
+  static std::pair<It, It> getBatchRange(It beg, It end, const size_t batchSize,
+                                         const size_t idx) {
+    std::pair<It, It> res;
+    res.first = std::min(beg + idx * batchSize, end);
+    res.second = idx < Parallelism - 1
+                     ? std::min(beg + (idx + 1) * batchSize, end)
+                     : end;
+    return res;
+  }
+
+  // For each element x in [beg, end): move it, apply *transformer to it and
+  // append it to *res
+  template <typename It, typename ResVec, typename TransformerPtr>
+  static void moveAndTransform(It beg, It end, ResVec* res,
+                               TransformerPtr transformer) {
+    res->reserve(end - beg);
+    std::transform(std::make_move_iterator(beg), std::make_move_iterator(end),
+                   std::back_inserter(*res),
+                   [transformer](typename std::decay_t<decltype(*beg)>&& x) {
+                     return (*transformer)(std::move(x));
+                   });
   }
 
   /**
@@ -296,53 +290,37 @@ class BatchedPipeline {
    * @param transformer Pointer to the first transformer
    * @param transformers Pointers to the remaining transformers
    */
-  template <typename InVec, typename TransformerPtr,
-            typename... TransformerPtrs>
-  static void createInternalParallelism(
-      std::array<std::future<std::vector<ResT>>, Parallelism>* futuresPtr,
-      size_t batchSize, size_t index, InVec& in, TransformerPtr transformer,
-      TransformerPtrs... transformers) {
-    auto& futures = *futuresPtr;
-    // calculate the correct bounds for the next subbatch
-    auto startIt = std::min(in.begin() + index * batchSize, in.end());
-    auto endIt = index < Parallelism - 1
-                     ? std::min(in.begin() + (index + 1) * batchSize, in.end())
-                     : in.end();
-    // start a thread for the first transformer. This function will
-    // be called recursively s.t. the index-th transformer will always be
-    // the first in the respective recursion step
-    futures[index] = std::async(std::launch::async, [index, transformer,
-                                                     batchSize, startIt,
-                                                     endIt] {
-      std::vector<ResT> res;
-      res.reserve(endIt - startIt);
-      std::transform(
-          std::make_move_iterator(startIt), std::make_move_iterator(endIt),
-          std::back_inserter(res),
-          [transformer](typename std::decay_t<decltype(in)>::value_type&& x) {
-            return (*transformer)(std::move(x));
-          });
-      return res;
-    });
-
-    if (index < Parallelism - 1) {
-      // this was not the last transformer, recursive
-      if constexpr (sizeof...(transformers) > 0) {
-        createInternalParallelism(futuresPtr, batchSize, index + 1, in,
-                                  transformers...);
-      } else {
-        // this can never happen by the static_asserted invariants of the class
-        // but we need the constexpr if to make the instantiation for the last
-        // transformer work
-        throw std::runtime_error(
-            "This path should never be called in createInternalParallelism. "
-            "Please report to the developers.");
-      }
+  template <size_t... I, typename InVec, typename... TransformerPtrs>
+  static auto setupParallelismImpl(size_t batchSize, InVec& in,
+                                   std::index_sequence<I...>,
+                                   TransformerPtrs... transformers) {
+    if constexpr (sizeof...(I) == sizeof...(TransformerPtrs)) {
+      return std::array{(createIthFuture<I>(batchSize, in, transformers))...};
+    } else if constexpr (sizeof...(TransformerPtrs) == 1) {
+      // only one transformer that is applied to several threads
+      auto onlyTransformer =
+          std::get<0>(std::forward_as_tuple(transformers...));
+      return std::array{
+          (createIthFuture<I>(batchSize, in, onlyTransformer))...};
     }
   }
 
+  template <size_t Idx, typename InVec, typename TransformerPtr>
+  static std::future<std::vector<ResT>> createIthFuture(
+      size_t batchSize, InVec& in, TransformerPtr transformer) {
+    auto [startIt, endIt] = getBatchRange(in.begin(), in.end(), batchSize, Idx);
+    // start a thread for the transformer.
+    return std::async(std::launch::async, [transformer, batchSize,
+                                           startIt = startIt, endIt = endIt] {
+      std::vector<ResT> res;
+      moveAndTransform(startIt, endIt, &res, transformer);
+      return res;
+    });
+  }
+
  private:
-  ad_utility::Timer _timer;
+  std::unique_ptr<ad_utility::Timer> _timer =
+      std::make_unique<ad_utility::Timer>();
   // the unique_ptrs to our Transformers
   using uniquePtrTuple = toUniquePtrTuple_t<FirstTransformer, Transformers...>;
   // raw non-owning pointers to the transformers
@@ -464,8 +442,8 @@ template <class Pipeline>
 class BatchExtractor {
  public:
   /// The type of our elements after all transformations were applied
-  using ValueT =
-      std::decay_t<decltype(std::declval<Pipeline>().produceBatch().second[0])>;
+  using ValueT = std::decay_t<decltype(
+      std::declval<Pipeline>().produceBatch()._content[0])>;
 
   // Retrieve and return the next triple from the internal buffer.
   // If the buffer is exhausted blocks
@@ -477,9 +455,14 @@ class BatchExtractor {
     // we return the elements in order
     if (_buffer.size() == _bufferPosition && _isPipelineValid) {
       // we have to wait for the next parallel batch to be completed.
-      _timer.cont();
-      std::tie(_isPipelineValid, _buffer) = _fut.get();
-      _timer.stop();
+      _timer->cont();
+      {
+        auto res = _fut.get();
+        _isPipelineValid = res._isLast;
+        _buffer = std::move(res._content);
+      }
+
+      _timer->stop();
       _bufferPosition = 0;
       if (_isPipelineValid) {
         // if possible, directly submit the next parsing job
@@ -504,7 +487,7 @@ class BatchExtractor {
    */
   [[nodiscard]] std::vector<off_t> getWaitingTime() const {
     auto res = _pipeline->getWaitingTime();
-    res.push_back(_timer.msecs());
+    res.push_back(_timer->msecs());
     return res;
   }
 
@@ -512,7 +495,8 @@ class BatchExtractor {
   [[nodiscard]] size_t getBatchSize() const { return _pipeline.getBatchSize(); }
 
  private:
-  ad_utility::Timer _timer;
+  std::unique_ptr<ad_utility::Timer> _timer =
+      std::make_unique<ad_utility::Timer>();
   std::unique_ptr<Pipeline> _pipeline;
   std::future<detail::VecT<ValueT>> _fut;
   std::vector<ValueT> _buffer;

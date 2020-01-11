@@ -11,9 +11,9 @@ TEST(BatcherTest, MoveOnlyCreator) {
   auto pipeline = ad_pipeline::detail::Batcher(
       20, [ptr = std::unique_ptr<int>()]() { return std::optional(25); });
   auto batch = pipeline.produceBatch();
-  ASSERT_TRUE(batch.first);
-  ASSERT_EQ(20u, batch.second.size());
-  ASSERT_EQ(batch.second[0], 25);
+  ASSERT_TRUE(batch._isLast);
+  ASSERT_EQ(20u, batch._content.size());
+  ASSERT_EQ(batch._content[0], 25);
 }
 
 TEST(BatcherTest, MoveOnlyCreator2) {
@@ -28,23 +28,23 @@ TEST(BatchedPipelineTest, BasicPipeline) {
   auto pipeline =
       ad_pipeline::detail::Batcher(20, []() { return std::optional(25); });
   auto batch = pipeline.produceBatch();
-  ASSERT_TRUE(batch.first);
-  ASSERT_EQ(20u, batch.second.size());
-  ASSERT_EQ(batch.second[0], 25);
+  ASSERT_TRUE(batch._isLast);
+  ASSERT_EQ(20u, batch._content.size());
+  ASSERT_EQ(batch._content[0], 25);
 
   auto pipeline2 = ad_pipeline::detail::makeBatchedPipeline<1>(
       std::move(pipeline), [](const auto x) { return x + 3; });
   auto batch2 = pipeline2.produceBatch();
-  ASSERT_TRUE(batch2.first);
-  ASSERT_EQ(20u, batch2.second.size());
-  ASSERT_EQ(batch2.second[0], 28);
+  ASSERT_TRUE(batch2._isLast);
+  ASSERT_EQ(20u, batch2._content.size());
+  ASSERT_EQ(batch2._content[0], 28);
 
   auto pipeline3 = ad_pipeline::detail::makeBatchedPipeline<1>(
       std::move(pipeline2), [](const auto x) { return std::to_string(x); });
   auto batch3 = pipeline3.produceBatch();
-  ASSERT_TRUE(batch3.first);
-  ASSERT_EQ(20u, batch3.second.size());
-  ASSERT_EQ(batch3.second[0], std::string("28"));
+  ASSERT_TRUE(batch3._isLast);
+  ASSERT_EQ(20u, batch3._content.size());
+  ASSERT_EQ(batch3._content[0], std::string("28"));
 
   {
     auto finalPipeline = ad_pipeline::setupPipeline(
@@ -88,10 +88,10 @@ TEST(BatchedPipelineTest, SimpleParallelism) {
     auto pipeline2 = ad_pipeline::detail::makeBatchedPipeline<3>(
         std::move(pipeline), [](const auto x) { return x * 3; });
     auto batch2 = pipeline2.produceBatch();
-    ASSERT_TRUE(batch2.first);
-    ASSERT_EQ(20u, batch2.second.size());
+    ASSERT_TRUE(batch2._isLast);
+    ASSERT_EQ(20u, batch2._content.size());
     for (size_t i = 0; i < 20u; ++i) {
-      ASSERT_EQ(batch2.second[i], i * 3);
+      ASSERT_EQ(batch2._content[i], i * 3);
     }
   }
   {
@@ -101,10 +101,10 @@ TEST(BatchedPipelineTest, SimpleParallelism) {
     auto pipeline2 = ad_pipeline::detail::makeBatchedPipeline<40>(
         std::move(pipeline), [](const auto x) { return x * 3; });
     auto batch2 = pipeline2.produceBatch();
-    ASSERT_TRUE(batch2.first);
-    ASSERT_EQ(20u, batch2.second.size());
+    ASSERT_TRUE(batch2._isLast);
+    ASSERT_EQ(20u, batch2._content.size());
     for (size_t i = 0; i < 20u; ++i) {
-      ASSERT_EQ(batch2.second[i], i * 3);
+      ASSERT_EQ(batch2._content[i], i * 3);
     }
   }
 
@@ -137,13 +137,13 @@ TEST(BatchedPipelineTest, BranchedParallelism) {
         std::move(pipeline), [](const auto x) { return x * 3; },
         [](const auto x) { return x * 2; });
     auto batch2 = pipeline2.produceBatch();
-    ASSERT_TRUE(batch2.first);
-    ASSERT_EQ(20u, batch2.second.size());
+    ASSERT_TRUE(batch2._isLast);
+    ASSERT_EQ(20u, batch2._content.size());
     for (size_t i = 0; i < 10u; ++i) {
-      ASSERT_EQ(batch2.second[i], i * 3);
+      ASSERT_EQ(batch2._content[i], i * 3);
     }
     for (size_t i = 10; i < 20u; ++i) {
-      ASSERT_EQ(batch2.second[i], i * 2);
+      ASSERT_EQ(batch2._content[i], i * 2);
     }
   }
   {
@@ -153,10 +153,10 @@ TEST(BatchedPipelineTest, BranchedParallelism) {
     auto pipeline2 = ad_pipeline::detail::makeBatchedPipeline<40>(
         std::move(pipeline), [](const auto x) { return x * 3; });
     auto batch2 = pipeline2.produceBatch();
-    ASSERT_TRUE(batch2.first);
-    ASSERT_EQ(20u, batch2.second.size());
+    ASSERT_TRUE(batch2._isLast);
+    ASSERT_EQ(20u, batch2._content.size());
     for (size_t i = 0; i < 20u; ++i) {
-      ASSERT_EQ(batch2.second[i], i * 3);
+      ASSERT_EQ(batch2._content[i], i * 3);
     }
   }
 

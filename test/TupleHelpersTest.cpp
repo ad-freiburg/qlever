@@ -19,18 +19,6 @@ TEST(TupleHelpersTest, SetupFromCallable) {
   }
 
   {
-    // lambda with sideeffect
-    size_t i = 2;
-    auto f = [&i](const size_t x) {
-      i *= 2;
-      return x + i;
-    };
-    ASSERT_EQ(setupTupleFromCallable<3>(f), std::tuple(4, 9, 18));
-    static_assert(std::is_same_v<decltype(setupTupleFromCallable<3>(f)),
-                                 std::tuple<size_t, size_t, size_t>>);
-  }
-
-  {
     // lambda that returns a lambda
     auto f = [](const size_t x) {
       return [x](const size_t y) { return static_cast<int>(x + y); };

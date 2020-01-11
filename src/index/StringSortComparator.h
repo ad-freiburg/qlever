@@ -8,7 +8,9 @@
 #include <unicode/casemap.h>
 #include <unicode/coll.h>
 #include <unicode/locid.h>
+#include <unicode/normalizer2.h>
 #include <unicode/unistr.h>
+#include <unicode/unorm2.h>
 #include <unicode/utypes.h>
 #include <cstring>
 #include <memory>
@@ -205,6 +207,23 @@ class LocaleManager {
     return {numCodepoints, std::string(sp.data(), i)};
   }
 
+  /**
+   * @brief Normalize a Utf8 string to a canonical representation.
+   * Maps e.g. single codepoint é and e + accent aigu to single codepoint é by
+   * applying the UNICODE NFC (Normalization form C) This is independent from
+   * the locale
+   * @param input The String to be normalized. Must be UTF-8 encoded
+   * @return The NFC canonical form of NFC in UTF-8 encoding.
+   */
+  std::string normalizeUtf8(std::string_view input) const {
+    std::string res;
+    icu::StringByteSink<std::string> sink(&res);
+    UErrorCode err = U_ZERO_ERROR;
+    _normalizer->normalizeUTF8(0, toStringPiece(input), sink, nullptr, err);
+    raise(err);
+    return res;
+  }
+
  private:
   icu::Locale _icuLocale;  // the held locale
   /* One collator for each collation Level to make this class threadsafe.
@@ -213,6 +232,10 @@ class LocaleManager {
   std::unique_ptr<icu::Collator> _collator[5];
   UColAttributeValue _ignorePunctuationStatus =
       UCOL_NON_IGNORABLE;  // how to sort punctuations etc.
+
+  const icu::Normalizer2*
+      _normalizer;  // actually locale-independent but useful to be placed here
+                    // since it wraps ICU
 
   // raise an exception if the error code holds an error.
   static void raise(const UErrorCode& err) {
@@ -239,6 +262,12 @@ class LocaleManager {
         icu::Collator::QUATERNARY);
     _collator[static_cast<uint8_t>(Level::IDENTICAL)]->setStrength(
         icu::Collator::IDENTICAL);
+
+    // also setup the normalizer
+    UErrorCode err = U_ZERO_ERROR;
+    _normalizer =
+        icu::Normalizer2::getInstance(nullptr, "nfc", UNORM2_COMPOSE, err);
+    raise(err);
   }
 
   // ______________________________________________________________________________
@@ -543,6 +572,18 @@ class TripleComponentComparator {
   /// obtain const access to the held LocaleManager
   [[nodiscard]] const LocaleManager& getLocaleManager() const {
     return _locManager;
+  }
+
+  /**
+   * @brief Normalize a Utf8 string to a canonical representation.
+   * Maps e.g. single codepoint é and e + accent aigu to single codepoint é by
+   * applying the UNICODE NFC (Normalization form C) This is independent from
+   * the locale
+   * @param input The String to be normalized. Must be UTF-8 encoded
+   * @return The NFC canonical form of NFC in UTF-8 encoding.
+   */
+  std::string normalizeUtf8(std::string_view sv) const {
+    return _locManager.normalizeUtf8(sv);
   }
 
  private:
