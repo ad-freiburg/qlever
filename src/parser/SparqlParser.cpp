@@ -15,6 +15,8 @@
 #include "./ParseException.h"
 #include "PropertyPathParser.h"
 
+using namespace std::literals::string_literals;
+
 SparqlParser::SparqlParser(const string& query) : _lexer(query), _query(query) {
   LOG(DEBUG) << "Parsing " << query << std::endl;
 }
@@ -287,9 +289,6 @@ void SparqlParser::parseWhere(
                 ParsedQuery::GraphPatternOperation::Type::SUBQUERY);
         u->_subquery = std::make_shared<ParsedQuery>();
         parseQuery(u->_subquery.get());
-        // Remove all manual ordering from the subquery as it would be changed
-        // by the parent query.
-        u->_subquery->_orderBy.clear();
         currentPattern->_children.push_back(u);
         // The closing bracked } is consumed by the subquery
         _lexer.accept(".");
@@ -694,7 +693,7 @@ bool SparqlParser::parseFilter(
       f._rhs = _lexer.current().raw;
     } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
       // Resolve escaped characters
-      f._rhs = parseLiteral(_lexer.current().raw, true);
+      f._rhs = _lexer.current().raw;
     } else if (_lexer.accept(SparqlToken::Type::INTEGER)) {
       f._rhs = _lexer.current().raw;
     } else if (_lexer.accept(SparqlToken::Type::FLOAT)) {
@@ -716,7 +715,7 @@ bool SparqlParser::parseFilter(
     _lexer.expect(")");
     _lexer.expect(",");
     _lexer.expect(SparqlToken::Type::RDFLITERAL);
-    std::string rhs = parseLiteral(_lexer.current().raw, true);
+    std::string rhs = _lexer.current().raw;
     _lexer.expect(")");
     addLangFilter(lhs, rhs, pattern);
     return true;
@@ -735,7 +734,7 @@ bool SparqlParser::parseFilter(
     }
     _lexer.expect(",");
     _lexer.expect(SparqlToken::Type::RDFLITERAL);
-    f._rhs = parseLiteral(_lexer.current().raw, true);
+    f._rhs = _lexer.current().raw;
     // Remove the enlcosing quotation marks
     f._rhs = f._rhs.substr(1, f._rhs.size() - 2);
     if (_lexer.accept(",")) {
@@ -764,11 +763,19 @@ bool SparqlParser::parseFilter(
           escaped = !escaped;  // correctly deal with consecutive backslashes
           continue;
         }
-        if (!escaped) {
-          char c = f._rhs[i];
-          if (regexControlChars.find(c) != string::npos) {
-            isSimple = false;
-          }
+        char c = f._rhs[i];
+        bool isControlChar = regexControlChars.find(c) != string::npos;
+        if (!escaped && isControlChar) {
+          isSimple = false;
+        } else if (escaped && !isControlChar) {
+          const std::string error =
+              "Escaping the character "s + c +
+              " is not allowed in QLever's regex filters. (Regex was " +
+              f._rhs +
+              ") Please note that "
+              "there are two levels of Escaping in place here: One for Sparql "
+              "and one for the regex engine";
+          throw ParseException(error);
         }
         escaped = false;
       }
