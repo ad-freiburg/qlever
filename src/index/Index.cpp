@@ -1396,6 +1396,9 @@ void Index::readConfiguration() {
 // ___________________________________________________________________________
 string Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
   auto& spo = *triplePtr;
+  for (auto& el : spo) {
+    el = _vocab.getLocaleManager().normalizeUtf8(el);
+  }
   size_t upperBound = 3;
   string langtag;
   if (ad_utility::isXsdValue(spo[2])) {
