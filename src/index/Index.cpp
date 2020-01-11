@@ -235,8 +235,9 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   VocabularyMerger::VocMergeRes mergeRes;
   {
     VocabularyMerger v;
+    auto identicalPred = [c = _vocab.getCaseComparator()](const auto& a, const auto& b) { return c(a, b, decltype(c)::Level::IDENTICAL);};
     mergeRes =
-        v.mergeVocabulary(_onDiskBase, numFiles, _vocab.getCaseComparator());
+        v.mergeVocabulary(_onDiskBase, numFiles, identicalPred);
     LOG(INFO) << "Finished Merging Vocabulary.\n";
   }
   VocabularyData res;
@@ -1395,6 +1396,9 @@ void Index::readConfiguration() {
 // ___________________________________________________________________________
 string Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
   auto& spo = *triplePtr;
+  for (auto& el : spo) {
+    el = _vocab.getLocaleManager().normalizeUtf8(el);
+  }
   size_t upperBound = 3;
   string langtag;
   if (ad_utility::isXsdValue(spo[2])) {
@@ -1506,8 +1510,9 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
 
   LOG(INFO) << "writing partial vocabulary to " << partialFilename << std::endl;
   LOG(INFO) << "it contains " << items->size() << " elements\n";
+  auto identicalPred = [c = _vocab.getCaseComparator()](const auto& a, const auto& b) { return c(a, b, decltype(c)::Level::IDENTICAL);};
   fut1 = std::async(
-      [&items, partialFilename, comp = _vocab.getCaseComparator()]() {
+      [&items, partialFilename, comp = identicalPred]() {
         writePartialIdMapToBinaryFileForMerging(items, partialFilename, comp);
       });
 

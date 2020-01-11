@@ -41,6 +41,22 @@ TEST(LocaleManagerTest, Punctuation) {
   }
 }
 
+TEST(LocaleManagerTest, Normalization) {
+  // é as single codepoints
+  const char a[]  = {static_cast<char>(0xC3), static_cast<char>(0xA9), 0 };
+  // é as e + accent aigu
+  const char b[] = {'e', static_cast<char>(0xCC), static_cast<char>(0x81), 0};
+  std::string as(a);
+  std::string bs(b);
+  ASSERT_EQ(2u, as.size());
+  ASSERT_EQ(3u, bs.size());
+  LocaleManager loc;
+  auto resA = loc.normalizeUtf8(as);
+  auto resB = loc.normalizeUtf8(bs);
+  ASSERT_EQ(resA, resB);
+  ASSERT_EQ(resA, as);
+}
+
 // ______________________________________________________________________________________________
 TEST(StringSortComparatorTest, TripleComponentComparator) {
   TripleComponentComparator comp("en", "US", false);
