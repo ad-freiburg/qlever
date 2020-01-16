@@ -61,7 +61,7 @@ class TextOperationWithoutFilter : public Operation {
   virtual ad_utility::HashMap<string, size_t> getVariableColumns()
       const override;
 
-  vector<QueryExecutionTree*> getChildren() override { return {};}
+  vector<QueryExecutionTree*> getChildren() override { return {}; }
 
  private:
   const string _words;

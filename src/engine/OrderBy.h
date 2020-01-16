@@ -61,7 +61,9 @@ class OrderBy : public Operation {
     return _subtree->getVariableColumns();
   }
 
-  vector<QueryExecutionTree*> getChildren() override { return {_subtree.get()};}
+  vector<QueryExecutionTree*> getChildren() override {
+    return {_subtree.get()};
+  }
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;

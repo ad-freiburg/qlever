@@ -54,7 +54,9 @@ class Join : public Operation {
 
   virtual float getMultiplicity(size_t col) override;
 
-  vector<QueryExecutionTree*> getChildren() override { return {_left.get(), _right.get()};}
+  vector<QueryExecutionTree*> getChildren() override {
+    return {_left.get(), _right.get()};
+  }
 
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning

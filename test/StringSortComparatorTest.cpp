@@ -43,7 +43,7 @@ TEST(LocaleManagerTest, Punctuation) {
 
 TEST(LocaleManagerTest, Normalization) {
   // é as single codepoints
-  const char a[]  = {static_cast<char>(0xC3), static_cast<char>(0xA9), 0 };
+  const char a[] = {static_cast<char>(0xC3), static_cast<char>(0xA9), 0};
   // é as e + accent aigu
   const char b[] = {'e', static_cast<char>(0xCC), static_cast<char>(0x81), 0};
   std::string as(a);

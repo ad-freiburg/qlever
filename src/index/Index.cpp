@@ -235,9 +235,11 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   VocabularyMerger::VocMergeRes mergeRes;
   {
     VocabularyMerger v;
-    auto identicalPred = [c = _vocab.getCaseComparator()](const auto& a, const auto& b) { return c(a, b, decltype(c)::Level::IDENTICAL);};
-    mergeRes =
-        v.mergeVocabulary(_onDiskBase, numFiles, identicalPred);
+    auto identicalPred = [c = _vocab.getCaseComparator()](const auto& a,
+                                                          const auto& b) {
+      return c(a, b, decltype(c)::Level::IDENTICAL);
+    };
+    mergeRes = v.mergeVocabulary(_onDiskBase, numFiles, identicalPred);
     LOG(INFO) << "Finished Merging Vocabulary.\n";
   }
   VocabularyData res;
@@ -1510,11 +1512,13 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
 
   LOG(INFO) << "writing partial vocabulary to " << partialFilename << std::endl;
   LOG(INFO) << "it contains " << items->size() << " elements\n";
-  auto identicalPred = [c = _vocab.getCaseComparator()](const auto& a, const auto& b) { return c(a, b, decltype(c)::Level::IDENTICAL);};
-  fut1 = std::async(
-      [&items, partialFilename, comp = identicalPred]() {
-        writePartialIdMapToBinaryFileForMerging(items, partialFilename, comp);
-      });
+  auto identicalPred = [c = _vocab.getCaseComparator()](const auto& a,
+                                                        const auto& b) {
+    return c(a, b, decltype(c)::Level::IDENTICAL);
+  };
+  fut1 = std::async([&items, partialFilename, comp = identicalPred]() {
+    writePartialIdMapToBinaryFileForMerging(items, partialFilename, comp);
+  });
 
   if (_vocabPrefixCompressed) {
     // we also have to create the "ordinary" vocabulary order to make the

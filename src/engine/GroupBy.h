@@ -87,7 +87,9 @@ class GroupBy : public Operation {
   vector<pair<size_t, bool>> computeSortColumns(
       std::shared_ptr<QueryExecutionTree> inputTree);
 
-  vector<QueryExecutionTree*> getChildren() override { return {_subtree.get()};}
+  vector<QueryExecutionTree*> getChildren() override {
+    return {_subtree.get()};
+  }
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;

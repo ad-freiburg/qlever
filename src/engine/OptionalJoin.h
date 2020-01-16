@@ -45,7 +45,9 @@ class OptionalJoin : public Operation {
 
   virtual size_t getCostEstimate() override;
 
-  vector<QueryExecutionTree*> getChildren() override { return {_left.get(), _right.get()};}
+  vector<QueryExecutionTree*> getChildren() override {
+    return {_left.get(), _right.get()};
+  }
 
   /**
    * @brief Joins two result tables on any number of columns, inserting the

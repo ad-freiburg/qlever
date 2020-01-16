@@ -56,7 +56,9 @@ class HasPredicateScan : public Operation {
 
   const std::string& getObject() const;
 
-  vector<QueryExecutionTree*> getChildren() override { return {_subtree.get()};}
+  vector<QueryExecutionTree*> getChildren() override {
+    return {_subtree.get()};
+  }
 
   // These are made static and public mainly for easier testing
   static void computeFreeS(ResultTable* result, size_t objectId,

@@ -45,7 +45,7 @@ class DummyOperation : public Operation {
     return 1;
   }
 
-  vector<QueryExecutionTree*> getChildren() override { return {};}
+  vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   virtual bool knownEmptyResult() override { return false; }
 

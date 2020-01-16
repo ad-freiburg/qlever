@@ -55,7 +55,9 @@ class Distinct : public Operation {
 
   ad_utility::HashMap<string, size_t> getVariableColumns() const;
 
-  vector<QueryExecutionTree*> getChildren() override { return {_subtree.get()};}
+  vector<QueryExecutionTree*> getChildren() override {
+    return {_subtree.get()};
+  }
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;

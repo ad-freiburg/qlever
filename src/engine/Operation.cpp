@@ -6,16 +6,16 @@
 #include "QueryExecutionTree.h"
 
 // __________________________________________________________________________________________________________
-vector<string> Operation::collectWarnings() const{
+vector<string> Operation::collectWarnings() const {
   vector<string> res = getWarnings();
   for (auto child : getChildren()) {
     if (!child) {
       continue;
     }
     auto recursive = child->collectWarnings();
-    res.insert(res.end(), std::make_move_iterator(recursive.begin()), std::make_move_iterator(recursive.end()));
+    res.insert(res.end(), std::make_move_iterator(recursive.begin()),
+               std::make_move_iterator(recursive.end()));
   }
 
   return res;
 }
-

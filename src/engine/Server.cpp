@@ -328,7 +328,6 @@ string Server::create400HttpResponse() const {
 string Server::composeResponseJson(const ParsedQuery& query,
                                    const QueryExecutionTree& qet,
                                    size_t maxSend) const {
-
   // TODO(schnelle) we really should use a json library
   // such as https://github.com/nlohmann/json
   shared_ptr<const ResultTable> rt = qet.getResult();
@@ -345,7 +344,7 @@ string Server::composeResponseJson(const ParsedQuery& query,
   j["selected"] = query._selectedVariables;
 
   j["runtimeInformation"] = RuntimeInformation::ordered_json(
-          qet.getRootOperation()->getRuntimeInfo());
+      qet.getRootOperation()->getRuntimeInfo());
 
   {
     std::stringstream os;
@@ -364,7 +363,8 @@ string Server::composeResponseJson(const ParsedQuery& query,
     _requestProcessingTimer.stop();
   }
 
-  j["time"]["total"] = std::to_string(_requestProcessingTimer.usecs() / 1000.0) + "ms";
+  j["time"]["total"] =
+      std::to_string(_requestProcessingTimer.usecs() / 1000.0) + "ms";
   j["time"]["computeResult"] = std::to_string(compResultUsecs / 1000.0) + "ms";
 
   return j.dump(4);
