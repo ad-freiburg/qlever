@@ -45,6 +45,8 @@ class OptionalJoin : public Operation {
 
   virtual size_t getCostEstimate() override;
 
+  vector<QueryExecutionTree*> getChildren() override { return {_left.get(), _right.get()};}
+
   /**
    * @brief Joins two result tables on any number of columns, inserting the
    *        special value ID_NO_VALUE for any entries marked as optional.

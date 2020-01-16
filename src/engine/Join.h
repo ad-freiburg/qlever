@@ -54,6 +54,8 @@ class Join : public Operation {
 
   virtual float getMultiplicity(size_t col) override;
 
+  vector<QueryExecutionTree*> getChildren() override { return {_left.get(), _right.get()};}
+
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning
    * the result in dynRes. Creates a cross product for matching rows

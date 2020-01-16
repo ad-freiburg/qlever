@@ -33,6 +33,8 @@ class Values : public Operation {
 
   virtual size_t getCostEstimate() override;
 
+  vector<QueryExecutionTree*> getChildren() override { return {};}
+
  private:
   void computeMultiplicities();
   std::vector<size_t> _multiplicities;

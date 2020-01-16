@@ -55,6 +55,8 @@ class TwoColumnJoin : public Operation {
 
   virtual float getMultiplicity(size_t col) override;
 
+  vector<QueryExecutionTree*> getChildren() override { return {_left.get(), _right.get()};}
+
  private:
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
