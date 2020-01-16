@@ -183,9 +183,9 @@ void Server::process(Socket* client) {
             "Content-Disposition: attachment;filename=export.csv";
       } else if (ad_utility::getLowercase(params["action"]) == "tsv_export") {
         // TSV export
-        string response = composeResponseSepValues(pq, qet, '\t');
+        response = composeResponseSepValues(pq, qet, '\t');
         contentType =
-            "text/tsv\r\n"
+            "text/tab-separated-values\r\n"
             "Content-Disposition: attachment;filename=export.tsv";
       } else {
         // Normal case: JSON response
