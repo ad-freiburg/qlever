@@ -47,6 +47,10 @@ class Union : public Operation {
       IdTable* res, const IdTable& left, const IdTable& right,
       const std::vector<std::array<size_t, 2>>& columnOrigins);
 
+  vector<QueryExecutionTree*> getChildren() override {
+    return {_subtrees[0].get(), _subtrees[1].get()};
+  }
+
  private:
   virtual void computeResult(ResultTable* result) override;
 

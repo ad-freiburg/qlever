@@ -55,6 +55,10 @@ class Sort : public Operation {
     return _subtree->getVariableColumns();
   }
 
+  vector<QueryExecutionTree*> getChildren() override {
+    return {_subtree.get()};
+  }
+
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   size_t _sortCol;

@@ -133,6 +133,11 @@ class QueryExecutionTree {
   // to zero. Currently multiplicities are not affected
   void readFromCache();
 
+  // recursively get all warnings from descendant operations
+  vector<string> collectWarnings() const {
+    return _rootOperation->collectWarnings();
+  }
+
  private:
   QueryExecutionContext* _qec;  // No ownership
   ad_utility::HashMap<string, size_t> _variableColumnMap;
