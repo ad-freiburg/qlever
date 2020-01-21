@@ -199,7 +199,7 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
     const IdTable& data, size_t from, size_t limit,
     const vector<pair<size_t, ResultTable::ResultType>>& validIndices) const {
   shared_ptr<const ResultTable> res = getResult();
-  nlohmann::json json{std::vector<std::string>()};
+  nlohmann::json json = nlohmann::json::parse("[]");
   auto optToJson = [](const auto& opt) -> nlohmann::json {
     if (opt) {
       return opt.value();
@@ -208,6 +208,7 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
   };
 
   const auto upperBound = std::min(data.size(), limit + from);
+
   for (size_t i = from; i < upperBound; ++i) {
     json.emplace_back();
     auto& row = json.back();
@@ -235,7 +236,9 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
         case ResultTable::ResultType::FLOAT: {
           float f;
           std::memcpy(&f, &currentId, sizeof(float));
-          row.push_back(std::to_string(f));
+          std::stringstream s;
+          s << f;
+          row.push_back(s.str());
           break;
         }
         case ResultTable::ResultType::LOCAL_VOCAB: {
