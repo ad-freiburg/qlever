@@ -147,12 +147,15 @@ void Values::writeValues(IdTable* res, const Index& index,
         getWarnings().push_back("The word " + row[colIdx] +
                                 " is not part of the vocabulary.");
         numSkipped++;
+        // this goto is a continue in the outer loop. The current row was not
+        // sucessfully written, so the numActuallyWritten index is not advanced
         goto skipRow;
       }
       result(numActuallyWritten, colIdx) = id;
     }
     numActuallyWritten++;
-  skipRow:;
+  skipRow:;  // the label for the goto. Jumping to this label is basically
+             // "continue" and can be also called from the inner loop
   }
   AD_CHECK(numActuallyWritten + numSkipped == values._values.size());
   if (numSkipped) {

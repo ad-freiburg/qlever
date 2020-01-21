@@ -151,7 +151,7 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
             for requested_warning in value:
                 found = False
                 for actual_warning in result["warnings"]:
-                    if actual_warning.startswith(requested_warning):
+                    if actual_warning.find(requested_warning):
                         found = True
                         break
                 if not found:

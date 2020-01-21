@@ -4,7 +4,6 @@
 
 #include <gtest/gtest.h>
 #include "../src/index/StringSortComparator.h"
-using namespace std::literals;
 
 TEST(LocaleManagerTest, Levels) {
   using L = LocaleManager::Level;
@@ -40,20 +39,6 @@ TEST(LocaleManagerTest, Punctuation) {
     ASSERT_EQ(loc.compare(".a", "#?a", L::TERTIARY), 0);
     ASSERT_LT(loc.compare(".a", "#?a", L::QUARTERNARY), 0);
   }
-}
-
-TEST(LocaleManagerTest, Normalization) {
-  // é as single codepoints
-  std::string as = "\xc3\xa9"s;
-  // é as e + accent aigu
-  std::string bs = "e\xcc\x81"s;
-  ASSERT_EQ(2u, as.size());
-  ASSERT_EQ(3u, bs.size());
-  LocaleManager loc;
-  auto resA = loc.normalizeUtf8(as);
-  auto resB = loc.normalizeUtf8(bs);
-  ASSERT_EQ(resA, resB);
-  ASSERT_EQ(resA, as);
 }
 
 // ______________________________________________________________________________________________
