@@ -235,7 +235,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   VocabularyMerger::VocMergeRes mergeRes;
   {
     VocabularyMerger v;
-    mergeRes = v.mergeVocabulary(_onDiskBase, numFiles, _vocab.getCaseComparator());
+    mergeRes =
+        v.mergeVocabulary(_onDiskBase, numFiles, _vocab.getCaseComparator());
     LOG(INFO) << "Finished Merging Vocabulary.\n";
   }
   VocabularyData res;
@@ -1508,9 +1509,10 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
 
   LOG(INFO) << "writing partial vocabulary to " << partialFilename << std::endl;
   LOG(INFO) << "it contains " << items->size() << " elements\n";
-  fut1 = std::async([&items, partialFilename, comp = _vocab.getCaseComparator()]() {
-    writePartialIdMapToBinaryFileForMerging(items, partialFilename, comp);
-  });
+  fut1 = std::async(
+      [&items, partialFilename, comp = _vocab.getCaseComparator()]() {
+        writePartialIdMapToBinaryFileForMerging(items, partialFilename, comp);
+      });
 
   if (_vocabPrefixCompressed) {
     // we also have to create the "ordinary" vocabulary order to make the

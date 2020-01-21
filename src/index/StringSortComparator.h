@@ -340,7 +340,6 @@ class SimpleStringComparator {
     return _locManager.compare(a, b, level) < 0;
   }
 
-
   /**
    * @brief Compare a UTF-8 encoded string and a SortKey on the Primary Level
    * CAVEAT: The Level l argument IS IGNORED

@@ -347,7 +347,6 @@ string Server::composeResponseJson(const ParsedQuery& query,
       qet.getRootOperation()->getRuntimeInfo());
 
   {
-    std::stringstream os;
     size_t limit = MAX_NOF_ROWS_IN_RESULT;
     size_t offset = 0;
     if (query._limit.size() > 0) {
@@ -357,9 +356,8 @@ string Server::composeResponseJson(const ParsedQuery& query,
       offset = static_cast<size_t>(atol(query._offset.c_str()));
     }
     _requestProcessingTimer.cont();
-    qet.writeResultToStreamAsJson(os, query._selectedVariables, limit, offset,
-                                  maxSend);
-    j["res"] = json::parse(os.str());
+    j["res"] = qet.writeResultAsJson(query._selectedVariables,
+                                     std::min(limit, maxSend), offset);
     _requestProcessingTimer.stop();
   }
 
