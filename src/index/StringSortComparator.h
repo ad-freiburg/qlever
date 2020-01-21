@@ -336,9 +336,10 @@ class SimpleStringComparator {
    * @return True iff a comes before b
    */
   bool operator()(std::string_view a, std::string_view b,
-                  const Level level = Level::QUARTERNARY) const {
+                  const Level level = _defaultLevel) const {
     return _locManager.compare(a, b, level) < 0;
   }
+
 
   /**
    * @brief Compare a UTF-8 encoded string and a SortKey on the Primary Level
@@ -397,6 +398,7 @@ class SimpleStringComparator {
 
  private:
   LocaleManager _locManager;
+  static constexpr Level _defaultLevel = Level::IDENTICAL;
 };
 
 /**
@@ -470,7 +472,7 @@ class TripleComponentComparator {
    * @return false iff a comes before b in the vocabulary
    */
   bool operator()(std::string_view a, std::string_view b,
-                  const Level level = Level::QUARTERNARY) const {
+                  const Level level = _defaultLevel) const {
     return compare(a, b, level) < 0;
   }
 
@@ -497,7 +499,7 @@ class TripleComponentComparator {
   /// Compare two string_views from the Vocabulary. Return value according to
   /// std::strcmp
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
-                            const Level level = Level::QUARTERNARY) const {
+                            const Level level = _defaultLevel) const {
     auto splitA = extractComparable<SplitValNonOwning>(a, level);
     auto splitB = extractComparable<SplitValNonOwning>(b, level);
     return compare(splitA, splitB, level);
@@ -588,6 +590,7 @@ class TripleComponentComparator {
 
  private:
   LocaleManager _locManager;
+  static constexpr Level _defaultLevel = Level::IDENTICAL;
 
   /* Split a string into its components to prepare collation.
    * SplitValType = SplitVal will transform the inner string according to the
