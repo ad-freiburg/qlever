@@ -31,7 +31,11 @@ class LocaleManager {
     SECONDARY = 1,
     TERTIARY = 2,
     QUARTERNARY = 3,
-    IDENTICAL = 4
+    IDENTICAL = 4,
+    TOTAL =
+        5  // if the identical level returns equal, we take the language  tag
+           // into account and then the result by strcmp. that way two strings
+           // that have a different byte representation never compare equal
   };
 
   /**
@@ -44,6 +48,11 @@ class LocaleManager {
     explicit SortKey(std::string_view contents) : _content(contents) {}
     [[nodiscard]] const std::string& get() const { return _content; }
     std::string& get() { return _content; }
+
+    // compare according to the byte value
+    [[nodiscard]] int compare(const SortKey& rhs) const {
+      return _content.compare(rhs._content);
+    }
 
    private:
     std::string _content;
@@ -150,10 +159,16 @@ class LocaleManager {
     sz = col.getSortKey(utf16, reinterpret_cast<uint8_t*>(res.data()),
                         res.size());
     AD_CHECK(sz == static_cast<decltype(sz)>(
-                       res.size()));  // this is save by the way we obtained sz
+                       res.size()))  // this is save by the way we obtained sz
     // since this is a c-api we still have a trailing '\0'. Trimming this is
     // necessary for the prefix range to work correct.
     res.resize(res.size() - 1);
+    if (level == Level::TOTAL) {
+      // on the total Level, also concatenate with the actual bytes.
+      // might be a waste of space, but is only possibly used while building the
+      // index.
+      res += s;
+    }
     return finalRes;
   }
 
@@ -196,7 +211,7 @@ class LocaleManager {
     int32_t i = 0;
     for (i = 0; i < length && numCodepoints < prefixLength;) {
       UChar32 c;
-      U8_NEXT(s, i, length, c);
+      U8_NEXT(s, i, length, c)
       if (c >= 0) {
         ++numCodepoints;
       } else {
@@ -215,7 +230,7 @@ class LocaleManager {
    * @param input The String to be normalized. Must be UTF-8 encoded
    * @return The NFC canonical form of NFC in UTF-8 encoding.
    */
-  std::string normalizeUtf8(std::string_view input) const {
+  [[nodiscard]] std::string normalizeUtf8(std::string_view input) const {
     std::string res;
     icu::StringByteSink<std::string> sink(&res);
     UErrorCode err = U_ZERO_ERROR;
@@ -229,13 +244,14 @@ class LocaleManager {
   /* One collator for each collation Level to make this class threadsafe.
    * Needed because setting the collation level and comparing strings are 2
    * different steps in icu. */
-  std::unique_ptr<icu::Collator> _collator[5];
+  std::unique_ptr<icu::Collator> _collator[6];
   UColAttributeValue _ignorePunctuationStatus =
       UCOL_NON_IGNORABLE;  // how to sort punctuations etc.
 
-  const icu::Normalizer2*
-      _normalizer;  // actually locale-independent but useful to be placed here
-                    // since it wraps ICU
+  const icu::Normalizer2* _normalizer =
+      nullptr;  // actually locale-independent but useful to be placed here
+                // since it wraps ICU. Initialized by the setupCollators()
+                // method
 
   // raise an exception if the error code holds an error.
   static void raise(const UErrorCode& err) {
@@ -261,6 +277,10 @@ class LocaleManager {
     _collator[static_cast<uint8_t>(Level::QUARTERNARY)]->setStrength(
         icu::Collator::QUATERNARY);
     _collator[static_cast<uint8_t>(Level::IDENTICAL)]->setStrength(
+        icu::Collator::IDENTICAL);
+    // as far as the locale is concerned, the total and the identical level are
+    // equivalent.
+    _collator[static_cast<uint8_t>(Level::TOTAL)]->setStrength(
         icu::Collator::IDENTICAL);
 
     // also setup the normalizer
@@ -307,7 +327,7 @@ class LocaleManager {
 
 /**
  * @brief This class compares strings according to proper Unicode collation,
- * e.g. Strings from the text index vocabulary To Compare components of RDFS
+ * e.g. Strings from the text index vocabulary. To Compare components of RDFS
  * triples use the TripleComponentComparator defined below
  */
 class SimpleStringComparator {
@@ -336,8 +356,21 @@ class SimpleStringComparator {
    * @return True iff a comes before b
    */
   bool operator()(std::string_view a, std::string_view b,
-                  const Level level = _defaultLevel) const {
-    return _locManager.compare(a, b, level) < 0;
+                  const Level level = Level::QUARTERNARY) const {
+    return compare(a, b, level) < 0;
+  }
+
+  /**
+   * @brief compare the strings given the sortLevel
+   * @return the same returning convention as std::strcmp
+   */
+  [[nodiscard]] int compare(std::string_view a, std::string_view b,
+                            const Level level = Level::QUARTERNARY) const {
+    auto cmpRes = _locManager.compare(a, b, level);
+    if (cmpRes != 0 || level != Level::TOTAL) {
+      return cmpRes;
+    }
+    return a.compare(b) < 0;
   }
 
   /**
@@ -379,7 +412,7 @@ class SimpleStringComparator {
    */
   [[nodiscard]] LocaleManager::SortKey transformToFirstPossibleBiggerValue(
       std::string_view s, const Level level) const {
-    AD_CHECK(level == Level::PRIMARY);
+    AD_CHECK(level == Level::PRIMARY)
     auto transformed = _locManager.getSortKey(s, Level::PRIMARY);
     unsigned char last = transformed.get().back();
     if (last < std::numeric_limits<unsigned char>::max()) {
@@ -397,7 +430,6 @@ class SimpleStringComparator {
 
  private:
   LocaleManager _locManager;
-  static constexpr Level _defaultLevel = Level::IDENTICAL;
 };
 
 /**
@@ -471,7 +503,7 @@ class TripleComponentComparator {
    * @return false iff a comes before b in the vocabulary
    */
   bool operator()(std::string_view a, std::string_view b,
-                  const Level level = _defaultLevel) const {
+                  const Level level = Level::QUARTERNARY) const {
     return compare(a, b, level) < 0;
   }
 
@@ -498,10 +530,13 @@ class TripleComponentComparator {
   /// Compare two string_views from the Vocabulary. Return value according to
   /// std::strcmp
   [[nodiscard]] int compare(std::string_view a, std::string_view b,
-                            const Level level = _defaultLevel) const {
+                            const Level level = Level::QUARTERNARY) const {
     auto splitA = extractComparable<SplitValNonOwning>(a, level);
     auto splitB = extractComparable<SplitValNonOwning>(b, level);
-    return compare(splitA, splitB, level);
+    // We have to have a total ordering of unique elements in the vocabulary,
+    // so if they compare equal according to the locale, use strcmp
+    auto cmp = compare(splitA, splitB, level);
+    return cmp;
   }
 
   /**
@@ -533,11 +568,18 @@ class TripleComponentComparator {
             // this correctly dispatches between SortKeys (already transformed)
             // and string_views (not-transformed, perform unicode collation)
         _locManager.compare(a.transformedVal, b.transformedVal, level);
-        res != 0) {
+        res != 0 || level != Level::TOTAL) {
       return res;  // actual value differs
     }
-    return a.langtag.compare(
-        b.langtag);  // if everything else matches, we sort by the langtag
+
+    // if everything else matches and we are on the TOTAL level, we sort by the
+    // langtag
+    if (int res = a.langtag.compare(b.langtag); res != 0) {
+      return res;
+    }
+
+    // TOTAL level and even the langtags match, sort by bytes
+    return a.transformedVal.compare(b.transformedVal);
   }
 
   /**
@@ -559,7 +601,7 @@ class TripleComponentComparator {
    */
   [[nodiscard]] SplitVal transformToFirstPossibleBiggerValue(
       std::string_view s, const Level level) const {
-    AD_CHECK(level == Level::PRIMARY);
+    AD_CHECK(level == Level::PRIMARY)
     auto transformed = extractAndTransformComparable(s, Level::PRIMARY);
     unsigned char last = transformed.transformedVal.get().back();
     if (last < std::numeric_limits<unsigned char>::max()) {
@@ -583,13 +625,17 @@ class TripleComponentComparator {
    * @param input The String to be normalized. Must be UTF-8 encoded
    * @return The NFC canonical form of NFC in UTF-8 encoding.
    */
-  std::string normalizeUtf8(std::string_view sv) const {
+  [[nodiscard]] std::string normalizeUtf8(std::string_view sv) const {
     return _locManager.normalizeUtf8(sv);
   }
 
+  /// handle to the default collation level
+  Level& defaultLevel() { return _defaultLevel; }
+  [[nodiscard]] const Level& defaultLevel() const { return _defaultLevel; }
+
  private:
   LocaleManager _locManager;
-  static constexpr Level _defaultLevel = Level::IDENTICAL;
+  Level _defaultLevel = Level::IDENTICAL;
 
   /* Split a string into its components to prepare collation.
    * SplitValType = SplitVal will transform the inner string according to the
@@ -601,7 +647,9 @@ class TripleComponentComparator {
     std::string_view res = a;
     const char first = a.empty() ? char(0) : a[0];
     std::string_view langtag;
-    if (ad_utility::startsWith(res, "\"")) {
+    if (ad_utility::startsWith(res, "\"") ||
+        ad_utility::startsWith(res,
+                               std::string{EXTERNALIZED_LITERALS_PREFIX})) {
       // only remove the first character in case of literals that always start
       // with a quotation mark. For all other types we need this. <TODO> rework
       // the vocabulary's data type to remove ALL of those hacks

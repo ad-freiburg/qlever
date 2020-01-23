@@ -144,7 +144,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buff
   std::vector<std::pair<size_t, std::pair<size_t, size_t>>> writeBuf;
   writeBuf.reserve(bufSize);
   // avoid duplicates
-  for (const auto& top : buffer) {
+  for (auto& top : buffer) {
     if (top._value != _lastWritten) {
       _lastWritten = top._value;
 
@@ -153,11 +153,24 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buff
       // idVecs to have a more useful external access pattern.
 
       // write the new word to the vocabulary
-      if (top._value < EXTERNALIZED_LITERALS_PREFIX) {
-        _outfile << top._value << '\n';
+      if (_lastWritten < EXTERNALIZED_LITERALS_PREFIX) {
+        _outfile << _lastWritten << '\n';
       } else {
         // we have to strip the externalization character again
-        _outfileExternal << top._value.substr(1) << '\n';
+        auto& c = _lastWritten[0];
+        switch (c) {
+          case EXTERNALIZED_LITERALS_PREFIX_CHAR:
+            c = '"';
+            break;
+          case EXTERNALIZED_ENTITIES_PREFIX_CHAR:
+            c = '<';
+            break;
+          default:
+            LOG(ERROR) << "Illegal Externalization character met in vocabulary merging. This "
+                          "should never happen\n";
+            AD_CHECK(false)
+        }
+        _outfileExternal << _lastWritten << '\n';
       }
 
       // write id to corresponding vec

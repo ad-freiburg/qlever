@@ -235,8 +235,12 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   VocabularyMerger::VocMergeRes mergeRes;
   {
     VocabularyMerger v;
-    mergeRes =
-        v.mergeVocabulary(_onDiskBase, numFiles, _vocab.getCaseComparator());
+    auto sortPred = [cmp = &(_vocab.getCaseComparator())](std::string_view a,
+                                                          std::string_view b) {
+      return (*cmp)(a, b, decltype(_vocab)::SortLevel::TOTAL);
+    };
+
+    mergeRes = v.mergeVocabulary(_onDiskBase, numFiles, sortPred);
     LOG(INFO) << "Finished Merging Vocabulary.\n";
   }
   VocabularyData res;
@@ -1409,7 +1413,12 @@ string Index::tripleToInternalRepresentation(array<string, 3>* triplePtr) {
 
   for (size_t k = 0; k < upperBound; ++k) {
     if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k])) {
-      spo[k] = EXTERNALIZED_LITERALS_PREFIX + spo[k];
+      if (isLiteral(spo[k])) {
+        spo[k][0] = EXTERNALIZED_LITERALS_PREFIX_CHAR;
+      } else {
+        AD_CHECK(spo[k][0] == '<');
+        spo[k][0] = EXTERNALIZED_ENTITIES_PREFIX_CHAR;
+      }
     }
   }
   return langtag;
@@ -1421,7 +1430,7 @@ void Index::initializeVocabularySettingsBuild() {
            // values
   if (!_settingsFileName.empty()) {
     std::ifstream f(_settingsFileName);
-    AD_CHECK(f.is_open());
+    AD_CHECK(f.is_open())
     f >> j;
   }
 
@@ -1509,10 +1518,14 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
 
   LOG(INFO) << "writing partial vocabulary to " << partialFilename << std::endl;
   LOG(INFO) << "it contains " << items->size() << " elements\n";
-  fut1 = std::async(
-      [&items, partialFilename, comp = _vocab.getCaseComparator()]() {
-        writePartialIdMapToBinaryFileForMerging(items, partialFilename, comp);
-      });
+  auto sortPred = [cmp = &(_vocab.getCaseComparator())](std::string_view a,
+                                                        std::string_view b) {
+    return (*cmp)(a, b, decltype(_vocab)::SortLevel::TOTAL);
+  };
+
+  fut1 = std::async([&items, partialFilename, comp = sortPred]() {
+    writePartialIdMapToBinaryFileForMerging(items, partialFilename, comp);
+  });
 
   if (_vocabPrefixCompressed) {
     // we also have to create the "ordinary" vocabulary order to make the
@@ -1525,7 +1538,7 @@ pair<std::future<void>, std::future<void>> Index::writeNextPartialVocabulary(
     LOG(INFO) << "it contains " << items->size() << " elements\n";
     fut2 = std::async([&items, partialTmpFilename]() {
       writePartialIdMapToBinaryFileForMerging(items, partialTmpFilename,
-                                              std::less<std::string>());
+                                              std::less<>());
     });
   }
   return {std::move(fut1), std::move(fut2)};

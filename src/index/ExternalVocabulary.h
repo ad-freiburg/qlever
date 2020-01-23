@@ -8,6 +8,7 @@
 #include <vector>
 #include "../global/Id.h"
 #include "../util/File.h"
+#include "StringSortComparator.h"
 
 using std::string;
 using std::vector;
@@ -20,6 +21,7 @@ using std::vector;
 //! startofOffsets + i * sizeof(off_t) and then read the strings in between.
 //! To obtain an ID for a term, do a binary search where each random access
 //! uses the steps described above.
+template <class StringComparator>
 class ExternalVocabulary {
  public:
   void buildFromVector(const vector<string>& v, const string& fileName);
@@ -46,10 +48,13 @@ class ExternalVocabulary {
     return *id < _size && (*this)[*id] == word;
   }
 
+  StringComparator& getCaseComparator() { return _caseComparator; }
+
  private:
   mutable ad_utility::File _file;
   off_t _startOfOffsets;
   size_t _size = 0;
+  StringComparator _caseComparator;
 
   Id binarySearchInVocab(const string& word) const;
 };
