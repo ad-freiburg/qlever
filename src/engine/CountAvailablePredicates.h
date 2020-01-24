@@ -55,10 +55,6 @@ class CountAvailablePredicates : public Operation {
 
   virtual vector<size_t> resultSortedOn() const override;
 
-  vector<QueryExecutionTree*> getChildren() override {
-    return {_subtree.get()};
-  }
-
   ad_utility::HashMap<string, size_t> getVariableColumns() const;
 
   virtual void setTextLimit(size_t limit) override {

@@ -66,10 +66,6 @@ class TransitivePath : public Operation {
 
   virtual size_t getCostEstimate() override;
 
-  vector<QueryExecutionTree*> getChildren() override {
-    return {_subtree.get()};
-  }
-
   // The method is declared here to make it unit testable
 
   template <int SUB_WIDTH, bool leftIsVar, bool rightIsVar>

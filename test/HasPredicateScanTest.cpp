@@ -45,8 +45,6 @@ class DummyOperation : public Operation {
     return 1;
   }
 
-  vector<QueryExecutionTree*> getChildren() override { return {}; }
-
   virtual bool knownEmptyResult() override { return false; }
 
   virtual ad_utility::HashMap<string, size_t> getVariableColumns()

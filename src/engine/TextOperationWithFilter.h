@@ -60,10 +60,6 @@ class TextOperationWithFilter : public Operation {
             _executionContext->getIndex().getSizeEstimate(_words) == 0);
   }
 
-  vector<QueryExecutionTree*> getChildren() override {
-    return {_filterResult.get()};
-  }
-
   virtual float getMultiplicity(size_t col) override;
 
   virtual ad_utility::HashMap<string, size_t> getVariableColumns()

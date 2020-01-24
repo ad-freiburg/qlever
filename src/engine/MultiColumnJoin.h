@@ -41,10 +41,6 @@ class MultiColumnJoin : public Operation {
 
   virtual size_t getCostEstimate() override;
 
-  vector<QueryExecutionTree*> getChildren() override {
-    return {_left.get(), _right.get()};
-  }
-
   /**
    * @brief Joins a and b using the column defined int joinColumns, storing the
    *        result in result. R should have width resultWidth (or be a vector

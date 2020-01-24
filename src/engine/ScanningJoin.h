@@ -48,8 +48,6 @@ class ScanningJoin : public IndexScan {
     return _subtree->knownEmptyResult() || IndexScan::knownEmptyResult();
   }
 
-  vector<QueryExecutionTree*> getChildren() override { return {_subtree}; }
-
  private:
   QueryExecutionTree* _subtree;
   size_t _subtreeJoinCol;

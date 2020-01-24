@@ -147,18 +147,6 @@ def test_check(check_dict: Dict[str, Any], result: Dict[str, Any]) -> bool:
                 eprint("contains_row check failed:\n" +
                        "\tdid not find %r" % gold_row)
                 return False
-        elif check == 'contains_warning':
-            for requested_warning in value:
-                found = False
-                for actual_warning in result["warnings"]:
-                    if actual_warning.startswith(requested_warning):
-                        found = True
-                        break
-                if not found:
-                    eprint("contains_warning check failed:\n" +
-                           "\tdid not find %r" % requested_warning)
-                    eprint("actual warnings:", result["warnings"])
-                    return False
         elif check.startswith('order_'):
             try:
                 direction, var = value['dir'], value['var']
