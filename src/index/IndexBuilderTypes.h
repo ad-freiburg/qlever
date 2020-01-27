@@ -9,14 +9,22 @@
 #include "../util/HashMap.h"
 #include "../util/TupleHelpers.h"
 #include "./ConstantsIndexCreation.h"
+#include "./StringSortComparator.h"
 
 #ifndef QLEVER_INDEXBUILDERTYPES_H
 #define QLEVER_INDEXBUILDERTYPES_H
 
 using Triple = std::array<std::string, 3>;
 
-using ItemMap = ad_utility::HashMap<std::string, Id>;
+/// named value type for the ItemMap
+struct IdAndSplitVal {
+  Id m_id;
+  TripleComponentComparator::SplitVal m_splitVal;
+};
+
+using ItemMap = ad_utility::HashMap<std::string, IdAndSplitVal>;
 using ItemMapArray = std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS>;
+using ItemVec = std::vector<std::pair<std::string, IdAndSplitVal>>;
 
 /**
  * Manage a HashMap of string->Id to create unique Ids for strings.
@@ -25,7 +33,7 @@ using ItemMapArray = std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS>;
  */
 struct ItemMapManager {
   /// Construct by assigning the minimum Id that shall be returned by the map
-  explicit ItemMapManager(Id minId) : _map(), _minId(minId) {}
+  explicit ItemMapManager(Id minId, const TripleComponentComparator* cmp) : _map(), _minId(minId), m_comp(cmp) {}
   /// Minimum Id is 0
   ItemMapManager() = default;
 
@@ -38,10 +46,10 @@ struct ItemMapManager {
   Id assignNextId(const string& key) {
     if (!_map.count(key)) {
       Id res = _map.size() + _minId;
-      _map[key] = res;
+      _map[key] = {res, m_comp->extractAndTransformComparable(key, TripleComponentComparator::Level::IDENTICAL)};
       return res;
     } else {
-      return _map[key];
+      return _map[key].m_id;
     }
   }
 
@@ -51,6 +59,7 @@ struct ItemMapManager {
   }
   ItemMap _map;
   Id _minId = 0;
+  const TripleComponentComparator* m_comp = nullptr;
 };
 
 /// Combines a triple (three strings) together with the (possibly empty)
@@ -90,11 +99,11 @@ struct LangtagAndTriple {
  */
 template <size_t Parallelism>
 auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
-                     size_t maxNumberOfTriples) {
+                     size_t maxNumberOfTriples, const TripleComponentComparator* comp) {
   // that way the different ids won't interfere
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < Parallelism; ++j) {
-    itemArray[j] = ItemMapManager(j * 100 * maxNumberOfTriples);
+    itemArray[j] = ItemMapManager(j * 100 * maxNumberOfTriples, comp);
     itemArray[j].assignNextId(
         LANGUAGE_PREDICATE);  // not really needed here, but also not harmful
                               // and needed to make some completely unrelated

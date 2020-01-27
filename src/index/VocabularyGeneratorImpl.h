@@ -216,7 +216,7 @@ void VocabularyMerger::doActualWrite(
 }
 
 // ____________________________________________________________________________________________________________
-ad_utility::HashMap<Id, Id> createInternalMapping(std::vector<std::pair<string, Id>>* elsPtr) {
+ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
   auto& els = *elsPtr;
   ad_utility::HashMap<Id, Id> res;
   bool first = true;
@@ -226,11 +226,15 @@ ad_utility::HashMap<Id, Id> createInternalMapping(std::vector<std::pair<string, 
     if (!first && lastWord != el.first) {
       nextWordId++;
       lastWord = el.first;
+      if (nextWordId % 300000 == 0) {
+        LOG(INFO) << "Updated mapping for # words: " << nextWordId << std::endl;
+      }
     }
-    AD_CHECK(!res.count(el.second));
-    res[el.second] = nextWordId;
-    el.second = nextWordId;
+    AD_CHECK(!res.count(el.second.m_id));
+    res[el.second.m_id] = nextWordId;
+    el.second.m_id = nextWordId;
     first = false;
+
   }
   return res;
 }
@@ -256,7 +260,7 @@ void writeMappedIdsToExtVec(const TripleVec& input, const ad_utility::HashMap<Id
 }
 
 // _________________________________________________________________________________________________________
-void writePartialVocabularyToFile(const std::vector<std::pair<string, Id>>& els,
+void writePartialVocabularyToFile(const ItemVec & els,
                                   const string& fileName) {
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
   std::ofstream out(fileName.c_str(), std::ios_base::out | std::ios_base::binary);
@@ -266,7 +270,7 @@ void writePartialVocabularyToFile(const std::vector<std::pair<string, Id>>& els,
     size_t len = word.size();
     out.write((char*)&len, sizeof(len));
     out.write(word.data(), len);
-    Id id = el.second;
+    Id id = el.second.m_id;
     out.write((char*)&id, sizeof(id));
   }
   out.close();
@@ -279,7 +283,7 @@ void writePartialIdMapToBinaryFileForMerging(std::shared_ptr<const ItemMapArray>
                                              const string& fileName, Pred comp,
                                              const bool doParallelSort) {
   LOG(INFO) << "Creating partial vocabulary from set ...\n";
-  std::vector<std::pair<string, Id>> els;
+  ItemVec els;
   size_t totalEls = std::accumulate(map->begin(), map->end(), 0,
                                     [](const auto& x, const auto& y) { return x + y.size(); });
   els.reserve(totalEls);
@@ -306,8 +310,8 @@ void writePartialIdMapToBinaryFileForMerging(std::shared_ptr<const ItemMapArray>
 }
 
 // __________________________________________________________________________________________________
-std::vector<std::pair<string, Id>> vocabMapsToVector(std::shared_ptr<const ItemMapArray> map) {
-  std::vector<std::pair<string, Id>> els;
+ItemVec vocabMapsToVector(std::shared_ptr<const ItemMapArray> map) {
+  ItemVec els;
   size_t totalEls = std::accumulate(map->begin(), map->end(), 0,
                                     [](const auto& x, const auto& y) { return x + y.size(); });
   els.reserve(totalEls);
@@ -319,19 +323,18 @@ std::vector<std::pair<string, Id>> vocabMapsToVector(std::shared_ptr<const ItemM
 
 // _______________________________________________________________________________________________________________________
 template <class StringSortComparator>
-void sortVocabVector(std::vector<std::pair<string, Id>>* vecPtr, StringSortComparator comp,
+void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
                      const bool doParallelSort) {
   auto& els = *vecPtr;
-  auto pred = [comp](const auto& p1, const auto& p2) { return comp(p1.first, p2.first); };
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {
-      __gnu_parallel::sort(begin(els), end(els), pred,
+      __gnu_parallel::sort(begin(els), end(els), comp,
                            __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
     } else {
-      std::sort(begin(els), end(els), pred);
+      std::sort(begin(els), end(els), comp);
     }
   } else {
-    std::sort(begin(els), end(els), pred);
+    std::sort(begin(els), end(els), comp);
     (void)doParallelSort;  // avoid compiler warning for unused value.
   }
 }

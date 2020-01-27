@@ -135,7 +135,7 @@ ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
  * the strings and the Ids must be unique to work correctly.
  */
 ad_utility::HashMap<Id, Id> createInternalMapping(
-    std::vector<std::pair<string, Id>>* els);
+    ItemVec * els);
 
 /**
  * @brief for each of the IdTriples in <input>: map the three Ids using the
@@ -154,7 +154,7 @@ void writeMappedIdsToExtVec(const TripleVec& input,
  * @param els The input
  * @param fileName will write to this file. If it exists it will be overwritten
  */
-void writePartialVocabularyToFile(const std::vector<std::pair<string, Id>>& els,
+void writePartialVocabularyToFile(const ItemVec & els,
                                   const string& fileName);
 
 /**
@@ -162,7 +162,7 @@ void writePartialVocabularyToFile(const std::vector<std::pair<string, Id>>& els,
  * elements from all the hashMaps into a single vector No reordering or
  * deduplication is done, so result.size() == summed size of all the hash maps
  */
-std::vector<std::pair<string, Id>> vocabMapsToVector(
+ItemVec vocabMapsToVector(
     std::shared_ptr<const ItemMapArray> map);
 
 // _____________________________________________________________________________________________________________
@@ -175,7 +175,7 @@ std::vector<std::pair<string, Id>> vocabMapsToVector(
  * parallel extension for sorting.
  */
 template <class StringSortComparator>
-void sortVocabVector(std::vector<std::pair<string, Id>>* vecPtr,
+void sortVocabVector(ItemVec * vecPtr,
                      StringSortComparator comp, bool doParallelSort);
 
 #include "VocabularyGeneratorImpl.h"
