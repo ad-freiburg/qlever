@@ -3,7 +3,6 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <absl/container/flat_hash_map.h>
 #include <array>
 #include <fstream>
 #include <google/sparse_hash_set>
@@ -24,6 +23,7 @@
 #include "../util/MmapVector.h"
 #include "./ConstantsIndexCreation.h"
 #include "./DocsDB.h"
+#include "./IndexBuilderTypes.h"
 #include "./IndexMetaData.h"
 #include "./Permutations.h"
 #include "./StxxlSortFunctors.h"
@@ -445,12 +445,6 @@ class Index {
     LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
   }
 
-  template <typename K, typename V>
-  using HashMap = absl::flat_hash_map<K, V>;
-
-  using ItemMap = absl::flat_hash_map<std::string, Id>;
-  using ItemMapArray = std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS>;
-
  private:
   string _onDiskBase;
   string _settingsFileName;
@@ -491,12 +485,6 @@ class Index {
    */
   CompactStringVector<Id, Id> _hasPredicate;
 
-  using Triple = std::array<std::string, 3>;
-  struct LangtagAndTriple {
-    std::string _langtag;
-    Triple _triple;
-  };
-
   // Create Vocabulary and directly write it to disk. Create TripleVec with all
   // the triples converted to id space. This Vec can be used for creating
   // permutations. Member _vocab will be empty after this because it is not
@@ -509,35 +497,6 @@ class Index {
   template <class Parser>
   VocabularyData passFileForVocabulary(const string& ntFile,
                                        size_t linesPerPartial);
-
-  struct ItemMapManager {
-    explicit ItemMapManager(Id minId) : _map(), _minId(minId) {
-      _map[LANGUAGE_PREDICATE] = _minId;
-    }
-    // ______________________________________________________________
-    ItemMapManager() = default;
-
-    [[nodiscard]] Id getLanguagePredicateId() const { return _minId; }
-
-    ItemMap&& moveMap() { return std::move(_map); }
-
-    // __________________________________________________
-    Id assignNextId(const string& key) {
-      if (!_map.count(key)) {
-        Id res = _map.size() + _minId;
-        _map[key] = res;
-        return res;
-      } else {
-        return _map[key];
-      }
-    }
-
-    std::array<Id, 3> assignNextId(const Index::Triple& t) {
-      return {assignNextId(t[0]), assignNextId(t[1]), assignNextId(t[2])};
-    }
-    ItemMap _map;
-    Id _minId = 0;
-  };
 
   /**
    * @brief Everything that has to be done when we have seen all the triples
@@ -562,15 +521,6 @@ class Index {
   void convertPartialToGlobalIds(TripleVec& data,
                                  const vector<size_t>& actualLinesPerPartial,
                                  size_t linesPerPartial);
-
-  // ___________________________________________________________________________
-  // TODO<joka921> this is again the unused function.
-  template <class Map>
-  static Id assignNextId(Map* mapPtr, const string& key);
-
-  // TODO<joka921> This should also be unused
-  template <class Map>
-  static std::array<Id, 3> assignNextId(Map* m, const Index::Triple& t);
 
   size_t passContextFileForVocabulary(const string& contextFile);
 

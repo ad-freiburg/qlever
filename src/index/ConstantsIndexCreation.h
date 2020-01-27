@@ -55,5 +55,8 @@ static const std::string PARTIAL_MMAP_IDS = ".partial-ids-mmap";
 static const std::string TMP_BASENAME_COMPRESSION = ".tmp.compression_index";
 
 // _________________________________________________________________
-// TODO: Comment
+// The degree of parallelism that is used for IndexBuilding step where the
+// unique elements of the vocabulary are identified via hash maps. Typically, 4
+// is a good value. On systems with very few CPUs, a lower value might be
+// beneficial.
 constexpr size_t NUM_PARALLEL_ITEM_MAPS = 4;

@@ -2,7 +2,6 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <absl/container/flat_hash_map.h>
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -121,11 +120,10 @@ template void Index::createFromFile<TurtleMmapParser>(const string& filename);
 template <class Parser>
 VocabularyData Index::passFileForVocabulary(const string& filename,
                                             size_t linesPerPartial) {
-  Parser parser(filename);
+  auto parser = std::make_shared<Parser>(filename);
   std::unique_ptr<TripleVec> idTriples(new TripleVec());
   TripleVec::bufwriter_type writer(*idTriples);
   bool parserExhausted = false;
-  using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
 
   size_t i = 0;
   // already count the numbers of triples that will be used for the language
@@ -144,55 +142,26 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
 
     std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
-    // that way the different ids won't interfere
-    for (size_t j = 0; j < NUM_PARALLEL_ITEM_MAPS; ++j) {
-      itemArray[j] = ItemMapManager(j * 100 * linesPerPartial);
-    }
-
-    const auto itemMapLamdaCreator = [&itemArray](const size_t idx) {
-      return [itPtr = &(itemArray[idx])](LangtagAndTriple&& lt) {
-        OptionalIds res;
-        res[0] = itPtr->assignNextId(lt._triple);
-        if (!lt._langtag.empty()) {
-          auto langTagId = itPtr->assignNextId(
-              ad_utility::convertLangtagToEntityUri(lt._langtag));
-          auto langTaggedPredId =
-              itPtr->assignNextId(ad_utility::convertToLanguageTaggedPredicate(
-                  lt._triple[1], lt._langtag));
-          auto& spoIds = *(res[0]);
-          res[1].emplace(array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
-          res[2].emplace(array<Id, 3>{
-              spoIds[2], itPtr->getLanguagePredicateId(), langTagId});
-        }
-        return res;
-      };
-    };
-
-    auto itemMapLambdaTuple =
-        ad_tuple_helpers::setupTupleFromCallable<NUM_PARALLEL_ITEM_MAPS>(
-            itemMapLamdaCreator);
-
     {
       auto p = ad_pipeline::setupParallelPipeline<1, NUM_PARALLEL_ITEM_MAPS>(
           _parserBatchSize,
-          [parserPtr = &parser, i = 0ull, linesPerPartial,
-           &parserExhausted]() mutable -> std::optional<Triple> {
-            if (i >= linesPerPartial) {
-              return std::nullopt;
-            }
-            Triple t;
-            if (parserPtr->getLine(t)) {
-              i++;
-              return std::optional(std::move(t));
-            } else {
-              parserExhausted = true;
-              return std::nullopt;
-            }
-          },
+          // when called, returns an optional to the next triple. If
+          // <linexPerPartial> triples were parsed, return std::nullopt. when
+          // the parser is unable to deliver triples, set parserExhausted to
+          // true and return std::nullopt. this is exactly the behavior we need,
+          // as a first step in the parallel Pipeline.
+          ParserBatcher(parser, linesPerPartial,
+                        [&]() { parserExhausted = true; }),
+          // convert each triple to the internal representation (e.g. special
+          // values for Numbers, externalized literals, etc.)
           [this](Triple&& t) {
             return tripleToInternalRepresentation(std::move(t));
           },
-          std::move(itemMapLambdaTuple));
+
+          // get the Ids for the original triple and the possibly added language
+          // Tag triples using the provided HashMaps via itemArray. See
+          // documentation of the function for more details
+          getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(&itemArray, linesPerPartial));
 
       while (auto opt = p.getNextValue()) {
         i++;
@@ -222,7 +191,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     }
     std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS> convertedMaps;
     for (size_t j = 0; j < NUM_PARALLEL_ITEM_MAPS; ++j) {
-      convertedMaps[j] = std::move(itemArray[j].moveMap());
+      convertedMaps[j] = std::move(itemArray[j]).moveMap();
     }
     auto oldItemPtr =
         std::make_shared<const std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS>>(
@@ -247,22 +216,21 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     {
       VocabularyMerger m;
       m.mergeVocabulary(_onDiskBase + TMP_BASENAME_COMPRESSION, numFiles,
-                        std::less<std::string>());
+                        std::less<>());
       LOG(INFO) << "Finished merging additional Vocabulary.";
     }
   }
 
   LOG(INFO) << "Merging vocabulary\n";
-  VocabularyMerger::VocMergeRes mergeRes;
-  {
+  VocabularyMerger::VocMergeRes mergeRes = [&]() {
     VocabularyMerger v;
-    auto identicalPred = [c = _vocab.getCaseComparator()](const auto& a,
-                                                          const auto& b) {
-      return c(a, b, decltype(c)::Level::IDENTICAL);
+    const auto identicalPred = [& c = _vocab.getCaseComparator()](
+                                   const auto& a, const auto& b) {
+      return c(a, b, decltype(_vocab)::SortLevel::IDENTICAL);
     };
-    mergeRes = v.mergeVocabulary(_onDiskBase, numFiles, identicalPred);
-    LOG(INFO) << "Finished Merging Vocabulary.\n";
-  }
+    return v.mergeVocabulary(_onDiskBase, numFiles, identicalPred);
+  }();
+  LOG(INFO) << "Finished Merging Vocabulary.\n";
   VocabularyData res;
   res.nofWords = mergeRes._numWordsTotal;
   res.langPredLowerBound = mergeRes._langPredLowerBound;
@@ -271,15 +239,15 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   res.idTriples = std::move(idTriples);
   res.actualPartialSizes = std::move(actualPartialSizes);
 
-  for (size_t i = 0; i < numFiles; ++i) {
+  for (size_t n = 0; n < numFiles; ++n) {
     string partialFilename =
-        _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(i);
+        _onDiskBase + PARTIAL_VOCAB_FILE_NAME + std::to_string(n);
     deleteTemporaryFile(partialFilename);
-  }
-  if (_vocabPrefixCompressed) {
-    string partialFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +
-                             PARTIAL_VOCAB_FILE_NAME + std::to_string(i);
-    deleteTemporaryFile(partialFilename);
+    if (_vocabPrefixCompressed) {
+      partialFilename = _onDiskBase + TMP_BASENAME_COMPRESSION +
+                        PARTIAL_VOCAB_FILE_NAME + std::to_string(n);
+      deleteTemporaryFile(partialFilename);
+    }
   }
 
   return res;
@@ -1417,8 +1385,7 @@ void Index::readConfiguration() {
 }
 
 // ___________________________________________________________________________
-Index::LangtagAndTriple Index::tripleToInternalRepresentation(
-    Index::Triple&& tripleIn) {
+LangtagAndTriple Index::tripleToInternalRepresentation(Triple&& tripleIn) {
   LangtagAndTriple res{"", std::move(tripleIn)};
   auto& spo = res._triple;
   size_t upperBound = 3;
@@ -1519,27 +1486,6 @@ void Index::initializeVocabularySettingsBuild() {
   }
 }
 
-// ____
-// TODO<joka921: are those unused now and can be
-// removed?>_______________________________________________________________________
-template <class Map>
-Id Index::assignNextId(Map* mapPtr, const string& key) {
-  Map& map = *mapPtr;
-  if (!map.count(key)) {
-    Id res = map.size();
-    map[key] = map.size();
-    return res;
-  } else {
-    return map[key];
-  }
-}
-
-// ___________________________________________________________________________
-template <class Map>
-std::array<Id, 3> Index::assignNextId(Map* m, const Index::Triple& t) {
-  return {assignNextId(m, t[0]), assignNextId(m, t[1]), assignNextId(m, t[2])};
-}
-
 // ___________________________________________________________________________
 std::future<void> Index::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
@@ -1561,9 +1507,9 @@ std::future<void> Index::writeNextPartialVocabulary(
                  vocab = &_vocab, partialFilename, partialCompressionFilename,
                  vocabPrefixCompressed = _vocabPrefixCompressed]() {
     auto vec = vocabMapsToVector(items);
-    auto identicalPred = [c = vocab->getCaseComparator()](const auto& a,
-                                                          const auto& b) {
-      return c(a, b, decltype(c)::Level::IDENTICAL);
+    const auto identicalPred = [& c = vocab->getCaseComparator()](
+                                   const auto& a, const auto& b) {
+      return c(a, b, decltype(_vocab)::SortLevel::IDENTICAL);
     };
     sortVocabVector(&vec, identicalPred, false);
     auto mapping = createInternalMapping(&vec);
@@ -1574,7 +1520,7 @@ std::future<void> Index::writeNextPartialVocabulary(
     writeMappedIdsToExtVec(*localIds, mapping, globalWritePtr);
     writePartialVocabularyToFile(vec, partialFilename);
     if (vocabPrefixCompressed) {
-      sortVocabVector(&vec, std::less<std::string>(), false);
+      sortVocabVector(&vec, std::less<>(), false);
       writePartialVocabularyToFile(vec, partialCompressionFilename);
     }
     LOG(INFO) << "Finished writing the partial vocabulary" << std::endl;

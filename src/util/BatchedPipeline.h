@@ -16,19 +16,21 @@ using namespace ad_tuple_helpers;
 
 namespace detail {
 
-/* This is used as a return value for the produceBatch calls of our pipeline
- * elements If the first element (the bool) is false this means that our
+/* This is used as a return value for the pickupBatch calls of our pipeline
+ * elements If the  is false this means that our
  * pipeline is exhausted and there is no point in asking it for further batches.
  */
 template <class T>
-struct VecT {
-  bool _isLast;             // was this the last (and possibly incomplete) batch
-  std::vector<T> _content;  // the actual payload
+struct Batch {
+  bool m_isPipelineGood;  // if set to false, this was the last (and possibly
+                          // incomplete) batch, else there might be more content
+                          // waiting in the pipeline.
+  std::vector<T> m_content;  // the actual payload
 };
 
 /*
  * The Batcher class takes a Creator (A Functor that returns a std::optional<T>
- * and will call the creator and store the results. A call to produceBatch will
+ * and will call the creator and store the results. A call to pickupBatch will
  * return a batch of these results and trigger the concurrent calculation of the
  * next batch. Once the creator returns std::nullopt, the Batcher will stop
  * calling it. The next call to produce batch will then set its first element
@@ -57,11 +59,11 @@ class Batcher {
     orderNextBatch();
   }
 
-  /* Get the next batch of values. A batch exactly batchSize values
-   * unless this was the last batch. Then result.first will be false
+  /* Get the next batch of values. A batch contains exactly batchSize values
+   * unless this was the last batch. Then result.m_isPipelineGood will be false
    * and the batch might have < batchSize elements
    */
-  detail::VecT<ValueT> produceBatch() {
+  Batch<ValueT> pickupBatch() {
     try {
       auto res = _fut.get();
       orderNextBatch();
@@ -73,7 +75,7 @@ class Batcher {
     }
   }
 
-  // get the accumulated time that calls to produceBatch had to block until they
+  // get the accumulated time that calls to pickupBatch had to block until they
   // could return the next batch
   std::vector<off_t> getWaitingTime() const { return {_timer->msecs()}; }
 
@@ -85,7 +87,7 @@ class Batcher {
   std::unique_ptr<Creator> _creator;
   std::unique_ptr<ad_utility::Timer> _timer =
       std::make_unique<ad_utility::Timer>();
-  std::future<detail::VecT<ValueT>> _fut;
+  std::future<detail::Batch<ValueT>> _fut;
 
   // start assembling the next batch in parallel
   void orderNextBatch() {
@@ -99,24 +101,24 @@ class Batcher {
                    });
   }
 
-  /* retrieve values from the creator and store them in the VecT result.
+  /* retrieve values from the creator and store them in the Batch result.
    * Once we have reached batchSize Elements or the creator returns std::nullopt
    * we return. In the latter case, result.first is false
    */
-  static detail::VecT<ValueT> produceBatchInternal(size_t batchSize,
-                                                   ad_utility::Timer* timer,
-                                                   Creator* creator) {
+  static detail::Batch<ValueT> produceBatchInternal(size_t batchSize,
+                                                    ad_utility::Timer* timer,
+                                                    Creator* creator) {
     timer->cont();
-    detail::VecT<ValueT> res;
-    res._isLast = true;
-    res._content.reserve(batchSize);
+    detail::Batch<ValueT> res;
+    res.m_isPipelineGood = true;
+    res.m_content.reserve(batchSize);
     for (size_t i = 0; i < batchSize; ++i) {
       auto opt = (*creator)();
       if (!opt) {
-        res._isLast = false;
+        res.m_isPipelineGood = false;
         return res;
       }
-      res._content.push_back(std::move(opt.value()));
+      res.m_content.push_back(std::move(opt.value()));
     }
     timer->stop();
     return res;
@@ -125,9 +127,9 @@ class Batcher {
 
 /*
  * This class represents an intermediate step of the Pipeline.
- * It gets batches from the Producer and Applies the Transformer(s) (see below)
- * to each element of the batch and returns the produced batch via the
- * produceBatch() method. Each time a transformed batch is returned, we issue
+ * It gets batches from the PreviousStage and Applies the Transformer(s) (see
+ * below) to each element of the batch and returns the produced batch via the
+ * pickupBatch() method. Each time a transformed batch is returned, we issue
  * transformation of the next batch in a concurrent thread
  *
  * Concerning the Parallelism, there are two cases
@@ -142,7 +144,7 @@ class Batcher {
  * FirstTransformer determines the produced Value type and the return types of
  * the remaining transformers must be implicitly convertible to this type.
  */
-template <size_t Parallelism, class Producer, class FirstTransformer,
+template <size_t Parallelism, class PreviousStage, class FirstTransformer,
           class... Transformers>
 class BatchedPipeline {
  public:
@@ -151,9 +153,9 @@ class BatchedPipeline {
   static_assert(sizeof...(Transformers) == 0 ||
                 sizeof...(Transformers) + 1 == Parallelism);
 
-  // the value type our producer delivers to us
+  // the value type the previous pipeline stage delivers to us
   using InT = std::decay_t<decltype(
-      std::declval<Producer&>().produceBatch()._content[0])>;
+      std::declval<PreviousStage&>().pickupBatch().m_content[0])>;
 
   // the value type this BatchedPipeline produces
   using ResT = std::invoke_result_t<FirstTransformer, InT>;
@@ -163,15 +165,15 @@ class BatchedPipeline {
    * an issue, but copying is pretty much the default for Function objects in
    * C++
    */
-  BatchedPipeline(Producer&& p, FirstTransformer t, Transformers... ts)
+  BatchedPipeline(PreviousStage&& p, FirstTransformer t, Transformers... ts)
       : _transformers(toUniquePtrTuple(t, ts...)),
         _rawTransformers(toRawPtrTuple(_transformers)),
-        _producer(std::make_unique<Producer>(std::move(p))) {
+        _previousStage(std::make_unique<PreviousStage>(std::move(p))) {
     orderNextBatch();
   }
 
   // _____________________________________________________________________
-  VecT<ResT> produceBatch() {
+  Batch<ResT> pickupBatch() {
     try {
       auto res = _fut.get();
       orderNextBatch();
@@ -185,7 +187,8 @@ class BatchedPipeline {
 
   // asynchronously prepare the next Batch in a different thread
   void orderNextBatch() {
-    auto lambda = [p = _producer.get(), batchSize = _producer->getBatchSize(),
+    auto lambda = [p = _previousStage.get(),
+                   batchSize = _previousStage->getBatchSize(),
                    t = _timer.get()](auto... transformerPtrs) {
       return std::async(
           std::launch::async, [p, batchSize, t, transformerPtrs...]() {
@@ -198,48 +201,49 @@ class BatchedPipeline {
   // for this and all previous steps of the pipeline, get the total blocking
   // time in calls to produce batch
   std::vector<off_t> getWaitingTime() const {
-    auto res = _producer->getWaitingTime();
+    auto res = _previousStage->getWaitingTime();
     res.push_back(_timer->msecs());
     return res;
   }
 
   // Return the batch size
   [[nodiscard]] size_t getBatchSize() const {
-    return _producer->getBatchSize();
+    return _previousStage->getBatchSize();
   }
 
  private:
-  /*  The actual transformation logic
-   *  is a static function to easily pass it to a std::future
-   *  takes raw pointers to the transformers and the producer, so the
-   *  ownership remains with the unique_ptrs within the class.
-   *  This implies that this class can be safely moved, even this method runs in
+  /* The actual transformation logic
+   * is a static function to easily pass it to a std::future
+   * takes raw pointers to the transformers and the previous stage, so the
+   * ownership remains with the unique_ptrs within the class.
+   * This implies that this class can be safely moved, even this method runs in
    * parallel also takes the actual batchSize of the pipeline. That way it can
    * apply the correct transformer to the correct element even for the last
    * (possibly incomplete batch)
    */
   template <typename... TransformerPtrs>
-  static VecT<ResT> produceBatchInternal(Producer* producer, size_t inBatchSize,
-                                         ad_utility::Timer* timer,
-                                         TransformerPtrs... transformers) {
-    auto inBatch = producer->produceBatch();
+  static Batch<ResT> produceBatchInternal(PreviousStage* previousStage,
+                                          size_t inBatchSize,
+                                          ad_utility::Timer* timer,
+                                          TransformerPtrs... transformers) {
+    auto inBatch = previousStage->pickupBatch();
     timer->cont();
-    VecT<ResT> result;
-    result._isLast = inBatch._isLast;
-    // currently each of the <parallelism> threads first creates its own VecT
+    Batch<ResT> result;
+    result.m_isPipelineGood = inBatch.m_isPipelineGood;
+    // currently each of the <parallelism> threads first creates its own Batch
     // and later we merge. <TODO>(joka921) Doing this in place would require
     // something like a std::vector without default construction on insert.
     const size_t batchSize = inBatchSize / Parallelism;
-    auto futures = setupParallelismImpl(batchSize, inBatch._content,
+    auto futures = setupParallelismImpl(batchSize, inBatch.m_content,
                                         std::make_index_sequence<Parallelism>{},
                                         transformers...);
     // if we had multiple threads, we have to merge the partial results in the
     // correct order.
     for (size_t i = 0; i < Parallelism; ++i) {
       auto vec = futures[i].get();
-      result._content.insert(result._content.end(),
-                             std::make_move_iterator(vec.begin()),
-                             std::make_move_iterator(vec.end()));
+      result.m_content.insert(result.m_content.end(),
+                              std::make_move_iterator(vec.begin()),
+                              std::make_move_iterator(vec.end()));
     }
     timer->stop();
     return result;
@@ -278,7 +282,7 @@ class BatchedPipeline {
    * @brief This function makes sure that each of the different transformers,
    * which possibly have different types (lambdas!) are applied to the correct
    * subbatch.
-   * @tparam InVec std::vector of the Producer's value type
+   * @tparam InVec std::vector of the PreviousStage's value type
    * @param futuresPtr pointer to one future per Transformer that will be
    * associated with the respective subbatch calculation
    * @param batchSize the correct batchSize that will also be respected for
@@ -327,8 +331,8 @@ class BatchedPipeline {
   using rawPtrTuple = toRawPtrTuple_t<uniquePtrTuple>;
   uniquePtrTuple _transformers;
   rawPtrTuple _rawTransformers;
-  std::unique_ptr<Producer> _producer;
-  std::future<VecT<ResT>> _fut;
+  std::unique_ptr<PreviousStage> _previousStage;
+  std::future<Batch<ResT>> _fut;
 };
 
 /*
@@ -337,14 +341,14 @@ class BatchedPipeline {
  * and implicitly specify the other template types by the constructor
  * arguments.
  */
-template <size_t Parallelism, class Producer, class Transformer,
+template <size_t Parallelism, class PreviousStage, class Transformer,
           class... OtherTransformers>
-auto makeBatchedPipeline(Producer&& p, Transformer&& t,
+auto makeBatchedPipeline(PreviousStage&& p, Transformer&& t,
                          OtherTransformers&&... other) {
-  return BatchedPipeline<Parallelism, std::decay_t<Producer>,
+  return BatchedPipeline<Parallelism, std::decay_t<PreviousStage>,
                          std::decay_t<Transformer>,
                          std::decay_t<OtherTransformers>...>(
-      std::forward<Producer>(p), std::forward<Transformer>(t),
+      std::forward<PreviousStage>(p), std::forward<Transformer>(t),
       std::forward<OtherTransformers>(other)...);
 }
 
@@ -426,8 +430,8 @@ class Interface;  // forward declaration needed below for friend declaration
 
 }  // namespace detail
 
-/* Holds a Pipeline (Object on which we can call "produceBatch" and get a
- * VecT<ValueType> and extracts its elements one by one. Internally buffers one
+/* Holds a Pipeline (Object on which we can call "pickupBatch" and get a
+ * Batch<ValueType> and extracts its elements one by one. Internally buffers one
  * batch and concurrently produces the nextBatch while it issues the element
  * from the buffer one at a time via the getNextValue() method.
  */
@@ -443,14 +447,12 @@ class BatchExtractor {
  public:
   /// The type of our elements after all transformations were applied
   using ValueT = std::decay_t<decltype(
-      std::declval<Pipeline>().produceBatch()._content[0])>;
+      std::declval<Pipeline>().pickupBatch().m_content[0])>;
 
-  // Retrieve and return the next triple from the internal buffer.
-  // If the buffer is exhausted blocks
-  // until the (asynchronous) call to _pipeline.produceBatch() has finished. A
-  // nullopt signals the parser has completely parsed the file.
-  /// get the next completely transformed value from the pipeline. std::nullopt
-  /// means that all elements have been extracted
+  /// Get the next completely transformed value from the pipeline. std::nullopt
+  /// means that all elements have been extracted and the pipeline is exhausted.
+  /// Might block if the pipeline is currently busy and the internal buffer is
+  /// empty
   std::optional<ValueT> getNextValue() {
     // we return the elements in order
     if (_buffer.size() == _bufferPosition && _isPipelineValid) {
@@ -458,8 +460,8 @@ class BatchExtractor {
       _timer->cont();
       {
         auto res = _fut.get();
-        _isPipelineValid = res._isLast;
-        _buffer = std::move(res._content);
+        _isPipelineValid = res.m_isPipelineGood;
+        _buffer = std::move(res.m_content);
       }
 
       _timer->stop();
@@ -467,7 +469,7 @@ class BatchExtractor {
       if (_isPipelineValid) {
         // if possible, directly submit the next parsing job
         _fut = std::async(std::launch::async, [ptr = _pipeline.get()]() {
-          return ptr->produceBatch();
+          return ptr->pickupBatch();
         });
       }
     }
@@ -475,15 +477,15 @@ class BatchExtractor {
     if (_bufferPosition < _buffer.size()) {
       return std::move(_buffer[_bufferPosition++]);
     } else {
-      // we can only reach this if the buffer is exhausted and there is nothing
-      // more to parse
+      // we can only reach this if the pipeline is exhausted and we have reached
+      // past the last element.
       return std::nullopt;
     }
   }
 
   /**
    * @brief for all steps in the pipeline, report how long their calls to
-   * produceBatch were blocking. TODO<joka921>: how useful is this measure?
+   * pickupBatch were blocking. TODO<joka921>: how useful is this measure?
    */
   [[nodiscard]] std::vector<off_t> getWaitingTime() const {
     auto res = _pipeline->getWaitingTime();
@@ -498,7 +500,7 @@ class BatchExtractor {
   std::unique_ptr<ad_utility::Timer> _timer =
       std::make_unique<ad_utility::Timer>();
   std::unique_ptr<Pipeline> _pipeline;
-  std::future<detail::VecT<ValueT>> _fut;
+  std::future<detail::Batch<ValueT>> _fut;
   std::vector<ValueT> _buffer;
   size_t _bufferPosition = 0;
   bool _isPipelineValid = true;
@@ -506,9 +508,8 @@ class BatchExtractor {
   // Pipelines are move-only types
   explicit BatchExtractor(Pipeline&& pipeline)
       : _pipeline(std::make_unique<Pipeline>(std::move(pipeline))) {
-    _fut = std::async(std::launch::async, [ptr = _pipeline.get()]() {
-      return ptr->produceBatch();
-    });
+    _fut = std::async(std::launch::async,
+                      [ptr = _pipeline.get()]() { return ptr->pickupBatch(); });
   }
   friend class detail::Interface;
 };
@@ -546,8 +547,11 @@ class Interface {
 }  // namespace detail
 
 /**
- * @brief setup a pipeline that efficiently creates and transforms values. The
- * Concurrency is used between the different levels
+ * @brief setup a pipeline that efficiently creates and transforms values.
+ * Concurrency is used ONLY BETWEEN the different stages
+ *
+ * (if you want to use concurrency also within the stages see the
+ * setupParallelPipeline() function below)
  *
  * Each element is created by the creator and then transformed by all of the
  * transformers one after another s.t. it becomes
@@ -582,14 +586,14 @@ auto setupPipeline(size_t batchSize, Creator&& creator, Ts&&... transformers) {
 
 /**
  * @brief setup a pipeline that efficiently creates and transforms values.
- * Concurrency is used between and within the different levels
+ * Concurrency is used between and within the different stages
  *
  * In general this works similar to the setupPipeline() function template. Make
  * sure to read and understand the corresponding documentation first. It has the
  * following difference::
  *
  * With each Transformer there is a degree of Parallelism (a size_t) associated.
- * If this is degree is 1, this level behaves exactly the same as in the
+ * If this is degree is 1, this stage behaves exactly the same as in the
  * setupPipeline function above.
  *
  * Otherwise let p be the degree of Parallelism of the i-th Transformer. then
@@ -603,12 +607,12 @@ auto setupPipeline(size_t batchSize, Creator&& creator, Ts&&... transformers) {
  * is split into p parts where the first part is transformed by the first
  * element of the tuple, the second part by the second element... In this case
  * it is of course necessary, that the return types of the function objects in
- * the tuple are compatible, the return type of this level is derived from the
+ * the tuple are compatible, the return type of this stage is derived from the
  * first tuple element. The following guarantee holds: If two (not necessary
- * consecutive) levels i and j have the same degree of parallelism p > 1  and
+ * consecutive) stages i and j have the same degree of parallelism p > 1  and
  * both specify a tuple of p function objects then the elements that are
- * transformed by the k-th tuple element on level i are also transformed by the
- * k-th tuple element on level j.
+ * transformed by the k-th tuple element on stage i are also transformed by the
+ * k-th tuple element on stage j.
  *
  * @tparam Parallelisms One size_t for each transformer, assigning it a degree
  * of parallelism

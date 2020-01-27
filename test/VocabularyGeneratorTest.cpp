@@ -216,7 +216,7 @@ TEST_F(MergeVocabularyTest, bla) {
 
 TEST(VocabularyGenerator, ReadAndWritePartial) {
   {
-    Index::ItemMapArray arr;
+    ItemMapArray arr;
     auto& s = arr[0];
     s["A"] = 5;
     s["a"] = 6;
@@ -224,7 +224,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     s["car"] = 8;
     TextVocabulary v;
     std::string basename = "_tmp_testidx";
-    auto ptr = std::make_shared<const Index::ItemMapArray>(std::move(arr));
+    auto ptr = std::make_shared<const ItemMapArray>(std::move(arr));
     writePartialIdMapToBinaryFileForMerging(
         ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", std::less<std::string>(),
         false);
@@ -246,7 +246,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
   try {
     RdfsVocabulary v;
     v.setLocale("en", "US", false);
-    Index::ItemMapArray arr;
+    ItemMapArray arr;
     auto& s = arr[0];
     s["\"A\""] = 5;
     s["\"a\""] = 6;
@@ -254,7 +254,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     s["\"car\""] = 8;
     s["\"Ä\""] = 9;
     std::string basename = "_tmp_testidx";
-    auto ptr = std::make_shared<const Index::ItemMapArray>(std::move(arr));
+    auto ptr = std::make_shared<const ItemMapArray>(std::move(arr));
     writePartialIdMapToBinaryFileForMerging(
         ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(),
         false);

@@ -57,7 +57,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
     // read the first entry of the vocabulary and add it to the queue
     endOfFile[i] = true;
 
-    uint64_t len;
+    size_t len;
     if (infiles[i].read((char*)&len, sizeof(len))) {
       std::string word(len, '\0');
       infiles[i].read(&(word[0]), len);
@@ -104,7 +104,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
     }  // file is exhausted, nothing to add
 
     endOfFile[i] = true;
-    uint64_t len;
+    size_t len;
     if (infiles[i].read((char*)&len, sizeof(len))) {
       std::string word(len, '\0');
       infiles[i].read(&(word[0]), len);
@@ -216,9 +216,9 @@ void VocabularyMerger::doActualWrite(
 }
 
 // ____________________________________________________________________________________________________________
-absl::flat_hash_map<Id, Id> createInternalMapping(std::vector<std::pair<string, Id>>* elsPtr) {
+ad_utility::HashMap<Id, Id> createInternalMapping(std::vector<std::pair<string, Id>>* elsPtr) {
   auto& els = *elsPtr;
-  absl::flat_hash_map<Id, Id> res;
+  ad_utility::HashMap<Id, Id> res;
   bool first = true;
   std::string lastWord;
   size_t nextWordId = 0;
@@ -236,12 +236,12 @@ absl::flat_hash_map<Id, Id> createInternalMapping(std::vector<std::pair<string, 
 }
 
 // ________________________________________________________________________________________________________
-void writeMappedIdsToExtVec(const TripleVec& input, const absl::flat_hash_map<Id, Id>& map,
+void writeMappedIdsToExtVec(const TripleVec& input, const ad_utility::HashMap<Id, Id>& map,
                             TripleVec::bufwriter_type* writePtr) {
   auto& writer = *writePtr;
   for (const auto& curTriple : input) {
     // for all triple elements find their mapping from partial to global ids
-    absl::flat_hash_map<Id, Id>::const_iterator iterators[3];
+    ad_utility::HashMap<Id, Id>::const_iterator iterators[3];
     for (size_t k = 0; k < 3; ++k) {
       iterators[k] = map.find(curTriple[k]);
       if (iterators[k] == map.end()) {
@@ -263,7 +263,7 @@ void writePartialVocabularyToFile(const std::vector<std::pair<string, Id>>& els,
   AD_CHECK(out.is_open());
   for (const auto& el : els) {
     std::string_view word = el.first;
-    uint64_t len = word.size();
+    size_t len = word.size();
     out.write((char*)&len, sizeof(len));
     out.write(word.data(), len);
     Id id = el.second;

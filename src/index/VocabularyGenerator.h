@@ -3,7 +3,6 @@
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 #pragma once
 
-#include <absl/container/flat_hash_map.h>
 #include <string>
 #include <stxxl/vector>
 #include <utility>
@@ -13,14 +12,13 @@
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
 #include "./ConstantsIndexCreation.h"
+#include "./IndexBuilderTypes.h"
 #include "Vocabulary.h"
 
 using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
 using std::string;
 
-using ItemMapArray =
-    std::array<absl::flat_hash_map<std::string, Id>, NUM_PARALLEL_ITEM_MAPS>;
 using TripleVec = stxxl::vector<array<Id, 3>>;
 
 /**
@@ -136,7 +134,7 @@ ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
  * @param els  Must be sorted(at least duplicates must be adjacent) according to
  * the strings and the Ids must be unique to work correctly.
  */
-absl::flat_hash_map<Id, Id> createInternalMapping(
+ad_utility::HashMap<Id, Id> createInternalMapping(
     std::vector<std::pair<string, Id>>* els);
 
 /**
@@ -144,7 +142,7 @@ absl::flat_hash_map<Id, Id> createInternalMapping(
  * <map> and write the resulting Id triple to <*writePtr>
  */
 void writeMappedIdsToExtVec(const TripleVec& input,
-                            const absl::flat_hash_map<Id, Id>& map,
+                            const ad_utility::HashMap<Id, Id>& map,
                             TripleVec::bufwriter_type* writePtr);
 
 /**
