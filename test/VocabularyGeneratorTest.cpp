@@ -216,18 +216,20 @@ TEST_F(MergeVocabularyTest, bla) {
 
 TEST(VocabularyGenerator, ReadAndWritePartial) {
   {
+    using S = TripleComponentComparator::SplitVal;
+    S dummy;
     ItemMapArray arr;
     auto& s = arr[0];
-    s["A"] = 5;
-    s["a"] = 6;
-    s["Ba"] = 7;
-    s["car"] = 8;
+    s["A"] = {5, dummy};
+    s["a"] = {6, dummy};
+    s["Ba"] = {7, dummy};
+    s["car"] = {8, dummy};
     TextVocabulary v;
     std::string basename = "_tmp_testidx";
     auto ptr = std::make_shared<const ItemMapArray>(std::move(arr));
     writePartialIdMapToBinaryFileForMerging(
-        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", std::less<std::string>(),
-        false);
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0",
+        [](const auto& a, const auto& b) { return a.first < b.first; }, false);
 
     {
       VocabularyMerger m;
@@ -248,15 +250,23 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     v.setLocale("en", "US", false);
     ItemMapArray arr;
     auto& s = arr[0];
-    s["\"A\""] = 5;
-    s["\"a\""] = 6;
-    s["\"Ba\""] = 7;
-    s["\"car\""] = 8;
-    s["\"Ä\""] = 9;
+    auto assign = [&](std::string_view str, size_t id) {
+      s[str] = {id, v.getCaseComparator().extractAndTransformComparable(
+                        str, TripleComponentComparator::Level::IDENTICAL)};
+    };
+    assign("\"A\"", 5);
+    assign("\"a\"", 6);
+    assign("\"Ba\"", 7);
+    assign("\"car\"", 8);
+    assign("\"Ä\"", 9);
     std::string basename = "_tmp_testidx";
     auto ptr = std::make_shared<const ItemMapArray>(std::move(arr));
     writePartialIdMapToBinaryFileForMerging(
-        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator(),
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0",
+        [& c = v.getCaseComparator()](const auto& a, const auto& b) {
+          return c(a.second.m_splitVal, b.second.m_splitVal,
+                   TripleComponentComparator::Level::IDENTICAL);
+        },
         false);
 
     {
@@ -278,23 +288,26 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
 }
 
 TEST(VocabularyGeneratorTest, createInternalMapping) {
-  std::vector<std::pair<string, Id>> input;
-  input.emplace_back("alpha", 5);
-  input.emplace_back("beta", 4);
-  input.emplace_back("beta", 42);
-  input.emplace_back("d", 8);
-  input.emplace_back("e", 9);
-  input.emplace_back("e", 38);
-  input.emplace_back("xenon", 0);
+  ItemVec input;
+  using S = IdAndSplitVal;
+  TripleComponentComparator::SplitVal
+      d;  // dummy value that is unused in this case.
+  input.emplace_back("alpha", S{5, d});
+  input.emplace_back("beta", S{4, d});
+  input.emplace_back("beta", S{42, d});
+  input.emplace_back("d", S{8, d});
+  input.emplace_back("e", S{9, d});
+  input.emplace_back("e", S{38, d});
+  input.emplace_back("xenon", S{0, d});
 
   auto res = createInternalMapping(&input);
-  ASSERT_EQ(0u, input[0].second);
-  ASSERT_EQ(1u, input[1].second);
-  ASSERT_EQ(1u, input[2].second);
-  ASSERT_EQ(2u, input[3].second);
-  ASSERT_EQ(3u, input[4].second);
-  ASSERT_EQ(3u, input[5].second);
-  ASSERT_EQ(4u, input[6].second);
+  ASSERT_EQ(0u, input[0].second.m_id);
+  ASSERT_EQ(1u, input[1].second.m_id);
+  ASSERT_EQ(1u, input[2].second.m_id);
+  ASSERT_EQ(2u, input[3].second.m_id);
+  ASSERT_EQ(3u, input[4].second.m_id);
+  ASSERT_EQ(3u, input[5].second.m_id);
+  ASSERT_EQ(4u, input[6].second.m_id);
 
   ASSERT_EQ(0u, res[5]);
   ASSERT_EQ(1u, res[4]);

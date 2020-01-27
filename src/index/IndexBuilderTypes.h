@@ -33,7 +33,8 @@ using ItemVec = std::vector<std::pair<std::string, IdAndSplitVal>>;
  */
 struct ItemMapManager {
   /// Construct by assigning the minimum Id that shall be returned by the map
-  explicit ItemMapManager(Id minId, const TripleComponentComparator* cmp) : _map(), _minId(minId), m_comp(cmp) {}
+  explicit ItemMapManager(Id minId, const TripleComponentComparator* cmp)
+      : _map(), _minId(minId), m_comp(cmp) {}
   /// Minimum Id is 0
   ItemMapManager() = default;
 
@@ -46,7 +47,8 @@ struct ItemMapManager {
   Id assignNextId(const string& key) {
     if (!_map.count(key)) {
       Id res = _map.size() + _minId;
-      _map[key] = {res, m_comp->extractAndTransformComparable(key, TripleComponentComparator::Level::IDENTICAL)};
+      _map[key] = {res, m_comp->extractAndTransformComparable(
+                            key, TripleComponentComparator::Level::IDENTICAL)};
       return res;
     } else {
       return _map[key].m_id;
@@ -99,7 +101,8 @@ struct LangtagAndTriple {
  */
 template <size_t Parallelism>
 auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
-                     size_t maxNumberOfTriples, const TripleComponentComparator* comp) {
+                     size_t maxNumberOfTriples,
+                     const TripleComponentComparator* comp) {
   // that way the different ids won't interfere
   auto& itemArray = *itemArrayPtr;
   for (size_t j = 0; j < Parallelism; ++j) {

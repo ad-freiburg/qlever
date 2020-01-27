@@ -161,7 +161,8 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
           // get the Ids for the original triple and the possibly added language
           // Tag triples using the provided HashMaps via itemArray. See
           // documentation of the function for more details
-          getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(&itemArray, linesPerPartial, &(_vocab.getCaseComparator())));
+          getIdMapLambdas<NUM_PARALLEL_ITEM_MAPS>(
+              &itemArray, linesPerPartial, &(_vocab.getCaseComparator())));
 
       while (auto opt = p.getNextValue()) {
         i++;
@@ -1509,25 +1510,36 @@ std::future<void> Index::writeNextPartialVocabulary(
     auto vec = vocabMapsToVector(items);
     const auto identicalPred = [& c = vocab->getCaseComparator()](
                                    const auto& a, const auto& b) {
-      return c(a.second.m_splitVal, b.second.m_splitVal, decltype(_vocab)::SortLevel::IDENTICAL);
+      return c(a.second.m_splitVal, b.second.m_splitVal,
+               decltype(_vocab)::SortLevel::IDENTICAL);
     };
-    LOG(INFO) << "Start sorting of vocabulary with #elements: " << vec.size() << std::endl;
-    sortVocabVector(&vec, identicalPred, false);
+    LOG(INFO) << "Start sorting of vocabulary with #elements: " << vec.size()
+              << std::endl;
+    sortVocabVector(&vec, identicalPred, true);
     LOG(INFO) << "Finished sorting of vocabulary" << std::endl;
     auto mapping = createInternalMapping(&vec);
     LOG(INFO) << "Finished creating of Mapping vocabulary" << std::endl;
     auto sz = vec.size();
-    // since now adjacent duplicates also have the same Ids, it suffices to compare those
-    vec.erase(std::unique(vec.begin(), vec.end(), [](const auto& a, const auto& b){return a.second.m_id == b.second.m_id;}), vec.end());
+    // since now adjacent duplicates also have the same Ids, it suffices to
+    // compare those
+    vec.erase(std::unique(vec.begin(), vec.end(),
+                          [](const auto& a, const auto& b) {
+                            return a.second.m_id == b.second.m_id;
+                          }),
+              vec.end());
     LOG(INFO) << "Removed " << sz - vec.size()
               << " Duplicates from the local partial vocabularies\n";
     writeMappedIdsToExtVec(*localIds, mapping, globalWritePtr);
     writePartialVocabularyToFile(vec, partialFilename);
     if (vocabPrefixCompressed) {
       // sort according to the actual byte values
-      LOG(INFO) << "Start sorting of vocabulary for prefix compression" << std::endl;
-      sortVocabVector(&vec, [](const auto& a, const auto& b){return a.first < b.first;}, false);
-      LOG(INFO) << "Finished sorting of vocabulary for prefix compression" << std::endl;
+      LOG(INFO) << "Start sorting of vocabulary for prefix compression"
+                << std::endl;
+      sortVocabVector(
+          &vec, [](const auto& a, const auto& b) { return a.first < b.first; },
+          false);
+      LOG(INFO) << "Finished sorting of vocabulary for prefix compression"
+                << std::endl;
       writePartialVocabularyToFile(vec, partialCompressionFilename);
     }
     LOG(INFO) << "Finished writing the partial vocabulary" << std::endl;

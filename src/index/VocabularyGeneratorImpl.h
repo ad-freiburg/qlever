@@ -226,15 +226,11 @@ ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
     if (!first && lastWord != el.first) {
       nextWordId++;
       lastWord = el.first;
-      if (nextWordId % 300000 == 0) {
-        LOG(INFO) << "Updated mapping for # words: " << nextWordId << std::endl;
-      }
     }
     AD_CHECK(!res.count(el.second.m_id));
     res[el.second.m_id] = nextWordId;
     el.second.m_id = nextWordId;
     first = false;
-
   }
   return res;
 }
@@ -260,8 +256,7 @@ void writeMappedIdsToExtVec(const TripleVec& input, const ad_utility::HashMap<Id
 }
 
 // _________________________________________________________________________________________________________
-void writePartialVocabularyToFile(const ItemVec & els,
-                                  const string& fileName) {
+void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
   std::ofstream out(fileName.c_str(), std::ios_base::out | std::ios_base::binary);
   AD_CHECK(out.is_open());
@@ -292,18 +287,8 @@ void writePartialIdMapToBinaryFileForMerging(std::shared_ptr<const ItemMapArray>
   }
   LOG(INFO) << "... sorting ...\n";
 
-  auto pred = [comp](const auto& p1, const auto& p2) { return comp(p1.first, p2.first); };
-  if constexpr (USE_PARALLEL_SORT) {
-    if (doParallelSort) {
-      __gnu_parallel::sort(begin(els), end(els), pred,
-                           __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
-    } else {
-      std::sort(begin(els), end(els), pred);
-    }
-  } else {
-    std::sort(begin(els), end(els), pred);
-    (void)doParallelSort;  // avoid compiler warning for unused value.
-  }
+  sortVocabVector(&els, comp, doParallelSort);
+
   LOG(INFO) << "Done creating vocabulary.\n";
 
   writePartialVocabularyToFile(els, fileName);
@@ -323,8 +308,7 @@ ItemVec vocabMapsToVector(std::shared_ptr<const ItemMapArray> map) {
 
 // _______________________________________________________________________________________________________________________
 template <class StringSortComparator>
-void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
-                     const bool doParallelSort) {
+void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp, const bool doParallelSort) {
   auto& els = *vecPtr;
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {

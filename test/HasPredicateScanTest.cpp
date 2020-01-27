@@ -49,7 +49,10 @@ class DummyOperation : public Operation {
 
   virtual ad_utility::HashMap<string, size_t> getVariableColumns()
       const override {
-    return {{"?a", 0}, {"?b", 1}};
+    ad_utility::HashMap<string, size_t> m;
+    m["?a"] = 0;
+    m["?b"] = 1;
+    return m;
   }
 };
 
@@ -359,6 +362,10 @@ TEST(CountAvailablePredicates, patternTrickTest) {
     std::cout << e.what() << std::endl;
     ASSERT_TRUE(false);
   }
+  std::sort(
+      result.begin(), result.end(),
+      [](const auto& i1, const auto& i2) -> bool { return i1[0] < i2[0]; });
+
   ASSERT_EQ(5u, result.size());
 
   ASSERT_EQ(0u, result[0][0]);
