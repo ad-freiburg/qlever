@@ -9,5 +9,6 @@
 	  "language": "en",
 	  "country": "US",
 	  "ignore-punctuation": true
-  }
+  },
+  "num-triples-per-partial-vocab" : 50000000
 }
