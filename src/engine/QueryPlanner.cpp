@@ -89,17 +89,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   vector<SubtreePlan>& lastRow = plans.back();
 
   AD_CHECK_GT(lastRow.size(), 0);
+  auto minInd = findCheapestExecutionTree(lastRow);
 
-  size_t minCost = lastRow[0].getCostEstimate();
-  size_t minInd = 0;
-
-  for (size_t i = 1; i < lastRow.size(); ++i) {
-    size_t thisCost = lastRow[i].getCostEstimate();
-    if (thisCost < minCost) {
-      minCost = thisCost;
-      minInd = i;
-    }
-  }
   lastRow[minInd]._isOptional = pq._rootGraphPattern->_optional;
 
   SubtreePlan final = lastRow[minInd];
@@ -320,16 +311,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     if (pattern == rootPattern) {
       return lastRow;
     } else {
-      AD_CHECK_GT(lastRow.size(), 0);
-      size_t minCost = lastRow[0].getCostEstimate();
-      size_t minInd = 0;
-      for (size_t i = 1; i < lastRow.size(); ++i) {
-        size_t thisCost = lastRow[i].getCostEstimate();
-        if (thisCost < minCost) {
-          minCost = lastRow[i].getCostEstimate();
-          minInd = i;
-        }
-      }
+      auto minInd = findCheapestExecutionTree(lastRow);
       lastRow[minInd]._isOptional = pattern->_optional;
       patternPlans[pattern->_id] = lastRow[minInd];
     }
@@ -2114,21 +2096,11 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
   // as key.
   LOG(TRACE) << "Pruning...\n";
   vector<SubtreePlan> prunedPlans;
-  size_t nofCandidates = 0;
-  for (auto it = candidates.begin(); it != candidates.end(); ++it) {
-    size_t minCost = std::numeric_limits<size_t>::max();
-    size_t minIndex = 0;
-    for (size_t i = 0; i < it->second.size(); ++i) {
-      ++nofCandidates;
-      if (it->second[i].getCostEstimate() < minCost) {
-        minCost = it->second[i].getCostEstimate();
-        minIndex = i;
-      }
-    }
-    prunedPlans.push_back(it->second[minIndex]);
+  for (const auto& [[[maybe_unused]] key, value] : candidates) {
+    size_t minIndex = findCheapestExecutionTree(value);
+    prunedPlans.push_back(value[minIndex]);
   }
-  LOG(TRACE) << "Got " << prunedPlans.size() << " pruned plans from "
-             << nofCandidates << " candidates.\n";
+  LOG(TRACE) << "Got " << prunedPlans.size() << " pruned plans from \n";
   return prunedPlans;
 }
 
@@ -2904,3 +2876,26 @@ QueryPlanner::createVariableColumnsMapForTextOperation(
 void QueryPlanner::setEnablePatternTrick(bool enablePatternTrick) {
   _enablePatternTrick = enablePatternTrick;
 }
+
+// _________________________________________________________________________________
+size_t QueryPlanner::findCheapestExecutionTree(
+    const std::vector<SubtreePlan>& lastRow) const {
+  AD_CHECK_GT(lastRow.size(), 0);
+  size_t minCost = std::numeric_limits<size_t>::max();
+  size_t minInd = 0;
+  for (size_t i = 0; i < lastRow.size(); ++i) {
+    size_t thisCost = lastRow[i].getCostEstimate();
+    if (thisCost < minCost) {
+      minCost = lastRow[i].getCostEstimate();
+      minInd = i;
+    }
+    // make the tiebreaking deterministic for the UnitTests. The asString
+    // should never be on a hot code path in practice.
+    else if (thisCost == minCost && isInTestMode() &&
+             lastRow[i]._qet->asString() < lastRow[minInd]._qet->asString()) {
+      minCost = lastRow[i].getCostEstimate();
+      minInd = i;
+    }
+  }
+  return minInd;
+};

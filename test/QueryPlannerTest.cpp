@@ -552,7 +552,7 @@ TEST(QueryPlannerTest, testSP_free_) {
   QueryPlanner qp(nullptr);
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(
-      "{\n  SCAN PSO with P = \"<http://rdf.myprefix.com/myrel>\"\n  "
+      "{\n  SCAN POS with P = \"<http://rdf.myprefix.com/myrel>\"\n  "
       "qet-width: 2 \n}",
       qet.asString());
 }
@@ -782,7 +782,7 @@ TEST(QueryPlannerTest, threeVarTriples) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n  JOIN\n  {\n    SCAN FOR FULL INDEX SPO (DUMMY OP"
+        "{\n  JOIN\n  {\n    SCAN FOR FULL INDEX SOP (DUMMY OP"
         "ERATION)\n    qet-width: 3 \n  } join-column: [0]"
         "\n  |X|\n  {\n    SCAN SOP with S = \"<s>\", O = \"<o>\"\n "
         "   qet-width: 1 \n  } join-column: [0]\n  qet-width: 3 \n}",
@@ -1162,19 +1162,11 @@ TEST(QueryPlannerTest, testSimpleOptional) {
     pq.expandPrefixes();
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n"
-        "  OPTIONAL_JOIN\n"
-        "  {\n"
-        "    SCAN PSO with P = \"<rel1>\"\n"
-        "    qet-width: 2 \n"
-        "  } join-columns: [0]\n"
-        "  |X|\n"
-        "  {\n"
-        "    SCAN PSO with P = \"<rel2>\"\n"
-        "    qet-width: 2 \n"
-        "  } join-columns: [0]\n"
-        "  qet-width: 3 \n"
-        "}",
+        "{\n  OPTIONAL_JOIN\n  {\n    ORDER_BY\n    {\n      SCAN POS with P = "
+        "\"<rel2>\"\n      qet-width: 2 \n    } order on asc(1) \n    "
+        "qet-width: 2 \n  } join-columns: [1]\n  |X|\n  {\n    SCAN PSO with P "
+        "= \"<rel1>\"\n    qet-width: 2 \n  } join-columns: [0]\n  qet-width: "
+        "3 \n}",
         qet.asString());
 
     ParsedQuery pq2 = SparqlParser(
@@ -1185,23 +1177,14 @@ TEST(QueryPlannerTest, testSimpleOptional) {
     pq2.expandPrefixes();
     QueryExecutionTree qet2 = qp.createExecutionTree(pq2);
     ASSERT_EQ(
-        "{\n"
-        "  SORT on column:1\n"
-        "  {\n"
-        "    OPTIONAL_JOIN\n"
-        "    {\n"
-        "      SCAN PSO with P = \"<rel1>\"\n"
-        "      qet-width: 2 \n"
-        "    } join-columns: [0]\n"
-        "    |X|\n"
-        "    {\n"
-        "      SCAN PSO with P = \"<rel2>\"\n"
-        "      qet-width: 2 \n"
-        "    } join-columns: [0]\n"
-        "    qet-width: 3 \n"
-        "  }\n"
-        "  qet-width: 3 \n"
-        "}",
+        "{\n  SORT on column:2\n  {\n    OPTIONAL_JOIN\n    {\n      "
+        "ORDER_BY\n      {\n        SCAN POS with P = \"<rel2>\"\n        "
+        "qet-width: 2 \n      } order on asc(1) \n      qet-width: 2 \n    } "
+        "join-columns: [1]\n    |X|\n    {\n      SCAN PSO with P = "
+        "\"<rel1>\"\n      qet-width: 2 \n    } join-columns: [0]\n    "
+        "qet-width: 3 \n  }\n  qet-width: 3 \n}"
+
+        ,
         qet2.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
