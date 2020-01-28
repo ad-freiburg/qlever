@@ -2096,7 +2096,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
   // as key.
   LOG(TRACE) << "Pruning...\n";
   vector<SubtreePlan> prunedPlans;
-  for (const auto& [[[maybe_unused]] key, value] : candidates) {
+  for (const auto& [key, value] : candidates) {
+    (void)key;  // silence unused warning
     size_t minIndex = findCheapestExecutionTree(value);
     prunedPlans.push_back(value[minIndex]);
   }

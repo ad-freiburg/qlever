@@ -1389,6 +1389,9 @@ void Index::readConfiguration() {
 LangtagAndTriple Index::tripleToInternalRepresentation(Triple&& tripleIn) {
   LangtagAndTriple res{"", std::move(tripleIn)};
   auto& spo = res._triple;
+  for (auto& el : spo) {
+    el = _vocab.getLocaleManager().normalizeUtf8(el);
+  }
   size_t upperBound = 3;
   if (ad_utility::isXsdValue(spo[2])) {
     spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
