@@ -2890,9 +2890,10 @@ size_t QueryPlanner::findCheapestExecutionTree(
     std::transform(repr.begin(), repr.end(), repr.begin(),
                    [](char c) { return c == '\n' ? ' ' : c; });
 
+    size_t thisSize = lastRow[i].getSizeEstimate();
     size_t thisCost = lastRow[i].getCostEstimate();
-    LOG(INFO) << "Estimated cost of " << thisCost << " for Tree " << repr
-              << '\n';
+    LOG(INFO) << "Estimated cost and size  of " << thisCost << " " << thisSize
+              << " for Tree " << repr << '\n';
     if (thisCost < minCost) {
       minCost = lastRow[i].getCostEstimate();
       minInd = i;
