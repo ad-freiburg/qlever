@@ -10,4 +10,4 @@ add_library(parser
               ParallelParseBuffer.h
               PropertyPathParser.h PropertyPathParser.cpp
               SparqlLexer.h SparqlLexer.cpp)
-target_link_libraries(parser re2)
+target_link_libraries(parser re2 absl::flat_hash_map)

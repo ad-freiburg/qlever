@@ -39,6 +39,9 @@ class TurtleParser {
   // open an input file or stream
   virtual void initialize(const string& filename) = 0;
   virtual ~TurtleParser() = default;
+  TurtleParser() = default;
+  TurtleParser(TurtleParser&& rhs) = default;
+  TurtleParser& operator=(TurtleParser&& rhs) = default;
 
   // Wrapper to getLine that is expected by the rest of QLever
   bool getLine(std::array<string, 3>& triple) { return getLine(&triple); }
@@ -108,7 +111,7 @@ class TurtleParser {
   std::string _activePrefix;
   std::string _activeSubject;
   std::string _activePredicate;
-  const TurtleToken& _tokens = _tok._tokens;
+  [[nodiscard]] const TurtleToken& tokens() const { return _tok._tokens; }
   size_t _numBlankNodes = 0;
 
  private:
@@ -142,20 +145,20 @@ class TurtleParser {
   // Terminal symbols from the grammar
   // Behavior of the functions is similar to the nonterminals (see above)
   bool iriref();
-  bool integer() { return parseTerminal(_tokens.Integer); }
-  bool decimal() { return parseTerminal(_tokens.Decimal); }
-  bool doubleParse() { return parseTerminal(_tokens.Double); }
+  bool integer() { return parseTerminal(tokens().Integer); }
+  bool decimal() { return parseTerminal(tokens().Decimal); }
+  bool doubleParse() { return parseTerminal(tokens().Double); }
   bool pnameLN();
 
   // __________________________________________________________________________
   bool pnameNS();
 
   // __________________________________________________________________________
-  bool langtag() { return parseTerminal(_tokens.Langtag); }
+  bool langtag() { return parseTerminal(tokens().Langtag); }
   bool blankNodeLabel();
 
   bool anon() {
-    if (!parseTerminal(_tokens.Anon)) {
+    if (!parseTerminal(tokens().Anon)) {
       return false;
     }
     _lastParseResult = createAnonNode();
@@ -356,6 +359,8 @@ class TurtleMmapParser : public TurtleParser {
   }
 
   ~TurtleMmapParser() { unmapFile(); }
+  TurtleMmapParser(TurtleMmapParser&& rhs) = default;
+  TurtleMmapParser& operator=(TurtleMmapParser&& rhs) = default;
 
   // inherit the other overload
   using TurtleParser::getLine;

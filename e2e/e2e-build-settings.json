@@ -1,0 +1,4 @@
+{
+  "num-triples-per-partial-vocab" : 40000,
+  "parser-batch-size" : 1000
+}

@@ -4,18 +4,22 @@
 #pragma once
 
 #include <string>
+#include <stxxl/vector>
 #include <utility>
 
 #include "../global/Constants.h"
 #include "../global/Id.h"
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
-#include "Index.h"
+#include "./ConstantsIndexCreation.h"
+#include "./IndexBuilderTypes.h"
 #include "Vocabulary.h"
 
 using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
 using std::string;
+
+using TripleVec = stxxl::vector<array<Id, 3>>;
 
 /**
  * class for merging the partial vocabularies. The main function is still in the
@@ -107,14 +111,68 @@ class VocabularyMerger {
       const std::vector<std::pair<size_t, std::pair<size_t, size_t>>>& buffer);
 };
 
-// _________________________________________________________________________________________
+// ______________
+// TODO<joka921> is this even used
+// anymore?___________________________________________________________________________
 template <class Comp>
 void writePartialIdMapToBinaryFileForMerging(
-    std::shared_ptr<const Index::ItemMap> map, const string& fileName,
-    Comp comp);
+    std::shared_ptr<const ItemMapArray> map, const string& fileName, Comp comp,
+    bool doParallelSort);
 
 // _________________________________________________________________________________________
 ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
     const string& mmapFilename);
+
+/**
+ * @brief Create a hashMap that maps the Id of the pair<string, Id> to the
+ * position of the string in the vector. The resulting ids will be ascending and
+ * duplicates strings that appear adjacent to each other will be given the same
+ * ID. If Input is sorted this will mean if result[x] == result[y] then the
+ * strings that were connected to x and y in the input were identical. Also
+ * modifies the input Ids to their mapped values.
+ *
+ * @param els  Must be sorted(at least duplicates must be adjacent) according to
+ * the strings and the Ids must be unique to work correctly.
+ */
+ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* els);
+
+/**
+ * @brief for each of the IdTriples in <input>: map the three Ids using the
+ * <map> and write the resulting Id triple to <*writePtr>
+ */
+void writeMappedIdsToExtVec(const TripleVec& input,
+                            const ad_utility::HashMap<Id, Id>& map,
+                            TripleVec::bufwriter_type* writePtr);
+
+/**
+ * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file
+ *
+ * For each string first writes the size of the string (64 bits). Then the
+ * actual string content (no trailing zero) and then the Id (sizeof(Id)
+ *
+ * @param els The input
+ * @param fileName will write to this file. If it exists it will be overwritten
+ */
+void writePartialVocabularyToFile(const ItemVec& els, const string& fileName);
+
+/**
+ * @brief Take an Array of HashMaps of Strings to Ids and insert all the
+ * elements from all the hashMaps into a single vector No reordering or
+ * deduplication is done, so result.size() == summed size of all the hash maps
+ */
+ItemVec vocabMapsToVector(std::shared_ptr<const ItemMapArray> map);
+
+// _____________________________________________________________________________________________________________
+/**
+ * @brief Sort the input in-place according to the strings as compared by the
+ * StringComparator
+ * @tparam A binary Function object to compare strings (e.g.
+ * std::less<std::string>())
+ * @param doParallelSort if true and USE_PARALLEL_SORT is true, use the gnu
+ * parallel extension for sorting.
+ */
+template <class StringSortComparator>
+void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
+                     bool doParallelSort);
 
 #include "VocabularyGeneratorImpl.h"

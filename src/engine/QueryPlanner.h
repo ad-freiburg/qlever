@@ -323,4 +323,18 @@ class QueryPlanner {
    */
   bool checkUsePatternTrick(ParsedQuery* pq,
                             SparqlTriple* patternTrickTriple) const;
+
+  /**
+   * @brief return the index of the cheapest execution tree in the argument.
+   *
+   * If we are in the unit test mode, this is deterministic by additionally
+   * sorting by the cache key when comparing equally cheap indices, else the
+   * first element that has the minimum index is returned.
+   */
+  size_t findCheapestExecutionTree(
+      const std::vector<SubtreePlan>& lastRow) const;
+
+  /// if this Planner is not associated with a queryExecutionContext we are only
+  /// in the unit test mode
+  [[nodiscard]] bool isInTestMode() const { return _qec == nullptr; }
 };

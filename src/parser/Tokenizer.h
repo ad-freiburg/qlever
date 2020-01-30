@@ -198,6 +198,11 @@ struct TurtleToken {
         Anon(grp(AnonString)),
         Comment(grp(CommentString)) {}
 
+  TurtleToken(const TurtleToken& other) : TurtleToken() { (void)other; }
+  TurtleToken& operator=([[maybe_unused]] const TurtleToken& other) {
+    return *this;
+  }
+
   const RE2 TurtlePrefix;
   const RE2 SparqlPrefix;
   const RE2 TurtleBase;
@@ -378,7 +383,7 @@ class Tokenizer {
   std::string_view view() const { return {_data.data(), _data.size()}; }
 
   // holds all the regexes needed for Tokenization
-  const TurtleToken _tokens;
+  TurtleToken _tokens;
 
  private:
   // ________________________________________________________________

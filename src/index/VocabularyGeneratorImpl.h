@@ -57,7 +57,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
     // read the first entry of the vocabulary and add it to the queue
     endOfFile[i] = true;
 
-    uint32_t len;
+    size_t len;
     if (infiles[i].read((char*)&len, sizeof(len))) {
       std::string word(len, '\0');
       infiles[i].read(&(word[0]), len);
@@ -104,7 +104,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
     }  // file is exhausted, nothing to add
 
     endOfFile[i] = true;
-    uint32_t len;
+    size_t len;
     if (infiles[i].read((char*)&len, sizeof(len))) {
       std::string word(len, '\0');
       infiles[i].read(&(word[0]), len);
@@ -215,44 +215,112 @@ void VocabularyMerger::doActualWrite(
   }
 }
 
-// ______________________________________________________________________________________________
-template <class Pred>
-void writePartialIdMapToBinaryFileForMerging(std::shared_ptr<const Index::ItemMap> map,
-                                             const string& fileName, Pred pred) {
-  LOG(INFO) << "Creating partial vocabulary from set ...\n";
-  std::vector<std::pair<string, Id>> els;
-  els.reserve(map->size());
-  els.insert(begin(els), begin(*map), end(*map));
-  LOG(INFO) << "... sorting ...\n";
-
-  auto sort = [&els](const auto& pred) {
-    if constexpr (USE_PARALLEL_SORT) {
-      __gnu_parallel::sort(begin(els), end(els), pred,
-                           __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
-    } else {
-      std::sort(begin(els), end(els), pred);
+// ____________________________________________________________________________________________________________
+ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
+  auto& els = *elsPtr;
+  ad_utility::HashMap<Id, Id> res;
+  bool first = true;
+  std::string lastWord;
+  size_t nextWordId = 0;
+  for (auto& el : els) {
+    if (!first && lastWord != el.first) {
+      nextWordId++;
+      lastWord = el.first;
     }
-  };
+    AD_CHECK(!res.count(el.second.m_id));
+    res[el.second.m_id] = nextWordId;
+    el.second.m_id = nextWordId;
+    first = false;
+  }
+  return res;
+}
 
-  const auto comp = [&pred](const auto& a, const auto& b) { return pred(a.first, b.first); };
+// ________________________________________________________________________________________________________
+void writeMappedIdsToExtVec(const TripleVec& input, const ad_utility::HashMap<Id, Id>& map,
+                            TripleVec::bufwriter_type* writePtr) {
+  auto& writer = *writePtr;
+  for (const auto& curTriple : input) {
+    // for all triple elements find their mapping from partial to global ids
+    ad_utility::HashMap<Id, Id>::const_iterator iterators[3];
+    for (size_t k = 0; k < 3; ++k) {
+      iterators[k] = map.find(curTriple[k]);
+      if (iterators[k] == map.end()) {
+        LOG(INFO) << "not found in partial local Vocab: " << curTriple[k] << '\n';
+        AD_CHECK(false);
+      }
+    }
 
-  sort(comp);
+    // update the Element
+    writer << array<Id, 3>{{iterators[0]->second, iterators[1]->second, iterators[2]->second}};
+  }
+}
 
-  LOG(INFO) << "Done creating vocabulary.\n";
+// _________________________________________________________________________________________________________
+void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
   std::ofstream out(fileName.c_str(), std::ios_base::out | std::ios_base::binary);
   AD_CHECK(out.is_open());
   for (const auto& el : els) {
-    // 32 bits should be enough for len of string
     std::string_view word = el.first;
-    uint32_t len = word.size();
+    size_t len = word.size();
     out.write((char*)&len, sizeof(len));
     out.write(word.data(), len);
-    Id id = el.second;
+    Id id = el.second.m_id;
     out.write((char*)&id, sizeof(id));
   }
   out.close();
   LOG(INFO) << "Done writing vocabulary to file.\n";
+}
+
+// ______________________________________________________________________________________________
+template <class Pred>
+void writePartialIdMapToBinaryFileForMerging(std::shared_ptr<const ItemMapArray> map,
+                                             const string& fileName, Pred comp,
+                                             const bool doParallelSort) {
+  LOG(INFO) << "Creating partial vocabulary from set ...\n";
+  ItemVec els;
+  size_t totalEls = std::accumulate(map->begin(), map->end(), 0,
+                                    [](const auto& x, const auto& y) { return x + y.size(); });
+  els.reserve(totalEls);
+  for (const auto& singleMap : *map) {
+    els.insert(end(els), begin(singleMap), end(singleMap));
+  }
+  LOG(INFO) << "... sorting ...\n";
+
+  sortVocabVector(&els, comp, doParallelSort);
+
+  LOG(INFO) << "Done creating vocabulary.\n";
+
+  writePartialVocabularyToFile(els, fileName);
+}
+
+// __________________________________________________________________________________________________
+ItemVec vocabMapsToVector(std::shared_ptr<const ItemMapArray> map) {
+  ItemVec els;
+  size_t totalEls = std::accumulate(map->begin(), map->end(), 0,
+                                    [](const auto& x, const auto& y) { return x + y.size(); });
+  els.reserve(totalEls);
+  for (const auto& singleMap : *map) {
+    els.insert(end(els), begin(singleMap), end(singleMap));
+  }
+  return els;
+}
+
+// _______________________________________________________________________________________________________________________
+template <class StringSortComparator>
+void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp, const bool doParallelSort) {
+  auto& els = *vecPtr;
+  if constexpr (USE_PARALLEL_SORT) {
+    if (doParallelSort) {
+      __gnu_parallel::sort(begin(els), end(els), comp,
+                           __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
+    } else {
+      std::sort(begin(els), end(els), comp);
+    }
+  } else {
+    std::sort(begin(els), end(els), comp);
+    (void)doParallelSort;  // avoid compiler warning for unused value.
+  }
 }
 
 // _____________________________________________________________________

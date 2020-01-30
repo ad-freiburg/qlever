@@ -517,9 +517,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
     using ScoreToContext = std::set<pair<Score, Id>>;
     using ScoreAndStC = pair<Score, ScoreToContext>;
     using AggMap = ad_utility::HashMap<vector<Id>, ScoreAndStC, IdVectorHash>;
-    vector<Id> emptyKey = {{std::numeric_limits<Id>::max()}};
-    vector<Id> deletedKey = {{std::numeric_limits<Id>::max() - 1}};
-    AggMap map(emptyKey, deletedKey);
+    AggMap map;
     vector<Id> entitiesInContext;
     Id currentCid = cids[0];
     Score cscore = scores[0];
@@ -645,7 +643,7 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
                           IdVectorHash>;
   vector<Id> emptyKey = {{std::numeric_limits<Id>::max()}};
   vector<Id> deletedKey = {{std::numeric_limits<Id>::max() - 1}};
-  AggMap map(emptyKey, deletedKey);
+  AggMap map;
   vector<Id> entitiesInContext;
   Id currentCid = cids[0];
   Score cscore = scores[0];
@@ -1027,9 +1025,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   using ScoreToContext = std::set<pair<Score, Id>>;
   using ScoreAndStC = pair<Score, ScoreToContext>;
   using AggMap = ad_utility::HashMap<vector<Id>, ScoreAndStC, IdVectorHash>;
-  vector<Id> emptyKey = {{std::numeric_limits<Id>::max()}};
-  vector<Id> deletedKey = {{std::numeric_limits<Id>::max() - 1}};
-  AggMap map(emptyKey, deletedKey);
+  AggMap map;
   vector<Id> entitiesInContext;
   vector<Id> filteredEntitiesInContext;
   Id currentCid = cids[0];
@@ -1201,9 +1197,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   using ScoreToContext = std::set<pair<Score, Id>>;
   using ScoreAndStC = pair<Score, ScoreToContext>;
   using AggMap = ad_utility::HashMap<vector<Id>, ScoreAndStC, IdVectorHash>;
-  vector<Id> emptyKey = {{std::numeric_limits<Id>::max()}};
-  vector<Id> deletedKey = {{std::numeric_limits<Id>::max() - 1}};
-  AggMap map(emptyKey, deletedKey);
+  AggMap map;
   vector<Id> entitiesInContext;
   vector<Id> filteredEntitiesInContext;
   Id currentCid = cids[0];
