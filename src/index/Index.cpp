@@ -242,13 +242,6 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   LOG(INFO) << "Merging vocabulary\n";
   VocabularyMerger::VocMergeRes mergeRes = [&]() {
     VocabularyMerger v;
-    auto identicalPred = [c = _vocab.getCaseComparator()](const auto& a,
-                                                          const auto& b) {
-      return c(a, b, decltype(c)::Level::IDENTICAL);
-    };
-    mergeRes = v.mergeVocabulary(_onDiskBase, numFiles, identicalPred);
-    LOG(INFO) << "Finished Merging Vocabulary.\n";
-  }
     const auto identicalPred = [& c = _vocab.getCaseComparator()](
                                    const auto& a, const auto& b) {
       return c(a, b, decltype(_vocab)::SortLevel::IDENTICAL);
@@ -1514,7 +1507,6 @@ void Index::initializeVocabularySettingsBuild() {
                    "is ignored\n";
     }
   }
-}
 
   if (j.count("num-triples-per-partial-vocab")) {
     _numTriplesPerPartialVocab = j["num-triples-per-partial-vocab"];
