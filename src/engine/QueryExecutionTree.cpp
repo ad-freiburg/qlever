@@ -164,13 +164,10 @@ size_t QueryExecutionTree::getSizeEstimate() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
     if (_cachedResult && _cachedResult->status() == ResultTable::FINISHED) {
       _sizeEstimate = _cachedResult->size();
-    } else if (_qec) {
-      _sizeEstimate = _rootOperation->getSizeEstimate();
     } else {
-      // For test cases without index only:
-      // Make it deterministic by using the asString.
-      _sizeEstimate =
-          1000 + std::hash<string>{}(_rootOperation->asString()) % 1000;
+      // if we are in a unit test setting and there is no QueryExecutionContest specified
+      // it is the _rootOperation's obligation to handle this case correctly
+      _sizeEstimate = _rootOperation->getSizeEstimate();
     }
   }
   return _sizeEstimate;

@@ -2884,7 +2884,7 @@ size_t QueryPlanner::findCheapestExecutionTree(
   AD_CHECK_GT(lastRow.size(), 0);
   size_t minCost = std::numeric_limits<size_t>::max();
   size_t minInd = 0;
-  LOG(INFO) << "\nFinding the cheapest row in the optimizer\n";
+  LOG(TRACE) << "\nFinding the cheapest row in the optimizer\n";
   for (size_t i = 0; i < lastRow.size(); ++i) {
     [[maybe_unused]] auto repr = lastRow[i]._qet->asString();
     std::transform(repr.begin(), repr.end(), repr.begin(),
@@ -2892,8 +2892,8 @@ size_t QueryPlanner::findCheapestExecutionTree(
 
     size_t thisSize = lastRow[i].getSizeEstimate();
     size_t thisCost = lastRow[i].getCostEstimate();
-    LOG(INFO) << "Estimated cost and size  of " << thisCost << " " << thisSize
-              << " for Tree " << repr << '\n';
+    LOG(TRACE) << "Estimated cost and size  of " << thisCost << " " << thisSize
+               << " for Tree " << repr << '\n';
     if (thisCost < minCost) {
       minCost = lastRow[i].getCostEstimate();
       minInd = i;
@@ -2906,6 +2906,6 @@ size_t QueryPlanner::findCheapestExecutionTree(
       minInd = i;
     }
   }
-  LOG(INFO) << "Finished\n";
+  LOG(TRACE) << "Finished\n";
   return minInd;
 };
