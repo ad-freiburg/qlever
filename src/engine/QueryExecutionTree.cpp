@@ -165,8 +165,9 @@ size_t QueryExecutionTree::getSizeEstimate() {
     if (_cachedResult && _cachedResult->status() == ResultTable::FINISHED) {
       _sizeEstimate = _cachedResult->size();
     } else {
-      // if we are in a unit test setting and there is no QueryExecutionContest specified
-      // it is the _rootOperation's obligation to handle this case correctly
+      // if we are in a unit test setting and there is no QueryExecutionContest
+      // specified it is the _rootOperation's obligation to handle this case
+      // correctly
       _sizeEstimate = _rootOperation->getSizeEstimate();
     }
   }
