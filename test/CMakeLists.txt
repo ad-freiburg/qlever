@@ -133,3 +133,7 @@ target_link_libraries(TupleHelpersTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 add_executable(StringSortComparatorTest StringSortComparatorTest.cpp)
 add_test(StringSortComparatorTest StringSortComparatorTest)
 target_link_libraries(StringSortComparatorTest gtest_main ${CMAKE_THREAD_LIBS_INIT} ${ICU_LIBRARIES})
+
+add_executable(PriorityQueueTest PriorityQueueTest.cpp)
+add_test(PriorityQueueTest PriorityQueueTest)
+target_link_libraries(PriorityQueueTest gtest_main ${CMAKE_THREAD_LIBS_INIT} ${ICU_LIBRARIES})

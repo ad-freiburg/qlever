@@ -22,6 +22,7 @@
 #include "./PrefixHeuristic.h"
 #include "./VocabularyGenerator.h"
 #include "MetaDataIterator.h"
+#include "../util/FlexibleCache.h"
 
 using std::array;
 
