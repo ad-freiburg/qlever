@@ -68,7 +68,7 @@ target_link_libraries(HashMapTest gtest_main ${CMAKE_THREAD_LIBS_INIT} absl::fla
 
 add_executable(HashSetTest HashSetTest.cpp)
 add_test(HashSetTest HashSetTest)
-target_link_libraries(HashSetTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(HashSetTest gtest_main ${CMAKE_THREAD_LIBS_INIT} absl::flat_hash_set)
 
 add_executable(GroupByTest GroupByTest.cpp)
 add_test(GroupByTest GroupByTest)
