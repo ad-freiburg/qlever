@@ -97,6 +97,7 @@ void Index::createFromFile(const string& filename) {
   string vocabFile = _onDiskBase + ".vocabulary";
   string vocabFileTmp = _onDiskBase + ".vocabularyTmp";
   std::vector<string> prefixes;
+  LOG(INFO) << "Finished writing permutations" << std::endl;
   if (_vocabPrefixCompressed) {
     // we have to use the "normally" sorted vocabulary for the prefix
     // compression;
@@ -107,7 +108,7 @@ void Index::createFromFile(const string& filename) {
     std::ofstream prefixFile(_onDiskBase + PREFIX_FILE);
     AD_CHECK(prefixFile.is_open());
     for (const auto& prefix : prefixes) {
-      prefixFile << prefix << '\n';
+      prefixFile << prefix << std::endl;
     }
   }
   _configurationJson["prefixes"] = _vocabPrefixCompressed;
@@ -118,7 +119,7 @@ void Index::createFromFile(const string& filename) {
   if (std::rename(vocabFileTmp.c_str(), vocabFile.c_str())) {
     LOG(INFO) << "Error: Rename the prefixed vocab file " << vocabFileTmp
               << " to " << vocabFile << " set errno to " << errno
-              << ". Terminating...\n";
+              << ". Terminating..." << std::endl;
     AD_CHECK(false);
   }
   writeConfiguration();
@@ -160,7 +161,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
     {
-      auto p = ad_pipeline::setupParallelPipeline<1, NUM_PARALLEL_ITEM_MAPS>(
+      auto p = ad_pipeline::setupParallelPipeline<1, 1, NUM_PARALLEL_ITEM_MAPS>(
           _parserBatchSize,
           // when called, returns an optional to the next triple. If
           // <linexPerPartial> triples were parsed, return std::nullopt. when
@@ -169,6 +170,24 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
           // as a first step in the parallel Pipeline.
           ParserBatcher(parser, linesPerPartial,
                         [&]() { parserExhausted = true; }),
+          // do all the unescaping from Sparql (ToDo<joka921>:: move this into
+          // its own pipeline within the parser
+          [this](Triple&& t) {
+            Triple res;
+            std::transform(t.begin(), t.end(), res.begin(), [](const auto& s) {
+              auto res = TurtleToken::normalizeRDFLiteral(s);
+              try {
+                [[maybe_unused]] auto tmp = TurtleToken::normalizeRDFLiteral(
+                    TurtleToken::escapeRDFLiteral(res));
+              } catch (...) {
+                LOG(ERROR) << "Vocabulary entry " + s +
+                                  " could not be (un)escaped properly"
+                           << std::endl;
+              }
+              return res;
+            });
+            return res;
+          },
           // convert each triple to the internal representation (e.g. special
           // values for Numbers, externalized literals, etc.)
           [this](Triple&& t) {
@@ -433,7 +452,7 @@ Index::createPermutationPairImpl(const string& fileName1,
 
   out1.close();
   out2.close();
-  LOG(INFO) << "Permutation done.\n";
+  LOG(INFO) << "Permutation done." << std::endl;
   return std::make_pair(std::move(metaData1), std::move(metaData2));
 }
 
@@ -493,12 +512,12 @@ void Index::createPermutationPair(
                            &(metaData.value().second));
     LOG(INFO) << "Done" << '\n';
     LOG(INFO) << "Writing MetaData for " << p1._readableName << " and "
-              << p2._readableName << '\n';
+              << p2._readableName << std::endl;
     ad_utility::File f1(_onDiskBase + ".index" + p1._fileSuffix, "r+");
     metaData.value().first.appendToFile(&f1);
     ad_utility::File f2(_onDiskBase + ".index" + p2._fileSuffix, "r+");
     metaData.value().second.appendToFile(&f2);
-    LOG(INFO) << "Done" << '\n';
+    LOG(INFO) << "Done" << std::endl;
   }
 }
 

@@ -6,6 +6,7 @@
 
 #include <fstream>
 
+#include "../parser/Tokenizer.h"
 #include "../util/Log.h"
 
 // _____________________________________________________________________________
@@ -74,6 +75,10 @@ void ExternalVocabulary<Comp>::buildFromTextFile(const string& textFileName,
   _size = 0;
   std::string word;
   while (std::getline(infile, word)) {
+    // in the text file we had the escaped variants, but here
+    // we can use the correct ones since we store in a binary format with
+    // offsets
+    word = TurtleToken::normalizeRDFLiteral<false>(word);
     offsets.push_back(currentOffset);
     currentOffset += _file.write(word.data(), word.size());
     _size++;

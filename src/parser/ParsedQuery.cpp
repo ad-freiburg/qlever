@@ -12,6 +12,7 @@
 #include "../util/Conversions.h"
 #include "../util/StringUtils.h"
 #include "ParseException.h"
+#include "Tokenizer.h"
 
 using std::string;
 using std::vector;
@@ -368,14 +369,9 @@ void ParsedQuery::expandPrefix(
     if (i != string::npos && i >= from &&
         prefixMap.count(item.substr(from, i - from)) > 0) {
       string prefixUri = prefixMap.find(item.substr(from, i - from))->second;
-      if (from == 0) {
-        item = prefixUri.substr(0, prefixUri.size() - 1) + item.substr(i + 1) +
-               '>';
-      } else {
-        item = item.substr(0, from) +
-               prefixUri.substr(0, prefixUri.size() - 1) + item.substr(i + 1) +
-               '>';
-      }
+      item = item.substr(0, from) + prefixUri.substr(0, prefixUri.size() - 1) +
+             item.substr(i + 1) + '>';
+      item = TurtleToken::unescapePrefixedIri(item);
     }
     if (langtag) {
       item =

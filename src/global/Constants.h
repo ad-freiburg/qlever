@@ -79,7 +79,9 @@ static const std::string WARNING_ASCII_ONLY_PREFIXES =
     "You explicitly requested the ascii-prefixes-only settings or the ctre "
     "regex engine for Tokenization. This means "
     "that prefixes in the input Turtle may only use characters from "
-    "the ascii range. This is stricter than the Sparql standard but "
+    "the ascii range and that no escape sequences may be used in prefixed "
+    "names (e.g. rdfs:lab\\,el)."
+    " This is stricter than the Sparql standard but "
     "makes parsing faster and works e.g. for wikidata dumps\n";
 
 static const std::string LOCALE_DEFAULT_LANG = "en";
