@@ -185,6 +185,7 @@ class TurtleParser {
   // put the matching prefix into _lastParseResult, move the input position
   // forward by the length of the match and return true else return false and do
   // not change the parser's state
+  template<bool SkipWhitespaceBefore=true>
   bool parseTerminal(const RE2& terminal);
 
   // ______________________________________________________________________________________

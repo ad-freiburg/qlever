@@ -10,6 +10,24 @@
 #include "../src/engine/TransitivePath.h"
 #include "../src/global/Id.h"
 
+void sameUnorderedContent(const IdTable& a, const IdTable& b) {
+  auto aCpy = a;
+  auto bCpy = b;
+  auto sorter = [](const auto& a, const auto& b) {
+    if (a.cols() != b.cols()) {return a.cols() < b.cols();}
+    for (size_t i = 0; i < a.cols(); ++i) {
+      if (a[i] != b[i]) {
+        return a[i] < b[i];
+      }
+    }
+    // equal means "not smaller"
+    return false;
+  };
+  std::sort(aCpy.begin(), aCpy.end(), sorter);
+  std::sort(bCpy.begin(), bCpy.end(), sorter);
+  ASSERT_EQ(aCpy, bCpy);
+}
+
 TEST(TransitivePathTest, computeTransitivePath) {
   IdTable sub(2);
   sub.push_back({0, 2});
@@ -46,7 +64,8 @@ TEST(TransitivePathTest, computeTransitivePath) {
   TransitivePath::computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0,
                                            1,
                                            std::numeric_limits<size_t>::max());
-  ASSERT_EQ(expected, result);
+  //ASSERT_EQ(expected, result);
+  sameUnorderedContent(expected, result);
 
   result.clear();
   expected.clear();
@@ -66,7 +85,8 @@ TEST(TransitivePathTest, computeTransitivePath) {
 
   TransitivePath::computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0,
                                            1, 2);
-  ASSERT_EQ(expected, result);
+  sameUnorderedContent(expected, result);
+  //ASSERT_EQ(expected, result);
 
   result.clear();
   expected.clear();
@@ -76,7 +96,8 @@ TEST(TransitivePathTest, computeTransitivePath) {
 
   TransitivePath::computeTransitivePath<2>(&result, sub, false, true, 0, 1, 7,
                                            0, 1, 2);
-  ASSERT_EQ(expected, result);
+  //ASSERT_EQ(expected, result);
+  sameUnorderedContent(expected, result);
 
   result.clear();
   expected.clear();
@@ -85,5 +106,6 @@ TEST(TransitivePathTest, computeTransitivePath) {
 
   TransitivePath::computeTransitivePath<2>(&result, sub, true, false, 0, 1, 0,
                                            2, 1, 2);
-  ASSERT_EQ(expected, result);
+  //ASSERT_EQ(expected, result);
+  sameUnorderedContent(expected, result);
 }

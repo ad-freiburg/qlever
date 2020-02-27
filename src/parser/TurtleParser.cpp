@@ -310,7 +310,7 @@ bool TurtleParser::prefixedName() {
     _lastParseResult = "";
   }
   _lastParseResult.clear();
-  parseTerminal(tokens().PnLocal);
+  parseTerminal<false>(tokens().PnLocal);
   _lastParseResult = '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
   return true;
 }
@@ -319,8 +319,11 @@ bool TurtleParser::prefixedName() {
 bool TurtleParser::blankNode() { return blankNodeLabel() || anon(); }
 
 // _______________________________________________________________________
+template<bool SkipWhitespaceBefore>
 bool TurtleParser::parseTerminal(const RE2& terminal) {
-  _tok.skipWhitespaceAndComments();
+  if constexpr (SkipWhitespaceBefore) {
+    _tok.skipWhitespaceAndComments();
+  }
   auto [success, word] = _tok.getNextToken(terminal);
   if (success) {
     _lastParseResult = word;
