@@ -319,7 +319,7 @@ bool TurtleParser::prefixedName() {
 bool TurtleParser::blankNode() { return blankNodeLabel() || anon(); }
 
 // _______________________________________________________________________
-template<bool SkipWhitespaceBefore>
+template <bool SkipWhitespaceBefore>
 bool TurtleParser::parseTerminal(const RE2& terminal) {
   if constexpr (SkipWhitespaceBefore) {
     _tok.skipWhitespaceAndComments();

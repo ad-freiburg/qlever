@@ -14,7 +14,9 @@ void sameUnorderedContent(const IdTable& a, const IdTable& b) {
   auto aCpy = a;
   auto bCpy = b;
   auto sorter = [](const auto& a, const auto& b) {
-    if (a.cols() != b.cols()) {return a.cols() < b.cols();}
+    if (a.cols() != b.cols()) {
+      return a.cols() < b.cols();
+    }
     for (size_t i = 0; i < a.cols(); ++i) {
       if (a[i] != b[i]) {
         return a[i] < b[i];
@@ -64,7 +66,7 @@ TEST(TransitivePathTest, computeTransitivePath) {
   TransitivePath::computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0,
                                            1,
                                            std::numeric_limits<size_t>::max());
-  //ASSERT_EQ(expected, result);
+  // ASSERT_EQ(expected, result);
   sameUnorderedContent(expected, result);
 
   result.clear();
@@ -86,7 +88,7 @@ TEST(TransitivePathTest, computeTransitivePath) {
   TransitivePath::computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0,
                                            1, 2);
   sameUnorderedContent(expected, result);
-  //ASSERT_EQ(expected, result);
+  // ASSERT_EQ(expected, result);
 
   result.clear();
   expected.clear();
@@ -96,7 +98,7 @@ TEST(TransitivePathTest, computeTransitivePath) {
 
   TransitivePath::computeTransitivePath<2>(&result, sub, false, true, 0, 1, 7,
                                            0, 1, 2);
-  //ASSERT_EQ(expected, result);
+  // ASSERT_EQ(expected, result);
   sameUnorderedContent(expected, result);
 
   result.clear();
@@ -106,6 +108,6 @@ TEST(TransitivePathTest, computeTransitivePath) {
 
   TransitivePath::computeTransitivePath<2>(&result, sub, true, false, 0, 1, 0,
                                            2, 1, 2);
-  //ASSERT_EQ(expected, result);
+  // ASSERT_EQ(expected, result);
   sameUnorderedContent(expected, result);
 }
