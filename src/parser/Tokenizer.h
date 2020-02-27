@@ -192,6 +192,7 @@ struct TurtleToken {
         Iriref(grp(IrirefString)),
         PnameNS(grp(PnameNSString)),
         PnameLN(grp(PnameLNString)),
+        PnLocal(grp(PnLocalString)),
         BlankNodeLabel(grp(BlankNodeLabelString)),
 
         WsMultiple(grp(WsMultipleString)),
@@ -313,6 +314,7 @@ struct TurtleToken {
 
   const string PnameLNString = grp(PnameNSString) + grp(PnLocalString);
   const RE2 PnameLN;
+  const RE2 PnLocal;
 
   const string BlankNodeLabelString = u8"_:" + cls(PnCharsUString + u8"0-9") +
                                       grp("\\.*" + cls(PnCharsString)) + "*";

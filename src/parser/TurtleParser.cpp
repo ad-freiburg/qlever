@@ -26,7 +26,7 @@ bool TurtleParser::prefixID() {
           _lastParseResult.substr(1, _lastParseResult.size() - 2);
       return true;
     } else {
-      throw ParseException("prefixID");
+      throw ParseException("prefixID", getParsePosition());
     }
   } else {
     return false;
@@ -40,7 +40,7 @@ bool TurtleParser::base() {
       _baseIRI = _lastParseResult;
       return true;
     } else {
-      throw ParseException("base");
+      raise("base");
     }
   } else {
     return false;
@@ -54,7 +54,7 @@ bool TurtleParser::sparqlPrefix() {
       _prefixMap[_activePrefix] = _lastParseResult;
       return true;
     } else {
-      throw ParseException("sparqlPrefix");
+      raise("sparqlPrefix");
     }
   } else {
     return false;
@@ -68,7 +68,7 @@ bool TurtleParser::sparqlBase() {
       _baseIRI = _lastParseResult;
       return true;
     } else {
-      throw ParseException("sparqlBase");
+      raise("sparqlBase");
     }
   } else {
     return false;
@@ -81,7 +81,7 @@ bool TurtleParser::triples() {
     if (predicateObjectList()) {
       return true;
     } else {
-      throw ParseException("triples");
+      raise("triples");
     }
   } else {
     if (blankNodePropertyList()) {
@@ -202,8 +202,7 @@ bool TurtleParser::collection() {
   if (!skip(tokens().OpenRound)) {
     return false;
   }
-  throw ParseException(
-      "We do not know how to handle collections in QLever yet\n");
+  raise("We do not know how to handle collections in QLever yet\n");
   // TODO<joka921> understand collections
 }
 
@@ -285,7 +284,7 @@ bool TurtleParser::stringParse() {
     return false;
   }
   if (endPos == string::npos) {
-    throw ParseException("unterminated string Literal");
+    raise("unterminated string Literal");
   }
   // also include the quotation marks in the word
   // TODO <joka921> how do we have to translate multiline strings for QLever?
@@ -303,13 +302,17 @@ bool TurtleParser::iri() {
 
 // _____________________________________________________________________
 bool TurtleParser::prefixedName() {
-  if (pnameLN() || pnameNS()) {
-    _lastParseResult =
-        '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
-    return true;
-  } else {
+  if (!parseTerminal(tokens().PnameNS)) {
     return false;
+  } else {
+    // this also includes a ":" which we do not need, hence the "-1"
+    _activePrefix = _lastParseResult.substr(0, _lastParseResult.size() - 1);
+    _lastParseResult = "";
   }
+  _lastParseResult.clear();
+  parseTerminal(tokens().PnLocal);
+  _lastParseResult = '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
+  return true;
 }
 
 // _____________________________________________________________________
@@ -381,7 +384,7 @@ bool TurtleParser::iriref() {
   if (ad_utility::startsWith(view, "<")) {
     auto endPos = view.find_first_of("> \n");
     if (endPos == string::npos || view[endPos] != '>') {
-      throw ParseException("Iriref");
+      raise("Iriref");
     } else {
       _tok.data().remove_prefix(endPos + 1);
       _lastParseResult = view.substr(0, endPos + 1);
@@ -405,7 +408,8 @@ TurtleStreamParser::TurtleParserBackupState TurtleStreamParser::backupState()
 
 // _______________________________________________________________
 bool TurtleStreamParser::resetStateAndRead(
-    const TurtleStreamParser::TurtleParserBackupState b) {
+    TurtleStreamParser::TurtleParserBackupState* bPtr) {
+  auto& b = *bPtr;
   auto nextBytesOpt = _fileBuffer->getNextBlock();
   if (!nextBytesOpt || nextBytesOpt.value().empty()) {
     // there are no more decompressed bytes, just continue with what we've got
@@ -422,6 +426,7 @@ bool TurtleStreamParser::resetStateAndRead(
   _tok.reset(b._tokenizerPosition, b._tokenizerSize);
 
   std::vector<char> buf;
+  _numBytesBeforeCurrentBatch += _byteVec.size() - _tok.data().size();
   buf.resize(_tok.data().size() + nextBytes.size());
   memcpy(buf.data(), _tok.data().begin(), _tok.data().size());
   memcpy(buf.data() + _tok.data().size(), nextBytes.data(), nextBytes.size());
@@ -430,6 +435,10 @@ bool TurtleStreamParser::resetStateAndRead(
 
   LOG(TRACE) << "Succesfully decompressed next batch of " << nextBytes.size()
              << " << bytes to parser\n";
+
+  // repair the backup state, its pointers might have changed due to
+  // reallocation
+  b = backupState();
   return true;
 }
 
@@ -530,7 +539,7 @@ bool TurtleStreamParser::getLine(std::array<string, 3>* triple) {
         // we read chunks of memories in a buffered way
         // try to parse with a larger buffer and repeat the reading process
         // (maybe the failure was due to statements crossing our block).
-        if (resetStateAndRead(b)) {
+        if (resetStateAndRead(&b)) {
           // we have succesfully extended our buffer
           if (_byteVec.size() > BZIP2_MAX_TOTAL_BUFFER_SIZE) {
             auto& d = _tok.data();
@@ -549,7 +558,7 @@ bool TurtleStreamParser::getLine(std::array<string, 3>* triple) {
               throw ex;
 
             } else {
-              throw ParseException(
+              raise(
                   "Too many bytes parsed without finishing a turtle "
                   "statement");
             }

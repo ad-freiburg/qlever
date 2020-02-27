@@ -19,9 +19,9 @@ namespace ad_utility {
 // functions. It only adds a constructor which automatically sets the empty and
 // deleted keys.  This may be changed in the future.
 template <class T,
-        class HashFcn = absl::container_internal::hash_default_hash<T>,
-        class EqualKey = absl::container_internal::hash_default_eq<T>,
-        class Alloc = std::allocator<T>>
+          class HashFcn = absl::container_internal::hash_default_hash<T>,
+          class EqualKey = absl::container_internal::hash_default_eq<T>,
+          class Alloc = std::allocator<T>>
 class HashSet : private absl::flat_hash_set<T, HashFcn, EqualKey, Alloc> {
   using Base = absl::flat_hash_set<T, HashFcn, EqualKey, Alloc>;
 

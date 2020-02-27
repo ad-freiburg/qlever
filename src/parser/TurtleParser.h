@@ -29,7 +29,8 @@ class TurtleParser {
   class ParseException : public std::exception {
    public:
     ParseException() = default;
-    ParseException(const string& msg) : _msg(msg) {}
+    ParseException(std::string_view msg, const size_t pos)
+        : _msg(std::string(msg) + " at position " + std::to_string(pos)) {}
     const char* what() const throw() { return _msg.c_str(); }
 
    private:
@@ -52,6 +53,10 @@ class TurtleParser {
   // returns true iff a triple can be successfully written, else the triple
   // value is invalid and the parser is at the end of the input.
   virtual bool getLine(std::array<string, 3>* triple) = 0;
+
+  // get the total offset of the first byte that has not yet been dealt with by
+  // the parser.
+  virtual size_t getParsePosition() const = 0;
 
  protected:
   // clear all the parser's state to the initial values.
@@ -113,6 +118,11 @@ class TurtleParser {
   std::string _activePredicate;
   [[nodiscard]] const TurtleToken& tokens() const { return _tok._tokens; }
   size_t _numBlankNodes = 0;
+
+  // throw an exception annotated with position information
+  [[noreturn]] void raise(std::string_view msg) {
+    throw ParseException(msg, getParsePosition());
+  }
 
  private:
   /* private Member Functions */
@@ -197,8 +207,9 @@ class TurtleParser {
   string expandPrefix(const string& prefix) {
     if (!_prefixMap.count(prefix)) {
       throw ParseException("Prefix " + prefix +
-                           " was not registered using a PREFIX or @prefix "
-                           "declaration before using it!\n");
+                               " was not registered using a PREFIX or @prefix "
+                               "declaration before using it!\n",
+                           getParsePosition());
     } else {
       return _prefixMap[prefix];
     }
@@ -234,6 +245,10 @@ class TurtleStringParser : public TurtleParser {
     throw std::runtime_error(
         "TurtleStringParser doesn't support calls to getLine. Only use "
         "parseUtf8String() for unit tests\n");
+  }
+
+  size_t getParsePosition() const override {
+    return _tmpToParse.size() - _tok.data().size();
   }
 
   virtual void initialize(const string& filename) override {
@@ -318,6 +333,10 @@ class TurtleStreamParser : public TurtleParser {
 
   virtual void initialize(const string& filename) override;
 
+  size_t getParsePosition() const override {
+    return _numBytesBeforeCurrentBatch + (_tok.data().data() - _byteVec.data());
+  }
+
  private:
   // Backup the current state of the turtle parser to a
   // TurtleparserBackupState object
@@ -329,7 +348,7 @@ class TurtleStreamParser : public TurtleParser {
   // Reset the parser to the state indicated by the argument
   // Must be called on the same parser object that was used to create the backup
   // state (the actual triples are not backed up)
-  bool resetStateAndRead(const TurtleParserBackupState state);
+  bool resetStateAndRead(TurtleParserBackupState* state);
 
   // stores the current batch of bytes we have to parse.
   // Might end in the middle of a statement or even a multibyte utf8 character,
@@ -340,6 +359,10 @@ class TurtleStreamParser : public TurtleParser {
   // this many characters will be buffered at once,
   // defaults to a global constant
   size_t _bufferSize = FILE_BUFFER_SIZE;
+
+  // that many bytes were already parsed before dealing with the current batch
+  // in member _byteVec
+  size_t _numBytesBeforeCurrentBatch = 0;
 };
 
 /**
@@ -361,6 +384,10 @@ class TurtleMmapParser : public TurtleParser {
   ~TurtleMmapParser() { unmapFile(); }
   TurtleMmapParser(TurtleMmapParser&& rhs) = default;
   TurtleMmapParser& operator=(TurtleMmapParser&& rhs) = default;
+
+  size_t getParsePosition() const override {
+    return _dataSize - _tok.data().size();
+  }
 
   // inherit the other overload
   using TurtleParser::getLine;
