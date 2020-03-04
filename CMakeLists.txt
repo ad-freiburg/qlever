@@ -88,6 +88,10 @@ if (USE_PARALLEL)
     add_definitions("-D_PARALLEL_SORT")
 endif()
 
+if (USE_TREE_BASED_CACHE)
+    add_definitions("-D_QLEVER_USE_TREE_BASED_CACHE")
+endif()
+
 ################################
 # STXXL
 ################################

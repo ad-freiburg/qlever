@@ -145,8 +145,24 @@ void Server::process(Socket* client) {
         return;
       }
 
+      if (ad_utility::getLowercase(params["cmd"]) == "cachestats") {
+        LOG(INFO) << "Supplying cache stats..." << std::endl;
+        auto statsJson = composeCacheStatsJson();
+        contentType = "application/json";
+        string httpResponse = createHttpResponse(statsJson.dump(), contentType);
+        auto bytesSent = client->send(httpResponse);
+        LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
+        LOG(INFO) << "Sent cache stats to client." << std::endl;
+        return;
+      }
+
       if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
         _cache.clear();
+      }
+
+      if (ad_utility::getLowercase(params["cmd"]) == "clearcachecomplete") {
+        _cache.clear();
+        _cache.clearAll();
       }
       auto it = params.find("send");
       size_t maxSend = MAX_NOF_ROWS_IN_RESULT;
@@ -494,4 +510,14 @@ string Server::composeStatsJson() const {
      << "\"nofentitypostings\": \"" << _index.getNofEntityPostings() << "\"\n"
      << "}\n";
   return os.str();
+}
+
+// _______________________________________
+nlohmann::json Server::composeCacheStatsJson() const {
+  nlohmann::json result;
+  result["num-cached-elements"] = _cache.numCachedElements();
+  result["num-pinned-elements"] = _cache.numPinnedElements();
+  result["cached-size"] = _cache.cachedSize();
+  result["pinned-size"] = _cache.pinnedSize();
+  return result;
 }

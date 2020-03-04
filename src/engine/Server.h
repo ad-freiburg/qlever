@@ -89,4 +89,6 @@ class Server {
   string composeStatsJson() const;
 
   mutable ad_utility::Timer _requestProcessingTimer;
+
+  json composeCacheStatsJson() const;
 };

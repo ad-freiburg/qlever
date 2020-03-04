@@ -192,7 +192,7 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
     resEids.resize(minSize);
   }
 
-  // For intersection, we don't need a PQ.
+  // For intersection, we don't need a HeapBasedPQ.
   // The algorithm:
   // Remember the current context and the length of the streak
   // (i.e. in how many lists was that context found).
@@ -202,7 +202,7 @@ void FTSAlgorithms::intersectKWay(const vector<vector<Id>>& cidVecs,
   // b) a higher context is found without a match before (reset cur and streak).
   // Stop as soon as one list cannot advance.
 
-  // I think no PQ is needed, because unlike for merge, elements that
+  // I think no HeapBasedPQ is needed, because unlike for merge, elements that
   // do not occur in all lists, don't have to be visited in the right order.
 
   vector<size_t> nextIndices;

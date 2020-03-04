@@ -9,7 +9,7 @@
 #include <vector>
 #include "../global/Constants.h"
 #include "../index/Index.h"
-#include "../util/LRUCache.h"
+#include "../util/Cache.h"
 #include "../util/Log.h"
 #include "./Engine.h"
 #include "./ResultTable.h"
@@ -24,6 +24,9 @@ struct CacheValue {
   CacheValue() : _resTable(std::make_shared<ResultTable>()), _runtimeInfo() {}
   std::shared_ptr<ResultTable> _resTable;
   RuntimeInformation _runtimeInfo;
+  [[nodiscard]] size_t size() const {
+    return _resTable ? _resTable-> size() * _resTable->width() : 0;
+  }
 };
 
 typedef ad_utility::LRUCache<string, CacheValue> SubtreeCache;

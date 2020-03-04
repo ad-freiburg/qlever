@@ -17,12 +17,12 @@
 #include "../util/BatchedPipeline.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
+#include "../util/PriorityQueue.h"
 #include "../util/TupleHelpers.h"
 #include "./Index.h"
 #include "./PrefixHeuristic.h"
 #include "./VocabularyGenerator.h"
 #include "MetaDataIterator.h"
-#include "../util/FlexibleCache.h"
 
 using std::array;
 
