@@ -19,7 +19,7 @@
 class Engine {
  public:
   template <typename Comp, int WIDTH>
-  static void filter(const IdTableStatic<WIDTH>& v, const Comp& comp,
+  static void filter(const IdTableView<WIDTH>& v, const Comp& comp,
                      IdTableStatic<WIDTH>* result) {
     AD_CHECK(result);
     AD_CHECK(result->size() == 0);
@@ -46,8 +46,8 @@ class Engine {
       return;
     }
 
-    const IdTableStatic<IN_WIDTH> v = dynV.asStaticView<IN_WIDTH>();
-    const IdTableStatic<FILTER_WIDTH> filter =
+    const IdTableView<IN_WIDTH> v = dynV.asStaticView<IN_WIDTH>();
+    const IdTableView<FILTER_WIDTH> filter =
         dynFilter.asStaticView<FILTER_WIDTH>();
     IdTableStatic<IN_WIDTH> result = dynResult->moveToStatic<IN_WIDTH>();
 
@@ -142,11 +142,11 @@ class Engine {
                        const std::vector<size_t>& keepIndices,
                        IdTable* dynResult) {
     LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
-    const IdTableStatic<WIDTH> input = dynInput.asStaticView<WIDTH>();
+    const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
     IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
     if (input.size() > 0) {
       AD_CHECK_LE(keepIndices.size(), input.cols());
-      result = input;
+      result = input.clone();
 
       auto last = std::unique(result.begin(), result.end(),
                               [&keepIndices](const auto& a, const auto& b) {

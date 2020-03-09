@@ -231,7 +231,7 @@ void CountAvailablePredicates::computePatternTrick(
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns, const size_t subjectColumn,
     RuntimeInformation* runtimeInfo) {
-  const IdTableStatic<I> input = dynInput.asStaticView<I>();
+  const IdTableView<I> input = dynInput.asStaticView<I>();
   IdTableStatic<2> result = dynResult->moveToStatic<2>();
   LOG(DEBUG) << "For " << input.size() << " entities in column "
              << subjectColumn << std::endl;

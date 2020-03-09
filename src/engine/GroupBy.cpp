@@ -167,7 +167,7 @@ struct resizeIfVec<vector<C>, C> {
  */
 template <int IN_WIDTH, int OUT_WIDTH>
 void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
-                  size_t blockEnd, const IdTableStatic<IN_WIDTH>& input,
+                  size_t blockEnd, const IdTableView<IN_WIDTH>& input,
                   const vector<ResultTable::ResultType>& inputTypes,
                   IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
                   const ResultTable* inTable, ResultTable* outTable,
@@ -585,7 +585,7 @@ void doGroupBy(const IdTable& dynInput,
   if (dynInput.size() == 0) {
     return;
   }
-  const IdTableStatic<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
+  const IdTableView<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
   ad_utility::HashSet<size_t> distinctHashSet;
 

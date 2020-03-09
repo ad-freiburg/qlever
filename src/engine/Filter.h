@@ -116,7 +116,7 @@ class Filter : public Operation {
    */
   template <ResultTable::ResultType T, int WIDTH>
   void computeFilter(IdTableStatic<WIDTH>* dynResult, size_t lhs, size_t rhs,
-                     const IdTableStatic<WIDTH>& dynInput) const;
+                     const IdTableView<WIDTH>& dynInput) const;
 
   template <int WIDTH>
   void computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
@@ -130,7 +130,7 @@ class Filter : public Operation {
    */
   template <ResultTable::ResultType T, int WIDTH>
   void computeFilterFixedValue(IdTableStatic<WIDTH>* res, size_t lhs, Id rhs,
-                               const IdTableStatic<WIDTH>& input,
+                               const IdTableView<WIDTH>& input,
                                shared_ptr<const ResultTable> subRes) const;
 
   template <int WIDTH>

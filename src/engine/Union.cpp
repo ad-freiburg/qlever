@@ -158,8 +158,8 @@ template <int LEFT_WIDTH, int RIGHT_WIDTH, int OUT_WIDTH>
 void Union::computeUnion(
     IdTable* dynRes, const IdTable& dynLeft, const IdTable& dynRight,
     const std::vector<std::array<size_t, 2>>& columnOrigins) {
-  const IdTableStatic<LEFT_WIDTH> left = dynLeft.asStaticView<LEFT_WIDTH>();
-  const IdTableStatic<RIGHT_WIDTH> right = dynRight.asStaticView<RIGHT_WIDTH>();
+  const IdTableView<LEFT_WIDTH> left = dynLeft.asStaticView<LEFT_WIDTH>();
+  const IdTableView<RIGHT_WIDTH> right = dynRight.asStaticView<RIGHT_WIDTH>();
   IdTableStatic<OUT_WIDTH> res = dynRes->moveToStatic<OUT_WIDTH>();
 
   res.reserve(left.size() + right.size());
