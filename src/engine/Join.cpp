@@ -571,6 +571,13 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
         // If the next i is still the same, reset j.
         if (a(i, jc1) == b(keepJ, jc2)) {
           j = keepJ;
+        } else if (j >= b.size()) {
+          // this check is needed because otherwise we might leak an out of
+          // bounds value for j into the next loop which does not check it. this
+          // fixes a bug that was not discovered by testing due to 0
+          // initialization of IdTables used for testing and should not occur in
+          // typical use cases but it is still wrong.
+          return;
         }
       }
     }
@@ -697,6 +704,13 @@ void Join::doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
       // If the next i is still the same, reset j.
       if (l1(i, jc1) == l2(keepJ, jc2)) {
         j = keepJ;
+      } else if (j >= l2.size()) {
+        // this check is needed because otherwise we might leak an out of bounds
+        // value for j into the next loop which does not check it.
+        // this fixes a bug that was not discovered by testing due to 0
+        // initialization of IdTables used for testing and should not occur in
+        // typical use cases but it is still wrong.
+        return;
       }
     }
   }
