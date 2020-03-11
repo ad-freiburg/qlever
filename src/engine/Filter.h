@@ -79,6 +79,9 @@ class Filter : public Operation {
   void setLhsAsString(bool i) { _lhsAsString = i; }
 
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
+  vector<QueryExecutionTree*> getChildren() override {
+    return {_subtree.get()};
+  }
 
   virtual bool knownEmptyResult() override {
     return _subtree->knownEmptyResult();
