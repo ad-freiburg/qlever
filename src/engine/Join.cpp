@@ -577,7 +577,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
           // fixes a bug that was not discovered by testing due to 0
           // initialization of IdTables used for testing and should not occur in
           // typical use cases but it is still wrong.
-          return;
+          goto finish;
         }
       }
     }
