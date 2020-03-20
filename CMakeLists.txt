@@ -66,6 +66,12 @@ include_directories(third_party/googletest/googletest/include)
 include_directories(third_party/json/)
 
 ################################
+# CTRE, Compile-Time-Regular-Expressions
+################################
+# Header only, nothing to include
+include_directories(third_party/ctre/include)
+
+################################
 # ABSEIL
 ################################
 set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
