@@ -335,47 +335,37 @@ string Server::composeResponseJson(const ParsedQuery& query,
   off_t compResultUsecs = _requestProcessingTimer.usecs();
   size_t resultSize = rt->size();
 
-  std::ostringstream os;
-  os << "{\n"
-     << "\"query\": " << ad_utility::toJson(query._originalString) << ",\n"
-     << "\"status\": \"OK\",\n"
-     << "\"resultsize\": \"" << resultSize << "\",\n";
+  nlohmann::json j;
 
-  os << "\"selected\": ";
-  if (query._selectedVariables.size()) {
-    os << "[\"" << ad_utility::join(query._selectedVariables, "\", \"")
-       << "\"],\n";
-  } else {
-    os << "[],\n";
-  }
+  j["query"] = query._originalString;
+  j["status"] = "OK";
+  j["resultsize"] = resultSize;
+  j["warnings"] = qet.collectWarnings();
+  j["selected"] = query._selectedVariables;
 
-  os << "\"runtimeInformation\" : ";
-  os << RuntimeInformation::ordered_json(
+  j["runtimeInformation"] = RuntimeInformation::ordered_json(
       qet.getRootOperation()->getRuntimeInfo());
-  os << ", \n";
 
-  os << "\"res\": ";
-  size_t limit = MAX_NOF_ROWS_IN_RESULT;
-  size_t offset = 0;
-  if (query._limit.size() > 0) {
-    limit = static_cast<size_t>(atol(query._limit.c_str()));
+  {
+    size_t limit = MAX_NOF_ROWS_IN_RESULT;
+    size_t offset = 0;
+    if (query._limit.size() > 0) {
+      limit = static_cast<size_t>(atol(query._limit.c_str()));
+    }
+    if (query._offset.size() > 0) {
+      offset = static_cast<size_t>(atol(query._offset.c_str()));
+    }
+    _requestProcessingTimer.cont();
+    j["res"] = qet.writeResultAsJson(query._selectedVariables,
+                                     std::min(limit, maxSend), offset);
+    _requestProcessingTimer.stop();
   }
-  if (query._offset.size() > 0) {
-    offset = static_cast<size_t>(atol(query._offset.c_str()));
-  }
-  _requestProcessingTimer.cont();
-  qet.writeResultToStreamAsJson(os, query._selectedVariables, limit, offset,
-                                maxSend);
-  _requestProcessingTimer.stop();
-  os << ",\n";
 
-  os << "\"time\": {\n"
-     << "\"total\": \"" << _requestProcessingTimer.usecs() / 1000.0 << "ms\",\n"
-     << "\"computeResult\": \"" << compResultUsecs / 1000.0 << "ms\"\n"
-     << "}\n"
-     << "}\n";
+  j["time"]["total"] =
+      std::to_string(_requestProcessingTimer.usecs() / 1000.0) + "ms";
+  j["time"]["computeResult"] = std::to_string(compResultUsecs / 1000.0) + "ms";
 
-  return os.str();
+  return j.dump(4);
 }
 
 // _____________________________________________________________________________

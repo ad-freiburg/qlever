@@ -17,6 +17,8 @@ class TsvParser {
   // Don't allow copy & assignment
   explicit TsvParser(const TsvParser& other) = delete;
   TsvParser& operator=(const TsvParser& other) = delete;
+  TsvParser(TsvParser&& other) = default;
+  TsvParser& operator=(TsvParser&& other) = default;
 
   // Get the next line from the file.
   // Returns true if something was stored.

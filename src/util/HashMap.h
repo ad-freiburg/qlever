@@ -5,7 +5,7 @@
 
 #pragma once
 
-#include <google/dense_hash_map>
+#include <absl/container/flat_hash_map.h>
 
 #include "./DefaultKeyProvider.h"
 
@@ -18,21 +18,13 @@ namespace ad_utility {
 // functions. It only adds a constructor which automatically sets the empty and
 // deleted keys.  This may be changed in the future.
 template <class K, class V,
-          class HashFcn = SPARSEHASH_HASH<K>,  // defined in sparseconfig.h
-          class EqualKey = std::equal_to<K>,
-          class Alloc =
-              google::libc_allocator_with_realloc<std::pair<const K, V> > >
-class HashMap : private google::dense_hash_map<K, V, HashFcn, EqualKey, Alloc> {
-  using Base = typename google::dense_hash_map<K, V, HashFcn, EqualKey, Alloc>;
+          class HashFcn = absl::container_internal::hash_default_hash<K>,
+          class EqualKey = absl::container_internal::hash_default_eq<K>,
+          class Alloc = std::allocator<std::pair<const K, V>>>
+class HashMap : private absl::flat_hash_map<K, V, HashFcn, EqualKey, Alloc> {
+  using Base = typename absl::flat_hash_map<K, V, HashFcn, EqualKey, Alloc>;
 
  public:
-  HashMap<K, V, HashFcn, EqualKey, Alloc>(
-      K emptyKey = DefaultKeyProvider<K>::DEFAULT_EMPTY_KEY,
-      K deletedKey = DefaultKeyProvider<K>::DEFAULT_DELETED_KEY) {
-    Base::set_empty_key(emptyKey);
-    Base::set_deleted_key(deletedKey);
-  }
-
   // Iterator type of this map, it.first is the key, it.second the value
   using typename Base::iterator;
 

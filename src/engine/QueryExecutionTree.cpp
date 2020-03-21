@@ -115,10 +115,8 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
 }
 
 // _____________________________________________________________________________
-void QueryExecutionTree::writeResultToStreamAsJson(
-    std::ostream& out, const vector<string>& selectVars, size_t limit,
-    size_t offset, size_t maxSend) const {
-  out << "[\r\n";
+nlohmann::json QueryExecutionTree::writeResultAsJson(
+    const vector<string>& selectVars, size_t limit, size_t offset) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
@@ -134,16 +132,11 @@ void QueryExecutionTree::writeResultToStreamAsJson(
     }
   }
   if (validIndices.size() == 0) {
-    out << "]";
-    return;
+    return nlohmann::json(std::vector<std::string>());
   }
 
   const IdTable& data = res->_data;
-  size_t upperBound = std::min<size_t>(offset + limit, data.size());
-  writeJsonTable(data, offset, upperBound, validIndices, maxSend, out);
-
-  out << "]";
-  LOG(DEBUG) << "Done creating readable result.\n";
+  return writeJsonTable(data, offset, limit, validIndices);
 }
 
 // _____________________________________________________________________________
@@ -164,13 +157,11 @@ size_t QueryExecutionTree::getSizeEstimate() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
     if (_cachedResult && _cachedResult->status() == ResultTable::FINISHED) {
       _sizeEstimate = _cachedResult->size();
-    } else if (_qec) {
-      _sizeEstimate = _rootOperation->getSizeEstimate();
     } else {
-      // For test cases without index only:
-      // Make it deterministic by using the asString.
-      _sizeEstimate =
-          1000 + std::hash<string>{}(_rootOperation->asString()) % 1000;
+      // if we are in a unit test setting and there is no QueryExecutionContest
+      // specified it is the _rootOperation's obligation to handle this case
+      // correctly
+      _sizeEstimate = _rootOperation->getSizeEstimate();
     }
   }
   return _sizeEstimate;
@@ -198,5 +189,114 @@ void QueryExecutionTree::readFromCache() {
   std::shared_ptr<const CacheValue> res = cache[asString()];
   if (res) {
     _cachedResult = cache[asString()]->_resTable;
+  }
+}
+
+// __________________________________________________________________________________________________________
+nlohmann::json QueryExecutionTree::writeJsonTable(
+    const IdTable& data, size_t from, size_t limit,
+    const vector<pair<size_t, ResultTable::ResultType>>& validIndices) const {
+  shared_ptr<const ResultTable> res = getResult();
+  nlohmann::json json = nlohmann::json::parse("[]");
+  auto optToJson = [](const auto& opt) -> nlohmann::json {
+    if (opt) {
+      return opt.value();
+    }
+    return nullptr;
+  };
+
+  const auto upperBound = std::min(data.size(), limit + from);
+
+  for (size_t i = from; i < upperBound; ++i) {
+    json.emplace_back();
+    auto& row = json.back();
+    for (const auto& idx : validIndices) {
+      const auto& currentId = data(i, idx.first);
+      switch (idx.second) {
+        case ResultTable::ResultType::KB: {
+          std::optional<string> entity =
+              _qec->getIndex().idToOptionalString(currentId);
+          if (entity) {
+            string entitystr = entity.value();
+            if (ad_utility::startsWith(entitystr, VALUE_PREFIX)) {
+              entity = ad_utility::convertIndexWordToValueLiteral(entitystr);
+            }
+          }
+          row.emplace_back(optToJson(entity));
+          break;
+        }
+        case ResultTable::ResultType::VERBATIM:
+          row.emplace_back(std::to_string(currentId));
+          break;
+        case ResultTable::ResultType::TEXT:
+          row.emplace_back(_qec->getIndex().getTextExcerpt(currentId));
+          break;
+        case ResultTable::ResultType::FLOAT: {
+          float f;
+          std::memcpy(&f, &currentId, sizeof(float));
+          std::stringstream s;
+          s << f;
+          row.push_back(s.str());
+          break;
+        }
+        case ResultTable::ResultType::LOCAL_VOCAB: {
+          std::optional<string> entity = res->idToOptionalString(currentId);
+          row.emplace_back(optToJson(entity));
+          break;
+        }
+        default:
+          AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+                   "Cannot deduce output type.");
+      }
+    }
+  }
+  return json;
+}
+
+// _________________________________________________________________________________________________________
+void QueryExecutionTree::writeTable(
+    const IdTable& data, char sep, size_t from, size_t upperBound,
+    const vector<pair<size_t, ResultTable::ResultType>>& validIndices,
+    std::ostream& out) const {
+  shared_ptr<const ResultTable> res = getResult();
+  for (size_t i = from; i < upperBound; ++i) {
+    for (size_t j = 0; j < validIndices.size(); ++j) {
+      switch (validIndices[j].second) {
+        case ResultTable::ResultType::KB: {
+          string entity =
+              _qec->getIndex()
+                  .idToOptionalString(data(i, validIndices[j].first))
+                  .value_or("");
+          if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
+            out << ad_utility::convertIndexWordToValueLiteral(entity);
+          } else {
+            out << entity;
+          }
+          break;
+        }
+        case ResultTable::ResultType::VERBATIM:
+          out << data(i, validIndices[j].first);
+          break;
+        case ResultTable::ResultType::TEXT:
+          out << _qec->getIndex().getTextExcerpt(
+              data(i, validIndices[j].first));
+          break;
+        case ResultTable::ResultType::FLOAT: {
+          float f;
+          std::memcpy(&f, &data(i, validIndices[j].first), sizeof(float));
+          out << f;
+          break;
+        }
+        case ResultTable::ResultType::LOCAL_VOCAB: {
+          out << res->idToOptionalString(data(i, validIndices[j].first))
+                     .value_or("");
+          break;
+        }
+        default:
+          AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+                   "Cannot deduce output type.");
+      }
+      out << (j + 1 < validIndices.size() ? sep : '\n');
+    }
   }
 }

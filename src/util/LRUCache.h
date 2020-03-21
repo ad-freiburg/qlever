@@ -33,11 +33,12 @@ using std::shared_ptr;
 //! enforces read-only access for all operations which can't guarantee only
 //! one thread getting write access. It uses shared_ptrs so as to ensure
 //! that deletes do not free in-use memory.
-template <class Key, class Value,
-          template <typename K, typename V> typename MapType =
-              ad_utility::HashMap>
+template <class Key, class Value>
 class LRUCache {
  private:
+  template <typename K, typename V>
+  using MapType = ad_utility::HashMap<K, V>;
+
   using EntryValue = shared_ptr<const Value>;
   using EmplacedValue = shared_ptr<Value>;
   using Entry = pair<Key, EntryValue>;

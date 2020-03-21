@@ -6,6 +6,8 @@
 #include "../src/index/StringSortComparator.h"
 using namespace std::literals;
 
+using namespace std::literals;
+
 TEST(LocaleManagerTest, Levels) {
   using L = LocaleManager::Level;
   LocaleManager loc;

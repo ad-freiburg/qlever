@@ -8,7 +8,7 @@ target_link_libraries(StringUtilsTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(LRUCacheTest LRUCacheTest.cpp)
 add_test(LRUCacheTest LRUCacheTest)
-target_link_libraries(LRUCacheTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(LRUCacheTest gtest_main ${CMAKE_THREAD_LIBS_INIT} absl::flat_hash_map)
 
 add_executable(FileTest FileTest.cpp)
 add_test(FileTest FileTest)
@@ -64,7 +64,7 @@ target_link_libraries(ConversionsTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT
 
 add_executable(HashMapTest HashMapTest.cpp)
 add_test(HashMapTest HashMapTest)
-target_link_libraries(HashMapTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(HashMapTest gtest_main ${CMAKE_THREAD_LIBS_INIT} absl::flat_hash_map)
 
 add_executable(HashSetTest HashSetTest.cpp)
 add_test(HashSetTest HashSetTest)
@@ -100,7 +100,7 @@ target_link_libraries(TokenTest parser re2 gtest_main -pthread)
 
 add_executable(TurtleParserTest TurtleParserTest.cpp)
 add_test(TurtleParserTest TurtleParserTest)
-target_link_libraries(TurtleParserTest parser re2 gtest_main -pthread)
+target_link_libraries(TurtleParserTest parser absl::flat_hash_map re2 gtest_main -pthread)
 
 add_executable(MultiColumnJoinTest MultiColumnJoinTest.cpp)
 add_test(MultiColumnJoinTest MultiColumnJoinTest)
@@ -117,6 +117,18 @@ target_link_libraries(TransitivePathTest engine gtest_main ${CMAKE_THREAD_LIBS_I
 add_executable(SparqlLexerTest SparqlLexerTest.cpp)
 add_test(SparqlLexerTest SparqlLexerTest)
 target_link_libraries(SparqlLexerTest parser gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(Utf8RegexTest Utf8RegexTest.cpp)
+add_test(Utf8RegexTest Utf8RegexTest)
+target_link_libraries(Utf8RegexTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(BatchedPipelineTest BatchedPipelineTest.cpp)
+add_test(BatchedPipelineTest BatchedPipelineTest)
+target_link_libraries(BatchedPipelineTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(TupleHelpersTest TupleHelpersTest.cpp)
+add_test(TupleHelpersTest TupleHelpersTest)
+target_link_libraries(TupleHelpersTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(StringSortComparatorTest StringSortComparatorTest.cpp)
 add_test(StringSortComparatorTest StringSortComparatorTest)

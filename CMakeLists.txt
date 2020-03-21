@@ -65,6 +65,19 @@ include_directories(third_party/googletest/googletest/include)
 # Header only, nothing to include
 include_directories(third_party/json/)
 
+################################
+# CTRE, Compile-Time-Regular-Expressions
+################################
+# Header only, nothing to include
+include_directories(third_party/ctre/include)
+
+################################
+# ABSEIL
+################################
+set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
+add_subdirectory(third_party/abseil-cpp)
+include_directories(third_party/abseil-cpp/)
+
 if (USE_PARALLEL)
     include(FindOpenMP)
     if(OPENMP_FOUND)
@@ -163,7 +176,7 @@ add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp
 target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(TurtleParserMain src/TurtleParserMain.cpp)
-target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT} absl::flat_hash_map)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})

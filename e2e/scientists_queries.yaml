@@ -693,6 +693,31 @@ queries:
       - num_cols: 3
       - num_rows: 0
       - selected: ["?a", "?b", "?c"]
+  - query: nonexisting-values
+    type: no-text
+    sparql: |
+      SELECT ?a WHERE {
+        VALUES ?a {"obscure Literal"@xf <Albert_Einstein> <Non_Exisiting_Scientist>}
+      }
+    checks:
+      - num_cols: 1
+      - num_rows: 1
+      - selected: ["?a"]
+      - contains_row: ["<Albert_Einstein>"]
+      - contains_warning: ["The word \"obscure Literal\"@xf", "The word <Non_Exisiting", "Ignored 2 rows"]
+  - query: values-empty-join
+    type: no-text
+    sparql: |
+      SELECT ?a ?b ?c WHERE {
+        VALUES ?a { <Albert_Einstein>}
+        VALUES (?a ?b) {
+          (<Marie_Curie> <Joseph_Jacobson>) (<Freiherr> <Lord_of_the_Isles>)
+        }
+      }
+    checks:
+      - num_cols: 3
+      - num_rows: 0
+      - selected: ["?a", "?b", "?c"]
   - query: values-join
     type: no-text
     sparql: |

@@ -7,26 +7,29 @@
 #include <string.h>
 
 // _______________________________________________________________
-bool TurtleParser::statement() {
+template <class T>
+bool TurtleParser<T>::statement() {
   _tok.skipWhitespaceAndComments();
-  return directive() || (triples() && skip(_tokens.Dot));
+  return directive() || (triples() && skip<TokId::Dot>());
 }
 
 // ______________________________________________________________
-bool TurtleParser::directive() {
+template <class T>
+bool TurtleParser<T>::directive() {
   return prefixID() || base() || sparqlPrefix() || sparqlBase();
 }
 
 // ________________________________________________________________
-bool TurtleParser::prefixID() {
-  if (skip(_tokens.TurtlePrefix)) {
-    if (check(pnameNS()) && check(iriref()) && check(skip(_tokens.Dot))) {
+template <class T>
+bool TurtleParser<T>::prefixID() {
+  if (skip<TokId::TurtlePrefix>()) {
+    if (check(pnameNS()) && check(iriref()) && check(skip<TokId::Dot>())) {
       // strip  the angled brackes <bla> -> bla
       _prefixMap[_activePrefix] =
           _lastParseResult.substr(1, _lastParseResult.size() - 2);
       return true;
     } else {
-      throw ParseException("prefixID");
+      throw TurtleParser<T>::ParseException("prefixID");
     }
   } else {
     return false;
@@ -34,8 +37,9 @@ bool TurtleParser::prefixID() {
 }
 
 // ________________________________________________________________
-bool TurtleParser::base() {
-  if (skip(_tokens.TurtleBase)) {
+template <class T>
+bool TurtleParser<T>::base() {
+  if (skip<TokId::TurtleBase>()) {
     if (iriref()) {
       _baseIRI = _lastParseResult;
       return true;
@@ -48,8 +52,9 @@ bool TurtleParser::base() {
 }
 
 // ________________________________________________________________
-bool TurtleParser::sparqlPrefix() {
-  if (skip(_tokens.SparqlPrefix)) {
+template <class T>
+bool TurtleParser<T>::sparqlPrefix() {
+  if (skip<TokId::SparqlPrefix>()) {
     if (pnameNS() && iriref()) {
       _prefixMap[_activePrefix] = _lastParseResult;
       return true;
@@ -62,8 +67,9 @@ bool TurtleParser::sparqlPrefix() {
 }
 
 // ________________________________________________________________
-bool TurtleParser::sparqlBase() {
-  if (skip(_tokens.SparqlBase)) {
+template <class T>
+bool TurtleParser<T>::sparqlBase() {
+  if (skip<TokId::SparqlBase>()) {
     if (iriref()) {
       _baseIRI = _lastParseResult;
       return true;
@@ -76,7 +82,8 @@ bool TurtleParser::sparqlBase() {
 }
 
 // ________________________________________________
-bool TurtleParser::triples() {
+template <class T>
+bool TurtleParser<T>::triples() {
   if (subject()) {
     if (predicateObjectList()) {
       return true;
@@ -95,9 +102,10 @@ bool TurtleParser::triples() {
 }
 
 // __________________________________________________
-bool TurtleParser::predicateObjectList() {
+template <class T>
+bool TurtleParser<T>::predicateObjectList() {
   if (verb() && check(objectList())) {
-    while (skip(_tokens.Semicolon)) {
+    while (skip<TokId::Semicolon>()) {
       if (verb() && check(objectList())) {
         continue;
       }
@@ -109,9 +117,10 @@ bool TurtleParser::predicateObjectList() {
 }
 
 // _____________________________________________________
-bool TurtleParser::objectList() {
+template <class T>
+bool TurtleParser<T>::objectList() {
   if (object()) {
-    while (skip(_tokens.Comma) && check(object())) {
+    while (skip<TokId::Comma>() && check(object())) {
       continue;
     }
     return true;
@@ -121,12 +130,16 @@ bool TurtleParser::objectList() {
 }
 
 // ______________________________________________________
-bool TurtleParser::verb() { return predicateSpecialA() || predicate(); }
+template <class T>
+bool TurtleParser<T>::verb() {
+  return predicateSpecialA() || predicate();
+}
 
 // ___________________________________________________________________
-bool TurtleParser::predicateSpecialA() {
+template <class T>
+bool TurtleParser<T>::predicateSpecialA() {
   _tok.skipWhitespaceAndComments();
-  if (auto [success, word] = _tok.getNextToken(_tokens.A); success) {
+  if (auto [success, word] = _tok.template getNextToken<TokId::A>(); success) {
     (void)word;
     _activePredicate = u8"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
     return true;
@@ -136,7 +149,8 @@ bool TurtleParser::predicateSpecialA() {
 }
 
 // ____________________________________________________________________
-bool TurtleParser::subject() {
+template <class T>
+bool TurtleParser<T>::subject() {
   if (blankNode() || iri() || collection()) {
     _activeSubject = _lastParseResult;
     return true;
@@ -146,7 +160,8 @@ bool TurtleParser::subject() {
 }
 
 // ____________________________________________________________________
-bool TurtleParser::predicate() {
+template <class T>
+bool TurtleParser<T>::predicate() {
   if (iri()) {
     _activePredicate = _lastParseResult;
     return true;
@@ -156,7 +171,8 @@ bool TurtleParser::predicate() {
 }
 
 // ____________________________________________________________________
-bool TurtleParser::object() {
+template <class T>
+bool TurtleParser<T>::object() {
   // these produce a single object that becomes part of a triple
   // check blank Node first because _: also could look like a prefix
   if (blankNode() || literal() || iri()) {
@@ -171,13 +187,15 @@ bool TurtleParser::object() {
 }
 
 // ____________________________________________________________________
-bool TurtleParser::literal() {
+template <class T>
+bool TurtleParser<T>::literal() {
   return (rdfLiteral() || numericLiteral() || booleanLiteral());
 }
 
 // _____________________________________________________________________
-bool TurtleParser::blankNodePropertyList() {
-  if (!skip(_tokens.OpenSquared)) {
+template <class T>
+bool TurtleParser<T>::blankNodePropertyList() {
+  if (!skip<TokId::OpenSquared>()) {
     return false;
   }
   // save subject and predicate
@@ -190,7 +208,7 @@ bool TurtleParser::blankNodePropertyList() {
   // the following triples have the blank node as subject
   _activeSubject = blank;
   check(predicateObjectList());
-  check(skip(_tokens.CloseSquared));
+  check(skip<TokId::CloseSquared>());
   // restore subject and predicate
   _activeSubject = savedSubject;
   _activePredicate = savedPredicate;
@@ -198,8 +216,9 @@ bool TurtleParser::blankNodePropertyList() {
 }
 
 // _____________________________________________________________________
-bool TurtleParser::collection() {
-  if (!skip(_tokens.OpenRound)) {
+template <class T>
+bool TurtleParser<T>::collection() {
+  if (!skip<TokId::OpenRound>()) {
     return false;
   }
   throw ParseException(
@@ -208,12 +227,14 @@ bool TurtleParser::collection() {
 }
 
 // ______________________________________________________________________
-bool TurtleParser::numericLiteral() {
+template <class T>
+bool TurtleParser<T>::numericLiteral() {
   return integer() || decimal() || doubleParse();
 }
 
 // ______________________________________________________________________
-bool TurtleParser::rdfLiteral() {
+template <class T>
+bool TurtleParser<T>::rdfLiteral() {
   if (!stringParse()) {
     return false;
   }
@@ -223,7 +244,7 @@ bool TurtleParser::rdfLiteral() {
     return true;
     // TODO<joka921> this allows spaces here since the ^^ is unique in the
     // sparql syntax. is this correct?
-  } else if (skip(_tokens.DoubleCircumflex) && check(iri())) {
+  } else if (skip<TokId::DoubleCircumflex>() && check(iri())) {
     _lastParseResult = s + "^^" + _lastParseResult;
     return true;
   } else {
@@ -233,26 +254,19 @@ bool TurtleParser::rdfLiteral() {
 }
 
 // ______________________________________________________________________
-bool TurtleParser::booleanLiteral() {
-  std::vector<const RE2*> candidates;
-  candidates.push_back(&(_tokens.True));
-  candidates.push_back(&(_tokens.False));
-  if (auto [success, index, word] = _tok.getNextToken(candidates); success) {
-    (void)index;
-    _lastParseResult = word;
-    return true;
-  } else {
-    return false;
-  }
+template <class T>
+bool TurtleParser<T>::booleanLiteral() {
+  return parseTerminal<TokId::True>() || parseTerminal<TokId::False>();
 }
 
 // ______________________________________________________________________
-bool TurtleParser::stringParse() {
+template <class T>
+bool TurtleParser<T>::stringParse() {
   // manually parse strings for efficiency
   auto view = _tok.view();
   size_t startPos = 0;
   size_t endPos = 1;
-  std::array<string, 4> quotes{"\"\"\"", "\'\'\'", "\"", "\'"};
+  std::array<string, 4> quotes{R"(""")", R"(''')", "\"", "\'"};
   bool foundString = false;
   for (const auto& q : quotes) {
     if (ad_utility::startsWith(view, q)) {
@@ -290,19 +304,21 @@ bool TurtleParser::stringParse() {
   // also include the quotation marks in the word
   // TODO <joka921> how do we have to translate multiline strings for QLever?
   _lastParseResult = view.substr(0, endPos + startPos);
-  _tok.data().remove_prefix(endPos + startPos);
+  _tok.remove_prefix(endPos + startPos);
   return true;
 }
 
 // ______________________________________________________________________
-bool TurtleParser::iri() {
+template <class T>
+bool TurtleParser<T>::iri() {
   // irirefs always start with "<", prefixedNames never, so the lookahead always
   // works
   return iriref() || prefixedName();
 }
 
 // _____________________________________________________________________
-bool TurtleParser::prefixedName() {
+template <class T>
+bool TurtleParser<T>::prefixedName() {
   if (pnameLN() || pnameNS()) {
     _lastParseResult =
         '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
@@ -313,12 +329,17 @@ bool TurtleParser::prefixedName() {
 }
 
 // _____________________________________________________________________
-bool TurtleParser::blankNode() { return blankNodeLabel() || anon(); }
+template <class T>
+bool TurtleParser<T>::blankNode() {
+  return blankNodeLabel() || anon();
+}
 
 // _______________________________________________________________________
-bool TurtleParser::parseTerminal(const RE2& terminal) {
+template <class T>
+template <TokId terminal>
+bool TurtleParser<T>::parseTerminal() {
   _tok.skipWhitespaceAndComments();
-  auto [success, word] = _tok.getNextToken(terminal);
+  auto [success, word] = _tok.template getNextToken<terminal>();
   if (success) {
     _lastParseResult = word;
     return true;
@@ -329,13 +350,15 @@ bool TurtleParser::parseTerminal(const RE2& terminal) {
 }
 
 // ________________________________________________________________________
-bool TurtleParser::blankNodeLabel() {
-  return parseTerminal(_tokens.BlankNodeLabel);
+template <class T>
+bool TurtleParser<T>::blankNodeLabel() {
+  return parseTerminal<TokId::BlankNodeLabel>();
 }
 
 // __________________________________________________________________________
-bool TurtleParser::pnameNS() {
-  if (parseTerminal(_tokens.PnameNS)) {
+template <class T>
+bool TurtleParser<T>::pnameNS() {
+  if (parseTerminal<TokId::PnameNS>()) {
     // this also includes a ":" which we do not need, hence the "-1"
     _activePrefix = _lastParseResult.substr(0, _lastParseResult.size() - 1);
     _lastParseResult = "";
@@ -346,7 +369,8 @@ bool TurtleParser::pnameNS() {
 }
 
 // ________________________________________________________________________
-bool TurtleParser::pnameLN() {
+template <class T>
+bool TurtleParser<T>::pnameLN() {
   // relaxed parsing, only works if the greedy parsing of the ":"
   // is ok
   _tok.skipWhitespaceAndComments();
@@ -367,12 +391,13 @@ bool TurtleParser::pnameLN() {
   _activePrefix = view.substr(0, pos);
   _lastParseResult = view.substr(pos + 1, posEnd - (pos + 1));
   // we do not remove the whitespace or the ,; since they are needed
-  _tok.data().remove_prefix(posEnd);
+  _tok.remove_prefix(posEnd);
   return true;
 }
 
 // _____________________________________________________________________
-bool TurtleParser::iriref() {
+template <class T>
+bool TurtleParser<T>::iriref() {
   // manually check if the input starts with "<" and then find the next ">"
   // this might accept invalid irirefs but is faster than checking the
   // complete regexes
@@ -383,7 +408,7 @@ bool TurtleParser::iriref() {
     if (endPos == string::npos || view[endPos] != '>') {
       throw ParseException("Iriref");
     } else {
-      _tok.data().remove_prefix(endPos + 1);
+      _tok.remove_prefix(endPos + 1);
       _lastParseResult = view.substr(0, endPos + 1);
       return true;
     }
@@ -393,18 +418,20 @@ bool TurtleParser::iriref() {
 }
 
 // ______________________________________________________________________
-TurtleStreamParser::TurtleParserBackupState TurtleStreamParser::backupState()
-    const {
+template <class T>
+typename TurtleStreamParser<T>::TurtleParserBackupState
+TurtleStreamParser<T>::backupState() const {
   TurtleParserBackupState b;
-  b._numBlankNodes = _numBlankNodes;
-  b._numTriples = _triples.size();
-  b._tokenizerPosition = _tok.data().begin();
-  b._tokenizerSize = _tok.data().size();
+  b._numBlankNodes = this->_numBlankNodes;
+  b._numTriples = this->_triples.size();
+  b._tokenizerPosition = this->_tok.data().begin();
+  b._tokenizerSize = this->_tok.data().size();
   return b;
 }
 
 // _______________________________________________________________
-bool TurtleStreamParser::resetStateAndRead(
+template <class T>
+bool TurtleStreamParser<T>::resetStateAndRead(
     const TurtleStreamParser::TurtleParserBackupState b) {
   auto nextBytesOpt = _fileBuffer->getNextBlock();
   if (!nextBytesOpt || nextBytesOpt.value().empty()) {
@@ -416,10 +443,10 @@ bool TurtleStreamParser::resetStateAndRead(
   auto nextBytes = std::move(nextBytesOpt.value());
 
   // return to the state of the last backup
-  _numBlankNodes = b._numBlankNodes;
-  AD_CHECK(_triples.size() >= b._numTriples);
-  _triples.resize(b._numTriples);
-  _tok.reset(b._tokenizerPosition, b._tokenizerSize);
+  this->_numBlankNodes = b._numBlankNodes;
+  AD_CHECK(this->_triples.size() >= b._numTriples);
+  this->_triples.resize(b._numTriples);
+  this->_tok.reset(b._tokenizerPosition, b._tokenizerSize);
 
   std::vector<char> buf;
   buf.resize(_tok.data().size() + nextBytes.size());
@@ -434,9 +461,10 @@ bool TurtleStreamParser::resetStateAndRead(
 }
 
 // __________________________________________________________________________
-void TurtleMmapParser::initialize(const string& filename) {
+template <class T>
+void TurtleMmapParser<T>::initialize(const string& filename) {
   unmapFile();
-  clear();
+  this->clear();
   ad_utility::File f(filename.c_str(), "r");
   size_t size = f.sizeOfFile();
   LOG(INFO) << "mapping " << size << " bytes" << std::endl;
@@ -450,18 +478,19 @@ void TurtleMmapParser::initialize(const string& filename) {
   _tok.reset(_data, _dataSize);
 }
 
-bool TurtleMmapParser::getLine(std::array<string, 3>* triple) {
+template <class T>
+bool TurtleMmapParser<T>::getLine(std::array<string, 3>* triple) {
   if (_triples.empty()) {
     // always try to parse a batch of triples at once to make up for the
     // relatively expensive backup calls.
     while (_triples.size() < PARSER_MIN_TRIPLES_AT_ONCE &&
            !_isParserExhausted) {
-      if (statement()) {
+      if (this->statement()) {
         // we cannot parse anymore from an mmaped file but there was no
         // error. check if we are just at the end of the input, otherwise
         // inform.
         _tok.skipWhitespaceAndComments();
-        auto& d = _tok.data();
+        auto d = _tok.view();
         if (!d.empty()) {
           LOG(INFO) << "Parsing of line has Failed, but parseInput is not "
                        "yet exhausted. Remaining bytes: "
@@ -486,8 +515,9 @@ bool TurtleMmapParser::getLine(std::array<string, 3>* triple) {
   return true;
 }
 
-void TurtleStreamParser::initialize(const string& filename) {
-  clear();
+template <class T>
+void TurtleStreamParser<T>::initialize(const string& filename) {
+  this->clear();
   _fileBuffer = std::make_unique<ParallelFileBuffer>(_bufferSize);
   _fileBuffer->open(filename);
   _byteVec.resize(_bufferSize);
@@ -501,7 +531,8 @@ void TurtleStreamParser::initialize(const string& filename) {
   }
 }
 
-bool TurtleStreamParser::getLine(std::array<string, 3>* triple) {
+template <class T>
+bool TurtleStreamParser<T>::getLine(std::array<string, 3>* triple) {
   if (_triples.empty()) {
     // if parsing the line fails because our buffer ends before the end of
     // the next statement we need to be able to recover
@@ -512,15 +543,15 @@ bool TurtleStreamParser::getLine(std::array<string, 3>* triple) {
            !_isParserExhausted) {
       bool parsedStatement;
       bool exceptionThrown = false;
-      ParseException ex;
+      typename TurtleParser<T>::ParseException ex;
       // If this buffer reads from an mmaped file, then exceptions are
       // immediately rethrown. If we are reading from a stream in chunks of
       // bytes, we can try again with a larger buffer.
       try {
         // variable parsedStatement will be true iff a statement can
         // successfully be parsed
-        parsedStatement = statement();
-      } catch (const ParseException& p) {
+        parsedStatement = this->statement();
+      } catch (const typename TurtleParser<T>::ParseException& p) {
         parsedStatement = false;
         exceptionThrown = true;
         ex = p;
@@ -533,7 +564,7 @@ bool TurtleStreamParser::getLine(std::array<string, 3>* triple) {
         if (resetStateAndRead(b)) {
           // we have succesfully extended our buffer
           if (_byteVec.size() > BZIP2_MAX_TOTAL_BUFFER_SIZE) {
-            auto& d = _tok.data();
+            auto d = _tok.view();
             LOG(ERROR) << "Could not parse " << PARSER_MIN_TRIPLES_AT_ONCE
                        << " Within " << (BZIP2_MAX_TOTAL_BUFFER_SIZE >> 10)
                        << "MB of Turtle input\n";
@@ -549,7 +580,7 @@ bool TurtleStreamParser::getLine(std::array<string, 3>* triple) {
               throw ex;
 
             } else {
-              throw ParseException(
+              throw typename TurtleParser<T>::ParseException(
                   "Too many bytes parsed without finishing a turtle "
                   "statement");
             }
@@ -567,7 +598,7 @@ bool TurtleStreamParser::getLine(std::array<string, 3>* triple) {
             // triples parsed so far, check if we have indeed parsed through
             // the complete input
             _tok.skipWhitespaceAndComments();
-            auto& d = _tok.data();
+            auto d = _tok.view();
             if (!d.empty()) {
               LOG(INFO) << "Parsing of line has Failed, but parseInput is not "
                            "yet exhausted. Remaining bytes: "
@@ -594,3 +625,10 @@ bool TurtleStreamParser::getLine(std::array<string, 3>* triple) {
   _triples.pop_back();
   return true;
 }
+
+template class TurtleParser<Tokenizer>;
+template class TurtleParser<TokenizerCtre>;
+template class TurtleStreamParser<Tokenizer>;
+template class TurtleStreamParser<TokenizerCtre>;
+template class TurtleMmapParser<Tokenizer>;
+template class TurtleMmapParser<TokenizerCtre>;

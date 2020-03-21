@@ -138,16 +138,31 @@ void Values::writeValues(IdTable* res, const Index& index,
                          const SparqlValues& values) {
   IdTableStatic<I> result = res->moveToStatic<I>();
   result.resize(values._values.size());
-  for (size_t rowIdx = 0; rowIdx < values._values.size(); rowIdx++) {
-    const vector<string> row = values._values[rowIdx];
+  size_t numActuallyWritten = 0;
+  size_t numSkipped = 0;
+  for (const auto& row : values._values) {
     for (size_t colIdx = 0; colIdx < result.cols(); colIdx++) {
       size_t id;
       if (!index.getVocab().getId(row[colIdx], &id)) {
-        AD_THROW(ad_semsearch::Exception::BAD_INPUT,
-                 "The word " + row[colIdx] + " is not part of the vocabulary.")
+        getWarnings().push_back("The word " + row[colIdx] +
+                                " is not part of the vocabulary.");
+        numSkipped++;
+        // this goto is a continue in the outer loop. The current row was not
+        // sucessfully written, so the numActuallyWritten index is not advanced
+        goto skipRow;
       }
-      result(rowIdx, colIdx) = id;
+      result(numActuallyWritten, colIdx) = id;
     }
+    numActuallyWritten++;
+  skipRow:;  // the label for the goto. Jumping to this label is basically
+             // "continue" and can be also called from the inner loop
   }
+  AD_CHECK(numActuallyWritten + numSkipped == values._values.size());
+  if (numSkipped) {
+    getWarnings().push_back("Ignored " + std::to_string(numSkipped) +
+                            " rows of a value clause because they contained "
+                            "entries that are not part of the vocabulary");
+  }
+  result.resize(numActuallyWritten);
   *res = result.moveToDynamic();
 }

@@ -7,6 +7,7 @@
 
 #include "../src/global/Constants.h"
 #include "../src/index/ConstantsIndexCreation.h"
+#include "../src/index/Index.h"
 #include "../src/index/VocabularyGenerator.h"
 
 // equality operator used in this test
@@ -114,10 +115,10 @@ class MergeVocabularyTest : public ::testing::Test {
     size_t localIdx = 0;
     for (const auto& w : words1) {
       std::string word = w.first;
-      uint32_t len = word.size();
+      uint64_t len = word.size();
       // write 4 Bytes of string length
-      partial0.write((char*)&len, sizeof(uint32_t));
-      partialExp0.write((char*)&len, sizeof(uint32_t));
+      partial0.write((char*)&len, sizeof(len));
+      partialExp0.write((char*)&len, sizeof(len));
 
       // write the word
       partial0.write(word.c_str(), len);
@@ -134,9 +135,9 @@ class MergeVocabularyTest : public ::testing::Test {
     localIdx = 0;
     for (const auto& w : words2) {
       std::string word = w.first;
-      uint32_t len = word.size();
-      partial1.write((char*)&len, sizeof(uint32_t));
-      partialExp1.write((char*)&len, sizeof(uint32_t));
+      uint64_t len = word.size();
+      partial1.write((char*)&len, sizeof(len));
+      partialExp1.write((char*)&len, sizeof(len));
 
       partial1.write(word.c_str(), len);
       partialExp1.write(word.c_str(), len);
@@ -215,17 +216,20 @@ TEST_F(MergeVocabularyTest, bla) {
 
 TEST(VocabularyGenerator, ReadAndWritePartial) {
   {
-    Index::ItemMap s;
-    s["A"] = 5;
-    s["a"] = 6;
-    s["Ba"] = 7;
-    s["car"] = 8;
+    using S = TripleComponentComparator::SplitVal;
+    S dummy;
+    ItemMapArray arr;
+    auto& s = arr[0];
+    s["A"] = {5, dummy};
+    s["a"] = {6, dummy};
+    s["Ba"] = {7, dummy};
+    s["car"] = {8, dummy};
     TextVocabulary v;
     std::string basename = "_tmp_testidx";
-    auto ptr = std::make_shared<const decltype(s)>(std::move(s));
+    auto ptr = std::make_shared<const ItemMapArray>(std::move(arr));
     writePartialIdMapToBinaryFileForMerging(
         ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0",
-        std::less<std::string>());
+        [](const auto& a, const auto& b) { return a.first < b.first; }, false);
 
     {
       VocabularyMerger m;
@@ -244,16 +248,26 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
   try {
     RdfsVocabulary v;
     v.setLocale("en", "US", false);
-    Index::ItemMap s;
-    s["\"A\""] = 5;
-    s["\"a\""] = 6;
-    s["\"Ba\""] = 7;
-    s["\"car\""] = 8;
-    s["\"Ä\""] = 9;
+    ItemMapArray arr;
+    auto& s = arr[0];
+    auto assign = [&](std::string_view str, size_t id) {
+      s[str] = {id, v.getCaseComparator().extractAndTransformComparable(
+                        str, TripleComponentComparator::Level::IDENTICAL)};
+    };
+    assign("\"A\"", 5);
+    assign("\"a\"", 6);
+    assign("\"Ba\"", 7);
+    assign("\"car\"", 8);
+    assign("\"Ä\"", 9);
     std::string basename = "_tmp_testidx";
-    auto ptr = std::make_shared<const Index::ItemMap>(std::move(s));
+    auto ptr = std::make_shared<const ItemMapArray>(std::move(arr));
     writePartialIdMapToBinaryFileForMerging(
-        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0", v.getCaseComparator());
+        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0",
+        [& c = v.getCaseComparator()](const auto& a, const auto& b) {
+          return c(a.second.m_splitVal, b.second.m_splitVal,
+                   TripleComponentComparator::Level::IDENTICAL);
+        },
+        false);
 
     {
       VocabularyMerger m;
@@ -271,4 +285,35 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
   } catch (const std::bad_cast& b) {
     std::cerr << "What the fuck\n";
   }
+}
+
+TEST(VocabularyGeneratorTest, createInternalMapping) {
+  ItemVec input;
+  using S = IdAndSplitVal;
+  TripleComponentComparator::SplitVal
+      d;  // dummy value that is unused in this case.
+  input.emplace_back("alpha", S{5, d});
+  input.emplace_back("beta", S{4, d});
+  input.emplace_back("beta", S{42, d});
+  input.emplace_back("d", S{8, d});
+  input.emplace_back("e", S{9, d});
+  input.emplace_back("e", S{38, d});
+  input.emplace_back("xenon", S{0, d});
+
+  auto res = createInternalMapping(&input);
+  ASSERT_EQ(0u, input[0].second.m_id);
+  ASSERT_EQ(1u, input[1].second.m_id);
+  ASSERT_EQ(1u, input[2].second.m_id);
+  ASSERT_EQ(2u, input[3].second.m_id);
+  ASSERT_EQ(3u, input[4].second.m_id);
+  ASSERT_EQ(3u, input[5].second.m_id);
+  ASSERT_EQ(4u, input[6].second.m_id);
+
+  ASSERT_EQ(0u, res[5]);
+  ASSERT_EQ(1u, res[4]);
+  ASSERT_EQ(1u, res[42]);
+  ASSERT_EQ(2u, res[8]);
+  ASSERT_EQ(3u, res[9]);
+  ASSERT_EQ(3u, res[38]);
+  ASSERT_EQ(4u, res[0]);
 }

@@ -2,7 +2,7 @@ add_library(engine
         Engine.h
         IndexSequence.h
         QueryExecutionTree.h QueryExecutionTree.cpp
-        Operation.h
+        Operation.h Operation.cpp
         ../global/Id.h
         ../global/Constants.h
         ../util/Socket.h

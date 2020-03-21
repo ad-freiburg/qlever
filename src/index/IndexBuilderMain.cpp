@@ -306,7 +306,7 @@ int main(int argc, char** argv) {
       if (filetype == "ttl") {
         LOG(INFO) << "Reading from uncompressed turtle file or stream "
                   << inputFile << std::endl;
-        index.createFromFile<TurtleStreamParser>(inputFile);
+        index.createFromFile<TurtleParserDummy>(inputFile);
       } else if (filetype == "tsv") {
         LOG(INFO) << "Reading from uncompressed tsv file" << inputFile
                   << std::endl;
@@ -321,7 +321,7 @@ int main(int argc, char** argv) {
         LOG(WARN) << "We will load this file using mmap. This will only work "
                      "for files on hard disk and fail for streams.\n";
         LOG(WARN) << "For Turtle streams please use --file-format ttl\n";
-        index.createFromFile<TurtleMmapParser>(inputFile);
+        index.createFromFile<TurtleMmapParser<Tokenizer>>(inputFile);
       } else {
         LOG(ERROR)
             << "Argument to --file-format (-F) must be one of [tsv|nt|ttl|mmap]"

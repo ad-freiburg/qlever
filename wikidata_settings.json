@@ -9,5 +9,7 @@
 	  "language": "en",
 	  "country": "US",
 	  "ignore-punctuation": true
-  }
+  },
+  "ascii-prefixes-only":true,
+  "num-triples-per-partial-vocab" : 50000000
 }

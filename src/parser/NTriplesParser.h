@@ -17,6 +17,8 @@ class NTriplesParser {
   // Don't allow copy & assignment
   explicit NTriplesParser(const NTriplesParser& other) = delete;
   NTriplesParser& operator=(const NTriplesParser& other) = delete;
+  explicit NTriplesParser(NTriplesParser&& other) = default;
+  NTriplesParser& operator=(NTriplesParser&& other) = default;
 
   // Get the next line from the file.
   // Returns true if something was stored.

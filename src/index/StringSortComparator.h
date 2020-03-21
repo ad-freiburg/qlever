@@ -618,12 +618,8 @@ class TripleComponentComparator {
   }
 
   /**
-   * @brief Normalize a Utf8 string to a canonical representation.
-   * Maps e.g. single codepoint é and e + accent aigu to single codepoint é by
-   * applying the UNICODE NFC (Normalization form C) This is independent from
-   * the locale
-   * @param input The String to be normalized. Must be UTF-8 encoded
-   * @return The NFC canonical form of NFC in UTF-8 encoding.
+   * @brief trivialy wraps LocaleManager::normalizeUtf8, see there for
+   * documentation
    */
   [[nodiscard]] std::string normalizeUtf8(std::string_view sv) const {
     return _locManager.normalizeUtf8(sv);

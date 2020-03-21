@@ -14,6 +14,52 @@ using std::array;
 using std::string;
 using std::vector;
 
+/**
+ * A wrapper to make the different Parsers interfaces compatible with the
+ * parallel pipeline
+ *
+ * @tparam Parser A knowledge Base Parser Type
+ * @tparam ExhaustedCallback Is called when the Parser delivered no more
+ * triples.
+ */
+template <typename Parser, typename ExhaustedCallback>
+class ParserBatcher {
+ public:
+  /// construct from a Parser, the maximum Number of triples to parse, and the
+  /// callback.
+  ParserBatcher(const std::shared_ptr<Parser>& p, size_t maxNumTriples,
+                ExhaustedCallback c)
+      : m_parser(p), m_maxNumTriples(maxNumTriples), m_exhaustedCallback(c) {}
+  using Triple = std::array<std::string, 3>;
+
+  /**
+   * @brief Parse the next Triple
+   * If we have already parsed the maximum number of triples specified in the
+   * constructor, return std::nullopt. If the parser is exhausted and doesn't
+   * deliver any more triples, call the callback and return std::nullopt. Else
+   * return a optional that contains the next Triple from the parser.
+   * @return
+   */
+  std::optional<Triple> operator()() {
+    if (m_numTriplesAlreadyParsed >= m_maxNumTriples) {
+      return std::nullopt;
+    }
+    Triple t;
+    if (m_parser->getLine(t)) {
+      m_numTriplesAlreadyParsed++;
+      return std::optional(std::move(t));
+    } else {
+      m_exhaustedCallback();
+      return std::nullopt;
+    }
+  }
+
+  std::shared_ptr<Parser> m_parser;
+  size_t m_maxNumTriples;
+  size_t m_numTriplesAlreadyParsed = 0;
+  ExhaustedCallback m_exhaustedCallback;
+};
+
 // A class that holds a parser for a knowledge base file (.nt, .tsv, .ttl, etc)
 // and asynchronously retrieves triples from the file.
 // Can be used to parallelize the parsing and processing of kb files.

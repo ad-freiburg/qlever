@@ -23,6 +23,7 @@
 #include "../util/MmapVector.h"
 #include "./ConstantsIndexCreation.h"
 #include "./DocsDB.h"
+#include "./IndexBuilderTypes.h"
 #include "./IndexMetaData.h"
 #include "./Permutations.h"
 #include "./StxxlSortFunctors.h"
@@ -54,6 +55,12 @@ struct VocabularyData {
   // All the triples as Ids.
   std::unique_ptr<TripleVec> idTriples;
 };
+
+/**
+ * Used as a Template Argument to the createFromFile method, when we do not yet
+ * know, which Tokenizer Specialization of the TurtleParser we are going to use
+ */
+class TurtleParserDummy {};
 
 class Index {
  public:
@@ -118,6 +125,14 @@ class Index {
   // by createFromOnDiskIndex after this call.
   template <class Parser>
   void createFromFile(const string& filename);
+
+  /**
+   * @brief create an Index from a turtle file
+   * Determine from the settings, which Tokenizer regex engine (google re2 or
+   * ctre) should be used
+   * @param filename
+   */
+  void createFromTurtleFile(const string& filename);
 
   void addPatternsToExistingIndex();
 
@@ -444,11 +459,10 @@ class Index {
     LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
   }
 
-  using ItemMap = ad_utility::HashMap<string, Id>;
-
  private:
   string _onDiskBase;
   string _settingsFileName;
+  bool _onlyAsciiTurtlePrefixes = false;
   bool _onDiskLiterals = false;
   bool _keepTempFiles = false;
   json _configurationJson;
@@ -470,6 +484,9 @@ class Index {
   double _fullHasPredicateMultiplicityEntities;
   double _fullHasPredicateMultiplicityPredicates;
   size_t _fullHasPredicateSize;
+
+  size_t _parserBatchSize = PARSER_BATCH_SIZE;
+  size_t _numTriplesPerPartialVocab = NUM_TRIPLES_PER_PARTIAL_VOCAB;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
@@ -494,7 +511,7 @@ class Index {
   // ___________________________________________________________________
   template <class Parser>
   VocabularyData passFileForVocabulary(const string& ntFile,
-                                       size_t linesPerPartial = 100000000);
+                                       size_t linesPerPartial);
 
   /**
    * @brief Everything that has to be done when we have seen all the triples
@@ -510,16 +527,15 @@ class Index {
    * @param items Contains our unsorted vocabulary. Maps words to their local
    * ids within this vocabulary.
    */
-  pair<std::future<void>, std::future<void>> writeNextPartialVocabulary(
+  std::future<void> writeNextPartialVocabulary(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      std::shared_ptr<const ItemMap> items);
+      std::shared_ptr<const ItemMapArray> items,
+      std::unique_ptr<TripleVec> localIds,
+      TripleVec::bufwriter_type* globalWritePtr);
 
   void convertPartialToGlobalIds(TripleVec& data,
                                  const vector<size_t>& actualLinesPerPartial,
                                  size_t linesPerPartial);
-
-  // ___________________________________________________________________________
-  Id assignNextId(ItemMap* mapPtr, const string& key);
 
   size_t passContextFileForVocabulary(const string& contextFile);
 
@@ -715,7 +731,7 @@ class Index {
   // and add externalization characters if necessary.
   // Returns the language tag of spo[2] (the object) or ""
   // if there is none.
-  string tripleToInternalRepresentation(array<string, 3>* spo);
+  LangtagAndTriple tripleToInternalRepresentation(Triple&& spo);
 
   /**
    * @brief Throws an exception if no patterns are loaded. Should be called from
@@ -728,6 +744,7 @@ class Index {
   void readConfiguration();
 
   // initialize the index-build-time settings for the vocabulary
+  template <class Parser>
   void initializeVocabularySettingsBuild();
 
   // Helper function for Debugging during the index build.

@@ -24,13 +24,16 @@
 using std::string;
 
 // The actual parser class
+template <class Tokenizer_T>
 class TurtleParser {
  public:
   class ParseException : public std::exception {
    public:
     ParseException() = default;
-    ParseException(const string& msg) : _msg(msg) {}
-    const char* what() const throw() { return _msg.c_str(); }
+    explicit ParseException(string msg) : _msg(std::move(msg)) {}
+    [[nodiscard]] const char* what() const noexcept override {
+      return _msg.c_str();
+    }
 
    private:
     string _msg = "Error while parsing Turtle";
@@ -39,6 +42,9 @@ class TurtleParser {
   // open an input file or stream
   virtual void initialize(const string& filename) = 0;
   virtual ~TurtleParser() = default;
+  TurtleParser() = default;
+  TurtleParser(TurtleParser&& rhs) = default;
+  TurtleParser& operator=(TurtleParser&& rhs) = default;
 
   // Wrapper to getLine that is expected by the rest of QLever
   bool getLine(std::array<string, 3>& triple) { return getLine(&triple); }
@@ -91,7 +97,7 @@ class TurtleParser {
   bool _isParserExhausted = false;
 
   // The tokenizer
-  Tokenizer _tok{nullptr, 0};
+  Tokenizer_T _tok{std::string_view("")};
 
   // the result of the last succesful call to a parsing function
   // (a function named after a (non-)terminal of the Turtle grammar
@@ -108,7 +114,6 @@ class TurtleParser {
   std::string _activePrefix;
   std::string _activeSubject;
   std::string _activePredicate;
-  const TurtleToken& _tokens = _tok._tokens;
   size_t _numBlankNodes = 0;
 
  private:
@@ -142,37 +147,39 @@ class TurtleParser {
   // Terminal symbols from the grammar
   // Behavior of the functions is similar to the nonterminals (see above)
   bool iriref();
-  bool integer() { return parseTerminal(_tokens.Integer); }
-  bool decimal() { return parseTerminal(_tokens.Decimal); }
-  bool doubleParse() { return parseTerminal(_tokens.Double); }
+  bool integer() { return parseTerminal<TokId::Integer>(); }
+  bool decimal() { return parseTerminal<TokId::Decimal>(); }
+  bool doubleParse() { return parseTerminal<TokId::Double>(); }
   bool pnameLN();
 
   // __________________________________________________________________________
   bool pnameNS();
 
   // __________________________________________________________________________
-  bool langtag() { return parseTerminal(_tokens.Langtag); }
+  bool langtag() { return parseTerminal<TokId::Langtag>(); }
   bool blankNodeLabel();
 
   bool anon() {
-    if (!parseTerminal(_tokens.Anon)) {
+    if (!parseTerminal<TokId::Anon>()) {
       return false;
     }
     _lastParseResult = createAnonNode();
     return true;
   }
 
-  // Skip a givene regex without parsing it
-  bool skip(const RE2& reg) {
+  // Skip a given regex without parsing it
+  template <TokId reg>
+  bool skip() {
     _tok.skipWhitespaceAndComments();
-    return _tok.skip(reg);
+    return _tok.template skip<reg>();
   }
 
   // if the prefix of the current input position matches the regex argument,
   // put the matching prefix into _lastParseResult, move the input position
   // forward by the length of the match and return true else return false and do
   // not change the parser's state
-  bool parseTerminal(const RE2& terminal);
+  template <TokId terminal>
+  bool parseTerminal();
 
   // ______________________________________________________________________________________
   void emitTriple() {
@@ -223,17 +230,18 @@ class TurtleParser {
  * Parses turtle from std::string. Used to perform unit tests for
  * the different parser rules
  */
-class TurtleStringParser : public TurtleParser {
+template <class Tokenizer_T>
+class TurtleStringParser : public TurtleParser<Tokenizer_T> {
  public:
-  using TurtleParser::getLine;
-  virtual bool getLine(std::array<string, 3>* triple) override {
+  using TurtleParser<Tokenizer_T>::getLine;
+  bool getLine(std::array<string, 3>* triple) override {
     (void)triple;
     throw std::runtime_error(
         "TurtleStringParser doesn't support calls to getLine. Only use "
         "parseUtf8String() for unit tests\n");
   }
 
-  virtual void initialize(const string& filename) override {
+  void initialize(const string& filename) override {
     (void)filename;
     throw std::runtime_error(
         "TurtleStringParser doesn't support calls to initialize. Only use "
@@ -244,9 +252,9 @@ class TurtleStringParser : public TurtleParser {
   // allows easier testing without a file object
   void parseUtf8String(const std::string& toParse) {
     _tmpToParse = toParse;
-    _tok.reset(_tmpToParse.data(), _tmpToParse.size());
+    this->_tok.reset(_tmpToParse.data(), _tmpToParse.size());
     // directly parse the whole triple
-    turtleDoc();
+    this->turtleDoc();
   }
 
  private:
@@ -260,16 +268,14 @@ class TurtleStringParser : public TurtleParser {
   // Does not alter the tokenizers state
   void setInputStream(const string& utf8String) {
     _tmpToParse = utf8String;
-    _tok.reset(_tmpToParse.data(), _tmpToParse.size());
+    this->_tok.reset(_tmpToParse.data(), _tmpToParse.size());
   }
 
   // testing interface, only works when parsing from an utf8-string
   // return the current position of the tokenizer in the input string
   // can be used to test if the advancing of the tokenizer works
   // as expected
-  size_t getPosition() const {
-    return _tok.data().begin() - _tmpToParse.data();
-  }
+  size_t getPosition() const { return this->_tok.begin() - _tmpToParse.data(); }
 
   FRIEND_TEST(TurtleParserTest, prefixedName);
   FRIEND_TEST(TurtleParserTest, prefixID);
@@ -287,7 +293,8 @@ class TurtleStringParser : public TurtleParser {
  * its input file is an uncompressed .ttl file that will be read in
  * chunks. Input file can also be a stream like stdin.
  */
-class TurtleStreamParser : public TurtleParser {
+template <class Tokenizer_T>
+class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
   // struct that can store the state of a parser
   // the previously extracted triples are not stored
   // but only the number of triples that were already present
@@ -302,20 +309,24 @@ class TurtleStreamParser : public TurtleParser {
  public:
   // Default construction needed for tests
   TurtleStreamParser() = default;
-  TurtleStreamParser(const string& filename) {
+  explicit TurtleStreamParser(const string& filename) {
     LOG(INFO) << "Initialize turtle Parsing from uncompressed file or stream "
               << filename << '\n';
     initialize(filename);
   }
 
   // inherit the wrapper overload
-  using TurtleParser::getLine;
 
-  virtual bool getLine(std::array<string, 3>* triple) override;
+  using TurtleParser<Tokenizer_T>::getLine;
 
-  virtual void initialize(const string& filename) override;
+  bool getLine(std::array<string, 3>* triple) override;
+
+  void initialize(const string& filename) override;
 
  private:
+  using TurtleParser<Tokenizer_T>::_tok;
+  using TurtleParser<Tokenizer_T>::_triples;
+  using TurtleParser<Tokenizer_T>::_isParserExhausted;
   // Backup the current state of the turtle parser to a
   // TurtleparserBackupState object
   // This can be used e.g. when parsing from a compressed input
@@ -326,7 +337,7 @@ class TurtleStreamParser : public TurtleParser {
   // Reset the parser to the state indicated by the argument
   // Must be called on the same parser object that was used to create the backup
   // state (the actual triples are not backed up)
-  bool resetStateAndRead(const TurtleParserBackupState state);
+  bool resetStateAndRead(TurtleParserBackupState state);
 
   // stores the current batch of bytes we have to parse.
   // Might end in the middle of a statement or even a multibyte utf8 character,
@@ -345,9 +356,10 @@ class TurtleStreamParser : public TurtleParser {
  * It will be loaded at once using Mmap. Thus this class does not support
  * Parsing from streams like stdin
  */
-class TurtleMmapParser : public TurtleParser {
+template <class Tokenizer_T>
+class TurtleMmapParser : public TurtleParser<Tokenizer_T> {
  public:
-  TurtleMmapParser(const string& filename) {
+  explicit TurtleMmapParser(const string& filename) {
     LOG(INFO) << "Initialize turtle Parsing from uncompressed file " << filename
               << '\n';
     LOG(INFO) << "This file must reside in memory since it will be loaded "
@@ -356,14 +368,16 @@ class TurtleMmapParser : public TurtleParser {
   }
 
   ~TurtleMmapParser() { unmapFile(); }
+  TurtleMmapParser(TurtleMmapParser&& rhs) = default;
+  TurtleMmapParser& operator=(TurtleMmapParser&& rhs) = default;
 
   // inherit the other overload
-  using TurtleParser::getLine;
+  using TurtleParser<Tokenizer_T>::getLine;
   // overload of the actual mmap-based parsing logic
-  virtual bool getLine(std::array<string, 3>* triple) override;
+  bool getLine(std::array<string, 3>* triple) override;
 
   // initialize parse input from a turtle file using mmap
-  virtual void initialize(const string& filename) override;
+  void initialize(const string& filename) override;
 
   // has to be called after finishing parsing of an mmaped .ttl file
   // if no file is currently mapped this function has no effect
@@ -380,4 +394,7 @@ class TurtleMmapParser : public TurtleParser {
   // store the size of the mapped input when using the _data ptr
   // via mmap
   size_t _dataSize = 0;
+  using TurtleParser<Tokenizer_T>::_tok;
+  using TurtleParser<Tokenizer_T>::_isParserExhausted;
+  using TurtleParser<Tokenizer_T>::_triples;
 };
