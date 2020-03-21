@@ -240,16 +240,16 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   }
 
   LOG(INFO) << "Merging vocabulary\n";
-  VocabularyMerger::VocMergeRes mergeRes = [&]() {
+  const VocabularyMerger::VocMergeRes mergeRes = [&]() {
     VocabularyMerger v;
     auto sortPred = [cmp = &(_vocab.getCaseComparator())](std::string_view a,
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(_vocab)::SortLevel::TOTAL);
     };
 
-    mergeRes = v.mergeVocabulary(_onDiskBase, numFiles, sortPred);
-    LOG(INFO) << "Finished Merging Vocabulary.\n";
-  }
+    return v.mergeVocabulary(_onDiskBase, numFiles, sortPred);
+  }();
+  LOG(INFO) << "Finished Merging Vocabulary.\n";
   VocabularyData res;
   res.nofWords = mergeRes._numWordsTotal;
   res.langPredLowerBound = mergeRes._langPredLowerBound;
