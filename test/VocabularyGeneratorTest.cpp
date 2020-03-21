@@ -82,18 +82,18 @@ class MergeVocabularyTest : public ::testing::Test {
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
     std::vector<std::pair<std::string, size_t>> words1{
-        {"ape", 0},
-        {"gorilla", 2},
-        {"monkey", 3},
-        {std::string{EXTERNALIZED_LITERALS_PREFIX} + "bla", 5}};
+        {"\"ape\"", 0},
+        {"\"gorilla\"", 2},
+        {"\"monkey\"", 3},
+        {std::string{EXTERNALIZED_LITERALS_PREFIX} + "bla\"", 5}};
     std::vector<std::pair<std::string, size_t>> words2{
-        {"bear", 1}, {"monkey", 3}, {"zebra", 4}};
+        {"\"bear\"", 1}, {"\"monkey\"", 3}, {"\"zebra\"", 4}};
 
     // write expected vocabulary files
     std::ofstream expVoc(_pathVocabExp);
     std::ofstream expExtVoc(_pathExternalVocabExp);
-    expVoc << "ape\nbear\ngorilla\nmonkey\nzebra\n";
-    expExtVoc << "bla\n";
+    expVoc << "\"ape\"\n\"bear\"\n\"gorilla\"\n\"monkey\"\n\"zebra\"\n";
+    expExtVoc << "\"bla\"\n";
 
     // open files for partial Vocabularies
     auto mode = std::ios_base::out | std::ios_base::binary;

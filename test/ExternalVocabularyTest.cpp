@@ -12,7 +12,7 @@ TEST(ExternalVocabularyTest, getWordbyIdTest) {
   v.push_back("ba");
   v.push_back("car");
   {
-    ExternalVocabulary ev;
+    ExternalVocabulary<SimpleStringComparator> ev;
     ev.buildFromVector(v, "__tmp.evtest");
     ASSERT_EQ("a", ev[0]);
     ASSERT_EQ("ba", ev[2]);
@@ -28,7 +28,7 @@ TEST(ExternalVocabularyTest, getIdForWordTest) {
   v.push_back("ba");
   v.push_back("car");
   {
-    ExternalVocabulary ev;
+    ExternalVocabulary<SimpleStringComparator> ev;
     ev.buildFromVector(v, "__tmp.evtest");
     Id id;
     ASSERT_TRUE(ev.getId("ba", &id));
@@ -51,11 +51,11 @@ TEST(VocabularyTest, readWriteTest) {
   v.push_back("wordB4");
   ASSERT_EQ(size_t(5), v.size());
   {
-    ExternalVocabulary ev;
+    ExternalVocabulary<SimpleStringComparator> ev;
     ev.buildFromVector(v, "__tmp.evtest");
   }
   {
-    ExternalVocabulary ev;
+    ExternalVocabulary<SimpleStringComparator> ev;
     ev.initFromFile("__tmp.evtest");
     ASSERT_EQ(size_t(5), ev.size());
   }

@@ -240,13 +240,14 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   }
 
   LOG(INFO) << "Merging vocabulary\n";
-  VocabularyMerger::VocMergeRes mergeRes = [&]() {
+  const VocabularyMerger::VocMergeRes mergeRes = [&]() {
     VocabularyMerger v;
-    const auto identicalPred = [& c = _vocab.getCaseComparator()](
-                                   const auto& a, const auto& b) {
-      return c(a, b, decltype(_vocab)::SortLevel::IDENTICAL);
+    auto sortPred = [cmp = &(_vocab.getCaseComparator())](std::string_view a,
+                                                          std::string_view b) {
+      return (*cmp)(a, b, decltype(_vocab)::SortLevel::TOTAL);
     };
-    return v.mergeVocabulary(_onDiskBase, numFiles, identicalPred);
+
+    return v.mergeVocabulary(_onDiskBase, numFiles, sortPred);
   }();
   LOG(INFO) << "Finished Merging Vocabulary.\n";
   VocabularyData res;
@@ -1419,7 +1420,12 @@ LangtagAndTriple Index::tripleToInternalRepresentation(Triple&& tripleIn) {
 
   for (size_t k = 0; k < upperBound; ++k) {
     if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k])) {
-      spo[k] = EXTERNALIZED_LITERALS_PREFIX + spo[k];
+      if (isLiteral(spo[k])) {
+        spo[k][0] = EXTERNALIZED_LITERALS_PREFIX_CHAR;
+      } else {
+        AD_CHECK(spo[k][0] == '<');
+        spo[k][0] = EXTERNALIZED_ENTITIES_PREFIX_CHAR;
+      }
     }
   }
   return res;
@@ -1547,7 +1553,7 @@ std::future<void> Index::writeNextPartialVocabulary(
     const auto identicalPred = [& c = vocab->getCaseComparator()](
                                    const auto& a, const auto& b) {
       return c(a.second.m_splitVal, b.second.m_splitVal,
-               decltype(_vocab)::SortLevel::IDENTICAL);
+               decltype(_vocab)::SortLevel::TOTAL);
     };
     LOG(INFO) << "Start sorting of vocabulary with #elements: " << vec.size()
               << std::endl;

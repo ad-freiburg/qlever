@@ -33,7 +33,8 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
       _words.push_back(CompressedString::fromString(line));
       auto str = expandPrefix(_words.back());
       if (!first) {
-        if (!(_caseComparator.compare(lastExpandedString, str) <= 0)) {
+        if (!(_caseComparator.compare(lastExpandedString, str,
+                                      SortLevel::TOTAL))) {
           LOG(ERROR) << "Vocabulary is not sorted in ascending order for words "
                      << lastExpandedString << " and " << str << std::endl;
           // AD_CHECK(false);

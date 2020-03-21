@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 #include "../src/index/StringSortComparator.h"
+using namespace std::literals;
 
 using namespace std::literals;
 
@@ -58,7 +59,7 @@ TEST(LocaleManagerTest, Normalization) {
 }
 
 // ______________________________________________________________________________________________
-TEST(StringSortComparatorTest, TripleComponentComparator) {
+TEST(StringSortComparatorTest, TripleComponentComparatorQuarternary) {
   TripleComponentComparator comp("en", "US", false);
 
   // strange casings must not affect order
@@ -81,7 +82,11 @@ TEST(StringSortComparatorTest, TripleComponentComparator) {
   ASSERT_FALSE(comp("\"ALPHA\"", "\"alpha\""));
 
   ASSERT_TRUE(comp("\"Hannibal\"@en", "\"Hannibal Hamlin\"@en"));
-  ASSERT_TRUE(comp("\"Hannibal\"@af", "\"Hannibal\"@en"));
+
+  // language tags are ignored on the default quarternary level
+  ASSERT_FALSE(comp("\"Hannibal\"@af", "\"Hannibal\"@en"));
+  ASSERT_FALSE(comp("\"Hannibal\"@en", "\"Hannibal\"@af"));
+
   ASSERT_TRUE(comp("\"Hannibal\"@en", "\"HanNibal\"@en"));
 
   // something is not smaller thant itself
@@ -97,7 +102,53 @@ TEST(StringSortComparatorTest, TripleComponentComparator) {
   ASSERT_FALSE(comp("\"१५१\"", "\"151\"", L::IDENTICAL));
 
   ASSERT_TRUE(comp("\"151\"@en", "\"१५१\"", L::IDENTICAL));
-  ASSERT_TRUE(comp("\"१५१\"", "\"151\"@en", L::QUARTERNARY));
+  ASSERT_FALSE(comp("\"१५१\"", "\"151\"@en", L::QUARTERNARY));
+  ASSERT_FALSE(comp("\"151\"@en", "\"१५१\"", L::QUARTERNARY));
+}
+
+TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
+  TripleComponentComparator comparator("en", "US", false);
+  auto comp = [&comparator](const auto& a, const auto& b) {
+    return comparator(a, b, TripleComponentComparator::Level::TOTAL);
+  };
+
+  // strange casings must not affect order
+  ASSERT_TRUE(comp("\"ALPHA\"", "\"beta\""));
+  ASSERT_TRUE(comp("\"alpha\"", "\"BETA\""));
+  ASSERT_TRUE(comp("\"AlPha\"", "\"bEtA\""));
+  ASSERT_TRUE(comp("\"AlP\"", "\"alPha\""));
+  ASSERT_TRUE(comp("\"alP\"", "\"ALPha\""));
+
+  // inverse tests for completeness
+  ASSERT_FALSE(comp("\"beta\"", "\"ALPHA\""));
+  ASSERT_FALSE(comp("\"BETA\"", "\"alpha\""));
+  ASSERT_FALSE(comp("\"bEtA\"", "\"AlPha\""));
+  ASSERT_FALSE(comp("\"alPha\"", "\"AlP\""));
+  ASSERT_FALSE(comp("\"ALPha\"", "\"alP\""));
+
+  // only if lowercased version is exactly the same we want to sort by the
+  // casing (lowercase comes first in the default en_US.utf8-locale
+  ASSERT_TRUE(comp("\"alpha\"", "\"ALPHA\""));
+  ASSERT_FALSE(comp("\"ALPHA\"", "\"alpha\""));
+
+  ASSERT_TRUE(comp("\"Hannibal\"@en", "\"Hannibal Hamlin\"@en"));
+
+  // language tags matter on the TOTAL level
+  ASSERT_TRUE(comp("\"Hannibal\"@af", "\"Hannibal\"@en"));
+  ASSERT_FALSE(comp("\"Hannibal\"@en", "\"Hannibal\"@af"));
+
+  ASSERT_TRUE(comp("\"Hannibal\"@en", "\"HanNibal\"@en"));
+
+  // something is not smaller thant itself
+  ASSERT_FALSE(comp("\"beta\"", "\"beta\""));
+
+  // Testing that latin and Hindi numbers mean exactly the same up to the
+  // Quarternary level
+  ASSERT_TRUE(comp("\"151\"", "\"१५१\""));
+  ASSERT_FALSE(comp("\"१५१\"", "\"151\""));
+
+  ASSERT_TRUE(comp("\"151\"@en", "\"१५१\""));
+  ASSERT_FALSE(comp("\"१५१\"", "\"151\"@en"));
 }
 
 // ______________________________________________________________________________________________

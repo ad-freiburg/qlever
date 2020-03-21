@@ -9,7 +9,8 @@
 #include "../util/Log.h"
 
 // _____________________________________________________________________________
-string ExternalVocabulary::operator[](Id id) const {
+template <class Comp>
+string ExternalVocabulary<Comp>::operator[](Id id) const {
   off_t ft[2];
   off_t& from = ft[0];
   off_t& to = ft[1];
@@ -23,17 +24,19 @@ string ExternalVocabulary::operator[](Id id) const {
 }
 
 // _____________________________________________________________________________
-Id ExternalVocabulary::binarySearchInVocab(const string& word) const {
+template <class Comp>
+Id ExternalVocabulary<Comp>::binarySearchInVocab(const string& word) const {
   Id lower = 0;
   Id upper = _size;
   while (lower < upper) {
     Id i = (lower + upper) / 2;
     string w = (*this)[i];
-    if (w < word) {
+    int cmp = _caseComparator.compare(w, word, Comp::Level::TOTAL);
+    if (cmp < 0) {
       lower = i + 1;
-    } else if (w > word) {
+    } else if (cmp > 0) {
       upper = i - 1;
-    } else if (w == word) {
+    } else if (cmp == 0) {
       return i;
     }
   }
@@ -41,8 +44,9 @@ Id ExternalVocabulary::binarySearchInVocab(const string& word) const {
 }
 
 // _____________________________________________________________________________
-void ExternalVocabulary::buildFromVector(const vector<string>& v,
-                                         const string& fileName) {
+template <class Comp>
+void ExternalVocabulary<Comp>::buildFromVector(const vector<string>& v,
+                                               const string& fileName) {
   _file.open(fileName.c_str(), "w");
   vector<off_t> offsets;
   off_t currentOffset = 0;
@@ -59,8 +63,9 @@ void ExternalVocabulary::buildFromVector(const vector<string>& v,
 }
 
 // _____________________________________________________________________________
-void ExternalVocabulary::buildFromTextFile(const string& textFileName,
-                                           const string& outFileName) {
+template <class Comp>
+void ExternalVocabulary<Comp>::buildFromTextFile(const string& textFileName,
+                                                 const string& outFileName) {
   _file.open(outFileName.c_str(), "w");
   std::ifstream infile(textFileName);
   AD_CHECK(infile.is_open());
@@ -81,7 +86,8 @@ void ExternalVocabulary::buildFromTextFile(const string& textFileName,
 }
 
 // _____________________________________________________________________________
-void ExternalVocabulary::initFromFile(const string& file) {
+template <class Comp>
+void ExternalVocabulary<Comp>::initFromFile(const string& file) {
   _file.open(file.c_str(), "r");
   if (_file.empty()) {
     _size = 0;
@@ -92,3 +98,6 @@ void ExternalVocabulary::initFromFile(const string& file) {
   LOG(INFO) << "Initialized external vocabulary. It contains " << _size
             << " elements." << std::endl;
 }
+
+template class ExternalVocabulary<TripleComponentComparator>;
+template class ExternalVocabulary<SimpleStringComparator>;

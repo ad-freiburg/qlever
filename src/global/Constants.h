@@ -13,7 +13,12 @@ static const size_t NOF_SUBTREES_TO_CACHE = 1000;
 static const size_t MAX_NOF_ROWS_IN_RESULT = 100000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
 static const char PREFIX_CHAR = '*';
-static const std::string EXTERNALIZED_LITERALS_PREFIX = std::string({127});
+static const char EXTERNALIZED_LITERALS_PREFIX_CHAR{127};
+static const std::string EXTERNALIZED_LITERALS_PREFIX{
+    EXTERNALIZED_LITERALS_PREFIX_CHAR};
+static const char EXTERNALIZED_ENTITIES_PREFIX_CHAR{static_cast<char>(128)};
+static const std::string EXTERNALIZED_ENTITIES_PREFIX{
+    EXTERNALIZED_ENTITIES_PREFIX_CHAR};
 static const size_t MAX_NOF_NODES = 64;
 static const size_t MAX_NOF_FILTERS = 64;
 
@@ -87,8 +92,8 @@ static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;
 // All prefix codes have a most significant bit of 1. This means the prefix
 // codes are never valid UTF-8 and thus it is always able to determine, whether
 // this vocabulary was compressed or not.
-static constexpr uint8_t MIN_COMPRESSION_PREFIX = 128;
-static constexpr uint8_t NUM_COMPRESSION_PREFIXES = 127;
+static constexpr uint8_t MIN_COMPRESSION_PREFIX = 129;
+static constexpr uint8_t NUM_COMPRESSION_PREFIXES = 126;
 // if this is the first character of a compressed string, this means that no
 // compression has been applied to  a word
 static const uint8_t NO_PREFIX_CHAR =
