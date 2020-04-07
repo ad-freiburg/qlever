@@ -23,7 +23,18 @@
 
 using std::string;
 
-// The actual parser class
+/**
+ * @brief The actual parser class
+ *
+ * If TokenizerCtre is used as a Tokenizer, a relaxed parsing mode is applied,
+ * that does not quite fulfill the SPARQL standard is apllied. This means that:
+ * IRIS  of any kind (prefixed or not) must be limited to the ascii range
+ * Prefixed names (like prefix:suffix) may not include escape sequences
+ *
+ * These relaxations currently allow for fast parsing of Wikidata but might fail
+ * on other knowledge bases, so this should be used with caution.
+ * @tparam Tokenizer_T
+ */
 template <class Tokenizer_T>
 class TurtleParser {
  public:
@@ -37,6 +48,10 @@ class TurtleParser {
    private:
     string _msg = "Error while parsing Turtle";
   };
+
+  // If the CTRE
+  static constexpr bool UseRelaxedParsing =
+      std::is_same_v<Tokenizer_T, TokenizerCtre>;
 
   // open an input file or stream
   virtual void initialize(const string& filename) = 0;
@@ -158,7 +173,9 @@ class TurtleParser {
   bool integer() { return parseTerminal<TokId::Integer>(); }
   bool decimal() { return parseTerminal<TokId::Decimal>(); }
   bool doubleParse() { return parseTerminal<TokId::Double>(); }
-  bool pnameLN();
+
+  /// this version only works if no escape sequences were used.
+  bool pnameLnRelaxed();
 
   // __________________________________________________________________________
   bool pnameNS();
@@ -200,7 +217,7 @@ class TurtleParser {
     if (result) {
       return true;
     } else {
-      throw ParseException();
+      raise("A check for a required Element failed.");
     }
   }
 
@@ -252,7 +269,7 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
 
   // _____________________________________________________________
   size_t getParsePosition() const override {
-    return _tmpToParse.size() - _tok.data().size();
+    return _tmpToParse.size() - this->_tok.data().size();
   }
 
   void initialize(const string&) override {

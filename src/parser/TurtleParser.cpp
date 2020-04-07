@@ -29,7 +29,7 @@ bool TurtleParser<T>::prefixID() {
           _lastParseResult.substr(1, _lastParseResult.size() - 2);
       return true;
     } else {
-      throw raise("prefixID");
+      raise("prefixID");
     }
   } else {
     return false;
@@ -318,17 +318,29 @@ bool TurtleParser<T>::iri() {
 // _____________________________________________________________________
 template <class T>
 bool TurtleParser<T>::prefixedName() {
-  if (!parseTerminal(tokens().PnameNS)) {
-    return false;
+  if constexpr (UseRelaxedParsing) {
+    if (pnameLnRelaxed() || pnameNS()) {
+      _lastParseResult =
+          '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
+      return true;
+    } else {
+      return false;
+    }
   } else {
-    // this also includes a ":" which we do not need, hence the "-1"
-    _activePrefix = _lastParseResult.substr(0, _lastParseResult.size() - 1);
-    _lastParseResult = "";
+    if (!parseTerminal<TokId::PnameNS>()) {
+      return false;
+    } else {
+      // this also includes a ":" which we do not need, hence the "-1"
+      _activePrefix = _lastParseResult.substr(0, _lastParseResult.size() - 1);
+      _lastParseResult = "";
+    }
+    _lastParseResult.clear();
+    parseTerminal<TokId::PnLocal, false>();
+    _lastParseResult =
+        '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
+    LOG(TRACE) << "Parsed a prefixed name\n";
+    return true;
   }
-  _lastParseResult.clear();
-  parseTerminal<false>(tokens().PnLocal);
-  _lastParseResult = '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
-  return true;
 }
 
 // _____________________________________________________________________
@@ -375,7 +387,7 @@ bool TurtleParser<T>::pnameNS() {
 
 // ________________________________________________________________________
 template <class T>
-bool TurtleParser<T>::pnameLN() {
+bool TurtleParser<T>::pnameLnRelaxed() {
   // relaxed parsing, only works if the greedy parsing of the ":"
   // is ok
   _tok.skipWhitespaceAndComments();
@@ -385,7 +397,8 @@ bool TurtleParser<T>::pnameLN() {
     return false;
   }
   // these can also be part of a collection etc.
-  // find any character that can end a pnameLN
+  // find any character that can end a pnameLn when assuming that no
+  // escape sequences were used
   auto posEnd = view.find_first_of(" \n,;", pos);
   if (posEnd == string::npos) {
     // make tests work
@@ -591,7 +604,7 @@ bool TurtleStreamParser<T>::getLine(std::array<string, 3>* triple) {
               throw ex;
 
             } else {
-              raise(
+              this->raise(
                   "Too many bytes parsed without finishing a turtle "
                   "statement");
             }

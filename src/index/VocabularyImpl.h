@@ -8,6 +8,7 @@
 #include <fstream>
 #include <iostream>
 
+#include "../parser/Tokenizer.h"
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
@@ -30,8 +31,10 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
     if constexpr (_isCompressed) {
       // when we read from file it means that all preprocessing has been done
       // and the prefixes are already stripped in the file
-      _words.push_back(CompressedString::fromString(line));
-      auto str = expandPrefix(_words.back());
+      auto str = TurtleToken::normalizeRDFLiteral<false>(
+          expandPrefix(CompressedString::fromString(line)));
+
+      _words.push_back(compressPrefix(str));
       if (!first) {
         if (!(_caseComparator.compare(lastExpandedString, str,
                                       SortLevel::TOTAL))) {
