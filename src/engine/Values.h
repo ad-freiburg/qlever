@@ -33,6 +33,8 @@ class Values : public Operation {
 
   virtual size_t getCostEstimate() override;
 
+  vector<QueryExecutionTree*> getChildren() override { return {}; }
+
  private:
   void computeMultiplicities();
   std::vector<size_t> _multiplicities;
@@ -42,6 +44,6 @@ class Values : public Operation {
   virtual void computeResult(ResultTable* result) override;
 
   template <size_t I>
-  static void writeValues(IdTable* res, const Index& index,
-                          const SparqlValues& values);
+  void writeValues(IdTable* res, const Index& index,
+                   const SparqlValues& values);
 };

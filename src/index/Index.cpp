@@ -35,8 +35,6 @@ Index::Index()
 // _____________________________________________________________________________________________
 template <class Parser>
 VocabularyData Index::createIdTriplesAndVocab(const string& ntFile) {
-  initializeVocabularySettingsBuild();
-
   auto vocabData =
       passFileForVocabulary<Parser>(ntFile, _numTriplesPerPartialVocab);
   // first save the total number of words, this is needed to initialize the
@@ -67,7 +65,23 @@ void Index::createFromFile(const string& filename) {
   string indexFilename = _onDiskBase + ".index";
   _configurationJson["external-literals"] = _onDiskLiterals;
 
-  auto vocabData = createIdTriplesAndVocab<Parser>(filename);
+  initializeVocabularySettingsBuild<Parser>();
+
+  VocabularyData vocabData;
+  if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserDummy>) {
+    if (_onlyAsciiTurtlePrefixes) {
+      LOG(INFO) << "Using the CTRE library for Tokenization\n";
+      vocabData =
+          createIdTriplesAndVocab<TurtleStreamParser<TokenizerCtre>>(filename);
+    } else {
+      LOG(INFO) << "Using the Google Re2 library for Tokenization\n";
+      vocabData =
+          createIdTriplesAndVocab<TurtleStreamParser<Tokenizer>>(filename);
+    }
+
+  } else {
+    vocabData = createIdTriplesAndVocab<Parser>(filename);
+  }
 
   // also perform unique for first permutation
   createPermutationPair<IndexMetaDataHmapDispatcher>(&vocabData, _PSO, _POS,
@@ -113,8 +127,11 @@ void Index::createFromFile(const string& filename) {
 // explicit instantiations
 template void Index::createFromFile<TsvParser>(const string& filename);
 template void Index::createFromFile<NTriplesParser>(const string& filename);
-template void Index::createFromFile<TurtleStreamParser>(const string& filename);
-template void Index::createFromFile<TurtleMmapParser>(const string& filename);
+template void Index::createFromFile<TurtleStreamParser<Tokenizer>>(
+    const string& filename);
+template void Index::createFromFile<TurtleMmapParser<Tokenizer>>(
+    const string& filename);
+template void Index::createFromFile<TurtleParserDummy>(const string& filename);
 
 // _____________________________________________________________________________
 template <class Parser>
@@ -223,13 +240,14 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
   }
 
   LOG(INFO) << "Merging vocabulary\n";
-  VocabularyMerger::VocMergeRes mergeRes = [&]() {
+  const VocabularyMerger::VocMergeRes mergeRes = [&]() {
     VocabularyMerger v;
-    const auto identicalPred = [& c = _vocab.getCaseComparator()](
-                                   const auto& a, const auto& b) {
-      return c(a, b, decltype(_vocab)::SortLevel::IDENTICAL);
+    auto sortPred = [cmp = &(_vocab.getCaseComparator())](std::string_view a,
+                                                          std::string_view b) {
+      return (*cmp)(a, b, decltype(_vocab)::SortLevel::TOTAL);
     };
-    return v.mergeVocabulary(_onDiskBase, numFiles, identicalPred);
+
+    return v.mergeVocabulary(_onDiskBase, numFiles, sortPred);
   }();
   LOG(INFO) << "Finished Merging Vocabulary.\n";
   VocabularyData res;
@@ -1402,13 +1420,19 @@ LangtagAndTriple Index::tripleToInternalRepresentation(Triple&& tripleIn) {
 
   for (size_t k = 0; k < upperBound; ++k) {
     if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k])) {
-      spo[k] = EXTERNALIZED_LITERALS_PREFIX + spo[k];
+      if (isLiteral(spo[k])) {
+        spo[k][0] = EXTERNALIZED_LITERALS_PREFIX_CHAR;
+      } else {
+        AD_CHECK(spo[k][0] == '<');
+        spo[k][0] = EXTERNALIZED_ENTITIES_PREFIX_CHAR;
+      }
     }
   }
   return res;
 }
 
 // ___________________________________________________________________________
+template <class Parser>
 void Index::initializeVocabularySettingsBuild() {
   json j;  // if we have no settings, we still have to initialize some default
            // values
@@ -1474,6 +1498,21 @@ void Index::initializeVocabularySettingsBuild() {
     _onDiskLiterals = true;
     _configurationJson["external-literals"] = true;
   }
+  if (j.count("ascii-prefixes-only")) {
+    if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserDummy>) {
+      bool v = j["ascii-prefixes-only"];
+      if (v) {
+        LOG(WARN) << WARNING_ASCII_ONLY_PREFIXES;
+        _onlyAsciiTurtlePrefixes = true;
+      } else {
+        _onlyAsciiTurtlePrefixes = false;
+      }
+    } else {
+      LOG(WARN) << "You specified the ascii-prefixes-only but a parser that is "
+                   "not the Turtle stream parser. This means that this setting "
+                   "is ignored\n";
+    }
+  }
 
   if (j.count("num-triples-per-partial-vocab")) {
     _numTriplesPerPartialVocab = j["num-triples-per-partial-vocab"];
@@ -1514,7 +1553,7 @@ std::future<void> Index::writeNextPartialVocabulary(
     const auto identicalPred = [& c = vocab->getCaseComparator()](
                                    const auto& a, const auto& b) {
       return c(a.second.m_splitVal, b.second.m_splitVal,
-               decltype(_vocab)::SortLevel::IDENTICAL);
+               decltype(_vocab)::SortLevel::TOTAL);
     };
     LOG(INFO) << "Start sorting of vocabulary with #elements: " << vec.size()
               << std::endl;

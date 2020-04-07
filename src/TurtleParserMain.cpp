@@ -26,8 +26,13 @@ void writeNTImpl(std::ostream& out, const std::string& filename) {
   Parser p(filename);
   std::array<std::string, 3> triple;
   // this call by reference is necesary because of the TSV-Parsers interface
+  size_t numTriples = 0;
   while (p.getLine(triple)) {
     out << triple[0] << " " << triple[1] << " " << triple[2] << " .\n";
+    numTriples++;
+    if (numTriples % 10000000 == 0) {
+      LOG(INFO) << "Parsed " << numTriples << " triples" << std::endl;
+    }
   }
 }
 
@@ -38,20 +43,38 @@ void writeNTImpl(std::ostream& out, const std::string& filename) {
  * @param fileFormat One of [tsv|ttl|tsv|mmap]
  * @param filename Will read from this file, might be /dev/stdin
  */
+template <class Tokenizer_T>
 void writeNT(std::ostream& out, const string& fileFormat,
              const std::string& filename) {
   if (fileFormat == "ttl") {
-    writeNTImpl<TurtleStreamParser>(out, filename);
+    writeNTImpl<TurtleStreamParser<Tokenizer_T>>(out, filename);
   } else if (fileFormat == "tsv") {
     writeNTImpl<TsvParser>(out, filename);
   } else if (fileFormat == "nt") {
     writeNTImpl<NTriplesParser>(out, filename);
   } else if (fileFormat == "mmap") {
-    writeNTImpl<TurtleMmapParser>(out, filename);
+    writeNTImpl<TurtleMmapParser<Tokenizer_T>>(out, filename);
   } else {
     LOG(ERROR) << "writeNT was called with unknown file format " << fileFormat
                << ". This should never happen, terminating" << std::endl;
     LOG(ERROR) << "Please specify a valid file format" << std::endl;
+    exit(1);
+  }
+}
+
+void writeNTDispatch(std::ostream& out, const string& fileFormat,
+                     const std::string& filename,
+                     const std::string& regexEngine) {
+  if (regexEngine == "re2") {
+    writeNT<Tokenizer>(out, fileFormat, filename);
+  } else if (regexEngine == "ctre") {
+    LOG(WARN) << WARNING_ASCII_ONLY_PREFIXES;
+    writeNT<TokenizerCtre>(out, fileFormat, filename);
+  } else {
+    LOG(ERROR)
+        << "Please specify a valid regex engine via the -r flag. "
+           "Options are \"re2\" or \"ctre\" (The latter only works correct if "
+           "prefix names only use ascii characters but is faster.\n";
     exit(1);
   }
 }
@@ -79,6 +102,9 @@ void printUsage(char* execName) {
        << " The NTriples file to be Written to. If omitted, we will write to "
           "stdout"
        << endl;
+  cout << "  " << std::setw(20) << "r, regex-engine" << std::setw(1) << "    "
+       << R"( The regex engine used for lexing. Must be one of "re2" or "ctre")"
+       << endl;
   cout.copyfmt(coutState);
 }
 
@@ -91,11 +117,12 @@ int main(int argc, char** argv) {
                              {"file-format", required_argument, NULL, 'F'},
                              {"input-file", required_argument, NULL, 'i'},
                              {"output-file", required_argument, NULL, 'o'},
+                             {"regex-engine", required_argument, NULL, 'r'},
                              {NULL, 0, NULL, 0}};
 
-  string inputFile, outputFile, fileFormat;
+  string inputFile, outputFile, fileFormat, regexEngine;
   while (true) {
-    int c = getopt_long(argc, argv, "F:i:o:h", options, nullptr);
+    int c = getopt_long(argc, argv, "F:i:o:r:h", options, nullptr);
     if (c == -1) {
       break;
     }
@@ -112,6 +139,9 @@ int main(int argc, char** argv) {
         break;
       case 'F':
         fileFormat = optarg;
+        break;
+      case 'r':
+        regexEngine = optarg;
         break;
       default:
         cout << endl
@@ -168,10 +198,10 @@ int main(int argc, char** argv) {
       exit(1);
     }
     LOG(INFO) << "Writing to file " << outputFile << std::endl;
-    writeNT(of, fileFormat, inputFile);
+    writeNTDispatch(of, fileFormat, inputFile, regexEngine);
     of.close();
   } else {
     LOG(INFO) << "Writing to stdout" << std::endl;
-    writeNT(std::cout, fileFormat, inputFile);
+    writeNTDispatch(std::cout, fileFormat, inputFile, regexEngine);
   }
 }

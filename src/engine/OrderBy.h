@@ -61,6 +61,10 @@ class OrderBy : public Operation {
     return _subtree->getVariableColumns();
   }
 
+  vector<QueryExecutionTree*> getChildren() override {
+    return {_subtree.get()};
+  }
+
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<pair<size_t, bool>> _sortIndices;

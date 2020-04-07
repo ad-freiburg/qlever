@@ -13,7 +13,12 @@ static const size_t NOF_SUBTREES_TO_CACHE = 1000;
 static const size_t MAX_NOF_ROWS_IN_RESULT = 100000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
 static const char PREFIX_CHAR = '*';
-static const std::string EXTERNALIZED_LITERALS_PREFIX = std::string({127});
+static const char EXTERNALIZED_LITERALS_PREFIX_CHAR{127};
+static const std::string EXTERNALIZED_LITERALS_PREFIX{
+    EXTERNALIZED_LITERALS_PREFIX_CHAR};
+static const char EXTERNALIZED_ENTITIES_PREFIX_CHAR{static_cast<char>(128)};
+static const std::string EXTERNALIZED_ENTITIES_PREFIX{
+    EXTERNALIZED_ENTITIES_PREFIX_CHAR};
 static const size_t MAX_NOF_NODES = 64;
 static const size_t MAX_NOF_FILTERS = 64;
 
@@ -69,6 +74,12 @@ static const std::string ERROR_IGNORE_CASE_UNSUPPORTED =
     "Key \"ignore-case\" is no longer supported. Please remove this key from "
     "your settings.json and rebuild your index. You can optionally specify the "
     "\"locale\" key, otherwise \"en.US\" will be used as default";
+static const std::string WARNING_ASCII_ONLY_PREFIXES =
+    "You explicitly requested the ascii-prefixes-only settings or the ctre "
+    "regex engine for Tokenization. This means "
+    "that prefixes in the input Turtle may only use characters from "
+    "the ascii range. This is stricter than the Sparql standard but "
+    "makes parsing faster and works e.g. for wikidata dumps\n";
 
 static const std::string LOCALE_DEFAULT_LANG = "en";
 static const std::string LOCALE_DEFAULT_COUNTRY = "US";
@@ -81,8 +92,8 @@ static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;
 // All prefix codes have a most significant bit of 1. This means the prefix
 // codes are never valid UTF-8 and thus it is always able to determine, whether
 // this vocabulary was compressed or not.
-static constexpr uint8_t MIN_COMPRESSION_PREFIX = 128;
-static constexpr uint8_t NUM_COMPRESSION_PREFIXES = 127;
+static constexpr uint8_t MIN_COMPRESSION_PREFIX = 129;
+static constexpr uint8_t NUM_COMPRESSION_PREFIXES = 126;
 // if this is the first character of a compressed string, this means that no
 // compression has been applied to  a word
 static const uint8_t NO_PREFIX_CHAR =

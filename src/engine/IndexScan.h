@@ -98,6 +98,8 @@ class IndexScan : public Operation {
 
   virtual void computeResult(ResultTable* result) override;
 
+  vector<QueryExecutionTree*> getChildren() override { return {}; }
+
   void computePSOboundS(ResultTable* result) const;
 
   void computePSOfreeS(ResultTable* result) const;

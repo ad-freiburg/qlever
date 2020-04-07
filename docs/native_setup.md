@@ -5,7 +5,7 @@ Arch Linux.
 
 For Ubuntu 18.04 the following packages are required
 
-* build-essential cmake libsparsehash-dev
+* build-essential cmake libsparsehash-dev libicu-dev
 * wget python3-yaml unzip curl (for End-to-End Tests)
 
 This roughly translates to

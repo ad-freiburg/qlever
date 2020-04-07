@@ -177,7 +177,8 @@ class Vocabulary {
   //! Return value signals if something was found at all.
   bool getId(const string& word, Id* id) const {
     if (!shouldBeExternalized(word)) {
-      *id = lower_bound(word);
+      // need the TOTAL level because we want the unique word.
+      *id = lower_bound(word, SortLevel::TOTAL);
       // works for the case insensitive version because
       // of the strict ordering.
       return *id < _words.size() && at(*id) == word;
@@ -254,7 +255,7 @@ class Vocabulary {
     _externalLiterals.buildFromTextFile(textFileName, outFileName);
   }
 
-  const ExternalVocabulary& getExternalVocab() const {
+  const ExternalVocabulary<ComparatorType>& getExternalVocab() const {
     return _externalLiterals;
   }
 
@@ -312,6 +313,8 @@ class Vocabulary {
   void setLocale(const std::string& language, const std::string& country,
                  bool ignorePunctuation) {
     _caseComparator = ComparatorType(language, country, ignorePunctuation);
+    _externalLiterals.getCaseComparator() =
+        ComparatorType(language, country, ignorePunctuation);
   }
 
   // _____________________________________________________________________
@@ -399,7 +402,7 @@ class Vocabulary {
   vector<std::string> _internalizedLangs{"en"};
 
   vector<StringType> _words;
-  ExternalVocabulary _externalLiterals;
+  ExternalVocabulary<ComparatorType> _externalLiterals;
   ComparatorType _caseComparator;
 };
 
