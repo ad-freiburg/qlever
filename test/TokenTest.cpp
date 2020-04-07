@@ -502,4 +502,38 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(
                             TurtleToken::normalizeRDFLiteral(l4)));
   }
+
+  {
+    std::string t = "\"si\"mple\'Liää\n\rt\t\b\fer\\\"^^xsd::integer";
+    std::string tEscaped = R"("si\"mple\'Liää\n\rt\t\b\fer\\"^^xsd::integer)";
+    std::string l3 =
+        "\"\"\"si\"mple\'Li\\u00E4ä\n\rt\t\b\fer\\\\\"\"\"^^xsd::integer";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l3));
+    std::string l4 =
+        "\'\'\'si\"mple\'Liä\\u00e4\n\rt\t\b\fer\\\\\'\'\'^^xsd::integer";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
+
+    ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(t));
+    ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(
+                            TurtleToken::normalizeRDFLiteral(l3)));
+    ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(
+                            TurtleToken::normalizeRDFLiteral(l4)));
+  }
+
+  {
+    std::string t = "<si\"mple\'Liää\n\rt\t\b\fer\\>";
+    std::string l3 = "<si\"mple\'Li\\u00E4ä\n\rt\t\b\fer\\\\>";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l3));
+  }
+  {
+    std::string t = "<si\"mple\'Liää\n\rt\t\b\fer\\>";
+    std::string l3 = "<si\"mple\'Li\\U000000E4ä\n\rt\t\b\fer\\\\>";
+    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l3));
+  }
+
+  {
+    std::string unterminated = "<noending";
+    ASSERT_THROW(TurtleToken::normalizeRDFLiteral(unterminated),
+                 std::runtime_error);
+  }
 }

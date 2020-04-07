@@ -69,6 +69,9 @@ void writeNTDispatch(std::ostream& out, const string& fileFormat,
     writeNT<Tokenizer>(out, fileFormat, filename);
   } else if (regexEngine == "ctre") {
     LOG(WARN) << WARNING_ASCII_ONLY_PREFIXES;
+    throw std::runtime_error(
+        "The ctre engine is currently disabled due to serious performance "
+        "problems");
     writeNT<TokenizerCtre>(out, fileFormat, filename);
   } else {
     LOG(ERROR)

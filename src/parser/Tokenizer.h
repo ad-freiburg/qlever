@@ -7,10 +7,10 @@
 #include <ctre/ctre.h>
 #include <gtest/gtest.h>
 #include <re2/re2.h>
+#include <unicode/ustream.h>
 #include <regex>
 #include "../util/Exception.h"
 #include "../util/Log.h"
-
 using re2::RE2;
 using namespace std::string_literals;
 
@@ -93,6 +93,7 @@ enum class TokId : int {
   Iriref,
   PnameNS,
   PnameLN,
+  PnLocal,
   BlankNodeLabel,
   WsMultiple,
   Anon,
@@ -215,6 +216,8 @@ struct TurtleTokenCtre {
       grp(cls(PnCharsUString + u8":0-9") + "|" + PlxString) +
       grp(u8"\\.*" + grp(TmpNoDot)) + "*";
 
+  static constexpr fixed_string PnLocal = grp(PnLocalString);
+
   static constexpr fixed_string PnameLNString =
       grp(PnameNSString) + grp(PnLocalString);
 
@@ -246,6 +249,16 @@ struct TurtleTokenCtre {
  * at runtime
  */
 struct TurtleToken {
+  /// turn a number of hex-chars like '00e4' into utf-8
+  static std::string unescapeUchar(std::string_view hex) {
+    UChar32 x;
+    std::stringstream sstream;
+    sstream << std::hex << hex;
+    sstream >> x;
+    std::string res;
+    icu::UnicodeString(x).toUTF8String(res);
+    return res;
+  }
   /**
    * @brief convert a RDF Literal to a unified form that is used inside QLever
    *
@@ -266,23 +279,42 @@ struct TurtleToken {
    * @param literal
    * @return
    */
-  static std::string normalizeRDFLiteral(std::string_view literal) {
-    std::string res = "\"";
-    auto lastQuot = literal.find_last_of("\"\'");
-    AD_CHECK(lastQuot != std::string_view::npos);
-    auto langtagOrDatatype = literal.substr(lastQuot + 1);
-    literal.remove_suffix(literal.size() - lastQuot - 1);
-    if (ad_utility::startsWith(literal, "\"\"\"") ||
-        ad_utility::startsWith(literal, "'''")) {
-      AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 3)));
-      literal.remove_prefix(3);
-      literal.remove_suffix(3);
-    } else {
-      AD_CHECK(ad_utility::startsWith(literal, "\"") ||
-               ad_utility::startsWith(literal, "'"));
-      AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 1)));
+  static std::string normalizeRDFLiteral(std::string_view origLiteral) {
+    auto literal = origLiteral;
+    std::string res;
+    char endDelimiter = '\0';
+    std::string_view langtagOrDatatype;
+    if (ad_utility::startsWith(literal, "<")) {
+      // this must be an <iriref>
+      if (!ad_utility::endsWith(literal, ">")) {
+        throw std::runtime_error("Error: Rdf Triple element "s + origLiteral +
+                                 "could not be normalized properly"s);
+      }
+      res = "<";
+      endDelimiter = '>';
       literal.remove_prefix(1);
       literal.remove_suffix(1);
+    } else {
+      res = "\"";
+      endDelimiter = '\"';
+      auto lastQuot = literal.find_last_of("\"\'");
+      if (lastQuot != std::string_view::npos) {
+        langtagOrDatatype = literal.substr(lastQuot + 1);
+        literal.remove_suffix(literal.size() - lastQuot - 1);
+      } else {
+      }
+      if (ad_utility::startsWith(literal, "\"\"\"") ||
+          ad_utility::startsWith(literal, "'''")) {
+        AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 3)));
+        literal.remove_prefix(3);
+        literal.remove_suffix(3);
+      } else {
+        AD_CHECK(ad_utility::startsWith(literal, "\"") ||
+                 ad_utility::startsWith(literal, "'"));
+        AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 1)));
+        literal.remove_prefix(1);
+        literal.remove_suffix(1);
+      }
     }
     auto pos = literal.find('\\');
     while (pos != literal.npos) {
@@ -313,6 +345,20 @@ struct TurtleToken {
         case '\\':
           res.push_back('\\');
           break;
+        case 'u': {
+          AD_CHECK(pos + 5 <= literal.size());
+          auto unesc = unescapeUchar(literal.substr(pos + 2, 4));
+          res.insert(res.end(), unesc.begin(), unesc.end());
+          literal.remove_prefix(4);
+          break;
+        }
+        case 'U': {
+          AD_CHECK(pos + 9 <= literal.size());
+          auto unesc = unescapeUchar(literal.substr(pos + 2, 8));
+          res.insert(res.end(), unesc.begin(), unesc.end());
+          literal.remove_prefix(8);
+          break;
+        }
 
         default:
           throw std::runtime_error(
@@ -323,7 +369,7 @@ struct TurtleToken {
       pos = literal.find('\\');
     }
     res.append(literal);
-    res.push_back('"');
+    res.push_back(endDelimiter);
     res.append(langtagOrDatatype);
     return res;
   }
@@ -703,6 +749,8 @@ class TokenizerCtre {
       return F::template process<TurtleTokenCtre::PnameNS>(_data);
     } else if constexpr (id == TokId::PnameLN) {
       return F::template process<TurtleTokenCtre::PnameLN>(_data);
+    } else if constexpr (id == TokId::PnLocal) {
+      return F::template process<TurtleTokenCtre::PnLocal>(_data);
     } else if constexpr (id == TokId::BlankNodeLabel) {
       return F::template process<TurtleTokenCtre::BlankNodeLabel>(_data);
     } else {

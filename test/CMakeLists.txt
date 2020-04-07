@@ -1,6 +1,6 @@
 add_executable(SparqlParserTest SparqlParserTest.cpp)
 add_test(SparqlParserTest SparqlParserTest)
-target_link_libraries(SparqlParserTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(SparqlParserTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT} ${ICU_LIBRARIES})
 
 add_executable(StringUtilsTest StringUtilsTest.cpp)
 add_test(StringUtilsTest StringUtilsTest)
@@ -96,7 +96,7 @@ target_link_libraries(UnionTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(TokenTest TokenTest.cpp)
 add_test(TokenTest TokenTest)
-target_link_libraries(TokenTest parser re2 gtest_main -pthread)
+target_link_libraries(TokenTest parser re2 gtest_main -pthread ${ICU_LIBRARIES})
 
 add_executable(TurtleParserTest TurtleParserTest.cpp)
 add_test(TurtleParserTest TurtleParserTest)
@@ -116,7 +116,7 @@ target_link_libraries(TransitivePathTest engine gtest_main ${CMAKE_THREAD_LIBS_I
 
 add_executable(SparqlLexerTest SparqlLexerTest.cpp)
 add_test(SparqlLexerTest SparqlLexerTest)
-target_link_libraries(SparqlLexerTest parser gtest_main ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(SparqlLexerTest parser gtest_main ${CMAKE_THREAD_LIBS_INIT} ${ICU_LIBRARIES})
 
 add_executable(Utf8RegexTest Utf8RegexTest.cpp)
 add_test(Utf8RegexTest Utf8RegexTest)

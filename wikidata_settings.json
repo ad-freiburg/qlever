@@ -10,6 +10,6 @@
 	  "country": "US",
 	  "ignore-punctuation": true
   },
-  "ascii-prefixes-only":true,
+  "ascii-prefixes-only":false,
   "num-triples-per-partial-vocab" : 50000000
 }

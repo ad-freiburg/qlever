@@ -252,7 +252,7 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
 
   // _____________________________________________________________
   size_t getParsePosition() const override {
-    return _tmpToParse.size() - _tok.data().size();
+    return _tmpToParse.size() - this->_tok.data().size();
   }
 
   void initialize(const string&) override {

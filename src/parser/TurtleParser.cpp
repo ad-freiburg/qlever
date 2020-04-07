@@ -29,7 +29,7 @@ bool TurtleParser<T>::prefixID() {
           _lastParseResult.substr(1, _lastParseResult.size() - 2);
       return true;
     } else {
-      throw raise("prefixID");
+      raise("prefixID");
     }
   } else {
     return false;
@@ -318,7 +318,7 @@ bool TurtleParser<T>::iri() {
 // _____________________________________________________________________
 template <class T>
 bool TurtleParser<T>::prefixedName() {
-  if (!parseTerminal(tokens().PnameNS)) {
+  if (!parseTerminal<TokId::PnameNS>()) {
     return false;
   } else {
     // this also includes a ":" which we do not need, hence the "-1"
@@ -326,8 +326,9 @@ bool TurtleParser<T>::prefixedName() {
     _lastParseResult = "";
   }
   _lastParseResult.clear();
-  parseTerminal<false>(tokens().PnLocal);
+  parseTerminal<TokId::PnLocal, false>();
   _lastParseResult = '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
+  LOG(INFO) << "Parsed a prefixed name\n";
   return true;
 }
 
@@ -591,7 +592,7 @@ bool TurtleStreamParser<T>::getLine(std::array<string, 3>* triple) {
               throw ex;
 
             } else {
-              raise(
+              this->raise(
                   "Too many bytes parsed without finishing a turtle "
                   "statement");
             }
