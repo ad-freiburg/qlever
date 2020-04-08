@@ -250,10 +250,11 @@ class ParsedQuery {
     // deletes the patterns children.
     GraphPattern() : _optional(false) {}
     // Move and copyconstructors to avoid double deletes on the trees children
-    GraphPattern(GraphPattern&& other);
+    GraphPattern(GraphPattern&& other) = default;
     GraphPattern(const GraphPattern& other) = delete;
-    GraphPattern& operator=(const GraphPattern& other);
-    virtual ~GraphPattern();
+    GraphPattern& operator=(const GraphPattern& other) = delete;
+    GraphPattern& operator=( GraphPattern&& other) noexcept = default;
+    ~GraphPattern() = default;
     void toString(std::ostringstream& os, int indentation = 0) const;
     // Traverses the graph pattern tree and assigns a unique id to every graph
     // pattern
