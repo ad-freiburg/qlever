@@ -130,7 +130,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
               static_assert(std::is_same_v<T, ParsedQuery::Subquery>);
             }
           },
-          *op);
+          op);
     }
   }
 
@@ -165,7 +165,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     // size)
     childPlanStorage.reserve(pattern->_children.size());
     subqueryPlans.reserve(pattern->_children.size());
-    for (const std::shared_ptr<ParsedQuery::GraphPatternOperation>& child :
+    for (const ParsedQuery::GraphPatternOperation& child :
          pattern->_children) {
       std::visit(
           [&](auto&& arg) {
@@ -245,7 +245,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
               childPlans.push_back(&childPlanStorage.back());
             }
           },
-          *child);
+          child);
     }
 
     // Strategy:
@@ -440,14 +440,14 @@ bool QueryPlanner::checkUsePatternTrick(
             // Transitive paths cannot yet exist in the query. They could also
             // not contain the variables we are interested in.
           },
-          *op);
+          op);
     }
     while (!graphsToProcess.empty() && usePatternTrick) {
       std::shared_ptr<const ParsedQuery::GraphPattern> pattern =
           graphsToProcess.back();
       graphsToProcess.pop_back();
 
-      for (const std::shared_ptr<const ParsedQuery::GraphPatternOperation>& op :
+      for (const ParsedQuery::GraphPatternOperation& op :
            pattern->_children) {
         std::visit(
             [&](auto&& arg) {
@@ -470,7 +470,7 @@ bool QueryPlanner::checkUsePatternTrick(
               // Transitive paths cannot yet exist in the query. They could also
               // not contain the variables we are interested in.
             },
-            *op);
+            op);
       }
 
       for (const SparqlTriple& other : pattern->_whereClauseTriples) {
@@ -525,7 +525,7 @@ bool QueryPlanner::checkUsePatternTrick(
   // contains a single subquery child
   if (!root->_filters.empty() || !root->_whereClauseTriples.empty() ||
       root->_children.size() != 1 ||
-      !std::holds_alternative<ParsedQuery::Subquery>(*root->_children[0])) {
+      !std::holds_alternative<ParsedQuery::Subquery>(root->_children[0])) {
     return false;
   }
 
@@ -534,7 +534,7 @@ bool QueryPlanner::checkUsePatternTrick(
   // Check that the query is distinct and does not do any grouping and returns 2
   // variables.
   std::shared_ptr<ParsedQuery> sub =
-      std::get<ParsedQuery::Subquery>(*root->_children[0])._subquery;
+      std::get<ParsedQuery::Subquery>(root->_children[0])._subquery;
   if (!sub->_distinct || sub->_groupByVariables.size() > 0 ||
       sub->_aliases.size() > 0 || sub->_selectedVariables.size() != 2) {
     return false;
@@ -1565,8 +1565,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
   transPath._min = 1;
   transPath._max = std::numeric_limits<size_t>::max();
   transPath._childGraphPattern = childPlan;
-  p->_children.push_back(std::make_shared<ParsedQuery::GraphPatternOperation>(
-      std::move(transPath)));
+  p->_children.push_back(
+      std::move(transPath));
   return p;
 }
 
@@ -1588,8 +1588,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
   transPath._min = std::max(uint_fast16_t(1), path._limit);
   transPath._max = std::numeric_limits<size_t>::max();
   transPath._childGraphPattern = childPlan;
-  p->_children.push_back(std::make_shared<ParsedQuery::GraphPatternOperation>(
-      std::move(transPath)));
+  p->_children.push_back(
+      std::move(transPath));
   return p;
 }
 
@@ -1611,8 +1611,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
   transPath._min = 1;
   transPath._max = path._limit;
   transPath._childGraphPattern = childPlan;
-  p->_children.push_back(std::make_shared<ParsedQuery::GraphPatternOperation>(
-      std::move(transPath)));
+  p->_children.push_back(
+      std::move(transPath));
   return p;
 }
 
@@ -1637,16 +1637,15 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::uniteGraphPatterns(
     const std::vector<std::shared_ptr<ParsedQuery::GraphPattern>>& patterns)
     const {
   using GraphPattern = ParsedQuery::GraphPattern;
-  using GraphPatternOperation = ParsedQuery::GraphPatternOperation;
   // Build a tree of union operations
   auto p = std::make_shared<GraphPattern>();
-  p->_children.push_back(std::make_shared<GraphPatternOperation>(
-      ParsedQuery::Union{patterns[0], patterns[1]}));
+  p->_children.push_back(
+      ParsedQuery::Union{patterns[0], patterns[1]});
 
   for (size_t i = 2; i < patterns.size(); i++) {
     std::shared_ptr<GraphPattern> next = std::make_shared<GraphPattern>();
-    next->_children.push_back(std::make_shared<GraphPatternOperation>(
-        ParsedQuery::Union{p, patterns[i]}));
+    next->_children.push_back(
+        ParsedQuery::Union{p, patterns[i]});
     p = next;
   }
   return p;

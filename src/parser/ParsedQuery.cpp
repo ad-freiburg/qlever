@@ -258,7 +258,7 @@ void ParsedQuery::expandPrefixes() {
   while (!graphPatterns.empty()) {
     GraphPattern* pattern = graphPatterns.back();
     graphPatterns.pop_back();
-    for (const std::shared_ptr<GraphPatternOperation>& p : pattern->_children) {
+    for (const GraphPatternOperation& p : pattern->_children) {
       std::visit(
           [&graphPatterns, this](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
@@ -278,7 +278,7 @@ void ParsedQuery::expandPrefixes() {
               }
             }
           },
-          *p);
+          p);
     }
 
     for (auto& trip : pattern->_whereClauseTriples) {
@@ -493,11 +493,10 @@ void ParsedQuery::merge(const ParsedQuery& p) {
       p._rootGraphPattern->_whereClauseTriples.begin(),
       p._rootGraphPattern->_whereClauseTriples.end());
 
-  for (const std::shared_ptr<GraphPatternOperation>& op :
-       p._rootGraphPattern->_children) {
-    _rootGraphPattern->_children.push_back(
-        std::make_shared<GraphPatternOperation>(*op));
-  }
+  auto& children = _rootGraphPattern->_children;
+  auto& otherChildren = p._rootGraphPattern->_children;
+  children.insert(children.end(), otherChildren.begin(), otherChildren.end());
+
   // update the ids
   _numGraphPatterns = 0;
   _rootGraphPattern->recomputeIds(&_numGraphPatterns);
@@ -530,9 +529,9 @@ void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
     for (int j = 0; j < indentation; ++j) os << "  ";
     os << _filters.back().asString();
   }
-  for (const std::shared_ptr<GraphPatternOperation>& child : _children) {
+  for (const GraphPatternOperation& child : _children) {
     os << "\n";
-    operationtoString(*child, os, indentation + 1);
+    operationtoString(child, os, indentation + 1);
     // child->toString(os, indentation + 1);
   }
   os << "\n";
@@ -549,7 +548,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
   }
   _id = *id_count;
   (*id_count)++;
-  for (const std::shared_ptr<GraphPatternOperation>& op : _children) {
+  for (const GraphPatternOperation& op : _children) {
     std::visit(
         [&id_count](auto&& arg) {
           using T = std::decay_t<decltype(arg)>;
@@ -568,7 +567,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
             // at the same time assert that the above else-if is exhaustive.
           }
         },
-        *op);
+        op);
   }
 
   if (allocatedIdCounter) {

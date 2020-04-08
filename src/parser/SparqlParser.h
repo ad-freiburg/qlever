@@ -30,8 +30,8 @@ class SparqlParser {
   void parsePrologue(ParsedQuery* query);
   void parseSelect(ParsedQuery* query);
   void parseWhere(
-      ParsedQuery* query,
-      std::shared_ptr<ParsedQuery::GraphPattern> currentPattern = nullptr);
+          ParsedQuery* query,
+          std::shared_ptr<ParsedQuery::GraphPattern> currentPattern = nullptr);
   void parseSolutionModifiers(ParsedQuery* query);
   void addPrefix(const string& key, const string& value, ParsedQuery* query);
   void addWhereTriple(const string& str,

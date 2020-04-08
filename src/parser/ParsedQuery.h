@@ -270,7 +270,7 @@ class ParsedQuery {
      */
     size_t _id;
 
-    vector<std::shared_ptr<GraphPatternOperation>> _children;
+    vector<GraphPatternOperation> _children;
   };
 
   /**

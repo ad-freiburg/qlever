@@ -181,7 +181,7 @@ TEST(ParserTest, testParse) {
 
     ASSERT_EQ(1u, pq._rootGraphPattern->_children.size());
     const auto& opt = std::get<ParsedQuery::Optional>(
-        *pq._rootGraphPattern->_children[0]);  // throws on error
+        pq._rootGraphPattern->_children[0]);  // throws on error
     std::shared_ptr<ParsedQuery::GraphPattern> child = opt._children[0];
     ASSERT_EQ(1u, child->_whereClauseTriples.size());
     ASSERT_EQ("?y", child->_whereClauseTriples[0]._s);
@@ -207,13 +207,13 @@ TEST(ParserTest, testParse) {
              .parse();
     ASSERT_EQ(1u, pq._rootGraphPattern->_children.size());
     const auto& optA = std::get<ParsedQuery::Optional>(
-        *pq._rootGraphPattern->_children[0]);  // throws on error
+        pq._rootGraphPattern->_children[0]);  // throws on error
     child = optA._children[0];
     ASSERT_EQ(2u, child->_children.size());
     const auto& opt2 = std::get<ParsedQuery::Optional>(
-        *child->_children[0]);  // throws on error
+        child->_children[0]);  // throws on error
     const auto& opt3 = std::get<ParsedQuery::Optional>(
-        *child->_children[1]);  // throws on error
+        child->_children[1]);  // throws on error
     std::shared_ptr<ParsedQuery::GraphPattern> child2 = opt2._children[0];
     std::shared_ptr<ParsedQuery::GraphPattern> child3 = opt3._children[0];
     ASSERT_EQ(1u, child2->_whereClauseTriples.size());
