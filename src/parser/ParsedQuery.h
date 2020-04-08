@@ -5,6 +5,7 @@
 
 #include <initializer_list>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "../util/HashMap.h"
@@ -215,39 +216,36 @@ class ParsedQuery {
  public:
   class GraphPattern;
 
-  class GraphPatternOperation {
-   public:
-    enum class Type { OPTIONAL, UNION, SUBQUERY, TRANS_PATH };
-    GraphPatternOperation(
-        Type type,
-        std::initializer_list<std::shared_ptr<GraphPattern>> children);
-    GraphPatternOperation(Type type);
-
-    // Move and copyconstructors to avoid double deletes on the trees children
-    GraphPatternOperation(GraphPatternOperation&& other);
-    GraphPatternOperation(const GraphPatternOperation& other);
-    GraphPatternOperation& operator=(const GraphPatternOperation& other);
-    virtual ~GraphPatternOperation();
-
-    void toString(std::ostringstream& os, int indentation = 0) const;
-
-    Type _type;
-    union {
-      std::vector<std::shared_ptr<GraphPattern>> _childGraphPatterns;
-      std::shared_ptr<ParsedQuery> _subquery;
-      struct {
-        // The name of the left and right end of the transitive operation
-        std::string _left;
-        std::string _right;
-        // The name of the left and right end of the subpath
-        std::string _innerLeft;
-        std::string _innerRight;
-        size_t _min = 0;
-        size_t _max = 0;
-        std::shared_ptr<GraphPattern> _childGraphPattern;
-      } _pathData;
-    };
+  struct Optional {
+    std::array<std::shared_ptr<GraphPattern>, 1> _children;
   };
+  struct Union {
+    std::array<std::shared_ptr<GraphPattern>, 2> _children;
+  };
+  struct Subquery {
+    std::shared_ptr<ParsedQuery> _subquery;
+  };
+
+  struct TransPath {
+    // The name of the left and right end of the transitive operation
+    std::string _left;
+    std::string _right;
+    // The name of the left and right end of the subpath
+    std::string _innerLeft;
+    std::string _innerRight;
+    size_t _min = 0;
+    size_t _max = 0;
+    std::shared_ptr<GraphPattern> _childGraphPattern;
+  };
+
+  using GraphPatternOperation =
+      std::variant<Optional, Union, Subquery, TransPath>;
+  static void operationtoString(const GraphPatternOperation& op,
+                                std::ostringstream& os, int indentation = 0) {
+    (void)op;
+    os << indentation << "Not yet implemented\n";
+    // TODO<joka921: write
+  }
 
   // Groups triplets and filters. Represents a node in a tree (as graph patterns
   // are recursive).

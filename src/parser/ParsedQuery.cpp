@@ -259,16 +259,26 @@ void ParsedQuery::expandPrefixes() {
     GraphPattern* pattern = graphPatterns.back();
     graphPatterns.pop_back();
     for (const std::shared_ptr<GraphPatternOperation>& p : pattern->_children) {
-      if (p->_type == GraphPatternOperation::Type::SUBQUERY) {
-        // Pass the prefixes to the subquery and expand them.
-        p->_subquery->_prefixes = _prefixes;
-        p->_subquery->expandPrefixes();
-      } else {
-        for (const std::shared_ptr<GraphPattern>& pattern :
-             p->_childGraphPatterns) {
-          graphPatterns.push_back(pattern.get());
-        }
-      }
+      std::visit(
+          [&graphPatterns, this](auto&& arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, Subquery>) {
+              arg._subquery->_prefixes = _prefixes;
+              arg._subquery->expandPrefixes();
+            } else if constexpr (std::is_same_v<T, TransPath> ||
+                                 std::is_same_v<T, Subquery>) {
+              AD_CHECK(false);
+              // we may never be in an transitive path here or a
+              // subquery?TODO<joka921, verify by florian> at least this
+              // shoudn't have worked before
+            } else {
+              for (const std::shared_ptr<GraphPattern>& pattern :
+                   arg._children) {
+                graphPatterns.push_back(pattern.get());
+              }
+            }
+          },
+          *p);
     }
 
     for (auto& trip : pattern->_whereClauseTriples) {
@@ -557,7 +567,8 @@ void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
   }
   for (const std::shared_ptr<GraphPatternOperation>& child : _children) {
     os << "\n";
-    child->toString(os, indentation + 1);
+    operationtoString(*child, os, indentation + 1);
+    // child->toString(os, indentation + 1);
   }
   os << "\n";
   for (int j = 1; j < indentation; ++j) os << "  ";
@@ -574,22 +585,25 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
   _id = *id_count;
   (*id_count)++;
   for (const std::shared_ptr<GraphPatternOperation>& op : _children) {
-    switch (op->_type) {
-      case GraphPatternOperation::Type::OPTIONAL:
-      case GraphPatternOperation::Type::UNION:
-        for (const std::shared_ptr<GraphPattern>& p : op->_childGraphPatterns) {
-          p->recomputeIds(id_count);
-        }
-        break;
-      case GraphPatternOperation::Type::TRANS_PATH:
-        if (op->_pathData._childGraphPattern != nullptr) {
-          op->_pathData._childGraphPattern->recomputeIds(id_count);
-        }
-        break;
-      case GraphPatternOperation::Type::SUBQUERY:
-        // subquery children have their own id space
-        break;
-    }
+    std::visit(
+        [&id_count](auto&& arg) {
+          using T = std::decay_t<decltype(arg)>;
+          if constexpr (std::is_same_v<T, Union>) {
+            arg._children[0]->recomputeIds(id_count);
+            arg._children[1]->recomputeIds(id_count);
+          } else if constexpr (std::is_same_v<T, Optional>) {
+            arg._children[0]->recomputeIds(id_count);
+          } else if constexpr (std::is_same_v<T, TransPath>) {
+            if (arg._childGraphPattern != nullptr) {
+              arg._childGraphPattern->recomputeIds(id_count);
+            }
+          } else {
+            static_assert(std::is_same_v<T, Subquery>);
+            // subquery children have their own id space
+            // at the same time assert that the above else-if is exhaustive.
+          }
+        },
+        *op);
   }
 
   if (allocatedIdCounter) {
@@ -597,6 +611,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
   }
 }
 
+/*
 // _____________________________________________________________________________
 ParsedQuery::GraphPatternOperation::GraphPatternOperation(
     ParsedQuery::GraphPatternOperation::Type type,
@@ -743,7 +758,9 @@ ParsedQuery::GraphPatternOperation::~GraphPatternOperation() {
     _childGraphPatterns.~vector();
   }
 }
+ */
 
+/*
 // _____________________________________________________________________________
 void ParsedQuery::GraphPatternOperation::toString(std::ostringstream& os,
                                                   int indentation) const {
@@ -777,3 +794,4 @@ void ParsedQuery::GraphPatternOperation::toString(std::ostringstream& os,
       break;
   }
 }
+ */
