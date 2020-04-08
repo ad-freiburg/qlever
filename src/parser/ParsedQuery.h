@@ -241,11 +241,7 @@ class ParsedQuery {
   using GraphPatternOperation =
       std::variant<Optional, Union, Subquery, TransPath>;
   static void operationtoString(const GraphPatternOperation& op,
-                                std::ostringstream& os, int indentation = 0) {
-    (void)op;
-    os << indentation << "Not yet implemented\n";
-    // TODO<joka921: write
-  }
+                                std::ostringstream& os, int indentation = 0);
 
   // Groups triplets and filters. Represents a node in a tree (as graph patterns
   // are recursive).
@@ -255,7 +251,7 @@ class ParsedQuery {
     GraphPattern() : _optional(false) {}
     // Move and copyconstructors to avoid double deletes on the trees children
     GraphPattern(GraphPattern&& other);
-    GraphPattern(const GraphPattern& other);
+    GraphPattern(const GraphPattern& other) = delete;
     GraphPattern& operator=(const GraphPattern& other);
     virtual ~GraphPattern();
     void toString(std::ostringstream& os, int indentation = 0) const;

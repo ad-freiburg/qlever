@@ -515,6 +515,7 @@ ParsedQuery::GraphPattern::GraphPattern(GraphPattern&& other)
   other._children.clear();
 }
 
+/*
 // _____________________________________________________________________________
 ParsedQuery::GraphPattern::GraphPattern(const GraphPattern& other)
     : _whereClauseTriples(other._whereClauseTriples),
@@ -525,6 +526,7 @@ ParsedQuery::GraphPattern::GraphPattern(const GraphPattern& other)
     _children.push_back(std::make_shared<GraphPatternOperation>(*g));
   }
 }
+ */
 
 // _____________________________________________________________________________
 ParsedQuery::GraphPattern& ParsedQuery::GraphPattern::operator=(
@@ -611,187 +613,35 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
   }
 }
 
-/*
 // _____________________________________________________________________________
-ParsedQuery::GraphPatternOperation::GraphPatternOperation(
-    ParsedQuery::GraphPatternOperation::Type type,
-    std::initializer_list<std::shared_ptr<ParsedQuery::GraphPattern>> children)
-    : _type(type), _childGraphPatterns() {
-  switch (_type) {
-    case Type::OPTIONAL:
-      if (children.size() != 1) {
-        AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-                 "Optional expects one sub graph pattern.");
-      }
-      break;
-    case Type::UNION:
-      if (children.size() != 2) {
-        AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-                 "Union expects two sub graph patterns.");
-      }
-      break;
-    default:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-               "This constructor should only be used for UNION and OPTIONAL "
-               "type operations.");
-  }
-  _childGraphPatterns.insert(_childGraphPatterns.end(), children.begin(),
-                             children.end());
-}
-
-// _____________________________________________________________________________
-ParsedQuery::GraphPatternOperation::GraphPatternOperation(
-    ParsedQuery::GraphPatternOperation::Type type)
-    : _type(type) {
-  switch (_type) {
-    case Type::SUBQUERY:
-      new (&_subquery) std::shared_ptr<ParsedQuery>(nullptr);
-      break;
-    case Type::TRANS_PATH:
-      new (&_pathData._left) std::string();
-      new (&_pathData._right) std::string();
-      new (&_pathData._childGraphPattern)
-          std::shared_ptr<GraphPattern>(nullptr);
-      _pathData._max = 0;
-      _pathData._min = 0;
-      break;
-    default:
-      AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-               "This constructor should only be used for SUBQUERY"
-               "type operations.");
-  }
-}
-
-// _____________________________________________________________________________
-ParsedQuery::GraphPatternOperation::GraphPatternOperation(
-    GraphPatternOperation&& other)
-    : _type(other._type) {
-  if (_type == Type::SUBQUERY) {
-    new (&_subquery) std::shared_ptr<ParsedQuery>(nullptr);
-    _subquery = other._subquery;
-    other._subquery = nullptr;
-  } else if (_type == Type::TRANS_PATH) {
-    new (&_pathData._left) std::string();
-    new (&_pathData._right) std::string();
-    new (&_pathData._childGraphPattern) std::shared_ptr<GraphPattern>(nullptr);
-    _pathData = std::move(other._pathData);
-    other._pathData._childGraphPattern = nullptr;
-  } else {
-    new (&_childGraphPatterns) std::vector<std::shared_ptr<GraphPattern>>();
-    _childGraphPatterns = std::move(other._childGraphPatterns);
-    other._childGraphPatterns.clear();
-  }
-}
-
-// _____________________________________________________________________________
-ParsedQuery::GraphPatternOperation::GraphPatternOperation(
-    const GraphPatternOperation& other)
-    : _type(other._type) {
-  if (_type == Type::SUBQUERY) {
-    new (&_subquery) std::shared_ptr<ParsedQuery>(nullptr);
-    _subquery = std::make_shared<ParsedQuery>(*other._subquery);
-  } else if (_type == Type::TRANS_PATH) {
-    new (&_pathData._left) std::string();
-    new (&_pathData._right) std::string();
-    new (&_pathData._childGraphPattern) std::shared_ptr<GraphPattern>(nullptr);
-    _pathData._childGraphPattern =
-        std::make_shared<GraphPattern>(*other._pathData._childGraphPattern);
-    _pathData._min = other._pathData._min;
-    _pathData._max = other._pathData._max;
-    _pathData._left = other._pathData._left;
-    _pathData._right = other._pathData._right;
-  } else {
-    new (&_childGraphPatterns) std::vector<std::shared_ptr<GraphPattern>>();
-    _childGraphPatterns.reserve(other._childGraphPatterns.size());
-    for (const std::shared_ptr<GraphPattern>& child :
-         other._childGraphPatterns) {
-      _childGraphPatterns.push_back(std::make_shared<GraphPattern>(*child));
-    }
-  }
-}
-
-// _____________________________________________________________________________
-ParsedQuery::GraphPatternOperation& ParsedQuery::GraphPatternOperation::
-operator=(const ParsedQuery::GraphPatternOperation& other) {
-  if (_type == Type::SUBQUERY) {
-    _subquery.~shared_ptr();
-  } else if (_type == Type::TRANS_PATH) {
-    _pathData._childGraphPattern.~shared_ptr();
-    _pathData._left.~string();
-    _pathData._right.~string();
-  } else {
-    _childGraphPatterns.~vector();
-  }
-  _type = other._type;
-  if (_type == Type::SUBQUERY) {
-    new (&_subquery) std::shared_ptr<ParsedQuery>(nullptr);
-    _subquery = std::make_shared<ParsedQuery>(*other._subquery);
-  } else if (_type == Type::TRANS_PATH) {
-    new (&_pathData._left) std::string();
-    new (&_pathData._right) std::string();
-    new (&_pathData._childGraphPattern) std::shared_ptr<GraphPattern>(nullptr);
-    _pathData._childGraphPattern =
-        std::make_shared<GraphPattern>(*other._pathData._childGraphPattern);
-    _pathData._min = other._pathData._min;
-    _pathData._max = other._pathData._max;
-    _pathData._left = other._pathData._left;
-    _pathData._right = other._pathData._right;
-  } else {
-    new (&_childGraphPatterns) std::vector<std::shared_ptr<GraphPattern>>();
-    _childGraphPatterns.reserve(other._childGraphPatterns.size());
-    for (const std::shared_ptr<GraphPattern>& p : other._childGraphPatterns) {
-      _childGraphPatterns.push_back(std::make_shared<GraphPattern>(*p));
-    }
-  }
-  return *this;
-}
-
-// _____________________________________________________________________________
-ParsedQuery::GraphPatternOperation::~GraphPatternOperation() {
-  if (_type == Type::SUBQUERY) {
-    _subquery.~shared_ptr();
-  } else if (_type == Type::TRANS_PATH) {
-    _pathData._childGraphPattern.~shared_ptr();
-    _pathData._left.~string();
-    _pathData._right.~string();
-  } else {
-    _childGraphPatterns.~vector();
-  }
-}
- */
-
-/*
-// _____________________________________________________________________________
-void ParsedQuery::GraphPatternOperation::toString(std::ostringstream& os,
-                                                  int indentation) const {
+  void ParsedQuery::operationtoString(const GraphPatternOperation& op,
+                                std::ostringstream& os, int indentation) {
   for (int j = 1; j < indentation; ++j) os << "  ";
-  switch (_type) {
-    case Type::OPTIONAL:
+  std::visit([&os, indentation](auto&& arg) {
+    using T = std::decay_t<decltype(arg)>;
+    if constexpr (std::is_same_v<T, Optional>) {
       os << "OPTIONAL ";
-      _childGraphPatterns[0]->toString(os, indentation);
-      break;
-    case Type::UNION:
-      _childGraphPatterns[0]->toString(os, indentation);
-      os << " UNION ";
-      _childGraphPatterns[1]->toString(os, indentation);
-      break;
-    case Type::SUBQUERY:
-      if (_subquery != nullptr) {
-        os << _subquery->asString();
-      } else {
-        os << "Missing Subquery\n";
-      }
-      break;
-    case Type::TRANS_PATH:
-      os << "TRANS PATH from " << _pathData._left << " to " << _pathData._right
-         << " with at least " << _pathData._min << " and at most "
-         << _pathData._max << " steps of ";
-      if (_pathData._childGraphPattern != nullptr) {
-        _pathData._childGraphPattern->toString(os, indentation);
+      arg._children[0]->toString(os, indentation);
+    } else if constexpr (std::is_same_v<T, Union>) {
+    arg._children[0]->toString(os, indentation);
+    os << " UNION ";
+    arg._children[1]->toString(os, indentation);
+    } else if constexpr (std::is_same_v<T, Subquery>) {
+    if (arg._subquery != nullptr) {
+      os << arg._subquery->asString();
+    } else {
+      os << "Missing Subquery\n";
+    }
+    } else {
+      static_assert(std::is_same_v<T, TransPath>);
+      os << "TRANS PATH from " << arg._left << " to " << arg._right
+         << " with at least " << arg._min << " and at most "
+         << arg._max << " steps of ";
+      if (arg._childGraphPattern != nullptr) {
+        arg._childGraphPattern->toString(os, indentation);
       } else {
         os << "Missing graph pattern.";
       }
-      break;
-  }
+    }
+  }, op);
 }
- */
