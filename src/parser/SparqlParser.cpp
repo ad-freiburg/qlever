@@ -265,8 +265,8 @@ void SparqlParser::parseWhere(
     }
     if (_lexer.accept("optional")) {
 
-      currentPattern->_children.push_back(ParsedQuery::Optional{std::make_shared<ParsedQuery::GraphPattern>()});
-      auto& opt = std::get<ParsedQuery::Optional>(currentPattern->_children.back());
+      currentPattern->_children.push_back(GraphPatternOperation::Optional{std::make_shared<ParsedQuery::GraphPattern>()});
+      auto& opt = currentPattern->_children.back().get<GraphPatternOperation::Optional>();
       auto& child = opt._children[0];
       child->_optional = true;
       child->_id = query->_numGraphPatterns;
@@ -280,7 +280,7 @@ void SparqlParser::parseWhere(
       if (_lexer.accept("select")) {
         // subquery
         // create the subquery operation
-        ParsedQuery::Subquery subq;
+        GraphPatternOperation::Subquery subq;
         subq._subquery = std::make_shared<ParsedQuery>();
         parseQuery(subq._subquery.get());
         currentPattern->_children.push_back(std::move(subq));
@@ -290,7 +290,7 @@ void SparqlParser::parseWhere(
         // union
         // create the union operation
         auto un =
-            ParsedQuery::Union{std::make_shared<ParsedQuery::GraphPattern>(),
+            GraphPatternOperation::Union{std::make_shared<ParsedQuery::GraphPattern>(),
                                std::make_shared<ParsedQuery::GraphPattern>()};
         un._children[0]->_optional = false;
         un._children[1]->_optional = false;

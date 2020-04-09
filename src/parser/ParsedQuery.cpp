@@ -259,14 +259,13 @@ void ParsedQuery::expandPrefixes() {
     GraphPattern* pattern = graphPatterns.back();
     graphPatterns.pop_back();
     for (const GraphPatternOperation& p : pattern->_children) {
-      std::visit(
+      p.visit(
           [&graphPatterns, this](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, Subquery>) {
+            if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
               arg._subquery->_prefixes = _prefixes;
               arg._subquery->expandPrefixes();
-            } else if constexpr (std::is_same_v<T, TransPath> ||
-                                 std::is_same_v<T, Subquery>) {
+            } else if constexpr (std::is_same_v<T, GraphPatternOperation::TransPath>) {
               AD_CHECK(false);
               // we may never be in an transitive path here or a
               // subquery?TODO<joka921, verify by florian> at least this
@@ -277,8 +276,8 @@ void ParsedQuery::expandPrefixes() {
                 graphPatterns.push_back(pattern.get());
               }
             }
-          },
-          p);
+          }
+          );
     }
 
     for (auto& trip : pattern->_whereClauseTriples) {
@@ -531,8 +530,7 @@ void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
   }
   for (const GraphPatternOperation& child : _children) {
     os << "\n";
-    operationtoString(child, os, indentation + 1);
-    // child->toString(os, indentation + 1);
+    child.toString(os, indentation + 1);
   }
   os << "\n";
   for (int j = 1; j < indentation; ++j) os << "  ";
@@ -549,25 +547,25 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
   _id = *id_count;
   (*id_count)++;
   for (const GraphPatternOperation& op : _children) {
-    std::visit(
+    op.visit(
         [&id_count](auto&& arg) {
           using T = std::decay_t<decltype(arg)>;
-          if constexpr (std::is_same_v<T, Union>) {
+          if constexpr (std::is_same_v<T, GraphPatternOperation::Union>) {
             arg._children[0]->recomputeIds(id_count);
             arg._children[1]->recomputeIds(id_count);
-          } else if constexpr (std::is_same_v<T, Optional>) {
+          } else if constexpr (std::is_same_v<T, GraphPatternOperation::Optional>) {
             arg._children[0]->recomputeIds(id_count);
-          } else if constexpr (std::is_same_v<T, TransPath>) {
+          } else if constexpr (std::is_same_v<T, GraphPatternOperation::TransPath>) {
             if (arg._childGraphPattern != nullptr) {
               arg._childGraphPattern->recomputeIds(id_count);
             }
           } else {
-            static_assert(std::is_same_v<T, Subquery>);
+            static_assert(std::is_same_v<T, GraphPatternOperation::Subquery>);
             // subquery children have their own id space
             // at the same time assert that the above else-if is exhaustive.
           }
-        },
-        op);
+        }
+        );
   }
 
   if (allocatedIdCounter) {
@@ -576,10 +574,10 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
 }
 
 // _____________________________________________________________________________
-  void ParsedQuery::operationtoString(const GraphPatternOperation& op,
-                                std::ostringstream& os, int indentation) {
+  void GraphPatternOperation::toString(
+                                std::ostringstream& os, int indentation) const {
   for (int j = 1; j < indentation; ++j) os << "  ";
-  std::visit([&os, indentation](auto&& arg) {
+  visit([&os, indentation](auto&& arg) {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (std::is_same_v<T, Optional>) {
       os << "OPTIONAL ";
@@ -605,5 +603,5 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
         os << "Missing graph pattern.";
       }
     }
-  }, op);
+  });
 }

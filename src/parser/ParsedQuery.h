@@ -211,37 +211,14 @@ class SparqlValues {
   vector<vector<string>> _values;
 };
 
+class GraphPatternOperation;
+
 // A parsed SPARQL query. To be extended.
 class ParsedQuery {
  public:
   class GraphPattern;
 
-  struct Optional {
-    std::array<std::shared_ptr<GraphPattern>, 1> _children;
-  };
-  struct Union {
-    std::array<std::shared_ptr<GraphPattern>, 2> _children;
-  };
-  struct Subquery {
-    std::shared_ptr<ParsedQuery> _subquery;
-  };
 
-  struct TransPath {
-    // The name of the left and right end of the transitive operation
-    std::string _left;
-    std::string _right;
-    // The name of the left and right end of the subpath
-    std::string _innerLeft;
-    std::string _innerRight;
-    size_t _min = 0;
-    size_t _max = 0;
-    std::shared_ptr<GraphPattern> _childGraphPattern;
-  };
-
-  using GraphPatternOperation =
-      std::variant<Optional, Union, Subquery, TransPath>;
-  static void operationtoString(const GraphPatternOperation& op,
-                                std::ostringstream& os, int indentation = 0);
 
   // Groups triplets and filters. Represents a node in a tree (as graph patterns
   // are recursive).
@@ -344,3 +321,48 @@ class ParsedQuery {
    */
   std::string parseAlias(const std::string& alias);
 };
+
+
+struct GraphPatternOperation {
+  struct Optional {
+    std::array<std::shared_ptr<ParsedQuery::GraphPattern>, 1> _children;
+  };
+  struct Union {
+    std::array<std::shared_ptr<ParsedQuery::GraphPattern>, 2> _children;
+  };
+  struct Subquery {
+    std::shared_ptr<ParsedQuery> _subquery;
+  };
+
+  struct TransPath {
+    // The name of the left and right end of the transitive operation
+    std::string _left;
+    std::string _right;
+    // The name of the left and right end of the subpath
+    std::string _innerLeft;
+    std::string _innerRight;
+    size_t _min = 0;
+    size_t _max = 0;
+    std::shared_ptr<ParsedQuery::GraphPattern> _childGraphPattern;
+  };
+
+  std::variant<Optional, Union, Subquery, TransPath> variant_;
+  template<typename A, typename... Args, typename=std::enable_if_t<!std::is_base_of_v<GraphPatternOperation, std::decay_t<A>>>>
+  GraphPatternOperation(A&& a, Args&&... args) : variant_(std::forward<A>(a), std::forward<Args>(args)...) {}
+  GraphPatternOperation() = delete;
+  GraphPatternOperation(const GraphPatternOperation&) = default;
+  GraphPatternOperation(GraphPatternOperation&&) noexcept = default;
+  GraphPatternOperation& operator=(const GraphPatternOperation&) = default;
+  GraphPatternOperation& operator=(GraphPatternOperation&&) noexcept = default;
+  template<typename F>
+  auto visit(F f) const {
+    return std::visit(f, variant_);
+  }
+  template<class T>
+  constexpr T& get() {return std::get<T>(variant_);}
+  template<class T>
+  constexpr const T& get() const {return std::get<T>(variant_);}
+
+  void toString(std::ostringstream& os, int indentation = 0) const;
+};
+

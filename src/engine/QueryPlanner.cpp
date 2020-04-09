@@ -115,22 +115,22 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     childrenToAdd.pop_back();
     patternsToProcess.push_back(pattern);
     for (const auto& op : pattern->_children) {
-      std::visit(
+      op.visit(
           [&childrenToAdd](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, ParsedQuery::Union> ||
-                          std::is_same_v<T, ParsedQuery::Optional>) {
+            if constexpr (std::is_same_v<T, GraphPatternOperation::Union> ||
+                          std::is_same_v<T, GraphPatternOperation::Optional>) {
               childrenToAdd.insert(childrenToAdd.end(), arg._children.begin(),
                                    arg._children.end());
-            } else if constexpr (std::is_same_v<T, ParsedQuery::TransPath>) {
+            } else if constexpr (std::is_same_v<T, GraphPatternOperation::TransPath>) {
               if (arg._childGraphPattern != nullptr) {
                 childrenToAdd.push_back(arg._childGraphPattern);
               }
             } else {
-              static_assert(std::is_same_v<T, ParsedQuery::Subquery>);
+              static_assert(std::is_same_v<T, GraphPatternOperation::Subquery>);
             }
-          },
-          op);
+          }
+          );
     }
   }
 
@@ -165,17 +165,17 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     // size)
     childPlanStorage.reserve(pattern->_children.size());
     subqueryPlans.reserve(pattern->_children.size());
-    for (const ParsedQuery::GraphPatternOperation& child :
+    for (const auto& child :
          pattern->_children) {
-      std::visit(
+      child.visit(
           [&](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, ParsedQuery::Optional>) {
+            if constexpr (std::is_same_v<T, GraphPatternOperation::Optional>) {
               for (const std::shared_ptr<const ParsedQuery::GraphPattern>& p :
                    arg._children) {
                 childPlans.push_back(&patternPlans[p->_id]);
               }
-            } else if constexpr (std::is_same_v<T, ParsedQuery::Union>) {
+            } else if constexpr (std::is_same_v<T, GraphPatternOperation::Union>) {
               // the efficiency of the union operation is not dependent on the
               // sorting of the inputs and its position is fixed so it does not
               // need to be part of the optimization of the child.
@@ -190,12 +190,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
               tree.setVariableColumns(unionOp->getVariableColumns());
               tree.setOperation(QueryExecutionTree::UNION, unionOp);
               childPlans.push_back(&childPlanStorage.back());
-            } else if constexpr (std::is_same_v<T, ParsedQuery::Subquery>) {
+            } else if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
               subqueryPlans.emplace_back(_qec);
               QueryExecutionTree tree = createExecutionTree(*arg._subquery);
               *subqueryPlans.back()._qet.get() = tree;
               childPlans.push_back(&subqueryPlans.back());
-            } else if constexpr (std::is_same_v<T, ParsedQuery::TransPath>) {
+            } else if constexpr (std::is_same_v<T, GraphPatternOperation::TransPath>) {
               const SubtreePlan* sub =
                   &patternPlans[arg._childGraphPattern->_id];
               childPlanStorage.emplace_back(_qec);
@@ -244,8 +244,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
               tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, transOp);
               childPlans.push_back(&childPlanStorage.back());
             }
-          },
-          child);
+          }
+          );
     }
 
     // Strategy:
@@ -419,15 +419,15 @@ bool QueryPlanner::checkUsePatternTrick(
     std::vector<std::shared_ptr<const ParsedQuery::GraphPattern>>
         graphsToProcess;
     for (const auto& op : pq->_rootGraphPattern->_children) {
-      std::visit(
+      op.visit(
           [&](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, ParsedQuery::Optional> ||
-                          std::is_same_v<T, ParsedQuery::Union>) {
+            if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> ||
+                          std::is_same_v<T, GraphPatternOperation::Union>) {
               graphsToProcess.insert(graphsToProcess.end(),
                                      arg._children.begin(),
                                      arg._children.end());
-            } else if constexpr (std::is_same_v<T, ParsedQuery::Subquery>) {
+            } else if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
               for (const std::string& v : arg._subquery->_selectedVariables) {
                 if (v == t._o) {
                   usePatternTrick = false;
@@ -435,29 +435,28 @@ bool QueryPlanner::checkUsePatternTrick(
                 }
               }
             } else {
-              static_assert(std::is_same_v<T, ParsedQuery::TransPath>);
+              static_assert(std::is_same_v<T, GraphPatternOperation::TransPath>);
             }
             // Transitive paths cannot yet exist in the query. They could also
             // not contain the variables we are interested in.
-          },
-          op);
+          });
     }
     while (!graphsToProcess.empty() && usePatternTrick) {
       std::shared_ptr<const ParsedQuery::GraphPattern> pattern =
           graphsToProcess.back();
       graphsToProcess.pop_back();
 
-      for (const ParsedQuery::GraphPatternOperation& op :
+      for (const auto& op :
            pattern->_children) {
-        std::visit(
+        op.visit(
             [&](auto&& arg) {
               using T = std::decay_t<decltype(arg)>;
-              if constexpr (std::is_same_v<T, ParsedQuery::Optional> ||
-                            std::is_same_v<T, ParsedQuery::Union>) {
+              if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> ||
+                            std::is_same_v<T, GraphPatternOperation::Union>) {
                 graphsToProcess.insert(graphsToProcess.end(),
                                        arg._children.begin(),
                                        arg._children.end());
-              } else if constexpr (std::is_same_v<T, ParsedQuery::Subquery>) {
+              } else if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
                 for (const std::string& v : arg._subquery->_selectedVariables) {
                   if (v == t._o) {
                     usePatternTrick = false;
@@ -465,12 +464,12 @@ bool QueryPlanner::checkUsePatternTrick(
                   }
                 }
               } else {
-                static_assert(std::is_same_v<T, ParsedQuery::TransPath>);
+                static_assert(std::is_same_v<T, GraphPatternOperation::TransPath>);
               }
               // Transitive paths cannot yet exist in the query. They could also
               // not contain the variables we are interested in.
-            },
-            op);
+            }
+            );
       }
 
       for (const SparqlTriple& other : pattern->_whereClauseTriples) {
@@ -525,7 +524,7 @@ bool QueryPlanner::checkUsePatternTrick(
   // contains a single subquery child
   if (!root->_filters.empty() || !root->_whereClauseTriples.empty() ||
       root->_children.size() != 1 ||
-      !std::holds_alternative<ParsedQuery::Subquery>(root->_children[0])) {
+      !std::holds_alternative<GraphPatternOperation::Subquery>(root->_children[0].variant_)) {
     return false;
   }
 
@@ -534,7 +533,7 @@ bool QueryPlanner::checkUsePatternTrick(
   // Check that the query is distinct and does not do any grouping and returns 2
   // variables.
   std::shared_ptr<ParsedQuery> sub =
-      std::get<ParsedQuery::Subquery>(root->_children[0])._subquery;
+      root->_children[0].get<GraphPatternOperation::Subquery>()._subquery;
   if (!sub->_distinct || sub->_groupByVariables.size() > 0 ||
       sub->_aliases.size() > 0 || sub->_selectedVariables.size() != 2) {
     return false;
@@ -1557,7 +1556,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
       std::make_shared<ParsedQuery::GraphPattern>();
-  ParsedQuery::TransPath transPath;
+  GraphPatternOperation::TransPath transPath;
   transPath._left = left;
   transPath._right = right;
   transPath._innerLeft = innerLeft;
@@ -1580,7 +1579,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
       std::make_shared<ParsedQuery::GraphPattern>();
-  ParsedQuery::TransPath transPath;
+  GraphPatternOperation::TransPath transPath;
   transPath._left = left;
   transPath._right = right;
   transPath._innerLeft = innerLeft;
@@ -1603,7 +1602,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
       std::make_shared<ParsedQuery::GraphPattern>();
-  ParsedQuery::TransPath transPath;
+  GraphPatternOperation::TransPath transPath;
   transPath._left = left;
   transPath._right = right;
   transPath._innerLeft = innerLeft;
@@ -1640,12 +1639,12 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::uniteGraphPatterns(
   // Build a tree of union operations
   auto p = std::make_shared<GraphPattern>();
   p->_children.push_back(
-      ParsedQuery::Union{patterns[0], patterns[1]});
+      GraphPatternOperation::Union{patterns[0], patterns[1]});
 
   for (size_t i = 2; i < patterns.size(); i++) {
     std::shared_ptr<GraphPattern> next = std::make_shared<GraphPattern>();
     next->_children.push_back(
-        ParsedQuery::Union{p, patterns[i]});
+        GraphPatternOperation::Union{p, patterns[i]});
     p = next;
   }
   return p;
