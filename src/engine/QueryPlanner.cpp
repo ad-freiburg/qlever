@@ -101,20 +101,20 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
 }
 
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
-    std::shared_ptr<const ParsedQuery::GraphPattern> rootPattern) {
+        std::shared_ptr<ParsedQuery::GraphPattern> rootPattern) {
   // Create a topological sorting of the trees GraphPatterns where children are
   // in the list after their parents. This allows for ensuring that children are
   // already optimized when their parents need to be optimized
-  std::vector<const ParsedQuery::GraphPattern*>
+  std::vector<ParsedQuery::GraphPattern*>
       patternsToProcess;
-  std::vector<const ParsedQuery::GraphPattern*> childrenToAdd;
+  std::vector<ParsedQuery::GraphPattern*> childrenToAdd;
   childrenToAdd.push_back(rootPattern.get());
   while (!childrenToAdd.empty()) {
-    const ParsedQuery::GraphPattern* pattern =
+    ParsedQuery::GraphPattern* pattern =
         childrenToAdd.back();
     childrenToAdd.pop_back();
     patternsToProcess.push_back(pattern);
-    for (const auto& op : pattern->_children) {
+    for (auto& op : pattern->_children) {
       op.visit(
           [&childrenToAdd](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
@@ -151,7 +151,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // Optimize every GraphPattern starting with the leaves of the GraphPattern
   // tree.
   while (!patternsToProcess.empty()) {
-    const ParsedQuery::GraphPattern* pattern =
+    ParsedQuery::GraphPattern* pattern =
         patternsToProcess.back();
     patternsToProcess.pop_back();
     std::vector<std::vector<SubtreePlan>> plans;
@@ -166,7 +166,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     // size)
     childPlanStorage.reserve(pattern->_children.size());
     subqueryPlans.reserve(pattern->_children.size());
-    for (const auto& child :
+    for (auto& child :
          pattern->_children) {
       child.visit(
           [&](auto&& arg) {
@@ -190,7 +190,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
               childPlans.push_back(&childPlanStorage.back());
             } else if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
               subqueryPlans.emplace_back(_qec);
-              QueryExecutionTree tree = createExecutionTree(*arg._subquery);
+              QueryExecutionTree tree = createExecutionTree(arg._subquery);
               *subqueryPlans.back()._qet.get() = tree;
               childPlans.push_back(&subqueryPlans.back());
             } else if constexpr (std::is_same_v<T, GraphPatternOperation::TransPath>) {
@@ -427,7 +427,7 @@ bool QueryPlanner::checkUsePatternTrick(
               graphsToProcess.push_back(&arg._child1);
               graphsToProcess.push_back(&arg._child2);
             } else if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
-              for (const std::string& v : arg._subquery->_selectedVariables) {
+              for (const std::string& v : arg._subquery._selectedVariables) {
                 if (v == t._o) {
                   usePatternTrick = false;
                   break;
@@ -458,7 +458,7 @@ bool QueryPlanner::checkUsePatternTrick(
                 graphsToProcess.push_back(&arg._child1);
                 graphsToProcess.push_back(&arg._child2);
               } else if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
-                for (const std::string& v : arg._subquery->_selectedVariables) {
+                for (const std::string& v : arg._subquery._selectedVariables) {
                   if (v == t._o) {
                     usePatternTrick = false;
                     break;
@@ -533,14 +533,14 @@ bool QueryPlanner::checkUsePatternTrick(
 
   // Check that the query is distinct and does not do any grouping and returns 2
   // variables.
-  std::shared_ptr<ParsedQuery> sub =
+  const auto& sub =
       root->_children[0].get<GraphPatternOperation::Subquery>()._subquery;
-  if (!sub->_distinct || sub->_groupByVariables.size() > 0 ||
-      sub->_aliases.size() > 0 || sub->_selectedVariables.size() != 2) {
+  if (!sub._distinct || sub._groupByVariables.size() > 0 ||
+      sub._aliases.size() > 0 || sub._selectedVariables.size() != 2) {
     return false;
   }
   // Also check that it returns the correct variables
-  for (std::string& v : sub->_selectedVariables) {
+  for (const std::string& v : sub._selectedVariables) {
     if (v != predVar && v != subjVar) {
       return false;
     }
@@ -549,7 +549,7 @@ bool QueryPlanner::checkUsePatternTrick(
   LOG(TRACE) << "The subquery has the correct variables" << std::endl;
 
   // Look for a triple in the subquery of the form 'predVar subjVar ?o'
-  std::shared_ptr<ParsedQuery::GraphPattern> subroot = sub->_rootGraphPattern;
+  std::shared_ptr<ParsedQuery::GraphPattern> subroot = sub._rootGraphPattern;
   for (size_t i = 0; i < subroot->_whereClauseTriples.size(); i++) {
     const SparqlTriple& t = subroot->_whereClauseTriples[i];
     if ((returns_counts && t._s != subjVar) || t._p._iri != predVar ||
@@ -614,7 +614,7 @@ bool QueryPlanner::checkUsePatternTrick(
     subroot->_whereClauseTriples.erase(subroot->_whereClauseTriples.begin() +
                                        i);
     root->_children.clear();
-    pq->merge(*sub);
+    pq->merge(sub);
     break;
   }
   return true;

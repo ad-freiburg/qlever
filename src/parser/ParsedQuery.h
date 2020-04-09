@@ -332,7 +332,7 @@ struct GraphPatternOperation {
     ParsedQuery::GraphPattern _child2;
   };
   struct Subquery {
-    std::shared_ptr<ParsedQuery> _subquery;
+    ParsedQuery _subquery;
   };
 
   struct TransPath {

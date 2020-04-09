@@ -281,8 +281,7 @@ void SparqlParser::parseWhere(
         // subquery
         // create the subquery operation
         GraphPatternOperation::Subquery subq;
-        subq._subquery = std::make_shared<ParsedQuery>();
-        parseQuery(subq._subquery.get());
+        parseQuery(&subq._subquery);
         currentPattern->_children.push_back(std::move(subq));
         // The closing bracked } is consumed by the subquery
         _lexer.accept(".");

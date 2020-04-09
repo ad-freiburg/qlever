@@ -263,8 +263,8 @@ void ParsedQuery::expandPrefixes() {
           [&graphPatterns, this](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
-              arg._subquery->_prefixes = _prefixes;
-              arg._subquery->expandPrefixes();
+              arg._subquery._prefixes = _prefixes;
+              arg._subquery.expandPrefixes();
             } else if constexpr (std::is_same_v<T, GraphPatternOperation::TransPath>) {
               AD_CHECK(false);
               // we may never be in an transitive path here or a
@@ -586,11 +586,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
     os << " UNION ";
     arg._child2.toString(os, indentation);
     } else if constexpr (std::is_same_v<T, Subquery>) {
-    if (arg._subquery != nullptr) {
-      os << arg._subquery->asString();
-    } else {
-      os << "Missing Subquery\n";
-    }
+      os << arg._subquery.asString();
     } else {
       static_assert(std::is_same_v<T, TransPath>);
       os << "TRANS PATH from " << arg._left << " to " << arg._right
