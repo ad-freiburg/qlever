@@ -557,9 +557,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
           } else if constexpr (std::is_same_v<T, GraphPatternOperation::Optional>) {
             arg._child.recomputeIds(id_count);
           } else if constexpr (std::is_same_v<T, GraphPatternOperation::TransPath>) {
-            if (arg._childGraphPattern) {
-              arg._childGraphPattern->recomputeIds(id_count);
-            }
+              arg._childGraphPattern.recomputeIds(id_count);
           } else {
             static_assert(std::is_same_v<T, GraphPatternOperation::Subquery>);
             // subquery children have their own id space
@@ -598,11 +596,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
       os << "TRANS PATH from " << arg._left << " to " << arg._right
          << " with at least " << arg._min << " and at most "
          << arg._max << " steps of ";
-      if (arg._childGraphPattern) {
-        arg._childGraphPattern->toString(os, indentation);
-      } else {
-        os << "Missing graph pattern.";
-      }
+        arg._childGraphPattern.toString(os, indentation);
     }
   });
 }

@@ -126,9 +126,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
             } else if constexpr (std::is_same_v<T, GraphPatternOperation::Optional>) {
               childrenToAdd.push_back(&arg._child);
             } else if constexpr (std::is_same_v<T, GraphPatternOperation::TransPath>) {
-              if (arg._childGraphPattern) {
-                childrenToAdd.push_back(&arg._childGraphPattern.value());
-              }
+              childrenToAdd.push_back(&arg._childGraphPattern);
             } else {
               static_assert(std::is_same_v<T, GraphPatternOperation::Subquery>);
             }
@@ -197,7 +195,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
               childPlans.push_back(&subqueryPlans.back());
             } else if constexpr (std::is_same_v<T, GraphPatternOperation::TransPath>) {
               const SubtreePlan* sub =
-                  &patternPlans[arg._childGraphPattern->_id];
+                  &patternPlans[arg._childGraphPattern._id];
               childPlanStorage.emplace_back(_qec);
               size_t leftCol, rightCol;
               Id leftValue, rightValue;

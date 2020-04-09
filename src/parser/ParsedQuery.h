@@ -344,8 +344,7 @@ struct GraphPatternOperation {
     std::string _innerRight;
     size_t _min = 0;
     size_t _max = 0;
-    // todo<joka921> can this ever be empty??
-    std::optional<ParsedQuery::GraphPattern> _childGraphPattern;
+    ParsedQuery::GraphPattern _childGraphPattern;
   };
 
   std::variant<Optional, Union, Subquery, TransPath> variant_;
