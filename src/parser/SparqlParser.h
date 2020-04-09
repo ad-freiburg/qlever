@@ -31,18 +31,18 @@ class SparqlParser {
   void parseSelect(ParsedQuery* query);
   void parseWhere(
           ParsedQuery* query,
-          std::shared_ptr<ParsedQuery::GraphPattern> currentPattern = nullptr);
+          ParsedQuery::GraphPattern *currentPattern = nullptr);
   void parseSolutionModifiers(ParsedQuery* query);
   void addPrefix(const string& key, const string& value, ParsedQuery* query);
   void addWhereTriple(const string& str,
                       std::shared_ptr<ParsedQuery::GraphPattern> pattern);
   // Returns true if it found a filter
   bool parseFilter(
-      vector<SparqlFilter>* _filters, bool failOnNoFilter = true,
-      std::shared_ptr<ParsedQuery::GraphPattern> pattern = nullptr);
+          vector<SparqlFilter>* _filters, bool failOnNoFilter = true,
+          ParsedQuery::GraphPattern *pattern = nullptr);
   // Parses an expressiong of the form (?a) = "en"
   void addLangFilter(const std::string& lhs, const std::string& rhs,
-                     std::shared_ptr<ParsedQuery::GraphPattern> pattern);
+                     ParsedQuery::GraphPattern *pattern);
 
   // takes either DESC or ASC as the parameter
   OrderKey parseOrderKey(const std::string& order, ParsedQuery* query);

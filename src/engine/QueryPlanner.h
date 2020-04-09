@@ -147,7 +147,7 @@ class QueryPlanner {
   };
 
   TripleGraph createTripleGraph(
-      std::shared_ptr<const ParsedQuery::GraphPattern> pattern) const;
+          const ParsedQuery::GraphPattern *pattern) const;
 
   static ad_utility::HashMap<string, size_t>
   createVariableColumnsMapForTextOperation(
@@ -252,8 +252,8 @@ class QueryPlanner {
   std::string generateUniqueVarName();
 
   // Creates a tree of unions with the given patterns as the trees leaves
-  std::shared_ptr<ParsedQuery::GraphPattern> uniteGraphPatterns(
-      const std::vector<std::shared_ptr<ParsedQuery::GraphPattern>>& patterns)
+  ParsedQuery::GraphPattern uniteGraphPatterns(
+          std::vector<ParsedQuery::GraphPattern> &&patterns)
       const;
 
   /**

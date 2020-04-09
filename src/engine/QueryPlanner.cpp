@@ -105,12 +105,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // Create a topological sorting of the trees GraphPatterns where children are
   // in the list after their parents. This allows for ensuring that children are
   // already optimized when their parents need to be optimized
-  std::vector<std::shared_ptr<const ParsedQuery::GraphPattern>>
+  std::vector<const ParsedQuery::GraphPattern*>
       patternsToProcess;
-  std::vector<std::shared_ptr<const ParsedQuery::GraphPattern>> childrenToAdd;
-  childrenToAdd.push_back(rootPattern);
+  std::vector<const ParsedQuery::GraphPattern*> childrenToAdd;
+  childrenToAdd.push_back(rootPattern.get());
   while (!childrenToAdd.empty()) {
-    std::shared_ptr<const ParsedQuery::GraphPattern> pattern =
+    const ParsedQuery::GraphPattern* pattern =
         childrenToAdd.back();
     childrenToAdd.pop_back();
     patternsToProcess.push_back(pattern);
@@ -118,13 +118,16 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       op.visit(
           [&childrenToAdd](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, GraphPatternOperation::Union> ||
-                          std::is_same_v<T, GraphPatternOperation::Optional>) {
-              childrenToAdd.insert(childrenToAdd.end(), arg._children.begin(),
-                                   arg._children.end());
+            if constexpr (std::is_same_v<T, GraphPatternOperation::Union>) {
+              childrenToAdd.push_back(&arg._child1);
+              childrenToAdd.push_back(&arg._child2);
+
+
+            } else if constexpr (std::is_same_v<T, GraphPatternOperation::Optional>) {
+              childrenToAdd.push_back(&arg._child);
             } else if constexpr (std::is_same_v<T, GraphPatternOperation::TransPath>) {
-              if (arg._childGraphPattern != nullptr) {
-                childrenToAdd.push_back(arg._childGraphPattern);
+              if (arg._childGraphPattern) {
+                childrenToAdd.push_back(&arg._childGraphPattern.value());
               }
             } else {
               static_assert(std::is_same_v<T, GraphPatternOperation::Subquery>);
@@ -150,7 +153,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // Optimize every GraphPattern starting with the leaves of the GraphPattern
   // tree.
   while (!patternsToProcess.empty()) {
-    std::shared_ptr<const ParsedQuery::GraphPattern> pattern =
+    const ParsedQuery::GraphPattern* pattern =
         patternsToProcess.back();
     patternsToProcess.pop_back();
     std::vector<std::vector<SubtreePlan>> plans;
@@ -171,16 +174,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           [&](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, GraphPatternOperation::Optional>) {
-              for (const std::shared_ptr<const ParsedQuery::GraphPattern>& p :
-                   arg._children) {
-                childPlans.push_back(&patternPlans[p->_id]);
-              }
+              childPlans.push_back(&patternPlans[arg._child._id]);
             } else if constexpr (std::is_same_v<T, GraphPatternOperation::Union>) {
               // the efficiency of the union operation is not dependent on the
               // sorting of the inputs and its position is fixed so it does not
               // need to be part of the optimization of the child.
-              const SubtreePlan* left = &patternPlans[arg._children[0]->_id];
-              const SubtreePlan* right = &patternPlans[arg._children[1]->_id];
+              const SubtreePlan* left = &patternPlans[arg._child1._id];
+              const SubtreePlan* right = &patternPlans[arg._child2._id];
 
               // create a new subtree plan
               childPlanStorage.emplace_back(_qec);
@@ -305,7 +305,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         fillDpTab(tg, pattern->_filters, childPlans, pattern->_inlineValues)
             .back();
 
-    if (pattern == rootPattern) {
+    if (pattern == rootPattern.get()) {
       return lastRow;
     } else {
       auto minInd = findCheapestExecutionTree(lastRow);
@@ -416,17 +416,18 @@ bool QueryPlanner::checkUsePatternTrick(
 
     // Check for sub graph patterns containing the ql:has-predicate
     // triple's object
-    std::vector<std::shared_ptr<const ParsedQuery::GraphPattern>>
+    std::vector<const ParsedQuery::GraphPattern*>
         graphsToProcess;
     for (const auto& op : pq->_rootGraphPattern->_children) {
       op.visit(
           [&](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
-            if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> ||
+            if constexpr (std::is_same_v<T, GraphPatternOperation::Optional>) {
+              graphsToProcess.push_back(&arg._child);
+            } else if constexpr (
                           std::is_same_v<T, GraphPatternOperation::Union>) {
-              graphsToProcess.insert(graphsToProcess.end(),
-                                     arg._children.begin(),
-                                     arg._children.end());
+              graphsToProcess.push_back(&arg._child1);
+              graphsToProcess.push_back(&arg._child2);
             } else if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
               for (const std::string& v : arg._subquery->_selectedVariables) {
                 if (v == t._o) {
@@ -442,7 +443,7 @@ bool QueryPlanner::checkUsePatternTrick(
           });
     }
     while (!graphsToProcess.empty() && usePatternTrick) {
-      std::shared_ptr<const ParsedQuery::GraphPattern> pattern =
+      const ParsedQuery::GraphPattern* pattern =
           graphsToProcess.back();
       graphsToProcess.pop_back();
 
@@ -451,11 +452,13 @@ bool QueryPlanner::checkUsePatternTrick(
         op.visit(
             [&](auto&& arg) {
               using T = std::decay_t<decltype(arg)>;
-              if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> ||
-                            std::is_same_v<T, GraphPatternOperation::Union>) {
-                graphsToProcess.insert(graphsToProcess.end(),
-                                       arg._children.begin(),
-                                       arg._children.end());
+              if constexpr (std::is_same_v<T, GraphPatternOperation::Optional>) {
+                graphsToProcess.push_back(&arg._child);
+
+              } else if constexpr
+                      (std::is_same_v<T, GraphPatternOperation::Union>) {
+                graphsToProcess.push_back(&arg._child1);
+                graphsToProcess.push_back(&arg._child2);
               } else if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
                 for (const std::string& v : arg._subquery->_selectedVariables) {
                   if (v == t._o) {
@@ -938,7 +941,7 @@ void QueryPlanner::getVarTripleMap(
 
 // _____________________________________________________________________________
 QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
-    std::shared_ptr<const ParsedQuery::GraphPattern> pattern) const {
+        const ParsedQuery::GraphPattern *pattern) const {
   TripleGraph tg;
   if (pattern->_whereClauseTriples.size() > 64) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
@@ -1413,7 +1416,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
   }
 
   // Stores the pattern for every non null chunk
-  std::vector<std::shared_ptr<ParsedQuery::GraphPattern>> chunkPatterns;
+  std::vector<ParsedQuery::GraphPattern> chunkPatterns;
   chunkPatterns.reserve(nonNullChunks.size());
 
   for (size_t chunkIdx = 0; chunkIdx < nonNullChunks.size(); ++chunkIdx) {
@@ -1445,7 +1448,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
 
     // We need a union over every combination of joins that exclude any subset
     // the child paths which are marked as can_be_null.
-    std::vector<std::shared_ptr<ParsedQuery::GraphPattern>> join_patterns;
+    std::vector<ParsedQuery::GraphPattern> join_patterns;
     join_patterns.reserve((1 << num_null_children));
 
     std::vector<size_t> included_ids(numChildren);
@@ -1472,15 +1475,15 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
 
       // Merge all the child plans into one graph pattern
       // excluding those that can be null and are not marked in the bitmask
-      auto p = std::make_shared<ParsedQuery::GraphPattern>();
+      auto p = ParsedQuery::GraphPattern{};
       for (size_t i = 0; i < included_ids.size(); i++) {
         std::shared_ptr<ParsedQuery::GraphPattern> child =
             seedFromPropertyPath(l, path._children[included_ids[i]], r);
-        p->_children.insert(p->_children.end(), child->_children.begin(),
+        p._children.insert(p._children.end(), child->_children.begin(),
                             child->_children.end());
-        p->_filters.insert(p->_filters.end(), child->_filters.begin(),
+        p._filters.insert(p._filters.end(), child->_filters.begin(),
                            child->_filters.end());
-        p->_whereClauseTriples.insert(p->_whereClauseTriples.begin(),
+        p._whereClauseTriples.insert(p._whereClauseTriples.begin(),
                                       child->_whereClauseTriples.begin(),
                                       child->_whereClauseTriples.end());
         // Update the variables used on the left and right of the child path
@@ -1495,28 +1498,29 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
     }
 
     if (join_patterns.size() == 1) {
-      chunkPatterns.push_back(join_patterns[0]);
+      chunkPatterns.push_back(std::move(join_patterns[0]));
     } else {
-      chunkPatterns.push_back(uniteGraphPatterns(join_patterns));
+      chunkPatterns.push_back(uniteGraphPatterns(std::move(join_patterns)));
     }
   }
 
   if (chunkPatterns.size() == 1) {
-    return chunkPatterns[0];
+    // todo<joka921> also remove these shared_ptrs
+    return std::make_shared<ParsedQuery::GraphPattern>(chunkPatterns[0]);
   }
 
   // Join the chunk patterns
   std::shared_ptr<ParsedQuery::GraphPattern> fp =
       std::make_shared<ParsedQuery::GraphPattern>();
 
-  for (const std::shared_ptr<ParsedQuery::GraphPattern>& p : chunkPatterns) {
-    fp->_children.insert(fp->_children.begin(), p->_children.begin(),
-                         p->_children.end());
+  for (ParsedQuery::GraphPattern& p : chunkPatterns) {
+    fp->_children.insert(fp->_children.begin(), std::make_move_iterator(p._children.begin()),
+                         std::make_move_iterator(p._children.end()));
     fp->_whereClauseTriples.insert(fp->_whereClauseTriples.begin(),
-                                   p->_whereClauseTriples.begin(),
-                                   p->_whereClauseTriples.end());
-    fp->_filters.insert(fp->_filters.begin(), p->_filters.begin(),
-                        p->_filters.end());
+                                   std::make_move_iterator(p._whereClauseTriples.begin()),
+                                   std::make_move_iterator(p._whereClauseTriples.end()));
+    fp->_filters.insert(fp->_filters.begin(), std::make_move_iterator(p._filters.begin()),
+                        std::make_move_iterator(p._filters.end()));
   }
 
   return fp;
@@ -1542,8 +1546,13 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
   for (size_t i = 0; i < path._children.size(); i++) {
     childPlans.push_back(seedFromPropertyPath(left, path._children[i], right));
   }
+  // todo<joka921> refactor this nonsense recursively by getting rid of the shared_ptrs everywhere
+  std::vector<ParsedQuery::GraphPattern> tmp;
+  for (const auto& el : childPlans) {
+    tmp.push_back(*el);
+  }
 
-  return uniteGraphPatterns(childPlans);
+  return std::make_shared<ParsedQuery::GraphPattern>(uniteGraphPatterns(std::move(tmp)));
 }
 
 // _____________________________________________________________________________
@@ -1563,7 +1572,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
   transPath._innerRight = innerRight;
   transPath._min = 1;
   transPath._max = std::numeric_limits<size_t>::max();
-  transPath._childGraphPattern = childPlan;
+  transPath._childGraphPattern = *childPlan;
   p->_children.push_back(
       std::move(transPath));
   return p;
@@ -1586,7 +1595,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
   transPath._innerRight = innerRight;
   transPath._min = std::max(uint_fast16_t(1), path._limit);
   transPath._max = std::numeric_limits<size_t>::max();
-  transPath._childGraphPattern = childPlan;
+  transPath._childGraphPattern = *childPlan;
   p->_children.push_back(
       std::move(transPath));
   return p;
@@ -1609,7 +1618,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
   transPath._innerRight = innerRight;
   transPath._min = 1;
   transPath._max = path._limit;
-  transPath._childGraphPattern = childPlan;
+  transPath._childGraphPattern = *childPlan;
   p->_children.push_back(
       std::move(transPath));
   return p;
@@ -1632,20 +1641,20 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromIri(
   return p;
 }
 
-std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::uniteGraphPatterns(
-    const std::vector<std::shared_ptr<ParsedQuery::GraphPattern>>& patterns)
+ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
+        std::vector<ParsedQuery::GraphPattern> &&patterns)
     const {
   using GraphPattern = ParsedQuery::GraphPattern;
   // Build a tree of union operations
-  auto p = std::make_shared<GraphPattern>();
-  p->_children.push_back(
-      GraphPatternOperation::Union{patterns[0], patterns[1]});
+  auto p = GraphPattern{};
+  p._children.push_back(
+      GraphPatternOperation::Union{std::move(patterns[0]), std::move(patterns[1])});
 
   for (size_t i = 2; i < patterns.size(); i++) {
-    std::shared_ptr<GraphPattern> next = std::make_shared<GraphPattern>();
-    next->_children.push_back(
-        GraphPatternOperation::Union{p, patterns[i]});
-    p = next;
+    GraphPattern next;
+    next._children.push_back(
+        GraphPatternOperation::Union{std::move(p), std::move(patterns[i])});
+    p = std::move(next);
   }
   return p;
 }

@@ -182,47 +182,49 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(1u, pq._rootGraphPattern->_children.size());
     const auto& opt =
         pq._rootGraphPattern->_children[0].get<GraphPatternOperation::Optional>();  // throws on error
-    std::shared_ptr<ParsedQuery::GraphPattern> child = opt._children[0];
-    ASSERT_EQ(1u, child->_whereClauseTriples.size());
-    ASSERT_EQ("?y", child->_whereClauseTriples[0]._s);
-    ASSERT_EQ("<test2>", child->_whereClauseTriples[0]._p._iri);
-    ASSERT_EQ("?z", child->_whereClauseTriples[0]._o);
-    ASSERT_EQ(0u, child->_filters.size());
-    ASSERT_TRUE(child->_optional);
+    auto& child = opt._child;
+    ASSERT_EQ(1u, child._whereClauseTriples.size());
+    ASSERT_EQ("?y", child._whereClauseTriples[0]._s);
+    ASSERT_EQ("<test2>", child._whereClauseTriples[0]._p._iri);
+    ASSERT_EQ("?z", child._whereClauseTriples[0]._o);
+    ASSERT_EQ(0u, child._filters.size());
+    ASSERT_TRUE(child._optional);
 
-    pq = SparqlParser(
-             "SELECT ?x ?z WHERE {\n"
-             "  ?x <test> ?y .\n"
-             "  OPTIONAL {\n"
-             "    ?y <test2> ?z .\n"
-             "    optional {\n"
-             "      ?a ?b ?c .\n"
-             "      FILTER(?c > 3)\n"
-             "    }\n"
-             "    optional {\n"
-             "      ?d ?e ?f\n"
-             "    }\n"
-             "  }\n"
-             "}")
-             .parse();
-    ASSERT_EQ(1u, pq._rootGraphPattern->_children.size());
-    const auto& optA =
-        pq._rootGraphPattern->_children[0].get<GraphPatternOperation::Optional>();  // throws on error
-    child = optA._children[0];
-    ASSERT_EQ(2u, child->_children.size());
-    const auto& opt2 =
-        child->_children[0].get<GraphPatternOperation::Optional>();  // throws on error
-    const auto& opt3 =
-        child->_children[1].get<GraphPatternOperation::Optional>();  // throws on error
-    std::shared_ptr<ParsedQuery::GraphPattern> child2 = opt2._children[0];
-    std::shared_ptr<ParsedQuery::GraphPattern> child3 = opt3._children[0];
-    ASSERT_EQ(1u, child2->_whereClauseTriples.size());
-    ASSERT_EQ(1u, child2->_filters.size());
-    ASSERT_EQ(1u, child3->_whereClauseTriples.size());
-    ASSERT_EQ(0u, child3->_filters.size());
-    ASSERT_TRUE(child->_optional);
-    ASSERT_TRUE(child2->_optional);
-    ASSERT_TRUE(child3->_optional);
+    {
+      pq = SparqlParser(
+              "SELECT ?x ?z WHERE {\n"
+              "  ?x <test> ?y .\n"
+              "  OPTIONAL {\n"
+              "    ?y <test2> ?z .\n"
+              "    optional {\n"
+              "      ?a ?b ?c .\n"
+              "      FILTER(?c > 3)\n"
+              "    }\n"
+              "    optional {\n"
+              "      ?d ?e ?f\n"
+              "    }\n"
+              "  }\n"
+              "}")
+              .parse();
+      ASSERT_EQ(1u, pq._rootGraphPattern->_children.size());
+      const auto &optA =
+              pq._rootGraphPattern->_children[0].get<GraphPatternOperation::Optional>();  // throws on error
+      auto& child = optA._child;
+      ASSERT_EQ(2u, child._children.size());
+      const auto &opt2 =
+              child._children[0].get<GraphPatternOperation::Optional>();  // throws on error
+      const auto &opt3 =
+              child._children[1].get<GraphPatternOperation::Optional>();  // throws on error
+      const auto& child2 = opt2._child;
+      const auto& child3 = opt3._child;
+      ASSERT_EQ(1u, child2._whereClauseTriples.size());
+      ASSERT_EQ(1u, child2._filters.size());
+      ASSERT_EQ(1u, child3._whereClauseTriples.size());
+      ASSERT_EQ(0u, child3._filters.size());
+      ASSERT_TRUE(child._optional);
+      ASSERT_TRUE(child2._optional);
+      ASSERT_TRUE(child3._optional);
+    }
 
     pq = SparqlParser(
              "SELECT ?a WHERE {\n"

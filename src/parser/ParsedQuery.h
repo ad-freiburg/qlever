@@ -211,7 +211,7 @@ class SparqlValues {
   vector<vector<string>> _values;
 };
 
-class GraphPatternOperation;
+struct GraphPatternOperation;
 
 // A parsed SPARQL query. To be extended.
 class ParsedQuery {
@@ -228,8 +228,8 @@ class ParsedQuery {
     GraphPattern() : _optional(false) {}
     // Move and copyconstructors to avoid double deletes on the trees children
     GraphPattern(GraphPattern&& other) = default;
-    GraphPattern(const GraphPattern& other) = delete;
-    GraphPattern& operator=(const GraphPattern& other) = delete;
+    GraphPattern(const GraphPattern& other) = default;
+    GraphPattern& operator=(const GraphPattern& other) = default;
     GraphPattern& operator=( GraphPattern&& other) noexcept = default;
     ~GraphPattern() = default;
     void toString(std::ostringstream& os, int indentation = 0) const;
@@ -325,10 +325,11 @@ class ParsedQuery {
 
 struct GraphPatternOperation {
   struct Optional {
-    std::array<std::shared_ptr<ParsedQuery::GraphPattern>, 1> _children;
+    ParsedQuery::GraphPattern _child;
   };
   struct Union {
-    std::array<std::shared_ptr<ParsedQuery::GraphPattern>, 2> _children;
+    ParsedQuery::GraphPattern _child1;
+    ParsedQuery::GraphPattern _child2;
   };
   struct Subquery {
     std::shared_ptr<ParsedQuery> _subquery;
@@ -343,7 +344,8 @@ struct GraphPatternOperation {
     std::string _innerRight;
     size_t _min = 0;
     size_t _max = 0;
-    std::shared_ptr<ParsedQuery::GraphPattern> _childGraphPattern;
+    // todo<joka921> can this ever be empty??
+    std::optional<ParsedQuery::GraphPattern> _childGraphPattern;
   };
 
   std::variant<Optional, Union, Subquery, TransPath> variant_;
@@ -355,7 +357,12 @@ struct GraphPatternOperation {
   GraphPatternOperation& operator=(const GraphPatternOperation&) = default;
   GraphPatternOperation& operator=(GraphPatternOperation&&) noexcept = default;
   template<typename F>
-  auto visit(F f) const {
+  const auto visit(F f) const {
+    return std::visit(f, variant_);
+  }
+
+  template<typename F>
+  auto visit(F f) {
     return std::visit(f, variant_);
   }
   template<class T>

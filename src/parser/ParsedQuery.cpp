@@ -258,7 +258,7 @@ void ParsedQuery::expandPrefixes() {
   while (!graphPatterns.empty()) {
     GraphPattern* pattern = graphPatterns.back();
     graphPatterns.pop_back();
-    for (const GraphPatternOperation& p : pattern->_children) {
+    for (GraphPatternOperation& p : pattern->_children) {
       p.visit(
           [&graphPatterns, this](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
@@ -270,11 +270,12 @@ void ParsedQuery::expandPrefixes() {
               // we may never be in an transitive path here or a
               // subquery?TODO<joka921, verify by florian> at least this
               // shoudn't have worked before
+            } else if constexpr (std::is_same_v<T, GraphPatternOperation::Optional>) {
+              graphPatterns.push_back(&arg._child);
             } else {
-              for (const std::shared_ptr<GraphPattern>& pattern :
-                   arg._children) {
-                graphPatterns.push_back(pattern.get());
-              }
+              static_assert(std::is_same_v<T, GraphPatternOperation::Union>);
+              graphPatterns.push_back(&arg._child1);
+              graphPatterns.push_back(&arg._child2);
             }
           }
           );
@@ -546,17 +547,17 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
   }
   _id = *id_count;
   (*id_count)++;
-  for (const GraphPatternOperation& op : _children) {
+  for (auto& op : _children) {
     op.visit(
         [&id_count](auto&& arg) {
           using T = std::decay_t<decltype(arg)>;
           if constexpr (std::is_same_v<T, GraphPatternOperation::Union>) {
-            arg._children[0]->recomputeIds(id_count);
-            arg._children[1]->recomputeIds(id_count);
+            arg._child1.recomputeIds(id_count);
+            arg._child2.recomputeIds(id_count);
           } else if constexpr (std::is_same_v<T, GraphPatternOperation::Optional>) {
-            arg._children[0]->recomputeIds(id_count);
+            arg._child.recomputeIds(id_count);
           } else if constexpr (std::is_same_v<T, GraphPatternOperation::TransPath>) {
-            if (arg._childGraphPattern != nullptr) {
+            if (arg._childGraphPattern) {
               arg._childGraphPattern->recomputeIds(id_count);
             }
           } else {
@@ -581,11 +582,11 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (std::is_same_v<T, Optional>) {
       os << "OPTIONAL ";
-      arg._children[0]->toString(os, indentation);
+      arg._child.toString(os, indentation);
     } else if constexpr (std::is_same_v<T, Union>) {
-    arg._children[0]->toString(os, indentation);
+    arg._child1.toString(os, indentation);
     os << " UNION ";
-    arg._children[1]->toString(os, indentation);
+    arg._child2.toString(os, indentation);
     } else if constexpr (std::is_same_v<T, Subquery>) {
     if (arg._subquery != nullptr) {
       os << arg._subquery->asString();
@@ -597,7 +598,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
       os << "TRANS PATH from " << arg._left << " to " << arg._right
          << " with at least " << arg._min << " and at most "
          << arg._max << " steps of ";
-      if (arg._childGraphPattern != nullptr) {
+      if (arg._childGraphPattern) {
         arg._childGraphPattern->toString(os, indentation);
       } else {
         os << "Missing graph pattern.";
