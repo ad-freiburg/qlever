@@ -24,13 +24,14 @@ using std::shared_ptr;
  * Else, returns sizeof(Value)
  * @tparam Value
  */
-template<typename Value>
+template <typename Value>
 struct DefaultSizeGetter {
   template <typename V, typename = void>
   struct HasSizeMember : std::false_type {};
 
   template <typename V>
-  struct HasSizeMember <V, std::void_t<decltype(std::declval<V>().size())>> : std::true_type{};
+  struct HasSizeMember<V, std::void_t<decltype(std::declval<V>().size())>>
+      : std::true_type {};
 
   auto operator()([[maybe_unused]] const Value& value) const {
     if constexpr (HasSizeMember<Value>::value) {
@@ -67,13 +68,14 @@ struct DefaultSizeGetter {
  * accessed, its previous score and the value are used to calculate a new score.
  * @tparam ScoreCalculator function Value -> Score to determine the Score of a a
  * newly inserted entry
- * @tparam EntrySizeGetter function Value -> size_t to determine the actual "size" of
- * a value for statistics
+ * @tparam EntrySizeGetter function Value -> size_t to determine the actual
+ * "size" of a value for statistics
  */
 template <template <typename Sc, typename Val, typename Comp>
           class PriorityQueue,
           class Key, class Value, typename Score, typename ScoreComparator,
-          typename AccessUpdater, typename ScoreCalculator, typename EntrySizeGetter = DefaultSizeGetter<Value>>
+          typename AccessUpdater, typename ScoreCalculator,
+          typename EntrySizeGetter = DefaultSizeGetter<Value>>
 class FlexibleCache {
  private:
   template <typename K, typename V>
@@ -114,7 +116,8 @@ class FlexibleCache {
   //! Typical constructor. A default value may be added in time.
   explicit FlexibleCache(size_t capacity, ScoreComparator scoreComparator,
                          AccessUpdater accessUpdater,
-                         ScoreCalculator scoreCalculator, EntrySizeGetter entrySizeGetter = EntrySizeGetter())
+                         ScoreCalculator scoreCalculator,
+                         EntrySizeGetter entrySizeGetter = EntrySizeGetter())
       : _capacity(capacity),
         _data(scoreComparator),
         _accessUpdater(accessUpdater),
@@ -193,7 +196,8 @@ class FlexibleCache {
       // Move the element to the _pinnedMap and remove
       // unnecessary _accessMap entry
       _pinnedMap[key] = cached;
-      // We have already copied the value to variable "cached", so invalidating the handle is fine
+      // We have already copied the value to variable "cached", so invalidating
+      // the handle is fine
       _data.erase(std::move(handle));
       _accessMap.erase(key);
       return TryEmplaceResult(shared_ptr<Value>(nullptr), std::move(cached));
@@ -308,30 +312,31 @@ class FlexibleCache {
   /// return the total size of the pinned elements
   [[nodiscard]] EntrySizeType pinnedSize() const {
     std::lock_guard lock(_lock);
-    return std::accumulate(_pinnedMap.begin(), _pinnedMap.end(), EntrySizeType{}, [this](const EntrySizeType& x, const auto& el) {
-      // elements of the pinned Map are shared_ptrs
-      return x + (el.second ? _entrySizeGetter(*el.second) : EntrySizeType{}) ;
-    });
+    return std::accumulate(
+        _pinnedMap.begin(), _pinnedMap.end(), EntrySizeType{},
+        [this](const EntrySizeType& x, const auto& el) {
+          // elements of the pinned Map are shared_ptrs
+          return x +
+                 (el.second ? _entrySizeGetter(*el.second) : EntrySizeType{});
+        });
   }
 
   /// return the total size of the cached elements
   [[nodiscard]] EntrySizeType cachedSize() const {
     std::lock_guard lock(_lock);
-    return std::accumulate(_accessMap.begin(), _accessMap.end(), EntrySizeType{}, [this](const EntrySizeType& x, const auto& el) {
-      // elements of the pinned Map are shared_ptrs
-      return x + _entrySizeGetter(*el.second.value().value()) ;
-    });
+    return std::accumulate(
+        _accessMap.begin(), _accessMap.end(), EntrySizeType{},
+        [this](const EntrySizeType& x, const auto& el) {
+          // elements of the pinned Map are shared_ptrs
+          return x + _entrySizeGetter(*el.second.value().value());
+        });
   }
 
   /// return the number of cached elements
-  [[nodiscard]] size_t numCachedElements() const {
-    return _accessMap.size();
-  }
+  [[nodiscard]] size_t numCachedElements() const { return _accessMap.size(); }
 
   /// return the number of pinned elements
-  [[nodiscard]] size_t numPinnedElements() const {
-    return _pinnedMap.size();
-  }
+  [[nodiscard]] size_t numPinnedElements() const { return _pinnedMap.size(); }
 
  private:
   size_t _capacity;
@@ -355,7 +360,8 @@ class FlexibleCache {
 // Partial instantiation of FlexibleCache using the heap-based priority queue
 // from ad_utility::HeapBasedPQ
 template <class Key, class Value, typename Score, typename ScoreComparator,
-          typename AccessUpdater, typename ScoreCalculator, typename EntrySizeGetter = DefaultSizeGetter<Value>>
+          typename AccessUpdater, typename ScoreCalculator,
+          typename EntrySizeGetter = DefaultSizeGetter<Value>>
 using HeapBasedCache =
     ad_utility::FlexibleCache<HeapBasedPQ, Key, Value, Score, ScoreComparator,
                               AccessUpdater, ScoreCalculator, EntrySizeGetter>;
@@ -363,7 +369,8 @@ using HeapBasedCache =
 // Partial instantiation of FlexibleCache using the tree-based priority queue
 // from ad_utility::TreeBasedPQ
 template <class Key, class Value, typename Score, typename ScoreComparator,
-          typename AccessUpdater, typename ScoreCalculator, typename EntrySizeGetter = DefaultSizeGetter<Value>>
+          typename AccessUpdater, typename ScoreCalculator,
+          typename EntrySizeGetter = DefaultSizeGetter<Value>>
 using TreeBasedCache =
     ad_utility::FlexibleCache<TreeBasedPQ, Key, Value, Score, ScoreComparator,
                               AccessUpdater, ScoreCalculator, EntrySizeGetter>;
@@ -390,12 +397,15 @@ struct timeUpdater {
 }  // namespace detail
 
 /// A LRU cache using the HeapBasedCache
-template <typename Key, typename Value, typename EntrySizeGetter=DefaultSizeGetter<Value>>
+template <typename Key, typename Value,
+          typename EntrySizeGetter = DefaultSizeGetter<Value>>
 class HeapBasedLRUCache
     : public HeapBasedCache<Key, Value, detail::TimePoint, std::less<>,
-                            detail::timeUpdater, detail::timeAsScore, EntrySizeGetter> {
-  using Base = HeapBasedCache<Key, Value, detail::TimePoint, std::less<>,
-                              detail::timeUpdater, detail::timeAsScore, EntrySizeGetter>;
+                            detail::timeUpdater, detail::timeAsScore,
+                            EntrySizeGetter> {
+  using Base =
+      HeapBasedCache<Key, Value, detail::TimePoint, std::less<>,
+                     detail::timeUpdater, detail::timeAsScore, EntrySizeGetter>;
 
  public:
   explicit HeapBasedLRUCache(size_t capacity)
@@ -404,14 +414,15 @@ class HeapBasedLRUCache
 };
 
 /// A LRU cache using the TreeBasedCache
-template <typename Key, typename Value, typename EntrySizeGetter = DefaultSizeGetter<Value>>
+template <typename Key, typename Value,
+          typename EntrySizeGetter = DefaultSizeGetter<Value>>
 class TreeBasedLRUCache
     : public ad_utility::TreeBasedCache<Key, Value, detail::TimePoint,
                                         std::less<>, detail::timeUpdater,
                                         detail::timeAsScore, EntrySizeGetter> {
-  using Base =
-      ad_utility::TreeBasedCache<Key, Value, detail::TimePoint, std::less<>,
-                                 detail::timeUpdater, detail::timeAsScore, EntrySizeGetter>;
+  using Base = ad_utility::TreeBasedCache<Key, Value, detail::TimePoint,
+                                          std::less<>, detail::timeUpdater,
+                                          detail::timeAsScore, EntrySizeGetter>;
 
  public:
   explicit TreeBasedLRUCache(size_t capacity)
@@ -422,10 +433,12 @@ class TreeBasedLRUCache
 /// typedef for the simple name LRUCache that is fixed to one of the possible
 /// implementations at compiletime
 #ifdef _QLEVER_USE_TREE_BASED_CACHE
-template <typename Key, typename Value, typename EntrySizeGetter = DefaultSizeGetter<Value>>
+template <typename Key, typename Value,
+          typename EntrySizeGetter = DefaultSizeGetter<Value>>
 using LRUCache = TreeBasedLRUCache<Key, Value, EntrySizeGetter>;
 #else
-template <typename Key, typename Value, typename EntrySizeGetter = DefaultSizeGetter<Value>>
+template <typename Key, typename Value,
+          typename EntrySizeGetter = DefaultSizeGetter<Value>>
 using LRUCache = HeapBasedLRUCache<Key, Value, EntrySizeGetter>;
 #endif
 

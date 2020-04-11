@@ -50,6 +50,8 @@ class Server {
   Socket _serverSocket;
   int _port;
   SubtreeCache _cache;
+  PinnedSizes _pinnedSizes;
+  mutable std::shared_mutex _mutex;
   Index _index;
   Engine _engine;
 

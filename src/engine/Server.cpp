@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cstring>
 #include <nlohmann/json.hpp>
+#include <shared_mutex>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -162,7 +163,9 @@ void Server::process(Socket* client) {
 
       if (ad_utility::getLowercase(params["cmd"]) == "clearcachecomplete") {
         _cache.clear();
+        std::lock_guard m{_mutex};
         _cache.clearAll();
+        _pinnedSizes.clear();
       }
       auto it = params.find("send");
       size_t maxSend = MAX_NOF_ROWS_IN_RESULT;
@@ -179,16 +182,21 @@ void Server::process(Socket* client) {
 #endif
       const bool pinSubtrees =
           ad_utility::getLowercase(params["pinsubtrees"]) == "true";
+      const bool pinResult =
+          ad_utility::getLowercase(params["pinresult"]) == "true";
       query = createQueryFromHttpParams(params);
-      LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned): " : ": ")
-                << query << '\n';
+      LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
+                << ((pinResult) ? " (Result pinned)" : "") << ": " << query
+                << '\n';
       ParsedQuery pq = SparqlParser(query).parse();
       pq.expandPrefixes();
 
-      QueryExecutionContext qec(_index, _engine, &_cache, pinSubtrees);
+      QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
+                                &_mutex, pinSubtrees, pinResult);
       QueryPlanner qp(&qec);
       qp.setEnablePatternTrick(_enablePatternTrick);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
+      qet.isRoot() = true;  // allow pinning of the final result
       LOG(TRACE) << qet.asString() << std::endl;
 
       if (ad_utility::getLowercase(params["action"]) == "csv_export") {
@@ -519,5 +527,7 @@ nlohmann::json Server::composeCacheStatsJson() const {
   result["num-pinned-elements"] = _cache.numPinnedElements();
   result["cached-size"] = _cache.cachedSize();
   result["pinned-size"] = _cache.pinnedSize();
+  std::shared_lock m{_mutex};
+  result["num-pinned-index-scan-sizes"] = _pinnedSizes.size();
   return result;
 }

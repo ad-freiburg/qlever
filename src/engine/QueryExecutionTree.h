@@ -80,7 +80,7 @@ class QueryExecutionTree {
   size_t getResultWidth() const { return _rootOperation->getResultWidth(); }
 
   shared_ptr<const ResultTable> getResult() const {
-    return _rootOperation->getResult();
+    return _rootOperation->getResult(isRoot());
   }
 
   void writeResultToStream(std::ostream& out, const vector<string>& selectVars,
@@ -135,6 +135,30 @@ class QueryExecutionTree {
     return _rootOperation->collectWarnings();
   }
 
+  template <typename F>
+  void forAllDescendants(F f) {
+    static_assert(
+        std::is_same_v<void, std::invoke_result_t<F, QueryExecutionTree*>>);
+    for (auto ptr : _rootOperation->getChildren()) {
+      f(ptr);
+      ptr->forAllDescendants(f);
+    }
+  }
+
+  template <typename F>
+  void forAllDescendants(F f) const {
+    static_assert(
+        std::is_same_v<void,
+                       std::invoke_result_t<F, const QueryExecutionTree*>>);
+    for (auto ptr : _rootOperation->getChildren()) {
+      f(ptr);
+      ptr->forAllDescendants(f);
+    }
+  }
+
+  bool& isRoot() noexcept { return _isRoot; }
+  [[nodiscard]] const bool& isRoot() const noexcept { return _isRoot; }
+
  private:
   QueryExecutionContext* _qec;  // No ownership
   ad_utility::HashMap<string, size_t> _variableColumnMap;
@@ -145,6 +169,8 @@ class QueryExecutionTree {
   string _asString;
   size_t _indent = 0;  // the indent with which the _asString repr was formatted
   size_t _sizeEstimate;
+  bool _isRoot = false;  // used to distinguish the root from child
+                         // operations/subtrees when pinning only the result.
 
   std::shared_ptr<const ResultTable> _cachedResult = nullptr;
 

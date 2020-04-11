@@ -5,6 +5,7 @@
 #pragma once
 
 #include <memory>
+#include <shared_mutex>
 #include <string>
 #include <vector>
 #include "../global/Constants.h"
@@ -25,11 +26,12 @@ struct CacheValue {
   std::shared_ptr<ResultTable> _resTable;
   RuntimeInformation _runtimeInfo;
   [[nodiscard]] size_t size() const {
-    return _resTable ? _resTable-> size() * _resTable->width() : 0;
+    return _resTable ? _resTable->size() * _resTable->width() : 0;
   }
 };
 
 typedef ad_utility::LRUCache<string, CacheValue> SubtreeCache;
+using PinnedSizes = ad_utility::HashMap<std::string, size_t>;
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
@@ -37,14 +39,24 @@ class QueryExecutionContext {
  public:
   QueryExecutionContext(const Index& index, const Engine& engine,
                         SubtreeCache* const cache,
-                        const bool pinSubtrees = false)
-      : pin(pinSubtrees),
+                        PinnedSizes* const pinnedSizes,
+                        std::shared_mutex* mutex,
+                        const bool pinSubtrees = false,
+                        const bool pinResult = false)
+      : _pinSubtrees(pinSubtrees),
+        _pinResult(pinResult),
         _index(index),
         _engine(engine),
         _subtreeCache(cache),
+        _pinnedSizes(pinnedSizes),
+        _mutex(mutex),
         _costFactors() {}
 
   SubtreeCache& getQueryTreeCache() { return *_subtreeCache; }
+
+  PinnedSizes& getPinnedSizes() { return *_pinnedSizes; }
+
+  std::shared_mutex& getLock() const { return *_mutex; }
 
   const Engine& getEngine() const { return _engine; }
 
@@ -60,11 +72,14 @@ class QueryExecutionContext {
     return _costFactors.getCostFactor(key);
   };
 
-  const bool pin;
+  const bool _pinSubtrees;
+  const bool _pinResult;
 
  private:
   const Index& _index;
   const Engine& _engine;
   SubtreeCache* const _subtreeCache;
+  PinnedSizes* const _pinnedSizes;
+  std::shared_mutex* const _mutex;
   QueryPlanningCostFactors _costFactors;
 };
