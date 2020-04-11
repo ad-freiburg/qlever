@@ -191,7 +191,7 @@ class QueryPlanner {
   bool _enablePatternTrick;
 
   std::vector<SubtreePlan> optimize(
-          std::shared_ptr<ParsedQuery::GraphPattern> rootPattern);
+          ParsedQuery::GraphPattern *rootPattern);
 
   /**
    * @brief Fills varToTrip with a mapping from all variables in the root graph

@@ -53,7 +53,7 @@ string ParsedQuery::asString() const {
 
   // WHERE
   os << "\nWHERE: \n";
-  _rootGraphPattern->toString(os, 1);
+  _rootGraphPattern.toString(os, 1);
 
   os << "\nLIMIT: " << (_limit.size() > 0 ? _limit : "no limit specified");
   os << "\nTEXTLIMIT: "
@@ -252,7 +252,7 @@ void ParsedQuery::expandPrefixes() {
   }
 
   vector<GraphPattern*> graphPatterns;
-  graphPatterns.push_back(_rootGraphPattern.get());
+  graphPatterns.push_back(&_rootGraphPattern);
   // Traverse the graph pattern tree using dfs expanding the prefixes in every
   // pattern.
   while (!graphPatterns.empty()) {
@@ -485,21 +485,21 @@ std::string ParsedQuery::parseAlias(const std::string& alias) {
 
 void ParsedQuery::merge(const ParsedQuery& p) {
   _prefixes.insert(_prefixes.begin(), p._prefixes.begin(), p._prefixes.end());
-  _rootGraphPattern->_filters.insert(_rootGraphPattern->_filters.begin(),
-                                     p._rootGraphPattern->_filters.begin(),
-                                     p._rootGraphPattern->_filters.end());
-  _rootGraphPattern->_whereClauseTriples.insert(
-      _rootGraphPattern->_whereClauseTriples.begin(),
-      p._rootGraphPattern->_whereClauseTriples.begin(),
-      p._rootGraphPattern->_whereClauseTriples.end());
+  _rootGraphPattern._filters.insert(_rootGraphPattern._filters.begin(),
+                                     p._rootGraphPattern._filters.begin(),
+                                     p._rootGraphPattern._filters.end());
+  _rootGraphPattern._whereClauseTriples.insert(
+      _rootGraphPattern._whereClauseTriples.begin(),
+      p._rootGraphPattern._whereClauseTriples.begin(),
+      p._rootGraphPattern._whereClauseTriples.end());
 
-  auto& children = _rootGraphPattern->_children;
-  auto& otherChildren = p._rootGraphPattern->_children;
+  auto& children = _rootGraphPattern._children;
+  auto& otherChildren = p._rootGraphPattern._children;
   children.insert(children.end(), otherChildren.begin(), otherChildren.end());
 
   // update the ids
   _numGraphPatterns = 0;
-  _rootGraphPattern->recomputeIds(&_numGraphPatterns);
+  _rootGraphPattern.recomputeIds(&_numGraphPatterns);
 }
 
 

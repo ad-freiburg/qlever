@@ -276,24 +276,20 @@ class ParsedQuery {
     std::string _delimiter = " ";
   };
 
-  ParsedQuery()
-      : _rootGraphPattern(std::make_shared<GraphPattern>()),
-        _numGraphPatterns(1),
-        _reduced(false),
-        _distinct(false) {}
+  ParsedQuery() = default;
 
   vector<SparqlPrefix> _prefixes;
   vector<string> _selectedVariables;
-  std::shared_ptr<GraphPattern> _rootGraphPattern;
+  GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
-  size_t _numGraphPatterns;
+  size_t _numGraphPatterns = 1;
   vector<OrderKey> _orderBy;
   vector<string> _groupByVariables;
   string _limit;
   string _textLimit;
   string _offset;
-  bool _reduced;
-  bool _distinct;
+  bool _reduced = false;
+  bool _distinct = false;
   string _originalString;
   std::vector<Alias> _aliases;
 

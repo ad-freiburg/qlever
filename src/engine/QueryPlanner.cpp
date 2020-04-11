@@ -55,7 +55,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
 
   // Optimize the graph pattern tree
   std::vector<std::vector<SubtreePlan>> plans;
-  plans.push_back(optimize(pq._rootGraphPattern));
+  plans.push_back(optimize(&pq._rootGraphPattern));
 
   // Add the query level modifications
 
@@ -91,7 +91,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   AD_CHECK_GT(lastRow.size(), 0);
   auto minInd = findCheapestExecutionTree(lastRow);
 
-  lastRow[minInd]._isOptional = pq._rootGraphPattern->_optional;
+  lastRow[minInd]._isOptional = pq._rootGraphPattern._optional;
 
   SubtreePlan final = lastRow[minInd];
   final._qet.get()->setTextLimit(getTextLimit(pq._textLimit));
@@ -101,14 +101,14 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
 }
 
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
-        std::shared_ptr<ParsedQuery::GraphPattern> rootPattern) {
+        ParsedQuery::GraphPattern *rootPattern) {
   // Create a topological sorting of the trees GraphPatterns where children are
   // in the list after their parents. This allows for ensuring that children are
   // already optimized when their parents need to be optimized
   std::vector<ParsedQuery::GraphPattern*>
       patternsToProcess;
   std::vector<ParsedQuery::GraphPattern*> childrenToAdd;
-  childrenToAdd.push_back(rootPattern.get());
+  childrenToAdd.push_back(rootPattern);
   while (!childrenToAdd.empty()) {
     ParsedQuery::GraphPattern* pattern =
         childrenToAdd.back();
@@ -303,7 +303,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         fillDpTab(tg, pattern->_filters, childPlans, pattern->_inlineValues)
             .back();
 
-    if (pattern == rootPattern.get()) {
+    if (pattern == rootPattern) {
       return lastRow;
     } else {
       auto minInd = findCheapestExecutionTree(lastRow);
@@ -354,10 +354,10 @@ bool QueryPlanner::checkUsePatternTrick(
   // ql:has-predicate predicate in the query
 
   // look for a HAS_RELATION_PREDICATE triple which satisfies all constraints
-  for (size_t i = 0; i < pq->_rootGraphPattern->_whereClauseTriples.size();
+  for (size_t i = 0; i < pq->_rootGraphPattern._whereClauseTriples.size();
        i++) {
     bool usePatternTrick = true;
-    const SparqlTriple& t = pq->_rootGraphPattern->_whereClauseTriples[i];
+    const SparqlTriple& t = pq->_rootGraphPattern._whereClauseTriples[i];
     // Check that the triples predicates is the HAS_PREDICATE_PREDICATE.
     // Also check that the triples object or subject matches the aliases input
     // variable and the group by variable.
@@ -384,9 +384,9 @@ bool QueryPlanner::checkUsePatternTrick(
     // Check for triples containing the ql:has-predicate triple's
     // object.
     for (size_t j = 0; usePatternTrick &&
-                       j < pq->_rootGraphPattern->_whereClauseTriples.size();
+                       j < pq->_rootGraphPattern._whereClauseTriples.size();
          j++) {
-      const SparqlTriple& other = pq->_rootGraphPattern->_whereClauseTriples[j];
+      const SparqlTriple& other = pq->_rootGraphPattern._whereClauseTriples[j];
       if (j != i &&
           (other._s == t._o || other._p._iri == t._o || other._o == t._o)) {
         usePatternTrick = false;
@@ -400,7 +400,7 @@ bool QueryPlanner::checkUsePatternTrick(
     // object.
     // Filters that filter on the triple's object but have a static
     // rhs will be transformed to a having clause later on.
-    for (const SparqlFilter& filter : pq->_rootGraphPattern->_filters) {
+    for (const SparqlFilter& filter : pq->_rootGraphPattern._filters) {
       if (!(filter._lhs == t._o && filter._rhs[0] != '?') &&
           (filter._lhs == t._s || filter._lhs == t._o || filter._rhs == t._o ||
            filter._rhs == t._s)) {
@@ -416,7 +416,7 @@ bool QueryPlanner::checkUsePatternTrick(
     // triple's object
     std::vector<const ParsedQuery::GraphPattern*>
         graphsToProcess;
-    for (const auto& op : pq->_rootGraphPattern->_children) {
+    for (const auto& op : pq->_rootGraphPattern._children) {
       op.visit(
           [&](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
@@ -490,16 +490,16 @@ bool QueryPlanner::checkUsePatternTrick(
     LOG(DEBUG) << "Using the pattern trick to answer the query." << endl;
     *patternTrickTriple = t;
     // remove the triple from the graph
-    pq->_rootGraphPattern->_whereClauseTriples.erase(
-        pq->_rootGraphPattern->_whereClauseTriples.begin() + i);
+    pq->_rootGraphPattern._whereClauseTriples.erase(
+        pq->_rootGraphPattern._whereClauseTriples.begin() + i);
     // Transform filters on the ql:has-relation triple's object that
     // have a static rhs to having clauses
-    for (size_t i = 0; i < pq->_rootGraphPattern->_filters.size(); i++) {
-      const SparqlFilter& filter = pq->_rootGraphPattern->_filters[i];
+    for (size_t i = 0; i < pq->_rootGraphPattern._filters.size(); i++) {
+      const SparqlFilter& filter = pq->_rootGraphPattern._filters[i];
       if (filter._lhs == t._o && filter._rhs[0] != '?') {
         pq->_havingClauses.push_back(filter);
-        pq->_rootGraphPattern->_filters.erase(
-            pq->_rootGraphPattern->_filters.begin() + i);
+        pq->_rootGraphPattern._filters.erase(
+            pq->_rootGraphPattern._filters.begin() + i);
         i--;
       }
     }
@@ -519,13 +519,13 @@ bool QueryPlanner::checkUsePatternTrick(
   LOG(TRACE) << "The subject is " << subjVar << " the predicate " << predVar
              << std::endl;
   std::string objVar;
-  std::shared_ptr<ParsedQuery::GraphPattern> root = pq->_rootGraphPattern;
+  auto& root = pq->_rootGraphPattern;
 
   // Check that pq does not have where clause triples or filters, but
   // contains a single subquery child
-  if (!root->_filters.empty() || !root->_whereClauseTriples.empty() ||
-      root->_children.size() != 1 ||
-      !std::holds_alternative<GraphPatternOperation::Subquery>(root->_children[0].variant_)) {
+  if (!root._filters.empty() || !root._whereClauseTriples.empty() ||
+      root._children.size() != 1 ||
+      !std::holds_alternative<GraphPatternOperation::Subquery>(root._children[0].variant_)) {
     return false;
   }
 
@@ -533,8 +533,8 @@ bool QueryPlanner::checkUsePatternTrick(
 
   // Check that the query is distinct and does not do any grouping and returns 2
   // variables.
-  const auto& sub =
-      root->_children[0].get<GraphPatternOperation::Subquery>()._subquery;
+  auto& sub =
+      root._children[0].get<GraphPatternOperation::Subquery>()._subquery;
   if (!sub._distinct || sub._groupByVariables.size() > 0 ||
       sub._aliases.size() > 0 || sub._selectedVariables.size() != 2) {
     return false;
@@ -549,9 +549,9 @@ bool QueryPlanner::checkUsePatternTrick(
   LOG(TRACE) << "The subquery has the correct variables" << std::endl;
 
   // Look for a triple in the subquery of the form 'predVar subjVar ?o'
-  std::shared_ptr<ParsedQuery::GraphPattern> subroot = sub._rootGraphPattern;
-  for (size_t i = 0; i < subroot->_whereClauseTriples.size(); i++) {
-    const SparqlTriple& t = subroot->_whereClauseTriples[i];
+  auto& subroot = sub._rootGraphPattern;
+  for (size_t i = 0; i < subroot._whereClauseTriples.size(); i++) {
+    const SparqlTriple& t = subroot._whereClauseTriples[i];
     if ((returns_counts && t._s != subjVar) || t._p._iri != predVar ||
         !isVariable(t._o)) {
       continue;
@@ -570,9 +570,9 @@ bool QueryPlanner::checkUsePatternTrick(
     // Check if either the predicate or the object are constrained in
     // any way
     bool is_constrained = false;
-    for (size_t j = 0; j < subroot->_whereClauseTriples.size(); j++) {
+    for (size_t j = 0; j < subroot._whereClauseTriples.size(); j++) {
       if (j != i) {
-        const SparqlTriple& t2 = subroot->_whereClauseTriples[j];
+        const SparqlTriple& t2 = subroot._whereClauseTriples[j];
         if (t2._s == predVar || t2._p._iri == predVar || t2._o == predVar ||
             t2._s == objVar || t2._p._iri == objVar || t2._o == objVar) {
           LOG(TRACE) << "There is another triple " << t2.asString()
@@ -588,8 +588,8 @@ bool QueryPlanner::checkUsePatternTrick(
     }
 
     // Ensure the triple is not being filtered on either
-    for (size_t j = 0; j < subroot->_filters.size(); j++) {
-      const SparqlFilter& f = subroot->_filters[j];
+    for (size_t j = 0; j < subroot._filters.size(); j++) {
+      const SparqlFilter& f = subroot._filters[j];
       if (f._lhs == subjVar || f._lhs == predVar || f._lhs == objVar ||
           f._rhs == subjVar || f._rhs == predVar || f._rhs == objVar) {
         LOG(TRACE) << "There is a filter on one of the three variables"
@@ -611,9 +611,9 @@ bool QueryPlanner::checkUsePatternTrick(
     patternTrickTriple->_o = predVar;
     // merge the subquery without the selected triple into the
     // parent.
-    subroot->_whereClauseTriples.erase(subroot->_whereClauseTriples.begin() +
+    subroot._whereClauseTriples.erase(subroot._whereClauseTriples.begin() +
                                        i);
-    root->_children.clear();
+    root._children.clear();
     pq->merge(sub);
     break;
   }
@@ -916,7 +916,7 @@ void QueryPlanner::getVarTripleMap(
     const ParsedQuery& pq,
     ad_utility::HashMap<string, vector<SparqlTriple>>* varToTrip,
     ad_utility::HashSet<string>* contextVars) const {
-  for (SparqlTriple& t : pq._rootGraphPattern->_whereClauseTriples) {
+  for (const SparqlTriple& t : pq._rootGraphPattern._whereClauseTriples) {
     if (isVariable(t._s)) {
       (*varToTrip)[t._s].push_back(t);
     }
@@ -1326,7 +1326,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
   LOG(TRACE) << out.str() << std::endl << std::endl;
 #endif
   pattern->recomputeIds();
-  return optimize(pattern);
+  return optimize(pattern.get());
 }
 
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(

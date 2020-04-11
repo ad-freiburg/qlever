@@ -250,8 +250,8 @@ void SparqlParser::parseWhere(
   if (currentPattern == nullptr) {
     // Make the shared pointer point to the root graphpattern without deleting
     // it.
-    currentPattern = query->_rootGraphPattern.get();
-    query->_rootGraphPattern->_id = 0;
+    currentPattern = &query->_rootGraphPattern;
+    query->_rootGraphPattern._id = 0;
   }
 
   // If these are not empty the last subject and / or predicate is reused
@@ -596,9 +596,9 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
         query->_groupByVariables.emplace_back(_lexer.current().raw);
       }
     } else if (_lexer.accept("having")) {
-      parseFilter(&query->_havingClauses, true, query->_rootGraphPattern.get());
+      parseFilter(&query->_havingClauses, true, &query->_rootGraphPattern);
       while (parseFilter(&query->_havingClauses, false,
-                         query->_rootGraphPattern.get())) {
+                         &query->_rootGraphPattern)) {
       }
     } else if (_lexer.accept("textlimit")) {
       _lexer.expect(SparqlToken::Type::INTEGER);
