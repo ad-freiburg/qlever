@@ -3,7 +3,6 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./IndexScan.h"
-#include <shared_mutex>
 #include <sstream>
 #include <string>
 
@@ -311,9 +310,11 @@ size_t IndexScan::computeSizeEstimate() {
     // We have to do a simple scan anyway so might as well do it now
     if (getResultWidth() == 1) {
       auto key = asString();
-      std::shared_lock l{getExecutionContext()->getLock()};
-      if (getExecutionContext()->getPinnedSizes().count(key)) {
-        return getExecutionContext()->getPinnedSizes().at(key);
+      {
+        auto rlock = getExecutionContext()->getPinnedSizes().rlock();
+        if (rlock->count(key)) {
+          return rlock->at(key);
+        }
       }
       return getResult()->size();
     }

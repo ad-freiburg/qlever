@@ -58,11 +58,10 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
                                          : cache.tryEmplace(cacheKey);
 
   if (pinChildIndexScanSizes) {
-    std::lock_guard lock(getExecutionContext()->getLock());
-    forAllDescendants([this](QueryExecutionTree* child) {
+    auto lock = getExecutionContext()->getPinnedSizes().wlock();
+    forAllDescendants([&lock](QueryExecutionTree* child) {
       if (child->getType() == QueryExecutionTree::OperationType::SCAN) {
-        getExecutionContext()
-            ->getPinnedSizes()[child->getRootOperation()->asString()] =
+        (*lock)[child->getRootOperation()->asString()] =
             child->getSizeEstimate();
       }
     });

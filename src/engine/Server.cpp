@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <cstring>
 #include <nlohmann/json.hpp>
-#include <shared_mutex>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -162,10 +161,9 @@ void Server::process(Socket* client) {
       }
 
       if (ad_utility::getLowercase(params["cmd"]) == "clearcachecomplete") {
-        _cache.clear();
-        std::lock_guard m{_mutex};
+        auto lock = _pinnedSizes.wlock();
         _cache.clearAll();
-        _pinnedSizes.clear();
+        lock->clear();
       }
       auto it = params.find("send");
       size_t maxSend = MAX_NOF_ROWS_IN_RESULT;
@@ -192,7 +190,7 @@ void Server::process(Socket* client) {
       pq.expandPrefixes();
 
       QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
-                                &_mutex, pinSubtrees, pinResult);
+                                pinSubtrees, pinResult);
       QueryPlanner qp(&qec);
       qp.setEnablePatternTrick(_enablePatternTrick);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
@@ -527,7 +525,6 @@ nlohmann::json Server::composeCacheStatsJson() const {
   result["num-pinned-elements"] = _cache.numPinnedElements();
   result["cached-size"] = _cache.cachedSize();
   result["pinned-size"] = _cache.pinnedSize();
-  std::shared_lock m{_mutex};
-  result["num-pinned-index-scan-sizes"] = _pinnedSizes.size();
+  result["num-pinned-index-scan-sizes"] = _pinnedSizes.rlock()->size();
   return result;
 }

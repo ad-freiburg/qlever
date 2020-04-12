@@ -489,7 +489,7 @@ TEST(IndexTest, scanTest) {
 
   std::fstream f("_testtmp2.tsv", std::ios_base::out);
 
-  // Vocab::
+  // Vocab:
   // 0: a
   // 1: a2
   // 2: b

@@ -12,6 +12,7 @@
 #include "../index/Index.h"
 #include "../util/Cache.h"
 #include "../util/Log.h"
+#include "../util/Synchronized.h"
 #include "./Engine.h"
 #include "./ResultTable.h"
 #include "QueryPlanningCostFactors.h"
@@ -31,7 +32,9 @@ struct CacheValue {
 };
 
 typedef ad_utility::LRUCache<string, CacheValue> SubtreeCache;
-using PinnedSizes = ad_utility::HashMap<std::string, size_t>;
+using PinnedSizes =
+    ad_utility::Synchronized<ad_utility::HashMap<std::string, size_t>,
+                             std::shared_mutex>;
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.
@@ -40,7 +43,6 @@ class QueryExecutionContext {
   QueryExecutionContext(const Index& index, const Engine& engine,
                         SubtreeCache* const cache,
                         PinnedSizes* const pinnedSizes,
-                        std::shared_mutex* mutex,
                         const bool pinSubtrees = false,
                         const bool pinResult = false)
       : _pinSubtrees(pinSubtrees),
@@ -49,14 +51,11 @@ class QueryExecutionContext {
         _engine(engine),
         _subtreeCache(cache),
         _pinnedSizes(pinnedSizes),
-        _mutex(mutex),
         _costFactors() {}
 
   SubtreeCache& getQueryTreeCache() { return *_subtreeCache; }
 
   PinnedSizes& getPinnedSizes() { return *_pinnedSizes; }
-
-  std::shared_mutex& getLock() const { return *_mutex; }
 
   const Engine& getEngine() const { return _engine; }
 
@@ -80,6 +79,5 @@ class QueryExecutionContext {
   const Engine& _engine;
   SubtreeCache* const _subtreeCache;
   PinnedSizes* const _pinnedSizes;
-  std::shared_mutex* const _mutex;
   QueryPlanningCostFactors _costFactors;
 };

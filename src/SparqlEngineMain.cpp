@@ -141,7 +141,6 @@ int main(int argc, char** argv) {
     Engine engine;
     Index index;
     SubtreeCache cache(NOF_SUBTREES_TO_CACHE);
-    std::shared_mutex mutex;
     PinnedSizes pinnedSizes;
     index.setUsePatterns(usePatterns);
     index.setOnDiskLiterals(onDiskLiterals);
@@ -150,7 +149,7 @@ int main(int argc, char** argv) {
       index.addTextFromOnDiskIndex();
     }
 
-    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes, &mutex);
+    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes);
     if (costFactosFileName.size() > 0) {
       qec.readCostFactorsFromTSVFile(costFactosFileName);
     }
