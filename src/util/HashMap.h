@@ -61,6 +61,12 @@ class HashMap : private absl::flat_hash_map<K, V, HashFcn, EqualKey, Alloc> {
   // Clears the contents of the map
   using Base::clear;
 
+  // determine if a key is contained
+  using Base::contains;
+
+  // Access an element and throw if not present (needed for const access)
+  using Base::at;
+
   // Inserts a std::pair<K, V> pair or a range of pairs from a compatible
   // container. Note: Such a pair can also be constructed using brace
   // initializer lists.

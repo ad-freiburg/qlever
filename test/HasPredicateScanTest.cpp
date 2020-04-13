@@ -224,7 +224,8 @@ TEST(HasPredicateScan, subtreeS) {
   Index index;
   Engine engine;
   SubtreeCache cache(NOF_SUBTREES_TO_CACHE);
-  QueryExecutionContext ctx(index, engine, &cache);
+  PinnedSizes pinnedSizes;
+  QueryExecutionContext ctx(index, engine, &cache, &pinnedSizes);
 
   // create the subtree operation
   std::shared_ptr<QueryExecutionTree> subtree =

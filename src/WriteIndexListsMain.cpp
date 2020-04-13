@@ -88,7 +88,8 @@ int main(int argc, char** argv) {
 
     Engine engine;
     SubtreeCache cache(NOF_SUBTREES_TO_CACHE);
-    QueryExecutionContext qec(index, engine, &cache);
+    PinnedSizes pinnedSizes;
+    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes);
     ParsedQuery q;
     if (!freebase) {
       q = SparqlParser("SELECT ?x WHERE {?x <is-a> <Scientist>}").parse();

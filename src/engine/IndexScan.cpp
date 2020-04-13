@@ -309,6 +309,13 @@ size_t IndexScan::computeSizeEstimate() {
 
     // We have to do a simple scan anyway so might as well do it now
     if (getResultWidth() == 1) {
+      auto key = asString();
+      {
+        auto rlock = getExecutionContext()->getPinnedSizes().rlock();
+        if (rlock->count(key)) {
+          return rlock->at(key);
+        }
+      }
       return getResult()->size();
     }
     if (_type == SPO_FREE_P || _type == SOP_FREE_O) {

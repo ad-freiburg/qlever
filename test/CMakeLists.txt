@@ -6,7 +6,7 @@ add_executable(StringUtilsTest StringUtilsTest.cpp)
 add_test(StringUtilsTest StringUtilsTest)
 target_link_libraries(StringUtilsTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(LRUCacheTest LRUCacheTest.cpp)
+add_executable(LRUCacheTest CacheTest.cpp)
 add_test(LRUCacheTest LRUCacheTest)
 target_link_libraries(LRUCacheTest gtest_main ${CMAKE_THREAD_LIBS_INIT} absl::flat_hash_map)
 
@@ -133,3 +133,11 @@ target_link_libraries(TupleHelpersTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 add_executable(StringSortComparatorTest StringSortComparatorTest.cpp)
 add_test(StringSortComparatorTest StringSortComparatorTest)
 target_link_libraries(StringSortComparatorTest gtest_main ${CMAKE_THREAD_LIBS_INIT} ${ICU_LIBRARIES})
+
+add_executable(PriorityQueueTest PriorityQueueTest.cpp)
+add_test(PriorityQueueTest PriorityQueueTest)
+target_link_libraries(PriorityQueueTest gtest_main absl::flat_hash_map ${CMAKE_THREAD_LIBS_INIT} ${ICU_LIBRARIES})
+
+add_executable(SynchronizedTest SynchronizedTest.cpp)
+add_test(SynchronizedTest SynchronizedTest)
+target_link_libraries(SynchronizedTest gtest_main ${CMAKE_THREAD_LIBS_INIT})

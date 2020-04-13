@@ -50,6 +50,7 @@ class Server {
   Socket _serverSocket;
   int _port;
   SubtreeCache _cache;
+  PinnedSizes _pinnedSizes;
   Index _index;
   Engine _engine;
 
@@ -89,4 +90,6 @@ class Server {
   string composeStatsJson() const;
 
   mutable ad_utility::Timer _requestProcessingTimer;
+
+  json composeCacheStatsJson() const;
 };

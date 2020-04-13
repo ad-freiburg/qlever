@@ -4,10 +4,38 @@
 
 #include <gtest/gtest.h>
 #include <string>
-#include "../src/util/LRUCache.h"
+#include "../src/util/Cache.h"
 
 using std::string;
 
+// first some simple Tests for the general cache interface
+TEST(FlexibleCacheTest, Simple) {
+  auto accessUpdater = [](const auto& s, const auto& v) { return s; };
+  auto scoreCalculator = [](const auto& v) { return v; };
+  auto scoreComparator = std::less<>();
+  ad_utility::HeapBasedCache<string, int, int, decltype(scoreComparator),
+                             decltype(accessUpdater), decltype(scoreCalculator)>
+      cache{3, scoreComparator, accessUpdater, scoreCalculator};
+  cache.insert("24", 24);
+  cache.insert("2", 2);
+  cache.insert("8", 8);
+  cache.insert("5", 5);
+  ASSERT_TRUE(cache.contains("24"));
+  ASSERT_TRUE(cache.contains("8"));
+  ASSERT_TRUE(cache.contains("5"));
+  ASSERT_FALSE(cache.contains("2"));
+}
+TEST(FlexibleCacheTest, LRUSimple) {
+  ad_utility::HeapBasedLRUCache<string, int> cache(3);
+  cache.insert("24", 24);
+  cache.insert("2", 2);
+  cache.insert("8", 8);
+  cache.insert("5", 5);
+  ASSERT_FALSE(cache.contains("24"));
+  ASSERT_TRUE(cache.contains("8"));
+  ASSERT_TRUE(cache.contains("5"));
+  ASSERT_TRUE(cache.contains("2"));
+}
 namespace ad_utility {
 // _____________________________________________________________________________
 TEST(LRUCacheTest, testSimpleMapUsage) {

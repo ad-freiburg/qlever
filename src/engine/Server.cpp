@@ -145,8 +145,25 @@ void Server::process(Socket* client) {
         return;
       }
 
+      if (ad_utility::getLowercase(params["cmd"]) == "cachestats") {
+        LOG(INFO) << "Supplying cache stats..." << std::endl;
+        auto statsJson = composeCacheStatsJson();
+        contentType = "application/json";
+        string httpResponse = createHttpResponse(statsJson.dump(), contentType);
+        auto bytesSent = client->send(httpResponse);
+        LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
+        LOG(INFO) << "Sent cache stats to client." << std::endl;
+        return;
+      }
+
       if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
         _cache.clear();
+      }
+
+      if (ad_utility::getLowercase(params["cmd"]) == "clearcachecomplete") {
+        auto lock = _pinnedSizes.wlock();
+        _cache.clearAll();
+        lock->clear();
       }
       auto it = params.find("send");
       size_t maxSend = MAX_NOF_ROWS_IN_RESULT;
@@ -163,16 +180,21 @@ void Server::process(Socket* client) {
 #endif
       const bool pinSubtrees =
           ad_utility::getLowercase(params["pinsubtrees"]) == "true";
+      const bool pinResult =
+          ad_utility::getLowercase(params["pinresult"]) == "true";
       query = createQueryFromHttpParams(params);
-      LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned): " : ": ")
-                << query << '\n';
+      LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
+                << ((pinResult) ? " (Result pinned)" : "") << ": " << query
+                << '\n';
       ParsedQuery pq = SparqlParser(query).parse();
       pq.expandPrefixes();
 
-      QueryExecutionContext qec(_index, _engine, &_cache, pinSubtrees);
+      QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
+                                pinSubtrees, pinResult);
       QueryPlanner qp(&qec);
       qp.setEnablePatternTrick(_enablePatternTrick);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
+      qet.isRoot() = true;  // allow pinning of the final result
       LOG(TRACE) << qet.asString() << std::endl;
 
       if (ad_utility::getLowercase(params["action"]) == "csv_export") {
@@ -494,4 +516,15 @@ string Server::composeStatsJson() const {
      << "\"nofentitypostings\": \"" << _index.getNofEntityPostings() << "\"\n"
      << "}\n";
   return os.str();
+}
+
+// _______________________________________
+nlohmann::json Server::composeCacheStatsJson() const {
+  nlohmann::json result;
+  result["num-cached-elements"] = _cache.numCachedElements();
+  result["num-pinned-elements"] = _cache.numPinnedElements();
+  result["cached-size"] = _cache.cachedSize();
+  result["pinned-size"] = _cache.pinnedSize();
+  result["num-pinned-index-scan-sizes"] = _pinnedSizes.rlock()->size();
+  return result;
 }

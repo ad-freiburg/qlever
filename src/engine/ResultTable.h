@@ -110,6 +110,7 @@ class ResultTable {
   }
 
   size_t size() const;
+  size_t width() const { return _data.cols(); }
 
   void clear();
 

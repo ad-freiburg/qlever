@@ -56,7 +56,8 @@ class CountAvailablePredicates : public Operation {
   virtual vector<size_t> resultSortedOn() const override;
 
   vector<QueryExecutionTree*> getChildren() override {
-    return {_subtree.get()};
+    using R = vector<QueryExecutionTree*>;
+    return _subtree != nullptr ? R{_subtree.get()} : R{};
   }
 
   ad_utility::HashMap<string, size_t> getVariableColumns() const;
