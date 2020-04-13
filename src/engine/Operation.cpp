@@ -10,8 +10,10 @@ void Operation::forAllDescendants(F f) {
   static_assert(
       std::is_same_v<void, std::invoke_result_t<F, QueryExecutionTree*>>);
   for (auto ptr : getChildren()) {
-    f(ptr);
-    ptr->forAllDescendants(f);
+    if (ptr) {
+      f(ptr);
+      ptr->forAllDescendants(f);
+    }
   }
 }
 
@@ -20,8 +22,10 @@ void Operation::forAllDescendants(F f) const {
   static_assert(
       std::is_same_v<void, std::invoke_result_t<F, const QueryExecutionTree*>>);
   for (auto ptr : getChildren()) {
-    f(ptr);
-    ptr->forAllDescendants(f);
+    if (ptr) {
+      f(ptr);
+      ptr->forAllDescendants(f);
+    }
   }
 }
 

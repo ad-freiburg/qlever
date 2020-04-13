@@ -140,8 +140,10 @@ class QueryExecutionTree {
     static_assert(
         std::is_same_v<void, std::invoke_result_t<F, QueryExecutionTree*>>);
     for (auto ptr : _rootOperation->getChildren()) {
-      f(ptr);
-      ptr->forAllDescendants(f);
+      if (ptr) {
+        f(ptr);
+        ptr->forAllDescendants(f);
+      }
     }
   }
 
@@ -151,8 +153,10 @@ class QueryExecutionTree {
         std::is_same_v<void,
                        std::invoke_result_t<F, const QueryExecutionTree*>>);
     for (auto ptr : _rootOperation->getChildren()) {
-      f(ptr);
-      ptr->forAllDescendants(f);
+      if (ptr) {
+        f(ptr);
+        ptr->forAllDescendants(f);
+      }
     }
   }
 
