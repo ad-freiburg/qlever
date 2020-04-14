@@ -17,8 +17,10 @@ size_t OrderBy::getResultWidth() const { return _subtree->getResultWidth(); }
 // _____________________________________________________________________________
 OrderBy::OrderBy(QueryExecutionContext* qec,
                  std::shared_ptr<QueryExecutionTree> subtree,
-                 const vector<pair<size_t, bool>>& sortIndices)
-    : Operation(qec), _subtree(subtree), _sortIndices(sortIndices) {}
+                 vector<pair<size_t, bool>> sortIndices)
+    : Operation(qec),
+      _subtree(std::move(subtree)),
+      _sortIndices(std::move(sortIndices)) {}
 
 // _____________________________________________________________________________
 string OrderBy::asString(size_t indent) const {
@@ -26,18 +28,23 @@ string OrderBy::asString(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  os << "ORDER_BY\n" << _subtree->asString(indent);
-  os << " order on ";
+
+  std::stringstream columns;
+  // TODO<joka921> This produces exactly the same format as SORT operations
+  // which is crucial for caching. Please refactor those classes to one class
+  // (this is only an optimization for sorts on a single column);
   for (auto ind : _sortIndices) {
-    os << (ind.second ? "desc(" : "asc(") << ind.first << ") ";
+    columns << (ind.second ? "desc(" : "asc(") << ind.first << ") ";
   }
+  os << "SORT / ORDER BY on columns:" << columns.str() << "\n"
+     << _subtree->asString(indent);
   return os.str();
 }
 
 // _____________________________________________________________________________
 string OrderBy::getDescriptor() const {
-  std::string orderByVars = "";
-  for (auto p : _subtree->getVariableColumns()) {
+  std::string orderByVars;
+  for (const auto& p : _subtree->getVariableColumns()) {
     for (auto oc : _sortIndices) {
       if (oc.first == p.second) {
         if (oc.second) {
@@ -48,7 +55,7 @@ string OrderBy::getDescriptor() const {
       }
     }
   }
-  return "OrderBy on " + orderByVars;
+  return "OrderBy (Sort) on " + orderByVars;
 }
 
 // _____________________________________________________________________________
@@ -67,7 +74,7 @@ vector<size_t> OrderBy::resultSortedOn() const {
 // _____________________________________________________________________________
 void OrderBy::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Gettign sub-result for OrderBy result computation..." << endl;
-  AD_CHECK(_sortIndices.size() > 0);
+  AD_CHECK(!_sortIndices.empty());
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
