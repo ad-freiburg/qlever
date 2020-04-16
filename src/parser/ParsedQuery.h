@@ -218,8 +218,6 @@ class ParsedQuery {
  public:
   class GraphPattern;
 
-
-
   // Groups triplets and filters. Represents a node in a tree (as graph patterns
   // are recursive).
   class GraphPattern {
@@ -230,7 +228,7 @@ class ParsedQuery {
     GraphPattern(GraphPattern&& other) = default;
     GraphPattern(const GraphPattern& other) = default;
     GraphPattern& operator=(const GraphPattern& other) = default;
-    GraphPattern& operator=( GraphPattern&& other) noexcept = default;
+    GraphPattern& operator=(GraphPattern&& other) noexcept = default;
     ~GraphPattern() = default;
     void toString(std::ostringstream& os, int indentation = 0) const;
     // Traverses the graph pattern tree and assigns a unique id to every graph
@@ -318,7 +316,6 @@ class ParsedQuery {
   std::string parseAlias(const std::string& alias);
 };
 
-
 struct GraphPatternOperation {
   struct Optional {
     ParsedQuery::GraphPattern _child;
@@ -344,27 +341,33 @@ struct GraphPatternOperation {
   };
 
   std::variant<Optional, Union, Subquery, TransPath> variant_;
-  template<typename A, typename... Args, typename=std::enable_if_t<!std::is_base_of_v<GraphPatternOperation, std::decay_t<A>>>>
-  GraphPatternOperation(A&& a, Args&&... args) : variant_(std::forward<A>(a), std::forward<Args>(args)...) {}
+  template <typename A, typename... Args,
+            typename = std::enable_if_t<
+                !std::is_base_of_v<GraphPatternOperation, std::decay_t<A>>>>
+  GraphPatternOperation(A&& a, Args&&... args)
+      : variant_(std::forward<A>(a), std::forward<Args>(args)...) {}
   GraphPatternOperation() = delete;
   GraphPatternOperation(const GraphPatternOperation&) = default;
   GraphPatternOperation(GraphPatternOperation&&) noexcept = default;
   GraphPatternOperation& operator=(const GraphPatternOperation&) = default;
   GraphPatternOperation& operator=(GraphPatternOperation&&) noexcept = default;
-  template<typename F>
+  template <typename F>
   const auto visit(F f) const {
     return std::visit(f, variant_);
   }
 
-  template<typename F>
+  template <typename F>
   auto visit(F f) {
     return std::visit(f, variant_);
   }
-  template<class T>
-  constexpr T& get() {return std::get<T>(variant_);}
-  template<class T>
-  constexpr const T& get() const {return std::get<T>(variant_);}
+  template <class T>
+  constexpr T& get() {
+    return std::get<T>(variant_);
+  }
+  template <class T>
+  constexpr const T& get() const {
+    return std::get<T>(variant_);
+  }
 
   void toString(std::ostringstream& os, int indentation = 0) const;
 };
-

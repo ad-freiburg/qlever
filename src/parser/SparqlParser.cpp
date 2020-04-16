@@ -244,9 +244,8 @@ ParsedQuery::Alias SparqlParser::parseAlias() {
 }
 
 // _____________________________________________________________________________
-void SparqlParser::parseWhere(
-        ParsedQuery* query,
-        ParsedQuery::GraphPattern *currentPattern) {
+void SparqlParser::parseWhere(ParsedQuery* query,
+                              ParsedQuery::GraphPattern* currentPattern) {
   if (currentPattern == nullptr) {
     // Make the shared pointer point to the root graphpattern without deleting
     // it.
@@ -264,9 +263,10 @@ void SparqlParser::parseWhere(
           "the end of the input.");
     }
     if (_lexer.accept("optional")) {
-
-      currentPattern->_children.push_back(GraphPatternOperation::Optional{ParsedQuery::GraphPattern()});
-      auto& opt = currentPattern->_children.back().get<GraphPatternOperation::Optional>();
+      currentPattern->_children.push_back(
+          GraphPatternOperation::Optional{ParsedQuery::GraphPattern()});
+      auto& opt = currentPattern->_children.back()
+                      .get<GraphPatternOperation::Optional>();
       auto& child = opt._child;
       child._optional = true;
       child._id = query->_numGraphPatterns;
@@ -288,9 +288,8 @@ void SparqlParser::parseWhere(
       } else {
         // union
         // create the union operation
-        auto un =
-            GraphPatternOperation::Union{ParsedQuery::GraphPattern{},
-                               ParsedQuery::GraphPattern{}};
+        auto un = GraphPatternOperation::Union{ParsedQuery::GraphPattern{},
+                                               ParsedQuery::GraphPattern{}};
         un._child1._optional = false;
         un._child2._optional = false;
         un._child1._id = query->_numGraphPatterns;
@@ -612,9 +611,9 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
 }
 
 // _____________________________________________________________________________
-bool SparqlParser::parseFilter(
-        vector<SparqlFilter>* _filters, bool failOnNoFilter,
-        ParsedQuery::GraphPattern *pattern) {
+bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
+                               bool failOnNoFilter,
+                               ParsedQuery::GraphPattern* pattern) {
   if (_lexer.accept("(")) {
     if (_lexer.accept("lang")) {
       _lexer.expect("(");
@@ -811,9 +810,8 @@ bool SparqlParser::parseFilter(
   return false;
 }
 
-void SparqlParser::addLangFilter(
-        const std::string& lhs, const std::string& rhs,
-        ParsedQuery::GraphPattern *pattern) {
+void SparqlParser::addLangFilter(const std::string& lhs, const std::string& rhs,
+                                 ParsedQuery::GraphPattern* pattern) {
   auto langTag = rhs.substr(1, rhs.size() - 2);
   // First find a suitable triple for the given variable. It
   // must use a predicate that is not a variable or complex
