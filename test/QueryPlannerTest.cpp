@@ -24,7 +24,8 @@ TEST(QueryPlannerTest, createTripleGraph) {
                            .parse();
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
+      auto tg =
+          qp.createTripleGraph(&pq._rootGraphPattern._children[0].getBasic());
       TripleGraph expected =
           TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
               {std::make_pair<Node, vector<size_t>>(
@@ -54,7 +55,7 @@ TEST(QueryPlannerTest, createTripleGraph) {
               .parse();
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
+      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       TripleGraph expected =
           TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
               {std::make_pair<Node, vector<size_t>>(
@@ -79,7 +80,7 @@ TEST(QueryPlannerTest, createTripleGraph) {
                            .parse();
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
+      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
 
       TripleGraph expected =
           TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>({
@@ -112,7 +113,7 @@ TEST(QueryPlannerTest, testCpyCtorWithKeepNodes) {
               .parse();
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
+      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       ASSERT_EQ(2u, tg._nodeMap.find(0)->second->_variables.size());
       ASSERT_EQ(2u, tg._nodeMap.find(1)->second->_variables.size());
       ASSERT_EQ(1u, tg._nodeMap.find(2)->second->_variables.size());
@@ -175,7 +176,7 @@ TEST(QueryPlannerTest, testBFSLeaveOut) {
               .parse();
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
+      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       ASSERT_EQ(3u, tg._adjLists.size());
       ad_utility::HashSet<size_t> lo;
       auto out = tg.bfsLeaveOut(0, lo);
@@ -197,7 +198,7 @@ TEST(QueryPlannerTest, testBFSLeaveOut) {
               .parse();
       pq.expandPrefixes();
       QueryPlanner qp(nullptr);
-      auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
+      auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
       ad_utility::HashSet<size_t> lo;
       auto out = tg.bfsLeaveOut(0, lo);
       ASSERT_EQ(3u, out.size());
@@ -235,7 +236,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                 .parse();
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
+        auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
             "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
@@ -276,7 +277,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                 .parse();
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
+        auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
             "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
@@ -319,7 +320,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                 .parse();
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
+        auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
             "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
@@ -367,7 +368,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                 .parse();
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
+        auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         TripleGraph expected = TripleGraph(std::vector<std::pair<
                                                Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
@@ -451,7 +452,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                 .parse();
         pq.expandPrefixes();
         QueryPlanner qp(nullptr);
-        auto tg = qp.createTripleGraph(&pq._rootGraphPattern);
+        auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
         ASSERT_EQ(
             "0 {s: ?x, p: <p>, o: <X>} : (1)\n"
             "1 {s: ?c, p: <QLever-internal-function/contains-entity>, o: ?x} : "
@@ -942,7 +943,8 @@ TEST(QueryExecutionTreeTest, testPlantsEdibleLeaves) {
             .parse();
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
-    QueryPlanner::TripleGraph tg = qp.createTripleGraph(&pq._rootGraphPattern);
+    QueryPlanner::TripleGraph tg =
+        qp.createTripleGraph(&pq.children()[0].getBasic());
     ASSERT_EQ(1u, tg._nodeMap.find(0)->second->_variables.size());
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
@@ -1163,10 +1165,10 @@ TEST(QueryPlannerTest, testSimpleOptional) {
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
         "{\n  OPTIONAL_JOIN\n  {\n    SCAN PSO with P = \"<rel1>\"\n    "
-        "qet-width: 2 \n  } join-columns: [0]\n  |X|\n  {\n    SORT / ORDER BY "
-        "on columns:asc(1) \n    {\n      SCAN POS with P = \"<rel2>\"\n      "
-        "qet-width: 2 \n    }\n    qet-width: 2 \n  } join-columns: [1]\n  "
-        "qet-width: 3 \n}",
+        "qet-width: 2 \n  } join-columns: [0]\n  |X|\n  {\n    SCAN PSO with P "
+        "= \"<rel2>\"\n    qet-width: 2 \n  } join-columns: [0]\n  qet-width: "
+        "3 \n}",
+
         qet.asString());
 
     ParsedQuery pq2 = SparqlParser(
@@ -1177,12 +1179,10 @@ TEST(QueryPlannerTest, testSimpleOptional) {
     pq2.expandPrefixes();
     QueryExecutionTree qet2 = qp.createExecutionTree(pq2);
     ASSERT_EQ(
-        "{\n  SORT / ORDER BY on columns:asc(1) \n  {\n    OPTIONAL_JOIN\n    "
-        "{\n      SCAN PSO with P = \"<rel1>\"\n      qet-width: 2 \n    } "
-        "join-columns: [0]\n    |X|\n    {\n      SORT / ORDER BY on "
-        "columns:asc(1) \n      {\n        SCAN POS with P = \"<rel2>\"\n      "
-        "  qet-width: 2 \n      }\n      qet-width: 2 \n    } join-columns: "
-        "[1]\n    qet-width: 3 \n  }\n  qet-width: 3 \n}"
+        "{\n  SORT on column:1\n  {\n    OPTIONAL_JOIN\n    {\n      SCAN PSO "
+        "with P = \"<rel1>\"\n      qet-width: 2 \n    } join-columns: [0]\n   "
+        " |X|\n    {\n      SCAN PSO with P = \"<rel2>\"\n      qet-width: 2 "
+        "\n    } join-columns: [0]\n    qet-width: 3 \n  }\n  qet-width: 3 \n}",
 
         ,
         qet2.asString());

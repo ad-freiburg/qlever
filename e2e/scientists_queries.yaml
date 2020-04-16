@@ -273,8 +273,8 @@ queries:
     sparql: |
       SELECT ?x ?y WHERE {
           ?x <is-a> <Scientist> .
+          FILTER (?x < <Ada_Lovelace>) .
           OPTIONAL { ?x <Spouse_(or_domestic_partner)> ?y } .
-          FILTER (?x < <Ada_Lovelace>)
       }
     checks:
       - num_rows: 126
@@ -286,9 +286,9 @@ queries:
     type: no-text
     sparql: |
       SELECT ?x (GROUP_CONCAT(?y; separator=";") AS ?partners) WHERE {
+          FILTER (?x < <Ada_Lovelace>)
           ?x <is-a> <Scientist> .
           OPTIONAL {?x <Spouse_(or_domestic_partner)> ?y .}
-          FILTER (?x < <Ada_Lovelace>)
       }
       GROUP BY ?x
     checks:

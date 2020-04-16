@@ -10,300 +10,335 @@
 
 TEST(ParserTest, testParse) {
   try {
-    ParsedQuery pq = SparqlParser("SELECT ?x WHERE {?x ?y ?z}").parse();
-    ASSERT_GT(pq.asString().size(), 0u);
-    ASSERT_EQ(0u, pq._prefixes.size());
-    ASSERT_EQ(1u, pq._selectedVariables.size());
-    ASSERT_EQ(1u, pq._rootGraphPattern._whereClauseTriples.size());
+    {
+      ParsedQuery pq = SparqlParser("SELECT ?x WHERE {?x ?y ?z}").parse();
+      ASSERT_GT(pq.asString().size(), 0u);
+      ASSERT_EQ(0u, pq._prefixes.size());
+      ASSERT_EQ(1u, pq._selectedVariables.size());
+      ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
+      ASSERT_EQ(1u, pq._rootGraphPattern._children[0]
+                        .getBasic()
+                        ._whereClauseTriples.size());
 
-    pq = SparqlParser(
-             "PREFIX : <http://rdf.myprefix.com/>\n"
-             "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
-             "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
-             "SELECT ?x ?z \n "
-             "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y nsx:rel2 "
-             "<http://abc.de>}")
-             .parse();
-    ASSERT_EQ(3u, pq._prefixes.size());
-    ASSERT_EQ(2u, pq._selectedVariables.size());
-    ASSERT_EQ(3u, pq._rootGraphPattern._whereClauseTriples.size());
+      pq = SparqlParser(
+               "PREFIX : <http://rdf.myprefix.com/>\n"
+               "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
+               "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
+               "SELECT ?x ?z \n "
+               "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y nsx:rel2 "
+               "<http://abc.de>}")
+               .parse();
+      ASSERT_EQ(3u, pq._prefixes.size());
+      ASSERT_EQ(2u, pq._selectedVariables.size());
+      ASSERT_EQ(1u, pq.children().size());
+      const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
+      ASSERT_EQ(3u, triples.size());
 
-    ASSERT_EQ("", pq._prefixes[0]._prefix);
-    ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[0]._uri);
-    ASSERT_EQ("ns", pq._prefixes[1]._prefix);
-    ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[1]._uri);
-    ASSERT_EQ("?x", pq._selectedVariables[0]);
-    ASSERT_EQ("?z", pq._selectedVariables[1]);
-    ASSERT_EQ("?x", pq._rootGraphPattern._whereClauseTriples[0]._s);
-    ASSERT_EQ(":myrel", pq._rootGraphPattern._whereClauseTriples[0]._p._iri);
-    ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[0]._o);
-    ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[1]._s);
-    ASSERT_EQ("ns:myrel", pq._rootGraphPattern._whereClauseTriples[1]._p._iri);
-    ASSERT_EQ("?z", pq._rootGraphPattern._whereClauseTriples[1]._o);
-    ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[2]._s);
-    ASSERT_EQ("nsx:rel2", pq._rootGraphPattern._whereClauseTriples[2]._p._iri);
-    ASSERT_EQ("<http://abc.de>",
-              pq._rootGraphPattern._whereClauseTriples[2]._o);
-    ASSERT_EQ("", pq._limit);
-    ASSERT_EQ("", pq._offset);
-
-    pq = SparqlParser(
-             "PREFIX : <http://rdf.myprefix.com/>\n"
-             "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
-             "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
-             "SELECT ?x ?z \n "
-             "WHERE \t {\n?x :myrel ?y. ?y ns:myrel ?z.\n?y nsx:rel2 "
-             "<http://abc.de>\n}")
-             .parse();
-    ASSERT_EQ(3u, pq._prefixes.size());
-    ASSERT_EQ(2u, pq._selectedVariables.size());
-    ASSERT_EQ(3u, pq._rootGraphPattern._whereClauseTriples.size());
-
-    ASSERT_EQ("", pq._prefixes[0]._prefix);
-    ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[0]._uri);
-    ASSERT_EQ("ns", pq._prefixes[1]._prefix);
-    ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[1]._uri);
-    ASSERT_EQ("?x", pq._selectedVariables[0]);
-    ASSERT_EQ("?z", pq._selectedVariables[1]);
-    ASSERT_EQ("?x", pq._rootGraphPattern._whereClauseTriples[0]._s);
-    ASSERT_EQ(":myrel", pq._rootGraphPattern._whereClauseTriples[0]._p._iri);
-    ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[0]._o);
-    ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[1]._s);
-    ASSERT_EQ("ns:myrel", pq._rootGraphPattern._whereClauseTriples[1]._p._iri);
-    ASSERT_EQ("?z", pq._rootGraphPattern._whereClauseTriples[1]._o);
-    ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[2]._s);
-    ASSERT_EQ("nsx:rel2", pq._rootGraphPattern._whereClauseTriples[2]._p._iri);
-    ASSERT_EQ("<http://abc.de>",
-              pq._rootGraphPattern._whereClauseTriples[2]._o);
-    ASSERT_EQ("", pq._limit);
-    ASSERT_EQ("", pq._offset);
-
-    pq = SparqlParser(
-             "PREFIX ns: <http://ns/>"
-             "SELECT ?x ?z \n "
-             "WHERE \t {\n?x <Directed_by> ?y. ?y ns:myrel.extend ?z.\n"
-             "?y nsx:rel2 \"Hello... World\"}")
-             .parse();
-    ASSERT_EQ(1u, pq._prefixes.size());
-    ASSERT_EQ(2u, pq._selectedVariables.size());
-    ASSERT_EQ(3u, pq._rootGraphPattern._whereClauseTriples.size());
-
-    pq.expandPrefixes();
-
-    ASSERT_EQ("?x", pq._selectedVariables[0]);
-    ASSERT_EQ("?z", pq._selectedVariables[1]);
-    ASSERT_EQ("?x", pq._rootGraphPattern._whereClauseTriples[0]._s);
-    ASSERT_EQ("<Directed_by>",
-              pq._rootGraphPattern._whereClauseTriples[0]._p._iri);
-    ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[0]._o);
-    ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[1]._s);
-    ASSERT_EQ("<http://ns/myrel.extend>",
-              pq._rootGraphPattern._whereClauseTriples[1]._p._iri);
-    ASSERT_EQ("?z", pq._rootGraphPattern._whereClauseTriples[1]._o);
-    ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[2]._s);
-    ASSERT_EQ("nsx:rel2", pq._rootGraphPattern._whereClauseTriples[2]._p._iri);
-    ASSERT_EQ("\"Hello... World\"",
-              pq._rootGraphPattern._whereClauseTriples[2]._o);
-    ASSERT_EQ("", pq._limit);
-    ASSERT_EQ("", pq._offset);
-
-    pq = SparqlParser(
-             "SELECT ?x ?y WHERE {?x <is-a> <Actor> .  FILTER(?x != ?y)."
-             "?y <is-a> <Actor> . FILTER(?y < ?x)} LIMIT 10")
-             .parse();
-    pq.expandPrefixes();
-    ASSERT_EQ(2u, pq._rootGraphPattern._filters.size());
-    ASSERT_EQ("?x", pq._rootGraphPattern._filters[0]._lhs);
-    ASSERT_EQ("?y", pq._rootGraphPattern._filters[0]._rhs);
-    ASSERT_EQ(SparqlFilter::FilterType::NE,
-              pq._rootGraphPattern._filters[0]._type);
-    ASSERT_EQ("?y", pq._rootGraphPattern._filters[1]._lhs);
-    ASSERT_EQ("?x", pq._rootGraphPattern._filters[1]._rhs);
-    ASSERT_EQ(SparqlFilter::FilterType::LT,
-              pq._rootGraphPattern._filters[1]._type);
-    ASSERT_EQ(2u, pq._rootGraphPattern._whereClauseTriples.size());
-
-    pq = SparqlParser(
-             "SELECT ?x ?y WHERE {?x <is-a> <Actor> .  FILTER(?x != ?y)."
-             "?y <is-a> <Actor>} LIMIT 10")
-             .parse();
-    pq.expandPrefixes();
-    ASSERT_EQ(1u, pq._rootGraphPattern._filters.size());
-    ASSERT_EQ("?x", pq._rootGraphPattern._filters[0]._lhs);
-    ASSERT_EQ("?y", pq._rootGraphPattern._filters[0]._rhs);
-    ASSERT_EQ(SparqlFilter::FilterType::NE,
-              pq._rootGraphPattern._filters[0]._type);
-    ASSERT_EQ(2u, pq._rootGraphPattern._whereClauseTriples.size());
-
-    pq = SparqlParser(
-             "SELECT ?x ?y WHERE {?x <is-a> <Actor> .  FILTER(?x != ?y)."
-             "?y <is-a> <Actor>. ?c ql:contains-entity ?x."
-             "?c ql:contains-word \"coca* abuse\"} LIMIT 10")
-             .parse();
-    pq.expandPrefixes();
-    ASSERT_EQ(1u, pq._rootGraphPattern._filters.size());
-    ASSERT_EQ("?x", pq._rootGraphPattern._filters[0]._lhs);
-    ASSERT_EQ("?y", pq._rootGraphPattern._filters[0]._rhs);
-    ASSERT_EQ(SparqlFilter::FilterType::NE,
-              pq._rootGraphPattern._filters[0]._type);
-    ASSERT_EQ(4u, pq._rootGraphPattern._whereClauseTriples.size());
-    ASSERT_EQ("?c", pq._rootGraphPattern._whereClauseTriples[2]._s);
-    ASSERT_EQ(CONTAINS_ENTITY_PREDICATE,
-              pq._rootGraphPattern._whereClauseTriples[2]._p._iri);
-    ASSERT_EQ("?x", pq._rootGraphPattern._whereClauseTriples[2]._o);
-    ASSERT_EQ("?c", pq._rootGraphPattern._whereClauseTriples[3]._s);
-    ASSERT_EQ(CONTAINS_WORD_PREDICATE,
-              pq._rootGraphPattern._whereClauseTriples[3]._p._iri);
-    ASSERT_EQ("coca* abuse", pq._rootGraphPattern._whereClauseTriples[3]._o);
-
-    pq = SparqlParser(
-             "PREFIX : <>\n"
-             "SELECT ?x ?y ?z TEXT(?c) SCORE(?c) ?c WHERE {\n"
-             "?x :is-a :Politician .\n"
-             "?c ql:contains-entity ?x .\n"
-             "?c ql:contains-word \"friend\" .\n"
-             "?c ql:contains-entity ?y .\n"
-             "?y :is-a :Scientist .\n"
-             "FILTER(?x != ?y) .\n"
-             "} ORDER BY ?c")
-             .parse();
-    pq.expandPrefixes();
-    ASSERT_EQ(1u, pq._rootGraphPattern._filters.size());
-
-    pq = SparqlParser(
-             "SELECT ?x ?z WHERE {\n"
-             "  ?x <test> ?y .\n"
-             "  OPTIONAL {\n"
-             "    ?y <test2> ?z .\n"
-             "  }\n"
-             "}")
-             .parse();
-
-    ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
-    const auto& opt =
-        pq._rootGraphPattern._children[0]
-            .get<GraphPatternOperation::Optional>();  // throws on error
-    auto& child = opt._child;
-    ASSERT_EQ(1u, child._whereClauseTriples.size());
-    ASSERT_EQ("?y", child._whereClauseTriples[0]._s);
-    ASSERT_EQ("<test2>", child._whereClauseTriples[0]._p._iri);
-    ASSERT_EQ("?z", child._whereClauseTriples[0]._o);
-    ASSERT_EQ(0u, child._filters.size());
-    ASSERT_TRUE(child._optional);
+      ASSERT_EQ("", pq._prefixes[0]._prefix);
+      ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[0]._uri);
+      ASSERT_EQ("ns", pq._prefixes[1]._prefix);
+      ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[1]._uri);
+      ASSERT_EQ("?x", pq._selectedVariables[0]);
+      ASSERT_EQ("?z", pq._selectedVariables[1]);
+      ASSERT_EQ("?x", triples[0]._s);
+      ASSERT_EQ(":myrel", triples[0]._p._iri);
+      ASSERT_EQ("?y", triples[0]._o);
+      ASSERT_EQ("?y", triples[1]._s);
+      ASSERT_EQ("ns:myrel", triples[1]._p._iri);
+      ASSERT_EQ("?z", triples[1]._o);
+      ASSERT_EQ("?y", triples[2]._s);
+      ASSERT_EQ("nsx:rel2", triples[2]._p._iri);
+      ASSERT_EQ("<http://abc.de>", triples[2]._o);
+      ASSERT_EQ("", pq._limit);
+      ASSERT_EQ("", pq._offset);
+    }
 
     {
-      pq = SparqlParser(
-               "SELECT ?x ?z WHERE {\n"
-               "  ?x <test> ?y .\n"
-               "  OPTIONAL {\n"
-               "    ?y <test2> ?z .\n"
-               "    optional {\n"
-               "      ?a ?b ?c .\n"
-               "      FILTER(?c > 3)\n"
-               "    }\n"
-               "    optional {\n"
-               "      ?d ?e ?f\n"
-               "    }\n"
-               "  }\n"
-               "}")
-               .parse();
-      ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
+      auto pq = SparqlParser(
+                    "PREFIX : <http://rdf.myprefix.com/>\n"
+                    "PREFIX ns: <http://rdf.myprefix.com/ns/>\n"
+                    "PREFIX xxx: <http://rdf.myprefix.com/xxx/>\n"
+                    "SELECT ?x ?z \n "
+                    "WHERE \t {\n?x :myrel ?y. ?y ns:myrel ?z.\n?y nsx:rel2 "
+                    "<http://abc.de>\n}")
+                    .parse();
+      ASSERT_EQ(3u, pq._prefixes.size());
+      ASSERT_EQ(2u, pq._selectedVariables.size());
+      ASSERT_EQ(1u, pq.children().size());
+      const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
+      ASSERT_EQ(3u, triples.size());
+
+      ASSERT_EQ("", pq._prefixes[0]._prefix);
+      ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[0]._uri);
+      ASSERT_EQ("ns", pq._prefixes[1]._prefix);
+      ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[1]._uri);
+      ASSERT_EQ("?x", pq._selectedVariables[0]);
+      ASSERT_EQ("?z", pq._selectedVariables[1]);
+      ASSERT_EQ("?x", triples[0]._s);
+      ASSERT_EQ(":myrel", triples[0]._p._iri);
+      ASSERT_EQ("?y", triples[0]._o);
+      ASSERT_EQ("?y", triples[1]._s);
+      ASSERT_EQ("ns:myrel", triples[1]._p._iri);
+      ASSERT_EQ("?z", triples[1]._o);
+      ASSERT_EQ("?y", triples[2]._s);
+      ASSERT_EQ("nsx:rel2", triples[2]._p._iri);
+      ASSERT_EQ("<http://abc.de>", triples[2]._o);
+      ASSERT_EQ("", pq._limit);
+      ASSERT_EQ("", pq._offset);
+    }
+
+    {
+      auto pq = SparqlParser(
+                    "PREFIX ns: <http://ns/>"
+                    "SELECT ?x ?z \n "
+                    "WHERE \t {\n?x <Directed_by> ?y. ?y ns:myrel.extend ?z.\n"
+                    "?y nsx:rel2 \"Hello... World\"}")
+                    .parse();
+      ASSERT_EQ(1u, pq._prefixes.size());
+      ASSERT_EQ(2u, pq._selectedVariables.size());
+      ASSERT_EQ(1u, pq.children().size());
+      const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
+      ASSERT_EQ(3u, triples.size());
+
+      pq.expandPrefixes();
+
+      ASSERT_EQ("?x", pq._selectedVariables[0]);
+      ASSERT_EQ("?z", pq._selectedVariables[1]);
+      ASSERT_EQ("?x", triples[0]._s);
+      ASSERT_EQ("<Directed_by>", triples[0]._p._iri);
+      ASSERT_EQ("?y", triples[0]._o);
+      ASSERT_EQ("?y", triples[1]._s);
+      ASSERT_EQ("<http://ns/myrel.extend>", triples[1]._p._iri);
+      ASSERT_EQ("?z", triples[1]._o);
+      ASSERT_EQ("?y", triples[2]._s);
+      ASSERT_EQ("nsx:rel2", triples[2]._p._iri);
+      ASSERT_EQ("\"Hello... World\"", triples[2]._o);
+      ASSERT_EQ("", pq._limit);
+      ASSERT_EQ("", pq._offset);
+    }
+
+    {
+      auto pq = SparqlParser(
+                    "SELECT ?x ?y WHERE {?x <is-a> <Actor> .  FILTER(?x != ?y)."
+                    "?y <is-a> <Actor> . FILTER(?y < ?x)} LIMIT 10")
+                    .parse();
+      pq.expandPrefixes();
+      ASSERT_EQ(1u, pq.children().size());
+      const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
+      auto filters = pq.children()[0].getBasic()._filters;
+      ASSERT_EQ(2u, filters.size());
+      ASSERT_EQ("?x", filters[0]._lhs);
+      ASSERT_EQ("?y", filters[0]._rhs);
+      ASSERT_EQ(SparqlFilter::FilterType::NE, filters[0]._type);
+      ASSERT_EQ("?y", filters[1]._lhs);
+      ASSERT_EQ("?x", filters[1]._rhs);
+      ASSERT_EQ(SparqlFilter::FilterType::LT, filters[1]._type);
+      ASSERT_EQ(2u, triples.size());
+    }
+
+    {
+      auto pq = SparqlParser(
+                    "SELECT ?x ?y WHERE {?x <is-a> <Actor> .  FILTER(?x != ?y)."
+                    "?y <is-a> <Actor>} LIMIT 10")
+                    .parse();
+      pq.expandPrefixes();
+      ASSERT_EQ(1u, pq.children().size());
+      const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
+      auto filters = pq.children()[0].getBasic()._filters;
+      ASSERT_EQ(1u, filters.size());
+      ASSERT_EQ("?x", filters[0]._lhs);
+      ASSERT_EQ("?y", filters[0]._rhs);
+      ASSERT_EQ(SparqlFilter::FilterType::NE, filters[0]._type);
+      ASSERT_EQ(2u, triples.size());
+    }
+
+    {
+      auto pq = SparqlParser(
+                    "SELECT ?x ?y WHERE {?x <is-a> <Actor> .  FILTER(?x != ?y)."
+                    "?y <is-a> <Actor>. ?c ql:contains-entity ?x."
+                    "?c ql:contains-word \"coca* abuse\"} LIMIT 10")
+                    .parse();
+      pq.expandPrefixes();
+      ASSERT_EQ(1u, pq.children().size());
+      const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
+      auto filters = pq.children()[0].getBasic()._filters;
+      ASSERT_EQ(1u, filters.size());
+      ASSERT_EQ("?x", filters[0]._lhs);
+      ASSERT_EQ("?y", filters[0]._rhs);
+      ASSERT_EQ(SparqlFilter::FilterType::NE, filters[0]._type);
+      ASSERT_EQ(4u, triples.size());
+      ASSERT_EQ("?c", triples[2]._s);
+      ASSERT_EQ(CONTAINS_ENTITY_PREDICATE, triples[2]._p._iri);
+      ASSERT_EQ("?x", triples[2]._o);
+      ASSERT_EQ("?c", triples[3]._s);
+      ASSERT_EQ(CONTAINS_WORD_PREDICATE, triples[3]._p._iri);
+      ASSERT_EQ("coca* abuse", triples[3]._o);
+    }
+
+    {
+      auto pq = SparqlParser(
+                    "PREFIX : <>\n"
+                    "SELECT ?x ?y ?z TEXT(?c) SCORE(?c) ?c WHERE {\n"
+                    "?x :is-a :Politician .\n"
+                    "?c ql:contains-entity ?x .\n"
+                    "?c ql:contains-word \"friend\" .\n"
+                    "?c ql:contains-entity ?y .\n"
+                    "?y :is-a :Scientist .\n"
+                    "FILTER(?x != ?y) .\n"
+                    "} ORDER BY ?c")
+                    .parse();
+      pq.expandPrefixes();
+      ASSERT_EQ(1u,
+                pq._rootGraphPattern._children[0].getBasic()._filters.size());
+    }
+
+    {
+      auto pq = SparqlParser(
+                    "SELECT ?x ?z WHERE {\n"
+                    "  ?x <test> ?y .\n"
+                    "  OPTIONAL {\n"
+                    "    ?y <test2> ?z .\n"
+                    "  }\n"
+                    "}")
+                    .parse();
+
+      ASSERT_EQ(2u, pq.children().size());
+      const auto& opt =
+          pq._rootGraphPattern._children[1]
+              .get<GraphPatternOperation::Optional>();  // throws on error
+      auto& child = opt._child;
+      const auto& triples = child._children[0].getBasic()._whereClauseTriples;
+      auto filters = child._children[0].getBasic()._filters;
+      ASSERT_EQ(1u, triples.size());
+      ASSERT_EQ("?y", triples[0]._s);
+      ASSERT_EQ("<test2>", triples[0]._p._iri);
+      ASSERT_EQ("?z", triples[0]._o);
+      ASSERT_EQ(0u, filters.size());
+      ASSERT_TRUE(child._optional);
+    }
+
+    {
+      auto pq = SparqlParser(
+                    "SELECT ?x ?z WHERE {\n"
+                    "  ?x <test> ?y .\n"
+                    "  OPTIONAL {\n"
+                    "    ?y <test2> ?z .\n"
+                    "    optional {\n"
+                    "      ?a ?b ?c .\n"
+                    "      FILTER(?c > 3)\n"
+                    "    }\n"
+                    "    optional {\n"
+                    "      ?d ?e ?f\n"
+                    "    }\n"
+                    "  }\n"
+                    "}")
+                    .parse();
+      ASSERT_EQ(2u, pq._rootGraphPattern._children.size());
       const auto& optA =
-          pq._rootGraphPattern._children[0]
+          pq._rootGraphPattern._children[1]
               .get<GraphPatternOperation::Optional>();  // throws on error
       auto& child = optA._child;
-      ASSERT_EQ(2u, child._children.size());
+      ASSERT_EQ(3u, child._children.size());
       const auto& opt2 =
-          child._children[0]
-              .get<GraphPatternOperation::Optional>();  // throws on error
-      const auto& opt3 =
           child._children[1]
               .get<GraphPatternOperation::Optional>();  // throws on error
-      const auto& child2 = opt2._child;
-      const auto& child3 = opt3._child;
+      const auto& opt3 =
+          child._children[2]
+              .get<GraphPatternOperation::Optional>();  // throws on error
+      const auto& child2 = opt2._child._children[0].getBasic();
+      const auto& child3 = opt3._child._children[0].getBasic();
       ASSERT_EQ(1u, child2._whereClauseTriples.size());
       ASSERT_EQ(1u, child2._filters.size());
       ASSERT_EQ(1u, child3._whereClauseTriples.size());
       ASSERT_EQ(0u, child3._filters.size());
       ASSERT_TRUE(child._optional);
-      ASSERT_TRUE(child2._optional);
-      ASSERT_TRUE(child3._optional);
+      ASSERT_TRUE(opt2._child._optional);
+      ASSERT_TRUE(opt3._child._optional);
     }
 
-    pq = SparqlParser(
-             "SELECT ?a WHERE {\n"
-             "  VALUES ?a { <1> \"2\"}\n"
-             "  VALUES (?b ?c) {(<1> <2>) (\"1\" \"2\")}\n"
-             "  ?a <rel> ?b ."
-             "}")
-             .parse();
-    ASSERT_EQ(0u, pq._rootGraphPattern._children.size());
-    ASSERT_EQ(1u, pq._rootGraphPattern._whereClauseTriples.size());
-    ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
-    ASSERT_EQ(2u, pq._rootGraphPattern._inlineValues.size());
+    {
+      auto pq = SparqlParser(
+                    "SELECT ?a WHERE {\n"
+                    "  VALUES ?a { <1> \"2\"}\n"
+                    "  VALUES (?b ?c) {(<1> <2>) (\"1\" \"2\")}\n"
+                    "  ?a <rel> ?b ."
+                    "}")
+                    .parse();
+      ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
+      const auto& c = pq.children()[0].getBasic();
+      ASSERT_EQ(1u, c._whereClauseTriples.size());
+      ASSERT_EQ(0u, c._filters.size());
+      ASSERT_EQ(2u, c._inlineValues.size());
 
-    SparqlValues values1 = pq._rootGraphPattern._inlineValues[0];
-    vector<string> vvars = {"?a"};
-    ASSERT_EQ(vvars, values1._variables);
-    vector<vector<string>> vvals = {{"<1>"}, {"\"2\""}};
-    ASSERT_EQ(vvals, values1._values);
+      SparqlValues values1 = c._inlineValues[0];
+      vector<string> vvars = {"?a"};
+      ASSERT_EQ(vvars, values1._variables);
+      vector<vector<string>> vvals = {{"<1>"}, {"\"2\""}};
+      ASSERT_EQ(vvals, values1._values);
 
-    SparqlValues values2 = pq._rootGraphPattern._inlineValues[1];
-    vvars = {"?b", "?c"};
-    ASSERT_EQ(vvars, values2._variables);
-    vvals = {{"<1>", "<2>"}, {"\"1\"", "\"2\""}};
-    ASSERT_EQ(vvals, values2._values);
+      SparqlValues values2 = c._inlineValues[1];
+      vvars = {"?b", "?c"};
+      ASSERT_EQ(vvars, values2._variables);
+      vvals = {{"<1>", "<2>"}, {"\"1\"", "\"2\""}};
+      ASSERT_EQ(vvals, values2._values);
+    }
 
-    pq = SparqlParser(R"(
+    {
+      auto pq = SparqlParser(R"(
 SELECT ?a ?b ?c WHERE {
   VALUES ?a { <Albert_Einstein>}
   VALUES (?b ?c) { (<Marie_Curie> <Joseph_Jacobson>) (<Freiherr> <Lord_of_the_Isles>) }
 }
         )")
-             .parse();
+                    .parse();
 
-    ASSERT_EQ(0u, pq._rootGraphPattern._children.size());
-    ASSERT_EQ(0u, pq._rootGraphPattern._whereClauseTriples.size());
-    ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
-    ASSERT_EQ(2u, pq._rootGraphPattern._inlineValues.size());
+      ASSERT_EQ(1u, pq.children().size());
+      const auto& c = pq.children()[0].getBasic();
+      ASSERT_EQ(0u, c._whereClauseTriples.size());
+      ASSERT_EQ(0u, c._filters.size());
+      ASSERT_EQ(2u, c._inlineValues.size());
 
-    values1 = pq._rootGraphPattern._inlineValues[0];
-    vvars = {"?a"};
-    ASSERT_EQ(vvars, values1._variables);
-    vvals = {{"<Albert_Einstein>"}};
-    ASSERT_EQ(vvals, values1._values);
+      auto values1 = c._inlineValues[0];
+      vector<string> vvars = {"?a"};
+      ASSERT_EQ(vvars, values1._variables);
+      vector<vector<string>> vvals = {{"<Albert_Einstein>"}};
+      ASSERT_EQ(vvals, values1._values);
 
-    values2 = pq._rootGraphPattern._inlineValues[1];
-    vvars = {"?b", "?c"};
-    ASSERT_EQ(vvars, values2._variables);
-    vvals = {{"<Marie_Curie>", "<Joseph_Jacobson>"},
-             {"<Freiherr>", "<Lord_of_the_Isles>"}};
-    ASSERT_EQ(vvals, values2._values);
+      auto values2 = c._inlineValues[1];
+      vvars = {"?b", "?c"};
+      ASSERT_EQ(vvars, values2._variables);
+      vvals = {{"<Marie_Curie>", "<Joseph_Jacobson>"},
+               {"<Freiherr>", "<Lord_of_the_Isles>"}};
+      ASSERT_EQ(vvals, values2._values);
+    }
 
-    pq = SparqlParser(
-             ""
-             "PREFIX wd: <http://www.wikidata.org/entity/>\n"
-             "PREFIX wdt: <http://www.wikidata.org/prop/direct/>\n"
-             "SELECT ?city WHERE {\n"
-             "  VALUES ?citytype { wd:Q515 wd:Q262166}\n"
-             "  ?city wdt:P31 ?citytype .\n"
-             "}\n")
-             .parse();
+    {
+      auto pq = SparqlParser(
+                    ""
+                    "PREFIX wd: <http://www.wikidata.org/entity/>\n"
+                    "PREFIX wdt: <http://www.wikidata.org/prop/direct/>\n"
+                    "SELECT ?city WHERE {\n"
+                    "  VALUES ?citytype { wd:Q515 wd:Q262166}\n"
+                    "  ?city wdt:P31 ?citytype .\n"
+                    "}\n")
+                    .parse();
 
-    ASSERT_EQ(0u, pq._rootGraphPattern._children.size());
-    ASSERT_EQ(1u, pq._rootGraphPattern._whereClauseTriples.size());
-    ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
-    ASSERT_EQ(1u, pq._rootGraphPattern._inlineValues.size());
+      ASSERT_EQ(1u, pq.children().size());
+      const auto& c = pq.children()[0].getBasic();
+      ASSERT_EQ(1u, c._whereClauseTriples.size());
+      ASSERT_EQ(0u, c._filters.size());
+      ASSERT_EQ(1u, c._inlineValues.size());
 
-    ASSERT_EQ(pq._rootGraphPattern._whereClauseTriples[0]._s, "?city");
-    ASSERT_EQ(pq._rootGraphPattern._whereClauseTriples[0]._p._iri, "wdt:P31");
-    ASSERT_EQ(pq._rootGraphPattern._whereClauseTriples[0]._s, "?city");
+      ASSERT_EQ(c._whereClauseTriples[0]._s, "?city");
+      ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "wdt:P31");
+      ASSERT_EQ(c._whereClauseTriples[0]._s, "?city");
 
-    values1 = pq._rootGraphPattern._inlineValues[0];
-    vvars = {"?citytype"};
-    ASSERT_EQ(vvars, values1._variables);
-    vvals = {{"wd:Q515"}, {"wd:Q262166"}};
-    ASSERT_EQ(vvals, values1._values);
+      auto values1 = c._inlineValues[0];
+      vector<string> vvars = {"?citytype"};
+      ASSERT_EQ(vvars, values1._variables);
+      vector<vector<string>> vvals = {{"wd:Q515"}, {"wd:Q262166"}};
+      ASSERT_EQ(vvals, values1._values);
+    }
   } catch (const ad_semsearch::Exception& e) {
     FAIL() << e.getFullErrorMessage();
   }
@@ -329,23 +364,19 @@ TEST(ParserTest, testFilterWithoutDot) {
   pq.expandPrefixes();
   ASSERT_EQ(1u, pq._prefixes.size());
   ASSERT_EQ(1u, pq._selectedVariables.size());
-  ASSERT_EQ(3u, pq._rootGraphPattern._whereClauseTriples.size());
-  ASSERT_EQ(3u, pq._rootGraphPattern._filters.size());
-  ASSERT_EQ("?1", pq._rootGraphPattern._filters[0]._lhs);
-  ASSERT_EQ("<http://rdf.freebase.com/ns/m.0fkvn>",
-            pq._rootGraphPattern._filters[0]._rhs);
-  ASSERT_EQ(SparqlFilter::FilterType::NE,
-            pq._rootGraphPattern._filters[0]._type);
-  ASSERT_EQ("?1", pq._rootGraphPattern._filters[1]._lhs);
-  ASSERT_EQ("<http://rdf.freebase.com/ns/m.0vmt>",
-            pq._rootGraphPattern._filters[1]._rhs);
-  ASSERT_EQ(SparqlFilter::FilterType::NE,
-            pq._rootGraphPattern._filters[1]._type);
-  ASSERT_EQ("?1", pq._rootGraphPattern._filters[2]._lhs);
-  ASSERT_EQ("<http://rdf.freebase.com/ns/m.018mts>",
-            pq._rootGraphPattern._filters[2]._rhs);
-  ASSERT_EQ(SparqlFilter::FilterType::NE,
-            pq._rootGraphPattern._filters[2]._type);
+  ASSERT_EQ(1u, pq.children().size());
+  const auto& c = pq.children()[0].getBasic();
+  ASSERT_EQ(3u, c._whereClauseTriples.size());
+  ASSERT_EQ(3u, c._filters.size());
+  ASSERT_EQ("?1", c._filters[0]._lhs);
+  ASSERT_EQ("<http://rdf.freebase.com/ns/m.0fkvn>", c._filters[0]._rhs);
+  ASSERT_EQ(SparqlFilter::FilterType::NE, c._filters[0]._type);
+  ASSERT_EQ("?1", c._filters[1]._lhs);
+  ASSERT_EQ("<http://rdf.freebase.com/ns/m.0vmt>", c._filters[1]._rhs);
+  ASSERT_EQ(SparqlFilter::FilterType::NE, c._filters[1]._type);
+  ASSERT_EQ("?1", c._filters[2]._lhs);
+  ASSERT_EQ("<http://rdf.freebase.com/ns/m.018mts>", c._filters[2]._rhs);
+  ASSERT_EQ(SparqlFilter::FilterType::NE, c._filters[2]._type);
 }
 
 TEST(ParserTest, testExpandPrefixes) {
@@ -358,227 +389,272 @@ TEST(ParserTest, testExpandPrefixes) {
           "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y nsx:rel2 <http://abc.de>}")
           .parse();
   pq.expandPrefixes();
+  ASSERT_EQ(1u, pq.children().size());
+  const auto& c = pq.children()[0].getBasic();
   ASSERT_EQ(3u, pq._prefixes.size());
   ASSERT_EQ(2u, pq._selectedVariables.size());
-  ASSERT_EQ(3u, pq._rootGraphPattern._whereClauseTriples.size());
+  ASSERT_EQ(3u, c._whereClauseTriples.size());
   ASSERT_EQ("", pq._prefixes[0]._prefix);
   ASSERT_EQ("<http://rdf.myprefix.com/>", pq._prefixes[0]._uri);
   ASSERT_EQ("ns", pq._prefixes[1]._prefix);
   ASSERT_EQ("<http://rdf.myprefix.com/ns/>", pq._prefixes[1]._uri);
   ASSERT_EQ("?x", pq._selectedVariables[0]);
   ASSERT_EQ("?z", pq._selectedVariables[1]);
-  ASSERT_EQ("?x", pq._rootGraphPattern._whereClauseTriples[0]._s);
+  ASSERT_EQ("?x", c._whereClauseTriples[0]._s);
   ASSERT_EQ("<http://rdf.myprefix.com/myrel>",
-            pq._rootGraphPattern._whereClauseTriples[0]._p._iri);
-  ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[0]._o);
-  ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[1]._s);
+            c._whereClauseTriples[0]._p._iri);
+  ASSERT_EQ("?y", c._whereClauseTriples[0]._o);
+  ASSERT_EQ("?y", c._whereClauseTriples[1]._s);
   ASSERT_EQ("<http://rdf.myprefix.com/ns/myrel>",
-            pq._rootGraphPattern._whereClauseTriples[1]._p._iri);
-  ASSERT_EQ("?z", pq._rootGraphPattern._whereClauseTriples[1]._o);
-  ASSERT_EQ("?y", pq._rootGraphPattern._whereClauseTriples[2]._s);
-  ASSERT_EQ("nsx:rel2", pq._rootGraphPattern._whereClauseTriples[2]._p._iri);
-  ASSERT_EQ("<http://abc.de>", pq._rootGraphPattern._whereClauseTriples[2]._o);
+            c._whereClauseTriples[1]._p._iri);
+  ASSERT_EQ("?z", c._whereClauseTriples[1]._o);
+  ASSERT_EQ("?y", c._whereClauseTriples[2]._s);
+  ASSERT_EQ("nsx:rel2", c._whereClauseTriples[2]._p._iri);
+  ASSERT_EQ("<http://abc.de>", c._whereClauseTriples[2]._o);
   ASSERT_EQ("", pq._limit);
   ASSERT_EQ("", pq._offset);
 }
 
 TEST(ParserTest, testSolutionModifiers) {
-  ParsedQuery pq = SparqlParser("SELECT ?x WHERE \t {?x :myrel ?y}").parse();
-  pq.expandPrefixes();
-  ASSERT_EQ(0u, pq._prefixes.size());
-  ASSERT_EQ(1u, pq._selectedVariables.size());
-  ASSERT_EQ(1u, pq._rootGraphPattern._whereClauseTriples.size());
-  ASSERT_EQ("", pq._limit);
-  ASSERT_EQ("", pq._offset);
-  ASSERT_EQ(size_t(0), pq._orderBy.size());
-  ASSERT_FALSE(pq._distinct);
-  ASSERT_FALSE(pq._reduced);
+  {
+    ParsedQuery pq = SparqlParser("SELECT ?x WHERE \t {?x :myrel ?y}").parse();
+    pq.expandPrefixes();
+    ASSERT_EQ(1u, pq.children().size());
+    const auto& c = pq.children()[0].getBasic();
+    ASSERT_EQ(0u, pq._prefixes.size());
+    ASSERT_EQ(1u, pq._selectedVariables.size());
+    ASSERT_EQ(1u, c._whereClauseTriples.size());
+    ASSERT_EQ("", pq._limit);
+    ASSERT_EQ("", pq._offset);
+    ASSERT_EQ(size_t(0), pq._orderBy.size());
+    ASSERT_FALSE(pq._distinct);
+    ASSERT_FALSE(pq._reduced);
+  }
 
-  pq = SparqlParser("SELECT ?x WHERE \t {?x :myrel ?y} LIMIT 10").parse();
-  pq.expandPrefixes();
-  ASSERT_EQ(0u, pq._prefixes.size());
-  ASSERT_EQ(1u, pq._selectedVariables.size());
-  ASSERT_EQ(1u, pq._rootGraphPattern._whereClauseTriples.size());
-  ASSERT_EQ("10", pq._limit);
-  ASSERT_EQ("", pq._offset);
-  ASSERT_EQ(size_t(0), pq._orderBy.size());
-  ASSERT_FALSE(pq._distinct);
-  ASSERT_FALSE(pq._reduced);
+  {
+    auto pq =
+        SparqlParser("SELECT ?x WHERE \t {?x :myrel ?y} LIMIT 10").parse();
+    pq.expandPrefixes();
+    ASSERT_EQ(0u, pq._prefixes.size());
+    ASSERT_EQ(1u, pq._selectedVariables.size());
+    ASSERT_EQ(1u, pq.children().size());
+    const auto& c = pq.children()[0].getBasic();
+    ASSERT_EQ(1u, c._whereClauseTriples.size());
+    ASSERT_EQ("10", pq._limit);
+    ASSERT_EQ("", pq._offset);
+    ASSERT_EQ(size_t(0), pq._orderBy.size());
+    ASSERT_FALSE(pq._distinct);
+    ASSERT_FALSE(pq._reduced);
+  }
 
-  pq = SparqlParser(
-           "SELECT ?x WHERE \t {?x :myrel ?y}\n"
-           "LIMIT 10 OFFSET 15")
-           .parse();
-  pq.expandPrefixes();
-  ASSERT_EQ(0u, pq._prefixes.size());
-  ASSERT_EQ(1u, pq._selectedVariables.size());
-  ASSERT_EQ(1u, pq._rootGraphPattern._whereClauseTriples.size());
-  ASSERT_EQ("10", pq._limit);
-  ASSERT_EQ("15", pq._offset);
-  ASSERT_EQ(size_t(0), pq._orderBy.size());
-  ASSERT_FALSE(pq._distinct);
-  ASSERT_FALSE(pq._reduced);
+  {
+    auto pq = SparqlParser(
+                  "SELECT ?x WHERE \t {?x :myrel ?y}\n"
+                  "LIMIT 10 OFFSET 15")
+                  .parse();
+    pq.expandPrefixes();
+    ASSERT_EQ(1u, pq.children().size());
+    const auto& c = pq.children()[0].getBasic();
+    ASSERT_EQ(0u, pq._prefixes.size());
+    ASSERT_EQ(1u, pq._selectedVariables.size());
+    ASSERT_EQ(1u, c._whereClauseTriples.size());
+    ASSERT_EQ("10", pq._limit);
+    ASSERT_EQ("15", pq._offset);
+    ASSERT_EQ(size_t(0), pq._orderBy.size());
+    ASSERT_FALSE(pq._distinct);
+    ASSERT_FALSE(pq._reduced);
+  }
 
-  pq = SparqlParser(
-           "SELECT DISTINCT ?x ?y WHERE \t {?x :myrel ?y}\n"
-           "ORDER BY ?y LIMIT 10 OFFSET 15")
-           .parse();
-  pq.expandPrefixes();
-  ASSERT_EQ(0u, pq._prefixes.size());
-  ASSERT_EQ(2u, pq._selectedVariables.size());
-  ASSERT_EQ(1u, pq._rootGraphPattern._whereClauseTriples.size());
-  ASSERT_EQ("10", pq._limit);
-  ASSERT_EQ("15", pq._offset);
-  ASSERT_EQ(size_t(1), pq._orderBy.size());
-  ASSERT_EQ("?y", pq._orderBy[0]._key);
-  ASSERT_FALSE(pq._orderBy[0]._desc);
-  ASSERT_TRUE(pq._distinct);
-  ASSERT_FALSE(pq._reduced);
+  {
+    auto pq = SparqlParser(
+                  "SELECT DISTINCT ?x ?y WHERE \t {?x :myrel ?y}\n"
+                  "ORDER BY ?y LIMIT 10 OFFSET 15")
+                  .parse();
+    pq.expandPrefixes();
+    ASSERT_EQ(1u, pq.children().size());
+    const auto& c = pq.children()[0].getBasic();
+    ASSERT_EQ(0u, pq._prefixes.size());
+    ASSERT_EQ(2u, pq._selectedVariables.size());
+    ASSERT_EQ(1u, c._whereClauseTriples.size());
+    ASSERT_EQ("10", pq._limit);
+    ASSERT_EQ("15", pq._offset);
+    ASSERT_EQ(size_t(1), pq._orderBy.size());
+    ASSERT_EQ("?y", pq._orderBy[0]._key);
+    ASSERT_FALSE(pq._orderBy[0]._desc);
+    ASSERT_TRUE(pq._distinct);
+    ASSERT_FALSE(pq._reduced);
+  }
 
-  pq = SparqlParser(
-           "SELECT DISTINCT ?x SCORE(?x) ?y WHERE \t {?x :myrel ?y}\n"
-           "ORDER BY ASC(?y) DESC(SCORE(?x)) LIMIT 10 OFFSET 15")
-           .parse();
-  pq.expandPrefixes();
-  ASSERT_EQ(0u, pq._prefixes.size());
-  ASSERT_EQ(3u, pq._selectedVariables.size());
-  ASSERT_EQ("SCORE(?x)", pq._selectedVariables[1]);
-  ASSERT_EQ(1u, pq._rootGraphPattern._whereClauseTriples.size());
-  ASSERT_EQ("10", pq._limit);
-  ASSERT_EQ("15", pq._offset);
-  ASSERT_EQ(size_t(2), pq._orderBy.size());
-  ASSERT_EQ("?y", pq._orderBy[0]._key);
-  ASSERT_FALSE(pq._orderBy[0]._desc);
-  ASSERT_EQ("SCORE(?x)", pq._orderBy[1]._key);
-  ASSERT_TRUE(pq._orderBy[1]._desc);
-  ASSERT_TRUE(pq._distinct);
-  ASSERT_FALSE(pq._reduced);
+  {
+    auto pq = SparqlParser(
+                  "SELECT DISTINCT ?x SCORE(?x) ?y WHERE \t {?x :myrel ?y}\n"
+                  "ORDER BY ASC(?y) DESC(SCORE(?x)) LIMIT 10 OFFSET 15")
+                  .parse();
+    pq.expandPrefixes();
+    ASSERT_EQ(1u, pq.children().size());
+    const auto& c = pq.children()[0].getBasic();
+    ASSERT_EQ(0u, pq._prefixes.size());
+    ASSERT_EQ(3u, pq._selectedVariables.size());
+    ASSERT_EQ("SCORE(?x)", pq._selectedVariables[1]);
+    ASSERT_EQ(1u, c._whereClauseTriples.size());
+    ASSERT_EQ("10", pq._limit);
+    ASSERT_EQ("15", pq._offset);
+    ASSERT_EQ(size_t(2), pq._orderBy.size());
+    ASSERT_EQ("?y", pq._orderBy[0]._key);
+    ASSERT_FALSE(pq._orderBy[0]._desc);
+    ASSERT_EQ("SCORE(?x)", pq._orderBy[1]._key);
+    ASSERT_TRUE(pq._orderBy[1]._desc);
+    ASSERT_TRUE(pq._distinct);
+    ASSERT_FALSE(pq._reduced);
+  }
 
-  pq = SparqlParser(
-           "SELECT REDUCED ?x ?y WHERE \t {?x :myrel ?y}\n"
-           "ORDER BY DESC(?x) ASC(?y) LIMIT 10 OFFSET 15")
-           .parse();
-  pq.expandPrefixes();
-  ASSERT_EQ(0u, pq._prefixes.size());
-  ASSERT_EQ(2u, pq._selectedVariables.size());
-  ASSERT_EQ(1u, pq._rootGraphPattern._whereClauseTriples.size());
-  ASSERT_EQ("10", pq._limit);
-  ASSERT_EQ("15", pq._offset);
-  ASSERT_EQ(size_t(2), pq._orderBy.size());
-  ASSERT_EQ("?x", pq._orderBy[0]._key);
-  ASSERT_TRUE(pq._orderBy[0]._desc);
-  ASSERT_EQ("?y", pq._orderBy[1]._key);
-  ASSERT_FALSE(pq._orderBy[1]._desc);
-  ASSERT_FALSE(pq._distinct);
-  ASSERT_TRUE(pq._reduced);
+  {
+    auto pq = SparqlParser(
+                  "SELECT REDUCED ?x ?y WHERE \t {?x :myrel ?y}\n"
+                  "ORDER BY DESC(?x) ASC(?y) LIMIT 10 OFFSET 15")
+                  .parse();
+    pq.expandPrefixes();
+    ASSERT_EQ(1u, pq.children().size());
+    const auto& c = pq.children()[0].getBasic();
+    ASSERT_EQ(0u, pq._prefixes.size());
+    ASSERT_EQ(2u, pq._selectedVariables.size());
+    ASSERT_EQ(1u, c._whereClauseTriples.size());
+    ASSERT_EQ("10", pq._limit);
+    ASSERT_EQ("15", pq._offset);
+    ASSERT_EQ(size_t(2), pq._orderBy.size());
+    ASSERT_EQ("?x", pq._orderBy[0]._key);
+    ASSERT_TRUE(pq._orderBy[0]._desc);
+    ASSERT_EQ("?y", pq._orderBy[1]._key);
+    ASSERT_FALSE(pq._orderBy[1]._desc);
+    ASSERT_FALSE(pq._distinct);
+    ASSERT_TRUE(pq._reduced);
+  }
 
-  pq = SparqlParser("SELECT ?x ?y WHERE {?x <is-a> <Actor>} LIMIT 10").parse();
-  pq.expandPrefixes();
-  ASSERT_EQ("10", pq._limit);
+  {
+    auto pq =
+        SparqlParser("SELECT ?x ?y WHERE {?x <is-a> <Actor>} LIMIT 10").parse();
+    pq.expandPrefixes();
+    ASSERT_EQ("10", pq._limit);
+  }
 
-  pq = SparqlParser(
-           "SELECT DISTINCT ?movie WHERE { \n"
-           "\n"
-           "?movie <from-year> \"00-00-2000\"^^xsd:date .\n"
-           "\n"
-           "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50")
-           .parse();
-  pq.expandPrefixes();
-  ASSERT_EQ(0u, pq._prefixes.size());
-  ASSERT_EQ(1u, pq._selectedVariables.size());
-  ASSERT_EQ("?movie", pq._selectedVariables[0]);
-  ASSERT_EQ(2u, pq._rootGraphPattern._whereClauseTriples.size());
-  ASSERT_EQ("?movie", pq._rootGraphPattern._whereClauseTriples[0]._s);
-  ASSERT_EQ("<from-year>", pq._rootGraphPattern._whereClauseTriples[0]._p._iri);
-  ASSERT_EQ("\"00-00-2000\"^^xsd:date",
-            pq._rootGraphPattern._whereClauseTriples[0]._o);
-  ASSERT_EQ("?movie", pq._rootGraphPattern._whereClauseTriples[1]._s);
-  ASSERT_EQ("<directed-by>",
-            pq._rootGraphPattern._whereClauseTriples[1]._p._iri);
-  ASSERT_EQ("<Scott%2C%20Ridley>",
-            pq._rootGraphPattern._whereClauseTriples[1]._o);
+  {
+    auto pq = SparqlParser(
+                  "SELECT DISTINCT ?movie WHERE { \n"
+                  "\n"
+                  "?movie <from-year> \"00-00-2000\"^^xsd:date .\n"
+                  "\n"
+                  "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50")
+                  .parse();
+    pq.expandPrefixes();
+    ASSERT_EQ(1u, pq.children().size());
+    const auto& c = pq.children()[0].getBasic();
+    ASSERT_EQ(0u, pq._prefixes.size());
+    ASSERT_EQ(1u, pq._selectedVariables.size());
+    ASSERT_EQ("?movie", pq._selectedVariables[0]);
+    ASSERT_EQ(2u, c._whereClauseTriples.size());
+    ASSERT_EQ("?movie", c._whereClauseTriples[0]._s);
+    ASSERT_EQ("<from-year>", c._whereClauseTriples[0]._p._iri);
+    ASSERT_EQ("\"00-00-2000\"^^xsd:date", c._whereClauseTriples[0]._o);
+    ASSERT_EQ("?movie", c._whereClauseTriples[1]._s);
+    ASSERT_EQ("<directed-by>", c._whereClauseTriples[1]._p._iri);
+    ASSERT_EQ("<Scott%2C%20Ridley>", c._whereClauseTriples[1]._o);
+  }
 
-  pq = SparqlParser(
-           "PREFIX xsd: <http://www.w3.org/2010/XMLSchema#>"
-           "SELECT DISTINCT ?movie WHERE { \n"
-           "\n"
-           "?movie <from-year> \"00-00-2000\"^^xsd:date .\n"
-           "\n"
-           "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50")
-           .parse();
-  pq.expandPrefixes();
-  ASSERT_EQ(1u, pq._prefixes.size());
-  ASSERT_EQ(1u, pq._selectedVariables.size());
-  ASSERT_EQ("?movie", pq._selectedVariables[0]);
-  ASSERT_EQ(2u, pq._rootGraphPattern._whereClauseTriples.size());
-  ASSERT_EQ("?movie", pq._rootGraphPattern._whereClauseTriples[0]._s);
-  ASSERT_EQ("<from-year>", pq._rootGraphPattern._whereClauseTriples[0]._p._iri);
-  ASSERT_EQ("\"00-00-2000\"^^<http://www.w3.org/2010/XMLSchema#date>",
-            pq._rootGraphPattern._whereClauseTriples[0]._o);
-  ASSERT_EQ("?movie", pq._rootGraphPattern._whereClauseTriples[1]._s);
-  ASSERT_EQ("<directed-by>",
-            pq._rootGraphPattern._whereClauseTriples[1]._p._iri);
-  ASSERT_EQ("<Scott%2C%20Ridley>",
-            pq._rootGraphPattern._whereClauseTriples[1]._o);
+  {
+    auto pq = SparqlParser(
+                  "PREFIX xsd: <http://www.w3.org/2010/XMLSchema#>"
+                  "SELECT DISTINCT ?movie WHERE { \n"
+                  "\n"
+                  "?movie <from-year> \"00-00-2000\"^^xsd:date .\n"
+                  "\n"
+                  "?movie <directed-by> <Scott%2C%20Ridley> .   }  LIMIT 50")
+                  .parse();
+    pq.expandPrefixes();
+    ASSERT_EQ(1u, pq.children().size());
+    const auto& c = pq.children()[0].getBasic();
+    ASSERT_EQ(1u, pq._prefixes.size());
+    ASSERT_EQ(1u, pq._selectedVariables.size());
+    ASSERT_EQ("?movie", pq._selectedVariables[0]);
+    ASSERT_EQ(2u, c._whereClauseTriples.size());
+    ASSERT_EQ("?movie", c._whereClauseTriples[0]._s);
+    ASSERT_EQ("<from-year>", c._whereClauseTriples[0]._p._iri);
+    ASSERT_EQ("\"00-00-2000\"^^<http://www.w3.org/2010/XMLSchema#date>",
+              c._whereClauseTriples[0]._o);
+    ASSERT_EQ("?movie", c._whereClauseTriples[1]._s);
+    ASSERT_EQ("<directed-by>", c._whereClauseTriples[1]._p._iri);
+    ASSERT_EQ("<Scott%2C%20Ridley>", c._whereClauseTriples[1]._o);
+  }
 
-  pq = SparqlParser(
-           "SELECT ?r (AVG(?r) as ?avg) WHERE {"
-           "?a <http://schema.org/name> ?b ."
-           "?a ql:has-relation ?r }"
-           "GROUP BY ?r "
-           "ORDER BY ?avg")
-           .parse();
-  ASSERT_EQ(1u, pq._groupByVariables.size());
-  ASSERT_EQ(1u, pq._orderBy.size());
-  ASSERT_EQ("?r", pq._groupByVariables[0]);
-  ASSERT_EQ("?avg", pq._orderBy[0]._key);
-  ASSERT_FALSE(pq._orderBy[0]._desc);
+  {
+    auto pq = SparqlParser(
+                  "SELECT ?r (AVG(?r) as ?avg) WHERE {"
+                  "?a <http://schema.org/name> ?b ."
+                  "?a ql:has-relation ?r }"
+                  "GROUP BY ?r "
+                  "ORDER BY ?avg")
+                  .parse();
+    ASSERT_EQ(1u, pq.children().size());
+    ASSERT_EQ(1u, pq._groupByVariables.size());
+    ASSERT_EQ(1u, pq._orderBy.size());
+    ASSERT_EQ("?r", pq._groupByVariables[0]);
+    ASSERT_EQ("?avg", pq._orderBy[0]._key);
+    ASSERT_FALSE(pq._orderBy[0]._desc);
+  }
 
-  pq = SparqlParser(
-           "SELECT ?r (COUNT(DISTINCT ?r) as ?count) WHERE {"
-           "?a <http://schema.org/name> ?b ."
-           "?a ql:has-relation ?r }"
-           "GROUP BY ?r "
-           "ORDER BY ?count")
-           .parse();
-  ASSERT_EQ(1u, pq._groupByVariables.size());
-  ASSERT_EQ(1u, pq._orderBy.size());
-  ASSERT_EQ("?r", pq._groupByVariables[0]);
-  ASSERT_EQ("?count", pq._orderBy[0]._key);
-  ASSERT_FALSE(pq._orderBy[0]._desc);
+  {
+    auto pq = SparqlParser(
+                  "SELECT ?r (COUNT(DISTINCT ?r) as ?count) WHERE {"
+                  "?a <http://schema.org/name> ?b ."
+                  "?a ql:has-relation ?r }"
+                  "GROUP BY ?r "
+                  "ORDER BY ?count")
+                  .parse();
+    ASSERT_EQ(1u, pq._groupByVariables.size());
+    ASSERT_EQ(1u, pq._orderBy.size());
+    ASSERT_EQ("?r", pq._groupByVariables[0]);
+    ASSERT_EQ("?count", pq._orderBy[0]._key);
+    ASSERT_FALSE(pq._orderBy[0]._desc);
+  }
 
-  pq = SparqlParser(
-           "SELECT ?r (GROUP_CONCAT(?r;SEPARATOR=\"Cake\") as ?concat) WHERE {"
-           "?a <http://schema.org/name> ?b ."
-           "?a ql:has-relation ?r }"
-           "GROUP BY ?r "
-           "ORDER BY ?count")
-           .parse();
-  ASSERT_EQ(1u, pq._aliases.size());
-  ASSERT_EQ("GROUP_CONCAT(?r;SEPARATOR=\"Cake\") as ?concat",
-            pq._aliases[0]._function);
+  {
+    auto pq =
+        SparqlParser(
+            "SELECT ?r (GROUP_CONCAT(?r;SEPARATOR=\"Cake\") as ?concat) WHERE {"
+            "?a <http://schema.org/name> ?b ."
+            "?a ql:has-relation ?r }"
+            "GROUP BY ?r "
+            "ORDER BY ?count")
+            .parse();
+    ASSERT_EQ(1u, pq._aliases.size());
+    ASSERT_EQ("GROUP_CONCAT(?r;SEPARATOR=\"Cake\") as ?concat",
+              pq._aliases[0]._function);
+  }
 
-  // Test for an alias in the order by statement
-  pq = SparqlParser(
-           "SELECT DISTINCT ?x ?y WHERE \t {?x :myrel ?y}\n"
-           "ORDER BY DESC((COUNT(?x) as ?count)) LIMIT 10 OFFSET 15")
-           .parse();
-  pq.expandPrefixes();
-  ASSERT_EQ(0u, pq._prefixes.size());
-  ASSERT_EQ(2u, pq._selectedVariables.size());
-  ASSERT_EQ(1u, pq._rootGraphPattern._whereClauseTriples.size());
-  ASSERT_EQ("10", pq._limit);
-  ASSERT_EQ("15", pq._offset);
-  ASSERT_EQ(1u, pq._orderBy.size());
-  ASSERT_EQ("?count", pq._orderBy[0]._key);
-  ASSERT_TRUE(pq._orderBy[0]._desc);
-  ASSERT_EQ(1u, pq._aliases.size());
-  ASSERT_TRUE(pq._aliases[0]._isAggregate);
-  ASSERT_EQ("?x", pq._aliases[0]._inVarName);
-  ASSERT_EQ("?count", pq._aliases[0]._outVarName);
-  ASSERT_EQ("COUNT(?x) as ?count", pq._aliases[0]._function);
-  ASSERT_TRUE(pq._distinct);
-  ASSERT_FALSE(pq._reduced);
+  {
+    // Test for an alias in the order by statement
+    auto pq = SparqlParser(
+                  "SELECT DISTINCT ?x ?y WHERE \t {?x :myrel ?y}\n"
+                  "ORDER BY DESC((COUNT(?x) as ?count)) LIMIT 10 OFFSET 15")
+                  .parse();
+    pq.expandPrefixes();
+    ASSERT_EQ(1u, pq.children().size());
+    const auto& c = pq.children()[0].getBasic();
+    ASSERT_EQ(0u, pq._prefixes.size());
+    ASSERT_EQ(2u, pq._selectedVariables.size());
+    ASSERT_EQ(1u, c._whereClauseTriples.size());
+    ASSERT_EQ("10", pq._limit);
+    ASSERT_EQ("15", pq._offset);
+    ASSERT_EQ(1u, pq._orderBy.size());
+    ASSERT_EQ("?count", pq._orderBy[0]._key);
+    ASSERT_TRUE(pq._orderBy[0]._desc);
+    ASSERT_EQ(1u, pq._aliases.size());
+    ASSERT_TRUE(pq._aliases[0]._isAggregate);
+    ASSERT_EQ("?x", pq._aliases[0]._inVarName);
+    ASSERT_EQ("?count", pq._aliases[0]._outVarName);
+    ASSERT_EQ("COUNT(?x) as ?count", pq._aliases[0]._function);
+    ASSERT_TRUE(pq._distinct);
+    ASSERT_FALSE(pq._reduced);
+  }
 }
 
 TEST(ParserTest, testGroupByAndAlias) {

@@ -127,17 +127,14 @@ class QueryPlanner {
   class SubtreePlan {
    public:
     explicit SubtreePlan(QueryExecutionContext* qec)
-        : _qet(new QueryExecutionTree(qec)),
-          _idsOfIncludedNodes(0),
-          _idsOfIncludedFilters(0),
-          _isOptional(false) {}
+        : _qet(std::make_shared<QueryExecutionTree>(qec)) {}
 
     std::shared_ptr<QueryExecutionTree> _qet;
     std::shared_ptr<ResultTable> _cachedResult;
     bool _isCached = false;
-    uint64_t _idsOfIncludedNodes;
-    uint64_t _idsOfIncludedFilters;
-    bool _isOptional;
+    uint64_t _idsOfIncludedNodes = 0;
+    uint64_t _idsOfIncludedFilters = 0;
+    bool _isOptional = false;
 
     size_t getCostEstimate() const;
 
@@ -146,7 +143,8 @@ class QueryPlanner {
     void addAllNodes(uint64_t otherNodes);
   };
 
-  TripleGraph createTripleGraph(const ParsedQuery::GraphPattern* pattern) const;
+  TripleGraph createTripleGraph(
+      const GraphPatternOperation::BasicGraphPattern* pattern) const;
 
   static ad_utility::HashMap<string, size_t>
   createVariableColumnsMapForTextOperation(
@@ -189,7 +187,8 @@ class QueryPlanner {
 
   bool _enablePatternTrick;
 
-  std::vector<SubtreePlan> optimize(ParsedQuery::GraphPattern* rootPattern);
+  std::vector<QueryPlanner::SubtreePlan> optimize(
+      ParsedQuery::GraphPattern* rootPattern, bool isRoot);
 
   /**
    * @brief Fills varToTrip with a mapping from all variables in the root graph
@@ -262,6 +261,9 @@ class QueryPlanner {
   vector<SubtreePlan> merge(const vector<SubtreePlan>& a,
                             const vector<SubtreePlan>& b,
                             const TripleGraph& tg) const;
+
+  std::optional<QueryPlanner::SubtreePlan> join(const SubtreePlan& a,
+                                                const SubtreePlan& b) const;
 
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
