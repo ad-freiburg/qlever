@@ -305,7 +305,9 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         currentPattern->_children.push_back(std::move(un));
       }
     } else if (_lexer.accept("filter")) {
-      parseFilter(&currentPattern->_filters, true, currentPattern);
+      // append to the ongoing graph pattern or start a new one
+      auto& curBasicPattern = lastBasicPattern(currentPattern);
+      parseFilter(&curBasicPattern._filters, true, currentPattern);
       // A filter may have an optional dot after it
       _lexer.accept(".");
     } else if (_lexer.accept("values")) {
@@ -343,7 +345,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
             "Expected either a single or a set of variables "
             "after VALUES");
       }
-      currentPattern->_inlineValues.emplace_back(values);
+      lastBasicPattern(currentPattern)._inlineValues.emplace_back(values);
       _lexer.accept(".");
     } else {
       std::string subject;
@@ -396,13 +398,12 @@ void SparqlParser::parseWhere(ParsedQuery* query,
 
       SparqlTriple triple(subject, PropertyPathParser(predicate).parse(),
                           object);
-      if (std::find(currentPattern->_whereClauseTriples.begin(),
-                    currentPattern->_whereClauseTriples.end(),
-                    triple) != currentPattern->_whereClauseTriples.end()) {
+      auto& v = lastBasicPattern(currentPattern)._whereClauseTriples;
+      if (std::find(v.begin(), v.end(), triple) != v.end()) {
         LOG(INFO) << "Ignoring duplicate triple: " << subject << ' '
                   << predicate << ' ' << object << std::endl;
       } else {
-        currentPattern->_whereClauseTriples.push_back(triple);
+        v.push_back(triple);
       }
 
       if (_lexer.accept(";")) {
@@ -468,6 +469,8 @@ std::string_view SparqlParser::readTriplePart(const std::string& s,
   return std::string_view(s.data() + start, (*pos) - start);
 }
 
+// TODO<joka921> : is this unused?
+/*
 // _____________________________________________________________________________
 void SparqlParser::addWhereTriple(
     const string& str, std::shared_ptr<ParsedQuery::GraphPattern> pattern) {
@@ -554,6 +557,7 @@ void SparqlParser::addWhereTriple(
     pattern->_whereClauseTriples.push_back(triple);
   }
 }
+ */
 
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
@@ -816,14 +820,12 @@ void SparqlParser::addLangFilter(const std::string& lhs, const std::string& rhs,
   // First find a suitable triple for the given variable. It
   // must use a predicate that is not a variable or complex
   // predicate path
-  auto it =
-      std::find_if(pattern->_whereClauseTriples.begin(),
-                   pattern->_whereClauseTriples.end(), [&lhs](const auto& tr) {
-                     return tr._o == lhs &&
-                            (tr._p._operation == PropertyPath::Operation::IRI &&
-                             !isVariable(tr._p));
-                   });
-  if (it == pattern->_whereClauseTriples.end()) {
+  auto& t = lastBasicPattern(pattern)._whereClauseTriples;
+  auto it = std::find_if(t.begin(), t.end(), [&lhs](const auto& tr) {
+    return tr._o == lhs && (tr._p._operation == PropertyPath::Operation::IRI &&
+                            !isVariable(tr._p));
+  });
+  if (it == t.end()) {
     LOG(DEBUG) << "language filter variable " + lhs +
                       " did not appear as object in any suitable "
                       "triple. "
@@ -835,13 +837,11 @@ void SparqlParser::addLangFilter(const std::string& lhs, const std::string& rhs,
     // Quadratic in number of triples in query.
     // Shouldn't be a problem here, though.
     // Could use a (hash)-set instead of vector.
-    if (std::find(pattern->_whereClauseTriples.begin(),
-                  pattern->_whereClauseTriples.end(),
-                  triple) != pattern->_whereClauseTriples.end()) {
+    if (std::find(t.begin(), t.end(), triple) != t.end()) {
       LOG(DEBUG) << "Ignoring duplicate triple: lang(" << lhs << ") = " << rhs
                  << std::endl;
     } else {
-      pattern->_whereClauseTriples.push_back(triple);
+      t.push_back(triple);
     }
   } else {
     // replace the triple
@@ -942,4 +942,13 @@ string SparqlParser::parseLiteral(const string& literal, bool isEntireString,
     }
   }
   return out.str();
+}
+
+GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
+    ParsedQuery::GraphPattern* ptr) const {
+  auto& c = ptr->_children;
+  if (c.empty() || !c.back().is<GraphPatternOperation::BasicGraphPattern>()) {
+    c.emplace_back(GraphPatternOperation::BasicGraphPattern{});
+  }
+  return c.back().get<GraphPatternOperation::BasicGraphPattern>();
 }

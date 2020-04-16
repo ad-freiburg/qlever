@@ -53,6 +53,13 @@ class SparqlParser {
   std::string_view readTriplePart(const std::string& s, size_t* pos);
 
   static string stripAndLowercaseKeywordLiteral(const string& lit);
+  /**
+   * If *ptr 's last child is a BasicGraphPattern, return a reference to it.
+   * If not, first append a BasicGraphPattern and then return a reference
+   * to the added child
+   */
+  GraphPatternOperation::BasicGraphPattern& lastBasicPattern(
+      ParsedQuery::GraphPattern* ptr) const;
 
   SparqlLexer _lexer;
   string _query;
