@@ -644,6 +644,7 @@ TEST(QueryPlannerTest, testActorsBornInEurope) {
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
+    ASSERT_EQ(18340u, qet.getCostEstimate());
     ASSERT_EQ(
         "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/profession>\", "
         "O = \"<pre/Actor>\"\n    qet-width: 1 \n  } join-column:"
