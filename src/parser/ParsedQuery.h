@@ -240,8 +240,12 @@ class ParsedQuery {
      * @brief A id that is unique for the ParsedQuery. Ids are guaranteed to
      * start with zero and to be dense.
      */
-    size_t _id;
+    size_t _id = size_t(-1);
 
+    // Filters always apply to the complete GraphPattern, no matter where
+    // they appear. For VALUES and Triples, the order matters, so they
+    // become children.
+    std::vector<SparqlFilter> _filters;
     vector<GraphPatternOperation> _children;
   };
 
@@ -319,8 +323,10 @@ class ParsedQuery {
 struct GraphPatternOperation {
   struct BasicGraphPattern {
     vector<SparqlTriple> _whereClauseTriples;
-    vector<SparqlFilter> _filters;
-    vector<SparqlValues> _inlineValues;
+  };
+  struct Values {
+    SparqlValues _inlineValues;
+    size_t _id;
   };
   struct GroupGraphPattern {
     ParsedQuery::GraphPattern _child;
@@ -348,7 +354,8 @@ struct GraphPatternOperation {
     ParsedQuery::GraphPattern _childGraphPattern;
   };
 
-  std::variant<BasicGraphPattern, GroupGraphPattern, Optional, Union, Subquery, TransPath>
+  std::variant<BasicGraphPattern, GroupGraphPattern, Optional, Union, Subquery,
+               TransPath, Values>
       variant_;
   template <typename A, typename... Args,
             typename = std::enable_if_t<

@@ -136,9 +136,14 @@ class QueryPlanner {
     uint64_t _idsOfIncludedFilters = 0;
     bool _isOptional = false;
 
+    // is only used inside the query planner
+    size_t _id = 0;
+
     size_t getCostEstimate() const;
 
     size_t getSizeEstimate() const;
+
+
 
     void addAllNodes(uint64_t otherNodes);
   };
