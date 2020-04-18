@@ -285,10 +285,10 @@ void ParsedQuery::expandPrefixes() {
           graphPatterns.push_back(&arg._child1);
           graphPatterns.push_back(&arg._child2);
         } else if constexpr (std::is_same_v<T, GraphPatternOperation::Values>) {
-            for (auto& row : arg._inlineValues._values) {
-              for (std::string& value : row) {
-                expandPrefix(value, prefixMap);
-              }
+          for (auto& row : arg._inlineValues._values) {
+            for (std::string& value : row) {
+              expandPrefix(value, prefixMap);
+            }
           }
 
         } else {
@@ -312,7 +312,6 @@ void ParsedQuery::expandPrefixes() {
               expandPrefix(trip._o, prefixMap);
             }
           }
-
         }
       });
     }
@@ -546,8 +545,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
       } else if constexpr (std::is_same_v<T,
                                           GraphPatternOperation::TransPath>) {
         arg._childGraphPattern.recomputeIds(id_count);
-      } else
-        if constexpr (std::is_same_v<T, GraphPatternOperation::Values>)  {
+      } else if constexpr (std::is_same_v<T, GraphPatternOperation::Values>) {
         arg._id = (*id_count)++;
       } else {
         static_assert(
@@ -555,8 +553,8 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
             std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
         // subquery children have their own id space
         // TODO:joka921 look at the optimizer if it is ok, that
-        // BasicGraphPatterns and Values have no ids at all. at the same time assert that
-        // the above else-if is exhaustive.
+        // BasicGraphPatterns and Values have no ids at all. at the same time
+        // assert that the above else-if is exhaustive.
       }
     });
   }
@@ -595,7 +593,7 @@ void GraphPatternOperation::toString(std::ostringstream& os,
       for (const auto& v : arg._inlineValues._values) {
         os << "(";
         for (const auto& val : v) {
-          os << val <<' ';
+          os << val << ' ';
         }
         os << ')';
       }

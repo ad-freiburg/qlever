@@ -136,14 +136,9 @@ class QueryPlanner {
     uint64_t _idsOfIncludedFilters = 0;
     bool _isOptional = false;
 
-    // is only used inside the query planner
-    size_t _id = 0;
-
     size_t getCostEstimate() const;
 
     size_t getSizeEstimate() const;
-
-
 
     void addAllNodes(uint64_t otherNodes);
   };
@@ -212,8 +207,7 @@ class QueryPlanner {
    */
   vector<SubtreePlan> seedWithScansAndText(
       const TripleGraph& tg,
-      const vector<const QueryPlanner::SubtreePlan*>& children,
-      const vector<SparqlValues>& values);
+      const vector<vector<QueryPlanner::SubtreePlan>>& children);
 
   /**
    * @brief Returns a subtree plan that will compute the values for the
@@ -304,8 +298,7 @@ class QueryPlanner {
 
   vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
-      const vector<const SubtreePlan*>& children,
-      const vector<SparqlValues>& values);
+      const vector<vector<SubtreePlan>>& children);
 
   size_t getTextLimit(const string& textLimitString) const;
 

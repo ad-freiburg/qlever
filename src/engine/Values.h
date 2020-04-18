@@ -9,7 +9,8 @@
 
 class Values : public Operation {
  public:
-  /// constructor sanitizes the input by removing completely undefined variables and values.
+  /// constructor sanitizes the input by removing completely undefined variables
+  /// and values.
   Values(QueryExecutionContext* qec, SparqlValues values);
 
   virtual string asString(size_t indent = 0) const override;
@@ -50,5 +51,5 @@ class Values : public Operation {
 
   /// remove all completely undefined values and variables
   /// throw if nothing remains
-  static SparqlValues sanitizeValues(SparqlValues&& values);
+  SparqlValues sanitizeValues(SparqlValues&& values);
 };

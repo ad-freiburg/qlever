@@ -344,7 +344,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
             "Expected either a single or a set of variables "
             "after VALUES");
       }
-      currentPattern->_children.emplace_back(GraphPatternOperation::Values{std::move(values)});
+      currentPattern->_children.emplace_back(
+          GraphPatternOperation::Values{std::move(values)});
       _lexer.accept(".");
     } else {
       std::string subject;

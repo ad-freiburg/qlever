@@ -138,7 +138,7 @@ void Values::computeResult(ResultTable* result) {
 SparqlValues Values::sanitizeValues(SparqlValues&& values) {
   std::vector<std::pair<std::size_t, std::size_t>> variableBound;
   for (size_t i = 0; i < values._variables.size(); ++i) {
-    variableBound.emplace_back(i, 0); // variable i is unbound so far;
+    variableBound.emplace_back(i, 0);  // variable i is unbound so far;
   }
   std::vector<std::size_t> emptyValues;
   for (std::size_t i = 0; i < values._values.size(); ++i) {
@@ -148,7 +148,7 @@ SparqlValues Values::sanitizeValues(SparqlValues&& values) {
                     [](const auto& s) { return s == "UNDEF"s; })) {
       emptyValues.push_back(i);
     }
-    for (std::size_t k = 0; k < v.size(); ++i) {
+    for (std::size_t k = 0; k < v.size(); ++k) {
       if (v[k] != "UNDEF"s) {
         variableBound[k].second = 1;
       }
@@ -157,28 +157,31 @@ SparqlValues Values::sanitizeValues(SparqlValues&& values) {
   // erase all the values where every variable is "UNDEF"
   for (auto it = emptyValues.rbegin(); it != emptyValues.rend(); ++it) {
     getWarnings().push_back(
-                     "Found a value line, where no variable is bound, ignoring it";
-                     );
+        "Found a value line, where no variable is bound, ignoring it");
     values._values.erase(values._values.begin() + *it);
   }
 
   // completely erase all the variables which are never bound.
   for (auto it = variableBound.rbegin(); it != variableBound.rend(); ++it) {
-    if (! it->second) {
+    if (it->second) {
       continue;
     }
     getWarnings().push_back(
-        "Found a VALUES variable , which is never bound in the value clause ,ignoring it"
-    );
+        "Found a VALUES variable , which is never bound in the value clause "
+        ",ignoring it");
     values._variables.erase(values._variables.begin() + it->first);
     for (auto& val : values._values) {
       val.erase(val.begin() + it->first);
     }
   }
   if (values._values.empty() || values._variables.empty()) {
-    AD_THROW(ad_semsearch::Exception::BAD_INPUT, "After removing undefined values and variables, a VALUES clause was found to be empty. This"
-             "(the neutral element for JOIN) is currently not supported by QLever");
+    AD_THROW(
+        ad_semsearch::Exception::BAD_INPUT,
+        "After removing undefined values and variables, a VALUES clause was "
+        "found to be empty. This"
+        "(the neutral element for JOIN) is currently not supported by QLever");
   }
+  return std::move(values);
 }
 
 template <size_t I>

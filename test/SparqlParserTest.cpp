@@ -188,8 +188,7 @@ TEST(ParserTest, testParse) {
                     "} ORDER BY ?c")
                     .parse();
       pq.expandPrefixes();
-      ASSERT_EQ(1u,
-                pq._rootGraphPattern._filters.size());
+      ASSERT_EQ(1u, pq._rootGraphPattern._filters.size());
     }
 
     {
@@ -268,8 +267,10 @@ TEST(ParserTest, testParse) {
       const auto& c = pq.children()[2].getBasic();
       ASSERT_EQ(1u, c._whereClauseTriples.size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
-      const auto& values1 = pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
-      const auto& values2 = pq.children()[1].get<GraphPatternOperation::Values>()._inlineValues;
+      const auto& values1 =
+          pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
+      const auto& values2 =
+          pq.children()[1].get<GraphPatternOperation::Values>()._inlineValues;
 
       vector<string> vvars = {"?a"};
       ASSERT_EQ(vvars, values1._variables);
@@ -293,8 +294,10 @@ SELECT ?a ?b ?c WHERE {
 
       ASSERT_EQ(2u, pq.children().size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
-      const auto& values1 = pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
-      const auto& values2 = pq.children()[1].get<GraphPatternOperation::Values>()._inlineValues;
+      const auto& values1 =
+          pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
+      const auto& values2 =
+          pq.children()[1].get<GraphPatternOperation::Values>()._inlineValues;
 
       vector<string> vvars = {"?a"};
       ASSERT_EQ(vvars, values1._variables);
@@ -321,7 +324,8 @@ SELECT ?a ?b ?c WHERE {
 
       ASSERT_EQ(2u, pq.children().size());
       const auto& c = pq.children()[1].getBasic();
-      const auto& values1 = pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
+      const auto& values1 =
+          pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
       ASSERT_EQ(1u, c._whereClauseTriples.size());
       ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
 
