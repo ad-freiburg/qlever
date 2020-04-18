@@ -104,8 +104,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     ParsedQuery::GraphPattern* rootPattern, bool isRoot) {
   // we have to deal with the different pattern operations in order, so we first
   // optimize them separately
-  std::vector<SubtreePlan> candidatePlans;
+  std::vector<std::vector<SubtreePlan>> candidatePlans;
+  GraphPatternOperation::BasicGraphPattern candidateTriples;
+
   std::optional<SubtreePlan> runningSolution;
+  ad_utility::HashSet<std::string> boundVariables;
 
   auto optimizeSingle = [this](const auto pattern) -> SubtreePlan {
     auto v = optimize(pattern, false);
@@ -118,37 +121,82 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     return std::move(v[idx]);
   };
 
-  auto joinCandidates = [this, &candidatePlans,
-                         &runningSolution](std::vector<SubtreePlan>&& v) {
-    if (v.empty()) {
-      throw std::runtime_error(
-          "grandchildren or lower of a Plan to be optimized may never be "
-          "empty");
-    }
-    std::vector<SubtreePlan> previous;
-    if (!runningSolution && candidatePlans.empty()) {
-      // this is the first graph pattern
-      candidatePlans = std::move(v);
-      return;
-    } else if (!runningSolution) {
-      previous = std::move(candidatePlans);
-    } else {
-      previous.push_back(*runningSolution);
-    }
-    candidatePlans.clear();
-    for (const auto& a : previous) {
-      for (const auto& b : v) {
-        auto opt = join(a, b);
-        if (opt) {
-          candidatePlans.push_back(std::move(*opt));
-          }
+  auto joinCandidates = [this, &candidatePlans, &candidateTriples,
+                         &runningSolution, &boundVariables,
+                         &rootPattern](auto&& v) {
+    if constexpr (std::is_same_v<GraphPatternOperation::BasicGraphPattern,
+                                 std::decay_t<decltype(v)>>) {
+      for (const SparqlTriple& t : v._whereClauseTriples) {
+        if (isVariable(t._s)) {
+          boundVariables.insert(t._s);
+        }
+        if (isVariable(t._p)) {
+          boundVariables.insert(t._p._iri);
+        }
+        if (isVariable(t._o)) {
+          boundVariables.insert(t._o);
+        }
       }
+      candidateTriples._whereClauseTriples.insert(
+          candidateTriples._whereClauseTriples.end(),
+          std::make_move_iterator(v._whereClauseTriples.begin()),
+          std::make_move_iterator(v._whereClauseTriples.end()));
+    } else {
+      static_assert(
+          std::is_same_v<std::vector<SubtreePlan>, std::decay_t<decltype(v)>>);
+      if (v.empty()) {
+        throw std::runtime_error(
+            "grandchildren or lower of a Plan to be optimized may never be "
+            "empty");
+      }
+      std::vector<SubtreePlan> previous;
+      if (v[0]._isOptional) {
+        auto vc = v[0]._qet->getVariableColumns();
+        if (std::all_of(vc.begin(), vc.end(),
+                        [&boundVariables](const auto& el) {
+                          return !boundVariables.count(el.first);
+                        })) {
+          // all variables in the optional are unbound so far, so this optional
+          // actually is not an optional.
+          for (auto& vec : v) {
+            vec._isOptional = false;
+          }
+        }
+      }
+      if (!v[0]._isOptional) {
+        auto vc = v[0]._qet->getVariableColumns();
+        std::for_each(vc.begin(), vc.end(), [&boundVariables](const auto& el) {
+          boundVariables.insert(el.first);
+        });
+        candidatePlans.push_back(std::forward<decltype(v)>(v));
+        return;
+      }
+      auto tg = createTripleGraph(&candidateTriples);
+      LOG(TRACE) << "Collapse text cliques..." << std::endl;
+      tg.collapseTextCliques();
+      LOG(TRACE) << "Collapse text cliques done." << std::endl;
+      auto lastRow =
+          fillDpTab(tg, rootPattern->_filters, candidatePlans).back();
+      candidateTriples._whereClauseTriples.clear();
+      candidatePlans.clear();
+
+      std::vector<SubtreePlan> optJoinCandidates;
+      for (const auto& a : lastRow) {
+        for (const auto& b : v) {
+          auto opt = join(a, b);
+          if (opt) {
+            optJoinCandidates.push_back(std::move(*opt));
+          }
+        }
+      }
+      if (optJoinCandidates.empty()) {
+        throw std::runtime_error(
+            "Could not find a single candidate join for two optimized Graph "
+            "patterns. Please report to the developers");
+      }
+      auto idx = findCheapestExecutionTree(optJoinCandidates);
+      candidatePlans.push_back({std::move(optJoinCandidates[idx])});
     }
-    if (candidatePlans.empty()) {
-      throw std::runtime_error("Could not find a single candidate join for two optimized Graph patterns. Please report to the developers");
-    }
-    auto idx = findCheapestExecutionTree(candidatePlans);
-    runningSolution = std::move(candidatePlans[idx]);
   };
 
   size_t numEmptyChildren = 0;  // the number of children for which no tree was
@@ -157,9 +205,14 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
 
   // if we start with an optional, it is actually empytPattern -> Optional
   // which is the same as making the "Optional" mandatory.
-  if (!rootPattern->_children.empty() && rootPattern->_children[0].is<GraphPatternOperation::Optional>()) {
-    // TODO<joka921> transform the Optional into a GroupGraphPattern as soon as we support them.
-    rootPattern->_children[0] = GraphPatternOperation::GroupGraphPattern{rootPattern->_children[0].get<GraphPatternOperation::Optional>()._child};
+  if (!rootPattern->_children.empty() &&
+      rootPattern->_children[0].is<GraphPatternOperation::Optional>()) {
+    // TODO<joka921> transform the Optional into a GroupGraphPattern as soon as
+    // we support them.
+    rootPattern->_children[0] = GraphPatternOperation::GroupGraphPattern{
+        rootPattern->_children[0]
+            .get<GraphPatternOperation::Optional>()
+            ._child};
   }
 
   // TODO<joka921> Make the single children aware of the ordering they require
@@ -170,7 +223,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
                  this](auto&& arg) {
       using T = std::decay_t<decltype(arg)>;
       if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> ||
-          std::is_same_v<T, GraphPatternOperation::GroupGraphPattern>) {
+                    std::is_same_v<T,
+                                   GraphPatternOperation::GroupGraphPattern>) {
         auto candidates = optimize(&arg._child, false);
         if constexpr (std::is_same_v<T, GraphPatternOperation::Optional>) {
           for (auto& c : candidates) {
@@ -191,12 +245,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         QueryExecutionTree& tree = *candidate._qet;
         tree.setVariableColumns(unionOp->getVariableColumns());
         tree.setOperation(QueryExecutionTree::UNION, unionOp);
-        joinCandidates({std::move(candidate)});
+        joinCandidates(std::vector{std::move(candidate)});
       } else if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
         SubtreePlan plan(_qec);
         plan._qet = std::make_shared<QueryExecutionTree>(
             createExecutionTree(arg._subquery));
-        joinCandidates({std::move(plan)});
+        joinCandidates(std::vector{std::move(plan)});
       } else if constexpr (std::is_same_v<T,
                                           GraphPatternOperation::TransPath>) {
         auto candidatesIn = optimize(&arg._childGraphPattern, false);
@@ -247,9 +301,21 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         }
         joinCandidates(std::move(candidatesOut));
 
+      } else if constexpr (std::is_same_v<T, GraphPatternOperation::Values>) {
+        SubtreePlan valuesPlan(_qec);
+        std::shared_ptr<Values> op =
+            std::make_shared<Values>(_qec, arg._inlineValues);
+        valuesPlan._qet->setOperation(QueryExecutionTree::OperationType::VALUES,
+                                      op);
+        valuesPlan._qet->setVariableColumns(op->getVariableColumns());
+        joinCandidates(std::vector{std::move(valuesPlan)});
+
       } else {
         static_assert(
             std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
+        joinCandidates(arg);
+        return;
+        // TODO:joka921 where to put this long comment.
         // Optimize every GraphPattern starting with the leaves of the
         // GraphPattern tree.
 
@@ -258,7 +324,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         // Each triple corresponds to a node, there is an edge between two nodes
         // iff they share a variable.
 
-        TripleGraph tg = createTripleGraph(&arg);
+        // TripleGraph tg = createTripleGraph(&arg);
 
         // Each node/triple corresponds to a scan (more than one way possible),
         // each edge corresponds to a possible join.
@@ -292,10 +358,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         // cvar). Detect them and turn them into nodes with stored word part and
         // edges to connected variables.
 
+        /*
         LOG(TRACE) << "Collapse text cliques..." << std::endl;
         tg.collapseTextCliques();
         LOG(TRACE) << "Collapse text cliques done." << std::endl;
-        vector<vector<SubtreePlan>> finalTab;
+         */
 
         // Each text operation has two ways how it can be used.
         // 1) As leave in the bottom row of the tab.
@@ -306,6 +373,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         // and will filter on one variable.
         // Cycles have to be avoided (by previously removing a triple and using
         // it as a filter later on).
+        /*
         std::vector<SubtreePlan> lastRow =
             fillDpTab(tg, arg._filters, std::vector<const SubtreePlan*>{},
                       arg._inlineValues)
@@ -317,22 +385,37 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           AD_CHECK(numEmptyChildren == 0);
           numEmptyChildren++;
         }
+         */
       }
     });
   }
+  // one last pass in case the last one was not an optional
+  if (candidatePlans.size() > 1 ||
+      !candidateTriples._whereClauseTriples.empty()) {
+    auto tg = createTripleGraph(&candidateTriples);
+    LOG(TRACE) << "Collapse text cliques..." << std::endl;
+    tg.collapseTextCliques();
+    LOG(TRACE) << "Collapse text cliques done." << std::endl;
+    auto lastRow = fillDpTab(tg, rootPattern->_filters, candidatePlans).back();
+    candidateTriples._whereClauseTriples.clear();
+    candidatePlans.clear();
+    candidatePlans.push_back(std::move(lastRow));
+  }
 
-  if (!runningSolution) {
-    // in this case, we return all possible plans for a single graph pattern,
-    // so we can benefit from plans, that are already sorted according
-    // to needs we don't know yet.
-    return candidatePlans;
+  AD_CHECK(candidatePlans.size() == 1 || candidatePlans.empty());
+  if (candidatePlans.empty()) {
+    // this case is needed e.g. if we have the empty graph pattern due to a
+    // pattern trick
+    return std::vector<SubtreePlan>{};
   } else {
-    return {*runningSolution};
+    return candidatePlans[0];
   }
 }
 
 bool QueryPlanner::checkUsePatternTrick(
     ParsedQuery* pq, SparqlTriple* patternTrickTriple) const {
+  //   TODO<joka921> does the pattern trick behave correctly if the elements
+  //   appear in a value clause?
   // Check if the query has the right number of variables for aliases and
   // group by.
   if (pq->_groupByVariables.size() != 1 || pq->_aliases.size() > 1) {
@@ -426,18 +509,12 @@ bool QueryPlanner::checkUsePatternTrick(
       // object.
       // Filters that filter on the triple's object but have a static
       // rhs will be transformed to a having clause later on.
-      for (auto& otherChild : pq->children()) {
-        if (!otherChild.is<GraphPatternOperation::BasicGraphPattern>()) {
-          continue;
-        }
-        auto& otherPattern = otherChild.getBasic();
-        for (const SparqlFilter& filter : otherPattern._filters) {
-          if (!(filter._lhs == t._o && filter._rhs[0] != '?') &&
-              (filter._lhs == t._s || filter._lhs == t._o ||
-               filter._rhs == t._o || filter._rhs == t._s)) {
-            usePatternTrick = false;
-            break;
-          }
+      for (const SparqlFilter& filter : pq->_rootGraphPattern._filters) {
+        if (!(filter._lhs == t._o && filter._rhs[0] != '?') &&
+            (filter._lhs == t._s || filter._lhs == t._o ||
+             filter._rhs == t._o || filter._rhs == t._s)) {
+          usePatternTrick = false;
+          break;
         }
       }
 
@@ -451,7 +528,9 @@ bool QueryPlanner::checkUsePatternTrick(
       for (const auto& op : pq->_rootGraphPattern._children) {
         op.visit([&](auto&& arg) {
           using T = std::decay_t<decltype(arg)>;
-          if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> || std::is_same_v<T, GraphPatternOperation::GroupGraphPattern>) {
+          if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> ||
+                        std::is_same_v<
+                            T, GraphPatternOperation::GroupGraphPattern>) {
             graphsToProcess.push_back(&arg._child);
           } else if constexpr (std::is_same_v<T,
                                               GraphPatternOperation::Union>) {
@@ -468,7 +547,8 @@ bool QueryPlanner::checkUsePatternTrick(
           } else {
             static_assert(
                 std::is_same_v<T, GraphPatternOperation::TransPath> ||
-                std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
+                std::is_same_v<T, GraphPatternOperation::BasicGraphPattern> ||
+                std::is_same_v<T, GraphPatternOperation::Values>);
           }
           // Transitive paths cannot yet exist in the query. They could also
           // not contain the variables we are interested in.
@@ -483,7 +563,8 @@ bool QueryPlanner::checkUsePatternTrick(
           op.visit([&](auto&& arg) {
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> ||
-                std::is_same_v<T, GraphPatternOperation::GroupGraphPattern>) {
+                          std::is_same_v<
+                              T, GraphPatternOperation::GroupGraphPattern>) {
               graphsToProcess.push_back(&arg._child);
 
             } else if constexpr (std::is_same_v<T,
@@ -507,6 +588,15 @@ bool QueryPlanner::checkUsePatternTrick(
                   break;
                 }
               }
+            } else if constexpr (std::is_same_v<
+                                     T, GraphPatternOperation::Values>) {
+              for (const auto& var : arg._inlineValues._variables) {
+                if (var == t._o) {
+                  usePatternTrick = false;
+                  break;
+                }
+              }
+
             } else {
               static_assert(
                   std::is_same_v<T, GraphPatternOperation::TransPath>);
@@ -533,11 +623,12 @@ bool QueryPlanner::checkUsePatternTrick(
       // have a static rhs to having clauses
       // Filters are only scoped within a GraphPattern, so we only
       // have to  check curPattern
-      for (size_t i = 0; i < curPattern._filters.size(); i++) {
-        const SparqlFilter& filter = curPattern._filters[i];
+      auto& filters = pq->_rootGraphPattern._filters;
+      for (size_t i = 0; i < filters.size(); i++) {
+        const SparqlFilter& filter = filters[i];
         if (filter._lhs == t._o && filter._rhs[0] != '?') {
           pq->_havingClauses.push_back(filter);
-          curPattern._filters.erase(curPattern._filters.begin() + i);
+          filters.erase(filters.begin() + i);
           i--;
         }
       }
@@ -993,10 +1084,6 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "At most 64 triples allowed at the moment.");
   }
-  if (pattern->_filters.size() > 64) {
-    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-             "At most 64 filters allowed at the moment.");
-  }
   for (auto& t : pattern->_whereClauseTriples) {
     // Add a node for the triple.
     tg._nodeStorage.emplace_back(TripleGraph::Node(tg._nodeStorage.size(), t));
@@ -1023,28 +1110,18 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
-    const vector<const QueryPlanner::SubtreePlan*>& children,
-    const vector<SparqlValues>& values) {
+    const vector<vector<QueryPlanner::SubtreePlan>>& children) {
   vector<SubtreePlan> seeds;
   // add all child plans as seeds
   uint64_t idShift = tg._nodeMap.size();
-  for (const SubtreePlan* plan : children) {
-    SubtreePlan newIdPlan = *plan;
-    // give the plan a unique id bit
-    newIdPlan._idsOfIncludedNodes = uint64_t(1) << idShift;
-    newIdPlan._idsOfIncludedFilters = 0;
-    seeds.emplace_back(newIdPlan);
-    idShift++;
-  }
-  for (const SparqlValues& val : values) {
-    SubtreePlan valuesPlan(_qec);
-    std::shared_ptr<Values> op = std::make_shared<Values>(_qec, val);
-    valuesPlan._qet->setOperation(QueryExecutionTree::OperationType::VALUES,
-                                  op);
-    valuesPlan._qet->setVariableColumns(op->getVariableColumns());
-    valuesPlan._idsOfIncludedNodes = uint64_t(1) << idShift;
-    valuesPlan._idsOfIncludedFilters = 0;
-    seeds.emplace_back(valuesPlan);
+  for (const auto& vec : children) {
+    for (const SubtreePlan& plan : vec) {
+      SubtreePlan newIdPlan = plan;
+      // give the plan a unique id bit
+      newIdPlan._idsOfIncludedNodes = uint64_t(1) << idShift;
+      newIdPlan._idsOfIncludedFilters = 0;
+      seeds.emplace_back(newIdPlan);
+    }
     idShift++;
   }
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
@@ -2436,13 +2513,17 @@ std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
 // _____________________________________________________________________________
 vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, const vector<SparqlFilter>& filters,
-    const vector<const QueryPlanner::SubtreePlan*>& children,
-    const vector<SparqlValues>& values) {
-  size_t numSeeds = tg._nodeMap.size() + children.size() + values.size();
+    const vector<vector<QueryPlanner::SubtreePlan>>& children) {
+  size_t numSeeds = tg._nodeMap.size() + children.size();
+
+  if (filters.size() > 64) {
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+             "At most 64 filters allowed at the moment.");
+  }
   LOG(TRACE) << "Fill DP table... (there are " << numSeeds
              << " operations to join)" << std::endl;
   vector<vector<SubtreePlan>> dpTab;
-  dpTab.emplace_back(seedWithScansAndText(tg, children, values));
+  dpTab.emplace_back(seedWithScansAndText(tg, children));
   applyFiltersIfPossible(dpTab.back(), filters, numSeeds == 1);
 
   for (size_t k = 2; k <= numSeeds; ++k) {

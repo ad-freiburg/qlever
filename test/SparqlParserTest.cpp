@@ -125,7 +125,7 @@ TEST(ParserTest, testParse) {
       pq.expandPrefixes();
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
-      auto filters = pq.children()[0].getBasic()._filters;
+      auto filters = pq._rootGraphPattern._filters;
       ASSERT_EQ(2u, filters.size());
       ASSERT_EQ("?x", filters[0]._lhs);
       ASSERT_EQ("?y", filters[0]._rhs);
@@ -144,7 +144,7 @@ TEST(ParserTest, testParse) {
       pq.expandPrefixes();
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
-      auto filters = pq.children()[0].getBasic()._filters;
+      auto filters = pq._rootGraphPattern._filters;
       ASSERT_EQ(1u, filters.size());
       ASSERT_EQ("?x", filters[0]._lhs);
       ASSERT_EQ("?y", filters[0]._rhs);
@@ -161,7 +161,7 @@ TEST(ParserTest, testParse) {
       pq.expandPrefixes();
       ASSERT_EQ(1u, pq.children().size());
       const auto& triples = pq.children()[0].getBasic()._whereClauseTriples;
-      auto filters = pq.children()[0].getBasic()._filters;
+      auto filters = pq._rootGraphPattern._filters;
       ASSERT_EQ(1u, filters.size());
       ASSERT_EQ("?x", filters[0]._lhs);
       ASSERT_EQ("?y", filters[0]._rhs);
@@ -188,8 +188,7 @@ TEST(ParserTest, testParse) {
                     "} ORDER BY ?c")
                     .parse();
       pq.expandPrefixes();
-      ASSERT_EQ(1u,
-                pq._rootGraphPattern._children[0].getBasic()._filters.size());
+      ASSERT_EQ(1u, pq._rootGraphPattern._filters.size());
     }
 
     {
@@ -208,7 +207,7 @@ TEST(ParserTest, testParse) {
               .get<GraphPatternOperation::Optional>();  // throws on error
       auto& child = opt._child;
       const auto& triples = child._children[0].getBasic()._whereClauseTriples;
-      auto filters = child._children[0].getBasic()._filters;
+      auto filters = child._filters;
       ASSERT_EQ(1u, triples.size());
       ASSERT_EQ("?y", triples[0]._s);
       ASSERT_EQ("<test2>", triples[0]._p._iri);
@@ -248,9 +247,9 @@ TEST(ParserTest, testParse) {
       const auto& child2 = opt2._child._children[0].getBasic();
       const auto& child3 = opt3._child._children[0].getBasic();
       ASSERT_EQ(1u, child2._whereClauseTriples.size());
-      ASSERT_EQ(1u, child2._filters.size());
+      ASSERT_EQ(1u, opt2._child._filters.size());
       ASSERT_EQ(1u, child3._whereClauseTriples.size());
-      ASSERT_EQ(0u, child3._filters.size());
+      ASSERT_EQ(0u, opt3._child._filters.size());
       ASSERT_TRUE(child._optional);
       ASSERT_TRUE(opt2._child._optional);
       ASSERT_TRUE(opt3._child._optional);
@@ -264,19 +263,20 @@ TEST(ParserTest, testParse) {
                     "  ?a <rel> ?b ."
                     "}")
                     .parse();
-      ASSERT_EQ(1u, pq._rootGraphPattern._children.size());
-      const auto& c = pq.children()[0].getBasic();
+      ASSERT_EQ(3u, pq._rootGraphPattern._children.size());
+      const auto& c = pq.children()[2].getBasic();
       ASSERT_EQ(1u, c._whereClauseTriples.size());
-      ASSERT_EQ(0u, c._filters.size());
-      ASSERT_EQ(2u, c._inlineValues.size());
+      ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
+      const auto& values1 =
+          pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
+      const auto& values2 =
+          pq.children()[1].get<GraphPatternOperation::Values>()._inlineValues;
 
-      SparqlValues values1 = c._inlineValues[0];
       vector<string> vvars = {"?a"};
       ASSERT_EQ(vvars, values1._variables);
       vector<vector<string>> vvals = {{"<1>"}, {"\"2\""}};
       ASSERT_EQ(vvals, values1._values);
 
-      SparqlValues values2 = c._inlineValues[1];
       vvars = {"?b", "?c"};
       ASSERT_EQ(vvars, values2._variables);
       vvals = {{"<1>", "<2>"}, {"\"1\"", "\"2\""}};
@@ -292,19 +292,18 @@ SELECT ?a ?b ?c WHERE {
         )")
                     .parse();
 
-      ASSERT_EQ(1u, pq.children().size());
-      const auto& c = pq.children()[0].getBasic();
-      ASSERT_EQ(0u, c._whereClauseTriples.size());
-      ASSERT_EQ(0u, c._filters.size());
-      ASSERT_EQ(2u, c._inlineValues.size());
+      ASSERT_EQ(2u, pq.children().size());
+      ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
+      const auto& values1 =
+          pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
+      const auto& values2 =
+          pq.children()[1].get<GraphPatternOperation::Values>()._inlineValues;
 
-      auto values1 = c._inlineValues[0];
       vector<string> vvars = {"?a"};
       ASSERT_EQ(vvars, values1._variables);
       vector<vector<string>> vvals = {{"<Albert_Einstein>"}};
       ASSERT_EQ(vvals, values1._values);
 
-      auto values2 = c._inlineValues[1];
       vvars = {"?b", "?c"};
       ASSERT_EQ(vvars, values2._variables);
       vvals = {{"<Marie_Curie>", "<Joseph_Jacobson>"},
@@ -323,17 +322,17 @@ SELECT ?a ?b ?c WHERE {
                     "}\n")
                     .parse();
 
-      ASSERT_EQ(1u, pq.children().size());
-      const auto& c = pq.children()[0].getBasic();
+      ASSERT_EQ(2u, pq.children().size());
+      const auto& c = pq.children()[1].getBasic();
+      const auto& values1 =
+          pq.children()[0].get<GraphPatternOperation::Values>()._inlineValues;
       ASSERT_EQ(1u, c._whereClauseTriples.size());
-      ASSERT_EQ(0u, c._filters.size());
-      ASSERT_EQ(1u, c._inlineValues.size());
+      ASSERT_EQ(0u, pq._rootGraphPattern._filters.size());
 
       ASSERT_EQ(c._whereClauseTriples[0]._s, "?city");
       ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "wdt:P31");
       ASSERT_EQ(c._whereClauseTriples[0]._s, "?city");
 
-      auto values1 = c._inlineValues[0];
       vector<string> vvars = {"?citytype"};
       ASSERT_EQ(vvars, values1._variables);
       vector<vector<string>> vvals = {{"wd:Q515"}, {"wd:Q262166"}};
@@ -367,16 +366,17 @@ TEST(ParserTest, testFilterWithoutDot) {
   ASSERT_EQ(1u, pq.children().size());
   const auto& c = pq.children()[0].getBasic();
   ASSERT_EQ(3u, c._whereClauseTriples.size());
-  ASSERT_EQ(3u, c._filters.size());
-  ASSERT_EQ("?1", c._filters[0]._lhs);
-  ASSERT_EQ("<http://rdf.freebase.com/ns/m.0fkvn>", c._filters[0]._rhs);
-  ASSERT_EQ(SparqlFilter::FilterType::NE, c._filters[0]._type);
-  ASSERT_EQ("?1", c._filters[1]._lhs);
-  ASSERT_EQ("<http://rdf.freebase.com/ns/m.0vmt>", c._filters[1]._rhs);
-  ASSERT_EQ(SparqlFilter::FilterType::NE, c._filters[1]._type);
-  ASSERT_EQ("?1", c._filters[2]._lhs);
-  ASSERT_EQ("<http://rdf.freebase.com/ns/m.018mts>", c._filters[2]._rhs);
-  ASSERT_EQ(SparqlFilter::FilterType::NE, c._filters[2]._type);
+  const auto& filters = pq._rootGraphPattern._filters;
+  ASSERT_EQ(3u, filters.size());
+  ASSERT_EQ("?1", filters[0]._lhs);
+  ASSERT_EQ("<http://rdf.freebase.com/ns/m.0fkvn>", filters[0]._rhs);
+  ASSERT_EQ(SparqlFilter::FilterType::NE, filters[0]._type);
+  ASSERT_EQ("?1", filters[1]._lhs);
+  ASSERT_EQ("<http://rdf.freebase.com/ns/m.0vmt>", filters[1]._rhs);
+  ASSERT_EQ(SparqlFilter::FilterType::NE, filters[1]._type);
+  ASSERT_EQ("?1", filters[2]._lhs);
+  ASSERT_EQ("<http://rdf.freebase.com/ns/m.018mts>", filters[2]._rhs);
+  ASSERT_EQ(SparqlFilter::FilterType::NE, filters[2]._type);
 }
 
 TEST(ParserTest, testExpandPrefixes) {

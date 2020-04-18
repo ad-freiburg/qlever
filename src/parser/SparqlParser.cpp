@@ -305,9 +305,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         currentPattern->_children.push_back(std::move(un));
       }
     } else if (_lexer.accept("filter")) {
-      // append to the ongoing graph pattern or start a new one
-      auto& curBasicPattern = lastBasicPattern(currentPattern);
-      parseFilter(&curBasicPattern._filters, true, currentPattern);
+      // append to the global filters of the pattern.
+      parseFilter(&currentPattern->_filters, true, currentPattern);
       // A filter may have an optional dot after it
       _lexer.accept(".");
     } else if (_lexer.accept("values")) {
@@ -345,7 +344,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
             "Expected either a single or a set of variables "
             "after VALUES");
       }
-      lastBasicPattern(currentPattern)._inlineValues.emplace_back(values);
+      currentPattern->_children.emplace_back(
+          GraphPatternOperation::Values{std::move(values)});
       _lexer.accept(".");
     } else {
       std::string subject;
