@@ -183,12 +183,14 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       std::vector<SubtreePlan> optJoinCandidates;
       for (const auto& a : lastRow) {
         for (const auto& b : v) {
-          auto opt = join(a, b);
-          if (opt) {
-            optJoinCandidates.push_back(std::move(*opt));
-          }
+          auto vec = createJoinCandidates(a, b);
+          optJoinCandidates.insert(optJoinCandidates.end(),
+                                   std::make_move_iterator(vec.begin()),
+                                   std::make_move_iterator(vec.end()));
         }
       }
+      // TODO<joka921> Also keep one candidate per Ordering to make even better
+      // plans.
       if (optJoinCandidates.empty()) {
         throw std::runtime_error(
             "Could not find a single candidate join for two optimized Graph "
@@ -1979,10 +1981,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
           bool replaceJoin = false;
           size_t subtree_col = 0;
 
-          auto hasPredicateScan =
-              std::make_shared<QueryExecutionTree>(_qec);
-          auto other =
-              std::make_shared<QueryExecutionTree>(_qec);
+          auto hasPredicateScan = std::make_shared<QueryExecutionTree>(_qec);
+          auto other = std::make_shared<QueryExecutionTree>(_qec);
           if (a[i]._qet->getType() ==
                   QueryExecutionTree::OperationType::HAS_RELATION_SCAN &&
               jcs[0][0] == 0) {
@@ -3031,17 +3031,9 @@ size_t QueryPlanner::findCheapestExecutionTree(
 };
 
 // _____________________________________________________________________________
-std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
+std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     const SubtreePlan& a, const SubtreePlan& b) const {
   std::vector<SubtreePlan> candidates;
-  auto prune = [&candidates, this]() -> std::optional<SubtreePlan> {
-    LOG(TRACE) << "Pruning...\n";
-    if (candidates.empty()) {
-      return std::nullopt;
-    }
-    size_t minIndex = findCheapestExecutionTree(candidates);
-    return candidates[minIndex];
-  };
 
   // TODO<joka921>: in the DP optimization there is the more
   // involved connected version, here we only need the join columns
@@ -3054,15 +3046,15 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
              QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER ||
          b._qet->getType() ==
              QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER)) {
-        LOG(WARN) << "Not considering possible join on "
-                  << "two columns, if they involve text operations.\n";
-      return prune();
+      LOG(WARN) << "Not considering possible join on "
+                << "two columns, if they involve text operations.\n";
+      return candidates;
     }
 
     // TODO<joka921> OPTIONAL JOINS are not symmetric!
     if (a._isOptional || b._isOptional) {
       // Join the two optional columns using an optional join
-      return optionalJoin(a, b);
+      return std::vector{optionalJoin(a, b)};
     }
 
     if (jcs.size() == 2) {
@@ -3073,7 +3065,7 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
            a._qet->getRootOperation()->getResultWidth() == 3) &&
           (b._qet->getType() == QueryExecutionTree::SCAN &&
            b._qet->getRootOperation()->getResultWidth() == 3)) {
-        return prune();
+        return candidates;
       }
 
       // Check if a sub-result has to be re-sorted
@@ -3086,8 +3078,8 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
       for (size_t n = 0; n < 4; ++n) {
         size_t c = n / 2;
         size_t swap = n % 2;
-        auto left =  std::make_shared<QueryExecutionTree>(_qec);
-        auto right =  std::make_shared<QueryExecutionTree>(_qec);
+        auto left = std::make_shared<QueryExecutionTree>(_qec);
+        auto right = std::make_shared<QueryExecutionTree>(_qec);
         const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
         if (aSortedOn.size() > 0 && aSortedOn[0] == jcs[c][(0 + swap) % 2] &&
             (a._qet->getResultWidth() == 2 ||
@@ -3124,18 +3116,17 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
         // Create the join operation.
         SubtreePlan plan(_qec);
         auto& tree = *plan._qet;
-        auto join = std::make_shared<TwoColumnJoin>(
-            _qec, left, right, jcs);
+        auto join = std::make_shared<TwoColumnJoin>(_qec, left, right, jcs);
         tree.setVariableColumns(join->getVariableColumns());
         tree.setOperation(QueryExecutionTree::TWO_COL_JOIN, join);
-        // TODO<joka921>: shouldn't we |= the filters here to avoid duplicate filtering
-        // when it might hurt (although filters are always cheap).
+        // TODO<joka921>: shouldn't we |= the filters here to avoid duplicate
+        // filtering when it might hurt (although filters are always cheap).
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
         plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
         plan.addAllNodes(b._idsOfIncludedNodes);
         candidates.push_back(std::move(plan));
       }
-      return  prune();
+      return candidates;
     } else if (jcs.size() > 2) {
       // this can happen when e.g. subqueries are used
       SubtreePlan plan = multiColumnJoin(a, b);
@@ -3143,7 +3134,7 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
       plan.addAllNodes(b._idsOfIncludedNodes);
       plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
       plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
-      return plan;
+      return {plan};
     }
 
     // CASE: JOIN ON ONE COLUMN ONLY.
@@ -3189,7 +3180,7 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
         a._qet->getResultWidth() == 3 &&
         b._qet->getType() == QueryExecutionTree::OperationType::SCAN &&
         b._qet->getResultWidth() == 3) {
-      return prune();
+      return candidates;
     }
 
     // Check if one of the two operations is a HAS_RELATION_SCAN.
@@ -3203,10 +3194,8 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
       bool replaceJoin = false;
       size_t subtree_col = 0;
 
-      auto hasPredicateScan =
-          std::make_shared<QueryExecutionTree>(_qec);
-      auto other =
-          std::make_shared<QueryExecutionTree>(_qec);
+      auto hasPredicateScan = std::make_shared<QueryExecutionTree>(_qec);
+      auto other = std::make_shared<QueryExecutionTree>(_qec);
       std::make_shared<QueryExecutionTree>(_qec);
       if (a._qet->getType() ==
               QueryExecutionTree::OperationType::HAS_RELATION_SCAN &&
@@ -3248,7 +3237,7 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
         plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
         candidates.push_back(std::move(plan));
-        return prune();
+        return candidates;
       }
     }
 
@@ -3285,11 +3274,10 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
         const vector<size_t>& otherSortedOn = other->resultSortedOn();
         if (otherSortedOn.size() == 0 || otherSortedOn[0] != otherCol) {
           if (other->getType() == QueryExecutionTree::SCAN) {
-            return prune();
+            return candidates;
           }
           auto sort = std::make_shared<Sort>(_qec, other, jcs[0][0]);
-          auto sortedOther =
-              std::make_shared<QueryExecutionTree>(_qec);
+          auto sortedOther = std::make_shared<QueryExecutionTree>(_qec);
           sortedOther->setVariableColumns(other->getVariableColumns());
           sortedOther->setContextVars(other->getContextVars());
           sortedOther->setOperation(QueryExecutionTree::SORT, sort);
@@ -3306,7 +3294,7 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
         plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
         candidates.push_back(std::move(plan));
-        return prune();
+        return candidates;
       }
     }
 
@@ -3342,11 +3330,10 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
         const vector<size_t>& otherSortedOn = other->resultSortedOn();
         if (otherSortedOn.empty() || otherSortedOn[0] != otherCol) {
           if (other->getType() == QueryExecutionTree::SCAN) {
-            return prune();
+            return candidates;
           }
           auto sort = std::make_shared<Sort>(_qec, other, jcs[0][0]);
-          auto sortedOther =
-              std::make_shared<QueryExecutionTree>(_qec);
+          auto sortedOther = std::make_shared<QueryExecutionTree>(_qec);
           sortedOther->setVariableColumns(other->getVariableColumns());
           sortedOther->setContextVars(other->getContextVars());
           sortedOther->setOperation(QueryExecutionTree::SORT, sort);
@@ -3363,7 +3350,7 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
         plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
         candidates.push_back(std::move(plan));
-        return prune();
+        return candidates;
       }
     }
 
@@ -3381,7 +3368,7 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
       // But never sort scans, there we could have just scanned
       // differently.
       if (a._qet->getType() == QueryExecutionTree::SCAN) {
-        return prune();
+        return candidates;
       }
       auto sort = std::make_shared<Sort>(_qec, a._qet, jcs[0][0]);
       left->setVariableColumns(a._qet->getVariableColumns());
@@ -3396,7 +3383,7 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
       // But never sort scans, there we could have just scanned
       // differently.
       if (b._qet->getType() == QueryExecutionTree::SCAN) {
-        return prune();
+        return candidates;
       }
       auto sort = std::make_shared<Sort>(_qec, b._qet, jcs[0][1]);
       right->setVariableColumns(b._qet->getVariableColumns());
@@ -3419,5 +3406,5 @@ std::optional<QueryPlanner::SubtreePlan> QueryPlanner::join(
     candidates.push_back(std::move(plan));
   }
 
-  return prune();
+  return candidates;
 }
