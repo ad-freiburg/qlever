@@ -30,6 +30,7 @@ add_library(engine
         MultiColumnJoin.cpp MultiColumnJoin.h
         TransitivePath.cpp TransitivePath.h
         Values.cpp Values.h
+        Bind.cpp Bind.h
         IdTable.h
         )
 

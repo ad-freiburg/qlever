@@ -141,3 +141,7 @@ target_link_libraries(PriorityQueueTest gtest_main absl::flat_hash_map ${CMAKE_T
 add_executable(SynchronizedTest SynchronizedTest.cpp)
 add_test(SynchronizedTest SynchronizedTest)
 target_link_libraries(SynchronizedTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(BindTest BindTest.cpp)
+add_test(BindTest BindTest)
+target_link_libraries(BindTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
