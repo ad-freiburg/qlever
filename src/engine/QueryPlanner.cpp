@@ -55,7 +55,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
 
   // Optimize the graph pattern tree
   std::vector<std::vector<SubtreePlan>> plans;
-  plans.push_back(optimize(&pq._rootGraphPattern, true));
+  plans.push_back(optimize(&pq._rootGraphPattern));
 
   // Add the query level modifications
 
@@ -101,17 +101,23 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
 }
 
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
-    ParsedQuery::GraphPattern* rootPattern, bool isRoot) {
-  // we have to deal with the different pattern operations in order, so we first
-  // optimize them separately
+    ParsedQuery::GraphPattern* rootPattern) {
+  // here we collect a set of possible plans for each of our children.
+  // always only holds plans for children that can be joined in an
+  // arbitrary order
   std::vector<std::vector<SubtreePlan>> candidatePlans;
+  // triples from BasicGraphPatterns that can be joined arbirarily
+  // with each other and the contents of  candidatePlans
   GraphPatternOperation::BasicGraphPattern candidateTriples;
 
-  std::optional<SubtreePlan> runningSolution;
+  // all Variables that have been bound be the children we have dealt with
+  // so far. TODO<joka921> verify that we get no false positives with plans
+  // that create no single binding for a variable "by accident".
   ad_utility::HashSet<std::string> boundVariables;
 
+  // find a single best candidate for a given graph pattern
   auto optimizeSingle = [this](const auto pattern) -> SubtreePlan {
-    auto v = optimize(pattern, false);
+    auto v = optimize(pattern);
     if (v.empty()) {
       throw std::runtime_error(
           "grandchildren or lower of a Plan to be optimized may never be "
@@ -121,11 +127,14 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     return std::move(v[idx]);
   };
 
+  // the callback that is called after dealing with a child pattern.
+  // Can either be passed a BasicGraphPattern directly or a set
+  // of possible candidate plans for a single child pattern
   auto joinCandidates = [this, &candidatePlans, &candidateTriples,
-                         &runningSolution, &boundVariables,
-                         &rootPattern](auto&& v) {
+                         &boundVariables, &rootPattern](auto&& v) {
     if constexpr (std::is_same_v<GraphPatternOperation::BasicGraphPattern,
                                  std::decay_t<decltype(v)>>) {
+      // we only consist of triples, store them and all the bound variables.
       for (const SparqlTriple& t : v._whereClauseTriples) {
         if (isVariable(t._s)) {
           boundVariables.insert(t._s);
@@ -147,9 +156,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       if (v.empty()) {
         throw std::runtime_error(
             "grandchildren or lower of a Plan to be optimized may never be "
-            "empty");
+            "empty. Please report this");
       }
-      std::vector<SubtreePlan> previous;
+
+      // optionals that occur before any of their variables have been bound
+      // actually behave like ordinary (Group)GraphPatterns
       if (v[0]._isOptional) {
         auto vc = v[0]._qet->getVariableColumns();
         if (std::all_of(vc.begin(), vc.end(),
@@ -163,6 +174,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           }
         }
       }
+
+      // if our input is not optional, this means we still can arbitrarily
+      // optimize among our candidates and just append our new candidates.
       if (!v[0]._isOptional) {
         auto vc = v[0]._qet->getVariableColumns();
         std::for_each(vc.begin(), vc.end(), [&boundVariables](const auto& el) {
@@ -171,15 +185,26 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         candidatePlans.push_back(std::forward<decltype(v)>(v));
         return;
       }
+
+      // we are an optional, optimization across is forbidden.
+      // optimize all previously collected candidates, and then perform
+      // an optional join.
       auto tg = createTripleGraph(&candidateTriples);
       LOG(TRACE) << "Collapse text cliques..." << std::endl;
       tg.collapseTextCliques();
       LOG(TRACE) << "Collapse text cliques done." << std::endl;
+      // always apply all filters to be safe.
+      // TODO<joka921> it could be possible, to allow the DpTab to leave
+      // results unfiltered and add the filters later, but this has to be
+      // carefully checked and I currently see no benefit.
       auto lastRow =
           fillDpTab(tg, rootPattern->_filters, candidatePlans).back();
       candidateTriples._whereClauseTriples.clear();
       candidatePlans.clear();
 
+      // join all the candidates plans for the complete previous inputs
+      // in an optional way with all the candidates for the contents of
+      // the optional join.
       std::vector<SubtreePlan> optJoinCandidates;
       for (const auto& a : lastRow) {
         for (const auto& b : v) {
@@ -189,8 +214,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
                                    std::make_move_iterator(vec.end()));
         }
       }
+
+      // keep the best found candidate, which is now a non-optional "so far"
+      // solution which can be combined with all upcoming children until we hit
+      // the next optional
       // TODO<joka921> Also keep one candidate per Ordering to make even better
-      // plans.
+      // plans at this step
       if (optJoinCandidates.empty()) {
         throw std::runtime_error(
             "Could not find a single candidate join for two optimized Graph "
@@ -201,33 +230,15 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     }
   };
 
-  size_t numEmptyChildren = 0;  // the number of children for which no tree was
-                                // found because they are empty
-  // only happens when a triple is removed for a pattern trick
-
-  // if we start with an optional, it is actually empytPattern -> Optional
-  // which is the same as making the "Optional" mandatory.
-  if (!rootPattern->_children.empty() &&
-      rootPattern->_children[0].is<GraphPatternOperation::Optional>()) {
-    // TODO<joka921> transform the Optional into a GroupGraphPattern as soon as
-    // we support them.
-    rootPattern->_children[0] = GraphPatternOperation::GroupGraphPattern{
-        rootPattern->_children[0]
-            .get<GraphPatternOperation::Optional>()
-            ._child};
-  }
-
-  // TODO<joka921> Make the single children aware of the ordering they require
-  // to be properly joined afterwards (possibly in the OptimizeSingle function
-  // with a different argument).
+  // go through the child patterns in order, set up all their candidatePlans
+  // and then call the joinCandidates call back
   for (auto& child : rootPattern->_children) {
-    child.visit([&optimizeSingle, &joinCandidates, &numEmptyChildren,
-                 this](auto&& arg) {
+    child.visit([&optimizeSingle, &joinCandidates, this](auto&& arg) {
       using T = std::decay_t<decltype(arg)>;
       if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> ||
                     std::is_same_v<T,
                                    GraphPatternOperation::GroupGraphPattern>) {
-        auto candidates = optimize(&arg._child, false);
+        auto candidates = optimize(&arg._child);
         if constexpr (std::is_same_v<T, GraphPatternOperation::Optional>) {
           for (auto& c : candidates) {
             c._isOptional = true;
@@ -235,9 +246,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         }
         joinCandidates(std::move(candidates));
       } else if constexpr (std::is_same_v<T, GraphPatternOperation::Union>) {
-        // the efficiency of the union operation is not dependent on the
-        // sorting of the inputs and its position is fixed so it does not
-        // need to be part of the optimization of the child.
+        // TODO<joka921> here we could keep all the candidates, and create a
+        // "sorted union" by merging as additional candidates if the inputs
+        // are presorted.
         SubtreePlan left = optimizeSingle(&arg._child1);
         SubtreePlan right = optimizeSingle(&arg._child2);
 
@@ -249,13 +260,19 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         tree.setOperation(QueryExecutionTree::UNION, unionOp);
         joinCandidates(std::vector{std::move(candidate)});
       } else if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
+        // TODO<joka921> We currently do not optimize across subquery borders
+        // but abuse them as "optimization hints". In theory, one could even
+        // remove the ORDER BY clauses of a subquery if we can prove, that
+        // the results will be reordered anyway.
         SubtreePlan plan(_qec);
         plan._qet = std::make_shared<QueryExecutionTree>(
             createExecutionTree(arg._subquery));
         joinCandidates(std::vector{std::move(plan)});
       } else if constexpr (std::is_same_v<T,
                                           GraphPatternOperation::TransPath>) {
-        auto candidatesIn = optimize(&arg._childGraphPattern, false);
+        // TODO<kramerfl> This is obviously how you set up transitive paths.
+        // maybe factor this out and comment it somewhere
+        auto candidatesIn = optimize(&arg._childGraphPattern);
         std::vector<SubtreePlan> candidatesOut;
 
         for (auto& sub : candidatesIn) {
@@ -315,83 +332,16 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       } else {
         static_assert(
             std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
+        // just add all the triples directly.
         joinCandidates(arg);
-        return;
-        // TODO:joka921 where to put this long comment.
-        // Optimize every GraphPattern starting with the leaves of the
-        // GraphPattern tree.
-
-        // Strategy:
-        // Create a graph.
-        // Each triple corresponds to a node, there is an edge between two nodes
-        // iff they share a variable.
-
-        // TripleGraph tg = createTripleGraph(&arg);
-
-        // Each node/triple corresponds to a scan (more than one way possible),
-        // each edge corresponds to a possible join.
-
-        // Enumerate and judge possible query plans using a DP table.
-        // Each ExecutionTree for a sub-problem gives an estimate:
-        // There are estimates for cost and size ( and multiplicity per column).
-        // Start bottom up, i.e. with the scans for triples.
-        // Always merge two solutions from the table by picking one possible
-        // join. A join is possible, if there is an edge between the results.
-        // Therefore we keep track of all edges that touch a sub-result.
-        // When joining two sub-results, the results edges are those that belong
-        // to exactly one of the two input sub-trees.
-        // If two of them have the same target, only one out edge is created.
-        // All edges that are shared by both subtrees, are checked if they are
-        // covered by the join or if an extra filter/select is needed.
-
-        // The algorithm then creates all possible plans for 1 to n triples.
-        // To generate a plan for k triples, all subsets between i and k-i are
-        // joined.
-
-        // Filters are now added to the mix when building execution plans.
-        // Without them, a plan has an execution tree and a set of
-        // covered triple nodes.
-        // With them, it also has a set of covered filters.
-        // A filter can be applied as soon as all variables that occur in the
-        // filter Are covered by the query. This is also always the place where
-        // this is done.
-
-        // Text operations form cliques (all triples connected via the context
-        // cvar). Detect them and turn them into nodes with stored word part and
-        // edges to connected variables.
-
-        /*
-        LOG(TRACE) << "Collapse text cliques..." << std::endl;
-        tg.collapseTextCliques();
-        LOG(TRACE) << "Collapse text cliques done." << std::endl;
-         */
-
-        // Each text operation has two ways how it can be used.
-        // 1) As leave in the bottom row of the tab.
-        // According to the number of connected variables, the operation creates
-        // a cross product with n entities that can be used in subsequent joins.
-        // 2) as intermediate unary (downwards) nodes in the execution tree.
-        // This is a bit similar to sorts: they can be applied after each step
-        // and will filter on one variable.
-        // Cycles have to be avoided (by previously removing a triple and using
-        // it as a filter later on).
-        /*
-        std::vector<SubtreePlan> lastRow =
-            fillDpTab(tg, arg._filters, std::vector<const SubtreePlan*>{},
-                      arg._inlineValues)
-                .back();
-
-        if (!lastRow.empty()) {
-          joinCandidates(std::move(lastRow));
-        } else {
-          AD_CHECK(numEmptyChildren == 0);
-          numEmptyChildren++;
-        }
-         */
       }
     });
   }
   // one last pass in case the last one was not an optional
+  // if the last child was not an optional clause we still have unjoined
+  // candidates. Do one last pass over them.
+  // TODO<joka921> here is a little bit of duplicate code with the end of the
+  // joinCandidates lambda;
   if (candidatePlans.size() > 1 ||
       !candidateTriples._whereClauseTriples.empty()) {
     auto tg = createTripleGraph(&candidateTriples);
@@ -1453,7 +1403,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
   LOG(TRACE) << out.str() << std::endl << std::endl;
 #endif
   pattern->recomputeIds();
-  return optimize(pattern.get(), true);
+  return optimize(pattern.get());
 }
 
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
