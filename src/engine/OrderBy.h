@@ -20,7 +20,7 @@ class OrderBy : public Operation {
  public:
   OrderBy(QueryExecutionContext* qec,
           std::shared_ptr<QueryExecutionTree> subtree,
-          const vector<pair<size_t, bool>>& sortIndices);
+          vector<pair<size_t, bool>> sortIndices);
 
   virtual string asString(size_t indent = 0) const override;
 

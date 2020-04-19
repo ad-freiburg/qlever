@@ -15,7 +15,7 @@ size_t Sort::getResultWidth() const { return _subtree->getResultWidth(); }
 // _____________________________________________________________________________
 Sort::Sort(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree, size_t sortCol)
-    : Operation(qec), _subtree(subtree), _sortCol(sortCol) {}
+    : Operation(qec), _subtree(std::move(subtree)), _sortCol(sortCol) {}
 
 // _____________________________________________________________________________
 string Sort::asString(size_t indent) const {
@@ -23,21 +23,28 @@ string Sort::asString(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  os << "SORT on column:" << _sortCol << "\n" << _subtree->asString(indent);
+
+  std::stringstream columns;
+  // TODO<joka921> This produces exactly the same format as ORDER BY operations
+  // which is crucial for caching. Please refactor those classes to one class
+  // (this is only an optimization for sorts on a single column);
+  columns << "asc(" << _sortCol << ") ";
+  os << "SORT / ORDER BY on columns:" << columns.str() << "\n"
+     << _subtree->asString(indent);
   return os.str();
 }
 
 // _____________________________________________________________________________
 string Sort::getDescriptor() const {
-  std::string orderByVars = "";
+  std::string orderByVars;
   for (const auto& p : _subtree->getVariableColumns()) {
     if (p.second == _sortCol) {
-      orderByVars = "ASC(" + p.first + ")";
+      orderByVars = "ASC(" + p.first + ") ";
       break;
     }
   }
 
-  return "Sort on " + orderByVars;
+  return "Sort on (OrderBy) on " + orderByVars;
 }
 
 // _____________________________________________________________________________
