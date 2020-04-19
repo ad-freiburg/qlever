@@ -275,6 +275,59 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       // Recursively call parseWhere to parse the optional part.
       parseWhere(query, &child);
       _lexer.accept(".");
+    } else if (_lexer.accept("bind")) {
+      _lexer.expect("(");
+      std::string inVar;
+      bool rename = false;
+      bool isString = true;
+      bool isSum = false;
+      std::string inVar2;
+      int64_t val = 0;
+      if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+        rename = true;
+        inVar = _lexer.current().raw;
+        if (_lexer.accept(SparqlToken::Type::SYMBOL)) {
+          if (_lexer.current().raw != "+") {
+            throw std::runtime_error(
+                "A sum of two variables is currently the only"
+                "supported arithmetic bind expression, but symbol after first "
+                "variable was " +
+                _lexer.current().raw);
+          }
+          isSum = true;
+          _lexer.expect(SparqlToken::Type::VARIABLE);
+          inVar2 = _lexer.current().raw;
+        }
+      } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+        inVar = parseLiteral(_lexer.current().raw, true);
+      } else if (_lexer.accept(SparqlToken::Type::INTEGER)) {
+        isString = false;
+        val = std::strtoll(_lexer.current().raw.c_str(), nullptr, 10);
+      } else {
+        _lexer.expect(SparqlToken::Type::IRI);
+        inVar = _lexer.current().raw;
+      }
+      _lexer.expect("as");
+      _lexer.expect(SparqlToken::Type::VARIABLE);
+      GraphPatternOperation::Bind b;
+      if (isSum) {
+        b._input = GraphPatternOperation::Bind::Sum{inVar, inVar2};
+      } else if (rename) {
+        b._input = GraphPatternOperation::Bind::Rename{inVar};
+      } else {
+        if (isString) {
+          // Note that this only works if the literal or iri stored in inVar is
+          // part of the KB
+          b._input = GraphPatternOperation::Bind::Constant{inVar};
+        } else {
+          b._input = GraphPatternOperation::Bind::Constant{val};
+        }
+      }
+      b._target = _lexer.current().raw;
+      _lexer.expect(")");
+      currentPattern->_children.push_back(std::move(b));
+      // the dot after the bind is optional
+      _lexer.accept(".");
     } else if (_lexer.accept("{")) {
       // Subquery or union
       if (_lexer.accept("select")) {

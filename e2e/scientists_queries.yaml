@@ -795,3 +795,73 @@ queries:
       - contains_row: ["<Albert_Fert>", "<Wolf_Prize_in_Physics>"]
       - contains_row: ["<Albert_Overhauser>", "<National_Medal_of_Science_for_Physical_Science>"]
       - contains_row: ["<Andre_Geim>", "<Nobel_Prize_in_Physics>"]
+
+  - query: bind-rename
+    type: no-text
+    sparql: |
+      SELECT ?x ?z WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Spouse_(or_domestic_partner)> ?y .
+          ?y <is-a> <Scientist> .
+          FILTER(?x < ?y) .
+          BIND(?y AS ?z)
+      } ORDER BY ASC(?x)
+    checks:
+      - num_cols: 2
+      - num_rows: 97
+      - selected: [ "?x", "?z" ]
+      - contains_row: [ "<Albert_Einstein>", "<Mileva_Marić>" ]
+      - order_string: { "dir": "ASC", "var": "?x" }
+  - query: bind-integer-constant
+    type: no-text
+    sparql: |
+      SELECT ?x ?y ?z WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Spouse_(or_domestic_partner)> ?y .
+          ?y <is-a> <Scientist> .
+          FILTER(?x < ?y) .
+          BIND(42 AS ?z)
+      } ORDER BY ASC(?x)
+    checks:
+      - num_cols: 3
+      - num_rows: 97
+      - selected: [ "?x", "?y", "?z" ]
+      - contains_row: [ "<Albert_Einstein>", "<Mileva_Marić>", 42 ]
+      - order_string: { "dir": "ASC", "var": "?x" }
+
+  - query: bind-entity-constant
+    type: no-text
+    sparql: |
+      SELECT ?x ?y ?z WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Spouse_(or_domestic_partner)> ?y .
+          ?y <is-a> <Scientist> .
+          FILTER(?x < ?y) .
+          BIND(<Al_Gore> AS ?z)
+      } ORDER BY ASC(?x)
+    checks:
+      - num_cols: 3
+      - num_rows: 97
+      - selected: [ "?x", "?y", "?z" ]
+      - contains_row: [ "<Albert_Einstein>", "<Mileva_Marić>", "<Al_Gore>" ]
+      - order_string: { "dir": "ASC", "var": "?x" }
+  - query: bind-entity-constant
+    type: no-text
+    sparql: |
+      SELECT ?x ?y ?sum WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Spouse_(or_domestic_partner)> ?y .
+          ?y <is-a> <Scientist> .
+          FILTER(?x < ?y) .
+          BIND(38 AS ?z) .
+          BIND(4 AS ?a) .
+          BIND (?z + ?a AS ?sum)
+      } ORDER BY ASC(?x)
+    checks:
+      - num_cols: 3
+      - num_rows: 97
+      - selected: [ "?x", "?y", "?sum" ]
+      - contains_row: [ "<Albert_Einstein>", "<Mileva_Marić>", 42.0 ]
+      - order_string: { "dir": "ASC", "var": "?x" }
+
+

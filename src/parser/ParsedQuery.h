@@ -6,8 +6,10 @@
 #include <initializer_list>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
+#include "../engine/ResultTable.h"
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
@@ -384,8 +386,75 @@ struct GraphPatternOperation {
     ParsedQuery::GraphPattern _childGraphPattern;
   };
 
-  std::variant<BasicGraphPattern, GroupGraphPattern, Optional, Union, Subquery,
-               TransPath, Values>
+  // A SPARQL Bind construct. Currently only binding of constants,
+  // renaming/copying of variables and SUMS of two columns are allowed.
+  struct Bind {
+    // Only usigned integer and knowledge base constants are currently supported
+    struct Constant {
+      int64_t _value = 0;  // the Value of an integer constant (VERBATIM)
+      string _repr;  // the value of a knowledge base entity or literal (KB)
+      ResultTable::ResultType
+          _type;  // the type, currently alsways KB or VERBATIM
+      Constant() = default;
+
+      // Initialize a  VERBATIM constant. Also set a readable _repr variable,
+      // since it is used with the runtime info
+      explicit Constant(int64_t val)
+          : _value(val),
+            _repr(std::to_string(val)),
+            _type(ResultTable::ResultType::VERBATIM) {}
+      // Initialize a KB constant. If the argument string is not part of the KB
+      // this will lead to an error later on (currently no possibility to
+      // already check this during parsing
+      explicit Constant(std::string entry)
+          : _repr(entry), _type(ResultTable::ResultType::KB) {}
+      // TODO<joka921> in c++ 20 we have constexpr strings.
+      static constexpr const char* Name = "Constant";
+      vector<string*> strings() { return {&_repr}; }
+      [[nodiscard]] string getDescriptor() const { return _repr; }
+    };
+    struct Sum {
+      static constexpr const char* Name = "Sum";
+      string _var1, _var2;
+      vector<string*> strings() { return {&_var1, &_var2}; }
+      [[nodiscard]] string getDescriptor() const {
+        return _var1 + " + " + _var2;
+      }
+    };
+
+    struct Rename {
+      static constexpr const char* Name = "Rename";
+      string _var;
+      vector<string*> strings() { return {&_var}; }
+      [[nodiscard]] string getDescriptor() const { return _var; }
+    };
+    std::variant<Rename, Constant, Sum> _input;
+    std::string _target;  // the variable to which the expression will be bound
+
+    // return all the strings contained in the bind expression (variables,
+    // constants, etc.
+    vector<const string*> strings() const {
+      auto r = std::visit([](auto&& arg) { return arg.strings(); },
+                          const_cast<decltype(_input)&>(_input));
+      vector<const string*> res{r.begin(), r.end()};
+      res.push_back(&_target);
+      return res;
+    }
+
+    // "Constant", "Rename" etc
+    [[nodiscard]] constexpr const char* operationName() const {
+      return std::visit([](auto&& arg) { return arg.Name; }, _input);
+    }
+
+    string getDescriptor() const {
+      auto inner =
+          std::visit([](auto&& arg) { return arg.getDescriptor(); }, _input);
+      return "BIND (" + inner + " AS " + _target + ")";
+    }
+  };
+
+  std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
+               Values>
       variant_;
   template <typename A, typename... Args,
             typename = std::enable_if_t<
