@@ -715,3 +715,4 @@ void Join::doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
     }
   }
 }
+
