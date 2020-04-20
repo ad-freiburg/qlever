@@ -439,10 +439,10 @@ bool QueryPlanner::checkUsePatternTrick(
       // Check for triples containing the ql:has-predicate triple's
       // object.
       for (auto& otherChild : pq->children()) {
-        if (!child.is<GraphPatternOperation::BasicGraphPattern>()) {
+        if (!otherChild.is<GraphPatternOperation::BasicGraphPattern>()) {
           continue;
         }
-        auto& otherPattern = child.getBasic();
+        auto& otherPattern = otherChild.getBasic();
         for (size_t j = 0;
              usePatternTrick && j < otherPattern._whereClauseTriples.size();
              j++) {
