@@ -16,8 +16,8 @@
 #include <memory>
 #include "../global/Constants.h"
 #include "../util/Exception.h"
-#include "../util/StringUtils.h"
 #include "../util/Log.h"
+#include "../util/StringUtils.h"
 
 /**
  * @brief This class wraps all calls to the ICU library that are required by
@@ -616,7 +616,8 @@ class TripleComponentComparator {
     if (last < std::numeric_limits<unsigned char>::max()) {
       transformed.transformedVal.get().back() += 1;
     } else {
-      // \0 would not work because of the c-api that underlies icu and std::strcmp
+      // \0 would not work because of the c-api that underlies icu and
+      // std::strcmp
       transformed.transformedVal.get().push_back('\1');
     }
     LOG(DEBUG) << "finished transformation" << std::endl;

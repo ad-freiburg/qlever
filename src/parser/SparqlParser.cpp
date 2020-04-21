@@ -615,9 +615,9 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
 }
 
 // _____________________________________________________________________________
-bool SparqlParser::parseFilter(
-    vector<SparqlFilter>* _filters, bool failOnNoFilter,
-    ParsedQuery::GraphPattern* pattern) {
+bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
+                               bool failOnNoFilter,
+                               ParsedQuery::GraphPattern* pattern) {
   size_t numParentheses = 0;
   while (_lexer.accept("(")) {
     numParentheses++;
