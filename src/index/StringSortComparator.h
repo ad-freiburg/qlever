@@ -609,7 +609,7 @@ class TripleComponentComparator {
     LOG(DEBUG) << "size of transformed val is"
                << transformed.transformedVal.get().size() << std::endl;
     if (transformed.transformedVal.get().empty()) {
-      transformed.transformedVal.get() = "\1"s;
+      transformed.transformedVal.get() = "\1";
       return transformed;
     }
     unsigned char last = transformed.transformedVal.get().back();
