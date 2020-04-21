@@ -1133,9 +1133,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                                    scan);
             scanTree->setVariableColumn(node._triple._s, 0);
             scanTree->setVariableColumn(filterVar, 1);
-            auto filter = std::make_shared<Filter>(_qec, scanTree,
-                                                   SparqlFilter::FilterType::EQ,
-                                                   node._triple._s, filterVar);
+            auto filter = std::make_shared<Filter>(
+                _qec, scanTree, SparqlFilter::FilterType::EQ, node._triple._s,
+                filterVar, vector<string>{});
             tree.setOperation(QueryExecutionTree::OperationType::FILTER,
                               filter);
             tree.setVariableColumns(filter->getVariableColumns());
@@ -2071,8 +2071,9 @@ void QueryPlanner::applyFiltersIfPossible(
 // _____________________________________________________________________________
 std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
     const SparqlFilter& filter, const SubtreePlan& parent) const {
-  std::shared_ptr<Filter> op = std::make_shared<Filter>(
-      _qec, parent._qet, filter._type, filter._lhs, filter._rhs);
+  std::shared_ptr<Filter> op =
+      std::make_shared<Filter>(_qec, parent._qet, filter._type, filter._lhs,
+                               filter._rhs, filter._additionalPrefixes);
   op->setLhsAsString(filter._lhsAsString);
   if (filter._type == SparqlFilter::REGEX) {
     op->setRegexIgnoreCase(filter._regexIgnoreCase);
