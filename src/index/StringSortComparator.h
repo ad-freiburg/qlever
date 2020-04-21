@@ -17,6 +17,7 @@
 #include "../global/Constants.h"
 #include "../util/Exception.h"
 #include "../util/StringUtils.h"
+#include "../util/Log.h"
 
 /**
  * @brief This class wraps all calls to the ICU library that are required by
@@ -605,7 +606,8 @@ class TripleComponentComparator {
     LOG(DEBUG) << "started transformToFirstPossible" << std::endl;
     auto transformed = extractAndTransformComparable(s, Level::PRIMARY);
     LOG(DEBUG) << "transformed initial" << std::endl;
-    LOG(DEBUG) << "size of transformed val is" << transformed.transformedVal.get().size() << std::endl;
+    LOG(DEBUG) << "size of transformed val is"
+               << transformed.transformedVal.get().size() << std::endl;
     unsigned char last = transformed.transformedVal.get().back();
     if (last < std::numeric_limits<unsigned char>::max()) {
       transformed.transformedVal.get().back() += 1;
