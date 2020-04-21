@@ -325,17 +325,22 @@ class Vocabulary {
   /// range, the last one not. Currently only supports the Primary collation
   /// level, due to limitations in the StringSortComparators
   std::pair<Id, Id> prefix_range(const string& prefix) const {
+    LOG(DEBUG) << "started prefix_range without trouble" << std::endl;
     if (prefix.empty()) {
       return {0, _words.size()};
     }
+    LOG(DEBUG) << "getting lower bound" << std::endl;
     Id lb = lower_bound(prefix, SortLevel::PRIMARY);
+    LOG(DEBUG) << "lower bound is " << lb << std::endl;
     auto transformed = _caseComparator.transformToFirstPossibleBiggerValue(
         prefix, SortLevel::PRIMARY);
 
+    LOG(DEBUG) << "completed transform" << lb << std::endl;
     auto pred = getLowerBoundLambda<decltype(transformed)>(SortLevel::PRIMARY);
     auto ub = static_cast<Id>(
         std::lower_bound(_words.begin(), _words.end(), transformed, pred) -
         _words.begin());
+    LOG(DEBUG) << "upper bound is" << ub << std::endl;
 
     return {lb, ub};
   }

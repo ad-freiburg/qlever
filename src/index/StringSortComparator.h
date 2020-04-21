@@ -602,13 +602,17 @@ class TripleComponentComparator {
   [[nodiscard]] SplitVal transformToFirstPossibleBiggerValue(
       std::string_view s, const Level level) const {
     AD_CHECK(level == Level::PRIMARY)
+    LOG(DEBUG) << "started transformToFirstPossible" << std::endl;
     auto transformed = extractAndTransformComparable(s, Level::PRIMARY);
+    LOG(DEBUG) << "transformed initial" << std::endl;
+    LOG(DEBUG) << "size of transformed val is" << transformed.transformedVal.get().size() << std::endl;
     unsigned char last = transformed.transformedVal.get().back();
     if (last < std::numeric_limits<unsigned char>::max()) {
       transformed.transformedVal.get().back() += 1;
     } else {
       transformed.transformedVal.get().push_back('\0');
     }
+    LOG(DEBUG) << "finished transformation" << std::endl;
     return transformed;
   }
 
