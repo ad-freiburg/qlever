@@ -9,7 +9,7 @@
 
 const std::string SparqlToken::TYPE_NAMES[] = {
     "IRI",       "WS",         "KEYWORD", "VARIABLE", "SYMBOL",
-    "AGGREGATE", "RDFLITERAL", "INTEGER", "FLOAT"};
+    "AGGREGATE", "RDFLITERAL", "INTEGER", "FLOAT",    "LOGICAL_OR"};
 
 const std::string SparqlLexer::LANGTAG = "@[a-zA-Z]+(-[a-zA-Z0-9]+)*";
 const std::string SparqlLexer::IRIREF =
@@ -65,6 +65,8 @@ const std::string SparqlLexer::STRING_LITERAL =
 const std::string SparqlLexer::RDFLITERAL =
     STRING_LITERAL + "((" + LANGTAG + ")|(\\^\\^" + IRI + "))?";
 
+const std::string SparqlLexer::LOGICAL_OR = "(\\|\\|)";
+
 const re2::RE2 SparqlLexer::RE_IRI = re2::RE2(IRI);
 const re2::RE2 SparqlLexer::RE_WS = re2::RE2("(" + WS + "+)");
 const re2::RE2 SparqlLexer::RE_KEYWORD = re2::RE2(KEYWORD);
@@ -74,6 +76,7 @@ const re2::RE2 SparqlLexer::RE_AGGREGATE = re2::RE2(AGGREGATE);
 const re2::RE2 SparqlLexer::RE_RDFLITERAL = re2::RE2("(" + RDFLITERAL + ")");
 const re2::RE2 SparqlLexer::RE_INTEGER = re2::RE2(INTEGER);
 const re2::RE2 SparqlLexer::RE_FLOAT = re2::RE2(FLOAT);
+const re2::RE2 SparqlLexer::RE_LOGICAL_OR = re2::RE2(LOGICAL_OR);
 
 SparqlLexer::SparqlLexer(const std::string& sparql)
     : _sparql(sparql), _re_string(_sparql) {
@@ -95,6 +98,8 @@ void SparqlLexer::readNext() {
     } else if (re2::RE2::Consume(&_re_string, RE_KEYWORD, &raw)) {
       _next.type = SparqlToken::Type::KEYWORD;
       raw = ad_utility::getLowercaseUtf8(raw);
+    } else if (re2::RE2::Consume(&_re_string, RE_LOGICAL_OR, &raw)) {
+      _next.type = SparqlToken::Type::LOGICAL_OR;
     } else if (re2::RE2::Consume(&_re_string, RE_VARIABLE, &raw)) {
       _next.type = SparqlToken::Type::VARIABLE;
     } else if (re2::RE2::Consume(&_re_string, RE_IRI, &raw)) {

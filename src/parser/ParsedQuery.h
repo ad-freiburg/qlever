@@ -197,6 +197,8 @@ class SparqlFilter {
   FilterType _type;
   string _lhs;
   string _rhs;
+  vector<string> _additionalLhs;
+  vector<string> _additionalPrefixes;
   bool _regexIgnoreCase = false;
   // True if the str function was applied to the left side.
   bool _lhsAsString = false;
