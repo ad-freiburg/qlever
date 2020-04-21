@@ -608,11 +608,16 @@ class TripleComponentComparator {
     LOG(DEBUG) << "transformed initial" << std::endl;
     LOG(DEBUG) << "size of transformed val is"
                << transformed.transformedVal.get().size() << std::endl;
+    if (transformed.transformedVal.get().empty()) {
+      transformed.transformedVal.get() = "\1"s;
+      return transformed;
+    }
     unsigned char last = transformed.transformedVal.get().back();
     if (last < std::numeric_limits<unsigned char>::max()) {
       transformed.transformedVal.get().back() += 1;
     } else {
-      transformed.transformedVal.get().push_back('\0');
+      // \0 would not work because of the c-api that underlies icu and std::strcmp
+      transformed.transformedVal.get().push_back('\1');
     }
     LOG(DEBUG) << "finished transformation" << std::endl;
     return transformed;
