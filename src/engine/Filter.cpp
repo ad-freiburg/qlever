@@ -18,14 +18,20 @@ size_t Filter::getResultWidth() const { return _subtree->getResultWidth(); }
 // _____________________________________________________________________________
 Filter::Filter(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> subtree,
-               SparqlFilter::FilterType type, string lhs, string rhs)
+               SparqlFilter::FilterType type, string lhs, string rhs,
+               vector<string> additionalPrefixes)
     : Operation(qec),
-      _subtree(subtree),
+      _subtree(std::move(subtree)),
       _type(type),
-      _lhs(lhs),
-      _rhs(rhs),
+      _lhs(std::move(lhs)),
+      _rhs(std::move(rhs)),
+      _additionalPrefixRegexes(std::move(additionalPrefixes)),
       _regexIgnoreCase(false),
-      _lhsAsString(false) {}
+      _lhsAsString(false) {
+  AD_CHECK(_additionalPrefixRegexes.empty() || _type == SparqlFilter::PREFIX);
+  // make the order deterministic for the asString method
+  std::sort(_additionalPrefixRegexes.begin(), _additionalPrefixRegexes.end());
+}
 
 // _____________________________________________________________________________
 string Filter::asString(size_t indent) const {
@@ -70,7 +76,11 @@ string Filter::asString(size_t indent) const {
   if (_lhsAsString) {
     os << "LHS_AS_STR ";
   }
-  os << _rhs << "\n";
+  os << _rhs;
+  for (const auto& add : _additionalPrefixRegexes) {
+    os << " || " << add;
+  }
+  os << '\n';
   return os.str();
 }
 
@@ -111,6 +121,9 @@ string Filter::getDescriptor() const {
       break;
   }
   os << _rhs;
+  for (const auto& add : _additionalPrefixRegexes) {
+    os << " || " << add;
+  }
   return os.str();
 }
 
@@ -415,42 +428,92 @@ void Filter::computeFilterFixedValue(
       // otherwise.
       if constexpr (T == ResultTable::ResultType::KB) {
         // remove the leading '^' symbol
-        std::string rhs = _rhs.substr(1);
+        std::vector<string> prefixes = _additionalPrefixRegexes;
+        prefixes.push_back(_rhs);
+        std::for_each(prefixes.begin(), prefixes.end(),
+                      [](auto& el) { el = el.substr(1); });
         // TODO<joka921>: handle Levels correctly;
-        auto [lowerBound, upperBound] = getIndex().getVocab().prefix_range(rhs);
+        std::vector<std::pair<Id, Id>> prefixRanges;
+        for (const auto& el : prefixes) {
+          prefixRanges.push_back(getIndex().getVocab().prefix_range(el));
+        }
+        // remove overlap in the ranges
+        std::sort(
+            prefixRanges.begin(), prefixRanges.end(),
+            [](const auto& a, const auto& b) { return a.first < b.first; });
+        for (size_t i = 1; i < prefixRanges.size(); ++i) {
+          prefixRanges[i].first =
+              std::max(prefixRanges[i - 1].second, prefixRanges[i].first);
+          prefixRanges[i].second =
+              std::max(prefixRanges[i].second, prefixRanges[i].first);
+        }
 
-        LOG(DEBUG) << "upper and lower bound are " << upperBound << ' '
-                   << lowerBound << std::endl;
         if (lhs_is_sorted) {
           // The input data is sorted, use binary search to locate the first
           // and last element that match rhs and copy the range.
-          rhs_array[lhs] = lowerBound;
-          const auto& lower = std::lower_bound(
-              input.begin(), input.end(), rhs_row,
-              [lhs](const auto& l, const auto& r) { return l[lhs] < r[lhs]; });
-          if (lower != input.end()) {
-            // There is at least one element in the input that is also within
-            // the range, look for the upper boundary and then copy all elements
-            // within the range.
-            rhs_array[lhs] = upperBound;
-            const auto& upper =
-                std::lower_bound(lower, input.end(), rhs_row,
+          using IT = typename std::decay_t<decltype(input)>::const_iterator;
+          std::vector<std::pair<IT, IT>> iterators;
+          for (auto [lowerBound, upperBound] : prefixRanges) {
+            rhs_array[lhs] = lowerBound;
+            const auto& lower =
+                std::lower_bound(input.begin(), input.end(), rhs_row,
                                  [lhs](const auto& l, const auto& r) {
                                    return l[lhs] < r[lhs];
                                  });
+            if (lower != input.end()) {
+              // There is at least one element in the input that is also within
+              // the range, look for the upper boundary and then copy all
+              // elements within the range.
+              rhs_array[lhs] = upperBound;
+              const auto& upper =
+                  std::lower_bound(lower, input.end(), rhs_row,
+                                   [lhs](const auto& l, const auto& r) {
+                                     return l[lhs] < r[lhs];
+                                   });
+              iterators.emplace_back(lower, upper);
+            } else {
+              // the bounds are sorted in ascending order
+              break;
+            }
+          }
+          auto sz = std::accumulate(iterators.begin(), iterators.end(), 0ul,
+                                    [](const auto& a, const auto& b) {
+                                      return a + (b.second - b.first);
+                                    });
+          res->reserve(sz);
+          for (const auto& [lower, upper] : iterators) {
             res->insert(res->end(), lower, upper);
           }
         } else {
-          getEngine().filter(
-              input,
-              [this, lhs, lowerBound, upperBound](const auto& e) {
-                return lowerBound <= e[lhs] && e[lhs] < upperBound;
-              },
-              res);
+          // optimization for a single filter
+          if (prefixRanges.size() == 1) {
+            getEngine().filter(
+                input,
+                [this, lhs, p = prefixRanges[0]](const auto& e) {
+                  return p.first <= e[lhs] && e[lhs] < p.second;
+                },
+                res);
+          } else {
+            getEngine().filter(
+                input,
+                [this, lhs, &p = prefixRanges](const auto& e) {
+                  return std::all_of(
+                      p.begin(), p.end(), [lhs, &e](const auto& x) {
+                        return x.first <= e[lhs] && e[lhs] < x.second;
+                      });
+                },
+                res);
+          }
         }
         break;
       }
     case SparqlFilter::REGEX: {
+      if (!_additionalPrefixRegexes.empty()) {
+        AD_THROW(
+            ad_semsearch::Exception::BAD_QUERY,
+            "Encountered multiple prefix filters concatenated with ||, but "
+            "their input was not of type KB, this is not supported as of now");
+      }
       std::regex self_regex;
       try {
         if (_regexIgnoreCase) {

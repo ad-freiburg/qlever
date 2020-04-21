@@ -16,7 +16,8 @@ struct SparqlToken {
     AGGREGATE,
     RDFLITERAL,
     INTEGER,
-    FLOAT
+    FLOAT,
+    LOGICAL_OR
   };
   static const std::string TYPE_NAMES[];
 
@@ -55,6 +56,7 @@ class SparqlLexer {
   static const std::string PNAME_LN;
   static const std::string INTEGER;
   static const std::string FLOAT;
+  static const std::string LOGICAL_OR;
 
   static const re2::RE2 RE_IRI;
   static const re2::RE2 RE_WS;
@@ -65,6 +67,7 @@ class SparqlLexer {
   static const re2::RE2 RE_RDFLITERAL;
   static const re2::RE2 RE_INTEGER;
   static const re2::RE2 RE_FLOAT;
+  static const re2::RE2 RE_LOGICAL_OR;
 
  public:
   SparqlLexer(const std::string& sparql);
