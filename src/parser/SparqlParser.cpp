@@ -669,6 +669,7 @@ bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
     }
     // merge the prefix filters (does nothing in case of a single regex filter
     for (auto it = v.begin() + 1; it < v.end(); ++it) {
+      v[0]._additionalLhs.push_back(std::move(it->_lhs));
       v[0]._additionalPrefixes.push_back(std::move(it->_rhs));
     }
     _filters->push_back(v[0]);
