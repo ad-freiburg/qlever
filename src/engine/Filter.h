@@ -22,7 +22,7 @@ class Filter : public Operation {
   Filter(QueryExecutionContext* qec,
          std::shared_ptr<QueryExecutionTree> subtree,
          SparqlFilter::FilterType type, string lhs, string rhs,
-         vector<string> additionalPrefixes);
+         vector<string> additionalLhs, vector<string> additionalPrefixes);
 
   virtual string asString(size_t indent = 0) const override;
 
@@ -79,12 +79,6 @@ class Filter : public Operation {
   void setRegexIgnoreCase(bool i) { _regexIgnoreCase = i; }
   void setLhsAsString(bool i) { _lhsAsString = i; }
 
-  // only safe to use, if this is a PREFIX filter, add another prefix
-  void addAdditionalPrefix(std::string p) {
-    AD_CHECK(_type == SparqlFilter::PREFIX);
-    _additionalPrefixRegexes.push_back(std::move(p));
-  }
-
   std::shared_ptr<QueryExecutionTree> getSubtree() const { return _subtree; };
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};
@@ -109,6 +103,7 @@ class Filter : public Operation {
   string _lhs;
   string _rhs;
 
+  std::vector<string> _additionalLhs;
   std::vector<string> _additionalPrefixRegexes;
   bool _regexIgnoreCase;
   bool _lhsAsString;

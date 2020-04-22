@@ -19,16 +19,18 @@ size_t Filter::getResultWidth() const { return _subtree->getResultWidth(); }
 Filter::Filter(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> subtree,
                SparqlFilter::FilterType type, string lhs, string rhs,
-               vector<string> additionalPrefixes)
+               vector<string> additionalLhs, vector<string> additionalPrefixes)
     : Operation(qec),
       _subtree(std::move(subtree)),
       _type(type),
       _lhs(std::move(lhs)),
       _rhs(std::move(rhs)),
+      _additionalLhs(std::move(additionalLhs)),
       _additionalPrefixRegexes(std::move(additionalPrefixes)),
       _regexIgnoreCase(false),
       _lhsAsString(false) {
   AD_CHECK(_additionalPrefixRegexes.empty() || _type == SparqlFilter::PREFIX);
+  AD_CHECK(_additionalLhs.size() == _additionalPrefixRegexes.size());
   // make the order deterministic for the asString method
   std::sort(_additionalPrefixRegexes.begin(), _additionalPrefixRegexes.end());
 }
@@ -428,32 +430,45 @@ void Filter::computeFilterFixedValue(
       // otherwise.
       if constexpr (T == ResultTable::ResultType::KB) {
         // remove the leading '^' symbol
-        std::vector<string> prefixes = _additionalPrefixRegexes;
-        prefixes.push_back(_rhs);
-        std::for_each(prefixes.begin(), prefixes.end(),
-                      [](auto& el) { el = el.substr(1); });
+        ad_utility::HashMap<Id, vector<string>> lhsRhsMap;
+        lhsRhsMap[lhs].push_back(_rhs.substr(1));
+        for (size_t i = 0; i < _additionalPrefixRegexes.size(); ++i) {
+          lhsRhsMap[_subtree->getVariableColumn(_additionalLhs[i])].push_back(
+              _additionalPrefixRegexes[i].substr(1));
+        }
+        ad_utility::HashMap<Id, std::vector<std::pair<Id, Id>>> prefixRanges;
         // TODO<joka921>: handle Levels correctly;
-        std::vector<std::pair<Id, Id>> prefixRanges;
-        for (const auto& el : prefixes) {
-          prefixRanges.push_back(getIndex().getVocab().prefix_range(el));
+        for (const auto& [l, r] : lhsRhsMap) {
+          for (const auto& pref : r) {
+            prefixRanges[l].push_back(getIndex().getVocab().prefix_range(pref));
+          }
         }
         // remove overlap in the ranges
-        std::sort(
-            prefixRanges.begin(), prefixRanges.end(),
-            [](const auto& a, const auto& b) { return a.first < b.first; });
-        for (size_t i = 1; i < prefixRanges.size(); ++i) {
-          prefixRanges[i].first =
-              std::max(prefixRanges[i - 1].second, prefixRanges[i].first);
-          prefixRanges[i].second =
-              std::max(prefixRanges[i].second, prefixRanges[i].first);
+        for (auto& [l, range] : prefixRanges) {
+          (void)l;
+          std::sort(
+              range.begin(), range.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+          for (size_t i = 1; i < range.size(); ++i) {
+            range[i].first = std::max(range[i - 1].second, range[i].first);
+            range[i].second = std::max(range[i].second, range[i].first);
+          }
         }
 
-        if (lhs_is_sorted) {
+        const std::optional<Id> sortedLhs = [&, this]() -> std::optional<Id> {
+          if (prefixRanges.size() > 1 || subRes->_sortedBy.empty() ||
+              !prefixRanges.contains(subRes->_sortedBy[0])) {
+            return std::nullopt;
+          }
+          return subRes->_sortedBy[0];
+        }();
+
+        using IT = typename std::decay_t<decltype(input)>::const_iterator;
+        std::vector<std::pair<IT, IT>> iterators;
+        if (sortedLhs) {
           // The input data is sorted, use binary search to locate the first
           // and last element that match rhs and copy the range.
-          using IT = typename std::decay_t<decltype(input)>::const_iterator;
-          std::vector<std::pair<IT, IT>> iterators;
-          for (auto [lowerBound, upperBound] : prefixRanges) {
+          for (auto [lowerBound, upperBound] : prefixRanges[*sortedLhs]) {
             rhs_array[lhs] = lowerBound;
             const auto& lower =
                 std::lower_bound(input.begin(), input.end(), rhs_row,
@@ -486,21 +501,27 @@ void Filter::computeFilterFixedValue(
           }
         } else {
           // optimization for a single filter
-          if (prefixRanges.size() == 1) {
+          if (prefixRanges.size() == 1 && prefixRanges[lhs].size() == 1) {
             getEngine().filter(
                 input,
-                [this, lhs, p = prefixRanges[0]](const auto& e) {
+                [lhs, p = prefixRanges[lhs][0]](const auto& e) {
                   return p.first <= e[lhs] && e[lhs] < p.second;
                 },
                 res);
           } else {
             getEngine().filter(
                 input,
-                [this, lhs, &p = prefixRanges](const auto& e) {
-                  return std::all_of(
-                      p.begin(), p.end(), [lhs, &e](const auto& x) {
-                        return x.first <= e[lhs] && e[lhs] < x.second;
-                      });
+                [&prefixRanges](const auto& e) {
+                  return std::any_of(prefixRanges.begin(), prefixRanges.end(),
+                                     [&e](const auto& x) {
+                                       const auto& vec = x.second;
+                                       return std::any_of(
+                                           vec.begin(), vec.end(),
+                                           [&e, &l = x.first](const auto& p) {
+                                             return p.first <= e[l] &&
+                                                    e[l] < p.second;
+                                           });
+                                     });
                 },
                 res);
           }
