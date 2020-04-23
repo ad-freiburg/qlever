@@ -79,7 +79,7 @@ vector<size_t> GroupBy::resultSortedOn() const {
 }
 
 vector<pair<size_t, bool>> GroupBy::computeSortColumns(
-    std::shared_ptr<QueryExecutionTree> inputTree) {
+    const QueryExecutionTree* inputTree) {
   vector<pair<size_t, bool>> cols;
   if (_groupByVariables.empty()) {
     // the entire input is a single group, no sorting needs to be done

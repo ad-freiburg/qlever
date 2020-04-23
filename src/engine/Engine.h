@@ -8,7 +8,6 @@
 #include <type_traits>
 #include <vector>
 
-#include <parallel/algorithm>
 #include "../global/Constants.h"
 #include "../global/Id.h"
 #include "../util/Exception.h"
@@ -102,12 +101,12 @@ class Engine {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
-      __gnu_parallel::sort(
+      ad_utility::parallel_sort(
           stab.begin(), stab.end(),
           [keyColumn](const auto& a, const auto& b) {
             return a[keyColumn] < b[keyColumn];
           },
-          __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
+          ad_utility::parallel_tag(NUM_SORT_THREADS));
     } else {
       std::sort(stab.begin(), stab.end(),
                 [keyColumn](const auto& a, const auto& b) {
@@ -123,8 +122,8 @@ class Engine {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
-      __gnu_parallel::sort(stab.begin(), stab.end(), comp,
-                           __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
+      ad_utility::parallel_sort(stab.begin(), stab.end(), comp,
+                                ad_utility::parallel_tag(NUM_SORT_THREADS));
     } else {
       std::sort(stab.begin(), stab.end(), comp);
     }

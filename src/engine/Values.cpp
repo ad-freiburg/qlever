@@ -9,8 +9,10 @@
 #include "../util/HashSet.h"
 #include "CallFixedSize.h"
 
-Values::Values(QueryExecutionContext* qec, const SparqlValues& values)
-    : Operation(qec), _values(values) {}
+Values::Values(QueryExecutionContext* qec, SparqlValues values)
+    : Operation(qec) {
+  _values = sanitizeValues(std::move(values));
+}
 
 string Values::asString(size_t indent) const {
   std::ostringstream os;
@@ -131,6 +133,55 @@ void Values::computeResult(ResultTable* result) {
 
   size_t resWidth = getResultWidth();
   CALL_FIXED_SIZE_1(resWidth, writeValues, &result->_data, index, _values);
+}
+
+SparqlValues Values::sanitizeValues(SparqlValues&& values) {
+  std::vector<std::pair<std::size_t, std::size_t>> variableBound;
+  for (size_t i = 0; i < values._variables.size(); ++i) {
+    variableBound.emplace_back(i, 0);  // variable i is unbound so far;
+  }
+  std::vector<std::size_t> emptyValues;
+  for (std::size_t i = 0; i < values._values.size(); ++i) {
+    AD_CHECK(values._values[i].size() == values._variables.size());
+    auto& v = values._values[i];
+    if (std::all_of(v.begin(), v.end(),
+                    [](const auto& s) { return s == "UNDEF"s; })) {
+      emptyValues.push_back(i);
+    }
+    for (std::size_t k = 0; k < v.size(); ++k) {
+      if (v[k] != "UNDEF"s) {
+        variableBound[k].second = 1;
+      }
+    }
+  }
+  // erase all the values where every variable is "UNDEF"
+  for (auto it = emptyValues.rbegin(); it != emptyValues.rend(); ++it) {
+    getWarnings().push_back(
+        "Found a value line, where no variable is bound, ignoring it");
+    values._values.erase(values._values.begin() + *it);
+  }
+
+  // completely erase all the variables which are never bound.
+  for (auto it = variableBound.rbegin(); it != variableBound.rend(); ++it) {
+    if (it->second) {
+      continue;
+    }
+    getWarnings().push_back(
+        "Found a VALUES variable , which is never bound in the value clause "
+        ",ignoring it");
+    values._variables.erase(values._variables.begin() + it->first);
+    for (auto& val : values._values) {
+      val.erase(val.begin() + it->first);
+    }
+  }
+  if (values._values.empty() || values._variables.empty()) {
+    AD_THROW(
+        ad_semsearch::Exception::BAD_INPUT,
+        "After removing undefined values and variables, a VALUES clause was "
+        "found to be empty. This"
+        "(the neutral element for JOIN) is currently not supported by QLever");
+  }
+  return std::move(values);
 }
 
 template <size_t I>

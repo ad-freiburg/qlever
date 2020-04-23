@@ -127,17 +127,14 @@ class QueryPlanner {
   class SubtreePlan {
    public:
     explicit SubtreePlan(QueryExecutionContext* qec)
-        : _qet(new QueryExecutionTree(qec)),
-          _idsOfIncludedNodes(0),
-          _idsOfIncludedFilters(0),
-          _isOptional(false) {}
+        : _qet(std::make_shared<QueryExecutionTree>(qec)) {}
 
     std::shared_ptr<QueryExecutionTree> _qet;
     std::shared_ptr<ResultTable> _cachedResult;
     bool _isCached = false;
-    uint64_t _idsOfIncludedNodes;
-    uint64_t _idsOfIncludedFilters;
-    bool _isOptional;
+    uint64_t _idsOfIncludedNodes = 0;
+    uint64_t _idsOfIncludedFilters = 0;
+    bool _isOptional = false;
 
     size_t getCostEstimate() const;
 
@@ -146,7 +143,8 @@ class QueryPlanner {
     void addAllNodes(uint64_t otherNodes);
   };
 
-  TripleGraph createTripleGraph(const ParsedQuery::GraphPattern* pattern) const;
+  TripleGraph createTripleGraph(
+      const GraphPatternOperation::BasicGraphPattern* pattern) const;
 
   static ad_utility::HashMap<string, size_t>
   createVariableColumnsMapForTextOperation(
@@ -189,7 +187,8 @@ class QueryPlanner {
 
   bool _enablePatternTrick;
 
-  std::vector<SubtreePlan> optimize(ParsedQuery::GraphPattern* rootPattern);
+  std::vector<QueryPlanner::SubtreePlan> optimize(
+      ParsedQuery::GraphPattern* rootPattern);
 
   /**
    * @brief Fills varToTrip with a mapping from all variables in the root graph
@@ -208,8 +207,7 @@ class QueryPlanner {
    */
   vector<SubtreePlan> seedWithScansAndText(
       const TripleGraph& tg,
-      const vector<const QueryPlanner::SubtreePlan*>& children,
-      const vector<SparqlValues>& values);
+      const vector<vector<QueryPlanner::SubtreePlan>>& children);
 
   /**
    * @brief Returns a subtree plan that will compute the values for the
@@ -263,6 +261,10 @@ class QueryPlanner {
                             const vector<SubtreePlan>& b,
                             const TripleGraph& tg) const;
 
+  std::vector<QueryPlanner::SubtreePlan> createJoinCandidates(
+      const SubtreePlan& a, const SubtreePlan& b,
+      std::optional<TripleGraph> tg) const;
+
   vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 
@@ -295,10 +297,66 @@ class QueryPlanner {
   std::shared_ptr<Operation> createFilterOperation(
       const SparqlFilter& filter, const SubtreePlan& parent) const;
 
+  /**
+   * @brief Optimize a set of triples, filters and precomputed candidates
+   * for child graph patterns
+   *
+   *
+   * Optimize every GraphPattern starting with the leaves of the
+   * GraphPattern tree.
+
+   * Strategy:
+   * Create a graph.
+   * Each triple corresponds to a node, there is an edge between two nodes
+   * iff they share a variable.
+
+   * TripleGraph tg = createTripleGraph(&arg);
+
+   * Each node/triple corresponds to a scan (more than one way possible),
+   * each edge corresponds to a possible join.
+
+   * Enumerate and judge possible query plans using a DP table.
+   * Each ExecutionTree for a sub-problem gives an estimate:
+   * There are estimates for cost and size ( and multiplicity per column).
+   * Start bottom up, i.e. with the scans for triples.
+   * Always merge two solutions from the table by picking one possible
+   * join. A join is possible, if there is an edge between the results.
+   * Therefore we keep track of all edges that touch a sub-result.
+   * When joining two sub-results, the results edges are those that belong
+   * to exactly one of the two input sub-trees.
+   * If two of them have the same target, only one out edge is created.
+   * All edges that are shared by both subtrees, are checked if they are
+   * covered by the join or if an extra filter/select is needed.
+
+   * The algorithm then creates all possible plans for 1 to n triples.
+   * To generate a plan for k triples, all subsets between i and k-i are
+   * joined.
+
+   * Filters are now added to the mix when building execution plans.
+   * Without them, a plan has an execution tree and a set of
+   * covered triple nodes.
+   * With them, it also has a set of covered filters.
+   * A filter can be applied as soon as all variables that occur in the
+   * filter Are covered by the query. This is also always the place where
+   * this is done.
+
+   * Text operations form cliques (all triples connected via the context
+   * cvar). Detect them and turn them into nodes with stored word part and
+   * edges to connected variables.
+
+   * Each text operation has two ways how it can be used.
+   * 1) As leave in the bottom row of the tab.
+   * According to the number of connected variables, the operation creates
+   * a cross product with n entities that can be used in subsequent joins.
+   * 2) as intermediate unary (downwards) nodes in the execution tree.
+   * This is a bit similar to sorts: they can be applied after each step
+   * and will filter on one variable.
+   * Cycles have to be avoided (by previously removing a triple and using
+   * it as a filter later on).
+   */
   vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
-      const vector<const SubtreePlan*>& children,
-      const vector<SparqlValues>& values);
+      const vector<vector<SubtreePlan>>& children);
 
   size_t getTextLimit(const string& textLimitString) const;
 

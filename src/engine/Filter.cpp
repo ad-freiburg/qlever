@@ -417,7 +417,11 @@ void Filter::computeFilterFixedValue(
         // remove the leading '^' symbol
         std::string rhs = _rhs.substr(1);
         // TODO<joka921>: handle Levels correctly;
-        auto [lowerBound, upperBound] = getIndex().getVocab().prefix_range(rhs);
+        // according to the standard, structured bindings cannot be captured by
+        // lambdas and clang fails to compile with them
+        Id lowerBound, upperBound;
+        std::tie(lowerBound, upperBound) =
+            getIndex().getVocab().prefix_range(rhs);
 
         LOG(DEBUG) << "upper and lower bound are " << upperBound << ' '
                    << lowerBound << std::endl;
