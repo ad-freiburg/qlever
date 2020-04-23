@@ -354,6 +354,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     candidatePlans.push_back(std::move(lastRow));
   }
 
+  // it might be, that we have not yet applied all the filters
+  // (it might be, that the last join was optional and introduced new variables)
+  if (!candidatePlans.empty()) {
+    applyFiltersIfPossible(candidatePlans[0], rootPattern->_filters, true);
+  }
+
   AD_CHECK(candidatePlans.size() == 1 || candidatePlans.empty());
   if (candidatePlans.empty()) {
     // this case is needed e.g. if we have the empty graph pattern due to a
