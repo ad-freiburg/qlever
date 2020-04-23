@@ -11,6 +11,7 @@
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
 #include "ParseException.h"
+#include <variant>
 
 using std::string;
 using std::vector;
@@ -202,6 +203,7 @@ class SparqlFilter {
   bool _lhsAsString = false;
 };
 
+
 // Represents a VALUES statement in the query.
 class SparqlValues {
  public:
@@ -340,7 +342,14 @@ struct GraphPatternOperation {
     ParsedQuery::GraphPattern _childGraphPattern;
   };
 
-  std::variant<Optional, Union, Subquery, TransPath> variant_;
+  struct Bind {
+    struct Constant {string _value;};
+    struct Sum {string _var1, _var2;};
+    std::variant<Constant, Sum> input;
+    std::string _target;
+  };
+
+  std::variant<Optional, Union, Subquery, TransPath, Bind> variant_;
   template <typename A, typename... Args,
             typename = std::enable_if_t<
                 !std::is_base_of_v<GraphPatternOperation, std::decay_t<A>>>>

@@ -36,8 +36,9 @@ class Bind : public Operation {
   size_t _var1, _var2;
 
   template <int IN_WIDTH, int OUT_WIDTH>
-  void computeBind(IdTable* dynRes, const IdTable& inputDyn,
-                   std::array<size_t, 2> columns, array<2> inputType);
+  static void computeBind(IdTable* dynRes, const IdTable& inputDyn,
+                   std::array<size_t, 2> columns, array<ResultTable::ResultType, 2> inputType,
+                          const Index& index);
 };
 
 #endif  // QLEVER_BIND_H
