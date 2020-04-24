@@ -146,8 +146,7 @@ class QueryPlanner {
     void addAllNodes(uint64_t otherNodes);
   };
 
-  TripleGraph createTripleGraph(
-      std::shared_ptr<const ParsedQuery::GraphPattern> pattern) const;
+  TripleGraph createTripleGraph(const ParsedQuery::GraphPattern* pattern) const;
 
   static ad_utility::HashMap<string, size_t>
   createVariableColumnsMapForTextOperation(
@@ -190,8 +189,7 @@ class QueryPlanner {
 
   bool _enablePatternTrick;
 
-  std::vector<SubtreePlan> optimize(
-      std::shared_ptr<const ParsedQuery::GraphPattern> pattern);
+  std::vector<SubtreePlan> optimize(ParsedQuery::GraphPattern* rootPattern);
 
   /**
    * @brief Fills varToTrip with a mapping from all variables in the root graph
@@ -252,9 +250,8 @@ class QueryPlanner {
   std::string generateUniqueVarName();
 
   // Creates a tree of unions with the given patterns as the trees leaves
-  std::shared_ptr<ParsedQuery::GraphPattern> uniteGraphPatterns(
-      const std::vector<std::shared_ptr<ParsedQuery::GraphPattern>>& patterns)
-      const;
+  ParsedQuery::GraphPattern uniteGraphPatterns(
+      std::vector<ParsedQuery::GraphPattern>&& patterns) const;
 
   /**
    * @brief Merges two rows of the dp optimization table using various types of

@@ -244,14 +244,13 @@ ParsedQuery::Alias SparqlParser::parseAlias() {
 }
 
 // _____________________________________________________________________________
-void SparqlParser::parseWhere(
-    ParsedQuery* query,
-    std::shared_ptr<ParsedQuery::GraphPattern> currentPattern) {
+void SparqlParser::parseWhere(ParsedQuery* query,
+                              ParsedQuery::GraphPattern* currentPattern) {
   if (currentPattern == nullptr) {
     // Make the shared pointer point to the root graphpattern without deleting
     // it.
-    currentPattern = query->_rootGraphPattern;
-    query->_rootGraphPattern->_id = 0;
+    currentPattern = &query->_rootGraphPattern;
+    query->_rootGraphPattern._id = 0;
   }
 
   // If these are not empty the last subject and / or predicate is reused
@@ -265,56 +264,45 @@ void SparqlParser::parseWhere(
     }
     if (_lexer.accept("optional")) {
       currentPattern->_children.push_back(
-          std::make_shared<ParsedQuery::GraphPatternOperation>(
-              ParsedQuery::GraphPatternOperation::Type::OPTIONAL,
-              std::initializer_list<std::shared_ptr<ParsedQuery::GraphPattern>>{
-                  std::make_shared<ParsedQuery::GraphPattern>()}));
-      currentPattern->_children.back()->_childGraphPatterns[0]->_optional =
-          true;
-      currentPattern->_children.back()->_childGraphPatterns[0]->_id =
-          query->_numGraphPatterns;
+          GraphPatternOperation::Optional{ParsedQuery::GraphPattern()});
+      auto& opt = currentPattern->_children.back()
+                      .get<GraphPatternOperation::Optional>();
+      auto& child = opt._child;
+      child._optional = true;
+      child._id = query->_numGraphPatterns;
       query->_numGraphPatterns++;
       _lexer.expect("{");
       // Recursively call parseWhere to parse the optional part.
-      parseWhere(query,
-                 currentPattern->_children.back()->_childGraphPatterns[0]);
+      parseWhere(query, &child);
       _lexer.accept(".");
     } else if (_lexer.accept("{")) {
       // Subquery or union
       if (_lexer.accept("select")) {
         // subquery
         // create the subquery operation
-        std::shared_ptr<ParsedQuery::GraphPatternOperation> u =
-            std::make_shared<ParsedQuery::GraphPatternOperation>(
-                ParsedQuery::GraphPatternOperation::Type::SUBQUERY);
-        u->_subquery = std::make_shared<ParsedQuery>();
-        parseQuery(u->_subquery.get());
-        currentPattern->_children.push_back(u);
+        GraphPatternOperation::Subquery subq;
+        parseQuery(&subq._subquery);
+        currentPattern->_children.push_back(std::move(subq));
         // The closing bracked } is consumed by the subquery
         _lexer.accept(".");
       } else {
         // union
         // create the union operation
-        std::shared_ptr<ParsedQuery::GraphPatternOperation> u =
-            std::make_shared<ParsedQuery::GraphPatternOperation>(
-                ParsedQuery::GraphPatternOperation::Type::UNION,
-                std::initializer_list<
-                    std::shared_ptr<ParsedQuery::GraphPattern>>{
-                    std::make_shared<ParsedQuery::GraphPattern>(),
-                    std::make_shared<ParsedQuery::GraphPattern>()});
-        u->_childGraphPatterns[0]->_optional = false;
-        u->_childGraphPatterns[1]->_optional = false;
-        u->_childGraphPatterns[0]->_id = query->_numGraphPatterns;
-        u->_childGraphPatterns[1]->_id = query->_numGraphPatterns + 1;
+        auto un = GraphPatternOperation::Union{ParsedQuery::GraphPattern{},
+                                               ParsedQuery::GraphPattern{}};
+        un._child1._optional = false;
+        un._child2._optional = false;
+        un._child1._id = query->_numGraphPatterns;
+        un._child2._id = query->_numGraphPatterns + 1;
         query->_numGraphPatterns += 2;
-        currentPattern->_children.push_back(u);
 
         // parse the left and right bracket
-        parseWhere(query, u->_childGraphPatterns[0]);
+        parseWhere(query, &un._child1);
         _lexer.expect("union");
         _lexer.expect("{");
-        parseWhere(query, u->_childGraphPatterns[1]);
+        parseWhere(query, &un._child2);
         _lexer.accept(".");
+        currentPattern->_children.push_back(std::move(un));
       }
     } else if (_lexer.accept("filter")) {
       parseFilter(&currentPattern->_filters, true, currentPattern);
@@ -607,9 +595,9 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
         query->_groupByVariables.emplace_back(_lexer.current().raw);
       }
     } else if (_lexer.accept("having")) {
-      parseFilter(&query->_havingClauses, true, query->_rootGraphPattern);
+      parseFilter(&query->_havingClauses, true, &query->_rootGraphPattern);
       while (parseFilter(&query->_havingClauses, false,
-                         query->_rootGraphPattern)) {
+                         &query->_rootGraphPattern)) {
       }
     } else if (_lexer.accept("textlimit")) {
       _lexer.expect(SparqlToken::Type::INTEGER);
@@ -623,9 +611,9 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
 }
 
 // _____________________________________________________________________________
-bool SparqlParser::parseFilter(
-    vector<SparqlFilter>* _filters, bool failOnNoFilter,
-    std::shared_ptr<ParsedQuery::GraphPattern> pattern) {
+bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
+                               bool failOnNoFilter,
+                               ParsedQuery::GraphPattern* pattern) {
   if (_lexer.accept("(")) {
     if (_lexer.accept("lang")) {
       _lexer.expect("(");
@@ -822,9 +810,8 @@ bool SparqlParser::parseFilter(
   return false;
 }
 
-void SparqlParser::addLangFilter(
-    const std::string& lhs, const std::string& rhs,
-    std::shared_ptr<ParsedQuery::GraphPattern> pattern) {
+void SparqlParser::addLangFilter(const std::string& lhs, const std::string& rhs,
+                                 ParsedQuery::GraphPattern* pattern) {
   auto langTag = rhs.substr(1, rhs.size() - 2);
   // First find a suitable triple for the given variable. It
   // must use a predicate that is not a variable or complex

@@ -5,6 +5,7 @@
 
 #include <initializer_list>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "../util/HashMap.h"
@@ -210,44 +211,12 @@ class SparqlValues {
   vector<vector<string>> _values;
 };
 
+struct GraphPatternOperation;
+
 // A parsed SPARQL query. To be extended.
 class ParsedQuery {
  public:
   class GraphPattern;
-
-  class GraphPatternOperation {
-   public:
-    enum class Type { OPTIONAL, UNION, SUBQUERY, TRANS_PATH };
-    GraphPatternOperation(
-        Type type,
-        std::initializer_list<std::shared_ptr<GraphPattern>> children);
-    GraphPatternOperation(Type type);
-
-    // Move and copyconstructors to avoid double deletes on the trees children
-    GraphPatternOperation(GraphPatternOperation&& other);
-    GraphPatternOperation(const GraphPatternOperation& other);
-    GraphPatternOperation& operator=(const GraphPatternOperation& other);
-    virtual ~GraphPatternOperation();
-
-    void toString(std::ostringstream& os, int indentation = 0) const;
-
-    Type _type;
-    union {
-      std::vector<std::shared_ptr<GraphPattern>> _childGraphPatterns;
-      std::shared_ptr<ParsedQuery> _subquery;
-      struct {
-        // The name of the left and right end of the transitive operation
-        std::string _left;
-        std::string _right;
-        // The name of the left and right end of the subpath
-        std::string _innerLeft;
-        std::string _innerRight;
-        size_t _min = 0;
-        size_t _max = 0;
-        std::shared_ptr<GraphPattern> _childGraphPattern;
-      } _pathData;
-    };
-  };
 
   // Groups triplets and filters. Represents a node in a tree (as graph patterns
   // are recursive).
@@ -256,10 +225,11 @@ class ParsedQuery {
     // deletes the patterns children.
     GraphPattern() : _optional(false) {}
     // Move and copyconstructors to avoid double deletes on the trees children
-    GraphPattern(GraphPattern&& other);
-    GraphPattern(const GraphPattern& other);
-    GraphPattern& operator=(const GraphPattern& other);
-    virtual ~GraphPattern();
+    GraphPattern(GraphPattern&& other) = default;
+    GraphPattern(const GraphPattern& other) = default;
+    GraphPattern& operator=(const GraphPattern& other) = default;
+    GraphPattern& operator=(GraphPattern&& other) noexcept = default;
+    ~GraphPattern() = default;
     void toString(std::ostringstream& os, int indentation = 0) const;
     // Traverses the graph pattern tree and assigns a unique id to every graph
     // pattern
@@ -275,7 +245,7 @@ class ParsedQuery {
      */
     size_t _id;
 
-    vector<std::shared_ptr<GraphPatternOperation>> _children;
+    vector<GraphPatternOperation> _children;
   };
 
   /**
@@ -304,24 +274,20 @@ class ParsedQuery {
     std::string _delimiter = " ";
   };
 
-  ParsedQuery()
-      : _rootGraphPattern(std::make_shared<GraphPattern>()),
-        _numGraphPatterns(1),
-        _reduced(false),
-        _distinct(false) {}
+  ParsedQuery() = default;
 
   vector<SparqlPrefix> _prefixes;
   vector<string> _selectedVariables;
-  std::shared_ptr<GraphPattern> _rootGraphPattern;
+  GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
-  size_t _numGraphPatterns;
+  size_t _numGraphPatterns = 1;
   vector<OrderKey> _orderBy;
   vector<string> _groupByVariables;
   string _limit;
   string _textLimit;
   string _offset;
-  bool _reduced;
-  bool _distinct;
+  bool _reduced = false;
+  bool _distinct = false;
   string _originalString;
   std::vector<Alias> _aliases;
 
@@ -348,4 +314,60 @@ class ParsedQuery {
    * @return The new name of the variable after the aliasing was completed
    */
   std::string parseAlias(const std::string& alias);
+};
+
+struct GraphPatternOperation {
+  struct Optional {
+    ParsedQuery::GraphPattern _child;
+  };
+  struct Union {
+    ParsedQuery::GraphPattern _child1;
+    ParsedQuery::GraphPattern _child2;
+  };
+  struct Subquery {
+    ParsedQuery _subquery;
+  };
+
+  struct TransPath {
+    // The name of the left and right end of the transitive operation
+    std::string _left;
+    std::string _right;
+    // The name of the left and right end of the subpath
+    std::string _innerLeft;
+    std::string _innerRight;
+    size_t _min = 0;
+    size_t _max = 0;
+    ParsedQuery::GraphPattern _childGraphPattern;
+  };
+
+  std::variant<Optional, Union, Subquery, TransPath> variant_;
+  template <typename A, typename... Args,
+            typename = std::enable_if_t<
+                !std::is_base_of_v<GraphPatternOperation, std::decay_t<A>>>>
+  GraphPatternOperation(A&& a, Args&&... args)
+      : variant_(std::forward<A>(a), std::forward<Args>(args)...) {}
+  GraphPatternOperation() = delete;
+  GraphPatternOperation(const GraphPatternOperation&) = default;
+  GraphPatternOperation(GraphPatternOperation&&) noexcept = default;
+  GraphPatternOperation& operator=(const GraphPatternOperation&) = default;
+  GraphPatternOperation& operator=(GraphPatternOperation&&) noexcept = default;
+  template <typename F>
+  const auto visit(F f) const {
+    return std::visit(f, variant_);
+  }
+
+  template <typename F>
+  auto visit(F f) {
+    return std::visit(f, variant_);
+  }
+  template <class T>
+  constexpr T& get() {
+    return std::get<T>(variant_);
+  }
+  template <class T>
+  constexpr const T& get() const {
+    return std::get<T>(variant_);
+  }
+
+  void toString(std::ostringstream& os, int indentation = 0) const;
 };
