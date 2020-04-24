@@ -502,12 +502,41 @@ void Filter::computeFilterFixedValue(
             res->insert(res->end(), lower, upper);
           }
         } else {
+          // move our conditions into more cache_friendly data structures
+          std::vector<std::pair<Id, std::pair<Id, Id>>> conds;
+          for (const auto& [l, vec] : prefixRanges ) {
+            for (const auto& p : prefixRanges[l]) {
+              conds.emplace_back(l, p);
+            }
+          }
           // optimization for a single filter
-          if (prefixRanges.size() == 1 && prefixRanges[lhs].size() == 1) {
+          if (conds.size() == 1u) {
             getEngine().filter(
                 input,
-                [lhs, p = prefixRanges[lhs][0]](const auto& e) {
-                  return p.first <= e[lhs] && e[lhs] < p.second;
+                [col = conds[0].first, p = conds[0].second](const auto& e) {
+                  return p.first <= e[col] && e[col] < p.second;
+                },
+                res);
+          } else if (conds.size() == 2u) {
+            getEngine().filter(
+                input,
+                [col1 = conds[0].first, p1 = conds[0].second,
+                 col2 = conds[1].first, p2 = conds[1].second](const auto& e) {
+                  return (p1.first <= e[col1] && e[col1] < p1.second) ||
+                         (p2.first <= e[col2] && e[col2] < p2.second) ;
+                },
+                res);
+          } else if (conds.size() == 3u) {
+            // TODO<joka921> do this via fold expressions etc?
+            getEngine().filter(
+                input,
+                [col1 = conds[0].first, p1 = conds[0].second,
+                    col2 = conds[1].first, p2 = conds[1].second,
+                    col3 = conds[2].first, p3 = conds[2].second
+            ](const auto& e) {
+                  return (p1.first <= e[col1] && e[col1] < p1.second) ||
+                         (p2.first <= e[col2] && e[col2] < p2.second) ||
+                         (p3.first <= e[col3] && e[col3] < p3.second) ;
                 },
                 res);
           } else {
