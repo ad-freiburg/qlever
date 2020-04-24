@@ -31,8 +31,9 @@ Filter::Filter(QueryExecutionContext* qec,
       _lhsAsString(false) {
   AD_CHECK(_additionalPrefixRegexes.empty() || _type == SparqlFilter::PREFIX);
   AD_CHECK(_additionalLhs.size() == _additionalPrefixRegexes.size());
-  // make the order deterministic for the asString method
-  std::sort(_additionalPrefixRegexes.begin(), _additionalPrefixRegexes.end());
+  // TODO<joka921> Make the _additionalRegexes and _additionalLhs a pair to
+  // safely deal with then. then and ONLY then we could maybe sort them hear for
+  // consistent cache keys, when filters are only reordered within the pair.
 }
 
 // _____________________________________________________________________________
@@ -79,8 +80,8 @@ string Filter::asString(size_t indent) const {
     os << "LHS_AS_STR ";
   }
   os << _rhs;
-  for (const auto& add : _additionalPrefixRegexes) {
-    os << " || " << add;
+  for (size_t i = 0; i < _additionalLhs.size(); ++i) {
+    os << " || " << _additionalLhs[i] << " " << _additionalPrefixRegexes[i];
   }
   os << '\n';
   return os.str();
@@ -123,8 +124,8 @@ string Filter::getDescriptor() const {
       break;
   }
   os << _rhs;
-  for (const auto& add : _additionalPrefixRegexes) {
-    os << " || " << add;
+  for (size_t i = 0; i < _additionalLhs.size(); ++i) {
+    os << " || " << _additionalLhs[i] << " " << _additionalPrefixRegexes[i];
   }
   return os.str();
 }
@@ -469,6 +470,7 @@ void Filter::computeFilterFixedValue(
           // The input data is sorted, use binary search to locate the first
           // and last element that match rhs and copy the range.
           for (auto [lowerBound, upperBound] : prefixRanges[*sortedLhs]) {
+            AD_CHECK(*sortedLhs == lhs);
             rhs_array[lhs] = lowerBound;
             const auto& lower =
                 std::lower_bound(input.begin(), input.end(), rhs_row,
