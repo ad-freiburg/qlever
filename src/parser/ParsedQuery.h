@@ -356,13 +356,24 @@ struct GraphPatternOperation {
   };
 
   struct Bind {
-    struct Constant {string _value;};
-    struct Sum {string _var1, _var2;};
-    std::variant<Constant, Sum> input;
+    struct Constant {string _value;
+    vector<string*> strings() {
+      return {&_value};
+    }};
+    struct Sum {string _var1, _var2;
+      vector<string*> strings() {
+        return {&_var1, &_var2};
+      }};
+
+    struct Rename {string _var;
+      vector<string*> strings() {
+        return {&_var};
+      }};
+    std::variant<Constant, Rename, Sum> _input;
     std::string _target;
   };
 
-  std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern> variant_;
+  std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern, Values> variant_;
   template <typename A, typename... Args,
             typename = std::enable_if_t<
                 !std::is_base_of_v<GraphPatternOperation, std::decay_t<A>>>>

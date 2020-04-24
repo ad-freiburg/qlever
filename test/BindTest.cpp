@@ -6,5 +6,5 @@
 #include "../src/engine/Bind.h"
 
 TEST(BindTest, Bind) {
-  Bind b;
+  //Bind b;
 }

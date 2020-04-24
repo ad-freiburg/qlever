@@ -291,6 +291,10 @@ void ParsedQuery::expandPrefixes() {
             }
           }
 
+        } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
+          for (auto ptr: std::visit([](auto&& x){return x.strings();}, arg._input)) {
+            expandPrefix(*ptr, prefixMap);
+          }
         } else {
           static_assert(
               std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
@@ -550,7 +554,8 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
       } else {
         static_assert(
             std::is_same_v<T, GraphPatternOperation::Subquery> ||
-            std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
+            std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>||
+                std::is_same_v<T, GraphPatternOperation::Bind>);
         // subquery children have their own id space
         // TODO:joka921 look at the optimizer if it is ok, that
         // BasicGraphPatterns and Values have no ids at all. at the same time
@@ -564,6 +569,7 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
   }
 }
 
+/*
 // _____________________________________________________________________________
 void GraphPatternOperation::toString(std::ostringstream& os,
                                      int indentation) const {
@@ -618,3 +624,4 @@ void GraphPatternOperation::toString(std::ostringstream& os,
     }
   });
 }
+ */

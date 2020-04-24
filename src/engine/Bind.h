@@ -6,9 +6,15 @@
 #define QLEVER_BIND_H
 
 #include "Operation.h"
+#include "../parser/ParsedQuery.h"
 
 class Bind : public Operation {
  public:
+  Bind(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree, GraphPatternOperation::Bind b) :
+  Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)){
+    AD_CHECK(!std::holds_alternative<GraphPatternOperation::Bind::Constant>(_bind._input));
+  }
+
   // Get a unique, not ambiguous string representation for a subtree.
   // This should possible act like an ID for each subtree.
   [[nodiscard]] string asString(size_t indent) const override;
@@ -32,8 +38,7 @@ class Bind : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   void computeResult(ResultTable* result) override ;
-  std::string _targetVar;
-  size_t _var1, _var2;
+  GraphPatternOperation::Bind _bind;
 
   template <int IN_WIDTH, int OUT_WIDTH>
   static void computeBind(IdTable* dynRes, const IdTable& inputDyn,
