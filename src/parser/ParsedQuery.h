@@ -8,10 +8,10 @@
 #include <utility>
 #include <vector>
 
+#include <variant>
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
 #include "ParseException.h"
-#include <variant>
 
 using std::string;
 using std::vector;
@@ -356,24 +356,53 @@ struct GraphPatternOperation {
   };
 
   struct Bind {
-    struct Constant {string _value;
-    vector<string*> strings() {
-      return {&_value};
-    }};
-    struct Sum {string _var1, _var2;
-      vector<string*> strings() {
-        return {&_var1, &_var2};
-      }};
+    struct Constant {
+      string _value;
+      // TODO<joka921> in c++ 20 we have constexpr strings.
+      static constexpr const char* Name = "Constant";
+      vector<string*> strings() { return {&_value}; }
+      [[nodiscard]] string getDescriptor() const { return _value; }
+    };
+    struct Sum {
+      static constexpr const char* Name = "Sum";
+      string _var1, _var2;
+      vector<string*> strings() { return {&_var1, &_var2}; }
+      [[nodiscard]] string getDescriptor() const {
+        return _var1 + " + " + _var2;
+      }
+    };
 
-    struct Rename {string _var;
-      vector<string*> strings() {
-        return {&_var};
-      }};
+    struct Rename {
+      static constexpr const char* Name = "Rename";
+      string _var;
+      vector<string*> strings() { return {&_var}; }
+      [[nodiscard]] string getDescriptor() const { return _var; }
+    };
     std::variant<Constant, Rename, Sum> _input;
     std::string _target;
+
+    vector<const string*> strings() const {
+      auto r = std::visit([](auto&& arg) { return arg.strings(); },
+                          const_cast<decltype(_input)&>(_input));
+      vector<const string*> res{r.begin(), r.end()};
+      res.push_back(&_target);
+      return res;
+    }
+
+    [[nodiscard]] constexpr const char* operationName() const {
+      return std::visit([](auto&& arg) { return arg.Name; }, _input);
+    }
+
+    string getDescriptor() const {
+      auto inner =
+          std::visit([](auto&& arg) { return arg.getDescriptor(); }, _input);
+      return "BIND (" + inner + " AS " + _target + ")";
+    }
   };
 
-  std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern, Values> variant_;
+  std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
+               Values>
+      variant_;
   template <typename A, typename... Args,
             typename = std::enable_if_t<
                 !std::is_base_of_v<GraphPatternOperation, std::decay_t<A>>>>
