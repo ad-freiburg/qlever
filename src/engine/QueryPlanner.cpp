@@ -206,6 +206,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         // create a copy of the Bind prototype and add the corresponding subtree
         SubtreePlan plan(_qec);
         std::shared_ptr<Bind> op = std::make_shared<Bind>(_qec, a._qet, v);
+        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
         // TODO<joka921> : should we make this setVariableColumns call a part
         // of setOperation in the queryExecutionTree, since it is invariant?
         plan._qet->setVariableColumns(op->getVariableColumns());
