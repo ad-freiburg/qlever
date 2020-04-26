@@ -275,6 +275,30 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       // Recursively call parseWhere to parse the optional part.
       parseWhere(query, &child);
       _lexer.accept(".");
+    } else if (_lexer.accept("bind")) {
+      _lexer.expect("(");
+      std::string inVar;
+      bool rename = false;
+      if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+        rename = true;
+        inVar = _lexer.current().raw;
+      } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+        inVar = parseLiteral(_lexer.current().raw, true);
+      } else {
+        _lexer.expect(SparqlToken::Type::IRI);
+        inVar = _lexer.current().raw;
+      }
+      _lexer.expect("as");
+      _lexer.expect(SparqlToken::Type::VARIABLE);
+      GraphPatternOperation::Bind b;
+      if (rename) {
+        b._input = GraphPatternOperation::Bind::Rename{inVar};
+      } else {
+        b._input = GraphPatternOperation::Bind::Constant{inVar};
+      }
+      b._target = _lexer.current().raw;
+      _lexer.expect(")");
+      currentPattern->_children.push_back(std::move(b));
     } else if (_lexer.accept("{")) {
       // Subquery or union
       if (_lexer.accept("select")) {
