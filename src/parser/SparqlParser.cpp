@@ -299,6 +299,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       b._target = _lexer.current().raw;
       _lexer.expect(")");
       currentPattern->_children.push_back(std::move(b));
+      // the dot after the bind is optional
+      _lexer.accept(".");
     } else if (_lexer.accept("{")) {
       // Subquery or union
       if (_lexer.accept("select")) {
