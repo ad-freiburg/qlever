@@ -10,6 +10,7 @@ COPY . /app/
 
 # Check formatting with the .clang-format project style
 WORKDIR /app/
+# disable for this dirty merging branch
 #RUN misc/format-check.sh
 
 WORKDIR /app/build/
@@ -33,9 +34,9 @@ EXPOSE 7001
 VOLUME ["/input", "/index"]
 
 ENV INDEX_PREFIX index
-#ENV MEMORY_FOR_QUERIES 20
+ENV MEMORY_FOR_QUERIES 70
 # Need the shell to get the INDEX_PREFIX envirionment variable
-ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -p 7001 \"$@\"", "--"]
+ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -m ${MEMORY_FOR_QUERIES} -p 7001 \"$@\"", "--"]
 
 # docker build -t qlever-<name> .
 # # When running with user namespaces you may need to make the index folder accessible
