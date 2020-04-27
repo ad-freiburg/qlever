@@ -10,8 +10,14 @@
 #include "../src/engine/TransitivePath.h"
 #include "../src/global/Id.h"
 
+ad_utility::LimitedAllocator<Id>& alloc() {
+  static ad_utility::LimitedAllocator<Id> a{
+      ad_utility::makeAllocationState(4000000000)};
+  return a;
+}
+
 TEST(TransitivePathTest, computeTransitivePath) {
-  IdTable sub(2);
+  IdTable sub(2, alloc());
   sub.push_back({0, 2});
   sub.push_back({2, 4});
   sub.push_back({4, 7});
@@ -21,9 +27,9 @@ TEST(TransitivePathTest, computeTransitivePath) {
   // Disconnected component.
   sub.push_back({10, 11});
 
-  IdTable result(2);
+  IdTable result(2, alloc());
 
-  IdTable expected(2);
+  IdTable expected(2, alloc());
   expected.push_back({0, 2});
   expected.push_back({0, 4});
   expected.push_back({0, 7});

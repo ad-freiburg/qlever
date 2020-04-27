@@ -10,19 +10,25 @@
 #include "../src/engine/Join.h"
 #include "../src/engine/OptionalJoin.h"
 
+ad_utility::LimitedAllocator<Id>& alloc() {
+  static ad_utility::LimitedAllocator<Id> a{
+      ad_utility::makeAllocationState(4000000000)};
+  return a;
+}
+
 TEST(EngineTest, joinTest) {
-  IdTable a(2);
+  IdTable a(2, alloc());
   a.push_back({1, 1});
   a.push_back({1, 3});
   a.push_back({2, 1});
   a.push_back({2, 2});
   a.push_back({4, 1});
-  IdTable b(2);
+  IdTable b(2, alloc());
   b.push_back({1, 3});
   b.push_back({1, 8});
   b.push_back({3, 1});
   b.push_back({4, 2});
-  IdTable res(3);
+  IdTable res(3, alloc());
   int lwidth = a.cols();
   int rwidth = b.cols();
   int reswidth = a.cols() + b.cols() - 1;
@@ -82,7 +88,7 @@ TEST(EngineTest, joinTest) {
   b.clear();
   res.clear();
 
-  IdTable c(1);
+  IdTable c(1, alloc());
   c.push_back({0});
 
   b.push_back({0, 1});
@@ -105,18 +111,18 @@ TEST(EngineTest, joinTest) {
 };
 
 TEST(EngineTest, optionalJoinTest) {
-  IdTable a(3);
+  IdTable a(3, alloc());
   a.push_back({4, 1, 2});
   a.push_back({2, 1, 3});
   a.push_back({1, 1, 4});
   a.push_back({2, 2, 1});
   a.push_back({1, 3, 1});
-  IdTable b(3);
+  IdTable b(3, alloc());
   b.push_back({3, 3, 1});
   b.push_back({1, 8, 1});
   b.push_back({4, 2, 2});
   b.push_back({1, 1, 3});
-  IdTable res(4);
+  IdTable res(4, alloc());
   vector<array<Id, 2>> jcls;
   jcls.push_back(array<Id, 2>{{1, 2}});
   jcls.push_back(array<Id, 2>{{2, 1}});
@@ -157,17 +163,17 @@ TEST(EngineTest, optionalJoinTest) {
   ASSERT_EQ(1u, res(4, 3));
 
   // Test the optional join with variable sized data.
-  IdTable va(6);
+  IdTable va(6, alloc());
   va.push_back({1, 2, 3, 4, 5, 6});
   va.push_back({1, 2, 3, 7, 5, 6});
   va.push_back({7, 6, 5, 4, 3, 2});
 
-  IdTable vb(3);
+  IdTable vb(3, alloc());
   vb.push_back({2, 3, 4});
   vb.push_back({2, 3, 5});
   vb.push_back({6, 7, 4});
 
-  IdTable vres(7);
+  IdTable vres(7, alloc());
   jcls.clear();
   jcls.push_back(array<Id, 2>{{1, 0}});
   jcls.push_back(array<Id, 2>{{2, 1}});
@@ -204,8 +210,8 @@ TEST(EngineTest, optionalJoinTest) {
 }
 
 TEST(EngineTest, distinctTest) {
-  IdTable inp(4);
-  IdTable res(4);
+  IdTable inp(4, alloc());
+  IdTable res(4, alloc());
 
   inp.push_back({1, 1, 3, 7});
   inp.push_back({6, 1, 3, 6});

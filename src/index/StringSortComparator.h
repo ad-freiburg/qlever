@@ -211,7 +211,7 @@ class LocaleManager {
     int32_t i = 0;
     for (i = 0; i < length && numCodepoints < prefixLength;) {
       UChar32 c;
-      U8_NEXT(s, i, length, c)
+      U8_NEXT(s, i, length, c);
       if (c >= 0) {
         ++numCodepoints;
       } else {

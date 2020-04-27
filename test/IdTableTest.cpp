@@ -11,12 +11,11 @@
 #include "../src/engine/IdTable.h"
 #include "../src/global/Id.h"
 
-
 ad_utility::LimitedAllocator<Id>& alloc() {
-  static ad_utility::LimitedAllocator<Id> a {ad_utility::makeAllocationState(40000)};
+  static ad_utility::LimitedAllocator<Id> a{
+      ad_utility::makeAllocationState(40000)};
   return a;
 }
-
 
 TEST(IdTableTest, push_back_and_assign) {
   constexpr size_t NUM_ROWS = 30;

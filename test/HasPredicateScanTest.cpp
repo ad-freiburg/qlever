@@ -9,6 +9,11 @@
 #include "../src/engine/CountAvailablePredicates.h"
 #include "../src/engine/HasPredicateScan.h"
 
+ad_utility::LimitedAllocator<Id>& alloc() {
+  static ad_utility::LimitedAllocator<Id> a{
+      ad_utility::makeAllocationState(4000000000)};
+  return a;
+}
 // used to test HasRelationScan with a subtree
 class DummyOperation : public Operation {
  public:
@@ -60,7 +65,7 @@ class DummyOperation : public Operation {
 
 TEST(HasPredicateScan, freeS) {
   // Used to store the result.
-  ResultTable resultTable;
+  ResultTable resultTable{alloc()};
   resultTable._data.setCols(1);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
@@ -100,7 +105,7 @@ TEST(HasPredicateScan, freeS) {
 
 TEST(HasPredicateScan, freeO) {
   // Used to store the result.
-  ResultTable resultTable;
+  ResultTable resultTable{alloc()};
   resultTable._data.setCols(1);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
@@ -142,7 +147,7 @@ TEST(HasPredicateScan, freeO) {
 
 TEST(HasPredicateScan, fullScan) {
   // Used to store the result.
-  ResultTable resultTable;
+  ResultTable resultTable{alloc()};
   resultTable._data.setCols(2);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
@@ -204,7 +209,7 @@ TEST(HasPredicateScan, fullScan) {
 
 TEST(HasPredicateScan, subtreeS) {
   // Used to store the result.
-  ResultTable resultTable;
+  ResultTable resultTable{alloc()};
   resultTable._data.setCols(3);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
@@ -225,7 +230,7 @@ TEST(HasPredicateScan, subtreeS) {
   Engine engine;
   SubtreeCache cache(NOF_SUBTREES_TO_CACHE);
   PinnedSizes pinnedSizes;
-  QueryExecutionContext ctx(index, engine, &cache, &pinnedSizes);
+  QueryExecutionContext ctx(index, engine, &cache, &pinnedSizes, alloc());
 
   // create the subtree operation
   std::shared_ptr<QueryExecutionTree> subtree =
@@ -288,12 +293,12 @@ TEST(HasPredicateScan, subtreeS) {
 
 TEST(CountAvailablePredicates, patternTrickTest) {
   // The input table containing entity ids
-  IdTable input(1);
+  IdTable input(1, alloc());
   for (Id i = 0; i < 8; i++) {
     input.push_back({i});
   }
   // Used to store the result.
-  IdTable result(2);
+  IdTable result(2, alloc());
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};

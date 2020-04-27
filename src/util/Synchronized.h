@@ -7,6 +7,7 @@
 #ifndef QLEVER_SYNCHRONIZED_H
 #define QLEVER_SYNCHRONIZED_H
 
+#include <atomic>
 #include <shared_mutex>
 
 namespace ad_utility {

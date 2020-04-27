@@ -27,6 +27,7 @@ using std::vector;
 struct option options[] = {{"help", no_argument, NULL, 'h'},
                            {"index", required_argument, NULL, 'i'},
                            {"worker-threads", required_argument, NULL, 'j'},
+                           {"memory-for-queries", required_argument, NULL, 'm'},
                            {"on-disk-literals", no_argument, NULL, 'l'},
                            {"port", required_argument, NULL, 'p'},
                            {"no-patterns", no_argument, NULL, 'P'},
@@ -48,6 +49,11 @@ void printUsage(char* execName) {
        << "The location of the index files." << endl;
   cout << "  " << std::setw(20) << "p, port" << std::setw(1) << "    "
        << "The port on which to run the web interface." << endl;
+  cout << "  " << std::setw(20) << "m, memory-for-queries" << std::setw(1)
+       << "    "
+       << "The number of GB that may be used by query (intermediate) results, "
+          "including the cache"
+       << endl;
   cout << "  " << std::setw(20) << "no-patterns" << std::setw(1) << "    "
        << "Disable the use of patterns. This disables ql:has-predicate."
        << endl;
@@ -80,6 +86,8 @@ int main(int argc, char** argv) {
   bool usePatterns = true;
   bool enablePatternTrick = true;
 
+  size_t memLimit = MAX_MEM_FOR_QUERIES_IN_GB;
+
   optind = 1;
   // Process command line arguments.
   while (true) {
@@ -103,6 +111,9 @@ int main(int argc, char** argv) {
         break;
       case 'j':
         numThreads = atoi(optarg);
+        break;
+      case 'm':
+        memLimit = atoi(optarg);
         break;
       case 'h':
         printUsage(argv[0]);
@@ -142,7 +153,7 @@ int main(int argc, char** argv) {
   cout << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
-    Server server(port, numThreads);
+    Server server(port, numThreads, memLimit * 2 << 30u);
     server.initialize(index, text, usePatterns, enablePatternTrick);
     server.run();
   } catch (const std::exception& e) {

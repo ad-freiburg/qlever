@@ -18,7 +18,7 @@ TEST(LimitedAllocator, initial) {
 }
 
 TEST(LimitedAllocator, vector) {
-  V v{makeAllocationState(18)};
+  V v{LimitedAllocator<int>(makeAllocationState(18))};
   v.push_back(5);  // allocate 4 bytes -> works
   ASSERT_EQ(v.size(), 1u);
   ASSERT_EQ(v[0], 5);

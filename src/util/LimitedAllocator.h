@@ -35,17 +35,20 @@ class AllocationLimits {
 
 class AllocationState {
  public:
-  AllocationState() = delete ;
-  using T = std::shared_ptr<ad_utility::Synchronized<AllocationLimits, SpinLock>>;
+  AllocationState() = delete;
+  using T =
+      std::shared_ptr<ad_utility::Synchronized<AllocationLimits, SpinLock>>;
   explicit AllocationState(T ptr) : ptr_{std::move(ptr)} {}
-  T& ptr() {return ptr_;}
+  T& ptr() { return ptr_; }
+
  private:
   T ptr_;
 };
 
-AllocationState makeAllocationState(size_t n) {
-  return AllocationState{std::make_shared<ad_utility::Synchronized<AllocationLimits, SpinLock>>(
-      n)};
+inline AllocationState makeAllocationState(size_t n) {
+  return AllocationState{
+      std::make_shared<ad_utility::Synchronized<AllocationLimits, SpinLock>>(
+          n)};
 }
 
 template <typename T>
@@ -82,6 +85,7 @@ class LimitedAllocator {
     return !(u == v);
   }
 };
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_LIMITEDALLOCATOR_H
