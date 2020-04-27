@@ -53,6 +53,9 @@ class HashMap : private absl::flat_hash_map<K, V, HashFcn, EqualKey, Alloc> {
   // Counts the number of occurences (0 or 1) of the given key
   using Base::count;
 
+  // ____________________________
+  using Base::emplace;
+
   // Returns the size of the map
   using Base::size;
 

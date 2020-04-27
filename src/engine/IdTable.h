@@ -11,6 +11,7 @@
 #include <initializer_list>
 #include <ostream>
 #include "../global/Id.h"
+#include "../util/LimitedAllocator.h"
 #include "../util/Log.h"
 
 /**
@@ -489,20 +490,22 @@ class IdTableImpl<0> {
   bool _manage_storage;
 };
 
-template <int COLS = 0>
+template <int COLS = 0, typename Allocator = ad_utility::LimitedAllocator<Id>>
 class IdTableStatic;
-using IdTable = IdTableStatic<>;
+using IdTable = IdTableStatic<0, ad_utility::LimitedAllocator<Id>>;
 
-template <int COLS>
+template <int COLS, typename Allocator>
 class IdTableStatic : private IdTableImpl<COLS> {
   // Make all other instantiations of this template friends of this.
-  template <int>
+  template <int, typename>
   friend class IdTableStatic;
   template <int I>
   friend void swap(IdTableStatic<I>& left, IdTableStatic<I>& right);
 
  private:
   static constexpr float GROWTH_FACTOR = 1.5;
+  // the allocator
+  Allocator _allocator;
 
  public:
   using Row = typename IdTableImpl<COLS>::row_type;
@@ -510,7 +513,10 @@ class IdTableStatic : private IdTableImpl<COLS> {
   using iterator = typename IdTableImpl<COLS>::iterator;
   using const_iterator = typename IdTableImpl<COLS>::iterator;
 
-  IdTableStatic() {
+  IdTableStatic(Allocator al = Allocator{}) : _allocator{al} {
+    static_assert(
+        std::is_same_v<Id,
+                       typename std::allocator_traits<Allocator>::value_type>);
     IdTableImpl<COLS>::_data = nullptr;
     IdTableImpl<COLS>::_size = 0;
     IdTableImpl<COLS>::_capacity = 0;
@@ -518,7 +524,7 @@ class IdTableStatic : private IdTableImpl<COLS> {
     IdTableImpl<COLS>::_manage_storage = true;
   }
 
-  IdTableStatic(size_t cols) {
+  IdTableStatic(size_t cols, Allocator al = Allocator{}) : _allocator{al} {
     IdTableImpl<COLS>::_data = nullptr;
     IdTableImpl<COLS>::_size = 0;
     IdTableImpl<COLS>::_capacity = 0;
@@ -528,20 +534,22 @@ class IdTableStatic : private IdTableImpl<COLS> {
 
   virtual ~IdTableStatic() {
     if (IdTableImpl<COLS>::_manage_storage) {
-      free(IdTableImpl<COLS>::_data);
+      std::allocator_traits<Allocator>::deallocate(
+          _allocator, IdTableImpl<COLS>::_data,
+          this->_capacity * IdTableImpl<COLS>::_cols);
     }
   }
 
   // Copy constructor
-  IdTableStatic<COLS>(const IdTableStatic<COLS>& other) {
+  IdTableStatic(const IdTableStatic<COLS>& other)
+      : _allocator{other._allocator} {
     IdTableImpl<COLS>::_data = other.IdTableImpl<COLS>::_data;
     IdTableImpl<COLS>::_size = other.IdTableImpl<COLS>::_size;
     IdTableImpl<COLS>::setCols(other.IdTableImpl<COLS>::_cols);
     IdTableImpl<COLS>::_capacity = other.IdTableImpl<COLS>::_capacity;
     if (other.IdTableImpl<COLS>::_data != nullptr) {
-      IdTableImpl<COLS>::_data =
-          reinterpret_cast<Id*>(malloc(IdTableImpl<COLS>::_capacity *
-                                       IdTableImpl<COLS>::_cols * sizeof(Id)));
+      IdTableImpl<COLS>::_data = std::allocator_traits<Allocator>::allocate(
+          _allocator, this->_capacity * IdTableImpl<COLS>::_cols);
       std::memcpy(
           IdTableImpl<COLS>::_data, other.IdTableImpl<COLS>::_data,
           IdTableImpl<COLS>::_size * sizeof(Id) * IdTableImpl<COLS>::_cols);
@@ -550,7 +558,8 @@ class IdTableStatic : private IdTableImpl<COLS> {
   }
 
   // Move constructor
-  IdTableStatic<COLS>(IdTableStatic<COLS>&& other) {
+  IdTableStatic(IdTableStatic&& other) : _allocator{other._allocator} {
+    // copy the allocator because of the messy swap business
     swap(*this, other);
     other.IdTableImpl<COLS>::_data = nullptr;
     other.IdTableImpl<COLS>::_size = 0;
@@ -558,12 +567,12 @@ class IdTableStatic : private IdTableImpl<COLS> {
   }
 
   // copy assignment
-  IdTableStatic<COLS>& operator=(IdTableStatic<COLS> other) {
+  IdTableStatic& operator=(IdTableStatic other) {
     swap(*this, other);
     return *this;
   }
 
-  bool operator==(const IdTableStatic<COLS>& other) const {
+  bool operator==(const IdTableStatic& other) const {
     if (other.size() != size()) {
       return false;
     }
@@ -802,9 +811,9 @@ class IdTableStatic : private IdTableImpl<COLS> {
    * id tables data. This is effectively a move operation that also
    * changes the type to its equivalent dynamic variant.
    **/
-  template <int NEW_COLS>
-  IdTableStatic<NEW_COLS> moveToStatic() {
-    IdTableStatic<NEW_COLS> tmp;
+  template <int NEW_COLS, typename A = Allocator>
+  IdTableStatic<NEW_COLS, A> moveToStatic() {
+    IdTableStatic<NEW_COLS, A> tmp{this->_allocator};
     tmp.setCols(cols());
     tmp._data = IdTableImpl<COLS>::_data;
     tmp._size = IdTableImpl<COLS>::_size;
@@ -815,9 +824,9 @@ class IdTableStatic : private IdTableImpl<COLS> {
     return tmp;
   };
 
-  template <int NEW_COLS>
-  const IdTableStatic<NEW_COLS> asStaticView() const {
-    IdTableStatic<NEW_COLS> tmp;
+  template <int NEW_COLS, typename A = Allocator>
+  const IdTableStatic<NEW_COLS, A> asStaticView() const {
+    IdTableStatic<NEW_COLS> tmp{this->_allocator};
     tmp.setCols(cols());
     tmp._data = IdTableImpl<COLS>::_data;
     tmp._size = IdTableImpl<COLS>::_size;
@@ -832,8 +841,9 @@ class IdTableStatic : private IdTableImpl<COLS> {
    * id tables data. This is effectively a move operation that also
    * changes the type to an equibalent one.
    **/
-  IdTable moveToDynamic() {
-    IdTable tmp(cols());
+  template <typename A = Allocator>
+  IdTableStatic<0, A> moveToDynamic() {
+    IdTableStatic<0, A> tmp(cols(), _allocator);
     tmp._data = IdTableImpl<COLS>::_data;
     tmp._size = IdTableImpl<COLS>::_size;
     tmp._capacity = IdTableImpl<COLS>::_capacity;
@@ -857,6 +867,9 @@ class IdTableStatic : private IdTableImpl<COLS> {
     return out;
   }
 
+  // __________________________________________________
+  Allocator getAllocator() const { return _allocator; }
+
  private:
   /**
    * @brief Grows the storage of this IdTableStatic
@@ -873,12 +886,12 @@ class IdTableStatic : private IdTableImpl<COLS> {
     } else {
       new_capacity = IdTableImpl<COLS>::_capacity + newRows;
     }
-    Id* larger = reinterpret_cast<Id*>(
-        realloc(IdTableImpl<COLS>::_data,
-                new_capacity * IdTableImpl<COLS>::_cols * sizeof(Id)));
+    Id* larger = std::allocator_traits<Allocator>::allocate(
+        _allocator, new_capacity * IdTableImpl<COLS>::_cols);
     if (larger == nullptr) {
       // We were unable to acquire the memory
-      free(IdTableImpl<COLS>::_data);
+      std::allocator_traits<Allocator>::deallocate(
+          _allocator, this->_data, this->_capacity * this->_cols);
       IdTableImpl<COLS>::_data = nullptr;
       IdTableImpl<COLS>::_capacity = 0;
       IdTableImpl<COLS>::_size = 0;
@@ -886,6 +899,11 @@ class IdTableStatic : private IdTableImpl<COLS> {
                  << (reinterpret_cast<void*>(this)) << std::endl;
       throw std::bad_alloc();
     }
+    std::memcpy(larger, this->_data, this->_size * this->_cols * sizeof(Id));
+    std::allocator_traits<Allocator>::deallocate(
+        _allocator, IdTableImpl<COLS>::_data,
+        this->_capacity * IdTableImpl<COLS>::_cols);
+
     IdTableImpl<COLS>::_data = larger;
     IdTableImpl<COLS>::_capacity = new_capacity;
   }
@@ -894,6 +912,8 @@ class IdTableStatic : private IdTableImpl<COLS> {
 template <int COLS>
 void swap(IdTableStatic<COLS>& left, IdTableStatic<COLS>& right) {
   using std::swap;
+
+  swap(left._allocator, right._allocator);
   swap(left._data, right._data);
   swap(left._size, right._size);
   swap(left._capacity, right._capacity);

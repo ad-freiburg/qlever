@@ -11,17 +11,23 @@
 #include "../src/engine/Union.h"
 #include "../src/global/Id.h"
 
+ad_utility::LimitedAllocator<Id>& alloc() {
+  static ad_utility::LimitedAllocator<Id> a{
+      ad_utility::makeAllocationState(4000000000)};
+  return a;
+}
+
 TEST(UnionTest, computeUnion) {
-  IdTable left(1);
+  IdTable left(1, alloc());
   left.push_back({1});
   left.push_back({2});
   left.push_back({3});
 
-  IdTable right(2);
+  IdTable right(2, alloc());
   right.push_back({4, 5});
   right.push_back({6, 7});
 
-  IdTable result(2);
+  IdTable result(2, alloc());
 
   const std::vector<std::array<size_t, 2>> columnOrigins = {
       {0, 1}, {Union::NO_COLUMN, 0}};
@@ -45,16 +51,16 @@ TEST(UnionTest, computeUnion) {
 
 TEST(UnionTest, computeUnionOptimized) {
   // the left and right data vectors will be deleted by the result tables
-  IdTable left(2);
+  IdTable left(2, alloc());
   left.push_back({1, 2});
   left.push_back({2, 3});
   left.push_back({3, 4});
 
-  IdTable right(2);
+  IdTable right(2, alloc());
   right.push_back({4, 5});
   right.push_back({6, 7});
 
-  IdTable result(2);
+  IdTable result(2, alloc());
 
   const std::vector<std::array<size_t, 2>> columnOrigins = {{0, 0}, {1, 1}};
   int leftWidth = left.cols();

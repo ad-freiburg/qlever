@@ -3,28 +3,34 @@
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
 #include <array>
+
 #include <vector>
 
 #include <gtest/gtest.h>
 #include "../src/engine/CallFixedSize.h"
 #include "../src/engine/MultiColumnJoin.h"
+ad_utility::LimitedAllocator<Id>& alloc() {
+  static ad_utility::LimitedAllocator<Id> a{
+      ad_utility::makeAllocationState(4000000000)};
+  return a;
+}
 
 TEST(EngineTest, multiColumnJoinTest) {
   using std::array;
   using std::vector;
 
-  IdTable a(3);
+  IdTable a(3, alloc());
   a.push_back({4, 1, 2});
   a.push_back({2, 1, 3});
   a.push_back({1, 1, 4});
   a.push_back({2, 2, 1});
   a.push_back({1, 3, 1});
-  IdTable b(3);
+  IdTable b(3, alloc());
   b.push_back({3, 3, 1});
   b.push_back({1, 8, 1});
   b.push_back({4, 2, 2});
   b.push_back({1, 1, 3});
-  IdTable res(4);
+  IdTable res(4, alloc());
   vector<array<Id, 2>> jcls;
   jcls.push_back(array<Id, 2>{{1, 2}});
   jcls.push_back(array<Id, 2>{{2, 1}});
@@ -50,17 +56,17 @@ TEST(EngineTest, multiColumnJoinTest) {
   ASSERT_EQ(1u, res[1][3]);
 
   // Test the multi column join with variable sized data.
-  IdTable va(6);
+  IdTable va(6, alloc());
   va.push_back({1, 2, 3, 4, 5, 6});
   va.push_back({1, 2, 3, 7, 5, 6});
   va.push_back({7, 6, 5, 4, 3, 2});
 
-  IdTable vb(3);
+  IdTable vb(3, alloc());
   vb.push_back({2, 3, 4});
   vb.push_back({2, 3, 5});
   vb.push_back({6, 7, 4});
 
-  IdTable vres(7);
+  IdTable vres(7, alloc());
   jcls.clear();
   jcls.push_back({1, 0});
   jcls.push_back({2, 1});
@@ -77,7 +83,7 @@ TEST(EngineTest, multiColumnJoinTest) {
   ASSERT_EQ(4u, vres.size());
   ASSERT_EQ(7u, vres.cols());
 
-  IdTable wantedRes(7);
+  IdTable wantedRes(7, alloc());
   wantedRes.push_back({1, 2, 3, 4, 5, 6, 4});
   wantedRes.push_back({1, 2, 3, 4, 5, 6, 5});
   wantedRes.push_back({1, 2, 3, 7, 5, 6, 4});
