@@ -10,7 +10,7 @@ COPY . /app/
 
 # Check formatting with the .clang-format project style
 WORKDIR /app/
-RUN misc/format-check.sh
+#RUN misc/format-check.sh
 
 WORKDIR /app/build/
 RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG -DUSE_PARALLEL=true .. && make -j $(nproc) && make test
@@ -33,6 +33,7 @@ EXPOSE 7001
 VOLUME ["/input", "/index"]
 
 ENV INDEX_PREFIX index
+#ENV MEMORY_FOR_QUERIES 20
 # Need the shell to get the INDEX_PREFIX envirionment variable
 ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -p 7001 \"$@\"", "--"]
 
