@@ -33,12 +33,19 @@ class AllocationLimits {
   void deallocate(size_t n) { free_ += n; }
 };
 
-using AllocationState =
-    std::shared_ptr<ad_utility::Synchronized<AllocationLimits, SpinLock>>;
+class AllocationState {
+ public:
+  AllocationState() = delete ;
+  using T = std::shared_ptr<ad_utility::Synchronized<AllocationLimits, SpinLock>>;
+  explicit AllocationState(T ptr) : ptr_{std::move(ptr)} {}
+  T& ptr() {return ptr_;}
+ private:
+  T ptr_;
+};
 
 AllocationState makeAllocationState(size_t n) {
-  return std::make_shared<ad_utility::Synchronized<AllocationLimits, SpinLock>>(
-      n);
+  return AllocationState{std::make_shared<ad_utility::Synchronized<AllocationLimits, SpinLock>>(
+      n)};
 }
 
 template <typename T>
@@ -51,15 +58,16 @@ class LimitedAllocator {
   std::allocator<T> alloc_;
 
  public:
-  LimitedAllocator(AllocationState s) : state_(std::move(s)) {}
+  explicit LimitedAllocator(AllocationState s) : state_(std::move(s)) {}
+  LimitedAllocator() = delete;
   // TODO<C++20> : the exact signature of allocate changes
   T* allocate(std::size_t n) {
-    state_->wlock()->allocate(n * sizeof(T));
+    state_.ptr()->wlock()->allocate(n * sizeof(T));
     return alloc_.allocate(n);
   }
 
   void deallocate(T* p, std::size_t n) {
-    state_->wlock()->deallocate(n * sizeof(T));
+    state_.ptr()->wlock()->deallocate(n * sizeof(T));
     alloc_.deallocate(p, n);
   }
 

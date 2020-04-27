@@ -12,6 +12,7 @@
 #include <ostream>
 #include "../global/Id.h"
 #include "../util/Log.h"
+#include "../util/LimitedAllocator.h"
 
 /**
  * @brief This struct is used to store all the template specialized data and
@@ -489,9 +490,9 @@ class IdTableImpl<0> {
   bool _manage_storage;
 };
 
-template <int COLS = 0, typename Allocator = std::allocator<Id>>
+template <int COLS = 0, typename Allocator = ad_utility::LimitedAllocator<Id>>
 class IdTableStatic;
-using IdTable = IdTableStatic<>;
+using IdTable = IdTableStatic<0, ad_utility::LimitedAllocator<Id>>;
 
 template <int COLS, typename Allocator>
 class IdTableStatic : private IdTableImpl<COLS> {
@@ -513,7 +514,7 @@ class IdTableStatic : private IdTableImpl<COLS> {
   using const_iterator = typename IdTableImpl<COLS>::iterator;
 
   IdTableStatic(Allocator al = Allocator{}) : _allocator{al} {
-    static_assert(std::is_same_v<Id, typename Allocator::value_type>);
+    static_assert(std::is_same_v<Id, typename std::allocator_traits<Allocator>::value_type>);
     IdTableImpl<COLS>::_data = nullptr;
     IdTableImpl<COLS>::_size = 0;
     IdTableImpl<COLS>::_capacity = 0;
@@ -553,7 +554,8 @@ class IdTableStatic : private IdTableImpl<COLS> {
   }
 
   // Move constructor
-  IdTableStatic(IdTableStatic&& other) {
+  IdTableStatic(IdTableStatic&& other): _allocator{other._allocator} {
+    // copy the allocator because of the messy swap business
     swap(*this, other);
     other.IdTableImpl<COLS>::_data = nullptr;
     other.IdTableImpl<COLS>::_size = 0;
@@ -805,9 +807,9 @@ class IdTableStatic : private IdTableImpl<COLS> {
    * id tables data. This is effectively a move operation that also
    * changes the type to its equivalent dynamic variant.
    **/
-  template <int NEW_COLS>
-  IdTableStatic<NEW_COLS> moveToStatic() {
-    IdTableStatic<NEW_COLS> tmp;
+  template <int NEW_COLS, typename A = Allocator>
+  IdTableStatic<NEW_COLS, A> moveToStatic() {
+    IdTableStatic<NEW_COLS, A> tmp{this->_allocator};
     tmp.setCols(cols());
     tmp._data = IdTableImpl<COLS>::_data;
     tmp._size = IdTableImpl<COLS>::_size;
@@ -818,9 +820,9 @@ class IdTableStatic : private IdTableImpl<COLS> {
     return tmp;
   };
 
-  template <int NEW_COLS>
-  const IdTableStatic<NEW_COLS> asStaticView() const {
-    IdTableStatic<NEW_COLS> tmp;
+  template <int NEW_COLS, typename A = Allocator>
+  const IdTableStatic<NEW_COLS, A> asStaticView() const {
+    IdTableStatic<NEW_COLS> tmp{this->_allocator};
     tmp.setCols(cols());
     tmp._data = IdTableImpl<COLS>::_data;
     tmp._size = IdTableImpl<COLS>::_size;
@@ -835,8 +837,9 @@ class IdTableStatic : private IdTableImpl<COLS> {
    * id tables data. This is effectively a move operation that also
    * changes the type to an equibalent one.
    **/
-  IdTable moveToDynamic() {
-    IdTable tmp(cols());
+  template <typename A = Allocator>
+  IdTableStatic<0, A> moveToDynamic() {
+    IdTableStatic<0, A> tmp(cols(), _allocator);
     tmp._data = IdTableImpl<COLS>::_data;
     tmp._size = IdTableImpl<COLS>::_size;
     tmp._capacity = IdTableImpl<COLS>::_capacity;
