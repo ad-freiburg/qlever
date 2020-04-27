@@ -57,9 +57,10 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       _executionContext->_pinSubtrees || pinChildIndexScanSizes;
   LOG(TRACE) << "Check cache for Operation result" << endl;
   LOG(TRACE) << "Using key: \n" << cacheKey << endl;
-  auto [newResult, existingResult] = (pinResult)
-                                         ? cache.tryEmplacePinned(cacheKey)
-                                         : cache.tryEmplace(cacheKey);
+  auto [newResult, existingResult] =
+      (pinResult)
+          ? cache.tryEmplacePinned(cacheKey, _executionContext->getAllocator())
+          : cache.tryEmplace(cacheKey, _executionContext->getAllocator());
 
   if (pinChildIndexScanSizes) {
     auto lock = getExecutionContext()->getPinnedSizes().wlock();
@@ -73,6 +74,9 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
 
   if (newResult) {
     LOG(TRACE) << "Not in the cache, need to compute result" << endl;
+    LOG(DEBUG) << "Available memory (in MB) before operation: "
+               << (_executionContext->getAllocator().numFreeBytes() >> 20)
+               << std::endl;
     // Passing the raw pointer here is ok as the result shared_ptr remains
     // in scope
     try {

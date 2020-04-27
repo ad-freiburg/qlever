@@ -6,8 +6,9 @@
 #include <cassert>
 
 // _____________________________________________________________________________
-ResultTable::ResultTable()
+ResultTable::ResultTable(ad_utility::AllocatorWithLimit<Id> allocator)
     : _sortedBy(),
+      _data(std::move(allocator)),
       _resultTypes(),
       _localVocab(std::make_shared<std::vector<std::string>>()),
       _status(ResultTable::IN_PROGRESS) {}

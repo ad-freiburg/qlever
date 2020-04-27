@@ -335,7 +335,7 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
     } else {
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-      IdTable jr(2);
+      IdTable jr(2, _executionContext->getAllocator());
       scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
@@ -348,7 +348,7 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
   }
   // Do the scan for the final element.
   LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-  IdTable jr(2);
+  IdTable jr(2, _executionContext->getAllocator());
   scan(currentJoinId, &jr);
   LOG(TRACE) << "Got #items: " << jr.size() << endl;
   // Build the cross product.
@@ -376,7 +376,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
     } else {
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-      IdTable jr(2);
+      IdTable jr(2, _executionContext->getAllocator());
       scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
@@ -389,7 +389,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
   }
   // Do the scan for the final element.
   LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-  IdTable jr(2);
+  IdTable jr(2, _executionContext->getAllocator());
   scan(currentJoinId, &jr);
   LOG(TRACE) << "Got #items: " << jr.size() << endl;
   // Build the cross product.

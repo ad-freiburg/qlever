@@ -23,7 +23,9 @@ using std::string;
 using std::vector;
 
 struct CacheValue {
-  CacheValue() : _resTable(std::make_shared<ResultTable>()), _runtimeInfo() {}
+  CacheValue(ad_utility::AllocatorWithLimit<Id> allocator)
+      : _resTable(std::make_shared<ResultTable>(std::move(allocator))),
+        _runtimeInfo() {}
   std::shared_ptr<ResultTable> _resTable;
   RuntimeInformation _runtimeInfo;
   [[nodiscard]] size_t size() const {
@@ -43,6 +45,7 @@ class QueryExecutionContext {
   QueryExecutionContext(const Index& index, const Engine& engine,
                         SubtreeCache* const cache,
                         PinnedSizes* const pinnedSizes,
+                        ad_utility::AllocatorWithLimit<Id> allocator,
                         const bool pinSubtrees = false,
                         const bool pinResult = false)
       : _pinSubtrees(pinSubtrees),
@@ -51,6 +54,7 @@ class QueryExecutionContext {
         _engine(engine),
         _subtreeCache(cache),
         _pinnedSizes(pinnedSizes),
+        _alloc(std::move(allocator)),
         _costFactors() {}
 
   SubtreeCache& getQueryTreeCache() { return *_subtreeCache; }
@@ -71,6 +75,8 @@ class QueryExecutionContext {
     return _costFactors.getCostFactor(key);
   };
 
+  ad_utility::AllocatorWithLimit<Id> getAllocator() { return _alloc; }
+
   const bool _pinSubtrees;
   const bool _pinResult;
 
@@ -79,5 +85,7 @@ class QueryExecutionContext {
   const Engine& _engine;
   SubtreeCache* const _subtreeCache;
   PinnedSizes* const _pinnedSizes;
+  // allocators are copied but hold shared state
+  ad_utility::AllocatorWithLimit<Id> _alloc;
   QueryPlanningCostFactors _costFactors;
 };

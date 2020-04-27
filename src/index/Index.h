@@ -443,7 +443,7 @@ class Index {
         } else {
           // If we don't have blocks, scan the whole relation and filter /
           // restrict.
-          IdTable fullRelation(2);
+          IdTable fullRelation(2, result->getAllocator());
           fullRelation.resize(rmd.getNofElements());
           p._file.read(fullRelation.data(),
                        rmd.getNofElements() * 2 * sizeof(Id),

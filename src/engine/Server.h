@@ -11,6 +11,7 @@
 #include "../index/Index.h"
 #include "../parser/ParseException.h"
 #include "../parser/SparqlParser.h"
+#include "../util/AllocatorWithLimit.h"
 #include "../util/Socket.h"
 #include "../util/Timer.h"
 #include "./QueryExecutionContext.h"
@@ -24,11 +25,14 @@ using ad_utility::Socket;
 //! The HTTP Sever used.
 class Server {
  public:
-  explicit Server(const int port, const int numThreads)
+  explicit Server(const int port, const int numThreads, size_t maxMemInBytes)
       : _numThreads(numThreads),
         _serverSocket(),
         _port(port),
         _cache(NOF_SUBTREES_TO_CACHE),
+        _allocator(ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+            maxMemInBytes)),
+
         _index(),
         _engine(),
         _initialized(false) {}
@@ -51,6 +55,7 @@ class Server {
   int _port;
   SubtreeCache _cache;
   PinnedSizes _pinnedSizes;
+  ad_utility::AllocatorWithLimit<Id> _allocator;
   Index _index;
   Engine _engine;
 

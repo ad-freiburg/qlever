@@ -10,22 +10,28 @@
 #include <cstring>
 #include <initializer_list>
 #include <ostream>
+
 #include "../global/Id.h"
+#include "../util/AllocatorWithLimit.h"
 #include "../util/Log.h"
 
 namespace detail {
 // The actual data storage of the Id Tables, basically a wrapper around a
 // std::vector<Id>
+template <typename Allocator>
 struct IdTableVectorWrapper {
   static constexpr bool ManagesStorage = true;  // is able to grow/allocate
-  std::vector<Id> _data;
+  std::vector<Id, Allocator> _data;
 
-  IdTableVectorWrapper() = default;
+  IdTableVectorWrapper(Allocator a) : _data{a} {};
 
   // construct from c-style array by copying the content
-  explicit IdTableVectorWrapper(const Id* const ptr, size_t sz) {
+  explicit IdTableVectorWrapper(const Id* const ptr, size_t sz, Allocator a)
+      : _data{a} {
     _data.assign(ptr, ptr + sz);
   }
+
+  Allocator getAllocator() const { return _data.get_allocator(); }
 
   // unified interface to the data
   Id* data() noexcept { return _data.data(); }
@@ -36,24 +42,30 @@ struct IdTableVectorWrapper {
 
 // similar interface to the IdTableVectorWrapper but doesn't own storage, used
 // for cheap to copy const views into IdTables
+// We still need the allocator information to be able to copy to a owning vector
+template <typename Allocator>
 struct IdTableViewWrapper {
   static constexpr bool ManagesStorage =
       false;  // is not able to grow and allocate
   const Id* _data;
   const size_t _size;
+  Allocator _allocator;
 
   IdTableViewWrapper() = delete;
 
   IdTableViewWrapper(const IdTableViewWrapper&) noexcept = default;
 
   // construct as a view into an owning VectorWrapper
-  explicit IdTableViewWrapper(const IdTableVectorWrapper& rhs) noexcept
-      : _data(rhs.data()), _size(rhs._data.size()) {}
+  explicit IdTableViewWrapper(
+      const IdTableVectorWrapper<Allocator>& rhs) noexcept
+      : _data(rhs.data()),
+        _size(rhs._data.size()),
+        _allocator{rhs.getAllocator()} {}
 
   // convert to an owning VectorWrapper by making a copy. Explicit since
   // expensive
-  explicit operator IdTableVectorWrapper() const {
-    return IdTableVectorWrapper(_data, _size);
+  explicit operator IdTableVectorWrapper<Allocator>() const {
+    return IdTableVectorWrapper(_data, _size, _allocator);
   }
 
   // access interface to the data
@@ -229,32 +241,33 @@ class IdTableIterator {
  *
  * @tparam COLS The number of columns (> 0 for this implementation)
  * @tparam DATA IdTableVectorWrapper or IdTableViewWrapper (data storage that
+ * @tparam Allocator The Allocator used
  *allows access to an (const) Id* )
  **/
-template <int COLS, typename DATA>
+template <int COLS, typename DATA, typename Allocator>
 class IdTableImpl {
  protected:
   size_t _size = 0;
   size_t _capacity = 0;
   DATA _data;  // something that lets us access a (const) Id*, might or might
-               // not own its storage
+  // not own its storage
 
-  template <int INCOLS, typename INDATA>
+  template <int OTHER_COLS, typename OTHER_DATA, typename OTHER_ALLOCATOR>
   friend class IdTableImpl;  // make the conversions work from static to dynamic
-                             // etc.
+  // etc.
 
   // these constructors are protected so they can only be used by the
   // moveToStatic and moveToStaticView functions of the IdTableStatic class
-  template <int INCOLS, typename INDATA,
-            typename = std::enable_if_t<INCOLS == 0 || INCOLS == COLS>>
-  IdTableImpl(const IdTableImpl<INCOLS, INDATA>& o)
+  template <int OTHER_COLS, typename OTHER_DATA,
+            typename = std::enable_if_t<OTHER_COLS == 0 || OTHER_COLS == COLS>>
+  IdTableImpl(const IdTableImpl<OTHER_COLS, OTHER_DATA, Allocator>& o)
       : _size(o._size), _capacity(o._capacity), _data(DATA(o._data)) {
     assert(cols() == o.cols());
   }
 
-  template <int INCOLS, typename INDATA,
-            typename = std::enable_if_t<INCOLS == 0 || INCOLS == COLS>>
-  IdTableImpl(IdTableImpl<INCOLS, INDATA>&& o) noexcept
+  template <int OTHER_COLS, typename OTHER_DATA,
+            typename = std::enable_if_t<OTHER_COLS == 0 || OTHER_COLS == COLS>>
+  IdTableImpl(IdTableImpl<OTHER_COLS, OTHER_DATA, Allocator>&& o) noexcept
       : _size(std::move(o._size)),
         _capacity(std::move(o._capacity)),
         _data(std::move(o._data)) {
@@ -262,7 +275,7 @@ class IdTableImpl {
   }
 
  public:
-  IdTableImpl() = default;
+  IdTableImpl(Allocator allocator) : _data{allocator} {};
 
   using const_row_type = const std::array<Id, COLS>;
   using row_type = const std::array<Id, COLS>;
@@ -340,6 +353,8 @@ class ConstRow final {
  * This provides access to a single row of a Table. The class can optionally
  * manage its own data, allowing for it to be swappable (otherwise swapping
  * two rows during e.g. a std::sort would lead to bad behaviour).
+ * Rows currently do not pass down the allocator information, but there are only
+ *few of them typically.
  **/
 class Row {
   Id* _data;
@@ -624,9 +639,9 @@ class IdTableDynamicIterator {
 
 // Common interface specialication for the dynamic (number of columns only known
 // at runtime) IdTable
-template <typename DATA>
-class IdTableImpl<0, DATA> {
-  template <int INCOLS, typename INDATA>
+template <typename DATA, typename Allocator>
+class IdTableImpl<0, DATA, Allocator> {
+  template <int OTHER_COLS, typename OTHER_DATA, typename OTHER_ALLOCATOR>
   friend class IdTableImpl;
 
  protected:
@@ -636,18 +651,18 @@ class IdTableImpl<0, DATA> {
   size_t _cols = 0;
 
  public:
-  IdTableImpl() = default;
+  IdTableImpl(Allocator al) : _data{al} {};
 
  protected:
-  template <int INCOLS, typename INDATA>
-  explicit IdTableImpl(const IdTableImpl<INCOLS, INDATA>& o)
+  template <int OTHER_COLS, typename OTHER_DATA>
+  explicit IdTableImpl(const IdTableImpl<OTHER_COLS, OTHER_DATA, Allocator>& o)
       : _size(o._size),
         _capacity(o._capacity),
         _data(o._data),
         _cols(o._cols) {}
 
-  template <int INCOLS, typename INDATA>
-  explicit IdTableImpl(IdTableImpl<INCOLS, INDATA>&& o)
+  template <int OTHER_COLS, typename OTHER_DATA>
+  explicit IdTableImpl(IdTableImpl<OTHER_COLS, OTHER_DATA, Allocator>&& o)
       : _size(o._size),
         _capacity(o._capacity),
         _data(std::move(o._data)),
@@ -690,15 +705,16 @@ class IdTableImpl<0, DATA> {
  * @tparam COLS The number of Columns, 0 means "dynamic (const but runtime)
  * number of columns)
  * @tparam DATA A data Accessor like IdTableVectorWrapper or IdTableViewWrapper
+ * @tparam Allocator An allocator type
  */
-template <int COLS, typename DATA>
-class IdTableTemplated : private IdTableImpl<COLS, DATA> {
+template <int COLS, typename DATA, typename Allocator>
+class IdTableTemplated : private IdTableImpl<COLS, DATA, Allocator> {
   // Make all other instantiations of this template friends of this.
-  template <int, typename>
+  template <int, typename, typename>
   friend class IdTableTemplated;
 
  protected:
-  using Base = IdTableImpl<COLS, DATA>;
+  using Base = IdTableImpl<COLS, DATA, Allocator>;
   // make stuff from the templated base class accessible
   using Base::_capacity;
   using Base::_cols;
@@ -710,6 +726,7 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
   using typename Base::const_row_reference;
   using typename Base::row_reference;
   static constexpr float GROWTH_FACTOR = 1.5;
+  // the allocator
 
  public:
   using typename Base::const_iterator;
@@ -726,9 +743,11 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
   using Base::cols;
   using Base::setCols;
 
-  IdTableTemplated() = default;
+  IdTableTemplated(Allocator al = Allocator{}) : Base{al} {};
 
-  IdTableTemplated(size_t cols) { setCols(cols); }
+  IdTableTemplated(size_t cols, Allocator al = Allocator{}) : Base{al} {
+    setCols(cols);
+  }
 
   virtual ~IdTableTemplated() = default;
 
@@ -741,16 +760,20 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
   // move assignment
   IdTableTemplated& operator=(IdTableTemplated&& other) noexcept = default;
 
+  Allocator getAllocator() const { return _data.getAllocator(); }
+
  protected:
   // internally convert between "dynamic" and "static" mode and possibly
   // convert from Owning to non owning storage, is used in the conversion
   // functions Base class asserts that number of columns match.
-  template <int INCOLS, typename INDATA>
-  explicit IdTableTemplated(const IdTableTemplated<INCOLS, INDATA>& o)
+  template <int OTHER_COLS, typename OTHER_DATA>
+  explicit IdTableTemplated(
+      const IdTableTemplated<OTHER_COLS, OTHER_DATA, Allocator>& o)
       : Base(o) {}
 
-  template <int INCOLS, typename INDATA>
-  explicit IdTableTemplated(IdTableTemplated<INCOLS, INDATA>&& o) noexcept
+  template <int OTHER_COLS, typename OTHER_DATA>
+  explicit IdTableTemplated(
+      IdTableTemplated<OTHER_COLS, OTHER_DATA, Allocator>&& o) noexcept
       : Base(std::move(o)) {}
 
  public:
@@ -878,9 +901,10 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
     _size++;
   }
 
-  template <typename INDATA, bool ManagesStorage = DATA::ManagesStorage,
+  template <typename OTHER_DATA, bool ManagesStorage = DATA::ManagesStorage,
             typename = std::enable_if_t<ManagesStorage>>
-  void push_back(const IdTableTemplated<COLS, INDATA>& init, size_t row) {
+  void push_back(const IdTableTemplated<COLS, OTHER_DATA, Allocator>& init,
+                 size_t row) {
     assert(init._cols == _cols);
     if (_size + 1 >= _capacity) {
       grow();
@@ -986,14 +1010,14 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
   }
 
   /**
-   * @brief Creates an IdTableTemplated<NEW_COLS> that now owns this
+   * @brief Creates an IdTableTemplated<OTHER_COLS> that now owns this
    * id tables data. This is effectively a move operation that also
    * changes the type to its equivalent dynamic variant.
    **/
-  template <int NEW_COLS, bool ManagesStorage = DATA::ManagesStorage,
+  template <int OTHER_COLS, bool ManagesStorage = DATA::ManagesStorage,
             typename = std::enable_if_t<ManagesStorage>>
-  IdTableTemplated<NEW_COLS, DATA> moveToStatic() {
-    return IdTableTemplated<NEW_COLS, DATA>(
+  IdTableTemplated<OTHER_COLS, DATA, Allocator> moveToStatic() {
+    return IdTableTemplated<OTHER_COLS, DATA, Allocator>(
         std::move(*this));  // let the private conversions do all the work
   };
 
@@ -1004,20 +1028,22 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
    **/
   template <bool ManagesStorage = DATA::ManagesStorage,
             typename = std::enable_if_t<ManagesStorage>>
-  IdTableTemplated<0, DATA> moveToDynamic() {
-    return IdTableTemplated<0, DATA>(std::move(*this));
+  IdTableTemplated<0, DATA, Allocator> moveToDynamic() {
+    return IdTableTemplated<0, DATA, Allocator>(std::move(*this));
   };
 
   /**
    * @brief Create a non-owning and readOnly view into this data that has a
    * static width.
-   * @tparam NEW_COLS The number of Columns. Must be the actual number of
+   * @tparam OTHER_COLS The number of Columns. Must be the actual number of
    * columns this table already has or an assertion will fail
    */
-  template <int NEW_COLS>
-  const IdTableTemplated<NEW_COLS, IdTableViewWrapper> asStaticView() const {
-    return IdTableTemplated<NEW_COLS, IdTableViewWrapper>(
-        *static_cast<const IdTableTemplated<COLS, DATA>*>(this));
+  template <int OTHER_COLS>
+  const IdTableTemplated<OTHER_COLS, IdTableViewWrapper<Allocator>, Allocator>
+  asStaticView() const {
+    return IdTableTemplated<OTHER_COLS, IdTableViewWrapper<Allocator>,
+                            Allocator>(
+        *static_cast<const IdTableTemplated<COLS, DATA, Allocator>*>(this));
   };
 
   /**
@@ -1029,8 +1055,10 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
    */
   template <bool ManagesStorage = DATA::ManagesStorage,
             typename = std::enable_if_t<!ManagesStorage>>
-  const IdTableTemplated<COLS, IdTableVectorWrapper> clone() const {
-    return IdTableTemplated<COLS, IdTableVectorWrapper>(*this);
+  const IdTableTemplated<COLS, IdTableVectorWrapper<Allocator>, Allocator>
+  clone() const {
+    return IdTableTemplated<COLS, IdTableVectorWrapper<Allocator>, Allocator>(
+        *this);
   };
 
   // Size access
@@ -1059,8 +1087,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
   }
 
   // Support for ostreams
-  friend std::ostream& operator<<(std::ostream& out,
-                                  const IdTableTemplated<COLS, DATA>& table) {
+  friend std::ostream& operator<<(
+      std::ostream& out, const IdTableTemplated<COLS, DATA, Allocator>& table) {
     out << "IdTable(" << ((void*)table.data()) << ") with " << table.size()
         << " rows and " << table.cols() << " columns" << std::endl;
     for (size_t row = 0; row < table.size(); row++) {
@@ -1078,13 +1106,17 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
 /// The general IdTable class. Can be modified and owns its data. If COLS > 0,
 /// COLS specifies the compile-time number of columns COLS == 0 means "runtime
 /// number of cols"
-template <int COLS>
+template <int COLS, typename Allocator = ad_utility::AllocatorWithLimit<Id>>
 using IdTableStatic =
-    detail::IdTableTemplated<COLS, detail::IdTableVectorWrapper>;
+    detail::IdTableTemplated<COLS, detail::IdTableVectorWrapper<Allocator>,
+                             Allocator>;
 
 // the "runtime number of cols" variant
-using IdTable = IdTableStatic<0>;
+// template <typename Allocator = ad_utility::AllocatorWithLimit<Id>>
+using IdTable = IdTableStatic<0, ad_utility::AllocatorWithLimit<Id>>;
 
 /// A constant view into an IdTable that does not own its data
-template <int COLS>
-using IdTableView = detail::IdTableTemplated<COLS, detail::IdTableViewWrapper>;
+template <int COLS, typename Allocator = ad_utility::AllocatorWithLimit<Id>>
+using IdTableView =
+    detail::IdTableTemplated<COLS, detail::IdTableViewWrapper<Allocator>,
+                             Allocator>;
