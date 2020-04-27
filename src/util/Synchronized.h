@@ -32,6 +32,19 @@ struct AllowsSharedLocking<
                    decltype(std::declval<M&>().unlock_shared())>>
     : std::true_type {};
 
+/// A very simple spin lock, stolen from cppreference
+class SpinLock {
+ private:
+  std::atomic_flag lock_ = ATOMIC_FLAG_INIT;
+
+ public:
+  void lock() {
+    while (lock_.test_and_set(std::memory_order_acquire)) {
+    }  // spin
+  }
+  void unlock() { lock_.clear(std::memory_order_release); }
+};
+
 // forward declaration
 template <class S, bool b, bool c>
 class LockPtr;
