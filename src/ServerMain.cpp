@@ -153,7 +153,7 @@ int main(int argc, char** argv) {
   cout << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
-    Server server(port, numThreads, memLimit * 2 << 30u);
+    Server server(port, numThreads, memLimit * 1 << 30u);
     server.initialize(index, text, usePatterns, enablePatternTrick);
     server.run();
   } catch (const std::exception& e) {
