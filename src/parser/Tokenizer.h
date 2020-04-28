@@ -388,9 +388,10 @@ struct TurtleToken {
         }
 
         default:
-          throw std::runtime_error(
-              "Illegal escape sequence in RDF Literal. This should never "
-              "happen, please report this");
+          throw std::runtime_error("Illegal escape sequence in RDF Literal \"" +
+                                   std::string(literal) +
+                                   "\" . This should never "
+                                   "happen, please report this");
       }
       literal.remove_prefix(pos + 2);
       pos = literal.find('\\');
