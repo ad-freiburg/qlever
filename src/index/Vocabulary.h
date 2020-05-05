@@ -41,7 +41,7 @@ struct AccessReturnTypeGetter<CompressedString> {
 };
 
 template <class StringType>
-using AccessReturnType_t = typename AccessReturnTypeGetter<StringType>::type;
+using AccessReturnType_t = std::string;
 
 struct IdRange {
   IdRange() : _first(), _last() {}
@@ -143,8 +143,11 @@ class Vocabulary {
   template <typename U = StringType, typename = enable_if_compressed<U>>
   const std::optional<string> idToOptionalString(Id id) const {
     if (id < _words.size()) {
+      if (id >= _lowerBoundFloat && id < _upperBoundFloat) {
+        return std::to_string(_words[static_cast<size_t>(id)].getFloat());
+      }
       // internal, prefixCompressed word
-      return expandPrefix(_words[static_cast<size_t>(id)]);
+      return expandPrefix(_words[static_cast<size_t>(id)].getStr());
     } else if (id == ID_NO_VALUE) {
       return std::nullopt;
     } else {
@@ -159,9 +162,15 @@ class Vocabulary {
   //! lvalue for compressedString and const& for string-based vocabulary
   AccessReturnType_t<StringType> at(Id id) const {
     if constexpr (_isCompressed) {
-      return expandPrefix(_words[static_cast<size_t>(id)]);
+      if (id >= _lowerBoundFloat && id < _upperBoundFloat) {
+        return std::to_string(_words[static_cast<size_t>(id)].getFloat());
+      }
+      return expandPrefix(_words[static_cast<size_t>(id)].getStr());
     } else {
-      return _words[static_cast<size_t>(id)];
+      if (id >= _lowerBoundFloat && id < _upperBoundFloat) {
+        return std::to_string(_words[static_cast<size_t>(id)].getFloat());
+      }
+      return _words[static_cast<size_t>(id)].getStr();
     }
   }
 
@@ -370,16 +379,42 @@ class Vocabulary {
   // Wraps std::lower_bound and returns an index instead of an iterator
   Id lower_bound(const string& word,
                  const SortLevel level = SortLevel::QUARTERNARY) const {
-    return static_cast<Id>(std::lower_bound(_words.begin(), _words.end(), word,
-                                            getLowerBoundLambda(level)) -
+    if (ad_utility::startsWith(word, VALUE_FLOAT_PREFIX)) {
+      float f = ad_utility::convertIndexWordToFloat(word);
+      return static_cast<Id>(std::lower_bound(_words.begin() + _lowerBoundFloat, _words.begin() + _upperBoundFloat, f,
+                                              [](const auto& a, float b) {return a.getFloat < b;}) - _words.begin());
+
+    }
+    auto lambda = [f = getLowerBoundLambda(level)](const auto& a, const auto& b) {
+      return f(a.getStr, b);
+    };
+    auto a = static_cast<Id>(std::lower_bound(_words.begin(), _words.begin() + _lowerBoundFloat, word,
+                                            lambda) -
                            _words.begin());
+    auto b = static_cast<Id>(std::lower_bound(_words.begin() + _upperBoundFloat, _words.end() , word,
+                                              lambda) -
+                             _words.begin());
+    return std::min(a, b);
   }
 
   // _______________________________________________________________
   Id upper_bound(const string& word, const SortLevel level) const {
-    return static_cast<Id>(std::upper_bound(_words.begin(), _words.end(), word,
-                                            getUpperBoundLambda(level)) -
-                           _words.begin());
+    if (ad_utility::startsWith(word, VALUE_FLOAT_PREFIX)) {
+      float f = ad_utility::convertIndexWordToFloat(word);
+      return static_cast<Id>(std::upper_bound(_words.begin() + _lowerBoundFloat, _words.begin() + _upperBoundFloat, f,
+                                              [](float a, const auto& b) {return a < b.getFloat();}) - _words.begin());
+
+    }
+    auto lambda = [f = getUpperBoundLambda(level)](const auto& a, const auto& b) {
+      return f(a.getStr, b);
+    };
+    auto a = static_cast<Id>(std::upper_bound(_words.begin(), _words.begin() + _lowerBoundFloat, word,
+                                              lambda) -
+                             _words.begin());
+    auto b = static_cast<Id>(std::upper_bound(_words.begin() + _upperBoundFloat, _words.end() , word,
+                                              lambda) -
+                             _words.begin());
+    return std::max(a, b);
   }
 
   // TODO<joka921> these following two members are only used with the
@@ -401,7 +436,30 @@ class Vocabulary {
   // defaults to English
   vector<std::string> _internalizedLangs{"en"};
 
-  vector<StringType> _words;
+  struct Content {
+   private:
+    union U {
+      float f;
+      StringType str;
+      ~U() {} // TODO<joka921> same unsafety here
+    } u;
+    public:
+    Content() : u(0.0f) {}
+    // may only be called once!
+    void setStr(const StringType& str) {
+      new(&u.str) StringType(str);
+    }
+    // this is unsafe, the Strings won't be destroyed,
+    // TODO<joka921> currently this doesn't bother us
+    ~Content() {}
+    const StringType& getStr() const { return u.str;}
+    float getFloat() const {return u.f;}
+    void setFloat(float f) { u.f = f;}
+
+  };
+  size_t _lowerBoundFloat;
+  size_t _upperBoundFloat;
+  vector<Content> _words;
   ExternalVocabulary<ComparatorType> _externalLiterals;
   ComparatorType _caseComparator;
 };

@@ -26,14 +26,30 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
   string line;
   [[maybe_unused]] bool first = true;
   std::string lastExpandedString;
+  bool floatsStarted = false;
+  size_t numWords = 0;
   while (std::getline(in, line)) {
     if constexpr (_isCompressed) {
       // when we read from file it means that all preprocessing has been done
       // and the prefixes are already stripped in the file
-      _words.push_back(CompressedString::fromString(line));
-      auto str = expandPrefix(_words.back());
-      if (!first) {
-        if (!(_caseComparator.compare(lastExpandedString, str,
+      auto compr = CompressedString::fromString(line);
+      auto str = expandPrefix(compr);
+      _words.emplace_back();
+      if (ad_utility::startsWith(str, VALUE_FLOAT_PREFIX)) {
+        _words.back().setFloat(ad_utility::convertIndexWordToFloat(str));
+        if (!floatsStarted) {
+          _lowerBoundFloat = numWords;
+          floatsStarted = true;
+        }
+      } else {
+        _words.back().setStr(compr);
+        if (floatsStarted) {
+          floatsStarted = false;
+          _upperBoundFloat = numWords + 1;
+        }
+      }
+        if (!first) {
+          if (!(_caseComparator.compare(lastExpandedString, str,
                                       SortLevel::TOTAL))) {
           LOG(ERROR) << "Vocabulary is not sorted in ascending order for words "
                      << lastExpandedString << " and " << str << std::endl;
@@ -44,8 +60,22 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
       }
       lastExpandedString = std::move(str);
     } else {
-      _words.push_back(line);
+      _words.emplace_back();
+      if (ad_utility::startsWith(line, VALUE_FLOAT_PREFIX)) {
+        _words.back().setFloat(ad_utility::convertIndexWordToFloat(line));
+        if (!floatsStarted) {
+          _lowerBoundFloat = numWords;
+          floatsStarted = true;
+        }
+      } else {
+        _words.back().setStr(line);
+        if (floatsStarted) {
+          floatsStarted = false;
+          _upperBoundFloat = numWords + 1;
+        }
+      }
     }
+    numWords++;
   }
   in.close();
   LOG(INFO) << "Done reading vocabulary from file.\n";
