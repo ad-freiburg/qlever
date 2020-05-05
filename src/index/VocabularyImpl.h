@@ -22,18 +22,35 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
                                     const string& extLitsFileName) {
   LOG(INFO) << "Reading vocabulary from file " << fileName << "\n";
   _words.clear();
+  _words.reserve(_maxVocabularySize);
   std::fstream in(fileName.c_str(), std::ios_base::in);
   string line;
   [[maybe_unused]] bool first = true;
   std::string lastExpandedString;
+  bool floatsStarted = false;
+  size_t numWords = 0;
   while (std::getline(in, line)) {
     if constexpr (_isCompressed) {
       // when we read from file it means that all preprocessing has been done
       // and the prefixes are already stripped in the file
-      _words.push_back(CompressedString::fromString(line));
-      auto str = expandPrefix(_words.back());
-      if (!first) {
-        if (!(_caseComparator.compare(lastExpandedString, str,
+      auto compr = CompressedString::fromString(line);
+      auto str = expandPrefix(compr);
+      _words.emplace_back();
+      if (ad_utility::startsWith(str, VALUE_FLOAT_PREFIX)) {
+        _words.back().setFloat(ad_utility::convertIndexWordToFloat(str));
+        if (!floatsStarted) {
+          _lowerBoundFloat = numWords;
+          floatsStarted = true;
+        }
+      } else {
+        _words.back().setStr(compr);
+        if (floatsStarted) {
+          floatsStarted = false;
+          _upperBoundFloat = numWords + 1;
+        }
+      }
+        if (!first) {
+          if (!(_caseComparator.compare(lastExpandedString, str,
                                       SortLevel::TOTAL))) {
           LOG(ERROR) << "Vocabulary is not sorted in ascending order for words "
                      << lastExpandedString << " and " << str << std::endl;
@@ -44,8 +61,22 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
       }
       lastExpandedString = std::move(str);
     } else {
-      _words.push_back(line);
+      _words.emplace_back();
+      if (ad_utility::startsWith(line, VALUE_FLOAT_PREFIX)) {
+        _words.back().setFloat(ad_utility::convertIndexWordToFloat(line));
+        if (!floatsStarted) {
+          _lowerBoundFloat = numWords;
+          floatsStarted = true;
+        }
+      } else {
+        _words.back().setStr(line);
+        if (floatsStarted) {
+          floatsStarted = false;
+          _upperBoundFloat = numWords + 1;
+        }
+      }
     }
+    numWords++;
   }
   in.close();
   LOG(INFO) << "Done reading vocabulary from file.\n";
@@ -71,14 +102,18 @@ void Vocabulary<S, C>::writeToFile(const string& fileName) const {
   LOG(INFO) << "Writing vocabulary to file " << fileName << "\n";
   std::ofstream out(fileName.c_str(), std::ios_base::out);
   // on disk we save the compressed version, so do not  expand prefixes
-  for (size_t i = 0; i + 1 < _words.size(); ++i) {
-    out << _words[i] << '\n';
+  if constexpr (!_isCompressed) {
+    for (size_t i = 0; i + 1 < _words.size(); ++i) {
+      out << at(i) << '\n';
+    }
+    if (_words.size() > 0) {
+      out << at(_words.size() - 1);
+    }
+    out.close();
+    LOG(INFO) << "Done writing vocabulary to file.\n";
+  } else {
+    throw std::runtime_error("Vocabulary writing to file for compressed vocabularies is illegal!");
   }
-  if (_words.size() > 0) {
-    out << _words[_words.size() - 1];
-  }
-  out.close();
-  LOG(INFO) << "Done writing vocabulary to file.\n";
 }
 
 // _____________________________________________________________________________
@@ -108,11 +143,19 @@ template <class S, class C>
 template <typename, typename>
 void Vocabulary<S, C>::createFromSet(const ad_utility::HashSet<S>& set) {
   LOG(INFO) << "Creating vocabulary from set ...\n";
-  _words.clear();
-  _words.reserve(set.size());
-  _words.insert(begin(_words), begin(set), end(set));
+  //TODO<joka921> This is inefficient, but only used for the small text index;
+  std::vector<S> words;
+  words.clear();
+  words.reserve(set.size());
+  words.insert(begin(words), begin(set), end(set));
   LOG(INFO) << "... sorting ...\n";
-  std::sort(begin(_words), end(_words), _caseComparator);
+  std::sort(begin(words), end(words), _caseComparator);
+  _words.reserve(words.size());
+  for (const auto& w : words) {
+    _words.emplace_back();
+    _words.back().setStr(w);
+  }
+
   LOG(INFO) << "Done creating vocabulary.\n";
 }
 
