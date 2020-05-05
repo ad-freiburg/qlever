@@ -366,6 +366,14 @@ TEST(ConversionsTest, convertNumericToIndexWordEndToEnd) {
   // ASSERT_EQ(convertIndexWordToValueLiteral(convertNumericToIndexWord("0123")),
   //                "\"123\"^^<http://www.w3.org/2001/XMLSchema#int>");
 }
+TEST(Conversions, Failing) {
+  for (int i = -1000000; i < 1000000; ++i) {
+    auto f = convertFloatStringToIndexWord(std::to_string(i));
+    ASSERT_FLOAT_EQ(convertIndexWordToFloat(f), i);
+
+  }
+  //ASSERT_FLOAT_EQ(convertIndexWordToFloat(":v:float:M-00000000000000000001E900000078912576641972733203432T"), -0.99999999999f);
+}
 
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
