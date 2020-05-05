@@ -37,7 +37,12 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
       auto str = expandPrefix(compr);
       _words.emplace_back();
       if (ad_utility::startsWith(str, VALUE_FLOAT_PREFIX)) {
-        _words.back().setFloat(ad_utility::convertIndexWordToFloat(str));
+        try {
+          _words.back().setFloat(ad_utility::convertIndexWordToFloat(str));
+        } catch(...) {
+          LOG(ERROR) << "Error converting index word " << str << '\n';
+          throw;
+        }
         if (!floatsStarted) {
           _lowerBoundFloat = numWords;
           floatsStarted = true;
