@@ -25,11 +25,12 @@ Server::~Server() {
 
 // _____________________________________________________________________________
 void Server::initialize(const string& ontologyBaseName, bool useText,
-                        bool usePatterns, bool usePatternTrick) {
+                        bool usePatterns, bool usePatternTrick, size_t maxVocabSize) {
   LOG(INFO) << "Initializing server..." << std::endl;
 
   _enablePatternTrick = usePatternTrick;
   _index.setUsePatterns(usePatterns);
+  _index.setMaxVocabSize(maxVocabSize);
 
   // Init the index.
   _index.createFromOnDiskIndex(ontologyBaseName);

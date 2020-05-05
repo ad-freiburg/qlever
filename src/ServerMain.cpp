@@ -32,6 +32,7 @@ struct option options[] = {{"help", no_argument, NULL, 'h'},
                            {"no-patterns", no_argument, NULL, 'P'},
                            {"no-pattern-trick", no_argument, NULL, 'T'},
                            {"text", no_argument, NULL, 't'},
+                           {"max-vocab-size", no_argument, NULL, 'M'},
                            {NULL, 0, NULL, 0}};
 
 void printUsage(char* execName) {
@@ -59,6 +60,8 @@ void printUsage(char* execName) {
        << "Enables the usage of text." << endl;
   cout << "  " << std::setw(20) << "j, worker-threads" << std::setw(1) << "    "
        << "Sets the number of worker threads to use" << endl;
+  cout << "  " << std::setw(20) << "M, max-vocab-size" << std::setw(1) << "    "
+       << "Must be bigger than wc -l on the vocabulary file, else will crash" << endl;
   cout.copyfmt(coutState);
 }
 
@@ -79,11 +82,12 @@ int main(int argc, char** argv) {
   int numThreads = 1;
   bool usePatterns = true;
   bool enablePatternTrick = true;
+  size_t maxVocabSize = 1000000;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "i:p:j:tauhmlT", options, NULL);
+    int c = getopt_long(argc, argv, "i:p:j:tauhmlTM:", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'i':
@@ -103,6 +107,9 @@ int main(int argc, char** argv) {
         break;
       case 'j':
         numThreads = atoi(optarg);
+        break;
+      case 'M':
+        maxVocabSize = atoi(optarg);
         break;
       case 'h':
         printUsage(argv[0]);
@@ -143,7 +150,8 @@ int main(int argc, char** argv) {
 
   try {
     Server server(port, numThreads);
-    server.initialize(index, text, usePatterns, enablePatternTrick);
+    cout << "max vocab size is " << maxVocabSize << std::endl;
+    server.initialize(index, text, usePatterns, enablePatternTrick, maxVocabSize);
     server.run();
   } catch (const std::exception& e) {
     // This code should never be reached as all exceptions should be handled

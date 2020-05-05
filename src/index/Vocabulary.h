@@ -21,6 +21,7 @@
 #include "../util/HashSet.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
+#include "../util/Conversions.h"
 #include "./CompressedString.h"
 #include "./StringSortComparator.h"
 #include "ExternalVocabulary.h"
@@ -88,7 +89,9 @@ class Vocabulary {
       typename = std::enable_if_t<std::is_same_v<StringType, string> ||
                                   std::is_same_v<StringType, CompressedString>>>
 
-  Vocabulary(){};
+  Vocabulary(){
+      _words.reserve(_maxVocabularySize);
+  };
 
   // variable for dispatching
   static constexpr bool _isCompressed =
@@ -117,10 +120,11 @@ class Vocabulary {
 
   //! Append a word to the vocabulary. Wraps the std::vector method.
   void push_back(const string& word) {
+    _words.emplace_back();
     if constexpr (_isCompressed) {
-      _words.push_back(compressPrefix(word));
+      _words.back().setStr((compressPrefix(word)));
     } else {
-      _words.push_back(word);
+      _words.back().setStr(word);
     }
   }
 
@@ -130,11 +134,24 @@ class Vocabulary {
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
   const std::optional<std::reference_wrapper<const string>> operator[](
       Id id) const {
+    AD_CHECK(_lowerBoundFloat == 0 && _upperBoundFloat == 0);
     if (id < _words.size()) {
-      return _words[static_cast<size_t>(id)];
+      return _words[static_cast<size_t>(id)].getStr();
     } else {
       return std::nullopt;
     }
+  }
+
+  // if out of float range, returns NaN
+  float idToFloat(Id id) const {
+    if (id < _lowerBoundFloat || id >= _upperBoundFloat) {
+      return std::numeric_limits<float>::quiet_NaN();
+    }
+    return _words[id].getFloat();
+  }
+
+  void setMaxVocabSize(size_t f) {
+    _maxVocabularySize = f;
   }
 
   //! Get the word with the given id or an empty optional if the
@@ -341,10 +358,23 @@ class Vocabulary {
     auto transformed = _caseComparator.transformToFirstPossibleBiggerValue(
         prefix, SortLevel::PRIMARY);
 
-    auto pred = getLowerBoundLambda<decltype(transformed)>(SortLevel::PRIMARY);
-    auto ub = static_cast<Id>(
-        std::lower_bound(_words.begin(), _words.end(), transformed, pred) -
-        _words.begin());
+    auto pred = [f = getLowerBoundLambda<decltype(transformed)>(SortLevel::PRIMARY)] (const auto& a, const auto& b){
+      return f(a.getStr(), b);
+    };
+
+    Id ub;
+
+    if (lb < _lowerBoundFloat) {
+      ub = static_cast<Id>(
+          std::lower_bound(_words.begin(), _words.begin() + _lowerBoundFloat, transformed, pred) -
+          _words.begin());
+    } else if (lb >= _upperBoundFloat) {
+      ub = static_cast<Id>(
+          std::lower_bound(_words.begin() + _upperBoundFloat, _words.end(), transformed, pred) -
+          _words.begin());
+    } else {
+      AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Prefix filter on numeric literal is not allowed");
+    }
 
     return {lb, ub};
   }
@@ -382,19 +412,21 @@ class Vocabulary {
     if (ad_utility::startsWith(word, VALUE_FLOAT_PREFIX)) {
       float f = ad_utility::convertIndexWordToFloat(word);
       return static_cast<Id>(std::lower_bound(_words.begin() + _lowerBoundFloat, _words.begin() + _upperBoundFloat, f,
-                                              [](const auto& a, float b) {return a.getFloat < b;}) - _words.begin());
+                                              [](const auto& a, float b) {return a.getFloat() < b;}) - _words.begin());
 
     }
     auto lambda = [f = getLowerBoundLambda(level)](const auto& a, const auto& b) {
-      return f(a.getStr, b);
+      return f(a.getStr(), b);
     };
-    auto a = static_cast<Id>(std::lower_bound(_words.begin(), _words.begin() + _lowerBoundFloat, word,
-                                            lambda) -
-                           _words.begin());
-    auto b = static_cast<Id>(std::lower_bound(_words.begin() + _upperBoundFloat, _words.end() , word,
+
+    if ((_lowerBoundFloat == 0 && _upperBoundFloat == 0) || word > VALUE_FLOAT_PREFIX) {
+      return static_cast<Id>(std::lower_bound(_words.begin() + _upperBoundFloat, _words.end() , word,
+                                                lambda) -
+                               _words.begin());
+    }
+    return static_cast<Id>(std::lower_bound(_words.begin(), _words.begin() + _lowerBoundFloat, word,
                                               lambda) -
                              _words.begin());
-    return std::min(a, b);
   }
 
   // _______________________________________________________________
@@ -406,15 +438,16 @@ class Vocabulary {
 
     }
     auto lambda = [f = getUpperBoundLambda(level)](const auto& a, const auto& b) {
-      return f(a.getStr, b);
+      return f(a, b.getStr());
     };
-    auto a = static_cast<Id>(std::upper_bound(_words.begin(), _words.begin() + _lowerBoundFloat, word,
+    if ((_lowerBoundFloat == 0 && _upperBoundFloat == 0) || word > VALUE_FLOAT_PREFIX) {
+      return static_cast<Id>(std::upper_bound(_words.begin() + _upperBoundFloat,
+                                           _words.end(), word, lambda) -
+                          _words.begin());
+    }
+    return static_cast<Id>(std::upper_bound(_words.begin(), _words.begin() + _lowerBoundFloat, word,
                                               lambda) -
                              _words.begin());
-    auto b = static_cast<Id>(std::upper_bound(_words.begin() + _upperBoundFloat, _words.end() , word,
-                                              lambda) -
-                             _words.begin());
-    return std::max(a, b);
   }
 
   // TODO<joka921> these following two members are only used with the
@@ -439,12 +472,19 @@ class Vocabulary {
   struct Content {
    private:
     union U {
-      float f;
+      float f{0.0f};
       StringType str;
+      U(): f{0.0f} {}
       ~U() {} // TODO<joka921> same unsafety here
     } u;
     public:
-    Content() : u(0.0f) {}
+    Content() {};
+    Content(const Content&) {
+      throw std::runtime_error{"The vocabulary must completely be reserved before usage!"};
+    }
+    Content& operator=(const Content&) {
+      throw std::runtime_error{"The vocabulary must completely be reserved before usage!"};
+    }
     // may only be called once!
     void setStr(const StringType& str) {
       new(&u.str) StringType(str);
@@ -459,6 +499,7 @@ class Vocabulary {
   };
   size_t _lowerBoundFloat;
   size_t _upperBoundFloat;
+  size_t _maxVocabularySize = 1000000;
   vector<Content> _words;
   ExternalVocabulary<ComparatorType> _externalLiterals;
   ComparatorType _caseComparator;
