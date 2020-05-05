@@ -119,8 +119,23 @@ class Vocabulary {
   void writeToBinaryFileForMerging(const string& fileName) const;
 
   //! Append a word to the vocabulary. Wraps the std::vector method.
+  bool floatStarted = false;
   void push_back(const string& word) {
+    if (ad_utility::startsWith(word, VALUE_FLOAT_PREFIX))  {
+      if (!floatStarted) {
+        _lowerBoundFloat = _words.size();
+        floatStarted = true;
+      }
+      _words.emplace_back();
+      _words.back().setFloat(ad_utility::convertIndexWordToFloat(word));
+      return;
+    }
+
     _words.emplace_back();
+    if (floatStarted) {
+      floatStarted = false;
+      _upperBoundFloat = _words.size();
+    }
     if constexpr (_isCompressed) {
       _words.back().setStr((compressPrefix(word)));
     } else {
@@ -500,8 +515,8 @@ class Vocabulary {
     void setFloat(float f) { u.f = f;}
 
   };
-  size_t _lowerBoundFloat;
-  size_t _upperBoundFloat;
+  size_t _lowerBoundFloat = 0;
+  size_t _upperBoundFloat = 0;
   size_t _maxVocabularySize = 1000000;
   vector<Content> _words;
   ExternalVocabulary<ComparatorType> _externalLiterals;
