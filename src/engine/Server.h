@@ -42,7 +42,7 @@ class Server {
 
   // Initialize the server.
   void initialize(const string& ontologyBaseName, bool useText,
-                  bool usePatterns = true, bool usePatternTrick = true);
+                  bool usePatterns = true, bool usePatternTrick = true, size_t maxVocabSize = 100000);
 
   //! Loop, wait for requests and trigger processing. This method never returns
   //! except when throwing an exceptiob
