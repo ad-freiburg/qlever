@@ -31,6 +31,7 @@ add_library(engine
         TransitivePath.cpp TransitivePath.h
         Values.cpp Values.h
         IdTable.h
+        Minus.h Minus.cpp
         )
 
 target_link_libraries(engine index parser)

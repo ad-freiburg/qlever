@@ -275,6 +275,19 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       // Recursively call parseWhere to parse the optional part.
       parseWhere(query, &child);
       _lexer.accept(".");
+    } else if (_lexer.accept("minus")) {
+      currentPattern->_children.push_back(
+          GraphPatternOperation::Minus{ParsedQuery::GraphPattern()});
+      auto& opt = currentPattern->_children.back()
+                      .get<GraphPatternOperation::Optional>();
+      auto& child = opt._child;
+      child._optional = false;
+      child._id = query->_numGraphPatterns;
+      query->_numGraphPatterns++;
+      _lexer.expect("{");
+      // Recursively call parseWhere to parse the optional part.
+      parseWhere(query, &child);
+      _lexer.accept(".");
     } else if (_lexer.accept("{")) {
       // Subquery or union
       if (_lexer.accept("select")) {

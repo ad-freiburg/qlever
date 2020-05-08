@@ -383,7 +383,7 @@ struct GraphPatternOperation {
   };
 
   std::variant<BasicGraphPattern, GroupGraphPattern, Optional, Union, Subquery,
-               TransPath, Values>
+               TransPath, Values, Minus>
       variant_;
   template <typename A, typename... Args,
             typename = std::enable_if_t<
