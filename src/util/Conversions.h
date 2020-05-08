@@ -426,7 +426,10 @@ float convertIndexWordToFloat(const string& indexWord) {
        mStop--)
     ;
   auto mantissaSub = mantissa.substr(mStart, mStop - mStart + 1);
-  mantissaSub = mantissaSub.substr(0, 15);
+  mantissaSub = mantissaSub.substr(0, 10);
+  if (mantissaSub.empty()) {
+    return 0.0;
+  }
   long absMantissa = stol(mantissaSub);
   unsigned int mantissaLog = std::log10(absMantissa);
   if (negaMantissa) {
