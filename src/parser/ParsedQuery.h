@@ -11,6 +11,7 @@
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
 #include "ParseException.h"
+#include "../util/Exception.h"
 
 using std::string;
 using std::vector;
@@ -262,6 +263,31 @@ class ParsedQuery {
     SUM,
     AVG
   };
+
+  static std::string AggregateTypeAsString(AggregateType t) {
+    switch(t) {
+      case  AggregateType::COUNT:
+        return "COUNT";
+      case AggregateType::GROUP_CONCAT:
+        return "GROUP_CONCAT";
+      case AggregateType::FIRST:
+        return "FIRST";
+      case AggregateType::LAST:
+        return "LAST";
+      case AggregateType::SAMPLE:
+        return "SAMPLE";
+      case AggregateType::MIN:
+        return "MIN";
+      case AggregateType::MAX:
+        return "MAX";
+      case AggregateType::SUM:
+        return "SUM";
+      case AggregateType::AVG:
+        return "AVG";
+      default:
+        AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Illegal/unimplemented enum value in AggregateTyppeAsString. Should never happen, please report this");
+    }
+  }
 
   struct Alias {
     AggregateType _type;
