@@ -14,7 +14,6 @@
 #include <vector>
 #include "./VocabularyGenerator.h"
 
-#include <parallel/algorithm>
 #include "../util/Conversions.h"
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
@@ -325,8 +324,8 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp, const bool doPa
   auto& els = *vecPtr;
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {
-      __gnu_parallel::sort(begin(els), end(els), comp,
-                           __gnu_parallel::parallel_tag(NUM_SORT_THREADS));
+      ad_utility::parallel_sort(begin(els), end(els), comp,
+                                ad_utility::parallel_tag(NUM_SORT_THREADS));
     } else {
       std::sort(begin(els), end(els), comp);
     }

@@ -101,7 +101,26 @@ static const uint8_t NO_PREFIX_CHAR =
 
 #ifdef _PARALLEL_SORT
 static constexpr bool USE_PARALLEL_SORT = true;
+#include <parallel/algorithm>
+namespace ad_utility {
+template <typename... Args>
+auto parallel_sort(Args&&... args) {
+  return __gnu_parallel::sort(std::forward<Args>(args)...);
+}
+using parallel_tag = __gnu_parallel::parallel_tag;
+
+}  // namespace ad_utility
+
 #else
 static constexpr bool USE_PARALLEL_SORT = false;
+namespace ad_utility {
+template <typename... Args>
+auto parallel_sort([[maybe_unused]] Args&&... args) {
+  throw std::runtime_error(
+      "Triggered the parallel sort although it was disabled. Please report to "
+      "the developers!");
+}
+using parallel_tag = int;
+}  // namespace ad_utility
 #endif
 static constexpr size_t NUM_SORT_THREADS = 4;

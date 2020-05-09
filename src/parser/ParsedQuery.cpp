@@ -251,6 +251,11 @@ void ParsedQuery::expandPrefixes() {
     prefixMap[p._prefix] = p._uri;
   }
 
+  for (auto& f : _rootGraphPattern._filters) {
+    expandPrefix(f._lhs, prefixMap);
+    expandPrefix(f._rhs, prefixMap);
+  }
+
   vector<GraphPattern*> graphPatterns;
   graphPatterns.push_back(&_rootGraphPattern);
   // Traverse the graph pattern tree using dfs expanding the prefixes in every
@@ -259,7 +264,8 @@ void ParsedQuery::expandPrefixes() {
     GraphPattern* pattern = graphPatterns.back();
     graphPatterns.pop_back();
     for (GraphPatternOperation& p : pattern->_children) {
-      p.visit([&graphPatterns, this](auto&& arg) {
+      p.visit([&graphPatterns, &prefixMap = std::as_const(prefixMap),
+               this](auto&& arg) {
         using T = std::decay_t<decltype(arg)>;
         if constexpr (std::is_same_v<T, GraphPatternOperation::Subquery>) {
           arg._subquery._prefixes = _prefixes;
@@ -271,45 +277,43 @@ void ParsedQuery::expandPrefixes() {
           // subquery?TODO<joka921, verify by florian> at least this
           // shoudn't have worked before
         } else if constexpr (std::is_same_v<T,
-                                            GraphPatternOperation::Optional>) {
+                                            GraphPatternOperation::Optional> ||
+                             std::is_same_v<
+                                 T, GraphPatternOperation::GroupGraphPattern>) {
           graphPatterns.push_back(&arg._child);
-        } else {
-          static_assert(std::is_same_v<T, GraphPatternOperation::Union>);
+        } else if constexpr (std::is_same_v<T, GraphPatternOperation::Union>) {
           graphPatterns.push_back(&arg._child1);
           graphPatterns.push_back(&arg._child2);
-        }
-      });
-    }
+        } else if constexpr (std::is_same_v<T, GraphPatternOperation::Values>) {
+          for (auto& row : arg._inlineValues._values) {
+            for (std::string& value : row) {
+              expandPrefix(value, prefixMap);
+            }
+          }
 
-    for (auto& trip : pattern->_whereClauseTriples) {
-      expandPrefix(trip._s, prefixMap);
-      expandPrefix(trip._p, prefixMap);
-      if (trip._p._operation == PropertyPath::Operation::IRI &&
-          trip._p._iri.find("in-context") != string::npos) {
-        auto tokens = ad_utility::split(trip._o, ' ');
-        trip._o = "";
-        for (size_t i = 0; i < tokens.size(); ++i) {
-          expandPrefix(tokens[i], prefixMap);
-          trip._o += tokens[i];
-          if (i + 1 < tokens.size()) {
-            trip._o += " ";
+        } else {
+          static_assert(
+              std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
+          for (auto& trip : arg._whereClauseTriples) {
+            expandPrefix(trip._s, prefixMap);
+            expandPrefix(trip._p, prefixMap);
+            if (trip._p._operation == PropertyPath::Operation::IRI &&
+                trip._p._iri.find("in-context") != string::npos) {
+              auto tokens = ad_utility::split(trip._o, ' ');
+              trip._o = "";
+              for (size_t i = 0; i < tokens.size(); ++i) {
+                expandPrefix(tokens[i], prefixMap);
+                trip._o += tokens[i];
+                if (i + 1 < tokens.size()) {
+                  trip._o += " ";
+                }
+              }
+            } else {
+              expandPrefix(trip._o, prefixMap);
+            }
           }
         }
-      } else {
-        expandPrefix(trip._o, prefixMap);
-      }
-    }
-    for (auto& f : pattern->_filters) {
-      expandPrefix(f._lhs, prefixMap);
-      expandPrefix(f._rhs, prefixMap);
-    }
-
-    for (SparqlValues& v : pattern->_inlineValues) {
-      for (auto& row : v._values) {
-        for (std::string& value : row) {
-          expandPrefix(value, prefixMap);
-        }
-      }
+      });
     }
   }
 }
@@ -485,13 +489,6 @@ std::string ParsedQuery::parseAlias(const std::string& alias) {
 
 void ParsedQuery::merge(const ParsedQuery& p) {
   _prefixes.insert(_prefixes.begin(), p._prefixes.begin(), p._prefixes.end());
-  _rootGraphPattern._filters.insert(_rootGraphPattern._filters.begin(),
-                                    p._rootGraphPattern._filters.begin(),
-                                    p._rootGraphPattern._filters.end());
-  _rootGraphPattern._whereClauseTriples.insert(
-      _rootGraphPattern._whereClauseTriples.begin(),
-      p._rootGraphPattern._whereClauseTriples.begin(),
-      p._rootGraphPattern._whereClauseTriples.end());
 
   auto& children = _rootGraphPattern._children;
   auto& otherChildren = p._rootGraphPattern._children;
@@ -507,16 +504,6 @@ void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
                                          int indentation) const {
   for (int j = 1; j < indentation; ++j) os << "  ";
   os << "{";
-  for (size_t i = 0; i + 1 < _whereClauseTriples.size(); ++i) {
-    os << "\n";
-    for (int j = 0; j < indentation; ++j) os << "  ";
-    os << _whereClauseTriples[i].asString() << ',';
-  }
-  if (_whereClauseTriples.size() > 0) {
-    os << "\n";
-    for (int j = 0; j < indentation; ++j) os << "  ";
-    os << _whereClauseTriples.back().asString();
-  }
   for (size_t i = 0; i + 1 < _filters.size(); ++i) {
     os << "\n";
     for (int j = 0; j < indentation; ++j) os << "  ";
@@ -551,15 +538,23 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
       if constexpr (std::is_same_v<T, GraphPatternOperation::Union>) {
         arg._child1.recomputeIds(id_count);
         arg._child2.recomputeIds(id_count);
-      } else if constexpr (std::is_same_v<T, GraphPatternOperation::Optional>) {
+      } else if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> ||
+                           std::is_same_v<
+                               T, GraphPatternOperation::GroupGraphPattern>) {
         arg._child.recomputeIds(id_count);
       } else if constexpr (std::is_same_v<T,
                                           GraphPatternOperation::TransPath>) {
         arg._childGraphPattern.recomputeIds(id_count);
+      } else if constexpr (std::is_same_v<T, GraphPatternOperation::Values>) {
+        arg._id = (*id_count)++;
       } else {
-        static_assert(std::is_same_v<T, GraphPatternOperation::Subquery>);
+        static_assert(
+            std::is_same_v<T, GraphPatternOperation::Subquery> ||
+            std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
         // subquery children have their own id space
-        // at the same time assert that the above else-if is exhaustive.
+        // TODO:joka921 look at the optimizer if it is ok, that
+        // BasicGraphPatterns and Values have no ids at all. at the same time
+        // assert that the above else-if is exhaustive.
       }
     });
   }
@@ -573,10 +568,14 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
 void GraphPatternOperation::toString(std::ostringstream& os,
                                      int indentation) const {
   for (int j = 1; j < indentation; ++j) os << "  ";
+
   visit([&os, indentation](auto&& arg) {
     using T = std::decay_t<decltype(arg)>;
     if constexpr (std::is_same_v<T, Optional>) {
       os << "OPTIONAL ";
+      arg._child.toString(os, indentation);
+    } else if constexpr (std::is_same_v<T, GroupGraphPattern>) {
+      os << "GROUP ";
       arg._child.toString(os, indentation);
     } else if constexpr (std::is_same_v<T, Union>) {
       arg._child1.toString(os, indentation);
@@ -584,6 +583,32 @@ void GraphPatternOperation::toString(std::ostringstream& os,
       arg._child2.toString(os, indentation);
     } else if constexpr (std::is_same_v<T, Subquery>) {
       os << arg._subquery.asString();
+    } else if constexpr (std::is_same_v<T, Values>) {
+      os << "VALUES (";
+      for (const auto& v : arg._inlineValues._variables) {
+        os << v << ' ';
+      }
+      os << ") ";
+
+      for (const auto& v : arg._inlineValues._values) {
+        os << "(";
+        for (const auto& val : v) {
+          os << val << ' ';
+        }
+        os << ')';
+      }
+    } else if constexpr (std::is_same_v<T, BasicGraphPattern>) {
+      for (size_t i = 0; i + 1 < arg._whereClauseTriples.size(); ++i) {
+        os << "\n";
+        for (int j = 0; j < indentation; ++j) os << "  ";
+        os << arg._whereClauseTriples[i].asString() << ',';
+      }
+      if (arg._whereClauseTriples.size() > 0) {
+        os << "\n";
+        for (int j = 0; j < indentation; ++j) os << "  ";
+        os << arg._whereClauseTriples.back().asString();
+      }
+
     } else {
       static_assert(std::is_same_v<T, TransPath>);
       os << "TRANS PATH from " << arg._left << " to " << arg._right

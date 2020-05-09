@@ -273,8 +273,8 @@ queries:
     sparql: |
       SELECT ?x ?y WHERE {
           ?x <is-a> <Scientist> .
+          FILTER (?x < <Ada_Lovelace>) .
           OPTIONAL { ?x <Spouse_(or_domestic_partner)> ?y } .
-          FILTER (?x < <Ada_Lovelace>)
       }
     checks:
       - num_rows: 126
@@ -286,9 +286,9 @@ queries:
     type: no-text
     sparql: |
       SELECT ?x (GROUP_CONCAT(?y; separator=";") AS ?partners) WHERE {
+          FILTER (?x < <Ada_Lovelace>)
           ?x <is-a> <Scientist> .
           OPTIONAL {?x <Spouse_(or_domestic_partner)> ?y .}
-          FILTER (?x < <Ada_Lovelace>)
       }
       GROUP BY ?x
     checks:
@@ -734,4 +734,34 @@ queries:
       - num_rows: 1
       - selected: ["?a", "?b"]
       - contains_row: ["<Charles,_Prince_of_Wales>", "<Lord_of_the_Isles>"]
+  - query : filter-depending-on-last-optional
+    type: no-text
+    sparql: |
+      SELECT ?s ?a WHERE {
+          ?s <is-a> <Scientist> .
+          OPTIONAL { ?s <Award_Won> ?a }
+          FILTER regex(?a, "^<Nob")
+      }
+    checks:
+      - num_rows: 543
+      - num_cols: 2
+      - selected: ["?s", "?a"]
+      - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
+      - contains_row: ["<Al_Gore>", "<Nobel_Peace_Prize>"]
+      - contains_row: ["<Dennis_Gabor>", "<Nobel_Prize_in_Physics>"]
+  - query : filter-depending-on-last-optional-reordered
+    type: no-text
+    sparql: |
+      SELECT ?s ?a WHERE {
+          ?s <is-a> <Scientist> .
+          FILTER regex(?a, "^<Nob")
+          OPTIONAL { ?s <Award_Won> ?a }
+      }
+    checks:
+      - num_rows: 543
+      - num_cols: 2
+      - selected: ["?s", "?a"]
+      - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
+      - contains_row: ["<Al_Gore>", "<Nobel_Peace_Prize>"]
+      - contains_row: ["<Dennis_Gabor>", "<Nobel_Prize_in_Physics>"]
 

@@ -235,16 +235,17 @@ class ParsedQuery {
     // pattern
     void recomputeIds(size_t* id_count = nullptr);
 
-    vector<SparqlTriple> _whereClauseTriples;
-    vector<SparqlFilter> _filters;
-    vector<SparqlValues> _inlineValues;
     bool _optional;
     /**
      * @brief A id that is unique for the ParsedQuery. Ids are guaranteed to
      * start with zero and to be dense.
      */
-    size_t _id;
+    size_t _id = size_t(-1);
 
+    // Filters always apply to the complete GraphPattern, no matter where
+    // they appear. For VALUES and Triples, the order matters, so they
+    // become children.
+    std::vector<SparqlFilter> _filters;
     vector<GraphPatternOperation> _children;
   };
 
@@ -294,6 +295,9 @@ class ParsedQuery {
   void expandPrefixes();
   void parseAliases();
 
+  auto& children() { return _rootGraphPattern._children; }
+  const auto& children() const { return _rootGraphPattern._children; }
+
   /**
    * @brief Adds all elements from p's rootGraphPattern to this parsed query's
    * root graph pattern. This changes the graph patterns ids.
@@ -317,6 +321,16 @@ class ParsedQuery {
 };
 
 struct GraphPatternOperation {
+  struct BasicGraphPattern {
+    vector<SparqlTriple> _whereClauseTriples;
+  };
+  struct Values {
+    SparqlValues _inlineValues;
+    size_t _id;
+  };
+  struct GroupGraphPattern {
+    ParsedQuery::GraphPattern _child;
+  };
   struct Optional {
     ParsedQuery::GraphPattern _child;
   };
@@ -340,7 +354,9 @@ struct GraphPatternOperation {
     ParsedQuery::GraphPattern _childGraphPattern;
   };
 
-  std::variant<Optional, Union, Subquery, TransPath> variant_;
+  std::variant<BasicGraphPattern, GroupGraphPattern, Optional, Union, Subquery,
+               TransPath, Values>
+      variant_;
   template <typename A, typename... Args,
             typename = std::enable_if_t<
                 !std::is_base_of_v<GraphPatternOperation, std::decay_t<A>>>>
@@ -351,13 +367,19 @@ struct GraphPatternOperation {
   GraphPatternOperation(GraphPatternOperation&&) noexcept = default;
   GraphPatternOperation& operator=(const GraphPatternOperation&) = default;
   GraphPatternOperation& operator=(GraphPatternOperation&&) noexcept = default;
+
+  template <typename T>
+  constexpr bool is() noexcept {
+    return std::holds_alternative<T>(variant_);
+  }
+
   template <typename F>
-  const auto visit(F f) const {
+  decltype(auto) visit(F f) {
     return std::visit(f, variant_);
   }
 
   template <typename F>
-  auto visit(F f) {
+  decltype(auto) visit(F f) const {
     return std::visit(f, variant_);
   }
   template <class T>
@@ -368,6 +390,9 @@ struct GraphPatternOperation {
   constexpr const T& get() const {
     return std::get<T>(variant_);
   }
+
+  auto& getBasic() { return get<BasicGraphPattern>(); }
+  const auto& getBasic() const { return get<BasicGraphPattern>(); }
 
   void toString(std::ostringstream& os, int indentation = 0) const;
 };
