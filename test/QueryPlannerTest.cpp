@@ -1179,12 +1179,11 @@ TEST(QueryPlannerTest, testSimpleOptional) {
     pq2.expandPrefixes();
     QueryExecutionTree qet2 = qp.createExecutionTree(pq2);
     ASSERT_EQ(
-        "{\n  SORT on column:1\n  {\n    OPTIONAL_JOIN\n    {\n      SCAN PSO "
-        "with P = \"<rel1>\"\n      qet-width: 2 \n    } join-columns: [0]\n   "
-        " |X|\n    {\n      SCAN PSO with P = \"<rel2>\"\n      qet-width: 2 "
-        "\n    } join-columns: [0]\n    qet-width: 3 \n  }\n  qet-width: 3 \n}",
-
-        ,
+        "{\n  SORT / ORDER BY on columns:asc(1) \n  {\n    OPTIONAL_JOIN\n    "
+        "{\n      SCAN PSO with P = \"<rel1>\"\n      qet-width: 2 \n    } "
+        "join-columns: [0]\n    |X|\n    {\n      SCAN PSO with P = "
+        "\"<rel2>\"\n      qet-width: 2 \n    } join-columns: [0]\n    "
+        "qet-width: 3 \n  }\n  qet-width: 3 \n}",
         qet2.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
