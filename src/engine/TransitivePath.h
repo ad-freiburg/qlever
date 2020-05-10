@@ -94,6 +94,12 @@ class TransitivePath : public Operation {
       IdTable* res, const IdTable& sub, const IdTable& left, size_t leftSideCol,
       bool rightIsVar, size_t leftSubCol, size_t rightSubCol, Id rightValue,
       size_t minDist, size_t maxDist, size_t resWidth);
+  template <int SUB_WIDTH, int LEFT_WIDTH, int RES_WIDTH>
+
+  static void computeTransitivePathLeftBoundRightIsVar(
+      IdTable* res, const IdTable& sub, const IdTable& left, size_t leftSideCol,
+      bool rightIsVar, size_t leftSubCol, size_t rightSubCol, Id rightValue,
+      size_t minDist, size_t maxDist, size_t resWidth);
 
   template <int SUB_WIDTH, int LEFT_WIDTH, int RES_WIDTH>
   static void computeTransitivePathRightBound(IdTable* res, const IdTable& sub,
