@@ -54,7 +54,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
     }
   }
 
-  // Optimize the graph pattern tree
+  // Optimize the graph pattern trec
   std::vector<std::vector<SubtreePlan>> plans;
   plans.push_back(optimize(&pq._rootGraphPattern));
 

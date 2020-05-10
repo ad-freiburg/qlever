@@ -516,8 +516,8 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
     ad_utility::HashSet<Id> reachable;
     std::vector<Id> toBeChecked;
     for (; beg != end; ++beg) {
-      reachable.insert((*beg)[leftSubCol]);
-      toBeChecked.push_back((*beg)[leftSubCol]);
+      reachable.insert((*beg)[rightSubCol]);
+      toBeChecked.push_back((*beg)[rightSubCol]);
     }
     size_t dist = 1;
     while (!toBeChecked.empty() && dist < maxDist) {
@@ -544,7 +544,7 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
 
   for (size_t i = 0; i < left.size(); ++i) {
     Id cur = left[i][leftSideCol];
-    if (results.contains(cur)) {
+    if (!results.contains(cur)) {
       results.insert({cur, calculateReachable(cur)});
     }
     const auto& reachables = results[cur];
