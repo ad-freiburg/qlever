@@ -34,6 +34,21 @@ TransitivePath::TransitivePath(
       _maxDist(maxDist) {
   _variableColumns[_leftColName] = 0;
   _variableColumns[_rightColName] = 1;
+  if (! (leftIsVar || rightIsVar)) {
+    throw std::runtime_error{"Tried to instantiate a transitive path where neither the left or the right side are a variable. This is currently forbidden"};
+  }
+
+  auto x = _subtree->resultSortedOn();
+  if (x.empty() || (x[0] != leftSubCol && x[0] != rightSubCol)) {
+    throw std::runtime_error{"Transitive Path input has to be sorted! This should never happen, please report it"};
+  }
+  if (x[0] == leftSubCol) {
+    AD_CHECK(leftIsVar);
+    _childOrdered = ChildOrdered::Left;
+  } else {
+    AD_CHECK(rightIsVar);
+    _childOrdered = ChildOrdered::Right;
+  }
 }
 
 // _____________________________________________________________________________
@@ -657,6 +672,7 @@ void TransitivePath::computeResult(ResultTable* result) {
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
     std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol) const {
+  AD_CHECK(_childOrdered == ChildOrdered::Left);
   // Create a copy of this
   std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(*this);
   p->_leftSideTree = leftop;
@@ -679,6 +695,7 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftSide(
 std::shared_ptr<TransitivePath> TransitivePath::bindRightSide(
     std::shared_ptr<QueryExecutionTree> rightop, size_t inputCol) const {
   // Create a copy of this
+  AD_CHECK(_childOrdered == ChildOrdered::Left);
   std::shared_ptr<TransitivePath> p = std::make_shared<TransitivePath>(*this);
   p->_rightSideTree = rightop;
   p->_rightSideCol = inputCol;

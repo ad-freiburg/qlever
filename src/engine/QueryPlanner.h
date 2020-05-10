@@ -176,6 +176,8 @@ class QueryPlanner {
         vector<pair<QueryExecutionTree, size_t>>());
   };
 
+  std::shared_ptr<QueryExecutionTree> createOrderBy(const SubtreePlan& a, const vector<pair<size_t, bool>>& sortIndices) const;
+
   void setEnablePatternTrick(bool enablePatternTrick);
 
  private:
