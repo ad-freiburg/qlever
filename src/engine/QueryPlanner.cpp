@@ -372,14 +372,37 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           }
           min = arg._min;
           max = arg._max;
-          auto transOp = std::make_shared<TransitivePath>(
-              _qec, sub._qet, leftVar, rightVar, leftCol, rightCol, leftValue,
-              rightValue, leftColName, rightColName, min, max);
-          candidatesOut.emplace_back(_qec);
-          QueryExecutionTree& tree = *candidatesOut.back()._qet;
-          tree.setVariableColumns(static_cast<TransitivePath*>(transOp.get())
-                                      ->getVariableColumns());
-          tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, transOp);
+          auto resSorted = sub._qet->resultSortedOn();
+          if (rightVar) {
+            candidatesOut.emplace_back(_qec);
+            QueryExecutionTree& tree = *candidatesOut.back()._qet;
+            auto transSubtree = sub._qet;
+            if (resSorted.empty() || resSorted[0] != rightCol) {
+              std::vector<std::pair<size_t, bool>> sortIndices {{rightCol, false}};
+              transSubtree = createOrderBy(sub, sortIndices);
+            }
+            auto transOp = std::make_shared<TransitivePath>(
+                _qec, transSubtree, leftVar, rightVar, leftCol, rightCol, leftValue,
+                rightValue, leftColName, rightColName, min, max);
+            tree.setVariableColumns(static_cast<TransitivePath*>(transOp.get())
+                                        ->getVariableColumns());
+            tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, transOp);
+          }
+          if (leftVar) {
+            candidatesOut.emplace_back(_qec);
+            QueryExecutionTree& tree = *candidatesOut.back()._qet;
+            auto transSubtree = sub._qet;
+            if (resSorted.empty() || resSorted[0] != leftCol) {
+              std::vector<std::pair<size_t, bool>> sortIndices {{leftCol, false}};
+              transSubtree = createOrderBy(sub, sortIndices);
+            }
+            auto transOp = std::make_shared<TransitivePath>(
+                _qec, transSubtree, leftVar, rightVar, leftCol, rightCol, leftValue,
+                rightValue, leftColName, rightColName, min, max);
+            tree.setVariableColumns(static_cast<TransitivePath*>(transOp.get())
+                                        ->getVariableColumns());
+            tree.setOperation(QueryExecutionTree::TRANSITIVE_PATH, transOp);
+          }
         }
         joinCandidates(std::move(candidatesOut));
 
@@ -409,6 +432,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         joinCandidates(std::vector{std::move(plan)});
 
          */
+
       } else {
         static_assert(
             std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
@@ -2779,9 +2803,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
               std::make_pair(jcs[c][(0 + swap) % 2], false));
           sortIndices.emplace_back(
               std::make_pair(jcs[(c + 1) % 2][(0 + swap) % 2], false));
-          auto orderBy = std::make_shared<OrderBy>(_qec, a._qet, sortIndices);
-          left->setVariableColumns(a._qet->getVariableColumns());
-          left->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
+          left = createOrderBy(a, sortIndices);
         }
         const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
         if (bSortedOn.size() > 0 && bSortedOn[0] == jcs[c][(1 + swap) % 2] &&
@@ -2795,9 +2817,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
               std::make_pair(jcs[c][(1 + swap) % 2], false));
           sortIndices.emplace_back(
               std::make_pair(jcs[(c + 1) % 2][(1 + swap) % 2], false));
-          auto orderBy = std::make_shared<OrderBy>(_qec, b._qet, sortIndices);
-          right->setVariableColumns(b._qet->getVariableColumns());
-          right->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
+          right = createOrderBy(b, sortIndices);
         }
         // TODO(florian): consider replacing this with a multicolumn join.
         // Create the join operation.
@@ -2954,7 +2974,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
 
       // Do not bind the side of a path twice
       if (!srcpath->isBound() &&
-          other->getSizeEstimate() < srcpath->getSizeEstimate()) {
+          other->getSizeEstimate() < srcpath->getSizeEstimate() && srcpath->childOrdered() == TransitivePath::ChildOrdered::Left) {
         // The left or right side is a TRANSITIVE_PATH and its join column
         // corresponds to the left side of its input.
 
@@ -3010,7 +3030,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       }
       // Do not bnd the side of a path twice
       if (!srcpath->isBound() &&
-          other->getSizeEstimate() < srcpath->getSizeEstimate()) {
+          other->getSizeEstimate() < srcpath->getSizeEstimate() && srcpath->childOrdered() == TransitivePath::ChildOrdered::Right) {
         // The left or right side is a TRANSITIVE_PATH and its join column
         // corresponds to the left side of its input.
 
@@ -3094,4 +3114,14 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   }
 
   return candidates;
+}
+
+// ______________________________________________________________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> QueryPlanner::createOrderBy(const SubtreePlan& a, const vector<pair<size_t, bool>>& sortIndices) const {
+  // Create an order by operation.
+  auto orderBy = std::make_shared<OrderBy>(_qec, a._qet, sortIndices);
+  auto left = std::make_shared<QueryExecutionTree>(_qec);
+  left->setVariableColumns(a._qet->getVariableColumns());
+  left->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
+  return left;
 }

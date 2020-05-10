@@ -20,6 +20,10 @@ class TransitivePath : public Operation {
                  const std::string& rightColName, size_t minDist,
                  size_t maxDist);
 
+  // is the child ordered on the left or the right input column
+  enum class ChildOrdered {Left, Right};
+  [[nodiscard]] ChildOrdered childOrdered() const {return _childOrdered;}
+
   /**
    * Returns a new TransitivePath operation that uses the fact that leftop
    * generates all possible values for the left side of the paths. If the
@@ -90,6 +94,12 @@ class TransitivePath : public Operation {
       IdTable* res, const IdTable& sub, const IdTable& left, size_t leftSideCol,
       bool rightIsVar, size_t leftSubCol, size_t rightSubCol, Id rightValue,
       size_t minDist, size_t maxDist, size_t resWidth);
+  template <int SUB_WIDTH, int LEFT_WIDTH, int RES_WIDTH>
+
+  static void computeTransitivePathLeftBoundRightIsVar(
+      IdTable* res, const IdTable& sub, const IdTable& left, size_t leftSideCol,
+      bool rightIsVar, size_t leftSubCol, size_t rightSubCol, Id rightValue,
+      size_t minDist, size_t maxDist, size_t resWidth);
 
   template <int SUB_WIDTH, int LEFT_WIDTH, int RES_WIDTH>
   static void computeTransitivePathRightBound(IdTable* res, const IdTable& sub,
@@ -119,6 +129,7 @@ class TransitivePath : public Operation {
   std::shared_ptr<QueryExecutionTree> _subtree;
   bool _leftIsVar;
   bool _rightIsVar;
+  ChildOrdered _childOrdered = ChildOrdered::Left;
   size_t _leftSubCol;
   size_t _rightSubCol;
   size_t _leftValue;
