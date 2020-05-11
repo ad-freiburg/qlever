@@ -764,7 +764,8 @@ void TransitivePath::computeResult(ResultTable* result) {
     }
     runtimeInfo.addChild(_leftSideTree->getRootOperation()->getRuntimeInfo());
     int leftWidth = leftRes->_data.cols();
-    if (_rightIsVar) {
+    // TODO<joka921> do a thorough evaluation of what is faster...
+    if (_rightIsVar && subRes->size() > leftRes * 3) {
       CALL_FIXED_SIZE_3(subWidth, leftWidth, _resultWidth,
                         computeTransitivePathLeftBoundRightIsVar, &result->_data,
                         subRes->_data, leftRes->_data, _leftSideCol, _rightIsVar,
