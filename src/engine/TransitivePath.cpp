@@ -546,7 +546,7 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
         } else {
           auto [fst, lst] = getAdjacent(nextId);
           for (; fst < lst; ++fst) {
-            Id next = (*fst)[leftSubCol];
+            Id next = (*fst)[rightSubCol];
             if (!reachable.count(next) || reachable[next] > dist) {
               newFound[next] = dist;
               reachable[next] = dist;
