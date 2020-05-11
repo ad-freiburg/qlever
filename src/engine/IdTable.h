@@ -153,10 +153,21 @@ class IdTableImpl {
     size_t _row;
   };
 
+  class RowHashImpl {
+    size_t operator()(const std::array<Id, COLS> &row) {
+      size_t hash = 0;
+      for (size_t i = 0; i < row.size(); ++i) {
+        hash ^= std::hash<Id>()(row[i]);
+      }
+      return 0;
+    };
+  };
+
   using const_row_type = const std::array<Id, COLS>;
   using row_type = const std::array<Id, COLS>;
   using const_row_reference = const_row_type&;
   using row_reference = row_type&;
+  using RowHash = RowHashImpl;
 
   const_row_reference getConstRow(size_t row) const {
     return *reinterpret_cast<const_row_type*>(_data + (row * COLS));
@@ -467,10 +478,21 @@ class IdTableImpl<0> {
     Row _rowView;
   };
 
+  class RowHashImpl {
+    size_t operator()(const Row &row) {
+      size_t hash = 0;
+      for (size_t i = 0; i < row.size(); ++i) {
+        hash ^= std::hash<Id>()(row[i]);
+      }
+      return 0;
+    };
+  };
+
   using const_row_type = ConstRow;
   using row_type = Row;
   using const_row_reference = const_row_type;
   using row_reference = row_type;
+  using RowHash = RowHashImpl;
 
   const_row_reference getConstRow(size_t row) const {
     return ConstRow(_data + (row * _cols), _cols);
@@ -509,6 +531,7 @@ class IdTableStatic : private IdTableImpl<COLS> {
   using ConstRow = typename IdTableImpl<COLS>::const_row_type;
   using iterator = typename IdTableImpl<COLS>::iterator;
   using const_iterator = typename IdTableImpl<COLS>::iterator;
+  using RowHash = typename IdTableImpl<COLS>::RowHash;
 
   IdTableStatic() {
     IdTableImpl<COLS>::_data = nullptr;

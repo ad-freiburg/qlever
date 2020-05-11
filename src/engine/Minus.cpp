@@ -4,6 +4,10 @@
 
 #include "Minus.h"
 
+#include <sparsehash/sparse_hash_set>
+
+#include "../util/Exception.h"
+#include "../util/HashSet.h"
 #include "CallFixedSize.h"
 
 using std::string;
@@ -77,26 +81,19 @@ ad_utility::HashMap<string, size_t> Minus::getVariableColumns() const {
 size_t Minus::getResultWidth() const { return _left->getResultWidth(); }
 
 // _____________________________________________________________________________
-vector<size_t> Minus::resultSortedOn() const {
-  std::vector<size_t> sortedOn;
-  // The result is sorted on all join columns from the left subtree.
-  for (const auto& a : _matchedColumns) {
-    sortedOn.push_back(a[0]);
-  }
-  return sortedOn;
-}
+vector<size_t> Minus::resultSortedOn() const { return _left->resultSortedOn(); }
 
 // _____________________________________________________________________________
 float Minus::getMultiplicity(size_t col) {
   // This is an upper bound on the multiplicity as an arbitrary number
-  // of columns might be deleted in this operation.
+  // of rows might be deleted in this operation.
   return _left->getMultiplicity(col);
 }
 
 // _____________________________________________________________________________
 size_t Minus::getSizeEstimate() {
-  // This is an upper bound on the multiplicity as an arbitrary number
-  // of columns might be deleted in this operation.
+  // This is an upper bound on the size as an arbitrary number
+  // of rows might be deleted in this operation.
   return _left->getSizeEstimate();
 }
 
@@ -113,15 +110,17 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
                          IdTable* dynResult) {
   // Substract dynB from dynA. The result should be all result mappings mu
   // for which all result mappings mu' in dynB are not compatible (one value
-  // differs) or the domain of mu and mu' are disjoint (mu' defines no
-  // solution for any variables for which mu defines a solution).
+  // for a variable defined in both differs) or the domain of mu and mu' are
+  // disjoint (mu' defines no solution for any variables for which mu defines a
+  // solution).
 
   // check for trivial cases
   if (dynA.size() == 0) {
     return;
   }
 
-  if (dynA.size() == 0) {
+  if (dynB.size() == 0) {
+    // B is the empty set of solution mappings, so the result is A
     if constexpr (A_WIDTH == OUT_WIDTH) {
       IdTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
       IdTableStatic<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
@@ -141,80 +140,78 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
   IdTableStatic<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
 
-  std::vector<size_t> rightToLeftCols(b.cols(),
-                                      std::numeric_limits<size_t>::max());
-  for (const auto& jc : joinColumns) {
-    rightToLeftCols[jc[1]] = jc[0];
+  struct RowHash {
+    size_t operator()(const std::vector<Id>& row) const {
+      size_t hash = 0;
+      for (size_t i = 0; i < row.size(); ++i) {
+        hash ^= std::hash<Id>()(row[i]);
+      }
+      return 0;
+    };
+  };
+
+  // Columns in a for which the matching column in b contains an entry with a
+  // unbound variable
+  ad_utility::HashSet<size_t> cols_containing_unbound;
+  google::dense_hash_set<std::vector<Id>, RowHash> ids_to_remove(b.size());
+  ids_to_remove.set_empty_key({});
+  // Based upon the default deleted key for ids
+  ids_to_remove.set_deleted_key({std::numeric_limits<Id>::max() - 1});
+  std::vector<Id> entry_to_remove(joinColumns.size());
+  for (size_t ib = 0; ib < b.size(); ib++) {
+    for (size_t i = 0; i < joinColumns.size(); ++i) {
+      Id id = b(ib, joinColumns[i][1]);
+      if (id == ID_NO_VALUE) {
+        cols_containing_unbound.insert(joinColumns[i][0]);
+      }
+      entry_to_remove[i] = id;
+    }
+    ids_to_remove.insert(entry_to_remove);
+  }
+  std::vector<size_t> v_cols_containing_unbound(cols_containing_unbound.begin(),
+                                                cols_containing_unbound.end());
+
+  // Build a list of bitmasks of combinations of join columns in a which contain
+  // no value in b
+  std::vector<uint64_t> no_value_masks;
+  if (joinColumns.size() > 62) {
+    AD_THROW(ad_semsearch::Exception::OTHER,
+             "Minus only supports up to 62 columns in its input.");
+  }
+  // Iterate all possible states of columns in b being unbound
+  for (uint64_t i = (1 << (cols_containing_unbound.size() + 1)); i > 0; i--) {
+    // Build a bitmaks of columns in a which correspond to join colunmns in b
+    // being unbound.
+    uint64_t mask = ~uint64_t(0);
+    for (size_t j = 0; j < cols_containing_unbound.size(); j++) {
+      if (((i - 1) & (1 << j)) == 0) {
+        // Set the bit for the column to 0
+        mask &= ~(1 << v_cols_containing_unbound[j]);
+      }
+    }
+    no_value_masks.push_back(mask);
+  }
+  if (no_value_masks.empty()) {
+    no_value_masks.push_back(~uint64_t(0));
   }
 
-  size_t ia = 0, ib = 0;
-  while (ia < a.size() && ib < b.size()) {
-    // Join columns 0 are the primary sort columns
-    while (a(ia, joinColumns[0][0]) < b(ib, joinColumns[0][1])) {
-      // Write a result
-      result.emplace_back();
-      size_t backIdx = result.size() - 1;
-      for (size_t col = 0; col < a.cols(); col++) {
-        result(backIdx, col) = a(ia, col);
-      }
-
-      ia++;
-      if (ia >= a.size()) {
-        goto finish;
-      }
-    }
-    while (b(ib, joinColumns[0][1]) < a(ia, joinColumns[0][0])) {
-      ib++;
-      if (ib >= b.size()) {
-        goto finish;
-      }
-    }
-
-    // check if the rest of the join columns also match
-    RowComparison rowEq = isRowEq(a, b, &ia, &ib, joinColumns);
-    if (rowEq == RowComparison::DISJOINT_DOMAINS) {
-      // dom(a) and dom(b) are disjoint. There might still be another entry in
-      // b that discards a though.
-
-      // Look for an ib that discards the current ia.
-      size_t nia = ia;
-      size_t nib = ib + 1;
-      bool wasDiscarded = true;
-      while (nib < b.size()) {
-        RowComparison r = isRowEq(a, b, &nia, &nib, joinColumns);
-        switch (r) {
-          case RowComparison::NOT_EQUAL_LEFT_SMALLER:
-            // An ib that discard the current ia does not exists
-            wasDiscarded = false;
-            break;
-          case RowComparison::EQUAL:
-            // An ib that discard the current ia exists
-            break;
-            break;
-          case RowComparison::DISJOINT_DOMAINS:
-            // The domains are still disjoint, keep looking
-            nib++;
-            break;
-          case RowComparison::NOT_EQUAL_RIGHT_SMALLER:
-            // keep looking for an ib
-            break;
+  for (size_t ia = 0; ia < a.size(); ia++) {
+    bool remove = false;
+    // iterate every combination of ignoring variables
+    for (uint64_t mask : no_value_masks) {
+      for (size_t i = 0; i < joinColumns.size(); ++i) {
+        if ((mask & (1 << joinColumns[i][0])) > 0) {
+          entry_to_remove[i] = a(ia, joinColumns[i][0]);
+        } else {
+          entry_to_remove[i] = ID_NO_VALUE;
         }
       }
-      if (!wasDiscarded) {
-        result.emplace_back();
-        size_t backIdx = result.size() - 1;
-        for (size_t col = 0; col < a.cols(); col++) {
-          result(backIdx, col) = a(ia, col);
-        }
-      } else {
-        // ia was discarded. The current ib might not be disjoint with a later
-        // ia though, so we can't advance ib.
+      if (ids_to_remove.count(entry_to_remove) != 0) {
+        remove = true;
+        break;
       }
-      // process the next ia
-      ia++;
-    } else if (rowEq == RowComparison::NOT_EQUAL_LEFT_SMALLER) {
-      // ib does not discard ia, and there can not be another ib that
-      // would discard ia.
+    }
+    if (!remove) {
       result.emplace_back();
       size_t backIdx = result.size() - 1;
       for (size_t col = 0; col < a.cols(); col++) {
@@ -222,35 +219,5 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
       }
     }
   }
-finish:
   *dynResult = result.moveToDynamic();
-}
-
-template <int A_WIDTH, int B_WIDTH>
-Minus::RowComparison Minus::isRowEq(
-    const IdTableStatic<A_WIDTH>& a, const IdTableStatic<B_WIDTH>& b,
-    size_t* ia, size_t* ib, const vector<array<size_t, 2>>& matchedColumns) {
-  size_t numUndefined = 0;
-  for (size_t i = 0; i < matchedColumns.size(); ++i) {
-    const array<Id, 2>& joinColumn = matchedColumns[i];
-    Id va = a(*ia, joinColumn[i]);
-    Id vb = b(*ib, joinColumn[i]);
-    if (vb == ID_NO_VALUE || va == ID_NO_VALUE) {
-      // count the number of entries for which b is undefined.
-      numUndefined++;
-    } else {
-      if (va < vb) {
-        (*ia)++;
-        return RowComparison::NOT_EQUAL_LEFT_SMALLER;
-      }
-      if (vb < va) {
-        (*ib)++;
-        return RowComparison::NOT_EQUAL_RIGHT_SMALLER;
-      }
-    }
-  }
-  if (numUndefined == matchedColumns.size()) {
-    return RowComparison::DISJOINT_DOMAINS;
-  }
-  return RowComparison::EQUAL;
 }
