@@ -542,7 +542,12 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
     return reachable;
   };
 
+  LOG(DEBUG) << "Starting inner TransPath for " << left.size() << "elements\n";
   for (size_t i = 0; i < left.size(); ++i) {
+    if (i == 1 || !i%1000) {
+      LOG(DEBUG) << "Completed " << i << " out of " << left.size() << '\n';
+    }
+
     Id cur = left[i][leftSideCol];
     if (!results.contains(cur)) {
       results.insert({cur, calculateReachable(cur)});
