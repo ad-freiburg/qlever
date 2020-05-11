@@ -521,7 +521,6 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
   };
 
   auto calculateReachable = [&] (Id id) {
-    LOG(DEBUG) << "start calculate reacachble" << std::endl;
     auto [beg, end] = getAdjacent(id);
     ad_utility::HashMap<Id, size_t> reachable;
     ad_utility::HashMap<Id, size_t> toBeChecked;
@@ -531,7 +530,6 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
     }
     size_t dist = 1;
     while (!toBeChecked.empty() && dist < maxDist) {
-      LOG(DEBUG) << "start one iterations of hops." << std::endl;
       ad_utility::HashMap<Id, size_t> newFound;
       for (const auto&  [nextId, distSoFar] : toBeChecked) {
         if (results.contains(nextId)) {
