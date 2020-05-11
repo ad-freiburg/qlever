@@ -36,7 +36,7 @@ VOLUME ["/input", "/index"]
 ENV INDEX_PREFIX index
 ENV MEMORY_FOR_QUERIES 70
 # Need the shell to get the INDEX_PREFIX envirionment variable
-ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -m ${MEMORY_FOR_QUERIES} -M 650000000 -p 7001 \"$@\"", "--"]
+ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -j 4 -m ${MEMORY_FOR_QUERIES} -M 650000000 -p 7001 \"$@\"", "--"]
 
 # docker build -t qlever-<name> .
 # # When running with user namespaces you may need to make the index folder accessible

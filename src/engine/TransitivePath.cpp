@@ -480,8 +480,13 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
     IdTable* resTable, const IdTable& subTable, const IdTable& leftTable,
     size_t leftSideCol, bool rightIsVar, size_t leftSubCol, size_t rightSubCol,
     Id rightValue, size_t minDist, size_t maxDist, size_t resWidth) {
-  using Map = ad_utility::HashMap<Id, ad_utility::HashSet<Id>>;
-  using MapIt = Map::iterator;
+
+  struct X {
+    Id id;
+    size_t distance;
+  };
+
+  using Map = ad_utility::HashMap<Id, ad_utility::HashMap<Id, size_t>>;
 
 
   const IdTableStatic<SUB_WIDTH> sub = subTable.asStaticView<SUB_WIDTH>();
@@ -498,6 +503,8 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
              "distance of 0 (use at least one instead).");
   }
 
+  LOG(DEBUG) << "Starting leftBound transitivePath" << std::endl;
+
   auto compRow = [&](){
     if constexpr (SUB_WIDTH == 0) {
       return typename decltype(sub)::Row{sub.cols()};
@@ -506,46 +513,64 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
     }
   }();
 
+  LOG(DEBUG) << "Set up the comp row" << std::endl;
+
   auto getAdjacent = [&](Id id) {
     compRow[leftSubCol] = id;
     return std::equal_range(sub.begin(), sub.end(), compRow, [leftSubCol](const auto& a, const auto& b){return a[leftSubCol] < b[leftSubCol];});
   };
 
   auto calculateReachable = [&] (Id id) {
+    LOG(DEBUG) << "start calculate reacachble" << std::endl;
     auto [beg, end] = getAdjacent(id);
-    ad_utility::HashSet<Id> reachable;
-    std::vector<Id> toBeChecked;
+    ad_utility::HashMap<Id, size_t> reachable;
+    ad_utility::HashMap<Id, size_t> toBeChecked;
     for (; beg != end; ++beg) {
-      reachable.insert((*beg)[rightSubCol]);
-      toBeChecked.push_back((*beg)[rightSubCol]);
+      reachable.insert({(*beg)[rightSubCol], 1});
+      toBeChecked.insert({(*beg)[rightSubCol], 1});
     }
     size_t dist = 1;
     while (!toBeChecked.empty() && dist < maxDist) {
-      std::vector<Id> newFound;
-      for (Id nextId : toBeChecked) {
-        auto [fst, lst] = getAdjacent(nextId);
-        for (; fst < lst; ++fst) {
-          Id next = (*fst)[leftSubCol];
-          if (!reachable.count(next)) {
-            newFound.push_back(next);
-            reachable.insert(next);
+      LOG(DEBUG) << "start one iterations of hops." << std::endl;
+      ad_utility::HashMap<Id, size_t> newFound;
+      for (const auto&  [nextId, distSoFar] : toBeChecked) {
+        if (results.contains(nextId)) {
+          const auto& nextRes = results[nextId];
+          for (const auto& [id, nextDist] : nextRes) {
+            if (nextDist + distSoFar > maxDist) {
+              continue;
+            }
+            if (!reachable.count(id) || reachable[id] < distSoFar + nextDist) {
+              newFound[id] = distSoFar + nextDist;
+              reachable[id] = distSoFar + nextDist;
+            }
           }
+        } else {
+          auto [fst, lst] = getAdjacent(nextId);
+          for (; fst < lst; ++fst) {
+            Id next = (*fst)[leftSubCol];
+            if (!reachable.count(next) || reachable[next] > dist) {
+              newFound[next] = dist;
+              reachable[next] = dist;
+            }
+          }
+
         }
       }
       toBeChecked = std::move(newFound);
       ++dist;
       if (dist == minDist) {
-        toBeChecked.insert(toBeChecked.begin(), reachable.begin(), reachable.end());
+        toBeChecked = std::move(reachable);
         reachable.clear();
       }
     }
     return reachable;
   };
 
-  LOG(DEBUG) << "Starting inner TransPath for " << left.size() << "elements\n";
+  LOG(DEBUG) << "Starting inner TransPath for " << left.size() << "elements" << std::endl;
   for (size_t i = 0; i < left.size(); ++i) {
     if (i == 1 || !i%1000) {
-      LOG(DEBUG) << "Completed " << i << " out of " << left.size() << '\n';
+      LOG(DEBUG) << "Completed " << i << " out of " << left.size() << std::endl;
     }
 
     Id cur = left[i][leftSideCol];
@@ -555,7 +580,8 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
     const auto& reachables = results[cur];
     auto res_row = res.size();
     res.resize(res.size() + reachables.size());
-    for (Id id : reachables) {
+    for (const auto& [id, dist] : reachables) {
+      (void) dist;
       res(res_row, 0) = cur;
       res(res_row, 1) = id;
       for (size_t k = 2; k < resWidth + 1; k++) {
