@@ -565,9 +565,10 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
     return reachable;
   };
 
+  size_t numWritten = 0
   LOG(DEBUG) << "Starting inner TransPath for " << left.size() << "elements" << std::endl;
   for (size_t i = 0; i < left.size(); ++i) {
-    if (i == 1 || !i%1000) {
+    if (i == 1 || !i%10000) {
       LOG(DEBUG) << "Completed " << i << " out of " << left.size() << std::endl;
     }
 
@@ -577,9 +578,13 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
     }
     const auto& reachables = results[cur];
     auto res_row = res.size();
-    res.resize(res.size() + reachables.size());
     for (const auto& [id, dist] : reachables) {
       (void) dist;
+      res.emplace_back();
+      if (!numWritten % 10000) {
+        LOG(DEBUG) << "Wrote " << numWritten << " outputs of transPath " << std::endl;
+      }
+
       res(res_row, 0) = cur;
       res(res_row, 1) = id;
       for (size_t k = 2; k < resWidth + 1; k++) {
@@ -590,6 +595,7 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
         }
       }
       ++res_row;
+      ++numWritten;
     }
   }
   *resTable = res.moveToDynamic();
