@@ -565,7 +565,7 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
     return reachable;
   };
 
-  size_t numWritten = 0
+  size_t numWritten = 0;
   LOG(DEBUG) << "Starting inner TransPath for " << left.size() << "elements" << std::endl;
   for (size_t i = 0; i < left.size(); ++i) {
     if (i == 1 || !i%10000) {
