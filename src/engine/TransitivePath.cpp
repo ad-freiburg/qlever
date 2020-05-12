@@ -538,8 +538,7 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
             if (nextDist + distSoFar > maxDist) {
               continue;
             }
-            if (!reachable.count(id) || reachable[id] < distSoFar + nextDist) {
-              newFound[id] = distSoFar + nextDist;
+            if (!reachable.count(id) || reachable[id] > distSoFar + nextDist) {
               reachable[id] = distSoFar + nextDist;
             }
           }
@@ -557,6 +556,7 @@ void TransitivePath::computeTransitivePathLeftBoundRightIsVar(
       }
       toBeChecked = std::move(newFound);
       ++dist;
+      newFound.clear();
       if (dist == minDist) {
         toBeChecked = std::move(reachable);
         reachable.clear();
