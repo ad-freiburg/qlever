@@ -110,11 +110,14 @@ class Log {
   static void imbue(const std::locale& locale) { std::cout.imbue(locale); }
 
   static string getTimeStamp() {
+    using namespace std::chrono;
     auto now = std::chrono::system_clock::now();
     auto in_time_t = std::chrono::system_clock::to_time_t(now);
-
+    auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
     std::stringstream ss;
-    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %X");
+
+    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %X") << '.'
+       << std::setw(3) << std::setfill('0') << ms.count();
     return ss.str();
   }
 
