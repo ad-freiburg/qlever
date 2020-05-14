@@ -114,7 +114,8 @@ class Log {
     auto in_time_t = std::chrono::system_clock::to_time_t(now);
     auto ms = duration_cast<milliseconds>(now.time_since_epoch()) % 1000;
     std::stringstream ss;
-    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %X") << '.' << ms.count();
+    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %X") << '.'
+       << ms.count();
     return ss.str();
   }
 
