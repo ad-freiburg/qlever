@@ -1,10 +1,11 @@
-FROM ubuntu:18.04 as base
+FROM ubuntu:20.04 as base
 LABEL maintainer="Niklas Schnelle <schnelle@informatik.uni-freiburg.de>"
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 ENV LC_CTYPE C.UTF-8
 
 FROM base as builder
+ENV DEBIAN_FRONTEND=noninteractive 
 RUN apt-get update && apt-get install -y build-essential cmake clang-format-8 libsparsehash-dev libicu-dev
 COPY . /app/
 
@@ -18,6 +19,7 @@ RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG -DUSE_PARALLEL=true .. && 
 
 FROM base as runtime
 WORKDIR /app
+ENV DEBIAN_FRONTEND=noninteractive 
 RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu libgomp1
 
 ARG UID=1000
@@ -36,7 +38,7 @@ VOLUME ["/input", "/index"]
 ENV INDEX_PREFIX index
 ENV MEMORY_FOR_QUERIES 70
 # Need the shell to get the INDEX_PREFIX envirionment variable
-ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -j 4 -m ${MEMORY_FOR_QUERIES} -M 650000000 -p 7001 \"$@\"", "--"]
+ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -j 8 -m ${MEMORY_FOR_QUERIES} -M 650000000 -p 7001 \"$@\"", "--"]
 
 # docker build -t qlever-<name> .
 # # When running with user namespaces you may need to make the index folder accessible

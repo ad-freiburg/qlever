@@ -270,7 +270,9 @@ void CountAvailablePredicates::computePatternTrick(
   // the number of predicates counted without patterns
   size_t numListPredicates = 0;
 
-#pragma omp taskloop grainsize(50000) default(none) reduction(MergeHashmapsId:predicateCounts) reduction(MergeHashmapsSizeT : patternCounts) \
+#pragma omp parallel
+#pragma omp single
+#pragma omp taskloop grainsize(5000000) default(none) reduction(MergeHashmapsId:predicateCounts) reduction(MergeHashmapsSizeT : patternCounts) \
                                        reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared(input, subjectColumn, hasPattern, hasPredicate)
   for(size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
     // Skip over elements with the same subject (don't count them twice)
