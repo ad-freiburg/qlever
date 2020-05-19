@@ -154,7 +154,7 @@ class IdTableImpl {
   };
 
   class RowHashImpl {
-    size_t operator()(const std::array<Id, COLS> &row) {
+    size_t operator()(const std::array<Id, COLS>& row) {
       size_t hash = 0;
       for (size_t i = 0; i < row.size(); ++i) {
         hash ^= std::hash<Id>()(row[i]);
@@ -479,7 +479,7 @@ class IdTableImpl<0> {
   };
 
   class RowHashImpl {
-    size_t operator()(const Row &row) {
+    size_t operator()(const Row& row) {
       size_t hash = 0;
       for (size_t i = 0; i < row.size(); ++i) {
         hash ^= std::hash<Id>()(row[i]);

@@ -126,9 +126,7 @@ class QueryPlanner {
 
   class SubtreePlan {
    public:
-    enum Type {
-      BASIC, OPTIONAL, MINUS
-    };
+    enum Type { BASIC, OPTIONAL, MINUS };
 
     explicit SubtreePlan(QueryExecutionContext* qec)
         : _qet(std::make_shared<QueryExecutionTree>(qec)) {}

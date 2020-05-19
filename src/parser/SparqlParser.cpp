@@ -278,8 +278,8 @@ void SparqlParser::parseWhere(ParsedQuery* query,
     } else if (_lexer.accept("minus")) {
       currentPattern->_children.push_back(
           GraphPatternOperation::Minus{ParsedQuery::GraphPattern()});
-      auto& opt = currentPattern->_children.back()
-                      .get<GraphPatternOperation::Minus>();
+      auto& opt =
+          currentPattern->_children.back().get<GraphPatternOperation::Minus>();
       auto& child = opt._child;
       child._optional = false;
       child._id = query->_numGraphPatterns;

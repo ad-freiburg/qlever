@@ -16,9 +16,9 @@
 #include "HasPredicateScan.h"
 #include "IndexScan.h"
 #include "Join.h"
+#include "Minus.h"
 #include "MultiColumnJoin.h"
 #include "OptionalJoin.h"
-#include "Minus.h"
 #include "OrderBy.h"
 #include "Sort.h"
 #include "TextOperationWithFilter.h"
@@ -332,11 +332,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         joinCandidates(std::vector{std::move(valuesPlan)});
 
       } else if constexpr (std::is_same_v<T, GraphPatternOperation::Minus>) {
-          auto candidates = optimize(&arg._child);
-          for (auto& c : candidates) {
-            c.type = SubtreePlan::MINUS;
-          }
-          joinCandidates(std::move(candidates));
+        auto candidates = optimize(&arg._child);
+        for (auto& c : candidates) {
+          c.type = SubtreePlan::MINUS;
+        }
+        joinCandidates(std::move(candidates));
       } else {
         static_assert(
             std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
@@ -567,7 +567,7 @@ bool QueryPlanner::checkUsePatternTrick(
             } else {
               static_assert(
                   std::is_same_v<T, GraphPatternOperation::TransPath> ||
-                      std::is_same_v<T, GraphPatternOperation::Minus>);
+                  std::is_same_v<T, GraphPatternOperation::Minus>);
             }
             // Transitive paths cannot yet exist in the query. They could also
             // not contain the variables we are interested in.
@@ -1853,8 +1853,9 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
   }
 
   auto join = std::make_shared<OptionalJoin>(
-      _qec, aSorted ? a._qet : orderByPlanA._qet, a.type == SubtreePlan::OPTIONAL,
-      bSorted ? b._qet : orderByPlanB._qet, b.type == SubtreePlan::OPTIONAL, jcs);
+      _qec, aSorted ? a._qet : orderByPlanA._qet,
+      a.type == SubtreePlan::OPTIONAL, bSorted ? b._qet : orderByPlanB._qet,
+      b.type == SubtreePlan::OPTIONAL, jcs);
   QueryExecutionTree& tree = *plan._qet;
   tree.setVariableColumns(join->getVariableColumns());
   tree.setOperation(QueryExecutionTree::OPTIONAL_JOIN, join);
@@ -1863,17 +1864,15 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
   return plan;
 }
 
-
 // _____________________________________________________________________________
-QueryPlanner::SubtreePlan QueryPlanner::minus(
-    const SubtreePlan& a, const SubtreePlan& b) const {
+QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
+                                              const SubtreePlan& b) const {
   if (a.type == SubtreePlan::MINUS || b.type != SubtreePlan::MINUS) {
     throw std::runtime_error("Can only subtract the right side from the left.");
   }
   SubtreePlan plan(_qec);
 
   std::vector<std::array<Id, 2>> jcs = getJoinColumns(a, b);
-
 
   auto join = std::make_shared<Minus>(_qec, a._qet, b._qet, jcs);
   QueryExecutionTree& tree = *plan._qet;
@@ -2669,16 +2668,18 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     }
 
     if (a.type == SubtreePlan::MINUS) {
-      AD_THROW(ad_semsearch::Exception::BAD_QUERY, "MINUS can only appear after"
-                                                   " another graph pattern.");
+      AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+               "MINUS can only appear after"
+               " another graph pattern.");
     }
     if (b.type == SubtreePlan::MINUS) {
       if (a.type == SubtreePlan::OPTIONAL) {
         // This case shouldn't happen. If the first pattern is OPTIONAL, it
         // is made non optional earlier. If a minus occurs after an optional
         // further into the query that optional should be resolved by now.
-        AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Cannot subtract from an"
-                                                     "optional graph pattern.");
+        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                 "Cannot subtract from an"
+                 "optional graph pattern.");
       }
       return std::vector{minus(a, b)};
     }

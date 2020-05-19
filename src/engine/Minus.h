@@ -56,7 +56,6 @@ class Minus : public Operation {
                            IdTable* result);
 
  private:
-
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 

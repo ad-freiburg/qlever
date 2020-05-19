@@ -280,8 +280,7 @@ void ParsedQuery::expandPrefixes() {
                                             GraphPatternOperation::Optional> ||
                              std::is_same_v<
                                  T, GraphPatternOperation::GroupGraphPattern> ||
-                             std::is_same_v<
-                                 T, GraphPatternOperation::Minus>) {
+                             std::is_same_v<T, GraphPatternOperation::Minus>) {
           graphPatterns.push_back(&arg._child);
         } else if constexpr (std::is_same_v<T, GraphPatternOperation::Union>) {
           graphPatterns.push_back(&arg._child1);
@@ -542,9 +541,8 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
         arg._child2.recomputeIds(id_count);
       } else if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> ||
                            std::is_same_v<
-                               T, GraphPatternOperation::GroupGraphPattern>||
-                           std::is_same_v<
-                               T, GraphPatternOperation::Minus>) {
+                               T, GraphPatternOperation::GroupGraphPattern> ||
+                           std::is_same_v<T, GraphPatternOperation::Minus>) {
         arg._child.recomputeIds(id_count);
       } else if constexpr (std::is_same_v<T,
                                           GraphPatternOperation::TransPath>) {
