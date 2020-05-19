@@ -764,4 +764,18 @@ queries:
       - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
       - contains_row: ["<Al_Gore>", "<Nobel_Peace_Prize>"]
       - contains_row: ["<Dennis_Gabor>", "<Nobel_Prize_in_Physics>"]
-
+  - query : minus-biologists 
+    type: no-text
+    sparql: |
+      SELECT ?a WHERE {
+        ?a <is-a> <Entrepreneur> .
+        MINUS {
+          ?a <is-a> <Engineer>
+        }
+      }
+    checks:
+      - num_rows: 152 
+      - num_cols: 1
+      - selected: ["?a"]
+      - contains_row: ["<Barney_Pell>"]
+      - contains_row: ["<Duc_Pham>"]
