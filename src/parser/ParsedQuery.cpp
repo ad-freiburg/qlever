@@ -613,6 +613,9 @@ void GraphPatternOperation::toString(std::ostringstream& os,
         os << arg._whereClauseTriples.back().asString();
       }
 
+    } else if constexpr (std::is_same_v<T, Minus>) {
+      os << "MINUS ";
+      arg._child.toString(os, indentation);
     } else {
       static_assert(std::is_same_v<T, TransPath>);
       os << "TRANS PATH from " << arg._left << " to " << arg._right

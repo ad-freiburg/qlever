@@ -362,6 +362,9 @@ struct GraphPatternOperation {
   struct Optional {
     ParsedQuery::GraphPattern _child;
   };
+  struct Minus {
+    ParsedQuery::GraphPattern _child;
+  };
   struct Union {
     ParsedQuery::GraphPattern _child1;
     ParsedQuery::GraphPattern _child2;
