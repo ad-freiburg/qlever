@@ -3,6 +3,7 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 
 #include "SparqlLexer.h"
+
 #include "../util/StringUtils.h"
 #include "ParseException.h"
 #include "Tokenizer.h"
@@ -52,7 +53,8 @@ const std::string SparqlLexer::ORDER_BY = "(?i)(ORDER(\\s)*BY)";
 const std::string SparqlLexer::KEYWORD =
     "(?i)(TEXTLIMIT|PREFIX|SELECT|DISTINCT|REDUCED|"
     "HAVING|WHERE|ASC|AS|LIMIT|OFFSET|DESC|FILTER|VALUES|"
-    "OPTIONAL|MINUS|UNION|LANGMATCHES|LANG|TEXT|SCORE|REGEX|PREFIX|SEPARATOR|STR)";
+    "OPTIONAL|MINUS|UNION|LANGMATCHES|LANG|TEXT|SCORE|REGEX|PREFIX|SEPARATOR|"
+    "STR)";
 const std::string SparqlLexer::AGGREGATE =
     "(?i)(SAMPLE|COUNT|MIN|MAX|AVG|SUM|GROUP_CONCAT)";
 const std::string SparqlLexer::VARIABLE = "(\\?" + VARNAME + ")";
