@@ -272,7 +272,7 @@ void QueryExecutionTree::writeTable(
   shared_ptr<const ResultTable> res = getResult();
   for (size_t i = from; i < upperBound; ++i) {
     for (size_t j = 0; j < validIndices.size(); ++j) {
-      if (!validIndices[j]) {
+      if (validIndices[j]) {
         const auto& val = *validIndices[j];
         switch (val.second) {
           case ResultTable::ResultType::KB: {
