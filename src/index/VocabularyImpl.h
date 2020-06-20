@@ -51,7 +51,7 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
         _words.back().setStr(compr);
         if (floatsStarted) {
           floatsStarted = false;
-          _upperBoundFloat = numWords + 1;
+          _upperBoundFloat = numWords;
         }
       }
         if (!first) {
