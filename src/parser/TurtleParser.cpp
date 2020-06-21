@@ -432,7 +432,8 @@ TurtleStreamParser<T>::backupState() const {
 // _______________________________________________________________
 template <class T>
 bool TurtleStreamParser<T>::resetStateAndRead(
-    const TurtleStreamParser::TurtleParserBackupState b) {
+    TurtleStreamParser::TurtleParserBackupState* bPtr) {
+  auto& b = *bPtr;
   auto nextBytesOpt = _fileBuffer->getNextBlock();
   if (!nextBytesOpt || nextBytesOpt.value().empty()) {
     // there are no more decompressed bytes, just continue with what we've got
@@ -457,6 +458,9 @@ bool TurtleStreamParser<T>::resetStateAndRead(
 
   LOG(TRACE) << "Succesfully decompressed next batch of " << nextBytes.size()
              << " << bytes to parser\n";
+
+  // important: our tokenizer may have a new position
+  b = backupState();
   return true;
 }
 
@@ -561,7 +565,7 @@ bool TurtleStreamParser<T>::getLine(std::array<string, 3>* triple) {
         // we read chunks of memories in a buffered way
         // try to parse with a larger buffer and repeat the reading process
         // (maybe the failure was due to statements crossing our block).
-        if (resetStateAndRead(b)) {
+        if (resetStateAndRead(&b)) {
           // we have succesfully extended our buffer
           if (_byteVec.size() > BZIP2_MAX_TOTAL_BUFFER_SIZE) {
             auto d = _tok.view();
