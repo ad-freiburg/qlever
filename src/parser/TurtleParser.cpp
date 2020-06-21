@@ -565,6 +565,9 @@ bool TurtleStreamParser<T>::getLine(std::array<string, 3>* triple) {
         // we read chunks of memories in a buffered way
         // try to parse with a larger buffer and repeat the reading process
         // (maybe the failure was due to statements crossing our block).
+        auto s = std::min(size_t(1000), size_t(_tok.view().size()));
+        auto firstUnparsed = std::string(_tok.view().data(), s);
+
         if (resetStateAndRead(&b)) {
           // we have succesfully extended our buffer
           if (_byteVec.size() > BZIP2_MAX_TOTAL_BUFFER_SIZE) {
@@ -579,7 +582,7 @@ bool TurtleStreamParser<T>::getLine(std::array<string, 3>* triple) {
                           "use --file-format mmap\n";
             auto s = std::min(size_t(1000), size_t(d.size()));
             LOG(INFO) << "Logging first 1000 unparsed characters\n";
-            LOG(INFO) << std::string_view(d.data(), s);
+            LOG(INFO) << firstUnparsed;
             if (exceptionThrown) {
               throw ex;
 
