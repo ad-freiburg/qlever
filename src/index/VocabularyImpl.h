@@ -210,8 +210,14 @@ bool Vocabulary<S, C>::isExternalizedLiteral(const string& word) {
 // _____________________________________________________________________________
 template <class S, class C>
 bool Vocabulary<S, C>::shouldBeExternalized(const string& word) const {
+  for (const auto& p : _externalizedPrefixes) {
+    if (ad_utility::startsWith(word, p)) {
+      return true;
+    }
+  }
   if (!isLiteral(word)) {
-    return shouldEntityBeExternalized(word);
+    return false;
+    //return shouldEntityBeExternalized(word);
   } else {
     return shouldLiteralBeExternalized(word);
   }

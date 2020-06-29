@@ -584,6 +584,7 @@ bool TurtleStreamParser<T>::getLine(std::array<string, 3>* triple) {
             LOG(INFO) << "Logging first 1000 unparsed characters\n";
             LOG(INFO) << firstUnparsed;
             if (exceptionThrown) {
+              LOG(ERROR) << "error was " << ex.what() << '\n';
               throw ex;
 
             } else {
