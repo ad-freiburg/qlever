@@ -1412,8 +1412,13 @@ LangtagAndTriple Index::tripleToInternalRepresentation(Triple&& tripleIn) {
   }
   size_t upperBound = 3;
   if (ad_utility::isXsdValue(spo[2])) {
-    spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
-    upperBound = 2;
+    // for datatypes that are not converted we still want to allow
+    // externalization according to the other rules
+    auto conv = ad_utility::convertValueLiteralToIndexWord(spo[2]);
+    if (conv != spo[2]) {
+      spo[2] = std::move(conv);
+      upperBound = 2;
+    }
   } else if (isLiteral(spo[2])) {
     res._langtag = decltype(_vocab)::getLanguage(spo[2]);
   }
