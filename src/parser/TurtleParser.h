@@ -30,10 +30,7 @@ class TurtleParser {
   class ParseException : public std::exception {
    public:
     ParseException() = default;
-    explicit ParseException(string msg) : _msg(std::move(msg)) {
-
-    }
-
+    explicit ParseException(string msg) : _msg(std::move(msg)) {}
 
     [[nodiscard]] const char* what() const noexcept override {
       return _msg.c_str();
