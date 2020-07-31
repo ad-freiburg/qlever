@@ -74,7 +74,9 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
 
   if (newResult) {
     LOG(TRACE) << "Not in the cache, need to compute result" << endl;
-    LOG(DEBUG) << "Free Megabytes in the limit before computing the result:" << (_executionContext->getAllocator().numFreeBytes() >> 20) << std::endl;
+    LOG(DEBUG) << "Free Megabytes in the limit before computing the result:"
+               << (_executionContext->getAllocator().numFreeBytes() >> 20)
+               << std::endl;
     // Passing the raw pointer here is ok as the result shared_ptr remains
     // in scope
     try {

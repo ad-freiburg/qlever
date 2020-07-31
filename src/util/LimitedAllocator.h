@@ -31,7 +31,7 @@ class AllocationLimits {
   }
 
   void deallocate(size_t n) { free_ += n; }
-  [[nodiscard]] size_t numFreeBytes() const {return free_;}
+  [[nodiscard]] size_t numFreeBytes() const { return free_; }
 };
 
 class AllocationState {
@@ -75,7 +75,9 @@ class LimitedAllocator {
     alloc_.deallocate(p, n);
   }
 
-  [[nodiscard]] size_t numFreeBytes() { return state_.ptr()->wlock()->numFreeBytes();}
+  [[nodiscard]] size_t numFreeBytes() {
+    return state_.ptr()->wlock()->numFreeBytes();
+  }
 
   template <typename U, typename V>
   friend bool operator==(const LimitedAllocator<U>& u,
