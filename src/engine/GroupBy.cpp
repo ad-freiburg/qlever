@@ -46,16 +46,24 @@ void GroupBy::setSubtree(std::shared_ptr<QueryExecutionTree> subtree) {
 }
 
 string GroupBy::asString(size_t indent) const {
+  const auto varMap = getVariableColumns();
+  const auto varMapInput = _subtree->getVariableColumns();
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
   os << "GROUP_BY ";
   for (const std::string var : _groupByVariables) {
-    os << var << ", ";
+    os << varMap.at(var) << ", ";
   }
   for (auto p : _aliases) {
-    os << p._function << ", ";
+    os << ParsedQuery::AggregateTypeAsString(p._type);
+    if (p._type == ParsedQuery::AggregateType::GROUP_CONCAT) {
+      os << p._delimiter;
+    }
+
+    os << ' ' << varMapInput.at(p._inVarName) << ' '
+       << varMap.at(p._outVarName);
   }
   os << std::endl;
   os << _subtree->asString(indent);

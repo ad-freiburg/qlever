@@ -649,7 +649,8 @@ TEST(QueryPlannerTest, testActorsBornInEurope) {
     ASSERT_EQ(
         "{\n  JOIN\n  {\n    SCAN POS with P = \"<pre/profession>\", "
         "O = \"<pre/Actor>\"\n    qet-width: 1 \n  } join-column:"
-        " [0]\n  |X|\n  {\n    SORT on column:1\n    {\n      "
+        " [0]\n  |X|\n  {\n    SORT / ORDER BY on columns:asc(1) \n    {\n     "
+        " "
         "JOIN\n      {\n        SCAN POS with P = \"<pre/born-i"
         "n>\"\n        qet-width: 2 \n      } join-column: [0]\n "
         "     |X|\n      {\n        SCAN POS with P = \"<pre/in>\""
@@ -1073,7 +1074,8 @@ TEST(QueryExecutionTreeTest, testPoliticiansFriendWithScieManHatProj) {
         "\"manhattan project\" and 1 variables with textLimit = 1 filtered "
         "by\n  {\n    JOIN\n    {\n      SCAN POS with P = \"<is-a>\", O = "
         "\"<Scientist>\"\n      qet-width: 1 \n    } join-column: [0]\n    "
-        "|X|\n    {\n      SORT on column:2\n      {\n        TEXT OPERATION "
+        "|X|\n    {\n      SORT / ORDER BY on columns:asc(2) \n      {\n       "
+        " TEXT OPERATION "
         "WITH FILTER: co-occurrence with words: \"friend*\" and 2 variables "
         "with textLimit = 1 filtered by\n        {\n          SCAN POS with P "
         "= \"<is-a>\", O = \"<Politician>\"\n          qet-width: 1 \n        "
@@ -1101,14 +1103,15 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
     ASSERT_EQ(
-        "{\n  TWO_COLUMN_JOIN\n    {\n    ORDER_BY\n    {\n      JOIN\n      "
-        "{\n        SCAN POS with P = \"<Film_performance>\"\n        "
-        "qet-width: 2 \n      } join-column: [0]\n      |X|\n      {\n        "
-        "SCAN POS with P = \"<Film_performance>\"\n        qet-width: 2 \n     "
-        " } join-column: [0]\n      qet-width: 3 \n    } order on asc(1) "
-        "asc(2) \n    qet-width: 3 \n  }\n  join-columns: [1 & 2]\n  |X|\n    "
-        "{\n    SCAN POS with P = \"<Spouse_(or_domestic_partner)>\"\n    "
-        "qet-width: 2 \n  }\n  join-columns: [0 & 1]\n  qet-width: 3 \n}",
+        "{\n  TWO_COLUMN_JOIN\n    {\n    SCAN POS with P = "
+        "\"<Film_performance>\"\n    qet-width: 2 \n  }\n  join-columns: [0 & "
+        "1]\n  |X|\n    {\n    SORT / ORDER BY on columns:asc(1) asc(2) \n    "
+        "{\n      JOIN\n      {\n        SCAN PSO with P = "
+        "\"<Film_performance>\"\n        qet-width: 2 \n      } join-column: "
+        "[0]\n      |X|\n      {\n        SCAN PSO with P = "
+        "\"<Spouse_(or_domestic_partner)>\"\n        qet-width: 2 \n      } "
+        "join-column: [0]\n      qet-width: 3 \n    }\n    qet-width: 3 \n  "
+        "}\n  join-columns: [1 & 2]\n  qet-width: 3 \n}",
         qet.asString());
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;

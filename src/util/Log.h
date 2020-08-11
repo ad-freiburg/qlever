@@ -12,6 +12,7 @@
 #include <sstream>
 #include <string>
 
+#include <chrono>
 #include "./StringUtils.h"
 
 #ifndef LOGLEVEL
@@ -108,20 +109,12 @@ class Log {
   static void imbue(const std::locale& locale) { std::cout.imbue(locale); }
 
   static string getTimeStamp() {
-    struct timeb timebuffer;
-    char timeline[26];
+    auto now = std::chrono::system_clock::now();
+    auto in_time_t = std::chrono::system_clock::to_time_t(now);
 
-    ftime(&timebuffer);
-    ctime_r(&timebuffer.time, timeline);
-    timeline[19] = '.';
-    timeline[20] = 0;
-
-    std::ostringstream os;
-    os << timeline;
-    os.fill('0');
-    os.width(3);
-    os << timebuffer.millitm;
-    return os.str();
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %X");
+    return ss.str();
   }
 
   template <unsigned char LEVEL>
