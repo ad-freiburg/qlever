@@ -31,6 +31,7 @@ class TurtleParser {
    public:
     ParseException() = default;
     explicit ParseException(string msg) : _msg(std::move(msg)) {}
+
     [[nodiscard]] const char* what() const noexcept override {
       return _msg.c_str();
     }
@@ -337,7 +338,7 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
   // Reset the parser to the state indicated by the argument
   // Must be called on the same parser object that was used to create the backup
   // state (the actual triples are not backed up)
-  bool resetStateAndRead(TurtleParserBackupState state);
+  bool resetStateAndRead(TurtleParserBackupState* state);
 
   // stores the current batch of bytes we have to parse.
   // Might end in the middle of a statement or even a multibyte utf8 character,
