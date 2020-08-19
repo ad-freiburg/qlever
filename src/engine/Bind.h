@@ -13,8 +13,6 @@ class Bind : public Operation {
   Bind(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
        GraphPatternOperation::Bind b)
       : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {
-    AD_CHECK(!std::holds_alternative<GraphPatternOperation::Bind::Constant>(
-        _bind._input));
   }
 
   // Get a unique, not ambiguous string representation for a subtree.
@@ -58,6 +56,9 @@ class Bind : public Operation {
   template <int IN_WIDTH, int OUT_WIDTH>
   static void computeRenameBind(IdTable* dynRes, const IdTable& inputDyn,
                                 size_t column);
+  template <int IN_WIDTH, int OUT_WIDTH>
+  static void computeConstantBind(IdTable* dynRes, const IdTable& inputDyn,
+                                 size_t targetVal);
 };
 
 #endif  // QLEVER_BIND_H

@@ -101,6 +101,14 @@ void Bind::computeResult(ResultTable* result) {
     result->_resultTypes.push_back(subRes->_resultTypes[columns]);
     CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeRenameBind,
                       &result->_data, subRes->_data, columns);
+  } else if (auto ptr = std::get_if<GraphPatternOperation::Bind::Constant>(&_bind._input); ptr) {
+    result->_resultTypes.push_back(ResultTable::ResultType::LOCAL_VOCAB);
+    auto targetVal = result->_localVocab->size();
+    result->_localVocab->push_back(ptr->_value);
+    CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeConstantBind,
+                      &result->_data, subRes->_data, targetVal);
+
+
   } else {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "Currently only renaming and sum binds are implemented");
@@ -177,6 +185,27 @@ void Bind::computeRenameBind(IdTable* dynRes, const IdTable& inputDyn,
     }
     // simply copy
     res(i, inCols) = input(i, column);
+  }
+  *dynRes = res.moveToDynamic();
+}
+
+template <int IN_WIDTH, int OUT_WIDTH>
+void Bind::computeConstantBind(IdTable* dynRes, const IdTable& inputDyn,
+                             size_t targetVal) {
+  const auto input = inputDyn.asStaticView<IN_WIDTH>();
+  auto res = dynRes->moveToStatic<OUT_WIDTH>();
+
+  const auto inSize = input.size();
+  res.reserve(inSize);
+  const auto inCols = input.cols();
+  // copy the input to the first cols;
+  for (size_t i = 0; i < inSize; ++i) {
+    res.emplace_back();
+    for (size_t j = 0; j < inCols; ++j) {
+      res(i, j) = input(i, j);
+    }
+    // simply copy
+    res(i, inCols) = targetVal;
   }
   *dynRes = res.moveToDynamic();
 }
