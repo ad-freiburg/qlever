@@ -416,6 +416,7 @@ void Index::calculateBlockBoundaries() {
         locManager.compare(currentLenAndPrefix.second, nextLenAndPrefix.second,
                            LocaleManager::Level::PRIMARY) > 0) {
       _blockBoundaries.push_back(i);
+      currentLenAndPrefix = nextLenAndPrefix;
     }
   }
   _blockBoundaries.push_back(_textVocab.size() - 1);

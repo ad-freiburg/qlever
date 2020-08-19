@@ -179,24 +179,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       }
       boundVariables.insert(v._target);
 
-      if (auto ptr =
-              std::get_if<GraphPatternOperation::Bind::Constant>(&v._input)) {
-        // Binding of a constant can be interpreted as a VALUES clause with a
-        // single input
-        SparqlValues spVals;
-        spVals._variables.push_back(v._target);
-        spVals._values.emplace_back(std::vector{ptr->_value});
-        auto values = std::make_shared<Values>(_qec, std::move(spVals));
-        SubtreePlan plan(_qec);
-        plan._qet->setVariableColumns(values->getVariableColumns());
-        plan._qet->setOperation(QueryExecutionTree::OperationType::VALUES,
-                                std::move(values));
-        candidatePlans.emplace_back(std::vector{std::move(plan)});
-        return;
-      }
-
-      // otherwise, the bind clause currently disallows optimization across it.
-
       auto lastRow = optimizeCommutativ(candidateTriples, candidatePlans,
                                         rootPattern->_filters);
       candidateTriples._whereClauseTriples.clear();
@@ -432,7 +414,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         joinCandidates(std::vector{std::move(plan)});
 
          */
-
       } else {
         static_assert(
             std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);

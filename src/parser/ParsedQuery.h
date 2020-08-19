@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <variant>
+#include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
 #include "ParseException.h"
@@ -269,8 +270,8 @@ class ParsedQuery {
   };
 
   static std::string AggregateTypeAsString(AggregateType t) {
-    switch(t) {
-      case  AggregateType::COUNT:
+    switch (t) {
+      case AggregateType::COUNT:
         return "COUNT";
       case AggregateType::GROUP_CONCAT:
         return "GROUP_CONCAT";
@@ -289,7 +290,9 @@ class ParsedQuery {
       case AggregateType::AVG:
         return "AVG";
       default:
-        AD_THROW(ad_semsearch::Exception::CHECK_FAILED, "Illegal/unimplemented enum value in AggregateTyppeAsString. Should never happen, please report this");
+        AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
+                 "Illegal/unimplemented enum value in AggregateTypeAsString. "
+                 "Should never happen, please report this");
     }
   }
 
