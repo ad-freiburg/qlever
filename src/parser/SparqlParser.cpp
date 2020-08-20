@@ -279,11 +279,16 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       _lexer.expect("(");
       std::string inVar;
       bool rename = false;
+      bool isString = true;
+      int64_t val = 0;
       if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         rename = true;
         inVar = _lexer.current().raw;
       } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
         inVar = parseLiteral(_lexer.current().raw, true);
+      } else if (_lexer.accept(SparqlToken::Type::INTEGER)) {
+        isString = false;
+        val = std::strtoll(_lexer.current().raw.c_str(), nullptr, 10);
       } else {
         _lexer.expect(SparqlToken::Type::IRI);
         inVar = _lexer.current().raw;
@@ -294,7 +299,12 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       if (rename) {
         b._input = GraphPatternOperation::Bind::Rename{inVar};
       } else {
-        b._input = GraphPatternOperation::Bind::Constant{inVar};
+        if (isString) {
+          AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Binding of constants is currently only supported using integer values");
+          //b._input = GraphPatternOperation::Bind::Constant{inVar};
+        } else {
+          b._input = GraphPatternOperation::Bind::Constant{val};
+        }
       }
       b._target = _lexer.current().raw;
       _lexer.expect(")");
