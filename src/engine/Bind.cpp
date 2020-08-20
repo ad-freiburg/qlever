@@ -102,11 +102,18 @@ void Bind::computeResult(ResultTable* result) {
     CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeRenameBind,
                       &result->_data, subRes->_data, columns);
   } else if (auto ptr = std::get_if<GraphPatternOperation::Bind::Constant>(&_bind._input); ptr) {
-    result->_resultTypes.push_back(ResultTable::ResultType::LOCAL_VOCAB);
-    auto targetVal = result->_localVocab->size();
-    result->_localVocab->push_back(ptr->_value);
-    CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeConstantBind,
-                      &result->_data, subRes->_data, targetVal);
+    /*
+    if (auto ptrI = std::get_if<string>(&(ptr->_value))) {
+      result->_resultTypes.push_back(ResultTable::ResultType::LOCAL_VOCAB);
+      auto targetVal = result->_localVocab->size();
+      result->_localVocab->push_back(*ptrI);
+      CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeConstantBind,
+                        &result->_data, subRes->_data, targetVal);
+                        */
+        result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
+        CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeConstantBind,
+                          &result->_data, subRes->_data, ptr->_value);
+
 
 
   } else {
