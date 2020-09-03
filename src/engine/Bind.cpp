@@ -110,7 +110,7 @@ void Bind::computeResult(ResultTable* result) {
       CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeConstantBind,
                         &result->_data, subRes->_data, targetVal);
                         */
-        result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
+        result->_resultTypes.push_back(ptr->_type);
         CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeConstantBind,
                           &result->_data, subRes->_data, ptr->_value);
 

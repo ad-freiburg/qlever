@@ -387,8 +387,10 @@ struct GraphPatternOperation {
     struct Constant {
       int64_t _value = 0;
       string _repr;
+      ResultTable::ResultType _type;
       Constant() = default;
-      explicit Constant(int64_t val): _value(val), _repr(std::to_string(val)){}
+      explicit Constant(int64_t val): _value(val), _repr(std::to_string(val)), _type(ResultTable::ResultType::VERBATIM){}
+      explicit Constant(std::string entry): _repr(entry), _type(ResultTable::ResultType::KB){}
       // TODO<joka921> in c++ 20 we have constexpr strings.
       static constexpr const char* Name = "Constant";
       vector<string*> strings() {
