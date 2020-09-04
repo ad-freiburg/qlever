@@ -8,6 +8,7 @@
 #include <utility>
 #include <vector>
 
+#include <variant>
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
@@ -384,8 +385,58 @@ struct GraphPatternOperation {
     ParsedQuery::GraphPattern _childGraphPattern;
   };
 
-  std::variant<BasicGraphPattern, GroupGraphPattern, Optional, Union, Subquery,
-               TransPath, Values>
+  struct Bind {
+    struct Constant {
+      int64_t _value = 0;
+      string _repr;
+      Constant() = default;
+      explicit Constant(int64_t val): _value(val), _repr(std::to_string(val)){}
+      // TODO<joka921> in c++ 20 we have constexpr strings.
+      static constexpr const char* Name = "Constant";
+      vector<string*> strings() {
+        return {&_repr};
+      }
+      [[nodiscard]] string getDescriptor() const { return _repr; }
+    };
+    struct Sum {
+      static constexpr const char* Name = "Sum";
+      string _var1, _var2;
+      vector<string*> strings() { return {&_var1, &_var2}; }
+      [[nodiscard]] string getDescriptor() const {
+        return _var1 + " + " + _var2;
+      }
+    };
+
+    struct Rename {
+      static constexpr const char* Name = "Rename";
+      string _var;
+      vector<string*> strings() { return {&_var}; }
+      [[nodiscard]] string getDescriptor() const { return _var; }
+    };
+    std::variant<Rename, Constant, Sum> _input;
+    std::string _target;
+
+    vector<const string*> strings() const {
+      auto r = std::visit([](auto&& arg) { return arg.strings(); },
+                          const_cast<decltype(_input)&>(_input));
+      vector<const string*> res{r.begin(), r.end()};
+      res.push_back(&_target);
+      return res;
+    }
+
+    [[nodiscard]] constexpr const char* operationName() const {
+      return std::visit([](auto&& arg) { return arg.Name; }, _input);
+    }
+
+    string getDescriptor() const {
+      auto inner =
+          std::visit([](auto&& arg) { return arg.getDescriptor(); }, _input);
+      return "BIND (" + inner + " AS " + _target + ")";
+    }
+  };
+
+  std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
+               Values>
       variant_;
   template <typename A, typename... Args,
             typename = std::enable_if_t<
