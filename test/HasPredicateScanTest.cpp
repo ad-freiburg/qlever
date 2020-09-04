@@ -289,9 +289,10 @@ TEST(HasPredicateScan, subtreeS) {
 TEST(CountAvailablePredicates, patternTrickTest) {
   // The input table containing entity ids
   IdTable input(1);
-  for (Id i = 0; i < 8; i++) {
+  /*for (Id i = 0; i < 8; i++) {
     input.push_back({i});
   }
+   */
   // Used to store the result.
   IdTable result(2);
   // Maps entities to their patterns. If an entity id is higher than the lists
