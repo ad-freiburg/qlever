@@ -381,20 +381,6 @@ queries:
       - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
       - contains_row: ["<Albert_Fert>", "<Wolf_Prize_in_Physics>"]
       - contains_row: ["<Albert_Overhauser>", "<National_Medal_of_Science_for_Physical_Science>"]
-  - query : having-height
-    type: no-text
-    sparql: |
-      SELECT (COUNT(?profession) as ?count) ?height WHERE {
-        ?x <Profession> ?profession .
-        ?x <Height> ?height
-      }
-      GROUP BY ?height
-      HAVING (?height > 1.7)
-    checks:
-      - num_rows: 32
-      - num_cols: 2
-      - selected: ["?count", "?height"]
-      - contains_row: ["5", "1.803"]
   - query : having-predicate-religion
     type: no-text
     sparql: |
@@ -734,6 +720,20 @@ queries:
       - num_rows: 1
       - selected: ["?a", "?b"]
       - contains_row: ["<Charles,_Prince_of_Wales>", "<Lord_of_the_Isles>"]
+  - query : having-height
+    type: no-text
+    sparql: |
+      SELECT (COUNT(?profession) as ?count) ?height WHERE {
+        ?x <Profession> ?profession .
+        ?x <Height> ?height
+      }
+      GROUP BY ?height
+      HAVING (?height > 1.7)
+    checks:
+      - num_rows: 32
+      - num_cols: 2
+      - selected: ["?count", "?height"]
+      - contains_row: ["5", "1.803"]
   - query : filter-depending-on-last-optional
     type: no-text
     sparql: |
@@ -764,4 +764,34 @@ queries:
       - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
       - contains_row: ["<Al_Gore>", "<Nobel_Peace_Prize>"]
       - contains_row: ["<Dennis_Gabor>", "<Nobel_Prize_in_Physics>"]
-
+  - query : prefix-filter-disjunction
+    type: no-text
+    sparql: |
+      SELECT ?s  WHERE {
+                ?s <is-a> <Scientist> .
+                FILTER ((regex(?s, "^<Albert") || regex(?s, "^<Marie"))) .
+            }
+    checks:
+      - num_rows: 106
+      - num_cols: 1
+      - selected: ["?s"]
+      - contains_row: ["<Albert_Einstein>"]
+      - contains_row: ["<Albert_Fert>"]
+      - contains_row: ["<Albert_Overhauser>"]
+      - contains_row: ["<Marie_Curie>"]
+  - query : prefix-filter-disjunction-different-lhs
+    type: no-text
+    sparql: |
+      SELECT ?s ?a WHERE {
+          ?s <is-a> <Scientist> .
+          ?s <Award_Won> ?a .
+          FILTER (regex(?s, "^<Albert") || regex(?a, "^<Nobel"))
+      }
+    checks:
+      - num_rows: 579
+      - num_cols: 2
+      - selected: ["?s", "?a"]
+      - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
+      - contains_row: ["<Albert_Fert>", "<Wolf_Prize_in_Physics>"]
+      - contains_row: ["<Albert_Overhauser>", "<National_Medal_of_Science_for_Physical_Science>"]
+      - contains_row: ["<Andre_Geim>", "<Nobel_Prize_in_Physics>"]
