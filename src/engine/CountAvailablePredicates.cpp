@@ -236,24 +236,50 @@ void CountAvailablePredicates::computePatternTrick(
   LOG(DEBUG) << "For " << input.size() << " entities in column "
              << subjectColumn << std::endl;
 
-  ad_utility::HashMap<Id, size_t> predicateCounts;
-  ad_utility::HashMap<size_t, size_t> patternCounts;
-  size_t inputIdx = 0;
+  class MergeableId : public ad_utility::HashMap<Id, size_t> {
+   public:
+    MergeableId& operator%=(const MergeableId& rhs) {
+      for (const auto& [key, value] : rhs) {
+        (*this)[key] += value;
+      }
+      return *this;
+    }
+  };
+
+  class MergeableSizeT : public ad_utility::HashMap<size_t, size_t> {
+   public:
+    MergeableSizeT& operator%=(const MergeableSizeT& rhs) {
+      for (const auto& [key, value] : rhs) {
+        (*this)[key] += value;
+      }
+      return *this;
+    }
+  };
+  MergeableId predicateCounts;
+  MergeableSizeT patternCounts;
+
+#pragma omp declare reduction(MergeHashmapsId:MergeableId : omp_out %= omp_in)
+#pragma omp declare reduction(MergeHashmapsSizeT:MergeableSizeT \
+                              : omp_out %= omp_in)
+
   // These variables are used to gather additional statistics
   size_t numEntitiesWithPatterns = 0;
   // the number of distinct predicates in patterns
   size_t numPatternPredicates = 0;
   // the number of predicates counted without patterns
   size_t numListPredicates = 0;
-  Id lastSubject = ID_NO_VALUE;
-  while (inputIdx < input.size()) {
+
+#pragma omp parallel
+#pragma omp single
+#pragma omp taskloop grainsize(500000) default(none) reduction(MergeHashmapsId:predicateCounts) reduction(MergeHashmapsSizeT : patternCounts) \
+                                       reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared(input, subjectColumn, hasPattern, hasPredicate)
+  for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
     // Skip over elements with the same subject (don't count them twice)
     Id subject = input(inputIdx, subjectColumn);
-    if (subject == lastSubject) {
-      inputIdx++;
+    if (inputIdx > 0 && subject == input(inputIdx - 1, subjectColumn)) {
       continue;
     }
-    lastSubject = subject;
+
     if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
       // The subject matches a pattern
       patternCounts[hasPattern[subject]]++;
@@ -278,26 +304,41 @@ void CountAvailablePredicates::computePatternTrick(
                     "(its id is to high)."
                  << std::endl;
     }
-    inputIdx++;
   }
   LOG(DEBUG) << "Using " << patternCounts.size()
              << " patterns for computing the result." << std::endl;
   // the number of predicates counted with patterns
   size_t numPredicatesSubsumedInPatterns = 0;
   // resolve the patterns to predicate counts
-  for (const auto& it : patternCounts) {
-    std::pair<Id*, size_t> pattern = patterns[it.first];
+
+  LOG(DEBUG) << "Converting PatternMap to vector" << std::endl;
+  // flatten into a vector, to make iterable
+  std::vector<std::pair<size_t, size_t>> patternVec;
+  patternVec.reserve(patternCounts.size());
+  for (const auto& p : patternCounts) {
+    patternVec.push_back(p);
+  }
+
+  LOG(DEBUG) << "Start convertin patterns" << std::endl;
+#pragma omp parallel
+#pragma omp single
+#pragma omp taskloop grainsize(100000) default(none) reduction(MergeHashmapsId:predicateCounts) reduction(+ : numPredicatesSubsumedInPatterns) \
+                                       reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared( patternVec, patterns)
+  for (auto it = patternVec.begin(); it != patternVec.end(); ++it) {
+    std::pair<Id*, size_t> pattern = patterns[it->first];
     numPatternPredicates += pattern.second;
     for (size_t i = 0; i < pattern.second; i++) {
-      predicateCounts[pattern.first[i]] += it.second;
-      numPredicatesSubsumedInPatterns += it.second;
+      predicateCounts[pattern.first[i]] += it->second;
+      numPredicatesSubsumedInPatterns += it->second;
     }
   }
+  LOG(DEBUG) << "Finished converting patterns" << std::endl;
   // write the predicate counts to the result
   result.reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
     result.push_back({it.first, static_cast<Id>(it.second)});
   }
+  LOG(DEBUG) << "Finished writing results" << std::endl;
 
   // Print interesting statistics about the pattern trick
   double ratioHasPatterns =
