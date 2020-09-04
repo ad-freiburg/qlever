@@ -152,7 +152,7 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
     // If the entity exists return the all predicates for that entitity,
     // otherwise return an empty result.
     if (getIndex().getVocab().getId(_subjectEntityName.value(), &entityId)) {
-      IdTable input(1);
+      IdTable input(1, _executionContext->getAllocator());
       input.push_back({entityId});
       int width = input.cols();
       CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,

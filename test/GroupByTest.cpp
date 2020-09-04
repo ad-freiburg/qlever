@@ -7,6 +7,12 @@
 #include "../src/engine/CallFixedSize.h"
 #include "../src/engine/GroupBy.h"
 
+ad_utility::LimitedAllocator<Id>& alloc() {
+  static ad_utility::LimitedAllocator<Id> a{
+      ad_utility::makeAllocationState(4000000000)};
+  return a;
+}
+
 // This fixture is used to create an Index for the tests.
 // The full index creation is required for initialization of the vocabularies.
 class GroupByTest : public ::testing::Test {
@@ -88,12 +94,12 @@ TEST_F(GroupByTest, doGroupBy) {
   vocab.push_back(ad_utility::convertFloatStringToIndexWord("17"));
 
   // create an input result table with a local vocabulary
-  ResultTable inTable;
+  ResultTable inTable{alloc()};
   inTable._localVocab->push_back("<local1>");
   inTable._localVocab->push_back("<local2>");
   inTable._localVocab->push_back("<local3>");
 
-  IdTable inputData(6);
+  IdTable inputData(6, alloc());
   // The input data types are
   //                   KB, KB, VERBATIM, TEXT, FLOAT,           STRING
   inputData.push_back({1, 4, 123, 0, floatBuffers[0], 0});
@@ -157,7 +163,7 @@ TEST_F(GroupByTest, doGroupBy) {
       {ParsedQuery::AggregateType::AVG, 3, 22, nullptr},
       {ParsedQuery::AggregateType::AVG, 4, 23, nullptr}};
 
-  ResultTable outTable;
+  ResultTable outTable{alloc()};
 
   // This is normally done when calling computeResult in the GroupBy
   // operation.
