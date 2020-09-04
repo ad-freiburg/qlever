@@ -53,6 +53,12 @@ std::vector<PropertyPathParser::Token> PropertyPathParser::tokenize(
     if (!VALID_CHARS[(uint8_t)c]) {
       std::stringstream s;
       s << "Invalid character " << c << " in property path " << str;
+      s << ". Valid chars is: ";
+      for (auto el: VALID_CHARS) {
+        s << el;
+      }
+
+      s << "Numerical value of character is " << (uint8_t) c;
       throw ParseException(s.str());
     }
     if (c == '<') {
