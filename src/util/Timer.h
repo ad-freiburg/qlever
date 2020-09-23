@@ -88,7 +88,50 @@ class Timer {
   off_t msecs() const { return _usecs / 1000; }     /* in milliseconds */
   float secs() const { return _usecs / 1000000.0; } /* in seconds */
 
+  // is the timer currently running
+  bool isRunning() const { return _running; }
+
   //! Time from last mark to last stop (initally zero)
   off_t usecs_since_mark() const { return _usecs - _usecs_at_mark; }
+};
+
+/// A timer which also can be given a timeout value and queried whether it
+/// has timed out
+class TimeoutTimer : public Timer {
+ public:
+  /// Factory function for a timer that never times out
+  static TimeoutTimer unlimited() { return TimeoutTimer(UnlimitedTag{}); }
+  /// Factory function for a timer that times out after a number of microseconds
+  static TimeoutTimer usecLimited(off_t usecs) { return TimeoutTimer(usecs); }
+  /// Factory function for a timer that times out after a number of miliseconds
+  static TimeoutTimer msecLimited(off_t msecs) {
+    return TimeoutTimer(msecs * 1000);
+  }
+  /// Factory function for a timer that times out after a number of seconds
+  static TimeoutTimer secLimited(off_t secs) {
+    return TimeoutTimer(secs * 1000 * 1000);
+  }
+
+  /// Did this timer already timeout
+  /// Can't be const because of the internals of the Timer class.
+  bool isTimeout() {
+    if (_isUnlimited) {
+      return false;
+    }
+    auto prevRunning = isRunning();
+    stop();
+    auto res = usecs() > _timeout;
+    if (prevRunning) {
+      cont();
+    }
+    return res;
+  }
+
+ private:
+  off_t _timeout = 0;
+  bool _isUnlimited = false;  // never times out
+  class UnlimitedTag {};
+  TimeoutTimer(UnlimitedTag) : _isUnlimited{true} {}
+  TimeoutTimer(off_t timeout) : _timeout{timeout} {}
 };
 }  // namespace ad_utility

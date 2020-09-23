@@ -135,6 +135,14 @@ class QueryExecutionTree {
     return _rootOperation->collectWarnings();
   }
 
+  // typedef for a synchronized and shared timeoutTimer
+  using SyncTimer =
+      ad_utility::Synchronized<ad_utility::TimeoutTimer, std::shared_mutex>;
+
+  void recursivelySetTimeoutTimer(std::shared_ptr<SyncTimer> timer) {
+    _rootOperation->recursivelySetTimeoutTimer(std::move(timer));
+  }
+
   template <typename F>
   void forAllDescendants(F f) {
     static_assert(
