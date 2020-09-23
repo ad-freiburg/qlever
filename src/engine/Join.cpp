@@ -336,6 +336,7 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
       IdTable jr(2);
+      checkTimeout();  // the scan is a disk operation, so we can check the
       scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
@@ -377,6 +378,8 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
       IdTable jr(2);
+      checkTimeout();  // the scan is a disk operation, so we can check the
+                       // timeout frequently
       scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
@@ -525,6 +528,9 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     while (i < a.size() && j < b.size()) {
       while (a(i, jc1) < b(j, jc2)) {
         ++i;
+        if (i % (1024 * 16) == 0) {
+          checkTimeout();
+        }
         if (i >= a.size()) {
           goto finish;
         }
@@ -532,6 +538,9 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
       while (b(j, jc2) < a(i, jc1)) {
         ++j;
+        if (j % (1024 * 16) == 0) {
+          checkTimeout();
+        }
         if (j >= b.size()) {
           goto finish;
         }
@@ -559,12 +568,18 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
           }
 
           ++j;
+          if (j % (1024 * 4) == 0) {
+            checkTimeout();
+          }
           if (j >= b.size()) {
             // The next i might still match
             break;
           }
         }
         ++i;
+        if (i % (1024 * 4) == 0) {
+          checkTimeout();
+        }
         if (i >= a.size()) {
           goto finish;
         }

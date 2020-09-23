@@ -44,6 +44,17 @@ vector<string> Operation::collectWarnings() const {
   return res;
 }
 
+// ________________________________________________________________________
+void Operation::recursivelySetTimeoutTimer(std::shared_ptr<SyncTimer> timer) {
+  for (auto child : getChildren()) {
+    if (!child) {
+      continue;
+    }
+    child->recursivelySetTimeoutTimer(timer);
+  }
+  _timeoutTimer = std::move(timer);
+}
+
 // Get the result for the subtree rooted at this element.
 // Use existing results if they are already available, otherwise
 // trigger computation.
@@ -76,7 +87,14 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     // Passing the raw pointer here is ok as the result shared_ptr remains
     // in scope
     try {
+      if (_timeoutTimer->wlock()->isTimeout()) {
+        throw ad_semsearch::TimeoutException("uncaught Timeout before " +
+                                             getDescriptor());
+      }
       computeResult(newResult->_resTable.get());
+      if (_timeoutTimer->wlock()->isTimeout()) {
+        throw ad_semsearch::TimeoutException("Timeout in " + getDescriptor());
+      }
     } catch (const ad_semsearch::AbortException& e) {
       // A child Operation was aborted, abort this Operation
       // as well. The child already printed
@@ -133,4 +151,11 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   _runtimeInfo.addDetail("original_operation_time",
                          existingResult->_runtimeInfo.getOperationTime());
   return existingResult->_resTable;
+}
+
+// ______________________________________________________________________
+void Operation::checkTimeout() const {
+  if (_timeoutTimer->wlock()->isTimeout()) {
+    throw ad_semsearch::TimeoutException("Timeout in " + getDescriptor());
+  }
 }

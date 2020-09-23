@@ -108,6 +108,12 @@ class Operation {
   // trigger computation.
   shared_ptr<const ResultTable> getResult(bool isRoot = false);
 
+  // typedef for a synchronized and shared timeoutTimer
+  using SyncTimer = ad_utility::TimeoutChecker;
+  // set a global timeout timer for all child operations.
+  // As soon as this runs out, the complete tree will fail.
+  void recursivelySetTimeoutTimer(std::shared_ptr<SyncTimer> timer);
+
  protected:
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
@@ -137,6 +143,14 @@ class Operation {
   [[nodiscard]] const std::vector<std::string>& getWarnings() const {
     return _warnings;
   }
+
+  // check if we still have time left on the clock.
+  // if not, throw a TimeoutException
+  void checkTimeout() const;
+
+  // handles the timeout of this operation
+  std::shared_ptr<SyncTimer> _timeoutTimer =
+      std::make_shared<SyncTimer>(ad_utility::TimeoutTimer::unlimited());
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
