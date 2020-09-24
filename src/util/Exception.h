@@ -101,6 +101,19 @@ class AbortException : public std::exception {
   string _what;
 };
 
+//! Exception class for rethrowing exceptions during a query abort
+//! such exceptions are never printed but still keep the original what()
+//! message just in case
+class TimeoutException : public std::exception {
+ public:
+  TimeoutException(const std::exception& original) : _what(original.what()) {}
+  TimeoutException(const std::string& whatthe) : _what(whatthe) {}
+  const char* what() const noexcept { return _what.c_str(); }
+
+ private:
+  string _what;
+};
+
 //! Exception class for all kinds of exceptions.
 //! Compatibility with the THROW macro is ensured by using error
 //! codes inside this exception class instead of implementing an
