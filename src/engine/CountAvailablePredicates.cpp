@@ -269,40 +269,42 @@ void CountAvailablePredicates::computePatternTrick(
   // the number of predicates counted without patterns
   size_t numListPredicates = 0;
 
+  if (input.size() > 0) { //avoid strange OpenMP segfaults
 #pragma omp parallel
 #pragma omp single
 #pragma omp taskloop grainsize(500000) default(none) reduction(MergeHashmapsId:predicateCounts) reduction(MergeHashmapsSizeT : patternCounts) \
                                        reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared(input, subjectColumn, hasPattern, hasPredicate)
-  for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
-    // Skip over elements with the same subject (don't count them twice)
-    Id subject = input(inputIdx, subjectColumn);
-    if (inputIdx > 0 && subject == input(inputIdx - 1, subjectColumn)) {
-      continue;
-    }
+    for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
+      // Skip over elements with the same subject (don't count them twice)
+      Id subject = input(inputIdx, subjectColumn);
+      if (inputIdx > 0 && subject == input(inputIdx - 1, subjectColumn)) {
+        continue;
+      }
 
-    if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
-      // The subject matches a pattern
-      patternCounts[hasPattern[subject]]++;
-      numEntitiesWithPatterns++;
-    } else if (subject < hasPredicate.size()) {
-      // The subject does not match a pattern
-      size_t numPredicates;
-      Id* predicateData;
-      std::tie(predicateData, numPredicates) = hasPredicate[subject];
-      numListPredicates += numPredicates;
-      if (numPredicates > 0) {
-        for (size_t i = 0; i < numPredicates; i++) {
-          predicateCounts[predicateData[i]]++;
+      if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
+        // The subject matches a pattern
+        patternCounts[hasPattern[subject]]++;
+        numEntitiesWithPatterns++;
+      } else if (subject < hasPredicate.size()) {
+        // The subject does not match a pattern
+        size_t numPredicates;
+        Id* predicateData;
+        std::tie(predicateData, numPredicates) = hasPredicate[subject];
+        numListPredicates += numPredicates;
+        if (numPredicates > 0) {
+          for (size_t i = 0; i < numPredicates; i++) {
+            predicateCounts[predicateData[i]]++;
+          }
+        } else {
+          LOG(TRACE) << "No pattern or has-relation entry found for entity "
+                     << std::to_string(subject) << std::endl;
         }
       } else {
-        LOG(TRACE) << "No pattern or has-relation entry found for entity "
-                   << std::to_string(subject) << std::endl;
+        LOG(TRACE) << "Subject " << subject
+                   << " does not appear to be an entity "
+                      "(its id is to high)."
+                   << std::endl;
       }
-    } else {
-      LOG(TRACE) << "Subject " << subject
-                 << " does not appear to be an entity "
-                    "(its id is to high)."
-                 << std::endl;
     }
   }
   LOG(DEBUG) << "Using " << patternCounts.size()
@@ -320,16 +322,18 @@ void CountAvailablePredicates::computePatternTrick(
   }
 
   LOG(DEBUG) << "Start convertin patterns" << std::endl;
+  if (patternVec.begin() != patternVec.end()) {  // avoid segfaults with OpenMP
 #pragma omp parallel
 #pragma omp single
 #pragma omp taskloop grainsize(100000) default(none) reduction(MergeHashmapsId:predicateCounts) reduction(+ : numPredicatesSubsumedInPatterns) \
                                        reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared( patternVec, patterns)
-  for (auto it = patternVec.begin(); it != patternVec.end(); ++it) {
-    std::pair<Id*, size_t> pattern = patterns[it->first];
-    numPatternPredicates += pattern.second;
-    for (size_t i = 0; i < pattern.second; i++) {
-      predicateCounts[pattern.first[i]] += it->second;
-      numPredicatesSubsumedInPatterns += it->second;
+    for (auto it = patternVec.begin(); it != patternVec.end(); ++it) {
+      std::pair<Id*, size_t> pattern = patterns[it->first];
+      numPatternPredicates += pattern.second;
+      for (size_t i = 0; i < pattern.second; i++) {
+        predicateCounts[pattern.first[i]] += it->second;
+        numPredicatesSubsumedInPatterns += it->second;
+      }
     }
   }
   LOG(DEBUG) << "Finished converting patterns" << std::endl;
