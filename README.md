@@ -3,10 +3,10 @@
 [![Build
 Status](https://travis-ci.org/ad-freiburg/QLever.svg?branch=master)](https://travis-ci.org/ad-freiburg/QLever)
 
-QLever (pronounced "clever") is an efficient SPARQL engine supporting
-large datasets including the full Wikidata (7 billion triples). Even on very
-large datasets QLever uses only about 40 GB RAM, builds indices in less than 12
-hours and executes most queries in less than a second.
+QLever (pronounced "clever") is an efficient SPARQL engine, which supports
+can index very large datasets including the full Wikidata (14 billion triples).
+Even for that dataset, QLever uses only about 40 GB RAM, does the indexing in less than 24
+hours, and executes many typical queries in less than a second.
 
 On top of the standard SPARQL functionality, QLever also supports SPARQL+Text
 search and SPARQL autocompletion; these are described on the [advanced
@@ -14,10 +14,13 @@ features](docs/advanced_features.md) page.
 
 A demo of QLever on a variety of large datasets, including Wikidata, can be
 found [here](http://qlever.cs.uni-freiburg.de).
+Some of those demos also feature QLever's autocompletion capabilities.
 
 The basic design behind QLever was described in this [CIKM'17
 paper](http://ad-publications.informatik.uni-freiburg.de/CIKM_qlever_BB_2017.pdf).
 If you use QLever in your work, please cite that paper.
+Much functionality has been added to QLever since then.
+We are currently working on several publications that describe and evaluate these extensions.
 
 # Quickstart
 
