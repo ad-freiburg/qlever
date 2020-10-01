@@ -77,29 +77,6 @@ class ResultTable {
 
   virtual ~ResultTable();
 
-  void abort() {
-    lock_guard<mutex> lk(_cond_var_m);
-    clear();
-    _status = ResultTable::ABORTED;
-    _cond_var.notify_all();
-  }
-
-  void finish() {
-    lock_guard<mutex> lk(_cond_var_m);
-    _status = ResultTable::FINISHED;
-    _cond_var.notify_all();
-  }
-
-  Status status() const {
-    lock_guard<mutex> lk(_cond_var_m);
-    return _status;
-  }
-
-  void awaitFinished() const {
-    unique_lock<mutex> lk(_cond_var_m);
-    _cond_var.wait(lk, [&] { return _status != ResultTable::IN_PROGRESS; });
-  }
-
   std::optional<std::string> idToOptionalString(Id id) const {
     if (id < _localVocab->size()) {
       return (*_localVocab)[id];
@@ -124,9 +101,4 @@ class ResultTable {
   }
 
  private:
-  // See this SO answer for why mutable is ok here
-  // https://stackoverflow.com/questions/3239905/c-mutex-and-const-correctness
-  mutable condition_variable _cond_var;
-  mutable mutex _cond_var_m;
-  Status _status;
 };
