@@ -9,14 +9,18 @@
 #include <memory>
 #include <mutex>
 #include <utility>
+#include <limits>
 #include "./HashMap.h"
 #include "PriorityQueue.h"
+
 
 namespace ad_utility {
 
 using std::make_shared;
 using std::pair;
 using std::shared_ptr;
+
+static constexpr auto size_t_max = std::numeric_limits<size_t>::max();
 
 /**
  * Has operator()(const Value&)
@@ -114,11 +118,14 @@ class FlexibleCache {
 
  public:
   //! Typical constructor. A default value may be added in time.
-  explicit FlexibleCache(size_t capacity, ScoreComparator scoreComparator,
+  explicit FlexibleCache(size_t capacityNumElements, size_t capacitySize, size_t maxSizeSingleEl,
+                         ScoreComparator scoreComparator,
                          AccessUpdater accessUpdater,
                          ScoreCalculator scoreCalculator,
                          EntrySizeGetter entrySizeGetter = EntrySizeGetter())
-      : _capacity(capacity),
+      : _capacityNumElements(capacityNumElements),
+        _capacitySize(capacitySize),
+        _maxSizeSingleEl(maxSizeSingleEl),
         _data(scoreComparator),
         _accessUpdater(accessUpdater),
         _scoreCalculator(scoreCalculator),
@@ -163,17 +170,13 @@ class FlexibleCache {
     // Insert without taking mutex recursively
     EmplacedValue emplaced = make_shared<Value>(std::forward<Args>(args)...);
 
-    _accessMap[key] =
-        _data.insert(_scoreCalculator(*emplaced), Entry(key, emplaced));
-    if (_data.size() > _capacity) {
-      // Remove the last element.
-      // Since we are using shared_ptr this does not free the underlying
-      // memory if it is still accessible through a previously returned
-      // shared_ptr
+   auto sz = _entrySizeGetter(*emplaced);
+   if (sz <= _maxSizeSingleEl) {
+     _accessMap[key] =
+         _data.insert(_scoreCalculator(*emplaced), Entry(key, emplaced));
 
-      _accessMap.erase(_data.pop().value().key());
-    }
-    assert(_data.size() <= _capacity);
+     shrinkToFit();
+   }
     return TryEmplaceResult(emplaced, emplaced);
   }
 
@@ -200,12 +203,16 @@ class FlexibleCache {
       // the handle is fine
       _data.erase(std::move(handle));
       _accessMap.erase(key);
+      auto sz = _entrySizeGetter(*cached);
+      _totalSizeNonPinned -= sz;
+      _totalSizePinned += sz;
       return TryEmplaceResult(shared_ptr<Value>(nullptr), std::move(cached));
     }
 
     // Insert without taking mutex recursively
     EmplacedValue emplaced = make_shared<Value>(std::forward<Args>(args)...);
     _pinnedMap[key] = emplaced;
+    _totalSizePinned += _entrySizeGetter(*emplaced);
     return TryEmplaceResult(emplaced, emplaced);
   }
 
@@ -234,34 +241,24 @@ class FlexibleCache {
   // Insert a key value pair to the cache.
   // TODO(schnelle) add pinned variant and check pinned
   void insert(const Key& key, Value value) {
+    // ignore elements that are too big
+    if (_entrySizeGetter(value) > _maxSizeSingleEl) { return;}
     std::lock_guard<std::mutex> lock(_lock);
     Score s = _scoreCalculator(value);
+    _totalSizeNonPinned += _entrySizeGetter(value);
     auto handle = _data.insert(
         std::move(s), Entry(key, make_shared<const Value>(std::move(value))));
     _accessMap[key] = handle;
-    // todo<joka921> : codeDuplication
-    if (_data.size() > _capacity) {
-      // Remove the last element.
-      // Since we are using shared_ptr this does not free the underlying
-      // memory if it is still accessible through a previously returned
-      // shared_ptr
-
-      _accessMap.erase(_data.pop().value().key());
-    }
-    assert(_data.size() <= _capacity);
+    shrinkToFit();
   }
 
   //! Set the capacity.
   void setCapacity(const size_t nofElements) {
     std::lock_guard<std::mutex> lock(_lock);
-    _capacity = nofElements;
-    while (_data.size() > _capacity) {
-      // Remove elements from the back until we meet the capacity requirement
-      // TODO<joka921> : code duplication
-      _accessMap.erase(_data.pop().value().key());
-    }
-    assert(_data.size() <= _capacity);
+    _capacityNumElements = nofElements;
+    shrinkToFit();
   }
+
 
   //! Checks if there is an entry with the given key.
   bool contains(const Key& key) {
@@ -275,6 +272,7 @@ class FlexibleCache {
     std::lock_guard<std::mutex> lock(_lock);
     const auto pinnedIt = _pinnedMap.find(key);
     if (pinnedIt != _pinnedMap.end()) {
+      _totalSizePinned -= _entrySizeGetter(*pinnedIt->second);
       _pinnedMap.erase(pinnedIt);
       return;
     }
@@ -284,6 +282,7 @@ class FlexibleCache {
       // Item already erased do nothing
       return;
     }
+    _totalSizeNonPinned -= _entrySizeGetter(*mapIt->second);
     _data.erase(std::move(mapIt->second));
     _accessMap.erase(mapIt);
   }
@@ -296,6 +295,7 @@ class FlexibleCache {
     // shared_ptr
     _data.clear();
     _accessMap.clear();
+    _totalSizeNonPinned = 0;
   }
 
   /// Clear the cache AND the pinned elements
@@ -307,6 +307,8 @@ class FlexibleCache {
     _data.clear();
     _pinnedMap.clear();
     _accessMap.clear();
+    _totalSizeNonPinned = 0;
+    _totalSizePinned = 0;
   }
 
   /// return the total size of the pinned elements
@@ -339,7 +341,12 @@ class FlexibleCache {
   [[nodiscard]] size_t numPinnedElements() const { return _pinnedMap.size(); }
 
  private:
-  size_t _capacity;
+  size_t _capacityNumElements;
+  size_t _capacitySize;
+  size_t _maxSizeSingleEl;
+  size_t _totalSizeNonPinned = 0;  // the size in terms of the EntrySizeGetter, NOT Number of elements
+  size_t _totalSizePinned = 0;
+
   EntryList _data;
   AccessUpdater _accessUpdater;
   ScoreCalculator _scoreCalculator;
@@ -355,6 +362,20 @@ class FlexibleCache {
 
   FRIEND_TEST(FlexibleLRUCacheTest, testTryEmplacePinnedExistingInternal);
   FRIEND_TEST(LRUCacheTest, testTryEmplacePinnedExistingInternal);
+
+  void shrinkToFit() {
+
+    while (!_data.empty() && (_data.size() + _pinnedMap.size() > _capacityNumElements || _totalSizeNonPinned + _totalSizePinned > _capacitySize)) {
+      // Remove elements from the back until we meet the capacity requirement
+      // TODO<joka921> : code duplication
+
+      auto handle = _data.pop();
+      _totalSizeNonPinned -= _entrySizeGetter(*handle.value().value());
+      _accessMap.erase(handle.value().key());
+    }
+    assert(_data.empty() || _data.size() + _pinnedMap.size() <= _capacityNumElements);
+  }
+
 };
 
 // Partial instantiation of FlexibleCache using the heap-based priority queue
@@ -408,8 +429,8 @@ class HeapBasedLRUCache
                      detail::timeUpdater, detail::timeAsScore, EntrySizeGetter>;
 
  public:
-  explicit HeapBasedLRUCache(size_t capacity)
-      : Base(capacity, std::less<>(), detail::timeUpdater{},
+  explicit HeapBasedLRUCache(size_t capacityNumEls, size_t capacitySize = size_t_max, size_t maxSizeSingleEl = size_t_max)
+      : Base(capacityNumEls, capacitySize, maxSizeSingleEl, std::less<>(), detail::timeUpdater{},
              detail::timeAsScore{}, EntrySizeGetter{}) {}
 };
 

@@ -15,7 +15,7 @@ TEST(FlexibleCacheTest, Simple) {
   auto scoreComparator = std::less<>();
   ad_utility::HeapBasedCache<string, int, int, decltype(scoreComparator),
                              decltype(accessUpdater), decltype(scoreCalculator)>
-      cache{3, scoreComparator, accessUpdater, scoreCalculator};
+      cache{3, 10000, 10000, scoreComparator, accessUpdater, scoreCalculator};
   cache.insert("24", 24);
   cache.insert("2", 2);
   cache.insert("8", 8);
@@ -26,7 +26,7 @@ TEST(FlexibleCacheTest, Simple) {
   ASSERT_FALSE(cache.contains("2"));
 }
 TEST(FlexibleCacheTest, LRUSimple) {
-  ad_utility::HeapBasedLRUCache<string, int> cache(3);
+  ad_utility::HeapBasedLRUCache<string, int> cache(3, 10000, 10000);
   cache.insert("24", 24);
   cache.insert("2", 2);
   cache.insert("8", 8);
@@ -39,7 +39,7 @@ TEST(FlexibleCacheTest, LRUSimple) {
 namespace ad_utility {
 // _____________________________________________________________________________
 TEST(LRUCacheTest, testSimpleMapUsage) {
-  LRUCache<string, string> cache(5);
+  LRUCache<string, string> cache(5, 10000, 10000);
   cache.insert("1", "x");
   cache.insert("2", "xx");
   cache.insert("3", "xxx");
@@ -114,7 +114,9 @@ TEST(LRUCacheTest, testTryEmplacePinnedSimple) {
   cache.insert("4", "xxxx");
   ASSERT_EQ(*cache["pinned"], "bar");  // pinned still there
   ASSERT_FALSE(cache["1"]);            // oldest already gone
-  ASSERT_EQ(*cache["2"], "xx");  // not dropped because pinned not in capacity
+  ASSERT_FALSE(cache["2"]);            // also gone because pinned counts towards capacity
+  ASSERT_EQ(*cache["3"], "xxx");  // not dropped because pinned not in capacity
+  ASSERT_EQ(*cache["4"], "xxxx");  // not dropped because pinned not in capacity
   ASSERT_EQ(*cache["pinned"], "bar");  // pinned still there
 }
 // _____________________________________________________________________________
@@ -130,7 +132,7 @@ TEST(LRUCacheTest, testTryEmplacePinnedExisting) {
   ASSERT_FALSE(cache["1"]);         // oldest already gone
   ASSERT_EQ(*cache["2"], "xx");     // pinned still there
   ASSERT_FALSE(cache["3"]);         // third oldest not pinned and gone
-  ASSERT_EQ(*cache["4"], "xxxx");   // second newest still there
+  ASSERT_FALSE(cache["4"]);   // also gone, because pinned counts towards capacity
   ASSERT_EQ(*cache["5"], "xxxxx");  // newest still there
 }
 // _____________________________________________________________________________
