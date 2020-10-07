@@ -81,6 +81,9 @@ template <template <typename Sc, typename Val, typename Comp>
           typename AccessUpdater, typename ScoreCalculator,
           typename EntrySizeGetter = DefaultSizeGetter<Value>>
 class FlexibleCache {
+ public:
+  using key_type=Key;
+  using value_type=Value;
  private:
   template <typename K, typename V>
   using MapType = ad_utility::HashMap<K, V>;
@@ -216,6 +219,7 @@ class FlexibleCache {
     return TryEmplaceResult(emplaced, emplaced);
   }
 
+
   // Lookup a read-only value without creating a new one if non exists
   // instead shared_ptr<const Value>(nullptr) is returned in that case
   EntryValue operator[](const Key& key) {
@@ -240,9 +244,13 @@ class FlexibleCache {
 
   // Insert a key value pair to the cache.
   // TODO(schnelle) add pinned variant and check pinned
-  void insert(const Key& key, Value value) {
+  shared_ptr<const Value> insert(const Key& key, Value value) {
+    if (contains(key)) {
+      throw std::runtime_error("Trying to insert a cache key which was already present");
+    }
+
     // ignore elements that are too big
-    if (_entrySizeGetter(value) > _maxSizeSingleEl) { return;}
+    if (_entrySizeGetter(value) > _maxSizeSingleEl) { return {};}
     std::lock_guard<std::mutex> lock(_lock);
     Score s = _scoreCalculator(value);
     _totalSizeNonPinned += _entrySizeGetter(value);
@@ -250,6 +258,7 @@ class FlexibleCache {
         std::move(s), Entry(key, make_shared<const Value>(std::move(value))));
     _accessMap[key] = handle;
     shrinkToFit();
+    return handle.value().value();
   }
 
   //! Set the capacity.
@@ -265,6 +274,27 @@ class FlexibleCache {
     std::lock_guard<std::mutex> lock(_lock);
     return _pinnedMap.count(key) > 0 || _accessMap.count(key) > 0;
   }
+
+  bool containsPinnedIncludingUpgrade(const Key& key) {
+    std::lock_guard<std::mutex> lock(_lock);
+    if (_pinnedMap.count(key) > 0) { return true;}
+    if (!_accessMap.count(key)) { return false;}
+    auto handle = _accessMap[key].second;
+    const EntryValue cached = handle.value().value();
+    // Move the element to the _pinnedMap and remove
+    // unnecessary _accessMap entry
+    _pinnedMap[key] = cached;
+    // We have already copied the value to variable "cached", so invalidating
+    // the handle is fine
+    _data.erase(std::move(handle));
+    _accessMap.erase(key);
+    auto sz = _entrySizeGetter(*cached);
+    _totalSizeNonPinned -= sz;
+    _totalSizePinned += sz;
+    return true;
+
+  }
+
 
   // Erase an item from the cache if it exists, do nothing otherwise. As this
   // erase is explicit do remove pinned elements as well.

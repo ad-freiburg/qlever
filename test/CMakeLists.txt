@@ -10,6 +10,11 @@ add_executable(LRUCacheTest CacheTest.cpp)
 add_test(LRUCacheTest LRUCacheTest)
 target_link_libraries(LRUCacheTest gtest_main ${CMAKE_THREAD_LIBS_INIT} absl::flat_hash_map)
 
+add_executable(CacheAdapterTest CacheAdapterTest.cpp)
+add_test(CacheAdapterTest CacheAdapterTest)
+target_link_libraries(CacheAdapterTest gtest_main ${CMAKE_THREAD_LIBS_INIT} absl::flat_hash_map)
+
+
 add_executable(FileTest FileTest.cpp)
 add_test(FileTest FileTest)
 target_link_libraries(FileTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
