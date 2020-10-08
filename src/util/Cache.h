@@ -245,17 +245,22 @@ class FlexibleCache {
   // Insert a key value pair to the cache.
   // TODO(schnelle) add pinned variant and check pinned
   shared_ptr<const Value> insert(const Key& key, Value value) {
+    auto ptr = make_shared<Value>(std::move(value));
+    return insert(key, std::move(ptr));
+  }
+
+  shared_ptr<const Value> insert(const Key& key, shared_ptr<Value> valPtr) {
     if (contains(key)) {
       throw std::runtime_error("Trying to insert a cache key which was already present");
     }
 
     // ignore elements that are too big
-    if (_entrySizeGetter(value) > _maxSizeSingleEl) { return {};}
+    if (_entrySizeGetter(*valPtr) > _maxSizeSingleEl) { return {};}
     std::lock_guard<std::mutex> lock(_lock);
-    Score s = _scoreCalculator(value);
-    _totalSizeNonPinned += _entrySizeGetter(value);
+    Score s = _scoreCalculator(*valPtr);
+    _totalSizeNonPinned += _entrySizeGetter(*valPtr);
     auto handle = _data.insert(
-        std::move(s), Entry(key, make_shared<const Value>(std::move(value))));
+        std::move(s), Entry(key, std::move(valPtr)));
     _accessMap[key] = handle;
     shrinkToFit();
     return handle.value().value();
@@ -270,7 +275,7 @@ class FlexibleCache {
 
 
   //! Checks if there is an entry with the given key.
-  bool contains(const Key& key) {
+  bool contains(const Key& key) const {
     std::lock_guard<std::mutex> lock(_lock);
     return _pinnedMap.count(key) > 0 || _accessMap.count(key) > 0;
   }
@@ -279,7 +284,7 @@ class FlexibleCache {
     std::lock_guard<std::mutex> lock(_lock);
     if (_pinnedMap.count(key) > 0) { return true;}
     if (!_accessMap.count(key)) { return false;}
-    auto handle = _accessMap[key].second;
+    auto handle = _accessMap[key];
     const EntryValue cached = handle.value().value();
     // Move the element to the _pinnedMap and remove
     // unnecessary _accessMap entry
@@ -441,7 +446,7 @@ struct timeAsScore {
 struct timeUpdater {
   template <typename T, typename U>
   TimePoint operator()([[maybe_unused]] const T& v,
-                       [[maybe_unused]] const U& u) {
+                       [[maybe_unused]] const U& u) const {
     return std::chrono::steady_clock::now();
   }
 };

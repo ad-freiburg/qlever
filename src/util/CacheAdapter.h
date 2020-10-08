@@ -16,18 +16,18 @@ using std::make_shared;
 
 template <typename Key, typename Value, typename OnFinishedAction>
 struct TryEmplaceResult {
-  TryEmplaceResult(Key&& key, shared_ptr<Value> todo, shared_ptr<Value> done, OnFinishedAction* action):
+  TryEmplaceResult(Key key, shared_ptr<Value> todo, shared_ptr<const Value> done, OnFinishedAction action):
  _val{std::move(todo), std::move(done)}, _key{std::move(key)}, _onFinishedAction{action} {}
   std::pair<shared_ptr<Value>, shared_ptr<const Value>> _val;
   void finish() {
     if (_val.first) {
-      (*_onFinishedAction)(*_val.first);
+      (_onFinishedAction)(_key, _val.first);
     }
   }
 
  private:
   Key _key;
-  OnFinishedAction* _onFinishedAction;
+  OnFinishedAction _onFinishedAction;
 
 };
 
@@ -36,56 +36,78 @@ class CacheAdapter {
  public:
   using Value = typename Cache::value_type;
   using Key = typename Cache::key_type;
-  using SyncCache = ad_utility::Synchronized<Cache, std::mutex>;
+
+  struct S {
+    Cache _cache;
+    // values that are currently being computed.
+    // the bool tells us whether this result will be pinned in the cache
+    HashMap<Key, std::pair<bool, shared_ptr<Value>>> _inProgress;
+    template<typename... Args>
+    S(Args&&... args) : _cache{std::forward<Args>(args)...} {}
+  };
+  using SyncCache = ad_utility::Synchronized<S, std::mutex>;
 
   template <typename... CacheArgs>
   CacheAdapter(OnFinishedAction action, CacheArgs&&... cacheArgs ):
-    _cache{SyncCache(std::forward<CacheArgs>(cacheArgs)...)}, _onFinishedAction{action} {}
+    _v{std::forward<CacheArgs>(cacheArgs)...}, _onFinishedAction{action} {}
  private:
   class Action {
    public:
-    Action(bool pinned, SyncCache* cPtr, OnFinishedAction* action):
-    _cachePtr{cPtr}, _singleAction{action}, _pinnedInsert{pinned} {}
+    Action(SyncCache* cPtr, OnFinishedAction* action):
+    _cachePtr{cPtr}, _singleAction{action}{}
 
     void operator()(Key k, shared_ptr<Value> vPtr) {
-      _singleAction(*vPtr);
-      if (_pinnedInsert) {
-        _cachePtr->wlock()->insertPinned(std::move(k), std::move(vPtr));
+      auto l = _cachePtr->wlock();  // lock for the whole time, so no one gets confused.
+      (*_singleAction)(*vPtr);
+      auto& pinned = l->_inProgress[k].first;
+      if (pinned) {
+        // TODO: implement pinned insert
+        throw std::runtime_error("pinnedInsert is not implemented, TODO");
+        //l->_cache.insertPinned(std::move(k), std::move(vPtr));
       } else {
-        _cachePtr->wlock()->insert(std::move(k), std::move(vPtr));
+        l->_cache.insert(std::move(k), std::move(vPtr));
       }
+      l->_inProgress.erase(k);
     }
    private:
-    ad_utility::Synchronized<Cache, std::mutex>* _cachePtr;
+    SyncCache * _cachePtr;
     OnFinishedAction* _singleAction;
-    const bool _pinnedInsert;
   };
 
  public:
   using Res = TryEmplaceResult<Key, Value, Action>;
-  template <class... Args>
 
+  template <class... Args>
   Res tryEmplace(const Key& key, Args&&... args) {
-    _cache.withWriteLock([&](auto& cache) {
-      if (cache.contains(key)) {
-        return Res{key, shared_ptr<Value>{}, cache[key], makeAction()};
-      } else if (_inProgress.contains(key)) {
-        return Res{key, shared_ptr<Value>{}, _inProgress[key], makeAction()};
+    return tryEmplaceImpl(false, key, std::forward<Args>(args)...);
+  }
+
+  auto& getStorage() { return _v;}
+ private:
+  SyncCache _v;
+  OnFinishedAction _onFinishedAction;
+
+
+  Action makeAction() {
+    return Action(&_v, &_onFinishedAction);
+  }
+
+  // ______________________________________________________________________________
+  template <typename... Args>
+  Res tryEmplaceImpl(bool pinned, const Key& key, Args&&... args) {
+    return _v.withWriteLock([&](auto& s) {
+      bool contained = pinned ? s._cache.containsPinnedIncludingUpgrade(key) : s._cache.contains(key);
+      if (contained) {
+        return Res{key, shared_ptr<Value>{}, static_cast<shared_ptr<const Value>>(s._cache[key]), makeAction()};
+      } else if (s._inProgress.contains(key)) {
+        s._inProgress[key].first = s._inProgress[key].first || pinned;
+        return Res{key, shared_ptr<Value>{}, s._inProgress[key].second, makeAction()};
       }
       auto empl = make_shared<Value>(std::forward<Args>(args)...);
-      // Todo: threadSafety, this whole thing has to be locked.
-      // Maybe only use this within an ad_utility::synchronized
-      _inProgress[key] = empl;
+
+      s._inProgress[key] = {pinned, empl};
       return Res{key, empl, empl, makeAction()};
     });
-  }
- private:
-  ad_utility::Synchronized<Cache, std::mutex> _cache;
-  OnFinishedAction _onFinishedAction;
-  HashMap<Key, shared_ptr<Value>> _inProgress;
-
-  Action makeAction(bool pinned=false) {
-    return Action(pinned, _cache, &_onFinishedAction);
   }
 };
 }
