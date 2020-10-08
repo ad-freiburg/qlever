@@ -56,6 +56,9 @@ class Filter : public Operation {
       }
       if (_type == SparqlFilter::FilterType::NE) {
         return _subtree->getSizeEstimate();
+      } else if (_type == SparqlFilter::FilterType::PREFIX) {
+        // strip the leading ^ and " and assume each character gets rid of 10 percent of the entries
+        return _subtree->getSizeEstimate() / static_cast<size_t>(std::pow(10, std::max(0, static_cast<int>(_rhs.size()) - 2)));
       } else {
         return _subtree->getSizeEstimate() / 50;
       }
