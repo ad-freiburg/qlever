@@ -114,6 +114,13 @@ class CacheAdapter {
   }
 
   void clear() { _v.wlock()->_cache.clear();}
+  void clearAll() { _v.wlock()->_cache.clearAll();}
+
+  auto numCachedElements() const { return _v.wlock()->_cache.numCachedElements();}
+  auto numPinnedElements() const { return _v.wlock()->_cache.numPinnedElements();}
+  auto cachedSize() const {return _v.wlock()->_cache.cachedSize();}
+  auto pinnedSize() const {return _v.wlock()->_cache.pinnedSize();}
+
 
   auto& getStorage() { return _v;}
 
