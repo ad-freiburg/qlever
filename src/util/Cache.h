@@ -249,6 +249,11 @@ class FlexibleCache {
     return insert(key, std::move(ptr));
   }
 
+  shared_ptr<const Value> insertPinned(const Key& key, Value value) {
+    auto ptr = make_shared<Value>(std::move(value));
+    return insertPinned(key, std::move(ptr));
+  }
+
   shared_ptr<const Value> insert(const Key& key, shared_ptr<Value> valPtr) {
     if (contains(key)) {
       throw std::runtime_error("Trying to insert a cache key which was already present");
@@ -265,6 +270,23 @@ class FlexibleCache {
     shrinkToFit();
     return handle.value().value();
   }
+
+  shared_ptr<const Value> insertPinned(const Key& key, shared_ptr<Value> valPtr) {
+    if (contains(key)) {
+      throw std::runtime_error("Trying to insert a cache key which was already present");
+    }
+
+    // ignore elements that are too big
+    if (_entrySizeGetter(*valPtr) > _maxSizeSingleEl) {
+      throw std::runtime_error("Trying to pin an element to the cache that is bigger than the maximum size for a single element in the cache");
+    }
+    _pinnedMap[key] = valPtr;
+    _totalSizePinned += _entrySizeGetter(*valPtr);
+    shrinkToFit();
+    return valPtr;
+  }
+
+
 
   //! Set the capacity.
   void setCapacity(const size_t nofElements) {

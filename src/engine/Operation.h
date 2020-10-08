@@ -59,7 +59,8 @@ class Operation {
    * when memory pressure was lowered in the meantime.  When print is true the
    * Operation is printed to the ERROR LOG
    */
-  void abort(const shared_ptr<CacheValue>& cachedResult, bool print) {
+   // TODO<joka921>: change to pointer for styleguide?
+  void abort(SubtreeCache::Res & cachedResult, bool print) {
     const std::string opString = asString();
     if (print) {
       LOG(ERROR) << "Aborted Operation:" << endl;
@@ -67,8 +68,7 @@ class Operation {
     }
     // Remove Operation from cache so we may retry it later. Anyone with a live
     // pointer will be waiting and register the abort.
-    _executionContext->getQueryTreeCache().erase(opString);
-    cachedResult->_resTable->abort();
+    cachedResult.abort([](auto&& res){res._resTable->abort();});
   }
 
   /**
