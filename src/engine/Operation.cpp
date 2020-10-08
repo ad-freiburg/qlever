@@ -68,10 +68,11 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       _executionContext->_pinSubtrees || pinChildIndexScanSizes;
   LOG(TRACE) << "Check cache for Operation result" << endl;
   LOG(TRACE) << "Using key: \n" << cacheKey << endl;
-  auto [newResult, existingResult] =
-      (pinResult)
-          ? cache.tryEmplacePinned(cacheKey, _executionContext->getAllocator())
-          : cache.tryEmplace(cacheKey, _executionContext->getAllocator());
+  auto cacheProxyResult = (pinResult)
+                                         ? cache.tryEmplacePinned(cacheKey, _executionContext->getAllocator())
+                                         : cache.tryEmplace(cacheKey, _executionContext->getAllocator());
+
+  auto& [newResult, existingResult] = cacheProxyResult._val;
 
   if (pinChildIndexScanSizes) {
     auto lock = getExecutionContext()->getPinnedSizes().wlock();
@@ -101,18 +102,18 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     } catch (const ad_semsearch::AbortException& e) {
       // A child Operation was aborted, abort this Operation
       // as well. The child already printed
-      abort(newResult, false);
+      abort(cacheProxyResult, false);
       // Continue unwinding the stack
       throw;
     } catch (const std::exception& e) {
       // We are in the innermost level of the exception, so print
-      abort(newResult, true);
+      abort(cacheProxyResult, true);
       // Rethrow as QUERY_ABORTED allowing us to print the Operation
       // only at innermost failure of a recursive call
       throw ad_semsearch::AbortException(e);
     } catch (...) {
       // We are in the innermost level of the exception, so print
-      abort(newResult, true);
+      abort(cacheProxyResult, true);
       LOG(ERROR) << "WEIRD_EXCEPTION not inheriting from std::exception"
                  << endl;
       // Rethrow as QUERY_ABORTED allowing us to print the Operation
@@ -131,7 +132,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     newResult->_runtimeInfo = _runtimeInfo;
     // Only now we can let other threads access the result
     // and runtime information
-    newResult->_resTable->finish();
+    cacheProxyResult.finish();
     return newResult->_resTable;
   }
 

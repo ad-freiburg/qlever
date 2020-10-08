@@ -11,6 +11,7 @@
 #include "../global/Constants.h"
 #include "../index/Index.h"
 #include "../util/Cache.h"
+#include "../util/CacheAdapter.h"
 #include "../util/Log.h"
 #include "../util/Synchronized.h"
 #include "./Engine.h"
@@ -33,7 +34,14 @@ struct CacheValue {
   }
 };
 
-typedef ad_utility::LRUCache<string, CacheValue> SubtreeCache;
+// TODO: In C++ 20 this can be a lambda with a default constructor
+namespace detail {
+struct finisher {
+  template <class V>
+  void operator()(V&& val) const {val._resTable->finish();}
+};
+}
+using SubtreeCache = ad_utility::CacheAdapter<ad_utility::LRUCache<string, CacheValue>, detail::finisher>;
 using PinnedSizes =
     ad_utility::Synchronized<ad_utility::HashMap<std::string, size_t>,
                              std::shared_mutex>;
