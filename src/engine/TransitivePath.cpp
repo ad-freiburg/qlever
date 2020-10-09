@@ -238,7 +238,7 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
       nodes.push_back(leftValue);
     }
     for (size_t i = 0; i < sub.size(); i++) {
-      if (i % 4096 == 0) {
+      if (i % 2048 == 0) {
         checkTimeout();
       }
       size_t l = sub(i, leftSubCol);
@@ -261,6 +261,9 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
     (void)leftValue;
     nodes.push_back(rightValue);
     for (size_t i = 0; i < sub.size(); i++) {
+      if (i % 2048 == 0) {
+        checkTimeout();
+      }
       // Use the inverted edges
       size_t l = sub(i, leftSubCol);
       size_t r = sub(i, rightSubCol);
