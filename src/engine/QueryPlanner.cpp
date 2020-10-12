@@ -60,6 +60,18 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
 
   // Add the query level modifications
 
+
+  // if we do not do grouping/distict/etc then we can optimize by letting
+  // the last operation be limited
+  // TODO<joka921>: Maybe this information can also be integrated into the query planner's
+  // decisions
+
+  if (pq._limit && !doGrouping && pq._havingClauses.empty() && !pq._distinct && pq._orderBy.empty()) {
+    for (auto& p : plans.back()) {
+      p.getExecutionTree()->setLimit(pq._limit.value());
+    }
+  }
+
   // GROUP BY
   if (doGrouping && !usePatternTrick) {
     plans.emplace_back(getGroupByRow(pq, plans));

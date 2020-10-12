@@ -115,6 +115,8 @@ class Operation {
   // As soon as this runs out, the complete tree will fail.
   void recursivelySetTimeoutTimer(std::shared_ptr<SyncTimer> timer);
 
+  void setLimit(size_t limit) { _limit = limit;}
+
  protected:
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
@@ -149,6 +151,10 @@ class Operation {
   // if not, throw a TimeoutException
   void checkTimeout() const;
 
+
+  // if set, allow the single operation to emit at most this many results.
+  std::optional<size_t> _limit = std::nullopt;  // create at most this many entries
+
  private:
   //! Compute the result of the query-subtree rooted at this element..
   //! Computes both, an EntityList and a HitList.
@@ -156,6 +162,7 @@ class Operation {
 
   vector<size_t> _resultSortedColumns;
   RuntimeInformation _runtimeInfo;
+
 
   bool _hasComputedSortColumns;
 

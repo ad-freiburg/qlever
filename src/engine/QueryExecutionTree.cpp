@@ -69,6 +69,10 @@ void QueryExecutionTree::setVariableColumn(const string& variable,
   _variableColumnMap[variable] = column;
 }
 
+void QueryExecutionTree::setLimit(size_t limit) {
+  _rootOperation->setLimit(limit);
+}
+
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getVariableColumn(const string& variable) const {
   if (_variableColumnMap.count(variable) == 0) {

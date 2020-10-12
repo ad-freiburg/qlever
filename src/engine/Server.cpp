@@ -384,8 +384,8 @@ string Server::composeResponseJson(const ParsedQuery& query,
   {
     size_t limit = MAX_NOF_ROWS_IN_RESULT;
     size_t offset = 0;
-    if (query._limit.size() > 0) {
-      limit = static_cast<size_t>(atol(query._limit.c_str()));
+    if (query._limit) {
+      limit = query._limit.value();
     }
     if (query._offset.size() > 0) {
       offset = static_cast<size_t>(atol(query._offset.c_str()));
@@ -410,8 +410,8 @@ string Server::composeResponseSepValues(const ParsedQuery& query,
   std::ostringstream os;
   size_t limit = std::numeric_limits<size_t>::max();
   size_t offset = 0;
-  if (query._limit.size() > 0) {
-    limit = static_cast<size_t>(atol(query._limit.c_str()));
+  if (query._limit) {
+    limit = query._limit.value();
   }
   if (query._offset.size() > 0) {
     offset = static_cast<size_t>(atol(query._offset.c_str()));

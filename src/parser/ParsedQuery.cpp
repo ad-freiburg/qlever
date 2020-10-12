@@ -55,7 +55,7 @@ string ParsedQuery::asString() const {
   os << "\nWHERE: \n";
   _rootGraphPattern.toString(os, 1);
 
-  os << "\nLIMIT: " << (_limit.size() > 0 ? _limit : "no limit specified");
+  os << "\nLIMIT: " << (_limit ? std::to_string(_limit.value()) : "no limit specified");
   os << "\nTEXTLIMIT: "
      << (_textLimit.size() > 0 ? _textLimit : "no limit specified");
   os << "\nOFFSET: " << (_offset.size() > 0 ? _offset : "no offset specified");
