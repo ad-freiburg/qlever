@@ -48,6 +48,10 @@ string Join::asString(size_t indent) const {
   }
   os << "|X|\n"
      << _right->asString(indent) << " join-column: [" << _rightJoinCol << "]";
+
+  if (_limit) {
+    os << "LIMIT " << _limit.value();
+  }
   return os.str();
 }
 
@@ -59,6 +63,10 @@ string Join::getDescriptor() const {
       joinVar = p.first;
       break;
     }
+  }
+
+  if (_limit) {
+    joinVar += " Limit" + std::to_string(_limit.value());
   }
   return "Join on " + joinVar;
 }
@@ -510,6 +518,8 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     return;
   }
 
+  size_t limit = _limit.value_or(std::numeric_limits<size_t>::max());
+
   IdTableStatic<OUT_WIDTH> result = dynRes->moveToStatic<OUT_WIDTH>();
   // Cannot just switch l1 and l2 around because the order of
   // items in the result tuples is important.
@@ -556,6 +566,11 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
           // Copy bs columns after the join column
           for (size_t h = jc2 + 1; h < b.cols(); h++) {
             result(backIndex, h + a.cols() - 1) = b(j, h);
+          }
+
+          // check for the limit
+          if (result.size() >= limit) {
+            goto finish;
           }
 
           ++j;

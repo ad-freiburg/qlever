@@ -584,7 +584,7 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
       }
     } else if (_lexer.accept("limit")) {
       _lexer.expect(SparqlToken::Type::INTEGER);
-      query->_limit = _lexer.current().raw;
+      query->_limit = std::atoll(_lexer.current().raw.c_str());
     } else if (_lexer.accept("textlimit")) {
       _lexer.expect(SparqlToken::Type::INTEGER);
       query->_textLimit = _lexer.current().raw;

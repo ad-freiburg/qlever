@@ -312,7 +312,7 @@ class ParsedQuery {
   size_t _numGraphPatterns = 1;
   vector<OrderKey> _orderBy;
   vector<string> _groupByVariables;
-  string _limit;
+  std::optional<size_t> _limit;
   string _textLimit;
   string _offset;
   bool _reduced = false;
