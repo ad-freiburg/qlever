@@ -139,8 +139,7 @@ class QueryExecutionTree {
   }
 
   // typedef for a synchronized and shared timeoutTimer
-  using SyncTimer =
-      ad_utility::Synchronized<ad_utility::TimeoutTimer, std::shared_mutex>;
+  using SyncTimer =ad_utility::TimeoutChecker;
 
   void recursivelySetTimeoutTimer(std::shared_ptr<SyncTimer> timer) {
     _rootOperation->recursivelySetTimeoutTimer(std::move(timer));

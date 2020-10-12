@@ -4,6 +4,7 @@
 
 #include <sys/time.h>
 #include <sys/types.h>
+#include "Synchronized.h"
 
 // Björn 01Jun11: Copied this class from the CompleteSearch
 // code in order to use it in the semantic search, too.
@@ -133,5 +134,19 @@ class TimeoutTimer : public Timer {
   class UnlimitedTag {};
   TimeoutTimer(UnlimitedTag) : _isUnlimited{true} {}
   TimeoutTimer(off_t timeout) : _timeout{timeout} {}
+};
+
+// simple interface : threadsafe timer + "checkTimeout + throw exception"
+class TimeoutChecker : public ad_utility::Synchronized<TimeoutTimer, std::mutex> {
+ public:
+  class TimeoutException : public std::exception {};
+  using Base = ad_utility::Synchronized<TimeoutTimer, std::mutex>;
+  using Base::Synchronized;
+
+  void checkTimeout() {
+    if (wlock()->isTimeout()) {
+      throw TimeoutException{};
+    }
+  }
 };
 }  // namespace ad_utility
