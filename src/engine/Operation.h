@@ -110,7 +110,7 @@ class Operation {
 
   // typedef for a synchronized and shared timeoutTimer
   using SyncTimer =
-      ad_utility::Synchronized<ad_utility::TimeoutTimer, std::shared_mutex>;
+      ad_utility::TimeoutChecker;
   // set a global timeout timer for all child operations.
   // As soon as this runs out, the complete tree will fail.
   void recursivelySetTimeoutTimer(std::shared_ptr<SyncTimer> timer);
@@ -149,6 +149,10 @@ class Operation {
   // if not, throw a TimeoutException
   void checkTimeout() const;
 
+  // handles the timeout of this operation
+  std::shared_ptr<SyncTimer> _timeoutTimer =
+      std::make_shared<SyncTimer>(ad_utility::TimeoutTimer::unlimited());
+
  private:
   //! Compute the result of the query-subtree rooted at this element..
   //! Computes both, an EntityList and a HitList.
@@ -163,9 +167,6 @@ class Operation {
   /// execution of this operation
   std::vector<std::string> _warnings;
 
-  // handles the timeout of this operation
-  std::shared_ptr<SyncTimer> _timeoutTimer =
-      std::make_shared<SyncTimer>(ad_utility::TimeoutTimer::unlimited());
 
   // recursively call a function on all children
   template <typename F>

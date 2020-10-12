@@ -21,6 +21,7 @@
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/MmapVector.h"
+#include "../util/Timer.h"
 #include "./ConstantsIndexCreation.h"
 #include "./DocsDB.h"
 #include "./IndexBuilderTypes.h"
@@ -37,6 +38,7 @@ using std::array;
 using std::string;
 using std::tuple;
 using std::vector;
+using std::shared_ptr;
 
 using json = nlohmann::json;
 
@@ -370,13 +372,13 @@ class Index {
    * Index class).
    */
   template <class Permutation>
-  void scan(Id key, IdTable* result, const Permutation& p) const {
+  void scan(Id key, IdTable* result, const Permutation& p, shared_ptr<ad_utility::TimeoutChecker> timer = nullptr) const {
     if (p._meta.relationExists(key)) {
       const FullRelationMetaData& rmd = p._meta.getRmd(key)._rmdPairs;
       result->reserve(rmd.getNofElements() + 2);
       result->resize(rmd.getNofElements());
       p._file.read(result->data(), rmd.getNofElements() * 2 * sizeof(Id),
-                   rmd._startFullIndex);
+                   rmd._startFullIndex, std::move(timer));
     }
   }
 
@@ -391,13 +393,13 @@ class Index {
    * Index class).
    */
   template <class Permutation>
-  void scan(const string& key, IdTable* result, const Permutation& p) const {
+  void scan(const string& key, IdTable* result, const Permutation& p, shared_ptr<ad_utility::TimeoutChecker> timer = nullptr) const {
     LOG(DEBUG) << "Performing " << p._readableName
                << " scan for full list for: " << key << "\n";
     Id relId;
     if (_vocab.getId(key, &relId)) {
       LOG(TRACE) << "Successfully got key ID.\n";
-      scan(relId, result, p);
+      scan(relId, result, p, std::move(timer));
     }
     LOG(DEBUG) << "Scan done, got " << result->size() << " elements.\n";
   }
