@@ -95,7 +95,7 @@ class VocabularyMerger {
   // keep track of the last seen word to correctly handle duplicates
   ParsedVocabularyEntry _lastWritten;
   std::ofstream _outfile;
-  std::ofstream _outfileNumerical;
+  ad_utility::File _outfileNumerical;
   std::ofstream _outfileExternal;
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;

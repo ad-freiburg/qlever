@@ -198,11 +198,14 @@ class FancyId {
         case FancyId::LOCAL_VOCAB : return "local";
         case FancyId::DATE : return "date";
         case FancyId::FLOAT : return "float";
+        case FancyId::INTEGER : return "int";
         default: AD_CHECK(false);
       }
     };
     if (id.type() == FLOAT) {
       return str << id.getFloat() << 'f';
+    } else if (id.type() == INTEGER) {
+      return str << id.getInteger();
     } else {
       return str << id.getUnsigned() << tp(id.type());
     }

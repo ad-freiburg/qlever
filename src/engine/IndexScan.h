@@ -92,7 +92,7 @@ class IndexScan : public Operation {
   ScanType _type;
   string _subject;
   string _predicate;
-  string _object;
+  ParsedVocabularyEntry _object;
   size_t _sizeEstimate;
   vector<float> _multiplicity;
 

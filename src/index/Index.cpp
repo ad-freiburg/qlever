@@ -1245,7 +1245,7 @@ size_t Index::subjectCardinality(const string& sub) const {
 }
 
 // _____________________________________________________________________________
-size_t Index::objectCardinality(const string& obj) const {
+size_t Index::objectCardinality(const ParsedVocabularyEntry & obj) const {
   Id relId;
   if (_vocab.getId(obj, &relId)) {
     if (this->_OSP.metaData().relationExists(relId)) {
@@ -1257,23 +1257,26 @@ size_t Index::objectCardinality(const string& obj) const {
 
 // _____________________________________________________________________________
 size_t Index::sizeEstimate(const string& sub, const string& pred,
-                           const string& obj) const {
+                           const ParsedVocabularyEntry & obj) const {
   // One or two of the parameters have to be empty strings.
   // This determines the permutations to use.
 
   // With only one nonempty string, we can get the exact count.
   // With two, we can check if the relation is functional (return 1) or not
   // where we approximate the result size by the block size.
-  if (sub.size() > 0 && pred.size() == 0 && obj.size() == 0) {
+
+  const bool objEmpty = std::holds_alternative<std::string>(obj) && std::get<std::string>(obj).empty();
+
+  if (sub.size() > 0 && pred.size() == 0 && objEmpty) {
     return subjectCardinality(sub);
   }
-  if (sub.size() == 0 && pred.size() > 0 && obj.size() == 0) {
+  if (sub.size() == 0 && pred.size() > 0 && objEmpty) {
     return relationCardinality(pred);
   }
-  if (sub.size() == 0 && pred.size() == 0 && obj.size() > 0) {
+  if (sub.size() == 0 && pred.size() == 0 && !objEmpty) {
     return objectCardinality(obj);
   }
-  if (sub.size() == 0 && pred.size() == 0 && obj.size() == 0) {
+  if (sub.size() == 0 && pred.size() == 0 && objEmpty) {
     return getNofTriples();
   }
   AD_THROW(ad_semsearch::Exception::CHECK_FAILED,

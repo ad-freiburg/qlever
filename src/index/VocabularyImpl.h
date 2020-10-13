@@ -18,7 +18,7 @@ using std::string;
 
 // _____________________________________________________________________________
 template <class S, class C>
-void Vocabulary<S, C>::readFromFile(const string& fileName,
+void Vocabulary<S, C>::readFromFile(const string& fileName, const string& numbersFileName,
                                     const string& extLitsFileName) {
   LOG(INFO) << "Reading vocabulary from file " << fileName << "\n";
   _words.clear();
@@ -50,6 +50,8 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
   in.close();
   LOG(INFO) << "Done reading vocabulary from file.\n";
   LOG(INFO) << "It contains " << _words.size() << " elements\n";
+
+  readNumbersFromFile(numbersFileName);
   if (extLitsFileName.size() > 0) {
     if (!_isCompressed) {
       LOG(INFO) << "ERROR: trying to load externalized literals to an "
@@ -62,6 +64,22 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
     _externalLiterals.initFromFile(extLitsFileName);
     LOG(INFO) << "Done registering external vocabulary for literals.\n";
   }
+}
+
+template <class S, class C>
+void Vocabulary<S, C>::readNumbersFromFile(const std::string& filename) {
+  _numbers.clear();
+  if (filename.empty()) {
+    LOG(INFO) << "No Numbers used for this vocabulary\n";
+    return;
+  }
+  ad_utility::File f;
+  f.open(filename, "r");
+  uint64_t x;
+  while (f.read((char*)&x, sizeof(x))) {
+    _numbers.push_back(bit_cast<FancyId>(x));
+  }
+  LOG(INFO) << "registered " << _numbers.size() << "numbers";
 }
 
 // _____________________________________________________________________________

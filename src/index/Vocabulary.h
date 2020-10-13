@@ -24,6 +24,7 @@
 #include "./CompressedString.h"
 #include "./StringSortComparator.h"
 #include "ExternalVocabulary.h"
+#include "../util/Conversions.h"
 
 using std::string;
 using std::vector;
@@ -102,7 +103,8 @@ class Vocabulary {
     _externalLiterals.clear();
   }
   //! Read the vocabulary from file.
-  void readFromFile(const string& fileName, const string& extLitsFileName = "");
+  void readFromFile(const string& fileName, const string& numbersFilename, const string& extLitsFileName = "");
+
 
   //! Write the vocabulary to a file.
   // We don't need to write compressed vocabularies with the current index
@@ -175,16 +177,23 @@ class Vocabulary {
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
-  bool getId(const string& word, Id* id) const {
+  bool getId(const ParsedVocabularyEntry& entry, Id* id) const {
+    if (auto ptr = std::get_if<FancyId>(&entry)) {
+      *id = std::lower_bound(_numbers.begin(), _numbers.end(), *ptr) - _numbers.begin();
+      return *id < _numbers.size() && _numbers[*id] == *ptr;
+    }
+    const auto& word = std::get<std::string>(entry);
     if (!shouldBeExternalized(word)) {
       // need the TOTAL level because we want the unique word.
       *id = lower_bound(word, SortLevel::TOTAL);
       // works for the case insensitive version because
       // of the strict ordering.
-      return *id < _words.size() && at(*id) == word;
+      bool ret = *id < _words.size() && at(*id) == word;
+      *id += _numbers.size();
+      return ret;
     }
     bool success = _externalLiterals.getId(word, id);
-    *id += _words.size();
+    *id += _words.size() + _numbers.size();
     return success;
   }
 
@@ -382,6 +391,8 @@ class Vocabulary {
                            _words.begin());
   }
 
+  void readNumbersFromFile(const std::string& filename);
+
   // TODO<joka921> these following two members are only used with the
   // compressed vocabulary. They don't use much space if empty, but still it
   // would be cleaner to throw them out when using the uncompressed version
@@ -402,6 +413,7 @@ class Vocabulary {
   vector<std::string> _internalizedLangs{"en"};
 
   vector<StringType> _words;
+  vector<FancyId> _numbers;
   ExternalVocabulary<ComparatorType> _externalLiterals;
   ComparatorType _caseComparator;
 };

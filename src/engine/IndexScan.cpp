@@ -69,7 +69,10 @@ string IndexScan::asString(size_t indent) const {
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  return "IndexScan " + _subject + " " + _predicate + " " + _object;
+  std::stringstream s{};
+  s << _object;
+
+  return "IndexScan " + _subject + " " + _predicate + " " + s.str();
 }
 
 // _____________________________________________________________________________
@@ -129,6 +132,7 @@ ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
   ad_utility::HashMap<string, size_t> res;
   size_t col = 0;
 
+
   switch (_type) {
     case SPO_FREE_P:
     case FULL_INDEX_SCAN_SPO:
@@ -139,8 +143,10 @@ ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
         res[_predicate] = col++;
       }
 
-      if (_object[0] == '?') {
-        res[_object] = col++;
+      if (auto ptr = std::get_if<std::string>(&_object)) {
+        if ((*ptr)[0] == '?') {
+          res[*ptr] = col++;
+        }
       }
       return res;
     case SOP_FREE_O:
@@ -150,8 +156,10 @@ ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
         res[_subject] = col++;
       }
 
-      if (_object[0] == '?') {
-        res[_object] = col++;
+      if (auto ptr = std::get_if<std::string>(&_object)) {
+        if ((*ptr)[0] == '?') {
+          res[*ptr] = col++;
+        }
       }
 
       if (_predicate[0] == '?') {
@@ -168,8 +176,10 @@ ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
         res[_subject] = col++;
       }
 
-      if (_object[0] == '?') {
-        res[_object] = col++;
+      if (auto ptr = std::get_if<std::string>(&_object)) {
+        if ((*ptr)[0] == '?') {
+          res[*ptr] = col++;
+        }
       }
       return res;
     case POS_BOUND_O:
@@ -179,8 +189,10 @@ ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
         res[_predicate] = col++;
       }
 
-      if (_object[0] == '?') {
-        res[_object] = col++;
+      if (auto ptr = std::get_if<std::string>(&_object)) {
+        if ((*ptr)[0] == '?') {
+          res[*ptr] = col++;
+        }
       }
 
       if (_subject[0] == '?') {
@@ -189,8 +201,10 @@ ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
       return res;
     case OPS_FREE_P:
     case FULL_INDEX_SCAN_OPS:
-      if (_object[0] == '?') {
-        res[_object] = col++;
+      if (auto ptr = std::get_if<std::string>(&_object)) {
+        if ((*ptr)[0] == '?') {
+          res[*ptr] = col++;
+        }
       }
 
       if (_predicate[0] == '?') {
@@ -203,8 +217,10 @@ ad_utility::HashMap<string, size_t> IndexScan::getVariableColumns() const {
       return res;
     case OSP_FREE_S:
     case FULL_INDEX_SCAN_OSP:
-      if (_object[0] == '?') {
-        res[_object] = col++;
+      if (auto ptr = std::get_if<std::string>(&_object)) {
+        if ((*ptr)[0] == '?') {
+          res[*ptr] = col++;
+        }
       }
 
       if (_subject[0] == '?') {
@@ -327,7 +343,9 @@ size_t IndexScan::computeSizeEstimate() {
     }
     return getIndex().sizeEstimate("", "", "");
   } else {
-    return 1000 + _subject.size() + _predicate.size() + _object.size();
+    std::stringstream s;
+    s << _object;
+    return 1000 + _subject.size() + _predicate.size() + s.str().size();
   }
 }
 

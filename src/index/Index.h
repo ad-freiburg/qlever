@@ -172,10 +172,10 @@ class Index {
 
   size_t subjectCardinality(const string& sub) const;
 
-  size_t objectCardinality(const string& obj) const;
+  size_t objectCardinality(const ParsedVocabularyEntry & obj) const;
 
   size_t sizeEstimate(const string& sub, const string& pred,
-                      const string& obj) const;
+                      const ParsedVocabularyEntry & obj) const;
 
   std::optional<string> idToOptionalString(Id id) const {
     return _vocab.idToOptionalString(id);
@@ -331,7 +331,7 @@ class Index {
 
   // _____________________________________________________________________________
   template <class PermutationImpl>
-  vector<float> getMultiplicities(const string& key,
+  vector<float> getMultiplicities(const ParsedVocabularyEntry& key,
                                   const PermutationImpl& p) const {
     Id keyId;
     vector<float> res;
@@ -391,7 +391,7 @@ class Index {
    * Index class).
    */
   template <class Permutation>
-  void scan(const string& key, IdTable* result, const Permutation& p) const {
+  void scan(const ParsedVocabularyEntry & key, IdTable* result, const Permutation& p) const {
     LOG(DEBUG) << "Performing " << p._readableName
                << " scan for full list for: " << key << "\n";
     Id relId;
@@ -418,7 +418,7 @@ class Index {
    */
   // _____________________________________________________________________________
   template <class PermutationInfo>
-  void scan(const string& keyFirst, const string& keySecond, IdTable* result,
+  void scan(const ParsedVocabularyEntry & keyFirst, const ParsedVocabularyEntry & keySecond, IdTable* result,
             const PermutationInfo& p) const {
     LOG(DEBUG) << "Performing " << p._readableName << "  scan of relation "
                << keyFirst << " with fixed subject: " << keySecond << "...\n";

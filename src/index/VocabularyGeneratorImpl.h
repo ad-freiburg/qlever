@@ -38,7 +38,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
   std::vector<std::ifstream> infiles;
 
   _outfile.open(basename + ".vocabulary");
-  _outfileNumerical.open(basename + ".numericalVocabulary");
+  _outfileNumerical.open(basename + ".numericalVocabulary", "w");
 
   AD_CHECK(_outfile.is_open());
   _outfileExternal.open(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
@@ -179,7 +179,8 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buff
 
       // write the new word to the vocabulary
       if (auto ptr = std::get_if<FancyId>(&_lastWritten)) {
-        _outfileNumerical << bit_cast<uint64_t>(*ptr);
+        auto x = bit_cast<uint64_t>(*ptr);
+        _outfileNumerical.write((char*)&x, sizeof(x));
       } else {
         auto stringPtr = std::get_if<std::string>(&_lastWritten);
         if (*stringPtr < EXTERNALIZED_LITERALS_PREFIX) {

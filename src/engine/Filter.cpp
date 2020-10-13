@@ -510,40 +510,42 @@ void Filter::computeResultFixedValue(
   Id rhs;
   switch (subRes->getResultType(lhs)) {
     case ResultTable::ResultType::KB: {
-      std::string rhs_string = _rhs;
-      if (ad_utility::isXsdValue(rhs_string)) {
-        rhs_string = ad_utility::convertValueLiteralToIndexWord(rhs_string);
+      ParsedVocabularyEntry rhsEntry;
+      if (ad_utility::isXsdValue(_rhs)) {
+        rhsEntry = ad_utility::convertValueLiteralToIndexWord(_rhs);
       } else if (ad_utility::isNumeric(_rhs)) {
-        rhs_string = ad_utility::convertNumericToIndexWord(rhs_string);
+        rhsEntry = ad_utility::convertNumericToIndexWord(_rhs);
       } else {
+        std::string rhsString = _rhs;
         // TODO: This is not standard conform, but currently required due to
         // our vocabulary storing iris with the greater than and
         // literals with their quotation marks.
-        if (rhs_string.size() > 2 && rhs_string[1] == '<' &&
-            rhs_string[0] == '"' && rhs_string.back() == '"') {
+        if (rhsString.size() > 2 && rhsString[1] == '<' && rhsString[0] == '"' &&
+            rhsString.back() == '"') {
           // Remove the quotation marks surrounding the string.
-          rhs_string = rhs_string.substr(1, rhs_string.size() - 2);
-        } else if (std::count(rhs_string.begin(), rhs_string.end(), '"') > 2 &&
-                   rhs_string.back() == '"') {
+          rhsString = rhsString.substr(1, rhsString.size() - 2);
+        } else if (std::count(rhsString.begin(), rhsString.end(), '"') > 2 &&
+                   rhsString.back() == '"') {
           // Remove the quotation marks surrounding the string.
-          rhs_string = rhs_string.substr(1, rhs_string.size() - 2);
+          rhsString = rhsString.substr(1, rhsString.size() - 2);
         }
+        rhsEntry = std::move(rhsString);
       }
 
       // TODO<joka921> which level do we want for these filters
       auto level = TripleComponentComparator::Level::QUARTERNARY;
       if (_type == SparqlFilter::EQ || _type == SparqlFilter::NE) {
-        if (!getIndex().getVocab().getId(rhs_string, &rhs)) {
+        if (!getIndex().getVocab().getId(rhsEntry, &rhs)) {
           rhs = std::numeric_limits<size_t>::max() - 1;
         }
       } else if (_type == SparqlFilter::GE) {
-        rhs = getIndex().getVocab().getValueIdForGE(rhs_string, level);
+        rhs = getIndex().getVocab().getValueIdForGE(rhsEntry, level);
       } else if (_type == SparqlFilter::GT) {
-        rhs = getIndex().getVocab().getValueIdForGT(rhs_string, level);
+        rhs = getIndex().getVocab().getValueIdForGT(rhsEntry, level);
       } else if (_type == SparqlFilter::LT) {
-        rhs = getIndex().getVocab().getValueIdForLT(rhs_string, level);
+        rhs = getIndex().getVocab().getValueIdForLT(rhsEntry, level);
       } else if (_type == SparqlFilter::LE) {
-        rhs = getIndex().getVocab().getValueIdForLE(rhs_string, level);
+        rhs = getIndex().getVocab().getValueIdForLE(rhsEntry, level);
       }
       // All other types of filters do not use r and work on _rhs directly
       break;

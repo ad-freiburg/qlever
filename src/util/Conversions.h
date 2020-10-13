@@ -29,9 +29,14 @@ using std::endl;
 using std::string;
 using std::vector;
 
-using ParsedVocabularyEntry = std::variant<std::string, FancyId>;
+using ParsedVocabularyEntry = std::variant<FancyId, std::string>;
+decltype(auto) operator<<(std::ostream& str, const ParsedVocabularyEntry entry) {
+  str << entry.index() << ":";
+  std::visit([&str](const auto& el) {str << el;}, entry);
+  return str;
+}
 
-namespace ad_utility {
+  namespace ad_utility {
 //! Convert a value literal to an index word.
 //! Ontology values have a prefix and a readable format apart form that.
 //! IndexWords are not necessarily readable but lexicographical
@@ -94,7 +99,7 @@ inline bool isXsdValue(const string& val);
 inline bool isNumeric(const string& val);
 
 //! Converts numeric strings (as determined by isNumeric()) into index words
-inline string convertNumericToIndexWord(const string& val);
+inline ParsedVocabularyEntry convertNumericToIndexWord(const string& val);
 
 //! Convert a language tag like "@en" to the corresponding entity uri
 //! for the efficient language filter
@@ -632,14 +637,9 @@ bool isNumeric(const string& val) {
 }
 
 // _____________________________________________________________________________
-string convertNumericToIndexWord(const string& val) {
-  NumericType type = NumericType::FLOAT;
-  string tmp = val;
-  if (tmp.find('.') == string::npos) {
-    tmp += ".0";
-    type = NumericType::INTEGER;
-  }
-  return convertFloatStringToIndexWord(tmp, type);
+ParsedVocabularyEntry convertNumericToIndexWord(const string& val) {
+  // TODO<joka921> Also differentiate between floats and ints here
+  return FancyId{XsdParser::parseFloat(val).value()};
 }
 
 // _________________________________________________________
