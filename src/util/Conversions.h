@@ -15,10 +15,12 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <variant>
 
 #include "../global/Constants.h"
 #include "./Exception.h"
 #include "./StringUtils.h"
+#include "../global/Id.h"
 
 using std::cerr;
 using std::cout;
@@ -26,13 +28,15 @@ using std::endl;
 using std::string;
 using std::vector;
 
+using ParsedVocabularyEntry = std::variant<std::string, FancyId>;
+
 namespace ad_utility {
 //! Convert a value literal to an index word.
 //! Ontology values have a prefix and a readable format apart form that.
 //! IndexWords are not necessarily readable but lexicographical
 //! comparison should yield the same ordering that one would expect from
 //! a natural ordering of the values invloved.
-inline string convertValueLiteralToIndexWord(const string& orig);
+inline ParsedVocabularyEntry convertValueLiteralToIndexWord(const string& orig);
 
 //! Convert an index word to an ontology value.
 //! Ontology values have a prefix and a readable format apart form that.
@@ -99,7 +103,7 @@ inline std::string convertToLanguageTaggedPredicate(const string& pred,
                                                     const string& langtag);
 
 // _____________________________________________________________________________
-string convertValueLiteralToIndexWord(const string& orig) {
+ParsedVocabularyEntry convertValueLiteralToIndexWord(const string& orig) {
   /*
    * Value literals can have one of two forms
    * 0) "123"^^<http://www.w3.org/2001/XMLSchema#integer>

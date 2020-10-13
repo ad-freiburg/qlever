@@ -23,17 +23,22 @@ using Id = uint64_t;
 static constexpr Id ID_NO_VALUE = std::numeric_limits<Id>::max() - 2;
 
 
+
 class FancyId {
  public:
   enum Type : uint8_t {
     VOCAB = 0,
     LOCAL_VOCAB = 1,
     DATE = 2,
-    FLOAT = 3
+    FLOAT = 3,
+    INTEGER = 4
   };
   static constexpr uint64_t INTERNAL_MAX_VAL =~ (3ull << 62);
+  static constexpr int64_t INTEGER_MAX_VAL =~ (7ull << 61);
+  static constexpr int64_t INTEGER_MIN_VAL = (7ull << 61);
   static constexpr uint64_t MAX_VAL = INTERNAL_MAX_VAL - 1;
   static constexpr uint32_t TAG_MASK = 3ull << 30;
+  static constexpr uint32_t SIGN_MASK = 1ull << 29;
 // A value to use when the result should be empty (e.g. due to an optional join)
   static FancyId NoValue () { return FancyId(VOCAB, INTERNAL_MAX_VAL);}
   // TODO<joka921, C++20> with std::bit_cast this can be constexpr
@@ -55,6 +60,18 @@ class FancyId {
     return res;
   }
 
+  constexpr uint64_t getInteger() const noexcept {
+    assert(type() == INTEGER);
+    bool isneg = value_.tagAndHigh & SIGN_MASK;
+    uint64_t res = value_.un.rest;
+    res |= static_cast<uint64_t>(value_.tagAndHigh & (~TAG_MASK)) << 32u;
+    if (isneg) {
+      res |= static_cast<uint64_t>(TAG_MASK) << 32u;
+    }
+    return res;
+
+  }
+
   /// This constructor leaves the FancyId unitialized for performance reasons and is thus unsafe.
   /// TODO<joka921> measure, if initializing to some kind of zero makes a difference
   FancyId() noexcept = default;
@@ -70,15 +87,15 @@ class FancyId {
     // low bits
     value_.un.rest = static_cast<uint32_t>(val);
     value_.tagAndHigh = val >> 32u;
-    if (t == FLOAT) {
 
-    }
+
     if (t == FLOAT) {
       throw std::runtime_error("Wrong fancyId constructor used, should never happen, please report");
     }
     if (val >= INTERNAL_MAX_VAL) {
       throw std::runtime_error("Value is too big to be represented by a fancy Id");
     }
+    value_.tagAndHigh &= ~TAG_MASK;  // clear the tag bits
     value_.tagAndHigh |= static_cast<uint32_t>(t) << 30;
   }
 

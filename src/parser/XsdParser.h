@@ -6,27 +6,50 @@
 #define QLEVER_XSDPARSER_H
 
 #include <ctre/ctre.h>
-#include <optional>
+
 #include <charconv>
+#include <cmath>
 #include <iostream>
+#include <optional>
 
 class XsdParser {
   static constexpr auto floatRegexStr =
-      ctll::fixed_string {"(?<sign>\\+|-)?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([Ee](\\+|-)?[0-9]+)?|(?<inf>(?<infSign>\\+|-)?INF)|(?<nan>NaN)"};
+      ctll::fixed_string {"(?<sign>\\+|-)?([0-9]+(\\.[0-9]*)?|\\.[0-9]+)([Ee]((\\+|-)?([0-9]+)))?|(?<inf>(?<infSign>\\+|-)?INF)|(?<nan>NaN)"};
+
+  static constexpr size_t sign = 1;
+  static constexpr size_t float_val = 2;
+  static constexpr size_t exp = 5;
+  static constexpr size_t is_inf = 8;
+  static constexpr size_t inf_sign = 9;
+  static constexpr size_t nan = 10;
+
+
 
  public:
   static std::optional<float> parseFloat(std::string_view input) {
+
     if (auto m = ctre::match<floatRegexStr>(input)) {
-      std::cout <<  0 << " : "  << m.get<0>() << " " << m.get<0>().to_string() << '\n';
-      std::cout <<  1 << " : "  << m.get<1>() << " " << m.get<1>().to_string() << '\n';
-      std::cout <<  2 << " : "  << m.get<2>() << " " << m.get<2>().to_string() << '\n';
-      std::cout <<  3 << " : "  << m.get<3>() << " " << m.get<3>().to_string() << '\n';
-      std::cout <<  4 << " : "  << m.get<4>() << " " << m.get<4>().to_string() << '\n';
-      std::cout <<  5 << " : "  << m.get<5>() << " " << m.get<5>().to_string() << '\n';
-      std::cout <<  6 << " : "  << m.get<6>() << " " << m.get<6>().to_string() << '\n';
-      std::cout <<  7 << " : "  << m.get<7>() << " " << m.get<7>().to_string() << '\n';
-      std::cout <<  8 << " : "  << m.get<8>() << " " << m.get<8>().to_string() << '\n';
-      return std::stof(m.get<0>().to_string());
+
+      if (m.get<nan>()) {
+        return std::numeric_limits<float>::quiet_NaN();
+      }
+      if (m.get<is_inf>()) {
+        return m.get<inf_sign>().to_string() == "-" ? -std::numeric_limits<float>::infinity() : std::numeric_limits<float>::infinity();
+      }
+
+      float val = std::stof(m.get<float_val>().to_string());
+      if (m.get<sign>().to_string() == "-") {
+        val *= -1;
+      }
+
+      if (m.get<exp>()) {
+        auto exp_val = std::stof(m.get<exp>().to_string());
+        val *= std::pow(10.0f, exp_val);
+      }
+
+      return val;
+
+
 
     }
     return std::nullopt;

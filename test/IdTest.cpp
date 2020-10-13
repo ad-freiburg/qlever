@@ -80,7 +80,7 @@ TEST(FancyId, AddToNan) {
   eval([](const auto& a, const auto& b){return a / b;});
 }
 
-TEST(FancyId, SetInt) {
+TEST(FancyId, SetUnsigned) {
   std::vector<FancyId::Type> types{FancyId::VOCAB, FancyId::LOCAL_VOCAB, FancyId::DATE};
   for (const auto& type : types) {
     {
@@ -112,6 +112,81 @@ TEST(FancyId, SetInt) {
       FancyId id(type, FancyId::MAX_VAL - 1);
       ASSERT_EQ(id.type(), type);
       ASSERT_EQ(id.getUnsigned(), FancyId::MAX_VAL - 1);
+    }
+    {
+      auto val = std::numeric_limits<uint32_t>::max();
+      FancyId id(type, val);
+      ASSERT_EQ(id.type(), type);
+      ASSERT_EQ(id.getUnsigned(), val);
+    }
+    {
+      auto val = std::numeric_limits<uint32_t>::max() - 1;
+      FancyId id(type, val);
+      ASSERT_EQ(id.type(), type);
+      ASSERT_EQ(id.getUnsigned(), val);
+    }
+    {
+      auto val =
+          static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 1;
+      FancyId id(type, val);
+      ASSERT_EQ(id.type(), type);
+      ASSERT_EQ(id.getUnsigned(), val);
+    }
+  }
+}
+
+TEST(FancyId, SetInt) {
+  std::vector<FancyId::Type> types{FancyId::INTEGER};
+  for (const auto& type : types) {
+    {
+      ad_utility::RandomIntGenerator<int64_t> gen(
+          std::numeric_limits<int32_t>::min(), std::numeric_limits<uint32_t>::max());
+      for (size_t i = 0; i < 1000000; ++i) {
+        auto val = gen();
+        FancyId id(type, val);
+        ASSERT_EQ(id.type(), type);
+        ASSERT_EQ(id.getInteger(), val);
+      }
+    }
+    {
+      ad_utility::RandomIntGenerator<int64_t> gen(
+          std::numeric_limits<uint32_t>::max(), FancyId::INTEGER_MAX_VAL);
+      for (size_t i = 0; i < 1000000; ++i) {
+        auto val = gen();
+        FancyId id(type, val);
+        ASSERT_EQ(id.type(), type);
+        ASSERT_EQ(id.getUnsigned(), val);
+      }
+    }
+    {
+      ad_utility::RandomIntGenerator<int64_t> gen(
+          FancyId::INTEGER_MIN_VAL, std::numeric_limits<int32_t>::min());
+      for (size_t i = 0; i < 1000000; ++i) {
+        auto val = gen();
+        FancyId id(type, val);
+        ASSERT_EQ(id.type(), type);
+        ASSERT_EQ(id.getUnsigned(), val);
+      }
+    }
+    {
+      FancyId id(type, FancyId::INTEGER_MAX_VAL);
+      ASSERT_EQ(id.type(), type);
+      ASSERT_EQ(id.getUnsigned(), FancyId::INTEGER_MAX_VAL);
+    }
+    {
+      FancyId id(type, FancyId::INTEGER_MAX_VAL - 1);
+      ASSERT_EQ(id.type(), type);
+      ASSERT_EQ(id.getUnsigned(), FancyId::INTEGER_MAX_VAL - 1);
+    }
+    {
+      FancyId id(type, FancyId::INTEGER_MIN_VAL);
+      ASSERT_EQ(id.type(), type);
+      ASSERT_EQ(id.getUnsigned(), FancyId::INTEGER_MIN_VAL);
+    }
+    {
+      FancyId id(type, FancyId::INTEGER_MIN_VAL - 1);
+      ASSERT_EQ(id.type(), type);
+      ASSERT_EQ(id.getUnsigned(), FancyId::INTEGER_MIN_VAL - 1);
     }
     {
       auto val = std::numeric_limits<uint32_t>::max();
