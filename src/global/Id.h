@@ -30,15 +30,15 @@ class FancyId {
     VOCAB = 0,
     LOCAL_VOCAB = 1,
     DATE = 2,
-    FLOAT = 3,
-    INTEGER = 4
+    INTEGER = 3,
+    FLOAT = 7
   };
-  static constexpr uint64_t INTERNAL_MAX_VAL =~ (3ull << 62);
-  static constexpr int64_t INTEGER_MAX_VAL =~ (7ull << 61);
-  static constexpr int64_t INTEGER_MIN_VAL = (7ull << 61);
+  static constexpr uint64_t INTERNAL_MAX_VAL =~ (7ull << 61);
+  static constexpr int64_t INTEGER_MAX_VAL =~ (15ull << 60);
+  static constexpr int64_t INTEGER_MIN_VAL = (15ull << 60);
   static constexpr uint64_t MAX_VAL = INTERNAL_MAX_VAL - 1;
-  static constexpr uint32_t TAG_MASK = 3ull << 30;
-  static constexpr uint32_t SIGN_MASK = 1ull << 29;
+  static constexpr uint32_t TAG_MASK = 7ull << 29;
+  static constexpr uint32_t SIGN_MASK = 1ull << 28;
 // A value to use when the result should be empty (e.g. due to an optional join)
   static FancyId NoValue () { return FancyId(VOCAB, INTERNAL_MAX_VAL);}
   // TODO<joka921, C++20> with std::bit_cast this can be constexpr
@@ -92,11 +92,20 @@ class FancyId {
     if (t == FLOAT) {
       throw std::runtime_error("Wrong fancyId constructor used, should never happen, please report");
     }
-    if (val >= INTERNAL_MAX_VAL) {
+    if (t != INTEGER && val >= INTERNAL_MAX_VAL) {
       throw std::runtime_error("Value is too big to be represented by a fancy Id");
     }
+    auto intval = static_cast<int64_t>(val);
+    if (t == INTEGER && (intval > INTEGER_MAX_VAL || intval < INTEGER_MIN_VAL) ) {
+      throw std::runtime_error("Integer Value is out of bounds for QLever's internal representation");
+
+    }
     value_.tagAndHigh &= ~TAG_MASK;  // clear the tag bits
-    value_.tagAndHigh |= static_cast<uint32_t>(t) << 30;
+    value_.tagAndHigh |= static_cast<uint32_t>(t) << 29;
+    auto t2 = value_.tagAndHigh >> 29u;
+    if (t2 != t) {
+      throw std::runtime_error("wrong type in constructor");
+    }
   }
 
   template <typename F>
@@ -117,7 +126,7 @@ class FancyId {
   }
 
   constexpr Type type() const {
-    return static_cast<Type>(value_.tagAndHigh >> 30u);
+    return static_cast<Type>(value_.tagAndHigh >> 29u);
   }
 
   friend FancyId operator+(FancyId a, FancyId b) {

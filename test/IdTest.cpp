@@ -155,7 +155,7 @@ TEST(FancyId, SetInt) {
         auto val = gen();
         FancyId id(type, val);
         ASSERT_EQ(id.type(), type);
-        ASSERT_EQ(id.getUnsigned(), val);
+        ASSERT_EQ(id.getInteger(), val);
       }
     }
     {
@@ -165,47 +165,47 @@ TEST(FancyId, SetInt) {
         auto val = gen();
         FancyId id(type, val);
         ASSERT_EQ(id.type(), type);
-        ASSERT_EQ(id.getUnsigned(), val);
+        ASSERT_EQ(id.getInteger(), val);
       }
     }
     {
       FancyId id(type, FancyId::INTEGER_MAX_VAL);
       ASSERT_EQ(id.type(), type);
-      ASSERT_EQ(id.getUnsigned(), FancyId::INTEGER_MAX_VAL);
+      ASSERT_EQ(id.getInteger(), FancyId::INTEGER_MAX_VAL);
     }
     {
       FancyId id(type, FancyId::INTEGER_MAX_VAL - 1);
       ASSERT_EQ(id.type(), type);
-      ASSERT_EQ(id.getUnsigned(), FancyId::INTEGER_MAX_VAL - 1);
+      ASSERT_EQ(id.getInteger(), FancyId::INTEGER_MAX_VAL - 1);
     }
     {
       FancyId id(type, FancyId::INTEGER_MIN_VAL);
       ASSERT_EQ(id.type(), type);
-      ASSERT_EQ(id.getUnsigned(), FancyId::INTEGER_MIN_VAL);
+      ASSERT_EQ(id.getInteger(), FancyId::INTEGER_MIN_VAL);
     }
     {
-      FancyId id(type, FancyId::INTEGER_MIN_VAL - 1);
+      FancyId id(type, FancyId::INTEGER_MIN_VAL + 1);
       ASSERT_EQ(id.type(), type);
-      ASSERT_EQ(id.getUnsigned(), FancyId::INTEGER_MIN_VAL - 1);
+      ASSERT_EQ(id.getInteger(), FancyId::INTEGER_MIN_VAL + 1);
     }
     {
       auto val = std::numeric_limits<uint32_t>::max();
       FancyId id(type, val);
       ASSERT_EQ(id.type(), type);
-      ASSERT_EQ(id.getUnsigned(), val);
+      ASSERT_EQ(id.getInteger(), val);
     }
     {
       auto val = std::numeric_limits<uint32_t>::max() - 1;
       FancyId id(type, val);
       ASSERT_EQ(id.type(), type);
-      ASSERT_EQ(id.getUnsigned(), val);
+      ASSERT_EQ(id.getInteger(), val);
     }
     {
       auto val =
           static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 1;
       FancyId id(type, val);
       ASSERT_EQ(id.type(), type);
-      ASSERT_EQ(id.getUnsigned(), val);
+      ASSERT_EQ(id.getInteger(), val);
     }
   }
 }
