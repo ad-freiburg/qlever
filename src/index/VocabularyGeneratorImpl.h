@@ -38,6 +38,8 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
   std::vector<std::ifstream> infiles;
 
   _outfile.open(basename + ".vocabulary");
+  _outfileNumerical.open(basename + ".numericalVocabulary");
+
   AD_CHECK(_outfile.is_open());
   _outfileExternal.open(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
   AD_CHECK(_outfileExternal.is_open());
@@ -56,14 +58,25 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
     // read the first entry of the vocabulary and add it to the queue
     endOfFile[i] = true;
 
-    size_t len;
-    if (infiles[i].read((char*)&len, sizeof(len))) {
-      std::string word(len, '\0');
-      infiles[i].read(&(word[0]), len);
-      Id id;
-      infiles[i].read((char*)&id, sizeof(id));
-      queue.push(QueueWord(std::move(word), i, id));
+    char tag;
+    if (infiles[i].read(&tag, sizeof(tag))) {
       endOfFile[i] = false;
+      if (tag == 0) {
+        size_t len;
+        infiles[i].read((char*)&len, sizeof(len));
+        std::string word(len, '\0');
+        infiles[i].read(&(word[0]), len);
+        Id id;
+        infiles[i].read((char*)&id, sizeof(id));
+        queue.push(QueueWord(std::move(word), i, id));
+      } else {
+        // we have read a numerical word
+        uint64_t bytes;
+        infiles[i].read((char*)&bytes, sizeof(bytes));
+        Id id;
+        infiles[i].read((char*)&id, sizeof(id));
+        queue.push(QueueWord{bit_cast<FancyId>(bytes), i, id});
+      }
     }
   }
 
@@ -101,16 +114,29 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
     if (endOfFile[i]) {
       continue;
     }  // file is exhausted, nothing to add
-
+    // read next entry
     endOfFile[i] = true;
-    size_t len;
-    if (infiles[i].read((char*)&len, sizeof(len))) {
-      std::string word(len, '\0');
-      infiles[i].read(&(word[0]), len);
-      Id id;
-      infiles[i].read((char*)&id, sizeof(id));
-      queue.push(QueueWord(std::move(word), i, id));
+
+
+    char tag;
+    if (infiles[i].read(&tag, sizeof(tag))) {
       endOfFile[i] = false;
+      if (tag == 0) {
+        size_t len;
+        infiles[i].read((char*)&len, sizeof(len));
+        std::string word(len, '\0');
+        infiles[i].read(&(word[0]), len);
+        Id id;
+        infiles[i].read((char*)&id, sizeof(id));
+        queue.push(QueueWord(std::move(word), i, id));
+      } else {
+        // we have read a numerical word
+        uint64_t bytes;
+        infiles[i].read((char*)&bytes, sizeof(bytes));
+        Id id;
+        infiles[i].read((char*)&id, sizeof(id));
+        queue.push(QueueWord{bit_cast<FancyId>(bytes), i, id});
+      }
     }
   }
 
@@ -152,37 +178,44 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buff
       // idVecs to have a more useful external access pattern.
 
       // write the new word to the vocabulary
-      if (_lastWritten < EXTERNALIZED_LITERALS_PREFIX) {
-        _outfile << _lastWritten << '\n';
+      if (auto ptr = std::get_if<FancyId>(&_lastWritten)) {
+        _outfileNumerical << bit_cast<uint64_t>(*ptr);
       } else {
-        // we have to strip the externalization character again
-        auto& c = _lastWritten[0];
-        switch (c) {
-          case EXTERNALIZED_LITERALS_PREFIX_CHAR:
-            c = '"';
-            break;
-          case EXTERNALIZED_ENTITIES_PREFIX_CHAR:
-            c = '<';
-            break;
-          default:
-            LOG(ERROR) << "Illegal Externalization character met in vocabulary merging. This "
-                          "should never happen\n";
-            AD_CHECK(false)
+        auto stringPtr = std::get_if<std::string>(&_lastWritten);
+        if (*stringPtr < EXTERNALIZED_LITERALS_PREFIX) {
+          _outfile << *stringPtr << '\n';
+        } else {
+          // we have to strip the externalization character again
+          auto& c = (*stringPtr)[0];
+          switch (c) {
+            case EXTERNALIZED_LITERALS_PREFIX_CHAR:
+              c = '"';
+              break;
+            case EXTERNALIZED_ENTITIES_PREFIX_CHAR:
+              c = '<';
+              break;
+            default:
+              LOG(ERROR) << "Illegal Externalization character met in vocabulary merging. This "
+                            "should never happen\n";
+              AD_CHECK(false)
+          }
+          _outfileExternal << *stringPtr << '\n';
         }
-        _outfileExternal << _lastWritten << '\n';
       }
 
       // write id to corresponding vec
       writeBuf.emplace_back(top._partialFileId, std::make_pair(top._partialWordId, _totalWritten));
 
-      if (top._value.size() > 0 && top._value[0] == '@') {
-        if (!_firstLangPredSeen) {
-          // inclusive
-          _langPredLowerBound = _totalWritten;
-          _firstLangPredSeen = true;
+      if (auto ptr = std::get_if<std::string>(&top._value)) {
+        if (ptr->size() > 0 && (*ptr)[0] == '@') {
+          if (!_firstLangPredSeen) {
+            // inclusive
+            _langPredLowerBound = _totalWritten;
+            _firstLangPredSeen = true;
+          }
+          // exclusive
+          _langPredUpperBound = _totalWritten + 1;
         }
-        // exclusive
-        _langPredUpperBound = _totalWritten + 1;
       }
       _totalWritten++;
       if (_totalWritten % _bufferSize == 0) {
