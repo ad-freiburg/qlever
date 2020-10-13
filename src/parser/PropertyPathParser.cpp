@@ -58,8 +58,12 @@ std::vector<PropertyPathParser::Token> PropertyPathParser::tokenize(
         s << el;
       }
 
-      s << "Numerical value of character is " << (uint8_t) c;
-      throw ParseException(s.str());
+      s << "\nNumerical value of character is " << (unsigned) c;
+      s << "\nvalid chars at this position is (uint_8t and unsigned) " << VALID_CHARS[(uint8_t)c] << VALID_CHARS[(unsigned)c] << '\n';
+
+      if (!VALID_CHARS[(uint8_t)c]) {
+        throw ParseException(s.str());
+      }
     }
     if (c == '<') {
       inside_iri = true;
