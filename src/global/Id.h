@@ -238,3 +238,11 @@ inline FancyId fancy(size_t i) {
 
 typedef uint16_t Score;
 
+
+namespace std {
+  template <> struct hash<FancyId> {
+    size_t operator()(const FancyId& x) {
+      return std::hash<uint64_t>{}(bit_cast<uint64_t>(x));
+    }
+  };
+}

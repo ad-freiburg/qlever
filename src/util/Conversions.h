@@ -21,6 +21,7 @@
 #include "./Exception.h"
 #include "./StringUtils.h"
 #include "../global/Id.h"
+#include "../parser/XsdParser.h"
 
 using std::cerr;
 using std::cout;
@@ -146,15 +147,15 @@ ParsedVocabularyEntry convertValueLiteralToIndexWord(const string& orig) {
     // have a special marker at the very end to tell if the original number
     // was int for float. The benefit: can compare float with int that way.
     if (type == "int" || type == "integer") {
-      return convertFloatStringToIndexWord(value + ".0", NumericType::INTEGER);
+      return FancyId(FancyId::INTEGER, std::stoll(value));
     }
     // We treat double and decimal as synonyms for float
     if (type == "float") {
-      return convertFloatStringToIndexWord(value, NumericType::FLOAT);
+      return FancyId(XsdParser::parseFloat(value).value());
     } else if (type == "double") {
-      return convertFloatStringToIndexWord(value, NumericType::DOUBLE);
+      return FancyId(XsdParser::parseFloat(value).value());
     } else if (type == "decimal") {
-      return convertFloatStringToIndexWord(value, NumericType::DECIMAL);
+      return FancyId(XsdParser::parseFloat(value).value());
     }
   }
   return orig;

@@ -1405,17 +1405,16 @@ void Index::readConfiguration() {
 
 // ___________________________________________________________________________
 LangtagAndTriple Index::tripleToInternalRepresentation(Triple&& tripleIn) {
-  LangtagAndTriple res{"", std::move(tripleIn)};
-  auto& spo = res._triple;
-  for (auto& el : spo) {
+  for (auto& el : tripleIn) {
     el = _vocab.getLocaleManager().normalizeUtf8(el);
   }
+  auto& spo = tripleIn;
+  std::string langtag;
   size_t upperBound = 3;
   if (ad_utility::isXsdValue(spo[2])) {
-    spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
     upperBound = 2;
   } else if (isLiteral(spo[2])) {
-    res._langtag = decltype(_vocab)::getLanguage(spo[2]);
+    langtag = decltype(_vocab)::getLanguage(spo[2]);
   }
 
   for (size_t k = 0; k < upperBound; ++k) {
@@ -1428,7 +1427,10 @@ LangtagAndTriple Index::tripleToInternalRepresentation(Triple&& tripleIn) {
       }
     }
   }
-  return res;
+  if (upperBound == 2) {
+    return LangtagAndTriple{std::move(langtag), {std::move(spo[0]), std::move(spo[1]), ad_utility::convertValueLiteralToIndexWord(spo[2])}};
+  }
+  return LangtagAndTriple{std::move(langtag), {std::move(spo[0]), std::move(spo[1]), std::move(spo[2])}};
 }
 
 // ___________________________________________________________________________
@@ -1552,8 +1554,18 @@ std::future<void> Index::writeNextPartialVocabulary(
     auto vec = vocabMapsToVector(items);
     const auto identicalPred = [& c = vocab->getCaseComparator()](
                                    const auto& a, const auto& b) {
-      return c(a.second.m_splitVal, b.second.m_splitVal,
-               decltype(_vocab)::SortLevel::TOTAL);
+      auto& af = a.first;
+      auto& bf = b.first;
+      if (af.index() < bf.index()) {
+        return true;
+      } else if (af.index() > bf.index()) {
+        return false;
+      }
+      if (std::holds_alternative<std::string>(af)) {
+        return c(a.second.m_splitVal, b.second.m_splitVal,
+                 decltype(_vocab)::SortLevel::TOTAL);
+      }
+      return std::get<FancyId>(af) < std::get<FancyId>(bf);
     };
     LOG(INFO) << "Start sorting of vocabulary with #elements: " << vec.size()
               << std::endl;

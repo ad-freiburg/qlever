@@ -232,7 +232,7 @@ ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
   auto& els = *elsPtr;
   ad_utility::HashMap<Id, Id> res;
   bool first = true;
-  std::string lastWord;
+  ParsedVocabularyEntry lastWord;
   size_t nextWordId = 0;
   for (auto& el : els) {
     if (!first && lastWord != el.first) {
@@ -272,11 +272,22 @@ void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
   std::ofstream out(fileName.c_str(), std::ios_base::out | std::ios_base::binary);
   AD_CHECK(out.is_open());
+  char stringTag = 0;
+  char numTag = 1;
   for (const auto& el : els) {
-    std::string_view word = el.first;
-    size_t len = word.size();
-    out.write((char*)&len, sizeof(len));
-    out.write(word.data(), len);
+    if (auto ptr = std::get_if<std::string>(&el.first)) {
+      out.write((char*)&stringTag, sizeof(stringTag));
+      std::string_view word = *ptr;
+      size_t len = word.size();
+      out.write((char*)&len, sizeof(len));
+      out.write(word.data(), len);
+    } else {
+      auto ptr2 = std::get_if<FancyId>(&el.first);
+      AD_CHECK(ptr2);
+      auto serialized = bit_cast<uint64_t>(*ptr2);
+      out.write((char*)&numTag, sizeof(numTag));
+      out.write((char*) &serialized, sizeof(serialized));
+    }
     Id id = el.second.m_id;
     out.write((char*)&id, sizeof(id));
   }

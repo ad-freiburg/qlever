@@ -15,6 +15,7 @@
 #define QLEVER_INDEXBUILDERTYPES_H
 
 using Triple = std::array<std::string, 3>;
+using TripleWithXSD = std::tuple<std::string, std::string, ParsedVocabularyEntry>;
 
 /// named value type for the ItemMap
 struct IdAndSplitVal {
@@ -22,9 +23,9 @@ struct IdAndSplitVal {
   TripleComponentComparator::SplitVal m_splitVal;
 };
 
-using ItemMap = ad_utility::HashMap<std::string, IdAndSplitVal>;
+using ItemMap = ad_utility::HashMap<ParsedVocabularyEntry, IdAndSplitVal>;
 using ItemMapArray = std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS>;
-using ItemVec = std::vector<std::pair<std::string, IdAndSplitVal>>;
+using ItemVec = std::vector<std::pair<ParsedVocabularyEntry, IdAndSplitVal>>;
 
 /**
  * Manage a HashMap of string->Id to create unique Ids for strings.
@@ -55,9 +56,23 @@ struct ItemMapManager {
     }
   }
 
+  Id assignNextId(const ParsedVocabularyEntry& entry) {
+    if (auto ptr = std::get_if<std::string>(&entry)) {
+      return assignNextId(*ptr);
+    } else {
+      if (!_map.count(entry)) {
+        Id res = _map.size() + _minId;
+        _map[entry] = {res, {}};
+        return res;
+      } else {
+        return _map[entry].m_id;
+      }
+    }
+  }
+
   /// call assignNextId for each of the Triple elements.
-  std::array<Id, 3> assignNextId(const Triple& t) {
-    return {assignNextId(t[0]), assignNextId(t[1]), assignNextId(t[2])};
+  std::array<Id, 3> assignNextId(const TripleWithXSD & t) {
+    return {assignNextId(std::get<0>(t)), assignNextId(std::get<1>(t)), assignNextId(std::get<2>(t))};
   }
   ItemMap _map;
   Id _minId = 0;
@@ -68,7 +83,7 @@ struct ItemMapManager {
 /// language tag of its object.
 struct LangtagAndTriple {
   std::string _langtag;
-  Triple _triple;
+  TripleWithXSD _triple;
 };
 
 /**
@@ -135,7 +150,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         auto langTaggedPredId =
             map.assignNextId(ad_utility::convertToLanguageTaggedPredicate(
-                lt._triple[1], lt._langtag));
+                std::get<1>(lt._triple), lt._langtag));
         auto& spoIds = *(res[0]);  // ids of original triple
         // extra triple <subject> @language@<predicate> <object>
         res[1].emplace(array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
