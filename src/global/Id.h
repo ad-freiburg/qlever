@@ -20,7 +20,7 @@ To bit_cast(const From& from) noexcept {
 
 /// when we really just need an Id
 using Id = uint64_t;
-Id ID_NO_VALUE = std::numeric_limits<Id>::max() - 2;
+static constexpr Id ID_NO_VALUE = std::numeric_limits<Id>::max() - 2;
 
 
 class FancyId {

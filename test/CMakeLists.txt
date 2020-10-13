@@ -143,5 +143,9 @@ add_test(SynchronizedTest SynchronizedTest)
 target_link_libraries(SynchronizedTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(IdTest IdTest.cpp)
-add_test(IdTest SynchronizedTest)
+add_test(IdTest IdTest)
 target_link_libraries(IdTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(XsdParserTest XsdParserTest.cpp)
+add_test(XsdParserTest XsdParserTest)
+target_link_libraries(XsdParserTest gtest_main ${CMAKE_THREAD_LIBS_INIT})

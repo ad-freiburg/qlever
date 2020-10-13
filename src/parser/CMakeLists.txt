@@ -9,5 +9,5 @@ add_library(parser
               ContextFileParser.cpp ContextFileParser.h
               ParallelParseBuffer.h
               PropertyPathParser.h PropertyPathParser.cpp
-              SparqlLexer.h SparqlLexer.cpp)
+              SparqlLexer.h SparqlLexer.cpp XsdParser.h)
 target_link_libraries(parser re2 absl::flat_hash_map)
