@@ -30,7 +30,7 @@ using std::string;
 using std::vector;
 
 using ParsedVocabularyEntry = std::variant<FancyId, std::string>;
-decltype(auto) operator<<(std::ostream& str, const ParsedVocabularyEntry entry) {
+inline decltype(auto) operator<<(std::ostream& str, const ParsedVocabularyEntry entry) {
   str << entry.index() << ":";
   std::visit([&str](const auto& el) {str << el;}, entry);
   return str;

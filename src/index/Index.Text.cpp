@@ -69,7 +69,7 @@ void Index::buildDocsDB(const string& docsFileName) {
 
 // _____________________________________________________________________________
 void Index::addTextFromOnDiskIndex() {
-  _textVocab.readFromFile(_onDiskBase + ".text.vocabulary", "");
+  _textVocab.readFromFile(_onDiskBase + ".text.vocabulary", "", "");
   _textIndexFile.open(string(_onDiskBase + ".text.index").c_str(), "r");
   AD_CHECK(_textIndexFile.isOpen());
   off_t metaFrom;
@@ -133,7 +133,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
   // initialized before
   _vocab = Vocabulary<CompressedString, TripleComponentComparator>();
   readConfiguration();
-  _vocab.readFromFile(_onDiskBase + ".vocabulary",
+  _vocab.readFromFile(_onDiskBase + ".vocabulary", _onDiskBase + ".numericalVocabulary",
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
 
   TextVec::bufwriter_type writer(vec);

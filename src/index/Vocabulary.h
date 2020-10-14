@@ -103,7 +103,7 @@ class Vocabulary {
     _externalLiterals.clear();
   }
   //! Read the vocabulary from file.
-  void readFromFile(const string& fileName, const string& numbersFilename, const string& extLitsFileName = "");
+  void readFromFile(const string& fileName, const string& numbersFilename, const string& extLitsFileName);
 
 
   //! Write the vocabulary to a file.
@@ -185,7 +185,9 @@ class Vocabulary {
     const auto& word = std::get<std::string>(entry);
     if (!shouldBeExternalized(word)) {
       // need the TOTAL level because we want the unique word.
-      *id = lower_bound(word, SortLevel::TOTAL);
+      *id = static_cast<Id>(std::lower_bound(_words.begin(), _words.end(), word,
+                                              getLowerBoundLambda(SortLevel::TOTAL)) -
+                             _words.begin());
       // works for the case insensitive version because
       // of the strict ordering.
       bool ret = *id < _words.size() && at(*id) == word;
@@ -197,15 +199,15 @@ class Vocabulary {
     return success;
   }
 
-  Id getValueIdForLT(const string& indexWord, const SortLevel level) const {
+  Id getValueIdForLT(const ParsedVocabularyEntry & indexWord, const SortLevel level) const {
     Id lb = lower_bound(indexWord, level);
     return lb;
   }
-  Id getValueIdForGE(const string& indexWord, const SortLevel level) const {
+  Id getValueIdForGE(const ParsedVocabularyEntry & indexWord, const SortLevel level) const {
     return getValueIdForLT(indexWord, level);
   }
 
-  Id getValueIdForLE(const string& indexWord, const SortLevel level) const {
+  Id getValueIdForLE(const ParsedVocabularyEntry & indexWord, const SortLevel level) const {
     Id lb = upper_bound(indexWord, level);
     if (lb > 0) {
       // We actually retrieved the first word that is bigger than our entry.
@@ -215,7 +217,7 @@ class Vocabulary {
     return lb;
   }
 
-  Id getValueIdForGT(const string& indexWord, const SortLevel level) const {
+  Id getValueIdForGT(const ParsedVocabularyEntry & indexWord, const SortLevel level) const {
     return getValueIdForLE(indexWord, level);
   }
 
@@ -377,18 +379,26 @@ class Vocabulary {
     }
   }
   // Wraps std::lower_bound and returns an index instead of an iterator
-  Id lower_bound(const string& word,
+  Id lower_bound(const ParsedVocabularyEntry & entry,
                  const SortLevel level = SortLevel::QUARTERNARY) const {
+    if (auto ptr = std::get_if<FancyId>(&entry)) {
+      return std::lower_bound(_numbers.begin(), _numbers.end(), *ptr) - _numbers.begin();
+    }
+    const auto& word = std::get<std::string>(entry);
     return static_cast<Id>(std::lower_bound(_words.begin(), _words.end(), word,
                                             getLowerBoundLambda(level)) -
-                           _words.begin());
+                           _words.begin()) + _numbers.size();
   }
 
   // _______________________________________________________________
-  Id upper_bound(const string& word, const SortLevel level) const {
+  Id upper_bound(const ParsedVocabularyEntry & entry, const SortLevel level) const {
+    if (auto ptr = std::get_if<FancyId>(&entry)) {
+      return std::upper_bound(_numbers.begin(), _numbers.end(), *ptr) - _numbers.begin();
+    }
+    const auto& word = std::get<std::string>(entry);
     return static_cast<Id>(std::upper_bound(_words.begin(), _words.end(), word,
                                             getUpperBoundLambda(level)) -
-                           _words.begin());
+                           _words.begin()) + _numbers.size();
   }
 
   void readNumbersFromFile(const std::string& filename);

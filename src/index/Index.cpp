@@ -1006,7 +1006,7 @@ void Index::writeNonFunctionalRelation(
 void Index::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
-  _vocab.readFromFile(_onDiskBase + ".vocabulary",
+  _vocab.readFromFile(_onDiskBase + ".vocabulary", _onDiskBase + ".numericalVocabulary",
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
 
   _totalVocabularySize = _vocab.size() + _vocab.getExternalVocab().size();

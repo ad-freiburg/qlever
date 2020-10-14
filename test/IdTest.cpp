@@ -7,6 +7,11 @@
 #include "../src/util/Random.h"
 
 TEST(FancyId, SetAndAddFloat) {
+  static_assert(std::is_trivially_copyable_v<FancyId>, "it is required that the FancyId type can be memcopied");
+  static_assert(sizeof(FancyId) == sizeof(uint64_t), "FancyId must have 64 bits, else a lot of stuff breaks");
+  auto a1 = alignof(FancyId);
+  auto a2 = alignof(uint64_t);
+  ASSERT_EQ(a1, a2);
   auto eval = [](auto op) {
     ad_utility::RandomFloatGenerator<float> gen;
     for (size_t i = 0; i < 1000000; ++i) {
