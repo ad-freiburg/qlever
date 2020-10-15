@@ -181,6 +181,10 @@ class Index {
     return _vocab.idToOptionalString(id);
   }
 
+  std::optional<FancyId> idToNumericValue(Id id) const {
+    return _vocab.idToNumericValue(id);
+  }
+
   const vector<PatternID>& getHasPattern() const;
   const CompactStringVector<Id, Id>& getHasPredicate() const;
   const CompactStringVector<size_t, Id>& getPatterns() const;

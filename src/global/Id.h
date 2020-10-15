@@ -81,6 +81,28 @@ class FancyId {
     value_.tagAndHigh = std::numeric_limits<uint32_t>::max();
   }
 
+  std::string toXSDValue() const {
+    switch (type()) {
+      case FLOAT:
+        return std::to_string(getFloat()) + "^^xsd:float";
+      case INTEGER:
+        return std::to_string(getInteger()) + "^^xsd:integer";
+      default:
+        throw std::runtime_error("Tried to get xsd-Value from FancyId that is neither Integer nor Float. This is not supported, please report this");
+    }
+  }
+
+  float convertToFloat() {
+    switch (type()) {
+      case FLOAT:
+        return getFloat();
+      case INTEGER:
+        return static_cast<float>(getInteger());
+      default:
+        throw std::runtime_error("Tried to convert a non-numeric type  to float in FancyId");
+    }
+  }
+
 
 
   constexpr FancyId(Type t, uint64_t val) : value_() {

@@ -144,18 +144,30 @@ class Vocabulary {
   //! externalized words don't allow references
   template <typename U = StringType, typename = enable_if_compressed<U>>
   const std::optional<string> idToOptionalString(Id id) const {
-    if (id < _words.size()) {
+    if (id < _numbers.size()) {
+      return _numbers[id].toXSDValue();
+    }
+    if (id < _words.size() + _numbers.size()) {
       // internal, prefixCompressed word
-      return expandPrefix(_words[static_cast<size_t>(id)]);
+      return expandPrefix(_words[static_cast<size_t>(id - _numbers.size())]);
     } else if (id == ID_NO_VALUE) {
       return std::nullopt;
     } else {
       // this word must be externalized
-      id -= _words.size();
+      id -= (_words.size() + _numbers.size());
       AD_CHECK(id < _externalLiterals.size());
       return _externalLiterals[id];
     }
   }
+
+  std::optional<FancyId> idToNumericValue(Id id) const {
+    if (id < _numbers.size()) {
+      return _numbers[id];
+    }
+    // not a numeric value
+    return std::nullopt;
+  }
+
 
   //! Get the word with the given id.
   //! lvalue for compressedString and const& for string-based vocabulary
