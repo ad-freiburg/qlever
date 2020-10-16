@@ -91,6 +91,8 @@ void Server::runAcceptLoop() {
 
 // _____________________________________________________________________________
 void Server::process(Socket* client) {
+  ad_utility::Timer totalTimer;
+  totalTimer.start();
   string contentType;
   LOG(DEBUG) << "Waiting for receive call to complete." << endl;
   string request;
@@ -224,7 +226,7 @@ void Server::process(Socket* client) {
             "Content-Disposition: attachment;filename=export.tsv";
       } else {
         // Normal case: JSON response
-        response = composeResponseJson(pq, qet, maxSend);
+        response = composeResponseJson(pq, qet, maxSend, &totalTimer);
         contentType = "application/json";
       }
       // Print the runtime info. This needs to be done after the query
@@ -362,7 +364,10 @@ string Server::create400HttpResponse() const {
 // _____________________________________________________________________________
 string Server::composeResponseJson(const ParsedQuery& query,
                                    const QueryExecutionTree& qet,
-                                   size_t maxSend) const {
+                                   size_t maxSend, ad_utility::Timer* totalTimer) const {
+  if (!totalTimer) {
+    totalTimer = &_requestProcessingTimer;
+  }
   // TODO(schnelle) we really should use a json library
   // such as https://github.com/nlohmann/json
   shared_ptr<const ResultTable> rt = qet.getResult();
@@ -396,8 +401,10 @@ string Server::composeResponseJson(const ParsedQuery& query,
     _requestProcessingTimer.stop();
   }
 
+
+  totalTimer->stop();
   j["time"]["total"] =
-      std::to_string(_requestProcessingTimer.usecs() / 1000.0) + "ms";
+      std::to_string(totalTimer->usecs() / 1000.0) + "ms";
   j["time"]["computeResult"] = std::to_string(compResultUsecs / 1000.0) + "ms";
 
   return j.dump(4);
