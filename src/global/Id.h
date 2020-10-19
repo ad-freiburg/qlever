@@ -18,13 +18,19 @@ To bit_cast(const From& from) noexcept {
   return t;
 }
 
+constexpr uint64_t  extractBits(uint64_t input, uint8_t lower, uint8_t upper) {
+  input >>= lower;
+  uint64_t mask = (1ull << (upper - lower)) - 1;
+  return input & mask;
+}
+
 /// when we really just need an Id
 using Id = uint64_t;
 static constexpr Id ID_NO_VALUE = std::numeric_limits<Id>::max() - 2;
 
 
 
-class FancyId {
+class alignas(alignof(uint64_t)) FancyId {
  public:
   enum Type : uint8_t {
     VOCAB = 0,
@@ -103,6 +109,71 @@ class FancyId {
     }
   }
 
+
+  static constexpr FancyId Date(int year, int month = 1, int day = 1, int hour = 0, int min = 0, float sec = .0, bool signTimezone = false, int hTimezone = 0, int mTimezone = 0 ) {
+    const auto raise = [](){throw std::runtime_error("input value for date out of range");};
+    uint64_t v = year < 0; // start with sign bit of year
+    v <<= 60;
+    year = year < 0 ? -year : year;
+    if (year > 9999) { raise();}
+    v |= static_cast<uint64_t>(year) << 46;
+
+    if (month < 1 || month > 12) raise();
+    v |= static_cast<uint64_t>(month) << 42;
+
+    if (day < 1 || day > 31) raise();
+    v |= static_cast<uint64_t>(day) << 37;
+
+    if (hour < 0 || hour > 23) raise();
+    v |= static_cast<uint64_t>(hour) << 32;
+
+
+    if (min < 0 || min > 59) raise();
+    v |= static_cast<uint64_t>(min) << 26;
+
+    if (sec < 0.0f || sec >= 60.0f) raise();
+    v |= static_cast<uint64_t>(sec * 250) << 12;
+
+    v |= static_cast<uint64_t>(signTimezone) << 11;
+
+    if (hTimezone < 0 || hTimezone > 23) raise();
+    v |= static_cast<uint64_t>(hTimezone) << 6;
+
+    if (mTimezone < 0 || mTimezone > 59) raise();
+    v |= static_cast<uint64_t>(mTimezone);
+
+    return FancyId(FancyId::DATE, v);
+  }
+
+  struct DateValue {
+    int year = 0;
+    int month = 1;
+    int day = 1;
+    int hour = 0;
+    int min = 0;
+    float sec = .0;
+    bool signTimezone = false;
+    int hTimezone = 0;
+    int mTimezone = 0;
+  };
+
+  constexpr DateValue getDate() const {
+    DateValue res;
+    auto v = getUnsigned();
+    res.year = extractBits(v, 46, 60);
+    if (extractBits(v, 60, 61)) {
+      res.year = - res.year;
+    }
+    res.month = extractBits(v, 42, 46);
+    res.day = extractBits(v, 37, 42);
+    res.hour = extractBits(v, 32, 37);
+    res.min = extractBits(v, 26, 32);
+    res.sec = static_cast<float>(extractBits(v, 12, 26) / 250.0f);
+    res.signTimezone = extractBits(v, 11, 12);
+    res.hTimezone = extractBits(v, 6, 11);
+    res.mTimezone = extractBits(v, 0, 6);
+    return res;
+  }
 
 
   constexpr FancyId(Type t, uint64_t val) : value_() {

@@ -215,4 +215,36 @@ TEST(FancyId, SetInt) {
   }
 }
 
+TEST(Id, SetAndGetDate) {
+    ad_utility::RandomIntGenerator<int> yearGen(
+        -9999, 9999);
+  ad_utility::RandomIntGenerator<int> monthGen(
+      1, 12);
+  ad_utility::RandomIntGenerator<int> dayGen(
+      1, 31);
+  ad_utility::RandomIntGenerator<int> hourGen(
+      0, 23);
+  ad_utility::RandomIntGenerator<int> minuteGen(
+      0, 59);
+  ad_utility::RandomIntGenerator<int> secGen(
+      0, 59);
+  for (size_t i = 0; i < 4000000; ++i) {
+    auto y = yearGen();
+    auto m = monthGen();
+    auto d = dayGen();
+    auto h = hourGen();
+    auto min = minuteGen();
+    auto s = static_cast<float>(secGen());
+    auto date = FancyId::Date(y, m, d, h, min,  s);
+    auto r = date.getDate();
+    ASSERT_EQ(r.year, y);
+    ASSERT_EQ(r.month, m);
+    ASSERT_EQ(r.day, d);
+    ASSERT_EQ(r.hour, h);
+    ASSERT_EQ(r.min, min);
+
+    ASSERT_FLOAT_EQ(r.sec, s);
+  }
+}
+
 
