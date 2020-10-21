@@ -11,6 +11,7 @@
 #include <regex>
 #include "../util/Exception.h"
 #include "../util/Log.h"
+#include "../util/HashSet.h"
 using re2::RE2;
 using namespace std::string_literals;
 
@@ -346,7 +347,7 @@ struct TurtleToken {
     auto pos = literal.find('\\');
     while (pos != literal.npos) {
       res.append(literal.begin(), literal.begin() + pos);
-      AD_CHECK(pos + 1 <= literal.size());
+      AD_CHECK(pos + 1 < literal.size());
       switch (literal[pos + 1]) {
         case 't':
           res.push_back('\t');
@@ -373,14 +374,14 @@ struct TurtleToken {
           res.push_back('\\');
           break;
         case 'u': {
-          AD_CHECK(pos + 5 <= literal.size());
+          AD_CHECK(pos + 5 < literal.size());
           auto unesc = unescapeUchar(literal.substr(pos + 2, 4));
           res.insert(res.end(), unesc.begin(), unesc.end());
           literal.remove_prefix(4);
           break;
         }
         case 'U': {
-          AD_CHECK(pos + 9 <= literal.size());
+          AD_CHECK(pos + 9 < literal.size());
           auto unesc = unescapeUchar(literal.substr(pos + 2, 8));
           res.insert(res.end(), unesc.begin(), unesc.end());
           literal.remove_prefix(8);
@@ -399,6 +400,35 @@ struct TurtleToken {
     res.append(literal);
     res.push_back(endDelimiter);
     res.append(langtagOrDatatype);
+    return res;
+  }
+
+  static std::string unescapePrefixedIri(std::string_view literal) {
+    std::string res;
+    auto pos = literal.find('\\');
+    static const ad_utility::HashSet<char> m = [](){
+      ad_utility::HashSet<char> r;
+      for (auto c : {'_', '~', '.', '-', '-', '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', '/', '?', '#', '@', '%' }) {
+        r.insert(c);
+      }
+      return r;
+    }();
+    while (pos != literal.npos) {
+      res.append(literal.begin(), literal.begin() + pos);
+      if (pos + 1 >= literal.size()) {
+        throw std::runtime_error("Trying to unescape a literal or iri that ended with a single backslash. This should not happen, please report this");
+      }
+      if (m.count(literal[pos + 1])) {
+        res += literal[pos + 1];
+      } else {
+        throw std::runtime_error(std::string{"Illegal escape sequence \\"} + literal[pos + 1] + " encountered while trying to unescape an iri. Please report this");
+      }
+
+      literal.remove_prefix(pos + 2);
+      pos = literal.find('\\');
+    }
+    // the remainder
+    res.append(literal);
     return res;
   }
 
