@@ -7,10 +7,11 @@
 #include <ctre/ctre.h>
 #include <gtest/gtest.h>
 #include <re2/re2.h>
+#include <unicode/ustream.h>
 #include <regex>
 #include "../util/Exception.h"
 #include "../util/Log.h"
-
+#include "../util/HashSet.h"
 using re2::RE2;
 using namespace std::string_literals;
 
@@ -93,6 +94,7 @@ enum class TokId : int {
   Iriref,
   PnameNS,
   PnameLN,
+  PnLocal,
   BlankNodeLabel,
   WsMultiple,
   Anon,
@@ -215,6 +217,8 @@ struct TurtleTokenCtre {
       grp(cls(PnCharsUString + u8":0-9") + "|" + PlxString) +
       grp(u8"\\.*" + grp(TmpNoDot)) + "*";
 
+  static constexpr fixed_string PnLocal = grp(PnLocalString);
+
   static constexpr fixed_string PnameLNString =
       grp(PnameNSString) + grp(PnLocalString);
 
@@ -246,6 +250,16 @@ struct TurtleTokenCtre {
  * at runtime
  */
 struct TurtleToken {
+  /// turn a number of hex-chars like '00e4' into utf-8
+  static std::string unescapeUchar(std::string_view hex) {
+    UChar32 x;
+    std::stringstream sstream;
+    sstream << std::hex << hex;
+    sstream >> x;
+    std::string res;
+    icu::UnicodeString(x).toUTF8String(res);
+    return res;
+  }
   /**
    * @brief convert a RDF Literal to a unified form that is used inside QLever
    *
@@ -264,30 +278,76 @@ struct TurtleToken {
    * content of the literal.
    *
    * @param literal
+   * @tparam strictMode If set to true, anything that is not an rdf literal or
+   * entity as an input will throw an exception. If set to false, the input will
+   * be returned in such cases.
    * @return
    */
-  static std::string normalizeRDFLiteral(std::string_view literal) {
-    std::string res = "\"";
-    auto lastQuot = literal.find_last_of("\"\'");
-    AD_CHECK(lastQuot != std::string_view::npos);
-    auto langtagOrDatatype = literal.substr(lastQuot + 1);
-    literal.remove_suffix(literal.size() - lastQuot - 1);
-    if (ad_utility::startsWith(literal, "\"\"\"") ||
-        ad_utility::startsWith(literal, "'''")) {
-      AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 3)));
-      literal.remove_prefix(3);
-      literal.remove_suffix(3);
-    } else {
-      AD_CHECK(ad_utility::startsWith(literal, "\"") ||
-               ad_utility::startsWith(literal, "'"));
-      AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 1)));
+  template <bool strictMode = true>
+  static std::string normalizeRDFLiteral(std::string_view origLiteral) {
+    if constexpr (!strictMode) {
+      if (origLiteral.empty() ||
+          (origLiteral[0] != '"' && origLiteral[0] != '\'' &&
+           origLiteral[0] != '<')) {
+        return std::string{origLiteral};
+      }
+    }
+
+    auto literal = origLiteral;
+
+    // filter the special case of the genids or the qlever special value
+    // escapes, which neither start with angles nor with quotation marks
+    // TODO<joka921> proper data types for the different types of vocabulary
+    // entries.
+    if (ad_utility::startsWith(literal, "_:genid") ||
+        ad_utility::startsWith(literal, ":v:")) {
+      return std::string{literal};
+    }
+    std::string res;
+    char endDelimiter = '\0';
+    std::string_view langtagOrDatatype;
+    if (ad_utility::startsWith(literal, "<")) {
+      // this must be an <iriref>
+      if (!ad_utility::endsWith(literal, ">")) {
+        throw std::runtime_error("Error: Rdf Triple element "s + origLiteral +
+                                 "could not be normalized properly"s);
+      }
+      res = "<";
+      endDelimiter = '>';
       literal.remove_prefix(1);
       literal.remove_suffix(1);
+    } else {
+      res = "\"";
+      endDelimiter = '\"';
+      auto lastQuot = literal.find_last_of("\"\'");
+      if (lastQuot != std::string_view::npos) {
+        langtagOrDatatype = literal.substr(lastQuot + 1);
+        literal.remove_suffix(literal.size() - lastQuot - 1);
+      }
+
+      if (ad_utility::startsWith(literal, "\"\"\"") ||
+          ad_utility::startsWith(literal, "'''")) {
+        if (!ad_utility::endsWith(literal, literal.substr(0, 3))) {
+          throw std::runtime_error("Error: Rdf Triple element "s + origLiteral +
+                                   "could not be normalized properly"s);
+        }
+        literal.remove_prefix(3);
+        literal.remove_suffix(3);
+      } else {
+        if (!(ad_utility::startsWith(literal, "\"") ||
+              ad_utility::startsWith(literal, "'"))) {
+          throw std::runtime_error("Error: Rdf Triple element "s + origLiteral +
+                                   "could not be normalized properly"s);
+        }
+        AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 1)));
+        literal.remove_prefix(1);
+        literal.remove_suffix(1);
+      }
     }
     auto pos = literal.find('\\');
     while (pos != literal.npos) {
       res.append(literal.begin(), literal.begin() + pos);
-      AD_CHECK(pos + 1 <= literal.size());
+      AD_CHECK(pos + 1 < literal.size());
       switch (literal[pos + 1]) {
         case 't':
           res.push_back('\t');
@@ -313,18 +373,62 @@ struct TurtleToken {
         case '\\':
           res.push_back('\\');
           break;
+        case 'u': {
+          AD_CHECK(pos + 5 < literal.size());
+          auto unesc = unescapeUchar(literal.substr(pos + 2, 4));
+          res.insert(res.end(), unesc.begin(), unesc.end());
+          literal.remove_prefix(4);
+          break;
+        }
+        case 'U': {
+          AD_CHECK(pos + 9 < literal.size());
+          auto unesc = unescapeUchar(literal.substr(pos + 2, 8));
+          res.insert(res.end(), unesc.begin(), unesc.end());
+          literal.remove_prefix(8);
+          break;
+        }
 
         default:
-          throw std::runtime_error(
-              "Illegal escape sequence in RDF Literal. This should never "
-              "happen, please report this");
+          throw std::runtime_error("Illegal escape sequence in RDF Literal \"" +
+                                   std::string(literal) +
+                                   "\" . This should never "
+                                   "happen, please report this");
       }
       literal.remove_prefix(pos + 2);
       pos = literal.find('\\');
     }
     res.append(literal);
-    res.push_back('"');
+    res.push_back(endDelimiter);
     res.append(langtagOrDatatype);
+    return res;
+  }
+
+  static std::string unescapePrefixedIri(std::string_view literal) {
+    std::string res;
+    auto pos = literal.find('\\');
+    static const ad_utility::HashSet<char> m = [](){
+      ad_utility::HashSet<char> r;
+      for (auto c : {'_', '~', '.', '-', '-', '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', '/', '?', '#', '@', '%' }) {
+        r.insert(c);
+      }
+      return r;
+    }();
+    while (pos != literal.npos) {
+      res.append(literal.begin(), literal.begin() + pos);
+      if (pos + 1 >= literal.size()) {
+        throw std::runtime_error("Trying to unescape a literal or iri that ended with a single backslash. This should not happen, please report this");
+      }
+      if (m.count(literal[pos + 1])) {
+        res += literal[pos + 1];
+      } else {
+        throw std::runtime_error(std::string{"Illegal escape sequence \\"} + literal[pos + 1] + " encountered while trying to unescape an iri. Please report this");
+      }
+
+      literal.remove_prefix(pos + 2);
+      pos = literal.find('\\');
+    }
+    // the remainder
+    res.append(literal);
     return res;
   }
 
@@ -333,7 +437,10 @@ struct TurtleToken {
    * normalizeRDFLiteral and escape it again
    */
   static std::string escapeRDFLiteral(std::string_view literal) {
-    AD_CHECK(ad_utility::startsWith(literal, "\""));
+    // do nothing for <iris> and _:genid278 Anonymous entities
+    if (!ad_utility::startsWith(literal, "\"")) {
+      return std::string{literal};
+    }
     std::string res = "\"";
     auto lastQuot = literal.find_last_of('"');
     AD_CHECK(lastQuot != std::string_view::npos);
@@ -421,6 +528,7 @@ struct TurtleToken {
         Iriref(grp(IrirefString)),
         PnameNS(grp(PnameNSString)),
         PnameLN(grp(PnameLNString)),
+        PnLocal(grp(PnLocalString)),
         BlankNodeLabel(grp(BlankNodeLabelString)),
 
         WsMultiple(grp(WsMultipleString)),
@@ -542,6 +650,7 @@ struct TurtleToken {
 
   const string PnameLNString = grp(PnameNSString) + grp(PnLocalString);
   const RE2 PnameLN;
+  const RE2 PnLocal;
 
   const string BlankNodeLabelString = u8"_:" + cls(PnCharsUString + u8"0-9") +
                                       grp("\\.*" + cls(PnCharsString)) + "*";
@@ -701,6 +810,8 @@ class TokenizerCtre {
       return F::template process<TurtleTokenCtre::PnameNS>(_data);
     } else if constexpr (id == TokId::PnameLN) {
       return F::template process<TurtleTokenCtre::PnameLN>(_data);
+    } else if constexpr (id == TokId::PnLocal) {
+      return F::template process<TurtleTokenCtre::PnLocal>(_data);
     } else if constexpr (id == TokId::BlankNodeLabel) {
       return F::template process<TurtleTokenCtre::BlankNodeLabel>(_data);
     } else {
@@ -907,11 +1018,10 @@ class Tokenizer {
   void skipWhitespace() {
     auto v = view();
     auto pos = v.find_first_not_of("\x20\x09\x0D\x0A");
-    if (pos != string::npos) {
-      _data.remove_prefix(pos);
+    if (pos == string::npos) {
+      pos = _data.size();
     }
-    // auto success = skip(_tokens.WsMultiple);
-    // assert(success);
+    _data.remove_prefix(pos);
     return;
   }
 

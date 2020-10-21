@@ -29,7 +29,7 @@ bool TurtleParser<T>::prefixID() {
           _lastParseResult.substr(1, _lastParseResult.size() - 2);
       return true;
     } else {
-      throw TurtleParser<T>::ParseException("prefixID");
+      raise("prefixID");
     }
   } else {
     return false;
@@ -44,7 +44,7 @@ bool TurtleParser<T>::base() {
       _baseIRI = _lastParseResult;
       return true;
     } else {
-      throw ParseException("base");
+      raise("base");
     }
   } else {
     return false;
@@ -59,7 +59,7 @@ bool TurtleParser<T>::sparqlPrefix() {
       _prefixMap[_activePrefix] = _lastParseResult;
       return true;
     } else {
-      throw ParseException("sparqlPrefix");
+      raise("sparqlPrefix");
     }
   } else {
     return false;
@@ -74,7 +74,7 @@ bool TurtleParser<T>::sparqlBase() {
       _baseIRI = _lastParseResult;
       return true;
     } else {
-      throw ParseException("sparqlBase");
+      raise("sparqlBase");
     }
   } else {
     return false;
@@ -88,7 +88,7 @@ bool TurtleParser<T>::triples() {
     if (predicateObjectList()) {
       return true;
     } else {
-      throw ParseException("triples");
+      raise("triples");
     }
   } else {
     if (blankNodePropertyList()) {
@@ -221,8 +221,7 @@ bool TurtleParser<T>::collection() {
   if (!skip<TokId::OpenRound>()) {
     return false;
   }
-  throw ParseException(
-      "We do not know how to handle collections in QLever yet\n");
+  raise("We do not know how to handle collections in QLever yet\n");
   // TODO<joka921> understand collections
 }
 
@@ -299,7 +298,7 @@ bool TurtleParser<T>::stringParse() {
     return false;
   }
   if (endPos == string::npos) {
-    throw ParseException("unterminated string Literal");
+    raise("unterminated string Literal");
   }
   // also include the quotation marks in the word
   // TODO <joka921> how do we have to translate multiline strings for QLever?
@@ -319,12 +318,28 @@ bool TurtleParser<T>::iri() {
 // _____________________________________________________________________
 template <class T>
 bool TurtleParser<T>::prefixedName() {
-  if (pnameLN() || pnameNS()) {
+  if constexpr (UseRelaxedParsing) {
+    if (pnameLnRelaxed() || pnameNS()) {
+      _lastParseResult =
+          '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
+      return true;
+    } else {
+      return false;
+    }
+  } else {
+    if (!parseTerminal<TokId::PnameNS>()) {
+      return false;
+    } else {
+      // this also includes a ":" which we do not need, hence the "-1"
+      _activePrefix = _lastParseResult.substr(0, _lastParseResult.size() - 1);
+      _lastParseResult = "";
+    }
+    _lastParseResult.clear();
+    parseTerminal<TokId::PnLocal, false>();
     _lastParseResult =
         '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
+    LOG(TRACE) << "Parsed a prefixed name\n";
     return true;
-  } else {
-    return false;
   }
 }
 
@@ -336,9 +351,11 @@ bool TurtleParser<T>::blankNode() {
 
 // _______________________________________________________________________
 template <class T>
-template <TokId terminal>
+template <TokId terminal, bool SkipWhitespaceBefore>
 bool TurtleParser<T>::parseTerminal() {
-  _tok.skipWhitespaceAndComments();
+  if constexpr (SkipWhitespaceBefore) {
+    _tok.skipWhitespaceAndComments();
+  }
   auto [success, word] = _tok.template getNextToken<terminal>();
   if (success) {
     _lastParseResult = word;
@@ -370,7 +387,7 @@ bool TurtleParser<T>::pnameNS() {
 
 // ________________________________________________________________________
 template <class T>
-bool TurtleParser<T>::pnameLN() {
+bool TurtleParser<T>::pnameLnRelaxed() {
   // relaxed parsing, only works if the greedy parsing of the ":"
   // is ok
   _tok.skipWhitespaceAndComments();
@@ -380,7 +397,8 @@ bool TurtleParser<T>::pnameLN() {
     return false;
   }
   // these can also be part of a collection etc.
-  // find any character that can end a pnameLN
+  // find any character that can end a pnameLn when assuming that no
+  // escape sequences were used
   auto posEnd = view.find_first_of(" \n,;", pos);
   if (posEnd == string::npos) {
     // make tests work
@@ -406,7 +424,7 @@ bool TurtleParser<T>::iriref() {
   if (ad_utility::startsWith(view, "<")) {
     auto endPos = view.find_first_of("> \n");
     if (endPos == string::npos || view[endPos] != '>') {
-      throw ParseException("Iriref");
+      raise("Iriref");
     } else {
       _tok.remove_prefix(endPos + 1);
       _lastParseResult = view.substr(0, endPos + 1);
@@ -450,6 +468,7 @@ bool TurtleStreamParser<T>::resetStateAndRead(
   this->_tok.reset(b._tokenizerPosition, b._tokenizerSize);
 
   std::vector<char> buf;
+  _numBytesBeforeCurrentBatch += _byteVec.size() - _tok.data().size();
   buf.resize(_tok.data().size() + nextBytes.size());
   memcpy(buf.data(), _tok.data().begin(), _tok.data().size());
   memcpy(buf.data() + _tok.data().size(), nextBytes.data(), nextBytes.size());
@@ -459,7 +478,8 @@ bool TurtleStreamParser<T>::resetStateAndRead(
   LOG(TRACE) << "Succesfully decompressed next batch of " << nextBytes.size()
              << " << bytes to parser\n";
 
-  // important: our tokenizer may have a new position
+  // repair the backup state, its pointers might have changed due to
+  // reallocation
   b = backupState();
   return true;
 }
@@ -584,7 +604,7 @@ bool TurtleStreamParser<T>::getLine(std::array<string, 3>* triple) {
               throw ex;
 
             } else {
-              throw typename TurtleParser<T>::ParseException(
+              this->raise(
                   "Too many bytes parsed without finishing a turtle "
                   "statement");
             }

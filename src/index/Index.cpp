@@ -160,7 +160,7 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
     {
-      auto p = ad_pipeline::setupParallelPipeline<1, NUM_PARALLEL_ITEM_MAPS>(
+      auto p = ad_pipeline::setupParallelPipeline<1, 1, NUM_PARALLEL_ITEM_MAPS>(
           _parserBatchSize,
           // when called, returns an optional to the next triple. If
           // <linexPerPartial> triples were parsed, return std::nullopt. when
@@ -169,6 +169,15 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
           // as a first step in the parallel Pipeline.
           ParserBatcher(parser, linesPerPartial,
                         [&]() { parserExhausted = true; }),
+          // do all the unescaping from Sparql (ToDo<joka921>:: move this into
+          // its own pipeline within the parser
+          [this](Triple&& t) {
+            Triple res;
+            std::transform(t.begin(), t.end(), res.begin(), [](const auto& s) {
+              return TurtleToken::normalizeRDFLiteral(s);
+            });
+            return res;
+          },
           // convert each triple to the internal representation (e.g. special
           // values for Numbers, externalized literals, etc.)
           [this](Triple&& t) {
