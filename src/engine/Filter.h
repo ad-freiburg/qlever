@@ -59,7 +59,10 @@ class Filter : public Operation {
         return _subtree->getSizeEstimate();
       } else if (_type == SparqlFilter::FilterType::PREFIX) {
         // strip the leading ^ and " and assume each character gets rid of 10 percent of the entries
-        return _subtree->getSizeEstimate() / static_cast<size_t>(std::pow(10, std::max(0, static_cast<int>(_rhs.size()) - 2)));
+        double reductionFactor = std::pow(10, std::max(0, static_cast<int>(_rhs.size()) - 2));
+        reductionFactor = std::min(100000000.0, reductionFactor);
+        reductionFactor = std::max(1.0, reductionFactor);
+        return _subtree->getSizeEstimate() / static_cast<size_t>(reductionFactor);
       } else {
         return _subtree->getSizeEstimate() / 50;
       }
