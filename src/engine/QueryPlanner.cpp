@@ -1633,8 +1633,9 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
-  std::string innerLeft = generateUniqueVarName();
-  std::string innerRight = generateUniqueVarName();
+
+  std::string innerLeft = toUniqueVariable(innerLeft);
+  std::string innerRight = toUniqueVariable(innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
@@ -1655,8 +1656,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
-  std::string innerLeft = generateUniqueVarName();
-  std::string innerRight = generateUniqueVarName();
+  std::string innerLeft = toUniqueVariable(innerLeft);
+  std::string innerRight = toUniqueVariable(innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
@@ -1677,8 +1678,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
-  std::string innerLeft = generateUniqueVarName();
-  std::string innerRight = generateUniqueVarName();
+  std::string innerLeft = toUniqueVariable(innerLeft);
+  std::string innerRight = toUniqueVariable(innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
@@ -1735,6 +1736,10 @@ ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
 // _____________________________________________________________________________
 std::string QueryPlanner::generateUniqueVarName() {
   return "?:" + std::to_string(_internalVarCount++);
+}
+
+std::string QueryPlanner::toUniqueVariable(const string& entity) {
+  return ad_utility::startsWith(entity, "?") ? generateUniqueVarName() : entity;
 }
 
 // _____________________________________________________________________________
