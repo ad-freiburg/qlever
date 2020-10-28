@@ -83,6 +83,17 @@ std::string TransitivePath::getDescriptor() const {
     os << " rightValue " << _rightValue;
   }
   os << " minDist " << _minDist << " maxDist " << _maxDist << "\n";
+
+  os << "sorted on: ";
+  for (const auto& el : resultSortedOn()) {
+    os << el;
+  }
+  os << '\n';
+  os << "variable columns ";
+  for (const auto& [k, v]: _variableColumns) {
+    os << k << " : " << v << '\n';
+  }
+  os << '\n';
   return os.str();
 }
 
