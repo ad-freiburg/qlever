@@ -22,17 +22,17 @@ template <class Vec>
 class Iterator {
  public:
   using iterator_category = std::forward_iterator_tag;
-  using value_type = std::pair<Id, FullRelationMetaData>;
+  using value_type = std::pair<SimpleId, FullRelationMetaData>;
 
   // _________________________________________________
-  std::pair<Id, const FullRelationMetaData&> operator*() const {
+  std::pair<SimpleId, const FullRelationMetaData&> operator*() const {
     // make sure that we do not conflict with the empty key
     AD_CHECK(_id != size_t(-1));
     return std::make_pair(_id, std::cref(*_it));
   }
 
   // _________________________________________________
-  std::pair<Id, std::reference_wrapper<const FullRelationMetaData>>*
+  std::pair<SimpleId, std::reference_wrapper<const FullRelationMetaData>>*
   operator->() const {
     // make sure that we do not conflict with the empty key
     AD_CHECK(_id != size_t(-1));
@@ -41,7 +41,7 @@ class Iterator {
   }
 
   // _____________________________________________________________
-  Iterator(Id id, const typename Vec::const_iterator& it, const Vec* const vec)
+  Iterator(SimpleId id, const typename Vec::const_iterator& it, const Vec* const vec)
       : _id(id), _it(it), _accessPair(**this), _vec(vec) {}
 
   // ________________________________________________
@@ -77,11 +77,11 @@ class Iterator {
   bool operator!=(const Iterator& other) { return _it != other._it; }
 
  private:
-  Id _id;
+  SimpleId _id;
   typename Vec::const_iterator _it;
   // here we store the pair needed for operator->()
   // will be updated before each access
-  mutable std::pair<Id, std::reference_wrapper<const FullRelationMetaData>>
+  mutable std::pair<SimpleId, std::reference_wrapper<const FullRelationMetaData>>
       _accessPair;
   const Vec* const _vec;
 
@@ -147,7 +147,7 @@ class MetaDataWrapperDense {
   Iterator end() const { return Iterator(_vec.size(), _vec.end(), &_vec); }
 
   // ____________________________________________________________
-  void set(Id id, const FullRelationMetaData& value) {
+  void set(SimpleId id, const FullRelationMetaData& value) {
     if (id >= _vec.size()) {
       AD_CHECK(id < _vec.size());
     }
@@ -162,21 +162,21 @@ class MetaDataWrapperDense {
   }
 
   // __________________________________________________________
-  const FullRelationMetaData& getAsserted(Id id) const {
+  const FullRelationMetaData& getAsserted(SimpleId id) const {
     const auto& res = _vec[id];
     AD_CHECK(res != emptyMetaData);
     return res;
   }
 
   // _________________________________________________________
-  FullRelationMetaData& operator[](Id id) {
+  FullRelationMetaData& operator[](SimpleId id) {
     auto& res = _vec[id];
     AD_CHECK(res != emptyMetaData);
     return res;
   }
 
   // ________________________________________________________
-  size_t count(Id id) const {
+  size_t count(SimpleId id) const {
     // can either be 1 or 0 for map-like types
     return _vec[id] != emptyMetaData;
   }
@@ -222,24 +222,24 @@ class MetaDataWrapperHashMap {
   Iterator end() { return _map.end(); }
 
   // ____________________________________________________________
-  void set(Id id, const FullRelationMetaData& value) { _map[id] = value; }
+  void set(SimpleId id, const FullRelationMetaData& value) { _map[id] = value; }
 
   // __________________________________________________________
-  const FullRelationMetaData& getAsserted(Id id) const {
+  const FullRelationMetaData& getAsserted(SimpleId id) const {
     auto it = _map.find(id);
     AD_CHECK(it != _map.end());
     return std::cref(it->second);
   }
 
   // __________________________________________________________
-  FullRelationMetaData& operator[](Id id) {
+  FullRelationMetaData& operator[](SimpleId id) {
     auto it = _map.find(id);
     AD_CHECK(it != _map.end());
     return std::ref(it->second);
   }
 
   // ________________________________________________________
-  size_t count(Id id) const {
+  size_t count(SimpleId id) const {
     // can either be 1 or 0 for map-like types
     return _map.count(id);
   }

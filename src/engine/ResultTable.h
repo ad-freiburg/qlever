@@ -48,7 +48,7 @@ class ResultTable {
    */
   vector<size_t> _sortedBy;
 
-  IdTable _data;
+  IdTable<Id> _data;
 
   vector<ResultType> _resultTypes;
 
@@ -101,10 +101,15 @@ class ResultTable {
   }
 
   std::optional<std::string> idToOptionalString(Id id) const {
-    if (id < _localVocab->size()) {
-      return (*_localVocab)[id];
+    if (id.type() != Id::LOCAL_VOCAB) {
+      throw std::runtime_error(
+          "tried to access the local vocabulary with a wrong typed id, this should never happen");
     } else if (id == ID_NO_VALUE) {
       return std::nullopt;
+  }
+    auto idInternal = id.getUnsigned();
+    if (idInternal < _localVocab->size()) {
+      return (*_localVocab)[idInternal];
     }
     return std::nullopt;
   }

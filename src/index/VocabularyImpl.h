@@ -139,8 +139,8 @@ void Vocabulary<S, C>::createFromSet(const ad_utility::HashSet<S>& set) {
 // compressedString as key type
 template <class S, class C>
 template <typename, typename>
-ad_utility::HashMap<string, Id> Vocabulary<S, C>::asMap() {
-  ad_utility::HashMap<string, Id> map;
+ad_utility::HashMap<string, SimpleId> Vocabulary<S, C>::asMap() {
+  ad_utility::HashMap<string, SimpleId> map;
   for (size_t i = 0; i < _words.size(); ++i) {
     map[_words[i]] = i;
   }

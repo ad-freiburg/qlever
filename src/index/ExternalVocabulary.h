@@ -36,14 +36,14 @@ class ExternalVocabulary {
   //! (as non-reference, returning a cost ref is not possible, because the
   //! string does not necessarily already exist in memory - unlike for an
   //! internal vocabulary)
-  string operator[](Id id) const;
+  string operator[](SimpleId id) const;
 
   //! Get the number of words in the vocabulary.
   size_t size() const { return _size; }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
-  bool getId(const string& word, Id* id) const {
+  bool getId(const string& word, SimpleId* id) const {
     *id = binarySearchInVocab(word);
     return *id < _size && (*this)[*id] == word;
   }
@@ -56,5 +56,5 @@ class ExternalVocabulary {
   size_t _size = 0;
   StringComparator _caseComparator;
 
-  Id binarySearchInVocab(const string& word) const;
+  uint64_t binarySearchInVocab(const string& word) const;
 };

@@ -42,6 +42,7 @@ find_package (Threads REQUIRED)
 ################################
 find_package(ICU 60 REQUIRED COMPONENTS uc i18n)
 include_directories(${ICU_INCLUDE_DIR})
+include_directories(${ANTLR4_INCLUDE_DIR})
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)

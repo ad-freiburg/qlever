@@ -10,7 +10,7 @@
 
 // _____________________________________________________________________________
 template <class Comp>
-string ExternalVocabulary<Comp>::operator[](Id id) const {
+string ExternalVocabulary<Comp>::operator[](SimpleId id) const {
   off_t ft[2];
   off_t& from = ft[0];
   off_t& to = ft[1];
@@ -25,11 +25,11 @@ string ExternalVocabulary<Comp>::operator[](Id id) const {
 
 // _____________________________________________________________________________
 template <class Comp>
-Id ExternalVocabulary<Comp>::binarySearchInVocab(const string& word) const {
-  Id lower = 0;
-  Id upper = _size;
+uint64_t ExternalVocabulary<Comp>::binarySearchInVocab(const string& word) const {
+  uint64_t lower = 0;
+  uint64_t upper = _size;
   while (lower < upper) {
-    Id i = (lower + upper) / 2;
+    uint64_t i = (lower + upper) / 2;
     string w = (*this)[i];
     int cmp = _caseComparator.compare(w, word, Comp::Level::TOTAL);
     if (cmp < 0) {

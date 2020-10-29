@@ -18,7 +18,7 @@
  * methods of the IdTable class. This way less code of the IdTable has to
  * be duplicated.
  **/
-template <int COLS>
+template <int COLS, typename T = Id>
 class IdTableImpl {
  public:
   IdTableImpl()
@@ -28,7 +28,7 @@ class IdTableImpl {
    public:
     // iterator traits types
     using difference_type = ssize_t;
-    using value_type = std::array<Id, COLS>;
+    using value_type = std::array<T, COLS>;
     using pointer = value_type*;
     using reference = value_type&;
     using iterator_category = std::random_access_iterator_tag;
@@ -38,7 +38,7 @@ class IdTableImpl {
     // IdTableImpl<0> which doesn't know the number of columns at compile time.
     // To prevent compiler warnings about unused parameters the third parameter
     // (the number of columns) is not given a name.
-    iterator(Id* data, size_t row, size_t) : _data(data), _row(row) {}
+    iterator(T* data, size_t row, size_t) : _data(data), _row(row) {}
     virtual ~iterator() {}
 
     // Copy and move constructors and assignment operators
@@ -149,12 +149,12 @@ class IdTableImpl {
     size_t size() const { return COLS; }
 
    private:
-    Id* _data;
+    T* _data;
     size_t _row;
   };
 
-  using const_row_type = const std::array<Id, COLS>;
-  using row_type = const std::array<Id, COLS>;
+  using const_row_type = const std::array<T, COLS>;
+  using row_type = const std::array<T, COLS>;
   using const_row_reference = const_row_type&;
   using row_reference = row_type&;
 
@@ -168,7 +168,7 @@ class IdTableImpl {
 
   constexpr size_t cols() const { return COLS; }
 
-  Id* _data;
+  T* _data;
   size_t _size;
   size_t _capacity;
   // This ensures the name _cols is always defined within the IdTableImpl
@@ -179,8 +179,8 @@ class IdTableImpl {
   void setCols(size_t cols) { (void)cols; };
 };
 
-template <>
-class IdTableImpl<0> {
+template <typename T>
+class IdTableImpl<0, T> {
  public:
   IdTableImpl()
       : _data(nullptr),
@@ -191,7 +191,7 @@ class IdTableImpl<0> {
 
   class ConstRow final {
    public:
-    ConstRow(const Id* data, size_t cols) : _data(data), _cols(cols) {}
+    ConstRow(const T* data, size_t cols) : _data(data), _cols(cols) {}
     ConstRow(const ConstRow& other) : _data(other._data), _cols(other._cols) {}
     ConstRow(ConstRow&& other) : _data(other._data), _cols(other._cols) {}
     ConstRow& operator=(const ConstRow& other) = delete;
@@ -203,11 +203,11 @@ class IdTableImpl<0> {
       }
       return matches;
     }
-    const Id& operator[](size_t i) const { return *(_data + i); }
-    const Id* data() const { return _data; }
+    const T& operator[](size_t i) const { return *(_data + i); }
+    const T* data() const { return _data; }
     size_t size() const { return _cols; }
 
-    const Id* _data;
+    const T* _data;
     size_t _cols;
   };
 
@@ -219,26 +219,26 @@ class IdTableImpl<0> {
   class Row {
    public:
     explicit Row(size_t cols)
-        : _data(new Id[cols]), _cols(cols), _allocated(true) {}
-    Row(Id* data, size_t cols) : _data(data), _cols(cols), _allocated(false) {}
+        : _data(new T[cols]), _cols(cols), _allocated(true) {}
+    Row(T* data, size_t cols) : _data(data), _cols(cols), _allocated(false) {}
     virtual ~Row() {
       if (_allocated) {
         delete[] _data;
       }
     }
     Row(const Row& other)
-        : _data(new Id[other._cols]), _cols(other._cols), _allocated(true) {
-      std::memcpy(_data, other._data, sizeof(Id) * _cols);
+        : _data(new T[other._cols]), _cols(other._cols), _allocated(true) {
+      std::memcpy(_data, other._data, sizeof(T) * _cols);
     }
 
     Row(Row&& other)
-        : _data(other._allocated ? other._data : new Id[other._cols]),
+        : _data(other._allocated ? other._data : new T[other._cols]),
           _cols(other._cols),
           _allocated(true) {
       if (other._allocated) {
         other._data = nullptr;
       } else {
-        std::memcpy(_data, other._data, sizeof(Id) * _cols);
+        std::memcpy(_data, other._data, sizeof(T) * _cols);
       }
     }
 
@@ -250,12 +250,12 @@ class IdTableImpl<0> {
       if (_allocated) {
         // If we manage our own storage recreate that to fit the other row
         delete[] _data;
-        _data = new Id[other._cols];
+        _data = new T[other._cols];
         _cols = other._cols;
       }
       // Copy over the data from the other row to this row
       if (_cols == other._cols && _data != nullptr && other._data != nullptr) {
-        std::memcpy(_data, other._data, sizeof(Id) * _cols);
+        std::memcpy(_data, other._data, sizeof(T) * _cols);
       }
       return *this;
     }
@@ -282,13 +282,13 @@ class IdTableImpl<0> {
 
           return *this;
         } else {
-          _data = new Id[other._cols];
+          _data = new T[other._cols];
           _cols = other._cols;
         }
       }
       // Copy over the data from the other row to this row
       if (_cols == other._cols && _data != nullptr && other._data != nullptr) {
-        std::memcpy(_data, other._data, sizeof(Id) * _cols);
+        std::memcpy(_data, other._data, sizeof(T) * _cols);
       }
       return *this;
     }
@@ -301,21 +301,21 @@ class IdTableImpl<0> {
       return matches;
     }
 
-    Id& operator[](size_t i) { return *(_data + i); }
-    const Id& operator[](size_t i) const { return *(_data + i); }
-    Id* data() { return _data; }
-    const Id* data() const { return _data; }
+    T& operator[](size_t i) { return *(_data + i); }
+    const T& operator[](size_t i) const { return *(_data + i); }
+    T* data() { return _data; }
+    const T* data() const { return _data; }
 
     size_t size() const { return _cols; }
     size_t cols() const { return _cols; }
 
-    Id* _data;
+    T* _data;
     size_t _cols;
     bool _allocated;
   };
 
   friend std::ostream& operator<<(std::ostream& out,
-                                  const typename IdTableImpl<0>::Row& row) {
+                                  const typename IdTableImpl<0, T>::Row& row) {
     for (size_t col = 0; col < row.size(); col++) {
       out << row[col] << ", ";
     }
@@ -324,7 +324,7 @@ class IdTableImpl<0> {
   }
 
   friend std::ostream& operator<<(
-      std::ostream& out, const typename IdTableImpl<0>::ConstRow&& row) {
+      std::ostream& out, const typename IdTableImpl<0, T>::ConstRow&& row) {
     for (size_t col = 0; col < row.size(); col++) {
       out << row[col] << ", ";
     }
@@ -341,7 +341,7 @@ class IdTableImpl<0> {
     using iterator_category = std::random_access_iterator_tag;
 
     iterator() : _data(nullptr), _row(0), _cols(0), _rowView(nullptr, 0) {}
-    iterator(Id* data, size_t row, size_t cols)
+    iterator(T* data, size_t row, size_t cols)
         : _data(data),
           _row(row),
           _cols(cols),
@@ -461,7 +461,7 @@ class IdTableImpl<0> {
     size_t size() const { return _cols; }
 
    private:
-    Id* _data;
+    T* _data;
     size_t _row;
     size_t _cols;
     Row _rowView;
@@ -482,21 +482,23 @@ class IdTableImpl<0> {
 
   void setCols(size_t cols) { _cols = cols; }
 
-  Id* _data;
+  T* _data;
   size_t _size;
   size_t _capacity;
   size_t _cols;
   bool _manage_storage;
 };
 
-template <int COLS = 0>
+template <int COLS = 0, typename T = Id>
 class IdTableStatic;
-using IdTable = IdTableStatic<>;
 
-template <int COLS>
-class IdTableStatic : private IdTableImpl<COLS> {
+template <typename T = Id>
+using IdTable = IdTableStatic<0, T>;
+
+template <int COLS, typename T>
+class IdTableStatic : private IdTableImpl<COLS, T> {
   // Make all other instantiations of this template friends of this.
-  template <int>
+  template <int, typename>
   friend class IdTableStatic;
   template <int I>
   friend void swap(IdTableStatic<I>& left, IdTableStatic<I>& right);
@@ -533,37 +535,37 @@ class IdTableStatic : private IdTableImpl<COLS> {
   }
 
   // Copy constructor
-  IdTableStatic<COLS>(const IdTableStatic<COLS>& other) {
-    IdTableImpl<COLS>::_data = other.IdTableImpl<COLS>::_data;
-    IdTableImpl<COLS>::_size = other.IdTableImpl<COLS>::_size;
-    IdTableImpl<COLS>::setCols(other.IdTableImpl<COLS>::_cols);
-    IdTableImpl<COLS>::_capacity = other.IdTableImpl<COLS>::_capacity;
-    if (other.IdTableImpl<COLS>::_data != nullptr) {
-      IdTableImpl<COLS>::_data =
-          reinterpret_cast<Id*>(malloc(IdTableImpl<COLS>::_capacity *
-                                       IdTableImpl<COLS>::_cols * sizeof(Id)));
+  IdTableStatic<COLS, T>(const IdTableStatic<COLS, T>& other) {
+    IdTableImpl<COLS, T>::_data = other.IdTableImpl<COLS, T>::_data;
+    IdTableImpl<COLS, T>::_size = other.IdTableImpl<COLS, T>::_size;
+    IdTableImpl<COLS, T>::setCols(other.IdTableImpl<COLS, T>::_cols);
+    IdTableImpl<COLS, T>::_capacity = other.IdTableImpl<COLS, T>::_capacity;
+    if (other.IdTableImpl<COLS, T>::_data != nullptr) {
+      IdTableImpl<COLS, T>::_data =
+          reinterpret_cast<T*>(malloc(IdTableImpl<COLS, T>::_capacity *
+                                       IdTableImpl<COLS, T>::_cols * sizeof(T)));
       std::memcpy(
-          IdTableImpl<COLS>::_data, other.IdTableImpl<COLS>::_data,
-          IdTableImpl<COLS>::_size * sizeof(Id) * IdTableImpl<COLS>::_cols);
+          IdTableImpl<COLS, T>::_data, other.IdTableImpl<COLS, T>::_data,
+          IdTableImpl<COLS, T>::_size * sizeof(T) * IdTableImpl<COLS, T>::_cols);
     }
-    IdTableImpl<COLS>::_manage_storage = true;
+    IdTableImpl<COLS, T>::_manage_storage = true;
   }
 
   // Move constructor
-  IdTableStatic<COLS>(IdTableStatic<COLS>&& other) {
+  IdTableStatic<COLS, T>(IdTableStatic<COLS, T>&& other) {
     swap(*this, other);
-    other.IdTableImpl<COLS>::_data = nullptr;
-    other.IdTableImpl<COLS>::_size = 0;
-    other.IdTableImpl<COLS>::_capacity = 0;
+    other.IdTableImpl<COLS, T>::_data = nullptr;
+    other.IdTableImpl<COLS, T>::_size = 0;
+    other.IdTableImpl<COLS, T>::_capacity = 0;
   }
 
   // copy assignment
-  IdTableStatic<COLS>& operator=(IdTableStatic<COLS> other) {
+  IdTableStatic<COLS, T>& operator=(IdTableStatic<COLS, T> other) {
     swap(*this, other);
     return *this;
   }
 
-  bool operator==(const IdTableStatic<COLS>& other) const {
+  bool operator==(const IdTableStatic<COLS, T>& other) const {
     if (other.size() != size()) {
       return false;
     }
@@ -578,59 +580,59 @@ class IdTableStatic : private IdTableImpl<COLS> {
   }
 
   // Element access
-  Id& operator()(size_t row, size_t col) {
-    return IdTableImpl<COLS>::_data[row * IdTableImpl<COLS>::_cols + col];
+  T& operator()(size_t row, size_t col) {
+    return IdTableImpl<COLS, T>::_data[row * IdTableImpl<COLS, T>::_cols + col];
   }
-  const Id& operator()(size_t row, size_t col) const {
-    return IdTableImpl<COLS>::_data[row * IdTableImpl<COLS>::_cols + col];
+  const T& operator()(size_t row, size_t col) const {
+    return IdTableImpl<COLS, T>::_data[row * IdTableImpl<COLS, T>::_cols + col];
   }
 
   // Row access
-  typename IdTableImpl<COLS>::row_reference operator[](size_t row) {
-    return IdTableImpl<COLS>::getRow(row);
+  typename IdTableImpl<COLS, T>::row_reference operator[](size_t row) {
+    return IdTableImpl<COLS, T>::getRow(row);
   }
 
-  typename IdTableImpl<COLS>::const_row_reference operator[](size_t row) const {
+  typename IdTableImpl<COLS, T>::const_row_reference operator[](size_t row) const {
     // Moving this method to impl allows for efficient ConstRow types when
     // using non dynamic IdTables.
-    return IdTableImpl<COLS>::getConstRow(row);
+    return IdTableImpl<COLS, T>::getConstRow(row);
   }
 
   // Begin iterator
   iterator begin() {
-    return iterator(IdTableImpl<COLS>::_data, 0, IdTableImpl<COLS>::_cols);
+    return iterator(IdTableImpl<COLS, T>::_data, 0, IdTableImpl<COLS, T>::_cols);
   }
   const_iterator begin() const {
-    return iterator(IdTableImpl<COLS>::_data, 0, IdTableImpl<COLS>::_cols);
+    return iterator(IdTableImpl<COLS, T>::_data, 0, IdTableImpl<COLS, T>::_cols);
   }
   const_iterator cbegin() const {
-    return iterator(IdTableImpl<COLS>::_data, 0, IdTableImpl<COLS>::_cols);
+    return iterator(IdTableImpl<COLS, T>::_data, 0, IdTableImpl<COLS, T>::_cols);
   }
 
   // End iterator
   iterator end() {
-    return iterator(IdTableImpl<COLS>::_data, IdTableImpl<COLS>::_size,
-                    IdTableImpl<COLS>::_cols);
+    return iterator(IdTableImpl<COLS, T>::_data, IdTableImpl<COLS, T>::_size,
+                    IdTableImpl<COLS, T>::_cols);
   }
   const_iterator end() const {
-    return iterator(IdTableImpl<COLS>::_data, IdTableImpl<COLS>::_size,
-                    IdTableImpl<COLS>::_cols);
+    return iterator(IdTableImpl<COLS, T>::_data, IdTableImpl<COLS, T>::_size,
+                    IdTableImpl<COLS, T>::_cols);
   }
   const_iterator cend() const {
-    return iterator(IdTableImpl<COLS>::_data, IdTableImpl<COLS>::_size,
-                    IdTableImpl<COLS>::_cols);
+    return iterator(IdTableImpl<COLS, T>::_data, IdTableImpl<COLS, T>::_size,
+                    IdTableImpl<COLS, T>::_cols);
   }
 
-  typename IdTableImpl<COLS>::row_reference back() {
-    return IdTableImpl<COLS>::getRow((end() - 1).row());
+  typename IdTableImpl<COLS, T>::row_reference back() {
+    return IdTableImpl<COLS, T>::getRow((end() - 1).row());
   }
 
-  typename IdTableImpl<COLS>::const_row_reference back() const {
-    return IdTableImpl<COLS>::getConstRow((end() - 1).row());
+  typename IdTableImpl<COLS, T>::const_row_reference back() const {
+    return IdTableImpl<COLS, T>::getConstRow((end() - 1).row());
   }
 
-  Id* data() { return IdTableImpl<COLS>::_data; }
-  const Id* data() const { return IdTableImpl<COLS>::_data; }
+  T* data() { return IdTableImpl<COLS, T>::_data; }
+  const T* data() const { return IdTableImpl<COLS, T>::_data; }
 
   // Size access
   size_t rows() const { return IdTableImpl<COLS>::_size; }
@@ -640,80 +642,84 @@ class IdTableStatic : private IdTableImpl<COLS> {
    * a version of the function that is constexpr for COLS != 0
    * and one that is not constexpt for COLS == 0
    */
-  using IdTableImpl<COLS>::cols;
+  using IdTableImpl<COLS, T>::cols;
+  using IdTableImpl<COLS, T>::_cols;
+  using IdTableImpl<COLS, T>::_size;
+  using IdTableImpl<COLS, T>::_capacity;
+  using IdTableImpl<COLS, T>::_data;
 
-  size_t size() const { return IdTableImpl<COLS>::_size; }
+  size_t size() const { return _size; }
 
   /**
    * @brief Sets the number of columns. Should only be called while data is
    *        still nullptr.
    **/
   void setCols(size_t cols) {
-    assert(IdTableImpl<COLS>::_data == nullptr);
-    IdTableImpl<COLS>::setCols(cols);
+    assert(_data == nullptr);
+    IdTableImpl<COLS, T>::setCols(cols);
   }
 
   void emplace_back() { push_back(); }
 
   void push_back() {
-    if (IdTableImpl<COLS>::_size + 1 >= IdTableImpl<COLS>::_capacity) {
+    if (IdTableImpl<COLS, T>::_size + 1 >= IdTableImpl<COLS, T>::_capacity) {
       grow();
     }
-    IdTableImpl<COLS>::_size++;
+    IdTableImpl<COLS, T>::_size++;
   }
 
-  void push_back(const std::initializer_list<Id>& init) {
-    assert(init.size() == IdTableImpl<COLS>::_cols);
-    if (IdTableImpl<COLS>::_size + 1 >= IdTableImpl<COLS>::_capacity) {
+  void push_back(const std::initializer_list<T>& init) {
+    assert(init.size() == _cols);
+    if (IdTableImpl<COLS, T>::_size + 1 >= IdTableImpl<COLS, T>::_capacity) {
       grow();
     }
-    std::memcpy(IdTableImpl<COLS>::_data +
-                    IdTableImpl<COLS>::_size * IdTableImpl<COLS>::_cols,
-                init.begin(), sizeof(Id) * IdTableImpl<COLS>::_cols);
-    IdTableImpl<COLS>::_size++;
+    std::memcpy(IdTableImpl<COLS, T>::_data +
+                    IdTableImpl<COLS, T>::_size * IdTableImpl<COLS, T>::_cols,
+                init.begin(), sizeof(T) * IdTableImpl<COLS, T>::_cols);
+    IdTableImpl<COLS, T>::_size++;
   }
 
   /**
    * @brief Read cols() elements from init and stores them in a new row
    **/
-  void push_back(const Id* init) {
-    if (IdTableImpl<COLS>::_size + 1 >= IdTableImpl<COLS>::_capacity) {
+  void push_back(const T* init) {
+    if (IdTableImpl<COLS, T>::_size + 1 >= IdTableImpl<COLS, T>::_capacity) {
       grow();
     }
-    std::memcpy(IdTableImpl<COLS>::_data +
-                    IdTableImpl<COLS>::_size * IdTableImpl<COLS>::_cols,
-                init, sizeof(Id) * IdTableImpl<COLS>::_cols);
-    IdTableImpl<COLS>::_size++;
+    std::memcpy(IdTableImpl<COLS, T>::_data +
+                    IdTableImpl<COLS, T>::_size * IdTableImpl<COLS, T>::_cols,
+                init, sizeof(T) * _cols);
+    _size++;
   }
 
   /**
    * @brief Read cols() elements from init and stores them in a new row
    **/
   void push_back(const Row& init) {
-    if (IdTableImpl<COLS>::_size + 1 >= IdTableImpl<COLS>::_capacity) {
+    if (_size + 1 >= _capacity) {
       grow();
     }
-    std::memcpy(IdTableImpl<COLS>::_data +
-                    IdTableImpl<COLS>::_size * IdTableImpl<COLS>::_cols,
-                init.data(), sizeof(Id) * IdTableImpl<COLS>::_cols);
-    IdTableImpl<COLS>::_size++;
+    std::memcpy(_data +
+                    _size * _cols,
+                init.data(), sizeof(T) * _cols);
+    _size++;
   }
 
   void push_back(const IdTableStatic<COLS>& init, size_t row) {
-    assert(init.IdTableImpl<COLS>::_cols == IdTableImpl<COLS>::_cols);
-    if (IdTableImpl<COLS>::_size + 1 >= IdTableImpl<COLS>::_capacity) {
+    assert(init._cols == _cols);
+    if (_size + 1 >= _capacity) {
       grow();
     }
-    std::memcpy(IdTableImpl<COLS>::_data +
-                    IdTableImpl<COLS>::_size * IdTableImpl<COLS>::_cols,
-                init.IdTableImpl<COLS>::_data + row * IdTableImpl<COLS>::_cols,
-                sizeof(Id) * IdTableImpl<COLS>::_cols);
-    IdTableImpl<COLS>::_size++;
+    std::memcpy(_data +
+                    _size * _cols,
+                init._data + row * _cols,
+                sizeof(T) * _cols);
+    _size++;
   }
 
   void pop_back() {
-    if (IdTableImpl<COLS>::_size > 0) {
-      IdTableImpl<COLS>::_size--;
+    if (_size > 0) {
+      _size--;
     }
   }
 
@@ -727,24 +733,24 @@ class IdTableStatic : private IdTableImpl<COLS> {
     }
     size_t target = std::min(pos.row(), this->end().row());
     size_t numNewRows = end.row() - begin.row();
-    if (IdTableImpl<COLS>::_capacity < IdTableImpl<COLS>::_size + numNewRows) {
+    if (_capacity < _size + numNewRows) {
       size_t numMissing =
-          IdTableImpl<COLS>::_size + numNewRows - IdTableImpl<COLS>::_capacity;
+          _size + numNewRows - _capacity;
       grow(numMissing);
     }
 
     size_t afterTarget = size() - target;
     // Move the data currently in the way back.
-    std::memmove(IdTableImpl<COLS>::_data +
-                     (target + numNewRows) * IdTableImpl<COLS>::_cols,
-                 IdTableImpl<COLS>::_data + target * IdTableImpl<COLS>::_cols,
-                 sizeof(Id) * IdTableImpl<COLS>::_cols * afterTarget);
+    std::memmove(_data +
+                     (target + numNewRows) * _cols,
+                 _data + target * _cols,
+                 sizeof(T) * _cols * afterTarget);
 
-    IdTableImpl<COLS>::_size += numNewRows;
+    _size += numNewRows;
     // Copy the new data
-    std::memcpy(IdTableImpl<COLS>::_data + target * IdTableImpl<COLS>::_cols,
+    std::memcpy(_data + target * _cols,
                 (*begin).data(),
-                sizeof(Id) * IdTableImpl<COLS>::_cols * numNewRows);
+                sizeof(T) * _cols * numNewRows);
   }
 
   /**
@@ -754,8 +760,8 @@ class IdTableStatic : private IdTableImpl<COLS> {
              const const_iterator& end = iterator(nullptr, 0, 0)) {
     iterator actualEnd = end;
     if (actualEnd == iterator(nullptr, 0, 0)) {
-      actualEnd = iterator(IdTableImpl<COLS>::_data, begin.row() + 1,
-                           IdTableImpl<COLS>::_cols);
+      actualEnd = iterator(_data, begin.row() + 1,
+                           _cols);
     }
     if (actualEnd.row() > IdTableStatic<COLS>::end().row()) {
       actualEnd = IdTableStatic<COLS>::end();
@@ -766,22 +772,22 @@ class IdTableStatic : private IdTableImpl<COLS> {
     size_t numErased = actualEnd.row() - begin.row();
     size_t numToMove = size() - actualEnd.row();
     std::memmove(
-        IdTableImpl<COLS>::_data + begin.row() * IdTableImpl<COLS>::_cols,
-        IdTableImpl<COLS>::_data + actualEnd.row() * IdTableImpl<COLS>::_cols,
-        numToMove * IdTableImpl<COLS>::_cols * sizeof(Id));
-    IdTableImpl<COLS>::_size -= numErased;
+        _data + begin.row() * _cols,
+        _data + actualEnd.row() * _cols,
+        numToMove * _cols * sizeof(T));
+    _size -= numErased;
   }
 
-  void clear() { IdTableImpl<COLS>::_size = 0; }
+  void clear() { _size = 0; }
 
   /**
    * @brief Ensures this table has enough space allocated to store rows many
    *        rows of data
    **/
   void reserve(size_t rows) {
-    if (IdTableImpl<COLS>::_capacity < rows) {
-      // Add rows - IdTableImpl<COLS>::_capacity many new rows
-      grow(rows - IdTableImpl<COLS>::_capacity);
+    if (_capacity < rows) {
+      // Add rows - _capacity many new rows
+      grow(rows - _capacity);
     }
   }
 
@@ -789,11 +795,11 @@ class IdTableStatic : private IdTableImpl<COLS> {
    * @brief Resizes this IdTableStatic to have at least row many rows.
    **/
   void resize(size_t rows) {
-    if (rows > IdTableImpl<COLS>::_size) {
+    if (rows > _size) {
       reserve(rows);
-      IdTableImpl<COLS>::_size = rows;
-    } else if (rows < IdTableImpl<COLS>::_size) {
-      IdTableImpl<COLS>::_size = rows;
+      _size = rows;
+    } else if (rows < _size) {
+      _size = rows;
     }
   }
 
@@ -806,12 +812,12 @@ class IdTableStatic : private IdTableImpl<COLS> {
   IdTableStatic<NEW_COLS> moveToStatic() {
     IdTableStatic<NEW_COLS> tmp;
     tmp.setCols(cols());
-    tmp._data = IdTableImpl<COLS>::_data;
-    tmp._size = IdTableImpl<COLS>::_size;
-    tmp._capacity = IdTableImpl<COLS>::_capacity;
-    IdTableImpl<COLS>::_data = nullptr;
-    IdTableImpl<COLS>::_size = 0;
-    IdTableImpl<COLS>::_capacity = 0;
+    tmp._data = _data;
+    tmp._size = _size;
+    tmp._capacity = _capacity;
+    _data = nullptr;
+    _size = 0;
+    _capacity = 0;
     return tmp;
   };
 
@@ -819,9 +825,9 @@ class IdTableStatic : private IdTableImpl<COLS> {
   const IdTableStatic<NEW_COLS> asStaticView() const {
     IdTableStatic<NEW_COLS> tmp;
     tmp.setCols(cols());
-    tmp._data = IdTableImpl<COLS>::_data;
-    tmp._size = IdTableImpl<COLS>::_size;
-    tmp._capacity = IdTableImpl<COLS>::_capacity;
+    tmp._data = _data;
+    tmp._size = _size;
+    tmp._capacity = _capacity;
     // This prevents the view from freeing the memory
     tmp._manage_storage = false;
     return tmp;
@@ -832,19 +838,19 @@ class IdTableStatic : private IdTableImpl<COLS> {
    * id tables data. This is effectively a move operation that also
    * changes the type to an equibalent one.
    **/
-  IdTable moveToDynamic() {
-    IdTable tmp(cols());
-    tmp._data = IdTableImpl<COLS>::_data;
-    tmp._size = IdTableImpl<COLS>::_size;
-    tmp._capacity = IdTableImpl<COLS>::_capacity;
-    IdTableImpl<COLS>::_data = nullptr;
-    IdTableImpl<COLS>::_size = 0;
-    IdTableImpl<COLS>::_capacity = 0;
+  IdTable<T> moveToDynamic() {
+    IdTable<T> tmp(cols());
+    tmp._data = _data;
+    tmp._size = _size;
+    tmp._capacity = _capacity;
+    _data = nullptr;
+    _size = 0;
+    _capacity = 0;
     return tmp;
   };
 
   // Support for ostreams
-  friend std::ostream& operator<<(std::ostream& out,
+  inline friend std::ostream& operator<<(std::ostream& out,
                                   const IdTableStatic<COLS>& table) {
     out << "IdTable(" << ((void*)table.data()) << ") with " << table.size()
         << " rows and " << table.cols() << " columns" << std::endl;
@@ -865,29 +871,29 @@ class IdTableStatic : private IdTableImpl<COLS> {
    *        rows.
    **/
   void grow(size_t newRows = 0) {
-    // If IdTableImpl<COLS>::_data is nullptr so is IdTableImpl<COLS>::_size
+    // If _data is nullptr so is _size
     // which makes this safe
     size_t new_capacity;
     if (newRows == 0) {
-      new_capacity = IdTableImpl<COLS>::_capacity * GROWTH_FACTOR + 1;
+      new_capacity = _capacity * GROWTH_FACTOR + 1;
     } else {
-      new_capacity = IdTableImpl<COLS>::_capacity + newRows;
+      new_capacity = _capacity + newRows;
     }
-    Id* larger = reinterpret_cast<Id*>(
-        realloc(IdTableImpl<COLS>::_data,
-                new_capacity * IdTableImpl<COLS>::_cols * sizeof(Id)));
+    T* larger = reinterpret_cast<T*>(
+        realloc(_data,
+                new_capacity * _cols * sizeof(T)));
     if (larger == nullptr) {
       // We were unable to acquire the memory
-      free(IdTableImpl<COLS>::_data);
-      IdTableImpl<COLS>::_data = nullptr;
-      IdTableImpl<COLS>::_capacity = 0;
-      IdTableImpl<COLS>::_size = 0;
+      free(_data);
+      _data = nullptr;
+      _capacity = 0;
+      _size = 0;
       LOG(ERROR) << "Unable to grow the IDTable at "
                  << (reinterpret_cast<void*>(this)) << std::endl;
       throw std::bad_alloc();
     }
-    IdTableImpl<COLS>::_data = larger;
-    IdTableImpl<COLS>::_capacity = new_capacity;
+    _data = larger;
+    _capacity = new_capacity;
   }
 };
 
@@ -901,7 +907,7 @@ void swap(IdTableStatic<COLS>& left, IdTableStatic<COLS>& right) {
   // method here. setCols is guaranteed to always be defined even
   // if COLS != 0 (It might not have any effect though).
   size_t rcols = right.cols();
-  right.IdTableImpl<COLS>::setCols(left.cols());
-  left.IdTableImpl<COLS>::setCols(rcols);
+  right.setCols(left.cols());
+  left.setCols(rcols);
   swap(left._manage_storage, right._manage_storage);
 }

@@ -47,10 +47,10 @@ using AccessReturnType_t = typename AccessReturnTypeGetter<StringType>::type;
 struct IdRange {
   IdRange() : _first(), _last() {}
 
-  IdRange(Id first, Id last) : _first(first), _last(last) {}
+  IdRange(SimpleId first, SimpleId last) : _first(first), _last(last) {}
 
-  Id _first;
-  Id _last;
+  SimpleId _first;
+  SimpleId _last;
 };
 
 //! Stream operator for convenience.
@@ -131,7 +131,7 @@ class Vocabulary {
   //! Only enabled when uncompressed which also means no externalization
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
   const std::optional<std::reference_wrapper<const string>> operator[](
-      Id id) const {
+      SimpleId id) const {
     if (id < _words.size()) {
       return _words[static_cast<size_t>(id)];
     } else {
@@ -143,15 +143,13 @@ class Vocabulary {
   //! word is not in the vocabulary. Returns an lvalue because compressed or
   //! externalized words don't allow references
   template <typename U = StringType, typename = enable_if_compressed<U>>
-  const std::optional<string> idToOptionalString(Id id) const {
+  const std::optional<string> idToOptionalString(SimpleId id) const {
     if (id < _numbers.size()) {
       return _numbers[id].toXSDValue();
     }
     if (id < _words.size() + _numbers.size()) {
       // internal, prefixCompressed word
       return expandPrefix(_words[static_cast<size_t>(id - _numbers.size())]);
-    } else if (id == ID_NO_VALUE) {
-      return std::nullopt;
     } else {
       // this word must be externalized
       id -= (_words.size() + _numbers.size());
@@ -160,7 +158,7 @@ class Vocabulary {
     }
   }
 
-  std::optional<FancyId> idToNumericValue(Id id) const {
+  std::optional<FancyId> idToNumericValue(SimpleId id) const {
     if (id < _numbers.size()) {
       return _numbers[id];
     }
@@ -171,7 +169,7 @@ class Vocabulary {
 
   //! Get the word with the given id.
   //! lvalue for compressedString and const& for string-based vocabulary
-  AccessReturnType_t<StringType> at(Id id) const {
+  AccessReturnType_t<StringType> at(SimpleId id) const {
     if constexpr (_isCompressed) {
       return expandPrefix(_words[static_cast<size_t>(id)]);
     } else {
@@ -179,7 +177,7 @@ class Vocabulary {
     }
   }
 
-  // AccessReturnType_t<StringType> at(Id id) const { return operator[](id); }
+  // AccessReturnType_t<StringType> at(SimpleId id) const { return operator[](id); }
 
   //! Get the number of words in the vocabulary.
   size_t size() const { return _words.size(); }
@@ -187,9 +185,9 @@ class Vocabulary {
   //! Reserve space for the given number of words.
   void reserve(unsigned int n) { _words.reserve(n); }
 
-  //! Get an Id from the vocabulary for some "normal" word.
+  //! Get an SimpleId from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
-  bool getId(const ParsedVocabularyEntry& entry, Id* id) const {
+  bool getId(const ParsedVocabularyEntry& entry, SimpleId* id) const {
     if (auto ptr = std::get_if<FancyId>(&entry)) {
       *id = std::lower_bound(_numbers.begin(), _numbers.end(), *ptr) - _numbers.begin();
       return *id < _numbers.size() && _numbers[*id] == *ptr;
@@ -197,7 +195,7 @@ class Vocabulary {
     const auto& word = std::get<std::string>(entry);
     if (!shouldBeExternalized(word)) {
       // need the TOTAL level because we want the unique word.
-      *id = static_cast<Id>(std::lower_bound(_words.begin(), _words.end(), word,
+      *id = static_cast<SimpleId>(std::lower_bound(_words.begin(), _words.end(), word,
                                               getLowerBoundLambda(SortLevel::TOTAL)) -
                              _words.begin());
       // works for the case insensitive version because
@@ -211,16 +209,16 @@ class Vocabulary {
     return success;
   }
 
-  Id getValueIdForLT(const ParsedVocabularyEntry & indexWord, const SortLevel level) const {
-    Id lb = lower_bound(indexWord, level);
+  SimpleId getValueIdForLT(const ParsedVocabularyEntry & indexWord, const SortLevel level) const {
+    SimpleId lb = lower_bound(indexWord, level);
     return lb;
   }
-  Id getValueIdForGE(const ParsedVocabularyEntry & indexWord, const SortLevel level) const {
+  SimpleId getValueIdForGE(const ParsedVocabularyEntry & indexWord, const SortLevel level) const {
     return getValueIdForLT(indexWord, level);
   }
 
-  Id getValueIdForLE(const ParsedVocabularyEntry & indexWord, const SortLevel level) const {
-    Id lb = upper_bound(indexWord, level);
+  SimpleId getValueIdForLE(const ParsedVocabularyEntry & indexWord, const SortLevel level) const {
+    SimpleId lb = upper_bound(indexWord, level);
     if (lb > 0) {
       // We actually retrieved the first word that is bigger than our entry.
       // TODO<joka921>: What to do, if the 0th entry is already too big?
@@ -229,11 +227,11 @@ class Vocabulary {
     return lb;
   }
 
-  Id getValueIdForGT(const ParsedVocabularyEntry & indexWord, const SortLevel level) const {
+  SimpleId getValueIdForGT(const ParsedVocabularyEntry & indexWord, const SortLevel level) const {
     return getValueIdForLE(indexWord, level);
   }
 
-  //! Get an Id range that matches a prefix.
+  //! Get an SimpleId range that matches a prefix.
   //! Return value signals if something was found at all.
   //! CAVEAT! TODO<discovered by joka921>: This is only used for the text index,
   //! and uses a range, where the last index is still within the range which is
@@ -258,7 +256,7 @@ class Vocabulary {
   void createFromSet(const ad_utility::HashSet<StringType>& set);
 
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  ad_utility::HashMap<string, Id> asMap();
+  ad_utility::HashMap<string, SimpleId> asMap();
 
   static bool isLiteral(const string& word);
   static bool isExternalizedLiteral(const string& word);
@@ -347,16 +345,16 @@ class Vocabulary {
   /// prefix according to the collation level the first Id is included in the
   /// range, the last one not. Currently only supports the Primary collation
   /// level, due to limitations in the StringSortComparators
-  std::pair<Id, Id> prefix_range(const string& prefix) const {
+  std::pair<SimpleId, SimpleId> prefix_range(const string& prefix) const {
     if (prefix.empty()) {
       return {0, _words.size()};
     }
-    Id lb = lower_bound(prefix, SortLevel::PRIMARY);
+    SimpleId lb = lower_bound(prefix, SortLevel::PRIMARY);
     auto transformed = _caseComparator.transformToFirstPossibleBiggerValue(
         prefix, SortLevel::PRIMARY);
 
     auto pred = getLowerBoundLambda<decltype(transformed)>(SortLevel::PRIMARY);
-    auto ub = static_cast<Id>(
+    auto ub = static_cast<SimpleId>(
         std::lower_bound(_words.begin(), _words.end(), transformed, pred) -
         _words.begin());
 
@@ -391,24 +389,24 @@ class Vocabulary {
     }
   }
   // Wraps std::lower_bound and returns an index instead of an iterator
-  Id lower_bound(const ParsedVocabularyEntry & entry,
+  SimpleId lower_bound(const ParsedVocabularyEntry & entry,
                  const SortLevel level = SortLevel::QUARTERNARY) const {
     if (auto ptr = std::get_if<FancyId>(&entry)) {
       return std::lower_bound(_numbers.begin(), _numbers.end(), *ptr) - _numbers.begin();
     }
     const auto& word = std::get<std::string>(entry);
-    return static_cast<Id>(std::lower_bound(_words.begin(), _words.end(), word,
+    return static_cast<SimpleId>(std::lower_bound(_words.begin(), _words.end(), word,
                                             getLowerBoundLambda(level)) -
                            _words.begin()) + _numbers.size();
   }
 
   // _______________________________________________________________
-  Id upper_bound(const ParsedVocabularyEntry & entry, const SortLevel level) const {
+  SimpleId upper_bound(const ParsedVocabularyEntry & entry, const SortLevel level) const {
     if (auto ptr = std::get_if<FancyId>(&entry)) {
       return std::upper_bound(_numbers.begin(), _numbers.end(), *ptr) - _numbers.begin();
     }
     const auto& word = std::get<std::string>(entry);
-    return static_cast<Id>(std::upper_bound(_words.begin(), _words.end(), word,
+    return static_cast<SimpleId>(std::upper_bound(_words.begin(), _words.end(), word,
                                             getUpperBoundLambda(level)) -
                            _words.begin()) + _numbers.size();
   }

@@ -30,9 +30,9 @@ class BlockMetaData {
  public:
   BlockMetaData() : _firstLhs(0), _startOffset(0) {}
 
-  BlockMetaData(Id lhs, off_t start) : _firstLhs(lhs), _startOffset(start) {}
+  BlockMetaData(SimpleId lhs, off_t start) : _firstLhs(lhs), _startOffset(start) {}
 
-  Id _firstLhs;
+  SimpleId _firstLhs;
   off_t _startOffset;
 };
 
@@ -40,7 +40,7 @@ class FullRelationMetaData {
  public:
   FullRelationMetaData();
 
-  FullRelationMetaData(Id relId, off_t startFullIndex, size_t nofElements,
+  FullRelationMetaData(SimpleId relId, off_t startFullIndex, size_t nofElements,
                        double col1Mult, double col2Mult, bool isFunctional,
                        bool hasBlocks);
 
@@ -75,7 +75,7 @@ class FullRelationMetaData {
 
   off_t getStartOfLhs() const;
 
-  Id _relId;
+  SimpleId _relId;
   off_t _startFullIndex;
 
   friend ad_utility::File& operator<<(ad_utility::File& f,
@@ -132,14 +132,14 @@ class BlockBasedRelationMetaData {
   // the desired lhs if such a block exists at all.
   // If the lhs does not exists at all, this will only be clear after reading
   // said block.
-  pair<off_t, size_t> getBlockStartAndNofBytesForLhs(Id lhs) const;
+  pair<off_t, size_t> getBlockStartAndNofBytesForLhs(SimpleId lhs) const;
 
   // Gets the block after the one returned by getBlockStartAndNofBytesForLhs.
   // This is necessary for finding rhs upper bounds for the last item in a
   // block.
   // If this is equal to the block returned by getBlockStartAndNofBytesForLhs,
   // it means it is the last block and the offsetAfter can be used.
-  pair<off_t, size_t> getFollowBlockForLhs(Id lhs) const;
+  pair<off_t, size_t> getFollowBlockForLhs(SimpleId lhs) const;
 
   off_t _startRhs;
   off_t _offsetAfter;

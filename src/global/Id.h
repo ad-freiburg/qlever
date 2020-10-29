@@ -24,9 +24,6 @@ constexpr uint64_t  extractBits(uint64_t input, uint8_t lower, uint8_t upper) {
   return input & mask;
 }
 
-/// when we really just need an Id
-using Id = uint64_t;
-static constexpr Id ID_NO_VALUE = std::numeric_limits<Id>::max() - 2;
 
 
 
@@ -47,7 +44,7 @@ class alignas(alignof(uint64_t)) FancyId {
   static constexpr uint32_t TAG_MASK = 7ull << 29;
   static constexpr uint32_t SIGN_MASK = 1ull << 28;
 // A value to use when the result should be empty (e.g. due to an optional join)
-  static FancyId NoValue () { return FancyId(VOCAB, INTERNAL_MAX_VAL);}
+  static constexpr FancyId NoValue () { return FancyId(VOCAB, INTERNAL_MAX_VAL, std::true_type{});}
   // TODO<joka921, C++20> with std::bit_cast this can be constexpr
   static uint32_t nan() {
     return bit_cast<uint32_t>(std::numeric_limits<float>::quiet_NaN());
@@ -220,7 +217,8 @@ class alignas(alignof(uint64_t)) FancyId {
 
 
   // construct from a type and a 64 bit payload
-  constexpr FancyId(Type t, uint64_t val) : value_() {
+  template <typename AllowNoValue = std::false_type>
+  constexpr FancyId(Type t, uint64_t val, [[maybe_unused]] AllowNoValue ttt = AllowNoValue{}) : value_() {
     // low bits
     value_.un.rest = static_cast<uint32_t>(val);
     value_.tagAndHigh = val >> 32u;
@@ -229,8 +227,17 @@ class alignas(alignof(uint64_t)) FancyId {
     if (t == FLOAT) {
       throw std::runtime_error("Wrong fancyId constructor used, should never happen, please report");
     }
-    if (t != INTEGER && val >= INTERNAL_MAX_VAL) {
-      throw std::runtime_error("Value is too big to be represented by a fancy Id");
+    if constexpr (AllowNoValue::value) {
+      if (t != INTEGER && val > INTERNAL_MAX_VAL) {
+        throw std::runtime_error(
+            "Value is too big to be represented by a fancy Id");
+      }
+
+    } else {
+      if (t != INTEGER && val >= INTERNAL_MAX_VAL) {
+        throw std::runtime_error(
+            "Value is too big to be represented by a fancy Id");
+      }
     }
     auto intval = static_cast<int64_t>(val);
     if (t == INTEGER && (intval > INTEGER_MAX_VAL || intval < INTEGER_MIN_VAL) ) {
@@ -384,3 +391,9 @@ namespace std {
     }
   };
 }
+
+/// when we really just need an Id
+using Id = FancyId;
+static constexpr Id ID_NO_VALUE = Id::NoValue();
+
+using SimpleId = uint64_t;

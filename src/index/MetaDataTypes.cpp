@@ -16,7 +16,7 @@ FullRelationMetaData::FullRelationMetaData()
     : _relId(0), _startFullIndex(0), _typeMultAndNofElements(0) {}
 
 // _____________________________________________________________________________
-FullRelationMetaData::FullRelationMetaData(Id relId, off_t startFullIndex,
+FullRelationMetaData::FullRelationMetaData(SimpleId relId, off_t startFullIndex,
                                            size_t nofElements, double col1Mult,
                                            double col2Mult, bool isFunctional,
                                            bool hasBlocks)
@@ -101,12 +101,12 @@ uint8_t FullRelationMetaData::getCol2LogMultiplicity() const {
 
 // _____________________________________________________________________________
 pair<off_t, size_t> BlockBasedRelationMetaData::getBlockStartAndNofBytesForLhs(
-    Id lhs) const {
+    SimpleId lhs) const {
   // get the first block where the first Id is greater or equal to what we are
   // looking for.
   auto it = std::lower_bound(
       _blocks.begin(), _blocks.end(), lhs,
-      [](const BlockMetaData& a, Id lhs) { return a._firstLhs < lhs; });
+      [](const BlockMetaData& a, SimpleId lhs) { return a._firstLhs < lhs; });
 
   // Go back one block unless perfect lhs match.
   if (it == _blocks.end() || it->_firstLhs > lhs) {
@@ -134,10 +134,10 @@ pair<off_t, size_t> BlockBasedRelationMetaData::getBlockStartAndNofBytesForLhs(
 
 // _____________________________________________________________________________
 pair<off_t, size_t> BlockBasedRelationMetaData::getFollowBlockForLhs(
-    Id lhs) const {
+    SimpleId lhs) const {
   auto it = std::lower_bound(
       _blocks.begin(), _blocks.end(), lhs,
-      [](const BlockMetaData& a, Id lhs) { return a._firstLhs < lhs; });
+      [](const BlockMetaData& a, SimpleId lhs) { return a._firstLhs < lhs; });
 
   // Go back one block unless perfect lhs match.
   if (it == _blocks.end() || it->_firstLhs > lhs) {
@@ -171,7 +171,7 @@ pair<off_t, size_t> BlockBasedRelationMetaData::getFollowBlockForLhs(
 // _____________________________________________________________________________
 FullRelationMetaData& FullRelationMetaData::createFromByteBuffer(
     unsigned char* buffer) {
-  _relId = *reinterpret_cast<Id*>(buffer);
+  _relId = *reinterpret_cast<SimpleId*>(buffer);
   _startFullIndex = *reinterpret_cast<off_t*>(buffer + sizeof(_relId));
   _typeMultAndNofElements =
       *reinterpret_cast<uint64_t*>(buffer + sizeof(Id) + sizeof(off_t));

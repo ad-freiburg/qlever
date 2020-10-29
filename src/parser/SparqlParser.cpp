@@ -472,7 +472,7 @@ std::string_view SparqlParser::readTriplePart(const std::string& s,
 // TODO<joka921> : is this unused?
 /*
 // _____________________________________________________________________________
-void SparqlParser::addWhereTriple(
+void sparqlParser::addWhereTriple(
     const string& str, std::shared_ptr<ParsedQuery::GraphPattern> pattern) {
   size_t i = 0;
   while (i < str.size() &&

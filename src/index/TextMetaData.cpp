@@ -8,14 +8,14 @@
 
 // _____________________________________________________________________________
 const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
-    const Id lower, const Id upper) const {
+    const SimpleId lower, const SimpleId upper) const {
   AD_CHECK_GE(upper, lower);
   assert(_blocks.size() > 0);
   assert(_blocks.size() ==
          _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());
 
   // Binary search in the sorted _blockUpperBoundWordIds vector.
-  vector<Id>::const_iterator it = std::lower_bound(
+  vector<SimpleId>::const_iterator it = std::lower_bound(
       _blockUpperBoundWordIds.begin(), _blockUpperBoundWordIds.end(), lower);
 
   // If the word would be behind all that, return the last block
@@ -44,13 +44,13 @@ const TextBlockMetaData& TextMetaData::getBlockInfoByWordRange(
 }
 
 // _____________________________________________________________________________
-bool TextMetaData::existsTextBlockForEntityId(const Id eid) const {
+bool TextMetaData::existsTextBlockForEntityId(const SimpleId eid) const {
   assert(_blocks.size() > 0);
   assert(_blocks.size() ==
          _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());
 
   // Binary search in the sorted _blockUpperBoundWordIds vector.
-  vector<Id>::const_iterator it = std::lower_bound(
+  vector<SimpleId>::const_iterator it = std::lower_bound(
       _blockUpperBoundEntityIds.begin(), _blockUpperBoundEntityIds.end(), eid);
 
   return (*it == eid);
@@ -58,13 +58,13 @@ bool TextMetaData::existsTextBlockForEntityId(const Id eid) const {
 
 // _____________________________________________________________________________
 const TextBlockMetaData& TextMetaData::getBlockInfoByEntityId(
-    const Id eid) const {
+    const SimpleId eid) const {
   assert(_blocks.size() > 0);
   assert(_blocks.size() ==
          _blockUpperBoundWordIds.size() + _blockUpperBoundEntityIds.size());
 
   // Binary search in the sorted _blockUpperBoundWordIds vector.
-  vector<Id>::const_iterator it = std::lower_bound(
+  vector<SimpleId>::const_iterator it = std::lower_bound(
       _blockUpperBoundEntityIds.begin(), _blockUpperBoundEntityIds.end(), eid);
 
   assert(*it == eid);
@@ -149,9 +149,9 @@ ad_utility::File& operator<<(ad_utility::File& f, const TextBlockMetaData& md) {
 TextBlockMetaData& TextBlockMetaData::createFromByteBuffer(
     unsigned char* buffer) {
   off_t offset = 0;
-  _firstWordId = *reinterpret_cast<Id*>(buffer + offset);
+  _firstWordId = *reinterpret_cast<SimpleId*>(buffer + offset);
   offset += sizeof(_firstWordId);
-  _lastWordId = *reinterpret_cast<Id*>(buffer + offset);
+  _lastWordId = *reinterpret_cast<SimpleId*>(buffer + offset);
   offset += sizeof(_lastWordId);
   _cl.createFromByteBuffer(buffer + offset);
   offset += ContextListMetaData::sizeOnDisk();

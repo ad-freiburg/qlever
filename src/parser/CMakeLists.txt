@@ -11,3 +11,6 @@ add_library(parser
               PropertyPathParser.h PropertyPathParser.cpp
               SparqlLexer.h SparqlLexer.cpp XsdParser.h)
 target_link_libraries(parser re2 absl::flat_hash_map)
+
+
+add_subdirectory(sparqlParser)
