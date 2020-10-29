@@ -40,6 +40,9 @@ using std::vector;
 
 using json = nlohmann::json;
 
+using TextTable = IdTable<SimpleId>;
+using FancyTable = IdTable<FancyId>;
+
 // a simple struct for better naming
 struct VocabularyData {
   using TripleVec = stxxl::vector<array<Id, 3>>;
@@ -64,10 +67,10 @@ class TurtleParserDummy {};
 
 class Index {
  public:
-  using TripleVec = stxxl::vector<array<Id, 3>>;
+  using TripleVec = stxxl::vector<array<SimpleId, 3>>;
   // Block Id, Context Id, Word Id, Score, entity
-  using TextVec = stxxl::vector<tuple<Id, Id, Id, Score, bool>>;
-  using Posting = std::tuple<Id, Id, Score>;
+  using TextVec = stxxl::vector<tuple<SimpleId, SimpleId, SimpleId, Score, bool>>;
+  using Posting = std::tuple<SimpleId, SimpleId, Score>;
 
   // Forbid copy and assignment
   Index& operator=(const Index&) = delete;
@@ -158,12 +161,12 @@ class Index {
   // --------------------------------------------------------------------------
   //  -- RETRIEVAL ---
   // --------------------------------------------------------------------------
-  typedef vector<array<Id, 1>> WidthOneList;
-  typedef vector<array<Id, 2>> WidthTwoList;
-  typedef vector<array<Id, 3>> WidthThreeList;
-  typedef vector<array<Id, 4>> WidthFourList;
-  typedef vector<array<Id, 5>> WidthFiveList;
-  typedef vector<vector<Id>> VarWidthList;
+  typedef vector<array<SimpleId, 1>> WidthOneList;
+  typedef vector<array<SimpleId, 2>> WidthTwoList;
+  typedef vector<array<SimpleId, 3>> WidthThreeList;
+  typedef vector<array<SimpleId, 4>> WidthFourList;
+  typedef vector<array<SimpleId, 5>> WidthFiveList;
+  typedef vector<vector<SimpleId>> VarWidthList;
 
   // --------------------------------------------------------------------------
   // RDF RETRIEVAL
@@ -177,11 +180,11 @@ class Index {
   size_t sizeEstimate(const string& sub, const string& pred,
                       const ParsedVocabularyEntry & obj) const;
 
-  std::optional<string> idToOptionalString(Id id) const {
+  std::optional<string> idToOptionalString(SimpleId id) const {
     return _vocab.idToOptionalString(id);
   }
 
-  std::optional<FancyId> idToNumericValue(Id id) const {
+  std::optional<FancyId> idToNumericValue(SimpleId id) const {
     return _vocab.idToNumericValue(id);
   }
 
@@ -209,60 +212,60 @@ class Index {
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
   // --------------------------------------------------------------------------
-  const string& wordIdToString(Id id) const;
+  const string& wordIdToString(SimpleId id) const;
 
   size_t getSizeEstimate(const string& words) const;
 
-  void getContextListForWords(const string& words, IdTable* result) const;
+  void getContextListForWords(const string& words, TextTable* result) const;
 
   void getECListForWordsOneVar(const string& words, size_t limit,
-                               IdTable* result) const;
+                               TextTable* result) const;
 
   // With two or more variables.
   void getECListForWords(const string& words, size_t nofVars, size_t limit,
-                         IdTable* result) const;
+                         TextTable* result) const;
 
   // With filtering. Needs many template instantiations but
   // only nofVars truly makes a difference. Others are just data types
   // of result tables.
-  void getFilteredECListForWords(const string& words, const IdTable& filter,
+  void getFilteredECListForWords(const string& words, const TextTable& filter,
                                  size_t filterColumn, size_t nofVars,
-                                 size_t limit, IdTable* result) const;
+                                 size_t limit, TextTable* result) const;
 
   // Special cast with a width-one filter.
   void getFilteredECListForWordsWidthOne(const string& words,
-                                         const IdTable& filter, size_t nofVars,
-                                         size_t limit, IdTable* result) const;
+                                         const TextTable& filter, size_t nofVars,
+                                         size_t limit, TextTable* result) const;
 
-  void getContextEntityScoreListsForWords(const string& words, vector<Id>& cids,
-                                          vector<Id>& eids,
+  void getContextEntityScoreListsForWords(const string& words, vector<SimpleId>& cids,
+                                          vector<SimpleId>& eids,
                                           vector<Score>& scores) const;
 
   template <size_t I>
   void getECListForWordsAndSingleSub(const string& words,
-                                     const vector<array<Id, I>>& subres,
+                                     const vector<array<SimpleId, I>>& subres,
                                      size_t subResMainCol, size_t limit,
-                                     vector<array<Id, 3 + I>>& res) const;
+                                     vector<array<SimpleId, 3 + I>>& res) const;
 
   void getECListForWordsAndTwoW1Subs(const string& words,
-                                     const vector<array<Id, 1>> subres1,
-                                     const vector<array<Id, 1>> subres2,
+                                     const vector<array<SimpleId, 1>> subres1,
+                                     const vector<array<SimpleId, 1>> subres2,
                                      size_t limit,
-                                     vector<array<Id, 5>>& res) const;
+                                     vector<array<SimpleId, 5>>& res) const;
 
   void getECListForWordsAndSubtrees(
       const string& words,
-      const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResVecs,
-      size_t limit, vector<vector<Id>>& res) const;
+      const vector<ad_utility::HashMap<SimpleId, vector<vector<SimpleId>>>>& subResVecs,
+      size_t limit, vector<vector<SimpleId>>& res) const;
 
-  void getWordPostingsForTerm(const string& term, vector<Id>& cids,
+  void getWordPostingsForTerm(const string& term, vector<SimpleId>& cids,
                               vector<Score>& scores) const;
 
-  void getEntityPostingsForTerm(const string& term, vector<Id>& cids,
-                                vector<Id>& eids, vector<Score>& scores) const;
+  void getEntityPostingsForTerm(const string& term, vector<SimpleId>& cids,
+                                vector<SimpleId>& eids, vector<Score>& scores) const;
 
-  string getTextExcerpt(Id cid) const {
-    if (cid == ID_NO_VALUE) {
+  string getTextExcerpt(SimpleId cid) const {
+    if (cid == SIMPLE_ID_NO_VALUE) {
       return std::string();
     } else {
       return _docsDB.getTextExcerpt(cid);
@@ -337,7 +340,7 @@ class Index {
   template <class PermutationImpl>
   vector<float> getMultiplicities(const ParsedVocabularyEntry& key,
                                   const PermutationImpl& p) const {
-    Id keyId;
+    SimpleId keyId;
     vector<float> res;
     if (_vocab.getId(key, &keyId) && p._meta.relationExists(keyId)) {
       auto rmd = p._meta.getRmd(keyId);
@@ -374,7 +377,7 @@ class Index {
    * Index class).
    */
   template <class Permutation>
-  void scan(Id key, IdTable* result, const Permutation& p) const {
+  void scan(Id key, IdTable<FancyId>* result, const Permutation& p) const {
     if (p._meta.relationExists(key)) {
       const FullRelationMetaData& rmd = p._meta.getRmd(key)._rmdPairs;
       result->reserve(rmd.getNofElements() + 2);
@@ -395,10 +398,10 @@ class Index {
    * Index class).
    */
   template <class Permutation>
-  void scan(const ParsedVocabularyEntry & key, IdTable* result, const Permutation& p) const {
+  void scan(const ParsedVocabularyEntry & key, IdTable<FancyId>* result, const Permutation& p) const {
     LOG(DEBUG) << "Performing " << p._readableName
                << " scan for full list for: " << key << "\n";
-    Id relId;
+    SimpleId relId;
     if (_vocab.getId(key, &relId)) {
       LOG(TRACE) << "Successfully got key ID.\n";
       scan(relId, result, p);
@@ -422,12 +425,12 @@ class Index {
    */
   // _____________________________________________________________________________
   template <class PermutationInfo>
-  void scan(const ParsedVocabularyEntry & keyFirst, const ParsedVocabularyEntry & keySecond, IdTable* result,
+  void scan(const ParsedVocabularyEntry & keyFirst, const ParsedVocabularyEntry & keySecond, IdTable<FancyId>* result,
             const PermutationInfo& p) const {
     LOG(DEBUG) << "Performing " << p._readableName << "  scan of relation "
                << keyFirst << " with fixed subject: " << keySecond << "...\n";
-    Id relId;
-    Id subjId;
+    SimpleId relId;
+    SimpleId subjId;
     if (_vocab.getId(keyFirst, &relId) && _vocab.getId(keySecond, &subjId)) {
       if (p._meta.relationExists(relId)) {
         auto rmd = p._meta.getRmd(relId);
@@ -447,7 +450,7 @@ class Index {
         } else {
           // If we don't have blocks, scan the whole relation and filter /
           // restrict.
-          IdTable fullRelation(2);
+          IdTable<FancyId> fullRelation(2);
           fullRelation.resize(rmd.getNofElements());
           p._file.read(fullRelation.data(),
                        rmd.getNofElements() * 2 * sizeof(Id),
@@ -477,7 +480,7 @@ class Index {
 
   TextMetaData _textMeta;
   DocsDB _docsDB;
-  vector<Id> _blockBoundaries;
+  vector<SimpleId> _blockBoundaries;
   off_t _currentoff_t;
   mutable ad_utility::File _textIndexFile;
 
@@ -669,16 +672,16 @@ class Index {
 
   void scanFunctionalRelation(const pair<off_t, size_t>& blockOff, Id lhsId,
                               ad_utility::File& indexFile,
-                              IdTable* result) const;
+                              IdTable<FancyId>* result) const;
 
   void scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                  const pair<off_t, size_t>& followBlock,
                                  Id lhsId, ad_utility::File& indexFile,
-                                 off_t upperBound, IdTable* result) const;
+                                 off_t upperBound, FancyTable* result) const;
 
-  void addContextToVector(TextVec::bufwriter_type& writer, Id context,
-                          const ad_utility::HashMap<Id, Score>& words,
-                          const ad_utility::HashMap<Id, Score>& entities);
+  void addContextToVector(TextVec::bufwriter_type& writer, SimpleId context,
+                          const ad_utility::HashMap<SimpleId, Score>& words,
+                          const ad_utility::HashMap<SimpleId, Score>& entities);
 
   template <typename T>
   void readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
@@ -692,11 +695,11 @@ class Index {
 
   void calculateBlockBoundaries();
 
-  Id getWordBlockId(Id wordId) const;
+  SimpleId getWordBlockId(SimpleId wordId) const;
 
-  Id getEntityBlockId(Id entityId) const;
+  SimpleId getEntityBlockId(SimpleId entityId) const;
 
-  bool isEntityBlockId(Id blockId) const;
+  bool isEntityBlockId(SimpleId blockId) const;
 
   //! Writes a list of elements (have to be able to be cast to unit64_t)
   //! to file.
@@ -705,9 +708,9 @@ class Index {
   size_t writeList(Numeric* data, size_t nofElements,
                    ad_utility::File& file) const;
 
-  typedef ad_utility::HashMap<Id, Id> IdCodeMap;
+  typedef ad_utility::HashMap<SimpleId, SimpleId> IdCodeMap;
   typedef ad_utility::HashMap<Score, Score> ScoreCodeMap;
-  typedef vector<Id> IdCodebook;
+  typedef vector<SimpleId> IdCodebook;
   typedef vector<Score> ScoreCodebook;
 
   //! Creates codebooks for lists that are supposed to be entropy encoded.
@@ -726,7 +729,7 @@ class Index {
   template <class T>
   void writeAsciiListFile(const string& filename, const T& ids) const;
 
-  void getRhsForSingleLhs(const IdTable& in, Id lhsId, IdTable* result) const;
+  void getRhsForSingleLhs(const FancyTable& in, SimpleId lhsId, FancyTable* result) const;
 
   bool isLiteral(const string& object);
 

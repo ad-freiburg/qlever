@@ -19,7 +19,7 @@ using TripleWithXSD = std::tuple<std::string, std::string, ParsedVocabularyEntry
 
 /// named value type for the ItemMap
 struct IdAndSplitVal {
-  Id m_id;
+  SimpleId m_id;
   TripleComponentComparator::SplitVal m_splitVal;
 };
 
@@ -34,7 +34,7 @@ using ItemVec = std::vector<std::pair<ParsedVocabularyEntry, IdAndSplitVal>>;
  */
 struct ItemMapManager {
   /// Construct by assigning the minimum Id that shall be returned by the map
-  explicit ItemMapManager(Id minId, const TripleComponentComparator* cmp)
+  explicit ItemMapManager(SimpleId minId, const TripleComponentComparator* cmp)
       : _map(), _minId(minId), m_comp(cmp) {}
   /// Minimum Id is 0
   ItemMapManager() = default;
@@ -45,9 +45,9 @@ struct ItemMapManager {
 
   /// If the key was seen before, return its preassigned Id. Else assign the
   /// Next free Id to the string, store and return it.
-  Id assignNextId(const string& key) {
+  SimpleId assignNextId(const string& key) {
     if (!_map.count(key)) {
-      Id res = _map.size() + _minId;
+      SimpleId res = _map.size() + _minId;
       _map[key] = {res, m_comp->extractAndTransformComparable(
                             key, TripleComponentComparator::Level::IDENTICAL)};
       return res;
@@ -56,12 +56,12 @@ struct ItemMapManager {
     }
   }
 
-  Id assignNextId(const ParsedVocabularyEntry& entry) {
+  SimpleId assignNextId(const ParsedVocabularyEntry& entry) {
     if (auto ptr = std::get_if<std::string>(&entry)) {
       return assignNextId(*ptr);
     } else {
       if (!_map.count(entry)) {
-        Id res = _map.size() + _minId;
+        SimpleId res = _map.size() + _minId;
         _map[entry] = {res, {}};
         return res;
       } else {
@@ -71,11 +71,11 @@ struct ItemMapManager {
   }
 
   /// call assignNextId for each of the Triple elements.
-  std::array<Id, 3> assignNextId(const TripleWithXSD & t) {
+  std::array<SimpleId, 3> assignNextId(const TripleWithXSD & t) {
     return {assignNextId(std::get<0>(t)), assignNextId(std::get<1>(t)), assignNextId(std::get<2>(t))};
   }
   ItemMap _map;
-  Id _minId = 0;
+  SimpleId _minId = 0;
   const TripleComponentComparator* m_comp = nullptr;
 };
 
@@ -127,7 +127,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
                               // and needed to make some completely unrelated
                               // unit tests pass.
   }
-  using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
+  using OptionalIds = std::array<std::optional<std::array<SimpleId, 3>>, 3>;
 
   /* given an index idx, returns a lambda that
    * - Takes a triple and a language tag
@@ -153,9 +153,9 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
                 std::get<1>(lt._triple), lt._langtag));
         auto& spoIds = *(res[0]);  // ids of original triple
         // extra triple <subject> @language@<predicate> <object>
-        res[1].emplace(array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
+        res[1].emplace(array<SimpleId, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
         // extra triple <object> ql:language-tag <@language>
-        res[2].emplace(array<Id, 3>{
+        res[2].emplace(array<SimpleId, 3>{
             spoIds[2], map.assignNextId(LANGUAGE_PREDICATE), langTagId});
       }
       return res;

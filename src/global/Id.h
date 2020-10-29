@@ -33,8 +33,9 @@ class alignas(alignof(uint64_t)) FancyId {
     VOCAB = 0,
     LOCAL_VOCAB = 1,
     DATE = 2,
+    TEXT = 3,
     // IMPORTANT: Integer and float must be consecutive for the ordering to work...
-    INTEGER = 3,
+    INTEGER = 4,
     FLOAT = 7
   };
   static constexpr uint64_t INTERNAL_MAX_VAL =~ (7ull << 61);
@@ -397,3 +398,4 @@ using Id = FancyId;
 static constexpr Id ID_NO_VALUE = Id::NoValue();
 
 using SimpleId = uint64_t;
+static constexpr SimpleId SIMPLE_ID_NO_VALUE = std::numeric_limits<SimpleId>::max() - 1;

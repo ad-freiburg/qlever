@@ -114,7 +114,7 @@ void IndexMetaData<MapType>::createFromByteBuffer(unsigned char* buf) {
 }
 // _____________________________________________________________________________
 template <class MapType>
-const RelationMetaData IndexMetaData<MapType>::getRmd(Id relId) const {
+const RelationMetaData IndexMetaData<MapType>::getRmd(SimpleId relId) const {
   const FullRelationMetaData& full = _data.getAsserted(relId);
   RelationMetaData ret(full);
   if (full.hasBlocks()) {
@@ -240,7 +240,7 @@ string IndexMetaData<MapType>::statistics() const {
 
 // _____________________________________________________________________________
 template <class MapType>
-size_t IndexMetaData<MapType>::getNofBlocksForRelation(const Id id) const {
+size_t IndexMetaData<MapType>::getNofBlocksForRelation(const SimpleId id) const {
   auto it = _blockData.find(id);
   if (it != _blockData.end()) {
     return it->second._blocks.size();

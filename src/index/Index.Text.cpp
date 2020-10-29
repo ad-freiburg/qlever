@@ -37,12 +37,12 @@ void Index::buildDocsDB(const string& docsFileName) {
   typedef stxxl::vector<off_t> OffVec;
   OffVec offsets;
   off_t currentOffset = 0;
-  Id currentContextId = 0;
+  SimpleId currentContextId = 0;
   char* buf = new char[BUFFER_SIZE_DOCSFILE_LINE];
   string line;
   while (docsFile.readLine(&line, buf, BUFFER_SIZE_DOCSFILE_LINE)) {
     size_t tab = line.find('\t');
-    Id contextId = static_cast<Id>(atol(line.substr(0, tab).c_str()));
+    SimpleId contextId = static_cast<SimpleId>(atol(line.substr(0, tab).c_str()));
     line = line.substr(tab + 1);
     ofs << line;
     while (currentContextId < contextId) {
@@ -137,9 +137,9 @@ void Index::passContextFileIntoVector(const string& contextFile,
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
 
   TextVec::bufwriter_type writer(vec);
-  ad_utility::HashMap<Id, Score> wordsInContext;
-  ad_utility::HashMap<Id, Score> entitiesInContext;
-  Id currentContext = 0;
+  ad_utility::HashMap<SimpleId, Score> wordsInContext;
+  ad_utility::HashMap<SimpleId, Score> entitiesInContext;
+  SimpleId currentContext = 0;
   size_t nofContexts = 0;
   size_t nofWordPostings = 0;
   size_t nofEntityPostings = 0;
@@ -156,7 +156,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
     }
     if (line._isEntity) {
       ++nofEntityPostings;
-      Id eid;
+      SimpleId eid;
       if (_vocab.getId(line._word, &eid)) {
         entitiesInContext[eid] += line._score;
       } else {
@@ -170,7 +170,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
       }
     } else {
       ++nofWordPostings;
-      Id wid;
+      SimpleId wid;
 #ifndef NDEBUG
       bool ret = _textVocab.getId(line._word, &wid);
       if (!ret) {
@@ -200,20 +200,20 @@ void Index::passContextFileIntoVector(const string& contextFile,
 
 // _____________________________________________________________________________
 void Index::addContextToVector(Index::TextVec::bufwriter_type& writer,
-                               Id context,
-                               const ad_utility::HashMap<Id, Score>& words,
-                               const ad_utility::HashMap<Id, Score>& entities) {
+                               SimpleId context,
+                               const ad_utility::HashMap<SimpleId, Score>& words,
+                               const ad_utility::HashMap<SimpleId, Score>& entities) {
   // Determine blocks for each word and each entity.
   // Add the posting to each block.
-  ad_utility::HashSet<Id> touchedBlocks;
+  ad_utility::HashSet<SimpleId> touchedBlocks;
   for (auto it = words.begin(); it != words.end(); ++it) {
-    Id blockId = getWordBlockId(it->first);
+    SimpleId blockId = getWordBlockId(it->first);
     touchedBlocks.insert(blockId);
     writer << std::make_tuple(blockId, context, it->first, it->second, false);
   }
 
   for (auto it = entities.begin(); it != entities.end(); ++it) {
-    Id blockId = getEntityBlockId(it->first);
+    SimpleId blockId = getEntityBlockId(it->first);
     touchedBlocks.insert(blockId);
     writer << std::make_tuple(blockId, context, it->first, it->second, false);
   }
@@ -223,7 +223,7 @@ void Index::addContextToVector(Index::TextVec::bufwriter_type& writer,
   // For example, there could be both words computer and computing
   // in the same context. Still, co-occurring entities would only have to be
   // written to a comp* block once.
-  for (Id blockId : touchedBlocks) {
+  for (SimpleId blockId : touchedBlocks) {
     for (auto it = entities.begin(); it != entities.end(); ++it) {
       // Don't add an entity to its own block..
       // FIX JUN 07 2017: DO add it. It's needed so that it is returned
@@ -241,9 +241,9 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
   // Detect block boundaries from the main key of the vec.
   // Write the data for each block.
   // First, there's the classic lists, then the additional entity ones.
-  Id currentBlockId = 0;
-  Id currentMinWordId = std::numeric_limits<Id>::max();
-  Id currentMaxWordId = std::numeric_limits<Id>::min();
+  SimpleId currentBlockId = 0;
+  SimpleId currentMinWordId = std::numeric_limits<SimpleId>::max();
+  SimpleId currentMaxWordId = std::numeric_limits<SimpleId>::min();
   vector<Posting> classicPostings;
   vector<Posting> entityPostings;
   size_t nofEntities = 0;
@@ -321,8 +321,8 @@ ContextListMetaData Index::writePostings(ad_utility::File& out,
 
   // Collect the individual lists
   // Context lists are gap encoded, word and score lists frequency encoded.
-  Id* contextList = new Id[meta._nofElements];
-  Id* wordList = new Id[meta._nofElements];
+  SimpleId* contextList = new SimpleId[meta._nofElements];
+  SimpleId* wordList = new SimpleId[meta._nofElements];
   Score* scoreList = new Score[meta._nofElements];
 
   size_t n = 0;
@@ -335,14 +335,14 @@ ContextListMetaData Index::writePostings(ad_utility::File& out,
   createCodebooks(postings, wordCodeMap, wordCodebook, scoreCodeMap,
                   scoreCodebook);
 
-  Id lastContext = std::get<0>(postings[0]);
+  SimpleId lastContext = std::get<0>(postings[0]);
   contextList[n] = lastContext;
   wordList[n] = wordCodeMap[std::get<1>(postings[0])];
   scoreList[n] = scoreCodeMap[std::get<2>(postings[0])];
   ++n;
 
   for (auto it = postings.begin() + 1; it < postings.end(); ++it) {
-    Id gap = std::get<0>(*it) - lastContext;
+    SimpleId gap = std::get<0>(*it) - lastContext;
     contextList[n] = gap;
     lastContext = std::get<0>(*it);
     wordList[n] = wordCodeMap[std::get<1>(*it)];
@@ -425,19 +425,19 @@ void Index::calculateBlockBoundaries() {
 }
 
 // _____________________________________________________________________________
-Id Index::getWordBlockId(Id wordId) const {
-  return static_cast<Id>(std::lower_bound(_blockBoundaries.begin(),
+SimpleId Index::getWordBlockId(SimpleId wordId) const {
+  return static_cast<SimpleId>(std::lower_bound(_blockBoundaries.begin(),
                                           _blockBoundaries.end(), wordId) -
                          _blockBoundaries.begin());
 }
 
 // _____________________________________________________________________________
-Id Index::getEntityBlockId(Id entityId) const {
+SimpleId Index::getEntityBlockId(SimpleId entityId) const {
   return entityId + _blockBoundaries.size();
 }
 
 // _____________________________________________________________________________
-bool Index::isEntityBlockId(Id blockId) const {
+bool Index::isEntityBlockId(SimpleId blockId) const {
   return blockId >= _blockBoundaries.size();
 }
 
@@ -463,7 +463,7 @@ void Index::createCodebooks(const vector<Index::Posting>& postings,
                             Index::IdCodebook& wordCodebook,
                             Index::ScoreCodeMap& scoreCodemap,
                             Index::ScoreCodebook& scoreCodebook) const {
-  ad_utility::HashMap<Id, size_t> wfMap;
+  ad_utility::HashMap<SimpleId, size_t> wfMap;
   ad_utility::HashMap<Score, size_t> sfMap;
   for (const auto& p : postings) {
     wfMap[std::get<1>(p)] = 0;
@@ -473,7 +473,7 @@ void Index::createCodebooks(const vector<Index::Posting>& postings,
     ++wfMap[std::get<1>(p)];
     ++sfMap[std::get<2>(p)];
   }
-  vector<std::pair<Id, size_t>> wfVec;
+  vector<std::pair<SimpleId, size_t>> wfVec;
   wfVec.resize(wfMap.size());
   size_t i = 0;
   for (auto it = wfMap.begin(); it != wfMap.end(); ++it) {
@@ -490,7 +490,7 @@ void Index::createCodebooks(const vector<Index::Posting>& postings,
     ++i;
   }
   std::sort(wfVec.begin(), wfVec.end(),
-            [](const std::pair<Id, size_t>& a, const std::pair<Id, size_t>& b) {
+            [](const std::pair<SimpleId, size_t>& a, const std::pair<SimpleId, size_t>& b) {
               return a.second > b.second;
             });
   std::sort(
@@ -525,24 +525,24 @@ void Index::openTextFileHandle() {
 }
 
 // _____________________________________________________________________________
-const string& Index::wordIdToString(Id id) const {
+const string& Index::wordIdToString(SimpleId id) const {
   return _textVocab[id].value();
 }
 
 // _____________________________________________________________________________
 void Index::getContextListForWords(const string& words,
-                                   IdTable* dynResult) const {
+                                   TextTable* dynResult) const {
   LOG(DEBUG) << "In getContextListForWords...\n";
   auto terms = ad_utility::split(words, ' ');
   AD_CHECK(terms.size() > 0);
 
-  vector<Id> cids;
+  vector<SimpleId> cids;
   vector<Score> scores;
   if (terms.size() > 1) {
-    vector<vector<Id>> cidVecs;
+    vector<vector<SimpleId>> cidVecs;
     vector<vector<Score>> scoreVecs;
     for (auto& term : terms) {
-      cidVecs.push_back(vector<Id>());
+      cidVecs.push_back(vector<SimpleId>());
       scoreVecs.push_back(vector<Score>());
       getWordPostingsForTerm(term, cidVecs.back(), scoreVecs.back());
     }
@@ -550,7 +550,7 @@ void Index::getContextListForWords(const string& words,
       FTSAlgorithms::intersectTwoPostingLists(
           cidVecs[0], scoreVecs[1], cidVecs[1], scoreVecs[1], cids, scores);
     } else {
-      vector<Id> dummy;
+      vector<SimpleId> dummy;
       FTSAlgorithms::intersectKWay(cidVecs, scoreVecs, nullptr, cids, dummy,
                                    scores);
     }
@@ -559,7 +559,7 @@ void Index::getContextListForWords(const string& words,
   }
 
   LOG(DEBUG) << "Packing lists into a ResultTable\n...";
-  IdTableStatic<2> result = dynResult->moveToStatic<2>();
+  IdTableStatic<SimpleId, 2> result = dynResult->moveToStatic<2>();
   result.resize(cids.size());
   for (size_t i = 0; i < cids.size(); ++i) {
     result(i, 0) = cids[i];
@@ -570,7 +570,7 @@ void Index::getContextListForWords(const string& words,
 }
 
 // _____________________________________________________________________________
-void Index::getWordPostingsForTerm(const string& term, vector<Id>& cids,
+void Index::getWordPostingsForTerm(const string& term, vector<SimpleId>& cids,
                                    vector<Score>& scores) const {
   assert(term.size() > 0);
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
@@ -603,8 +603,8 @@ void Index::getWordPostingsForTerm(const string& term, vector<Id>& cids,
           : _textMeta.getBlockInfoByWordRange(idRange._first, idRange._last);
   if (tbmd._cl.hasMultipleWords() && !(tbmd._firstWordId == idRange._first &&
                                        tbmd._lastWordId == idRange._last)) {
-    vector<Id> blockCids;
-    vector<Id> blockWids;
+    vector<SimpleId> blockCids;
+    vector<SimpleId> blockWids;
     vector<Score> blockScores;
     readGapComprList(tbmd._cl._nofElements, tbmd._cl._startContextlist,
                      static_cast<size_t>(tbmd._cl._startWordlist -
@@ -636,8 +636,8 @@ void Index::getWordPostingsForTerm(const string& term, vector<Id>& cids,
 
 // _____________________________________________________________________________
 void Index::getContextEntityScoreListsForWords(const string& words,
-                                               vector<Id>& cids,
-                                               vector<Id>& eids,
+                                               vector<SimpleId>& cids,
+                                               vector<SimpleId>& eids,
                                                vector<Score>& scores) const {
   LOG(DEBUG) << "In getEntityContextScoreListsForWords...\n";
   auto terms = ad_utility::split(words, ' ');
@@ -655,10 +655,10 @@ void Index::getContextEntityScoreListsForWords(const string& words,
 
     if (terms.size() == 2) {
       // Special case of two terms: no k-way intersect needed.
-      vector<Id> wCids;
+      vector<SimpleId> wCids;
       vector<Score> wScores;
-      vector<Id> eCids;
-      vector<Id> eWids;
+      vector<SimpleId> eCids;
+      vector<SimpleId> eWids;
       vector<Score> eScores;
       size_t onlyWordsFrom = 1 - useElFromTerm;
       getWordPostingsForTerm(terms[onlyWordsFrom], wCids, wScores);
@@ -668,18 +668,18 @@ void Index::getContextEntityScoreListsForWords(const string& words,
     } else {
       // Generic case: Use a k-way intersect whereas the entity postings
       // play a special role.
-      vector<vector<Id>> cidVecs;
+      vector<vector<SimpleId>> cidVecs;
       vector<vector<Score>> scoreVecs;
       for (size_t i = 0; i < terms.size(); ++i) {
         if (i != useElFromTerm) {
-          cidVecs.push_back(vector<Id>());
+          cidVecs.push_back(vector<SimpleId>());
           scoreVecs.push_back(vector<Score>());
           getWordPostingsForTerm(terms[i], cidVecs.back(), scoreVecs.back());
         }
       }
-      cidVecs.push_back(vector<Id>());
+      cidVecs.push_back(vector<SimpleId>());
       scoreVecs.push_back(vector<Score>());
-      vector<Id> eWids;
+      vector<SimpleId> eWids;
       getEntityPostingsForTerm(terms[useElFromTerm], cidVecs.back(), eWids,
                                scoreVecs.back());
       FTSAlgorithms::intersectKWay(cidVecs, scoreVecs, &eWids, cids, eids,
@@ -695,10 +695,10 @@ void Index::getContextEntityScoreListsForWords(const string& words,
 
 // _____________________________________________________________________________
 void Index::getECListForWordsOneVar(const string& words, size_t limit,
-                                    IdTable* result) const {
+                                    TextTable* result) const {
   LOG(DEBUG) << "In getECListForWords...\n";
-  vector<Id> cids;
-  vector<Id> eids;
+  vector<SimpleId> cids;
+  vector<SimpleId> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
   FTSAlgorithms::aggScoresAndTakeTopKContexts(cids, eids, scores, limit,
@@ -709,10 +709,10 @@ void Index::getECListForWordsOneVar(const string& words, size_t limit,
 
 // _____________________________________________________________________________
 void Index::getECListForWords(const string& words, size_t nofVars, size_t limit,
-                              IdTable* result) const {
+                              TextTable* result) const {
   LOG(DEBUG) << "In getECListForWords...\n";
-  vector<Id> cids;
-  vector<Id> eids;
+  vector<SimpleId> cids;
+  vector<SimpleId> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
   int width = result->cols();
@@ -724,25 +724,25 @@ void Index::getECListForWords(const string& words, size_t nofVars, size_t limit,
 
 // _____________________________________________________________________________
 void Index::getFilteredECListForWords(const string& words,
-                                      const IdTable& filter,
+                                      const TextTable& filter,
                                       size_t filterColumn, size_t nofVars,
-                                      size_t limit, IdTable* result) const {
+                                      size_t limit, TextTable* result) const {
   LOG(DEBUG) << "In getFilteredECListForWords...\n";
   if (filter.size() > 0) {
     // Build a map filterEid->set<Rows>
-    using FilterMap = ad_utility::HashMap<Id, IdTable>;
+    using FilterMap = ad_utility::HashMap<SimpleId, TextTable>;
     LOG(DEBUG) << "Constructing map...\n";
     FilterMap fMap;
     for (size_t i = 0; i < filter.size(); ++i) {
-      Id eid = filter(i, filterColumn);
+      SimpleId eid = filter(i, filterColumn);
       auto it = fMap.find(eid);
       if (it == fMap.end()) {
-        it = fMap.insert(std::make_pair(eid, IdTable(filter.cols()))).first;
+        it = fMap.insert(std::make_pair(eid, TextTable(filter.cols()))).first;
       }
       it->second.push_back(filter, i);
     }
-    vector<Id> cids;
-    vector<Id> eids;
+    vector<SimpleId> cids;
+    vector<SimpleId> eids;
     vector<Score> scores;
     getContextEntityScoreListsForWords(words, cids, eids, scores);
     int width = result->cols();
@@ -762,19 +762,19 @@ void Index::getFilteredECListForWords(const string& words,
 
 // _____________________________________________________________________________
 void Index::getFilteredECListForWordsWidthOne(const string& words,
-                                              const IdTable& filter,
+                                              const TextTable& filter,
                                               size_t nofVars, size_t limit,
-                                              IdTable* result) const {
+                                              TextTable* result) const {
   LOG(DEBUG) << "In getFilteredECListForWords...\n";
   // Build a map filterEid->set<Rows>
-  using FilterSet = ad_utility::HashSet<Id>;
+  using FilterSet = ad_utility::HashSet<SimpleId>;
   LOG(DEBUG) << "Constructing filter set...\n";
   FilterSet fSet;
   for (size_t i = 0; i < filter.size(); ++i) {
     fSet.insert(filter(i, 0));
   }
-  vector<Id> cids;
-  vector<Id> eids;
+  vector<SimpleId> cids;
+  vector<SimpleId> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
   int width = result->cols();
@@ -791,8 +791,8 @@ void Index::getFilteredECListForWordsWidthOne(const string& words,
 }
 
 // _____________________________________________________________________________
-void Index::getEntityPostingsForTerm(const string& term, vector<Id>& cids,
-                                     vector<Id>& eids,
+void Index::getEntityPostingsForTerm(const string& term, vector<SimpleId>& cids,
+                                     vector<SimpleId>& eids,
                                      vector<Score>& scores) const {
   LOG(DEBUG) << "Getting entity postings for term: " << term << '\n';
   IdRange idRange;
@@ -843,13 +843,13 @@ void Index::getEntityPostingsForTerm(const string& term, vector<Id>& cids,
     // CASE: more than one word in the block.
     // Need to obtain matching postings for regular words and intersect for
     // a list of matching contexts.
-    vector<Id> matchingContexts;
+    vector<SimpleId> matchingContexts;
     vector<Score> matchingContextScores;
     getWordPostingsForTerm(term, matchingContexts, matchingContextScores);
 
     // Read the full lists
-    vector<Id> eBlockCids;
-    vector<Id> eBlockWids;
+    vector<SimpleId> eBlockCids;
+    vector<SimpleId> eBlockWids;
     vector<Score> eBlockScores;
     readGapComprList(tbmd._entityCl._nofElements,
                      tbmd._entityCl._startContextlist,
@@ -956,8 +956,8 @@ void Index::dumpAsciiLists(const vector<string>& lists,
       TextBlockMetaData tbmd =
           _textMeta.getBlockInfoByWordRange(idRange._first, idRange._last);
       if (decGapsFreq) {
-        vector<Id> eids;
-        vector<Id> cids;
+        vector<SimpleId> eids;
+        vector<SimpleId> cids;
         vector<Score> scores;
         getEntityPostingsForTerm(lists[i], cids, eids, scores);
         auto firstWord = wordIdToString(tbmd._firstWordId);
@@ -988,7 +988,7 @@ void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
     string docIdsFn = basename + ".docids.noent.ascii";
     string wordIdsFn = basename + ".wordids.noent.ascii";
     string scoresFn = basename + ".scores.noent.ascii";
-    vector<Id> ids;
+    vector<SimpleId> ids;
 
     LOG(DEBUG) << "Reading non-entity docId list..." << std::endl;
     auto nofElements = tbmd._cl._nofElements;
@@ -1022,7 +1022,7 @@ void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
       LOG(DEBUG) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
       AD_CHECK_EQ(sizeof(off_t), ret);
       current += ret;
-      Id* codebookW = new Id[nofCodebookBytes / sizeof(Id)];
+      SimpleId* codebookW = new SimpleId[nofCodebookBytes / sizeof(SimpleId)];
       ret = _textIndexFile.read(codebookW, nofCodebookBytes, current);
       current += ret;
       AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
@@ -1069,7 +1069,7 @@ void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
     string eDocIdsFn = basename + ".docids.ent.ascii";
     string eWordIdsFn = basename + ".wordids.ent.ascii";
     string eScoresFn = basename + ".scores.ent.ascii";
-    vector<Id> ids;
+    vector<SimpleId> ids;
 
     auto nofElements = tbmd._entityCl._nofElements;
     if (nofElements == 0) return;
@@ -1102,7 +1102,7 @@ void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
       LOG(DEBUG) << "Nof Codebook Bytes: " << nofCodebookBytes << '\n';
       AD_CHECK_EQ(sizeof(off_t), ret);
       current += ret;
-      Id* codebookW = new Id[nofCodebookBytes / sizeof(Id)];
+      SimpleId* codebookW = new SimpleId[nofCodebookBytes / sizeof(SimpleId)];
       ret = _textIndexFile.read(codebookW, nofCodebookBytes, current);
       current += ret;
       AD_CHECK_EQ(ret, size_t(nofCodebookBytes));
@@ -1202,12 +1202,12 @@ size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
 // _____________________________________________________________________________
 template <size_t I>
 void Index::getECListForWordsAndSingleSub(const string& words,
-                                          const vector<array<Id, I>>& subres,
+                                          const vector<array<SimpleId, I>>& subres,
                                           size_t subResMainCol, size_t limit,
-                                          vector<array<Id, 3 + I>>& res) const {
+                                          vector<array<SimpleId, 3 + I>>& res) const {
   // Get context entity postings matching the words
-  vector<Id> cids;
-  vector<Id> eids;
+  vector<SimpleId> cids;
+  vector<SimpleId> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
 
@@ -1217,17 +1217,17 @@ void Index::getECListForWordsAndSingleSub(const string& words,
   // Could binary search then instead of create the map first.
 
   LOG(DEBUG) << "Filtering matching contexts and building cross-product...\n";
-  vector<array<Id, 3 + I>> nonAggRes;
+  vector<array<SimpleId, 3 + I>> nonAggRes;
   if (cids.size() > 0) {
     // Transform the sub res into a map from key entity to tuples
-    ad_utility::HashMap<Id, vector<array<Id, I>>> subEs;
+    ad_utility::HashMap<SimpleId, vector<array<SimpleId, I>>> subEs;
     for (size_t i = 0; i < subres.size(); ++i) {
       auto& tuples = subEs[subres[i][subResMainCol]];
       tuples.push_back(subres[i]);
     }
     // Test if each context is fitting.
     size_t currentContextFrom = 0;
-    Id currentContext = cids[0];
+    SimpleId currentContext = cids[0];
     bool matched = false;
     for (size_t i = 0; i < cids.size(); ++i) {
       if (cids[i] != currentContext) {
@@ -1248,22 +1248,22 @@ void Index::getECListForWordsAndSingleSub(const string& words,
 }
 
 template void Index::getECListForWordsAndSingleSub(
-    const string& words, const vector<array<Id, 1>>& subres,
-    size_t subResMainCol, size_t limit, vector<array<Id, 4>>& res) const;
+    const string& words, const vector<array<SimpleId, 1>>& subres,
+    size_t subResMainCol, size_t limit, vector<array<SimpleId, 4>>& res) const;
 
 template void Index::getECListForWordsAndSingleSub(
-    const string& words, const vector<array<Id, 2>>& subres,
-    size_t subResMainCol, size_t limit, vector<array<Id, 5>>& res) const;
+    const string& words, const vector<array<SimpleId, 2>>& subres,
+    size_t subResMainCol, size_t limit, vector<array<SimpleId, 5>>& res) const;
 
 // _____________________________________________________________________________
 void Index::getECListForWordsAndTwoW1Subs(const string& words,
-                                          const vector<array<Id, 1>> subres1,
-                                          const vector<array<Id, 1>> subres2,
+                                          const vector<array<SimpleId, 1>> subres1,
+                                          const vector<array<SimpleId, 1>> subres2,
                                           size_t limit,
-                                          vector<array<Id, 5>>& res) const {
+                                          vector<array<SimpleId, 5>>& res) const {
   // Get context entity postings matching the words
-  vector<Id> cids;
-  vector<Id> eids;
+  vector<SimpleId> cids;
+  vector<SimpleId> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
 
@@ -1273,11 +1273,11 @@ void Index::getECListForWordsAndTwoW1Subs(const string& words,
   // Could binary search in them, then instead of create sets first.
 
   LOG(DEBUG) << "Filtering matching contexts and building cross-product...\n";
-  vector<array<Id, 5>> nonAggRes;
+  vector<array<SimpleId, 5>> nonAggRes;
   if (cids.size() > 0) {
     // Transform the sub res' into sets of entity Ids
-    ad_utility::HashSet<Id> subEs1;
-    ad_utility::HashSet<Id> subEs2;
+    ad_utility::HashSet<SimpleId> subEs1;
+    ad_utility::HashSet<SimpleId> subEs2;
     for (size_t i = 0; i < subres1.size(); ++i) {
       subEs1.insert(subres1[i][0]);
     }
@@ -1286,7 +1286,7 @@ void Index::getECListForWordsAndTwoW1Subs(const string& words,
     }
     // Test if each context is fitting.
     size_t currentContextFrom = 0;
-    Id currentContext = cids[0];
+    SimpleId currentContext = cids[0];
     bool matched = false;
     bool matched1 = false;
     bool matched2 = false;
@@ -1320,20 +1320,20 @@ void Index::getECListForWordsAndTwoW1Subs(const string& words,
 // _____________________________________________________________________________
 void Index::getECListForWordsAndSubtrees(
     const string& words,
-    const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResMaps,
-    size_t limit, vector<vector<Id>>& res) const {
+    const vector<ad_utility::HashMap<SimpleId, vector<vector<SimpleId>>>>& subResMaps,
+    size_t limit, vector<vector<SimpleId>>& res) const {
   // Get context entity postings matching the words
-  vector<Id> cids;
-  vector<Id> eids;
+  vector<SimpleId> cids;
+  vector<SimpleId> eids;
   vector<Score> scores;
   getContextEntityScoreListsForWords(words, cids, eids, scores);
 
   LOG(DEBUG) << "Filtering matching contexts and building cross-product...\n";
-  vector<vector<Id>> nonAggRes;
+  vector<vector<SimpleId>> nonAggRes;
   if (cids.size() > 0) {
     // Test if each context is fitting.
     size_t currentContextFrom = 0;
-    Id currentContext = cids[0];
+    SimpleId currentContext = cids[0];
     bool matched = false;
     vector<bool> matchedSubs;
     matchedSubs.resize(subResMaps.size(), false);
@@ -1401,19 +1401,20 @@ size_t Index::getSizeEstimate(const string& words) const {
 }
 
 // _____________________________________________________________________________
-void Index::getRhsForSingleLhs(const IdTable& in, Id lhsId,
-                               IdTable* result) const {
+void Index::getRhsForSingleLhs(const FancyTable& in, SimpleId lhsId,
+                               FancyTable* result) const {
   LOG(DEBUG) << "Getting only rhs from a relation with " << in.size()
-             << " elements by an Id key.\n";
+             << " elements by an SimpleId key.\n";
   AD_CHECK(result);
   AD_CHECK_EQ(0, result->size());
 
-  Id compareElem[] = {lhsId, 0};
+  FancyId compareElem[] = {fancy(lhsId), fancy(0)};
+  FancyId fancyLhs = fancy(lhsId);
   auto it = std::lower_bound(
       in.begin(), in.end(), compareElem,
       [](const auto& a, const auto& b) { return a[0] < b[0]; });
 
-  while (it != in.end() && (*it)[0] == lhsId) {
+  while (it != in.end() && (*it)[0] == fancyLhs) {
     result->push_back({(*it)[1]});
     ++it;
   }

@@ -66,14 +66,14 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
         infiles[i].read((char*)&len, sizeof(len));
         std::string word(len, '\0');
         infiles[i].read(&(word[0]), len);
-        Id id;
+        SimpleId id;
         infiles[i].read((char*)&id, sizeof(id));
         queue.push(QueueWord(std::move(word), i, id));
       } else {
         // we have read a numerical word
         uint64_t bytes;
         infiles[i].read((char*)&bytes, sizeof(bytes));
-        Id id;
+        SimpleId id;
         infiles[i].read((char*)&id, sizeof(id));
         queue.push(QueueWord{bit_cast<FancyId>(bytes), i, id});
       }
@@ -126,14 +126,14 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
         infiles[i].read((char*)&len, sizeof(len));
         std::string word(len, '\0');
         infiles[i].read(&(word[0]), len);
-        Id id;
+        SimpleId id;
         infiles[i].read((char*)&id, sizeof(id));
         queue.push(QueueWord(std::move(word), i, id));
       } else {
         // we have read a numerical word
         uint64_t bytes;
         infiles[i].read((char*)&bytes, sizeof(bytes));
-        Id id;
+        SimpleId id;
         infiles[i].read((char*)&id, sizeof(id));
         queue.push(QueueWord{bit_cast<FancyId>(bytes), i, id});
       }
@@ -262,9 +262,9 @@ void VocabularyMerger::doActualWrite(
 }
 
 // ____________________________________________________________________________________________________________
-ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
+ad_utility::HashMap<SimpleId, SimpleId> createInternalMapping(ItemVec* elsPtr) {
   auto& els = *elsPtr;
-  ad_utility::HashMap<Id, Id> res;
+  ad_utility::HashMap<SimpleId, SimpleId> res;
   bool first = true;
   ParsedVocabularyEntry lastWord;
   size_t nextWordId = 0;
@@ -282,12 +282,12 @@ ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
 }
 
 // ________________________________________________________________________________________________________
-void writeMappedIdsToExtVec(const TripleVec& input, const ad_utility::HashMap<Id, Id>& map,
+void writeMappedIdsToExtVec(const TripleVec& input, const ad_utility::HashMap<SimpleId, SimpleId>& map,
                             TripleVec::bufwriter_type* writePtr) {
   auto& writer = *writePtr;
   for (const auto& curTriple : input) {
     // for all triple elements find their mapping from partial to global ids
-    ad_utility::HashMap<Id, Id>::const_iterator iterators[3];
+    ad_utility::HashMap<SimpleId, SimpleId>::const_iterator iterators[3];
     for (size_t k = 0; k < 3; ++k) {
       iterators[k] = map.find(curTriple[k]);
       if (iterators[k] == map.end()) {
@@ -297,7 +297,7 @@ void writeMappedIdsToExtVec(const TripleVec& input, const ad_utility::HashMap<Id
     }
 
     // update the Element
-    writer << array<Id, 3>{{iterators[0]->second, iterators[1]->second, iterators[2]->second}};
+    writer << array<SimpleId, 3>{{iterators[0]->second, iterators[1]->second, iterators[2]->second}};
   }
 }
 
@@ -322,7 +322,7 @@ void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
       out.write((char*)&numTag, sizeof(numTag));
       out.write((char*) &serialized, sizeof(serialized));
     }
-    Id id = el.second.m_id;
+    SimpleId id = el.second.m_id;
     out.write((char*)&id, sizeof(id));
   }
   out.close();
@@ -381,8 +381,8 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp, const bool doPa
 }
 
 // _____________________________________________________________________
-ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(const string& mmapFilename) {
-  ad_utility::HashMap<Id, Id> res;
+ad_utility::HashMap<SimpleId, SimpleId> IdMapFromPartialIdMapFile(const string& mmapFilename) {
+  ad_utility::HashMap<SimpleId, SimpleId> res;
   IdPairMMapVecView vec(mmapFilename);
   for (const auto [partialId, globalId] : vec) {
     res[partialId] = globalId;

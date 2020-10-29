@@ -18,7 +18,7 @@ class ContextFileParser {
   struct Line {
     string _word;
     bool _isEntity;
-    Id _contextId;
+    SimpleId _contextId;
     Score _score;
   };
 
@@ -35,6 +35,6 @@ class ContextFileParser {
 
  private:
   std::ifstream _in;
-  Id _lastCId;
+  SimpleId _lastCId;
   LocaleManager _localeManager;
 };

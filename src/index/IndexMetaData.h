@@ -102,7 +102,7 @@ class IndexMetaData {
 
   off_t getOffsetAfter() const;
 
-  const RelationMetaData getRmd(Id relId) const;
+  const RelationMetaData getRmd(SimpleId relId) const;
 
   // Persistent meta data MapTypes (called MmapBased here) have to be separated
   // from RAM-based (e.g. hashMap based sparse) ones at compile time, this is
@@ -169,7 +169,7 @@ class IndexMetaData {
   string _filename;
 
   MapType _data;
-  ad_utility::HashMap<Id, BlockBasedRelationMetaData> _blockData;
+  ad_utility::HashMap<SimpleId, BlockBasedRelationMetaData> _blockData;
   size_t _totalElements = 0;
   size_t _totalBytes = 0;
   size_t _totalBlocks = 0;
@@ -194,7 +194,7 @@ class IndexMetaData {
   friend ad_utility::File& operator<<(ad_utility::File& f,
                                       const IndexMetaData<U>& rmd);
 
-  size_t getNofBlocksForRelation(const Id relId) const;
+  size_t getNofBlocksForRelation(const SimpleId relId) const;
 
   size_t getTotalBytesForRelation(const FullRelationMetaData& frmd) const;
 };

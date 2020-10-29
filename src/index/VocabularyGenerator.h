@@ -15,11 +15,11 @@
 #include "./IndexBuilderTypes.h"
 #include "Vocabulary.h"
 
-using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
-using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
+using IdPairMMapVec = ad_utility::MmapVector<std::pair<SimpleId, SimpleId>>;
+using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<SimpleId, SimpleId>>;
 using std::string;
 
-using TripleVec = stxxl::vector<array<Id, 3>>;
+using TripleVec = stxxl::vector<array<SimpleId, 3>>;
 
 /**
  * class for merging the partial vocabularies. The main function is still in the
@@ -32,10 +32,10 @@ class VocabularyMerger {
   struct VocMergeRes {
     size_t _numWordsTotal;   // that many distinct words were found (size of the
                              // vocabulary)
-    Id _langPredLowerBound;  // inclusive lower bound (as Id within the
+    SimpleId _langPredLowerBound;  // inclusive lower bound (as SimpleId within the
                              // vocabulary) for the added @en@rdfs:label style
                              // predicates
-    Id _langPredUpperBound;  // exclusive upper bound ...
+    SimpleId _langPredUpperBound;  // exclusive upper bound ...
   };
 
   VocabularyMerger() = default;
@@ -62,11 +62,11 @@ class VocabularyMerger {
   // represents tokens/words in a certain partial vocabulary
   struct QueueWord {
     QueueWord() = default;
-    QueueWord(ParsedVocabularyEntry && v, size_t file, Id word)
+    QueueWord(ParsedVocabularyEntry && v, size_t file, SimpleId word)
         : _value(std::move(v)), _partialFileId(file), _partialWordId(word) {}
     ParsedVocabularyEntry _value;          // the word
     size_t _partialFileId;  // from which partial vocabulary did this word come
-    Id _partialWordId;  // which partial id did the word have in this partial
+    SimpleId _partialWordId;  // which partial id did the word have in this partial
     // vocabulary
   };
 
@@ -100,8 +100,8 @@ class VocabularyMerger {
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;
   bool _firstLangPredSeen = false;
-  Id _langPredLowerBound = 0;
-  Id _langPredUpperBound = 0;
+  SimpleId _langPredLowerBound = 0;
+  SimpleId _langPredUpperBound = 0;
 
   const size_t _bufferSize = 10000000;
 
@@ -121,7 +121,7 @@ void writePartialIdMapToBinaryFileForMerging(
     bool doParallelSort);
 
 // _________________________________________________________________________________________
-ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
+ad_utility::HashMap<SimpleId, SimpleId> IdMapFromPartialIdMapFile(
     const string& mmapFilename);
 
 /**
@@ -135,18 +135,18 @@ ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
  * @param els  Must be sorted(at least duplicates must be adjacent) according to
  * the strings and the Ids must be unique to work correctly.
  */
-ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* els);
+ad_utility::HashMap<SimpleId, SimpleId> createInternalMapping(ItemVec* els);
 
 /**
  * @brief for each of the IdTriples in <input>: map the three Ids using the
  * <map> and write the resulting Id triple to <*writePtr>
  */
 void writeMappedIdsToExtVec(const TripleVec& input,
-                            const ad_utility::HashMap<Id, Id>& map,
+                            const ad_utility::HashMap<SimpleId, SimpleId>& map,
                             TripleVec::bufwriter_type* writePtr);
 
 /**
- * @brief Serialize a std::vector<std::pair<string, Id>> to a binary file
+ * @brief Serialize a std::vector<std::pair<string, SimpleId>> to a binary file
  *
  * For each string first writes the size of the string (64 bits). Then the
  * actual string content (no trailing zero) and then the Id (sizeof(Id)
