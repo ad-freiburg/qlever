@@ -36,6 +36,7 @@ class alignas(alignof(uint64_t)) FancyId {
     VOCAB = 0,
     LOCAL_VOCAB = 1,
     DATE = 2,
+    // IMPORTANT: Integer and float must be consecutive for the ordering to work...
     INTEGER = 3,
     FLOAT = 7
   };
@@ -60,12 +61,14 @@ class alignas(alignof(uint64_t)) FancyId {
   // unchecked, undefined behavior if we don't hold any of the uint64_t based types
   constexpr uint64_t getUnsigned() const noexcept {
     assert(type() != FLOAT);
+    assert(type()!= INTEGER);
     // get the low order bits
     uint64_t res = value_.un.rest;
     res |= static_cast<uint64_t>(value_.tagAndHigh & (~TAG_MASK)) << 32u;
     return res;
   }
 
+  // unchecked, unexpected behavior if no integer is held.
   constexpr uint64_t getInteger() const noexcept {
     assert(type() == INTEGER);
     bool isneg = value_.tagAndHigh & SIGN_MASK;
@@ -82,11 +85,13 @@ class alignas(alignof(uint64_t)) FancyId {
   /// TODO<joka921> measure, if initializing to some kind of zero makes a difference
   FancyId() noexcept = default;
 
+  // construct from a float
   explicit FancyId(float f) {
     value_.un.f = f;
     value_.tagAndHigh = std::numeric_limits<uint32_t>::max();
   }
 
+  // convert to an xsd-value-string. Only supported for types FLOAT and INTEGER
   std::string toXSDValue() const {
     switch (type()) {
       case FLOAT:
@@ -98,6 +103,7 @@ class alignas(alignof(uint64_t)) FancyId {
     }
   }
 
+  // safe conversion to float. Cast INTEGER and FLOAT, throw exception otherwise
   float convertToFloat() {
     switch (type()) {
       case FLOAT:
@@ -110,6 +116,7 @@ class alignas(alignof(uint64_t)) FancyId {
   }
 
 
+  // construct a Date.
   static constexpr FancyId Date(int year, int month = 1, int day = 1, int hour = 0, int min = 0, float sec = .0, bool signTimezone = false, int hTimezone = 0, int mTimezone = 0 ) {
     const auto raise = [](){throw std::runtime_error("input value for date out of range");};
     uint64_t v = year < 0; // start with sign bit of year
@@ -155,9 +162,45 @@ class alignas(alignof(uint64_t)) FancyId {
     bool signTimezone = false;
     int hTimezone = 0;
     int mTimezone = 0;
+
+    template<typename Comp>
+    constexpr friend bool compare(DateValue a, DateValue b, Comp f) {
+      if (a.year != b.year) {
+        return f(a.year, b.year);
+      }
+      if (a.month != b.month) {
+        return f(a.month, b.month);
+      }
+      if (a.day != b.day) {
+        return f(a.day, b.day);
+      }
+      if (a.hour != b.hour) {
+        return f(a.hour, b.hour);
+      }
+      if (a.min != b.min) {
+        return f(a.min, b.min);
+      }
+      if (a.sec != b.month) {
+        return f(a.sec, b.month);
+      }
+      if (a.signTimezone != b.signTimezone) {
+        // "1" in sign bit means negative
+        return f(!a.signTimezone, !b.signTimezone);
+      }
+      // if timezonesx are negative, comparison order changes
+      const auto&x = a.signTimezone? b : a;
+      const auto&y = a.signTimezone? a : b;
+      if (a.hTimezone != b.hTimezone) {
+        return f(x.hTimezone, y.hTimezone);
+      }
+      return f(x.mTimezone, y.mTimezone);
+
+    }
   };
 
+  // unchecked conversion to date
   constexpr DateValue getDate() const {
+    assert(type()==DATE);
     DateValue res;
     auto v = getUnsigned();
     res.year = extractBits(v, 46, 60);
@@ -176,6 +219,7 @@ class alignas(alignof(uint64_t)) FancyId {
   }
 
 
+  // construct from a type and a 64 bit payload
   constexpr FancyId(Type t, uint64_t val) : value_() {
     // low bits
     value_.un.rest = static_cast<uint32_t>(val);
@@ -203,19 +247,19 @@ class alignas(alignof(uint64_t)) FancyId {
 
   template <typename F>
   static FancyId binFloatOp(FancyId a, FancyId b, F f) {
-  int isNan = a.type() != FLOAT || b.type() != FLOAT;
-  uint32_t bitmask = 0;
-  // set all bits either to 0 or to one;
-  for (size_t i = 0; i < 32u; ++i) {
-    bitmask |= isNan << i;
-  }
+    int isInt = a.type() == INTEGER && b.type() == INTEGER;
 
-  FancyId res;
-  res.value_.tagAndHigh = std::numeric_limits<uint32_t>::max();
-  res.value_.un.f = f(a.value_.un.f, b.value_.un.f);
-  auto nan = FancyId::nan();
-  res.value_.un.f = bit_cast<float>((bitmask & nan) | ((~bitmask) & bit_cast<uint32_t>(res.value_.un.f)));
-  return res;
+    int isNan = (a.type() != FLOAT && a.type() != INTEGER) || (b.type() != FLOAT && b.type() != INTEGER);
+    int isFloat = !isNan && !isInt;
+
+    // TODO: performance improvement by branchless programming?
+    if (isFloat) {
+      return FancyId(f(a.convertToFloat(), b.convertToFloat()));
+    } else if (isInt) {
+      return FancyId(INTEGER, f(a.getInteger(), b.getInteger()));
+    } else {
+      return  FancyId(std::numeric_limits<float>::quiet_NaN());
+    }
   }
 
   constexpr Type type() const {
@@ -223,65 +267,59 @@ class alignas(alignof(uint64_t)) FancyId {
   }
 
   friend FancyId operator+(FancyId a, FancyId b) {
-    return FancyId::binFloatOp(a, b, [](float x, float y){return x + y;});
+    return FancyId::binFloatOp(a, b, [](auto x, auto y){return x + y;});
   }
 
   friend FancyId operator-(FancyId a, FancyId b) {
-    return FancyId::binFloatOp(a, b, [](float x, float y){return x - y;});
+    return FancyId::binFloatOp(a, b, [](auto x, auto y){return x - y;});
   }
 
   friend FancyId operator*(FancyId a, FancyId b) {
-    return FancyId::binFloatOp(a, b, [](float x, float y){return x * y;});
+    return FancyId::binFloatOp(a, b, [](auto x, auto y){return x * y;});
   }
 
   friend FancyId operator/(FancyId a, FancyId b) {
-    return FancyId::binFloatOp(a, b, [](float x, float y){return x / y;});
+    return FancyId::binFloatOp(a, b, [](auto x, auto y){return x / y;});
   }
 
   template <typename F>
   static bool compare(FancyId a, FancyId b, F f) {
-    if (a.type() != b.type()) {
-      return f(a.type(), b.type());
+    int isNumeric = (a.type() == FLOAT  || a.type() == INTEGER) && (b.type() == FLOAT || b.type() == INTEGER);
+    int isInteger = a.type() == INTEGER && b.type() == INTEGER;
+    if (!isNumeric) {
+      if (a.type() != b.type()) {
+        return f(a.type(), b.type());
+      }
+      // same type, compare the held values.
+      // TODO: Make this work for the dates!
+      return f(a.getUnsigned(), b.getUnsigned());
     }
-    if (a.type() == FLOAT) {
-      return f(a.getFloat(), b.getFloat());
+    if (isInteger) {
+      return f(a.getInteger(), b.getInteger());
     }
-    return f(a.getUnsigned(), b.getUnsigned());
+    // both are numeric, but not both integers
+    return f(a.convertToFloat(), b.convertToFloat());
   }
 
   friend bool operator==(FancyId a, FancyId b) {
-    if (a.type() != b.type()) {
-      return false;
-    }
-
-    if (a.type() == FLOAT) {
-      return a.getFloat() == b.getFloat();
-    }
-    return a.getUnsigned() == b.getUnsigned();
+    return compare(a, b, std::equal_to<>{});
   }
 
   friend bool operator!=(FancyId a, FancyId b) {
-    if (a.type() != b.type()) {
-      return true;
-    }
-
-    if (a.type() == FLOAT) {
-      return a.getFloat() != b.getFloat();
-    }
-    return a.getUnsigned() != b.getUnsigned();
+    return compare(a, b, std::not_equal_to<>{});
   }
 
   friend bool operator<(FancyId a, FancyId b) {
-    return FancyId::compare(a, b, [](const auto& a, const auto& b){return a < b;});
+    return FancyId::compare(a, b, std::less<>{});
   }
   friend bool operator<=(FancyId a, FancyId b) {
-    return FancyId::compare(a, b, [](const auto& a, const auto& b){return a <= b;});
+    return FancyId::compare(a, b, std::less_equal<>{});
   }
   friend bool operator>(FancyId a, FancyId b) {
-    return FancyId::compare(a, b, [](const auto& a, const auto& b){return a > b;});
+    return FancyId::compare(a, b, std::greater<>{});
   }
   friend bool operator>=(FancyId a, FancyId b) {
-    return FancyId::compare(a, b, [](const auto& a, const auto& b){return a >= b;});
+    return FancyId::compare(a, b, std::greater_equal<>{});
   }
 
   friend decltype(auto) operator<<(std::ostream& str, const FancyId id) {
