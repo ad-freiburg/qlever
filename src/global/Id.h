@@ -69,7 +69,7 @@ class alignas(alignof(uint64_t)) FancyId {
   }
 
   // unchecked, unexpected behavior if no integer is held.
-  constexpr uint64_t getInteger() const noexcept {
+  constexpr int64_t getInteger() const noexcept {
     assert(type() == INTEGER);
     bool isneg = value_.tagAndHigh & SIGN_MASK;
     uint64_t res = value_.un.rest;
@@ -164,7 +164,7 @@ class alignas(alignof(uint64_t)) FancyId {
     int mTimezone = 0;
 
     template<typename Comp>
-    constexpr friend bool compare(DateValue a, DateValue b, Comp f) {
+    static constexpr bool compare(DateValue a, DateValue b, Comp f) {
       if (a.year != b.year) {
         return f(a.year, b.year);
       }
@@ -283,10 +283,14 @@ class alignas(alignof(uint64_t)) FancyId {
   }
 
   template <typename F>
-  static bool compare(FancyId a, FancyId b, F f) {
+  constexpr static bool compare(FancyId a, FancyId b, F f) {
     int isNumeric = (a.type() == FLOAT  || a.type() == INTEGER) && (b.type() == FLOAT || b.type() == INTEGER);
     int isInteger = a.type() == INTEGER && b.type() == INTEGER;
+    int isDate = a.type() == DATE && b.type() == DATE;
     if (!isNumeric) {
+      if (isDate) {
+        return DateValue::compare(a.getDate(), b.getDate(), f);
+      }
       if (a.type() != b.type()) {
         return f(a.type(), b.type());
       }

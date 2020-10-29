@@ -210,7 +210,7 @@ TEST(FancyId, SetInt) {
           static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 1;
       FancyId id(type, val);
       ASSERT_EQ(id.type(), type);
-      ASSERT_EQ(id.getInteger(), val);
+      ASSERT_EQ(id.getInteger(), static_cast<int64_t>(val));
     }
   }
 }
@@ -248,3 +248,102 @@ TEST(Id, SetAndGetDate) {
 }
 
 
+TEST(FancyId, Add) {
+  std::vector<FancyId::Type> types{FancyId::INTEGER};
+  for (const auto& type : types) {
+      ad_utility::RandomIntGenerator<int64_t> gen(
+          std::numeric_limits<int32_t>::min(), std::numeric_limits<uint32_t>::max());
+      for (size_t i = 0; i < 1000000; ++i) {
+        auto val = gen();
+        auto val2 = gen();
+        FancyId id(type, val);
+        FancyId id2(type, val2);
+        auto id3 = id + id2;
+        ASSERT_EQ(id3.type(), type);
+        ASSERT_EQ(id3.getInteger(), val + val2);
+      }
+
+    for (size_t i = 0; i < 1000000; ++i) {
+      auto val = gen();
+      auto val2 = static_cast<float>(gen());
+      FancyId id{type, static_cast<uint64_t>(val)};
+      FancyId id2{val2};
+      auto id3 = id + id2;
+      ASSERT_EQ(id3.type(), FancyId::FLOAT);
+      ASSERT_EQ(id3.getFloat(), val + val2);
+    }
+    for (size_t i = 0; i < 1000000; ++i) {
+      auto val = gen();
+      auto val2 = static_cast<float>(gen());
+      FancyId id{type, static_cast<uint64_t>(val)};
+      FancyId id2{val2};
+      auto id3 = id + id2;
+      ASSERT_EQ(id3.type(), FancyId::FLOAT);
+      ASSERT_EQ(id3.getFloat(), val + val2);
+    }
+  }
+
+  // TODO: tests that prduce Nan values, and tests that produce integer-overflow exceptions
+#if 0
+  {
+      ad_utility::RandomIntGenerator<int64_t> gen(
+          std::numeric_limits<uint32_t>::max(), FancyId::INTEGER_MAX_VAL);
+      for (size_t i = 0; i < 1000000; ++i) {
+        auto val = gen();
+        FancyId id(type, val);
+        ASSERT_EQ(id.type(), type);
+        ASSERT_EQ(id.getInteger(), val);
+      }
+    }
+    {
+      ad_utility::RandomIntGenerator<int64_t> gen(
+          FancyId::INTEGER_MIN_VAL, std::numeric_limits<int32_t>::min());
+      for (size_t i = 0; i < 1000000; ++i) {
+        auto val = gen();
+        FancyId id(type, val);
+        ASSERT_EQ(id.type(), type);
+        ASSERT_EQ(id.getInteger(), val);
+      }
+    }
+    {
+      FancyId id(type, FancyId::INTEGER_MAX_VAL);
+      ASSERT_EQ(id.type(), type);
+      ASSERT_EQ(id.getInteger(), FancyId::INTEGER_MAX_VAL);
+    }
+    {
+      FancyId id(type, FancyId::INTEGER_MAX_VAL - 1);
+      ASSERT_EQ(id.type(), type);
+      ASSERT_EQ(id.getInteger(), FancyId::INTEGER_MAX_VAL - 1);
+    }
+    {
+      FancyId id(type, FancyId::INTEGER_MIN_VAL);
+      ASSERT_EQ(id.type(), type);
+      ASSERT_EQ(id.getInteger(), FancyId::INTEGER_MIN_VAL);
+    }
+    {
+      FancyId id(type, FancyId::INTEGER_MIN_VAL + 1);
+      ASSERT_EQ(id.type(), type);
+      ASSERT_EQ(id.getInteger(), FancyId::INTEGER_MIN_VAL + 1);
+    }
+    {
+      auto val = std::numeric_limits<uint32_t>::max();
+      FancyId id(type, val);
+      ASSERT_EQ(id.type(), type);
+      ASSERT_EQ(id.getInteger(), val);
+    }
+    {
+      auto val = std::numeric_limits<uint32_t>::max() - 1;
+      FancyId id(type, val);
+      ASSERT_EQ(id.type(), type);
+      ASSERT_EQ(id.getInteger(), val);
+    }
+    {
+      auto val =
+          static_cast<uint64_t>(std::numeric_limits<uint32_t>::max()) + 1;
+      FancyId id(type, val);
+      ASSERT_EQ(id.type(), type);
+      ASSERT_EQ(id.getInteger(), static_cast<int64_t>(val));
+    }
+  }
+#endif
+}
