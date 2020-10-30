@@ -661,8 +661,8 @@ class IdTableStatic : private IdTableImpl<T, COLS> {
    *        still nullptr.
    **/
   void setCols(size_t cols) {
-    assert(_data == nullptr);
-    setCols(cols);
+    //assert(_data == nullptr); // TODO(joka921) This assertion does not hold bc of the swap method.
+    Base::setCols(cols);
   }
 
   void emplace_back() { push_back(); }

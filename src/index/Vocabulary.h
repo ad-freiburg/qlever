@@ -144,6 +144,9 @@ class Vocabulary {
   //! externalized words don't allow references
   template <typename U = StringType, typename = enable_if_compressed<U>>
   const std::optional<string> idToOptionalString(SimpleId id) const {
+    if (id == ID_NO_VALUE.getUnsigned()) {
+      return std::nullopt;
+    }
     if (id < _numbers.size()) {
       return _numbers[id].toXSDValue();
     }
@@ -153,6 +156,7 @@ class Vocabulary {
     } else {
       // this word must be externalized
       id -= (_words.size() + _numbers.size());
+      // not in the vocabulary means no value
       AD_CHECK(id < _externalLiterals.size());
       return _externalLiterals[id];
     }
@@ -347,7 +351,7 @@ class Vocabulary {
   /// level, due to limitations in the StringSortComparators
   std::pair<SimpleId, SimpleId> prefix_range(const string& prefix) const {
     if (prefix.empty()) {
-      return {0, _words.size()};
+      return {0, _words.size() + _numbers.size() + _externalLiterals.size()};
     }
     SimpleId lb = lower_bound(prefix, SortLevel::PRIMARY);
     auto transformed = _caseComparator.transformToFirstPossibleBiggerValue(
@@ -356,7 +360,7 @@ class Vocabulary {
     auto pred = getLowerBoundLambda<decltype(transformed)>(SortLevel::PRIMARY);
     auto ub = static_cast<SimpleId>(
         std::lower_bound(_words.begin(), _words.end(), transformed, pred) -
-        _words.begin());
+        _words.begin()) + _numbers.size();
 
     return {lb, ub};
   }

@@ -394,7 +394,7 @@ queries:
       - num_rows: 32
       - num_cols: 2
       - selected: ["?count", "?height"]
-      - contains_row: ["5", "1.803"]
+      - contains_row: [5, 1.803]
   - query : having-predicate-religion
     type: no-text
     sparql: |
@@ -436,8 +436,8 @@ queries:
       - num_rows: 2
       - num_cols: 2
       - selected: ["?scientist", "?height"]
-      - contains_row: ["<Granville_Woods>", '2.1336']
-      - contains_row: ["<Charles_Bradley_(Chemist)>", '1.98']
+      - contains_row: ["<Granville_Woods>", 2.1336]
+      - contains_row: ["<Charles_Bradley_(Chemist)>", 1.98]
   - query : having-avg-height
     type: no-text
     sparql: |
@@ -512,7 +512,7 @@ queries:
       - num_rows: 737 
       - num_cols: 2
       - selected: ["?a", "?h"]
-      - contains_row: ['<Sophie_Hosking>', '1.65']
+      - contains_row: ['<Sophie_Hosking>', 1.65]
       - contains_row: ['<Stuart_Kornfeld>', null]
   - query : union-full-merge
     type: no-text
@@ -526,7 +526,7 @@ queries:
       - num_rows: 1488
       - num_cols: 2
       - selected: ["?a", "?t"]
-      - contains_row: ['<Carl_Sagan>', '1.8']
+      - contains_row: ['<Carl_Sagan>', 1.8]
       - contains_row: ['<Noreena_Hertz>', '<Judaism>']
   - query : duplicate-alias 
     type: no-text
@@ -639,7 +639,7 @@ queries:
       - selected: ["?b"]
       - contains_row: ["<Politician>"] 
       - contains_row: ["<Character_Occupation>"] 
-      - contains_row: ["1.87"]
+      - contains_row: [1.87]
   - query : property_path_inverse
     type: no-text
     sparql: |

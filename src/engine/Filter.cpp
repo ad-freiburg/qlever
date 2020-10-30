@@ -511,6 +511,7 @@ void Filter::computeResultFixedValue(
   // interpret the filters right hand side
   size_t lhs = _subtree->getVariableColumn(_lhs);
   Id rhs;
+  FancyId fancyRhs;
   switch (subRes->getResultType(lhs)) {
     case ResultTable::ResultType::KB: {
       ParsedVocabularyEntry rhsEntry;
@@ -551,6 +552,7 @@ void Filter::computeResultFixedValue(
         rhs = getIndex().getVocab().getValueIdForLE(rhsEntry, level);
       }
       // All other types of filters do not use r and work on _rhs directly
+      fancyRhs = fancy(rhs);
       break;
     }
     case ResultTable::ResultType::VERBATIM:
@@ -562,10 +564,12 @@ void Filter::computeResultFixedValue(
                  "right hand side '" +
                      _rhs + "' could not be parsed as an unsigned integer.");
       }
+      fancyRhs = fancyInt(rhs);
       break;
     case ResultTable::ResultType::FLOAT:
       try {
         float f = std::stof(_rhs);
+        fancyRhs = fancyFloat(f);
         std::memcpy(&rhs, &f, sizeof(float));
       } catch (const std::logic_error& e) {
         AD_THROW(
@@ -590,6 +594,7 @@ void Filter::computeResultFixedValue(
             break;
           }
         }
+        fancyRhs = FancyId{FancyId::LOCAL_VOCAB, rhs};
       } else if (_type != SparqlFilter::LANG_MATCHES &&
                  _type != SparqlFilter::PREFIX &&
                  _type != SparqlFilter::REGEX) {
@@ -622,7 +627,7 @@ void Filter::computeResultFixedValue(
   }
   switch (resultType) {
     case ResultTable::ResultType::KB:
-      computeFilterFixedValue<ResultTable::ResultType::KB>(&result, lhs, fancy(rhs),
+      computeFilterFixedValue<ResultTable::ResultType::KB>(&result, lhs, fancyRhs,
                                                            input, subRes);
       break;
     case ResultTable::ResultType::VERBATIM:
@@ -630,15 +635,15 @@ void Filter::computeResultFixedValue(
           &result, lhs, fancyInt(rhs), input, subRes);
       break;
     case ResultTable::ResultType::FLOAT:
-      computeFilterFixedValue<ResultTable::ResultType::FLOAT>(&result, lhs, fancyFloat(rhs),
+      computeFilterFixedValue<ResultTable::ResultType::FLOAT>(&result, lhs, fancyRhs,
                                                               input, subRes);
       break;
     case ResultTable::ResultType::LOCAL_VOCAB:
       computeFilterFixedValue<ResultTable::ResultType::LOCAL_VOCAB>(
-          &result, lhs, FancyId{FancyId::LOCAL_VOCAB, rhs}, input, subRes);
+          &result, lhs, fancyRhs, input, subRes);
       break;
     case ResultTable::ResultType::TEXT:
-      computeFilterFixedValue<ResultTable::ResultType::TEXT>(&result, lhs, fancyText(rhs),
+      computeFilterFixedValue<ResultTable::ResultType::TEXT>(&result, lhs, fancyRhs,
                                                              input, subRes);
       break;
     default:

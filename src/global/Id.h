@@ -94,9 +94,9 @@ class alignas(alignof(uint64_t)) FancyId {
   std::string toXSDValue() const {
     switch (type()) {
       case FLOAT:
-        return std::to_string(getFloat()) + "^^xsd:float";
+        return '"' + std::to_string(getFloat()) + "\"^^xsd:float";
       case INTEGER:
-        return std::to_string(getInteger()) + "^^xsd:integer";
+        return '"' + std::to_string(getInteger()) + "\"^^xsd:integer";
       default:
         throw std::runtime_error("Tried to get xsd-Value from FancyId that is neither Integer nor Float. This is not supported, please report this");
     }

@@ -58,6 +58,7 @@ def is_result_sane(result: Dict[str, Any]) -> bool:
 
 def test_row(gold_row: List[Any],
              actual_row: List[Any], epsilon=0.1) -> bool:
+
     """
     Test if gold_row and actual_row match. For floats we allow an epsilon
     difference. If a gold_row cell is None it is ignored.
@@ -73,14 +74,17 @@ def test_row(gold_row: List[Any],
         if actual and actual[0] == '"':
             actual = actual[1:actual.rfind('"')]
         matches = False
-        if isinstance(gold, int):
-            matches = int(actual) == gold
-        elif isinstance(gold, float):
-            matches = abs(gold - float(actual)) <= epsilon
-        else:
-            matches = gold == actual
+        try:
+            if isinstance(gold, int):
+                matches = int(actual) == gold
+            elif isinstance(gold, float):
+                matches = abs(gold - float(actual)) <= epsilon
+            else:
+                matches = gold == actual
+        except ValueError:
+            pass
 
-        if not matches:
+    if not matches:
             return False
     return True
 

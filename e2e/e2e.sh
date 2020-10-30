@@ -81,5 +81,6 @@ echo "Waiting for ServerMain to launch and open port"
 while ! curl --max-time 1 --output /dev/null --silent http://localhost:9099/; do
 	sleep 1
 done
+echo "Waiting for ServerMain has finished ,starting binary"
 $PYTHON_BINARY "$PROJECT_DIR/e2e/queryit.py" "$PROJECT_DIR/e2e/scientists_queries.yaml" "http://localhost:9099" &> $BINARY_DIR/query_log.txt || bail "Querying Server failed"
 popd
