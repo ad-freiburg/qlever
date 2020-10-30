@@ -187,7 +187,7 @@ SparqlValues Values::sanitizeValues(SparqlValues&& values) {
 template <size_t I>
 void Values::writeValues(IdTable* res, const Index& index,
                          const SparqlValues& values) {
-  IdTableStatic<I> result = res->moveToStatic<I>();
+  FancyTableStatic<I> result = res->moveToStatic<I>();
   result.resize(values._values.size());
   size_t numActuallyWritten = 0;
   size_t numSkipped = 0;
@@ -202,7 +202,7 @@ void Values::writeValues(IdTable* res, const Index& index,
         // sucessfully written, so the numActuallyWritten index is not advanced
         goto skipRow;
       }
-      result(numActuallyWritten, colIdx) = id;
+      result(numActuallyWritten, colIdx) = fancy(id);
     }
     numActuallyWritten++;
   skipRow:;  // the label for the goto. Jumping to this label is basically

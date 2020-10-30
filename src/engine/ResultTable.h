@@ -48,7 +48,7 @@ class ResultTable {
    */
   vector<size_t> _sortedBy;
 
-  IdTable<Id> _data;
+  FancyTable _data;
 
   vector<ResultType> _resultTypes;
 
@@ -100,16 +100,9 @@ class ResultTable {
     _cond_var.wait(lk, [&] { return _status != ResultTable::IN_PROGRESS; });
   }
 
-  std::optional<std::string> idToOptionalString(Id id) const {
-    if (id.type() != Id::LOCAL_VOCAB) {
-      throw std::runtime_error(
-          "tried to access the local vocabulary with a wrong typed id, this should never happen");
-    } else if (id == ID_NO_VALUE) {
-      return std::nullopt;
-  }
-    auto idInternal = id.getUnsigned();
-    if (idInternal < _localVocab->size()) {
-      return (*_localVocab)[idInternal];
+  std::optional<std::string> idToOptionalString(SimpleId id) const {
+    if (id < _localVocab->size()) {
+      return (*_localVocab)[id];
     }
     return std::nullopt;
   }

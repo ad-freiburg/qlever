@@ -18,8 +18,8 @@
 class Engine {
  public:
   template <typename Comp, int WIDTH>
-  static void filter(const IdTableStatic<WIDTH>& v, const Comp& comp,
-                     IdTableStatic<WIDTH>* result) {
+  static void filter(const FancyTableStatic<WIDTH>& v, const Comp& comp,
+                     FancyTableStatic<WIDTH>* result) {
     AD_CHECK(result);
     AD_CHECK(result->size() == 0);
     LOG(DEBUG) << "Filtering " << v.size() << " elements.\n";
@@ -32,8 +32,8 @@ class Engine {
   }
 
   template <int IN_WIDTH, int FILTER_WIDTH>
-  static void filter(const IdTable& dynV, size_t fc1, size_t fc2,
-                     const IdTable& dynFilter, IdTable* dynResult) {
+  static void filter(const FancyTable& dynV, size_t fc1, size_t fc2,
+                     const FancyTable& dynFilter, FancyTable* dynResult) {
     AD_CHECK(dynResult);
     AD_CHECK(dynResult->size() == 0);
     LOG(DEBUG) << "Filtering " << dynV.size()
@@ -45,10 +45,10 @@ class Engine {
       return;
     }
 
-    const IdTableStatic<IN_WIDTH> v = dynV.asStaticView<IN_WIDTH>();
-    const IdTableStatic<FILTER_WIDTH> filter =
+    const FancyTableStatic<IN_WIDTH> v = dynV.asStaticView<IN_WIDTH>();
+    const FancyTableStatic<FILTER_WIDTH> filter =
         dynFilter.asStaticView<FILTER_WIDTH>();
-    IdTableStatic<IN_WIDTH> result = dynResult->moveToStatic<IN_WIDTH>();
+    FancyTableStatic<IN_WIDTH> result = dynResult->moveToStatic<IN_WIDTH>();
 
     // Intersect both lists.
     size_t i = 0;
@@ -97,9 +97,9 @@ class Engine {
   }
 
   template <int WIDTH>
-  static void sort(IdTable* tab, const size_t keyColumn) {
+  static void sort(FancyTable* tab, const size_t keyColumn) {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
-    IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
+    FancyTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
       ad_utility::parallel_sort(
           stab.begin(), stab.end(),
@@ -118,9 +118,9 @@ class Engine {
   }
 
   template <int WIDTH, typename C>
-  static void sort(IdTable* tab, C comp) {
+  static void sort(FancyTable* tab, C comp) {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
-    IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
+    FancyTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
       ad_utility::parallel_sort(stab.begin(), stab.end(), comp,
                                 ad_utility::parallel_tag(NUM_SORT_THREADS));
@@ -137,12 +137,12 @@ class Engine {
    *        otherwise the result of this function is undefined.
    **/
   template <int WIDTH>
-  static void distinct(const IdTable& dynInput,
+  static void distinct(const FancyTable& dynInput,
                        const std::vector<size_t>& keepIndices,
-                       IdTable* dynResult) {
+                       FancyTable* dynResult) {
     LOG(DEBUG) << "Distinct on " << dynInput.size() << " elements.\n";
-    const IdTableStatic<WIDTH> input = dynInput.asStaticView<WIDTH>();
-    IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
+    const FancyTableStatic<WIDTH> input = dynInput.asStaticView<WIDTH>();
+    FancyTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
     if (input.size() > 0) {
       AD_CHECK_LE(keepIndices.size(), input.cols());
       result = input;

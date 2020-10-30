@@ -175,12 +175,12 @@ struct resizeIfVec<vector<C>, C> {
  */
 template <int IN_WIDTH, int OUT_WIDTH>
 void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
-                  size_t blockEnd, const IdTableStatic<IN_WIDTH>& input,
+                  size_t blockEnd, const FancyTableStatic<IN_WIDTH>& input,
                   const vector<ResultTable::ResultType>& inputTypes,
-                  IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
+                  FancyTableStatic<OUT_WIDTH>* result, size_t resultRow,
                   const ResultTable* inTable, ResultTable* outTable,
                   const Index& index,
-                  ad_utility::HashSet<size_t>& distinctHashSet) {
+                  ad_utility::HashSet<FancyId>& distinctHashSet) {
   switch (a._type) {
     case ParsedQuery::AggregateType::AVG: {
       float res = 0;
@@ -190,13 +190,13 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
-              res += input(i, a._inCol);
+              res += input(i, a._inCol).convertToFloat();
             }
           }
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i <= blockEnd; i++) {
-            res += input(i, a._inCol);
+            res += input(i, a._inCol).convertToFloat();
           }
         }
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
@@ -229,7 +229,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
               distinctHashSet.insert(input(i, a._inCol));
               // TODO(schnelle): What's the correct way to handle OPTIONAL here
               // load the string, parse it as an xsd::int or float
-              auto val = index.idToNumericValue(input(i, a._inCol));
+              auto val = index.idToNumericValue(input(i, a._inCol).getUnsigned());
               if (!val) {
                 res = std::numeric_limits<float>::quiet_NaN();
                 break;
@@ -243,7 +243,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           for (size_t i = blockStart; i <= blockEnd; i++) {
             // load the string, parse it as an xsd::int or float
             // TODO(schnelle): What's the correct way to handle OPTIONAL here
-            auto val = index.idToNumericValue(input(i, a._inCol));
+            auto val = index.idToNumericValue(input(i, a._inCol).getUnsigned());
             if (!val) {
               res = std::numeric_limits<float>::quiet_NaN();
               break;
@@ -255,8 +255,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       }
       res /= (blockEnd - blockStart + 1);
 
-      (*result)(resultRow, a._outCol) = 0;
-      std::memcpy(&(*result)(resultRow, a._outCol), &res, sizeof(float));
+      (*result)(resultRow, a._outCol) = fancyFloat(res);
       break;
     }
     case ParsedQuery::AggregateType::COUNT:
@@ -269,10 +268,10 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
             distinctHashSet.insert(input(i, a._inCol));
           }
         }
-        (*result)(resultRow, a._outCol) = count;
+        (*result)(resultRow, a._outCol) = fancyInt(count);
         distinctHashSet.clear();
       } else {
-        (*result)(resultRow, a._outCol) = blockEnd - blockStart + 1;
+        (*result)(resultRow, a._outCol) = fancyInt(blockEnd - blockStart + 1);
       }
       break;
     case ParsedQuery::AggregateType::GROUP_CONCAT: {
@@ -329,19 +328,19 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
-              out << index.getTextExcerpt(input(i, a._inCol)) << *delim;
+              out << index.getTextExcerpt(input(i, a._inCol).getUnsigned()) << *delim;
             }
           }
           const auto it = distinctHashSet.find(input(blockEnd, a._inCol));
           if (it == distinctHashSet.end()) {
-            out << index.getTextExcerpt(input(blockEnd, a._inCol));
+            out << index.getTextExcerpt(input(blockEnd, a._inCol).getUnsigned());
           }
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-            out << index.getTextExcerpt(input(i, a._inCol)) << *delim;
+            out << index.getTextExcerpt(input(i, a._inCol).getUnsigned()) << *delim;
           }
-          out << index.getTextExcerpt(input(blockEnd, a._inCol));
+          out << index.getTextExcerpt(input(blockEnd, a._inCol).getUnsigned());
         }
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::LOCAL_VOCAB) {
         if (a._distinct) {
@@ -350,7 +349,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
               // TODO(schnelle): What's the correct way to handle OPTIONAL here
-              out << inTable->idToOptionalString(input(i, a._inCol))
+              out << inTable->idToOptionalString(input(i, a._inCol).getUnsigned())
                          .value_or("")
                   << *delim;
             }
@@ -358,17 +357,17 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           const auto it = distinctHashSet.find(input(blockEnd, a._inCol));
           if (it == distinctHashSet.end()) {
             // TODO(schnelle): What's the correct way to handle OPTIONAL here
-            out << inTable->idToOptionalString(input(blockEnd, a._inCol))
+            out << inTable->idToOptionalString(input(blockEnd, a._inCol).getUnsigned())
                        .value_or("");
           }
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
             // TODO(schnelle): What's the correct way to handle OPTIONAL here
-            out << inTable->idToOptionalString(input(i, a._inCol)).value_or("")
+            out << inTable->idToOptionalString(input(i, a._inCol).getUnsigned()).value_or("")
                 << *delim;
           }
-          out << inTable->idToOptionalString(input(blockEnd, a._inCol))
+          out << inTable->idToOptionalString(input(blockEnd, a._inCol).getUnsigned())
                      .value_or("");
         }
       } else {
@@ -379,7 +378,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
               distinctHashSet.insert(input(i, a._inCol));
               // TODO(schnelle): What's the correct way to handle OPTIONAL here
               std::string entity =
-                  index.idToOptionalString(input(i, a._inCol)).value_or("");
+                  index.idToOptionalString(input(i, a._inCol).getUnsigned()).value_or("");
                 out << entity << *delim;
             }
           }
@@ -387,7 +386,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           if (it == distinctHashSet.end()) {
             // TODO(schnelle): What's the correct way to handle OPTIONAL here
             std::string entity =
-                index.idToOptionalString(input(blockEnd, a._inCol))
+                index.idToOptionalString(input(blockEnd, a._inCol).getUnsigned())
                     .value_or("");
               out << entity;
           }
@@ -396,76 +395,69 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
             // TODO(schnelle): What's the correct way to handle OPTIONAL here
             std::string entity =
-                index.idToOptionalString(input(i, a._inCol)).value_or("");
+                index.idToOptionalString(input(i, a._inCol).getUnsigned()).value_or("");
             out << entity << *delim;
           }
           // TODO(schnelle): What's the correct way to handle OPTIONAL here
           std::string entity =
-              index.idToOptionalString(input(blockEnd, a._inCol)).value_or("");
+              index.idToOptionalString(input(blockEnd, a._inCol).getUnsigned()).value_or("");
             out << entity;
         }
       }
-      (*result)(resultRow, a._outCol) = outTable->_localVocab->size();
+      (*result)(resultRow, a._outCol) = FancyId{FancyId::LOCAL_VOCAB, outTable->_localVocab->size()};
       outTable->_localVocab->push_back(out.str());
       break;
     }
     case ParsedQuery::AggregateType::MAX: {
       if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
-        Id res = std::numeric_limits<Id>::lowest();
+        auto res = FancyId::INTEGER_MIN_VAL;
         for (size_t i = blockStart; i <= blockEnd; i++) {
-          res = std::max(res, input(i, a._inCol));
+          res = std::max(res, input(i, a._inCol).getInteger());
         }
-        (*result)(resultRow, a._outCol) = res;
+        (*result)(resultRow, a._outCol) = fancyInt(res);
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
         float res = std::numeric_limits<float>::lowest();
         // used to store the id value of the entry interpreted as a float
-        float tmpF;
         for (size_t i = blockStart; i <= blockEnd; i++) {
-          // interpret the first sizeof(float) bytes of the entry as a float.
-          std::memcpy(&tmpF, &input(i, a._inCol), sizeof(float));
-          res = std::max(res, tmpF);
+          res = std::max(res, input(i, a._inCol).getFloat());
         }
-        (*result)(resultRow, a._outCol) = 0;
-        std::memcpy(&(*result)(resultRow, a._outCol), &res, sizeof(float));
+        (*result)(resultRow, a._outCol) = fancyFloat(res);
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT ||
                  inputTypes[a._inCol] == ResultTable::ResultType::LOCAL_VOCAB) {
         (*result)(resultRow, a._outCol) = ID_NO_VALUE;
       } else {
-        Id res = std::numeric_limits<Id>::lowest();
+        auto res = std::numeric_limits<Id>::lowest();
         for (size_t i = blockStart; i <= blockEnd; i++) {
-          res = std::max(res, input(i, a._inCol));
+          res = std::max(res, input(i, a._inCol).getUnsigned());
         }
-        (*result)(resultRow, a._outCol) = res;
+        (*result)(resultRow, a._outCol) = fancy(res);
       }
       break;
     }
     case ParsedQuery::AggregateType::MIN: {
       if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
-        Id res = std::numeric_limits<Id>::max();
+        auto res = FancyId::INTEGER_MIN_VAL;
         for (size_t i = blockStart; i <= blockEnd; i++) {
-          res = std::min(res, input(i, a._inCol));
+          res = std::min(res, input(i, a._inCol).getInteger());
         }
-        (*result)(resultRow, a._outCol) = res;
+        (*result)(resultRow, a._outCol) = fancyInt(res);
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
         float res = std::numeric_limits<float>::max();
         // used to store the id value of the entry interpreted as a float
-        float tmpF;
         for (size_t i = blockStart; i <= blockEnd; i++) {
-          // interpret the first sizeof(float) bytes of the entry as a float.
-          std::memcpy(&tmpF, &input(i, a._inCol), sizeof(float));
-          res = std::min(res, tmpF);
+          res = std::min(res, input(i, a._inCol).getFloat());
         }
-        (*result)(resultRow, a._outCol) = 0;
+        (*result)(resultRow, a._outCol) = fancyFloat(res);
         std::memcpy(&(*result)(resultRow, a._outCol), &res, sizeof(float));
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT ||
                  inputTypes[a._inCol] == ResultTable::ResultType::LOCAL_VOCAB) {
         (*result)(resultRow, a._outCol) = ID_NO_VALUE;
       } else {
-        Id res = std::numeric_limits<Id>::max();
+        auto res = FancyId::INTERNAL_MAX_VAL;
         for (size_t i = blockStart; i <= blockEnd; i++) {
-          res = std::min(res, input(i, a._inCol));
+          res = std::min(res, input(i, a._inCol).getUnsigned());
         }
-        (*result)(resultRow, a._outCol) = res;
+        (*result)(resultRow, a._outCol) = fancy(res);
       }
       break;
     }
@@ -480,32 +472,29 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
-              res += input(i, a._inCol);
+              res += input(i, a._inCol).getInteger();
             }
           }
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i <= blockEnd; i++) {
-            res += input(i, a._inCol);
+            res += input(i, a._inCol).getInteger();
           }
         }
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::FLOAT) {
         // used to store the id value of the entry interpreted as a float
-        float tmpF;
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
-              std::memcpy(&tmpF, &input(i, a._inCol), sizeof(float));
-              res += tmpF;
+              res += input(i, a._inCol).getFloat();
             }
           }
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i <= blockEnd; i++) {
-            std::memcpy(&tmpF, &input(i, a._inCol), sizeof(float));
-            res += tmpF;
+            res += input(i, a._inCol).getFloat();
           }
         }
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT ||
@@ -519,7 +508,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
               distinctHashSet.insert(input(i, a._inCol));
               // load the string, parse it as an xsd::int or float
               // TODO(schnelle): What's the correct way to handle OPTIONAL here
-              auto val = index.idToNumericValue(input(i, a._inCol));
+              auto val = index.idToNumericValue(input(i, a._inCol).getUnsigned());
               if (!val) {
                 res = std::numeric_limits<float>::quiet_NaN();
                 break;
@@ -533,7 +522,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           for (size_t i = blockStart; i <= blockEnd; i++) {
             // load the string, parse it as an xsd::int or float
             // TODO(schnelle): What's the correct way to handle OPTIONAL here
-            auto val = index.idToNumericValue(input(i, a._inCol));
+            auto val = index.idToNumericValue(input(i, a._inCol).getUnsigned());
             if (!val) {
               res = std::numeric_limits<float>::quiet_NaN();
               break;
@@ -543,8 +532,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           }
         }
       }
-      (*result)(resultRow, a._outCol) = 0;
-      std::memcpy(&(*result)(resultRow, a._outCol), &res, sizeof(float));
+      (*result)(resultRow, a._outCol) = fancyFloat(res);
       break;
     }
     case ParsedQuery::AggregateType::FIRST:
@@ -571,9 +559,9 @@ void doGroupBy(const IdTable& dynInput,
   if (dynInput.size() == 0) {
     return;
   }
-  const IdTableStatic<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
-  IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
-  ad_utility::HashSet<size_t> distinctHashSet;
+  const FancyTableStatic<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
+  FancyTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
+  ad_utility::HashSet<FancyId> distinctHashSet;
 
   if (groupByCols.empty()) {
     // The entire input is a single group
@@ -592,9 +580,9 @@ void doGroupBy(const IdTable& dynInput,
 
   // This stores the values of the group by cols for the current block. A block
   // ends when one of these values changes.
-  std::vector<std::pair<size_t, Id>> currentGroupBlock;
+  std::vector<std::pair<size_t, FancyId>> currentGroupBlock;
   for (size_t col : groupByCols) {
-    currentGroupBlock.push_back(std::pair<size_t, Id>(col, input(0, col)));
+    currentGroupBlock.emplace_back(col, input(0, col));
   }
   size_t blockStart = 0;
   size_t blockEnd = 0;

@@ -59,21 +59,21 @@ class Join : public Operation {
   }
 
   /**
-   * @brief Joins IdTables dynA and dynB on join column jc2, returning
+   * @brief Joins FancyTables dynA and dynB on join column jc2, returning
    * the result in dynRes. Creates a cross product for matching rows
    **/
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  static void join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
-                   size_t jc2, IdTable* dynRes);
+  static void join(const FancyTable& dynA, size_t jc1, const FancyTable& dynB,
+                   size_t jc2, FancyTable* dynRes);
 
   class RightLargerTag {};
   class LeftLargerTag {};
   template <typename TagType, int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  static void doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
+  static void doGallopInnerJoin(const TagType, const FancyTableStatic<L_WIDTH>& l1,
                                 const size_t jc1,
-                                const IdTableStatic<R_WIDTH>& l2,
+                                const FancyTableStatic<R_WIDTH>& l2,
                                 const size_t jc2,
-                                IdTableStatic<OUT_WIDTH>* result);
+                                FancyTableStatic<OUT_WIDTH>* result);
 
  private:
   std::shared_ptr<QueryExecutionTree> _left;
@@ -98,18 +98,18 @@ class Join : public Operation {
 
   void computeResultForJoinWithFullScanDummy(ResultTable* result) const;
 
-  using ScanMethodType = std::function<void(Id, IdTable*)>;
+  using ScanMethodType = std::function<void(Id, FancyTable*)>;
 
   ScanMethodType getScanMethod(
       std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const;
 
-  void doComputeJoinWithFullScanDummyLeft(const IdTable& v, IdTable* r) const;
+  void doComputeJoinWithFullScanDummyLeft(const FancyTable& v, FancyTable* r) const;
 
-  void doComputeJoinWithFullScanDummyRight(const IdTable& v, IdTable* r) const;
+  void doComputeJoinWithFullScanDummyRight(const FancyTable& v, FancyTable* r) const;
 
-  void appendCrossProduct(const IdTable::const_iterator& leftBegin,
-                          const IdTable::const_iterator& leftEnd,
-                          const IdTable::const_iterator& rightBegin,
-                          const IdTable::const_iterator& rightEnd,
-                          IdTable* res) const;
+  void appendCrossProduct(const FancyTable::const_iterator& leftBegin,
+                          const FancyTable::const_iterator& leftEnd,
+                          const FancyTable::const_iterator& rightBegin,
+                          const FancyTable::const_iterator& rightEnd,
+                          FancyTable* res) const;
 };

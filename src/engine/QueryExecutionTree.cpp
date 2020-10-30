@@ -107,7 +107,7 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
     return;
   }
 
-  const IdTable& data = res->_data;
+  const FancyTable& data = res->_data;
   size_t upperBound = std::min<size_t>(offset + limit, data.size());
   writeTable(data, sep, offset, upperBound, validIndices, out);
 
@@ -135,7 +135,7 @@ nlohmann::json QueryExecutionTree::writeResultAsJson(
     return nlohmann::json(std::vector<std::string>());
   }
 
-  const IdTable& data = res->_data;
+  const FancyTable& data = res->_data;
   return writeJsonTable(data, offset, limit, validIndices);
 }
 
@@ -194,7 +194,7 @@ void QueryExecutionTree::readFromCache() {
 
 // __________________________________________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeJsonTable(
-    const IdTable& data, size_t from, size_t limit,
+    const FancyTable& data, size_t from, size_t limit,
     const vector<pair<size_t, ResultTable::ResultType>>& validIndices) const {
   shared_ptr<const ResultTable> res = getResult();
   nlohmann::json json = nlohmann::json::parse("[]");
@@ -215,7 +215,7 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
       switch (idx.second) {
         case ResultTable::ResultType::KB: {
           std::optional<string> entity =
-              _qec->getIndex().idToOptionalString(currentId);
+              _qec->getIndex().idToOptionalString(currentId.getUnsigned());
           if (entity) {
             string entitystr = entity.value();
             if (ad_utility::startsWith(entitystr, VALUE_PREFIX)) {
@@ -226,10 +226,10 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
           break;
         }
         case ResultTable::ResultType::VERBATIM:
-          row.emplace_back(std::to_string(currentId));
+          row.emplace_back(std::to_string(currentId.getInteger()));
           break;
         case ResultTable::ResultType::TEXT:
-          row.emplace_back(_qec->getIndex().getTextExcerpt(currentId));
+          row.emplace_back(_qec->getIndex().getTextExcerpt(currentId.getUnsigned()));
           break;
         case ResultTable::ResultType::FLOAT: {
           float f;
@@ -240,7 +240,7 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
           break;
         }
         case ResultTable::ResultType::LOCAL_VOCAB: {
-          std::optional<string> entity = res->idToOptionalString(currentId);
+          std::optional<string> entity = res->idToOptionalString(currentId.getUnsigned());
           row.emplace_back(optToJson(entity));
           break;
         }
@@ -255,7 +255,7 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
 
 // _________________________________________________________________________________________________________
 void QueryExecutionTree::writeTable(
-    const IdTable& data, char sep, size_t from, size_t upperBound,
+    const FancyTable& data, char sep, size_t from, size_t upperBound,
     const vector<pair<size_t, ResultTable::ResultType>>& validIndices,
     std::ostream& out) const {
   shared_ptr<const ResultTable> res = getResult();
@@ -265,7 +265,7 @@ void QueryExecutionTree::writeTable(
         case ResultTable::ResultType::KB: {
           string entity =
               _qec->getIndex()
-                  .idToOptionalString(data(i, validIndices[j].first))
+                  .idToOptionalString(data(i, validIndices[j].first).getUnsigned())
                   .value_or("");
           if (ad_utility::startsWith(entity, VALUE_PREFIX)) {
             out << ad_utility::convertIndexWordToValueLiteral(entity);
@@ -279,7 +279,7 @@ void QueryExecutionTree::writeTable(
           break;
         case ResultTable::ResultType::TEXT:
           out << _qec->getIndex().getTextExcerpt(
-              data(i, validIndices[j].first));
+              data(i, validIndices[j].first).getUnsigned());
           break;
         case ResultTable::ResultType::FLOAT: {
           float f;
@@ -288,7 +288,7 @@ void QueryExecutionTree::writeTable(
           break;
         }
         case ResultTable::ResultType::LOCAL_VOCAB: {
-          out << res->idToOptionalString(data(i, validIndices[j].first))
+          out << res->idToOptionalString(data(i, validIndices[j].first).getUnsigned())
                      .value_or("");
           break;
         }

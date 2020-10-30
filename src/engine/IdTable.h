@@ -492,8 +492,6 @@ class IdTableImpl<T, 0> {
 template <typename T, int COLS>
 class IdTableStatic;
 
-template <typename T>
-using IdTable = IdTableStatic<T, 0>;
 
 template <typename T, int COLS>
 class IdTableStatic : private IdTableImpl<T, COLS> {
@@ -771,8 +769,8 @@ class IdTableStatic : private IdTableImpl<T, COLS> {
       actualEnd = iterator(_data, begin.row() + 1,
                            _cols);
     }
-    if (actualEnd.row() > end().row()) {
-      actualEnd = end();
+    if (actualEnd.row() > this->end().row()) {
+      actualEnd = this->end();
     }
     if (actualEnd.row() <= begin.row()) {
       return;
@@ -846,8 +844,8 @@ class IdTableStatic : private IdTableImpl<T, COLS> {
    * id tables data. This is effectively a move operation that also
    * changes the type to an equibalent one.
    **/
-  IdTable<T> moveToDynamic() {
-    IdTable<T> tmp(cols());
+  IdTableStatic<T, 0> moveToDynamic() {
+    IdTableStatic<T, 0> tmp(cols());
     tmp._data = _data;
     tmp._size = _size;
     tmp._capacity = _capacity;
@@ -869,6 +867,21 @@ class IdTableStatic : private IdTableImpl<T, COLS> {
       out << std::endl;
     }
     return out;
+  }
+
+
+  friend void swap(IdTableStatic<T, COLS>& left, IdTableStatic<T, COLS>& right) {
+    using std::swap;
+    swap(left._data, right._data);
+    swap(left._size, right._size);
+    swap(left._capacity, right._capacity);
+    // As the cols member only exists for COLS = 0 we use the setCols
+    // method here. setCols is guaranteed to always be defined even
+    // if COLS != 0 (It might not have any effect though).
+    size_t rcols = right.cols();
+    right.setCols(left.cols());
+    left.setCols(rcols);
+    swap(left._manage_storage, right._manage_storage);
   }
 
  private:
@@ -905,17 +918,11 @@ class IdTableStatic : private IdTableImpl<T, COLS> {
   }
 };
 
-template <typename T, int COLS>
-void swap(IdTableStatic<T, COLS>& left, IdTableStatic<T, COLS>& right) {
-  using std::swap;
-  swap(left._data, right._data);
-  swap(left._size, right._size);
-  swap(left._capacity, right._capacity);
-  // As the cols member only exists for COLS = 0 we use the setCols
-  // method here. setCols is guaranteed to always be defined even
-  // if COLS != 0 (It might not have any effect though).
-  size_t rcols = right.cols();
-  right.setCols(left.cols());
-  left.setCols(rcols);
-  swap(left._manage_storage, right._manage_storage);
-}
+
+
+// typedef to make things simples
+template<int COLS>
+using FancyTableStatic = IdTableStatic<FancyId, COLS>;
+using FancyTable = IdTableStatic<FancyId, 0>;
+
+using IdTable = FancyTable;

@@ -125,7 +125,7 @@ const RelationMetaData IndexMetaData<MapType>::getRmd(SimpleId relId) const {
 
 // _____________________________________________________________________________
 template <class MapType>
-bool IndexMetaData<MapType>::relationExists(Id relId) const {
+bool IndexMetaData<MapType>::relationExists(SimpleId relId) const {
   return _data.count(relId) > 0;
 }
 

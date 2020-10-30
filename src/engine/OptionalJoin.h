@@ -81,13 +81,13 @@ class OptionalJoin : public Operation {
    * @param res the result row
    */
   template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
-  static void createOptionalResult(const IdTableStatic<A_WIDTH>& a, size_t aIdx,
-                                   bool aEmpty, const IdTableStatic<B_WIDTH>& b,
+  static void createOptionalResult(const FancyTableStatic<A_WIDTH>& a, size_t aIdx,
+                                   bool aEmpty, const FancyTableStatic<B_WIDTH>& b,
                                    size_t bIdx, bool bEmpty,
                                    int joinColumnBitmap_a,
                                    int joinColumnBitmap_b,
                                    const std::vector<Id>& joinColumnAToB,
-                                   IdTableStatic<OUT_WIDTH>* res);
+                                   FancyTableStatic<OUT_WIDTH>* res);
 
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;

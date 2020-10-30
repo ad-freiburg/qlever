@@ -116,8 +116,8 @@ string Filter::getDescriptor() const {
 
 // _____________________________________________________________________________
 template <ResultTable::ResultType T, int WIDTH>
-void Filter::computeFilter(IdTableStatic<WIDTH>* result, size_t lhs, size_t rhs,
-                           const IdTableStatic<WIDTH>& input) const {
+void Filter::computeFilter(FancyTableStatic<WIDTH>* result, size_t lhs, size_t rhs,
+                           const FancyTableStatic<WIDTH>& input) const {
   switch (_type) {
     case SparqlFilter::EQ:
       getEngine().filter(
@@ -189,8 +189,8 @@ template <int WIDTH>
 void Filter::computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
                                        size_t rhsInd, const IdTable& dynInput,
                                        ResultTable::ResultType lhsType) {
-  const IdTableStatic<WIDTH> input = dynInput.asStaticView<WIDTH>();
-  IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
+  const FancyTableStatic<WIDTH> input = dynInput.asStaticView<WIDTH>();
+  FancyTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
   switch (lhsType) {
     case ResultTable::ResultType::KB:
       computeFilter<ResultTable::ResultType::KB>(&result, lhsInd, rhsInd,
@@ -251,12 +251,12 @@ void Filter::computeResult(ResultTable* result) {
 // _____________________________________________________________________________
 template <ResultTable::ResultType T, int WIDTH>
 void Filter::computeFilterFixedValue(
-    IdTableStatic<WIDTH>* res, size_t lhs, Id rhs,
-    const IdTableStatic<WIDTH>& input,
+    FancyTableStatic<WIDTH>* res, size_t lhs, FancyId rhs,
+    const FancyTableStatic<WIDTH>& input,
     shared_ptr<const ResultTable> subRes) const {
   bool lhs_is_sorted =
       subRes->_sortedBy.size() > 0 && subRes->_sortedBy[0] == lhs;
-  Id* rhs_array = new Id[res->cols()];
+  auto rhs_array = new FancyId[res->cols()];
   IdTable::Row rhs_row(rhs_array, res->cols());
   switch (_type) {
     case SparqlFilter::EQ:
@@ -399,9 +399,9 @@ void Filter::computeFilterFixedValue(
           [this, lhs, &subRes](const auto& e) {
             std::optional<string> entity;
             if constexpr (T == ResultTable::ResultType::KB) {
-              entity = getIndex().idToOptionalString(e[lhs]);
+              entity = getIndex().idToOptionalString(e[lhs].getUnsigned());
             } else if (T == ResultTable::ResultType::LOCAL_VOCAB) {
-              entity = subRes->idToOptionalString(e[lhs]);
+              entity = subRes->idToOptionalString(e[lhs].getUnsigned());
             }
             if (!entity) {
               return true;
@@ -419,9 +419,12 @@ void Filter::computeFilterFixedValue(
         // TODO<joka921>: handle Levels correctly;
         // according to the standard, structured bindings cannot be captured by
         // lambdas and clang fails to compile with them
-        Id lowerBound, upperBound;
-        std::tie(lowerBound, upperBound) =
+        Id lowerBoundSimple, upperBoundSimple;
+        std::tie(lowerBoundSimple, upperBoundSimple) =
             getIndex().getVocab().prefix_range(rhs);
+
+        auto lowerBound = fancy(lowerBoundSimple);
+        auto upperBound = fancy(upperBoundSimple);
 
         LOG(DEBUG) << "upper and lower bound are " << upperBound << ' '
                    << lowerBound << std::endl;
@@ -476,9 +479,9 @@ void Filter::computeFilterFixedValue(
           [this, self_regex, &lhs, &subRes](const auto& e) {
             std::optional<string> entity;
             if constexpr (T == ResultTable::ResultType::KB) {
-              entity = getIndex().idToOptionalString(e[lhs]);
+              entity = getIndex().idToOptionalString(e[lhs].getUnsigned());
             } else if (T == ResultTable::ResultType::LOCAL_VOCAB) {
-              entity = subRes->idToOptionalString(e[lhs]);
+              entity = subRes->idToOptionalString(e[lhs].getUnsigned());
             }
             if (!entity) {
               return true;
@@ -497,8 +500,8 @@ void Filter::computeResultFixedValue(
     ResultTable* resultTable,
     const std::shared_ptr<const ResultTable> subRes) const {
   LOG(DEBUG) << "Filter result computation..." << endl;
-  IdTableStatic<WIDTH> result = resultTable->_data.moveToStatic<WIDTH>();
-  const IdTableStatic<WIDTH> input = subRes->_data.asStaticView<WIDTH>();
+  FancyTableStatic<WIDTH> result = resultTable->_data.moveToStatic<WIDTH>();
+  const FancyTableStatic<WIDTH> input = subRes->_data.asStaticView<WIDTH>();
 
   if (_lhsAsString) {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
@@ -619,23 +622,23 @@ void Filter::computeResultFixedValue(
   }
   switch (resultType) {
     case ResultTable::ResultType::KB:
-      computeFilterFixedValue<ResultTable::ResultType::KB>(&result, lhs, rhs,
+      computeFilterFixedValue<ResultTable::ResultType::KB>(&result, lhs, fancy(rhs),
                                                            input, subRes);
       break;
     case ResultTable::ResultType::VERBATIM:
       computeFilterFixedValue<ResultTable::ResultType::VERBATIM>(
-          &result, lhs, rhs, input, subRes);
+          &result, lhs, fancyInt(rhs), input, subRes);
       break;
     case ResultTable::ResultType::FLOAT:
-      computeFilterFixedValue<ResultTable::ResultType::FLOAT>(&result, lhs, rhs,
+      computeFilterFixedValue<ResultTable::ResultType::FLOAT>(&result, lhs, fancyFloat(rhs),
                                                               input, subRes);
       break;
     case ResultTable::ResultType::LOCAL_VOCAB:
       computeFilterFixedValue<ResultTable::ResultType::LOCAL_VOCAB>(
-          &result, lhs, rhs, input, subRes);
+          &result, lhs, FancyId{FancyId::LOCAL_VOCAB, rhs}, input, subRes);
       break;
     case ResultTable::ResultType::TEXT:
-      computeFilterFixedValue<ResultTable::ResultType::TEXT>(&result, lhs, rhs,
+      computeFilterFixedValue<ResultTable::ResultType::TEXT>(&result, lhs, fancyText(rhs),
                                                              input, subRes);
       break;
     default:

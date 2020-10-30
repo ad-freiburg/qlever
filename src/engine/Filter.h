@@ -115,8 +115,8 @@ class Filter : public Operation {
    * @return The pointer res.
    */
   template <ResultTable::ResultType T, int WIDTH>
-  void computeFilter(IdTableStatic<WIDTH>* dynResult, size_t lhs, size_t rhs,
-                     const IdTableStatic<WIDTH>& dynInput) const;
+  void computeFilter(FancyTableStatic<WIDTH>* dynResult, size_t lhs, size_t rhs,
+                     const FancyTableStatic<WIDTH>& dynInput) const;
 
   template <int WIDTH>
   void computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
@@ -129,8 +129,8 @@ class Filter : public Operation {
    * @return The pointer res.
    */
   template <ResultTable::ResultType T, int WIDTH>
-  void computeFilterFixedValue(IdTableStatic<WIDTH>* res, size_t lhs, Id rhs,
-                               const IdTableStatic<WIDTH>& input,
+  void computeFilterFixedValue(FancyTableStatic<WIDTH>* res, size_t lhs, FancyId rhs,
+                               const FancyTableStatic<WIDTH>& input,
                                shared_ptr<const ResultTable> subRes) const;
 
   template <int WIDTH>
@@ -145,15 +145,13 @@ class Filter : public Operation {
    */
   template <ResultTable::ResultType T>
   struct ValueReader {
-    static Id get(size_t in) { return in; }
+    static FancyId get(FancyId in) { return in; }
   };
 };
 
 template <>
 struct Filter::ValueReader<ResultTable::ResultType::FLOAT> {
-  static float get(size_t in) {
-    float f;
-    std::memcpy(&f, &in, sizeof(float));
-    return f;
+  static float get(FancyId in) {
+    return in.convertToFloat();
   }
 };

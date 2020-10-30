@@ -261,9 +261,9 @@ void MultiColumnJoin::computeMultiColumnJoin(
     joinColumnBitmap_b |= (1 << jc[1]);
   }
 
-  IdTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
-  IdTableStatic<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
-  IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
+  FancyTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
+  FancyTableStatic<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
+  FancyTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
 
   bool matched = false;
   size_t ia = 0, ib = 0;

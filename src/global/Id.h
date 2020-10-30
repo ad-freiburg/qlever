@@ -10,6 +10,7 @@
 #include <array>
 
 #include "../util/Exception.h"
+#include "../util/DefaultKeyProvider.h"
 template< class To, class From >
 To bit_cast(const From& from) noexcept {
   static_assert(sizeof(To) == sizeof(From));
@@ -102,7 +103,7 @@ class alignas(alignof(uint64_t)) FancyId {
   }
 
   // safe conversion to float. Cast INTEGER and FLOAT, throw exception otherwise
-  float convertToFloat() {
+  float convertToFloat() const {
     switch (type()) {
       case FLOAT:
         return getFloat();
@@ -382,20 +383,40 @@ inline FancyId fancy(size_t i) {
   return FancyId(FancyId::VOCAB, i);
 }
 
+inline FancyId fancyInt(int64_t i) {
+  return FancyId(FancyId::INTEGER, i);
+}
+
+inline FancyId fancyFloat(float f) {
+  return FancyId(f);
+}
+
+inline FancyId fancyText(uint64_t id) {
+  return FancyId(FancyId::TEXT, id);
+}
+
 typedef uint16_t Score;
 
 
 namespace std {
   template <> struct hash<FancyId> {
-    size_t operator()(const FancyId& x) {
+    size_t operator()(const FancyId& x) const {
       return std::hash<uint64_t>{}(bit_cast<uint64_t>(x));
     }
   };
 }
 
-/// when we really just need an Id
-using Id = FancyId;
-static constexpr Id ID_NO_VALUE = Id::NoValue();
 
 using SimpleId = uint64_t;
 static constexpr SimpleId SIMPLE_ID_NO_VALUE = std::numeric_limits<SimpleId>::max() - 1;
+
+/// when we really just need an Id
+using Id = SimpleId;
+static constexpr FancyId ID_NO_VALUE = FancyId::NoValue();
+namespace {
+template <>
+const FancyId DefaultKeyProvider<FancyId>::DEFAULT_EMPTY_KEY = ID_NO_VALUE;
+
+template <>
+const FancyId DefaultKeyProvider<FancyId>::DEFAULT_DELETED_KEY = fancy(FancyId::INTERNAL_MAX_VAL - 2);
+}  // namespace

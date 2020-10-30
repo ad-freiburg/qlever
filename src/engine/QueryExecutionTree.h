@@ -188,11 +188,11 @@ class QueryExecutionTree {
    * @return a 2D-Json array corresponding to the IdTable given the arguments
    */
   nlohmann::json writeJsonTable(
-      const IdTable& data, size_t from, size_t limit,
+      const FancyTable & data, size_t from, size_t limit,
       const vector<pair<size_t, ResultTable::ResultType>>& validIndices) const;
 
   void writeTable(
-      const IdTable& data, char sep, size_t from, size_t upperBound,
+      const FancyTable& data, char sep, size_t from, size_t upperBound,
       const vector<pair<size_t, ResultTable::ResultType>>& validIndices,
       std::ostream& out) const;
 };

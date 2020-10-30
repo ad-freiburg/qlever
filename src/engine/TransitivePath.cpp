@@ -212,8 +212,8 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
     return;
   }
 
-  const IdTableStatic<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
-  IdTableStatic<2> res = dynRes->moveToStatic<2>();
+  const FancyTableStatic<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
+  FancyTableStatic<2> res = dynRes->moveToStatic<2>();
 
   // Used to map entries in the left column to entries they have connection with
   Map edges;
@@ -227,8 +227,8 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
       nodes.push_back(leftValue);
     }
     for (size_t i = 0; i < sub.size(); i++) {
-      size_t l = sub(i, leftSubCol);
-      size_t r = sub(i, rightSubCol);
+      size_t l = sub(i, leftSubCol).getUnsigned();
+      size_t r = sub(i, rightSubCol).getUnsigned();
       MapIt it = edges.find(l);
       if (it == edges.end()) {
         if constexpr (leftIsVar) {
@@ -248,8 +248,8 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
     nodes.push_back(rightValue);
     for (size_t i = 0; i < sub.size(); i++) {
       // Use the inverted edges
-      size_t l = sub(i, leftSubCol);
-      size_t r = sub(i, rightSubCol);
+      size_t l = sub(i, leftSubCol).getUnsigned();
+      size_t r = sub(i, rightSubCol).getUnsigned();
       MapIt it = edges.find(r);
       if (it == edges.end()) {
         std::shared_ptr<ad_utility::HashSet<Id>> s =
@@ -311,9 +311,9 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
         if (childDepth >= minDist) {
           marks.insert(child);
           if constexpr (rightIsVar) {
-            res.push_back({nodes[i], child});
+            res.push_back({fancy(nodes[i]), fancy(child)});
           } else {
-            res.push_back({child, nodes[i]});
+            res.push_back({fancy(child), fancy(nodes[i])});
           }
         }
         // Add the child to the stack
@@ -342,17 +342,17 @@ void TransitivePath::computeTransitivePathLeftBound(
   using Map = ad_utility::HashMap<Id, std::shared_ptr<ad_utility::HashSet<Id>>>;
   using MapIt = Map::iterator;
 
-  const IdTableStatic<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
-  const IdTableStatic<LEFT_WIDTH> left = dynLeft.asStaticView<LEFT_WIDTH>();
-  IdTableStatic<RES_WIDTH> res = dynRes->moveToStatic<RES_WIDTH>();
+  const FancyTableStatic<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
+  const FancyTableStatic<LEFT_WIDTH> left = dynLeft.asStaticView<LEFT_WIDTH>();
+  FancyTableStatic<RES_WIDTH> res = dynRes->moveToStatic<RES_WIDTH>();
 
   // Used to map entries in the left column to entries they have connection with
   Map edges;
 
   // initialize the map from the subresult
   for (size_t i = 0; i < sub.size(); i++) {
-    size_t l = sub(i, leftSubCol);
-    size_t r = sub(i, rightSubCol);
+    size_t l = sub(i, leftSubCol).getUnsigned();
+    size_t r = sub(i, rightSubCol).getUnsigned();
     MapIt it = edges.find(l);
     if (it == edges.end()) {
       std::shared_ptr<ad_utility::HashSet<Id>> s =
@@ -381,7 +381,7 @@ void TransitivePath::computeTransitivePathLeftBound(
   size_t last_result_begin = 0;
   size_t last_result_end = 0;
   for (size_t i = 0; i < left.size(); i++) {
-    if (left[i][leftSideCol] == last_elem) {
+    if (left[i][leftSideCol].getUnsigned() == last_elem) {
       // We can repeat the last output
       size_t num_new = last_result_end - last_result_begin;
       size_t res_row = res.size();
@@ -393,7 +393,7 @@ void TransitivePath::computeTransitivePathLeftBound(
       }
       continue;
     }
-    last_elem = left[i][leftSideCol];
+    last_elem = left[i][leftSideCol].getUnsigned();
     last_result_begin = res.size();
     MapIt rootEdges = edges.find(last_elem);
     if (rootEdges != edges.end()) {
@@ -431,8 +431,8 @@ void TransitivePath::computeTransitivePathLeftBound(
           if (rightIsVar || child == rightValue) {
             size_t row = res.size();
             res.emplace_back();
-            res(row, 0) = last_elem;
-            res(row, 1) = child;
+            res(row, 0) = fancy(last_elem);
+            res(row, 1) = fancy(child);
             for (size_t k = 2; k < resWidth + 1; k++) {
               if (k - 2 < leftSideCol) {
                 res(row, k) = left(i, k - 2);
@@ -473,17 +473,17 @@ void TransitivePath::computeTransitivePathRightBound(
   using Map = ad_utility::HashMap<Id, std::shared_ptr<ad_utility::HashSet<Id>>>;
   using MapIt = Map::iterator;
 
-  const IdTableStatic<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
-  const IdTableStatic<LEFT_WIDTH> right = dynRight.asStaticView<LEFT_WIDTH>();
-  IdTableStatic<RES_WIDTH> res = dynRes->moveToStatic<RES_WIDTH>();
+  const FancyTableStatic<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
+  const FancyTableStatic<LEFT_WIDTH> right = dynRight.asStaticView<LEFT_WIDTH>();
+  FancyTableStatic<RES_WIDTH> res = dynRes->moveToStatic<RES_WIDTH>();
 
   // Used to map entries in the left column to entries they have connection with
   Map edges;
 
   // initialize the map from the subresult
   for (size_t i = 0; i < sub.size(); i++) {
-    size_t l = sub(i, leftSubCol);
-    size_t r = sub(i, rightSubCol);
+    size_t l = sub(i, leftSubCol).getUnsigned();
+    size_t r = sub(i, rightSubCol).getUnsigned();
     MapIt it = edges.find(r);
     if (it == edges.end()) {
       std::shared_ptr<ad_utility::HashSet<Id>> s =
@@ -512,7 +512,7 @@ void TransitivePath::computeTransitivePathRightBound(
   size_t last_result_begin = 0;
   size_t last_result_end = 0;
   for (size_t i = 0; i < right.size(); i++) {
-    if (right[i][rightSideCol] == last_elem) {
+    if (right[i][rightSideCol].getUnsigned() == last_elem) {
       // We can repeat the last output
       size_t num_new = last_result_end - last_result_begin;
       size_t res_row = res.size();
@@ -524,7 +524,7 @@ void TransitivePath::computeTransitivePathRightBound(
       }
       continue;
     }
-    last_elem = right(i, rightSideCol);
+    last_elem = right(i, rightSideCol).getUnsigned();
     last_result_begin = res.size();
     MapIt rootEdges = edges.find(last_elem);
     if (rootEdges != edges.end()) {
@@ -562,8 +562,8 @@ void TransitivePath::computeTransitivePathRightBound(
           if (leftIsVar || child == leftValue) {
             size_t row = res.size();
             res.emplace_back();
-            res(row, 0) = child;
-            res(row, 1) = last_elem;
+            res(row, 0) = fancy(child);
+            res(row, 1) = fancy(last_elem);
             for (size_t k = 2; k < resWidth + 1; k++) {
               if (k - 2 < rightSideCol) {
                 res(row, k) = right(i, k - 2);

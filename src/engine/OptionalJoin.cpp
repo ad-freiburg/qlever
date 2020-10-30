@@ -273,10 +273,10 @@ void OptionalJoin::computeSizeEstimateAndMultiplicities() {
 
 template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
 void OptionalJoin::createOptionalResult(
-    const IdTableStatic<A_WIDTH>& a, size_t aIdx, bool aEmpty,
-    const IdTableStatic<B_WIDTH>& b, size_t bIdx, bool bEmpty,
+    const FancyTableStatic<A_WIDTH>& a, size_t aIdx, bool aEmpty,
+    const FancyTableStatic<B_WIDTH>& b, size_t bIdx, bool bEmpty,
     int joinColumnBitmap_a, int joinColumnBitmap_b,
-    const std::vector<Id>& joinColumnAToB, IdTableStatic<OUT_WIDTH>* res) {
+    const std::vector<Id>& joinColumnAToB, FancyTableStatic<OUT_WIDTH>* res) {
   assert(!(aEmpty && bEmpty));
   res->emplace_back();
   size_t rIdx = res->size() - 1;
@@ -334,9 +334,9 @@ void OptionalJoin::optionalJoin(const IdTable& dynA, const IdTable& dynB,
     return;
   }
 
-  const IdTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
-  const IdTableStatic<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
-  IdTableStatic<OUT_WIDTH> result = dynResult->asStaticView<OUT_WIDTH>();
+  const FancyTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
+  const FancyTableStatic<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
+  FancyTableStatic<OUT_WIDTH> result = dynResult->asStaticView<OUT_WIDTH>();
 
   int joinColumnBitmap_a = 0;
   int joinColumnBitmap_b = 0;

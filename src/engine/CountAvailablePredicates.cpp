@@ -153,7 +153,7 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
     // otherwise return an empty result.
     if (getIndex().getVocab().getId(_subjectEntityName.value(), &entityId)) {
       IdTable input(1);
-      input.push_back({entityId});
+      input.push_back({fancy(entityId)});
       int width = input.cols();
       CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
                         input, &result->_data, hasPattern, hasPredicate,
@@ -183,7 +183,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
     IdTable* dynResult, const vector<PatternID>& hasPattern,
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
-  IdTableStatic<2> result = dynResult->moveToStatic<2>();
+  FancyTableStatic<2> result = dynResult->moveToStatic<2>();
   LOG(DEBUG) << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
   ad_utility::HashMap<size_t, size_t> patternCounts;
@@ -219,7 +219,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   }
   result.reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
-    result.push_back({it.first, static_cast<Id>(it.second)});
+    result.push_back({fancy(it.first), fancyInt(it.second)});
   }
   *dynResult = result.moveToDynamic();
 }
@@ -231,8 +231,8 @@ void CountAvailablePredicates::computePatternTrick(
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns, const size_t subjectColumn,
     RuntimeInformation* runtimeInfo) {
-  const IdTableStatic<I> input = dynInput.asStaticView<I>();
-  IdTableStatic<2> result = dynResult->moveToStatic<2>();
+  const FancyTableStatic<I> input = dynInput.asStaticView<I>();
+  FancyTableStatic<2> result = dynResult->moveToStatic<2>();
   LOG(DEBUG) << "For " << input.size() << " entities in column "
              << subjectColumn << std::endl;
 
@@ -245,10 +245,10 @@ void CountAvailablePredicates::computePatternTrick(
   size_t numPatternPredicates = 0;
   // the number of predicates counted without patterns
   size_t numListPredicates = 0;
-  Id lastSubject = ID_NO_VALUE;
+  auto lastSubject = ID_NO_VALUE.getUnsigned();
   while (inputIdx < input.size()) {
     // Skip over elements with the same subject (don't count them twice)
-    Id subject = input(inputIdx, subjectColumn);
+    auto subject = input(inputIdx, subjectColumn).getUnsigned();
     if (subject == lastSubject) {
       inputIdx++;
       continue;
@@ -296,7 +296,7 @@ void CountAvailablePredicates::computePatternTrick(
   // write the predicate counts to the result
   result.reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
-    result.push_back({it.first, static_cast<Id>(it.second)});
+    result.push_back({fancy(it.first), fancyInt(it.second)});
   }
 
   // Print interesting statistics about the pattern trick

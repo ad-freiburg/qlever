@@ -265,7 +265,7 @@ void HasPredicateScan::computeFreeS(
     const std::vector<PatternID>& hasPattern,
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
-  IdTableStatic<1> result = resultTable->_data.moveToStatic<1>();
+  FancyTableStatic<1> result = resultTable->_data.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
   Id id = 0;
   while (id < hasPattern.size() || id < hasPredicate.size()) {
@@ -276,7 +276,7 @@ void HasPredicateScan::computeFreeS(
       std::tie(patternData, numPredicates) = patterns[hasPattern[id]];
       for (size_t i = 0; i < numPredicates; i++) {
         if (patternData[i] == objectId) {
-          result.push_back({id});
+          result.push_back({fancy(id)});
         }
       }
     } else if (id < hasPredicate.size()) {
@@ -286,7 +286,7 @@ void HasPredicateScan::computeFreeS(
       std::tie(predicateData, numPredicates) = hasPredicate[id];
       for (size_t i = 0; i < numPredicates; i++) {
         if (predicateData[i] == objectId) {
-          result.push_back({id});
+          result.push_back({fancy(id)});
         }
       }
     }
@@ -300,7 +300,7 @@ void HasPredicateScan::computeFreeO(
     const std::vector<PatternID>& hasPattern,
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
-  IdTableStatic<1> result = resultTable->_data.moveToStatic<1>();
+  FancyTableStatic<1> result = resultTable->_data.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
 
   if (subjectId < hasPattern.size() && hasPattern[subjectId] != NO_PATTERN) {
@@ -309,7 +309,7 @@ void HasPredicateScan::computeFreeO(
     Id* patternData;
     std::tie(patternData, numPredicates) = patterns[hasPattern[subjectId]];
     for (size_t i = 0; i < numPredicates; i++) {
-      result.push_back({patternData[i]});
+      result.push_back({fancy(patternData[i])});
     }
   } else if (subjectId < hasPredicate.size()) {
     // add the relations
@@ -317,7 +317,7 @@ void HasPredicateScan::computeFreeO(
     Id* predicateData;
     std::tie(predicateData, numPredicates) = hasPredicate[subjectId];
     for (size_t i = 0; i < numPredicates; i++) {
-      result.push_back({predicateData[i]});
+      result.push_back({fancy(predicateData[i])});
     }
   }
   resultTable->_data = result.moveToDynamic();
@@ -329,7 +329,7 @@ void HasPredicateScan::computeFullScan(
     const CompactStringVector<size_t, Id>& patterns, size_t resultSize) {
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
-  IdTableStatic<2> result = resultTable->_data.moveToStatic<2>();
+  FancyTableStatic<2> result = resultTable->_data.moveToStatic<2>();
   result.reserve(resultSize);
 
   size_t id = 0;
@@ -340,7 +340,7 @@ void HasPredicateScan::computeFullScan(
       Id* patternData;
       std::tie(patternData, numPredicates) = patterns[hasPattern[id]];
       for (size_t i = 0; i < numPredicates; i++) {
-        result.push_back({id, patternData[i]});
+        result.push_back({fancy(id), fancy(patternData[i])});
       }
     } else if (id < hasPredicate.size()) {
       // add the relations
@@ -348,7 +348,7 @@ void HasPredicateScan::computeFullScan(
       Id* predicateData;
       std::tie(predicateData, numPredicates) = hasPredicate[id];
       for (size_t i = 0; i < numPredicates; i++) {
-        result.push_back({id, predicateData[i]});
+        result.push_back({fancy(id), fancy(predicateData[i])});
       }
     }
     id++;
@@ -362,13 +362,13 @@ void HasPredicateScan::computeSubqueryS(
     const std::vector<PatternID>& hasPattern,
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
-  IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
-  const IdTableStatic<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
+  FancyTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
+  const FancyTableStatic<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
 
   LOG(DEBUG) << "HasPredicateScan subresult size " << input.size() << std::endl;
 
   for (size_t i = 0; i < input.size(); i++) {
-    size_t id = input(i, subtreeColIndex);
+    size_t id = input(i, subtreeColIndex).getUnsigned();
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
       // Expand the pattern and add it to the result
       size_t numPredicates;
@@ -380,7 +380,7 @@ void HasPredicateScan::computeSubqueryS(
         for (size_t k = 0; k < input.cols(); k++) {
           result(backIdx, k) = input(i, k);
         }
-        result(backIdx, input.cols()) = patternData[j];
+        result(backIdx, input.cols()) = fancy(patternData[j]);
       }
     } else if (id < hasPredicate.size()) {
       // add the relations
@@ -393,7 +393,7 @@ void HasPredicateScan::computeSubqueryS(
         for (size_t k = 0; k < input.cols(); k++) {
           result(backIdx, k) = input(i, k);
         }
-        result(backIdx, input.cols()) = predicateData[j];
+        result(backIdx, input.cols()) = fancy(predicateData[j]);
       }
     } else {
       break;

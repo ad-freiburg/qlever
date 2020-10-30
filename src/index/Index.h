@@ -40,8 +40,8 @@ using std::vector;
 
 using json = nlohmann::json;
 
-using TextTable = IdTable<SimpleId>;
-using FancyTable = IdTable<FancyId>;
+//using TextTable = IdTableStatic<SimpleId, 0>;
+using TextTable = FancyTable;
 
 // a simple struct for better naming
 struct VocabularyData {
@@ -377,7 +377,7 @@ class Index {
    * Index class).
    */
   template <class Permutation>
-  void scan(Id key, IdTable<FancyId>* result, const Permutation& p) const {
+  void scan(Id key, FancyTable* result, const Permutation& p) const {
     if (p._meta.relationExists(key)) {
       const FullRelationMetaData& rmd = p._meta.getRmd(key)._rmdPairs;
       result->reserve(rmd.getNofElements() + 2);
@@ -398,7 +398,7 @@ class Index {
    * Index class).
    */
   template <class Permutation>
-  void scan(const ParsedVocabularyEntry & key, IdTable<FancyId>* result, const Permutation& p) const {
+  void scan(const ParsedVocabularyEntry & key, FancyTable* result, const Permutation& p) const {
     LOG(DEBUG) << "Performing " << p._readableName
                << " scan for full list for: " << key << "\n";
     SimpleId relId;
@@ -425,7 +425,7 @@ class Index {
    */
   // _____________________________________________________________________________
   template <class PermutationInfo>
-  void scan(const ParsedVocabularyEntry & keyFirst, const ParsedVocabularyEntry & keySecond, IdTable<FancyId>* result,
+  void scan(const ParsedVocabularyEntry & keyFirst, const ParsedVocabularyEntry & keySecond, FancyTable* result,
             const PermutationInfo& p) const {
     LOG(DEBUG) << "Performing " << p._readableName << "  scan of relation "
                << keyFirst << " with fixed subject: " << keySecond << "...\n";
@@ -450,7 +450,7 @@ class Index {
         } else {
           // If we don't have blocks, scan the whole relation and filter /
           // restrict.
-          IdTable<FancyId> fullRelation(2);
+          FancyTable fullRelation(2);
           fullRelation.resize(rmd.getNofElements());
           p._file.read(fullRelation.data(),
                        rmd.getNofElements() * 2 * sizeof(Id),
@@ -656,7 +656,7 @@ class Index {
   //   The Meta Data (Permutation offsets) for this relation,
   //   Careful: only multiplicity for first column is valid in return value
   static pair<FullRelationMetaData, BlockBasedRelationMetaData> writeRel(
-      ad_utility::File& out, off_t currentOffset, Id relId,
+      ad_utility::File& out, off_t currentOffset, SimpleId relId,
       const BufferedVector<array<Id, 2>>& data, size_t distinctC1,
       bool functional);
 
@@ -672,7 +672,7 @@ class Index {
 
   void scanFunctionalRelation(const pair<off_t, size_t>& blockOff, Id lhsId,
                               ad_utility::File& indexFile,
-                              IdTable<FancyId>* result) const;
+                              FancyTable* result) const;
 
   void scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                  const pair<off_t, size_t>& followBlock,

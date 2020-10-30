@@ -297,7 +297,7 @@ void Index::convertPartialToGlobalIds(
     std::string mmapFilename(_onDiskBase + PARTIAL_MMAP_IDS +
                              std::to_string(partialNum));
     LOG(INFO) << "Reading IdMap from " << mmapFilename << " ...\n";
-    ad_utility::HashMap<Id, Id> idMap = IdMapFromPartialIdMapFile(mmapFilename);
+    ad_utility::HashMap<SimpleId, SimpleId> idMap = IdMapFromPartialIdMapFile(mmapFilename);
     LOG(INFO) << "Done reading idMap\n";
     // Delete the temporary file in which we stored this map
     deleteTemporaryFile(mmapFilename);
@@ -305,10 +305,10 @@ void Index::convertPartialToGlobalIds(
     // update the triples for which this partial vocabulary was responsible
     for (size_t tmpNum = 0; tmpNum < actualLinesPerPartial[partialNum];
          ++tmpNum) {
-      std::array<Id, 3> curTriple = data[i];
+      std::array<SimpleId, 3> curTriple = data[i];
 
       // for all triple elements find their mapping from partial to global ids
-      ad_utility::HashMap<Id, Id>::iterator iterators[3];
+      ad_utility::HashMap<SimpleId, SimpleId>::iterator iterators[3];
       for (size_t k = 0; k < 3; ++k) {
         iterators[k] = idMap.find(curTriple[k]);
         if (iterators[k] == idMap.end()) {
@@ -318,7 +318,7 @@ void Index::convertPartialToGlobalIds(
       }
 
       // update the Element
-      data[i] = array<Id, 3>{
+      data[i] = array<SimpleId, 3>{
           {iterators[0]->second, iterators[1]->second, iterators[2]->second}};
 
       ++i;
@@ -332,8 +332,8 @@ void Index::convertPartialToGlobalIds(
 }
 
 pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeSwitchedRel(
-    ad_utility::File* out, off_t lastOffset, Id currentRel,
-    ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
+    ad_utility::File* out, off_t lastOffset, SimpleId currentRel,
+    ad_utility::BufferedVector<array<SimpleId, 2>>* bufPtr) {
   // sort according to the "switched" relation.
   auto& buffer = *bufPtr;
 
@@ -344,7 +344,7 @@ pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeSwitchedRel(
     return a[0] == b[0] ? a[1] < b[1] : a[0] < b[0];
   });
 
-  Id lastLhs = std::numeric_limits<Id>::max();
+  SimpleId lastLhs = std::numeric_limits<SimpleId>::max();
 
   bool functional = true;
   size_t distinctC1 = 0;
@@ -388,15 +388,15 @@ Index::createPermutationPairImpl(const string& fileName1,
             << " elements / facts." << std::endl;
   // Iterate over the vector and identify relation boundaries
   size_t from = 0;
-  Id currentRel = vec[0][c0];
+  SimpleId currentRel = vec[0][c0];
   off_t lastOffset1 = 0;
   off_t lastOffset2 = 0;
-  ad_utility::BufferedVector<array<Id, 2>> buffer(
+  ad_utility::BufferedVector<array<SimpleId, 2>> buffer(
       THRESHOLD_RELATION_CREATION, fileName1 + ".tmp.MmapBuffer");
   bool functional = true;
   size_t distinctC1 = 1;
   size_t sizeOfRelation = 0;
-  Id lastLhs = std::numeric_limits<Id>::max();
+  SimpleId lastLhs = std::numeric_limits<SimpleId>::max();
   for (TripleVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if ((*reader)[c0] != currentRel) {
       auto md = writeRel(out1, lastOffset1, currentRel, buffer, distinctC1,
@@ -418,7 +418,7 @@ Index::createPermutationPairImpl(const string& fileName1,
         distinctC1++;
       }
     }
-    buffer.push_back(array<Id, 2>{{(*reader)[c1], (*reader)[c2]}});
+    buffer.push_back(array<SimpleId, 2>{{(*reader)[c1], (*reader)[c2]}});
     lastLhs = (*reader)[c1];
   }
   if (from < vec.size()) {
@@ -561,15 +561,15 @@ void Index::createPatterns(bool vecAlreadySorted, VocabularyData* vocabData) {
 // _____________________________________________________________________________
 template <typename VecReaderType, typename... Args>
 void Index::createPatternsImpl(const string& fileName,
-                               CompactStringVector<Id, Id>& hasPredicate,
+                               CompactStringVector<SimpleId, SimpleId>& hasPredicate,
                                std::vector<PatternID>& hasPattern,
-                               CompactStringVector<size_t, Id>& patterns,
+                               CompactStringVector<size_t, SimpleId>& patterns,
                                double& fullHasPredicateMultiplicityEntities,
                                double& fullHasPredicateMultiplicityPredicates,
                                size_t& fullHasPredicateSize,
                                const size_t maxNumPatterns,
-                               const Id langPredLowerBound,
-                               const Id langPredUpperBound,
+                               const SimpleId langPredLowerBound,
+                               const SimpleId langPredUpperBound,
                                const Args&... vecReaderArgs) {
   IndexMetaDataHmap meta;
   typedef std::unordered_map<Pattern, size_t> PatternsCountMap;
@@ -587,7 +587,7 @@ void Index::createPatternsImpl(const string& fileName,
 
   size_t patternIndex = 0;
   size_t numValidPatterns = 0;
-  Id currentSubj = (*reader)[0];
+  SimpleId currentSubj = (*reader)[0];
 
   for (; !reader.empty(); ++reader) {
     auto triple = *reader;
@@ -673,25 +673,25 @@ void Index::createPatternsImpl(const string& fileName,
              << std::endl;
 
   // store the actual patterns
-  std::vector<std::vector<Id>> buffer;
+  std::vector<std::vector<SimpleId>> buffer;
   buffer.reserve(sortedPatterns.size());
   for (const auto& p : sortedPatterns) {
     buffer.push_back(p.first._data);
   }
   patterns.build(buffer);
 
-  std::unordered_map<Pattern, Id> patternSet;
+  std::unordered_map<Pattern, SimpleId> patternSet;
   patternSet.reserve(sortedPatterns.size());
   for (size_t i = 0; i < sortedPatterns.size(); i++) {
-    patternSet.insert(std::pair<Pattern, Id>(sortedPatterns[i].first, i));
+    patternSet.insert(std::pair<Pattern, SimpleId>(sortedPatterns[i].first, i));
   }
 
   LOG(DEBUG) << "Pattern set size: " << patternSet.size() << std::endl;
 
   // Associate entities with patterns if possible, store has-relation otherwise
-  ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPattern(
+  ad_utility::MmapVectorTmp<std::array<SimpleId, 2>> entityHasPattern(
       fileName + ".mmap.entityHasPattern.tmp");
-  ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPredicate(
+  ad_utility::MmapVectorTmp<std::array<SimpleId, 2>> entityHasPredicate(
       fileName + ".mmap.entityHasPredicate.tmp");
 
   size_t numEntitiesWithPatterns = 0;
@@ -710,7 +710,7 @@ void Index::createPatternsImpl(const string& fileName,
 
   // the input triple list is in spo order, we only need a hash map for
   // predicates
-  ad_utility::HashSet<Id> predicateHashSet;
+  ad_utility::HashSet<SimpleId> predicateHashSet;
 
   pattern.clear();
   currentSubj = (*VecReaderType(vecReaderArgs...))[0];
@@ -735,12 +735,12 @@ void Index::createPatternsImpl(const string& fileName,
             fullHasPredicatePredicatesDistinctSize++;
           }
           entityHasPredicate.push_back(
-              std::array<Id, 2>{currentSubj, pattern[i]});
+              std::array<SimpleId, 2>{currentSubj, pattern[i]});
         }
       } else {
         numEntitiesWithPatterns++;
         // The pattern does exist, add an entry to the has-pattern predicate
-        entityHasPattern.push_back(std::array<Id, 2>{currentSubj, it->second});
+        entityHasPattern.push_back(std::array<SimpleId, 2>{currentSubj, it->second});
         if (!haveCountedPattern[it->second]) {
           haveCountedPattern[it->second] = true;
           // iterate over the pattern once to
@@ -773,7 +773,7 @@ void Index::createPatternsImpl(const string& fileName,
     numEntitiesWithoutPatterns++;
     // The pattern does not exist, use the has-relation predicate instead
     for (size_t i = 0; i < patternIndex; i++) {
-      entityHasPredicate.push_back(std::array<Id, 2>{currentSubj, pattern[i]});
+      entityHasPredicate.push_back(std::array<SimpleId, 2>{currentSubj, pattern[i]});
       if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
         predicateHashSet.insert(pattern[i]);
         fullHasPredicatePredicatesDistinctSize++;
@@ -782,7 +782,7 @@ void Index::createPatternsImpl(const string& fileName,
   } else {
     numEntitiesWithPatterns++;
     // The pattern does exist, add an entry to the has-pattern predicate
-    entityHasPattern.push_back(std::array<Id, 2>{currentSubj, last->second});
+    entityHasPattern.push_back(std::array<SimpleId, 2>{currentSubj, last->second});
     for (size_t i = 0; i < patternIndex; i++) {
       if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
         predicateHashSet.insert(pattern[i]);
@@ -841,12 +841,12 @@ void Index::createPatternsImpl(const string& fileName,
   // write the entityHasPatterns vector
   size_t numHasPatterns = entityHasPattern.size();
   file.write(&numHasPatterns, sizeof(size_t));
-  file.write(entityHasPattern.data(), sizeof(Id) * numHasPatterns * 2);
+  file.write(entityHasPattern.data(), sizeof(SimpleId) * numHasPatterns * 2);
 
   // write the entityHasPredicate vector
   size_t numHasPredicatess = entityHasPredicate.size();
   file.write(&numHasPredicatess, sizeof(size_t));
-  file.write(entityHasPredicate.data(), sizeof(Id) * numHasPredicatess * 2);
+  file.write(entityHasPredicate.data(), sizeof(SimpleId) * numHasPredicatess * 2);
 
   // write the patterns
   patterns.write(file);
@@ -868,12 +868,12 @@ void Index::createPatternsImpl(const string& fileName,
     }
   }
 
-  vector<vector<Id>> hasPredicateTmp;
+  vector<vector<SimpleId>> hasPredicateTmp;
   if (entityHasPredicate.size() > 0) {
     hasPredicateTmp.resize(entityHasPredicate.back()[0] + 1);
     size_t pos = 0;
     for (size_t i = 0; i < entityHasPredicate.size(); i++) {
-      Id current = entityHasPredicate[i][0];
+      SimpleId current = entityHasPredicate[i][0];
       while (current > pos) {
         pos++;
       }
@@ -890,8 +890,8 @@ void Index::createPatternsImpl(const string& fileName,
 
 // _____________________________________________________________________________
 pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeRel(
-    ad_utility::File& out, off_t currentOffset, Id relId,
-    const ad_utility::BufferedVector<array<Id, 2>>& data, size_t distinctC1,
+    ad_utility::File& out, off_t currentOffset, SimpleId relId,
+    const ad_utility::BufferedVector<array<SimpleId, 2>>& data, size_t distinctC1,
     bool functional) {
   LOG(TRACE) << "Writing a relation ...\n";
   AD_CHECK_GT(data.size(), 0);
@@ -905,7 +905,7 @@ pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeRel(
       !functional && data.size() > USE_BLOCKS_INDEX_SIZE_TRESHOLD);
 
   // Write the full pair index.
-  out.write(data.data(), data.size() * 2 * sizeof(Id));
+  out.write(data.data(), data.size() * 2 * sizeof(SimpleId));
   pair<FullRelationMetaData, BlockBasedRelationMetaData> ret;
   ret.first = rmd;
 
@@ -920,7 +920,7 @@ pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeRel(
 
 // _____________________________________________________________________________
 void Index::writeFunctionalRelation(
-    const BufferedVector<array<Id, 2>>& data,
+    const BufferedVector<array<SimpleId, 2>>& data,
     pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd) {
   // Only has to do something if there are blocks.
   if (rmd.first.hasBlocks()) {
@@ -934,12 +934,12 @@ void Index::writeFunctionalRelation(
     // Create the block data for the meta data.
     // Blocks are offsets into the full pair index for functional relations.
     size_t nofDistinctLhs = 0;
-    Id lastLhs = std::numeric_limits<Id>::max();
+    SimpleId lastLhs = std::numeric_limits<SimpleId>::max();
     for (size_t i = 0; i < data.size(); ++i) {
       if (data[i][0] != lastLhs) {
         if (nofDistinctLhs % DISTINCT_LHS_PER_BLOCK == 0) {
           rmd.second._blocks.emplace_back(BlockMetaData(
-              data[i][0], rmd.first._startFullIndex + i * 2 * sizeof(Id)));
+              data[i][0], rmd.first._startFullIndex + i * 2 * sizeof(SimpleId)));
         }
         ++nofDistinctLhs;
       }
@@ -949,7 +949,7 @@ void Index::writeFunctionalRelation(
 
 // _____________________________________________________________________________
 void Index::writeNonFunctionalRelation(
-    ad_utility::File& out, const BufferedVector<array<Id, 2>>& data,
+    ad_utility::File& out, const BufferedVector<array<SimpleId, 2>>& data,
     pair<FullRelationMetaData, BlockBasedRelationMetaData>& rmd) {
   // Only has to do something if there are blocks.
   if (rmd.first.hasBlocks()) {
@@ -957,15 +957,15 @@ void Index::writeNonFunctionalRelation(
     // Make a pass over the data and extract a RHS list for each LHS.
     // Prepare both in buffers.
     // TODO: add compression - at least to RHS.
-    pair<Id, off_t>* bufLhs = new pair<Id, off_t>[data.size()];
-    Id* bufRhs = new Id[data.size()];
+    pair<SimpleId, off_t>* bufLhs = new pair<SimpleId, off_t>[data.size()];
+    SimpleId* bufRhs = new SimpleId[data.size()];
     size_t nofDistinctLhs = 0;
-    Id lastLhs = std::numeric_limits<Id>::max();
+    SimpleId lastLhs = std::numeric_limits<SimpleId>::max();
     size_t nofRhsDone = 0;
     for (; nofRhsDone < data.size(); ++nofRhsDone) {
       if (data[nofRhsDone][0] != lastLhs) {
         bufLhs[nofDistinctLhs++] =
-            pair<Id, off_t>(data[nofRhsDone][0], nofRhsDone * sizeof(Id));
+            pair<SimpleId, off_t>(data[nofRhsDone][0], nofRhsDone * sizeof(SimpleId));
         lastLhs = data[nofRhsDone][0];
       }
       bufRhs[nofRhsDone] = data[nofRhsDone][1];
@@ -973,20 +973,20 @@ void Index::writeNonFunctionalRelation(
 
     // Go over the Lhs data once more and adjust the offsets.
     off_t startRhs = rmd.first.getStartOfLhs() +
-                     nofDistinctLhs * (sizeof(Id) + sizeof(off_t));
+                     nofDistinctLhs * (sizeof(SimpleId) + sizeof(off_t));
 
     for (size_t i = 0; i < nofDistinctLhs; ++i) {
       bufLhs[i].second += startRhs;
     }
 
     // Write to file.
-    out.write(bufLhs, nofDistinctLhs * (sizeof(Id) + sizeof(off_t)));
-    out.write(bufRhs, data.size() * sizeof(Id));
+    out.write(bufLhs, nofDistinctLhs * (sizeof(SimpleId) + sizeof(off_t)));
+    out.write(bufRhs, data.size() * sizeof(SimpleId));
 
     // Update meta data.
     rmd.second._startRhs = startRhs;
     rmd.second._offsetAfter =
-        startRhs + rmd.first.getNofElements() * sizeof(Id);
+        startRhs + rmd.first.getNofElements() * sizeof(SimpleId);
 
     // Create the block data for the FullRelationMetaData.
     // Block are offsets into the LHS list for non-functional relations.
@@ -994,7 +994,7 @@ void Index::writeNonFunctionalRelation(
       if (i % DISTINCT_LHS_PER_BLOCK == 0) {
         rmd.second._blocks.emplace_back(BlockMetaData(
             bufLhs[i].first,
-            rmd.first.getStartOfLhs() + i * (sizeof(Id) + sizeof(off_t))));
+            rmd.first.getStartOfLhs() + i * (sizeof(SimpleId) + sizeof(off_t))));
       }
     }
     delete[] bufLhs;
@@ -1055,19 +1055,19 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
       size_t hasPatternSize;
       patternsFile.read(&hasPatternSize, sizeof(size_t), off);
       off += sizeof(size_t);
-      std::vector<array<Id, 2>> entityHasPattern(hasPatternSize);
+      std::vector<array<SimpleId, 2>> entityHasPattern(hasPatternSize);
       patternsFile.read(entityHasPattern.data(),
-                        hasPatternSize * sizeof(Id) * 2, off);
-      off += hasPatternSize * sizeof(Id) * 2;
+                        hasPatternSize * sizeof(SimpleId) * 2, off);
+      off += hasPatternSize * sizeof(SimpleId) * 2;
 
       // read the entity has relation vector
       size_t hasPredicateSize;
       patternsFile.read(&hasPredicateSize, sizeof(size_t), off);
       off += sizeof(size_t);
-      std::vector<array<Id, 2>> entityHasPredicate(hasPredicateSize);
+      std::vector<array<SimpleId, 2>> entityHasPredicate(hasPredicateSize);
       patternsFile.read(entityHasPredicate.data(),
-                        hasPredicateSize * sizeof(Id) * 2, off);
-      off += hasPredicateSize * sizeof(Id) * 2;
+                        hasPredicateSize * sizeof(SimpleId) * 2, off);
+      off += hasPredicateSize * sizeof(SimpleId) * 2;
 
       // read the patterns
       _patterns.load(patternsFile, off);
@@ -1086,12 +1086,12 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
         }
       }
 
-      vector<vector<Id>> hasPredicateTmp;
+      vector<vector<SimpleId>> hasPredicateTmp;
       if (entityHasPredicate.size() > 0) {
         hasPredicateTmp.resize(entityHasPredicate.back()[0] + 1);
         size_t pos = 0;
         for (size_t i = 0; i < entityHasPredicate.size(); i++) {
-          Id current = entityHasPredicate[i][0];
+          SimpleId current = entityHasPredicate[i][0];
           while (current > pos) {
             pos++;
           }
@@ -1124,13 +1124,13 @@ const vector<PatternID>& Index::getHasPattern() const {
 }
 
 // _____________________________________________________________________________
-const CompactStringVector<Id, Id>& Index::getHasPredicate() const {
+const CompactStringVector<SimpleId, SimpleId>& Index::getHasPredicate() const {
   throwExceptionIfNoPatterns();
   return _hasPredicate;
 }
 
 // _____________________________________________________________________________
-const CompactStringVector<size_t, Id>& Index::getPatterns() const {
+const CompactStringVector<size_t, SimpleId>& Index::getPatterns() const {
   throwExceptionIfNoPatterns();
   return _patterns;
 }
@@ -1155,8 +1155,8 @@ size_t Index::getHasPredicateFullSize() const {
 
 // _____________________________________________________________________________
 void Index::scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
-                                   Id lhsId, ad_utility::File& indexFile,
-                                   IdTable* result) const {
+                                   SimpleId lhsId, ad_utility::File& indexFile,
+                                   FancyTable* result) const {
   if (blockOff.second == 0) {
     // TODO<joka921> this check should be in the callers, but for that I want to
     // refactor the code duplication there first
@@ -1165,13 +1165,13 @@ void Index::scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
   }
   LOG(TRACE) << "Scanning functional relation ...\n";
   WidthTwoList block;
-  block.resize(blockOff.second / (2 * sizeof(Id)));
+  block.resize(blockOff.second / (2 * sizeof(SimpleId)));
   indexFile.read(block.data(), blockOff.second, blockOff.first);
   auto it = std::lower_bound(
       block.begin(), block.end(), lhsId,
-      [](const array<Id, 2>& elem, Id key) { return elem[0] < key; });
+      [](const array<SimpleId, 2>& elem, SimpleId key) { return elem[0] < key; });
   if ((*it)[0] == lhsId) {
-    result->push_back({(*it)[1]});
+    result->push_back({fancy((*it)[1])});
   }
   LOG(TRACE) << "Read " << result->size() << " RHS.\n";
 }
@@ -1179,8 +1179,8 @@ void Index::scanFunctionalRelation(const pair<off_t, size_t>& blockOff,
 // _____________________________________________________________________________
 void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
                                       const pair<off_t, size_t>& followBlock,
-                                      Id lhsId, ad_utility::File& indexFile,
-                                      off_t upperBound, IdTable* result) const {
+                                      SimpleId lhsId, ad_utility::File& indexFile,
+                                      off_t upperBound, FancyTable* result) const {
   LOG(TRACE) << "Scanning non-functional relation ...\n";
 
   if (blockOff.second == 0) {
@@ -1189,12 +1189,12 @@ void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
     // nothing to do if the result is empty
     return;
   }
-  vector<pair<Id, off_t>> block;
-  block.resize(blockOff.second / (sizeof(Id) + sizeof(off_t)));
+  vector<pair<SimpleId, off_t>> block;
+  block.resize(blockOff.second / (sizeof(SimpleId) + sizeof(off_t)));
   indexFile.read(block.data(), blockOff.second, blockOff.first);
   auto it = std::lower_bound(
       block.begin(), block.end(), lhsId,
-      [](const pair<Id, off_t>& elem, Id key) { return elem.first < key; });
+      [](const pair<SimpleId, off_t>& elem, SimpleId key) { return elem.first < key; });
   if (it->first == lhsId) {
     size_t nofBytes = 0;
     if ((it + 1) != block.end()) {
@@ -1207,12 +1207,12 @@ void Index::scanNonFunctionalRelation(const pair<off_t, size_t>& blockOff,
         nofBytes = static_cast<size_t>(upperBound - it->second);
       } else {
         LOG(TRACE) << "Special case: extra scan of follow block!\n";
-        pair<Id, off_t> follower;
+        pair<SimpleId, off_t> follower;
         indexFile.read(&follower, sizeof(follower), followBlock.first);
         nofBytes = static_cast<size_t>(follower.second - it->second);
       }
     }
-    result->resize(nofBytes / sizeof(Id));
+    result->resize(nofBytes / sizeof(SimpleId));
     indexFile.read(result->data(), nofBytes, it->second);
   } else {
     LOG(TRACE) << "Could not find LHS in block. Result will be empty.\n";
@@ -1224,7 +1224,7 @@ size_t Index::relationCardinality(const string& relationName) const {
   if (relationName == INTERNAL_TEXT_MATCH_PREDICATE) {
     return TEXT_PREDICATE_CARDINALITY_ESTIMATE;
   }
-  Id relId;
+  SimpleId relId;
   if (_vocab.getId(relationName, &relId)) {
     if (this->_PSO.metaData().relationExists(relId)) {
       return this->_PSO.metaData().getRmd(relId).getNofElements();
@@ -1235,7 +1235,7 @@ size_t Index::relationCardinality(const string& relationName) const {
 
 // _____________________________________________________________________________
 size_t Index::subjectCardinality(const string& sub) const {
-  Id relId;
+  SimpleId relId;
   if (_vocab.getId(sub, &relId)) {
     if (this->_SPO.metaData().relationExists(relId)) {
       return this->_SPO.metaData().getRmd(relId).getNofElements();
@@ -1246,7 +1246,7 @@ size_t Index::subjectCardinality(const string& sub) const {
 
 // _____________________________________________________________________________
 size_t Index::objectCardinality(const ParsedVocabularyEntry & obj) const {
-  Id relId;
+  SimpleId relId;
   if (_vocab.getId(obj, &relId)) {
     if (this->_OSP.metaData().relationExists(relId)) {
       return this->_OSP.metaData().getRmd(relId).getNofElements();
@@ -1297,8 +1297,8 @@ void Index::writeAsciiListFile(const string& filename, const T& ids) const {
   f.close();
 }
 
-template void Index::writeAsciiListFile<vector<Id>>(
-    const string& filename, const vector<Id>& ids) const;
+template void Index::writeAsciiListFile<vector<SimpleId>>(
+    const string& filename, const vector<SimpleId>& ids) const;
 
 template void Index::writeAsciiListFile<vector<Score>>(
     const string& filename, const vector<Score>& ids) const;

@@ -18,7 +18,7 @@ using std::vector;
 
 using ad_utility::HashSet;
 
-using Table = IdTable<SimpleId>;
+using Table = FancyTable;
 
 class FTSAlgorithms {
  public:
@@ -108,14 +108,14 @@ class FTSAlgorithms {
   static void aggScoresAndTakeTopKContexts(const vector<SimpleId>& cids,
                                            const vector<SimpleId>& eids,
                                            const vector<Score>& scores,
-                                           size_t k, IdTable<SimpleId>* result);
+                                           size_t k, Table* result);
 
   template <int WIDTH>
   static void multVarsAggScoresAndTakeTopKContexts(const vector<SimpleId>& cids,
                                                    const vector<SimpleId>& eids,
                                                    const vector<Score>& scores,
                                                    size_t nofVars, size_t k,
-                                                   IdTable<SimpleId>* result);
+                                                   Table* result);
 
   // Special case with only top-1 context(s).
   template <int WIDTH>
@@ -123,7 +123,7 @@ class FTSAlgorithms {
                                                  const vector<SimpleId>& eids,
                                                  const vector<Score>& scores,
                                                  size_t nofVars,
-                                                 IdTable<SimpleId>* result);
+                                                 Table* result);
 
   template <typename Row>
   static void aggScoresAndTakeTopKContexts(vector<Row>& nonAggRes, size_t k,
@@ -134,7 +134,7 @@ class FTSAlgorithms {
   static void aggScoresAndTakeTopContext(const vector<SimpleId>& cids,
                                          const vector<SimpleId>& eids,
                                          const vector<Score>& scores,
-                                         IdTable<SimpleId>* result);
+                                         Table* result);
 
   // K-way intersect whereas there may be word ids / entity ids
   // parallel to the last list in the vectors.
@@ -152,7 +152,7 @@ class FTSAlgorithms {
   static inline void appendCrossProduct(
       const vector<SimpleId>& cids, const vector<SimpleId>& eids,
       const vector<Score>& scores, size_t from, size_t toExclusive,
-      const ad_utility::HashMap<SimpleId, vector<array<SimpleId, I>>>& subRes,
+      const ad_utility::HashMap<Id, vector<array<SimpleId, I>>>& subRes,
       vector<array<SimpleId, 3 + I>>& res) {
     LOG(TRACE) << "Append cross-product called for a context with "
                << toExclusive - from << " postings.\n";

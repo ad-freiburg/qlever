@@ -10,6 +10,7 @@
 using std::pair;
 using std::vector;
 
+/*
 class OBComp {
  public:
   OBComp(const vector<pair<size_t, bool>>& sortIndices)
@@ -32,3 +33,5 @@ class OBComp {
  private:
   vector<pair<size_t, bool>> _sortIndices;
 };
+ */
+

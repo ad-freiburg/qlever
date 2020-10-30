@@ -345,14 +345,14 @@ void FTSAlgorithms::aggScoresAndTakeTopKContexts(const vector<SimpleId>& cids,
       };
     }
   }
-  IdTableStatic<SimpleId, 3> result = dynResult->moveToStatic<3>();
+  IdTableStatic<FancyId, 3> result = dynResult->moveToStatic<3>();
   result.reserve(map.size() * k + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     SimpleId eid = it->first;
     SimpleId entityScore = static_cast<SimpleId>(it->second.first);
     ScoreToContext& stc = it->second.second;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
-      result.push_back({itt->second, entityScore, eid});
+      result.push_back({fancyText(itt->second), fancyInt(entityScore), fancy(eid)});
     }
   }
   *dynResult = result.moveToDynamic();
@@ -459,14 +459,14 @@ void FTSAlgorithms::aggScoresAndTakeTopContext(const vector<SimpleId>& cids,
       };
     }
   }
-  IdTableStatic<SimpleId, WIDTH> result = dynResult->moveToStatic<WIDTH>();
+  IdTableStatic<FancyId, WIDTH> result = dynResult->moveToStatic<WIDTH>();
   result.reserve(map.size() + 2);
   result.resize(map.size());
   size_t n = 0;
   for (auto it = map.begin(); it != map.end(); ++it) {
-    result(n, 0) = it->second.second.first;
-    result(n, 1) = static_cast<SimpleId>(it->second.first);
-    result(n, 2) = it->first;
+    result(n, 0) = fancyText(it->second.second.first);
+    result(n, 1) = fancyInt(it->second.first);
+    result(n, 2) = fancy(it->first);
     n++;
   }
   AD_CHECK_EQ(n, result.size());
@@ -591,16 +591,16 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts(
       }
     }
     // Iterate over the map and populate the result.
-    IdTableStatic<SimpleId, WIDTH> result = dynResult->moveToStatic<WIDTH>();
+    IdTableStatic<FancyId, WIDTH> result = dynResult->moveToStatic<WIDTH>();
     for (auto it = map.begin(); it != map.end(); ++it) {
       ScoreToContext& stc = it->second.second;
       for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
         size_t n = result.size();
         result.push_back();
-        result(n, 0) = itt->second;
-        result(n, 1) = static_cast<SimpleId>(it->second.first);
+        result(n, 0) = fancyText(itt->second);
+        result(n, 1) = fancyInt(it->second.first);
         for (size_t k = 0; k < nofVars; ++k) {
-          result(n, k + 2) = it->first[k];  // eid
+          result(n, k + 2) = fancy(it->first[k]);  // eid
         }
       }
     }
@@ -703,17 +703,17 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
       };
     }
   }
-  IdTableStatic<SimpleId, WIDTH> result = dynResult->moveToStatic<WIDTH>();
+  IdTableStatic<FancyId, WIDTH> result = dynResult->moveToStatic<WIDTH>();
   result.reserve(map.size() + 2);
   result.resize(map.size());
   size_t n = 0;
 
   // Iterate over the map and populate the result.
   for (auto it = map.begin(); it != map.end(); ++it) {
-    result(n, 0) = it->second.second.first;
-    result(n, 1) = static_cast<SimpleId>(it->second.first);
+    result(n, 0) = fancyText(it->second.second.first);
+    result(n, 1) = fancyInt(static_cast<SimpleId>(it->second.first));
     for (size_t k = 0; k < nofVars; ++k) {
-      result(n, k + 2) = it->first[k];
+      result(n, k + 2) = fancy(it->first[k]);
     }
     n++;
   }
@@ -871,7 +871,7 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
       }
     }
   }
-  IdTableStatic<SimpleId, WIDTH> result = dynResult->moveToStatic<WIDTH>();
+  IdTableStatic<FancyId, WIDTH> result = dynResult->moveToStatic<WIDTH>();
   result.reserve(map.size() * k + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     SimpleId eid = it->first;
@@ -881,8 +881,8 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
       for (auto fRow : fMap.find(eid)->second) {
         size_t n = result.size();
         result.push_back();
-        result(n, 0) = itt->second;  // cid
-        result(n, 1) = score;
+        result(n, 0) = fancyText(itt->second);  // cid
+        result(n, 1) = fancyInt(score);
         for (size_t i = 0; i < fRow.size(); i++) {
           result(n, 2 + i) = fRow[i];
         }
@@ -962,14 +962,14 @@ void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts(
       }
     }
   }
-  IdTableStatic<SimpleId, 3> result = dynResult->moveToStatic<3>();
+  IdTableStatic<FancyId, 3> result = dynResult->moveToStatic<3>();
   result.reserve(map.size() * k + 2);
   for (auto it = map.begin(); it != map.end(); ++it) {
     SimpleId eid = it->first;
     SimpleId score = static_cast<SimpleId>(it->second.first);
     ScoreToContext& stc = it->second.second;
     for (auto itt = stc.rbegin(); itt != stc.rend(); ++itt) {
-      result.push_back({itt->second, score, eid});
+      result.push_back({fancyText(itt->second), fancyInt(score), fancy(eid)});
     }
   }
   *dynResult = result.moveToDynamic();
@@ -1120,7 +1120,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   }
 
   // Iterate over the map and populate the result.
-  IdTableStatic<SimpleId, WIDTH> result = dynResult->moveToStatic<WIDTH>();
+  IdTableStatic<FancyId, WIDTH> result = dynResult->moveToStatic<WIDTH>();
   for (auto it = map.begin(); it != map.end(); ++it) {
     ScoreToContext& stc = it->second.second;
     SimpleId rscore = it->second.first;
@@ -1130,11 +1130,11 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
       for (auto fRow : filterRows) {
         size_t n = result.size();
         result.push_back();
-        result(n, 0) = itt->second;  // cid
-        result(n, 1) = rscore;
+        result(n, 0) = fancyText(itt->second);  // cid
+        result(n, 1) = fancyInt(rscore);
         size_t off = 2;
         for (size_t i = 1; i < keyEids.size(); i++) {
-          result(n, off) = keyEids[i];
+          result(n, off) = fancy(keyEids[i]);
           off++;
         }
         for (size_t i = 0; i < fRow.size(); i++) {
@@ -1292,7 +1292,7 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
   }
 
   // Iterate over the map and populate the result.
-  IdTableStatic<SimpleId, WIDTH> result = dynResult->moveToStatic<WIDTH>();
+  IdTableStatic<FancyId, WIDTH> result = dynResult->moveToStatic<WIDTH>();
   for (auto it = map.begin(); it != map.end(); ++it) {
     ScoreToContext& stc = it->second.second;
     SimpleId rscore = it->second.first;
@@ -1300,14 +1300,14 @@ void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts(
       const vector<SimpleId>& keyEids = it->first;
       size_t n = result.size();
       result.push_back();
-      result(n, 0) = itt->second;  // cid
-      result(n, 1) = rscore;
+      result(n, 0) = fancyText(itt->second);  // cid
+      result(n, 1) = fancyInt(rscore);
       size_t off = 2;
       for (size_t i = 1; i < keyEids.size(); i++) {
-        result(n, 2 + i) = keyEids[i];
+        result(n, 2 + i) = fancy(keyEids[i]);
         off++;
       }
-      result(n, off) = keyEids[0];
+      result(n, off) = fancy(keyEids[0]);
     }
   }
   *dynResult = result.moveToDynamic();

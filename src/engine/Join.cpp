@@ -286,7 +286,7 @@ Join::ScanMethodType Join::getScanMethod(
   const auto& idx = _executionContext->getIndex();
   const auto scanLambda = [&idx](const auto& perm) {
     return
-        [&idx, &perm](Id id, IdTable* idTable) { idx.scan(id, idTable, perm); };
+        [&idx, &perm](Id id, FancyTable* idTable) { idx.scan(id, idTable, perm); };
   };
 
   switch (scan.getType()) {
@@ -316,8 +316,8 @@ Join::ScanMethodType Join::getScanMethod(
 }
 
 // _____________________________________________________________________________
-void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
-                                              IdTable* res) const {
+void Join::doComputeJoinWithFullScanDummyLeft(const FancyTable& ndr,
+                                              FancyTable* res) const {
   LOG(TRACE) << "Dummy on left side, other join op size: " << ndr.size()
              << endl;
   if (ndr.size() == 0) {
@@ -325,7 +325,7 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
   }
   const ScanMethodType scan = getScanMethod(_left);
   // Iterate through non-dummy.
-  Id currentJoinId = ndr(0, _rightJoinCol);
+  auto currentJoinId = ndr(0, _rightJoinCol);
   auto joinItemFrom = ndr.begin();
   auto joinItemEnd = ndr.begin();
   for (size_t i = 0; i < ndr.size(); ++i) {
@@ -335,8 +335,8 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
     } else {
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-      IdTable jr(2);
-      scan(currentJoinId, &jr);
+      FancyTable jr(2);
+      scan(currentJoinId.getUnsigned(), &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
       appendCrossProduct(jr.begin(), jr.end(), joinItemFrom, joinItemEnd, res);
@@ -348,16 +348,16 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
   }
   // Do the scan for the final element.
   LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-  IdTable jr(2);
-  scan(currentJoinId, &jr);
+  FancyTable jr(2);
+  scan(currentJoinId.getUnsigned(), &jr);
   LOG(TRACE) << "Got #items: " << jr.size() << endl;
   // Build the cross product.
   appendCrossProduct(jr.begin(), jr.end(), joinItemFrom, joinItemEnd, res);
 }
 
 // _____________________________________________________________________________
-void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
-                                               IdTable* res) const {
+void Join::doComputeJoinWithFullScanDummyRight(const FancyTable& ndr,
+                                               FancyTable* res) const {
   LOG(TRACE) << "Dummy on right side, other join op size: " << ndr.size()
              << endl;
   if (ndr.size() == 0) {
@@ -366,7 +366,7 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
   // Get the scan method (depends on type of dummy tree), use a function ptr.
   const ScanMethodType scan = getScanMethod(_right);
   // Iterate through non-dummy.
-  Id currentJoinId = ndr(0, _leftJoinCol);
+  auto currentJoinId = ndr(0, _leftJoinCol);
   auto joinItemFrom = ndr.begin();
   auto joinItemEnd = ndr.begin();
   for (size_t i = 0; i < ndr.size(); ++i) {
@@ -376,8 +376,8 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
     } else {
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-      IdTable jr(2);
-      scan(currentJoinId, &jr);
+      FancyTable jr(2);
+      scan(currentJoinId.getUnsigned(), &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
       appendCrossProduct(joinItemFrom, joinItemEnd, jr.begin(), jr.end(), res);
@@ -389,8 +389,8 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
   }
   // Do the scan for the final element.
   LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-  IdTable jr(2);
-  scan(currentJoinId, &jr);
+  FancyTable jr(2);
+  scan(currentJoinId.getUnsigned(), &jr);
   LOG(TRACE) << "Got #items: " << jr.size() << endl;
   // Build the cross product.
   appendCrossProduct(joinItemFrom, joinItemEnd, jr.begin(), jr.end(), res);
@@ -472,11 +472,11 @@ void Join::computeSizeEstimateAndMultiplicities() {
 }
 
 // ______________________________________________________________________________
-void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
-                              const IdTable::const_iterator& leftEnd,
-                              const IdTable::const_iterator& rightBegin,
-                              const IdTable::const_iterator& rightEnd,
-                              IdTable* res) const {
+void Join::appendCrossProduct(const FancyTable::const_iterator& leftBegin,
+                              const FancyTable::const_iterator& leftEnd,
+                              const FancyTable::const_iterator& rightBegin,
+                              const FancyTable::const_iterator& rightEnd,
+                              FancyTable* res) const {
   for (auto itl = leftBegin; itl != leftEnd; ++itl) {
     for (auto itr = rightBegin; itr != rightEnd; ++itr) {
       const auto& l = *itl;
@@ -496,10 +496,10 @@ void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
 // ______________________________________________________________________________
 
 template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
-                size_t jc2, IdTable* dynRes) {
-  const IdTableStatic<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
-  const IdTableStatic<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
+void Join::join(const FancyTable& dynA, size_t jc1, const FancyTable& dynB,
+                size_t jc2, FancyTable* dynRes) {
+  const FancyTableStatic<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
+  const FancyTableStatic<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
 
   LOG(DEBUG) << "Performing join between two tables.\n";
   LOG(DEBUG) << "A: width = " << a.cols() << ", size = " << a.size() << "\n";
@@ -510,7 +510,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     return;
   }
 
-  IdTableStatic<OUT_WIDTH> result = dynRes->moveToStatic<OUT_WIDTH>();
+  FancyTableStatic<OUT_WIDTH> result = dynRes->moveToStatic<OUT_WIDTH>();
   // Cannot just switch l1 and l2 around because the order of
   // items in the result tuples is important.
   if (a.size() / b.size() > GALLOP_THRESHOLD) {
@@ -575,7 +575,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
           // this check is needed because otherwise we might leak an out of
           // bounds value for j into the next loop which does not check it. this
           // fixes a bug that was not discovered by testing due to 0
-          // initialization of IdTables used for testing and should not occur in
+          // initialization of FancyTables used for testing and should not occur in
           // typical use cases but it is still wrong.
           goto finish;
         }
@@ -592,10 +592,10 @@ finish:
 
 // _____________________________________________________________________________
 template <typename TagType, int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-void Join::doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
-                             const size_t jc1, const IdTableStatic<R_WIDTH>& l2,
+void Join::doGallopInnerJoin(const TagType, const FancyTableStatic<L_WIDTH>& l1,
+                             const size_t jc1, const FancyTableStatic<R_WIDTH>& l2,
                              const size_t jc2,
-                             IdTableStatic<OUT_WIDTH>* result) {
+                             FancyTableStatic<OUT_WIDTH>* result) {
   LOG(DEBUG) << "Galloping case.\n";
   size_t i = 0;
   size_t j = 0;
@@ -629,9 +629,9 @@ void Join::doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
       } else if (l1(i, jc1) < l2(j, jc2)) {
         // We stepped over the location where l1 and l2 may be equal.
         // Use binary search to locate that spot
-        const Id needle = l1(i, jc1);
+        const FancyId needle = l1(i, jc1);
         j = std::lower_bound(l2.begin() + last, l2.begin() + j, needle,
-                             [jc2](const auto& l, const Id needle) -> bool {
+                             [jc2](const auto& l, const FancyId needle) -> bool {
                                return l[jc2] < needle;
                              }) -
             l2.begin();
@@ -659,9 +659,9 @@ void Join::doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
       } else if (l2(j, jc2) < l1(i, jc1)) {
         // We stepped over the location where l1 and l2 may be equal.
         // Use binary search to locate that spot
-        const Id needle = l2(j, jc2);
+        const auto needle = l2(j, jc2);
         i = std::lower_bound(l1.begin() + last, l1.begin() + i, needle,
-                             [jc1](const auto& l, const Id needle) -> bool {
+                             [jc1](const auto& l, const auto needle) -> bool {
                                return l[jc1] < needle;
                              }) -
             l1.begin();

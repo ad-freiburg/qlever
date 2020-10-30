@@ -559,11 +559,11 @@ void Index::getContextListForWords(const string& words,
   }
 
   LOG(DEBUG) << "Packing lists into a ResultTable\n...";
-  IdTableStatic<SimpleId, 2> result = dynResult->moveToStatic<2>();
+  IdTableStatic<FancyId, 2> result = dynResult->moveToStatic<2>();
   result.resize(cids.size());
   for (size_t i = 0; i < cids.size(); ++i) {
-    result(i, 0) = cids[i];
-    result(i, 1) = scores[i];
+    result(i, 0) = fancyText(cids[i]);
+    result(i, 1) = fancyInt(scores[i]);
   }
   *dynResult = result.moveToDynamic();
   LOG(DEBUG) << "Done with getContextListForWords.\n";
@@ -734,10 +734,10 @@ void Index::getFilteredECListForWords(const string& words,
     LOG(DEBUG) << "Constructing map...\n";
     FilterMap fMap;
     for (size_t i = 0; i < filter.size(); ++i) {
-      SimpleId eid = filter(i, filterColumn);
-      auto it = fMap.find(eid);
+      auto eid = filter(i, filterColumn);
+      auto it = fMap.find(eid.getUnsigned());
       if (it == fMap.end()) {
-        it = fMap.insert(std::make_pair(eid, TextTable(filter.cols()))).first;
+        it = fMap.insert(std::make_pair(eid.getUnsigned(), TextTable(filter.cols()))).first;
       }
       it->second.push_back(filter, i);
     }
@@ -771,7 +771,7 @@ void Index::getFilteredECListForWordsWidthOne(const string& words,
   LOG(DEBUG) << "Constructing filter set...\n";
   FilterSet fSet;
   for (size_t i = 0; i < filter.size(); ++i) {
-    fSet.insert(filter(i, 0));
+    fSet.insert(filter(i, 0).getUnsigned());
   }
   vector<SimpleId> cids;
   vector<SimpleId> eids;
