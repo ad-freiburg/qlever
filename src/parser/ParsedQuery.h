@@ -6,8 +6,10 @@
 #include <initializer_list>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
+#include "../engine/expressionModel/ExpressionTree.h"
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
@@ -382,8 +384,68 @@ struct GraphPatternOperation {
     ParsedQuery::GraphPattern _childGraphPattern;
   };
 
-  std::variant<BasicGraphPattern, GroupGraphPattern, Optional, Union, Subquery,
-               TransPath, Values>
+  struct Bind {
+    struct Constant {
+      int64_t _value = 0;
+      string _repr;
+      ResultTable::ResultType _type;
+      Constant() = default;
+      explicit Constant(int64_t val): _value(val), _repr(std::to_string(val)), _type(ResultTable::ResultType::VERBATIM){}
+      explicit Constant(std::string entry): _repr(entry), _type(ResultTable::ResultType::KB){}
+      // TODO<joka921> in c++ 20 we have constexpr strings.
+      static constexpr const char* Name = "Constant";
+      vector<string*> strings() {
+        return {&_repr};
+      }
+      [[nodiscard]] string getDescriptor() const { return _repr; }
+    };
+    struct Sum {
+      static constexpr const char* Name = "Sum";
+      string _var1, _var2;
+      vector<string*> strings() { return {&_var1, &_var2}; }
+      [[nodiscard]] string getDescriptor() const {
+        return _var1 + " + " + _var2;
+      }
+    };
+
+    struct Rename {
+      static constexpr const char* Name = "Rename";
+      string _var;
+      vector<string*> strings() { return {&_var}; }
+      [[nodiscard]] string getDescriptor() const { return _var; }
+    };
+
+    struct Expression {
+      static constexpr const char* Name = "Expression";
+      string _var;
+      std::shared_ptr<ExpressionTree> _expr; // unfortunately this has to be copyablefor the ParsedQuery:: merge operation.
+      vector<string*> strings() { return {&_var}; }
+      [[nodiscard]] string getDescriptor() const { return "Some expression... As "s + _var; }
+    };
+    std::variant<Rename, Constant, Sum, Expression> _input;
+    std::string _target;
+
+    vector<const string*> strings() const {
+      auto r = std::visit([](auto&& arg) { return arg.strings(); },
+                          const_cast<decltype(_input)&>(_input));
+      vector<const string*> res{r.begin(), r.end()};
+      res.push_back(&_target);
+      return res;
+    }
+
+    [[nodiscard]] constexpr const char* operationName() const {
+      return std::visit([](auto&& arg) { return arg.Name; }, _input);
+    }
+
+    string getDescriptor() const {
+      auto inner =
+          std::visit([](auto&& arg) { return arg.getDescriptor(); }, _input);
+      return "BIND (" + inner + " AS " + _target + ")";
+    }
+  };
+
+  std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
+               Values>
       variant_;
   template <typename A, typename... Args,
             typename = std::enable_if_t<

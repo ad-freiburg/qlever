@@ -1,7 +1,5 @@
-add_library(expressionParser
+add_library(sparqlParser
         SparqlLexer.h SparqlLexer.cpp
         SparqlParser.h SparqlParser.cpp
         SparqlCustomVisitor.h SparqlCustomVisitor.cpp)
 
-
-add_subdirectory(expressionModel)

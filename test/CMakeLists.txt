@@ -149,3 +149,12 @@ target_link_libraries(IdTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 add_executable(XsdParserTest XsdParserTest.cpp)
 add_test(XsdParserTest XsdParserTest)
 target_link_libraries(XsdParserTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(BindTest BindTest.cpp)
+add_test(BindTest BindTest)
+target_link_libraries(BindTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
+
+
+add_executable(ExpressionParserTest ExpressionParserTest.cpp)
+add_test(ExpressionParserTest ExpressionParserTest)
+target_link_libraries(ExpressionParserTest gtest_main expression sparqlParser antlr4-runtime absl::flat_hash_map engine ${CMAKE_THREAD_LIBS_INIT})

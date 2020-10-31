@@ -7,6 +7,9 @@ set (CMAKE_C_STANDARD_REQUIRED ON)
 set (CMAKE_CXX_STANDARD 17)
 set (CMAKE_CXX_STANDARD_REQUIRED ON)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
+
+
 # Check compiler versions:
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
   # Check version. If empty, warn. If too old, error out:
@@ -42,7 +45,7 @@ find_package (Threads REQUIRED)
 ################################
 find_package(ICU 60 REQUIRED COMPONENTS uc i18n)
 include_directories(${ICU_INCLUDE_DIR})
-include_directories(${ANTLR4_INCLUDE_DIR})
+
 
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
@@ -89,6 +92,16 @@ include_directories(third_party/ctre/include)
 set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
 add_subdirectory(third_party/abseil-cpp)
 include_directories(third_party/abseil-cpp/)
+
+################################
+# ANTLR
+################################
+
+add_subdirectory(third_party/antlr/runtime/Cpp)
+#include_directories(third_party/antlr/runtime/Cpp/runtime/src)
+include_directories(/usr/include/antlr4-runtime)
+
+
 
 if (USE_PARALLEL)
     include(FindOpenMP)
