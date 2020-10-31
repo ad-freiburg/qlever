@@ -57,10 +57,22 @@ class VariableExpression : public Expression {
     const auto& d = inp.input_->_data;
     AD_CHECK(col < d.cols());
 
-    for (size_t i = 0; i < d.size(); ++i) {
-      switch (inp->)
-      res.emplace_back()
+    switch (inp.input_->_resultTypes[col]) {
+      case ResultTable::ResultType::KB:
+        if (inp.requireNumericResult) {
+          for (size_t i = 0; i < d.size(); ++i) {
+            res.push_back(inp.qec_->getIndex()
+                              .idToNumericValue(d(i, col).getUnsigned())
+                              .value_or(ID_NO_VALUE));
+          }
+        } else {
+          AD_CHECK(false);
+        }
+      default:
+       throw std::runtime_error("Expression evaluation is currently only supported for KnowledgeBase columns") ;
     }
+
+    return res;
   }
 
  private:
