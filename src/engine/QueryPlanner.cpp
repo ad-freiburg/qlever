@@ -1633,7 +1633,6 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
-
   std::string innerLeft = toUniqueVariable(innerLeft);
   std::string innerRight = toUniqueVariable(innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
