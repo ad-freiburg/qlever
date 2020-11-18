@@ -246,7 +246,6 @@ class QueryPlanner {
       const std::string& right);
 
   std::string generateUniqueVarName();
-  std::string toUniqueVariable(const string& entity);
 
   // Creates a tree of unions with the given patterns as the trees leaves
   ParsedQuery::GraphPattern uniteGraphPatterns(
