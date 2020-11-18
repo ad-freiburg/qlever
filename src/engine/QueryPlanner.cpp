@@ -1434,7 +1434,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
   AD_THROW(
       ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
       "No implementation for creating a seed from a property path of type " +
-          std::to_string((int)path._operation));
+          std::to_string(static_cast<int>(path._operation)));
 }
 
 // _____________________________________________________________________________
