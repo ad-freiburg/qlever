@@ -28,6 +28,9 @@ using ad_utility::Socket;
 
 //! The HTTP Sever used.
 class Server {
+  /** @brief The encoding of the result of a query. */
+  enum class ResultFormat { INTERNAL_JSON, SPARQL_JSON, CSV, TSV };
+
  public:
   explicit Server(const int port, const int numThreads, size_t maxMemGB,
                   size_t cacheMaxSizeGB, size_t cacheMaxSizeGBSingleEntry,
@@ -98,6 +101,9 @@ class Server {
                                   const QueryExecutionTree& qet,
                                   ad_utility::Timer& requestTimer,
                                   size_t sendMax = MAX_NOF_ROWS_IN_RESULT);
+  static json composeResponseSparqlJson(
+      const ParsedQuery& query, const QueryExecutionTree& qet,
+      ad_utility::Timer& requestTimer, size_t sendMax = MAX_NOF_ROWS_IN_RESULT);
 
   static ad_utility::stream_generator::stream_generator
   composeResponseSepValues(const ParsedQuery& query,

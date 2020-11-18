@@ -175,6 +175,25 @@ json Server::composeResponseJson(const ParsedQuery& query,
 }
 
 // _____________________________________________________________________________
+json Server::composeResponseSparqlJson(const ParsedQuery& query,
+                                       const QueryExecutionTree& qet,
+                                       ad_utility::Timer& requestTimer,
+                                       size_t sendMax) {
+  shared_ptr<const ResultTable> rt = qet.getResult();
+  requestTimer.stop();
+  nlohmann::json j;
+  {
+    size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);
+    size_t offset = query._offset.value_or(0);
+    requestTimer.cont();
+    j = qet.writeResultAsSparqlJson(query._selectClause._selectedVariables,
+                                    std::min(limit, sendMax), offset);
+    requestTimer.stop();
+  }
+  return j;
+}
+
+// _____________________________________________________________________________
 ad_utility::stream_generator::stream_generator Server::composeResponseSepValues(
     const ParsedQuery& query, const QueryExecutionTree& qet, char sep) {
   size_t limit = query._limit.value_or(MAX_NOF_ROWS_IN_RESULT);

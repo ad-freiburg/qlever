@@ -98,6 +98,9 @@ class QueryExecutionTree {
   nlohmann::json writeResultAsJson(const vector<string>& selectVars,
                                    size_t limit, size_t offset) const;
 
+  nlohmann::json writeResultAsSparqlJson(const vector<string>& selectVars,
+                                         size_t limit, size_t offset) const;
+
   const std::vector<size_t>& resultSortedOn() const {
     return _rootOperation->getResultSortedOn();
   }

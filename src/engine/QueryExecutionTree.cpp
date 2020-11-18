@@ -155,6 +155,162 @@ nlohmann::json QueryExecutionTree::writeResultAsJson(
 }
 
 // _____________________________________________________________________________
+nlohmann::json QueryExecutionTree::writeResultAsSparqlJson(
+    const vector<string>& selectVars, size_t limit, size_t offset) const {
+  using nlohmann::json;
+
+  // They may trigger computation (but does not have to).
+  shared_ptr<const ResultTable> res = getResult();
+  LOG(DEBUG) << "Resolving strings for finished binary result...\n";
+  vector<pair<size_t, ResultTable::ResultType>> validIndices;
+  for (auto var : selectVars) {
+    if (ad_utility::startsWith(var, "TEXT(")) {
+      var = var.substr(5, var.rfind(')') - 5);
+    }
+    auto vc = getVariableColumns().find(var);
+    if (vc != getVariableColumns().end()) {
+      validIndices.push_back(pair<size_t, ResultTable::ResultType>(
+          vc->second, res->getResultType(vc->second)));
+    }
+  }
+  if (validIndices.size() == 0) {
+    return nlohmann::json(std::vector<std::string>());
+  }
+
+  const IdTable& data = res->_data;
+
+  json head;
+  head["vars"] = selectVars;
+
+  json encoded;
+  encoded["head"] = head;
+
+  json results;
+  json bindings = json::array();
+
+  const auto upperBound = std::min(data.size(), limit + offset);
+
+  // Take a string from the vocabulary, deduce the type and
+  // return a json dict that descibes the binding
+  auto entitystrToBinding =
+      [this](const std::string& entitystr) -> nlohmann::json {
+    json b;
+    if (ad_utility::startsWith(entitystr, VALUE_DATE_PREFIX)) {
+      // The string is a date
+      std::string date = ad_utility::convertIndexWordToDate(entitystr);
+      date = ad_utility::removeLeadingZeros(date);
+      if (date.empty() ||
+          ad_utility::startsWith(date, VALUE_DATE_TIME_SEPARATOR)) {
+        date = "0" + date;
+      }
+      b["value"] = date;
+      b["type"] = "literal";
+      b["datatype"] = "http://www.w3.org/2001/XMLSchema#dateTime";
+    } else if (ad_utility::startsWith(entitystr, VALUE_FLOAT_PREFIX)) {
+      // The string is a float
+      std::string value = ad_utility::convertIndexWordToFloatString(entitystr);
+      b["value"] = value;
+      b["type"] = "literal";
+      ad_utility::NumericType nt = ad_utility::NumericType(entitystr.back());
+      switch (nt) {
+        case ad_utility::NumericType::FLOAT:
+          b["datatype"] = "http://www.w3.org/2001/XMLSchema#float";
+          break;
+        case ad_utility::NumericType::DOUBLE:
+          b["datatype"] = "http://www.w3.org/2001/XMLSchema#double";
+          break;
+        case ad_utility::NumericType::DECIMAL:
+          b["datatype"] = "http://www.w3.org/2001/XMLSchema#decimal";
+          break;
+        case ad_utility::NumericType::INTEGER:
+          b["datatype"] = "http://www.w3.org/2001/XMLSchema#int";
+          break;
+      }
+    } else {
+      // The string is an iri or literal
+      if (entitystr[0] == '<') {
+        b["type"] = "iri";
+        // Strip the <> surrounding the iri
+        b["value"] = entitystr.substr(1, entitystr.size() - 2);
+      } else {
+        b["type"] = "literal";
+        // Look for a language tag
+        size_t at_pos = entitystr.rfind('@');
+        if (at_pos == std::string::npos) {
+          b["value"] = entitystr.substr(1, entitystr.size() - 2);
+        } else {
+          size_t quote_pos = entitystr.rfind('"');
+          if (quote_pos != std::string::npos && quote_pos < at_pos) {
+            b["value"] = entitystr.substr(1, quote_pos - 1);
+            b["xml:lang"] = entitystr.substr(at_pos + 1);
+          } else {
+            b["value"] = entitystr.substr(1, entitystr.size() - 2);
+          }
+        }
+      }
+    }
+    return b;
+  };
+
+  for (size_t i = offset; i < upperBound; ++i) {
+    json binding;
+    for (const auto& idx : validIndices) {
+      const auto& currentId = data(i, idx.first);
+      switch (idx.second) {
+        case ResultTable::ResultType::KB: {
+          std::optional<string> entity =
+              _qec->getIndex().idToOptionalString(currentId);
+          if (entity) {
+            string entitystr = entity.value();
+            binding[selectVars[idx.first]] = entitystrToBinding(entitystr);
+          }
+          break;
+        }
+        case ResultTable::ResultType::VERBATIM: {
+          json b;
+          b["value"] = std::to_string(currentId);
+          b["type"] = "literal";
+          b["datatype"] = "http://www.w3.org/2001/XMLSchema#int";
+          binding[selectVars[idx.first]] = b;
+        } break;
+        case ResultTable::ResultType::TEXT: {
+          json b;
+          b["value"] = _qec->getIndex().getTextExcerpt(currentId);
+          b["type"] = "literal";
+          binding[selectVars[idx.first]] = b;
+        } break;
+        case ResultTable::ResultType::FLOAT: {
+          float f;
+          std::memcpy(&f, &currentId, sizeof(float));
+          std::stringstream s;
+          s << f;
+          json b;
+          b["value"] = s.str();
+          b["type"] = "literal";
+          b["datatype"] = "http://www.w3.org/2001/XMLSchema#float";
+          binding[selectVars[idx.first]] = b;
+          break;
+        }
+        case ResultTable::ResultType::LOCAL_VOCAB: {
+          std::optional<string> entity = res->idToOptionalString(currentId);
+          if (entity) {
+            binding[selectVars[idx.first]] = entitystrToBinding(*entity);
+          }
+          break;
+        }
+        default:
+          AD_THROW(ad_semsearch::Exception::INVALID_PARAMETER_VALUE,
+                   "Cannot deduce output type.");
+      }
+    }
+    bindings.emplace_back(std::move(binding));
+  }
+  results["bindings"] = bindings;
+  encoded["results"] = results;
+  return encoded;
+}
+
+// _____________________________________________________________________________
 size_t QueryExecutionTree::getCostEstimate() {
   if (_cachedResult) {
     // result is pinned in cache. Nothing to compute
