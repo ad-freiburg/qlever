@@ -81,7 +81,14 @@ ad_utility::HashMap<string, size_t> Minus::getVariableColumns() const {
 size_t Minus::getResultWidth() const { return _left->getResultWidth(); }
 
 // _____________________________________________________________________________
-vector<size_t> Minus::resultSortedOn() const { return _left->resultSortedOn(); }
+vector<size_t> Minus::resultSortedOn() const {
+  std::vector<size_t> sortedOn;
+  // The result is sorted on all join columns from the left subtree.
+  for (const auto& a : _matchedColumns) {
+    sortedOn.push_back(a[0]);
+  }
+  return sortedOn;
+}
 
 // _____________________________________________________________________________
 float Minus::getMultiplicity(size_t col) {
@@ -119,7 +126,7 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
     return;
   }
 
-  if (dynB.size() == 0) {
+  if (dynB.size() == 0 || joinColumns.size() == 0) {
     // B is the empty set of solution mappings, so the result is A
     if constexpr (A_WIDTH == OUT_WIDTH) {
       IdTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
@@ -140,84 +147,95 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
   IdTableStatic<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
 
-  struct RowHash {
-    size_t operator()(const std::vector<Id>& row) const {
-      size_t hash = 0;
-      for (size_t i = 0; i < row.size(); ++i) {
-        hash ^= std::hash<Id>()(row[i]);
-      }
-      return 0;
-    };
-  };
-
-  // Columns in a for which the matching column in b contains an entry with a
-  // unbound variable
-  ad_utility::HashSet<size_t> cols_containing_unbound;
-  google::dense_hash_set<std::vector<Id>, RowHash> ids_to_remove(b.size());
-  ids_to_remove.set_empty_key({});
-  // Based upon the default deleted key for ids
-  ids_to_remove.set_deleted_key({std::numeric_limits<Id>::max() - 1});
-  std::vector<Id> entry_to_remove(joinColumns.size());
-  for (size_t ib = 0; ib < b.size(); ib++) {
-    for (size_t i = 0; i < joinColumns.size(); ++i) {
-      Id id = b(ib, joinColumns[i][1]);
-      if (id == ID_NO_VALUE) {
-        cols_containing_unbound.insert(joinColumns[i][0]);
-      }
-      entry_to_remove[i] = id;
-    }
-    ids_to_remove.insert(entry_to_remove);
-  }
-  std::vector<size_t> v_cols_containing_unbound(cols_containing_unbound.begin(),
-                                                cols_containing_unbound.end());
-
-  // Build a list of bitmasks of combinations of join columns in a which contain
-  // no value in b
-  std::vector<uint64_t> no_value_masks;
-  if (joinColumns.size() > 62) {
-    AD_THROW(ad_semsearch::Exception::OTHER,
-             "Minus only supports up to 62 columns in its input.");
-  }
-  // Iterate all possible states of columns in b being unbound
-  for (uint64_t i = (1 << (cols_containing_unbound.size() + 1)); i > 0; i--) {
-    // Build a bitmaks of columns in a which correspond to join colunmns in b
-    // being unbound.
-    uint64_t mask = ~uint64_t(0);
-    for (size_t j = 0; j < cols_containing_unbound.size(); j++) {
-      if (((i - 1) & (1 << j)) == 0) {
-        // Set the bit for the column to 0
-        mask &= ~(1 << v_cols_containing_unbound[j]);
-      }
-    }
-    no_value_masks.push_back(mask);
-  }
-  if (no_value_masks.empty()) {
-    no_value_masks.push_back(~uint64_t(0));
+  std::vector<size_t> rightToLeftCols(b.cols(),
+                                      std::numeric_limits<size_t>::max());
+  for (const auto& jc : joinColumns) {
+    rightToLeftCols[jc[1]] = jc[0];
   }
 
-  for (size_t ia = 0; ia < a.size(); ia++) {
-    bool remove = false;
-    // iterate every combination of ignoring variables
-    for (uint64_t mask : no_value_masks) {
-      for (size_t i = 0; i < joinColumns.size(); ++i) {
-        if ((mask & (1 << joinColumns[i][0])) > 0) {
-          entry_to_remove[i] = a(ia, joinColumns[i][0]);
-        } else {
-          entry_to_remove[i] = ID_NO_VALUE;
-        }
-      }
-      if (ids_to_remove.count(entry_to_remove) != 0) {
-        remove = true;
-        break;
-      }
-    }
-    if (!remove) {
+  size_t ia = 0, ib = 0;
+  while (ia < a.size() && ib < b.size()) {
+    // Join columns 0 are the primary sort columns
+    while (a(ia, joinColumns[0][0]) < b(ib, joinColumns[0][1])) {
+      // Write a result
       result.emplace_back();
       size_t backIdx = result.size() - 1;
       for (size_t col = 0; col < a.cols(); col++) {
         result(backIdx, col) = a(ia, col);
       }
+
+      ia++;
+      if (ia >= a.size()) {
+        goto finish;
+      }
+    }
+    while (b(ib, joinColumns[0][1]) < a(ia, joinColumns[0][0])) {
+      ib++;
+      if (ib >= b.size()) {
+        goto finish;
+      }
+    }
+
+    while (b(ib, joinColumns[0][1]) == a(ia, joinColumns[0][0])) {
+      // check if the rest of the join columns also match
+      RowComparison rowEq = isRowEqSkipFirst(a, b, ia, ib, joinColumns);
+      switch (rowEq) {
+        case RowComparison::EQUAL: {
+          ia++;
+          if (ia >= a.size()) {
+            goto finish;
+          }
+        } break;
+        case RowComparison::NOT_EQUAL_LEFT_SMALLER: {
+          // ib does not discard ia, and there can not be another ib that
+          // would discard ia.
+          result.emplace_back();
+          size_t backIdx = result.size() - 1;
+          for (size_t col = 0; col < a.cols(); col++) {
+            result(backIdx, col) = a(ia, col);
+          }
+          ia++;
+          if (ia >= a.size()) {
+            goto finish;
+          }
+        } break;
+        case RowComparison::NOT_EQUAL_RIGHT_SMALLER: {
+          ib++;
+          if (ib >= b.size()) {
+            goto finish;
+          }
+        } break;
+        default:
+          AD_CHECK(false);
+      }
     }
   }
+finish:
+  result.reserve(result.size() + (a.size() - ia));
+  while (ia < a.size()) {
+    result.emplace_back();
+    size_t backIdx = result.size() - 1;
+    for (size_t col = 0; col < a.cols(); col++) {
+      result(backIdx, col) = a(ia, col);
+    }
+    ia++;
+  }
   *dynResult = result.moveToDynamic();
+}
+
+template <int A_WIDTH, int B_WIDTH>
+Minus::RowComparison Minus::isRowEqSkipFirst(
+    const IdTableStatic<A_WIDTH>& a, const IdTableStatic<B_WIDTH>& b, size_t ia,
+    size_t ib, const vector<array<size_t, 2>>& joinColumns) {
+  for (size_t i = 1; i < joinColumns.size(); ++i) {
+    Id va = a(ia, joinColumns[i][0]);
+    Id vb = b(ib, joinColumns[i][1]);
+    if (va < vb) {
+      return RowComparison::NOT_EQUAL_LEFT_SMALLER;
+    }
+    if (va > vb) {
+      return RowComparison::NOT_EQUAL_RIGHT_SMALLER;
+    }
+  }
+  return RowComparison::EQUAL;
 }

@@ -10,6 +10,12 @@
 #include "./QueryExecutionTree.h"
 
 class Minus : public Operation {
+  enum class RowComparison {
+    EQUAL,
+    NOT_EQUAL_LEFT_SMALLER,
+    NOT_EQUAL_RIGHT_SMALLER
+  };
+
  public:
   Minus(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> left,
         std::shared_ptr<QueryExecutionTree> right,
@@ -56,6 +62,15 @@ class Minus : public Operation {
                            IdTable* result);
 
  private:
+  /**
+   * @brief Compares the two rows under the assumption that the first
+   * entries of the rows are equal.
+   */
+  template <int A_WIDTH, int B_WIDTH>
+  static RowComparison isRowEqSkipFirst(
+      const IdTableStatic<A_WIDTH>& a, const IdTableStatic<B_WIDTH>& b,
+      size_t ia, size_t ib, const vector<array<size_t, 2>>& matchedColumns);
+
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 

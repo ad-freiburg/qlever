@@ -15,26 +15,27 @@ TEST(EngineTest, minusTest) {
   using std::vector;
 
   IdTable a(3);
-  a.push_back({8, 1, 2});
   a.push_back({1, 2, 1});
   a.push_back({2, 1, 4});
   a.push_back({5, 4, 1});
+  a.push_back({8, 1, 2});
   a.push_back({8, 2, 3});
-  a.push_back({ID_NO_VALUE, 2, 1});
+
   IdTable b(4);
-  b.push_back({1, 2, 4, 5});
+  b.push_back({1, 2, 7, 5});
   b.push_back({3, 3, 1, 5});
   b.push_back({1, 8, 1, 5});
-  b.push_back({4, ID_NO_VALUE, 2, 5});
+
   IdTable res(3);
+
   vector<array<Id, 2>> jcls;
   jcls.push_back(array<Id, 2>{{0, 1}});
   jcls.push_back(array<Id, 2>{{1, 0}});
 
   IdTable wantedRes(3);
   wantedRes.push_back({1, 2, 1});
+  wantedRes.push_back({5, 4, 1});
   wantedRes.push_back({8, 2, 3});
-  wantedRes.push_back({ID_NO_VALUE, 2, 1});
 
   // Subtract b from a on the column pairs 1,2 and 2,1 (entries from columns 1
   // of a have to equal those of column 2 of b and vice versa).
@@ -49,6 +50,16 @@ TEST(EngineTest, minusTest) {
   ASSERT_EQ(wantedRes[0], res[0]);
   ASSERT_EQ(wantedRes[1], res[1]);
   ASSERT_EQ(wantedRes[2], res[2]);
+
+  // Test subtracting without matching columns
+  res.clear();
+  jcls.clear();
+  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth, Minus::computeMinus, a, b, jcls,
+                    &res);
+  ASSERT_EQ(a.size(), res.size());
+  for (size_t i = 0; i < a.size(); ++i) {
+    ASSERT_EQ(a[i], res[i]);
+  }
 
   // Test minus with variable sized data.
   IdTable va(6);
