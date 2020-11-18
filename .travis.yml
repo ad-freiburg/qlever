@@ -7,7 +7,8 @@ dist: focal
 # see https://github.com/moby/moby/issues/35641
 addons:
   apt:
-    sourceline: 'deb https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable'
+    sources:
+      - sourceline: 'deb https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable'
     packages:
       - docker-ce
 
