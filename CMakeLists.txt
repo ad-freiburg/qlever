@@ -175,6 +175,11 @@ message(STATUS "IMPORTANT: Make sure you have selected the desired CMAKE_BUILD_T
 message(STATUS "CMAKE_BUILD_TYPE is ${CMAKE_BUILD_TYPE}")
 message(STATUS ---)
 
+################################
+# uWebSockets
+################################
+add_subdirectory(third_party/uWebSockets)
+
 ###############################################################################
 ##### Actual project configuration #####
 ###############################################################################

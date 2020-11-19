@@ -17,6 +17,7 @@
 #include "./QueryExecutionContext.h"
 #include "./QueryExecutionTree.h"
 #include "./SortPerformanceEstimator.h"
+#include "App.h"
 
 using std::string;
 using std::vector;
@@ -72,21 +73,20 @@ class Server {
   bool _initialized;
   bool _enablePatternTrick;
 
-  void runAcceptLoop();
+  void process(uWS::HttpResponse<false>* resp, uWS::HttpRequest* req);
 
-  void process(Socket* client);
-
-  void serveFile(Socket* client, const string& requestedFile) const;
+  void serveFile(uWS::HttpResponse<false>* resp,
+                 const string& requestedFile) const;
 
   ParamValueMap parseHttpRequest(const string& request) const;
 
-  string createQueryFromHttpParams(const ParamValueMap& params) const;
+  string createQueryFromHttpParams(uWS::HttpRequest* req) const;
 
   string createHttpResponse(const string& content,
                             const string& contentType) const;
 
-  string create404HttpResponse() const;
-  string create400HttpResponse() const;
+  void create404HttpResponse(uWS::HttpResponse<false>* resp) const;
+  void create400HttpResponse(uWS::HttpResponse<false>* resp) const;
 
   string composeResponseJson(const ParsedQuery& query,
                              const QueryExecutionTree& qet,

@@ -69,6 +69,7 @@ inline string_view commonPrefix(string_view a, const string_view b);
 
 //! Case transformations. Should be thread safe.
 inline string getLowercase(const string& orig);
+inline string getLowercase(const std::string_view& orig);
 
 inline string getUppercase(const string& orig);
 
@@ -230,6 +231,16 @@ string_view commonPrefix(string_view a, const string_view b) {
 
 // ____________________________________________________________________________
 string getLowercase(const string& orig) {
+  string retVal;
+  retVal.reserve(orig.size());
+  for (size_t i = 0; i < orig.size(); ++i) {
+    retVal += tolower(orig[i]);
+  }
+  return retVal;
+}
+
+// ____________________________________________________________________________
+string getLowercase(const std::string_view& orig) {
   string retVal;
   retVal.reserve(orig.size());
   for (size_t i = 0; i < orig.size(); ++i) {

@@ -16,6 +16,7 @@
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
 #include "./Server.h"
+#include "App.h"
 #include "QueryPlanner.h"
 
 // _____________________________________________________________________________
@@ -38,21 +39,9 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
   if (useText) {
     _index.addTextFromOnDiskIndex();
   }
-
   _sortPerformanceEstimator.computeEstimatesExpensively(
       _allocator,
       _index.getNofTriples() * PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
-
-  // Init the server socket.
-  bool ret = _serverSocket.create() && _serverSocket.bind(_port) &&
-             _serverSocket.listen();
-  if (!ret) {
-    LOG(ERROR) << "Failed to create socket on port " << _port << "."
-               << std::endl;
-    exit(1);
-  }
-
-  // Set flag.
   _initialized = true;
   LOG(INFO) << "Done initializing server." << std::endl;
 }
@@ -63,149 +52,115 @@ void Server::run() {
     LOG(ERROR) << "Cannot start an uninitialized server!" << std::endl;
     exit(1);
   }
-  std::vector<std::thread> threads;
+
   for (int i = 0; i < _numThreads; ++i) {
-    threads.emplace_back(&Server::runAcceptLoop, this);
-  }
-  for (std::thread& worker : threads) {
-    worker.join();
-  }
-}
-// _____________________________________________________________________________
-void Server::runAcceptLoop() {
-  // Loop and wait for queries. Run forever, for now.
-  while (true) {
-    // Wait for new query
-    LOG(INFO) << "---------- WAITING FOR QUERY AT PORT \"" << _port << "\" ... "
-              << std::endl;
-
-    ad_utility::Socket client;
-    // Concurrent accept used to be problematic because of the Thundering Herd
-    // problem but this should be fixed on modern OSs
-    bool success = _serverSocket.acceptClient(&client);
-    if (!success) {
-      LOG(ERROR) << "Socket error in acceot" << std::strerror(errno)
-                 << std::endl;
-      continue;
-    }
-    client.setKeepAlive(true);
-    LOG(INFO) << "Incoming connection, processing..." << std::endl;
-    process(&client);
-    client.close();
+    uWS::App()
+        .get("/*", [this](uWS::HttpResponse<false>* resp,
+                          uWS::HttpRequest* req) { process(resp, req); })
+        .listen(_port,
+                [this](auto* token) {
+                  if (!token) {
+                    LOG(ERROR) << "Failed to create socket on port " << _port
+                               << "." << std::endl;
+                    exit(1);
+                  }
+                })
+        .run();
   }
 }
 
 // _____________________________________________________________________________
-void Server::process(Socket* client) {
+void Server::process(uWS::HttpResponse<false>* resp, uWS::HttpRequest* req) {
   ad_utility::Timer requestTimer;
   requestTimer.start();
-  string contentType;
-  LOG(DEBUG) << "Waiting for receive call to complete." << endl;
-  string request;
-  string response;
-  string headers;
-  string query;
-  client->getHTTPRequest(request, headers);
-  LOG(DEBUG) << "Got request from client with size: " << request.size()
-             << " and headers with total size: " << headers.size() << endl;
-
-  size_t indexOfGET = request.find("GET");
-  size_t indexOfHTTP = request.find("HTTP");
-  size_t upper = indexOfHTTP;
-
-  if (indexOfGET != request.npos && indexOfHTTP != request.npos) {
-    size_t indexOfQuest = request.find("?", indexOfGET);
-    if (indexOfQuest != string::npos && indexOfQuest < indexOfHTTP) {
-      upper = indexOfQuest + 1;
+  string file = std::string(req->getUrl());
+  if (file == "/") {
+    file = "/index.html";
+  }
+  LOG(INFO) << "GET request for " << file << std::endl;
+  // Use hardcoded white-listing for index.html and style.css
+  // can be changed if more should ever be needed, for now keep it simple.
+  if (req->getQuery().size() == 0) {
+    LOG(DEBUG) << "file: " << file << '\n';
+    if (file == "/index.html" || file == "/style.css" || file == "/script.js") {
+      serveFile(resp, "." + file);
+      return;
+    } else {
+      LOG(INFO) << "Responding with 404 for file " << file << '\n';
+      create404HttpResponse(resp);
+      return;
     }
-    string file = request.substr(indexOfGET + 5, upper - (indexOfGET + 5) - 1);
-    if (file.size() == 0) {
-      if (request[indexOfGET + 5] != '?') {
-        file = "index.html";
-      }
-    }
-    // Use hardcoded white-listing for index.html and style.css
-    // can be changed if more should ever be needed, for now keep it simple.
-    if (file.size() > 0) {
-      LOG(DEBUG) << "file: " << file << '\n';
-      if (file == "index.html" || file == "style.css" || file == "script.js") {
-        serveFile(client, file);
-        return;
-      } else {
-        LOG(INFO) << "Responding with 404 for file " << file << '\n';
-        auto bytesSent = client->send(create404HttpResponse());
-        LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
-        return;
-      }
+  }
+
+  std::string query;
+
+  try {
+    resp->writeHeader("Access-Control-Allow-Origin", "*");
+    if (ad_utility::getLowercase(req->getQuery("cmd")) == "stats") {
+      LOG(INFO) << "Supplying index stats..." << std::endl;
+      std::string statsJson = composeStatsJson();
+      resp->writeStatus("200 Ok");
+      resp->writeHeader("Content-Type", "application/json");
+      resp->end(statsJson);
+      LOG(INFO) << "Sent stats to client." << std::endl;
+      return;
     }
 
-    try {
-      ParamValueMap params = parseHttpRequest(request);
+    if (ad_utility::getLowercase(req->getQuery("cmd")) == "cachestats") {
+      LOG(INFO) << "Supplying cache stats..." << std::endl;
+      json statsJson = composeCacheStatsJson();
+      resp->writeStatus("200 Ok");
+      resp->writeHeader("Content-Type", "application/json");
+      resp->end(statsJson.dump());
+      LOG(INFO) << "Sent cache stats to client." << std::endl;
+      return;
+    }
 
-      if (ad_utility::getLowercase(params["cmd"]) == "stats") {
-        LOG(INFO) << "Supplying index stats..." << std::endl;
-        auto statsJson = composeStatsJson();
-        contentType = "application/json";
-        string httpResponse = createHttpResponse(statsJson, contentType);
-        auto bytesSent = client->send(httpResponse);
-        LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
-        LOG(INFO) << "Sent stats to client." << std::endl;
-        return;
-      }
+    if (ad_utility::getLowercase(req->getQuery("cmd")) == "clearcache") {
+      _cache.clearUnpinnedOnly();
+      resp->writeStatus("200 Ok");
+      resp->end();
+    }
 
-      if (ad_utility::getLowercase(params["cmd"]) == "cachestats") {
-        LOG(INFO) << "Supplying cache stats..." << std::endl;
-        auto statsJson = composeCacheStatsJson();
-        contentType = "application/json";
-        string httpResponse = createHttpResponse(statsJson.dump(), contentType);
-        auto bytesSent = client->send(httpResponse);
-        LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
-        LOG(INFO) << "Sent cache stats to client." << std::endl;
-        return;
-      }
+    if (ad_utility::getLowercase(req->getQuery("cmd")) ==
+        "clearcachecomplete") {
+      auto lock = _pinnedSizes.wlock();
+      _cache.clearAll();
+      lock->clear();
+    }
 
-      if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
-        _cache.clearUnpinnedOnly();
-      }
+    ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
+        std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+            ad_utility::TimeoutTimer::unlimited());
+    if (params.contains("timeout")) {
+      timeoutTimer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+          ad_utility::TimeoutTimer::fromSeconds(
+              atof(params["timeout"].c_str())));
+    }
 
-      if (ad_utility::getLowercase(params["cmd"]) == "clearcachecomplete") {
-        auto lock = _pinnedSizes.wlock();
-        _cache.clearAll();
-        lock->clear();
-      }
-
-      ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
-          std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-              ad_utility::TimeoutTimer::unlimited());
-      if (params.contains("timeout")) {
-        timeoutTimer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-            ad_utility::TimeoutTimer::fromSeconds(
-                atof(params["timeout"].c_str())));
-      }
-
-      auto it = params.find("send");
-      size_t maxSend = MAX_NOF_ROWS_IN_RESULT;
-      if (it != params.end()) {
-        maxSend = static_cast<size_t>(atol(it->second.c_str()));
-      }
+    std::string_view send = req->getQuery("send");
+    size_t maxSend = MAX_NOF_ROWS_IN_RESULT;
+    if (!send.empty()) {
+      maxSend = static_cast<size_t>(stoul(std::string(send)));
+    }
 #ifdef ALLOW_SHUTDOWN
-      if (ad_utility::getLowercase(params["cmd"]) == "shutdown") {
-        LOG(INFO) << "Shutdown triggered by HTTP request "
-                  << "(deactivate by compiling without -DALLOW_SHUTDOWN)"
-                  << std::endl;
-        exit(0);
-      }
+    if (ad_utility::getLowercase(req->getQuery("cmd")) == "shutdown") {
+      LOG(INFO) << "Shutdown triggered by HTTP request "
+                << "(deactivate by compiling without -DALLOW_SHUTDOWN)"
+                << std::endl;
+      exit(0);
+    }
 #endif
-      const bool pinSubtrees =
-          ad_utility::getLowercase(params["pinsubtrees"]) == "true";
-      const bool pinResult =
-          ad_utility::getLowercase(params["pinresult"]) == "true";
-      query = createQueryFromHttpParams(params);
-      LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
-                << ((pinResult) ? " (Result pinned)" : "") << ": " << query
-                << '\n';
-      ParsedQuery pq = SparqlParser(query).parse();
-      pq.expandPrefixes();
+    const bool pinSubtrees =
+        ad_utility::getLowercase(req->getQuery("pinsubtrees")) == "true";
+    const bool pinResult =
+        ad_utility::getLowercase(req->getQuery("pinresult")) == "true";
+    query = createQueryFromHttpParams(req);
+    LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
+              << ((pinResult) ? " (Result pinned)" : "") << ": " << query
+              << '\n';
+    ParsedQuery pq = SparqlParser(query).parse();
+    pq.expandPrefixes();
 
       QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
                                 _allocator, _sortPerformanceEstimator,
@@ -221,44 +176,46 @@ void Server::process(Socket* client) {
       qet.recursivelySetTimeoutTimer(timeoutTimer);
       LOG(TRACE) << qet.asString() << std::endl;
 
-      if (ad_utility::getLowercase(params["action"]) == "csv_export") {
-        // CSV export
-        response = composeResponseSepValues(pq, qet, ',');
-        contentType =
-            "text/csv\r\n"
-            "Content-Disposition: attachment;filename=export.csv";
-      } else if (ad_utility::getLowercase(params["action"]) == "tsv_export") {
-        // TSV export
-        response = composeResponseSepValues(pq, qet, '\t');
-        contentType =
-            "text/tab-separated-values\r\n"
-            "Content-Disposition: attachment;filename=export.tsv";
-      } else if (ad_utility::getLowercase(params["action"]) ==
-                 "binary_export") {
-        // binary export
-        response = composeResponseSepValues(pq, qet, 'b');
-        contentType =
-            "application/octet-stream\r\n"
-            "Content-Disposition: attachment;filename=export.dat";
-      } else {
-        // Normal case: JSON response
-        response = composeResponseJson(pq, qet, requestTimer, maxSend);
-        contentType = "application/json";
-      }
-      // Print the runtime info. This needs to be done after the query
-      // was computed.
-      LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
-    } catch (const std::exception& e) {
-      response = composeResponseJson(query, e, requestTimer);
+    std::string response;
+    std::string contentType;
+
+    if (ad_utility::getLowercase(req->getQuery("action")) == "csv_export") {
+      // CSV export
+      response = composeResponseSepValues(pq, qet, ',');
+      contentType =
+          "text/csv\r\n"
+          "Content-Disposition: attachment;filename=export.csv";
+    } else if (ad_utility::getLowercase(req->getQuery("action")) ==
+               "tsv_export") {
+      // TSV export
+      response = composeResponseSepValues(pq, qet, '\t');
+      contentType =
+          "text/tab-separated-values\r\n"
+          "Content-Disposition: attachment;filename=export.tsv";
+    } else if (ad_utility::getLowercase(req->getQuery("action")) ==
+               "binary_export") {
+      // binary export
+      response = composeResponseSepValues(pq, qet, 'b');
+      contentType =
+          "application/octet-stream\r\n"
+          "Content-Disposition: attachment;filename=export.dat";
+    } else {
+      // Normal case: JSON response
+      response = composeResponseJson(pq, qet, requestTimer, maxSend);
+      contentType = "application/json";
     }
-    string httpResponse = createHttpResponse(response, contentType);
-    auto bytesSent = client->send(httpResponse);
-    LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
-  } else {
-    LOG(INFO) << "Got invalid request " << request << '\n';
-    LOG(INFO) << "Responding with 400 Bad Request.\n";
-    auto bytesSent = client->send(create400HttpResponse());
-    LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
+    resp->writeStatus("200 Ok");
+    resp->writeHeader("Content-Type", contentType);
+    resp->end(response);
+    // Print the runtime info. This needs to be done after the query
+    // was computed.
+    LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
+  } catch (const ad_semsearch::Exception& e) {
+    resp->writeStatus("500 Internal Server Error");
+    resp->end(composeResponseJson(query, e));
+  } catch (const std::exception& e) {
+    resp->writeStatus("500 Internal Server Error");
+    resp->end(composeResponseJson(query, &e, requestTimer));
   }
 }
 
@@ -326,15 +283,14 @@ Server::ParamValueMap Server::parseHttpRequest(
 }
 
 // _____________________________________________________________________________
-string Server::createQueryFromHttpParams(const ParamValueMap& params) const {
-  string query;
+string Server::createQueryFromHttpParams(uWS::HttpRequest* req) const {
   // Construct a Query object from the parsed request.
-  auto it = params.find("query");
-  if (it == params.end() || it->second == "") {
+  std::string_view query = req->getQuery("query");
+  if (query.empty()) {
     AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
              "Expected at least one non-empty attribute \"query\".");
   }
-  return it->second;
+  return std::string(query);
 }
 
 // _____________________________________________________________________________
@@ -355,23 +311,15 @@ string Server::createHttpResponse(const string& content,
 }
 
 // _____________________________________________________________________________
-string Server::create404HttpResponse() const {
-  std::ostringstream os;
-  os << "HTTP/1.1 404 Not Found\r\n"
-     << "Content-Length: 0\r\n"
-     << "Connection: close\r\n"
-     << "\r\n";
-  return os.str();
+void Server::create404HttpResponse(uWS::HttpResponse<false>* resp) const {
+  resp->writeStatus("404 Not Found");
+  resp->end("404 Not Found");
 }
 
 // _____________________________________________________________________________
-string Server::create400HttpResponse() const {
-  std::ostringstream os;
-  os << "HTTP/1.1 400 Bad Request\r\n"
-     << "Content-Length: 0\r\n"
-     << "Connection: close\r\n"
-     << "\r\n";
-  return os.str();
+void Server::create400HttpResponse(uWS::HttpResponse<false>* resp) const {
+  resp->writeStatus("400 Bad Request");
+  resp->end("400 Bad Request");
 }
 
 // _____________________________________________________________________________
@@ -454,16 +402,17 @@ string Server::composeResponseJson(const string& query,
 }
 
 // _____________________________________________________________________________
-void Server::serveFile(Socket* client, const string& requestedFile) const {
+void Server::serveFile(uWS::HttpResponse<false>* resp,
+                       const string& requestedFile) const {
   string contentString;
   string contentType = "text/plain";
-  string statusString = "HTTP/1.0 200 OK";
+  string statusString = "200 OK";
 
   // CASE: file.
   LOG(DEBUG) << "Looking for file: \"" << requestedFile << "\" ... \n";
   std::ifstream in(requestedFile.c_str());
   if (!in) {
-    statusString = "HTTP/1.0 404 NOT FOUND";
+    statusString = "404 NOT FOUND";
     contentString = "404 NOT FOUND";
   } else {
     // File into string
@@ -480,18 +429,10 @@ void Server::serveFile(Socket* client, const string& requestedFile) const {
     in.close();
   }
 
-  size_t contentLength = contentString.size();
-  std::ostringstream headerStream;
-  headerStream << statusString << "\r\n"
-               << "Content-Length: " << contentLength << "\r\n"
-               << "Content-Type: " << contentType << "\r\n"
-               << "Access-Control-Allow-Origin: *\r\n"
-               << "Connection: close\r\n"
-               << "\r\n";
-
-  string data = headerStream.str();
-  data += contentString;
-  client->send(data);
+  resp->writeStatus(statusString);
+  resp->writeHeader("Access-Control-Allow-Origin", "*");
+  resp->writeHeader("Content-Type", contentType);
+  resp->end(contentString);
 }
 
 // _____________________________________________________________________________
