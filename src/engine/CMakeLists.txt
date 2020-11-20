@@ -19,7 +19,6 @@ add_library(engine
         Filter.h Filter.cpp
         Server.h Server.cpp
         QueryPlanner.cpp QueryPlanner.h
-        ScanningJoin.cpp ScanningJoin.h
         QueryPlanningCostFactors.cpp QueryPlanningCostFactors.h
         TwoColumnJoin.cpp TwoColumnJoin.h
         OptionalJoin.cpp OptionalJoin.h
