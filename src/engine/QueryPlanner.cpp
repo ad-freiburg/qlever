@@ -188,7 +188,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         return;
       }
 
-      // we are an optional or minus, optimization across is forbidden.
+      // we are an optional or minus join, optimization across is forbidden.
       // optimize all previously collected candidates, and then perform
       // an optional join.
       auto tg = createTripleGraph(&candidateTriples);
@@ -531,7 +531,8 @@ bool QueryPlanner::checkUsePatternTrick(
             using T = std::decay_t<decltype(arg)>;
             if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> ||
                           std::is_same_v<
-                              T, GraphPatternOperation::GroupGraphPattern>) {
+                              T, GraphPatternOperation::GroupGraphPattern> ||
+                          std::is_same_v<T, GraphPatternOperation::Minus>) {
               graphsToProcess.push_back(&arg._child);
 
             } else if constexpr (std::is_same_v<T,
@@ -566,8 +567,7 @@ bool QueryPlanner::checkUsePatternTrick(
 
             } else {
               static_assert(
-                  std::is_same_v<T, GraphPatternOperation::TransPath> ||
-                  std::is_same_v<T, GraphPatternOperation::Minus>);
+                  std::is_same_v<T, GraphPatternOperation::TransPath>);
             }
             // Transitive paths cannot yet exist in the query. They could also
             // not contain the variables we are interested in.

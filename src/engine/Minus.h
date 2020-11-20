@@ -36,9 +36,7 @@ class Minus : public Operation {
     _right->setTextLimit(limit);
   }
 
-  virtual bool knownEmptyResult() override {
-    return _left->knownEmptyResult() || _right->knownEmptyResult();
-  }
+  virtual bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
   virtual float getMultiplicity(size_t col) override;
 

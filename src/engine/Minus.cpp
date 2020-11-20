@@ -4,10 +4,7 @@
 
 #include "Minus.h"
 
-#include <sparsehash/sparse_hash_set>
-
 #include "../util/Exception.h"
-#include "../util/HashSet.h"
 #include "CallFixedSize.h"
 
 using std::string;
@@ -54,11 +51,9 @@ void Minus::computeResult(ResultTable* result) {
 
   LOG(DEBUG) << "Minus subresult computation done." << std::endl;
 
-  // compute the result types
-  result->_resultTypes.reserve(result->_data.cols());
-  result->_resultTypes.insert(result->_resultTypes.end(),
-                              leftResult->_resultTypes.begin(),
-                              leftResult->_resultTypes.end());
+  // We have the same output columns as the left input, so we also
+  // have the same output column types.
+  result->_resultTypes = leftResult->_resultTypes;
 
   LOG(DEBUG) << "Computing minus of results of size " << leftResult->size()
              << " and " << rightResult->size() << endl;
@@ -129,8 +124,9 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
   if (dynB.size() == 0 || joinColumns.size() == 0) {
     // B is the empty set of solution mappings, so the result is A
     if constexpr (A_WIDTH == OUT_WIDTH) {
+      // Copy a into the result, allowing for optimizations for small width by
+      // using the templated width types.
       IdTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
-      IdTableStatic<B_WIDTH> b = dynB.asStaticView<B_WIDTH>();
       IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
       result = a;
       *dynResult = result.moveToDynamic();
@@ -139,8 +135,6 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
       // This case should never happen.
       AD_CHECK(false);
     }
-    *dynResult = dynA;
-    return;
   }
 
   IdTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
@@ -163,7 +157,6 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
       for (size_t col = 0; col < a.cols(); col++) {
         result(backIdx, col) = a(ia, col);
       }
-
       ia++;
       if (ia >= a.size()) {
         goto finish;
