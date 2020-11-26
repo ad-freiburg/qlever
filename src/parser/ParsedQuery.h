@@ -365,6 +365,9 @@ struct GraphPatternOperation {
   struct Optional {
     ParsedQuery::GraphPattern _child;
   };
+  struct Minus {
+    ParsedQuery::GraphPattern _child;
+  };
   struct Union {
     ParsedQuery::GraphPattern _child1;
     ParsedQuery::GraphPattern _child2;
@@ -436,7 +439,7 @@ struct GraphPatternOperation {
   };
 
   std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-               Values>
+               Values, Minus>
       variant_;
   template <typename A, typename... Args,
             typename = std::enable_if_t<

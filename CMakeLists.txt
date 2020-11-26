@@ -28,6 +28,15 @@ set(CMAKE_CXX_FLAGS_ASAN
         CACHE STRING "Flags used by the C++ compiler during AddressSanitizer builds."
         FORCE)
 
+# Add colored output for Ninja
+if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
+  if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+     add_compile_options (-fdiagnostics-color=always)
+  elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+     add_compile_options (-fcolor-diagnostics)
+  endif ()
+endif()
+
 ###############################################################################
 ##### Essential settings #####
 ###############################################################################

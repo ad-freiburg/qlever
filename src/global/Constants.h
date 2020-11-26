@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <stdexcept>
 #include <string>
 
 static const size_t STXXL_MEMORY_TO_USE = 1024L * 1024L * 1024L * 2L;

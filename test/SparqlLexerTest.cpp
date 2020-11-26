@@ -83,8 +83,7 @@ TEST(SparqlLexerTest, basicTest) {
 
   lexer.expect("}");
 
-  lexer.expect("order");
-  lexer.expect("by");
+  lexer.expect("order by");
   lexer.expect("asc");
   lexer.expect("(");
   lexer.expect("?a");
@@ -94,80 +93,77 @@ TEST(SparqlLexerTest, basicTest) {
   lexer.expect("?b");
   lexer.expect(")");
 
-  lexer.expect("group");
-  lexer.expect("by");
+  lexer.expect("group by");
   lexer.expect("(");
   lexer.expect("?a");
   lexer.expect(")");
 
   SparqlLexer lexer2(query);
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::IRI);
-  lexer2.expect(SparqlToken::Type::IRI);
+  lexer2.expect(SparqlToken::Type::KEYWORD);  // prefix
+  lexer2.expect(SparqlToken::Type::IRI);      // wd:
+  lexer2.expect(SparqlToken::Type::IRI);  // <http://www.wikidata.org/entity/>
 
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::VARIABLE);
-  lexer2.expect(SparqlToken::Type::VARIABLE);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::AGGREGATE);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::VARIABLE);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::VARIABLE);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
+  lexer2.expect(SparqlToken::Type::KEYWORD);    // select
+  lexer2.expect(SparqlToken::Type::VARIABLE);   // ?a
+  lexer2.expect(SparqlToken::Type::VARIABLE);   // ?b
+  lexer2.expect(SparqlToken::Type::SYMBOL);     // (
+  lexer2.expect(SparqlToken::Type::AGGREGATE);  // count
+  lexer2.expect(SparqlToken::Type::SYMBOL);     // (
+  lexer2.expect(SparqlToken::Type::VARIABLE);   // ?c
+  lexer2.expect(SparqlToken::Type::SYMBOL);     // )
+  lexer2.expect(SparqlToken::Type::KEYWORD);    // as
+  lexer2.expect(SparqlToken::Type::VARIABLE);   // ?count
+  lexer2.expect(SparqlToken::Type::SYMBOL);     // )
+  lexer2.expect(SparqlToken::Type::KEYWORD);    // where
+  lexer2.expect(SparqlToken::Type::SYMBOL);     // {
 
-  lexer2.expect(SparqlToken::Type::VARIABLE);
-  lexer2.expect(SparqlToken::Type::IRI);
-  lexer2.expect(SparqlToken::Type::VARIABLE);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
+  lexer2.expect(SparqlToken::Type::VARIABLE);  // ?a
+  lexer2.expect(SparqlToken::Type::IRI);       // wd:test
+  lexer2.expect(SparqlToken::Type::VARIABLE);  // ?b
+  lexer2.expect(SparqlToken::Type::SYMBOL);    // .
 
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
+  lexer2.expect(SparqlToken::Type::KEYWORD);  // optional
+  lexer2.expect(SparqlToken::Type::SYMBOL);   // {
 
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::VARIABLE);
-  lexer2.expect(SparqlToken::Type::IRI);
-  lexer2.expect(SparqlToken::Type::VARIABLE);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::VARIABLE);
-  lexer2.expect(SparqlToken::Type::IRI);
-  lexer2.expect(SparqlToken::Type::VARIABLE);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
+  lexer2.expect(SparqlToken::Type::SYMBOL);    // {
+  lexer2.expect(SparqlToken::Type::VARIABLE);  // ?a
+  lexer2.expect(SparqlToken::Type::IRI);       // <is-a>
+  lexer2.expect(SparqlToken::Type::VARIABLE);  // ?b
+  lexer2.expect(SparqlToken::Type::SYMBOL);    // }
+  lexer2.expect(SparqlToken::Type::KEYWORD);   // union
+  lexer2.expect(SparqlToken::Type::SYMBOL);    // {
+  lexer2.expect(SparqlToken::Type::VARIABLE);  // ?a
+  lexer2.expect(SparqlToken::Type::IRI);       // <is-b>
+  lexer2.expect(SparqlToken::Type::VARIABLE);  // ?b
+  lexer2.expect(SparqlToken::Type::SYMBOL);    // }
 
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::VARIABLE);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::RDFLITERAL);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
+  lexer2.expect(SparqlToken::Type::KEYWORD);     // filter
+  lexer2.expect(SparqlToken::Type::KEYWORD);     // langmatches
+  lexer2.expect(SparqlToken::Type::SYMBOL);      // (
+  lexer2.expect(SparqlToken::Type::KEYWORD);     // lang
+  lexer2.expect(SparqlToken::Type::SYMBOL);      // (
+  lexer2.expect(SparqlToken::Type::VARIABLE);    // ?rname
+  lexer2.expect(SparqlToken::Type::SYMBOL);      // )
+  lexer2.expect(SparqlToken::Type::SYMBOL);      // ,
+  lexer2.expect(SparqlToken::Type::RDFLITERAL);  // "en"
+  lexer2.expect(SparqlToken::Type::SYMBOL);      // )
 
-  lexer2.expect(SparqlToken::Type::SYMBOL);
+  lexer2.expect(SparqlToken::Type::SYMBOL);  // }
 
-  lexer2.expect(SparqlToken::Type::SYMBOL);
+  lexer2.expect(SparqlToken::Type::SYMBOL);  // }
 
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::VARIABLE);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::VARIABLE);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
+  lexer2.expect(SparqlToken::Type::ORDER_BY);  // order by
+  lexer2.expect(SparqlToken::Type::KEYWORD);   // asc
+  lexer2.expect(SparqlToken::Type::SYMBOL);    // (
+  lexer2.expect(SparqlToken::Type::VARIABLE);  // ?a
+  lexer2.expect(SparqlToken::Type::SYMBOL);    // )
+  lexer2.expect(SparqlToken::Type::KEYWORD);   // desc
+  lexer2.expect(SparqlToken::Type::SYMBOL);    // (
+  lexer2.expect(SparqlToken::Type::VARIABLE);  // ?b
+  lexer2.expect(SparqlToken::Type::SYMBOL);    // )
 
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::KEYWORD);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
-  lexer2.expect(SparqlToken::Type::VARIABLE);
-  lexer2.expect(SparqlToken::Type::SYMBOL);
+  lexer2.expect(SparqlToken::Type::GROUP_BY);  // group by
+  lexer2.expect(SparqlToken::Type::SYMBOL);    // (
+  lexer2.expect(SparqlToken::Type::VARIABLE);  // ?a
+  lexer2.expect(SparqlToken::Type::SYMBOL);    // )
 }

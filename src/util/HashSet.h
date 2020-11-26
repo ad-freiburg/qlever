@@ -28,6 +28,11 @@ class HashSet : private absl::flat_hash_set<T, HashFcn, EqualKey, Alloc> {
  public:
   HashSet() = default;
 
+  HashSet(size_t num_items) : Base(num_items) {
+    Base::set_empty_key(DefaultKeyProvider<T>::DEFAULT_EMPTY_KEY);
+    Base::set_deleted_key(DefaultKeyProvider<T>::DEFAULT_DELETED_KEY);
+  }
+
   // Iterator type of this set, it.first is the key, it.second the value
   using typename Base::iterator;
 
