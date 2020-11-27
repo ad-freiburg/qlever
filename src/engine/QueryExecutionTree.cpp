@@ -217,7 +217,7 @@ nlohmann::json QueryExecutionTree::writeJsonTable(
     auto& row = json.back();
     for (const auto& opt : validIndices) {
       if (!opt) {
-        row.emplace_back(optToJson(std::optional<string>{}));
+        row.emplace_back(nullptr);
         continue;
       }
       const auto& idx = *opt;
