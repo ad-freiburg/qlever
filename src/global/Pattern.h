@@ -24,12 +24,13 @@ static const PatternID NO_PATTERN = std::numeric_limits<PatternID>::max();
  *        that a set of entities has (e.g. for autocompletion of relations
  *        while writing a query).
  */
+template <typename PredicateId>
 struct Pattern {
-  Id& operator[](const size_t pos) { return _data[pos]; }
+  PredicateId& operator[](const size_t pos) { return _data[pos]; }
 
-  const Id& operator[](const size_t pos) const { return _data[pos]; }
+  const PredicateId& operator[](const size_t pos) const { return _data[pos]; }
 
-  bool operator==(const Pattern& other) const {
+  bool operator==(const Pattern<PredicateId>& other) const {
     if (size() != other.size()) {
       return false;
     }
@@ -41,7 +42,7 @@ struct Pattern {
     return true;
   }
 
-  bool operator!=(const Pattern& other) const {
+  bool operator!=(const Pattern<PredicateId>& other) const {
     if (size() != other.size()) {
       return true;
     }
@@ -53,7 +54,7 @@ struct Pattern {
     return false;
   }
 
-  bool operator<(const Pattern& other) const {
+  bool operator<(const Pattern<PredicateId>& other) const {
     if (size() == 0) {
       return true;
     }
@@ -63,7 +64,7 @@ struct Pattern {
     return _data[0] < other._data[0];
   }
 
-  bool operator>(const Pattern& other) const {
+  bool operator>(const Pattern<PredicateId>& other) const {
     if (other.size() == 0) {
       return true;
     }
@@ -75,11 +76,11 @@ struct Pattern {
 
   size_t size() const { return _data.size(); }
 
-  void push_back(const Id i) { _data.push_back(i); }
+  void push_back(const PredicateId i) { _data.push_back(i); }
 
   void clear() { _data.clear(); }
 
-  std::vector<Id> _data;
+  std::vector<PredicateId> _data;
 };
 
 // The type of the index used to access the data, and the type of the data
@@ -140,12 +141,12 @@ class CompactStringVector {
                 sizeof(IndexT));
   }
 
-  void load(ad_utility::File& file, off_t offset = 0) {
-    file.read(&_size, sizeof(size_t), offset);
-    file.read(&_dataSize, sizeof(size_t), offset + sizeof(size_t));
+  void load(ad_utility::File* file, off_t offset = 0) {
+    file->read(&_size, sizeof(size_t), offset);
+    file->read(&_dataSize, sizeof(size_t), offset + sizeof(size_t));
     _indexEnd = (_size + 1) * sizeof(IndexT);
     _data = new uint8_t[_dataSize];
-    file.read(_data, _dataSize, offset + 2 * sizeof(size_t));
+    file->read(_data, _dataSize, offset + 2 * sizeof(size_t));
   }
 
   CompactStringVector& operator=(const CompactStringVector&) = delete;
@@ -188,23 +189,24 @@ class CompactStringVector {
   size_t _dataSize;
 };
 
-namespace std {
-template <>
-struct hash<Pattern> {
-  std::size_t operator()(const Pattern& p) const {
-    std::string_view s = std::string_view(
-        reinterpret_cast<const char*>(p._data.data()), sizeof(Id) * p.size());
-    return hash<std::string_view>()(s);
+template <typename PredicateId>
+struct PatternHash {
+  std::size_t operator()(const Pattern<PredicateId>& p) const {
+    std::string_view s =
+        std::string_view(reinterpret_cast<const char*>(p._data.data()),
+                         sizeof(PredicateId) * p.size());
+    return std::hash<std::string_view>()(s);
   }
 };
-}  // namespace std
 
-inline std::ostream& operator<<(std::ostream& o, const Pattern& p) {
+template <typename PredicateId>
+inline std::ostream& operator<<(std::ostream& o,
+                                const Pattern<PredicateId>& p) {
   for (size_t i = 0; i + 1 < p.size(); i++) {
-    o << p[i] << ", ";
+    o << uint64_t(p[i]) << ", ";
   }
   if (p.size() > 0) {
-    o << p[p.size() - 1];
+    o << uint64_t(p[p.size() - 1]);
   }
   return o;
 }

@@ -97,18 +97,21 @@ class CountAvailablePredicates : public Operation {
    * @param subjectColumn The column containing the entities for which the
    *                      relations should be counted.
    */
-  template <int I>
+  template <int I, typename PredicateId>
   static void computePatternTrick(
       const IdTable& input, IdTable* result,
       const vector<PatternID>& hasPattern,
-      const CompactStringVector<Id, Id>& hasPredicate,
-      const CompactStringVector<size_t, Id>& patterns,
-      const size_t subjectColumn, RuntimeInformation* runtimeInfo);
+      const CompactStringVector<Id, PredicateId>& hasPredicate,
+      const CompactStringVector<size_t, PredicateId>& patterns,
+      const std::vector<Id>& predicateGlobalIds, const size_t subjectColumn,
+      RuntimeInformation* runtimeInfo);
 
+  template <typename PredicateId>
   static void computePatternTrickAllEntities(
       IdTable* result, const vector<PatternID>& hasPattern,
-      const CompactStringVector<Id, Id>& hasPredicate,
-      const CompactStringVector<size_t, Id>& patterns);
+      const CompactStringVector<Id, PredicateId>& hasPredicate,
+      const CompactStringVector<size_t, PredicateId>& patterns,
+      const std::vector<Id>& predicateGlobalIds);
 
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
@@ -119,4 +122,9 @@ class CountAvailablePredicates : public Operation {
   std::string _countVarName;
 
   virtual void computeResult(ResultTable* result) override;
+
+  template <typename PredicateId>
+  void computeResult(
+      ResultTable* result,
+      std::shared_ptr<const PatternContainerImpl<PredicateId>> pattern_data);
 };

@@ -29,6 +29,7 @@
 #include "./StxxlSortFunctors.h"
 #include "./TextMetaData.h"
 #include "./Vocabulary.h"
+#include "PatternContainer.h"
 
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
@@ -181,9 +182,11 @@ class Index {
     return _vocab.idToOptionalString(id);
   }
 
-  const vector<PatternID>& getHasPattern() const;
-  const CompactStringVector<Id, Id>& getHasPredicate() const;
-  const CompactStringVector<size_t, Id>& getPatterns() const;
+  std::shared_ptr<PatternContainer> getPatternData();
+  std::shared_ptr<const PatternContainer> getPatternData() const;
+
+  const std::vector<Id> getPredicateGlobalIds() const;
+
   /**
    * @return The multiplicity of the Entites column (0) of the full has-relation
    *         relation after unrolling the patterns.
@@ -485,20 +488,27 @@ class Index {
   double _fullHasPredicateMultiplicityPredicates;
   size_t _fullHasPredicateSize;
 
+  /**
+   * @brief Maps predicate ids from the global namespace to the predicate local
+   * namespace (which only contains predicates). This map is only used
+   * during index creation and is otherwise not initialized.
+   */
+  ad_utility::HashMap<Id, size_t> _predicate_global_to_local_ids;
+
+  /**
+   * @brief Maps from the predicate local namespace (containing only predicates)
+   * to the global namespace (also containing subjects and objects).
+   */
+  std::vector<Id> _predicate_local_to_global_ids;
+
+  /**
+   * @brief Contains the has-predicate predicate encoded using patterns.
+   * Predicate ids are in the predicate local namespace.
+   */
+  std::shared_ptr<PatternContainer> _pattern_container;
+
   size_t _parserBatchSize = PARSER_BATCH_SIZE;
   size_t _numTriplesPerPartialVocab = NUM_TRIPLES_PER_PARTIAL_VOCAB;
-  /**
-   * @brief Maps pattern ids to sets of predicate ids.
-   */
-  CompactStringVector<size_t, Id> _patterns;
-  /**
-   * @brief Maps entity ids to pattern ids.
-   */
-  std::vector<PatternID> _hasPattern;
-  /**
-   * @brief Maps entity ids to sets of predicate ids
-   */
-  CompactStringVector<Id, Id> _hasPredicate;
 
   // Create Vocabulary and directly write it to disk. Create TripleVec with all
   // the triples converted to id space. This Vec can be used for creating
@@ -608,18 +618,30 @@ class Index {
    *             the tuples of the spo permutation after having been constructed
    *             using args.
    */
+  template <typename PatternId, typename VecReaderType, typename... Args>
+  void createPatternsImpl(
+      const string& fileName,
+      std::shared_ptr<PatternContainerImpl<PatternId>> pattern_data,
+      const std::vector<Id>& predicate_global_id,
+      const ad_utility::HashMap<Id, size_t>& predicate_local_id,
+      double& fullHasPredicateMultiplicityEntities,
+      double& fullHasPredicateMultiplicityPredicates,
+      size_t& fullHasPredicateSize, const size_t maxNumPatterns,
+      const Id langPredLowerBound, const Id langPredUpperBound,
+      const Args&... vecReaderArgs);
+
   template <typename VecReaderType, typename... Args>
-  void createPatternsImpl(const string& fileName,
-                          CompactStringVector<Id, Id>& hasPredicate,
-                          std::vector<PatternID>& hasPattern,
-                          CompactStringVector<size_t, Id>& patterns,
-                          double& fullHasPredicateMultiplicityEntities,
-                          double& fullHasPredicateMultiplicityPredicates,
-                          size_t& fullHasPredicateSize,
-                          const size_t maxNumPatterns,
-                          const Id langPredLowerBound,
-                          const Id langPredUpperBound,
-                          const Args&... vecReaderArgs);
+  void createPredicateIdsImpl(std::vector<Id>* predicateIds,
+                              const Id langPredLowerBound,
+                              const Id langPredUpperBound,
+                              const Args&... vecReaderArgs);
+
+  /**
+   * @brief Load the pattern_data stored in a patterns file.
+   */
+  template <typename PatternId>
+  std::shared_ptr<PatternContainerImpl<PatternId>> loadPatternData(
+      ad_utility::File* file, off_t* off);
 
   // wrap the static function using the internal member variables
   // the bool indicates wether the TripleVec has to be sorted before the pattern
