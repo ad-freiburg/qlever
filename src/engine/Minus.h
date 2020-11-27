@@ -10,11 +10,7 @@
 #include "./QueryExecutionTree.h"
 
 class Minus : public Operation {
-  enum class RowComparison {
-    EQUAL,
-    NOT_EQUAL_LEFT_SMALLER,
-    NOT_EQUAL_RIGHT_SMALLER
-  };
+  enum class RowComparison { EQUAL, LEFT_SMALLER, RIGHT_SMALLER };
 
  public:
   Minus(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> left,
@@ -54,7 +50,7 @@ class Minus : public Operation {
    *        that should have resultWidth entries).
    *        This method is made public here for unit testing purposes.
    **/
-  template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
+  template <int A_WIDTH, int B_WIDTH>
   static void computeMinus(const IdTable& a, const IdTable& b,
                            const vector<array<size_t, 2>>& matchedColumns,
                            IdTable* result);

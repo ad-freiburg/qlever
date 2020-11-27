@@ -41,9 +41,7 @@ TEST(EngineTest, minusTest) {
   // of a have to equal those of column 2 of b and vice versa).
   int aWidth = a.cols();
   int bWidth = b.cols();
-  int resWidth = res.cols();
-  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth, Minus::computeMinus, a, b, jcls,
-                    &res);
+  CALL_FIXED_SIZE_2(aWidth, bWidth, Minus::computeMinus, a, b, jcls, &res);
 
   ASSERT_EQ(wantedRes.size(), res.size());
 
@@ -54,8 +52,7 @@ TEST(EngineTest, minusTest) {
   // Test subtracting without matching columns
   res.clear();
   jcls.clear();
-  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth, Minus::computeMinus, a, b, jcls,
-                    &res);
+  CALL_FIXED_SIZE_2(aWidth, bWidth, Minus::computeMinus, a, b, jcls, &res);
   ASSERT_EQ(a.size(), res.size());
   for (size_t i = 0; i < a.size(); ++i) {
     ASSERT_EQ(a[i], res[i]);
@@ -81,9 +78,7 @@ TEST(EngineTest, minusTest) {
   // of fixed size columns plus one).
   aWidth = va.cols();
   bWidth = vb.cols();
-  resWidth = vres.cols();
-  CALL_FIXED_SIZE_3(aWidth, bWidth, resWidth, Minus::computeMinus, va, vb, jcls,
-                    &vres);
+  CALL_FIXED_SIZE_2(aWidth, bWidth, Minus::computeMinus, va, vb, jcls, &vres);
 
   wantedRes = IdTable(6);
   wantedRes.push_back({7, 6, 5, 4, 3, 2});

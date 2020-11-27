@@ -60,10 +60,8 @@ void Minus::computeResult(ResultTable* result) {
 
   int leftWidth = leftResult->_data.cols();
   int rightWidth = rightResult->_data.cols();
-  int resWidth = result->_data.cols();
-  CALL_FIXED_SIZE_3(leftWidth, rightWidth, resWidth, computeMinus,
-                    leftResult->_data, rightResult->_data, _matchedColumns,
-                    &result->_data);
+  CALL_FIXED_SIZE_2(leftWidth, rightWidth, computeMinus, leftResult->_data,
+                    rightResult->_data, _matchedColumns, &result->_data);
   LOG(DEBUG) << "Minus result computation done." << endl;
 }
 
@@ -106,7 +104,7 @@ size_t Minus::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-template <int A_WIDTH, int B_WIDTH, int OUT_WIDTH>
+template <int A_WIDTH, int B_WIDTH>
 void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
                          const vector<array<Id, 2>>& joinColumns,
                          IdTable* dynResult) {
@@ -116,6 +114,9 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
   // disjoint (mu' defines no solution for any variables for which mu defines a
   // solution).
 
+  // The output is always the same size as the left input
+  constexpr int OUT_WIDTH = A_WIDTH;
+
   // check for trivial cases
   if (dynA.size() == 0) {
     return;
@@ -123,18 +124,13 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
 
   if (dynB.size() == 0 || joinColumns.size() == 0) {
     // B is the empty set of solution mappings, so the result is A
-    if constexpr (A_WIDTH == OUT_WIDTH) {
-      // Copy a into the result, allowing for optimizations for small width by
-      // using the templated width types.
-      IdTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
-      IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
-      result = a;
-      *dynResult = result.moveToDynamic();
-      return;
-    } else {
-      // This case should never happen.
-      AD_CHECK(false);
-    }
+    // Copy a into the result, allowing for optimizations for small width by
+    // using the templated width types.
+    IdTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
+    IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
+    result = a;
+    *dynResult = result.moveToDynamic();
+    return;
   }
 
   IdTableStatic<A_WIDTH> a = dynA.asStaticView<A_WIDTH>();
@@ -147,16 +143,24 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
     rightToLeftCols[jc[1]] = jc[0];
   }
 
+  /**
+   * @brief A function to copy a row from a to the end of result.
+   * @param ia The index of the row in a.
+   */
+  auto writeResult = [&result, &a](size_t ia) {
+    result.emplace_back();
+    size_t backIdx = result.size() - 1;
+    for (size_t col = 0; col < a.cols(); col++) {
+      result(backIdx, col) = a(ia, col);
+    }
+  };
+
   size_t ia = 0, ib = 0;
   while (ia < a.size() && ib < b.size()) {
     // Join columns 0 are the primary sort columns
     while (a(ia, joinColumns[0][0]) < b(ib, joinColumns[0][1])) {
       // Write a result
-      result.emplace_back();
-      size_t backIdx = result.size() - 1;
-      for (size_t col = 0; col < a.cols(); col++) {
-        result(backIdx, col) = a(ia, col);
-      }
+      writeResult(ia);
       ia++;
       if (ia >= a.size()) {
         goto finish;
@@ -179,20 +183,16 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
             goto finish;
           }
         } break;
-        case RowComparison::NOT_EQUAL_LEFT_SMALLER: {
+        case RowComparison::LEFT_SMALLER: {
           // ib does not discard ia, and there can not be another ib that
           // would discard ia.
-          result.emplace_back();
-          size_t backIdx = result.size() - 1;
-          for (size_t col = 0; col < a.cols(); col++) {
-            result(backIdx, col) = a(ia, col);
-          }
+          writeResult(ia);
           ia++;
           if (ia >= a.size()) {
             goto finish;
           }
         } break;
-        case RowComparison::NOT_EQUAL_RIGHT_SMALLER: {
+        case RowComparison::RIGHT_SMALLER: {
           ib++;
           if (ib >= b.size()) {
             goto finish;
@@ -206,11 +206,7 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
 finish:
   result.reserve(result.size() + (a.size() - ia));
   while (ia < a.size()) {
-    result.emplace_back();
-    size_t backIdx = result.size() - 1;
-    for (size_t col = 0; col < a.cols(); col++) {
-      result(backIdx, col) = a(ia, col);
-    }
+    writeResult(ia);
     ia++;
   }
   *dynResult = result.moveToDynamic();
@@ -224,10 +220,10 @@ Minus::RowComparison Minus::isRowEqSkipFirst(
     Id va = a(ia, joinColumns[i][0]);
     Id vb = b(ib, joinColumns[i][1]);
     if (va < vb) {
-      return RowComparison::NOT_EQUAL_LEFT_SMALLER;
+      return RowComparison::LEFT_SMALLER;
     }
     if (va > vb) {
-      return RowComparison::NOT_EQUAL_RIGHT_SMALLER;
+      return RowComparison::RIGHT_SMALLER;
     }
   }
   return RowComparison::EQUAL;
