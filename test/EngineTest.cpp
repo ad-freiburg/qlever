@@ -93,6 +93,8 @@ TEST(EngineTest, joinTest) {
   lwidth = b.cols();
   rwidth = c.cols();
   reswidth = b.cols() + c.cols() - 1;
+  // reset the IdTable.
+  res = IdTable(reswidth);
   CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, Join::join, b, 0, c, 0, &res);
 
   ASSERT_EQ(2u, res.size());

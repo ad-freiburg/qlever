@@ -253,7 +253,7 @@ TEST(IdTableTest, sortTest) {
   // 1
   i1 = test.begin() + 1;
   i2 = i1 + 3;
-  IdTable::Row tmp(2);
+  IdTable::row_type tmp(2);
   tmp = *i2;
   *i1 = std::move(tmp);
   ASSERT_EQ(orig[4], test[1]);
@@ -261,7 +261,7 @@ TEST(IdTableTest, sortTest) {
 
   // The value is move constructible: move construct from a row in the table
   i1 = test.begin() + 4;
-  IdTable::Row tmp2(*i1);
+  IdTable::row_type tmp2(*i1);
   ASSERT_EQ(*i1, tmp2);
 
   // Now try the actual sort
@@ -496,7 +496,7 @@ TEST(IdTableStaticTest, iterating) {
   ASSERT_EQ(t1.end(), it);
 
   size_t row_index = 0;
-  for (const IdTableStatic<NUM_COLS>::Row row : t1) {
+  for (const IdTableStatic<NUM_COLS>::row_type row : t1) {
     for (size_t i = 0; i < NUM_COLS; i++) {
       ASSERT_EQ(row_index * NUM_COLS + i + 1, row[i]);
     }
@@ -516,7 +516,7 @@ TEST(IdTableTest, conversion) {
 
   IdTable initial = table;
 
-  IdTableStatic<3> s = table.moveToStatic<3>();
+  IdTableStatic<3> s = std::move(table).moveToStatic<3>();
   ASSERT_EQ(4u, s.size());
   ASSERT_EQ(3u, s.cols());
   for (size_t i = 0; i < s.size(); i++) {
@@ -525,7 +525,7 @@ TEST(IdTableTest, conversion) {
     }
   }
 
-  table = s.moveToDynamic();
+  table = std::move(s).moveToDynamic();
   ASSERT_EQ(4u, table.size());
   ASSERT_EQ(3u, table.cols());
   for (size_t i = 0; i < table.size(); i++) {
@@ -534,7 +534,8 @@ TEST(IdTableTest, conversion) {
     }
   }
 
-  const IdTableStatic<3> view = table.asStaticView<3>();
+  auto view = table.asStaticView<3>();
+  static_assert(std::is_same_v<decltype(view), IdTableView<3>>);
   ASSERT_EQ(4u, view.size());
   ASSERT_EQ(3u, view.cols());
   for (size_t i = 0; i < view.size(); i++) {
@@ -552,7 +553,7 @@ TEST(IdTableTest, conversion) {
 
   IdTable initialVar = tableVar;
 
-  IdTableStatic<6> staticVar = tableVar.moveToStatic<6>();
+  IdTableStatic<6> staticVar = std::move(tableVar).moveToStatic<6>();
   ASSERT_EQ(initialVar.size(), staticVar.size());
   ASSERT_EQ(initialVar.cols(), staticVar.cols());
   for (size_t i = 0; i < staticVar.size(); i++) {
@@ -561,7 +562,7 @@ TEST(IdTableTest, conversion) {
     }
   }
 
-  IdTable dynamicVar = staticVar.moveToDynamic();
+  IdTable dynamicVar = std::move(staticVar).moveToDynamic();
   ASSERT_EQ(initialVar.size(), dynamicVar.size());
   ASSERT_EQ(initialVar.cols(), dynamicVar.cols());
   for (size_t i = 0; i < dynamicVar.size(); i++) {
@@ -570,7 +571,8 @@ TEST(IdTableTest, conversion) {
     }
   }
 
-  const IdTableStatic<6> viewVar = dynamicVar.asStaticView<6>();
+  auto viewVar = std::move(dynamicVar).asStaticView<6>();
+  static_assert(std::is_same_v<decltype(viewVar), IdTableView<6>>);
   ASSERT_EQ(initialVar.size(), viewVar.size());
   ASSERT_EQ(initialVar.cols(), viewVar.cols());
   for (size_t i = 0; i < viewVar.size(); i++) {
@@ -578,4 +580,9 @@ TEST(IdTableTest, conversion) {
       ASSERT_EQ(initialVar(i, j), viewVar(i, j));
     }
   }
+}
+
+TEST(IdTableTest, staticAsserts) {
+  static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
+  static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
 }

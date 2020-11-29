@@ -117,7 +117,7 @@ string Filter::getDescriptor() const {
 // _____________________________________________________________________________
 template <ResultTable::ResultType T, int WIDTH>
 void Filter::computeFilter(IdTableStatic<WIDTH>* result, size_t lhs, size_t rhs,
-                           const IdTableStatic<WIDTH>& input) const {
+                           const IdTableView<WIDTH>& input) const {
   switch (_type) {
     case SparqlFilter::EQ:
       getEngine().filter(
@@ -189,7 +189,7 @@ template <int WIDTH>
 void Filter::computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
                                        size_t rhsInd, const IdTable& dynInput,
                                        ResultTable::ResultType lhsType) {
-  const IdTableStatic<WIDTH> input = dynInput.asStaticView<WIDTH>();
+  const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<WIDTH> result = dynResult->moveToStatic<WIDTH>();
   switch (lhsType) {
     case ResultTable::ResultType::KB:
@@ -252,12 +252,12 @@ void Filter::computeResult(ResultTable* result) {
 template <ResultTable::ResultType T, int WIDTH>
 void Filter::computeFilterFixedValue(
     IdTableStatic<WIDTH>* res, size_t lhs, Id rhs,
-    const IdTableStatic<WIDTH>& input,
+    const IdTableView<WIDTH>& input,
     shared_ptr<const ResultTable> subRes) const {
   bool lhs_is_sorted =
       subRes->_sortedBy.size() > 0 && subRes->_sortedBy[0] == lhs;
   Id* rhs_array = new Id[res->cols()];
-  IdTable::Row rhs_row(rhs_array, res->cols());
+  IdTable::row_type rhs_row(rhs_array, res->cols());
   switch (_type) {
     case SparqlFilter::EQ:
       if (lhs_is_sorted) {
@@ -498,7 +498,7 @@ void Filter::computeResultFixedValue(
     const std::shared_ptr<const ResultTable> subRes) const {
   LOG(DEBUG) << "Filter result computation..." << endl;
   IdTableStatic<WIDTH> result = resultTable->_data.moveToStatic<WIDTH>();
-  const IdTableStatic<WIDTH> input = subRes->_data.asStaticView<WIDTH>();
+  const IdTableView<WIDTH> input = subRes->_data.asStaticView<WIDTH>();
 
   if (_lhsAsString) {
     AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,

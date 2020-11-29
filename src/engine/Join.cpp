@@ -498,8 +498,8 @@ void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
 template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
 void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
                 size_t jc2, IdTable* dynRes) {
-  const IdTableStatic<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
-  const IdTableStatic<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
+  const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
+  const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
 
   LOG(DEBUG) << "Performing join between two tables.\n";
   LOG(DEBUG) << "A: width = " << a.cols() << ", size = " << a.size() << "\n";
@@ -592,8 +592,8 @@ finish:
 
 // _____________________________________________________________________________
 template <typename TagType, int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-void Join::doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
-                             const size_t jc1, const IdTableStatic<R_WIDTH>& l2,
+void Join::doGallopInnerJoin(const TagType, const IdTableView<L_WIDTH>& l1,
+                             const size_t jc1, const IdTableView<R_WIDTH>& l2,
                              const size_t jc2,
                              IdTableStatic<OUT_WIDTH>* result) {
   LOG(DEBUG) << "Galloping case.\n";
