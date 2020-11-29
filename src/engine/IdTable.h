@@ -431,7 +431,8 @@ class Row {
   }
 
   bool operator==(const Row& other) const {
-    return _cols == other._cols && std::equal(_data, _data + _cols, other._data);
+    return _cols == other._cols &&
+           std::equal(_data, _data + _cols, other._data);
   }
 
   Id& operator[](size_t i) { return *(_data + i); }
