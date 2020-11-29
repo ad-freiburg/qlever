@@ -250,37 +250,42 @@ void Filter::computeResult(ResultTable* result) {
 
 // _____________________________________________________________________________
 template <ResultTable::ResultType T, int WIDTH, bool INVERSE>
-void Filter::computeFilterRange(
-    IdTableStatic<WIDTH>* res, size_t lhs, Id rhs_lower, Id rhs_upper,
-    const IdTableStatic<WIDTH>& input,
-    shared_ptr<const ResultTable> subRes) const {
-bool lhs_is_sorted =
-    subRes->_sortedBy.size() > 0 && subRes->_sortedBy[0] == lhs;
-    if (lhs_is_sorted) {
-      // The input data is sorted, use binary search to locate the first
-      // and last element that match rhs and copy the range.
+void Filter::computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs,
+                                Id rhs_lower, Id rhs_upper,
+                                const IdTableStatic<WIDTH>& input,
+                                shared_ptr<const ResultTable> subRes) const {
+  bool lhs_is_sorted =
+      subRes->_sortedBy.size() > 0 && subRes->_sortedBy[0] == lhs;
+  if (lhs_is_sorted) {
+    // The input data is sorted, use binary search to locate the first
+    // and last element that match rhs and copy the range.
 
-      const auto& lower = std::lower_bound(
-          input.begin(), input.end(), rhs_lower,
-          [lhs](const auto& l, const auto& r) {
-            return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r);
-          });
-        const auto& upper = std::lower_bound(
-            lower, input.end(), rhs_upper, [lhs](const auto& l, const auto& r) {
-              return ValueReader<T>::get(l[lhs]) <
-                     ValueReader<T>::get(r);
-            });
-        if constexpr  (!INVERSE) {
-          res->insert(res->end(), lower, upper);
-        } else {
-          res->insert(res->end(), input.begin(), lower);
-          res->insert(res->end(), upper, res->end());
-        }
+    const auto& lower = std::lower_bound(input.begin(), input.end(), rhs_lower,
+                                         [lhs](const auto& l, const auto& r) {
+                                           return ValueReader<T>::get(l[lhs]) <
+                                                  ValueReader<T>::get(r);
+                                         });
+    const auto& upper = std::lower_bound(
+        lower, input.end(), rhs_upper, [lhs](const auto& l, const auto& r) {
+          return ValueReader<T>::get(l[lhs]) < ValueReader<T>::get(r);
+        });
+    if constexpr (!INVERSE) {
+      res->insert(res->end(), lower, upper);
     } else {
-      const auto inv = [&](const bool b){return INVERSE? !b : b;};
-      getEngine().filter(
-          input, [lhs, rhs_lower, rhs_upper, &inv](const auto& e) { return inv(ValueReader<T>::get(e[lhs]) >= ValueReader<T>::get(rhs_lower)  && ValueReader<T>::get(e[lhs]) < ValueReader<T>::get(rhs_upper)); }, res);
+      res->insert(res->end(), input.begin(), lower);
+      res->insert(res->end(), upper, res->end());
     }
+  } else {
+    const auto inv = [&](const bool b) { return INVERSE ? !b : b; };
+    getEngine().filter(
+        input,
+        [lhs, rhs_lower, rhs_upper, &inv](const auto& e) {
+          return inv(
+              ValueReader<T>::get(e[lhs]) >= ValueReader<T>::get(rhs_lower) &&
+              ValueReader<T>::get(e[lhs]) < ValueReader<T>::get(rhs_upper));
+        },
+        res);
+  }
 }
 
 // _____________________________________________________________________________
@@ -572,7 +577,8 @@ void Filter::computeResultFixedValue(
       auto level = TripleComponentComparator::Level::QUARTERNARY;
       if (_type == SparqlFilter::EQ || _type == SparqlFilter::NE) {
         rhs = getIndex().getVocab().lower_bound(rhs_string, level);
-        rhs_upper_for_range = getIndex().getVocab().upper_bound(rhs_string, level);
+        rhs_upper_for_range =
+            getIndex().getVocab().upper_bound(rhs_string, level);
         apply_range_filter = true;
         range_filter_inverse = _type == SparqlFilter::NE;
       } else if (_type == SparqlFilter::GE) {
@@ -658,14 +664,15 @@ void Filter::computeResultFixedValue(
   if (apply_range_filter) {
     if (resultType != ResultTable::ResultType::KB) {
       AD_THROW(ad_semsearch::Exception::BAD_REQUEST,
-               "Applying a range filter where datatype is not KB, this indicates a programming error, please report this");
+               "Applying a range filter where datatype is not KB, this "
+               "indicates a programming error, please report this");
     }
     if (range_filter_inverse) {
-      computeFilterRange<ResultTable::ResultType::KB, WIDTH, true>(&result, lhs, rhs, rhs_upper_for_range,
-                                                           input, subRes);
+      computeFilterRange<ResultTable::ResultType::KB, WIDTH, true>(
+          &result, lhs, rhs, rhs_upper_for_range, input, subRes);
     } else {
-      computeFilterRange<ResultTable::ResultType::KB, WIDTH, false>(&result, lhs, rhs, rhs_upper_for_range,
-                                                                    input, subRes);
+      computeFilterRange<ResultTable::ResultType::KB, WIDTH, false>(
+          &result, lhs, rhs, rhs_upper_for_range, input, subRes);
     }
   } else {
     switch (resultType) {

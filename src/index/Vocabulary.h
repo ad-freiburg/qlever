@@ -383,7 +383,6 @@ class Vocabulary {
     }
   }
 
-
   // TODO<joka921> these following two members are only used with the
   // compressed vocabulary. They don't use much space if empty, but still it
   // would be cleaner to throw them out when using the uncompressed version
