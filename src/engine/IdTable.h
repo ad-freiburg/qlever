@@ -403,7 +403,7 @@ class Row {
       return *this;
     }
     // This class cannot use move semantics if at least one of the two
-    // rows invovlved in an assigment does not manage it's data, but rather
+    // rows invovlved in an assigment does not manage its data, but rather
     // functions as a view into an IdTable
     if (_allocated) {
       // If we manage our own storage recreate that to fit the other row
@@ -431,11 +431,7 @@ class Row {
   }
 
   bool operator==(const Row& other) const {
-    bool matches = _cols == other._cols;
-    for (size_t i = 0; matches && i < _cols; i++) {
-      matches &= _data[i] == other._data[i];
-    }
-    return matches;
+    return _cols == other._cols && std::equal(_data, _data + _cols, other._data);
   }
 
   Id& operator[](size_t i) { return *(_data + i); }
@@ -604,7 +600,7 @@ class IdTableDynamicIterator {
 
   const value_type* operator->() const { return &_rowView; }
 
-  // access the element the is i steps ahead
+  // access the element that is i steps ahead
   // we need to construct new rows for this which should not be too expensive
   // In addition: Non const rows behave like references since they hold
   // pointers to specific parts of the _data. Thus they behave according to
@@ -986,7 +982,7 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
   /**
    * @brief Creates an IdTable that now owns this
    * id tables data. This is effectively a move operation that also
-   * changes the type to an equibalent one.
+   * changes the type to an equivalent one.
    **/
   template <typename = std::enable_if_t<DATA::ManagesStorage>>
   IdTableTemplated<0, DATA> moveToDynamic() {
