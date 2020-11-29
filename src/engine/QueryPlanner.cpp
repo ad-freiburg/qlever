@@ -1139,9 +1139,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
                                    scan);
             scanTree->setVariableColumn(node._triple._s, 0);
             scanTree->setVariableColumn(filterVar, 1);
-            auto filter = std::make_shared<Filter>(_qec, scanTree,
-                                                   SparqlFilter::FilterType::EQ,
-                                                   node._triple._s, filterVar);
+            auto filter = std::make_shared<Filter>(
+                _qec, scanTree, SparqlFilter::FilterType::EQ, node._triple._s,
+                filterVar, vector<string>{}, vector<string>{});
             tree.setOperation(QueryExecutionTree::OperationType::FILTER,
                               filter);
             tree.setVariableColumns(filter->getVariableColumns());
@@ -2050,7 +2050,12 @@ void QueryPlanner::applyFiltersIfPossible(
       if (((row[n]._idsOfIncludedFilters >> i) & 1) != 0) {
         continue;
       }
-      if (row[n]._qet->varCovered(filters[i]._lhs) &&
+      if (row[n]._qet.get()->varCovered(filters[i]._lhs) &&
+          std::all_of(filters[i]._additionalLhs.begin(),
+                      filters[i]._additionalLhs.end(),
+                      [&row, &n](const auto& lhs) {
+                        return row[n]._qet->varCovered(lhs);
+                      }) &&
           (!isVariable(filters[i]._rhs) ||
            row[n]._qet->varCovered(filters[i]._rhs))) {
         // Apply this filter.
@@ -2078,7 +2083,8 @@ void QueryPlanner::applyFiltersIfPossible(
 std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
     const SparqlFilter& filter, const SubtreePlan& parent) const {
   std::shared_ptr<Filter> op = std::make_shared<Filter>(
-      _qec, parent._qet, filter._type, filter._lhs, filter._rhs);
+      _qec, parent._qet, filter._type, filter._lhs, filter._rhs,
+      filter._additionalLhs, filter._additionalPrefixes);
   op->setLhsAsString(filter._lhsAsString);
   if (filter._type == SparqlFilter::REGEX) {
     op->setRegexIgnoreCase(filter._regexIgnoreCase);

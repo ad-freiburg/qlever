@@ -63,4 +63,5 @@ class SparqlParser {
 
   SparqlLexer _lexer;
   string _query;
+  SparqlFilter parseRegexFilter(bool expectKeyword);
 };
