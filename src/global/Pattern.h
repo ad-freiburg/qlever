@@ -141,12 +141,12 @@ class CompactStringVector {
                 sizeof(IndexT));
   }
 
-  void load(ad_utility::File* file, off_t offset = 0) {
-    file->read(&_size, sizeof(size_t), offset);
-    file->read(&_dataSize, sizeof(size_t), offset + sizeof(size_t));
+  void load(ad_utility::File* file) {
+    file->readOrThrow(&_size, sizeof(size_t));
+    file->readOrThrow(&_dataSize, sizeof(size_t));
     _indexEnd = (_size + 1) * sizeof(IndexT);
     _data = new uint8_t[_dataSize];
-    file->read(_data, _dataSize, offset + 2 * sizeof(size_t));
+    file->readOrThrow(_data, _dataSize);
   }
 
   CompactStringVector& operator=(const CompactStringVector&) = delete;

@@ -126,28 +126,40 @@ float HasPredicateScan::getMultiplicity(size_t col) {
   switch (_type) {
     case ScanType::FREE_S:
       if (col == 0) {
-        return getIndex().getHasPredicateMultiplicityEntities();
+        return getIndex()
+            .getPatternIndex()
+            .getHasPredicateMultiplicityEntities();
       }
       break;
     case ScanType::FREE_O:
       if (col == 0) {
-        return getIndex().getHasPredicateMultiplicityPredicates();
+        return getIndex()
+            .getPatternIndex()
+            .getHasPredicateMultiplicityPredicates();
       }
       break;
     case ScanType::FULL_SCAN:
       if (col == 0) {
-        return getIndex().getHasPredicateMultiplicityEntities();
+        return getIndex()
+            .getPatternIndex()
+            .getHasPredicateMultiplicityEntities();
       } else if (col == 1) {
-        return getIndex().getHasPredicateMultiplicityPredicates();
+        return getIndex()
+            .getPatternIndex()
+            .getHasPredicateMultiplicityPredicates();
       }
       break;
     case ScanType::SUBQUERY_S:
       if (col < getResultWidth() - 1) {
         return _subtree->getMultiplicity(col) *
-               getIndex().getHasPredicateMultiplicityPredicates();
+               getIndex()
+                   .getPatternIndex()
+                   .getHasPredicateMultiplicityPredicates();
       } else {
         return _subtree->getMultiplicity(_subtreeColIndex) *
-               getIndex().getHasPredicateMultiplicityPredicates();
+               getIndex()
+                   .getPatternIndex()
+                   .getHasPredicateMultiplicityPredicates();
       }
       break;
   }
@@ -158,27 +170,30 @@ size_t HasPredicateScan::getSizeEstimate() {
   switch (_type) {
     case ScanType::FREE_S:
       return static_cast<size_t>(
-          getIndex().getHasPredicateMultiplicityEntities());
+          getIndex().getPatternIndex().getHasPredicateMultiplicityEntities());
     case ScanType::FREE_O:
       return static_cast<size_t>(
-          getIndex().getHasPredicateMultiplicityPredicates());
+          getIndex().getPatternIndex().getHasPredicateMultiplicityPredicates());
     case ScanType::FULL_SCAN:
-      return getIndex().getHasPredicateFullSize();
+      return getIndex().getPatternIndex().getHasPredicateFullSize();
     case ScanType::SUBQUERY_S:
 
       size_t nofDistinctLeft = std::max(
           size_t(1),
           static_cast<size_t>(_subtree->getSizeEstimate() /
                               _subtree->getMultiplicity(_subtreeColIndex)));
-      size_t nofDistinctRight = std::max(
-          size_t(1), static_cast<size_t>(
-                         getIndex().getHasPredicateFullSize() /
-                         getIndex().getHasPredicateMultiplicityPredicates()));
+      size_t nofDistinctRight =
+          std::max(size_t(1),
+                   static_cast<size_t>(
+                       getIndex().getPatternIndex().getHasPredicateFullSize() /
+                       getIndex()
+                           .getPatternIndex()
+                           .getHasPredicateMultiplicityPredicates()));
       size_t nofDistinctInResult = std::min(nofDistinctLeft, nofDistinctRight);
 
       double jcMultiplicityInResult =
           _subtree->getMultiplicity(_subtreeColIndex) *
-          getIndex().getHasPredicateMultiplicityPredicates();
+          getIndex().getPatternIndex().getHasPredicateMultiplicityPredicates();
       return std::max(size_t(1), static_cast<size_t>(jcMultiplicityInResult *
                                                      nofDistinctInResult));
   }
@@ -206,7 +221,7 @@ void HasPredicateScan::computeResult(ResultTable* result) {
   result->_sortedBy = resultSortedOn();
 
   std::shared_ptr<const PatternContainer> pattern_data =
-      _executionContext->getIndex().getPatternData();
+      _executionContext->getIndex().getPatternIndex().getPatternData();
   if (pattern_data->predicateIdSize() <= 1) {
     computeResult(result,
                   std::static_pointer_cast<const PatternContainerImpl<uint8_t>>(
@@ -248,7 +263,9 @@ void HasPredicateScan::computeResult(
       HasPredicateScan::computeFreeS(
           result, objectId, pattern_data->hasPattern(),
           pattern_data->hasPredicate(), pattern_data->patterns(),
-          _executionContext->getIndex().getPredicateGlobalIds());
+          _executionContext->getIndex()
+              .getPatternIndex()
+              .getPredicateGlobalIds());
     } break;
     case ScanType::FREE_O: {
       runtimeInfo.setDescriptor("HasPredicateScan free object: " + _object);
@@ -260,15 +277,19 @@ void HasPredicateScan::computeResult(
       HasPredicateScan::computeFreeO(
           result, subjectId, pattern_data->hasPattern(),
           pattern_data->hasPredicate(), pattern_data->patterns(),
-          _executionContext->getIndex().getPredicateGlobalIds());
+          _executionContext->getIndex()
+              .getPatternIndex()
+              .getPredicateGlobalIds());
     } break;
     case ScanType::FULL_SCAN:
       runtimeInfo.setDescriptor("HasPredicateScan full scan");
       HasPredicateScan::computeFullScan(
           result, pattern_data->hasPattern(), pattern_data->hasPredicate(),
           pattern_data->patterns(),
-          _executionContext->getIndex().getPredicateGlobalIds(),
-          getIndex().getHasPredicateFullSize());
+          _executionContext->getIndex()
+              .getPatternIndex()
+              .getPredicateGlobalIds(),
+          getIndex().getPatternIndex().getHasPredicateFullSize());
       break;
     case ScanType::SUBQUERY_S:
 
@@ -283,7 +304,9 @@ void HasPredicateScan::computeResult(
                         &result->_data, subresult->_data, _subtreeColIndex,
                         pattern_data->hasPattern(),
                         pattern_data->hasPredicate(), pattern_data->patterns(),
-                        _executionContext->getIndex().getPredicateGlobalIds());
+                        _executionContext->getIndex()
+                            .getPatternIndex()
+                            .getPredicateGlobalIds());
       runtimeInfo.setDescriptor("HasPredicateScan with a subquery on " +
                                 _subject);
       runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());

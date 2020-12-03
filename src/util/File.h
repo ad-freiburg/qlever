@@ -119,6 +119,16 @@ class File {
     return fread(targetBuffer, (size_t)1, nofBytesToRead, _file);
   }
 
+  void readOrThrow(void* dest, size_t count) {
+    size_t num_read = read(dest, count);
+    if (num_read != count) {
+      throw std::runtime_error("File::readOrThrow: Unable to read " +
+                               std::to_string(count) + " bytes, read " +
+                               std::to_string(num_read) +
+                               " instead: " + std::string(strerror((errno))));
+    }
+  }
+
   // Reads a line from the file into param line and interprets it as ASCII.
   // Removes the \n from the end of the string.
   // Returns null on EOF when no chars have been read.

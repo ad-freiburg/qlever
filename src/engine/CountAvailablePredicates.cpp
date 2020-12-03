@@ -108,12 +108,13 @@ size_t CountAvailablePredicates::getSizeEstimate() {
     // for the type of optimizations the optimizer can currently do.
     size_t num_distinct = _subtree->getSizeEstimate() /
                           _subtree->getMultiplicity(_subjectColumnIndex);
-    return num_distinct / getIndex().getHasPredicateMultiplicityPredicates();
+    return num_distinct /
+           getIndex().getPatternIndex().getHasPredicateMultiplicityPredicates();
   } else {
     // Predicates are counted for all entities. In this case the size estimate
     // should be accurate.
-    return getIndex().getHasPredicateFullSize() /
-           getIndex().getHasPredicateMultiplicityPredicates();
+    return getIndex().getPatternIndex().getHasPredicateFullSize() /
+           getIndex().getPatternIndex().getHasPredicateMultiplicityPredicates();
   }
 }
 
@@ -139,7 +140,7 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
 
   std::shared_ptr<const PatternContainer> pattern_data =
-      _executionContext->getIndex().getPatternData();
+      _executionContext->getIndex().getPatternIndex().getPatternData();
   if (pattern_data->predicateIdSize() <= 1) {
     computeResult(result,
                   std::static_pointer_cast<const PatternContainerImpl<uint8_t>>(
@@ -182,7 +183,9 @@ void CountAvailablePredicates::computeResult(
       CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
                         input, &result->_data, pattern_data->hasPattern(),
                         pattern_data->hasPredicate(), pattern_data->patterns(),
-                        _executionContext->getIndex().getPredicateGlobalIds(),
+                        _executionContext->getIndex()
+                            .getPatternIndex()
+                            .getPredicateGlobalIds(),
                         0, &runtimeInfo);
     }
   } else if (_subtree == nullptr) {
@@ -191,7 +194,9 @@ void CountAvailablePredicates::computeResult(
         &result->_data, pattern_data->hasPattern(),
         pattern_data->hasPredicate(), pattern_data->patterns(),
 
-        _executionContext->getIndex().getPredicateGlobalIds());
+        _executionContext->getIndex()
+            .getPatternIndex()
+            .getPredicateGlobalIds());
   } else {
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
     runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
@@ -199,12 +204,12 @@ void CountAvailablePredicates::computeResult(
                << std::endl;
 
     int width = subresult->_data.cols();
-    CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
-                      subresult->_data, &result->_data,
-                      pattern_data->hasPattern(), pattern_data->hasPredicate(),
-                      pattern_data->patterns(),
-                      _executionContext->getIndex().getPredicateGlobalIds(),
-                      _subjectColumnIndex, &runtimeInfo);
+    CALL_FIXED_SIZE_1(
+        width, CountAvailablePredicates::computePatternTrick, subresult->_data,
+        &result->_data, pattern_data->hasPattern(),
+        pattern_data->hasPredicate(), pattern_data->patterns(),
+        _executionContext->getIndex().getPatternIndex().getPredicateGlobalIds(),
+        _subjectColumnIndex, &runtimeInfo);
   }
   LOG(DEBUG) << "CountAvailablePredicates result computation done."
              << std::endl;

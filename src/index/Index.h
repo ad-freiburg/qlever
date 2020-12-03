@@ -30,6 +30,8 @@
 #include "./TextMetaData.h"
 #include "./Vocabulary.h"
 #include "PatternContainer.h"
+#include "PatternIndex.h"
+#include "VocabularyData.h"
 
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
@@ -40,22 +42,6 @@ using std::tuple;
 using std::vector;
 
 using json = nlohmann::json;
-
-// a simple struct for better naming
-struct VocabularyData {
-  using TripleVec = stxxl::vector<array<Id, 3>>;
-  // The total number of distinct words in the complete Vocabulary
-  size_t nofWords;
-  // Id lower and upper bound of @lang@<predicate> predicates
-  Id langPredLowerBound;
-  Id langPredUpperBound;
-  // The number of triples in the idTriples vec that each partial vocabulary is
-  // responsible for (depends on the number of additional language filter
-  // triples)
-  std::vector<size_t> actualPartialSizes;
-  // All the triples as Ids.
-  std::unique_ptr<TripleVec> idTriples;
-};
 
 /**
  * Used as a Template Argument to the createFromFile method, when we do not yet
@@ -182,28 +168,7 @@ class Index {
     return _vocab.idToOptionalString(id);
   }
 
-  std::shared_ptr<PatternContainer> getPatternData();
-  std::shared_ptr<const PatternContainer> getPatternData() const;
-
-  const std::vector<Id> getPredicateGlobalIds() const;
-
-  /**
-   * @return The multiplicity of the Entites column (0) of the full has-relation
-   *         relation after unrolling the patterns.
-   */
-  double getHasPredicateMultiplicityEntities() const;
-
-  /**
-   * @return The multiplicity of the Predicates column (0) of the full
-   * has-relation relation after unrolling the patterns.
-   */
-  double getHasPredicateMultiplicityPredicates() const;
-
-  /**
-   * @return The size of the full has-relation relation after unrolling the
-   *         patterns.
-   */
-  size_t getHasPredicateFullSize() const;
+  const PatternIndex& getPatternIndex() const;
 
   // --------------------------------------------------------------------------
   // TEXT RETRIEVAL
@@ -480,32 +445,8 @@ class Index {
   off_t _currentoff_t;
   mutable ad_utility::File _textIndexFile;
 
-  // Pattern trick data
-  static const uint32_t PATTERNS_FILE_VERSION;
   bool _usePatterns;
-  size_t _maxNumPatterns;
-  double _fullHasPredicateMultiplicityEntities;
-  double _fullHasPredicateMultiplicityPredicates;
-  size_t _fullHasPredicateSize;
-
-  /**
-   * @brief Maps predicate ids from the global namespace to the predicate local
-   * namespace (which only contains predicates). This map is only used
-   * during index creation and is otherwise not initialized.
-   */
-  ad_utility::HashMap<Id, size_t> _predicate_global_to_local_ids;
-
-  /**
-   * @brief Maps from the predicate local namespace (containing only predicates)
-   * to the global namespace (also containing subjects and objects).
-   */
-  std::vector<Id> _predicate_local_to_global_ids;
-
-  /**
-   * @brief Contains the has-predicate predicate encoded using patterns.
-   * Predicate ids are in the predicate local namespace.
-   */
-  std::shared_ptr<PatternContainer> _pattern_container;
+  PatternIndex _patternIndex;
 
   size_t _parserBatchSize = PARSER_BATCH_SIZE;
   size_t _numTriplesPerPartialVocab = NUM_TRIPLES_PER_PARTIAL_VOCAB;
@@ -579,7 +520,7 @@ class Index {
           p1,
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
-      bool performUnique = false, bool createPatternsAfterFirst = false);
+      bool performUnique = false);
 
   // The pairs of permutations are PSO-POS, OSP-OPS and SPO-SOP
   // the multiplicity of column 1 in partner 1 of the pair is equal to the
@@ -608,45 +549,6 @@ class Index {
       const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
           p2,
       bool performUnique);
-
-  /**
-   * @brief Creates the data required for the "pattern-trick" used for fast
-   *        ql:has-relation evaluation when selection relation counts.
-   * @param fileName The name of the file in which the data should be stored
-   * @param args The arguments that need to be passed to the constructor of
-   *             VecReaderType. VecReaderType should allow for iterating over
-   *             the tuples of the spo permutation after having been constructed
-   *             using args.
-   */
-  template <typename PatternId, typename VecReaderType, typename... Args>
-  void createPatternsImpl(
-      const string& fileName,
-      std::shared_ptr<PatternContainerImpl<PatternId>> pattern_data,
-      const std::vector<Id>& predicate_global_id,
-      const ad_utility::HashMap<Id, size_t>& predicate_local_id,
-      double& fullHasPredicateMultiplicityEntities,
-      double& fullHasPredicateMultiplicityPredicates,
-      size_t& fullHasPredicateSize, const size_t maxNumPatterns,
-      const Id langPredLowerBound, const Id langPredUpperBound,
-      const Args&... vecReaderArgs);
-
-  template <typename VecReaderType, typename... Args>
-  void createPredicateIdsImpl(std::vector<Id>* predicateIds,
-                              const Id langPredLowerBound,
-                              const Id langPredUpperBound,
-                              const Args&... vecReaderArgs);
-
-  /**
-   * @brief Load the pattern_data stored in a patterns file.
-   */
-  template <typename PatternId>
-  std::shared_ptr<PatternContainerImpl<PatternId>> loadPatternData(
-      ad_utility::File* file, off_t* off);
-
-  // wrap the static function using the internal member variables
-  // the bool indicates wether the TripleVec has to be sorted before the pattern
-  // creation
-  void createPatterns(bool vecAlreadySorted, VocabularyData* idTriples);
 
   void createTextIndex(const string& filename, const TextVec& vec);
 
