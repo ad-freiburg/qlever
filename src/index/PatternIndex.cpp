@@ -13,7 +13,7 @@ PatternIndex::PatternIndex()
       _initialized(false) {}
 
 // _____________________________________________________________________________
-void PatternIndex::generatePredicateLocalNamespace(VocabularyData *vocabData) {
+void PatternIndex::generatePredicateLocalNamespace(VocabularyData* vocabData) {
   // Create a new namespace for predicates containing only predicates.
   // This will be significantly smaller than the global namespace which
   // also contains subjects and objects, and allows for shrinking
@@ -63,8 +63,8 @@ size_t PatternIndex::getHasPredicateFullSize() const {
 }
 
 // _____________________________________________________________________________
-void PatternIndex::createPatterns(VocabularyData *vocabData,
-                                  const std::string &filename_base) {
+void PatternIndex::createPatterns(VocabularyData* vocabData,
+                                  const std::string& filename_base) {
   // Determine the number of bytes required for the predicate local namespace
   size_t num_bytes_predicate_id = 0;
   size_t num_predicate_ids = _predicate_local_to_global_ids.size();
@@ -123,7 +123,7 @@ void PatternIndex::createPatterns(VocabularyData *vocabData,
 }
 
 // _____________________________________________________________________________
-void PatternIndex::loadPatternIndex(const std::string &filename_base) {
+void PatternIndex::loadPatternIndex(const std::string& filename_base) {
   std::string patternsFilePath = filename_base + ".index.patterns";
   ad_utility::File patternsFile;
   patternsFile.open(patternsFilePath, "r");
@@ -183,15 +183,15 @@ void PatternIndex::loadPatternIndex(const std::string &filename_base) {
 // _____________________________________________________________________________
 template <typename PredicateId, typename VecReaderType, typename... Args>
 void PatternIndex::createPatternsImpl(
-    const string &fileName,
+    const string& fileName,
     std::shared_ptr<PatternContainerImpl<PredicateId>> pattern_data,
-    const std::vector<Id> &predicate_global_id,
-    const ad_utility::HashMap<Id, size_t> &predicate_local_id,
-    double &fullHasPredicateMultiplicityEntities,
-    double &fullHasPredicateMultiplicityPredicates,
-    size_t &fullHasPredicateSize, const size_t maxNumPatterns,
+    const std::vector<Id>& predicate_global_id,
+    const ad_utility::HashMap<Id, size_t>& predicate_local_id,
+    double& fullHasPredicateMultiplicityEntities,
+    double& fullHasPredicateMultiplicityPredicates,
+    size_t& fullHasPredicateSize, const size_t maxNumPatterns,
     const Id langPredLowerBound, const Id langPredUpperBound,
-    const Args &...vecReaderArgs) {
+    const Args&... vecReaderArgs) {
   IndexMetaDataHmap meta;
   typedef ad_utility::HashMap<Pattern<PredicateId>, size_t,
                               PatternHash<PredicateId>>
@@ -270,12 +270,12 @@ void PatternIndex::createPatternsImpl(
   std::vector<std::pair<Pattern<PredicateId>, size_t>> sortedPatterns;
   sortedPatterns.reserve(actualNumPatterns);
   auto comparePatternCounts =
-      [](const std::pair<Pattern<PredicateId>, size_t> &first,
-         const std::pair<Pattern<PredicateId>, size_t> &second) -> bool {
+      [](const std::pair<Pattern<PredicateId>, size_t>& first,
+         const std::pair<Pattern<PredicateId>, size_t>& second) -> bool {
     return first.second > second.second ||
            (first.second == second.second && first.first > second.first);
   };
-  for (auto &it : patternCounts) {
+  for (auto& it : patternCounts) {
     if (sortedPatterns.size() < maxNumPatterns) {
       sortedPatterns.push_back(it);
       if (sortedPatterns.size() == maxNumPatterns) {
@@ -310,7 +310,7 @@ void PatternIndex::createPatternsImpl(
   // store the actual patterns
   std::vector<std::vector<PredicateId>> buffer;
   buffer.reserve(sortedPatterns.size());
-  for (const auto &p : sortedPatterns) {
+  for (const auto& p : sortedPatterns) {
     buffer.push_back(p.first._data);
   }
   pattern_data->patterns().build(buffer);
@@ -528,7 +528,7 @@ void PatternIndex::createPatternsImpl(
 
   // create the has-relation and has-pattern lookup vectors
   if (entityHasPattern.size() > 0) {
-    std::vector<PatternID> &hasPattern = pattern_data->hasPattern();
+    std::vector<PatternID>& hasPattern = pattern_data->hasPattern();
     hasPattern.resize(entityHasPattern.back().subject + 1);
     size_t pos = 0;
     for (size_t i = 0; i < entityHasPattern.size(); i++) {
@@ -563,10 +563,10 @@ void PatternIndex::createPatternsImpl(
 
 // _____________________________________________________________________________
 template <typename VecReaderType, typename... Args>
-void PatternIndex::createPredicateIdsImpl(std::vector<Id> *predicateIds,
+void PatternIndex::createPredicateIdsImpl(std::vector<Id>* predicateIds,
                                           const Id langPredLowerBound,
                                           const Id langPredUpperBound,
-                                          const Args &...vecReaderArgs) {
+                                          const Args&... vecReaderArgs) {
   VecReaderType reader(vecReaderArgs...);
   if (reader.empty()) {
     LOG(WARN) << "Triple vector was empty, no patterns created" << std::endl;
@@ -593,7 +593,7 @@ void PatternIndex::createPredicateIdsImpl(std::vector<Id> *predicateIds,
 // _____________________________________________________________________________
 template <typename PredicateId>
 std::shared_ptr<PatternContainerImpl<PredicateId>>
-PatternIndex::loadPatternData(ad_utility::File *file) {
+PatternIndex::loadPatternData(ad_utility::File* file) {
   // Used for the entityHasPattern relation
   // This struct is 16 bytes, not 12, due to padding (at least on gcc 10)
   struct SubjectPatternPair {
@@ -645,7 +645,7 @@ PatternIndex::loadPatternData(ad_utility::File *file) {
 
   // create the has-relation and has-pattern lookup vectors
   if (entityHasPattern.size() > 0) {
-    std::vector<PatternID> &has_pattern = pattern_data->hasPattern();
+    std::vector<PatternID>& has_pattern = pattern_data->hasPattern();
     has_pattern.resize(entityHasPattern.back().subject + 1);
     size_t pos = 0;
     for (size_t i = 0; i < entityHasPattern.size(); i++) {

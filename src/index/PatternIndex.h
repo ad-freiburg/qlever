@@ -55,6 +55,8 @@ class PatternIndex {
 
   void loadPatternIndex(const std::string& filename_base);
 
+  friend class CreatePatternsFixture_createPatterns_Test;
+
  private:
   /**
    * @brief Creates the data required for the "pattern-trick" used for fast

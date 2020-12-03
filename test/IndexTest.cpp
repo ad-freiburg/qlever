@@ -364,6 +364,7 @@ class CreatePatternsFixture : public testing::Test {
 };
 
 TEST_F(CreatePatternsFixture, createPatterns) {
+  using PredicateId = uint8_t;
   {
     LOG(DEBUG) << "Testing createPatterns with tsv file..." << std::endl;
     std::fstream f("_testtmppatterns.tsv", std::ios_base::out);
@@ -378,7 +379,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     {
       Index index;
       index.setUsePatterns(true);
-      index._maxNumPatterns = 1;
+      index._patternIndex._maxNumPatterns = 1;
       index.setOnDiskBase("_testindex");
       index.createFromFile<TsvParser>("_testtmppatterns.tsv");
     }
@@ -386,46 +387,60 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     index.setUsePatterns(true);
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_EQ(3u, index.getHasPattern().size());
-    ASSERT_EQ(2u, index.getHasPredicate().size());
-    ASSERT_EQ(1u, index._patterns.size());
-    Pattern p;
-    p.push_back(3);
-    p.push_back(6);
-    std::pair<Id*, size_t> ip = index._patterns[0];
+    std::shared_ptr<PatternContainerImpl<uint8_t>> pattern_data =
+        std::static_pointer_cast<PatternContainerImpl<uint8_t>>(
+            index._patternIndex.getPatternData());
+
+    ASSERT_EQ(3u, pattern_data->hasPattern().size());
+    ASSERT_EQ(2u, pattern_data->hasPredicate().size());
+    ASSERT_EQ(1u, pattern_data->numPatterns());
+    Pattern<PredicateId> p;
+    p.push_back(0);
+    p.push_back(1);
+    std::pair<PredicateId*, size_t> ip = pattern_data->patterns()[0];
     for (size_t i = 0; i < ip.second; i++) {
       // add 1 because of special language filter predicate
       // which is automatically inserted
       ASSERT_EQ(p[i] + 1, ip.first[i]);
     }
-    ASSERT_EQ(0u, index.getHasPattern()[2]);
-    ASSERT_EQ(NO_PATTERN, index.getHasPattern()[1]);
+    ASSERT_EQ(0u, pattern_data->hasPattern()[2]);
+    ASSERT_EQ(NO_PATTERN, pattern_data->hasPattern()[1]);
 
-    ASSERT_FLOAT_EQ(4.0 / 2, index.getHasPredicateMultiplicityEntities());
-    ASSERT_FLOAT_EQ(4.0 / 3, index.getHasPredicateMultiplicityPredicates());
+    ASSERT_FLOAT_EQ(
+        4.0 / 2, index.getPatternIndex().getHasPredicateMultiplicityEntities());
+    ASSERT_FLOAT_EQ(
+        4.0 / 3,
+        index.getPatternIndex().getHasPredicateMultiplicityPredicates());
   }
   {
     LOG(DEBUG) << "Testing createPatterns with existing index..." << std::endl;
     Index index;
     index.setUsePatterns(true);
-    index._maxNumPatterns = 1;
+    index._patternIndex._maxNumPatterns = 1;
     index.createFromOnDiskIndex("_testindex");
 
-    ASSERT_EQ(3u, index.getHasPattern().size());
-    ASSERT_EQ(2u, index.getHasPredicate().size());
-    ASSERT_EQ(1u, index._patterns.size());
-    Pattern p;
-    p.push_back(3);
-    p.push_back(6);
-    std::pair<Id*, size_t> ip = index._patterns[0];
+    std::shared_ptr<PatternContainerImpl<uint8_t>> pattern_data =
+        std::static_pointer_cast<PatternContainerImpl<uint8_t>>(
+            index._patternIndex.getPatternData());
+
+    ASSERT_EQ(3u, pattern_data->hasPattern().size());
+    ASSERT_EQ(2u, pattern_data->hasPredicate().size());
+    ASSERT_EQ(1u, pattern_data->numPatterns());
+    Pattern<PredicateId> p;
+    p.push_back(0);
+    p.push_back(1);
+    std::pair<PredicateId*, size_t> ip = pattern_data->patterns()[0];
     for (size_t i = 0; i < ip.second; i++) {
       ASSERT_EQ(p[i] + 1, ip.first[i]);
     }
-    ASSERT_EQ(0u, index.getHasPattern()[2]);
-    ASSERT_EQ(NO_PATTERN, index.getHasPattern()[1]);
+    ASSERT_EQ(0u, pattern_data->hasPattern()[2]);
+    ASSERT_EQ(NO_PATTERN, pattern_data->hasPattern()[1]);
 
-    ASSERT_FLOAT_EQ(4.0 / 2, index.getHasPredicateMultiplicityEntities());
-    ASSERT_FLOAT_EQ(4.0 / 3, index.getHasPredicateMultiplicityPredicates());
+    ASSERT_FLOAT_EQ(
+        4.0 / 2, index.getPatternIndex().getHasPredicateMultiplicityEntities());
+    ASSERT_FLOAT_EQ(
+        4.0 / 3,
+        index.getPatternIndex().getHasPredicateMultiplicityPredicates());
   }
 }
 

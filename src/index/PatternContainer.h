@@ -48,6 +48,8 @@ class PatternContainerImpl : public PatternContainer {
     return _hasPredicate;
   }
 
+  size_t numPatterns() const { return _patterns.size(); }
+
  private:
   /**
    * @brief Maps pattern ids to sets of predicate ids.
