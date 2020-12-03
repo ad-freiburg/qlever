@@ -217,8 +217,8 @@ Minus::RowComparison Minus::isRowEqSkipFirst(
     const IdTableStatic<A_WIDTH>& a, const IdTableStatic<B_WIDTH>& b, size_t ia,
     size_t ib, const vector<array<size_t, 2>>& joinColumns) {
   for (size_t i = 1; i < joinColumns.size(); ++i) {
-    Id va = a(ia, joinColumns[i][0]);
-    Id vb = b(ib, joinColumns[i][1]);
+    Id va{a(ia, joinColumns[i][0])};
+    Id vb{b(ib, joinColumns[i][1])};
     if (va < vb) {
       return RowComparison::LEFT_SMALLER;
     }
