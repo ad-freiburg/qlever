@@ -65,6 +65,8 @@ class Minus : public Operation {
       const IdTableStatic<A_WIDTH>& a, const IdTableStatic<B_WIDTH>& b,
       size_t ia, size_t ib, const vector<array<size_t, 2>>& matchedColumns);
 
+  virtual void computeResult(ResultTable* result) override;
+
   std::shared_ptr<QueryExecutionTree> _left;
   std::shared_ptr<QueryExecutionTree> _right;
 
@@ -73,6 +75,4 @@ class Minus : public Operation {
   bool _multiplicitiesComputed;
 
   std::vector<array<size_t, 2>> _matchedColumns;
-
-  virtual void computeResult(ResultTable* result) override;
 };
