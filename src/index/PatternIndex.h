@@ -4,6 +4,7 @@
 #include <string>
 #include "../global/Id.h"
 #include "../util/HashMap.h"
+#include "IndexMetaData.h"
 #include "PatternContainer.h"
 #include "Vocabulary.h"
 #include "VocabularyData.h"
@@ -44,6 +45,12 @@ class PatternIndex {
   void createPatterns(VocabularyData* vocabData,
                       const std::string& filename_base);
 
+  void createPatternsFromExistingIndex(Id langPredLowerBound,
+                                       Id langPredUpperBound,
+                                       IndexMetaDataMmapView& meta_data,
+                                       ad_utility::File& file,
+                                       const std::string& filename_base);
+
   /**
    * @brief Takes the triples sorted by PSO or POS and generates a new namespace
    * that only contains predicates. This namespace is then used for storing
@@ -52,6 +59,10 @@ class PatternIndex {
    * method, and will be loaded from the patterns file in subsequent runs.
    */
   void generatePredicateLocalNamespace(VocabularyData* vocabData);
+
+  void generatePredicateLocalNamespaceFromExistingIndex(
+      Id langPredLowerBound, Id langPredUpperBound,
+      IndexMetaDataHmap& meta_data);
 
   void loadPatternIndex(const std::string& filename_base);
 
@@ -77,13 +88,7 @@ class PatternIndex {
       double& fullHasPredicateMultiplicityPredicates,
       size_t& fullHasPredicateSize, const size_t maxNumPatterns,
       const Id langPredLowerBound, const Id langPredUpperBound,
-      const Args&... vecReaderArgs);
-
-  template <typename VecReaderType, typename... Args>
-  void createPredicateIdsImpl(std::vector<Id>* predicateIds,
-                              const Id langPredLowerBound,
-                              const Id langPredUpperBound,
-                              const Args&... vecReaderArgs);
+      Args&... vecReaderArgs);
 
   void throwExceptionIfNotInitialized() const;
 

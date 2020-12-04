@@ -522,17 +522,13 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
-  //  auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
+  auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
 
-  //  createPatternsImpl<MetaDataIterator<IndexMetaDataMmapView>,
-  //                     IndexMetaDataMmapView, ad_utility::File>(
-  //      _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern,
-  //      _patterns, _fullHasPredicateMultiplicityEntities,
-  //      _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
-  //      _maxNumPatterns, langPredLowerBound, langPredUpperBound,
-  //      _SPO.metaData(), _SPO._file);
-  AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
-           "Adding patterns to an existing index is not yet supported");
+  _patternIndex.generatePredicateLocalNamespaceFromExistingIndex(
+      langPredLowerBound, langPredUpperBound, _PSO._meta);
+  _patternIndex.createPatternsFromExistingIndex(langPredLowerBound,
+                                                langPredUpperBound, _SPO._meta,
+                                                _SPO._file, _onDiskBase);
 }
 
 // _____________________________________________________________________________

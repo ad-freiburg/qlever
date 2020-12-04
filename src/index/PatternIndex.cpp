@@ -1,6 +1,5 @@
 #include "PatternIndex.h"
-
-#include "IndexMetaData.h"
+#include "MetaDataIterator.h"
 
 const uint32_t PatternIndex::PATTERNS_FILE_VERSION = 1;
 
@@ -18,9 +17,72 @@ void PatternIndex::generatePredicateLocalNamespace(VocabularyData* vocabData) {
   // This will be significantly smaller than the global namespace which
   // also contains subjects and objects, and allows for shrinking
   // the pattern trick data.
-  createPredicateIdsImpl<TripleVec::bufreader_type>(
-      &_predicate_local_to_global_ids, vocabData->langPredLowerBound,
-      vocabData->langPredUpperBound, *vocabData->idTriples);
+
+  // This is not inside a templated method as the PSO metadata is based upon
+  // HashMaps which need to be treated differently
+  TripleVec::bufreader_type reader(*vocabData->idTriples);
+  if (reader.empty()) {
+    LOG(WARN) << "Triple vector was empty, no patterns created" << std::endl;
+    return;
+  }
+
+  Id currentPred = ID_NO_VALUE;
+
+  Id langPredLowerBound = vocabData->langPredLowerBound;
+  Id langPredUpperBound = vocabData->langPredUpperBound;
+
+  // Iterate all triples in POS (or PSO) sorting order. Add every distinct
+  // non language predicate to the predicateIds vector, therefore assigning
+  // a predicate namespace id to it via its position in the vector.
+  for (; !reader.empty(); ++reader) {
+    Id predicate = (*reader)[1];
+    if (predicate != currentPred) {
+      currentPred = predicate;
+      if (predicate < langPredLowerBound || predicate >= langPredUpperBound) {
+        // The predicate is not a language predicate, add it to the ids
+        _predicate_local_to_global_ids.push_back(predicate);
+      }
+    }
+  }
+
+  // Compute the global to local mapping from the local to global mapping
+  _predicate_global_to_local_ids.reserve(_predicate_local_to_global_ids.size());
+  for (size_t i = 0; i < _predicate_local_to_global_ids.size(); ++i) {
+    _predicate_global_to_local_ids.try_emplace(
+        _predicate_local_to_global_ids[i], i);
+  }
+}
+
+// _____________________________________________________________________________
+void PatternIndex::generatePredicateLocalNamespaceFromExistingIndex(
+    Id langPredLowerBound, Id langPredUpperBound,
+    IndexMetaDataHmap& meta_data) {
+  // This is not inside a templated method as the PSO metadata is based upon
+  // HashMaps which need to be treated differently
+
+  // Iterate the hash map mapping predicates to metadata
+  for (const auto& triple_it : meta_data.data()) {
+    Id predicate = triple_it.first;
+    if (predicate < langPredLowerBound || predicate >= langPredUpperBound) {
+      _predicate_local_to_global_ids.push_back(predicate);
+    }
+  }
+
+  // The sorting ensures that the namespace generated during and after index
+  // creation are identical. It is currently not strictly speaking required,
+  // but is also not that expensive (as the number of predicates tends to be
+  // small), and prevents nasty bugs appearing only if the namespace was
+  // generated from an existing index.
+  std::sort(_predicate_local_to_global_ids.begin(),
+            _predicate_local_to_global_ids.end());
+
+  // Compute the global to local mapping from the local to global mapping
+  _predicate_global_to_local_ids.reserve(_predicate_local_to_global_ids.size());
+  for (size_t i = 0; i < _predicate_local_to_global_ids.size(); ++i) {
+    _predicate_global_to_local_ids.try_emplace(
+        _predicate_local_to_global_ids[i], i);
+  }
+
   // Compute the global to local mapping from the local to global mapping
   _predicate_global_to_local_ids.reserve(_predicate_local_to_global_ids.size());
   for (size_t i = 0; i < _predicate_local_to_global_ids.size(); ++i) {
@@ -123,6 +185,71 @@ void PatternIndex::createPatterns(VocabularyData* vocabData,
 }
 
 // _____________________________________________________________________________
+void PatternIndex::createPatternsFromExistingIndex(
+    Id langPredLowerBound, Id langPredUpperBound,
+    IndexMetaDataMmapView& meta_data, ad_utility::File& file,
+    const std::string& filename_base) {
+  size_t num_bytes_predicate_id = 0;
+  size_t num_predicate_ids = _predicate_local_to_global_ids.size();
+  while (num_predicate_ids > 0) {
+    num_predicate_ids = num_predicate_ids >> 8;
+    num_bytes_predicate_id++;
+  }
+
+  std::string patterns_file_name = filename_base + ".index.patterns";
+
+  if (num_bytes_predicate_id <= 1) {
+    std::shared_ptr<PatternContainerImpl<uint8_t>> pattern_data =
+        std::make_shared<PatternContainerImpl<uint8_t>>();
+    createPatternsImpl<uint8_t, MetaDataIterator<IndexMetaDataMmapView>,
+                       IndexMetaDataMmapView, ad_utility::File>(
+        patterns_file_name, pattern_data, _predicate_local_to_global_ids,
+        _predicate_global_to_local_ids, _fullHasPredicateMultiplicityEntities,
+        _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
+        _maxNumPatterns, langPredLowerBound, langPredUpperBound, meta_data,
+        file);
+    _pattern_container = pattern_data;
+  } else if (num_bytes_predicate_id <= 2) {
+    std::shared_ptr<PatternContainerImpl<uint16_t>> pattern_data =
+        std::make_shared<PatternContainerImpl<uint16_t>>();
+    createPatternsImpl<uint16_t, MetaDataIterator<IndexMetaDataMmapView>,
+                       IndexMetaDataMmapView, ad_utility::File>(
+        patterns_file_name, pattern_data, _predicate_local_to_global_ids,
+        _predicate_global_to_local_ids, _fullHasPredicateMultiplicityEntities,
+        _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
+        _maxNumPatterns, langPredLowerBound, langPredUpperBound, meta_data,
+        file);
+    _pattern_container = pattern_data;
+  } else if (num_bytes_predicate_id <= 4) {
+    std::shared_ptr<PatternContainerImpl<uint32_t>> pattern_data =
+        std::make_shared<PatternContainerImpl<uint32_t>>();
+    createPatternsImpl<uint32_t, MetaDataIterator<IndexMetaDataMmapView>,
+                       IndexMetaDataMmapView, ad_utility::File>(
+        patterns_file_name, pattern_data, _predicate_local_to_global_ids,
+        _predicate_global_to_local_ids, _fullHasPredicateMultiplicityEntities,
+        _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
+        _maxNumPatterns, langPredLowerBound, langPredUpperBound, meta_data,
+        file);
+    _pattern_container = pattern_data;
+  } else if (num_bytes_predicate_id <= 8) {
+    std::shared_ptr<PatternContainerImpl<uint64_t>> pattern_data =
+        std::make_shared<PatternContainerImpl<uint64_t>>();
+    createPatternsImpl<uint64_t, MetaDataIterator<IndexMetaDataMmapView>,
+                       IndexMetaDataMmapView, ad_utility::File>(
+        patterns_file_name, pattern_data, _predicate_local_to_global_ids,
+        _predicate_global_to_local_ids, _fullHasPredicateMultiplicityEntities,
+        _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
+        _maxNumPatterns, langPredLowerBound, langPredUpperBound, meta_data,
+        file);
+    _pattern_container = pattern_data;
+  } else {
+    AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+             "The index contains more than 2**64 predicates.");
+  }
+  _initialized = true;
+}
+
+// _____________________________________________________________________________
 void PatternIndex::loadPatternIndex(const std::string& filename_base) {
   std::string patternsFilePath = filename_base + ".index.patterns";
   ad_utility::File patternsFile;
@@ -191,7 +318,7 @@ void PatternIndex::createPatternsImpl(
     double& fullHasPredicateMultiplicityPredicates,
     size_t& fullHasPredicateSize, const size_t maxNumPatterns,
     const Id langPredLowerBound, const Id langPredUpperBound,
-    const Args&... vecReaderArgs) {
+    Args&... vecReaderArgs) {
   IndexMetaDataHmap meta;
   typedef ad_utility::HashMap<Pattern<PredicateId>, size_t,
                               PatternHash<PredicateId>>
@@ -559,35 +686,6 @@ void PatternIndex::createPatternsImpl(
     }
   }
   pattern_data->hasPredicate().build(hasPredicateTmp);
-}
-
-// _____________________________________________________________________________
-template <typename VecReaderType, typename... Args>
-void PatternIndex::createPredicateIdsImpl(std::vector<Id>* predicateIds,
-                                          const Id langPredLowerBound,
-                                          const Id langPredUpperBound,
-                                          const Args&... vecReaderArgs) {
-  VecReaderType reader(vecReaderArgs...);
-  if (reader.empty()) {
-    LOG(WARN) << "Triple vector was empty, no patterns created" << std::endl;
-    return;
-  }
-
-  Id currentPred = ID_NO_VALUE;
-
-  // Iterate all triples in POS (or PSO) sorting order. Add every distinct
-  // non language predicate to the predicateIds vector, therefore assigning
-  // a predicate namespace id to it via its position in the vector.
-  for (; !reader.empty(); ++reader) {
-    Id predicate = (*reader)[1];
-    if (predicate != currentPred) {
-      currentPred = predicate;
-      if (predicate < langPredLowerBound || predicate >= langPredUpperBound) {
-        // The predicate is not a language predicate, add it to the ids
-        predicateIds->push_back(predicate);
-      }
-    }
-  }
 }
 
 // _____________________________________________________________________________

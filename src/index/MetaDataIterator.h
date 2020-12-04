@@ -9,7 +9,7 @@
 template <typename MetaDataType>
 class MetaDataIterator {
  public:
-  MetaDataIterator(const MetaDataType& meta, ad_utility::File file)
+  MetaDataIterator(MetaDataType& meta, ad_utility::File file)
       : meta_(meta),
         _iterator(meta.data().begin()),
         _buffer_offset(0),
@@ -37,11 +37,11 @@ class MetaDataIterator {
             _buffer[_buffer_offset][1]};
   }
 
-  bool empty() { return _iterator == meta_.data().end(); }
+  bool empty() { return _iterator == meta_.data().cend(); }
 
  private:
   void scanCurrentPos() {
-    const FullRelationMetaData& rmd = _iterator->second.get();
+    const FullRelationMetaData& rmd = _iterator->second;
     _buffer.resize(rmd.getNofElements());
     _file.read(_buffer.data(), rmd.getNofElements() * 2 * sizeof(Id),
                rmd._startFullIndex);
