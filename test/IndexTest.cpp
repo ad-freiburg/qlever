@@ -389,7 +389,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
 
     std::shared_ptr<PatternContainerImpl<uint8_t>> pattern_data =
         std::static_pointer_cast<PatternContainerImpl<uint8_t>>(
-            index._patternIndex.getPatternData());
+            index._patternIndex.getSubjectPatternData());
 
     ASSERT_EQ(3u, pattern_data->hasPattern().size());
     ASSERT_EQ(2u, pattern_data->hasPredicate().size());
@@ -421,7 +421,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
 
     std::shared_ptr<PatternContainerImpl<uint8_t>> pattern_data =
         std::static_pointer_cast<PatternContainerImpl<uint8_t>>(
-            index._patternIndex.getPatternData());
+            index._patternIndex.getSubjectPatternData());
 
     ASSERT_EQ(3u, pattern_data->hasPattern().size());
     ASSERT_EQ(2u, pattern_data->hasPredicate().size());

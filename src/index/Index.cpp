@@ -83,7 +83,7 @@ void Index::createFromFile(const string& filename) {
   createPermutationPair<IndexMetaDataHmapDispatcher>(&vocabData, _PSO, _POS,
                                                      true);
   if (_usePatterns) {
-    _patternIndex.generatePredicateLocalNamespace(&vocabData);
+    _patternIndex.generatePredicateLocalNamespace(&vocabData, _onDiskBase);
   }
 
   // also create Patterns after the Spo permutation if specified
@@ -94,7 +94,13 @@ void Index::createFromFile(const string& filename) {
     // be sorted by the SPO columns.
     _patternIndex.createPatterns(&vocabData, _onDiskBase);
   }
-  createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
+  createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OPS, _OSP);
+
+  if (_usePatterns) {
+    // After creating the permutation pair for OPS and OSP the vocabData will
+    // be sorted by the OPS columns.
+    _patternIndex.createPatternsForObjects(&vocabData, _onDiskBase);
+  }
 
   // if we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
@@ -525,10 +531,13 @@ void Index::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
 
   _patternIndex.generatePredicateLocalNamespaceFromExistingIndex(
-      langPredLowerBound, langPredUpperBound, _PSO._meta);
+      langPredLowerBound, langPredUpperBound, _PSO._meta, _onDiskBase);
   _patternIndex.createPatternsFromExistingIndex(langPredLowerBound,
                                                 langPredUpperBound, _SPO._meta,
                                                 _SPO._file, _onDiskBase);
+  _patternIndex.createPatternsForObjectsFromExistingIndex(
+      langPredLowerBound, langPredUpperBound, _OPS._meta, _OPS._file,
+      _onDiskBase);
 }
 
 // _____________________________________________________________________________

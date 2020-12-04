@@ -221,7 +221,7 @@ void HasPredicateScan::computeResult(ResultTable* result) {
   result->_sortedBy = resultSortedOn();
 
   std::shared_ptr<const PatternContainer> pattern_data =
-      _executionContext->getIndex().getPatternIndex().getPatternData();
+      _executionContext->getIndex().getPatternIndex().getSubjectPatternData();
   if (pattern_data->predicateIdSize() <= 1) {
     computeResult(result,
                   std::static_pointer_cast<const PatternContainerImpl<uint8_t>>(

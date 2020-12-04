@@ -140,7 +140,7 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
 
   std::shared_ptr<const PatternContainer> pattern_data =
-      _executionContext->getIndex().getPatternIndex().getPatternData();
+      _executionContext->getIndex().getPatternIndex().getSubjectPatternData();
   if (pattern_data->predicateIdSize() <= 1) {
     computeResult(result,
                   std::static_pointer_cast<const PatternContainerImpl<uint8_t>>(
