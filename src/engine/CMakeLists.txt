@@ -32,4 +32,4 @@ add_library(engine
         IdTable.h
         )
 
-target_link_libraries(engine index parser)
+target_link_libraries(engine index parser absl::flat_hash_set)
