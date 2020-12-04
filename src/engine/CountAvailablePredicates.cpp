@@ -224,14 +224,14 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   *dynResult = result.moveToDynamic();
 }
 
-template <int I>
+template <int WIDTH>
 void CountAvailablePredicates::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,
     const vector<PatternID>& hasPattern,
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns, const size_t subjectColumn,
     RuntimeInformation* runtimeInfo) {
-  const IdTableStatic<I> input = dynInput.asStaticView<I>();
+  const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<2> result = dynResult->moveToStatic<2>();
   LOG(DEBUG) << "For " << input.size() << " entities in column "
              << subjectColumn << std::endl;

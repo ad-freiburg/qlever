@@ -13,13 +13,61 @@
 #include "../global/Id.h"
 #include "../util/Log.h"
 
-/**
- * @brief This struct is used to store all the template specialized data and
- * methods of the IdTable class. This way less code of the IdTable has to
- * be duplicated.
- **/
-template <int COLS>
-class IdTableImpl {
+namespace detail {
+// The actual data storage of the Id Tables, basically a wrapper around a
+// std::vector<Id>
+struct IdTableVectorWrapper {
+  static constexpr bool ManagesStorage = true;  // is able to grow/allocate
+  std::vector<Id> _data;
+
+  IdTableVectorWrapper() = default;
+
+  // construct from c-style array by copying the content
+  explicit IdTableVectorWrapper(const Id* const ptr, size_t sz) {
+    _data.assign(ptr, ptr + sz);
+  }
+
+  // unified interface to the data
+  Id* data() noexcept { return _data.data(); }
+  [[nodiscard]] const Id* data() const noexcept { return _data.data(); }
+
+  bool empty() const { return _data.empty(); }
+};
+
+// similar interface to the IdTableVectorWrapper but doesn't own storage, used
+// for cheap to copy const views into IdTables
+struct IdTableViewWrapper {
+  static constexpr bool ManagesStorage =
+      false;  // is not able to grow and allocate
+  const Id* _data;
+  const size_t _size;
+
+  IdTableViewWrapper() = delete;
+
+  IdTableViewWrapper(const IdTableViewWrapper&) noexcept = default;
+
+  // construct as a view into an owning VectorWrapper
+  explicit IdTableViewWrapper(const IdTableVectorWrapper& rhs) noexcept
+      : _data(rhs.data()), _size(rhs._data.size()) {}
+
+  // convert to an owning VectorWrapper by making a copy. Explicit since
+  // expensive
+  explicit operator IdTableVectorWrapper() const {
+    return IdTableVectorWrapper(_data, _size);
+  }
+
+  // access interface to the data
+  [[nodiscard]] const Id* data() const noexcept { return _data; }
+
+  bool empty() const noexcept { return _size == 0; }
+};
+
+// Random Access Iterator for an IdTable (basically a 2d array with compile-time
+// fixed width only depends on the number of columns and not on the underlying
+// storage model, so create this as a separate class
+// with CONST = true we get a const_iterator
+template <int COLS, bool CONST = false>
+class IdTableIterator {
  public:
   IdTableImpl()
       : _data(nullptr), _size(0), _capacity(0), _manage_storage(true) {}
@@ -153,21 +201,10 @@ class IdTableImpl {
     size_t _row;
   };
 
-  class RowHashImpl {
-    size_t operator()(const std::array<Id, COLS>& row) {
-      size_t hash = 0;
-      for (size_t i = 0; i < row.size(); ++i) {
-        hash ^= std::hash<Id>()(row[i]);
-      }
-      return 0;
-    };
-  };
-
   using const_row_type = const std::array<Id, COLS>;
   using row_type = const std::array<Id, COLS>;
   using const_row_reference = const_row_type&;
   using row_reference = row_type&;
-  using RowHash = RowHashImpl;
 
   const_row_reference getConstRow(size_t row) const {
     return *reinterpret_cast<const_row_type*>(_data + (row * COLS));
@@ -478,21 +515,10 @@ class IdTableImpl<0> {
     Row _rowView;
   };
 
-  class RowHashImpl {
-    size_t operator()(const Row& row) {
-      size_t hash = 0;
-      for (size_t i = 0; i < row.size(); ++i) {
-        hash ^= std::hash<Id>()(row[i]);
-      }
-      return 0;
-    };
-  };
-
   using const_row_type = ConstRow;
   using row_type = Row;
   using const_row_reference = const_row_type;
   using row_reference = row_type;
-  using RowHash = RowHashImpl;
 
   const_row_reference getConstRow(size_t row) const {
     return ConstRow(_data + (row * _cols), _cols);
@@ -531,7 +557,6 @@ class IdTableStatic : private IdTableImpl<COLS> {
   using ConstRow = typename IdTableImpl<COLS>::const_row_type;
   using iterator = typename IdTableImpl<COLS>::iterator;
   using const_iterator = typename IdTableImpl<COLS>::iterator;
-  using RowHash = typename IdTableImpl<COLS>::RowHash;
 
   IdTableStatic() {
     IdTableImpl<COLS>::_data = nullptr;

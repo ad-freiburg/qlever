@@ -21,7 +21,8 @@ class Filter : public Operation {
  public:
   Filter(QueryExecutionContext* qec,
          std::shared_ptr<QueryExecutionTree> subtree,
-         SparqlFilter::FilterType type, string lhs, string rhs);
+         SparqlFilter::FilterType type, string lhs, string rhs,
+         vector<string> additionalLhs, vector<string> additionalPrefixes);
 
   virtual string asString(size_t indent = 0) const override;
 
@@ -101,6 +102,9 @@ class Filter : public Operation {
   SparqlFilter::FilterType _type;
   string _lhs;
   string _rhs;
+
+  std::vector<string> _additionalLhs;
+  std::vector<string> _additionalPrefixRegexes;
   bool _regexIgnoreCase;
   bool _lhsAsString;
 
@@ -116,7 +120,7 @@ class Filter : public Operation {
    */
   template <ResultTable::ResultType T, int WIDTH>
   void computeFilter(IdTableStatic<WIDTH>* dynResult, size_t lhs, size_t rhs,
-                     const IdTableStatic<WIDTH>& dynInput) const;
+                     const IdTableView<WIDTH>& dynInput) const;
 
   template <int WIDTH>
   void computeResultDynamicValue(IdTable* dynResult, size_t lhsInd,
@@ -130,7 +134,7 @@ class Filter : public Operation {
    */
   template <ResultTable::ResultType T, int WIDTH>
   void computeFilterFixedValue(IdTableStatic<WIDTH>* res, size_t lhs, Id rhs,
-                               const IdTableStatic<WIDTH>& input,
+                               const IdTableView<WIDTH>& input,
                                shared_ptr<const ResultTable> subRes) const;
 
   template <int WIDTH>

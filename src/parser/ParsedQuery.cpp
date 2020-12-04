@@ -253,7 +253,10 @@ void ParsedQuery::expandPrefixes() {
 
   for (auto& f : _rootGraphPattern._filters) {
     expandPrefix(f._lhs, prefixMap);
-    expandPrefix(f._rhs, prefixMap);
+    // TODO<joka921>: proper type system for variable/regex/iri/etc
+    if (f._type != SparqlFilter::REGEX) {
+      expandPrefix(f._rhs, prefixMap);
+    }
   }
 
   vector<GraphPattern*> graphPatterns;

@@ -212,7 +212,7 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
     return;
   }
 
-  const IdTableStatic<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
+  const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
   IdTableStatic<2> res = dynRes->moveToStatic<2>();
 
   // Used to map entries in the left column to entries they have connection with
@@ -342,8 +342,8 @@ void TransitivePath::computeTransitivePathLeftBound(
   using Map = ad_utility::HashMap<Id, std::shared_ptr<ad_utility::HashSet<Id>>>;
   using MapIt = Map::iterator;
 
-  const IdTableStatic<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
-  const IdTableStatic<LEFT_WIDTH> left = dynLeft.asStaticView<LEFT_WIDTH>();
+  const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
+  const IdTableView<LEFT_WIDTH> left = dynLeft.asStaticView<LEFT_WIDTH>();
   IdTableStatic<RES_WIDTH> res = dynRes->moveToStatic<RES_WIDTH>();
 
   // Used to map entries in the left column to entries they have connection with
@@ -473,8 +473,8 @@ void TransitivePath::computeTransitivePathRightBound(
   using Map = ad_utility::HashMap<Id, std::shared_ptr<ad_utility::HashSet<Id>>>;
   using MapIt = Map::iterator;
 
-  const IdTableStatic<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
-  const IdTableStatic<LEFT_WIDTH> right = dynRight.asStaticView<LEFT_WIDTH>();
+  const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
+  const IdTableView<LEFT_WIDTH> right = dynRight.asStaticView<LEFT_WIDTH>();
   IdTableStatic<RES_WIDTH> res = dynRes->moveToStatic<RES_WIDTH>();
 
   // Used to map entries in the left column to entries they have connection with
