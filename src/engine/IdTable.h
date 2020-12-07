@@ -769,7 +769,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
   }
 
   // Element access, use the const overload
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   Id& operator()(size_t row, size_t col) {
     return const_cast<Id&>(std::as_const(*this)(row, col));
   }
@@ -779,7 +780,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
   }
 
   // Row access
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   row_reference operator[](size_t row) {
     return getRow(row);
   }
@@ -793,7 +795,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
   const_iterator begin() const { return cbegin(); }
 
   // Begin iterator
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   iterator begin() {
     return iterator{data(), 0, _cols};
   }
@@ -803,26 +806,30 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
   const_iterator end() const { return cend(); }
 
   // End iterator
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   iterator end() {
     return iterator{data(), _size, _cols};
   }
 
   const_iterator cend() const { return const_iterator{data(), _size, _cols}; }
 
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   row_reference back() {
     return getRow((end() - 1).row());
   }
 
   const_row_reference back() const { return getConstRow((end() - 1).row()); }
 
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   void emplace_back() {
     push_back();
   }
 
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   void push_back() {
     if (_size + 1 >= _capacity) {
       grow();
@@ -830,7 +837,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
     _size++;
   }
 
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   void push_back(const std::initializer_list<Id>& init) {
     assert(init.size() == _cols);
     if (_size + 1 >= _capacity) {
@@ -843,7 +851,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
   /**
    * @brief Read cols() elements from init and stores them in a new row
    **/
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   void push_back(const Id* init) {
     if (_size + 1 >= _capacity) {
       grow();
@@ -869,7 +878,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
     _size++;
   }
 
-  template <typename INDATA, typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <typename INDATA, bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   void push_back(const IdTableTemplated<COLS, INDATA>& init, size_t row) {
     assert(init._cols == _cols);
     if (_size + 1 >= _capacity) {
@@ -880,7 +890,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
     _size++;
   }
 
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   void pop_back() {
     if (_size > 0) {
       _size--;
@@ -890,7 +901,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
   /**
    * @brief Inserts the elements in the range [begin;end) before pos.
    **/
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   void insert(const iterator& pos, const const_iterator& begin,
               const const_iterator& end) {
     assert(begin.cols() == cols());
@@ -918,7 +930,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
   /**
    * @brief Erases all rows in the range [begin;end)
    **/
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   void erase(const iterator& beginIt,
              const iterator& endIt = iterator(nullptr, 0, 0)) {
     iterator actualEnd = endIt;
@@ -939,7 +952,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
     _size -= numErased;
   }
 
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   void clear() {
     _size = 0;
   }
@@ -948,7 +962,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
    * @brief Ensures this table has enough space allocated to store rows many
    *        rows of data
    **/
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   void reserve(size_t rows) {
     if (_capacity < rows) {
       // Add rows - _capacity many new rows
@@ -959,7 +974,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
   /**
    * @brief Resizes this IdTableTemplated to have at least row many rows.
    **/
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   void resize(size_t rows) {
     if (rows > _size) {
       reserve(rows);
@@ -974,7 +990,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
    * id tables data. This is effectively a move operation that also
    * changes the type to its equivalent dynamic variant.
    **/
-  template <int NEW_COLS, typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <int NEW_COLS, bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   IdTableTemplated<NEW_COLS, DATA> moveToStatic() {
     return IdTableTemplated<NEW_COLS, DATA>(
         std::move(*this));  // let the private conversions do all the work
@@ -985,7 +1002,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
    * id tables data. This is effectively a move operation that also
    * changes the type to an equivalent one.
    **/
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   IdTableTemplated<0, DATA> moveToDynamic() {
     return IdTableTemplated<0, DATA>(std::move(*this));
   };
@@ -1009,7 +1027,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
    * This is an expensive operation and so it has an explicit name.
    * @return
    */
-  template <typename = std::enable_if_t<!DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<!ManagesStorage>>
   const IdTableTemplated<COLS, IdTableVectorWrapper> clone() const {
     return IdTableTemplated<COLS, IdTableVectorWrapper>(*this);
   };
@@ -1025,7 +1044,8 @@ class IdTableTemplated : private IdTableImpl<COLS, DATA> {
    *        newRows is any other number the vector is grown by newRows many
    *        rows.
    **/
-  template <typename = std::enable_if_t<DATA::ManagesStorage>>
+  template <bool ManagesStorage = DATA::ManagesStorage,
+            typename = std::enable_if_t<ManagesStorage>>
   void grow(size_t newRows = 0) {
     size_t new_capacity;
     if (newRows == 0) {
