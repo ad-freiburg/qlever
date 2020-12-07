@@ -136,6 +136,16 @@ class Filter : public Operation {
   void computeFilterFixedValue(IdTableStatic<WIDTH>* res, size_t lhs, Id rhs,
                                const IdTableView<WIDTH>& input,
                                shared_ptr<const ResultTable> subRes) const;
+  /**
+   * @brief Uses the result type and applies a range filter
+   * ( input[lhs] >= rhs_lower && input[rhs] < rhs_upper)
+   * to subRes and store it in res.
+   *
+   */
+  template <ResultTable::ResultType T, int WIDTH, bool INVERSE = false>
+  void computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs, Id rhs_lower,
+                          Id rhs_upper, const IdTableStatic<WIDTH>& input,
+                          shared_ptr<const ResultTable> subRes) const;
 
   template <int WIDTH>
   void computeResultFixedValue(
