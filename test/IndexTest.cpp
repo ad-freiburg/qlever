@@ -406,11 +406,12 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     ASSERT_EQ(0u, pattern_data->hasPattern()[2]);
     ASSERT_EQ(NO_PATTERN, pattern_data->hasPattern()[1]);
 
-    ASSERT_FLOAT_EQ(
-        4.0 / 2, index.getPatternIndex().getHasPredicateMultiplicityEntities());
-    ASSERT_FLOAT_EQ(
-        4.0 / 3,
-        index.getPatternIndex().getHasPredicateMultiplicityPredicates());
+    ASSERT_FLOAT_EQ(4.0 / 2, index.getPatternIndex()
+                                 .getSubjectMetaData()
+                                 .fullHasPredicateMultiplicityEntities);
+    ASSERT_FLOAT_EQ(4.0 / 3, index.getPatternIndex()
+                                 .getSubjectMetaData()
+                                 .fullHasPredicateMultiplicityPredicates);
   }
   {
     LOG(DEBUG) << "Testing createPatterns with existing index..." << std::endl;
@@ -436,11 +437,12 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     ASSERT_EQ(0u, pattern_data->hasPattern()[2]);
     ASSERT_EQ(NO_PATTERN, pattern_data->hasPattern()[1]);
 
-    ASSERT_FLOAT_EQ(
-        4.0 / 2, index.getPatternIndex().getHasPredicateMultiplicityEntities());
-    ASSERT_FLOAT_EQ(
-        4.0 / 3,
-        index.getPatternIndex().getHasPredicateMultiplicityPredicates());
+    ASSERT_FLOAT_EQ(4.0 / 2, index.getPatternIndex()
+                                 .getSubjectMetaData()
+                                 .fullHasPredicateMultiplicityEntities);
+    ASSERT_FLOAT_EQ(4.0 / 3, index.getPatternIndex()
+                                 .getSubjectMetaData()
+                                 .fullHasPredicateMultiplicityPredicates);
   }
 }
 

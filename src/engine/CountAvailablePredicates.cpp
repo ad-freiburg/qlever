@@ -108,13 +108,21 @@ size_t CountAvailablePredicates::getSizeEstimate() {
     // for the type of optimizations the optimizer can currently do.
     size_t num_distinct = _subtree->getSizeEstimate() /
                           _subtree->getMultiplicity(_subjectColumnIndex);
-    return num_distinct /
-           getIndex().getPatternIndex().getHasPredicateMultiplicityPredicates();
+    return num_distinct / getIndex()
+                              .getPatternIndex()
+                              .getSubjectMetaData()
+                              .fullHasPredicateMultiplicityPredicates;
   } else {
     // Predicates are counted for all entities. In this case the size estimate
     // should be accurate.
-    return getIndex().getPatternIndex().getHasPredicateFullSize() /
-           getIndex().getPatternIndex().getHasPredicateMultiplicityPredicates();
+    return getIndex()
+               .getPatternIndex()
+               .getSubjectMetaData()
+               .fullHasPredicateSize /
+           getIndex()
+               .getPatternIndex()
+               .getSubjectMetaData()
+               .fullHasPredicateMultiplicityPredicates;
   }
 }
 
@@ -223,8 +231,10 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
     const std::vector<Id>& predicateGlobalIds) {
   IdTableStatic<2> result = dynResult->moveToStatic<2>();
   LOG(DEBUG) << "For all entities." << std::endl;
-  ad_utility::HashMap<PredicateId, size_t> predicateCounts;
-  ad_utility::HashMap<size_t, size_t> patternCounts;
+  std::vector<size_t> predicateCounts(predicateGlobalIds.size(), 0);
+
+  // Every pattern will be counted at least once
+  std::vector<size_t> patternCounts(patterns.size(), 0);
 
   size_t maxId = std::max(hasPattern.size(), hasPredicate.size());
   for (size_t i = 0; i < maxId; i++) {
@@ -236,13 +246,8 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
       std::tie(predicateData, numPredicates) = hasPredicate[i];
       if (numPredicates > 0) {
         for (size_t i = 0; i < numPredicates; i++) {
-          Id predicate = predicateGlobalIds[predicateData[i]];
-          auto it = predicateCounts.find(predicate);
-          if (it == predicateCounts.end()) {
-            predicateCounts[predicate] = 1;
-          } else {
-            it->second++;
-          }
+          Id predicate = predicateData[i];
+          predicateCounts[predicate]++;
         }
       }
     }
@@ -250,20 +255,22 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
 
   LOG(DEBUG) << "Using " << patternCounts.size()
              << " patterns for computing the result." << std::endl;
-  for (const auto& it : patternCounts) {
-    std::pair<PredicateId*, size_t> pattern = patterns[it.first];
+  for (size_t pattern_id = 0; pattern_id < patternCounts.size(); ++pattern_id) {
+    std::pair<PredicateId*, size_t> pattern = patterns[pattern_id];
     for (size_t i = 0; i < pattern.second; i++) {
-      predicateCounts[predicateGlobalIds[pattern.first[i]]] += it.second;
+      predicateCounts[pattern.first[i]] += patternCounts[pattern_id];
     }
   }
   result.reserve(predicateCounts.size());
-  for (const auto& it : predicateCounts) {
-    result.push_back({it.first, static_cast<Id>(it.second)});
+  for (size_t predicate_local_id = 0;
+       predicate_local_id < predicateCounts.size(); ++predicate_local_id) {
+    result.push_back({predicateGlobalIds[predicate_local_id],
+                      predicateCounts[predicate_local_id]});
   }
   *dynResult = result.moveToDynamic();
 }
 
-template <int WIDTH>
+template <int WIDTH, typename PredicateId>
 void CountAvailablePredicates::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,
     const vector<PatternID>& hasPattern,

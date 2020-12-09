@@ -128,25 +128,29 @@ float HasPredicateScan::getMultiplicity(size_t col) {
       if (col == 0) {
         return getIndex()
             .getPatternIndex()
-            .getHasPredicateMultiplicityEntities();
+            .getSubjectMetaData()
+            .fullHasPredicateMultiplicityEntities;
       }
       break;
     case ScanType::FREE_O:
       if (col == 0) {
         return getIndex()
             .getPatternIndex()
-            .getHasPredicateMultiplicityPredicates();
+            .getSubjectMetaData()
+            .fullHasPredicateMultiplicityPredicates;
       }
       break;
     case ScanType::FULL_SCAN:
       if (col == 0) {
         return getIndex()
             .getPatternIndex()
-            .getHasPredicateMultiplicityEntities();
+            .getSubjectMetaData()
+            .fullHasPredicateMultiplicityEntities;
       } else if (col == 1) {
         return getIndex()
             .getPatternIndex()
-            .getHasPredicateMultiplicityPredicates();
+            .getSubjectMetaData()
+            .fullHasPredicateMultiplicityPredicates;
       }
       break;
     case ScanType::SUBQUERY_S:
@@ -154,12 +158,14 @@ float HasPredicateScan::getMultiplicity(size_t col) {
         return _subtree->getMultiplicity(col) *
                getIndex()
                    .getPatternIndex()
-                   .getHasPredicateMultiplicityPredicates();
+                   .getSubjectMetaData()
+                   .fullHasPredicateMultiplicityPredicates;
       } else {
         return _subtree->getMultiplicity(_subtreeColIndex) *
                getIndex()
                    .getPatternIndex()
-                   .getHasPredicateMultiplicityPredicates();
+                   .getSubjectMetaData()
+                   .fullHasPredicateMultiplicityPredicates;
       }
       break;
   }
@@ -169,31 +175,44 @@ float HasPredicateScan::getMultiplicity(size_t col) {
 size_t HasPredicateScan::getSizeEstimate() {
   switch (_type) {
     case ScanType::FREE_S:
-      return static_cast<size_t>(
-          getIndex().getPatternIndex().getHasPredicateMultiplicityEntities());
+      return static_cast<size_t>(getIndex()
+                                     .getPatternIndex()
+                                     .getSubjectMetaData()
+                                     .fullHasPredicateMultiplicityEntities);
     case ScanType::FREE_O:
-      return static_cast<size_t>(
-          getIndex().getPatternIndex().getHasPredicateMultiplicityPredicates());
+      return static_cast<size_t>(getIndex()
+                                     .getPatternIndex()
+                                     .getSubjectMetaData()
+                                     .fullHasPredicateMultiplicityPredicates);
     case ScanType::FULL_SCAN:
-      return getIndex().getPatternIndex().getHasPredicateFullSize();
+      return getIndex()
+          .getPatternIndex()
+          .getSubjectMetaData()
+          .fullHasPredicateSize;
     case ScanType::SUBQUERY_S:
 
       size_t nofDistinctLeft = std::max(
           size_t(1),
           static_cast<size_t>(_subtree->getSizeEstimate() /
                               _subtree->getMultiplicity(_subtreeColIndex)));
-      size_t nofDistinctRight =
-          std::max(size_t(1),
-                   static_cast<size_t>(
-                       getIndex().getPatternIndex().getHasPredicateFullSize() /
-                       getIndex()
-                           .getPatternIndex()
-                           .getHasPredicateMultiplicityPredicates()));
+      size_t nofDistinctRight = std::max(
+          size_t(1),
+          static_cast<size_t>(getIndex()
+                                  .getPatternIndex()
+                                  .getSubjectMetaData()
+                                  .fullHasPredicateSize /
+                              getIndex()
+                                  .getPatternIndex()
+                                  .getSubjectMetaData()
+                                  .fullHasPredicateMultiplicityPredicates));
       size_t nofDistinctInResult = std::min(nofDistinctLeft, nofDistinctRight);
 
       double jcMultiplicityInResult =
           _subtree->getMultiplicity(_subtreeColIndex) *
-          getIndex().getPatternIndex().getHasPredicateMultiplicityPredicates();
+          getIndex()
+              .getPatternIndex()
+              .getSubjectMetaData()
+              .fullHasPredicateMultiplicityPredicates;
       return std::max(size_t(1), static_cast<size_t>(jcMultiplicityInResult *
                                                      nofDistinctInResult));
   }
@@ -283,13 +302,16 @@ void HasPredicateScan::computeResult(
     } break;
     case ScanType::FULL_SCAN:
       runtimeInfo.setDescriptor("HasPredicateScan full scan");
-      HasPredicateScan::computeFullScan(
-          result, pattern_data->hasPattern(), pattern_data->hasPredicate(),
-          pattern_data->patterns(),
-          _executionContext->getIndex()
-              .getPatternIndex()
-              .getPredicateGlobalIds(),
-          getIndex().getPatternIndex().getHasPredicateFullSize());
+      HasPredicateScan::computeFullScan(result, pattern_data->hasPattern(),
+                                        pattern_data->hasPredicate(),
+                                        pattern_data->patterns(),
+                                        _executionContext->getIndex()
+                                            .getPatternIndex()
+                                            .getPredicateGlobalIds(),
+                                        getIndex()
+                                            .getPatternIndex()
+                                            .getSubjectMetaData()
+                                            .fullHasPredicateSize);
       break;
     case ScanType::SUBQUERY_S:
 
