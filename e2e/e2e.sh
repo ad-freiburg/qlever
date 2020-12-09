@@ -47,6 +47,12 @@ while true; do
   shift
 done
 
+if ! [ "$#" -eq 0 ] ; then
+  echo "Unexepected command line arguments '$@'"
+  print_usage
+  exit 1
+fi
+
 # Fail on unset varibles and any non zero returncodes
 set -Eeuo pipefail
 
