@@ -536,4 +536,8 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     ASSERT_THROW(TurtleToken::normalizeRDFLiteral(unterminated),
                  std::runtime_error);
   }
+
+  std::string lit = R"(",\")";
+  lit = R"(",")";
+  ASSERT_EQ(std::string("\",\\\\\""), TurtleToken::escapeRDFLiteral(lit));
 }
