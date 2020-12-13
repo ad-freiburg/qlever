@@ -284,123 +284,128 @@ struct TurtleToken {
    * @return
    */
   template <bool strictMode = true>
-  static std::string normalizeRDFLiteral(std::string_view origLiteral) {
-    if constexpr (!strictMode) {
-      if (origLiteral.empty() ||
-          (origLiteral[0] != '"' && origLiteral[0] != '\'' &&
-           origLiteral[0] != '<')) {
-        return std::string{origLiteral};
-      }
-    }
-
-    auto literal = origLiteral;
-
-    // filter the special case of the genids or the qlever special value
-    // escapes, which neither start with angles nor with quotation marks
-    // TODO<joka921> proper data types for the different types of vocabulary
-    // entries.
-    if (ad_utility::startsWith(literal, "_:genid") ||
-        ad_utility::startsWith(literal, ":v:")) {
-      return std::string{literal};
-    }
-    std::string res;
-    char endDelimiter = '\0';
-    std::string_view langtagOrDatatype;
-    if (ad_utility::startsWith(literal, "<")) {
-      // this must be an <iriref>
-      if (!ad_utility::endsWith(literal, ">")) {
-        throw std::runtime_error("Error: Rdf Triple element "s + origLiteral +
-                                 "could not be normalized properly"s);
-      }
-      res = "<";
-      endDelimiter = '>';
-      literal.remove_prefix(1);
-      literal.remove_suffix(1);
-    } else {
-      res = "\"";
-      endDelimiter = '\"';
-      auto lastQuot = literal.find_last_of("\"\'");
-      if (lastQuot != std::string_view::npos) {
-        langtagOrDatatype = literal.substr(lastQuot + 1);
-        literal.remove_suffix(literal.size() - lastQuot - 1);
+  static std::string normalizeRDFLiteral(const std::string_view origLiteral) {
+    try {
+      if constexpr (!strictMode) {
+        if (origLiteral.empty() ||
+            (origLiteral[0] != '"' && origLiteral[0] != '\'' &&
+             origLiteral[0] != '<')) {
+          return std::string{origLiteral};
+        }
       }
 
-      if (ad_utility::startsWith(literal, "\"\"\"") ||
-          ad_utility::startsWith(literal, "'''")) {
-        if (!ad_utility::endsWith(literal, literal.substr(0, 3))) {
+      auto literal = origLiteral;
+
+      // filter the special case of the genids or the qlever special value
+      // escapes, which neither start with angles nor with quotation marks
+      // TODO<joka921> proper data types for the different types of vocabulary
+      // entries.
+      if (ad_utility::startsWith(literal, "_:genid") ||
+          ad_utility::startsWith(literal, ":v:")) {
+        return std::string{literal};
+      }
+      std::string res;
+      char endDelimiter = '\0';
+      std::string_view langtagOrDatatype;
+      if (ad_utility::startsWith(literal, "<")) {
+        // this must be an <iriref>
+        if (!ad_utility::endsWith(literal, ">")) {
           throw std::runtime_error("Error: Rdf Triple element "s + origLiteral +
                                    "could not be normalized properly"s);
         }
-        literal.remove_prefix(3);
-        literal.remove_suffix(3);
-      } else {
-        if (!(ad_utility::startsWith(literal, "\"") ||
-              ad_utility::startsWith(literal, "'"))) {
-          throw std::runtime_error("Error: Rdf Triple element "s + origLiteral +
-                                   "could not be normalized properly"s);
-        }
-        AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 1)));
+        res = "<";
+        endDelimiter = '>';
         literal.remove_prefix(1);
         literal.remove_suffix(1);
-      }
-    }
-    auto pos = literal.find('\\');
-    while (pos != literal.npos) {
-      res.append(literal.begin(), literal.begin() + pos);
-      AD_CHECK(pos + 1 < literal.size());
-      switch (literal[pos + 1]) {
-        case 't':
-          res.push_back('\t');
-          break;
-        case 'n':
-          res.push_back('\n');
-          break;
-        case 'r':
-          res.push_back('\r');
-          break;
-        case 'b':
-          res.push_back('\b');
-          break;
-        case 'f':
-          res.push_back('\f');
-          break;
-        case '"':
-          res.push_back('\"');
-          break;
-        case '\'':
-          res.push_back('\'');
-          break;
-        case '\\':
-          res.push_back('\\');
-          break;
-        case 'u': {
-          AD_CHECK(pos + 5 < literal.size());
-          auto unesc = unescapeUchar(literal.substr(pos + 2, 4));
-          res.insert(res.end(), unesc.begin(), unesc.end());
-          literal.remove_prefix(4);
-          break;
-        }
-        case 'U': {
-          AD_CHECK(pos + 9 < literal.size());
-          auto unesc = unescapeUchar(literal.substr(pos + 2, 8));
-          res.insert(res.end(), unesc.begin(), unesc.end());
-          literal.remove_prefix(8);
-          break;
+      } else {
+        res = "\"";
+        endDelimiter = '\"';
+        auto lastQuot = literal.find_last_of("\"\'");
+        if (lastQuot != std::string_view::npos) {
+          langtagOrDatatype = literal.substr(lastQuot + 1);
+          literal.remove_suffix(literal.size() - lastQuot - 1);
         }
 
-        default:
-          throw std::runtime_error("Illegal escape sequence in RDF Literal \"" +
-                                   std::string(literal) +
-                                   "\" . This should never "
-                                   "happen, please report this");
+        if (ad_utility::startsWith(literal, "\"\"\"") ||
+            ad_utility::startsWith(literal, "'''")) {
+          if (!ad_utility::endsWith(literal, literal.substr(0, 3))) {
+            throw std::runtime_error("Error: Rdf Triple element "s + origLiteral +
+                                     "could not be normalized properly"s);
+          }
+          literal.remove_prefix(3);
+          literal.remove_suffix(3);
+        } else {
+          if (!(ad_utility::startsWith(literal, "\"") ||
+                ad_utility::startsWith(literal, "'"))) {
+            throw std::runtime_error("Error: Rdf Triple element "s + origLiteral +
+                                     "could not be normalized properly"s);
+          }
+          AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 1)));
+          literal.remove_prefix(1);
+          literal.remove_suffix(1);
+        }
       }
-      literal.remove_prefix(pos + 2);
-      pos = literal.find('\\');
+      auto pos = literal.find('\\');
+      while (pos != literal.npos) {
+        res.append(literal.begin(), literal.begin() + pos);
+        AD_CHECK(pos + 1 < literal.size());
+        switch (literal[pos + 1]) {
+          case 't':
+            res.push_back('\t');
+            break;
+          case 'n':
+            res.push_back('\n');
+            break;
+          case 'r':
+            res.push_back('\r');
+            break;
+          case 'b':
+            res.push_back('\b');
+            break;
+          case 'f':
+            res.push_back('\f');
+            break;
+          case '"':
+            res.push_back('\"');
+            break;
+          case '\'':
+            res.push_back('\'');
+            break;
+          case '\\':
+            res.push_back('\\');
+            break;
+          case 'u': {
+            AD_CHECK(pos + 5 < literal.size());
+            auto unesc = unescapeUchar(literal.substr(pos + 2, 4));
+            res.insert(res.end(), unesc.begin(), unesc.end());
+            literal.remove_prefix(4);
+            break;
+          }
+          case 'U': {
+            AD_CHECK(pos + 9 < literal.size());
+            auto unesc = unescapeUchar(literal.substr(pos + 2, 8));
+            res.insert(res.end(), unesc.begin(), unesc.end());
+            literal.remove_prefix(8);
+            break;
+          }
+
+            default:
+              throw std::runtime_error("Illegal escape sequence in RDF Literal \"" +
+                                       std::string(literal) +
+                                       "\" . This should never "
+                                       "happen, please report this");
+          }
+          literal.remove_prefix(pos + 2);
+          pos = literal.find('\\');
+        }
+        res.append(literal);
+        res.push_back(endDelimiter);
+        res.append(langtagOrDatatype);
+        return res;
+    } catch (...) {
+      LOG(ERROR) << "Failed to unescape " + origLiteral + " an exception was thrown" << std::endl;
+      throw;
     }
-    res.append(literal);
-    res.push_back(endDelimiter);
-    res.append(langtagOrDatatype);
-    return res;
   }
 
   static std::string unescapePrefixedIri(std::string_view literal) {
