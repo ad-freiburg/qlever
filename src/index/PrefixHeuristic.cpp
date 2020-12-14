@@ -41,7 +41,7 @@ TreeNode* TreeNode::insertAfter(string_view value) {
   }
 
   // if we have reached here, we have to add a new child
-  NodePtr newNode(new TreeNode(value));
+  NodePtr newNode = std::make_unique<TreeNode>(value);
   newNode->_parent = this;
 
   // find children of current node which have to become children of the new node
@@ -60,6 +60,13 @@ TreeNode* TreeNode::insertAfter(string_view value) {
 
   // register the newly created node as a child of this node
   _children.push_back(std::move(newNode));
+
+  for (const auto& c : _children) {
+    if (c.get() == nullptr) {
+      LOG(ERROR) << "Illegal nullptr child was found";
+    }
+  }
+
   return _children.back().get();
 }
 
