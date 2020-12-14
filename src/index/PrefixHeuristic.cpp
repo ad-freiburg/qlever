@@ -8,6 +8,7 @@
 #include "../util/Exception.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
+#include "../parser/Tokenizer.h"
 
 using std::string;
 
@@ -63,7 +64,7 @@ TreeNode* TreeNode::insertAfter(string_view value) {
 
   for (const auto& c : _children) {
     if (c.get() == nullptr) {
-      LOG(ERROR) << "Illegal nullptr child was found";
+      LOG(ERROR) << "Illegal nullptr child was found" << std::endl;
     }
   }
 
@@ -186,6 +187,7 @@ std::vector<string> calculatePrefixes(const string& filename,
   LOG(INFO) << "start reading words and building prefix tree..." << std::endl;
   // insert all prefix candidates into  the tree
   while (std::getline(ifs, nextWord)) {
+    nextWord = TurtleToken::normalizeRDFLiteral(nextWord);
     totalChars += nextWord.size();
     // the longest common prefixes between two adjacent words are our candidates
     // for compression
