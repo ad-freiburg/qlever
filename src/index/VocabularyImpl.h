@@ -304,6 +304,7 @@ void Vocabulary<S, C>::prefixCompressFile(const string& infile,
   v.initializePrefixes(prefixes);
   std::string word;
   while (std::getline(in, word)) {
-    out << TurtleToken::escapeRDFLiteral(v.compressPrefix(TurtleToken::normalizeRDFLiteral<false>(word)).toStringView()) << '\n';
+
+    out << v.compressPrefix(word).toStringView() << '\n';
   }
 }
