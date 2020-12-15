@@ -11,10 +11,9 @@ COPY . /app/
 
 # Check formatting with the .clang-format project style
 WORKDIR /app/
-RUN misc/format-check.sh
 
 WORKDIR /app/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG -DUSE_PARALLEL=true .. && make -j $(nproc) && make test
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG -DUSE_PARALLEL=true .. && make -j $(nproc)
 
 FROM base as runtime
 WORKDIR /app
@@ -36,7 +35,7 @@ VOLUME ["/input", "/index"]
 ENV INDEX_PREFIX index
 ENV MEMORY_FOR_QUERIES 70
 # Need the shell to get the INDEX_PREFIX envirionment variable
-ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -j 8 -m ${MEMORY_FOR_QUERIES} -M 650000000 -p 7001 \"$@\"", "--"]
+ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -j 8 -m ${MEMORY_FOR_QUERIES} -p 7001 \"$@\"", "--"]
 
 # docker build -t qlever-<name> .
 # # When running with user namespaces you may need to make the index folder accessible
