@@ -109,8 +109,8 @@ class TimeoutTimer : public Timer {
     return TimeoutTimer(msecs * 1000);
   }
   /// Factory function for a timer that times out after a number of seconds
-  static TimeoutTimer secLimited(off_t secs) {
-    return TimeoutTimer(secs * 1000 * 1000);
+  static TimeoutTimer secLimited(double secs) {
+    return TimeoutTimer(static_cast<off_t>(secs * 1000 * 1000));
   }
 
   /// Did this timer already timeout

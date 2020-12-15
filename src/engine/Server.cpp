@@ -173,7 +173,7 @@ void Server::process(Socket* client) {
       if (params.contains("timeout")) {
         timeoutTimer = std::make_shared<QueryExecutionTree::SyncTimer>(
             ad_utility::TimeoutTimer::secLimited(
-                static_cast<size_t>(atol(params["timeout"].c_str()))));
+                atof(params["timeout"].c_str())));
       }
 
       auto it = params.find("send");
