@@ -68,6 +68,9 @@ string Join::getDescriptor() const {
   if (_limit) {
     joinVar += " Limit" + std::to_string(_limit.value());
   }
+  if (isFullScanDummy(_left) || isFullScanDummy(_right)) {
+    return "Dummy join for all triples on " + joinVar;
+  }
   return "Join on " + joinVar;
 }
 
