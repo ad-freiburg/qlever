@@ -68,6 +68,9 @@ string Join::getDescriptor() const {
   if (_limit) {
     joinVar += " Limit" + std::to_string(_limit.value());
   }
+  if (isFullScanDummy(_left) || isFullScanDummy(_right)) {
+    return "Dummy join for all triples on " + joinVar;
+  }
   return "Join on " + joinVar;
 }
 
@@ -249,13 +252,14 @@ size_t Join::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
+void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) {
   LOG(DEBUG) << "Join by making multiple scans..." << endl;
   if (isFullScanDummy(_left)) {
     AD_CHECK(!isFullScanDummy(_right))
     result->_data.setCols(_right->getResultWidth() + 2);
     result->_sortedBy = {2 + _rightJoinCol};
     shared_ptr<const ResultTable> nonDummyRes = _right->getResult();
+    getRuntimeInfo().addChild(_right->getRootOperation()->getRuntimeInfo());
     result->_resultTypes.reserve(result->_data.cols());
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
     result->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -269,6 +273,7 @@ void Join::computeResultForJoinWithFullScanDummy(ResultTable* result) const {
     result->_sortedBy = {_leftJoinCol};
 
     shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
+    getRuntimeInfo().addChild(_left->getRootOperation()->getRuntimeInfo());
     result->_resultTypes.reserve(result->_data.cols());
     result->_resultTypes.insert(result->_resultTypes.end(),
                                 nonDummyRes->_resultTypes.begin(),
