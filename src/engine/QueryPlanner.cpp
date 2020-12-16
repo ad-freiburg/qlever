@@ -2763,7 +2763,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       return std::vector{optionalJoin(a, b)};
     }
 
-    if (jcs.size() == 2 &&
+    if (false && jcs.size() == 2 &&
         (a._qet->getResultWidth() == 2 || b._qet->getResultWidth() == 2)) {
       // SPECIAL CASE: Cyclic queries -> join on exactly two columns
       // this is currently only implemented for the filtering case where
@@ -2833,8 +2833,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         candidates.push_back(std::move(plan));
       }
       return candidates;
-    } else {  // also use this for two-column joins where both inputs have a
-              // width greater than 2
+    } else if (jcs.size() > 1) {  // also use this for two-column joins where
+                                  // both inputs have a
+                                  // width greater than 2
       // this can happen when e.g. subqueries are used
       SubtreePlan plan = multiColumnJoin(a, b);
       plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
