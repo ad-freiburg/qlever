@@ -2763,8 +2763,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       return std::vector{optionalJoin(a, b)};
     }
 
-    if (jcs.size() == 2) {
+    if (jcs.size() == 2 && (a._qet->getResultWidth() == 2 || b._qet->getResultWidth() == 2)) {
       // SPECIAL CASE: Cyclic queries -> join on exactly two columns
+      // this is currently only implemented for the filtering case where
+      // one input only consists of the join columns.
+      // else we will use the more general multi-column join
 
       // Forbd a join between two dummies.
       if ((a._qet->getType() == QueryExecutionTree::SCAN &&
@@ -2781,39 +2784,37 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       // the optimal solution will be picked).
       // The order plays a role for the efficient implementation for
       // filtering directly with a scan's result.
-      for (size_t n = 0; n < 4; ++n) {
-        size_t c = n / 2;
-        size_t swap = n % 2;
+      for (size_t n = 0; n < 2; ++n) {
+        auto first = n;
+        auto second = (n+1) % 2;
         auto left = std::make_shared<QueryExecutionTree>(_qec);
         auto right = std::make_shared<QueryExecutionTree>(_qec);
         const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
-        if (aSortedOn.size() > 0 && aSortedOn[0] == jcs[c][(0 + swap) % 2] &&
-            (a._qet->getResultWidth() == 2 ||
-             a._qet->getType() == QueryExecutionTree::SCAN)) {
+        if (aSortedOn.size() > 1 && aSortedOn[0] == jcs[first][0] &&
+            aSortedOn[1] == jcs[second][0]) {
           left = a._qet;
         } else {
           // Create an order by operation.
           vector<pair<size_t, bool>> sortIndices;
           sortIndices.emplace_back(
-              std::make_pair(jcs[c][(0 + swap) % 2], false));
+              std::make_pair(jcs[first][0], false));
           sortIndices.emplace_back(
-              std::make_pair(jcs[(c + 1) % 2][(0 + swap) % 2], false));
+              std::make_pair(jcs[second][0], false));
           auto orderBy = std::make_shared<OrderBy>(_qec, a._qet, sortIndices);
           left->setVariableColumns(a._qet->getVariableColumns());
           left->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
         }
         const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
-        if (bSortedOn.size() > 0 && bSortedOn[0] == jcs[c][(1 + swap) % 2] &&
-            b._qet->getResultWidth() == 2) {
+        if (bSortedOn.size() > 1 && bSortedOn[0] == jcs[first][1] &&
+            bSortedOn[1] == jcs[second][1]) {
           right = b._qet;
         } else {
-          // Create a sort operation.
           // Create an order by operation.
           vector<pair<size_t, bool>> sortIndices;
           sortIndices.emplace_back(
-              std::make_pair(jcs[c][(1 + swap) % 2], false));
+              std::make_pair(jcs[first][1], false));
           sortIndices.emplace_back(
-              std::make_pair(jcs[(c + 1) % 2][(1 + swap) % 2], false));
+              std::make_pair(jcs[second][1], false));
           auto orderBy = std::make_shared<OrderBy>(_qec, b._qet, sortIndices);
           right->setVariableColumns(b._qet->getVariableColumns());
           right->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
@@ -2827,13 +2828,15 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         tree.setOperation(QueryExecutionTree::TWO_COL_JOIN, join);
         // TODO<joka921>: shouldn't we |= the filters here to avoid duplicate
         // filtering when it might hurt (although filters are always cheap).
+        // TODO<joka921> fixed the above, check if it is correct
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
+        plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
         plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
         plan.addAllNodes(b._idsOfIncludedNodes);
         candidates.push_back(std::move(plan));
       }
       return candidates;
-    } else if (jcs.size() > 2) {
+    } else  {  // also use this for two-column joins where both inputs have a width greater than 2
       // this can happen when e.g. subqueries are used
       SubtreePlan plan = multiColumnJoin(a, b);
       plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
