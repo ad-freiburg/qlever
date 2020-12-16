@@ -124,7 +124,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     _runtimeInfo.setRows(newResult->_resTable->size());
     _runtimeInfo.setCols(getResultWidth());
     _runtimeInfo.setDescriptor(getDescriptor());
-    _runtimeInfo.setColumnNames(getVariableColumns());
+    _runtimeInfo.setColumnNames(getVariableColumns(), getResultSortedOn());
 
     _runtimeInfo.setTime(timer.msecs());
     _runtimeInfo.setWasCached(false);
