@@ -63,7 +63,14 @@ ad_utility::HashMap<string, size_t> Union::getVariableColumns() const {
       _subtrees[0]->getVariableColumns());
 
   size_t column = variableColumns.size();
-  for (auto it : _subtrees[1]->getVariableColumns()) {
+  // It is important that multiple calls to this function yield a consistent
+  // result;
+  const auto& otherCols = _subtrees[1]->getVariableColumns();
+  std::vector<std::pair<std::string, size_t>> otherColVec(otherCols.begin(),
+                                                          otherCols.end());
+  std::sort(otherColVec.begin(), otherColVec.end(),
+            [](const auto& a, const auto& b) { return a.second < b.second; });
+  for (const auto& it : otherColVec) {
     if (variableColumns.find(it.first) == variableColumns.end()) {
       variableColumns[it.first] = column;
       column++;
