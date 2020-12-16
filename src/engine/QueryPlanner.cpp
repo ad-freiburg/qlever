@@ -1945,11 +1945,47 @@ QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
   if (a.type == SubtreePlan::MINUS || b.type != SubtreePlan::MINUS) {
     throw std::runtime_error("Can only subtract the right side from the left.");
   }
-  SubtreePlan plan(_qec);
-
   std::vector<std::array<Id, 2>> jcs = getJoinColumns(a, b);
 
-  auto join = std::make_shared<Minus>(_qec, a._qet, b._qet, jcs);
+  const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
+  const vector<size_t>& bSortedOn = b._qet->resultSortedOn();
+
+  bool aSorted = aSortedOn.size() >= jcs.size();
+  // TODO: We could probably also accept permutations of the join columns
+  // as the order of a here and then permute the join columns to match the
+  // sorted columns of a or b (whichever is larger).
+  for (size_t i = 0; aSorted && i < jcs.size(); i++) {
+    aSorted = aSorted && jcs[i][0] == aSortedOn[i];
+  }
+  bool bSorted = bSortedOn.size() >= jcs.size();
+  for (size_t i = 0; bSorted && i < jcs.size(); i++) {
+    bSorted = bSorted && jcs[i][1] == bSortedOn[i];
+  }
+
+  // a and b need to be ordered properly first
+  vector<pair<size_t, bool>> sortIndicesA;
+  vector<pair<size_t, bool>> sortIndicesB;
+  for (array<Id, 2>& jc : jcs) {
+    sortIndicesA.push_back(std::make_pair(jc[0], false));
+    sortIndicesB.push_back(std::make_pair(jc[1], false));
+  }
+
+  SubtreePlan orderByPlanA(_qec), orderByPlanB(_qec);
+  auto orderByA = std::make_shared<OrderBy>(_qec, a._qet, sortIndicesA);
+  auto orderByB = std::make_shared<OrderBy>(_qec, b._qet, sortIndicesB);
+
+  if (!aSorted) {
+    orderByPlanA._qet->setVariableColumns(a._qet->getVariableColumns());
+    orderByPlanA._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByA);
+  }
+  if (!bSorted) {
+    orderByPlanB._qet->setVariableColumns(b._qet->getVariableColumns());
+    orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
+  }
+
+  SubtreePlan plan(_qec);
+
+  auto join = std::make_shared<Minus>(_qec, aSorted ? a._qet : orderByPlanA._qet, bSorted ? b._qet : orderByPlanB._qet, jcs);
   QueryExecutionTree& tree = *plan._qet;
   tree.setVariableColumns(join->getVariableColumns());
   tree.setOperation(QueryExecutionTree::MINUS, join);
@@ -1957,6 +1993,7 @@ QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
   plan.type = SubtreePlan::BASIC;
   return plan;
 }
+
 
 // _____________________________________________________________________________
 QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
