@@ -4,20 +4,23 @@
 
 #ifndef QLEVER_CACHEADAPTER_H
 #define QLEVER_CACHEADAPTER_H
-#include <utility>
 #include <memory>
-#include "./Synchronized.h"
+#include <utility>
 #include "../util/HashMap.h"
+#include "./Synchronized.h"
 
 namespace ad_utility {
 
-using std::shared_ptr;
 using std::make_shared;
+using std::shared_ptr;
 
 template <typename Key, typename Value, typename OnFinishedAction>
 struct TryEmplaceResult {
-  TryEmplaceResult(Key key, shared_ptr<Value> todo, shared_ptr<const Value> done, OnFinishedAction action):
- _val{std::move(todo), std::move(done)}, _key{std::move(key)}, _onFinishedAction{action} {}
+  TryEmplaceResult(Key key, shared_ptr<Value> todo,
+                   shared_ptr<const Value> done, OnFinishedAction action)
+      : _val{std::move(todo), std::move(done)},
+        _key{std::move(key)},
+        _onFinishedAction{action} {}
   std::pair<shared_ptr<Value>, shared_ptr<const Value>> _val;
 
   void finish() {
@@ -26,7 +29,7 @@ struct TryEmplaceResult {
     }
   }
 
-  template<typename AbortAction>
+  template <typename AbortAction>
   void abort(AbortAction a) {
     if (_val.first) {
       _onFinishedAction.abort(_key, _val.first, std::move(a));
@@ -36,7 +39,6 @@ struct TryEmplaceResult {
  private:
   Key _key;
   OnFinishedAction _onFinishedAction;
-
 };
 
 template <typename Cache, typename OnFinishedAction>
@@ -50,29 +52,31 @@ class CacheAdapter {
     // values that are currently being computed.
     // the bool tells us whether this result will be pinned in the cache
     HashMap<Key, std::pair<bool, shared_ptr<Value>>> _inProgress;
-    template<typename... Args>
+    template <typename... Args>
     S(Args&&... args) : _cache{std::forward<Args>(args)...} {}
   };
   using SyncCache = ad_utility::Synchronized<S, std::mutex>;
 
   template <typename... CacheArgs>
-  CacheAdapter(OnFinishedAction action, CacheArgs&&... cacheArgs ):
-    _v{std::forward<CacheArgs>(cacheArgs)...}, _onFinishedAction{action} {}
+  CacheAdapter(OnFinishedAction action, CacheArgs&&... cacheArgs)
+      : _v{std::forward<CacheArgs>(cacheArgs)...}, _onFinishedAction{action} {}
 
-  // overload is only problematic if the first argument to the cache is indeed of the same type as
-  // the OnFinishedAction, which should never happen
+  // overload is only problematic if the first argument to the cache is indeed
+  // of the same type as the OnFinishedAction, which should never happen
   template <typename... CacheArgs>
-  CacheAdapter(CacheArgs&&... cacheArgs ):
-      _v{std::forward<CacheArgs>(cacheArgs)...}, _onFinishedAction{} {}
+  CacheAdapter(CacheArgs&&... cacheArgs)
+      : _v{std::forward<CacheArgs>(cacheArgs)...}, _onFinishedAction{} {}
 
  private:
   class Action {
    public:
-    Action(SyncCache* cPtr, OnFinishedAction* action):
-    _cachePtr{cPtr}, _singleAction{action}{}
+    Action(SyncCache* cPtr, OnFinishedAction* action)
+        : _cachePtr{cPtr}, _singleAction{action} {}
 
     void finish(Key k, shared_ptr<Value> vPtr) {
-      auto l = _cachePtr->wlock();  // lock for the whole time, so no one gets confused.
+      auto l =
+          _cachePtr
+              ->wlock();  // lock for the whole time, so no one gets confused.
       (*_singleAction)(*vPtr);
       auto& pinned = l->_inProgress[k].first;
       if (pinned) {
@@ -85,19 +89,18 @@ class CacheAdapter {
 
     template <typename AbortAction>
     void abort(Key k, shared_ptr<Value> vPtr, AbortAction a) {
-      auto l = _cachePtr->wlock();  // lock for the whole time, so no one gets confused.
+      auto l =
+          _cachePtr
+              ->wlock();  // lock for the whole time, so no one gets confused.
       a(*vPtr);
       l->_inProgress.erase(k);
     }
 
-
    private:
-    SyncCache * _cachePtr;
+    SyncCache* _cachePtr;
     OnFinishedAction* _singleAction;
 
-    void impl(bool succesful, Key k, shared_ptr<Value> vPtr) {
-
-    }
+    void impl(bool succesful, Key k, shared_ptr<Value> vPtr) {}
   };
 
  public:
@@ -113,46 +116,48 @@ class CacheAdapter {
     return tryEmplaceImpl(true, key, std::forward<Args>(args)...);
   }
 
-  void clear() { _v.wlock()->_cache.clear();}
-  void clearAll() { _v.wlock()->_cache.clearAll();}
+  void clear() { _v.wlock()->_cache.clear(); }
+  void clearAll() { _v.wlock()->_cache.clearAll(); }
 
-  auto numCachedElements() const { return _v.wlock()->_cache.numCachedElements();}
-  auto numPinnedElements() const { return _v.wlock()->_cache.numPinnedElements();}
-  auto cachedSize() const {return _v.wlock()->_cache.cachedSize();}
-  auto pinnedSize() const {return _v.wlock()->_cache.pinnedSize();}
+  auto numCachedElements() const {
+    return _v.wlock()->_cache.numCachedElements();
+  }
+  auto numPinnedElements() const {
+    return _v.wlock()->_cache.numPinnedElements();
+  }
+  auto cachedSize() const { return _v.wlock()->_cache.cachedSize(); }
+  auto pinnedSize() const { return _v.wlock()->_cache.pinnedSize(); }
 
-
-  auto& getStorage() { return _v;}
+  auto& getStorage() { return _v; }
 
   // is key in cache (not in progress), used for testing
-  bool cacheContains (const Key& k) const {
+  bool cacheContains(const Key& k) const {
     return _v.wlock()->_cache.contains(k);
   }
 
   // get element from cache (only for testing)
-  auto cacheAt(const Key& k) {
-    return _v.wlock()->_cache.operator[](k);
-  }
+  auto cacheAt(const Key& k) { return _v.wlock()->_cache.operator[](k); }
 
  private:
   SyncCache _v;
   OnFinishedAction _onFinishedAction;
 
-
-  Action makeAction() {
-    return Action(&_v, &_onFinishedAction);
-  }
+  Action makeAction() { return Action(&_v, &_onFinishedAction); }
 
   // ______________________________________________________________________________
   template <typename... Args>
   Res tryEmplaceImpl(bool pinned, const Key& key, Args&&... args) {
     return _v.withWriteLock([&](auto& s) {
-      bool contained = pinned ? s._cache.containsPinnedIncludingUpgrade(key) : s._cache.contains(key);
+      bool contained = pinned ? s._cache.containsPinnedIncludingUpgrade(key)
+                              : s._cache.contains(key);
       if (contained) {
-        return Res{key, shared_ptr<Value>{}, static_cast<shared_ptr<const Value>>(s._cache[key]), makeAction()};
+        return Res{key, shared_ptr<Value>{},
+                   static_cast<shared_ptr<const Value>>(s._cache[key]),
+                   makeAction()};
       } else if (s._inProgress.contains(key)) {
         s._inProgress[key].first = s._inProgress[key].first || pinned;
-        return Res{key, shared_ptr<Value>{}, s._inProgress[key].second, makeAction()};
+        return Res{key, shared_ptr<Value>{}, s._inProgress[key].second,
+                   makeAction()};
       }
       auto empl = make_shared<Value>(std::forward<Args>(args)...);
 
@@ -161,8 +166,6 @@ class CacheAdapter {
     });
   }
 };
-}
-
-
+}  // namespace ad_utility
 
 #endif  // QLEVER_CACHEADAPTER_H

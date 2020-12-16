@@ -94,8 +94,8 @@ class RuntimeInformation {
     _descriptor = descriptor;
   }
 
-  void setColumnNames(
-      const ad_utility::HashMap<std::string, size_t>& columnMap, std::vector<size_t> sortedCols = {}) {
+  void setColumnNames(const ad_utility::HashMap<std::string, size_t>& columnMap,
+                      std::vector<size_t> sortedCols = {}) {
     ad_utility::HashMap<size_t, size_t> sortColMap;
     for (size_t i = 0; i < sortedCols.size(); ++i) {
       sortColMap[sortedCols[i]] = i;
@@ -104,7 +104,8 @@ class RuntimeInformation {
     for (const auto& column : columnMap) {
       _columnNames[column.second] = column.first;
       if (sortColMap.contains(column.second)) {
-        _columnNames[column.second] += "(" + std::to_string(sortColMap[column.second]) + ")";
+        _columnNames[column.second] +=
+            "(" + std::to_string(sortColMap[column.second]) + ")";
       }
     }
   }

@@ -172,7 +172,7 @@ class TreeBasedPQ {
   [[nodiscard]] size_t size() const { return mMap.size(); }
 
   /// is this pq empty
-  [[nodiscard]] bool empty() const {return size() == 0;}
+  [[nodiscard]] bool empty() const { return size() == 0; }
 
  private:
   // return an iterator into mMap where we find the handle that was passed in
@@ -393,7 +393,7 @@ class HeapBasedPQ {
   size_t size() const { return mSize; }
 
   /// true iff size is 0
-  [[nodiscard]] bool empty() const {return size() == 0;}
+  [[nodiscard]] bool empty() const { return size() == 0; }
 
  private:
   /* helper function that pops all the internal nodes that have become invalid

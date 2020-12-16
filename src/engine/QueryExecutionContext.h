@@ -38,10 +38,14 @@ struct CacheValue {
 namespace detail {
 struct finisher {
   template <class V>
-  void operator()(V&& val) const {val._resTable->finish();}
+  void operator()(V&& val) const {
+    val._resTable->finish();
+  }
 };
-}
-using SubtreeCache = ad_utility::CacheAdapter<ad_utility::LRUCache<string, CacheValue>, detail::finisher>;
+}  // namespace detail
+using SubtreeCache =
+    ad_utility::CacheAdapter<ad_utility::LRUCache<string, CacheValue>,
+                             detail::finisher>;
 using PinnedSizes =
     ad_utility::Synchronized<ad_utility::HashMap<std::string, size_t>,
                              std::shared_mutex>;

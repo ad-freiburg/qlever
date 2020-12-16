@@ -56,7 +56,8 @@ string ParsedQuery::asString() const {
   os << "\nWHERE: \n";
   _rootGraphPattern.toString(os, 1);
 
-  os << "\nLIMIT: " << (_limit ? std::to_string(_limit.value()) : "no limit specified");
+  os << "\nLIMIT: "
+     << (_limit ? std::to_string(_limit.value()) : "no limit specified");
   os << "\nTEXTLIMIT: "
      << (_textLimit.size() > 0 ? _textLimit : "no limit specified");
   os << "\nOFFSET: " << (_offset.size() > 0 ? _offset : "no offset specified");
@@ -375,9 +376,8 @@ void ParsedQuery::expandPrefix(
     if (i != string::npos && i >= from &&
         prefixMap.count(item.substr(from, i - from)) > 0) {
       string prefixUri = prefixMap.find(item.substr(from, i - from))->second;
-      item = item.substr(0, from) +
-             prefixUri.substr(0, prefixUri.size() - 1) + item.substr(i + 1) +
-             '>';
+      item = item.substr(0, from) + prefixUri.substr(0, prefixUri.size() - 1) +
+             item.substr(i + 1) + '>';
       item = TurtleToken::unescapePrefixedIri(item);
     }
     if (langtag) {

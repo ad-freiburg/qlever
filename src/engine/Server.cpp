@@ -364,7 +364,8 @@ string Server::create400HttpResponse() const {
 // _____________________________________________________________________________
 string Server::composeResponseJson(const ParsedQuery& query,
                                    const QueryExecutionTree& qet,
-                                   size_t maxSend, ad_utility::Timer* totalTimer) const {
+                                   size_t maxSend,
+                                   ad_utility::Timer* totalTimer) const {
   if (!totalTimer) {
     totalTimer = &_requestProcessingTimer;
   }
@@ -401,10 +402,8 @@ string Server::composeResponseJson(const ParsedQuery& query,
     _requestProcessingTimer.stop();
   }
 
-
   totalTimer->stop();
-  j["time"]["total"] =
-      std::to_string(totalTimer->usecs() / 1000.0) + "ms";
+  j["time"]["total"] = std::to_string(totalTimer->usecs() / 1000.0) + "ms";
   j["time"]["computeResult"] = std::to_string(compResultUsecs / 1000.0) + "ms";
 
   return j.dump(4);

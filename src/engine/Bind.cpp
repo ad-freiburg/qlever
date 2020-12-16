@@ -101,7 +101,9 @@ void Bind::computeResult(ResultTable* result) {
     result->_resultTypes.push_back(subRes->_resultTypes[columns]);
     CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeRenameBind,
                       &result->_data, subRes->_data, columns);
-  } else if (auto ptr = std::get_if<GraphPatternOperation::Bind::Constant>(&_bind._input); ptr) {
+  } else if (auto ptr = std::get_if<GraphPatternOperation::Bind::Constant>(
+                 &_bind._input);
+             ptr) {
     /*
     if (auto ptrI = std::get_if<string>(&(ptr->_value))) {
       result->_resultTypes.push_back(ResultTable::ResultType::LOCAL_VOCAB);
@@ -110,11 +112,9 @@ void Bind::computeResult(ResultTable* result) {
       CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeConstantBind,
                         &result->_data, subRes->_data, targetVal);
                         */
-        result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
-        CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeConstantBind,
-                          &result->_data, subRes->_data, ptr->_value);
-
-
+    result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
+    CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeConstantBind,
+                      &result->_data, subRes->_data, ptr->_value);
 
   } else {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
@@ -198,7 +198,7 @@ void Bind::computeRenameBind(IdTable* dynRes, const IdTable& inputDyn,
 
 template <int IN_WIDTH, int OUT_WIDTH>
 void Bind::computeConstantBind(IdTable* dynRes, const IdTable& inputDyn,
-                             size_t targetVal) {
+                               size_t targetVal) {
   const auto input = inputDyn.asStaticView<IN_WIDTH>();
   auto res = dynRes->moveToStatic<OUT_WIDTH>();
 

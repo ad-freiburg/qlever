@@ -269,7 +269,7 @@ void CountAvailablePredicates::computePatternTrick(
   // the number of predicates counted without patterns
   size_t numListPredicates = 0;
 
-  if (input.size() > 0) { //avoid strange OpenMP segfaults
+  if (input.size() > 0) {  // avoid strange OpenMP segfaults
 #pragma omp parallel
 #pragma omp single
 #pragma omp taskloop grainsize(500000) default(none) reduction(MergeHashmapsId:predicateCounts) reduction(MergeHashmapsSizeT : patternCounts) \

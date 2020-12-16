@@ -393,12 +393,11 @@ struct GraphPatternOperation {
       int64_t _value = 0;
       string _repr;
       Constant() = default;
-      explicit Constant(int64_t val): _value(val), _repr(std::to_string(val)){}
+      explicit Constant(int64_t val)
+          : _value(val), _repr(std::to_string(val)) {}
       // TODO<joka921> in c++ 20 we have constexpr strings.
       static constexpr const char* Name = "Constant";
-      vector<string*> strings() {
-        return {&_repr};
-      }
+      vector<string*> strings() { return {&_repr}; }
       [[nodiscard]] string getDescriptor() const { return _repr; }
     };
     struct Sum {

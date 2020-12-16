@@ -61,13 +61,13 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
 
   // Add the query level modifications
 
-
   // if we do not do grouping/distict/etc then we can optimize by letting
   // the last operation be limited
-  // TODO<joka921>: Maybe this information can also be integrated into the query planner's
-  // decisions
+  // TODO<joka921>: Maybe this information can also be integrated into the query
+  // planner's decisions
 
-  if (pq._limit && !doGrouping && pq._havingClauses.empty() && !pq._distinct && pq._orderBy.empty()) {
+  if (pq._limit && !doGrouping && pq._havingClauses.empty() && !pq._distinct &&
+      pq._orderBy.empty()) {
     for (auto& p : plans.back()) {
       p.getExecutionTree()->setLimit(pq._limit.value());
     }
@@ -255,30 +255,30 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       candidatePlans.clear();
 
       std::vector<SubtreePlan> nextCandidates;
-        // join all the candidates plans for the complete previous inputs
-        // in an optional way with all the candidates for the contents of
-        // the optional join.
-        for (const auto& a : lastRow) {
-          for (const auto& b : v) {
-            auto vec = createJoinCandidates(a, b, std::nullopt);
-            nextCandidates.insert(nextCandidates.end(),
-                                  std::make_move_iterator(vec.begin()),
-                                  std::make_move_iterator(vec.end()));
-          }
+      // join all the candidates plans for the complete previous inputs
+      // in an optional way with all the candidates for the contents of
+      // the optional join.
+      for (const auto& a : lastRow) {
+        for (const auto& b : v) {
+          auto vec = createJoinCandidates(a, b, std::nullopt);
+          nextCandidates.insert(nextCandidates.end(),
+                                std::make_move_iterator(vec.begin()),
+                                std::make_move_iterator(vec.end()));
         }
+      }
 
-        // keep the best found candidate, which is now a non-optional "so far"
-        // solution which can be combined with all upcoming children until we
-        // hit the next optional
-        // TODO<joka921> Also keep one candidate per Ordering to make even
-        // better plans at this step
-        if (nextCandidates.empty()) {
-          throw std::runtime_error(
-              "Could not find a single candidate join for two optimized Graph "
-              "patterns. Please report to the developers");
-        }
-        auto idx = findCheapestExecutionTree(nextCandidates);
-        candidatePlans.push_back({std::move(nextCandidates[idx])});
+      // keep the best found candidate, which is now a non-optional "so far"
+      // solution which can be combined with all upcoming children until we
+      // hit the next optional
+      // TODO<joka921> Also keep one candidate per Ordering to make even
+      // better plans at this step
+      if (nextCandidates.empty()) {
+        throw std::runtime_error(
+            "Could not find a single candidate join for two optimized Graph "
+            "patterns. Please report to the developers");
+      }
+      auto idx = findCheapestExecutionTree(nextCandidates);
+      candidatePlans.push_back({std::move(nextCandidates[idx])});
     }
   };
 
@@ -2763,7 +2763,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       return std::vector{optionalJoin(a, b)};
     }
 
-    if (jcs.size() == 2 && (a._qet->getResultWidth() == 2 || b._qet->getResultWidth() == 2)) {
+    if (jcs.size() == 2 &&
+        (a._qet->getResultWidth() == 2 || b._qet->getResultWidth() == 2)) {
       // SPECIAL CASE: Cyclic queries -> join on exactly two columns
       // this is currently only implemented for the filtering case where
       // one input only consists of the join columns.
@@ -2786,7 +2787,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       // filtering directly with a scan's result.
       for (size_t n = 0; n < 2; ++n) {
         auto first = n;
-        auto second = (n+1) % 2;
+        auto second = (n + 1) % 2;
         auto left = std::make_shared<QueryExecutionTree>(_qec);
         auto right = std::make_shared<QueryExecutionTree>(_qec);
         const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
@@ -2796,10 +2797,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         } else {
           // Create an order by operation.
           vector<pair<size_t, bool>> sortIndices;
-          sortIndices.emplace_back(
-              std::make_pair(jcs[first][0], false));
-          sortIndices.emplace_back(
-              std::make_pair(jcs[second][0], false));
+          sortIndices.emplace_back(std::make_pair(jcs[first][0], false));
+          sortIndices.emplace_back(std::make_pair(jcs[second][0], false));
           auto orderBy = std::make_shared<OrderBy>(_qec, a._qet, sortIndices);
           left->setVariableColumns(a._qet->getVariableColumns());
           left->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
@@ -2811,10 +2810,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         } else {
           // Create an order by operation.
           vector<pair<size_t, bool>> sortIndices;
-          sortIndices.emplace_back(
-              std::make_pair(jcs[first][1], false));
-          sortIndices.emplace_back(
-              std::make_pair(jcs[second][1], false));
+          sortIndices.emplace_back(std::make_pair(jcs[first][1], false));
+          sortIndices.emplace_back(std::make_pair(jcs[second][1], false));
           auto orderBy = std::make_shared<OrderBy>(_qec, b._qet, sortIndices);
           right->setVariableColumns(b._qet->getVariableColumns());
           right->setOperation(QueryExecutionTree::ORDER_BY, orderBy);
@@ -2836,7 +2833,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         candidates.push_back(std::move(plan));
       }
       return candidates;
-    } else  {  // also use this for two-column joins where both inputs have a width greater than 2
+    } else {  // also use this for two-column joins where both inputs have a
+              // width greater than 2
       // this can happen when e.g. subqueries are used
       SubtreePlan plan = multiColumnJoin(a, b);
       plan._idsOfIncludedNodes = a._idsOfIncludedNodes;

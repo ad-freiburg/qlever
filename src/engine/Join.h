@@ -63,8 +63,8 @@ class Join : public Operation {
    * the result in dynRes. Creates a cross product for matching rows
    **/
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  void join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
-                   size_t jc2, IdTable* dynRes);
+  void join(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
+            IdTable* dynRes);
 
   class RightLargerTag {};
   class LeftLargerTag {};
@@ -86,8 +86,6 @@ class Join : public Operation {
 
   bool _sizeEstimateComputed;
   size_t _sizeEstimate;
-
-
 
   vector<float> _multiplicities;
 

@@ -304,7 +304,6 @@ void Vocabulary<S, C>::prefixCompressFile(const string& infile,
   v.initializePrefixes(prefixes);
   std::string word;
   while (std::getline(in, word)) {
-
     out << v.compressPrefix(word).toStringView() << '\n';
   }
 }

@@ -3,18 +3,17 @@
 //
 
 #include <gtest/gtest.h>
-#include "../../src/util/CacheAdapter.h"
 #include "../../src/engine/QueryExecutionContext.h"
+#include "../../src/util/CacheAdapter.h"
 
-
-auto finish = [](auto&& val) {val.finish();};
+auto finish = [](auto&& val) { val.finish(); };
 auto nothing = []([[maybe_unused]] auto&& val) {};
 
-using SimpleAdapter = ad_utility::CacheAdapter<ad_utility::LRUCache<int, std::string>, decltype(nothing)>;
+using SimpleAdapter =
+    ad_utility::CacheAdapter<ad_utility::LRUCache<int, std::string>,
+                             decltype(nothing)>;
 
-TEST(CacheAdapter, initialize) {
-  auto a = SubtreeCache(42ul);
-}
+TEST(CacheAdapter, initialize) { auto a = SubtreeCache(42ul); }
 
 TEST(Adapter, Usage) {
   auto a = SimpleAdapter(nothing, 3ul);
@@ -34,5 +33,3 @@ TEST(Adapter, Usage) {
   ASSERT_EQ("hallo", *r._val.second);
   ASSERT_FALSE(a.getStorage().wlock()->_inProgress.contains(3));
 }
-
-

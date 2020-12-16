@@ -58,11 +58,14 @@ class Filter : public Operation {
       if (_type == SparqlFilter::FilterType::NE) {
         return _subtree->getSizeEstimate();
       } else if (_type == SparqlFilter::FilterType::PREFIX) {
-        // strip the leading ^ and " and assume each character gets rid of 10 percent of the entries
-        double reductionFactor = std::pow(10, std::max(0, static_cast<int>(_rhs.size()) - 2));
+        // strip the leading ^ and " and assume each character gets rid of 10
+        // percent of the entries
+        double reductionFactor =
+            std::pow(10, std::max(0, static_cast<int>(_rhs.size()) - 2));
         reductionFactor = std::min(100000000.0, reductionFactor);
         reductionFactor = std::max(1.0, reductionFactor);
-        return _subtree->getSizeEstimate() / static_cast<size_t>(reductionFactor);
+        return _subtree->getSizeEstimate() /
+               static_cast<size_t>(reductionFactor);
       } else {
         return _subtree->getSizeEstimate() / 50;
       }
@@ -148,10 +151,10 @@ class Filter : public Operation {
    * to subRes and store it in res.
    *
    */
-  template <ResultTable::ResultType T, int WIDTH, bool INVERSE=false>
-  void computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs, Id rhs_lower, Id rhs_upper,
-                               const IdTableStatic<WIDTH>& input,
-                               shared_ptr<const ResultTable> subRes) const;
+  template <ResultTable::ResultType T, int WIDTH, bool INVERSE = false>
+  void computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs, Id rhs_lower,
+                          Id rhs_upper, const IdTableStatic<WIDTH>& input,
+                          shared_ptr<const ResultTable> subRes) const;
 
   template <int WIDTH>
   void computeResultFixedValue(

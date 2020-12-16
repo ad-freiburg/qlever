@@ -114,8 +114,8 @@ TEST(LRUCacheTest, testTryEmplacePinnedSimple) {
   cache.insert("4", "xxxx");
   ASSERT_EQ(*cache["pinned"], "bar");  // pinned still there
   ASSERT_FALSE(cache["1"]);            // oldest already gone
-  ASSERT_FALSE(cache["2"]);            // also gone because pinned counts towards capacity
-  ASSERT_EQ(*cache["3"], "xxx");  // not dropped because pinned not in capacity
+  ASSERT_FALSE(cache["2"]);  // also gone because pinned counts towards capacity
+  ASSERT_EQ(*cache["3"], "xxx");   // not dropped because pinned not in capacity
   ASSERT_EQ(*cache["4"], "xxxx");  // not dropped because pinned not in capacity
   ASSERT_EQ(*cache["pinned"], "bar");  // pinned still there
 }
@@ -129,10 +129,11 @@ TEST(LRUCacheTest, testTryEmplacePinnedExisting) {
   cache.insert("3", "xxx");
   cache.insert("4", "xxxx");
   cache.insert("5", "xxxxx");
-  ASSERT_FALSE(cache["1"]);         // oldest already gone
-  ASSERT_EQ(*cache["2"], "xx");     // pinned still there
-  ASSERT_FALSE(cache["3"]);         // third oldest not pinned and gone
-  ASSERT_FALSE(cache["4"]);   // also gone, because pinned counts towards capacity
+  ASSERT_FALSE(cache["1"]);      // oldest already gone
+  ASSERT_EQ(*cache["2"], "xx");  // pinned still there
+  ASSERT_FALSE(cache["3"]);      // third oldest not pinned and gone
+  ASSERT_FALSE(
+      cache["4"]);  // also gone, because pinned counts towards capacity
   ASSERT_EQ(*cache["5"], "xxxxx");  // newest still there
 }
 // _____________________________________________________________________________
