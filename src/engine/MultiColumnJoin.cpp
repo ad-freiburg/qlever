@@ -123,7 +123,13 @@ ad_utility::HashMap<string, size_t> MultiColumnJoin::getVariableColumns()
     const {
   ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
   size_t columnIndex = retVal.size();
-  for (const auto& it : _right->getVariableColumns()) {
+  // hash maps have undefined iteration order, so we have to sort by the column
+  // index first
+  std::vector<std::pair<string, size_t>> rightCols{
+      _right->getVariableColumns().begin(), _right->getVariableColumns().end()};
+  std::sort(rightCols.begin(), rightCols.end(),
+            [](const auto& a, const auto& b) { return a.second < b.second; });
+  for (const auto& it : rightCols) {
     bool isJoinColumn = false;
     for (const std::array<Id, 2>& a : _joinColumns) {
       if (a[1] == it.second) {
