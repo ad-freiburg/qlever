@@ -199,7 +199,7 @@ class File {
     size_t bytesRead = 0;
     uint8_t* to = static_cast<uint8_t*>(targetBuffer);
     size_t batchSize =
-        timer ? 1024 * 1024 * 1024 : std::numeric_limits<size_t>::max();
+        timer ? 1024 * 1024 * 64 : std::numeric_limits<size_t>::max();
     while (bytesRead < nofBytesToRead) {
       size_t toRead = std::min(nofBytesToRead - bytesRead, batchSize);
 
