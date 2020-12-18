@@ -233,9 +233,9 @@ void Server::process(Socket* client) {
       // was computed.
       LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
     } catch (const ad_semsearch::Exception& e) {
-      response = composeResponseJson(query, e);
+      response = composeResponseJson(query, e, &totalTimer);
     } catch (const std::exception& e) {
-      response = composeResponseJson(query, &e);
+      response = composeResponseJson(query, &e, &totalTimer);
     }
     string httpResponse = createHttpResponse(response, contentType);
     auto bytesSent = client->send(httpResponse);
@@ -429,18 +429,22 @@ string Server::composeResponseSepValues(const ParsedQuery& query,
 }
 
 // _____________________________________________________________________________
-string Server::composeResponseJson(
-    const string& query, const ad_semsearch::Exception& exception) const {
+string Server::composeResponseJson(const string& query,
+                                   const ad_semsearch::Exception& exception,
+                                   ad_utility::Timer* totalTimer) const {
+  if (!totalTimer) {
+    totalTimer = &_requestProcessingTimer;
+  }
   std::ostringstream os;
-  _requestProcessingTimer.stop();
+  totalTimer->stop();
 
   os << "{\n"
      << "\"query\": " << ad_utility::toJson(query) << ",\n"
      << "\"status\": \"ERROR\",\n"
      << "\"resultsize\": \"0\",\n"
      << "\"time\": {\n"
-     << "\"total\": \"" << _requestProcessingTimer.msecs() / 1000.0 << "ms\",\n"
-     << "\"computeResult\": \"" << _requestProcessingTimer.msecs() / 1000.0
+     << "\"total\": \"" << totalTimer->msecs() / 1000.0 << "ms\",\n"
+     << "\"computeResult\": \"" << totalTimer->msecs() / 1000.0
      << "ms\"\n"
      << "},\n";
 
@@ -454,17 +458,21 @@ string Server::composeResponseJson(
 
 // _____________________________________________________________________________
 string Server::composeResponseJson(const string& query,
-                                   const std::exception* exception) const {
+                                   const std::exception* exception,
+                                   ad_utility::Timer* totalTimer) const {
   std::ostringstream os;
-  _requestProcessingTimer.stop();
+  if (!totalTimer) {
+    totalTimer = &_requestProcessingTimer;
+  }
+  totalTimer->stop();
 
   os << "{\n"
      << "\"query\": " << ad_utility::toJson(query) << ",\n"
      << "\"status\": \"ERROR\",\n"
      << "\"resultsize\": \"0\",\n"
      << "\"time\": {\n"
-     << "\"total\": \"" << _requestProcessingTimer.msecs() << "ms\",\n"
-     << "\"computeResult\": \"" << _requestProcessingTimer.msecs() << "ms\"\n"
+     << "\"total\": \"" << totalTimer->msecs() << "ms\",\n"
+     << "\"computeResult\": \"" << totalTimer->msecs() << "ms\"\n"
      << "},\n";
 
   string msg = ad_utility::toJson(exception->what());
