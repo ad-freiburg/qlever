@@ -90,10 +90,12 @@ class Server {
                                   char sep) const;
 
   string composeResponseJson(const string& query,
-                             const ad_semsearch::Exception& e) const;
+                             const ad_semsearch::Exception& exception,
+                             ad_utility::Timer* timer) const;
 
   string composeResponseJson(const string& query,
-                             const std::exception* e) const;
+                             const std::exception* exception,
+                             ad_utility::Timer* totalTimer) const;
 
   string composeStatsJson() const;
 
