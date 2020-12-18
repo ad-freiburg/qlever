@@ -444,8 +444,7 @@ string Server::composeResponseJson(const string& query,
      << "\"resultsize\": \"0\",\n"
      << "\"time\": {\n"
      << "\"total\": \"" << totalTimer->msecs() / 1000.0 << "ms\",\n"
-     << "\"computeResult\": \"" << totalTimer->msecs() / 1000.0
-     << "ms\"\n"
+     << "\"computeResult\": \"" << totalTimer->msecs() / 1000.0 << "ms\"\n"
      << "},\n";
 
   string msg = ad_utility::toJson(exception.getFullErrorMessage());
