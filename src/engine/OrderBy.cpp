@@ -77,6 +77,15 @@ void OrderBy::computeResult(ResultTable* result) {
   AD_CHECK(!_sortIndices.empty());
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
+  // TODO<joka921> proper timeout and better estimate
+  double remainingSecs = static_cast<double>(_timeoutTimer->wlock()->remainingUsecs()) / 1000000;
+  if (static_cast<double>(subRes->size()) / 50000000 > remainingSecs) {
+    // assume that we can sort at most 50M elements per second. This is a rather generous upper
+    // bound to make sure we do not exceed our timeout more than an order of magnitude b.c of sorts
+    throw ad_semsearch::TimeoutException("OrderBY operation was canceled, because time estimate exceeded remaining time by orders of magnitued");
+
+  }
+
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "OrderBy result computation..." << endl;
@@ -87,6 +96,8 @@ void OrderBy::computeResult(ResultTable* result) {
   result->_localVocab = subRes->_localVocab;
   result->_data.insert(result->_data.end(), subRes->_data.begin(),
                        subRes->_data.end());
+
+
 
   int width = result->_data.cols();
   // TODO(florian): Check if the lambda is a performance problem

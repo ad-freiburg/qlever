@@ -128,6 +128,20 @@ class TimeoutTimer : public Timer {
     return res;
   }
 
+  off_t remainingUsecs() {
+    if (_isUnlimited) {
+      return std::numeric_limits<off_t>::max();
+    }
+    auto prevRunning = isRunning();
+    stop();
+    off_t res = usecs() > _timeout ? 0 : _timeout - usecs();
+    if (prevRunning) {
+      cont();
+    }
+    return res;
+
+  }
+
  private:
   off_t _timeout = 0;
   bool _isUnlimited = false;  // never times out
