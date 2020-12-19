@@ -1,1 +1,2 @@
-add_executable(CancelableSortExample CancelableParallelSort.h CancelableSequentialSort.h SortExampleMain.cpp)
+add_executable(CancelableSortExample CancelableParallelSort
+        .h CancelableSequentialSort.h SortExampleMain.cpp)

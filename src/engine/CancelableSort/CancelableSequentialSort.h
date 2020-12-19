@@ -3501,38 +3501,6 @@ struct TimeoutedAlgorithms {
     return __f;  // N.B. [alg.foreach] says std::move(f) but it's redundant.
   }
 
-#if __cplusplus >= 201703L
-  /**
-   *  @brief Apply a function to every element of a sequence.
-   *  @ingroup non_mutating_algorithms
-   *  @param  __first  An input iterator.
-   *  @param  __n      A value convertible to an integer.
-   *  @param  __f      A unary function object.
-   *  @return   `__first+__n`
-   *
-   *  Applies the function object `__f` to each element in the range
-   *  `[first, first+n)`.  `__f` must not modify the order of the sequence.
-   *  If `__f` has a return value it is ignored.
-   */
-  template <typename _InputIterator, typename _Size, typename _Function>
-  _InputIterator for_each_n(_InputIterator __first, _Size __n, _Function __f) {
-    auto __n2 = std::__size_to_integer(__n);
-    using _Cat =
-        typename std::iterator_traits<_InputIterator>::iterator_category;
-    if constexpr (std::is_base_of_v<std::random_access_iterator_tag, _Cat>) {
-      if (__n2 <= 0) return __first;
-      auto __last = __first + __n2;
-      std::for_each(__first, __last, std::move(__f));
-      return __last;
-    } else {
-      while (__n2-- > 0) {
-        __f(*__first);
-        ++__first;
-      }
-      return __first;
-    }
-  }
-#endif  // C++17
 
   /**
    *  @brief Find the first occurrence of a value in a sequence.
@@ -4099,39 +4067,6 @@ struct TimeoutedAlgorithms {
     for (; __first != __last; ++__first) *__first = __gen();
   }
 
-  /**
-   *  @brief Assign the result of a function object to each value in a
-   *         sequence.
-   *  @ingroup mutating_algorithms
-   *  @param  __first  A forward iterator.
-   *  @param  __n      The length of the sequence.
-   *  @param  __gen    A function object taking no arguments and returning
-   *                 std::iterator_traits<_ForwardIterator>::value_type
-   *  @return   The end of the sequence, @p __first+__n
-   *
-   *  Performs the assignment @c *i = @p __gen() for each @c i in the range
-   *  @p [__first,__first+__n).
-   *
-   * If @p __n is negative, the function does nothing and returns @p __first.
-   */
-  // _GLIBCXX_RESOLVE_LIB_DEFECTS
-  // DR 865. More algorithms that throw away information
-  // DR 426. search_n(), fill_n(), and generate_n() with negative n
-  template <typename _OutputIterator, typename _Size, typename _Generator>
-  _GLIBCXX20_CONSTEXPR _OutputIterator generate_n(_OutputIterator __first,
-                                                  _Size __n, _Generator __gen) {
-    // concept requirements
-    __glibcxx_function_requires(
-        _OutputIteratorConcept<_OutputIterator,
-                               // "the type returned by a _Generator"
-                               __typeof__(__gen())>)
-
-        typedef __decltype(std::__size_to_integer(__n)) _IntSize;
-    for (_IntSize __niter = std::__size_to_integer(__n); __niter > 0;
-         --__niter, (void)++__first)
-      *__first = __gen();
-    return __first;
-  }
 
   /**
    *  @brief Copy a sequence, removing consecutive duplicate values.

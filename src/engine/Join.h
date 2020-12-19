@@ -70,10 +70,8 @@ class Join : public Operation {
   class LeftLargerTag {};
   template <typename TagType, int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
   void doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
-                                const size_t jc1,
-                                const IdTableStatic<R_WIDTH>& l2,
-                                const size_t jc2,
-                                IdTableStatic<OUT_WIDTH>* result);
+                         const size_t jc1, const IdTableStatic<R_WIDTH>& l2,
+                         const size_t jc2, IdTableStatic<OUT_WIDTH>* result);
 
  private:
   std::shared_ptr<QueryExecutionTree> _left;

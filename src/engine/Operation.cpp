@@ -98,7 +98,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       }
       computeResult(newResult->_resTable.get());
       if (_timeoutTimer->wlock()->isTimeout()) {
-        throw ad_semsearch::TimeoutException("uncaught Timeout in " + getDescriptor());
+        throw ad_semsearch::TimeoutException("uncaught Timeout in " +
+                                             getDescriptor());
       }
     } catch (const ad_semsearch::AbortException& e) {
       // A child Operation was aborted, abort this Operation
