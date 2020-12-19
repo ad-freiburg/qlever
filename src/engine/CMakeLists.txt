@@ -1,6 +1,6 @@
 add_library(
         engine Engine.h IndexSequence.h QueryExecutionTree.h QueryExecutionTree.cpp Operation.h
-        Operation.cpp ../global/Id.h ../global/Constants.h ../ util/Socket.h
+        Operation.cpp ../global/Id.h ../global/Constants.h ../util/Socket.h
         Comparators.h ResultTable.h ResultTable.cpp QueryExecutionContext.h
         IndexScan.h IndexScan.cpp Join.h Join.cpp Sort.h Sort.cpp
         TextOperationWithoutFilter.h TextOperationWithoutFilter.cpp
@@ -12,7 +12,6 @@ add_library(
         CountAvailablePredicates.h GroupBy.cpp GroupBy.h HasPredicateScan.cpp
         HasPredicateScan.h Union.cpp Union.h MultiColumnJoin.cpp
         MultiColumnJoin.h TransitivePath.cpp TransitivePath.h Values.cpp
-
         Values.h Bind.cpp Bind.h IdTable.h Minus.h Minus.cpp)
 
 target_link_libraries(engine index parser)
