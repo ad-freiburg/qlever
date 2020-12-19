@@ -634,6 +634,9 @@ void Join::doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
     if constexpr (std::is_same<TagType, RightLargerTag>::value) {
       while (l1(i, jc1) < l2(j, jc2)) {
         ++i;
+        if (i % 4096 == 0) {
+          checkTimeout();
+        }
         if (i >= l1.size()) {
           return;
         }
@@ -699,6 +702,9 @@ void Join::doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
       }
       while (l1(i, jc1) > l2(j, jc2)) {
         ++j;
+        if (j % 4096 == 0) {
+          checkTimeout();
+        }
         if (j >= l2.size()) {
           return;
         }

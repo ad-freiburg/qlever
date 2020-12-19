@@ -97,16 +97,16 @@ class Engine {
   }
 
   template <int WIDTH>
-  static void sort(IdTable* tab, const size_t keyColumn) {
+  static void sort(IdTable* tab, const size_t keyColumn, ad_utility::TimeoutChecker* check) {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
-      ad_utility::parallel_sort(
+      ad_utility::parallel_sort(check,
           stab.begin(), stab.end(),
           [keyColumn](const auto& a, const auto& b) {
             return a[keyColumn] < b[keyColumn];
           },
-          ad_utility::parallel_tag(NUM_SORT_THREADS));
+          NUM_SORT_THREADS);
     } else {
       std::sort(stab.begin(), stab.end(),
                 [keyColumn](const auto& a, const auto& b) {
@@ -118,12 +118,12 @@ class Engine {
   }
 
   template <int WIDTH, typename C>
-  static void sort(IdTable* tab, C comp) {
+  static void sort(IdTable* tab, C comp, ad_utility::TimeoutChecker* checker) {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
-      ad_utility::parallel_sort(stab.begin(), stab.end(), comp,
-                                ad_utility::parallel_tag(NUM_SORT_THREADS));
+      ad_utility::parallel_sort(checker, stab.begin(), stab.end(), comp,
+                                NUM_SORT_THREADS);
     } else {
       std::sort(stab.begin(), stab.end(), comp);
     }

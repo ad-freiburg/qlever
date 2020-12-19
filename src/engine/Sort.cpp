@@ -53,12 +53,15 @@ void Sort::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
   // TODO<joka921> proper timeout and better estimate
-  double remainingSecs = static_cast<double>(_timeoutTimer->wlock()->remainingUsecs()) / 1000000;
+  double remainingSecs =
+      static_cast<double>(_timeoutTimer->wlock()->remainingUsecs()) / 1000000;
   if (static_cast<double>(subRes->size()) / 50000000 > remainingSecs) {
-    // assume that we can sort at most 50M elements per second. This is a rather generous upper
-    // bound to make sure we do not exceed our timeout more than an order of magnitude b.c of sorts
-    throw ad_semsearch::TimeoutException("OrderBY operation was canceled, because time estimate exceeded remaining time by orders of magnitued");
-
+    // assume that we can sort at most 50M elements per second. This is a rather
+    // generous upper bound to make sure we do not exceed our timeout more than
+    // an order of magnitude b.c of sorts
+    throw ad_semsearch::TimeoutException(
+        "OrderBY operation was canceled, because time estimate exceeded "
+        "remaining time by orders of magnitued");
   }
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
@@ -73,7 +76,7 @@ void Sort::computeResult(ResultTable* result) {
   result->_data.insert(result->_data.end(), subRes->_data.begin(),
                        subRes->_data.end());
   int width = result->_data.cols();
-  CALL_FIXED_SIZE_1(width, Engine::sort, &result->_data, _sortCol);
+  CALL_FIXED_SIZE_1(width, Engine::sort, &result->_data, _sortCol, _timeoutTimer.get());
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "Sort result computation done." << endl;

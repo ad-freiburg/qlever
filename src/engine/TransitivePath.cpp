@@ -305,6 +305,9 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
   std::vector<std::shared_ptr<const ad_utility::HashSet<Id>>> edgeCache;
 
   for (size_t i = 0; i < nodes.size(); i++) {
+    if (i % 1024 == 0) {
+      checkTimeout();
+    }
     MapIt rootEdges = edges.find(nodes[i]);
     if (rootEdges != edges.end()) {
       positions.push_back(rootEdges->second->begin());
@@ -318,7 +321,12 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
 
     // While we have not found the entire transitive hull and have not reached
     // the max step limit
+    size_t elements_handled = 0;
     while (!positions.empty()) {
+      if (elements_handled % 1024 == 0) {
+        checkTimeout();
+      }
+      elements_handled++;
       size_t stackIndex = positions.size() - 1;
       // Process the next child of the node at the top of the stack
       ad_utility::HashSet<Id>::const_iterator& pos = positions[stackIndex];
@@ -442,7 +450,12 @@ void TransitivePath::computeTransitivePathLeftBound(
 
     // While we have not found the entire transitive hull and have not reached
     // the max step limit
+    size_t elements_handled = 0;
     while (!positions.empty()) {
+      if (elements_handled % 1024 == 0) {
+        checkTimeout();
+      }
+      elements_handled++;
       size_t stackIndex = positions.size() - 1;
       // Process the next child of the node at the top of the stack
       ad_utility::HashSet<Id>::const_iterator& pos = positions[stackIndex];
@@ -579,7 +592,12 @@ void TransitivePath::computeTransitivePathRightBound(
 
     // While we have not found the entire transitive hull and have not reached
     // the max step limit
+    size_t elements_handled = 0;
     while (!positions.empty()) {
+      if (elements_handled % 1024 == 0) {
+        checkTimeout();
+      }
+      elements_handled++;
       size_t stackIndex = positions.size() - 1;
       // Process the next child of the node at the top of the stack
       ad_utility::HashSet<Id>::const_iterator& pos = positions[stackIndex];

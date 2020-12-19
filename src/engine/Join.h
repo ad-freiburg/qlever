@@ -69,7 +69,7 @@ class Join : public Operation {
   class RightLargerTag {};
   class LeftLargerTag {};
   template <typename TagType, int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  static void doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
+  void doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
                                 const size_t jc1,
                                 const IdTableStatic<R_WIDTH>& l2,
                                 const size_t jc2,
