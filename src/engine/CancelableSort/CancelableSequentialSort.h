@@ -3501,7 +3501,6 @@ struct TimeoutedAlgorithms {
     return __f;  // N.B. [alg.foreach] says std::move(f) but it's redundant.
   }
 
-
   /**
    *  @brief Find the first occurrence of a value in a sequence.
    *  @ingroup non_mutating_algorithms
@@ -4066,7 +4065,6 @@ struct TimeoutedAlgorithms {
 
     for (; __first != __last; ++__first) *__first = __gen();
   }
-
 
   /**
    *  @brief Copy a sequence, removing consecutive duplicate values.
