@@ -12,6 +12,7 @@ add_library(
         CountAvailablePredicates.h GroupBy.cpp GroupBy.h HasPredicateScan.cpp
         HasPredicateScan.h Union.cpp Union.h MultiColumnJoin.cpp
         MultiColumnJoin.h TransitivePath.cpp TransitivePath.h Values.cpp
+
         Values.h Bind.cpp Bind.h IdTable.h Minus.h Minus.cpp)
 
 target_link_libraries(engine index parser)
