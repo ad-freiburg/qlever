@@ -139,7 +139,6 @@ class TimeoutTimer : public Timer {
       cont();
     }
     return res;
-
   }
 
  private:

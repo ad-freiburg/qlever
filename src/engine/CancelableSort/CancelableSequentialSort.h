@@ -1777,7 +1777,7 @@ struct TimeoutedAlgorithms {
       _RandomAccessIterator __first, _RandomAccessIterator __middle,
       _RandomAccessIterator __last, _Compare __comp) {
     __heap_select(__first, __middle, __last, __comp);
-    __sort_heap(__first, __middle, __comp);
+    std::__sort_heap(__first, __middle, __comp);
   }
 
   /// This is a helper function for the sort routine.

@@ -6,6 +6,8 @@
 #include <stdexcept>
 #include <string>
 
+#include "../engine/CancelableSort/CancelableParallelSort.h"
+
 static const size_t STXXL_MEMORY_TO_USE = 1024L * 1024L * 1024L * 2L;
 static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 1000 * 1000;
 static const size_t STXXL_DISK_SIZE_INDEX_TEST = 10;
@@ -111,8 +113,14 @@ static constexpr bool USE_PARALLEL_SORT = true;
 #include <parallel/algorithm>
 namespace ad_utility {
 template <typename... Args>
-auto parallel_sort(Args&&... args) {
-  return __gnu_parallel::sort(std::forward<Args>(args)...);
+auto parallel_sort(ad_utility::TimeoutChecker* checker, Args&&... args) {
+  ad_utility::TimeoutChecker unlim {ad_utility::TimeoutTimer::unlimited()};
+  if (checker == nullptr) {
+    checker = &unlim;
+  }
+  ad_utility::cancelableParallelSort::ParallelSorter p{checker};
+  //return __gnu_parallel::sort(std::forward<Args>(args)...);
+  return p.sort(std::forward<Args>(args)...);
 }
 using parallel_tag = __gnu_parallel::parallel_tag;
 

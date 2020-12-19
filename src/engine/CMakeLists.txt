@@ -36,3 +36,5 @@ add_library(engine
         )
 
 target_link_libraries(engine index parser)
+
+add_subdirectory(CancelableSort)
