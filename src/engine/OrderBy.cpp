@@ -102,18 +102,20 @@ void OrderBy::computeResult(ResultTable* result) {
 
   int width = result->_data.cols();
   // TODO(florian): Check if the lambda is a performance problem
-  CALL_FIXED_SIZE_1(width, getEngine().sort, &result->_data,
-                    [this](const auto& a, const auto& b) {
-                      for (auto& entry : _sortIndices) {
-                        if (a[entry.first] < b[entry.first]) {
-                          return !entry.second;
-                        }
-                        if (a[entry.first] > b[entry.first]) {
-                          return entry.second;
-                        }
-                      }
-                      return a[0] < b[0];
-                    }, _timeoutTimer.get());
+  CALL_FIXED_SIZE_1(
+      width, getEngine().sort, &result->_data,
+      [this](const auto& a, const auto& b) {
+        for (auto& entry : _sortIndices) {
+          if (a[entry.first] < b[entry.first]) {
+            return !entry.second;
+          }
+          if (a[entry.first] > b[entry.first]) {
+            return entry.second;
+          }
+        }
+        return a[0] < b[0];
+      },
+      _timeoutTimer.get());
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "OrderBy result computation done." << endl;

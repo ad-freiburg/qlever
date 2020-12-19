@@ -76,7 +76,8 @@ void Sort::computeResult(ResultTable* result) {
   result->_data.insert(result->_data.end(), subRes->_data.begin(),
                        subRes->_data.end());
   int width = result->_data.cols();
-  CALL_FIXED_SIZE_1(width, Engine::sort, &result->_data, _sortCol, _timeoutTimer.get());
+  CALL_FIXED_SIZE_1(width, Engine::sort, &result->_data, _sortCol,
+                    _timeoutTimer.get());
   result->_sortedBy = resultSortedOn();
 
   LOG(DEBUG) << "Sort result computation done." << endl;

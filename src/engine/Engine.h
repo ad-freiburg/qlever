@@ -97,12 +97,13 @@ class Engine {
   }
 
   template <int WIDTH>
-  static void sort(IdTable* tab, const size_t keyColumn, ad_utility::TimeoutChecker* check) {
+  static void sort(IdTable* tab, const size_t keyColumn,
+                   ad_utility::TimeoutChecker* check) {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
-      ad_utility::parallel_sort(check,
-          stab.begin(), stab.end(),
+      ad_utility::parallel_sort(
+          check, stab.begin(), stab.end(),
           [keyColumn](const auto& a, const auto& b) {
             return a[keyColumn] < b[keyColumn];
           },
