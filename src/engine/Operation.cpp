@@ -91,9 +91,14 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
                << std::endl;
     // Passing the raw pointer here is ok as the result shared_ptr remains
     // in scope
+    _runtimeInfo.setRows(0);
+    _runtimeInfo.setCols(getResultWidth());
+    _runtimeInfo.setDescriptor(getDescriptor());
+    _runtimeInfo.setColumnNames(getVariableColumns(), getResultSortedOn());
+    _runtimeInfo.setWasCached(false);
     try {
       if (_timeoutTimer->wlock()->isTimeout()) {
-        throw ad_semsearch::TimeoutException("Timeout in " + getDescriptor());
+        throw ad_semsearch::TimeoutException("uncaught Timeout before " + getDescriptor());
       }
       computeResult(newResult->_resTable.get());
       if (_timeoutTimer->wlock()->isTimeout()) {
@@ -111,7 +116,15 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       abort(cacheProxyResult, true);
       // Rethrow as QUERY_ABORTED allowing us to print the Operation
       // only at innermost failure of a recursive call
-      throw ad_semsearch::AbortException(e);
+      timer.stop();
+      _runtimeInfo.setTime(timer.msecs());
+      _runtimeInfo.clearChildren();
+      for (auto i : getChildren()) {
+        if (i and i->getRootOperation()) {
+          _runtimeInfo.addChild(i->getRootOperation()->getRuntimeInfo());
+        }
+      }
+      throw ad_semsearch::AbortException(e, _runtimeInfo);
     } catch (...) {
       // We are in the innermost level of the exception, so print
       abort(cacheProxyResult, true);
@@ -119,7 +132,15 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
                  << endl;
       // Rethrow as QUERY_ABORTED allowing us to print the Operation
       // only at innermost failure of a recursive call
-      throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
+      timer.stop();
+      _runtimeInfo.setTime(timer.msecs());
+      _runtimeInfo.clearChildren();
+      for (auto i : getChildren()) {
+        if (i and i->getRootOperation()) {
+          _runtimeInfo.addChild(i->getRootOperation()->getRuntimeInfo());
+        }
+      }
+      throw ad_semsearch::AbortException("WEIRD_EXCEPTION", _runtimeInfo);
     }
     timer.stop();
     _runtimeInfo.setRows(newResult->_resTable->size());

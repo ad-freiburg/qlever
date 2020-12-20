@@ -91,6 +91,10 @@ class Server {
                              ad_utility::Timer* timer) const;
 
   string composeResponseJson(const string& query,
+                             const ad_semsearch::AbortException& exception,
+                             ad_utility::Timer* timer) const;
+
+  string composeResponseJson(const string& query,
                              const std::exception* exception,
                              ad_utility::Timer* totalTimer) const;
 
