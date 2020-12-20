@@ -434,6 +434,8 @@ string Server::composeResponseJson(const string& query, const ad_semsearch::Abor
     totalTimer = &_requestProcessingTimer;
   }
 
+  totalTimer->stop();
+
   nlohmann::json j;
   j["query"] = query;
   j["status"] = "ERROR";
@@ -447,6 +449,9 @@ string Server::composeResponseJson(const string& query, const ad_semsearch::Abor
   j["exception"] = exception.what();
   j["runtimeInformation"] = RuntimeInformation::ordered_json(
       exception.runtimeInfo());
+
+  return j.dump(4);
+
 }
 
 // _____________________________________________________________________________
