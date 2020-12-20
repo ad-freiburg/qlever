@@ -44,11 +44,9 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
       return TurtleToken::normalizeRDFLiteral<false>(s);
     };
 
-    auto compress = [this](std::string&& s) {
-      return compressPrefix(s);
-    };
+    auto compress = [this](std::string&& s) { return compressPrefix(s); };
 
-    auto push = [this](std::string&& s) {
+    auto push = [this](CompressedString&& s) {
       _words.push_back(std::move(s));
       if (_words.size() % 1000000 == 0) {
         LOG(INFO) << "Read " << _words.size() << " words." << std::endl;
