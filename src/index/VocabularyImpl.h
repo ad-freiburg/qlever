@@ -9,12 +9,12 @@
 #include <iostream>
 
 #include "../parser/Tokenizer.h"
+#include "../util/BatchedPipeline.h"
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
 #include "./ConstantsIndexCreation.h"
 #include "./Vocabulary.h"
-#include "../util/BatchedPipeline.h"
 
 using std::string;
 
@@ -41,12 +41,18 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
       return expandPrefix(CompressedString::fromString(s));
     };
     auto normalize = [this](std::string&& s) {
-      return TurtleToken::normalizeRDFLiteral<false>(
-          s);
+      return TurtleToken::normalizeRDFLiteral<false>(s);
     };
 
     auto push = [this, &first, &lastExpandedString](std::string&& s) {
       _words.push_back(compressPrefix(s));
+      if (_words.size() % 1000000 == 0) {
+        LOG(INFO) << "Read " << _words.size() << " words." << std::endl;
+      }
+      return std::move(s);
+    };
+
+    auto check = [&] (std::string&& s) {
       if (!first) {
         if (!(_caseComparator.compare(lastExpandedString, s,
                                       SortLevel::TOTAL))) {
@@ -58,15 +64,16 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
         first = false;
       }
       lastExpandedString = std::move(s);
-      if (_words.size() % 50000 == 0) {
-        LOG(INFO) << "Read " << _words.size() << " words." << std::endl;
-      }
-      return s;
     };
 
-    auto pipeline = ad_pipeline::setupPipeline(50000, creator, expand, normalize, push);
+    auto pipeline =
+        ad_pipeline::setupPipeline(50000, creator, expand, normalize, push, check);
     while ([[maybe_unused]] auto opt = pipeline.getNextValue()) {
       // run to exhaustion
+    }
+    LOG(INFO) << "WaitTimes for Pipeline in msecs\n";
+    for (const auto& t : pipeline.getWaitingTime()) {
+      LOG(INFO) << t << " msecs\n";
     }
 
   } else {

@@ -381,6 +381,7 @@ void TransitivePath::computeTransitivePathLeftBound(
   const IdTableStatic<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
   const IdTableStatic<LEFT_WIDTH> left = dynLeft.asStaticView<LEFT_WIDTH>();
   IdTableStatic<RES_WIDTH> res = dynRes->moveToStatic<RES_WIDTH>();
+  LOG(INFO) << "Entered computeTransitive path" << std::endl;
 
   // Used to map entries in the left column to entries they have connection with
   Map edges;
@@ -388,6 +389,7 @@ void TransitivePath::computeTransitivePathLeftBound(
   // initialize the map from the subresult
   for (size_t i = 0; i < sub.size(); i++) {
     if (i % 1024 == 0) {
+      LOG(INFO) << "Checking Timeout" << std::endl;
       checkTimeout();
     }
     size_t l = sub(i, leftSubCol);
