@@ -99,7 +99,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     _runtimeInfo.setWasCached(false);
     try {
       if (_timeoutTimer->wlock()->isTimeout()) {
-        throw ad_semsearch::TimeoutException("uncaught Timeout before " + getDescriptor());
+        throw ad_semsearch::TimeoutException("uncaught Timeout before " +
+                                             getDescriptor());
       }
       computeResult(newResult->_resTable.get());
       if (_timeoutTimer->wlock()->isTimeout()) {
@@ -111,7 +112,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       // as well. The child already printed
       abort(cacheProxyResult, false);
       // Continue unwinding the stack
-     // make sure to throw complete execution trees
+      // make sure to throw complete execution trees
       _runtimeInfo.clearChildren();
       for (auto i : getChildren()) {
         if (i and i->getRootOperation()) {
@@ -120,7 +121,6 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       }
       throw ad_semsearch::AbortException(e, _runtimeInfo);
 
-      throw;
     } catch (const std::exception& e) {
       // We are in the innermost level of the exception, so print
       abort(cacheProxyResult, true);

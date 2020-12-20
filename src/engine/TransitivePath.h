@@ -67,7 +67,15 @@ class TransitivePath : public Operation {
   virtual size_t getCostEstimate() override;
 
   vector<QueryExecutionTree*> getChildren() override {
-    return {_subtree.get()};
+    std::vector<QueryExecutionTree*> res;
+    if (_leftSideTree) {
+      res.push_back(_leftSideTree.get());
+    }
+    res.push_back(_subtree.get());
+    if (_rightSideTree) {
+      res.push_back(_rightSideTree.get());
+    }
+    return res;
   }
 
   // The method is declared here to make it unit testable
