@@ -636,8 +636,8 @@ void TransitivePath::computeTransitivePathRightBound(
         // Add the child to the stack
         MapIt it = edges.find(child);
         if (it != edges.end()) {
-          positions.push_back(it->second->begin());
-          edgeCache.push_back(it->second);
+          positions.push_back(it->second.begin());
+          edgeCache.push_back(&(it->second));
         }
       }
     }
