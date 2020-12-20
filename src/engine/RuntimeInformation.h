@@ -13,6 +13,7 @@
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
 #include "../util/Timer.h"
+#include "../util/Log.h"
 
 class RuntimeInformation {
  public:
@@ -148,6 +149,8 @@ class RuntimeInformation {
   void setWasCached(bool wasCached) { _wasCached = wasCached; }
 
   void addChild(const RuntimeInformation& r) { _children.push_back(r); }
+
+  void clearChildren() {_children.clear();}
 
   template <typename T>
   void addDetail(const std::string& key, const T& value) {

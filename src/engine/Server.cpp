@@ -232,6 +232,8 @@ void Server::process(Socket* client) {
       // Print the runtime info. This needs to be done after the query
       // was computed.
       LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
+    } catch (const ad_semsearch::AbortException& e) {
+      response = composeResponseJson(query, e, &totalTimer);
     } catch (const ad_semsearch::Exception& e) {
       response = composeResponseJson(query, e, &totalTimer);
     } catch (const std::exception& e) {
@@ -427,6 +429,26 @@ string Server::composeResponseSepValues(const ParsedQuery& query,
   return os.str();
 }
 
+string Server::composeResponseJson(const string& query, const ad_semsearch::AbortException& exception, ad_utility::Timer* totalTimer) const {
+  if (!totalTimer) {
+    totalTimer = &_requestProcessingTimer;
+  }
+
+  nlohmann::json j;
+  j["query"] = query;
+  j["status"] = "ERROR";
+  j["resultsize"] = 0;
+
+  nlohmann::json timeJson;
+  timeJson["total"] = std::to_string(totalTimer->msecs()) + "ms";
+  timeJson["computeResult"] = timeJson["total"];
+
+  j["time"] = timeJson;
+  j["exception"] = exception.what();
+  j["runtimeInformation"] = RuntimeInformation::ordered_json(
+      exception.runtimeInfo());
+}
+
 // _____________________________________________________________________________
 string Server::composeResponseJson(const string& query,
                                    const ad_semsearch::Exception& exception,
@@ -442,8 +464,8 @@ string Server::composeResponseJson(const string& query,
      << "\"status\": \"ERROR\",\n"
      << "\"resultsize\": \"0\",\n"
      << "\"time\": {\n"
-     << "\"total\": \"" << totalTimer->msecs() / 1000.0 << "ms\",\n"
-     << "\"computeResult\": \"" << totalTimer->msecs() / 1000.0 << "ms\"\n"
+     << "\"total\": \"" << totalTimer->msecs() << "ms\",\n"
+     << "\"computeResult\": \"" << totalTimer->msecs() << "ms\"\n"
      << "},\n";
 
   string msg = ad_utility::toJson(exception.getFullErrorMessage());
