@@ -52,7 +52,7 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
       return std::move(s);
     };
 
-    auto check = [&] (std::string&& s) {
+    auto check = [&](std::string&& s) {
       if (!first) {
         if (!(_caseComparator.compare(lastExpandedString, s,
                                       SortLevel::TOTAL))) {
@@ -64,10 +64,11 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
         first = false;
       }
       lastExpandedString = std::move(s);
+      return s;
     };
 
-    auto pipeline =
-        ad_pipeline::setupPipeline(50000, creator, expand, normalize, push, check);
+    auto pipeline = ad_pipeline::setupPipeline(50000, creator, expand,
+                                               normalize, push, check);
     while ([[maybe_unused]] auto opt = pipeline.getNextValue()) {
       // run to exhaustion
     }
