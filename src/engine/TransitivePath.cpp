@@ -389,7 +389,6 @@ void TransitivePath::computeTransitivePathLeftBound(
   // initialize the map from the subresult
   for (size_t i = 0; i < sub.size(); i++) {
     if (i % 8192 == 0) {
-      LOG(INFO) << "Checking Timeout" << std::endl;
       checkTimeout();
     }
     size_t l = sub(i, leftSubCol);

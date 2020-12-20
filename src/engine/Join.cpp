@@ -349,6 +349,7 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
       IdTable jr(2, _executionContext->getAllocator());
+      checkTimeout();  // the scan is a disk operation, so we can check the
       scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
