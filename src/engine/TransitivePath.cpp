@@ -394,7 +394,7 @@ void TransitivePath::computeTransitivePathLeftBound(
     }
     size_t l = sub(i, leftSubCol);
     size_t r = sub(i, rightSubCol);
-    edges[l] = r;
+    edges[l].insert(r);
   }
 
   // For every node do a dfs on the graph
