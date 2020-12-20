@@ -429,7 +429,9 @@ string Server::composeResponseSepValues(const ParsedQuery& query,
   return os.str();
 }
 
-string Server::composeResponseJson(const string& query, const ad_semsearch::AbortException& exception, ad_utility::Timer* totalTimer) const {
+string Server::composeResponseJson(
+    const string& query, const ad_semsearch::AbortException& exception,
+    ad_utility::Timer* totalTimer) const {
   if (!totalTimer) {
     totalTimer = &_requestProcessingTimer;
   }
@@ -447,11 +449,10 @@ string Server::composeResponseJson(const string& query, const ad_semsearch::Abor
 
   j["time"] = timeJson;
   j["exception"] = exception.what();
-  j["runtimeInformation"] = RuntimeInformation::ordered_json(
-      exception.runtimeInfo());
+  j["runtimeInformation"] =
+      RuntimeInformation::ordered_json(exception.runtimeInfo());
 
   return j.dump(4);
-
 }
 
 // _____________________________________________________________________________
