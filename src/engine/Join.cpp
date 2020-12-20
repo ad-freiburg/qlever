@@ -596,6 +596,9 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
           }
         }
         ++i;
+        if (i % (1024 * 4) == 0) {
+          checkTimeout();
+        }
         if (i >= a.size()) {
           goto finish;
         }
