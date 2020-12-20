@@ -44,14 +44,19 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
       return TurtleToken::normalizeRDFLiteral<false>(s);
     };
 
-    auto push = [this, &first, &lastExpandedString](std::string&& s) {
-      _words.push_back(compressPrefix(s));
+    auto compress = [this](std::string&& s) {
+      return compressPrefix(s);
+    };
+
+    auto push = [this](std::string&& s) {
+      _words.push_back(std::move(s));
       if (_words.size() % 1000000 == 0) {
         LOG(INFO) << "Read " << _words.size() << " words." << std::endl;
       }
       return std::move(s);
     };
 
+    /*
     auto check = [&](std::string&& s) {
       if (!first) {
         if (!(_caseComparator.compare(lastExpandedString, s,
@@ -66,9 +71,10 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
       lastExpandedString = std::move(s);
       return s;
     };
+     */
 
-    auto pipeline = ad_pipeline::setupPipeline(50000, creator, expand,
-                                               normalize, push, check);
+    auto pipeline = ad_pipeline::setupPipeline(100000, creator, expand,
+                                               normalize, compress, push);
     while ([[maybe_unused]] auto opt = pipeline.getNextValue()) {
       // run to exhaustion
     }
