@@ -43,7 +43,7 @@ class Union : public Operation {
 
   // The method is declared here to make it unit testable
   template <int LEFT_WIDTH, int RIGHT_WIDTH, int OUT_WIDTH>
-  static void computeUnion(
+  void computeUnion(
       IdTable* res, const IdTable& left, const IdTable& right,
       const std::vector<std::array<size_t, 2>>& columnOrigins);
 

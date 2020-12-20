@@ -170,6 +170,8 @@ void Union::computeUnion(
   IdTableStatic<OUT_WIDTH> res = dynRes->moveToStatic<OUT_WIDTH>();
 
   res.reserve(left.size() + right.size());
+
+  const size_t chunkSize = 100000; // after this many elements, check for timeouts
   if (left.size() > 0) {
     bool columnsMatch = left.cols() == columnOrigins.size();
     // check if the order of the columns matches
@@ -188,10 +190,21 @@ void Union::computeUnion(
       // it would not be possible to call the function due to not matching
       // columns.
       if constexpr (LEFT_WIDTH == OUT_WIDTH) {
-        res.insert(res.end(), left.begin(), left.end());
+        size_t numChunks = left.size() / chunkSize ;
+        for (size_t i = 0; i < numChunks; ++i) {
+          res.insert(res.end(), left.begin() + i * chunkSize, left.begin() + (i + 1) * chunkSize);
+          checkTimeout();
+        }
+        res.insert(res.end(), left.begin() + numChunks * chunkSize, left.end());
       }
     } else {
+      size_t numHandled = 0;
       for (const auto& l : left) {
+        numHandled += 1;
+        if (numHandled >= chunkSize) {
+          checkTimeout();
+          numHandled = 0;
+        }
         res.emplace_back();
         size_t backIdx = res.size() - 1;
         for (size_t i = 0; i < columnOrigins.size(); i++) {
@@ -219,10 +232,22 @@ void Union::computeUnion(
       // The columns of the right subtree and the result match, we can
       // just copy the entries.
       if constexpr (RIGHT_WIDTH == OUT_WIDTH) {
-        res.insert(res.end(), right.begin(), right.end());
+        res.reserve(res.size() + right.size());
+        size_t numChunks = right.size() / chunkSize ;
+        for (size_t i = 0; i < numChunks; ++i) {
+          res.insert(res.end(), right.begin() + i * chunkSize, right.begin() + (i + 1) * chunkSize);
+          checkTimeout();
+        }
+        res.insert(res.end(), right.begin() + numChunks * chunkSize, right.end());
       }
     } else {
+      size_t numHandled = 0;
       for (const auto& r : right) {
+        numHandled += 1;
+        if (numHandled >= chunkSize) {
+          checkTimeout();
+          numHandled = 0;
+        }
         res.emplace_back();
         size_t backIdx = res.size() - 1;
         for (size_t i = 0; i < columnOrigins.size(); i++) {
