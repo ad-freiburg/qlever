@@ -71,7 +71,7 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
     };
      */
 
-    auto pipeline = ad_pipeline::setupPipeline(100000, creator, expand,
+    auto pipeline = ad_pipeline::setupParallelPipeline<1, 3, 1, 1>(100000, creator, expand,
                                                normalize, compress, push);
     while ([[maybe_unused]] auto opt = pipeline.getNextValue()) {
       // run to exhaustion
