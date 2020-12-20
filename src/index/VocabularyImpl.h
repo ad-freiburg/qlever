@@ -14,6 +14,7 @@
 #include "../util/HashSet.h"
 #include "./ConstantsIndexCreation.h"
 #include "./Vocabulary.h"
+#include "../util/BatchedPipeline.h"
 
 using std::string;
 
@@ -27,26 +28,49 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
   string line;
   [[maybe_unused]] bool first = true;
   std::string lastExpandedString;
-  while (std::getline(in, line)) {
-    if constexpr (_isCompressed) {
-      // when we read from file it means that all preprocessing has been done
-      // and the prefixes are already stripped in the file
-      auto str = TurtleToken::normalizeRDFLiteral<false>(
-          expandPrefix(CompressedString::fromString(line)));
 
-      _words.push_back(compressPrefix(str));
-      if (!first) {
-        if (!(_caseComparator.compare(lastExpandedString, str,
-                                      SortLevel::TOTAL))) {
-          LOG(ERROR) << "Vocabulary is not sorted in ascending order for words "
-                     << lastExpandedString << " and " << str << std::endl;
-          // AD_CHECK(false);
-        }
-      } else {
-        first = false;
-      }
-      lastExpandedString = std::move(str);
+  auto creator = [&]() -> std::optional<std::string> {
+    if (std::getline(in, line)) {
+      return std::optional(std::move(line));
     } else {
+      return std::nullopt;
+    }
+  };
+  auto expand = [this](std::string&& s) {
+    return expandPrefix(CompressedString::fromString(s));
+  };
+  auto normalize = [this](std::string&& s) {
+    return TurtleToken::normalizeRDFLiteral<false>(
+        s);
+  };
+
+  auto push = [this, &first, &lastExpandedString](std::string&& s) {
+    _words.push_back(compressPrefix(s));
+    if (!first) {
+      if (!(_caseComparator.compare(lastExpandedString, s,
+                                    SortLevel::TOTAL))) {
+        LOG(ERROR) << "Vocabulary is not sorted in ascending order for words "
+                   << lastExpandedString << " and " << s << std::endl;
+        // AD_CHECK(false);
+      }
+    } else {
+      first = false;
+    }
+    lastExpandedString = std::move(s);
+    if (_words.size() % 50000 == 0) {
+      LOG(INFO) << "Read " << _words.size() << " words." << std::endl;
+    }
+    return s;
+  };
+
+  if constexpr (_isCompressed) {
+    auto pipeline = ad_pipeline::setupPipeline(50000, creator, expand, normalize, push);
+    while ([[maybe_unused]] auto opt = pipeline.getNextValue) {
+      // run to exhaustion
+    }
+
+  } else {
+    while (std::getline(in, line)) {
       _words.push_back(line);
     }
   }

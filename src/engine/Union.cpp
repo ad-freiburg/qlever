@@ -164,7 +164,8 @@ void Union::computeUnion(
 
   res.reserve(left.size() + right.size());
 
-  const size_t chunkSize = 100000; // after this many elements, check for timeouts
+  const size_t chunkSize =
+      100000;  // after this many elements, check for timeouts
   if (left.size() > 0) {
     bool columnsMatch = left.cols() == columnOrigins.size();
     // check if the order of the columns matches
@@ -183,9 +184,10 @@ void Union::computeUnion(
       // it would not be possible to call the function due to not matching
       // columns.
       if constexpr (LEFT_WIDTH == OUT_WIDTH) {
-        size_t numChunks = left.size() / chunkSize ;
+        size_t numChunks = left.size() / chunkSize;
         for (size_t i = 0; i < numChunks; ++i) {
-          res.insert(res.end(), left.begin() + i * chunkSize, left.begin() + (i + 1) * chunkSize);
+          res.insert(res.end(), left.begin() + i * chunkSize,
+                     left.begin() + (i + 1) * chunkSize);
           checkTimeout();
         }
         res.insert(res.end(), left.begin() + numChunks * chunkSize, left.end());
@@ -226,12 +228,14 @@ void Union::computeUnion(
       // just copy the entries.
       if constexpr (RIGHT_WIDTH == OUT_WIDTH) {
         res.reserve(res.size() + right.size());
-        size_t numChunks = right.size() / chunkSize ;
+        size_t numChunks = right.size() / chunkSize;
         for (size_t i = 0; i < numChunks; ++i) {
-          res.insert(res.end(), right.begin() + i * chunkSize, right.begin() + (i + 1) * chunkSize);
+          res.insert(res.end(), right.begin() + i * chunkSize,
+                     right.begin() + (i + 1) * chunkSize);
           checkTimeout();
         }
-        res.insert(res.end(), right.begin() + numChunks * chunkSize, right.end());
+        res.insert(res.end(), right.begin() + numChunks * chunkSize,
+                   right.end());
       }
     } else {
       size_t numHandled = 0;
