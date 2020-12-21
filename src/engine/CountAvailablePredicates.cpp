@@ -503,24 +503,21 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
   LOG(INFO) << "Start loop for certifying CountPredicate" << std::endl;
 
   if (input.size() > 0) {  // avoid strange OpenMP segfaults
-                           //#pragma omp parallel
+#pragma omp parallel
                            //#pragma omp taskgroup
-                           //#pragma omp single
-    //#pragma omp taskloop grainsize(500000) default(none) reduction(+:resCount)
-    // private(localElementCount, localFlag)  shared(sharedFlag, map,
-    // predicateId, input, subjectColumn, hasPattern, hasPredicate)
+#pragma omp single
+#pragma omp taskloop grainsize(500000) default(none) reduction(+:resCount) private(localElementCount, localFlag)  shared(sharedFlag, map, predicateId, input, subjectColumn, hasPattern, hasPredicate)
     for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
       if (localFlag) {
         continue;
       }
       if (localElementCount % (1 << 5) == 0) {
         if (_timeoutTimer->wlock()->isTimeout()) {
-          LOG(INFO) << "Check timeout in loop" << std::endl;
-          //#pragma omp atomic
+#pragma omp atomic
           sharedFlag++;
           localFlag = 1;
         }
-        //#pragma omp atomic
+#pragma omp atomic
         localFlag |= sharedFlag;
 
         //#pragma omp cancellation point taskgroup
@@ -540,7 +537,6 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
         // The subject matches a pattern
         if (map.count(hasPattern[subject])) {
           resCount++;
-          LOG(INFO) << "Found an element!" << std::endl;
         }
       } else if (subject < hasPredicate.size()) {
         // The subject does not match a pattern
@@ -551,7 +547,6 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
           for (size_t i = 0; i < numPredicates; i++) {
             if (predicateData[i] == predicateId) {
               resCount++;
-              LOG(INFO) << "Found an element!" << std::endl;
               break;
             }
           }
