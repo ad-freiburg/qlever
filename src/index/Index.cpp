@@ -1008,7 +1008,7 @@ computePredicateToPatternMap(const vector<PatternID>& hasPattern,
   for (size_t i = 0; i < patterns.size(); ++i) {
     auto [ptr, sz] = patterns[i];
     for (size_t k = 0; k < sz; ++k) {
-      res[ptr[sz + k]].insert(i);
+      res[ptr[k]].insert(i);
     }
   }
   return res;
