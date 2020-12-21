@@ -168,7 +168,7 @@ void CountAvailablePredicates::computeResultSinglePredicate(
   const CompactStringVector<Id, Id>& hasPredicate =
       _executionContext->getIndex().getHasPredicate();
 
-  auto predicateToPatternMap =
+  const auto& predicateToPatternMap =
       _executionContext->getIndex().getPredicateToPatternMap();
 
   Id predicateId;
