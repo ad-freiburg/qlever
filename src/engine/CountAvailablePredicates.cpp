@@ -507,14 +507,15 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
                            //#pragma omp taskgroup
                            //#pragma omp single
     //#pragma omp taskloop grainsize(500000) default(none) reduction(+:resCount)
-    //private(localElementCount, localFlag)  shared(sharedFlag, map,
-    //predicateId, input, subjectColumn, hasPattern, hasPredicate)
+    // private(localElementCount, localFlag)  shared(sharedFlag, map,
+    // predicateId, input, subjectColumn, hasPattern, hasPredicate)
     for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
       if (localFlag) {
         continue;
       }
-      if (localElementCount % (1 << 13) == 0) {
+      if (localElementCount % (1 << 5) == 0) {
         if (_timeoutTimer->wlock()->isTimeout()) {
+          LOG(INFO) << "Check timeout in loop" << std::endl;
           //#pragma omp atomic
           sharedFlag++;
           localFlag = 1;
