@@ -537,6 +537,7 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
         // The subject matches a pattern
         if (map.count(hasPattern[subject])) {
           resCount++;
+          LOG(INFO) << "Found an element!" << std::endl;
         }
       } else if (subject < hasPredicate.size()) {
         // The subject does not match a pattern
@@ -547,6 +548,7 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
           for (size_t i = 0; i < numPredicates; i++) {
             if (predicateData[i] == predicateId) {
               resCount++;
+              LOG(INFO) << "Found an element!" << std::endl;
               break;
             }
           }
