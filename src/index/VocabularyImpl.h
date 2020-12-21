@@ -24,6 +24,7 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
                                     const string& extLitsFileName) {
   LOG(INFO) << "Reading vocabulary from file " << fileName << "\n";
   _words.clear();
+  _words.reserve(700000000);
   std::fstream in(fileName.c_str(), std::ios_base::in);
   string line;
   [[maybe_unused]] bool first = true;
