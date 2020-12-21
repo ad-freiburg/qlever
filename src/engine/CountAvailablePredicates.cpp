@@ -494,7 +494,6 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
 
   const auto& map = predicateToPattern.at(predicateId);
 
-  size_t resFound = 0;
   size_t localElementCount = 0;
   size_t sharedFlag = 0;
   size_t localFlag = 0;
@@ -538,12 +537,6 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
         // The subject matches a pattern
         if (map.count(hasPattern[subject])) {
           resCount++;
-#pragma omp atomic
-          resFound++;
-#pragma omp atomic
-          sharedFlag++;
-          localFlag = 1;
-#pragma omp cancel taskgroup
         }
       } else if (subject < hasPredicate.size()) {
         // The subject does not match a pattern
@@ -554,12 +547,6 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
           for (size_t i = 0; i < numPredicates; i++) {
             if (predicateData[i] == predicateId) {
               resCount++;
-#pragma omp atomic
-              resFound++;
-#pragma omp atomic
-              sharedFlag++;
-              localFlag = 1;
-#pragma omp cancel taskgroup
               break;
             }
           }
@@ -579,6 +566,6 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
   checkTimeout();
 
   // result.push_back({resCount});
-  result.push_back({resFound});
+  result.push_back({resCount});
   *dynResult = result.moveToDynamic();
 }

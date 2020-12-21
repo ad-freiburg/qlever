@@ -63,6 +63,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   timer.start();
   auto& cache = _executionContext->getQueryTreeCache();
   const string cacheKey = asString();
+  _runtimeInfo.addDetail("cache-key", cacheKey);
   const bool pinChildIndexScanSizes = _executionContext->_pinResult && isRoot;
   const bool pinResult =
       _executionContext->_pinSubtrees || pinChildIndexScanSizes;
@@ -179,7 +180,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   // We need to update column names and descriptor as we may have cached with
   // different variable names
   _runtimeInfo.setDescriptor(getDescriptor());
-  _runtimeInfo.setColumnNames(getVariableColumns());
+  _runtimeInfo.setColumnNames(getVariableColumns(), getResultSortedOn());
   _runtimeInfo.setTime(timer.msecs());
   _runtimeInfo.setWasCached(true);
   _runtimeInfo.addDetail("original_total_time",
