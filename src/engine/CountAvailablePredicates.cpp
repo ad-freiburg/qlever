@@ -494,10 +494,6 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
 
   const auto& map = predicateToPattern.at(predicateId);
 
-  size_t localElementCount = 0;
-  size_t sharedFlag = 0;
-  size_t localFlag = 0;
-
   checkTimeout();
 
   LOG(INFO) << "Start loop for certifying CountPredicate" << std::endl;
@@ -507,31 +503,18 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
                            //#pragma omp taskgroup
                            //#pragma omp single
     //#pragma omp taskloop grainsize(500000) default(none) reduction(+:resCount)
-    //private(localElementCount, localFlag)  shared(sharedFlag, map,
-    //predicateId, input, subjectColumn, hasPattern, hasPredicate)
+    // private(localElementCount, localFlag)  shared(sharedFlag, map,
+    // predicateId, input, subjectColumn, hasPattern, hasPredicate)
+    LOG(INFO) << "Before Loop" << std::endl;
     for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
-      if (localFlag) {
-        continue;
+      if (inputIdx % 1000 == 0) {
+        LOG(INFO) << "Handled another 1000 els" << std::endl;
       }
-      if (localElementCount % (1 << 5) == 0) {
-        if (_timeoutTimer->wlock()->isTimeout()) {
-          //#pragma omp atomic
-          sharedFlag++;
-          localFlag = 1;
-        }
-        //#pragma omp atomic
-        localFlag |= sharedFlag;
-
-        //#pragma omp cancellation point taskgroup
-      }
-      if (localFlag) {
-        continue;
-      }
-      localElementCount += 1;
 
       // Skip over elements with the same subject (don't count them twice)
       Id subject = input(inputIdx, subjectColumn);
       if (inputIdx > 0 && subject == input(inputIdx - 1, subjectColumn)) {
+        LOG(INFO) << "Skipping because of repetitions" << std::endl;
         continue;
       }
 
@@ -539,8 +522,10 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
         // The subject matches a pattern
         if (map.count(hasPattern[subject])) {
           resCount++;
+          LOG(INFO) << "Found an element" << std::endl;
         }
       } else if (subject < hasPredicate.size()) {
+        LOG(INFO) << "Subject has no pattern" << std::endl;
         // The subject does not match a pattern
         size_t numPredicates;
         Id* predicateData;
@@ -548,19 +533,20 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
         if (numPredicates > 0) {
           for (size_t i = 0; i < numPredicates; i++) {
             if (predicateData[i] == predicateId) {
+              LOG(INFO) << "Found an element" << std::endl;
               resCount++;
               break;
             }
           }
         } else {
-          LOG(TRACE) << "No pattern or has-relation entry found for entity "
-                     << std::to_string(subject) << std::endl;
+          LOG(INFO) << "No pattern or has-relation entry found for entity "
+                    << std::to_string(subject) << std::endl;
         }
       } else {
-        LOG(TRACE) << "Subject " << subject
-                   << " does not appear to be an entity "
-                      "(its id is to high)."
-                   << std::endl;
+        LOG(INFO) << "Subject " << subject
+                  << " does not appear to be an entity "
+                     "(its id is to high)."
+                  << std::endl;
       }
     }
   }
@@ -568,6 +554,7 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
   checkTimeout();
 
   // result.push_back({resCount});
+  LOG(INFO) << " Found" << resCount << "elements" << std::endl;
   result.push_back({resCount});
   *dynResult = result.moveToDynamic();
 }
