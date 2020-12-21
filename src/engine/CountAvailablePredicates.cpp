@@ -495,18 +495,29 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
   const auto& map = predicateToPattern.at(predicateId);
 
   size_t resFound = 0;
-  size_t localElementCount;
+  size_t localElementCount = 0;
+  size_t sharedFlag = 0;
+  size_t localFlag = 0;
 
   if (input.size() > 0) {  // avoid strange OpenMP segfaults
 #pragma omp parallel
 #pragma omp single
 #pragma omp taskgroup
-#pragma omp taskloop grainsize(500000) default(none) reduction(+:resCount) private(localElementCount)  shared(resFound, map, predicateId, input, subjectColumn, hasPattern, hasPredicate)
+#pragma omp taskloop grainsize(500000) default(none) reduction(+:resCount) private(localElementCount, localFlag)  shared(sharedFlag, resFound, map, predicateId, input, subjectColumn, hasPattern, hasPredicate)
     for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
-      localElementCount += 1;
+      if (localFlag) {
+        continue;
+      }
       if (localElementCount % (1 << 13) == 0) {
+#pragma omp atomic
+        localFlag |= sharedFlag;
+
 #pragma omp cancellation point taskgroup
       }
+      if (localFlag) {
+        continue;
+      }
+      localElementCount += 1;
 
       // Skip over elements with the same subject (don't count them twice)
       Id subject = input(inputIdx, subjectColumn);
@@ -520,6 +531,9 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
           resCount++;
 #pragma omp atomic
           resFound++;
+#pragma omp atomic
+          sharedFlag++;
+          localFlag = 1;
 #pragma omp cancel taskgroup
         }
       } else if (subject < hasPredicate.size()) {
@@ -533,6 +547,9 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
               resCount++;
 #pragma omp atomic
               resFound++;
+#pragma omp atomic
+              sharedFlag++;
+              localFlag = 1;
 #pragma omp cancel taskgroup
               break;
             }
