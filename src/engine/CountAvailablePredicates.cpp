@@ -494,11 +494,20 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
 
   const auto& map = predicateToPattern.at(predicateId);
 
+  size_t resFound = 0;
+  size_t localElementCount;
+
   if (input.size() > 0) {  // avoid strange OpenMP segfaults
 #pragma omp parallel
 #pragma omp single
-#pragma omp taskloop grainsize(500000) default(none) reduction(+:resCount)  shared(map, predicateId, input, subjectColumn, hasPattern, hasPredicate)
+#pragma omp taskgroup
+#pragma omp taskloop grainsize(500000) default(none) reduction(+:resCount) private(localElementCount)  shared(resFound, map, predicateId, input, subjectColumn, hasPattern, hasPredicate)
     for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
+      localElementCount += 1;
+      if (localElementCount % (1 << 13) == 0) {
+#pragma omp cancellation point taskgroup
+      }
+
       // Skip over elements with the same subject (don't count them twice)
       Id subject = input(inputIdx, subjectColumn);
       if (inputIdx > 0 && subject == input(inputIdx - 1, subjectColumn)) {
@@ -509,6 +518,9 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
         // The subject matches a pattern
         if (map.count(hasPattern[subject])) {
           resCount++;
+#pragma omp atomic
+          resFound++;
+#pragma omp cancel taskgroup
         }
       } else if (subject < hasPredicate.size()) {
         // The subject does not match a pattern
@@ -519,6 +531,9 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
           for (size_t i = 0; i < numPredicates; i++) {
             if (predicateData[i] == predicateId) {
               resCount++;
+#pragma omp atomic
+              resFound++;
+#pragma omp cancel taskgroup
               break;
             }
           }
@@ -535,6 +550,7 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
     }
   }
 
-  result.push_back({resCount});
+  // result.push_back({resCount});
+  result.push_back({resFound});
   *dynResult = result.moveToDynamic();
 }
