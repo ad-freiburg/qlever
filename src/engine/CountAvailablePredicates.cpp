@@ -503,24 +503,26 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
   LOG(INFO) << "Start loop for certifying CountPredicate" << std::endl;
 
   if (input.size() > 0) {  // avoid strange OpenMP segfaults
-#pragma omp parallel
-#pragma omp single
-#pragma omp taskgroup
-#pragma omp taskloop grainsize(500000) default(none) reduction(+:resCount) private(localElementCount, localFlag)  shared(sharedFlag, map, predicateId, input, subjectColumn, hasPattern, hasPredicate)
+                           //#pragma omp parallel
+                           //#pragma omp taskgroup
+                           //#pragma omp single
+    //#pragma omp taskloop grainsize(500000) default(none) reduction(+:resCount)
+    //private(localElementCount, localFlag)  shared(sharedFlag, map,
+    //predicateId, input, subjectColumn, hasPattern, hasPredicate)
     for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
       if (localFlag) {
         continue;
       }
       if (localElementCount % (1 << 13) == 0) {
         if (_timeoutTimer->wlock()->isTimeout()) {
-#pragma omp atomic
+          //#pragma omp atomic
           sharedFlag++;
           localFlag = 1;
         }
-#pragma omp atomic
+        //#pragma omp atomic
         localFlag |= sharedFlag;
 
-#pragma omp cancellation point taskgroup
+        //#pragma omp cancellation point taskgroup
       }
       if (localFlag) {
         continue;
