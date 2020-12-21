@@ -506,7 +506,7 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
 #pragma omp parallel
 #pragma omp single
 #pragma omp taskgroup
-#pragma omp taskloop grainsize(500000) default(none) reduction(+:resCount) private(localElementCount, localFlag)  shared(sharedFlag, resFound, map, predicateId, input, subjectColumn, hasPattern, hasPredicate)
+#pragma omp taskloop grainsize(500000) default(none) reduction(+:resCount) private(localElementCount, localFlag)  shared(sharedFlag, map, predicateId, input, subjectColumn, hasPattern, hasPredicate)
     for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
       if (localFlag) {
         continue;
