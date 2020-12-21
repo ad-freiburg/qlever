@@ -499,6 +499,10 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
   size_t sharedFlag = 0;
   size_t localFlag = 0;
 
+  checkTimeout();
+
+  LOG(INFO) << "Start loop for certifying CountPredicate" << std::endl;
+
   if (input.size() > 0) {  // avoid strange OpenMP segfaults
 #pragma omp parallel
 #pragma omp single
@@ -509,6 +513,11 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
         continue;
       }
       if (localElementCount % (1 << 13) == 0) {
+        if (_timeoutTimer->wlock()->isTimeout()) {
+#pragma omp atomic
+          sharedFlag++;
+          localFlag = 1;
+        }
 #pragma omp atomic
         localFlag |= sharedFlag;
 
@@ -566,6 +575,8 @@ void CountAvailablePredicates::computeSinglePredicatePatternTrick(
       }
     }
   }
+  LOG(INFO) << "Finished loop" << std::endl;
+  checkTimeout();
 
   // result.push_back({resCount});
   result.push_back({resFound});

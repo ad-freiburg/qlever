@@ -111,7 +111,7 @@ class CountAvailablePredicates : public Operation {
       const CompactStringVector<size_t, Id>& patterns);
 
   template <int I>
-  static void computeSinglePredicatePatternTrick(
+  void computeSinglePredicatePatternTrick(
       const IdTable& dynInput, IdTable* dynResult,
       const vector<PatternID>& hasPattern,
       const CompactStringVector<Id, Id>& hasPredicate,
