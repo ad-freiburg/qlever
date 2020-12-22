@@ -59,6 +59,7 @@ void Operation::recursivelySetTimeoutTimer(std::shared_ptr<SyncTimer> timer) {
 // Use existing results if they are already available, otherwise
 // trigger computation.
 shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
+  LOG(DEBUG) << "Start getting of result for " << getDescriptor() << std::endl;
   ad_utility::Timer timer;
   timer.start();
   auto& cache = _executionContext->getQueryTreeCache();
@@ -66,7 +67,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   const bool pinChildIndexScanSizes = _executionContext->_pinResult && isRoot;
   const bool pinResult =
       _executionContext->_pinSubtrees || pinChildIndexScanSizes;
-  LOG(TRACE) << "Check cache for Operation result" << endl;
+  LOG(DEBUG) << "Check cache for Operation result" << endl;
   LOG(TRACE) << "Using key: \n" << cacheKey << endl;
   auto cacheProxyResult = (pinResult)
                                          ? cache.tryEmplacePinned(cacheKey, _executionContext->getAllocator())
@@ -167,6 +168,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     return newResult->_resTable;
   }
 
+  LOG(DEBUG) << "Using existing result" << std::endl;
   existingResult->_resTable->awaitFinished();
   if (existingResult->_resTable->status() == ResultTable::ABORTED) {
     LOG(ERROR) << "Operation aborted while awaiting result" << endl;

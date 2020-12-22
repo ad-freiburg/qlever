@@ -4,6 +4,10 @@
 
 #ifndef QLEVER_CANCELABLESEQUENTIALSORT_H
 #define QLEVER_CANCELABLESEQUENTIALSORT_H
+
+#ifndef _GLIBCXX20_CONSTEXPR
+#define _GLIBCXX20_CONSTEXPR
+#endif
 // Algorithm implementation -*- C++ -*-
 
 // Copyright (C) 2001-2020 Free Software Foundation, Inc.
@@ -701,23 +705,6 @@ struct TimeoutedAlgorithms {
   std::enable_if_t<std::__is_char<_CharT>::__value, _CharT*> __copy_n_a(
       std::istreambuf_iterator<_CharT, std::char_traits<_CharT>>, _Size,
       _CharT*);
-
-  template <typename _InputIterator, typename _Size, typename _OutputIterator>
-  _GLIBCXX20_CONSTEXPR _OutputIterator __copy_n(_InputIterator __first,
-                                                _Size __n,
-                                                _OutputIterator __result,
-                                                std::input_iterator_tag) {
-    return std::__niter_wrap(
-        __result, __copy_n_a(__first, __n, std::__niter_base(__result)));
-  }
-
-  template <typename _RandomAccessIterator, typename _Size,
-            typename _OutputIterator>
-  _GLIBCXX20_CONSTEXPR inline _OutputIterator __copy_n(
-      _RandomAccessIterator __first, _Size __n, _OutputIterator __result,
-      std::random_access_iterator_tag) {
-    return std::copy(__first, __first + __n, __result);
-  }
 
   /**
    *  @brief Copies the range [first,first+n) into [result,result+n).
