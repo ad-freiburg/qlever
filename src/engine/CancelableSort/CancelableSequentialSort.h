@@ -706,8 +706,6 @@ struct TimeoutedAlgorithms {
       std::istreambuf_iterator<_CharT, std::char_traits<_CharT>>, _Size,
       _CharT*);
 
-
-
   /**
    *  @brief Copies the range [first,first+n) into [result,result+n).
    *  @ingroup mutating_algorithms

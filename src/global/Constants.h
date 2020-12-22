@@ -6,7 +6,6 @@
 #include <stdexcept>
 #include <string>
 
-#include "../engine/CancelableSort/CancelableParallelSort.h"
 
 static const size_t STXXL_MEMORY_TO_USE = 1024L * 1024L * 1024L * 2L;
 static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 1000 * 1000;
@@ -111,6 +110,8 @@ static const uint8_t NO_PREFIX_CHAR =
 #ifdef _PARALLEL_SORT
 static constexpr bool USE_PARALLEL_SORT = true;
 #include <parallel/algorithm>
+
+#include "../engine/CancelableSort/CancelableParallelSort.h"
 namespace ad_utility {
 template <typename... Args>
 auto parallel_sort(ad_utility::TimeoutChecker* checker, Args&&... args) {
