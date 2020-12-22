@@ -196,8 +196,9 @@ void Server::process(Socket* client) {
       query = createQueryFromHttpParams(params);
       LOG(INFO) << "Query" << ((pinSubtrees) ? " (Cache pinned)" : "")
                 << ((pinResult) ? " (Result pinned)" : "") << ": " << query
-                << '\n';
+                << std::endl;
       ParsedQuery pq = SparqlParser(query).parse();
+      LOG(INFO) << "Done parsing query" << std::endl;
       pq.expandPrefixes();
 
       QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
@@ -207,7 +208,9 @@ void Server::process(Socket* client) {
       timeoutTimer->wlock()->start();
       QueryPlanner qp(&qec);
       qp.setEnablePatternTrick(_enablePatternTrick);
+      LOG(DEBUG) << "Before createExecutionTree" << std::endl;
       QueryExecutionTree qet = qp.createExecutionTree(pq);
+      LOG(DEBUG) << "After createExecutionTree" << std::endl;
       qet.isRoot() = true;  // allow pinning of the final result
       qet.recursivelySetTimeoutTimer(timeoutTimer);
       LOG(TRACE) << qet.asString() << std::endl;
@@ -373,6 +376,7 @@ string Server::composeResponseJson(const ParsedQuery& query,
   }
   // TODO(schnelle) we really should use a json library
   // such as https://github.com/nlohmann/json
+  LOG(DEBUG) << "Trigger computation for result json" << std::endl;
   shared_ptr<const ResultTable> rt = qet.getResult();
   _requestProcessingTimer.stop();
   off_t compResultUsecs = _requestProcessingTimer.usecs();

@@ -4,6 +4,10 @@
 
 #ifndef QLEVER_CANCELABLESEQUENTIALSORT_H
 #define QLEVER_CANCELABLESEQUENTIALSORT_H
+
+#ifndef _GLIBCXX20_CONSTEXPR
+#define _GLIBCXX20_CONSTEXPR
+#endif
 // Algorithm implementation -*- C++ -*-
 
 // Copyright (C) 2001-2020 Free Software Foundation, Inc.

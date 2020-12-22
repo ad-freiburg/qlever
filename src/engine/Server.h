@@ -105,5 +105,7 @@ class Server {
 
   mutable ad_utility::Timer _requestProcessingTimer;
 
+  mutable std::mutex _queryPlannerMutex;
+
   json composeCacheStatsJson() const;
 };

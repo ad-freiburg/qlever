@@ -115,7 +115,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   SubtreePlan final = lastRow[minInd];
   final._qet->setTextLimit(getTextLimit(pq._textLimit));
 
-  LOG(DEBUG) << "Done creating execution plan.\n";
+  LOG(DEBUG) << "Done creating execution plan." << std::endl;
   return *final._qet;
 }
 
