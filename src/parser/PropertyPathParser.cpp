@@ -248,7 +248,13 @@ bool PropertyPathParser::acceptPrefix(const std::string& tokenPrefix,
 
 // _____________________________________________________________________________
 void PropertyPathParser::expect(const std::string& token) {
-  if (_position == _end || _position->text != token) {
+  if (_position == _end) {
+    std::stringstream s;
+    s << "Expected " << token << " but the input was exhausted"
+      << " while parsing " << _string;
+    throw ParseException(s.str());
+  }
+  if (_position->text != token) {
     std::stringstream s;
     s << "Expected " << token << " but got " << _position->text
       << " while parsing " << _string << " at pos " << _position->position;
