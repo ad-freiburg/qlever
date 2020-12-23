@@ -64,7 +64,6 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   timer.start();
   auto& cache = _executionContext->getQueryTreeCache();
   const string cacheKey = asString();
-  _runtimeInfo.addDetail("cache-key", cacheKey);
   const bool pinChildIndexScanSizes = _executionContext->_pinResult && isRoot;
   const bool pinResult =
       _executionContext->_pinSubtrees || pinChildIndexScanSizes;
