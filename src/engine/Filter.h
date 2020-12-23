@@ -144,7 +144,7 @@ class Filter : public Operation {
    */
   template <ResultTable::ResultType T, int WIDTH, bool INVERSE = false>
   void computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs, Id rhs_lower,
-                          Id rhs_upper, const IdTableStatic<WIDTH>& input,
+                          Id rhs_upper, const IdTableView<WIDTH>& input,
                           shared_ptr<const ResultTable> subRes) const;
 
   template <int WIDTH>
