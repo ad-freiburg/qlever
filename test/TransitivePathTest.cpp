@@ -46,6 +46,12 @@ TEST(TransitivePathTest, computeTransitivePath) {
   TransitivePath::computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0,
                                            1,
                                            std::numeric_limits<size_t>::max());
+
+  auto cmp = [](const auto& a, const auto& b) {
+    return a[0] != b[0] ? a[0] < b[0] : a[1] < b[1];
+  };
+  std::sort(expected.begin(), expected.end(), cmp);
+  std::sort(result.begin(), result.end(), cmp);
   ASSERT_EQ(expected, result);
 
   result.clear();
@@ -66,6 +72,8 @@ TEST(TransitivePathTest, computeTransitivePath) {
 
   TransitivePath::computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0,
                                            1, 2);
+  std::sort(expected.begin(), expected.end(), cmp);
+  std::sort(result.begin(), result.end(), cmp);
   ASSERT_EQ(expected, result);
 
   result.clear();
@@ -76,6 +84,8 @@ TEST(TransitivePathTest, computeTransitivePath) {
 
   TransitivePath::computeTransitivePath<2>(&result, sub, false, true, 0, 1, 7,
                                            0, 1, 2);
+  std::sort(expected.begin(), expected.end(), cmp);
+  std::sort(result.begin(), result.end(), cmp);
   ASSERT_EQ(expected, result);
 
   result.clear();
@@ -85,5 +95,7 @@ TEST(TransitivePathTest, computeTransitivePath) {
 
   TransitivePath::computeTransitivePath<2>(&result, sub, true, false, 0, 1, 0,
                                            2, 1, 2);
+  std::sort(expected.begin(), expected.end(), cmp);
+  std::sort(result.begin(), result.end(), cmp);
   ASSERT_EQ(expected, result);
 }
