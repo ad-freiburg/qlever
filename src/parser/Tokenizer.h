@@ -300,7 +300,7 @@ struct TurtleToken {
       // escapes, which neither start with angles nor with quotation marks
       // TODO<joka921> proper data types for the different types of vocabulary
       // entries.
-      if (ad_utility::startsWith(literal, "_:genid") ||
+      if (ad_utility::startsWith(literal, "_:") ||
           ad_utility::startsWith(literal, ":v:")) {
         return std::string{literal};
       }
