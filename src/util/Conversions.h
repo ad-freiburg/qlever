@@ -606,7 +606,12 @@ inline string removeLeadingZeros(const string& orig) {
 bool isXsdValue(const string& val) {
   // starting the search for "^^ at position 1 makes sure it's not in the
   // quotes as we already checked that the first char is the first quote
-  return !val.empty() && val[0] == '\"' && val.find("\"^^", 1) != string::npos;
+
+  // HACK(Hannah): make sure to return false for literals of type
+  // geo:wktLiteral. Otherwise they cannot get externalized, see
+  // src/index/Index.h and src/index/VocabularyImpl.h.
+  return !val.empty() && val[0] == '\"' && val.find("\"^^", 1) != string::npos
+                                        && val.find("wktL") == string::npos;
 }
 
 // _____________________________________________________________________________

@@ -104,6 +104,11 @@ bool TurtleParser<T>::triples() {
 // __________________________________________________
 template <class T>
 bool TurtleParser<T>::predicateObjectList() {
+
+  // HACK(Hannah, OSM 1/2): just look for single verb and
+  // object, so that we can have , and ; in predicate names.
+  return verb() && object();
+
   if (verb() && check(objectList())) {
     while (skip<TokId::Semicolon>()) {
       if (verb() && check(objectList())) {
@@ -397,9 +402,14 @@ bool TurtleParser<T>::pnameLnRelaxed() {
     return false;
   }
   // these can also be part of a collection etc.
+
+  // HACK(Hannah, OSM 2/2): no special meaning for , and ; for OSM data
+  // auto posEnd = view.find_first_of(" \n,;", pos);
+  auto posEnd = view.find_first_of(" \n", pos);
   // find any character that can end a pnameLn when assuming that no
   // escape sequences were used
-  auto posEnd = view.find_first_of(" \n,;", pos);
+  // auto posEnd = view.find_first_of(" \n,;", pos);
+
   if (posEnd == string::npos) {
     // make tests work
     posEnd = view.size();
