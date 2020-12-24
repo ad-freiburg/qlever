@@ -320,8 +320,8 @@ template <class T>
 bool TurtleParser<T>::prefixedName() {
   if constexpr (UseRelaxedParsing) {
     if (pnameLnRelaxed() || pnameNS()) {
-      _lastParseResult =
-          '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
+      _lastParseResult = TurtleToken::unescapePrefixedIri(
+          '<' + expandPrefix(_activePrefix) + _lastParseResult + '>');
       return true;
     } else {
       return false;
@@ -336,8 +336,8 @@ bool TurtleParser<T>::prefixedName() {
     }
     _lastParseResult.clear();
     parseTerminal<TokId::PnLocal, false>();
-    _lastParseResult =
-        '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
+    _lastParseResult = TurtleToken::unescapePrefixedIri(
+        '<' + expandPrefix(_activePrefix) + _lastParseResult + '>');
     LOG(TRACE) << "Parsed a prefixed name\n";
     return true;
   }
