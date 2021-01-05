@@ -178,7 +178,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   // We need to update column names and descriptor as we may have cached with
   // different variable names
   _runtimeInfo.setDescriptor(getDescriptor());
-  _runtimeInfo.setColumnNames(getVariableColumns());
+  _runtimeInfo.setColumnNames(getVariableColumns(), getResultSortedOn());
   _runtimeInfo.setTime(timer.msecs());
   _runtimeInfo.setWasCached(true);
   _runtimeInfo.addDetail("original_total_time",

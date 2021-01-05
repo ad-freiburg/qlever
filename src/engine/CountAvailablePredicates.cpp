@@ -37,15 +37,23 @@ CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
 // _____________________________________________________________________________
 string CountAvailablePredicates::asString(size_t indent) const {
   std::ostringstream os;
+
+  std::string fixedPredString;
+  if (_predicateEntityName) {
+    fixedPredString =
+        " for fixed predicate " + _predicateEntityName.value() + " ";
+  }
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
   if (_subjectEntityName) {
-    os << "COUNT_AVAILABLE_PREDICATES for " << _subjectEntityName.value();
+    os << "COUNT_AVAILABLE_PREDICATES for " << _subjectEntityName.value()
+       << fixedPredString;
   } else if (_subtree == nullptr) {
-    os << "COUNT_AVAILABLE_PREDICATES for all entities";
+    os << "COUNT_AVAILABLE_PREDICATES for all entities" << fixedPredString;
   } else {
-    os << "COUNT_AVAILABLE_PREDICATES (col " << _subjectColumnIndex << ")\n"
+    os << "COUNT_AVAILABLE_PREDICATES (col " << _subjectColumnIndex << ")"
+       << fixedPredString << "\n"
        << _subtree->asString(indent);
   }
   return os.str();
@@ -53,16 +61,22 @@ string CountAvailablePredicates::asString(size_t indent) const {
 
 // _____________________________________________________________________________
 string CountAvailablePredicates::getDescriptor() const {
+  std::string p = _predicateEntityName ? " for fixed predicate" : "";
   if (_subjectEntityName) {
-    return "CountAvailablePredicates for a single entity";
+    return "CountAvailablePredicates for a single entity" + p;
   } else if (_subtree == nullptr) {
-    return "CountAvailablePredicates for a all entities";
+    return "CountAvailablePredicates for a all entities" + p;
   }
-  return "CountAvailablePredicates";
+  return "CountAvailablePredicates" + p;
 }
 
 // _____________________________________________________________________________
-size_t CountAvailablePredicates::getResultWidth() const { return 2; }
+size_t CountAvailablePredicates::getResultWidth() const {
+  if (_predicateEntityName) {
+    return 1;
+  }
+  return 2;
+}
 
 // _____________________________________________________________________________
 vector<size_t> CountAvailablePredicates::resultSortedOn() const {
@@ -75,14 +89,22 @@ void CountAvailablePredicates::setVarNames(const std::string& predicateVarName,
                                            const std::string& countVarName) {
   _predicateVarName = predicateVarName;
   _countVarName = countVarName;
+  if (!ad_utility::startsWith(predicateVarName, "?")) {
+    // this makes this use the singleSpecialization version
+    _predicateEntityName = predicateVarName;
+  }
 }
 
 // _____________________________________________________________________________
 ad_utility::HashMap<string, size_t>
 CountAvailablePredicates::getVariableColumns() const {
   ad_utility::HashMap<string, size_t> varCols;
-  varCols[_predicateVarName] = 0;
-  varCols[_countVarName] = 1;
+  if (!_predicateEntityName) {
+    varCols[_predicateVarName] = 0;
+    varCols[_countVarName] = 1;
+  } else {
+    varCols[_countVarName] = 0;
+  }
   return varCols;
 }
 
@@ -130,8 +152,70 @@ size_t CountAvailablePredicates::getCostEstimate() {
   }
 }
 
+void CountAvailablePredicates::computeResultSinglePredicate(
+    ResultTable* result) {
+  LOG(DEBUG)
+      << "CountAvailablePredicates result computation for single predicate..."
+      << std::endl;
+  result->_data.setCols(1);
+  result->_sortedBy = resultSortedOn();
+  result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
+
+  RuntimeInformation& runtimeInfo = getRuntimeInfo();
+
+  const std::vector<PatternID>& hasPattern =
+      _executionContext->getIndex().getHasPattern();
+  const CompactStringVector<Id, Id>& hasPredicate =
+      _executionContext->getIndex().getHasPredicate();
+
+  const auto& predicateToPatternMap =
+      _executionContext->getIndex().getPredicateToPatternMap();
+
+  Id predicateId;
+  if (!getIndex().getVocab().getId(_predicateEntityName.value(),
+                                   &predicateId)) {
+    return;
+  }
+
+  if (_subjectEntityName) {
+    size_t entityId;
+    // If the entity exists return the all predicates for that entitity,
+    // otherwise return an empty result.
+    if (getIndex().getVocab().getId(_subjectEntityName.value(), &entityId)) {
+      IdTable input(1, _executionContext->getAllocator());
+      input.push_back({entityId});
+      int width = input.cols();
+      CALL_FIXED_SIZE_1(
+          width, CountAvailablePredicates::computeSinglePredicatePatternTrick,
+          input, &result->_data, hasPattern, hasPredicate,
+          predicateToPatternMap, 0, predicateId);
+    }
+  } else if (_subtree == nullptr) {
+    throw std::runtime_error(
+        "ql:has-predicate counting with a fixed predicate and no context "
+        "triples is inot supported");
+  } else {
+    std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
+    runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
+    LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
+               << std::endl;
+
+    int width = subresult->_data.cols();
+    CALL_FIXED_SIZE_1(
+        width, CountAvailablePredicates::computeSinglePredicatePatternTrick,
+        subresult->_data, &result->_data, hasPattern, hasPredicate,
+        predicateToPatternMap, _subjectColumnIndex, predicateId);
+  }
+  LOG(DEBUG) << "CountAvailablePredicates result computation done."
+             << std::endl;
+}
+
 // _____________________________________________________________________________
 void CountAvailablePredicates::computeResult(ResultTable* result) {
+  if (_predicateEntityName) {
+    return computeResultSinglePredicate(result);
+  }
+
   LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
   result->_data.setCols(2);
   result->_sortedBy = resultSortedOn();
@@ -387,5 +471,90 @@ void CountAvailablePredicates::computePatternTrick(
   runtimeInfo->addDetail("costWithoutPatterns", costWithoutPatterns);
   runtimeInfo->addDetail("costWithPatterns", costWithPatterns);
   runtimeInfo->addDetail("costRatio", costRatio * 100);
+  *dynResult = result.moveToDynamic();
+}
+
+template <int I>
+void CountAvailablePredicates::computeSinglePredicatePatternTrick(
+    const IdTable& dynInput, IdTable* dynResult,
+    const vector<PatternID>& hasPattern,
+    const CompactStringVector<Id, Id>& hasPredicate,
+    const ad_utility::HashMap<Id, ad_utility::HashSet<size_t>>&
+        predicateToPattern,
+    const size_t subjectColumn, const Id predicateId) {
+  const IdTableStatic<I> input = dynInput.asStaticView<I>();
+  IdTableStatic<1> result = dynResult->moveToStatic<1>();
+  LOG(DEBUG) << "For " << input.size() << " entities in column "
+             << subjectColumn << std::endl;
+
+  size_t resCount = 0;
+  if (!predicateToPattern.contains(predicateId)) {
+    return;
+  }
+
+  const auto& map = predicateToPattern.at(predicateId);
+
+  checkTimeout();
+
+  LOG(TRACE) << "Start loop for certifying CountPredicate" << std::endl;
+
+  if (input.size() > 0) {  // avoid strange OpenMP segfaults
+                           //#pragma omp parallel
+                           //#pragma omp taskgroup
+                           //#pragma omp single
+    //#pragma omp taskloop grainsize(500000) default(none) reduction(+:resCount)
+    // private(localElementCount, localFlag)  shared(sharedFlag, map,
+    // predicateId, input, subjectColumn, hasPattern, hasPredicate)
+    LOG(TRACE) << "Before Loop" << std::endl;
+    for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
+      if (inputIdx % 1000 == 0) {
+        LOG(TRACE) << "Handled another 1000 els" << std::endl;
+      }
+
+      // Skip over elements with the same subject (don't count them twice)
+      Id subject = input(inputIdx, subjectColumn);
+      if (inputIdx > 0 && subject == input(inputIdx - 1, subjectColumn)) {
+        LOG(TRACE) << "Skipping because of repetitions" << std::endl;
+        continue;
+      }
+
+      if (subject < hasPattern.size() && hasPattern[subject] != NO_PATTERN) {
+        // The subject matches a pattern
+        if (map.count(hasPattern[subject])) {
+          resCount++;
+          LOG(TRACE) << "Found an element" << std::endl;
+        }
+      } else if (subject < hasPredicate.size()) {
+        LOG(TRACE) << "Subject has no pattern" << std::endl;
+        // The subject does not match a pattern
+        size_t numPredicates;
+        Id* predicateData;
+        std::tie(predicateData, numPredicates) = hasPredicate[subject];
+        if (numPredicates > 0) {
+          for (size_t i = 0; i < numPredicates; i++) {
+            if (predicateData[i] == predicateId) {
+              LOG(TRACE) << "Found an element" << std::endl;
+              resCount++;
+              break;
+            }
+          }
+        } else {
+          LOG(TRACE) << "No pattern or has-relation entry found for entity "
+                     << std::to_string(subject) << std::endl;
+        }
+      } else {
+        LOG(TRACE) << "Subject " << subject
+                   << " does not appear to be an entity "
+                      "(its id is to high)."
+                   << std::endl;
+      }
+    }
+  }
+  LOG(TRACE) << "Finished loop" << std::endl;
+  checkTimeout();
+
+  // result.push_back({resCount});
+  LOG(TRACE) << " Found" << resCount << "elements" << std::endl;
+  result.push_back({resCount});
   *dynResult = result.moveToDynamic();
 }

@@ -43,6 +43,10 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   bool usePatternTrick =
       _enablePatternTrick && checkUsePatternTrick(&pq, &patternTrickTriple);
 
+  // those two cases are completely disjunct
+  usePatternTrick |= _enablePatternTrick && checkUseSinglePredicatePatternTrick(
+                                                &pq, &patternTrickTriple);
+
   bool doGrouping = pq._groupByVariables.size() > 0 || usePatternTrick;
   if (!doGrouping) {
     // if there is no group by statement, but an aggregate alias is used
@@ -792,6 +796,101 @@ bool QueryPlanner::checkUsePatternTrick(
   }
   return true;
    */
+}
+
+bool QueryPlanner::checkUseSinglePredicatePatternTrick(
+    ParsedQuery* pq, SparqlTriple* patternTrickTriple) const {
+  // Check if the query has the right number of variables for aliases and
+  // group by.
+  if (pq->_groupByVariables.size() != 0 || pq->_aliases.size() != 1) {
+    return false;
+  }
+
+  // These will only be set if the query returns the count of predicates
+  // The varialbe the COUNT alias counts
+  std::string counted_var_name;
+  // The variable holding the counts
+  std::string count_var_name;
+
+  // There has to be a single count alias
+  const ParsedQuery::Alias& alias = pq->_aliases.back();
+  // Create a lower case version of the aliases function string to allow
+  // for case insensitive keyword detection.
+  std::string aliasFunctionLower =
+      ad_utility::getLowercaseUtf8(alias._function);
+  // Check if the alias is a distinct count alias
+  if (!(alias._isAggregate &&
+        aliasFunctionLower.find("distinct") != std::string::npos &&
+        ad_utility::startsWith(aliasFunctionLower, "count"))) {
+    return false;
+  }
+  counted_var_name = alias._inVarName;
+  count_var_name = alias._outVarName;
+
+  if (pq->_selectedVariables.size() != 1 ||
+      pq->_selectedVariables[0] != count_var_name) {
+    return false;
+  }
+
+  // The first possibility for using the pattern trick is having a
+  // ql:has-predicate predicate in the query
+
+  // look for a HAS_RELATION_PREDICATE triple which satisfies all constraints
+  // check in all the basic graph patterns that are direct children.
+  // TODO<joka921, kramerfl> verify and proof that this is always legal
+  for (auto& child : pq->children()) {
+    if (!child.is<GraphPatternOperation::BasicGraphPattern>()) {
+      continue;
+    }
+    auto& curPattern = child.getBasic();
+    for (size_t i = 0; i < curPattern._whereClauseTriples.size(); i++) {
+      bool usePatternTrick = true;
+      const SparqlTriple& t = curPattern._whereClauseTriples[i];
+      // Check that the triples predicates is the HAS_PREDICATE_PREDICATE.
+      // Also check that the triples object or subject matches the aliases input
+      // variable and the group by variable.
+      if (t._p._iri != HAS_PREDICATE_PREDICATE || counted_var_name != t._s ||
+          ad_utility::startsWith(t._o, "?")) {
+        usePatternTrick = false;
+        continue;
+      }
+
+      if (!usePatternTrick) {
+        continue;
+      }
+
+      // TODO: Filters should be fine
+      /*
+
+      // Check for filters on the ql:has-predicate triple's subject or
+      // object.
+      // Filters that filter on the triple's object but have a static
+      // rhs will be transformed to a having clause later on.
+      for (const SparqlFilter& filter : pq->_rootGraphPattern._filters) {
+        if (!(filter._lhs == t._o && filter._rhs[0] != '?') &&
+            (filter._lhs == t._s || filter._lhs == t._o ||
+             filter._rhs == t._o || filter._rhs == t._s)) {
+          usePatternTrick = false;
+          break;
+        }
+      }
+
+      if (!usePatternTrick) {
+        continue;
+      }
+       */
+
+      LOG(DEBUG) << "Using the pattern trick for a single predicate to answer "
+                    "the query."
+                 << endl;
+      *patternTrickTriple = t;
+      // remove the triple from the graph
+      curPattern._whereClauseTriples.erase(
+          curPattern._whereClauseTriples.begin() + i);
+      return true;
+    }
+  }
+  return false;
 }
 
 // _____________________________________________________________________________

@@ -186,6 +186,7 @@ class Index {
   const vector<PatternID>& getHasPattern() const;
   const CompactStringVector<Id, Id>& getHasPredicate() const;
   const CompactStringVector<size_t, Id>& getPatterns() const;
+  const auto& getPredicateToPatternMap() const { return _predicateToPattern; }
   /**
    * @return The multiplicity of the Entites column (0) of the full has-relation
    *         relation after unrolling the patterns.
@@ -501,6 +502,9 @@ class Index {
    * @brief Maps entity ids to sets of predicate ids
    */
   CompactStringVector<Id, Id> _hasPredicate;
+
+  /// Maps predicates to the set of patterns in which they are contained
+  ad_utility::HashMap<Id, ad_utility::HashSet<size_t>> _predicateToPattern;
 
   // Create Vocabulary and directly write it to disk. Create TripleVec with all
   // the triples converted to id space. This Vec can be used for creating

@@ -383,6 +383,8 @@ class QueryPlanner {
    */
   bool checkUsePatternTrick(ParsedQuery* pq,
                             SparqlTriple* patternTrickTriple) const;
+  bool checkUseSinglePredicatePatternTrick(
+      ParsedQuery* pq, SparqlTriple* patternTrickTriple) const;
 
   /**
    * @brief return the index of the cheapest execution tree in the argument.

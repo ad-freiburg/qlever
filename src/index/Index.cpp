@@ -996,6 +996,21 @@ void Index::writeNonFunctionalRelation(
   }
 }
 
+///
+ad_utility::HashMap<Id, ad_utility::HashSet<size_t>>
+computePredicateToPatternMap(const vector<PatternID>& hasPattern,
+                             const CompactStringVector<Id, Id>& hasPredicate,
+                             const CompactStringVector<size_t, Id>& patterns) {
+  ad_utility::HashMap<Id, ad_utility::HashSet<size_t>> res;
+  for (size_t i = 0; i < patterns.size(); ++i) {
+    auto [ptr, sz] = patterns[i];
+    for (size_t k = 0; k < sz; ++k) {
+      res[ptr[k]].insert(i);
+    }
+  }
+  return res;
+}
+
 // _____________________________________________________________________________
 void Index::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
@@ -1098,6 +1113,10 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
         }
       }
       _hasPredicate.build(hasPredicateTmp);
+      LOG(INFO) << "Start computing predicate to pattern map..." << std::endl;
+      _predicateToPattern =
+          computePredicateToPatternMap(_hasPattern, _hasPredicate, _patterns);
+      LOG(INFO) << "Done." << std::endl;
     }
   }
 }

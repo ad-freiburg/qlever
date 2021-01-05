@@ -110,12 +110,26 @@ class CountAvailablePredicates : public Operation {
       const CompactStringVector<Id, Id>& hasPredicate,
       const CompactStringVector<size_t, Id>& patterns);
 
+  template <int I>
+  void computeSinglePredicatePatternTrick(
+      const IdTable& dynInput, IdTable* dynResult,
+      const vector<PatternID>& hasPattern,
+      const CompactStringVector<Id, Id>& hasPredicate,
+      const ad_utility::HashMap<Id, ad_utility::HashSet<size_t>>&
+          predicateToPattern,
+      const size_t subjectColumn, const Id predicateId);
+
+  void computeResultSinglePredicate(ResultTable* result);
+
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   size_t _subjectColumnIndex;
   // This can be used to aquire the predicates for a single entity
   std::optional<std::string> _subjectEntityName;
+  // Can be used to aquire the counts for a single predicate
+  std::optional<std::string> _predicateEntityName;
   std::string _predicateVarName;
+
   std::string _countVarName;
 
   virtual void computeResult(ResultTable* result) override;
