@@ -375,33 +375,26 @@ void TransitivePath::computeTransitivePathLeftBound(
     IdTable* dynRes, const IdTable& dynSub, const IdTable& dynLeft,
     size_t leftSideCol, bool rightIsVar, size_t leftSubCol, size_t rightSubCol,
     Id rightValue, size_t minDist, size_t maxDist, size_t resWidth) {
-  using Map = ad_utility::HashMap<Id, std::shared_ptr<ad_utility::HashSet<Id>>>;
+  using Map = ad_utility::HashMap<Id, ad_utility::HashSet<Id>>;
   using MapIt = Map::iterator;
 
   const IdTableStatic<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
   const IdTableStatic<LEFT_WIDTH> left = dynLeft.asStaticView<LEFT_WIDTH>();
   IdTableStatic<RES_WIDTH> res = dynRes->moveToStatic<RES_WIDTH>();
+  LOG(INFO) << "Entered computeTransitive path" << std::endl;
 
   // Used to map entries in the left column to entries they have connection with
   Map edges;
 
   // initialize the map from the subresult
   for (size_t i = 0; i < sub.size(); i++) {
-    if (i % 1024 == 0) {
+    if (i % 8192 == 0) {
+      LOG(INFO) << "Checking Timeout" << std::endl;
       checkTimeout();
     }
     size_t l = sub(i, leftSubCol);
     size_t r = sub(i, rightSubCol);
-    MapIt it = edges.find(l);
-    if (it == edges.end()) {
-      std::shared_ptr<ad_utility::HashSet<Id>> s =
-          std::make_shared<ad_utility::HashSet<Id>>();
-      s->insert(r);
-      edges[l] = s;
-    } else {
-      // If r is not in the vector insert it
-      it->second->insert(r);
-    }
+    edges[l].insert(r);
   }
 
   // For every node do a dfs on the graph
@@ -414,7 +407,7 @@ void TransitivePath::computeTransitivePathLeftBound(
   // Used to store all edges leading away from a node for every level.
   // Reduces access to the hashmap, and is safe as the map will not
   // be modified after this point.
-  std::vector<std::shared_ptr<const ad_utility::HashSet<Id>>> edgeCache;
+  std::vector<const ad_utility::HashSet<Id>*> edgeCache;
 
   size_t last_elem = std::numeric_limits<size_t>::max();
   size_t last_result_begin = 0;
@@ -448,8 +441,8 @@ void TransitivePath::computeTransitivePathLeftBound(
     last_result_begin = res.size();
     MapIt rootEdges = edges.find(last_elem);
     if (rootEdges != edges.end()) {
-      positions.push_back(rootEdges->second->begin());
-      edgeCache.push_back(rootEdges->second);
+      positions.push_back(rootEdges->second.begin());
+      edgeCache.push_back(&(rootEdges->second));
     }
     if (minDist == 0) {
       AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
@@ -467,7 +460,7 @@ void TransitivePath::computeTransitivePathLeftBound(
       size_t stackIndex = positions.size() - 1;
       // Process the next child of the node at the top of the stack
       ad_utility::HashSet<Id>::const_iterator& pos = positions[stackIndex];
-      const ad_utility::HashSet<Id>* nodeEdges = edgeCache.back().get();
+      const ad_utility::HashSet<Id>* nodeEdges = edgeCache.back();
 
       if (pos == nodeEdges->end()) {
         // We finished processing this node
@@ -500,8 +493,8 @@ void TransitivePath::computeTransitivePathLeftBound(
         // Add the child to the stack
         MapIt it = edges.find(child);
         if (it != edges.end()) {
-          positions.push_back(it->second->begin());
-          edgeCache.push_back(it->second);
+          positions.push_back(it->second.begin());
+          edgeCache.push_back(&(it->second));
         }
       }
     }
@@ -525,7 +518,7 @@ void TransitivePath::computeTransitivePathRightBound(
     Id leftValue, size_t minDist, size_t maxDist, size_t resWidth) {
   // Do the discovery from the right instead of the left.
 
-  using Map = ad_utility::HashMap<Id, std::shared_ptr<ad_utility::HashSet<Id>>>;
+  using Map = ad_utility::HashMap<Id, ad_utility::HashSet<Id>>;
   using MapIt = Map::iterator;
 
   const IdTableStatic<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
@@ -542,15 +535,7 @@ void TransitivePath::computeTransitivePathRightBound(
     }
     size_t l = sub(i, leftSubCol);
     size_t r = sub(i, rightSubCol);
-    MapIt it = edges.find(r);
-    if (it == edges.end()) {
-      std::shared_ptr<ad_utility::HashSet<Id>> s =
-          std::make_shared<ad_utility::HashSet<Id>>();
-      s->insert(l);
-      edges[r] = s;
-    } else {
-      it->second->insert(l);
-    }
+    edges[r].template insert(l);
   }
 
   // For every node do a dfs on the graph
@@ -564,7 +549,7 @@ void TransitivePath::computeTransitivePathRightBound(
   // Used to store all edges leading away from a node for every level.
   // Reduces access to the hashmap, and is safe as the map will not
   // be modified after this point.
-  std::vector<std::shared_ptr<const ad_utility::HashSet<Id>>> edgeCache;
+  std::vector<ad_utility::HashSet<Id>*> edgeCache;
 
   size_t last_elem = std::numeric_limits<size_t>::max();
   size_t last_result_begin = 0;
@@ -589,8 +574,8 @@ void TransitivePath::computeTransitivePathRightBound(
     last_result_begin = res.size();
     MapIt rootEdges = edges.find(last_elem);
     if (rootEdges != edges.end()) {
-      positions.push_back(rootEdges->second->begin());
-      edgeCache.push_back(rootEdges->second);
+      positions.push_back(rootEdges->second.begin());
+      edgeCache.push_back(&(rootEdges->second));
     }
     if (minDist == 0) {
       AD_THROW(ad_semsearch::Exception::NOT_YET_IMPLEMENTED,
@@ -609,7 +594,7 @@ void TransitivePath::computeTransitivePathRightBound(
       size_t stackIndex = positions.size() - 1;
       // Process the next child of the node at the top of the stack
       ad_utility::HashSet<Id>::const_iterator& pos = positions[stackIndex];
-      const ad_utility::HashSet<Id>* nodeEdges = edgeCache.back().get();
+      const ad_utility::HashSet<Id>* nodeEdges = edgeCache.back();
 
       if (pos == nodeEdges->end()) {
         // We finished processing this node
@@ -642,8 +627,8 @@ void TransitivePath::computeTransitivePathRightBound(
         // Add the child to the stack
         MapIt it = edges.find(child);
         if (it != edges.end()) {
-          positions.push_back(it->second->begin());
-          edgeCache.push_back(it->second);
+          positions.push_back(it->second.begin());
+          edgeCache.push_back(&(it->second));
         }
       }
     }
