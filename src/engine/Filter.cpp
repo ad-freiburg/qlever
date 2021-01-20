@@ -268,7 +268,7 @@ void Filter::computeResult(ResultTable* result) {
 template <ResultTable::ResultType T, int WIDTH, bool INVERSE>
 void Filter::computeFilterRange(IdTableStatic<WIDTH>* res, size_t lhs,
                                 Id rhs_lower, Id rhs_upper,
-                                const IdTableStatic<WIDTH>& input,
+                                const IdTableView<WIDTH>& input,
                                 shared_ptr<const ResultTable> subRes) const {
   bool lhs_is_sorted =
       subRes->_sortedBy.size() > 0 && subRes->_sortedBy[0] == lhs;
