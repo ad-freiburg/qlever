@@ -3,6 +3,7 @@
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
 #include "HasPredicateScan.h"
+
 #include "CallFixedSize.h"
 
 template <typename A, typename R>
@@ -12,9 +13,11 @@ void doComputeSubqueryS(const std::vector<A>* input,
                         const CompactStringVector<Id, Id>& hasPredicate,
                         const CompactStringVector<size_t, Id>& patterns);
 
-HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec, ScanType type)
+HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec, ScanType type,
+                                   DataSource data_source)
     : Operation(qec),
       _type(type),
+      _data_source(data_source),
       _subtree(nullptr),
       _subtreeColIndex(-1),
       _subject(),
@@ -25,35 +28,42 @@ string HasPredicateScan::asString(size_t indent) const {
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
+  if (_data_source == DataSource::OBJECT) {
+    os << "OBJECT_";
+  }
   switch (_type) {
     case ScanType::FREE_S:
-      os << "HAS_RELATION_SCAN with O = " << _object;
+      os << "HAS_PREDICATE_SCAN with O = " << _object;
       break;
     case ScanType::FREE_O:
-      os << "HAS_RELATION_SCAN with S = " << _subject;
+      os << "HAS_PREDICATE_SCAN with S = " << _subject;
       break;
     case ScanType::FULL_SCAN:
-      os << "HAS_RELATION_SCAN for the full relation";
+      os << "HAS_PREDICATE_SCAN for the full relation";
       break;
     case ScanType::SUBQUERY_S:
-      os << "HAS_RELATION_SCAN with S = " << _subtree->asString(indent);
+      os << "HAS_PREDICATE_SCAN with S = " << _subtree->asString(indent);
       break;
   }
   return os.str();
 }
 
 string HasPredicateScan::getDescriptor() const {
+  std::string prefix = "";
+  if (_data_source == DataSource::OBJECT) {
+    prefix = "Object";
+  }
   switch (_type) {
     case ScanType::FREE_S:
-      return "HasPredicateScan free subject: " + _subject;
+      return prefix + "HasPredicateScan free subject: " + _subject;
     case ScanType::FREE_O:
-      return "HasPredicateScan free object: " + _object;
+      return prefix + "HasPredicateScan free object: " + _object;
     case ScanType::FULL_SCAN:
-      return "HasPredicateScan full scan";
+      return prefix + "HasPredicateScan full scan";
     case ScanType::SUBQUERY_S:
-      return "HasPredicateScan with a subquery on " + _subject;
+      return prefix + "HasPredicateScan with a subquery on " + _subject;
     default:
-      return "HasPredicateScan";
+      return prefix + "HasPredicateScan";
   }
 }
 
@@ -123,49 +133,34 @@ bool HasPredicateScan::knownEmptyResult() {
 }
 
 float HasPredicateScan::getMultiplicity(size_t col) {
+  const auto& metadata = _data_source == DataSource::SUBJECT
+                             ? getIndex().getPatternIndex().getSubjectMetaData()
+                             : getIndex().getPatternIndex().getObjectMetaData();
   switch (_type) {
     case ScanType::FREE_S:
       if (col == 0) {
-        return getIndex()
-            .getPatternIndex()
-            .getSubjectMetaData()
-            .fullHasPredicateMultiplicityEntities;
+        return metadata.fullHasPredicateMultiplicityEntities;
       }
       break;
     case ScanType::FREE_O:
       if (col == 0) {
-        return getIndex()
-            .getPatternIndex()
-            .getSubjectMetaData()
-            .fullHasPredicateMultiplicityPredicates;
+        return metadata.fullHasPredicateMultiplicityPredicates;
       }
       break;
     case ScanType::FULL_SCAN:
       if (col == 0) {
-        return getIndex()
-            .getPatternIndex()
-            .getSubjectMetaData()
-            .fullHasPredicateMultiplicityEntities;
+        return metadata.fullHasPredicateMultiplicityEntities;
       } else if (col == 1) {
-        return getIndex()
-            .getPatternIndex()
-            .getSubjectMetaData()
-            .fullHasPredicateMultiplicityPredicates;
+        return metadata.fullHasPredicateMultiplicityPredicates;
       }
       break;
     case ScanType::SUBQUERY_S:
       if (col < getResultWidth() - 1) {
         return _subtree->getMultiplicity(col) *
-               getIndex()
-                   .getPatternIndex()
-                   .getSubjectMetaData()
-                   .fullHasPredicateMultiplicityPredicates;
+               metadata.fullHasPredicateMultiplicityPredicates;
       } else {
         return _subtree->getMultiplicity(_subtreeColIndex) *
-               getIndex()
-                   .getPatternIndex()
-                   .getSubjectMetaData()
-                   .fullHasPredicateMultiplicityPredicates;
+               metadata.fullHasPredicateMultiplicityPredicates;
       }
       break;
   }
@@ -173,22 +168,17 @@ float HasPredicateScan::getMultiplicity(size_t col) {
 }
 
 size_t HasPredicateScan::getSizeEstimate() {
+  const auto& metadata = _data_source == DataSource::SUBJECT
+                             ? getIndex().getPatternIndex().getSubjectMetaData()
+                             : getIndex().getPatternIndex().getObjectMetaData();
   switch (_type) {
     case ScanType::FREE_S:
-      return static_cast<size_t>(getIndex()
-                                     .getPatternIndex()
-                                     .getSubjectMetaData()
-                                     .fullHasPredicateMultiplicityEntities);
+      return static_cast<size_t>(metadata.fullHasPredicateMultiplicityEntities);
     case ScanType::FREE_O:
-      return static_cast<size_t>(getIndex()
-                                     .getPatternIndex()
-                                     .getSubjectMetaData()
-                                     .fullHasPredicateMultiplicityPredicates);
+      return static_cast<size_t>(
+          metadata.fullHasPredicateMultiplicityPredicates);
     case ScanType::FULL_SCAN:
-      return getIndex()
-          .getPatternIndex()
-          .getSubjectMetaData()
-          .fullHasPredicateSize;
+      return metadata.fullHasPredicateSize;
     case ScanType::SUBQUERY_S:
 
       size_t nofDistinctLeft = std::max(
@@ -197,22 +187,13 @@ size_t HasPredicateScan::getSizeEstimate() {
                               _subtree->getMultiplicity(_subtreeColIndex)));
       size_t nofDistinctRight = std::max(
           size_t(1),
-          static_cast<size_t>(getIndex()
-                                  .getPatternIndex()
-                                  .getSubjectMetaData()
-                                  .fullHasPredicateSize /
-                              getIndex()
-                                  .getPatternIndex()
-                                  .getSubjectMetaData()
-                                  .fullHasPredicateMultiplicityPredicates));
+          static_cast<size_t>(metadata.fullHasPredicateSize /
+                              metadata.fullHasPredicateMultiplicityPredicates));
       size_t nofDistinctInResult = std::min(nofDistinctLeft, nofDistinctRight);
 
       double jcMultiplicityInResult =
           _subtree->getMultiplicity(_subtreeColIndex) *
-          getIndex()
-              .getPatternIndex()
-              .getSubjectMetaData()
-              .fullHasPredicateMultiplicityPredicates;
+          metadata.fullHasPredicateMultiplicityPredicates;
       return std::max(size_t(1), static_cast<size_t>(jcMultiplicityInResult *
                                                      nofDistinctInResult));
   }
@@ -239,8 +220,20 @@ void HasPredicateScan::computeResult(ResultTable* result) {
   result->_data.setCols(getResultWidth());
   result->_sortedBy = resultSortedOn();
 
-  std::shared_ptr<const PatternContainer> pattern_data =
-      _executionContext->getIndex().getPatternIndex().getSubjectPatternData();
+  std::shared_ptr<const PatternContainer> pattern_data;
+  switch (_data_source) {
+    case DataSource::SUBJECT:
+      pattern_data = _executionContext->getIndex()
+                         .getPatternIndex()
+                         .getSubjectPatternData();
+      break;
+    case DataSource::OBJECT:
+      pattern_data = _executionContext->getIndex()
+                         .getPatternIndex()
+                         .getObjectPatternData();
+      break;
+  }
+
   if (pattern_data->predicateIdSize() <= 1) {
     computeResult(result,
                   std::static_pointer_cast<const PatternContainerImpl<uint8_t>>(
@@ -504,3 +497,7 @@ void HasPredicateScan::setSubtreeSubjectColumn(size_t colIndex) {
 }
 
 HasPredicateScan::ScanType HasPredicateScan::getType() const { return _type; }
+
+HasPredicateScan::DataSource HasPredicateScan::dataSource() const {
+  return _data_source;
+}

@@ -1124,7 +1124,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           SubtreePlan plan(_qec);
           plan._idsOfIncludedNodes |= (uint64_t(1) << i);
           auto& tree = *plan._qet;
-          if (node._triple._p._iri == HAS_PREDICATE_PREDICATE) {
+          if (node._triple._p._iri == HAS_PREDICATE_PREDICATE ||
+              node._triple._p._iri == OBJECT_HAS_PREDICATE_PREDICATE) {
             // TODO(schnelle): Handle ?p ql:has-prediacte ?p
             // Add a has relation scan instead of a normal IndexScan
             HasPredicateScan::ScanType scanType;
@@ -1133,7 +1134,13 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             } else if (isVariable(node._triple._o)) {
               scanType = HasPredicateScan::ScanType::FREE_O;
             }
-            auto scan = std::make_shared<HasPredicateScan>(_qec, scanType);
+            HasPredicateScan::DataSource source =
+                HasPredicateScan::DataSource::SUBJECT;
+            if (node._triple._p._iri == OBJECT_HAS_PREDICATE_PREDICATE) {
+              source = HasPredicateScan::DataSource::OBJECT;
+            }
+            auto scan =
+                std::make_shared<HasPredicateScan>(_qec, scanType, source);
             scan->setSubject(node._triple._s);
             scan->setObject(node._triple._o);
             tree.setOperation(
@@ -1198,13 +1205,19 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           seeds.push_back(plan);
         } else if (node._variables.size() == 2) {
           // Add plans for both possible scan directions.
-          if (node._triple._p._iri == HAS_PREDICATE_PREDICATE) {
+          if (node._triple._p._iri == HAS_PREDICATE_PREDICATE ||
+              node._triple._p._iri == OBJECT_HAS_PREDICATE_PREDICATE) {
             // Add a has relation scan instead of a normal IndexScan
             SubtreePlan plan(_qec);
             plan._idsOfIncludedNodes |= (uint64_t(1) << i);
+            HasPredicateScan::DataSource source =
+                HasPredicateScan::DataSource::SUBJECT;
+            if (node._triple._p._iri == OBJECT_HAS_PREDICATE_PREDICATE) {
+              source = HasPredicateScan::DataSource::OBJECT;
+            }
             auto& tree = *plan._qet;
             auto scan = std::make_shared<HasPredicateScan>(
-                _qec, HasPredicateScan::ScanType::FULL_SCAN);
+                _qec, HasPredicateScan::ScanType::FULL_SCAN, source);
             scan->setSubject(node._triple._s);
             scan->setObject(node._triple._o);
             tree.setOperation(
@@ -2803,6 +2816,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     // If the join column corresponds to the has-predicate scan's
     // subject column we can use a specialized join that avoids
     // loading the full has-predicate predicate.
+    HasPredicateScan::DataSource data_source;
     if (a._qet->getType() ==
             QueryExecutionTree::OperationType::HAS_RELATION_SCAN ||
         b._qet->getType() ==
@@ -2823,6 +2837,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
           other = b._qet;
           subtree_col = jcs[0][1];
           replaceJoin = true;
+          data_source = op->dataSource();
         }
       } else if (b._qet->getType() ==
                      QueryExecutionTree::OperationType::HAS_RELATION_SCAN &&
@@ -2834,13 +2849,14 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
           hasPredicateScan = b._qet;
           subtree_col = jcs[0][0];
           replaceJoin = true;
+          data_source = op->dataSource();
         }
       }
       if (replaceJoin) {
         SubtreePlan plan{_qec};
         QueryExecutionTree& tree = *plan._qet;
         auto scan = std::make_shared<HasPredicateScan>(
-            _qec, HasPredicateScan::ScanType::SUBQUERY_S);
+            _qec, HasPredicateScan::ScanType::SUBQUERY_S, data_source);
         scan->setSubtree(other);
         scan->setSubtreeSubjectColumn(subtree_col);
         scan->setObject(static_cast<HasPredicateScan*>(

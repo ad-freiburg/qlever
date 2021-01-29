@@ -16,17 +16,19 @@
 class HasPredicateScan : public Operation {
  public:
   enum class ScanType {
-    // Given a constant predicate, return all subjects
+    // Given a constant predicate, return all subjects or objects
     FREE_S,
-    // Given a constant subject, return all predicates
+    // Given a constant subject or object, return all predicates
     FREE_O,
-    // For all subjects return their predicates
+    // For all subjects or objects return their predicates
     FULL_SCAN,
-    // For a given subset of subjects return their predicates
+    // For a given subset of subjects or objects return their predicates
     SUBQUERY_S
   };
+  enum class DataSource { SUBJECT, OBJECT };
 
-  HasPredicateScan(QueryExecutionContext* qec, ScanType type);
+  HasPredicateScan(QueryExecutionContext* qec, ScanType type,
+                   DataSource data_source);
 
   virtual string asString(size_t indent = 0) const override;
 
@@ -53,6 +55,7 @@ class HasPredicateScan : public Operation {
   void setSubtree(std::shared_ptr<QueryExecutionTree> subtree);
   void setSubtreeSubjectColumn(size_t colIndex);
   ScanType getType() const;
+  DataSource dataSource() const;
 
   const std::string& getObject() const;
 
@@ -94,6 +97,7 @@ class HasPredicateScan : public Operation {
 
  private:
   ScanType _type;
+  DataSource _data_source;
   std::shared_ptr<QueryExecutionTree> _subtree;
   size_t _subtreeColIndex;
 
