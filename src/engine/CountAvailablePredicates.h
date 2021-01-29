@@ -26,6 +26,8 @@ using std::vector;
 // when building as well as when loading the index.
 class CountAvailablePredicates : public Operation {
  public:
+  enum class CountType { SUBJECT, OBJECT };
+
   /**
    * @brief Creates a new CountAvailablePredicates operation that returns
    * predicates and their counts for all entities.
@@ -84,6 +86,12 @@ class CountAvailablePredicates : public Operation {
   void setVarNames(const std::string& predicateVarName,
                    const std::string& countVarName);
 
+  /**
+   * @brief This operation can count predicates connected to subjects or
+   * objects. This method switches between the two modes.
+   */
+  void setCountFor(CountType count_for);
+
   // This method is declared here solely for unit testing purposes
   /**
    * @brief Computes all relations that have one of input[inputCol]'s entities
@@ -120,6 +128,8 @@ class CountAvailablePredicates : public Operation {
   std::optional<std::string> _subjectEntityName;
   std::string _predicateVarName;
   std::string _countVarName;
+
+  CountType _count_for;
 
   virtual void computeResult(ResultTable* result) override;
 

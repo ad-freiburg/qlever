@@ -41,6 +41,8 @@ static const char INTERNAL_TEXT_MATCH_PREDICATE[] =
     "<QLever-internal-function/text>";
 static const char HAS_PREDICATE_PREDICATE[] =
     "<QLever-internal-function/has-predicate>";
+static const char OBJECT_HAS_PREDICATE_PREDICATE[] =
+    "<QLever-internal-function/object-has-predicate>";
 
 // For anonymous nodes in Turtle.
 static const std::string ANON_NODE_PREFIX = "QLever-Anon-Node";

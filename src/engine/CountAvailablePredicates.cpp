@@ -12,7 +12,8 @@ CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec)
       _subjectColumnIndex(0),
       _subjectEntityName(),
       _predicateVarName("predicate"),
-      _countVarName("count") {}
+      _countVarName("count"),
+      _count_for(CountType::SUBJECT) {}
 
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(
@@ -23,7 +24,8 @@ CountAvailablePredicates::CountAvailablePredicates(
       _subjectColumnIndex(subjectColumnIndex),
       _subjectEntityName(),
       _predicateVarName("predicate"),
-      _countVarName("count") {}
+      _countVarName("count"),
+      _count_for(CountType::SUBJECT) {}
 
 CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
                                                    std::string entityName)
@@ -32,13 +34,17 @@ CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
       _subjectColumnIndex(0),
       _subjectEntityName(entityName),
       _predicateVarName("predicate"),
-      _countVarName("count") {}
+      _countVarName("count"),
+      _count_for(CountType::SUBJECT) {}
 
 // _____________________________________________________________________________
 string CountAvailablePredicates::asString(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
+  }
+  if (_count_for == CountType::OBJECT) {
+    os << "OBJECT_";
   }
   if (_subjectEntityName) {
     os << "COUNT_AVAILABLE_PREDICATES for " << _subjectEntityName.value();
@@ -53,12 +59,21 @@ string CountAvailablePredicates::asString(size_t indent) const {
 
 // _____________________________________________________________________________
 string CountAvailablePredicates::getDescriptor() const {
-  if (_subjectEntityName) {
-    return "CountAvailablePredicates for a single entity";
-  } else if (_subtree == nullptr) {
-    return "CountAvailablePredicates for a all entities";
+  if (_count_for == CountType::OBJECT) {
+    if (_subjectEntityName) {
+      return "ObjectCountAvailablePredicates for a single entity";
+    } else if (_subtree == nullptr) {
+      return "ObjectCountAvailablePredicates for a all entities";
+    }
+    return "ObjectCountAvailablePredicates";
+  } else {
+    if (_subjectEntityName) {
+      return "CountAvailablePredicates for a single entity";
+    } else if (_subtree == nullptr) {
+      return "CountAvailablePredicates for a all entities";
+    }
+    return "CountAvailablePredicates";
   }
-  return "CountAvailablePredicates";
 }
 
 // _____________________________________________________________________________
@@ -75,6 +90,11 @@ void CountAvailablePredicates::setVarNames(const std::string& predicateVarName,
                                            const std::string& countVarName) {
   _predicateVarName = predicateVarName;
   _countVarName = countVarName;
+}
+
+// _____________________________________________________________________________
+void CountAvailablePredicates::setCountFor(CountType count_for) {
+  _count_for = count_for;
 }
 
 // _____________________________________________________________________________
@@ -147,8 +167,20 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
 
-  std::shared_ptr<const PatternContainer> pattern_data =
-      _executionContext->getIndex().getPatternIndex().getSubjectPatternData();
+  std::shared_ptr<const PatternContainer> pattern_data;
+  switch (_count_for) {
+    case CountType::SUBJECT:
+      pattern_data = _executionContext->getIndex()
+                         .getPatternIndex()
+                         .getSubjectPatternData();
+      break;
+    case CountType::OBJECT:
+      pattern_data = _executionContext->getIndex()
+                         .getPatternIndex()
+                         .getObjectPatternData();
+      break;
+  }
+
   if (pattern_data->predicateIdSize() <= 1) {
     computeResult(result,
                   std::static_pointer_cast<const PatternContainerImpl<uint8_t>>(

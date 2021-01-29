@@ -380,13 +380,15 @@ bool QueryPlanner::checkUsePatternTrick(
     return false;
   }
 
+  std::string_view group_by_var = pq->_groupByVariables[0];
+
   bool returns_counts = pq->_aliases.size() == 1;
 
   // These will only be set if the query returns the count of predicates
   // The varialbe the COUNT alias counts
-  std::string counted_var_name;
+  std::string_view counted_var_name;
   // The variable holding the counts
-  std::string count_var_name;
+  std::string_view count_var_name;
 
   if (returns_counts) {
     // There has to be a single count alias
@@ -419,14 +421,24 @@ bool QueryPlanner::checkUsePatternTrick(
     for (size_t i = 0; i < curPattern._whereClauseTriples.size(); i++) {
       bool usePatternTrick = true;
       const SparqlTriple& t = curPattern._whereClauseTriples[i];
+      std::string_view predicate = t._p._iri;
       // Check that the triples predicates is the HAS_PREDICATE_PREDICATE.
       // Also check that the triples object or subject matches the aliases input
       // variable and the group by variable.
-      if (t._p._iri != HAS_PREDICATE_PREDICATE ||
-          (returns_counts &&
-           !(counted_var_name == t._o || counted_var_name == t._s)) ||
-          pq->_groupByVariables[0] != t._o) {
-        usePatternTrick = false;
+      if (predicate != HAS_PREDICATE_PREDICATE &&
+          predicate != OBJECT_HAS_PREDICATE_PREDICATE) {
+        continue;
+      }
+
+      // Check that we group by the variable for which we count the predicates
+      if (group_by_var != t._o) {
+        continue;
+      }
+
+      // Ensure that if we return counts we return either subject or object
+      // counts
+      if (returns_counts &&
+          !(counted_var_name == t._o || counted_var_name == t._s)) {
         continue;
       }
 
@@ -843,6 +855,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       auto countPred = std::make_shared<CountAvailablePredicates>(
           _qec, isSorted ? parent._qet : orderByPlan._qet, subjectColumn);
 
+      if (patternTrickTriple._p._iri == OBJECT_HAS_PREDICATE_PREDICATE) {
+        countPred->setCountFor(CountAvailablePredicates::CountType::OBJECT);
+      }
+
       countPred->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName);
       QueryExecutionTree& tree = *patternTrickPlan._qet;
       tree.setVariableColumns(countPred->getVariableColumns());
@@ -856,6 +872,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     auto countPred =
         std::make_shared<CountAvailablePredicates>(_qec, patternTrickTriple._s);
 
+    if (patternTrickTriple._p._iri == OBJECT_HAS_PREDICATE_PREDICATE) {
+      countPred->setCountFor(CountAvailablePredicates::CountType::OBJECT);
+    }
+
     countPred->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName);
     QueryExecutionTree& tree = *patternTrickPlan._qet;
     tree.setVariableColumns(countPred->getVariableColumns());
@@ -866,6 +886,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     // Use the pattern trick without a subtree
     SubtreePlan patternTrickPlan(_qec);
     auto countPred = std::make_shared<CountAvailablePredicates>(_qec);
+
+    if (patternTrickTriple._p._iri == OBJECT_HAS_PREDICATE_PREDICATE) {
+      countPred->setCountFor(CountAvailablePredicates::CountType::OBJECT);
+    }
 
     if (pq._aliases.size() > 0) {
       countPred->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName);
