@@ -386,14 +386,16 @@ void TransitivePath::computeTransitivePathLeftBound(
   // Used to map entries in the left column to entries they have connection with
   Map edges;
 
-  // initialize the map from the subresult
-  for (size_t i = 0; i < sub.size(); i++) {
-    if (i % 8192 == 0) {
-      checkTimeout();
+  if (left.size() > 0) {
+    // initialize the map from the subresult
+    for (size_t i = 0; i < sub.size(); i++) {
+      if (i % 8192 == 0) {
+	checkTimeout();
+      }
+      size_t l = sub(i, leftSubCol);
+      size_t r = sub(i, rightSubCol);
+      edges[l].insert(r);
     }
-    size_t l = sub(i, leftSubCol);
-    size_t r = sub(i, rightSubCol);
-    edges[l].insert(r);
   }
 
   // For every node do a dfs on the graph
@@ -527,14 +529,16 @@ void TransitivePath::computeTransitivePathRightBound(
   // Used to map entries in the left column to entries they have connection with
   Map edges;
 
-  // initialize the map from the subresult
-  for (size_t i = 0; i < sub.size(); i++) {
-    if (i % 4096 == 0) {
-      checkTimeout();
+  if (right.size() > 0) {
+    // initialize the map from the subresult
+    for (size_t i = 0; i < sub.size(); i++) {
+      if (i % 4096 == 0) {
+	checkTimeout();
+      }
+      size_t l = sub(i, leftSubCol);
+      size_t r = sub(i, rightSubCol);
+      edges[r].template insert(l);
     }
-    size_t l = sub(i, leftSubCol);
-    size_t r = sub(i, rightSubCol);
-    edges[r].template insert(l);
   }
 
   // For every node do a dfs on the graph
