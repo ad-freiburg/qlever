@@ -1,5 +1,25 @@
 # QLever
 
+# Important Release Note
+
+This is the Version used to produce the results for our VLDB 2021 submission.
+We highly recommend running it inside Docker (even more than with the usual
+QLever) for the following reasons:
+
+* We use a cancelable parallel sort that was produced by hacking GCC's STL.
+  Using a different compiler or a wrong version of the STL might lead to very
+  strange compilation errors.
+
+* We use relatively recent features of OpenMP for Parallelizing the
+  "CountAvailablePredicates" operation, aka "Pattern Trick". These also
+  require a very new compiler version.
+
+* Please also note, that compiling this version will typically produce many
+  Warnings (most of which are in external dependencies). But in the  Docker
+  setup, we have made sure that everything works as expected
+
+Summary: Use this version with Docker.
+
 [![Build
 Status](https://travis-ci.org/ad-freiburg/QLever.svg?branch=master)](https://travis-ci.org/ad-freiburg/QLever)
 
