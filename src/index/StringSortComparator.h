@@ -87,7 +87,7 @@ class LocaleManager {
     _ignorePunctuationStatus =
         ignorePunctuationAtFirstLevel ? UCOL_SHIFTED : UCOL_NON_IGNORABLE;
 
-    if (_icuLocale.isBogus() == TRUE) {
+    if (_icuLocale.isBogus()) {
       throw std::runtime_error("Could not create locale with language " + lang +
                                " and Country " + country);
     }
