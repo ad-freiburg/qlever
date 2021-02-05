@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "../global/Pattern.h"
+#include "../index/PatternIndex.h"
 #include "../parser/ParsedQuery.h"
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
@@ -109,5 +110,6 @@ class HasPredicateScan : public Operation {
   template <typename PredicateId>
   void computeResult(
       ResultTable* result,
-      std::shared_ptr<const PatternContainerImpl<PredicateId>> pattern_data);
+      std::shared_ptr<const PatternContainerImpl<PredicateId>> pattern_data,
+      const PatternIndex::PatternMetaData* metadata);
 };

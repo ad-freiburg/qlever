@@ -221,35 +221,47 @@ void HasPredicateScan::computeResult(ResultTable* result) {
   result->_sortedBy = resultSortedOn();
 
   std::shared_ptr<const PatternContainer> pattern_data;
+  const PatternIndex::PatternMetaData* metadata = nullptr;
   switch (_data_source) {
     case DataSource::SUBJECT:
       pattern_data = _executionContext->getIndex()
                          .getPatternIndex()
                          .getSubjectPatternData();
+      metadata =
+          &_executionContext->getIndex().getPatternIndex().getSubjectMetaData();
       break;
     case DataSource::OBJECT:
       pattern_data = _executionContext->getIndex()
                          .getPatternIndex()
                          .getObjectPatternData();
+      metadata =
+          &_executionContext->getIndex().getPatternIndex().getObjectMetaData();
       break;
   }
 
   if (pattern_data->predicateIdSize() <= 1) {
     computeResult(result,
                   std::static_pointer_cast<const PatternContainerImpl<uint8_t>>(
-                      pattern_data));
+                      pattern_data),
+                  metadata);
   } else if (pattern_data->predicateIdSize() <= 2) {
     computeResult(
-        result, std::static_pointer_cast<const PatternContainerImpl<uint16_t>>(
-                    pattern_data));
+        result,
+        std::static_pointer_cast<const PatternContainerImpl<uint16_t>>(
+            pattern_data),
+        metadata);
   } else if (pattern_data->predicateIdSize() <= 4) {
     computeResult(
-        result, std::static_pointer_cast<const PatternContainerImpl<uint32_t>>(
-                    pattern_data));
+        result,
+        std::static_pointer_cast<const PatternContainerImpl<uint32_t>>(
+            pattern_data),
+        metadata);
   } else if (pattern_data->predicateIdSize() <= 8) {
     computeResult(
-        result, std::static_pointer_cast<const PatternContainerImpl<uint64_t>>(
-                    pattern_data));
+        result,
+        std::static_pointer_cast<const PatternContainerImpl<uint64_t>>(
+            pattern_data),
+        metadata);
   } else {
     AD_THROW(ad_semsearch::Exception::BAD_INPUT,
              "The index contains more than 2**64 predicates.");
@@ -261,7 +273,8 @@ void HasPredicateScan::computeResult(ResultTable* result) {
 template <typename PredicateId>
 void HasPredicateScan::computeResult(
     ResultTable* result,
-    std::shared_ptr<const PatternContainerImpl<PredicateId>> pattern_data) {
+    std::shared_ptr<const PatternContainerImpl<PredicateId>> pattern_data,
+    const PatternIndex::PatternMetaData* metadata) {
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
 
   switch (_type) {
@@ -301,10 +314,7 @@ void HasPredicateScan::computeResult(
                                         _executionContext->getIndex()
                                             .getPatternIndex()
                                             .getPredicateGlobalIds(),
-                                        getIndex()
-                                            .getPatternIndex()
-                                            .getSubjectMetaData()
-                                            .fullHasPredicateSize);
+                                        metadata->fullHasPredicateSize);
       break;
     case ScanType::SUBQUERY_S:
 
@@ -471,7 +481,7 @@ void HasPredicateScan::computeSubqueryS(
         }
         result(backIdx, input.cols()) = predicateGlobalIds[predicateData[j]];
       }
-    } else {
+    } else if (id >= hasPattern.size()) {
       break;
     }
   }
