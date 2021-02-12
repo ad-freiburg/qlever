@@ -36,13 +36,14 @@ class QueryExecutionTree {
     TEXT_WITH_FILTER = 9,
     TWO_COL_JOIN = 10,
     OPTIONAL_JOIN = 11,
-    COUNT_AVAILABLE_PREDICATES = 12,
+    PREDICATE_COUNT_ENTITES = 12,
     GROUP_BY = 13,
     HAS_RELATION_SCAN = 14,
     UNION = 15,
     MULTICOLUMN_JOIN = 16,
     TRANSITIVE_PATH = 17,
-    VALUES = 18
+    VALUES = 18,
+    ENTITY_COUNT_PREDICATES = 19
   };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);

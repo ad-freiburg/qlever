@@ -82,6 +82,10 @@ add_executable(HasPredicateScanTest HasPredicateScanTest.cpp)
 add_test(HasPredicateScanTest HasPredicateScanTest)
 target_link_libraries(HasPredicateScanTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
 
+add_executable(EntityCountPredicatesTest EntityCountPredicatesTest.cpp)
+add_test(EntityCountPredicatesTest EntityCountPredicatesTest)
+target_link_libraries(EntityCountPredicatesTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
+
 add_executable(MmapVectorTest MmapVectorTest.cpp)
 add_test(MmapVectorTest MmapVectorTest)
 target_link_libraries(MmapVectorTest gtest_main -pthread)

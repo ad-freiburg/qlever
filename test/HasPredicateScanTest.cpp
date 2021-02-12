@@ -6,8 +6,8 @@
 #include <algorithm>
 #include <cstdio>
 #include "../src/engine/CallFixedSize.h"
-#include "../src/engine/CountAvailablePredicates.h"
 #include "../src/engine/HasPredicateScan.h"
+#include "../src/engine/PredicateCountEntities.h"
 
 // used to test HasRelationScan with a subtree
 class DummyOperation : public Operation {
@@ -294,7 +294,7 @@ TEST(HasPredicateScan, subtreeS) {
   ASSERT_EQ(3u, result[9][2]);
 }
 
-TEST(CountAvailablePredicates, patternTrickTest) {
+TEST(PredicateCountEntities, patternTrickTest) {
   // The input table containing entity ids
   IdTable input(1);
   for (Id i = 0; i < 8; i++) {
@@ -312,7 +312,7 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   // Maps pattern ids to patterns
   vector<vector<Id>> patternsSrc = {{0, 2, 3}, {1, 3, 4, 2, 0}};
 
-  std::vector<Id> predicateGlobalIds = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+  std::vector<Id> predicateGlobalIds = {0, 1, 2, 3, 4};
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
@@ -321,9 +321,8 @@ TEST(CountAvailablePredicates, patternTrickTest) {
 
   RuntimeInformation runtimeInfo;
   try {
-    CALL_FIXED_SIZE_1(input.cols(),
-                      CountAvailablePredicates::computePatternTrick, input,
-                      &result, hasPattern, hasRelation, patterns,
+    CALL_FIXED_SIZE_1(input.cols(), PredicateCountEntities::computePatternTrick,
+                      input, &result, hasPattern, hasRelation, patterns,
                       predicateGlobalIds, 0, &runtimeInfo);
   } catch (const std::runtime_error& e) {
     // More verbose output in the case of an exception occuring.
@@ -369,7 +368,7 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   // Test the pattern trick for all entities
   result.clear();
   try {
-    CountAvailablePredicates::computePatternTrickAllEntities(
+    PredicateCountEntities::computePatternTrickAllEntities(
         &result, hasPattern, hasRelation, patterns, predicateGlobalIds);
   } catch (const std::runtime_error& e) {
     // More verbose output in the case of an exception occuring.

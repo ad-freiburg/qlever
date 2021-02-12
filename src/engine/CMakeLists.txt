@@ -23,6 +23,7 @@ add_library(engine
         TwoColumnJoin.cpp TwoColumnJoin.h
         OptionalJoin.cpp OptionalJoin.h
         PredicateCountEntities.cpp PredicateCountEntities.h
+        EntityCountPredicates.cpp EntityCountPredicates.h
         GroupBy.cpp GroupBy.h
         HasPredicateScan.cpp HasPredicateScan.h
         Union.cpp Union.h
