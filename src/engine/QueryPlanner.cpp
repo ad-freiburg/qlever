@@ -9,7 +9,6 @@
 
 #include "../parser/ParseException.h"
 #include "../parser/ParsedQuery.h"
-#include "CountAvailablePredicates.h"
 #include "Distinct.h"
 #include "Filter.h"
 #include "GroupBy.h"
@@ -19,6 +18,7 @@
 #include "MultiColumnJoin.h"
 #include "OptionalJoin.h"
 #include "OrderBy.h"
+#include "PredicateCountEntities.h"
 #include "Sort.h"
 #include "TextOperationWithFilter.h"
 #include "TextOperationWithoutFilter.h"
@@ -443,7 +443,7 @@ bool QueryPlanner::checkUsePatternTrick(
       }
 
       // check that all selected variables are outputs of
-      // CountAvailablePredicates
+      // PredicateCountEntities
       for (const std::string& s : pq->_selectedVariables) {
         if (s != t._o && s != count_var_name) {
           usePatternTrick = false;
@@ -852,11 +852,11 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
         orderByPlan._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByOp);
       }
       SubtreePlan patternTrickPlan(_qec);
-      auto countPred = std::make_shared<CountAvailablePredicates>(
+      auto countPred = std::make_shared<PredicateCountEntities>(
           _qec, isSorted ? parent._qet : orderByPlan._qet, subjectColumn);
 
       if (patternTrickTriple._p._iri == OBJECT_HAS_PREDICATE_PREDICATE) {
-        countPred->setCountFor(CountAvailablePredicates::CountType::OBJECT);
+        countPred->setCountFor(PredicateCountEntities::CountType::OBJECT);
       }
 
       countPred->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName);
@@ -870,10 +870,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     // The subject of the pattern trick is not a variable
     SubtreePlan patternTrickPlan(_qec);
     auto countPred =
-        std::make_shared<CountAvailablePredicates>(_qec, patternTrickTriple._s);
+        std::make_shared<PredicateCountEntities>(_qec, patternTrickTriple._s);
 
     if (patternTrickTriple._p._iri == OBJECT_HAS_PREDICATE_PREDICATE) {
-      countPred->setCountFor(CountAvailablePredicates::CountType::OBJECT);
+      countPred->setCountFor(PredicateCountEntities::CountType::OBJECT);
     }
 
     countPred->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName);
@@ -885,10 +885,10 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
   } else {
     // Use the pattern trick without a subtree
     SubtreePlan patternTrickPlan(_qec);
-    auto countPred = std::make_shared<CountAvailablePredicates>(_qec);
+    auto countPred = std::make_shared<PredicateCountEntities>(_qec);
 
     if (patternTrickTriple._p._iri == OBJECT_HAS_PREDICATE_PREDICATE) {
-      countPred->setCountFor(CountAvailablePredicates::CountType::OBJECT);
+      countPred->setCountFor(PredicateCountEntities::CountType::OBJECT);
     }
 
     if (pq._aliases.size() > 0) {

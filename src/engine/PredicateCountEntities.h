@@ -20,34 +20,34 @@ using std::vector;
 // and a column index referring to such a column. It then creates a ResultTable
 // containing two columns, the first one filled with the ids of all predicates
 // for which there is an entry in the index with one of the entities in the
-// specified input column as its subject. The second output column contains a
-// count of how many of the input entities fulfill that requirement for that
-// predicate. This operation requires the use of the usePatterns option both
-// when building as well as when loading the index.
-class CountAvailablePredicates : public Operation {
+// specified input column as its subject (or object). The second output column
+// contains a count of how many of the input entities fulfill that requirement
+// for that predicate. This operation requires the use of the usePatterns
+// option both when building as well as when loading the index.
+class PredicateCountEntities : public Operation {
  public:
   enum class CountType { SUBJECT, OBJECT };
 
   /**
-   * @brief Creates a new CountAvailablePredicates operation that returns
+   * @brief Creates a new PredicateCountEntities operation that returns
    * predicates and their counts for all entities.
    */
-  CountAvailablePredicates(QueryExecutionContext* qec);
+  PredicateCountEntities(QueryExecutionContext* qec);
 
   /**
-   * @brief Creates a new CountAvailablePredicates operation that returns
+   * @brief Creates a new PredicateCountEntities operation that returns
    * predicates and their counts for the entities in column subjectColumnIndex
    * of the result of subtree.
    */
-  CountAvailablePredicates(QueryExecutionContext* qec,
-                           std::shared_ptr<QueryExecutionTree> subtree,
-                           size_t subjectColumnIndex);
+  PredicateCountEntities(QueryExecutionContext* qec,
+                         std::shared_ptr<QueryExecutionTree> subtree,
+                         size_t subjectColumnIndex);
 
   /**
    * @brief Creates a new CountAvailblePredicates operation that returns
    * predicates and their counts for the entity given by the entityName.
    */
-  CountAvailablePredicates(QueryExecutionContext* qec, std::string entityName);
+  PredicateCountEntities(QueryExecutionContext* qec, std::string entityName);
 
   virtual string asString(size_t indent = 0) const override;
 

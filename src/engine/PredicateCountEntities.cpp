@@ -2,11 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 
-#include "CountAvailablePredicates.h"
+#include "PredicateCountEntities.h"
 #include "CallFixedSize.h"
 
 // _____________________________________________________________________________
-CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec)
+PredicateCountEntities::PredicateCountEntities(QueryExecutionContext* qec)
     : Operation(qec),
       _subtree(nullptr),
       _subjectColumnIndex(0),
@@ -16,7 +16,7 @@ CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec)
       _count_for(CountType::SUBJECT) {}
 
 // _____________________________________________________________________________
-CountAvailablePredicates::CountAvailablePredicates(
+PredicateCountEntities::PredicateCountEntities(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
     size_t subjectColumnIndex)
     : Operation(qec),
@@ -27,8 +27,8 @@ CountAvailablePredicates::CountAvailablePredicates(
       _countVarName("count"),
       _count_for(CountType::SUBJECT) {}
 
-CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
-                                                   std::string entityName)
+PredicateCountEntities::PredicateCountEntities(QueryExecutionContext* qec,
+                                               std::string entityName)
     : Operation(qec),
       _subtree(nullptr),
       _subjectColumnIndex(0),
@@ -38,68 +38,69 @@ CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
       _count_for(CountType::SUBJECT) {}
 
 // _____________________________________________________________________________
-string CountAvailablePredicates::asString(size_t indent) const {
+string PredicateCountEntities::asString(size_t indent) const {
   std::ostringstream os;
   for (size_t i = 0; i < indent; ++i) {
     os << " ";
   }
-  if (_count_for == CountType::OBJECT) {
-    os << "OBJECT_";
-  }
+  const std::string entity_name =
+      (_count_for == CountType::OBJECT) ? "OBJECTS" : "SUBJECTS";
   if (_subjectEntityName) {
-    os << "COUNT_AVAILABLE_PREDICATES for " << _subjectEntityName.value();
+    os << "PREDICATE_COUNT_" << entity_name << " for "
+       << _subjectEntityName.value();
   } else if (_subtree == nullptr) {
-    os << "COUNT_AVAILABLE_PREDICATES for all entities";
+    os << "PREDICATE_COUNT_" << entity_name << " for all entities";
   } else {
-    os << "COUNT_AVAILABLE_PREDICATES (col " << _subjectColumnIndex << ")\n"
+    os << "PREDICATE_COUNT_" << entity_name << " (col " << _subjectColumnIndex
+       << ")\n"
        << _subtree->asString(indent);
   }
   return os.str();
 }
 
 // _____________________________________________________________________________
-string CountAvailablePredicates::getDescriptor() const {
+string PredicateCountEntities::getDescriptor() const {
   if (_count_for == CountType::OBJECT) {
     if (_subjectEntityName) {
-      return "ObjectCountAvailablePredicates for a single entity";
+      return "PredicateCountObjects for a single entity";
     } else if (_subtree == nullptr) {
-      return "ObjectCountAvailablePredicates for a all entities";
+      return "PredicateCountObjects for a all entities";
     }
-    return "ObjectCountAvailablePredicates";
+    return "PredicateCountObjects";
   } else {
     if (_subjectEntityName) {
-      return "CountAvailablePredicates for a single entity";
+      return "PredicateCountSubjects for a single entity";
     } else if (_subtree == nullptr) {
-      return "CountAvailablePredicates for a all entities";
+      return "PredicateCountSubjects for a all entities";
     }
-    return "CountAvailablePredicates";
+    return "PredicateCountSubjects";
   }
 }
 
 // _____________________________________________________________________________
-size_t CountAvailablePredicates::getResultWidth() const { return 2; }
+size_t PredicateCountEntities::getResultWidth() const { return 2; }
 
 // _____________________________________________________________________________
-vector<size_t> CountAvailablePredicates::resultSortedOn() const {
+vector<size_t> PredicateCountEntities::resultSortedOn() const {
   // The result is not sorted on any column.
   return {};
 }
 
 // _____________________________________________________________________________
-void CountAvailablePredicates::setVarNames(const std::string& predicateVarName,
-                                           const std::string& countVarName) {
+void PredicateCountEntities::setVarNames(const std::string& predicateVarName,
+                                         const std::string& countVarName) {
   _predicateVarName = predicateVarName;
   _countVarName = countVarName;
 }
 
 // _____________________________________________________________________________
-void CountAvailablePredicates::setCountFor(CountType count_for) {
+void PredicateCountEntities::setCountFor(CountType count_for) {
   _count_for = count_for;
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t>
-CountAvailablePredicates::getVariableColumns() const {
+ad_utility::HashMap<string, size_t> PredicateCountEntities::getVariableColumns()
+    const {
   ad_utility::HashMap<string, size_t> varCols;
   varCols[_predicateVarName] = 0;
   varCols[_countVarName] = 1;
@@ -107,7 +108,7 @@ CountAvailablePredicates::getVariableColumns() const {
 }
 
 // _____________________________________________________________________________
-float CountAvailablePredicates::getMultiplicity(size_t col) {
+float PredicateCountEntities::getMultiplicity(size_t col) {
   if (col == 0) {
     return 1;
   } else {
@@ -119,7 +120,7 @@ float CountAvailablePredicates::getMultiplicity(size_t col) {
 }
 
 // _____________________________________________________________________________
-size_t CountAvailablePredicates::getSizeEstimate() {
+size_t PredicateCountEntities::getSizeEstimate() {
   if (_subtree.get() != nullptr) {
     // Predicates are only computed for entities in the subtrees result.
 
@@ -147,7 +148,7 @@ size_t CountAvailablePredicates::getSizeEstimate() {
 }
 
 // _____________________________________________________________________________
-size_t CountAvailablePredicates::getCostEstimate() {
+size_t PredicateCountEntities::getCostEstimate() {
   if (_subtree.get() != nullptr) {
     // Without knowing the ratio of elements that will have a pattern assuming
     // constant cost per entry should be reasonable (altough non distinct
@@ -160,8 +161,8 @@ size_t CountAvailablePredicates::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-void CountAvailablePredicates::computeResult(ResultTable* result) {
-  LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
+void PredicateCountEntities::computeResult(ResultTable* result) {
+  LOG(DEBUG) << "PredicateCountEntities result computation..." << std::endl;
   result->_data.setCols(2);
   result->_sortedBy = resultSortedOn();
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -202,12 +203,11 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
              "The index contains more than 2**64 predicates.");
   }
 
-  LOG(DEBUG) << "CountAvailablePredicates result computation done."
-             << std::endl;
+  LOG(DEBUG) << "PredicateCountEntities result computation done." << std::endl;
 }
 
 template <typename PredicateId>
-void CountAvailablePredicates::computeResult(
+void PredicateCountEntities::computeResult(
     ResultTable* result,
     std::shared_ptr<const PatternContainerImpl<PredicateId>> pattern_data) {
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
@@ -220,7 +220,7 @@ void CountAvailablePredicates::computeResult(
       IdTable input(1);
       input.push_back({entityId});
       int width = input.cols();
-      CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
+      CALL_FIXED_SIZE_1(width, PredicateCountEntities::computePatternTrick,
                         input, &result->_data, pattern_data->hasPattern(),
                         pattern_data->hasPredicate(), pattern_data->patterns(),
                         _executionContext->getIndex()
@@ -230,7 +230,7 @@ void CountAvailablePredicates::computeResult(
     }
   } else if (_subtree == nullptr) {
     // Compute the predicates for all entities
-    CountAvailablePredicates::computePatternTrickAllEntities(
+    PredicateCountEntities::computePatternTrickAllEntities(
         &result->_data, pattern_data->hasPattern(),
         pattern_data->hasPredicate(), pattern_data->patterns(),
 
@@ -240,23 +240,22 @@ void CountAvailablePredicates::computeResult(
   } else {
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
     runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
-    LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
+    LOG(DEBUG) << "PredicateCountEntities subresult computation done."
                << std::endl;
 
     int width = subresult->_data.cols();
     CALL_FIXED_SIZE_1(
-        width, CountAvailablePredicates::computePatternTrick, subresult->_data,
+        width, PredicateCountEntities::computePatternTrick, subresult->_data,
         &result->_data, pattern_data->hasPattern(),
         pattern_data->hasPredicate(), pattern_data->patterns(),
         _executionContext->getIndex().getPatternIndex().getPredicateGlobalIds(),
         _subjectColumnIndex, &runtimeInfo);
   }
-  LOG(DEBUG) << "CountAvailablePredicates result computation done."
-             << std::endl;
+  LOG(DEBUG) << "PredicateCountEntities result computation done." << std::endl;
 }
 
 template <typename PredicateId>
-void CountAvailablePredicates::computePatternTrickAllEntities(
+void PredicateCountEntities::computePatternTrickAllEntities(
     IdTable* dynResult, const vector<PatternID>& hasPattern,
     const CompactStringVector<Id, PredicateId>& hasPredicate,
     const CompactStringVector<size_t, PredicateId>& patterns,
@@ -303,7 +302,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
 }
 
 template <int WIDTH, typename PredicateId>
-void CountAvailablePredicates::computePatternTrick(
+void PredicateCountEntities::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,
     const vector<PatternID>& hasPattern,
     const CompactStringVector<Id, PredicateId>& hasPredicate,

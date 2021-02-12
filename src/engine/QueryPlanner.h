@@ -367,7 +367,7 @@ class QueryPlanner {
 
   /**
    * @brief Determines if the pattern trick (and in turn the
-   * CountAvailablePredicates operation) are applicable to the given
+   * PredicateCountEntities operation) are applicable to the given
    * parsed query. If a ql:has-predicate triple is found and
    * CountAvailblePredicates can be used for it, the triple will be removed from
    * the parsed query.
