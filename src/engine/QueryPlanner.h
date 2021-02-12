@@ -278,6 +278,10 @@ class QueryPlanner {
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab,
       const SparqlTriple& patternTrickTriple);
 
+  vector<SubtreePlan> getEntityCountPredicatesRow(
+      const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab,
+      const SparqlTriple& entityCountPredicatesTriple);
+
   vector<SubtreePlan> getHavingRow(
       const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const;
 
@@ -378,6 +382,9 @@ class QueryPlanner {
    */
   bool checkUsePatternTrick(ParsedQuery* pq,
                             SparqlTriple* patternTrickTriple) const;
+
+  bool checkUseEntityCountPredicates(ParsedQuery* pq,
+                                     SparqlTriple* patternTrickTriple) const;
 
   /**
    * @brief return the index of the cheapest execution tree in the argument.

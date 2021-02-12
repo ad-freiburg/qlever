@@ -795,3 +795,48 @@ queries:
       - contains_row: ["<Albert_Fert>", "<Wolf_Prize_in_Physics>"]
       - contains_row: ["<Albert_Overhauser>", "<National_Medal_of_Science_for_Physical_Science>"]
       - contains_row: ["<Andre_Geim>", "<Nobel_Prize_in_Physics>"]
+  - query : geographer-has-predicates 
+    type: no-text
+    sparql: |
+      SELECT ?entity (COUNT(?predicate) AS ?count) WHERE {
+        ?entity <is-a> <Geographer> .
+        ?entity ql:has-predicate ?predicate
+      }
+      GROUP BY ?entity
+      ORDER BY DESC(?count)
+    checks:
+      - num_rows: 138
+      - num_cols: 2
+      - selected: ["?entity", "?count"]
+      - contains_row: ["<Leonardo_da_Vinci>", "25"]
+      - contains_row: ["<Ibn_Battuta>", "12"]
+  - query : entity-has-predicates 
+    type: no-text
+    sparql: |
+      SELECT ?entity (COUNT(?predicate) AS ?count) WHERE {
+        ?entity ql:has-predicate ?predicate
+      }
+      GROUP BY ?entity
+      ORDER BY DESC(?count)
+    checks:
+      # The e2e tests always ask for a smaller result
+      # - num_rows: 19362 
+      - num_cols: 2
+      - selected: ["?entity", "?count"]
+      - contains_row: ["<Theodore_Roosevelt>", "38"]
+      - contains_row: ["<Stephen_Hawking>", "31"]
+  - query : object-has-predicates 
+    type: no-text
+    sparql: |
+      SELECT ?entity (COUNT(?predicate) AS ?count) WHERE {
+        ?entity ql:object-has-predicate ?predicate
+      }
+      GROUP BY ?entity
+      ORDER BY DESC(?count)
+    checks:
+      # The e2e tests always ask for a smaller result
+      # - num_rows: 55147 
+      - num_cols: 2
+      - selected: ["?entity", "?count"]
+      - contains_row: ["<Australia>", "5"]
+      - contains_row: ["<Astronomer>", "4"]

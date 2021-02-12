@@ -10,6 +10,7 @@
 #include "../parser/ParseException.h"
 #include "../parser/ParsedQuery.h"
 #include "Distinct.h"
+#include "EntityCountPredicates.h"
 #include "Filter.h"
 #include "GroupBy.h"
 #include "HasPredicateScan.h"
@@ -40,8 +41,16 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   SparqlTriple patternTrickTriple("", PropertyPath(), "");
   bool usePatternTrick =
       _enablePatternTrick && checkUsePatternTrick(&pq, &patternTrickTriple);
+  SparqlTriple entityHasPredicateTriple("", PropertyPath(), "");
+  bool useEntityCountPredicates =
+      _enablePatternTrick && !usePatternTrick &&
+      checkUseEntityCountPredicates(&pq, &entityHasPredicateTriple);
+  LOG(INFO) << "pattern trick: " << usePatternTrick
+            << " entitycountpredicates: " << useEntityCountPredicates
+            << std::endl;
 
-  bool doGrouping = pq._groupByVariables.size() > 0 || usePatternTrick;
+  bool doGrouping = pq._groupByVariables.size() > 0 || usePatternTrick ||
+                    useEntityCountPredicates;
   if (!doGrouping) {
     // if there is no group by statement, but an aggregate alias is used
     // somewhere do grouping anyways.
@@ -60,10 +69,13 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   // Add the query level modifications
 
   // GROUP BY
-  if (doGrouping && !usePatternTrick) {
+  if (doGrouping && !usePatternTrick && !useEntityCountPredicates) {
     plans.emplace_back(getGroupByRow(pq, plans));
   } else if (usePatternTrick) {
     plans.emplace_back(getPatternTrickRow(pq, plans, patternTrickTriple));
+  } else if (useEntityCountPredicates) {
+    plans.emplace_back(
+        getEntityCountPredicatesRow(pq, plans, entityHasPredicateTriple));
   }
 
   // HAVING
@@ -729,6 +741,241 @@ bool QueryPlanner::checkUsePatternTrick(
    */
 }
 
+bool QueryPlanner::checkUseEntityCountPredicates(
+    ParsedQuery* pq, SparqlTriple* hasPredicateTriple) const {
+  // Check if the query has the right number of variables for aliases and
+  // group by.
+  if (pq->_groupByVariables.size() != 1 || pq->_aliases.size() > 1) {
+    return false;
+  }
+
+  std::string_view group_by_var = pq->_groupByVariables[0];
+
+  bool returns_counts = pq->_aliases.size() == 1;
+
+  // These will only be set if the query returns the count of predicates
+  // The varialbe the COUNT alias counts
+  std::string_view counted_var_name;
+  // The variable holding the counts
+  std::string_view count_var_name;
+
+  if (returns_counts) {
+    // There has to be a single count alias
+    const ParsedQuery::Alias& alias = pq->_aliases.back();
+    // Create a lower case version of the aliases function string to allow
+    // for case insensitive keyword detection.
+    std::string aliasFunctionLower =
+        ad_utility::getLowercaseUtf8(alias._function);
+    // Check if the alias is a non distinct count alias
+    if (!(alias._isAggregate &&
+          aliasFunctionLower.find("distinct") == std::string::npos &&
+          ad_utility::startsWith(aliasFunctionLower, "count"))) {
+      return false;
+    }
+    counted_var_name = alias._inVarName;
+    count_var_name = alias._outVarName;
+  }
+
+  // The first possibility for using the pattern trick is having a
+  // ql:has-predicate predicate in the query
+
+  // look for a HAS_RELATION_PREDICATE triple which satisfies all constraints
+  // check in all the basic graph patterns that are direct children.
+  // TODO<joka921, kramerfl> verify and proof that this is always legal
+  for (auto& child : pq->children()) {
+    if (!child.is<GraphPatternOperation::BasicGraphPattern>()) {
+      continue;
+    }
+    auto& curPattern = child.getBasic();
+    for (size_t i = 0; i < curPattern._whereClauseTriples.size(); i++) {
+      bool useEntityCountPredicates = true;
+      const SparqlTriple& t = curPattern._whereClauseTriples[i];
+      std::string_view predicate = t._p._iri;
+      // Check that the triples predicates is the HAS_PREDICATE_PREDICATE.
+      // Also check that the triples object or subject matches the aliases input
+      // variable and the group by variable.
+      if (predicate != HAS_PREDICATE_PREDICATE &&
+          predicate != OBJECT_HAS_PREDICATE_PREDICATE) {
+        continue;
+      }
+
+      // Check that we group by the variable for which we count the predicates
+      if (group_by_var != t._s) {
+        continue;
+      }
+
+      // Ensure that if we return counts we return object
+      // counts
+      if (returns_counts && counted_var_name != t._o) {
+        continue;
+      }
+
+      // check that all selected variables are outputs of
+      // PredicateCountEntities
+      for (const std::string& s : pq->_selectedVariables) {
+        if (s != t._s && s != count_var_name) {
+          useEntityCountPredicates = false;
+          break;
+        }
+      }
+      if (!useEntityCountPredicates) {
+        continue;
+      }
+
+      // Check for triples containing the ql:has-predicate triple's
+      // object.
+      for (auto& otherChild : pq->children()) {
+        if (!otherChild.is<GraphPatternOperation::BasicGraphPattern>()) {
+          continue;
+        }
+        auto& otherPattern = otherChild.getBasic();
+        for (size_t j = 0; useEntityCountPredicates &&
+                           j < otherPattern._whereClauseTriples.size();
+             j++) {
+          const SparqlTriple& other = otherPattern._whereClauseTriples[j];
+          if ((&child != &otherChild || j != i) &&
+              (other._s == t._o || other._p._iri == t._o || other._o == t._o)) {
+            useEntityCountPredicates = false;
+          }
+        }
+      }
+      if (!useEntityCountPredicates) {
+        continue;
+      }
+
+      // Check for filters on the ql:has-predicate triple's subject or
+      // object.
+      // Filters that filter on the triple's subject but have a static
+      // rhs will be transformed to a having clause later on.
+      for (const SparqlFilter& filter : pq->_rootGraphPattern._filters) {
+        if (!(filter._lhs == t._s && filter._rhs[0] != '?') &&
+            (filter._lhs == t._s || filter._lhs == t._o ||
+             filter._rhs == t._o || filter._rhs == t._s)) {
+          useEntityCountPredicates = false;
+          break;
+        }
+      }
+
+      if (!useEntityCountPredicates) {
+        continue;
+      }
+
+      // Check for sub graph patterns containing the ql:has-predicate
+      // triple's object
+      std::vector<const ParsedQuery::GraphPattern*> graphsToProcess;
+      for (const auto& op : pq->_rootGraphPattern._children) {
+        op.visit([&](auto&& arg) {
+          using T = std::decay_t<decltype(arg)>;
+          if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> ||
+                        std::is_same_v<
+                            T, GraphPatternOperation::GroupGraphPattern>) {
+            graphsToProcess.push_back(&arg._child);
+          } else if constexpr (std::is_same_v<T,
+                                              GraphPatternOperation::Union>) {
+            graphsToProcess.push_back(&arg._child1);
+            graphsToProcess.push_back(&arg._child2);
+          } else if constexpr (std::is_same_v<
+                                   T, GraphPatternOperation::Subquery>) {
+            for (const std::string& v : arg._subquery._selectedVariables) {
+              if (v == t._o) {
+                useEntityCountPredicates = false;
+                break;
+              }
+            }
+          } else {
+            static_assert(
+                std::is_same_v<T, GraphPatternOperation::TransPath> ||
+                std::is_same_v<T, GraphPatternOperation::BasicGraphPattern> ||
+                std::is_same_v<T, GraphPatternOperation::Values>);
+          }
+          // Transitive paths cannot yet exist in the query. They could also
+          // not contain the variables we are interested in.
+          // and the
+        });
+      }
+      while (!graphsToProcess.empty() && useEntityCountPredicates) {
+        const ParsedQuery::GraphPattern* pattern = graphsToProcess.back();
+        graphsToProcess.pop_back();
+
+        for (const auto& op : pattern->_children) {
+          op.visit([&](auto&& arg) {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, GraphPatternOperation::Optional> ||
+                          std::is_same_v<
+                              T, GraphPatternOperation::GroupGraphPattern>) {
+              graphsToProcess.push_back(&arg._child);
+
+            } else if constexpr (std::is_same_v<T,
+                                                GraphPatternOperation::Union>) {
+              graphsToProcess.push_back(&arg._child1);
+              graphsToProcess.push_back(&arg._child2);
+            } else if constexpr (std::is_same_v<
+                                     T, GraphPatternOperation::Subquery>) {
+              for (const std::string& v : arg._subquery._selectedVariables) {
+                if (v == t._o) {
+                  useEntityCountPredicates = false;
+                  break;
+                }
+              }
+            } else if constexpr (std::is_same_v<T, GraphPatternOperation::
+                                                       BasicGraphPattern>) {
+              for (const SparqlTriple& other : arg._whereClauseTriples) {
+                if (other._s == t._o || other._p._iri == t._o ||
+                    other._o == t._o) {
+                  useEntityCountPredicates = false;
+                  break;
+                }
+              }
+            } else if constexpr (std::is_same_v<
+                                     T, GraphPatternOperation::Values>) {
+              for (const auto& var : arg._inlineValues._variables) {
+                if (var == t._o) {
+                  useEntityCountPredicates = false;
+                  break;
+                }
+              }
+
+            } else {
+              static_assert(
+                  std::is_same_v<T, GraphPatternOperation::TransPath>);
+            }
+            // Transitive paths cannot yet exist in the query. They could also
+            // not contain the variables we are interested in.
+          });
+        }
+
+        if (!useEntityCountPredicates) {
+          break;
+        }
+      }
+      if (!useEntityCountPredicates) {
+        continue;
+      }
+
+      LOG(DEBUG) << "Using EntityCountPredicates to answer the query." << endl;
+      *hasPredicateTriple = t;
+      // remove the triple from the graph
+      curPattern._whereClauseTriples.erase(
+          curPattern._whereClauseTriples.begin() + i);
+      // Transform filters on the ql:has-relation triple's subject that
+      // have a static rhs to having clauses
+      // Filters are only scoped within a GraphPattern, so we only
+      // have to  check curPattern
+      auto& filters = pq->_rootGraphPattern._filters;
+      for (size_t i = 0; i < filters.size(); i++) {
+        const SparqlFilter& filter = filters[i];
+        if (filter._lhs == t._s && filter._rhs[0] != '?') {
+          pq->_havingClauses.push_back(filter);
+          filters.erase(filters.begin() + i);
+          i--;
+        }
+      }
+      return true;
+    }
+  }
+  return false;
+}
+
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
     const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab) const {
@@ -862,8 +1109,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       countPred->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName);
       QueryExecutionTree& tree = *patternTrickPlan._qet;
       tree.setVariableColumns(countPred->getVariableColumns());
-      tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
-                        countPred);
+      tree.setOperation(QueryExecutionTree::PREDICATE_COUNT_ENTITES, countPred);
       added.push_back(patternTrickPlan);
     }
   } else if (patternTrickTriple._s[0] != '?') {
@@ -879,8 +1125,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     countPred->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName);
     QueryExecutionTree& tree = *patternTrickPlan._qet;
     tree.setVariableColumns(countPred->getVariableColumns());
-    tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
-                      countPred);
+    tree.setOperation(QueryExecutionTree::PREDICATE_COUNT_ENTITES, countPred);
     added.push_back(patternTrickPlan);
   } else {
     // Use the pattern trick without a subtree
@@ -898,8 +1143,105 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     }
     QueryExecutionTree& tree = *patternTrickPlan._qet;
     tree.setVariableColumns(countPred->getVariableColumns());
-    tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
-                      countPred);
+    tree.setOperation(QueryExecutionTree::PREDICATE_COUNT_ENTITES, countPred);
+    added.push_back(patternTrickPlan);
+  }
+  return added;
+}
+
+// _____________________________________________________________________________
+vector<QueryPlanner::SubtreePlan> QueryPlanner::getEntityCountPredicatesRow(
+    const ParsedQuery& pq, const vector<vector<SubtreePlan>>& dpTab,
+    const SparqlTriple& entityCountPredicatesTriple) {
+  const vector<SubtreePlan>* previous = nullptr;
+  if (!dpTab.empty()) {
+    previous = &dpTab.back();
+  }
+  vector<SubtreePlan> added;
+  if (previous != nullptr && !previous->empty()) {
+    added.reserve(previous->size());
+    for (size_t i = 0; i < previous->size(); ++i) {
+      const SubtreePlan& parent = (*previous)[i];
+      // Determine the column containing the subjects for which we are
+      // interested in their predicates.
+      auto it = parent._qet->getVariableColumns().find(
+          entityCountPredicatesTriple._s);
+      if (it == parent._qet->getVariableColumns().end()) {
+        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                 "The root operation of the "
+                 "query excecution tree does "
+                 "not contain a column for "
+                 "variable " +
+                     entityCountPredicatesTriple._s +
+                     " required by EntityCountPredicates.");
+      }
+      size_t subjectColumn = it->second;
+      const std::vector<size_t>& resultSortedOn =
+          parent._qet->getRootOperation()->getResultSortedOn();
+      bool isSorted =
+          resultSortedOn.size() > 0 && resultSortedOn[0] == subjectColumn;
+      // a and b need to be ordered properly first
+      vector<pair<size_t, bool>> sortIndices = {
+          std::make_pair(subjectColumn, false)};
+
+      SubtreePlan orderByPlan(_qec);
+      if (!isSorted) {
+        auto orderByOp =
+            std::make_shared<OrderBy>(_qec, parent._qet, sortIndices);
+        orderByPlan._qet->setVariableColumns(parent._qet->getVariableColumns());
+        orderByPlan._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByOp);
+      }
+      SubtreePlan patternTrickPlan(_qec);
+      auto countPred = std::make_shared<EntityCountPredicates>(
+          _qec, isSorted ? parent._qet : orderByPlan._qet, subjectColumn);
+
+      if (entityCountPredicatesTriple._p._iri ==
+          OBJECT_HAS_PREDICATE_PREDICATE) {
+        countPred->setCountFor(EntityCountPredicates::CountType::OBJECT);
+      }
+
+      countPred->setVarNames(entityCountPredicatesTriple._s,
+                             pq._aliases[0]._outVarName);
+      QueryExecutionTree& tree = *patternTrickPlan._qet;
+      tree.setVariableColumns(countPred->getVariableColumns());
+      tree.setOperation(QueryExecutionTree::ENTITY_COUNT_PREDICATES, countPred);
+      added.push_back(patternTrickPlan);
+    }
+  } else if (entityCountPredicatesTriple._s[0] != '?') {
+    // The subject of the pattern trick is not a variable
+    SubtreePlan patternTrickPlan(_qec);
+    auto countPred = std::make_shared<EntityCountPredicates>(
+        _qec, entityCountPredicatesTriple._s);
+
+    if (entityCountPredicatesTriple._p._iri == OBJECT_HAS_PREDICATE_PREDICATE) {
+      countPred->setCountFor(EntityCountPredicates::CountType::OBJECT);
+    }
+
+    countPred->setVarNames(entityCountPredicatesTriple._s,
+                           pq._aliases[0]._outVarName);
+    QueryExecutionTree& tree = *patternTrickPlan._qet;
+    tree.setVariableColumns(countPred->getVariableColumns());
+    tree.setOperation(QueryExecutionTree::ENTITY_COUNT_PREDICATES, countPred);
+    added.push_back(patternTrickPlan);
+  } else {
+    // Use the pattern trick without a subtree
+    SubtreePlan patternTrickPlan(_qec);
+    auto countPred = std::make_shared<EntityCountPredicates>(_qec);
+
+    if (entityCountPredicatesTriple._p._iri == OBJECT_HAS_PREDICATE_PREDICATE) {
+      countPred->setCountFor(EntityCountPredicates::CountType::OBJECT);
+    }
+
+    if (pq._aliases.size() > 0) {
+      countPred->setVarNames(entityCountPredicatesTriple._s,
+                             pq._aliases[0]._outVarName);
+    } else {
+      countPred->setVarNames(entityCountPredicatesTriple._s,
+                             generateUniqueVarName());
+    }
+    QueryExecutionTree& tree = *patternTrickPlan._qet;
+    tree.setVariableColumns(countPred->getVariableColumns());
+    tree.setOperation(QueryExecutionTree::ENTITY_COUNT_PREDICATES, countPred);
     added.push_back(patternTrickPlan);
   }
   return added;

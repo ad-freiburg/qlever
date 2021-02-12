@@ -47,12 +47,12 @@ string EntityCountPredicates::asString(size_t indent) const {
   const std::string entity_name =
       (_count_for == CountType::OBJECT) ? "OBJECTS" : "SUBJECTS";
   if (_subjectEntityName) {
-    os << "PREDICATE_COUNT_" << entity_name << " for "
+    os << "ENTITY_COUNT_" << entity_name << " for "
        << _subjectEntityName.value();
   } else if (_subtree == nullptr) {
-    os << "PREDICATE_COUNT_" << entity_name << " for all entities";
+    os << "ENTITY_COUNT_" << entity_name << " for all entities";
   } else {
-    os << "PREDICATE_COUNT_" << entity_name << " (col " << _subjectColumnIndex
+    os << "ENTITY_COUNT_" << entity_name << " (col " << _subjectColumnIndex
        << ")\n"
        << _subtree->asString(indent);
   }
@@ -63,18 +63,18 @@ string EntityCountPredicates::asString(size_t indent) const {
 string EntityCountPredicates::getDescriptor() const {
   if (_count_for == CountType::OBJECT) {
     if (_subjectEntityName) {
-      return "PredicateCountObjects for a single entity";
+      return "EntityCountObjects for a single entity";
     } else if (_subtree == nullptr) {
-      return "PredicateCountObjects for a all entities";
+      return "EntityCountObjects for a all entities";
     }
-    return "PredicateCountObjects";
+    return "EntityCountObjects";
   } else {
     if (_subjectEntityName) {
-      return "PredicateCountSubjects for a single entity";
+      return "EntityCountSubjects for a single entity";
     } else if (_subtree == nullptr) {
-      return "PredicateCountSubjects for a all entities";
+      return "EntityCountSubjects for a all entities";
     }
-    return "PredicateCountSubjects";
+    return "EntityCountSubjects";
   }
 }
 
