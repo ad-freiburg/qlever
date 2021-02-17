@@ -6,14 +6,23 @@
 #define QLEVER_LIMITEDALLOCATOR_H
 
 #include <atomic>
+#include <locale>
+#include <sstream>
+#include "../util/ReadableNumberFact.h"
 #include "Synchronized.h"
 
 namespace ad_utility {
 
 class LimitException : public std::exception {
+ public:
+  LimitException(std::string msg) : msg_(msg) {}
+  virtual ~LimitException() {}
+ private:
   const char* what() const noexcept override {
-    return "Tried to allocate more than the specified limit";
+    return msg_.c_str();
+    // return "Tried to allocate more than the specified limit";
   }
+  std::string msg_;
 };
 
 class AllocationLimits {
@@ -26,7 +35,17 @@ class AllocationLimits {
     if (n <= free_) {
       free_ -= n;
     } else {
-      throw LimitException{};
+      // NEW(Hannah): In the exception (which also appears in the QLever UI), be
+      // explicit about how much we tried to allocate and what was still
+      // available.
+      std::ostringstream os;
+      std::locale loc;
+      ad_utility::ReadableNumberFacet facet(1);
+      std::locale locWithNumberGrouping(loc, &facet);
+      os.imbue(locWithNumberGrouping);
+      os << "Tried to allocate " << (n / 1000000) << " MB, but only "
+                                 << (free_ / 1000000) << " MB left";
+      throw LimitException(os.str());
     }
   }
 
