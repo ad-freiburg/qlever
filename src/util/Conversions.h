@@ -141,7 +141,7 @@ string convertValueLiteralToIndexWord(const string& orig) {
     // No longer convert to int. instead always convert to float and
     // have a special marker at the very end to tell if the original number
     // was int for float. The benefit: can compare float with int that way.
-    if (type == "int" || type == "integer") {
+    if (type == "int" || type == "integer" || type == "nonNegativeInteger") {
       return convertFloatStringToIndexWord(value + ".0", NumericType::INTEGER);
     }
     // We treat double and decimal as synonyms for float
