@@ -37,8 +37,8 @@ ENV MEMORY_FOR_QUERIES 70
 # Need the shell to get the INDEX_PREFIX envirionment variable
 ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -j 8 -m ${MEMORY_FOR_QUERIES} -p 7001 \"$@\"", "--"]
 
-# Build image:  docker build -t qlever .
+# Build image:  docker build -t qlever.pr355-plus .
 
-# Build index:  DB=wikidata; docker run -it --rm -v $(pwd):/index --entrypoint bash --name qlever.$DB-index qlever.pr355 -c "IndexBuilderMain -f /index/$DB.nt -i /index/$DB -s /index/$DB.settings.json | tee /index/$DB.index-log.txt"; rm -f $DIR/*tmp*
+# Build index:  DB=wikidata; docker run -it --rm -v $(pwd):/index --entrypoint bash --name qlever.$DB-index qlever.pr355-plus -c "IndexBuilderMain -f /index/$DB.nt -i /index/$DB -s /index/$DB.settings.json | tee /index/$DB.index-log.txt"; rm -f $DIR/*tmp*
 
-# Run engine:   DB=wikidata; PORT=7001; docker rm -f qlever.$DB; docker run -d --restart=unless-stopped -v $(pwd):/index -p 7001:7001 -e INDEX_PREFIX=$DB -e MEMORY_FOR_QUERIES=30 --name qlever.$DB qlever.pr355; docker logs -f --tail=100 qlever.$DB
+# Run engine:   DB=wikidata; PORT=7001; docker rm -f qlever.$DB; docker run -d --restart=unless-stopped -v $(pwd):/index -p 7001:7001 -e INDEX_PREFIX=$DB -e MEMORY_FOR_QUERIES=30 --name qlever.$DB qlever.pr355-plus; docker logs -f --tail=100 qlever.$DB
