@@ -103,6 +103,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
                                              getDescriptor());
       }
       computeResult(newResult->_resTable.get());
+
       if (_timeoutTimer->wlock()->isTimeout()) {
         throw ad_semsearch::TimeoutException("uncaught Timeout in " +
                                              getDescriptor());

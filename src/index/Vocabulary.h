@@ -328,6 +328,14 @@ class Vocabulary {
     if (prefix.empty()) {
       return {0, _words.size()};
     }
+    /*
+    if (prefix == "\"") {
+      Id lb = lower_bound(prefix, SortLevel::IDENTICAL);
+      Id ub = lower_bound("<", SortLevel::IDENTICAL);
+      return {lb, ub};
+    }
+     */
+
     Id lb = lower_bound(prefix, SortLevel::PRIMARY);
     auto transformed = _caseComparator.transformToFirstPossibleBiggerValue(
         prefix, SortLevel::PRIMARY);
