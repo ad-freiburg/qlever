@@ -604,9 +604,12 @@ inline string removeLeadingZeros(const string& orig) {
 
 // _____________________________________________________________________________
 bool isXsdValue(const string& val) {
-  // starting the search for "^^ at position 1 makes sure it's not in the
-  // quotes as we already checked that the first char is the first quote
-  return !val.empty() && val[0] == '\"' && val.find("\"^^", 1) != string::npos;
+  // Search for the last quote and check if it is followed by ^^.
+  // NOTE: searching for "^^ starting at position 1 (as done previously) fails
+  // for literal "\"^^"@en (which is contained in the RDF dump of DBpedia).
+  size_t posLastQuote = val.rfind("\"");
+  return !val.empty() && val[0] == '\"' && posLastQuote > 0 &&
+         val.find("^^", posLastQuote) != string::npos;
 }
 
 // _____________________________________________________________________________
