@@ -149,7 +149,11 @@ int main(int argc, char** argv) {
       index.addTextFromOnDiskIndex();
     }
 
-    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes);
+    ad_utility::AllocatorWithLimit<Id> allocator{
+        ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+            DEFAULT_MEM_FOR_QUERIES_IN_GB)};
+
+    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes, allocator);
     if (costFactosFileName.size() > 0) {
       qec.readCostFactorsFromTSVFile(costFactosFileName);
     }

@@ -3,8 +3,16 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+
 #include "../src/engine/CallFixedSize.h"
 #include "../src/index/FTSAlgorithms.h"
+
+ad_utility::AllocatorWithLimit<Id>& allocator() {
+  static ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<size_t>::max())};
+  return a;
+}
 
 TEST(FTSAlgorithmsTest, filterByRangeTest) {
   IdRange idRange;
@@ -232,7 +240,7 @@ TEST(FTSAlgorithmsTest, intersectKWayTest) {
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
   try {
-    IdTable result;
+    IdTable result{allocator()};
     result.setCols(3);
     vector<Id> cids;
     vector<Id> eids;
@@ -284,7 +292,7 @@ TEST(FTSAlgorithmsTest, aggScoresAndTakeTopKContextsTest) {
 };
 
 TEST(FTSAlgorithmsTest, aggScoresAndTakeTopContextTest) {
-  IdTable result;
+  IdTable result{allocator()};
   result.setCols(3);
   vector<Id> cids;
   vector<Id> eids;
@@ -445,14 +453,14 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
   vector<Score> scores;
   size_t nofVars = 2;
   size_t k = 1;
-  IdTable resW4(4);
+  IdTable resW4{4, allocator()};
   int width = resW4.cols();
   CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
                     cids, eids, scores, nofVars, k, &resW4);
   ASSERT_EQ(0u, resW4.size());
   nofVars = 5;
   k = 10;
-  IdTable resWV(13);
+  IdTable resWV{13, allocator()};
   width = resWV.cols();
   CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
                     cids, eids, scores, nofVars, k, &resWV);
@@ -516,7 +524,7 @@ TEST(FTSAlgorithmsTest, multVarsAggScoresAndTakeTopKContexts) {
 
   nofVars = 3;
   k = 1;
-  IdTable resW5(5);
+  IdTable resW5{5, allocator()};
   width = resW5.cols();
   CALL_FIXED_SIZE_1(width, FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts,
                     cids, eids, scores, nofVars, k, &resW5);
@@ -534,7 +542,7 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   vector<Id> eids;
   vector<Score> scores;
   size_t k = 1;
-  IdTable resW3(3);
+  IdTable resW3{3, allocator()};
   ad_utility::HashMap<Id, IdTable> fMap1;
 
   int width = resW3.cols();
@@ -569,8 +577,9 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
                     cids, eids, scores, fMap1, k, &resW3);
   ASSERT_EQ(0u, resW3.size());
 
-  fMap1[1] = IdTable(1);
-  fMap1[1].push_back({1});
+  auto [it, success] = fMap1.emplace(1, IdTable{1, allocator()});
+  ASSERT_TRUE(success);
+  it->second.push_back({1});
 
   CALL_FIXED_SIZE_1(width,
                     FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
@@ -583,8 +592,11 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
                     cids, eids, scores, fMap1, k, &resW3);
   ASSERT_EQ(2u, resW3.size());
 
-  fMap1[0] = IdTable(1);
-  fMap1[0].push_back({0});
+  {
+    auto [it, suc] = fMap1.emplace(0, IdTable{1, allocator()});
+    ASSERT_TRUE(suc);
+    it->second.push_back({0});
+  }
   resW3.clear();
   CALL_FIXED_SIZE_1(width,
                     FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
@@ -592,11 +604,15 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
   ASSERT_EQ(5u, resW3.size());
 
   ad_utility::HashMap<Id, IdTable> fMap4;
-  fMap4[0] = IdTable(4);
-  fMap4[0].push_back({0, 0, 0, 0});
-  fMap4[0].push_back({0, 1, 0, 0});
-  fMap4[0].push_back({0, 2, 0, 0});
-  IdTable resVar(7);
+  {
+    auto [it, suc] = fMap4.emplace(0, IdTable{4, allocator()});
+    ASSERT_TRUE(suc);
+    auto& el = it->second;
+    el.push_back({0, 0, 0, 0});
+    el.push_back({0, 1, 0, 0});
+    el.push_back({0, 2, 0, 0});
+  }
+  IdTable resVar{7, allocator()};
   k = 1;
   width = 7;
   CALL_FIXED_SIZE_1(width,
@@ -604,8 +620,11 @@ TEST(FTSAlgorithmsTest, oneVarFilterAggScoresAndTakeTopKContexts) {
                     cids, eids, scores, fMap4, k, &resVar);
   ASSERT_EQ(3u, resVar.size());
 
-  fMap4[2] = IdTable(4);
-  fMap4[2].push_back({2, 2, 2, 2});
+  {
+    auto [it, suc] = fMap4.emplace(2, IdTable(4, allocator()));
+    ASSERT_TRUE(suc);
+    it->second.push_back({2, 2, 2, 2});
+  }
   resVar.clear();
   CALL_FIXED_SIZE_1(width,
                     FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts,
@@ -640,7 +659,7 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
     scores.push_back(1);
 
     size_t k = 1;
-    IdTable resW4(4);
+    IdTable resW4{4, allocator()};
     ad_utility::HashMap<Id, IdTable> fMap1;
 
     size_t nofVars = 2;
@@ -650,8 +669,8 @@ TEST(FTSAlgorithmsTest, multVarsFilterAggScoresAndTakeTopKContexts) {
                       cids, eids, scores, fMap1, nofVars, k, &resW4);
     ASSERT_EQ(0u, resW4.size());
 
-    fMap1[1] = IdTable(1);
-    fMap1[1].push_back({1});
+    auto [it, suc] = fMap1.emplace(1, IdTable{1, allocator()});
+    it->second.push_back({1});
 
     CALL_FIXED_SIZE_1(width,
                       FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts,

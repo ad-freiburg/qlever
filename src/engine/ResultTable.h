@@ -65,7 +65,7 @@ class ResultTable {
   //          the _localVocab of a subresult.
   std::shared_ptr<vector<string>> _localVocab;
 
-  ResultTable();
+  ResultTable(ad_utility::AllocatorWithLimit<Id> allocator);
 
   ResultTable(const ResultTable& other) = delete;
 

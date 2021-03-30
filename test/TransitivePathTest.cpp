@@ -10,8 +10,15 @@
 #include "../src/engine/TransitivePath.h"
 #include "../src/global/Id.h"
 
+ad_utility::AllocatorWithLimit<Id>& allocator() {
+  static ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<size_t>::max())};
+  return a;
+}
+
 TEST(TransitivePathTest, computeTransitivePath) {
-  IdTable sub(2);
+  IdTable sub(2, allocator());
   sub.push_back({0, 2});
   sub.push_back({2, 4});
   sub.push_back({4, 7});
@@ -21,9 +28,9 @@ TEST(TransitivePathTest, computeTransitivePath) {
   // Disconnected component.
   sub.push_back({10, 11});
 
-  IdTable result(2);
+  IdTable result(2, allocator());
 
-  IdTable expected(2);
+  IdTable expected(2, allocator());
   expected.push_back({0, 2});
   expected.push_back({0, 4});
   expected.push_back({0, 7});

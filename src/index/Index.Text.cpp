@@ -737,7 +737,9 @@ void Index::getFilteredECListForWords(const string& words,
       Id eid = filter(i, filterColumn);
       auto it = fMap.find(eid);
       if (it == fMap.end()) {
-        it = fMap.insert(std::make_pair(eid, IdTable(filter.cols()))).first;
+        it = fMap.insert(std::make_pair(eid, IdTable(filter.cols(),
+                                                     filter.getAllocator())))
+                 .first;
       }
       it->second.push_back(filter, i);
     }

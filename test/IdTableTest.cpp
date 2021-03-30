@@ -11,11 +11,18 @@
 #include "../src/engine/IdTable.h"
 #include "../src/global/Id.h"
 
+ad_utility::AllocatorWithLimit<Id>& allocator() {
+  static ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<size_t>::max())};
+  return a;
+}
+
 TEST(IdTableTest, push_back_and_assign) {
   constexpr size_t NUM_ROWS = 30;
   constexpr size_t NUM_COLS = 4;
 
-  IdTable t1(NUM_COLS);
+  IdTable t1{NUM_COLS, allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back({i * NUM_COLS + 1, i * NUM_COLS + 2, i * NUM_COLS + 3,
@@ -42,11 +49,11 @@ TEST(IdTableTest, push_back_and_assign) {
 }
 
 TEST(IdTableTest, insert) {
-  IdTable t1(4);
+  IdTable t1{4, allocator()};
   t1.push_back({7, 2, 4, 1});
   t1.push_back({0, 22, 1, 4});
 
-  IdTable init(4);
+  IdTable init(4, allocator());
   init.push_back({1, 0, 6, 3});
   init.push_back({3, 1, 8, 2});
   init.push_back({0, 6, 8, 5});
@@ -92,7 +99,7 @@ TEST(IdTableTest, reserve_and_resize) {
   constexpr size_t NUM_COLS = 20;
 
   // Test a reserve call before insertions
-  IdTable t1(NUM_COLS);
+  IdTable t1(NUM_COLS, allocator());
   t1.reserve(NUM_ROWS);
 
   // Fill the rows with numbers counting up from 1
@@ -112,7 +119,7 @@ TEST(IdTableTest, reserve_and_resize) {
   }
 
   // Test a resize call instead of insertions
-  IdTable t2(NUM_COLS);
+  IdTable t2(NUM_COLS, allocator());
   t2.resize(NUM_ROWS);
 
   // Fill the rows with numbers counting up from 1
@@ -133,7 +140,7 @@ TEST(IdTableTest, copyAndMove) {
   constexpr size_t NUM_ROWS = 100;
   constexpr size_t NUM_COLS = 4;
 
-  IdTable t1(NUM_COLS);
+  IdTable t1(NUM_COLS, allocator());
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back({i * NUM_COLS + 1, i * NUM_COLS + 2, i * NUM_COLS + 3,
@@ -176,7 +183,7 @@ TEST(IdTableTest, erase) {
   constexpr size_t NUM_ROWS = 12;
   constexpr size_t NUM_COLS = 4;
 
-  IdTable t1(NUM_COLS);
+  IdTable t1(NUM_COLS, allocator());
   // Fill the rows with numbers counting up from 1
   for (size_t j = 0; j < 2 * NUM_ROWS; j++) {
     size_t i = j / 2;
@@ -204,7 +211,7 @@ TEST(IdTableTest, iterating) {
   constexpr size_t NUM_ROWS = 42;
   constexpr size_t NUM_COLS = 17;
 
-  IdTable t1(NUM_COLS);
+  IdTable t1(NUM_COLS, allocator());
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back();
@@ -231,7 +238,7 @@ TEST(IdTableTest, iterating) {
 }
 
 TEST(IdTableTest, sortTest) {
-  IdTable test(2);
+  IdTable test(2, allocator());
   test.push_back({3, 1});
   test.push_back({8, 9});
   test.push_back({1, 5});
@@ -287,7 +294,7 @@ TEST(IdTableStaticTest, push_back_and_assign) {
   constexpr size_t NUM_ROWS = 30;
   constexpr size_t NUM_COLS = 4;
 
-  IdTableStatic<NUM_COLS> t1;
+  IdTableStatic<NUM_COLS> t1{allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back({i * NUM_COLS + 1, i * NUM_COLS + 2, i * NUM_COLS + 3,
@@ -314,11 +321,11 @@ TEST(IdTableStaticTest, push_back_and_assign) {
 }
 
 TEST(IdTableStaticTest, insert) {
-  IdTableStatic<4> t1;
+  IdTableStatic<4> t1{allocator()};
   t1.push_back({7, 2, 4, 1});
   t1.push_back({0, 22, 1, 4});
 
-  IdTableStatic<4> init;
+  IdTableStatic<4> init{allocator()};
   init.push_back({1, 0, 6, 3});
   init.push_back({3, 1, 8, 2});
   init.push_back({0, 6, 8, 5});
@@ -366,7 +373,7 @@ TEST(IdTableStaticTest, reserve_and_resize) {
   constexpr size_t NUM_COLS = 20;
 
   // Test a reserve call before insertions
-  IdTableStatic<NUM_COLS> t1;
+  IdTableStatic<NUM_COLS> t1{allocator()};
   t1.reserve(NUM_ROWS);
 
   // Fill the rows with numbers counting up from 1
@@ -386,7 +393,7 @@ TEST(IdTableStaticTest, reserve_and_resize) {
   }
 
   // Test a resize call instead of insertions
-  IdTableStatic<NUM_COLS> t2;
+  IdTableStatic<NUM_COLS> t2{allocator()};
   t2.resize(NUM_ROWS);
 
   // Fill the rows with numbers counting up from 1
@@ -407,7 +414,7 @@ TEST(IdTableStaticTest, copyAndMove) {
   constexpr size_t NUM_ROWS = 100;
   constexpr size_t NUM_COLS = 4;
 
-  IdTableStatic<NUM_COLS> t1;
+  IdTableStatic<NUM_COLS> t1{allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back({i * NUM_COLS + 1, i * NUM_COLS + 2, i * NUM_COLS + 3,
@@ -450,7 +457,7 @@ TEST(IdTableStaticTest, erase) {
   constexpr size_t NUM_ROWS = 12;
   constexpr size_t NUM_COLS = 4;
 
-  IdTableStatic<NUM_COLS> t1;
+  IdTableStatic<NUM_COLS> t1{allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t j = 0; j < 2 * NUM_ROWS; j++) {
     size_t i = j / 2;
@@ -478,7 +485,7 @@ TEST(IdTableStaticTest, iterating) {
   constexpr size_t NUM_ROWS = 42;
   constexpr size_t NUM_COLS = 17;
 
-  IdTableStatic<NUM_COLS> t1;
+  IdTableStatic<NUM_COLS> t1{allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back();
@@ -508,7 +515,7 @@ TEST(IdTableStaticTest, iterating) {
 // Conversion Tests
 // =============================================================================
 TEST(IdTableTest, conversion) {
-  IdTable table(3);
+  IdTable table(3, allocator());
   table.push_back({4, 1, 0});
   table.push_back({1, 7, 8});
   table.push_back({7, 12, 2});
@@ -545,7 +552,7 @@ TEST(IdTableTest, conversion) {
   }
 
   // Test with more than 5 columns
-  IdTable tableVar(6);
+  IdTable tableVar(6, allocator());
   tableVar.push_back({1, 2, 3, 6, 5, 9});
   tableVar.push_back({0, 4, 3, 4, 5, 3});
   tableVar.push_back({3, 2, 3, 2, 5, 6});
