@@ -22,13 +22,14 @@ size_t Bind::getCostEstimate() {
 float Bind::getMultiplicity(size_t col) {
   if (col == getResultWidth() - 1) {
     // this is the newly added column
-    if (auto ptr =
-            std::get_if<GraphPatternOperation::Bind::Rename>(&(_bind._input))) {
+    if (auto ptr = std::get_if<GraphPatternOperation::Bind::Rename>(
+            &(_bind._expressionVariant))) {
       // if we rename a column, we also preserve the multiplicity of this column
       auto incol = _subtree->getVariableColumn(ptr->_var);
       return _subtree->getMultiplicity(incol);
     }
-    if (std::get_if<GraphPatternOperation::Bind::Constant>(&(_bind._input))) {
+    if (std::get_if<GraphPatternOperation::Bind::Constant>(
+            &(_bind._expressionVariant))) {
       // only one value in the new column, high multiplicity
       // TODO<joka921> is this the correct value then?
       return _subtree->getSizeEstimate();
@@ -121,7 +122,8 @@ void Bind::computeResult(ResultTable* result) {
   int inwidth = subRes->_data.cols();
   int outwidth = getResultWidth();
 
-  if (auto ptr = std::get_if<GraphPatternOperation::Bind::Sum>(&_bind._input);
+  if (auto ptr = std::get_if<GraphPatternOperation::Bind::Sum>(
+          &_bind._expressionVariant);
       ptr) {
     std::array<size_t, 2> columns{_subtree->getVariableColumn(ptr->_var1),
                                   _subtree->getVariableColumn(ptr->_var2)};
@@ -134,7 +136,7 @@ void Bind::computeResult(ResultTable* result) {
                       subRes->_data, columns, inTypes,
                       _subtree->getQec()->getIndex());
   } else if (auto ptr = std::get_if<GraphPatternOperation::Bind::Rename>(
-                 &_bind._input);
+                 &_bind._expressionVariant);
              ptr) {
     size_t inColumn{_subtree->getVariableColumn(ptr->_var)};
     // copying a column also copies the result type
@@ -142,15 +144,16 @@ void Bind::computeResult(ResultTable* result) {
     CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeRenameBind,
                       &result->_data, subRes->_data, inColumn);
   } else if (auto ptr = std::get_if<GraphPatternOperation::Bind::Constant>(
-                 &_bind._input);
+                 &_bind._expressionVariant);
              ptr) {
     result->_resultTypes.push_back(ptr->_type);
     Id value;
     if (ptr->_type == ResultTable::ResultType::VERBATIM) {
-      value = ptr->_value;
+      value = ptr->_intValue;
     } else if (ptr->_type == ResultTable::ResultType::KB) {
-      if (!_executionContext->getIndex().getVocab().getId(ptr->_repr, &value)) {
-        throw std::runtime_error("BIND constant " + ptr->_repr +
+      if (!_executionContext->getIndex().getVocab().getId(ptr->_kbValue,
+                                                          &value)) {
+        throw std::runtime_error("BIND constant " + ptr->_kbValue +
                                  " is not part of the knowledge base. This is "
                                  "currently unsupported");
       }

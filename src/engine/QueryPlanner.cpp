@@ -1717,7 +1717,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
   transPath._min = 1;
   transPath._max = std::numeric_limits<size_t>::max();
   transPath._childGraphPattern = *childPlan;
-  p->_children.push_back(std::move(transPath));
+  p->_children.emplace_back(std::move(transPath));
   return p;
 }
 
@@ -1739,7 +1739,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
   transPath._min = std::max(uint_fast16_t(1), path._limit);
   transPath._max = std::numeric_limits<size_t>::max();
   transPath._childGraphPattern = *childPlan;
-  p->_children.push_back(std::move(transPath));
+  p->_children.emplace_back(std::move(transPath));
   return p;
 }
 
@@ -1761,7 +1761,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
   transPath._min = 1;
   transPath._max = path._limit;
   transPath._childGraphPattern = *childPlan;
-  p->_children.push_back(std::move(transPath));
+  p->_children.emplace_back(std::move(transPath));
   return p;
 }
 
@@ -1790,12 +1790,12 @@ ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
   using GraphPattern = ParsedQuery::GraphPattern;
   // Build a tree of union operations
   auto p = GraphPattern{};
-  p._children.push_back(GraphPatternOperation::Union{std::move(patterns[0]),
-                                                     std::move(patterns[1])});
+  p._children.emplace_back(GraphPatternOperation::Union{
+      std::move(patterns[0]), std::move(patterns[1])});
 
   for (size_t i = 2; i < patterns.size(); i++) {
     GraphPattern next;
-    next._children.push_back(
+    next._children.emplace_back(
         GraphPatternOperation::Union{std::move(p), std::move(patterns[i])});
     p = std::move(next);
   }

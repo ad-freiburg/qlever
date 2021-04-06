@@ -263,7 +263,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
           "the end of the input.");
     }
     if (_lexer.accept("optional")) {
-      currentPattern->_children.push_back(
+      currentPattern->_children.emplace_back(
           GraphPatternOperation::Optional{ParsedQuery::GraphPattern()});
       auto& opt = currentPattern->_children.back()
                       .get<GraphPatternOperation::Optional>();
@@ -311,21 +311,21 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       _lexer.expect(SparqlToken::Type::VARIABLE);
       GraphPatternOperation::Bind b;
       if (isSum) {
-        b._input = GraphPatternOperation::Bind::Sum{inVar, inVar2};
+        b._expressionVariant = GraphPatternOperation::Bind::Sum{inVar, inVar2};
       } else if (rename) {
-        b._input = GraphPatternOperation::Bind::Rename{inVar};
+        b._expressionVariant = GraphPatternOperation::Bind::Rename{inVar};
       } else {
         if (isString) {
           // Note that this only works if the literal or iri stored in inVar is
           // part of the KB
-          b._input = GraphPatternOperation::Bind::Constant{inVar};
+          b._expressionVariant = GraphPatternOperation::Bind::Constant{inVar};
         } else {
-          b._input = GraphPatternOperation::Bind::Constant{val};
+          b._expressionVariant = GraphPatternOperation::Bind::Constant{val};
         }
       }
       b._target = _lexer.current().raw;
       _lexer.expect(")");
-      currentPattern->_children.push_back(std::move(b));
+      currentPattern->_children.emplace_back(std::move(b));
       // the dot after the bind is optional
       _lexer.accept(".");
     } else if (_lexer.accept("{")) {
@@ -335,7 +335,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // create the subquery operation
         GraphPatternOperation::Subquery subq;
         parseQuery(&subq._subquery);
-        currentPattern->_children.push_back(std::move(subq));
+        currentPattern->_children.emplace_back(std::move(subq));
         // The closing bracked } is consumed by the subquery
         _lexer.accept(".");
       } else {
@@ -355,7 +355,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         _lexer.expect("{");
         parseWhere(query, &un._child2);
         _lexer.accept(".");
-        currentPattern->_children.push_back(std::move(un));
+        currentPattern->_children.emplace_back(std::move(un));
       }
     } else if (_lexer.accept("filter")) {
       // append to the global filters of the pattern.
