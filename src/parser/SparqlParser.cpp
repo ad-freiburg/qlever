@@ -299,9 +299,13 @@ void SparqlParser::parseWhere(ParsedQuery* query,
           inVar2 = _lexer.current().raw;
         }
       } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+        // The "true" says that the whole string is a literal (with "false",
+        // there could be more stuff after the literal).
         inVar = parseLiteral(_lexer.current().raw, true);
+        isString = true;
       } else if (_lexer.accept(SparqlToken::Type::INTEGER)) {
         isString = false;
+        // Parse as decimal to base 10.
         val = std::strtoll(_lexer.current().raw.c_str(), nullptr, 10);
       } else {
         _lexer.expect(SparqlToken::Type::IRI);
