@@ -263,7 +263,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
           "the end of the input.");
     }
     if (_lexer.accept("optional")) {
-      currentPattern->_children.push_back(
+      currentPattern->_children.emplace_back(
           GraphPatternOperation::Optional{ParsedQuery::GraphPattern()});
       auto& opt = currentPattern->_children.back()
                       .get<GraphPatternOperation::Optional>();
@@ -275,6 +275,63 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       // Recursively call parseWhere to parse the optional part.
       parseWhere(query, &child);
       _lexer.accept(".");
+    } else if (_lexer.accept("bind")) {
+      _lexer.expect("(");
+      std::string inVar;
+      bool rename = false;
+      bool isString = true;
+      bool isSum = false;
+      std::string inVar2;
+      int64_t val = 0;
+      if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+        rename = true;
+        inVar = _lexer.current().raw;
+        if (_lexer.accept(SparqlToken::Type::SYMBOL)) {
+          if (_lexer.current().raw != "+") {
+            throw std::runtime_error(
+                "A sum of two variables is currently the only"
+                "supported arithmetic bind expression, but symbol after first "
+                "variable was " +
+                _lexer.current().raw);
+          }
+          isSum = true;
+          _lexer.expect(SparqlToken::Type::VARIABLE);
+          inVar2 = _lexer.current().raw;
+        }
+      } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+        // The "true" says that the whole string is a literal (with "false",
+        // there could be more stuff after the literal).
+        inVar = parseLiteral(_lexer.current().raw, true);
+        isString = true;
+      } else if (_lexer.accept(SparqlToken::Type::INTEGER)) {
+        isString = false;
+        // Parse as decimal to base 10.
+        val = std::strtoll(_lexer.current().raw.c_str(), nullptr, 10);
+      } else {
+        _lexer.expect(SparqlToken::Type::IRI);
+        inVar = _lexer.current().raw;
+      }
+      _lexer.expect("as");
+      _lexer.expect(SparqlToken::Type::VARIABLE);
+      GraphPatternOperation::Bind b;
+      if (isSum) {
+        b._expressionVariant = GraphPatternOperation::Bind::Sum{inVar, inVar2};
+      } else if (rename) {
+        b._expressionVariant = GraphPatternOperation::Bind::Rename{inVar};
+      } else {
+        if (isString) {
+          // Note that this only works if the literal or iri stored in inVar is
+          // part of the KB
+          b._expressionVariant = GraphPatternOperation::Bind::Constant{inVar};
+        } else {
+          b._expressionVariant = GraphPatternOperation::Bind::Constant{val};
+        }
+      }
+      b._target = _lexer.current().raw;
+      _lexer.expect(")");
+      currentPattern->_children.emplace_back(std::move(b));
+      // the dot after the bind is optional
+      _lexer.accept(".");
     } else if (_lexer.accept("{")) {
       // Subquery or union
       if (_lexer.accept("select")) {
@@ -282,7 +339,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // create the subquery operation
         GraphPatternOperation::Subquery subq;
         parseQuery(&subq._subquery);
-        currentPattern->_children.push_back(std::move(subq));
+        currentPattern->_children.emplace_back(std::move(subq));
         // The closing bracked } is consumed by the subquery
         _lexer.accept(".");
       } else {
@@ -302,7 +359,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         _lexer.expect("{");
         parseWhere(query, &un._child2);
         _lexer.accept(".");
-        currentPattern->_children.push_back(std::move(un));
+        currentPattern->_children.emplace_back(std::move(un));
       }
     } else if (_lexer.accept("filter")) {
       // append to the global filters of the pattern.
