@@ -57,10 +57,13 @@ class Filter : public Operation {
       if (_type == SparqlFilter::FilterType::NE) {
         return _subtree->getSizeEstimate();
       } else if (_type == SparqlFilter::FilterType::PREFIX) {
-        // strip the leading ^ and " and assume each character gets rid of 10
-        // percent of the entries
+        // Assume that only 10^-k entries remain, where k is the length of the
+        // prefix. The reason for the -2 is that at this point, _rhs always
+        // starts with ^"
         double reductionFactor =
             std::pow(10, std::max(0, static_cast<int>(_rhs.size()) - 2));
+        // Cap to reasonable minimal and maximal values to prevent numerical
+        // stability problems.
         reductionFactor = std::min(100000000.0, reductionFactor);
         reductionFactor = std::max(1.0, reductionFactor);
         return _subtree->getSizeEstimate() /
