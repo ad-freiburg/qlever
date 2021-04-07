@@ -467,11 +467,11 @@ struct GraphPatternOperation {
   std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
                Values>
       variant_;
-  template <typename A, typename... Args,
-            typename = std::enable_if_t<
-                !std::is_base_of_v<GraphPatternOperation, std::decay_t<A>>>>
-  explicit GraphPatternOperation(A&& a, Args&&... args)
-      : variant_(std::forward<A>(a), std::forward<Args>(args)...) {}
+  // Construct from one of the variant types (or anything that is convertible to
+  // them.
+  template <typename A, typename = std::enable_if_t<!std::is_base_of_v<
+                            GraphPatternOperation, std::decay_t<A>>>>
+  explicit GraphPatternOperation(A&& a) : variant_(std::forward<A>(a)) {}
   GraphPatternOperation() = delete;
   GraphPatternOperation(const GraphPatternOperation&) = default;
   GraphPatternOperation(GraphPatternOperation&&) noexcept = default;

@@ -226,9 +226,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         }
       }
 
-      // all variables we have seen so far are considered "bound" from now on
-      // this also includes optionals. in the case of bind operations
-      // we do not have any variables yet, so this does no harm
+      // All variables seen so far are considered bound and cannot appear as the
+      // RHS of a BIND operation. This is also true for variables from OPTIONALs
+      // (this was a bug in the previous version of the code).
       {
         auto vc = v[0]._qet->getVariableColumns();
         std::for_each(vc.begin(), vc.end(), [&boundVariables](const auto& el) {
@@ -250,9 +250,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
 
       std::vector<SubtreePlan> nextCandidates;
       if (v[0]._isOptional) {
-        // join all the candidates plans for the complete previous inputs
-        // in an optional way with all the candidates for the contents of
-        // the optional join.
+        // For each candidate plan, and each plan from the OPTIONAL, create a
+        // new plan with an optional join. Note that createJoinCandidates will
+        // know that b is from an OPTIONAL.
         for (const auto& a : lastRow) {
           for (const auto& b : v) {
             auto vec = createJoinCandidates(a, b, std::nullopt);
@@ -278,7 +278,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       } else {
       }
     }
-  };
+  };  // End of joinCandidates lambda.
 
   // go through the child patterns in order, set up all their candidatePlans
   // and then call the joinCandidates call back
@@ -380,7 +380,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         joinCandidates(std::vector{std::move(valuesPlan)});
 
       } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
-        // the BIND operation can be handled directly
+        // The logic of the BIND operation is implemented in the joinCandidates
+        // lambda. Reason: BIND does not add a new join operation like for the
+        // other operations above.
         joinCandidates(arg);
       } else {
         static_assert(
@@ -556,7 +558,8 @@ bool QueryPlanner::checkUsePatternTrick(
               }
             }
           } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
-            // check if pattern trick object has been used in Bind
+            // If the object variable of ql:has-predicate is used somewhere in a
+            // BIND, we cannot use the pattern trick.
             for (const std::string* v : arg.strings()) {
               if (*v == t._o) {
                 usePatternTrick = false;
@@ -618,7 +621,8 @@ bool QueryPlanner::checkUsePatternTrick(
               }
             } else if constexpr (std::is_same_v<T,
                                                 GraphPatternOperation::Bind>) {
-              // check if pattern trick object has been used in Bind
+              // If the object variable of ql:has-predicate is used somewhere in
+              // a BIND, we cannot use the pattern trick.
               for (const std::string* v : arg.strings()) {
                 if (*v == t._o) {
                   usePatternTrick = false;
