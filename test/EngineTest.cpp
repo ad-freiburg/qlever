@@ -26,7 +26,8 @@ TEST(EngineTest, joinTest) {
   int lwidth = a.cols();
   int rwidth = b.cols();
   int reswidth = a.cols() + b.cols() - 1;
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, Join::join, a, 0, b, 0, &res);
+  Join J{nullptr, nullptr, nullptr, 0, 0, false};
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, a, 0, b, 0, &res);
 
   ASSERT_EQ(1u, res(0, 0));
   ASSERT_EQ(1u, res(0, 1));
@@ -57,7 +58,7 @@ TEST(EngineTest, joinTest) {
   a.push_back({400000, 200000});
   b.push_back({400000, 200000});
 
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, Join::join, a, 0, b, 0, &res);
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, a, 0, b, 0, &res);
   ASSERT_EQ(6u, res.size());
 
   a.clear();
@@ -75,7 +76,7 @@ TEST(EngineTest, joinTest) {
   }
   a.push_back({4000001, 200000});
   b.push_back({4000001, 200000});
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, Join::join, a, 0, b, 0, &res);
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, a, 0, b, 0, &res);
   ASSERT_EQ(2u, res.size());
 
   a.clear();
@@ -93,7 +94,7 @@ TEST(EngineTest, joinTest) {
   lwidth = b.cols();
   rwidth = c.cols();
   reswidth = b.cols() + c.cols() - 1;
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, Join::join, b, 0, c, 0, &res);
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, b, 0, c, 0, &res);
 
   ASSERT_EQ(2u, res.size());
 

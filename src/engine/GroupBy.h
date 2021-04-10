@@ -115,5 +115,7 @@ class GroupBy : public Operation {
                           const vector<GroupBy::Aggregate>& aggregates, IdTable* dynResult,
                           const ResultTable* inTable, ResultTable* outTable,
                           const Index& index) const;
+
+  FRIEND_TEST(GroupByTest, doGroupBy);
 };
 

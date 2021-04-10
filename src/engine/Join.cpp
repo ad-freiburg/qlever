@@ -18,7 +18,7 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            size_t t2JoinCol, bool keepJoinColumn)
     : Operation(qec) {
   // Make sure subtrees are ordered so that identical queries can be identified.
-  if (t1.get()->asString() < t2.get()->asString()) {
+  if (t1 && t2 && t1.get()->asString() < t2.get()->asString()) {
     _left = t1;
     _leftJoinCol = t1JoinCol;
     _right = t2;

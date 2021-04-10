@@ -13,6 +13,10 @@ Union::Union(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   _subtrees[1] = t2;
 
   // compute the column origins
+  if (!t1 || !t2) {
+    // we are in the test mode, this constructor doesn't have to be useful then
+    return;
+  }
   ad_utility::HashMap<string, size_t> variableColumns = getVariableColumns();
   _columnOrigins.resize(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
   const auto& t1VarCols = t1->getVariableColumns();

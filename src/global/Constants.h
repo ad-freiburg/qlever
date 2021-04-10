@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+#include <stdexcept>
 
 static const size_t STXXL_MEMORY_TO_USE = 1024L * 1024L * 1024L * 2L;
 static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 1000 * 1000;
