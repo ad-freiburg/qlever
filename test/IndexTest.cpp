@@ -8,6 +8,13 @@
 #include "../src/global/Pattern.h"
 #include "../src/index/Index.h"
 
+ad_utility::AllocatorWithLimit<Id>& allocator() {
+  static ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<size_t>::max())};
+  return a;
+}
+
 string getStxxlConfigFileName(const string& location) {
   std::ostringstream os;
   os << location << ".stxxl";
@@ -511,8 +518,8 @@ TEST(IndexTest, scanTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-    IdTable wol(1);
-    IdTable wtl(2);
+    IdTable wol(1, allocator());
+    IdTable wtl(2, allocator());
 
     index.scan("b", &wtl, index._PSO);
     ASSERT_EQ(2u, wtl.size());
@@ -595,8 +602,8 @@ TEST(IndexTest, scanTest) {
     Index index;
     index.createFromOnDiskIndex("_testindex");
 
-    IdTable wol(1);
-    IdTable wtl(2);
+    IdTable wol(1, allocator());
+    IdTable wtl(2, allocator());
 
     index.scan("is-a", &wtl, index._PSO);
     ASSERT_EQ(7u, wtl.size());

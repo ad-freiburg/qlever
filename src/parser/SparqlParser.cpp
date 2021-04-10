@@ -263,7 +263,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
           "the end of the input.");
     }
     if (_lexer.accept("optional")) {
-      currentPattern->_children.push_back(
+      currentPattern->_children.emplace_back(
           GraphPatternOperation::Optional{ParsedQuery::GraphPattern()});
       auto& opt = currentPattern->_children.back()
                       .get<GraphPatternOperation::Optional>();
@@ -275,6 +275,63 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       // Recursively call parseWhere to parse the optional part.
       parseWhere(query, &child);
       _lexer.accept(".");
+    } else if (_lexer.accept("bind")) {
+      _lexer.expect("(");
+      std::string inVar;
+      bool rename = false;
+      bool isString = true;
+      bool isSum = false;
+      std::string inVar2;
+      int64_t val = 0;
+      if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+        rename = true;
+        inVar = _lexer.current().raw;
+        if (_lexer.accept(SparqlToken::Type::SYMBOL)) {
+          if (_lexer.current().raw != "+") {
+            throw std::runtime_error(
+                "A sum of two variables is currently the only"
+                "supported arithmetic bind expression, but symbol after first "
+                "variable was " +
+                _lexer.current().raw);
+          }
+          isSum = true;
+          _lexer.expect(SparqlToken::Type::VARIABLE);
+          inVar2 = _lexer.current().raw;
+        }
+      } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+        // The "true" says that the whole string is a literal (with "false",
+        // there could be more stuff after the literal).
+        inVar = parseLiteral(_lexer.current().raw, true);
+        isString = true;
+      } else if (_lexer.accept(SparqlToken::Type::INTEGER)) {
+        isString = false;
+        // Parse as decimal to base 10.
+        val = std::strtoll(_lexer.current().raw.c_str(), nullptr, 10);
+      } else {
+        _lexer.expect(SparqlToken::Type::IRI);
+        inVar = _lexer.current().raw;
+      }
+      _lexer.expect("as");
+      _lexer.expect(SparqlToken::Type::VARIABLE);
+      GraphPatternOperation::Bind b;
+      if (isSum) {
+        b._expressionVariant = GraphPatternOperation::Bind::Sum{inVar, inVar2};
+      } else if (rename) {
+        b._expressionVariant = GraphPatternOperation::Bind::Rename{inVar};
+      } else {
+        if (isString) {
+          // Note that this only works if the literal or iri stored in inVar is
+          // part of the KB
+          b._expressionVariant = GraphPatternOperation::Bind::Constant{inVar};
+        } else {
+          b._expressionVariant = GraphPatternOperation::Bind::Constant{val};
+        }
+      }
+      b._target = _lexer.current().raw;
+      _lexer.expect(")");
+      currentPattern->_children.emplace_back(std::move(b));
+      // the dot after the bind is optional
+      _lexer.accept(".");
     } else if (_lexer.accept("{")) {
       // Subquery or union
       if (_lexer.accept("select")) {
@@ -282,7 +339,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         // create the subquery operation
         GraphPatternOperation::Subquery subq;
         parseQuery(&subq._subquery);
-        currentPattern->_children.push_back(std::move(subq));
+        currentPattern->_children.emplace_back(std::move(subq));
         // The closing bracked } is consumed by the subquery
         _lexer.accept(".");
       } else {
@@ -302,7 +359,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         _lexer.expect("{");
         parseWhere(query, &un._child2);
         _lexer.accept(".");
-        currentPattern->_children.push_back(std::move(un));
+        currentPattern->_children.emplace_back(std::move(un));
       }
     } else if (_lexer.accept("filter")) {
       // append to the global filters of the pattern.
@@ -618,19 +675,87 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
 bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
                                bool failOnNoFilter,
                                ParsedQuery::GraphPattern* pattern) {
-  if (_lexer.accept("(")) {
-    if (_lexer.accept("lang")) {
-      _lexer.expect("(");
-      _lexer.expect(SparqlToken::Type::VARIABLE);
-      std::string lhs = _lexer.current().raw;
+  size_t numParentheses = 0;
+  while (_lexer.accept("(")) {
+    numParentheses++;
+  }
+  auto expectClose = [numParentheses, this]() mutable {
+    while (numParentheses) {
       _lexer.expect(")");
-      _lexer.expect("=");
-      _lexer.expect(SparqlToken::Type::RDFLITERAL);
-      std::string rhs = _lexer.current().raw;
-      _lexer.expect(")");
-      addLangFilter(lhs, rhs, pattern);
-      return true;
+      numParentheses--;
     }
+  };
+  if (_lexer.accept("lang") && numParentheses) {
+    _lexer.expect("(");
+    _lexer.expect(SparqlToken::Type::VARIABLE);
+    std::string lhs = _lexer.current().raw;
+    _lexer.expect(")");
+    _lexer.expect("=");
+    _lexer.expect(SparqlToken::Type::RDFLITERAL);
+    std::string rhs = _lexer.current().raw;
+    expectClose();
+    addLangFilter(lhs, rhs, pattern);
+    return true;
+  } else if (_lexer.accept("langmatches")) {
+    _lexer.expect("(");
+    _lexer.expect("lang");
+    _lexer.expect("(");
+    _lexer.expect(SparqlToken::Type::VARIABLE);
+    std::string lhs = _lexer.current().raw;
+    _lexer.expect(")");
+    _lexer.expect(",");
+    _lexer.expect(SparqlToken::Type::RDFLITERAL);
+    std::string rhs = _lexer.current().raw;
+    expectClose();
+    addLangFilter(lhs, rhs, pattern);
+    return true;
+  } else if (_lexer.accept("regex")) {
+    std::vector<SparqlFilter> v;
+    v.push_back(parseRegexFilter(false));
+    if (numParentheses) {
+      while (_lexer.accept(SparqlToken::Type::LOGICAL_OR)) {
+        v.push_back(parseRegexFilter(true));
+      }
+    }
+    if (!(v.size() == 1 || std::all_of(v.begin(), v.end(), [](const auto& f) {
+            return f._type == SparqlFilter::PREFIX;
+          }))) {
+      throw ParseException(
+          "Multiple regex filters concatenated via || must currently all be "
+          "PREFIX filters");
+    }
+    // merge the prefix filters (does nothing in case of a single regex filter
+    for (auto it = v.begin() + 1; it < v.end(); ++it) {
+      v[0]._additionalLhs.push_back(std::move(it->_lhs));
+      v[0]._additionalPrefixes.push_back(std::move(it->_rhs));
+    }
+    _filters->push_back(v[0]);
+    expectClose();
+    return true;
+  } else if (_lexer.accept("prefix")) {
+    _lexer.expect("(");
+    SparqlFilter f1;
+    SparqlFilter f2;
+    f1._type = SparqlFilter::GE;
+    f2._type = SparqlFilter::LT;
+    // Do prefix filtering by using two filters (one testing >=, the other =)
+    _lexer.expect(SparqlToken::Type::VARIABLE);
+    f1._lhs = _lexer.current().raw;
+    f2._lhs = f1._lhs;
+    _lexer.expect(",");
+    _lexer.expect(SparqlToken::Type::RDFLITERAL);
+    f1._rhs = _lexer.current().raw;
+    f2._rhs = f1._lhs;
+    f1._rhs = f1._rhs.substr(0, f1._rhs.size() - 1) + " ";
+    f2._rhs = f2._rhs.substr(0, f2._rhs.size() - 2);
+    f2._rhs += f1._rhs[f1._rhs.size() - 2] + 1;
+    f2._rhs += f1._rhs[f1._rhs.size() - 1];
+    _filters->emplace_back(f1);
+    _filters->emplace_back(f2);
+    _lexer.expect(")");
+    expectClose();
+    return true;
+  } else if (numParentheses) {
     SparqlFilter f;
     if (_lexer.accept("str")) {
       _lexer.expect("(");
@@ -695,122 +820,15 @@ bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
       throw ParseException(_lexer.current().raw +
                            " is not a valid right hand side for a filter.");
     }
-    _lexer.expect(")");
+    expectClose();
     _filters->emplace_back(f);
     return true;
-  } else if (_lexer.accept("langmatches")) {
-    _lexer.expect("(");
-    _lexer.expect("lang");
-    _lexer.expect("(");
-    _lexer.expect(SparqlToken::Type::VARIABLE);
-    std::string lhs = _lexer.current().raw;
-    _lexer.expect(")");
-    _lexer.expect(",");
-    _lexer.expect(SparqlToken::Type::RDFLITERAL);
-    std::string rhs = _lexer.current().raw;
-    _lexer.expect(")");
-    addLangFilter(lhs, rhs, pattern);
-    return true;
-  } else if (_lexer.accept("regex")) {
-    SparqlFilter f;
-    f._type = SparqlFilter::REGEX;
-    _lexer.expect("(");
-    if (_lexer.accept("str")) {
-      _lexer.expect("(");
-      f._lhsAsString = true;
-    }
-    _lexer.expect(SparqlToken::Type::VARIABLE);
-    f._lhs = _lexer.current().raw;
-    if (f._lhsAsString) {
-      _lexer.expect(")");
-    }
-    _lexer.expect(",");
-    _lexer.expect(SparqlToken::Type::RDFLITERAL);
-    f._rhs = _lexer.current().raw;
-    // Remove the enlcosing quotation marks
-    f._rhs = f._rhs.substr(1, f._rhs.size() - 2);
-    if (_lexer.accept(",")) {
-      _lexer.expect("\"i\"");
-      f._regexIgnoreCase = true;
-    }
-    _lexer.expect(")");
-    if (f._rhs[0] == '^' && !f._regexIgnoreCase) {
-      // Check if we can use the more efficient prefix filter instead
-      // of an expensive regex filter.
-      bool isSimple = true;
-      bool escaped = false;
-      std::vector<size_t>
-          escapePositions;  // position of backslashes that are used for
-                            // escaping within the regex
-      // these have to be removed if the regex is simply a prefix filter.
 
-      // Check if the regex is only a prefix regex or also does
-      // anything else.
-      const static string regexControlChars = "[]^$.|?*+()";
-      for (size_t i = 1; isSimple && i < f._rhs.size(); i++) {
-        if (f._rhs[i] == '\\') {
-          if (!escaped) {
-            escapePositions.push_back(i);
-          }
-          escaped = !escaped;  // correctly deal with consecutive backslashes
-          continue;
-        }
-        char c = f._rhs[i];
-        bool isControlChar = regexControlChars.find(c) != string::npos;
-        if (!escaped && isControlChar) {
-          isSimple = false;
-        } else if (escaped && !isControlChar) {
-          const std::string error =
-              "Escaping the character "s + c +
-              " is not allowed in QLever's regex filters. (Regex was " +
-              f._rhs +
-              ") Please note that "
-              "there are two levels of Escaping in place here: One for Sparql "
-              "and one for the regex engine";
-          throw ParseException(error);
-        }
-        escaped = false;
-      }
-      if (isSimple) {
-        // There are no regex special chars apart from the leading '^'
-        // so we can use a prefix filter.
-        f._type = SparqlFilter::PREFIX;
-
-        // we have to remove the escaping backslashes
-        for (auto it = escapePositions.rbegin(); it != escapePositions.rend();
-             ++it) {
-          f._rhs.erase(f._rhs.begin() + *it);
-        }
-      }
-    }
-    _filters->emplace_back(f);
-    return true;
-  } else if (_lexer.accept("prefix")) {
-    _lexer.expect("(");
-    SparqlFilter f1;
-    SparqlFilter f2;
-    f1._type = SparqlFilter::GE;
-    f2._type = SparqlFilter::LT;
-    // Do prefix filtering by using two filters (one testing >=, the other =)
-    _lexer.expect(SparqlToken::Type::VARIABLE);
-    f1._lhs = _lexer.current().raw;
-    f2._lhs = f1._lhs;
-    _lexer.expect(",");
-    _lexer.expect(SparqlToken::Type::RDFLITERAL);
-    f1._rhs = _lexer.current().raw;
-    f2._rhs = f1._lhs;
-    f1._rhs = f1._rhs.substr(0, f1._rhs.size() - 1) + " ";
-    f2._rhs = f2._rhs.substr(0, f2._rhs.size() - 2);
-    f2._rhs += f1._rhs[f1._rhs.size() - 2] + 1;
-    f2._rhs += f1._rhs[f1._rhs.size() - 1];
-    _filters->emplace_back(f1);
-    _filters->emplace_back(f2);
-    _lexer.expect(")");
-    return true;
   } else if (failOnNoFilter) {
     _lexer.accept();
     throw ParseException("Expected a filter but got " + _lexer.current().raw);
   }
+  expectClose();
   return false;
 }
 
@@ -942,6 +960,82 @@ string SparqlParser::parseLiteral(const string& literal, bool isEntireString,
     }
   }
   return out.str();
+}
+SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
+  if (expectKeyword) {
+    _lexer.expect("regex");
+  }
+  SparqlFilter f;
+  f._type = SparqlFilter::REGEX;
+  _lexer.expect("(");
+  if (_lexer.accept("str")) {
+    _lexer.expect("(");
+    f._lhsAsString = true;
+  }
+  _lexer.expect(SparqlToken::Type::VARIABLE);
+  f._lhs = _lexer.current().raw;
+  if (f._lhsAsString) {
+    _lexer.expect(")");
+  }
+  _lexer.expect(",");
+  _lexer.expect(SparqlToken::Type::RDFLITERAL);
+  f._rhs = _lexer.current().raw;
+  // Remove the enlcosing quotation marks
+  f._rhs = f._rhs.substr(1, f._rhs.size() - 2);
+  if (_lexer.accept(",")) {
+    _lexer.expect("\"i\"");
+    f._regexIgnoreCase = true;
+  }
+  _lexer.expect(")");
+  if (f._rhs[0] == '^' && !f._regexIgnoreCase) {
+    // Check if we can use the more efficient prefix filter instead
+    // of an expensive regex filter.
+    bool isSimple = true;
+    bool escaped = false;
+    std::vector<size_t>
+        escapePositions;  // position of backslashes that are used for
+    // escaping within the regex
+    // these have to be removed if the regex is simply a prefix filter.
+
+    // Check if the regex is only a prefix regex or also does
+    // anything else.
+    const static string regexControlChars = "[]^$.|?*+()";
+    for (size_t i = 1; isSimple && i < f._rhs.size(); i++) {
+      if (f._rhs[i] == '\\') {
+        if (!escaped) {
+          escapePositions.push_back(i);
+        }
+        escaped = !escaped;  // correctly deal with consecutive backslashes
+        continue;
+      }
+      char c = f._rhs[i];
+      bool isControlChar = regexControlChars.find(c) != string::npos;
+      if (!escaped && isControlChar) {
+        isSimple = false;
+      } else if (escaped && !isControlChar) {
+        const std::string error =
+            "Escaping the character "s + c +
+            " is not allowed in QLever's regex filters. (Regex was " + f._rhs +
+            ") Please note that "
+            "there are two levels of Escaping in place here: One for Sparql "
+            "and one for the regex engine";
+        throw ParseException(error);
+      }
+      escaped = false;
+    }
+    if (isSimple) {
+      // There are no regex special chars apart from the leading '^'
+      // so we can use a prefix filter.
+      f._type = SparqlFilter::PREFIX;
+
+      // we have to remove the escaping backslashes
+      for (auto it = escapePositions.rbegin(); it != escapePositions.rend();
+           ++it) {
+        f._rhs.erase(f._rhs.begin() + *it);
+      }
+    }
+  }
+  return f;
 }
 
 GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(

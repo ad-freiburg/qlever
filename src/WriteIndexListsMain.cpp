@@ -89,7 +89,10 @@ int main(int argc, char** argv) {
     Engine engine;
     SubtreeCache cache(NOF_SUBTREES_TO_CACHE);
     PinnedSizes pinnedSizes;
-    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes);
+    ad_utility::AllocatorWithLimit<Id> allocator{
+        ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+            DEFAULT_MEM_FOR_QUERIES_IN_GB)};
+    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes, allocator);
     ParsedQuery q;
     if (!freebase) {
       q = SparqlParser("SELECT ?x WHERE {?x <is-a> <Scientist>}").parse();

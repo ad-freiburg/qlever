@@ -44,15 +44,15 @@ class Join : public Operation {
     return _sizeEstimate;
   }
 
-  virtual size_t getCostEstimate() override;
+  size_t getCostEstimate() override;
 
-  virtual bool knownEmptyResult() override {
+  bool knownEmptyResult() override {
     return _left->knownEmptyResult() || _right->knownEmptyResult();
   }
 
   void computeSizeEstimateAndMultiplicities();
 
-  virtual float getMultiplicity(size_t col) override;
+  float getMultiplicity(size_t col) override;
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_left.get(), _right.get()};
@@ -69,11 +69,9 @@ class Join : public Operation {
   class RightLargerTag {};
   class LeftLargerTag {};
   template <typename TagType, int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  static void doGallopInnerJoin(const TagType, const IdTableStatic<L_WIDTH>& l1,
-                                const size_t jc1,
-                                const IdTableStatic<R_WIDTH>& l2,
-                                const size_t jc2,
-                                IdTableStatic<OUT_WIDTH>* result);
+  static void doGallopInnerJoin(TagType, const IdTableView<L_WIDTH>& l1,
+                                size_t jc1, const IdTableView<R_WIDTH>& l2,
+                                size_t jc2, IdTableStatic<OUT_WIDTH>* result);
 
  private:
   std::shared_ptr<QueryExecutionTree> _left;

@@ -11,11 +11,18 @@
 #include "../src/engine/IdTable.h"
 #include "../src/global/Id.h"
 
+ad_utility::AllocatorWithLimit<Id>& allocator() {
+  static ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<size_t>::max())};
+  return a;
+}
+
 TEST(IdTableTest, push_back_and_assign) {
   constexpr size_t NUM_ROWS = 30;
   constexpr size_t NUM_COLS = 4;
 
-  IdTable t1(NUM_COLS);
+  IdTable t1{NUM_COLS, allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back({i * NUM_COLS + 1, i * NUM_COLS + 2, i * NUM_COLS + 3,
@@ -42,11 +49,11 @@ TEST(IdTableTest, push_back_and_assign) {
 }
 
 TEST(IdTableTest, insert) {
-  IdTable t1(4);
+  IdTable t1{4, allocator()};
   t1.push_back({7, 2, 4, 1});
   t1.push_back({0, 22, 1, 4});
 
-  IdTable init(4);
+  IdTable init(4, allocator());
   init.push_back({1, 0, 6, 3});
   init.push_back({3, 1, 8, 2});
   init.push_back({0, 6, 8, 5});
@@ -92,7 +99,7 @@ TEST(IdTableTest, reserve_and_resize) {
   constexpr size_t NUM_COLS = 20;
 
   // Test a reserve call before insertions
-  IdTable t1(NUM_COLS);
+  IdTable t1(NUM_COLS, allocator());
   t1.reserve(NUM_ROWS);
 
   // Fill the rows with numbers counting up from 1
@@ -112,7 +119,7 @@ TEST(IdTableTest, reserve_and_resize) {
   }
 
   // Test a resize call instead of insertions
-  IdTable t2(NUM_COLS);
+  IdTable t2(NUM_COLS, allocator());
   t2.resize(NUM_ROWS);
 
   // Fill the rows with numbers counting up from 1
@@ -133,7 +140,7 @@ TEST(IdTableTest, copyAndMove) {
   constexpr size_t NUM_ROWS = 100;
   constexpr size_t NUM_COLS = 4;
 
-  IdTable t1(NUM_COLS);
+  IdTable t1(NUM_COLS, allocator());
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back({i * NUM_COLS + 1, i * NUM_COLS + 2, i * NUM_COLS + 3,
@@ -176,7 +183,7 @@ TEST(IdTableTest, erase) {
   constexpr size_t NUM_ROWS = 12;
   constexpr size_t NUM_COLS = 4;
 
-  IdTable t1(NUM_COLS);
+  IdTable t1(NUM_COLS, allocator());
   // Fill the rows with numbers counting up from 1
   for (size_t j = 0; j < 2 * NUM_ROWS; j++) {
     size_t i = j / 2;
@@ -204,7 +211,7 @@ TEST(IdTableTest, iterating) {
   constexpr size_t NUM_ROWS = 42;
   constexpr size_t NUM_COLS = 17;
 
-  IdTable t1(NUM_COLS);
+  IdTable t1(NUM_COLS, allocator());
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back();
@@ -231,7 +238,7 @@ TEST(IdTableTest, iterating) {
 }
 
 TEST(IdTableTest, sortTest) {
-  IdTable test(2);
+  IdTable test(2, allocator());
   test.push_back({3, 1});
   test.push_back({8, 9});
   test.push_back({1, 5});
@@ -253,7 +260,7 @@ TEST(IdTableTest, sortTest) {
   // 1
   i1 = test.begin() + 1;
   i2 = i1 + 3;
-  IdTable::Row tmp(2);
+  IdTable::row_type tmp(2);
   tmp = *i2;
   *i1 = std::move(tmp);
   ASSERT_EQ(orig[4], test[1]);
@@ -261,7 +268,7 @@ TEST(IdTableTest, sortTest) {
 
   // The value is move constructible: move construct from a row in the table
   i1 = test.begin() + 4;
-  IdTable::Row tmp2(*i1);
+  IdTable::row_type tmp2(*i1);
   ASSERT_EQ(*i1, tmp2);
 
   // Now try the actual sort
@@ -287,7 +294,7 @@ TEST(IdTableStaticTest, push_back_and_assign) {
   constexpr size_t NUM_ROWS = 30;
   constexpr size_t NUM_COLS = 4;
 
-  IdTableStatic<NUM_COLS> t1;
+  IdTableStatic<NUM_COLS> t1{allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back({i * NUM_COLS + 1, i * NUM_COLS + 2, i * NUM_COLS + 3,
@@ -314,11 +321,11 @@ TEST(IdTableStaticTest, push_back_and_assign) {
 }
 
 TEST(IdTableStaticTest, insert) {
-  IdTableStatic<4> t1;
+  IdTableStatic<4> t1{allocator()};
   t1.push_back({7, 2, 4, 1});
   t1.push_back({0, 22, 1, 4});
 
-  IdTableStatic<4> init;
+  IdTableStatic<4> init{allocator()};
   init.push_back({1, 0, 6, 3});
   init.push_back({3, 1, 8, 2});
   init.push_back({0, 6, 8, 5});
@@ -366,7 +373,7 @@ TEST(IdTableStaticTest, reserve_and_resize) {
   constexpr size_t NUM_COLS = 20;
 
   // Test a reserve call before insertions
-  IdTableStatic<NUM_COLS> t1;
+  IdTableStatic<NUM_COLS> t1{allocator()};
   t1.reserve(NUM_ROWS);
 
   // Fill the rows with numbers counting up from 1
@@ -386,7 +393,7 @@ TEST(IdTableStaticTest, reserve_and_resize) {
   }
 
   // Test a resize call instead of insertions
-  IdTableStatic<NUM_COLS> t2;
+  IdTableStatic<NUM_COLS> t2{allocator()};
   t2.resize(NUM_ROWS);
 
   // Fill the rows with numbers counting up from 1
@@ -407,7 +414,7 @@ TEST(IdTableStaticTest, copyAndMove) {
   constexpr size_t NUM_ROWS = 100;
   constexpr size_t NUM_COLS = 4;
 
-  IdTableStatic<NUM_COLS> t1;
+  IdTableStatic<NUM_COLS> t1{allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back({i * NUM_COLS + 1, i * NUM_COLS + 2, i * NUM_COLS + 3,
@@ -450,7 +457,7 @@ TEST(IdTableStaticTest, erase) {
   constexpr size_t NUM_ROWS = 12;
   constexpr size_t NUM_COLS = 4;
 
-  IdTableStatic<NUM_COLS> t1;
+  IdTableStatic<NUM_COLS> t1{allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t j = 0; j < 2 * NUM_ROWS; j++) {
     size_t i = j / 2;
@@ -478,7 +485,7 @@ TEST(IdTableStaticTest, iterating) {
   constexpr size_t NUM_ROWS = 42;
   constexpr size_t NUM_COLS = 17;
 
-  IdTableStatic<NUM_COLS> t1;
+  IdTableStatic<NUM_COLS> t1{allocator()};
   // Fill the rows with numbers counting up from 1
   for (size_t i = 0; i < NUM_ROWS; i++) {
     t1.push_back();
@@ -496,7 +503,7 @@ TEST(IdTableStaticTest, iterating) {
   ASSERT_EQ(t1.end(), it);
 
   size_t row_index = 0;
-  for (const IdTableStatic<NUM_COLS>::Row row : t1) {
+  for (const IdTableStatic<NUM_COLS>::row_type row : t1) {
     for (size_t i = 0; i < NUM_COLS; i++) {
       ASSERT_EQ(row_index * NUM_COLS + i + 1, row[i]);
     }
@@ -508,7 +515,7 @@ TEST(IdTableStaticTest, iterating) {
 // Conversion Tests
 // =============================================================================
 TEST(IdTableTest, conversion) {
-  IdTable table(3);
+  IdTable table(3, allocator());
   table.push_back({4, 1, 0});
   table.push_back({1, 7, 8});
   table.push_back({7, 12, 2});
@@ -516,7 +523,7 @@ TEST(IdTableTest, conversion) {
 
   IdTable initial = table;
 
-  IdTableStatic<3> s = table.moveToStatic<3>();
+  IdTableStatic<3> s = std::move(table).moveToStatic<3>();
   ASSERT_EQ(4u, s.size());
   ASSERT_EQ(3u, s.cols());
   for (size_t i = 0; i < s.size(); i++) {
@@ -525,7 +532,7 @@ TEST(IdTableTest, conversion) {
     }
   }
 
-  table = s.moveToDynamic();
+  table = std::move(s).moveToDynamic();
   ASSERT_EQ(4u, table.size());
   ASSERT_EQ(3u, table.cols());
   for (size_t i = 0; i < table.size(); i++) {
@@ -534,7 +541,8 @@ TEST(IdTableTest, conversion) {
     }
   }
 
-  const IdTableStatic<3> view = table.asStaticView<3>();
+  auto view = table.asStaticView<3>();
+  static_assert(std::is_same_v<decltype(view), IdTableView<3>>);
   ASSERT_EQ(4u, view.size());
   ASSERT_EQ(3u, view.cols());
   for (size_t i = 0; i < view.size(); i++) {
@@ -544,7 +552,7 @@ TEST(IdTableTest, conversion) {
   }
 
   // Test with more than 5 columns
-  IdTable tableVar(6);
+  IdTable tableVar(6, allocator());
   tableVar.push_back({1, 2, 3, 6, 5, 9});
   tableVar.push_back({0, 4, 3, 4, 5, 3});
   tableVar.push_back({3, 2, 3, 2, 5, 6});
@@ -552,7 +560,7 @@ TEST(IdTableTest, conversion) {
 
   IdTable initialVar = tableVar;
 
-  IdTableStatic<6> staticVar = tableVar.moveToStatic<6>();
+  IdTableStatic<6> staticVar = std::move(tableVar).moveToStatic<6>();
   ASSERT_EQ(initialVar.size(), staticVar.size());
   ASSERT_EQ(initialVar.cols(), staticVar.cols());
   for (size_t i = 0; i < staticVar.size(); i++) {
@@ -561,7 +569,7 @@ TEST(IdTableTest, conversion) {
     }
   }
 
-  IdTable dynamicVar = staticVar.moveToDynamic();
+  IdTable dynamicVar = std::move(staticVar).moveToDynamic();
   ASSERT_EQ(initialVar.size(), dynamicVar.size());
   ASSERT_EQ(initialVar.cols(), dynamicVar.cols());
   for (size_t i = 0; i < dynamicVar.size(); i++) {
@@ -570,7 +578,8 @@ TEST(IdTableTest, conversion) {
     }
   }
 
-  const IdTableStatic<6> viewVar = dynamicVar.asStaticView<6>();
+  auto viewVar = std::move(dynamicVar).asStaticView<6>();
+  static_assert(std::is_same_v<decltype(viewVar), IdTableView<6>>);
   ASSERT_EQ(initialVar.size(), viewVar.size());
   ASSERT_EQ(initialVar.cols(), viewVar.cols());
   for (size_t i = 0; i < viewVar.size(); i++) {
@@ -578,4 +587,9 @@ TEST(IdTableTest, conversion) {
       ASSERT_EQ(initialVar(i, j), viewVar(i, j));
     }
   }
+}
+
+TEST(IdTableTest, staticAsserts) {
+  static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::iterator>);
+  static_assert(std::is_trivially_copyable_v<IdTableStatic<1>::const_iterator>);
 }

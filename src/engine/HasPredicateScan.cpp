@@ -363,7 +363,7 @@ void HasPredicateScan::computeSubqueryS(
     const CompactStringVector<Id, Id>& hasPredicate,
     const CompactStringVector<size_t, Id>& patterns) {
   IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
-  const IdTableStatic<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
+  const IdTableView<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
 
   LOG(DEBUG) << "HasPredicateScan subresult size " << input.size() << std::endl;
 

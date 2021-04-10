@@ -344,6 +344,21 @@ class Vocabulary {
     return _caseComparator.getLocaleManager();
   }
 
+  // Wraps std::lower_bound and returns an index instead of an iterator
+  Id lower_bound(const string& word,
+                 const SortLevel level = SortLevel::QUARTERNARY) const {
+    return static_cast<Id>(std::lower_bound(_words.begin(), _words.end(), word,
+                                            getLowerBoundLambda(level)) -
+                           _words.begin());
+  }
+
+  // _______________________________________________________________
+  Id upper_bound(const string& word, const SortLevel level) const {
+    return static_cast<Id>(std::upper_bound(_words.begin(), _words.end(), word,
+                                            getUpperBoundLambda(level)) -
+                           _words.begin());
+  }
+
  private:
   template <class R = std::string>
   auto getLowerBoundLambda(const SortLevel level) const {
@@ -366,20 +381,6 @@ class Vocabulary {
     } else {
       return getLowerBoundLambda(level);
     }
-  }
-  // Wraps std::lower_bound and returns an index instead of an iterator
-  Id lower_bound(const string& word,
-                 const SortLevel level = SortLevel::QUARTERNARY) const {
-    return static_cast<Id>(std::lower_bound(_words.begin(), _words.end(), word,
-                                            getLowerBoundLambda(level)) -
-                           _words.begin());
-  }
-
-  // _______________________________________________________________
-  Id upper_bound(const string& word, const SortLevel level) const {
-    return static_cast<Id>(std::upper_bound(_words.begin(), _words.end(), word,
-                                            getUpperBoundLambda(level)) -
-                           _words.begin());
   }
 
   // TODO<joka921> these following two members are only used with the

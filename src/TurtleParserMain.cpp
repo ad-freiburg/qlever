@@ -36,6 +36,30 @@ void writeNTImpl(std::ostream& out, const std::string& filename) {
   }
 }
 
+template <class Parser>
+void writeLabel(std::ostream& out, const std::string& filename) {
+  Parser p(filename);
+  std::array<std::string, 3> triple;
+  // this call by reference is necesary because of the TSV-Parsers interface
+  size_t numTriples = 0;
+  std::unordered_set<std::string> entities;
+  while (p.getLine(triple)) {
+    entities.insert(std::move(triple[0]));
+    entities.insert(std::move(triple[1]));
+    entities.insert(std::move(triple[2]));
+    numTriples++;
+    if (numTriples % 10000000 == 0) {
+      LOG(INFO) << "Parsed " << numTriples << " triples" << std::endl;
+    }
+  }
+  for (const auto& t : entities) {
+    if (ad_utility::startsWith(t, "<")) {
+      std::cout << t << " <qlever_label> \"" << t.substr(1, t.size() - 2)
+                << ".\n";
+    }
+  }
+}
+
 /**
  * @brief Decide according to arg fileFormat which parser to use.
  * Then call writeNTImpl with the appropriate parser
@@ -47,7 +71,8 @@ template <class Tokenizer_T>
 void writeNT(std::ostream& out, const string& fileFormat,
              const std::string& filename) {
   if (fileFormat == "ttl") {
-    writeNTImpl<TurtleStreamParser<Tokenizer_T>>(out, filename);
+    writeLabel<TurtleStreamParser<Tokenizer_T>>(out, filename);
+    // writeNTImpl<TurtleStreamParser<Tokenizer_T>>(out, filename);
   } else if (fileFormat == "tsv") {
     writeNTImpl<TsvParser>(out, filename);
   } else if (fileFormat == "nt") {

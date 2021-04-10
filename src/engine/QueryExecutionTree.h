@@ -42,14 +42,15 @@ class QueryExecutionTree {
     UNION = 15,
     MULTICOLUMN_JOIN = 16,
     TRANSITIVE_PATH = 17,
-    VALUES = 18
+    VALUES = 18,
+    BIND = 19
   };
 
   void setOperation(OperationType type, std::shared_ptr<Operation> op);
 
   string asString(size_t indent = 0);
 
-  QueryExecutionContext* getQec() const { return _qec; }
+  const QueryExecutionContext* getQec() const { return _qec; }
 
   const ad_utility::HashMap<string, size_t>& getVariableColumns() const {
     return _variableColumnMap;
@@ -196,10 +197,12 @@ class QueryExecutionTree {
    */
   nlohmann::json writeJsonTable(
       const IdTable& data, size_t from, size_t limit,
-      const vector<pair<size_t, ResultTable::ResultType>>& validIndices) const;
+      const vector<std::optional<pair<size_t, ResultTable::ResultType>>>&
+          validIndices) const;
 
   void writeTable(
       const IdTable& data, char sep, size_t from, size_t upperBound,
-      const vector<pair<size_t, ResultTable::ResultType>>& validIndices,
+      const vector<std::optional<pair<size_t, ResultTable::ResultType>>>&
+          validIndices,
       std::ostream& out) const;
 };

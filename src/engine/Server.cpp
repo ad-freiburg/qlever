@@ -199,10 +199,11 @@ void Server::process(Socket* client) {
       pq.expandPrefixes();
 
       QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
-                                pinSubtrees, pinResult);
+                                _allocator, pinSubtrees, pinResult);
       // start the shared timeout timer here to also include
       // the query planning
       timeoutTimer->wlock()->start();
+
       QueryPlanner qp(&qec);
       qp.setEnablePatternTrick(_enablePatternTrick);
       QueryExecutionTree qet = qp.createExecutionTree(pq);

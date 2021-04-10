@@ -19,7 +19,6 @@ add_library(engine
         Filter.h Filter.cpp
         Server.h Server.cpp
         QueryPlanner.cpp QueryPlanner.h
-        ScanningJoin.cpp ScanningJoin.h
         QueryPlanningCostFactors.cpp QueryPlanningCostFactors.h
         TwoColumnJoin.cpp TwoColumnJoin.h
         OptionalJoin.cpp OptionalJoin.h
@@ -30,7 +29,8 @@ add_library(engine
         MultiColumnJoin.cpp MultiColumnJoin.h
         TransitivePath.cpp TransitivePath.h
         Values.cpp Values.h
+        Bind.cpp Bind.h
         IdTable.h
         )
 
-target_link_libraries(engine index parser)
+target_link_libraries(engine index parser absl::flat_hash_set)

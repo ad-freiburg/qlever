@@ -10,8 +10,15 @@
 #include "../src/engine/TransitivePath.h"
 #include "../src/global/Id.h"
 
+ad_utility::AllocatorWithLimit<Id>& allocator() {
+  static ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<size_t>::max())};
+  return a;
+}
+
 TEST(TransitivePathTest, computeTransitivePath) {
-  IdTable sub(2);
+  IdTable sub(2, allocator());
   sub.push_back({0, 2});
   sub.push_back({2, 4});
   sub.push_back({4, 7});
@@ -21,9 +28,9 @@ TEST(TransitivePathTest, computeTransitivePath) {
   // Disconnected component.
   sub.push_back({10, 11});
 
-  IdTable result(2);
+  IdTable result(2, allocator());
 
-  IdTable expected(2);
+  IdTable expected(2, allocator());
   expected.push_back({0, 2});
   expected.push_back({0, 4});
   expected.push_back({0, 7});
@@ -48,6 +55,12 @@ TEST(TransitivePathTest, computeTransitivePath) {
   T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0,
                                            1,
                                            std::numeric_limits<size_t>::max());
+
+  auto cmp = [](const auto& a, const auto& b) {
+    return a[0] != b[0] ? a[0] < b[0] : a[1] < b[1];
+  };
+  std::sort(expected.begin(), expected.end(), cmp);
+  std::sort(result.begin(), result.end(), cmp);
   ASSERT_EQ(expected, result);
 
   result.clear();
@@ -68,6 +81,8 @@ TEST(TransitivePathTest, computeTransitivePath) {
 
   T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0,
                                            1, 2);
+  std::sort(expected.begin(), expected.end(), cmp);
+  std::sort(result.begin(), result.end(), cmp);
   ASSERT_EQ(expected, result);
 
   result.clear();
@@ -78,6 +93,8 @@ TEST(TransitivePathTest, computeTransitivePath) {
 
   T.computeTransitivePath<2>(&result, sub, false, true, 0, 1, 7,
                                            0, 1, 2);
+  std::sort(expected.begin(), expected.end(), cmp);
+  std::sort(result.begin(), result.end(), cmp);
   ASSERT_EQ(expected, result);
 
   result.clear();
@@ -87,5 +104,7 @@ TEST(TransitivePathTest, computeTransitivePath) {
 
   T.computeTransitivePath<2>(&result, sub, true, false, 0, 1, 0,
                                            2, 1, 2);
+  std::sort(expected.begin(), expected.end(), cmp);
+  std::sort(result.begin(), result.end(), cmp);
   ASSERT_EQ(expected, result);
 }
