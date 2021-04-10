@@ -106,5 +106,4 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     // only at innermost failure of a recursive call
     throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
   }
-
 }

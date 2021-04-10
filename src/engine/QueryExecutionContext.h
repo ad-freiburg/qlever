@@ -34,7 +34,6 @@ struct CacheValue {
   }
 };
 
-
 // Threadsafe LRU cache for (partial) query results, that
 // checks on insertion, if the result is currently being computed
 // by another query.
