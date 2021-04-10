@@ -101,7 +101,7 @@ class GroupBy : public Operation {
 
   template <int IN_WIDTH, int OUT_WIDTH>
   void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
-                    size_t blockEnd, const IdTableStatic<IN_WIDTH>& input,
+                    size_t blockEnd, const IdTableView<IN_WIDTH>& input,
                     const vector<ResultTable::ResultType>& inputTypes,
                     IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
                     const ResultTable* inTable, ResultTable* outTable,

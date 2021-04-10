@@ -389,8 +389,6 @@ void TransitivePath::computeTransitivePathLeftBound(
   size_t last_elem = std::numeric_limits<size_t>::max();
   size_t last_result_begin = 0;
   size_t last_result_end = 0;
-  size_t elements_handled =
-      0;  // only there for checking timeouts every now and then
   size_t elements_inner_loop =
       0;  // only there for checking timeouts every now and then
   for (size_t i = 0; i < left.size(); i++) {
