@@ -176,13 +176,13 @@ struct resizeIfVec<vector<C>, C> {
 template <int IN_WIDTH, int OUT_WIDTH>
 
 void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
-                  size_t blockEnd, const IdTableView<IN_WIDTH>& input,
+                           size_t blockEnd, const IdTableView<IN_WIDTH>& input,
 
-                  const vector<ResultTable::ResultType>& inputTypes,
-                  IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
-                  const ResultTable* inTable, ResultTable* outTable,
-                  const Index& index,
-                  ad_utility::HashSet<size_t>& distinctHashSet) const {
+                           const vector<ResultTable::ResultType>& inputTypes,
+                           IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
+                           const ResultTable* inTable, ResultTable* outTable,
+                           const Index& index,
+                           ad_utility::HashSet<size_t>& distinctHashSet) const {
   auto check = [this](size_t i) {
     if (i % 32768 == 0) {
       checkTimeout();
@@ -608,11 +608,11 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
 
 template <int IN_WIDTH, int OUT_WIDTH>
 void GroupBy::doGroupBy(const IdTable& dynInput,
-               const vector<ResultTable::ResultType>& inputTypes,
-               const vector<size_t>& groupByCols,
-               const vector<GroupBy::Aggregate>& aggregates, IdTable* dynResult,
-               const ResultTable* inTable, ResultTable* outTable,
-               const Index& index) const {
+                        const vector<ResultTable::ResultType>& inputTypes,
+                        const vector<size_t>& groupByCols,
+                        const vector<GroupBy::Aggregate>& aggregates,
+                        IdTable* dynResult, const ResultTable* inTable,
+                        ResultTable* outTable, const Index& index) const {
   LOG(DEBUG) << "Group by input size " << dynInput.size() << std::endl;
   if (dynInput.size() == 0) {
     return;
@@ -810,5 +810,4 @@ void GroupBy::computeResult(ResultTable* result) {
   }
   cleanup();
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
-
 }

@@ -172,7 +172,7 @@ TEST_F(GroupByTest, doGroupBy) {
 
   int inWidth = inputData.cols();
   int outWidth = outTable._data.cols();
-  GroupBy G {nullptr, {}, {} };
+  GroupBy G{nullptr, {}, {}};
   CALL_FIXED_SIZE_2(inWidth, outWidth, G.doGroupBy, inputData, inputTypes,
                     groupByCols, aggregates, &outTable._data, &inTable,
                     &outTable, this->_index);
