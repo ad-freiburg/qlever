@@ -8,10 +8,11 @@
 #include <shared_mutex>
 #include <string>
 #include <vector>
+
 #include "../global/Constants.h"
 #include "../index/Index.h"
 #include "../util/Cache.h"
-#include "../util/CacheAdapter.h"
+#include "../util/ConcurrentCache.h"
 #include "../util/Log.h"
 #include "../util/Synchronized.h"
 #include "./Engine.h"
@@ -38,7 +39,7 @@ struct CacheValue {
 // checks on insertion, if the result is currently being computed
 // by another query.
 using SubtreeCache =
-    ad_utility::CacheAdapter<ad_utility::LRUCache<string, CacheValue>>;
+    ad_utility::ConcurrentCache<ad_utility::LRUCache<string, CacheValue>>;
 using PinnedSizes =
     ad_utility::Synchronized<ad_utility::HashMap<std::string, size_t>,
                              std::shared_mutex>;

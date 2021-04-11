@@ -57,7 +57,7 @@ struct DefaultSizeGetter {
  * ValueSizeGetter in the constructor below). NOTE: THIS IMPLEMENTATION IS NO
  * LONGER THREADSAFE. It used to be. If you require thread-safety, you should
  * wrap the FlexibleCache object within ad_utility::Synchronized; see class
- * CacheAdapter. This implementation uses shared_ptr pointers to ensure that
+ * ConcurrentCache. This implementation uses shared_ptr pointers to ensure that
  * delete operations do not free memory that is still in use.
  * @tparam PriorityQueue Container template for a priority queue with an
  * updateKey method. The templates from PrioityQueue.h are suitable

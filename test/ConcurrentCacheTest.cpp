@@ -10,7 +10,7 @@
 #include <thread>
 
 #include "../../src/util/Cache.h"
-#include "../../src/util/CacheAdapter.h"
+#include "../../src/util/ConcurrentCache.h"
 #include "../../src/util/Timer.h"
 
 using namespace std::literals;
@@ -39,9 +39,9 @@ auto wait_and_throw_function(size_t milliseconds,
 }
 
 using SimpleAdapter =
-    ad_utility::CacheAdapter<ad_utility::LRUCache<int, std::string>>;
+    ad_utility::ConcurrentCache<ad_utility::LRUCache<int, std::string>>;
 
-TEST(CacheAdapter, sequentialComputation) {
+TEST(ConcurrentCache, sequentialComputation) {
   SimpleAdapter a{3ul};
   ad_utility::Timer t;
   t.start();
@@ -73,7 +73,7 @@ TEST(CacheAdapter, sequentialComputation) {
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
 }
 
-TEST(CacheAdapter, sequentialPinnedComputation) {
+TEST(ConcurrentCache, sequentialPinnedComputation) {
   SimpleAdapter a{3ul};
   ad_utility::Timer t;
   t.start();
@@ -106,7 +106,7 @@ TEST(CacheAdapter, sequentialPinnedComputation) {
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
 }
 
-TEST(CacheAdapter, sequentialPinnedUpgradeComputation) {
+TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   SimpleAdapter a{3ul};
   ad_utility::Timer t;
   t.start();
@@ -140,7 +140,7 @@ TEST(CacheAdapter, sequentialPinnedUpgradeComputation) {
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
 }
 
-TEST(CacheAdapter, concurrentComputation) {
+TEST(ConcurrentCache, concurrentComputation) {
   auto a = SimpleAdapter(3ul);
   std::atomic<bool> flag = false;
   auto compute = [&a, &flag]() {
@@ -171,7 +171,7 @@ TEST(CacheAdapter, concurrentComputation) {
   ASSERT_FALSE(result2._wasCached);
 }
 
-TEST(CacheAdapter, concurrentPinnedComputation) {
+TEST(ConcurrentCache, concurrentPinnedComputation) {
   auto a = SimpleAdapter(3ul);
   std::atomic<bool> flag = false;
   auto compute = [&a, &flag]() {
@@ -203,7 +203,7 @@ TEST(CacheAdapter, concurrentPinnedComputation) {
   ASSERT_FALSE(result2._wasCached);
 }
 
-TEST(CacheAdapter, concurrentPinnedUpgradeComputation) {
+TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
   auto a = SimpleAdapter(3ul);
   std::atomic<bool> flag = false;
   auto compute = [&a, &flag]() {
@@ -235,7 +235,7 @@ TEST(CacheAdapter, concurrentPinnedUpgradeComputation) {
   ASSERT_FALSE(result2._wasCached);
 }
 
-TEST(CacheAdapter, abort) {
+TEST(ConcurrentCache, abort) {
   auto a = SimpleAdapter(3ul);
   std::atomic<bool> flag = false;
   auto compute = [&a, &flag]() {
@@ -258,7 +258,7 @@ TEST(CacheAdapter, abort) {
   ASSERT_THROW(fut.get(), std::runtime_error);
 }
 
-TEST(CacheAdapter, abortPinned) {
+TEST(ConcurrentCache, abortPinned) {
   auto a = SimpleAdapter(3ul);
   std::atomic<bool> flag = false;
   auto compute = [&]() {
