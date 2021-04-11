@@ -53,12 +53,12 @@ struct DefaultSizeGetter {
  * The strategy that is used to determine which element is removed once the
  * capacity is exceeded can be customized (see documentation of the template
  * parameters). The capacity can be limited wrt the number of elements as well
- * as their actual size (which is determined by a configurable callable).
- * THIS IMPLEMENTATION IS NO LONGER THREADSAFE. It used to be. If you require
- * thread-safety, we suggest wrapping it in an ad_utility::Synchronized
- * This implementation uses shared_ptrs so as to ensure that deletes do not
- * free in-use memory.
- *
+ * as their actual size (which can be configured with a callable of type
+ * ValueSizeGetter in the constructor below). NOTE: THIS IMPLEMENTATION IS NO
+ * LONGER THREADSAFE. It used to be. If you require thread-safety, you should
+ * wrap the FlexibleCache object within ad_utility::Synchronized; see class
+ * CacheAdapter. This implementation uses shared_ptr pointers to ensure that
+ * delete operations do not free memory that is still in use.
  * @tparam PriorityQueue Container template for a priority queue with an
  * updateKey method. The templates from PrioityQueue.h are suitable
  * @tparam Key The key type for lookup. Must be hashable TODO<joka921>::if
@@ -72,14 +72,14 @@ struct DefaultSizeGetter {
  * accessed, its previous score and the value are used to calculate a new score.
  * @tparam ScoreCalculator function Value -> Score to determine the Score of a a
  * newly inserted entry
- * @tparam EntrySizeGetter function Value -> size_t to determine the actual
+ * @tparam ValueSizeGetter function Value -> size_t to determine the actual
  * "size" of a value for statistics
  */
 template <template <typename Sc, typename Val, typename Comp>
           class PriorityQueue,
           class Key, class Value, typename Score, typename ScoreComparator,
           typename AccessUpdater, typename ScoreCalculator,
-          typename EntrySizeGetter = DefaultSizeGetter<Value>>
+          typename ValueSizeGetter = DefaultSizeGetter<Value>>
 class FlexibleCache {
  public:
   using key_type = Key;
@@ -89,14 +89,14 @@ class FlexibleCache {
   template <typename K, typename V>
   using MapType = ad_utility::HashMap<K, V>;
 
-  using EntryValue = shared_ptr<const Value>;
+  using ValuePtr = shared_ptr<const Value>;
 
   class Entry {
     Key mKey;
-    EntryValue mValue;
+    ValuePtr mValue;
 
    public:
-    Entry(Key k, EntryValue v) : mKey(std::move(k)), mValue(std::move(v)) {}
+    Entry(Key k, ValuePtr v) : mKey(std::move(k)), mValue(std::move(v)) {}
 
     Entry() = default;
 
@@ -104,41 +104,41 @@ class FlexibleCache {
 
     Key& key() { return mKey; }
 
-    const EntryValue& value() const { return mValue; }
+    const ValuePtr& value() const { return mValue; }
 
-    EntryValue& value() { return mValue; }
+    ValuePtr& value() { return mValue; }
   };
 
   using EmplacedValue = shared_ptr<Value>;
-  // using Entry = pair<Key, EntryValue>;
+  // using Entry = pair<Key, ValuePtr>;
   using EntryList = PriorityQueue<Score, Entry, ScoreComparator>;
 
   using AccessMap = MapType<Key, typename EntryList::Handle>;
-  using PinnedMap = MapType<Key, EntryValue>;
+  using PinnedMap = MapType<Key, ValuePtr>;
 
-  using TryEmplaceResult = pair<EmplacedValue, EntryValue>;
+  using TryEmplaceResult = pair<EmplacedValue, ValuePtr>;
 
-  using EntrySizeType = std::invoke_result_t<EntrySizeGetter, const Value&>;
+  using EntrySizeType = std::invoke_result_t<ValueSizeGetter, const Value&>;
 
  public:
   //! Typical constructor. A default value may be added in time.
-  explicit FlexibleCache(size_t capacityNumElements, size_t capacitySize,
-                         size_t maxSizeSingleEl,
+  explicit FlexibleCache(size_t capacityNumElements, size_t capacityTotalSize,
+                         size_t maxSizeSingleValue,
                          ScoreComparator scoreComparator,
                          AccessUpdater accessUpdater,
                          ScoreCalculator scoreCalculator,
-                         EntrySizeGetter entrySizeGetter = EntrySizeGetter())
+                         ValueSizeGetter valueSizeGetter = ValueSizeGetter())
       : _capacityNumElements(capacityNumElements),
-        _capacitySize(capacitySize),
-        _maxSizeSingleEl(maxSizeSingleEl),
-        _data(scoreComparator),
+        _capacityTotalSize(capacityTotalSize),
+        _maxSizeSingleValue(maxSizeSingleValue),
+        _entries(scoreComparator),
         _accessUpdater(accessUpdater),
         _scoreCalculator(scoreCalculator),
-        _entrySizeGetter(entrySizeGetter) {}
+        _valueSizeGetter(valueSizeGetter) {}
 
   // Look up a read-only value without creating it.
   // If the key does not exist, nullptr is returned
-  EntryValue operator[](const Key& key) {
+  ValuePtr operator[](const Key& key) {
     if (const auto pinnedIt = _pinnedMap.find(key);
         pinnedIt != _pinnedMap.end()) {
       return pinnedIt->second;
@@ -153,71 +153,75 @@ class FlexibleCache {
 
     // Move it to the front.
     auto& handle = mapIt->second;
-    _data.updateKey(_accessUpdater(handle.score(), handle.value()), &handle);
+    _entries.updateKey(_accessUpdater(handle.score(), handle.value()), &handle);
     return _accessMap[key].value().value();
   }
 
   /// Insert a key-value pair to the cache. Throws an exception if the key is
-  /// already present.
-  /// If the value is too big for the cache, nothing happens.
-  EntryValue insert(const Key& key, Value value) {
+  /// already present. If the value is too big for the cache, nothing happens.
+  ValuePtr insert(const Key& key, Value value) {
     auto ptr = make_shared<Value>(std::move(value));
     return insert(key, std::move(ptr));
   }
 
   // Insert a pinned key-value pair to the cache. Throws an exception if the key
-  // is already present.
-  /// If the value is too big for the cache, an exception is thrown.
-  EntryValue insertPinned(const Key& key, Value value) {
+  // is already present. If the value is too big for the cache, an exception is
+  // thrown.
+  ValuePtr insertPinned(const Key& key, Value value) {
     auto ptr = make_shared<Value>(std::move(value));
     return insertPinned(key, std::move(ptr));
   }
 
   /// Insert a key-value pair to the cache. Throws an exception if the key is
-  /// already present. Overload for shared_ptr of value.
-  /// If the value is too big for the cache, nothing happens.
-  EntryValue insert(const Key& key, shared_ptr<Value> valPtr) {
+  /// already present. Overload for shared_ptr of value. If the value is too big
+  /// for the cache, nothing happens.
+  ValuePtr insert(const Key& key, shared_ptr<Value> valPtr) {
     if (contains(key)) {
       throw std::runtime_error(
           "Trying to insert a cache key which was already present");
     }
 
     // ignore elements that are too big
-    if (_entrySizeGetter(*valPtr) > _maxSizeSingleEl) {
+    if (_valueSizeGetter(*valPtr) > _maxSizeSingleValue) {
       return {};
     }
     Score s = _scoreCalculator(*valPtr);
-    _totalSizeNonPinned += _entrySizeGetter(*valPtr);
-    auto handle = _data.insert(std::move(s), Entry(key, std::move(valPtr)));
+    _totalSizeNonPinned += _valueSizeGetter(*valPtr);
+    auto handle = _entries.insert(std::move(s), Entry(key, std::move(valPtr)));
     _accessMap[key] = handle;
     shrinkToFit();
+    // The first value is the value part of the key-value pair in the priority
+    // queue (where the key is a score and the value is a cache entry). The
+    // second value is the value part of the key-value pair in the cache (where
+    // the key is the cache key and the value is the payload = in our case, a
+    // result).
     return handle.value().value();
   }
 
   /// Insert a pinned key-value pair to the cache. Throws an exception if the
-  /// key is already present. Overload for shared_ptr<Value>
-  /// If the value is too big for the cache, an exception is thrown.
-  EntryValue insertPinned(const Key& key, shared_ptr<Value> valPtr) {
+  /// key is already present. Overload for shared_ptr<Value>. If the value is
+  /// too big for the cache, an exception is thrown.
+  ValuePtr insertPinned(const Key& key, shared_ptr<Value> valPtr) {
     if (contains(key)) {
       throw std::runtime_error(
           "Trying to insert a cache key which was already present");
     }
 
-    // throw if an element is too big for this cache, and can
-    if (_entrySizeGetter(*valPtr) > _maxSizeSingleEl) {
+    // throw if an element is too big for this cache
+    if (_valueSizeGetter(*valPtr) > _maxSizeSingleValue) {
       throw std::runtime_error(
           "Trying to pin an element to the cache that is bigger than the "
           "maximum size for a single element in the cache");
     }
     _pinnedMap[key] = valPtr;
-    _totalSizePinned += _entrySizeGetter(*valPtr);
+    _totalSizePinned += _valueSizeGetter(*valPtr);
     shrinkToFit();
     return valPtr;
   }
 
   //! Set the capacity.
-  void setCapacity(const size_t nofElements) {
-    _capacityNumElements = nofElements;
+  void setCapacity(const size_t numElements) {
+    _capacityNumElements = numElements;
     shrinkToFit();
   }
 
@@ -226,34 +230,36 @@ class FlexibleCache {
     return _pinnedMap.count(key) > 0 || _accessMap.count(key) > 0;
   }
 
-  bool containsPinnedIncludingUpgrade(const Key& key) {
-    if (_pinnedMap.count(key) > 0) {
+  //! Checks if there is an entry with the given key. If the entry exists and
+  //! was not pinned, it is pinned after the call.
+  bool containsAndMakePinnedIfExists(const Key& key) {
+    if (_pinnedMap.contains(key)) {
       return true;
     }
-    if (!_accessMap.count(key)) {
+    if (!_accessMap.contains(key)) {
       return false;
     }
     auto handle = _accessMap[key];
-    const EntryValue cached = handle.value().value();
-    // Move the element to the _pinnedMap and remove
-    // unnecessary _accessMap entry
-    _pinnedMap[key] = cached;
-    // We have already copied the value to variable "cached", so invalidating
-    // the handle is fine
-    _data.erase(std::move(handle));
-    _accessMap.erase(key);
-    auto sz = _entrySizeGetter(*cached);
+    const ValuePtr valuePtr = handle.value().value();
+
+    // adapt the sizes of the pinned and non-pinned part of the cache
+    auto sz = _valueSizeGetter(*valuePtr);
     _totalSizeNonPinned -= sz;
     _totalSizePinned += sz;
+    // Move the element to the _pinnedMap and remove it from the non-pinned data
+    // structures
+    _pinnedMap[key] = std::move(valuePtr);
+    _entries.erase(std::move(handle));
+    _accessMap.erase(key);
     return true;
   }
 
-  // Erase an item from the cache if it exists, do nothing otherwise. As this
-  // erase is explicit do remove pinned elements as well.
+  //! Erase an entry from the cache if it exists, do nothing otherwise. This
+  //! also removes pinned entries.
   void erase(const Key& key) {
     const auto pinnedIt = _pinnedMap.find(key);
     if (pinnedIt != _pinnedMap.end()) {
-      _totalSizePinned -= _entrySizeGetter(*pinnedIt->second);
+      _totalSizePinned -= _valueSizeGetter(*pinnedIt->second);
       _pinnedMap.erase(pinnedIt);
       return;
     }
@@ -263,17 +269,18 @@ class FlexibleCache {
       // Item already erased do nothing
       return;
     }
-    _totalSizeNonPinned -= _entrySizeGetter(*mapIt->second);
-    _data.erase(std::move(mapIt->second));
+    // the element exists in the non-pinned part of the cache, erase it.
+    _totalSizeNonPinned -= _valueSizeGetter(*mapIt->second);
+    _entries.erase(std::move(mapIt->second));
     _accessMap.erase(mapIt);
   }
 
   //! Clear the cache but leave pinned elements alone
-  void clear() {
+  void clearUnpinnedOnly() {
     // Since we are using shared_ptr this does not free the underlying
     // memory if it is still accessible through a previously returned
     // shared_ptr
-    _data.clear();
+    _entries.clear();
     _accessMap.clear();
     _totalSizeNonPinned = 0;
   }
@@ -283,7 +290,7 @@ class FlexibleCache {
     // Since we are using shared_ptr this does not free the underlying
     // memory if it is still accessible through a previously returned
     // shared_ptr
-    _data.clear();
+    _entries.clear();
     _pinnedMap.clear();
     _accessMap.clear();
     _totalSizeNonPinned = 0;
@@ -297,7 +304,7 @@ class FlexibleCache {
         [this](const EntrySizeType& x, const auto& el) {
           // elements of the pinned Map are shared_ptrs
           return x +
-                 (el.second ? _entrySizeGetter(*el.second) : EntrySizeType{});
+                 (el.second ? _valueSizeGetter(*el.second) : EntrySizeType{});
         });
   }
 
@@ -307,7 +314,7 @@ class FlexibleCache {
         _accessMap.begin(), _accessMap.end(), EntrySizeType{},
         [this](const EntrySizeType& x, const auto& el) {
           // elements of the accessMap are shared_ptrs
-          return x + _entrySizeGetter(*el.second.value().value());
+          return x + _valueSizeGetter(*el.second.value().value());
         });
   }
 
@@ -319,35 +326,33 @@ class FlexibleCache {
 
  private:
   size_t _capacityNumElements;
-  size_t _capacitySize;
-  size_t _maxSizeSingleEl;
+  size_t _capacityTotalSize;
+  size_t _maxSizeSingleValue;
   size_t _totalSizeNonPinned =
-      0;  // the size in terms of the EntrySizeGetter, NOT Number of elements
+      0;  // the size in terms of the ValueSizeGetter, NOT Number of elements
   size_t _totalSizePinned = 0;
 
-  EntryList _data;
+  EntryList _entries;
   AccessUpdater _accessUpdater;
   ScoreCalculator _scoreCalculator;
-  EntrySizeGetter _entrySizeGetter;
+  ValueSizeGetter _valueSizeGetter;
   PinnedMap _pinnedMap;
   AccessMap _accessMap;
 
-  FRIEND_TEST(FlexibleLRUCacheTest, testTryEmplacePinnedExistingInternal);
-  FRIEND_TEST(LRUCacheTest, testTryEmplacePinnedExistingInternal);
-
   void shrinkToFit() {
-    while (!_data.empty() &&
-           (_data.size() + _pinnedMap.size() > _capacityNumElements ||
-            _totalSizeNonPinned + _totalSizePinned > _capacitySize)) {
-      // Remove elements from the back until we meet the capacity requirement
-      // TODO<joka921> : code duplication
-
-      auto handle = _data.pop();
-      _totalSizeNonPinned -= _entrySizeGetter(*handle.value().value());
+    while (!_entries.empty() &&
+           (_entries.size() + _pinnedMap.size() > _capacityNumElements ||
+            _totalSizeNonPinned + _totalSizePinned > _capacityTotalSize)) {
+      // Remove elements from the back until we meet the capacity and size
+      // requirements
+      auto handle = _entries.pop();
+      _totalSizeNonPinned -= _valueSizeGetter(*handle.value().value());
       _accessMap.erase(handle.value().key());
     }
-    assert(_data.empty() ||
-           _data.size() + _pinnedMap.size() <= _capacityNumElements);
+
+    // Note that the pinned elements alone can exceed the capacity of the cache.
+    assert(_entries.empty() ||
+           _entries.size() + _pinnedMap.size() <= _capacityNumElements);
   }
 };
 
@@ -355,19 +360,19 @@ class FlexibleCache {
 // from ad_utility::HeapBasedPQ
 template <class Key, class Value, typename Score, typename ScoreComparator,
           typename AccessUpdater, typename ScoreCalculator,
-          typename EntrySizeGetter = DefaultSizeGetter<Value>>
+          typename ValueSizeGetter = DefaultSizeGetter<Value>>
 using HeapBasedCache =
     ad_utility::FlexibleCache<HeapBasedPQ, Key, Value, Score, ScoreComparator,
-                              AccessUpdater, ScoreCalculator, EntrySizeGetter>;
+                              AccessUpdater, ScoreCalculator, ValueSizeGetter>;
 
 // Partial instantiation of FlexibleCache using the tree-based priority queue
 // from ad_utility::TreeBasedPQ
 template <class Key, class Value, typename Score, typename ScoreComparator,
           typename AccessUpdater, typename ScoreCalculator,
-          typename EntrySizeGetter = DefaultSizeGetter<Value>>
+          typename ValueSizeGetter = DefaultSizeGetter<Value>>
 using TreeBasedCache =
     ad_utility::FlexibleCache<TreeBasedPQ, Key, Value, Score, ScoreComparator,
-                              AccessUpdater, ScoreCalculator, EntrySizeGetter>;
+                              AccessUpdater, ScoreCalculator, ValueSizeGetter>;
 
 namespace detail {
 // helper types used to implement an LRU cache using the FlexibleCache
@@ -392,50 +397,50 @@ struct timeUpdater {
 
 /// A LRU cache using the HeapBasedCache
 template <typename Key, typename Value,
-          typename EntrySizeGetter = DefaultSizeGetter<Value>>
+          typename ValueSizeGetter = DefaultSizeGetter<Value>>
 class HeapBasedLRUCache
     : public HeapBasedCache<Key, Value, detail::TimePoint, std::less<>,
                             detail::timeUpdater, detail::timeAsScore,
-                            EntrySizeGetter> {
+                            ValueSizeGetter> {
   using Base =
       HeapBasedCache<Key, Value, detail::TimePoint, std::less<>,
-                     detail::timeUpdater, detail::timeAsScore, EntrySizeGetter>;
+                     detail::timeUpdater, detail::timeAsScore, ValueSizeGetter>;
 
  public:
   explicit HeapBasedLRUCache(size_t capacityNumEls,
                              size_t capacitySize = size_t_max,
                              size_t maxSizeSingleEl = size_t_max)
       : Base(capacityNumEls, capacitySize, maxSizeSingleEl, std::less<>(),
-             detail::timeUpdater{}, detail::timeAsScore{}, EntrySizeGetter{}) {}
+             detail::timeUpdater{}, detail::timeAsScore{}, ValueSizeGetter{}) {}
 };
 
 /// A LRU cache using the TreeBasedCache
 template <typename Key, typename Value,
-          typename EntrySizeGetter = DefaultSizeGetter<Value>>
+          typename ValueSizeGetter = DefaultSizeGetter<Value>>
 class TreeBasedLRUCache
     : public ad_utility::TreeBasedCache<Key, Value, detail::TimePoint,
                                         std::less<>, detail::timeUpdater,
-                                        detail::timeAsScore, EntrySizeGetter> {
+                                        detail::timeAsScore, ValueSizeGetter> {
   using Base = ad_utility::TreeBasedCache<Key, Value, detail::TimePoint,
                                           std::less<>, detail::timeUpdater,
-                                          detail::timeAsScore, EntrySizeGetter>;
+                                          detail::timeAsScore, ValueSizeGetter>;
 
  public:
   explicit TreeBasedLRUCache(size_t capacity)
       : Base(capacity, std::less<>(), detail::timeUpdater{},
-             detail::timeAsScore{}, EntrySizeGetter{}) {}
+             detail::timeAsScore{}, ValueSizeGetter{}) {}
 };
 
 /// typedef for the simple name LRUCache that is fixed to one of the possible
 /// implementations at compiletime
 #ifdef _QLEVER_USE_TREE_BASED_CACHE
 template <typename Key, typename Value,
-          typename EntrySizeGetter = DefaultSizeGetter<Value>>
-using LRUCache = TreeBasedLRUCache<Key, Value, EntrySizeGetter>;
+          typename ValueSizeGetter = DefaultSizeGetter<Value>>
+using LRUCache = TreeBasedLRUCache<Key, Value, ValueSizeGetter>;
 #else
 template <typename Key, typename Value,
-          typename EntrySizeGetter = DefaultSizeGetter<Value>>
-using LRUCache = HeapBasedLRUCache<Key, Value, EntrySizeGetter>;
+          typename ValueSizeGetter = DefaultSizeGetter<Value>>
+using LRUCache = HeapBasedLRUCache<Key, Value, ValueSizeGetter>;
 #endif
 
 }  // namespace ad_utility

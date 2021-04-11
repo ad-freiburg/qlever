@@ -144,7 +144,7 @@ class CacheAdapter {
   }
 
   /// Clear the cache (but not the pinned elements)
-  void clear() { _cacheAndInProgressMap.wlock()->_cache.clear(); }
+  void clear() { _cacheAndInProgressMap.wlock()->_cache.clearUnpinnedOnly(); }
 
   /// Clear the cache, including the pinned elements.
   void clearAll() { _cacheAndInProgressMap.wlock()->_cache.clearAll(); }
@@ -235,7 +235,7 @@ class CacheAdapter {
     // this is done atomically by locking the storage for the whole time
     {
       auto lck = _cacheAndInProgressMap.wlock();
-      bool contained = pinned ? lck->_cache.containsPinnedIncludingUpgrade(key)
+      bool contained = pinned ? lck->_cache.containsAndMakePinnedIfExists(key)
                               : lck->_cache.contains(key);
       if (contained) {
         // the result is in the cache, simply return it.
