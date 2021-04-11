@@ -5,12 +5,14 @@
 #include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
+
 #include <iomanip>
 #include <iostream>
 #include <string>
 #include <vector>
 
 #include "engine/Server.h"
+#include "global/Constants.h"
 #include "util/ReadableNumberFact.h"
 
 using std::cerr;
@@ -24,16 +26,20 @@ using std::vector;
 #define EMPH_OFF "\033[22m"
 
 // Available options.
-struct option options[] = {{"help", no_argument, NULL, 'h'},
-                           {"index", required_argument, NULL, 'i'},
-                           {"worker-threads", required_argument, NULL, 'j'},
-                           {"memory-for-queries", required_argument, NULL, 'm'},
-                           {"on-disk-literals", no_argument, NULL, 'l'},
-                           {"port", required_argument, NULL, 'p'},
-                           {"no-patterns", no_argument, NULL, 'P'},
-                           {"no-pattern-trick", no_argument, NULL, 'T'},
-                           {"text", no_argument, NULL, 't'},
-                           {NULL, 0, NULL, 0}};
+struct option options[] = {
+    {"help", no_argument, NULL, 'h'},
+    {"index", required_argument, NULL, 'i'},
+    {"worker-threads", required_argument, NULL, 'j'},
+    {"memory-for-queries", required_argument, NULL, 'm'},
+    {"cache-size-in-gb", required_argument, NULL, 'c'},
+    {"cache-max-size-single-element", required_argument, NULL, 'e'},
+    {"cache-max-num-values", required_argument, NULL, 'k'},
+    {"on-disk-literals", no_argument, NULL, 'l'},
+    {"port", required_argument, NULL, 'p'},
+    {"no-patterns", no_argument, NULL, 'P'},
+    {"no-pattern-trick", no_argument, NULL, 'T'},
+    {"text", no_argument, NULL, 't'},
+    {NULL, 0, NULL, 0}};
 
 void printUsage(char* execName) {
   std::ios coutState(nullptr);
@@ -54,6 +60,20 @@ void printUsage(char* execName) {
        << "Limit on the total amount of memory (in GB) that can be used for "
           "query processing and caching. If exceeded, query will return with "
           "an error, but the engine will not crash."
+       << endl;
+  cout << "  " << std::setw(20) << "c, cache-size-in-gb" << std::setw(1)
+       << "Maximum amount of memory that the cache (pinned and non-pinned "
+          "values) is allowed to consume. This will still count towards the "
+          "limit specified by the -m option"
+       << endl;
+  cout << "  " << std::setw(20) << "e, cache-max-size-single-element"
+       << std::setw(1)
+       << "(Intermediate) results that are larger than this limit will never "
+          "be cached"
+       << endl;
+  cout << "  " << std::setw(20) << "k, cache-max-num-values" << std::setw(1)
+       << "The number of (Intermediate) results that can be stored in the "
+          "cache at the same time"
        << endl;
   cout << "  " << std::setw(20) << "no-patterns" << std::setw(1) << "    "
        << "Disable the use of patterns. This disables ql:has-predicate."
@@ -88,11 +108,14 @@ int main(int argc, char** argv) {
   bool enablePatternTrick = true;
 
   size_t memLimit = DEFAULT_MEM_FOR_QUERIES_IN_GB;
+  size_t cacheSizeInGB = DEFAULT_CACHE_SIZE_IN_GB;
+  size_t maxSizeSingleCacheValue = DEFAULT_MAX_SIZE_CACHE_VALUE_GB;
+  size_t maxNumCacheValues = DEFAULT_NUM_CACHE_VALUES;
 
   optind = 1;
   // Process command line arguments.
   while (true) {
-    int c = getopt_long(argc, argv, "i:p:j:tauhm:lT", options, NULL);
+    int c = getopt_long(argc, argv, "i:p:j:tauhm:lc:e:k:T", options, NULL);
     if (c == -1) break;
     switch (c) {
       case 'i':
@@ -125,6 +148,15 @@ int main(int argc, char** argv) {
                      "will be ignored for ServerMain. The correct setting for "
                      "this flag is read directly from the index\n";
         break;
+      case 'c':
+        cacheSizeInGB = atoi(optarg);
+        break;
+      case 'e':
+        maxSizeSingleCacheValue = atoi(optarg);
+        break;
+      case 'k':
+        maxNumCacheValues = atoi(optarg);
+        break;
       default:
         cout << endl
              << "! ERROR in processing options (getopt returned '" << c
@@ -154,7 +186,8 @@ int main(int argc, char** argv) {
   cout << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
-    Server server(port, numThreads, memLimit * 1 << 30u);
+    Server server(port, numThreads, memLimit * 1 << 30u, cacheSizeInGB,
+                  maxSizeSingleCacheValue, maxNumCacheValues);
     server.initialize(index, text, usePatterns, enablePatternTrick);
     server.run();
   } catch (const std::exception& e) {

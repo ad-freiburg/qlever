@@ -25,14 +25,14 @@ using ad_utility::Socket;
 //! The HTTP Sever used.
 class Server {
  public:
-  explicit Server(const int port, const int numThreads, size_t maxMemInBytes)
+  explicit Server(const int port, const int numThreads, size_t maxMemInBytes,
+                  size_t cacheSizeInGB, size_t maxSizeSingleCacheValueInGB,
+                  size_t maxNumCacheValues)
       : _numThreads(numThreads),
         _serverSocket(),
         _port(port),
-        _cache(
-            NOF_SUBTREES_TO_CACHE,
-            CACHE_SIZE_IN_GB * (2ull << 30u) / sizeof(Id),
-            MAX_SIZE_SINGLE_CACHE_ELEMENT_IN_GB * (2ull << 30u) / sizeof(Id)),
+        _cache(maxNumCacheValues, cacheSizeInGB * (2ull << 30u) / sizeof(Id),
+               maxSizeSingleCacheValueInGB * (2ull << 30u) / sizeof(Id)),
         _allocator(ad_utility::makeAllocationMemoryLeftThreadsafeObject(
             maxMemInBytes)),
         _index(),

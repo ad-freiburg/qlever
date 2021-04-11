@@ -34,8 +34,12 @@ EXPOSE 7001
 VOLUME ["/input", "/index"]
 
 ENV INDEX_PREFIX index
+ENV MEMORY_FOR_QUERIES 70
+ENV CACHE_SIZE 30
+ENV MAX_SIZE_SINGLE_CACHE_ELEMENT 5
+ENV CACHE_NUM_VALUES 1000
 # Need the shell to get the INDEX_PREFIX envirionment variable
-ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -p 7001 \"$@\"", "--"]
+ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -j 8 -m ${MEMORY_FOR_QUERIES} -c ${CACHE_SIZE} -e ${MAX_SIZE_SINGLE_CACHE_ELEMENT} -k ${CACHE_NUM_VALUES} -p 7001 \"$@\"", "--"]
 
 # docker build -t qlever-<name> .
 # # When running with user namespaces you may need to make the index folder accessible
