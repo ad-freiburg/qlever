@@ -70,7 +70,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   }
 
   try {
-    auto computeLambda = [&, this] {
+    auto computeLambda = [this] {
       CacheValue val(getExecutionContext()->getAllocator());
       computeResult(val._resTable.get());
       return val;
@@ -86,7 +86,8 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     // A child Operation was aborted, do not print the information again.
     throw;
   } catch (const ad_utility::WaitedForResultWhichThenFailedException& e) {
-    LOG(ERROR) << "Aborted operation was found in the cache:" << std::endl;
+    LOG(ERROR) << "Waited for a result from another thread which then failed"
+               << endl;
     LOG(ERROR) << asString();
     throw ad_semsearch::AbortException(e);
   } catch (const std::exception& e) {
@@ -101,9 +102,12 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     // We are in the innermost level of the exception, so print
     LOG(ERROR) << "Aborted Operation:" << endl;
     LOG(ERROR) << asString() << endl;
-    LOG(ERROR) << "WEIRD_EXCEPTION not inheriting from std::exception" << endl;
+    LOG(ERROR)
+        << "Unexpected exception that is not a subclass of std::exception"
+        << endl;
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
-    throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
+    throw ad_semsearch::AbortException(
+        "Unexpected expection that is not a subclass of std::exception");
   }
 }

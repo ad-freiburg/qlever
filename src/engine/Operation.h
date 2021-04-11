@@ -53,27 +53,6 @@ class Operation {
   vector<string> collectWarnings() const;
 
   /**
-   * Abort this Operation.  Removes the Operation's result from the cache so
-   * that it can be retried. The result must be owned meaning only the
-   * computing thread can abort an Operation. Retrying may succeed for example
-   * when memory pressure was lowered in the meantime.  When print is true the
-   * Operation is printed to the ERROR LOG
-   */
-  /*
- // TODO<joka921>: change to pointer for styleguide?
- void abort(SubtreeCache::Res& cachedResult, bool print) {
-   const std::string opString = asString();
-   if (print) {
-     LOG(ERROR) << "Aborted Operation:" << endl;
-     LOG(ERROR) << opString << endl;
-   }
-   // Remove Operation from cache so we may retry it later. Anyone with a live
-   // pointer will be waiting and register the abort.
-   cachedResult.abort();
- }
-   */
-
-  /**
    * @return A list of columns on which the result of this operation is sorted.
    */
   const vector<size_t>& getResultSortedOn() {

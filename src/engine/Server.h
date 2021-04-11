@@ -31,8 +31,8 @@ class Server {
         _port(port),
         _cache(
             NOF_SUBTREES_TO_CACHE,
-            CACHE_SIZE_IN_GB * (2ull << 30u) * sizeof(Id),
-            MAX_SIZE_SINGLE_CACHE_ELEMENT_IN_GB * (2ull << 30u) * sizeof(Id)),
+            CACHE_SIZE_IN_GB * (2ull << 30u) / sizeof(Id),
+            MAX_SIZE_SINGLE_CACHE_ELEMENT_IN_GB * (2ull << 30u) / sizeof(Id)),
         _allocator(ad_utility::makeAllocationMemoryLeftThreadsafeObject(
             maxMemInBytes)),
         _index(),
