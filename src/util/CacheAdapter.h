@@ -4,7 +4,9 @@
 
 #ifndef QLEVER_CACHEADAPTER_H
 #define QLEVER_CACHEADAPTER_H
+#include <condition_variable>
 #include <memory>
+#include <mutex>
 #include <utility>
 
 #include "../util/HashMap.h"
@@ -19,9 +21,10 @@ using std::shared_ptr;
  * which is computed by a different thread and the computation in this
  * other thread fails.
  */
-class AbortedByOtherThreadException : public std::exception {
+class WaitedForResultWhichThenFailedException : public std::exception {
   const char* what() const noexcept override {
-    return "Operation aborted while awaiting the result";
+    return "Waited for a result that was computed by another thread and then "
+           "failed";
   }
 };
 
@@ -38,7 +41,7 @@ namespace CacheAdapterDetail {
  *       to signal that the computation has failed. The other threads may only
  *       call getResult(). This call blocks, until finish() or abort() is called
  *       from the computing threads. If the result is aborted, the call to
- *       getResult() will throw an AbortedByOtherThreadException
+ *       getResult() will throw an WaitedForResultWhichThenFailedException
  *
  *       This class is thread-safe
  */
@@ -52,7 +55,7 @@ class ResultInProgress {
   // If the total number of calls to finish() or abort() exceeds 1, the program
   // will terminate.
   void finish(shared_ptr<Value> result) {
-    lock_guard<mutex> lk(_mutex);
+    std::lock_guard lk(_mutex);
     AD_CHECK(_status == Status::IN_PROGRESS);
     _status = Status::FINISHED;
     _result = std::move(result);
@@ -65,7 +68,7 @@ class ResultInProgress {
   // will terminate.
   void abort() {
     AD_CHECK(_status == Status::IN_PROGRESS);
-    lock_guard lk(_mutex);
+    std::lock_guard lk(_mutex);
     _status = Status::ABORTED;
     _cond_var.notify_all();
   }
@@ -74,10 +77,10 @@ class ResultInProgress {
   // If the computation is aborted, this function throws an
   // AbortedInOtherThreadException
   shared_ptr<const Value> getResult() {
-    unique_lock lk(_mutex);
+    std::unique_lock lk(_mutex);
     _cond_var.wait(lk, [&] { return _status != Status::IN_PROGRESS; });
     if (_status == ResultInProgress::Status::ABORTED) {
-      throw AbortedByOtherThreadException{};
+      throw WaitedForResultWhichThenFailedException{};
     }
     return _result;
   }
@@ -87,8 +90,8 @@ class ResultInProgress {
   shared_ptr<const Value> _result;
   // See this SO answer for why mutable is ok here
   // https://stackoverflow.com/questions/3239905/c-mutex-and-const-correctness
-  mutable condition_variable _cond_var;
-  mutable mutex _mutex;
+  mutable std::condition_variable _cond_var;
+  mutable std::mutex _mutex;
   Status _status = Status::IN_PROGRESS;
 };
 }  // namespace CacheAdapterDetail
@@ -213,7 +216,7 @@ class CacheAdapter {
     // Obtain a lock for the whole operation, making it atomic.
     auto l = _cacheAndInProgressMap.wlock();
     AD_CHECK(l->_inProgress.contains(key));
-    auto& pinned = l->_inProgress[key].first;
+    bool pinned = l->_inProgress[key].first;
     if (pinned) {
       l->_cache.insertPinned(std::move(key), std::move(computationResult));
     } else {
@@ -260,7 +263,7 @@ class CacheAdapter {
       }
     }  // release the lock, it is not required while we are computing
     if (mustCompute) {
-      LOG(TRACE) << "Not in the cache, need to compute result" << endl;
+      LOG(TRACE) << "Not in the cache, need to compute result" << std::endl;
       try {
         // The actual computation
         shared_ptr<Value> result = make_shared<Value>(createFunction());

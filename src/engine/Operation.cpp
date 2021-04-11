@@ -85,7 +85,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   } catch (const ad_semsearch::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
     throw;
-  } catch (const ad_utility::AbortedByOtherThreadException& e) {
+  } catch (const ad_utility::WaitedForResultWhichThenFailedException& e) {
     LOG(ERROR) << "Aborted operation was found in the cache:" << std::endl;
     LOG(ERROR) << asString();
     throw ad_semsearch::AbortException(e);
