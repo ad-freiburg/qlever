@@ -168,11 +168,8 @@ TEST(ConcurrentCache, concurrentComputation) {
     return a.computeOnce(3, waiting_function("3"s, 100, &signal));
   };
   auto resultFuture = std::async(std::launch::async, compute);
-  // the background thread is now computing for 100 milliseconds, wait for
-  // some time s.t. the computation has safely started
-  // note: This test might fail on a single-threaded system.
   signal.wait();
-  // now the background computation should be ongoing and registered as
+  // now the background computation is ongoing and registered as
   // "in progress"
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
@@ -198,12 +195,9 @@ TEST(ConcurrentCache, concurrentPinnedComputation) {
     return a.computeOncePinned(3, waiting_function("3"s, 100, &signal));
   };
   auto resultFuture = std::async(std::launch::async, compute);
-  // the background thread is now computing for 100 milliseconds, wait for
-  // some time s.t. the computation has safely started
-  // note: This test might fail on a single-threaded system.
-  // now the background computation should be ongoing and registered as
-  // "in progress"
   signal.wait();
+  // now the background computation is ongoing and registered as
+  // "in progress"
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
@@ -229,11 +223,8 @@ TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
     return a.computeOnce(3, waiting_function("3"s, 100, &signal));
   };
   auto resultFuture = std::async(std::launch::async, compute);
-  // the background thread is now computing for 100 milliseconds, wait for
-  // some time s.t. the computation has safely started
-  // note: This test might fail on a single-threaded system.
   signal.wait();
-  // now the background computation should be ongoing and registered as
+  // now the background computation is ongoing and registered as
   // "in progress"
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
