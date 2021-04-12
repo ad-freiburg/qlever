@@ -56,13 +56,15 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   const bool pinResult =
       _executionContext->_pinSubtrees || pinChildIndexScanSizes;
 
-  // When pinning a final result only, we also need to remember all of the
-  // involved IndexScans' sizes, otherwise the queryPlanner will retrigger these
-  // computations when reading the result from the cache.
+  // When we pin a final result only, we also need to remember the sizes of all
+  // involved IndexScans with two bound columns. If we don't do this, the query
+  // planner will otherwise trigger their computation even if it is uneeded
+  // because the final result can be found in the cache.
   if (pinChildIndexScanSizes) {
     auto lock = getExecutionContext()->getPinnedSizes().wlock();
     forAllDescendants([&lock](QueryExecutionTree* child) {
-      if (child->getType() == QueryExecutionTree::OperationType::SCAN) {
+      if (child->getType() == QueryExecutionTree::OperationType::SCAN &&
+          child->getResultWidth() == 1) {
         (*lock)[child->getRootOperation()->asString()] =
             child->getSizeEstimate();
       }
@@ -72,7 +74,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   try {
     auto computeLambda = [this] {
       CacheValue val(getExecutionContext()->getAllocator());
-      computeResult(val._resTable.get());
+      computeResult(val._resultTable.get());
       return val;
     };
 
@@ -81,7 +83,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
 
     timer.stop();
     createRuntimeInformation(result, timer.msecs());
-    return result._resultPointer->_resTable;
+    return result._resultPointer->_resultTable;
   } catch (const ad_semsearch::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
     throw;

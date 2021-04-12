@@ -58,7 +58,7 @@ class ResultInProgress {
     AD_CHECK(_status == Status::IN_PROGRESS);
     _status = Status::FINISHED;
     _result = std::move(result);
-    _cond_var.notify_all();
+    _conditionVariable.notify_all();
   }
 
   // Signal the failure of the computation to all the threads that at some point
@@ -69,7 +69,7 @@ class ResultInProgress {
     AD_CHECK(_status == Status::IN_PROGRESS);
     std::lock_guard lockGuard(_mutex);
     _status = Status::ABORTED;
-    _cond_var.notify_all();
+    _conditionVariable.notify_all();
   }
 
   // Wait for another thread to finish the computation and obtain the result.
@@ -77,8 +77,8 @@ class ResultInProgress {
   // AbortedInOtherThreadException
   shared_ptr<const Value> getResult() {
     std::unique_lock uniqueLock(_mutex);
-    _cond_var.wait(uniqueLock,
-                   [this] { return _status != Status::IN_PROGRESS; });
+    _conditionVariable.wait(uniqueLock,
+                            [this] { return _status != Status::IN_PROGRESS; });
     if (_status == ResultInProgress::Status::ABORTED) {
       throw WaitedForResultWhichThenFailedException{};
     }
@@ -90,7 +90,7 @@ class ResultInProgress {
   shared_ptr<const Value> _result;
   // See this SO answer for why mutable is ok here
   // https://stackoverflow.com/questions/3239905/c-mutex-and-const-correctness
-  mutable std::condition_variable _cond_var;
+  mutable std::condition_variable _conditionVariable;
   mutable std::mutex _mutex;
   Status _status = Status::IN_PROGRESS;
 };
@@ -146,29 +146,31 @@ class ConcurrentCache {
     return computeOnceImpl(true, key, std::move(computeFunction));
   }
 
-  /// Clear the cache (but not the pinned elements)
-  void clear() { _cacheAndInProgressMap.wlock()->_cache.clearUnpinnedOnly(); }
+  /// Clear the cache (but not the pinned entries)
+  void clearUnpinnedOnly() {
+    _cacheAndInProgressMap.wlock()->_cache.clearUnpinnedOnly();
+  }
 
-  /// Clear the cache, including the pinned elements.
+  /// Clear the cache, including the pinned entries.
   void clearAll() { _cacheAndInProgressMap.wlock()->_cache.clearAll(); }
 
-  /// The number of non-pinned elements in the cache
-  auto numCachedElements() const {
-    return _cacheAndInProgressMap.wlock()->_cache.numCachedElements();
+  /// The number of non-pinned entries in the cache
+  auto numNonPinnedEntries() const {
+    return _cacheAndInProgressMap.wlock()->_cache.numNonPinnedEntries();
   }
 
-  /// The number of pinned elements in the underlying cache
-  auto numPinnedElements() const {
-    return _cacheAndInProgressMap.wlock()->_cache.numPinnedElements();
+  /// The number of pinned entries in the underlying cache
+  auto numPinnedEntries() const {
+    return _cacheAndInProgressMap.wlock()->_cache.numPinnedEntries();
   }
 
-  /// Total size of the non-pinned elements in the cache (the unit depends on
+  /// Total size of the non-pinned entries in the cache (the unit depends on
   /// the cache's configuration)
-  auto cachedSize() const {
-    return _cacheAndInProgressMap.wlock()->_cache.cachedSize();
+  auto nonPinnedSize() const {
+    return _cacheAndInProgressMap.wlock()->_cache.nonPinnedSize();
   }
 
-  /// Total size of the non-pinned elements in the cache (the unit depends on
+  /// Total size of the non-pinned entries in the cache (the unit depends on
   /// the cache's configuration)
   auto pinnedSize() const {
     return _cacheAndInProgressMap.wlock()->_cache.pinnedSize();
@@ -182,10 +184,10 @@ class ConcurrentCache {
     return _cacheAndInProgressMap.wlock()->_cache.contains(k);
   }
 
-  // Get element from cache by its key.
-  // The behavior if the key is not present in the cache depends on the
-  // cache type's operator[]. The ad_utility caches will return a nullptr
-  // in this case (return type is shared_ptr<const Value> in this case)
+  // Get entry from cache by its key. If the key is not present in the cache,
+  // the behavior depends on the behavior of operator[] of _cache. The
+  // ad_utility Cache returns a nullptr in that case. The return type is then
+  // shared_ptr.
   auto resultAt(const Key& k) {
     return _cacheAndInProgressMap.wlock()->_cache[k];
   }
@@ -198,8 +200,8 @@ class ConcurrentCache {
   // cache)
   struct CacheAndInProgressMap {
     Cache _cache;
-    // values that are currently being computed.
-    // the bool tells us whether this result will be pinned in the cache
+    // Values that are currently being computed. The bool tells us whether this
+    // result will be pinned in the cache.
     HashMap<Key, std::pair<bool, shared_ptr<ResultInProgress>>> _inProgress;
     template <typename... Args>
     CacheAndInProgressMap(Args&&... args)

@@ -15,12 +15,33 @@
 
 using namespace std::literals;
 
+// Signal from one thread to another that a certain event has occured.
+// TODO<C++20>: In C++20 this can be a std::atomic_flag which has wait() and
+// notify() functions.
+class ConcurrentSignal {
+  bool _flag = false;
+  std::condition_variable _conditionVariable;
+  std::mutex _mutex;
+
+ public:
+  void notify() {
+    std::lock_guard lock(_mutex);
+    _flag = true;
+    _conditionVariable.notify_all();
+  }
+
+  void wait() {
+    std::unique_lock lock(_mutex);
+    _conditionVariable.wait(lock, [this] { return _flag; });
+  }
+};
+
 template <typename T>
 auto waiting_function(T result, size_t milliseconds,
-                      std::atomic<bool>* f = nullptr) {
+                      ConcurrentSignal* f = nullptr) {
   return [result, milliseconds, f]() {
     if (f) {
-      *f = true;
+      f->notify();
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
     return result;
@@ -28,64 +49,64 @@ auto waiting_function(T result, size_t milliseconds,
 }
 
 auto wait_and_throw_function(size_t milliseconds,
-                             std::atomic<bool>* f = nullptr) {
+                             ConcurrentSignal* f = nullptr) {
   return [f, milliseconds]() -> std::string {
     if (f) {
-      *f = true;
+      f->notify();
     }
     std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
     throw std::runtime_error("this is bound to fail");
   };
 }
 
-using SimpleAdapter =
+using SimpleConcurrentLruCache =
     ad_utility::ConcurrentCache<ad_utility::LRUCache<int, std::string>>;
 
 TEST(ConcurrentCache, sequentialComputation) {
-  SimpleAdapter a{3ul};
+  SimpleConcurrentLruCache a{3ul};
   ad_utility::Timer t;
   t.start();
   // Fake computation that takes 100ms and returns value "3", which is then
   // stored under key 3.
-  auto res = a.computeOnce(3, waiting_function("3"s, 100));
+  auto result = a.computeOnce(3, waiting_function("3"s, 100));
   t.stop();
-  ASSERT_EQ("3"s, *res._resultPointer);
-  ASSERT_FALSE(res._wasCached);
+  ASSERT_EQ("3"s, *result._resultPointer);
+  ASSERT_FALSE(result._wasCached);
   ASSERT_GE(t.msecs(), 100);
-  ASSERT_EQ(1ul, a.numCachedElements());
-  ASSERT_EQ(0ul, a.numPinnedElements());
+  ASSERT_EQ(1ul, a.numNonPinnedEntries());
+  ASSERT_EQ(0ul, a.numPinnedEntries());
   // No other results currently being computed
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
 
   t.reset();
   t.start();
   // takes 0 msecs to compute, as the request is served from the cache.
-  auto res2 = a.computeOnce(3, waiting_function("3"s, 100));
+  auto result2 = a.computeOnce(3, waiting_function("3"s, 100));
   t.stop();
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
-  ASSERT_EQ("3"s, *res2._resultPointer);
-  ASSERT_TRUE(res2._wasCached);
-  ASSERT_EQ(res._resultPointer, res2._resultPointer);
+  ASSERT_EQ("3"s, *result2._resultPointer);
+  ASSERT_TRUE(result2._wasCached);
+  ASSERT_EQ(result._resultPointer, result2._resultPointer);
   ASSERT_LE(t.msecs(), 5);
-  ASSERT_EQ(1ul, a.numCachedElements());
-  ASSERT_EQ(0ul, a.numPinnedElements());
+  ASSERT_EQ(1ul, a.numNonPinnedEntries());
+  ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
 }
 
 TEST(ConcurrentCache, sequentialPinnedComputation) {
-  SimpleAdapter a{3ul};
+  SimpleConcurrentLruCache a{3ul};
   ad_utility::Timer t;
   t.start();
   // Fake computation that takes 100ms and returns value "3", which is then
   // stored under key 3.
-  auto res = a.computeOncePinned(3, waiting_function("3"s, 100));
+  auto result = a.computeOncePinned(3, waiting_function("3"s, 100));
   t.stop();
-  ASSERT_EQ("3"s, *res._resultPointer);
-  ASSERT_FALSE(res._wasCached);
+  ASSERT_EQ("3"s, *result._resultPointer);
+  ASSERT_FALSE(result._wasCached);
   ASSERT_GE(t.msecs(), 100);
-  ASSERT_EQ(1ul, a.numPinnedElements());
-  ASSERT_EQ(0ul, a.numCachedElements());
+  ASSERT_EQ(1ul, a.numPinnedEntries());
+  ASSERT_EQ(0ul, a.numNonPinnedEntries());
   // No other results currently being computed
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
 
@@ -93,32 +114,32 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
   t.start();
   // takes 0 msecs to compute, as the request is served from the cache.
   // we don't request a pin, but the original computation was pinned
-  auto res2 = a.computeOnce(3, waiting_function("3"s, 100));
+  auto result2 = a.computeOnce(3, waiting_function("3"s, 100));
   t.stop();
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
-  ASSERT_EQ("3"s, *res2._resultPointer);
-  ASSERT_TRUE(res2._wasCached);
-  ASSERT_EQ(res._resultPointer, res2._resultPointer);
+  ASSERT_EQ("3"s, *result2._resultPointer);
+  ASSERT_TRUE(result2._wasCached);
+  ASSERT_EQ(result._resultPointer, result2._resultPointer);
   ASSERT_LE(t.msecs(), 5);
-  ASSERT_EQ(1ul, a.numPinnedElements());
-  ASSERT_EQ(0ul, a.numCachedElements());
+  ASSERT_EQ(1ul, a.numPinnedEntries());
+  ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
 }
 
 TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
-  SimpleAdapter a{3ul};
+  SimpleConcurrentLruCache a{3ul};
   ad_utility::Timer t;
   t.start();
   // Fake computation that takes 100ms and returns value "3", which is then
   // stored under key 3.
-  auto res = a.computeOnce(3, waiting_function("3"s, 100));
+  auto result = a.computeOnce(3, waiting_function("3"s, 100));
   t.stop();
-  ASSERT_EQ("3"s, *res._resultPointer);
-  ASSERT_FALSE(res._wasCached);
+  ASSERT_EQ("3"s, *result._resultPointer);
+  ASSERT_FALSE(result._wasCached);
   ASSERT_GE(t.msecs(), 100);
-  ASSERT_EQ(0ul, a.numPinnedElements());
-  ASSERT_EQ(1ul, a.numCachedElements());
+  ASSERT_EQ(0ul, a.numPinnedEntries());
+  ASSERT_EQ(1ul, a.numNonPinnedEntries());
   // No other results currently being computed
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
 
@@ -127,34 +148,33 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   // takes 0 msecs to compute, as the request is served from the cache.
   // request a pin, the result should be read from the cache and upgraded
   // to a pinned result.
-  auto res2 = a.computeOncePinned(3, waiting_function("3"s, 100));
+  auto result2 = a.computeOncePinned(3, waiting_function("3"s, 100));
   t.stop();
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
-  ASSERT_EQ("3"s, *res2._resultPointer);
-  ASSERT_TRUE(res2._wasCached);
-  ASSERT_EQ(res._resultPointer, res2._resultPointer);
+  ASSERT_EQ("3"s, *result2._resultPointer);
+  ASSERT_TRUE(result2._wasCached);
+  ASSERT_EQ(result._resultPointer, result2._resultPointer);
   ASSERT_LE(t.msecs(), 5);
-  ASSERT_EQ(1ul, a.numPinnedElements());
-  ASSERT_EQ(0ul, a.numCachedElements());
+  ASSERT_EQ(1ul, a.numPinnedEntries());
+  ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
 }
 
 TEST(ConcurrentCache, concurrentComputation) {
-  auto a = SimpleAdapter(3ul);
-  std::atomic<bool> flag = false;
-  auto compute = [&a, &flag]() {
-    return a.computeOnce(3, waiting_function("3"s, 100, &flag));
+  auto a = SimpleConcurrentLruCache(3ul);
+  ConcurrentSignal signal;
+  auto compute = [&a, &signal]() {
+    return a.computeOnce(3, waiting_function("3"s, 100, &signal));
   };
   auto resultFuture = std::async(std::launch::async, compute);
   // the background thread is now computing for 100 milliseconds, wait for
   // some time s.t. the computation has safely started
   // note: This test might fail on a single-threaded system.
-  while (!flag) {
-  }
+  signal.wait();
   // now the background computation should be ongoing and registered as
   // "in progress"
-  ASSERT_EQ(0ul, a.numCachedElements());
+  ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
 
@@ -162,7 +182,7 @@ TEST(ConcurrentCache, concurrentComputation) {
   // result. After this call completes, nothing is in progress and the result
   // is cached.
   auto result = compute();
-  ASSERT_EQ(1ul, a.numCachedElements());
+  ASSERT_EQ(1ul, a.numNonPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_FALSE(result._wasCached);
@@ -172,10 +192,10 @@ TEST(ConcurrentCache, concurrentComputation) {
 }
 
 TEST(ConcurrentCache, concurrentPinnedComputation) {
-  auto a = SimpleAdapter(3ul);
-  std::atomic<bool> flag = false;
-  auto compute = [&a, &flag]() {
-    return a.computeOncePinned(3, waiting_function("3"s, 100, &flag));
+  auto a = SimpleConcurrentLruCache(3ul);
+  ConcurrentSignal signal;
+  auto compute = [&a, &signal]() {
+    return a.computeOncePinned(3, waiting_function("3"s, 100, &signal));
   };
   auto resultFuture = std::async(std::launch::async, compute);
   // the background thread is now computing for 100 milliseconds, wait for
@@ -183,9 +203,8 @@ TEST(ConcurrentCache, concurrentPinnedComputation) {
   // note: This test might fail on a single-threaded system.
   // now the background computation should be ongoing and registered as
   // "in progress"
-  while (!flag) {
-  }
-  ASSERT_EQ(0ul, a.numCachedElements());
+  signal.wait();
+  ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
 
@@ -193,8 +212,8 @@ TEST(ConcurrentCache, concurrentPinnedComputation) {
   // result. After this call completes, nothing is in progress and the result
   // is cached.
   auto result = compute();
-  ASSERT_EQ(0ul, a.numCachedElements());
-  ASSERT_EQ(1ul, a.numPinnedElements());
+  ASSERT_EQ(0ul, a.numNonPinnedEntries());
+  ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_FALSE(result._wasCached);
@@ -204,20 +223,19 @@ TEST(ConcurrentCache, concurrentPinnedComputation) {
 }
 
 TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
-  auto a = SimpleAdapter(3ul);
-  std::atomic<bool> flag = false;
-  auto compute = [&a, &flag]() {
-    return a.computeOnce(3, waiting_function("3"s, 100, &flag));
+  auto a = SimpleConcurrentLruCache(3ul);
+  ConcurrentSignal signal;
+  auto compute = [&a, &signal]() {
+    return a.computeOnce(3, waiting_function("3"s, 100, &signal));
   };
   auto resultFuture = std::async(std::launch::async, compute);
   // the background thread is now computing for 100 milliseconds, wait for
   // some time s.t. the computation has safely started
   // note: This test might fail on a single-threaded system.
-  while (!flag) {
-  }
+  signal.wait();
   // now the background computation should be ongoing and registered as
   // "in progress"
-  ASSERT_EQ(0ul, a.numCachedElements());
+  ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
 
@@ -225,8 +243,8 @@ TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
   // result. After this call completes, nothing is in progress and the result
   // is cached.
   auto result = a.computeOncePinned(3, waiting_function("3"s, 100));
-  ASSERT_EQ(0ul, a.numCachedElements());
-  ASSERT_EQ(1ul, a.numPinnedElements());
+  ASSERT_EQ(0ul, a.numNonPinnedEntries());
+  ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_FALSE(result._wasCached);
@@ -236,47 +254,46 @@ TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
 }
 
 TEST(ConcurrentCache, abort) {
-  auto a = SimpleAdapter(3ul);
+  auto a = SimpleConcurrentLruCache(3ul);
   std::atomic<bool> flag = false;
-  auto compute = [&a, &flag]() {
-    return a.computeOnce(3, waiting_function("3"s, 100, &flag));
+  ConcurrentSignal signal;
+  auto compute = [&a, &signal]() {
+    return a.computeOnce(3, waiting_function("3"s, 100, &signal));
   };
-  auto computeWithError = [&a, &flag]() {
-    return a.computeOnce(3, wait_and_throw_function(100, &flag));
+  auto computeWithError = [&a, &signal]() {
+    return a.computeOnce(3, wait_and_throw_function(100, &signal));
   };
   auto fut = std::async(std::launch::async, computeWithError);
-  while (!flag) {
-  }
-  ASSERT_EQ(0ul, a.numCachedElements());
-  ASSERT_EQ(0ul, a.numPinnedElements());
+  signal.wait();
+  ASSERT_EQ(0ul, a.numNonPinnedEntries());
+  ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
   ASSERT_THROW(compute(), ad_utility::WaitedForResultWhichThenFailedException);
-  ASSERT_EQ(0ul, a.numCachedElements());
-  ASSERT_EQ(0ul, a.numPinnedElements());
+  ASSERT_EQ(0ul, a.numNonPinnedEntries());
+  ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_EQ(0ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_THROW(fut.get(), std::runtime_error);
 }
 
 TEST(ConcurrentCache, abortPinned) {
-  auto a = SimpleAdapter(3ul);
-  std::atomic<bool> flag = false;
+  auto a = SimpleConcurrentLruCache(3ul);
+  ConcurrentSignal signal;
   auto compute = [&]() {
-    return a.computeOncePinned(3, waiting_function("3"s, 100, &flag));
+    return a.computeOncePinned(3, waiting_function("3"s, 100, &signal));
   };
-  auto computeWithError = [&a, &flag]() {
-    return a.computeOncePinned(3, wait_and_throw_function(100, &flag));
+  auto computeWithError = [&a, &signal]() {
+    return a.computeOncePinned(3, wait_and_throw_function(100, &signal));
   };
   auto fut = std::async(std::launch::async, computeWithError);
-  while (!flag) {
-  }
-  ASSERT_EQ(0ul, a.numCachedElements());
-  ASSERT_EQ(0ul, a.numPinnedElements());
+  signal.wait();
+  ASSERT_EQ(0ul, a.numNonPinnedEntries());
+  ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
   ASSERT_THROW(compute(), ad_utility::WaitedForResultWhichThenFailedException);
-  ASSERT_EQ(0ul, a.numCachedElements());
-  ASSERT_EQ(0ul, a.numPinnedElements());
+  ASSERT_EQ(0ul, a.numNonPinnedEntries());
+  ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_EQ(0ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_THROW(fut.get(), std::runtime_error);
 }

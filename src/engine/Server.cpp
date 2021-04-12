@@ -157,7 +157,7 @@ void Server::process(Socket* client) {
       }
 
       if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
-        _cache.clear();
+        _cache.clearUnpinnedOnly();
       }
 
       if (ad_utility::getLowercase(params["cmd"]) == "clearcachecomplete") {
@@ -521,9 +521,9 @@ string Server::composeStatsJson() const {
 // _______________________________________
 nlohmann::json Server::composeCacheStatsJson() const {
   nlohmann::json result;
-  result["num-cached-elements"] = _cache.numCachedElements();
-  result["num-pinned-elements"] = _cache.numPinnedElements();
-  result["cached-size"] = _cache.cachedSize();
+  result["num-non-pinned-entries"] = _cache.numNonPinnedEntries();
+  result["num-pinned-entries"] = _cache.numPinnedEntries();
+  result["non-pinned-size"] = _cache.nonPinnedSize();
   result["pinned-size"] = _cache.pinnedSize();
   result["num-pinned-index-scan-sizes"] = _pinnedSizes.rlock()->size();
   return result;

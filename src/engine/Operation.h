@@ -128,7 +128,7 @@ class Operation {
   // All data that was previously stored in the runtime information will be
   // deleted.
   virtual void createRuntimeInformation(
-      const SubtreeCache::ResultAndCacheStatus& resAndCache,
+      const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
       size_t timeInMilliseconds) final {
     // reset
     _runtimeInfo = RuntimeInformation();
@@ -142,16 +142,18 @@ class Operation {
     // Only the result that was actually computed (or read from cache) knows
     // the correct information about the children computations.
     _runtimeInfo.children() =
-        resAndCache._resultPointer->_runtimeInfo.children();
+        resultAndCacheStatus._resultPointer->_runtimeInfo.children();
 
     _runtimeInfo.setTime(timeInMilliseconds);
-    _runtimeInfo.setRows(resAndCache._resultPointer->_resTable->size());
-    _runtimeInfo.setWasCached(resAndCache._wasCached);
-    _runtimeInfo.addDetail("original_total_time",
-                           resAndCache._resultPointer->_runtimeInfo.getTime());
+    _runtimeInfo.setRows(
+        resultAndCacheStatus._resultPointer->_resultTable->size());
+    _runtimeInfo.setWasCached(resultAndCacheStatus._wasCached);
+    _runtimeInfo.addDetail(
+        "original_total_time",
+        resultAndCacheStatus._resultPointer->_runtimeInfo.getTime());
     _runtimeInfo.addDetail(
         "original_operation_time",
-        resAndCache._resultPointer->_runtimeInfo.getOperationTime());
+        resultAndCacheStatus._resultPointer->_runtimeInfo.getOperationTime());
   }
 
   vector<size_t> _resultSortedColumns;

@@ -90,7 +90,7 @@ TEST(LRUCacheTest, testIncreasingCapacity) {
   ASSERT_EQ(*cache["3"], "3x");
   ASSERT_EQ(*cache["4"], "4x");
   ASSERT_EQ(*cache["5"], "5x");
-  cache.setCapacity(10);
+  cache.setMaxNumEntries(10);
   ASSERT_EQ(*cache["3"], "3x");
   cache.insert("6", "6x");
   ASSERT_EQ(*cache["6"], "6x");
@@ -115,7 +115,7 @@ TEST(LRUCacheTest, testDecreasingCapacity) {
   ASSERT_EQ(*cache["4"], "xxxx");
   ASSERT_EQ(*cache["5"], "xxxxx");
   cache.insert("9", "xxxxxxxxx");
-  cache.setCapacity(2);
+  cache.setMaxNumEntries(2);
   ASSERT_EQ(*cache["9"], "xxxxxxxxx");  // freshly inserted
   ASSERT_EQ(*cache["5"], "xxxxx");      // second leat recently used
   ASSERT_FALSE(cache["1"]);

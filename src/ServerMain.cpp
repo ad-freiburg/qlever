@@ -31,9 +31,9 @@ struct option options[] = {
     {"index", required_argument, NULL, 'i'},
     {"worker-threads", required_argument, NULL, 'j'},
     {"memory-for-queries", required_argument, NULL, 'm'},
-    {"cache-size-in-gb", required_argument, NULL, 'c'},
-    {"cache-max-size-single-element", required_argument, NULL, 'e'},
-    {"cache-max-num-values", required_argument, NULL, 'k'},
+    {"cache-max-size-gb", required_argument, NULL, 'c'},
+    {"cache-max-size-gb-single-entry", required_argument, NULL, 'e'},
+    {"cache-max-num-entries", required_argument, NULL, 'k'},
     {"on-disk-literals", no_argument, NULL, 'l'},
     {"port", required_argument, NULL, 'p'},
     {"no-patterns", no_argument, NULL, 'P'},
@@ -62,18 +62,20 @@ void printUsage(char* execName) {
           "an error, but the engine will not crash."
        << endl;
   cout << "  " << std::setw(20) << "c, cache-size-in-gb" << std::setw(1)
-       << "Maximum amount of memory that the cache (pinned and non-pinned "
-          "values) is allowed to consume. This will still count towards the "
-          "limit specified by the -m option"
+       << "Maximum memory size in GB for all cache entries (pinned and "
+          "non-pinned). Note that the cache is part of the amount of memory "
+          "limited by --memory-for-queries."
        << endl;
   cout << "  " << std::setw(20) << "e, cache-max-size-single-element"
        << std::setw(1)
-       << "(Intermediate) results that are larger than this limit will never "
-          "be cached"
+       << "Maximum size in GB for a single cache entry. In other words, "
+          "results larger than this will never be cached."
        << endl;
   cout << "  " << std::setw(20) << "k, cache-max-num-values" << std::setw(1)
-       << "The number of (Intermediate) results that can be stored in the "
-          "cache at the same time"
+       << "Maximum number of entries in the cache. If exceeded, remove "
+          "least-recently used entries from the cache if possible. Note that "
+          "this condition and the size limit specified via --cache-max-size-gb "
+          "both have to hold (logical AND)."
        << endl;
   cout << "  " << std::setw(20) << "no-patterns" << std::setw(1) << "    "
        << "Disable the use of patterns. This disables ql:has-predicate."
@@ -108,9 +110,9 @@ int main(int argc, char** argv) {
   bool enablePatternTrick = true;
 
   size_t memLimit = DEFAULT_MEM_FOR_QUERIES_IN_GB;
-  size_t cacheSizeInGB = DEFAULT_CACHE_SIZE_IN_GB;
-  size_t maxSizeSingleCacheValue = DEFAULT_MAX_SIZE_CACHE_VALUE_GB;
-  size_t maxNumCacheValues = DEFAULT_NUM_CACHE_VALUES;
+  size_t cacheMaxSizeGB = DEFAULT_CACHE_MAX_SIZE_GB;
+  size_t cacheMaxSizeGBSingleEntry = DEFAULT_CACHE_MAX_SIZE_GB_SINGLE_ENTRY;
+  size_t cacheMaxNumEntries = DEFAULT_CACHE_MAX_NUM_ENTRIES;
 
   optind = 1;
   // Process command line arguments.
@@ -149,13 +151,13 @@ int main(int argc, char** argv) {
                      "this flag is read directly from the index\n";
         break;
       case 'c':
-        cacheSizeInGB = atoi(optarg);
+        cacheMaxSizeGB = atoi(optarg);
         break;
       case 'e':
-        maxSizeSingleCacheValue = atoi(optarg);
+        cacheMaxSizeGBSingleEntry = atoi(optarg);
         break;
       case 'k':
-        maxNumCacheValues = atoi(optarg);
+        cacheMaxNumEntries = atoi(optarg);
         break;
       default:
         cout << endl
@@ -186,8 +188,8 @@ int main(int argc, char** argv) {
   cout << "Set locale LC_CTYPE to: " << locale << endl;
 
   try {
-    Server server(port, numThreads, memLimit * 1 << 30u, cacheSizeInGB,
-                  maxSizeSingleCacheValue, maxNumCacheValues);
+    Server server(port, numThreads, memLimit, cacheMaxSizeGB,
+                  cacheMaxSizeGBSingleEntry, cacheMaxNumEntries);
     server.initialize(index, text, usePatterns, enablePatternTrick);
     server.run();
   } catch (const std::exception& e) {

@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
     index.dumpAsciiLists(lists, decodeGapsAndFrequency);
 
     Engine engine;
-    SubtreeCache cache(DEFAULT_NUM_CACHE_VALUES);
+    ConcurrentLruCache cache(DEFAULT_CACHE_MAX_NUM_ENTRIES);
     PinnedSizes pinnedSizes;
     ad_utility::AllocatorWithLimit<Id> allocator{
         ad_utility::makeAllocationMemoryLeftThreadsafeObject(

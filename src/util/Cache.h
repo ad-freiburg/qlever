@@ -50,9 +50,9 @@ struct DefaultSizeGetter {
  * @brief Associative array for almost arbitrary keys and values that acts as a
  * cache with fixed capacity.
  *
- * The strategy that is used to determine which element is removed once the
+ * The strategy that is used to determine which entry is removed once the
  * capacity is exceeded can be customized (see documentation of the template
- * parameters). The capacity can be limited wrt the number of elements as well
+ * parameters). The capacity can be limited wrt the number of entries as well
  * as their actual size (which can be configured with a callable of type
  * ValueSizeGetter in the constructor below). NOTE: THIS IMPLEMENTATION IS NO
  * LONGER THREADSAFE. It used to be. If you require thread-safety, you should
@@ -64,8 +64,8 @@ struct DefaultSizeGetter {
  * @tparam Key The key type for lookup. Must be hashable TODO<joka921>::if
  * needed in future, add hash as optional template parameter
  * @tparam Value Value type. Must be default constructible
- * @tparam Score A type that is used to determine which element is deleted next
- * from the cache (the lowest element according to ScoreComparator)
+ * @tparam Score A type that is used to determine which entry is deleted next
+ * from the cache (the lowest entry according to ScoreComparator)
  * @tparam ScoreComparator function of (Score, Score) -> bool that returns true
  * if the first argument is to be deleted before the second
  * @tparam AccessUpdater function (Score, Value) -> Score. Each time a value is
@@ -82,6 +82,8 @@ template <template <typename Sc, typename Val, typename Comp>
           typename ValueSizeGetter = DefaultSizeGetter<Value>>
 class FlexibleCache {
  public:
+  // For easier interaction with the STL, which often uses key_type and
+  // value_type .
   using key_type = Key;
   using value_type = Value;
 
@@ -122,15 +124,15 @@ class FlexibleCache {
 
  public:
   //! Typical constructor. A default value may be added in time.
-  explicit FlexibleCache(size_t capacityNumElements, size_t capacityTotalSize,
-                         size_t maxSizeSingleValue,
+  explicit FlexibleCache(size_t maxNumEntries, size_t maxSize,
+                         size_t maxSizeSingleEntry,
                          ScoreComparator scoreComparator,
                          AccessUpdater accessUpdater,
                          ScoreCalculator scoreCalculator,
                          ValueSizeGetter valueSizeGetter = ValueSizeGetter())
-      : _capacityNumElements(capacityNumElements),
-        _capacityTotalSize(capacityTotalSize),
-        _maxSizeSingleValue(maxSizeSingleValue),
+      : _maxNumEntries(maxNumEntries),
+        _maxSize(maxSize),
+        _maxSizeSingleEntry(maxSizeSingleEntry),
         _entries(scoreComparator),
         _accessUpdater(accessUpdater),
         _scoreCalculator(scoreCalculator),
@@ -146,7 +148,7 @@ class FlexibleCache {
 
     const auto mapIt = _accessMap.find(key);
     if (mapIt == _accessMap.end()) {
-      // Returning a null pointer allows to easily check if the element
+      // Returning a null pointer allows to easily check if the entry
       // existed and crash misuses.
       return shared_ptr<Value>(nullptr);
     }
@@ -181,8 +183,8 @@ class FlexibleCache {
           "Trying to insert a cache key which was already present");
     }
 
-    // ignore elements that are too big
-    if (_valueSizeGetter(*valPtr) > _maxSizeSingleValue) {
+    // ignore entries that are too big
+    if (_valueSizeGetter(*valPtr) > _maxSizeSingleEntry) {
       return {};
     }
     Score s = _scoreCalculator(*valPtr);
@@ -207,11 +209,11 @@ class FlexibleCache {
           "Trying to insert a cache key which was already present");
     }
 
-    // throw if an element is too big for this cache
-    if (_valueSizeGetter(*valPtr) > _maxSizeSingleValue) {
+    // throw if an entry is too big for this cache
+    if (_valueSizeGetter(*valPtr) > _maxSizeSingleEntry) {
       throw std::runtime_error(
-          "Trying to pin an element to the cache that is bigger than the "
-          "maximum size for a single element in the cache");
+          "Trying to pin an entry to the cache that is bigger than the "
+          "maximum size for a single entry in the cache");
     }
     _pinnedMap[key] = valPtr;
     _totalSizePinned += _valueSizeGetter(*valPtr);
@@ -220,8 +222,8 @@ class FlexibleCache {
   }
 
   //! Set the capacity.
-  void setCapacity(const size_t numElements) {
-    _capacityNumElements = numElements;
+  void setMaxNumEntries(const size_t maxNumEntries) {
+    _maxNumEntries = maxNumEntries;
     shrinkToFit();
   }
 
@@ -246,7 +248,7 @@ class FlexibleCache {
     auto sz = _valueSizeGetter(*valuePtr);
     _totalSizeNonPinned -= sz;
     _totalSizePinned += sz;
-    // Move the element to the _pinnedMap and remove it from the non-pinned data
+    // Move the entry to the _pinnedMap and remove it from the non-pinned data
     // structures
     _pinnedMap[key] = std::move(valuePtr);
     _entries.erase(std::move(handle));
@@ -269,13 +271,13 @@ class FlexibleCache {
       // Item already erased do nothing
       return;
     }
-    // the element exists in the non-pinned part of the cache, erase it.
+    // the entry exists in the non-pinned part of the cache, erase it.
     _totalSizeNonPinned -= _valueSizeGetter(*mapIt->second);
     _entries.erase(std::move(mapIt->second));
     _accessMap.erase(mapIt);
   }
 
-  //! Clear the cache but leave pinned elements alone
+  //! Clear the cache but leave pinned entries alone
   void clearUnpinnedOnly() {
     // Since we are using shared_ptr this does not free the underlying
     // memory if it is still accessible through a previously returned
@@ -285,7 +287,7 @@ class FlexibleCache {
     _totalSizeNonPinned = 0;
   }
 
-  /// Clear the cache AND the pinned elements
+  /// Clear the cache AND the pinned entries
   void clearAll() {
     // Since we are using shared_ptr this does not free the underlying
     // memory if it is still accessible through a previously returned
@@ -297,39 +299,39 @@ class FlexibleCache {
     _totalSizePinned = 0;
   }
 
-  /// return the total size of the pinned elements
+  /// Return the total size of the pinned entries
   [[nodiscard]] EntrySizeType pinnedSize() const {
     return std::accumulate(
         _pinnedMap.begin(), _pinnedMap.end(), EntrySizeType{},
         [this](const EntrySizeType& x, const auto& el) {
-          // elements of the pinned Map are shared_ptrs
+          // entries of the pinned Map are shared_ptrs
           return x +
                  (el.second ? _valueSizeGetter(*el.second) : EntrySizeType{});
         });
   }
 
-  /// return the total size of the cached elements
-  [[nodiscard]] EntrySizeType cachedSize() const {
+  /// Return the total size of the non-pinned cache entries
+  [[nodiscard]] EntrySizeType nonPinnedSize() const {
     return std::accumulate(
         _accessMap.begin(), _accessMap.end(), EntrySizeType{},
         [this](const EntrySizeType& x, const auto& el) {
-          // elements of the accessMap are shared_ptrs
+          // entries of the accessMap are shared_ptrs
           return x + _valueSizeGetter(*el.second.value().value());
         });
   }
 
-  /// return the number of cached elements
-  [[nodiscard]] size_t numCachedElements() const { return _accessMap.size(); }
+  /// Return the number of non-pinned cache entries
+  [[nodiscard]] size_t numNonPinnedEntries() const { return _accessMap.size(); }
 
-  /// return the number of pinned elements
-  [[nodiscard]] size_t numPinnedElements() const { return _pinnedMap.size(); }
+  /// Return the number of pinned entries
+  [[nodiscard]] size_t numPinnedEntries() const { return _pinnedMap.size(); }
 
  private:
-  size_t _capacityNumElements;
-  size_t _capacityTotalSize;
-  size_t _maxSizeSingleValue;
+  size_t _maxNumEntries;
+  size_t _maxSize;
+  size_t _maxSizeSingleEntry;
   size_t _totalSizeNonPinned =
-      0;  // the size in terms of the ValueSizeGetter, NOT Number of elements
+      0;  // the size in terms of the ValueSizeGetter, NOT Number of entries
   size_t _totalSizePinned = 0;
 
   EntryList _entries;
@@ -341,18 +343,18 @@ class FlexibleCache {
 
   void shrinkToFit() {
     while (!_entries.empty() &&
-           (_entries.size() + _pinnedMap.size() > _capacityNumElements ||
-            _totalSizeNonPinned + _totalSizePinned > _capacityTotalSize)) {
-      // Remove elements from the back until we meet the capacity and size
+           (_entries.size() + _pinnedMap.size() > _maxNumEntries ||
+            _totalSizeNonPinned + _totalSizePinned > _maxSize)) {
+      // Remove entries from the back until we meet the capacity and size
       // requirements
       auto handle = _entries.pop();
       _totalSizeNonPinned -= _valueSizeGetter(*handle.value().value());
       _accessMap.erase(handle.value().key());
     }
 
-    // Note that the pinned elements alone can exceed the capacity of the cache.
+    // Note that the pinned entries alone can exceed the capacity of the cache.
     assert(_entries.empty() ||
-           _entries.size() + _pinnedMap.size() <= _capacityNumElements);
+           _entries.size() + _pinnedMap.size() <= _maxNumEntries);
   }
 };
 
