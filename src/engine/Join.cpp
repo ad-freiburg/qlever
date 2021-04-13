@@ -336,8 +336,9 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
       IdTable jr(2, _executionContext->getAllocator());
-      checkTimeout();  // the scan is a disk operation, so we can check the
-
+      // The scan is a relatively expensive disk operation, so we can afford to
+      // check for timeouts before each call.
+      checkTimeout();
       scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
@@ -378,8 +379,9 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
     } else {
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-      checkTimeout();  // the scan is a disk operation, so we can check the
-                       // timeout frequently
+      // The scan is a relatively expensive disk operation, so we can afford to
+      // check for timeouts before each call.
+      checkTimeout();
       IdTable jr(2, _executionContext->getAllocator());
       scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
@@ -522,6 +524,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   } else if (b.size() / a.size() > GALLOP_THRESHOLD) {
     doGallopInnerJoin(RightLargerTag{}, a, jc1, b, jc2, &result);
   } else {
+    auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory(32000);
     // Intersect both lists.
     size_t i = 0;
     size_t j = 0;
@@ -529,9 +532,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     while (i < a.size() && j < b.size()) {
       while (a(i, jc1) < b(j, jc2)) {
         ++i;
-        if (i % (1024 * 16) == 0) {
-          checkTimeout();
-        }
+        checkTimeoutAfterNCalls();
         if (i >= a.size()) {
           goto finish;
         }
@@ -539,9 +540,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
       while (b(j, jc2) < a(i, jc1)) {
         ++j;
-        if (j % (1024 * 16) == 0) {
-          checkTimeout();
-        }
+        checkTimeoutAfterNCalls();
         if (j >= b.size()) {
           goto finish;
         }
@@ -569,18 +568,14 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
           }
 
           ++j;
-          if (j % (1024 * 4) == 0) {
-            checkTimeout();
-          }
+          checkTimeoutAfterNCalls();
           if (j >= b.size()) {
             // The next i might still match
             break;
           }
         }
         ++i;
-        if (i % (1024 * 4) == 0) {
-          checkTimeout();
-        }
+        checkTimeoutAfterNCalls();
         if (i >= a.size()) {
           goto finish;
         }

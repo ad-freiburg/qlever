@@ -166,11 +166,12 @@ void Server::process(Socket* client) {
         lock->clear();
       }
 
-      auto timeoutTimer = std::make_shared<QueryExecutionTree::SyncTimer>(
-          ad_utility::TimeoutTimer::unlimited());
+      ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
+          std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+              ad_utility::TimeoutTimer::unlimited());
       if (params.contains("timeout")) {
-        timeoutTimer = std::make_shared<QueryExecutionTree::SyncTimer>(
-            ad_utility::TimeoutTimer::secLimited(
+        timeoutTimer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+            ad_utility::TimeoutTimer::fromSeconds(
                 atof(params["timeout"].c_str())));
       }
 

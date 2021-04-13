@@ -45,7 +45,8 @@ vector<string> Operation::collectWarnings() const {
 }
 
 // ________________________________________________________________________
-void Operation::recursivelySetTimeoutTimer(std::shared_ptr<SyncTimer> timer) {
+void Operation::recursivelySetTimeoutTimer(
+    ad_utility::SharedConcurrentTimeoutTimer timer) {
   for (auto child : getChildren()) {
     if (!child) {
       continue;
@@ -92,12 +93,12 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     // in scope
     try {
       if (_timeoutTimer->wlock()->isTimeout()) {
-        throw ad_semsearch::TimeoutException("uncaught Timeout before " +
-                                             getDescriptor());
+        throw ad_utility::TimeoutException("uncaught Timeout before " +
+                                           getDescriptor());
       }
       computeResult(newResult->_resTable.get());
       if (_timeoutTimer->wlock()->isTimeout()) {
-        throw ad_semsearch::TimeoutException("Timeout in " + getDescriptor());
+        throw ad_utility::TimeoutException("Timeout in " + getDescriptor());
       }
     } catch (const ad_semsearch::AbortException& e) {
       // A child Operation was aborted, abort this Operation
@@ -160,6 +161,6 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
 // ______________________________________________________________________
 void Operation::checkTimeout() const {
   if (_timeoutTimer->wlock()->isTimeout()) {
-    throw ad_semsearch::TimeoutException("Timeout in " + getDescriptor());
+    throw ad_utility::TimeoutException("Timeout in " + getDescriptor());
   }
 }

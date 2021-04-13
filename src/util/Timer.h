@@ -10,6 +10,7 @@
 // code in order to use it in the semantic search, too.
 // Adapted header guard, namespace, etc.
 namespace ad_utility {
+using namespace std::string_literals;
 // HOLGER 22Jan06 : changed all suseconds_t to off_t
 //
 //! A SIMPLE CLASS FOR TIME MEASUREMENTS.
@@ -96,6 +97,16 @@ class Timer {
   off_t usecs_since_mark() const { return _usecs - _usecs_at_mark; }
 };
 
+/// An exception signalling a timeout
+class TimeoutException : public std::exception {
+ public:
+  TimeoutException(std::string message) : _message{std::move(message)} {}
+  const char* what() const noexcept override { return _message.c_str(); }
+
+ private:
+  std::string _message;
+};
+
 /// A timer which also can be given a timeout value and queried whether it
 /// has timed out
 class TimeoutTimer : public Timer {
@@ -103,14 +114,16 @@ class TimeoutTimer : public Timer {
   /// Factory function for a timer that never times out
   static TimeoutTimer unlimited() { return TimeoutTimer(UnlimitedTag{}); }
   /// Factory function for a timer that times out after a number of microseconds
-  static TimeoutTimer usecLimited(off_t usecs) { return TimeoutTimer(usecs); }
+  static TimeoutTimer fromMicroseconds(off_t microseconds) {
+    return TimeoutTimer(microseconds);
+  }
   /// Factory function for a timer that times out after a number of miliseconds
-  static TimeoutTimer msecLimited(off_t msecs) {
-    return TimeoutTimer(msecs * 1000);
+  static TimeoutTimer fromMilliseconds(off_t milliseconds) {
+    return TimeoutTimer(milliseconds * 1000);
   }
   /// Factory function for a timer that times out after a number of seconds
-  static TimeoutTimer secLimited(double secs) {
-    return TimeoutTimer(static_cast<off_t>(secs * 1000 * 1000));
+  static TimeoutTimer fromSeconds(double seconds) {
+    return TimeoutTimer(static_cast<off_t>(seconds * 1000 * 1000));
   }
 
   /// Did this timer already timeout
@@ -121,20 +134,34 @@ class TimeoutTimer : public Timer {
     }
     auto prevRunning = isRunning();
     stop();
-    auto res = usecs() > _timeout;
+    auto res = usecs() > _timeLimitInMicroseconds;
     if (prevRunning) {
       cont();
     }
     return res;
   }
 
-  off_t remainingUsecs() {
+  // Check if this timer has timed out. If the timer has timed out, throws a
+  // TimeoutException. Else, nothing happens.
+  void checkTimeoutAndThrow(std::string additionalMessage = {}) {
+    if (isTimeout()) {
+      double seconds =
+          static_cast<double>(_timeLimitInMicroseconds) / (1000 * 1000);
+      throw TimeoutException(additionalMessage +
+                             "A Timeout occured. The time limit was "s +
+                             std::to_string(seconds) + "seconds"s);
+    }
+  }
+
+  off_t remainingMicroseconds() {
     if (_isUnlimited) {
       return std::numeric_limits<off_t>::max();
     }
     auto prevRunning = isRunning();
     stop();
-    off_t res = usecs() > _timeout ? 0 : _timeout - usecs();
+    off_t res = usecs() > _timeLimitInMicroseconds
+                    ? 0
+                    : _timeLimitInMicroseconds - usecs();
     if (prevRunning) {
       cont();
     }
@@ -142,25 +169,19 @@ class TimeoutTimer : public Timer {
   }
 
  private:
-  off_t _timeout = 0;
+  off_t _timeLimitInMicroseconds = 0;
   bool _isUnlimited = false;  // never times out
   class UnlimitedTag {};
   TimeoutTimer(UnlimitedTag) : _isUnlimited{true} {}
-  TimeoutTimer(off_t timeout) : _timeout{timeout} {}
+  TimeoutTimer(off_t timeLimitInMicroseconds)
+      : _timeLimitInMicroseconds{timeLimitInMicroseconds} {}
 };
 
-// simple interface : threadsafe timer + "checkTimeout + throw exception"
-class TimeoutChecker
-    : public ad_utility::Synchronized<TimeoutTimer, std::mutex> {
- public:
-  class TimeoutException : public std::exception {};
-  using Base = ad_utility::Synchronized<TimeoutTimer, std::mutex>;
-  using Base::Synchronized;
+/// A threadsafe timeout timer
+using ConcurrentTimeoutTimer =
+    ad_utility::Synchronized<TimeoutTimer, std::mutex>;
 
-  void checkTimeout() {
-    if (wlock()->isTimeout()) {
-      throw TimeoutException{};
-    }
-  }
-};
+/// A shared ptr to a threadsafe timeout timer
+using SharedConcurrentTimeoutTimer = std::shared_ptr<ConcurrentTimeoutTimer>;
+
 }  // namespace ad_utility

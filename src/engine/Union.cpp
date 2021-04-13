@@ -169,10 +169,11 @@ void Union::computeUnion(
   res.reserve(left.size() + right.size());
 
   const size_t chunkSize =
-      100000;  // after this many elements, check for timeouts
+      100000;  // after this many elements, checkAfterChunkSize for timeouts
+  auto checkAfterChunkSize = checkTimeoutAfterNCallsFactory(chunkSize);
   if (left.size() > 0) {
     bool columnsMatch = left.cols() == columnOrigins.size();
-    // check if the order of the columns matches
+    // checkAfterChunkSize if the order of the columns matches
     for (size_t i = 0; columnsMatch && i < columnOrigins.size(); i++) {
       const std::array<size_t, 2>& co = columnOrigins[i];
       if (co[0] != i) {
@@ -187,7 +188,9 @@ void Union::computeUnion(
       // This if clause is only here to avoid creating the call to insert when
       // it would not be possible to call the function due to not matching
       // columns.
+      AD_CHECK(LEFT_WIDTH == OUT_WIDTH);
       if constexpr (LEFT_WIDTH == OUT_WIDTH) {
+        // always copy chunkSize results at once and then check for a timeout
         size_t numChunks = left.size() / chunkSize;
         for (size_t i = 0; i < numChunks; ++i) {
           res.insert(res.end(), left.begin() + i * chunkSize,
@@ -197,13 +200,8 @@ void Union::computeUnion(
         res.insert(res.end(), left.begin() + numChunks * chunkSize, left.end());
       }
     } else {
-      size_t numHandled = 0;
       for (const auto& l : left) {
-        numHandled += 1;
-        if (numHandled >= chunkSize) {
-          checkTimeout();
-          numHandled = 0;
-        }
+        checkAfterChunkSize();
         res.emplace_back();
         size_t backIdx = res.size() - 1;
         for (size_t i = 0; i < columnOrigins.size(); i++) {
@@ -220,7 +218,7 @@ void Union::computeUnion(
 
   if (right.size() > 0) {
     bool columnsMatch = right.cols() == columnOrigins.size();
-    // check if the order of the columns matches
+    // checkAfterChunkSize if the order of the columns matches
     for (size_t i = 0; columnsMatch && i < columnOrigins.size(); i++) {
       const std::array<size_t, 2>& co = columnOrigins[i];
       if (co[1] != i) {
@@ -231,7 +229,7 @@ void Union::computeUnion(
       // The columns of the right subtree and the result match, we can
       // just copy the entries.
       if constexpr (RIGHT_WIDTH == OUT_WIDTH) {
-        res.reserve(res.size() + right.size());
+        // always copy chunkSize results at once and then check for a timeout
         size_t numChunks = right.size() / chunkSize;
         for (size_t i = 0; i < numChunks; ++i) {
           res.insert(res.end(), right.begin() + i * chunkSize,
@@ -242,13 +240,8 @@ void Union::computeUnion(
                    right.end());
       }
     } else {
-      size_t numHandled = 0;
       for (const auto& r : right) {
-        numHandled += 1;
-        if (numHandled >= chunkSize) {
-          checkTimeout();
-          numHandled = 0;
-        }
+        checkAfterChunkSize();
         res.emplace_back();
         size_t backIdx = res.size() - 1;
         for (size_t i = 0; i < columnOrigins.size(); i++) {

@@ -193,7 +193,7 @@ class File {
   //! returns the number of bytes read or the error returned by pread()
   //! which is < 0
   size_t read(void* targetBuffer, size_t nofBytesToRead, off_t offset,
-              std::shared_ptr<ad_utility::TimeoutChecker> timer = nullptr) {
+              ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) {
     assert(_file);
     const int fd = fileno(_file);
     size_t bytesRead = 0;
@@ -206,7 +206,7 @@ class File {
       const ssize_t ret = pread(fd, to + bytesRead, toRead, offset + bytesRead);
 
       if (timer) {
-        timer->checkTimeout();
+        timer->wlock()->checkTimeoutAndThrow();
       }
       if (ret < 0) {
         return ret;

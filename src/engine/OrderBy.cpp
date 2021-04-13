@@ -79,12 +79,13 @@ void OrderBy::computeResult(ResultTable* result) {
 
   // TODO<joka921> proper timeout and better estimate
   double remainingSecs =
-      static_cast<double>(_timeoutTimer->wlock()->remainingUsecs()) / 1000000;
+      static_cast<double>(_timeoutTimer->wlock()->remainingMicroseconds()) /
+      1000000;
   if (static_cast<double>(subRes->size()) / 50000000 > remainingSecs) {
     // assume that we can sort at most 50M elements per second. This is a rather
     // generous upper bound to make sure we do not exceed our timeout more than
     // an order of magnitude b.c of sorts
-    throw ad_semsearch::TimeoutException(
+    throw ad_utility::TimeoutException(
         "OrderBY operation was canceled, because time estimate exceeded "
         "remaining time by orders of magnitued");
   }

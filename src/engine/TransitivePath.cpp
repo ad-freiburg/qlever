@@ -220,6 +220,8 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
   // All nodes on the graph from which an edge leads to another node
   std::vector<Id> nodes;
 
+  auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory(10000);
+
   // initialize the map from the subresult
   if constexpr (rightIsVar) {
     (void)rightValue;
@@ -227,9 +229,7 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
       nodes.push_back(leftValue);
     }
     for (size_t i = 0; i < sub.size(); i++) {
-      if (i % 2048 == 0) {
-        checkTimeout();
-      }
+      checkTimeoutAfterNCalls();
       size_t l = sub(i, leftSubCol);
       size_t r = sub(i, rightSubCol);
       MapIt it = edges.find(l);
@@ -250,9 +250,7 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
     (void)leftValue;
     nodes.push_back(rightValue);
     for (size_t i = 0; i < sub.size(); i++) {
-      if (i % 2048 == 0) {
-        checkTimeout();
-      }
+      checkTimeoutAfterNCalls();
       // Use the inverted edges
       size_t l = sub(i, leftSubCol);
       size_t r = sub(i, rightSubCol);
@@ -355,11 +353,10 @@ void TransitivePath::computeTransitivePathLeftBound(
   // Used to map entries in the left column to entries they have connection with
   Map edges;
 
+  auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory(10000);
   // initialize the map from the subresult
   for (size_t i = 0; i < sub.size(); i++) {
-    if (i % 8192 == 0) {
-      checkTimeout();
-    }
+    checkTimeoutAfterNCalls();
     size_t l = sub(i, leftSubCol);
     size_t r = sub(i, rightSubCol);
     MapIt it = edges.find(l);
@@ -389,22 +386,14 @@ void TransitivePath::computeTransitivePathLeftBound(
   size_t last_elem = std::numeric_limits<size_t>::max();
   size_t last_result_begin = 0;
   size_t last_result_end = 0;
-  size_t elements_inner_loop =
-      0;  // only there for checking timeouts every now and then
   for (size_t i = 0; i < left.size(); i++) {
-    if (i % 4096 == 0) {
-      checkTimeout();
-    }
+    checkTimeoutAfterNCalls();
     if (left[i][leftSideCol] == last_elem) {
       // We can repeat the last output
       size_t num_new = last_result_end - last_result_begin;
       size_t res_row = res.size();
       res.resize(res.size() + num_new);
-      elements_inner_loop += num_new;
-      if (elements_inner_loop >= 2048) {
-        checkTimeout();
-        elements_inner_loop = 0;
-      }
+      checkTimeoutAfterNCalls(num_new);
       for (size_t j = 0; j < num_new; j++) {
         for (size_t c = 0; c < resWidth; c++) {
           res(res_row + j, c) = res(last_result_begin + j, c);
@@ -498,12 +487,11 @@ void TransitivePath::computeTransitivePathRightBound(
 
   // Used to map entries in the left column to entries they have connection with
   Map edges;
+  auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory(10000);
 
   // initialize the map from the subresult
   for (size_t i = 0; i < sub.size(); i++) {
-    if (i % 4096 == 0) {
-      checkTimeout();
-    }
+    checkTimeoutAfterNCalls();
     size_t l = sub(i, leftSubCol);
     size_t r = sub(i, rightSubCol);
     MapIt it = edges.find(r);
@@ -534,9 +522,7 @@ void TransitivePath::computeTransitivePathRightBound(
   size_t last_result_begin = 0;
   size_t last_result_end = 0;
   for (size_t i = 0; i < right.size(); i++) {
-    if (i % 4096 == 0) {
-      checkTimeout();
-    }
+    checkTimeoutAfterNCalls();
     if (right[i][rightSideCol] == last_elem) {
       // We can repeat the last output
       size_t num_new = last_result_end - last_result_begin;
@@ -547,6 +533,7 @@ void TransitivePath::computeTransitivePathRightBound(
           res(res_row + j, c) = res(last_result_begin + j, c);
         }
       }
+      checkTimeoutAfterNCalls(num_new);
       continue;
     }
     last_elem = right(i, rightSideCol);

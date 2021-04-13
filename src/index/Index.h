@@ -373,7 +373,7 @@ class Index {
    */
   template <class Permutation>
   void scan(Id key, IdTable* result, const Permutation& p,
-            shared_ptr<ad_utility::TimeoutChecker> timer = nullptr) const {
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
     if (p._meta.relationExists(key)) {
       const FullRelationMetaData& rmd = p._meta.getRmd(key)._rmdPairs;
       result->reserve(rmd.getNofElements() + 2);
@@ -395,7 +395,7 @@ class Index {
    */
   template <class Permutation>
   void scan(const string& key, IdTable* result, const Permutation& p,
-            shared_ptr<ad_utility::TimeoutChecker> timer = nullptr) const {
+            ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const {
     LOG(DEBUG) << "Performing " << p._readableName
                << " scan for full list for: " << key << "\n";
     Id relId;

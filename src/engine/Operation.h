@@ -108,11 +108,10 @@ class Operation {
   // trigger computation.
   shared_ptr<const ResultTable> getResult(bool isRoot = false);
 
-  // typedef for a synchronized and shared timeoutTimer
-  using SyncTimer = ad_utility::TimeoutChecker;
   // set a global timeout timer for all child operations.
   // As soon as this runs out, the complete tree will fail.
-  void recursivelySetTimeoutTimer(std::shared_ptr<SyncTimer> timer);
+  void recursivelySetTimeoutTimer(
+      ad_utility::SharedConcurrentTimeoutTimer timer);
 
  protected:
   QueryExecutionContext* getExecutionContext() const {
@@ -149,8 +148,31 @@ class Operation {
   void checkTimeout() const;
 
   // handles the timeout of this operation
-  std::shared_ptr<SyncTimer> _timeoutTimer =
-      std::make_shared<SyncTimer>(ad_utility::TimeoutTimer::unlimited());
+  ad_utility::SharedConcurrentTimeoutTimer _timeoutTimer =
+      std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+          ad_utility::TimeoutTimer::unlimited());
+
+  // Returns a lambda with the following behavior: The lambda counts, how often
+  // it has been called. When passing a size_t `numCalls` to the lambda call,
+  // this counter will be increased by `numCalls`. If the counter exceeds
+  // `numCallsBeforeCheck` the lambda resets the counter and checks whether this
+  // instance of the Operation class has timed out. On timeout a
+  // TimeoutException is thrown. For all other calls of the lambda, nothing
+  // happens (except for the counting). The lambdas returned by this function
+  // are useful for efficient timeout checking in tight loops, because the
+  // actual check for a timeout is rather expensive (it involves locking a
+  // concurrent resource).
+  auto checkTimeoutAfterNCallsFactory(size_t numCallsBeforeCheck) const {
+    return [numCallsBeforeCheck, i = 0ull,
+            this](size_t countMultiple = 1) mutable {
+      i += countMultiple;
+      if (i >= numCallsBeforeCheck) {
+        _timeoutTimer->wlock()->checkTimeoutAndThrow("Timeout in "s +
+                                                     getDescriptor());
+        i = 0;
+      }
+    };
+  }
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
