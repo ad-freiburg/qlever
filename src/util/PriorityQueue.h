@@ -171,6 +171,9 @@ class TreeBasedPQ {
   /// return the size of the map
   [[nodiscard]] size_t size() const { return mMap.size(); }
 
+  /// is this pq empty
+  [[nodiscard]] bool empty() const { return size() == 0; }
+
  private:
   // return an iterator into mMap where we find the handle that was passed in
   // returns mMap.end() if this handle is not valid anymore
@@ -388,6 +391,9 @@ class HeapBasedPQ {
   /// The logical size of the HeapBasedPQ (number of entries that are actually
   /// valid)
   size_t size() const { return mSize; }
+
+  /// true iff size is 0
+  [[nodiscard]] bool empty() const { return size() == 0; }
 
  private:
   /* helper function that pops all the internal nodes that have become invalid

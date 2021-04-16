@@ -140,7 +140,7 @@ int main(int argc, char** argv) {
   try {
     Engine engine;
     Index index;
-    SubtreeCache cache(NOF_SUBTREES_TO_CACHE);
+    ConcurrentLruCache cache(DEFAULT_CACHE_MAX_NUM_ENTRIES);
     PinnedSizes pinnedSizes;
     index.setUsePatterns(usePatterns);
     index.setOnDiskLiterals(onDiskLiterals);

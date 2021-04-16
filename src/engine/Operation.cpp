@@ -52,89 +52,69 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   timer.start();
   auto& cache = _executionContext->getQueryTreeCache();
   const string cacheKey = asString();
-  const bool pinChildIndexScanSizes = _executionContext->_pinResult && isRoot;
+  const bool pinFinalResultButNotSubtrees =
+      _executionContext->_pinResult && isRoot;
   const bool pinResult =
-      _executionContext->_pinSubtrees || pinChildIndexScanSizes;
-  LOG(TRACE) << "Check cache for Operation result" << endl;
-  LOG(TRACE) << "Using key: \n" << cacheKey << endl;
-  auto [newResult, existingResult] =
-      (pinResult)
-          ? cache.tryEmplacePinned(cacheKey, _executionContext->getAllocator())
-          : cache.tryEmplace(cacheKey, _executionContext->getAllocator());
+      _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
 
-  if (pinChildIndexScanSizes) {
+  // When we pin the final result but no subtrees, we need to remember the sizes
+  // of all involved index scans that have only one free variable. Note that
+  // these index scans are executed already during query planning because they
+  // have to be executed anyway, for any query plan. If we don't remember these
+  // sizes here, future queries that take the result from the cache would redo
+  // these index scans. Note that we do not need to remember the multiplicity
+  // (and distinctness) because the multiplicity for an index scan with a single
+  // free variable is always 1.
+  if (pinFinalResultButNotSubtrees) {
     auto lock = getExecutionContext()->getPinnedSizes().wlock();
     forAllDescendants([&lock](QueryExecutionTree* child) {
-      if (child->getType() == QueryExecutionTree::OperationType::SCAN) {
+      if (child->getType() == QueryExecutionTree::OperationType::SCAN &&
+          child->getResultWidth() == 1) {
         (*lock)[child->getRootOperation()->asString()] =
             child->getSizeEstimate();
       }
     });
   }
 
-  if (newResult) {
-    LOG(TRACE) << "Not in the cache, need to compute result" << endl;
-    LOG(DEBUG) << "Available memory (in MB) before operation: "
-               << (_executionContext->getAllocator().numFreeBytes() >> 20)
-               << std::endl;
-    // Passing the raw pointer here is ok as the result shared_ptr remains
-    // in scope
-    try {
-      computeResult(newResult->_resTable.get());
-    } catch (const ad_semsearch::AbortException& e) {
-      // A child Operation was aborted, abort this Operation
-      // as well. The child already printed
-      abort(newResult, false);
-      // Continue unwinding the stack
-      throw;
-    } catch (const std::exception& e) {
-      // We are in the innermost level of the exception, so print
-      abort(newResult, true);
-      // Rethrow as QUERY_ABORTED allowing us to print the Operation
-      // only at innermost failure of a recursive call
-      throw ad_semsearch::AbortException(e);
-    } catch (...) {
-      // We are in the innermost level of the exception, so print
-      abort(newResult, true);
-      LOG(ERROR) << "WEIRD_EXCEPTION not inheriting from std::exception"
-                 << endl;
-      // Rethrow as QUERY_ABORTED allowing us to print the Operation
-      // only at innermost failure of a recursive call
-      throw ad_semsearch::AbortException("WEIRD_EXCEPTION");
-    }
+  try {
+    auto computeLambda = [this] {
+      CacheValue val(getExecutionContext()->getAllocator());
+      computeResult(val._resultTable.get());
+      return val;
+    };
+
+    auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda)
+                              : cache.computeOnce(cacheKey, computeLambda);
+
     timer.stop();
-    _runtimeInfo.setRows(newResult->_resTable->size());
-    _runtimeInfo.setCols(getResultWidth());
-    _runtimeInfo.setDescriptor(getDescriptor());
-    _runtimeInfo.setColumnNames(getVariableColumns());
-
-    _runtimeInfo.setTime(timer.msecs());
-    _runtimeInfo.setWasCached(false);
-    // cache the runtime information for the execution as well
-    newResult->_runtimeInfo = _runtimeInfo;
-    // Only now we can let other threads access the result
-    // and runtime information
-    newResult->_resTable->finish();
-    return newResult->_resTable;
+    createRuntimeInformation(result, timer.msecs());
+    return result._resultPointer->_resultTable;
+  } catch (const ad_semsearch::AbortException& e) {
+    // A child Operation was aborted, do not print the information again.
+    throw;
+  } catch (const ad_utility::WaitedForResultWhichThenFailedException& e) {
+    LOG(ERROR) << "Waited for a result from another thread which then failed"
+               << endl;
+    LOG(ERROR) << asString();
+    throw ad_semsearch::AbortException(e);
+  } catch (const std::exception& e) {
+    // We are in the innermost level of the exception, so print
+    LOG(ERROR) << "Aborted Operation:" << endl;
+    LOG(ERROR) << asString() << endl;
+    LOG(ERROR) << e.what() << endl;
+    // Rethrow as QUERY_ABORTED allowing us to print the Operation
+    // only at innermost failure of a recursive call
+    throw ad_semsearch::AbortException(e);
+  } catch (...) {
+    // We are in the innermost level of the exception, so print
+    LOG(ERROR) << "Aborted Operation:" << endl;
+    LOG(ERROR) << asString() << endl;
+    LOG(ERROR)
+        << "Unexpected exception that is not a subclass of std::exception"
+        << endl;
+    // Rethrow as QUERY_ABORTED allowing us to print the Operation
+    // only at innermost failure of a recursive call
+    throw ad_semsearch::AbortException(
+        "Unexpected expection that is not a subclass of std::exception");
   }
-
-  existingResult->_resTable->awaitFinished();
-  if (existingResult->_resTable->status() == ResultTable::ABORTED) {
-    LOG(ERROR) << "Operation aborted while awaiting result" << endl;
-    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-             "Operation aborted while awaiting result");
-  }
-  timer.stop();
-  _runtimeInfo = existingResult->_runtimeInfo;
-  // We need to update column names and descriptor as we may have cached with
-  // different variable names
-  _runtimeInfo.setDescriptor(getDescriptor());
-  _runtimeInfo.setColumnNames(getVariableColumns());
-  _runtimeInfo.setTime(timer.msecs());
-  _runtimeInfo.setWasCached(true);
-  _runtimeInfo.addDetail("original_total_time",
-                         existingResult->_runtimeInfo.getTime());
-  _runtimeInfo.addDetail("original_operation_time",
-                         existingResult->_runtimeInfo.getOperationTime());
-  return existingResult->_resTable;
 }

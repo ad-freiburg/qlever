@@ -55,7 +55,7 @@ string QueryExecutionTree::asString(size_t indent) {
 void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
                                       std::shared_ptr<Operation> op) {
   _type = type;
-  _rootOperation = op;
+  _rootOperation = std::move(op);
   _asString = "";
   _sizeEstimate = std::numeric_limits<size_t>::max();
   // with setting the operation the initialization is done and we can try to
@@ -145,7 +145,7 @@ nlohmann::json QueryExecutionTree::writeResultAsJson(
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getCostEstimate() {
-  if (_cachedResult && _cachedResult->status() == ResultTable::FINISHED) {
+  if (_cachedResult) {
     // result is pinned in cache. Nothing to compute
     return 0;
   }
@@ -159,7 +159,7 @@ size_t QueryExecutionTree::getCostEstimate() {
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getSizeEstimate() {
   if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
-    if (_cachedResult && _cachedResult->status() == ResultTable::FINISHED) {
+    if (_cachedResult) {
       _sizeEstimate = _cachedResult->size();
     } else {
       // if we are in a unit test setting and there is no QueryExecutionContest
@@ -173,7 +173,7 @@ size_t QueryExecutionTree::getSizeEstimate() {
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::knownEmptyResult() {
-  if (_cachedResult && _cachedResult->status() == ResultTable::FINISHED) {
+  if (_cachedResult) {
     return _cachedResult->size() == 0;
   }
   return _rootOperation->knownEmptyResult();
@@ -190,9 +190,9 @@ void QueryExecutionTree::readFromCache() {
     return;
   }
   auto& cache = _qec->getQueryTreeCache();
-  std::shared_ptr<const CacheValue> res = cache[asString()];
+  std::shared_ptr<const CacheValue> res = cache.resultAt(asString());
   if (res) {
-    _cachedResult = cache[asString()]->_resTable;
+    _cachedResult = res->_resultTable;
   }
 }
 

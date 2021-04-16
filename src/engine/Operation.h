@@ -53,25 +53,6 @@ class Operation {
   vector<string> collectWarnings() const;
 
   /**
-   * Abort this Operation.  Removes the Operation's result from the cache so
-   * that it can be retried. The result must be owned meaning only the
-   * computing thread can abort an Operation. Retrying may succeed for example
-   * when memory pressure was lowered in the meantime.  When print is true the
-   * Operation is printed to the ERROR LOG
-   */
-  void abort(const shared_ptr<CacheValue>& cachedResult, bool print) {
-    const std::string opString = asString();
-    if (print) {
-      LOG(ERROR) << "Aborted Operation:" << endl;
-      LOG(ERROR) << opString << endl;
-    }
-    // Remove Operation from cache so we may retry it later. Anyone with a live
-    // pointer will be waiting and register the abort.
-    _executionContext->getQueryTreeCache().erase(opString);
-    cachedResult->_resTable->abort();
-  }
-
-  /**
    * @return A list of columns on which the result of this operation is sorted.
    */
   const vector<size_t>& getResultSortedOn() {
@@ -142,6 +123,38 @@ class Operation {
   //! Compute the result of the query-subtree rooted at this element..
   //! Computes both, an EntityList and a HitList.
   virtual void computeResult(ResultTable* result) = 0;
+
+  // Create and store the complete runtime Information for this operation.
+  // All data that was previously stored in the runtime information will be
+  // deleted.
+  virtual void createRuntimeInformation(
+      const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
+      size_t timeInMilliseconds) final {
+    // reset
+    _runtimeInfo = RuntimeInformation();
+    // the column names might differ between a cached result and this operation,
+    // so we have to take the local ones.
+    _runtimeInfo.setColumnNames(getVariableColumns());
+
+    _runtimeInfo.setCols(getResultWidth());
+    _runtimeInfo.setDescriptor(getDescriptor());
+
+    // Only the result that was actually computed (or read from cache) knows
+    // the correct information about the children computations.
+    _runtimeInfo.children() =
+        resultAndCacheStatus._resultPointer->_runtimeInfo.children();
+
+    _runtimeInfo.setTime(timeInMilliseconds);
+    _runtimeInfo.setRows(
+        resultAndCacheStatus._resultPointer->_resultTable->size());
+    _runtimeInfo.setWasCached(resultAndCacheStatus._wasCached);
+    _runtimeInfo.addDetail(
+        "original_total_time",
+        resultAndCacheStatus._resultPointer->_runtimeInfo.getTime());
+    _runtimeInfo.addDetail(
+        "original_operation_time",
+        resultAndCacheStatus._resultPointer->_runtimeInfo.getOperationTime());
+  }
 
   vector<size_t> _resultSortedColumns;
   RuntimeInformation _runtimeInfo;
