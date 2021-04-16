@@ -36,6 +36,9 @@ class ConcurrentSignal {
   }
 };
 
+// For the lifecycle of the tests, we have to know, when a computation has
+// started and the computation has to wait for an external signal to complete.
+// This can be achieved using two ConcurrentSignals.
 struct StartStopSignal {
   ConcurrentSignal _hasStartedSignal;
   ConcurrentSignal _mayFinishSignal;
@@ -43,30 +46,30 @@ struct StartStopSignal {
 
 template <typename T>
 auto waiting_function(T result, size_t milliseconds,
-                      StartStopSignal* f = nullptr) {
-  return [result, f, milliseconds]() {
-    if (f) {
+                      StartStopSignal* signal = nullptr) {
+  return [result, signal, milliseconds]() {
+    if (signal) {
       // signal that the operation has started
-      f->_hasStartedSignal.notify();
+      signal->_hasStartedSignal.notify();
     }
     std::this_thread::sleep_for(std::chrono::milliseconds{milliseconds});
-    if (f) {
+    if (signal) {
       // wait for the test case to allow finishing the operation
-      f->_mayFinishSignal.wait();
+      signal->_mayFinishSignal.wait();
     }
     return result;
   };
 }
 
 auto wait_and_throw_function(size_t milliseconds,
-                             StartStopSignal* f = nullptr) {
-  return [f, milliseconds]() -> std::string {
-    if (f) {
-      f->_hasStartedSignal.notify();
+                             StartStopSignal* signal = nullptr) {
+  return [signal, milliseconds]() -> std::string {
+    if (signal) {
+      signal->_hasStartedSignal.notify();
     }
     std::this_thread::sleep_for(std::chrono::milliseconds{milliseconds});
-    if (f) {
-      f->_mayFinishSignal.wait();
+    if (signal) {
+      signal->_mayFinishSignal.wait();
     }
     throw std::runtime_error("this is bound to fail");
   };

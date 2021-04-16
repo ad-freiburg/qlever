@@ -52,15 +52,20 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   timer.start();
   auto& cache = _executionContext->getQueryTreeCache();
   const string cacheKey = asString();
-  const bool pinChildIndexScanSizes = _executionContext->_pinResult && isRoot;
+  const bool pinFinalResultButNotSubtrees =
+      _executionContext->_pinResult && isRoot;
   const bool pinResult =
-      _executionContext->_pinSubtrees || pinChildIndexScanSizes;
+      _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
 
-  // When we pin a final result only, we also need to remember the sizes of all
-  // involved IndexScans with two bound columns. If we don't do this, the query
-  // planner will otherwise trigger their computation even if it is uneeded
-  // because the final result can be found in the cache.
-  if (pinChildIndexScanSizes) {
+  // When we pin the final result but no subtrees, we need to remember the sizes
+  // of all involved index scans that have only one free variable. Note that
+  // these index scans are executed already during query planning because they
+  // have to be executed anyway, for any query plan. If we don't remember these
+  // sizes here, future queries that take the result from the cache would redo
+  // these index scans. Note that we do not need to remember the multiplicity
+  // (and distinctness) because the multiplicity for an index scan with a single
+  // free variable is always 1.
+  if (pinFinalResultButNotSubtrees) {
     auto lock = getExecutionContext()->getPinnedSizes().wlock();
     forAllDescendants([&lock](QueryExecutionTree* child) {
       if (child->getType() == QueryExecutionTree::OperationType::SCAN &&
