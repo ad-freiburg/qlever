@@ -36,25 +36,38 @@ class ConcurrentSignal {
   }
 };
 
+struct StartStopSignal {
+  ConcurrentSignal _hasStartedSignal;
+  ConcurrentSignal _mayFinishSignal;
+};
+
 template <typename T>
 auto waiting_function(T result, size_t milliseconds,
-                      ConcurrentSignal* f = nullptr) {
-  return [result, milliseconds, f]() {
+                      StartStopSignal* f = nullptr) {
+  return [result, f, milliseconds]() {
     if (f) {
-      f->notify();
+      // signal that the operation has started
+      f->_hasStartedSignal.notify();
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+    std::this_thread::sleep_for(std::chrono::milliseconds{milliseconds});
+    if (f) {
+      // wait for the test case to allow finishing the operation
+      f->_mayFinishSignal.wait();
+    }
     return result;
   };
 }
 
 auto wait_and_throw_function(size_t milliseconds,
-                             ConcurrentSignal* f = nullptr) {
+                             StartStopSignal* f = nullptr) {
   return [f, milliseconds]() -> std::string {
     if (f) {
-      f->notify();
+      f->_hasStartedSignal.notify();
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
+    std::this_thread::sleep_for(std::chrono::milliseconds{milliseconds});
+    if (f) {
+      f->_mayFinishSignal.wait();
+    }
     throw std::runtime_error("this is bound to fail");
   };
 }
@@ -163,18 +176,19 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
 
 TEST(ConcurrentCache, concurrentComputation) {
   auto a = SimpleConcurrentLruCache(3ul);
-  ConcurrentSignal signal;
+  StartStopSignal signal;
   auto compute = [&a, &signal]() {
     return a.computeOnce(3, waiting_function("3"s, 100, &signal));
   };
   auto resultFuture = std::async(std::launch::async, compute);
-  signal.wait();
+  signal._hasStartedSignal.wait();
   // now the background computation is ongoing and registered as
   // "in progress"
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
 
+  signal._mayFinishSignal.notify();
   // this call waits for the background task to compute, and then fetches the
   // result. After this call completes, nothing is in progress and the result
   // is cached.
@@ -190,17 +204,19 @@ TEST(ConcurrentCache, concurrentComputation) {
 
 TEST(ConcurrentCache, concurrentPinnedComputation) {
   auto a = SimpleConcurrentLruCache(3ul);
-  ConcurrentSignal signal;
+  StartStopSignal signal;
   auto compute = [&a, &signal]() {
     return a.computeOncePinned(3, waiting_function("3"s, 100, &signal));
   };
   auto resultFuture = std::async(std::launch::async, compute);
-  signal.wait();
+  signal._hasStartedSignal.wait();
   // now the background computation is ongoing and registered as
   // "in progress"
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
+
+  signal._mayFinishSignal.notify();
 
   // this call waits for the background task to compute, and then fetches the
   // result. After this call completes, nothing is in progress and the result
@@ -218,17 +234,19 @@ TEST(ConcurrentCache, concurrentPinnedComputation) {
 
 TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
   auto a = SimpleConcurrentLruCache(3ul);
-  ConcurrentSignal signal;
+  StartStopSignal signal;
   auto compute = [&a, &signal]() {
     return a.computeOnce(3, waiting_function("3"s, 100, &signal));
   };
   auto resultFuture = std::async(std::launch::async, compute);
-  signal.wait();
+  signal._hasStartedSignal.wait();
   // now the background computation is ongoing and registered as
   // "in progress"
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
+
+  signal._mayFinishSignal.notify();
 
   // this call waits for the background task to compute, and then fetches the
   // result. After this call completes, nothing is in progress and the result
@@ -247,7 +265,7 @@ TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
 TEST(ConcurrentCache, abort) {
   auto a = SimpleConcurrentLruCache(3ul);
   std::atomic<bool> flag = false;
-  ConcurrentSignal signal;
+  StartStopSignal signal;
   auto compute = [&a, &signal]() {
     return a.computeOnce(3, waiting_function("3"s, 100, &signal));
   };
@@ -255,11 +273,13 @@ TEST(ConcurrentCache, abort) {
     return a.computeOnce(3, wait_and_throw_function(100, &signal));
   };
   auto fut = std::async(std::launch::async, computeWithError);
-  signal.wait();
+  signal._hasStartedSignal.wait();
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
+
+  signal._mayFinishSignal.notify();
   ASSERT_THROW(compute(), ad_utility::WaitedForResultWhichThenFailedException);
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
@@ -269,7 +289,7 @@ TEST(ConcurrentCache, abort) {
 
 TEST(ConcurrentCache, abortPinned) {
   auto a = SimpleConcurrentLruCache(3ul);
-  ConcurrentSignal signal;
+  StartStopSignal signal;
   auto compute = [&]() {
     return a.computeOncePinned(3, waiting_function("3"s, 100, &signal));
   };
@@ -277,11 +297,12 @@ TEST(ConcurrentCache, abortPinned) {
     return a.computeOncePinned(3, wait_and_throw_function(100, &signal));
   };
   auto fut = std::async(std::launch::async, computeWithError);
-  signal.wait();
+  signal._hasStartedSignal.wait();
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
   ASSERT_EQ(1ul, a.getStorage().wlock()->_inProgress.size());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.contains(3));
+  signal._mayFinishSignal.notify();
   ASSERT_THROW(compute(), ad_utility::WaitedForResultWhichThenFailedException);
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(0ul, a.numPinnedEntries());
