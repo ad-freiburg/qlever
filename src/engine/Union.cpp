@@ -6,17 +6,15 @@
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
 
-Union::Union(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
-             std::shared_ptr<QueryExecutionTree> t2)
+Union::Union(QueryExecutionContext* qec,
+             const std::shared_ptr<QueryExecutionTree>& t1,
+             const std::shared_ptr<QueryExecutionTree>& t2)
     : Operation(qec) {
+  AD_CHECK(t1 && t2);
   _subtrees[0] = t1;
   _subtrees[1] = t2;
 
   // compute the column origins
-  if (!t1 || !t2) {
-    // we are in the test mode, this constructor doesn't have to be useful then
-    return;
-  }
   ad_utility::HashMap<string, size_t> variableColumns = getVariableColumns();
   _columnOrigins.resize(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
   const auto& t1VarCols = t1->getVariableColumns();
@@ -168,9 +166,26 @@ void Union::computeUnion(
 
   res.reserve(left.size() + right.size());
 
+  // TODO<joka921> insert global constant here
   const size_t chunkSize =
-      100000;  // after this many elements, checkAfterChunkSize for timeouts
+      100000 / res.cols();  // after this many elements, check for timeouts
   auto checkAfterChunkSize = checkTimeoutAfterNCallsFactory(chunkSize);
+
+  // Append the contents of inputTable to the result. This requires previous
+  // checks that the columns are compatible. After copying chunkSize elements,
+  // we check for a timeout.
+  auto appendToResultChunked = [&res, chunkSize, this](const auto& inputTable) {
+    // always copy chunkSize results at once and then check for a timeout
+    size_t numChunks = inputTable.size() / chunkSize;
+    for (size_t i = 0; i < numChunks; ++i) {
+      res.insert(res.end(), inputTable.begin() + i * chunkSize,
+                 inputTable.begin() + (i + 1) * chunkSize);
+      checkTimeout();
+    }
+    res.insert(res.end(), inputTable.begin() + numChunks * chunkSize,
+               inputTable.end());
+  };
+
   if (left.size() > 0) {
     bool columnsMatch = left.cols() == columnOrigins.size();
     // checkAfterChunkSize if the order of the columns matches
@@ -190,14 +205,7 @@ void Union::computeUnion(
       // columns.
       AD_CHECK(LEFT_WIDTH == OUT_WIDTH);
       if constexpr (LEFT_WIDTH == OUT_WIDTH) {
-        // always copy chunkSize results at once and then check for a timeout
-        size_t numChunks = left.size() / chunkSize;
-        for (size_t i = 0; i < numChunks; ++i) {
-          res.insert(res.end(), left.begin() + i * chunkSize,
-                     left.begin() + (i + 1) * chunkSize);
-          checkTimeout();
-        }
-        res.insert(res.end(), left.begin() + numChunks * chunkSize, left.end());
+        appendToResultChunked(left);
       }
     } else {
       for (const auto& l : left) {
@@ -228,16 +236,9 @@ void Union::computeUnion(
     if (columnsMatch) {
       // The columns of the right subtree and the result match, we can
       // just copy the entries.
+      AD_CHECK(RIGHT_WIDTH == OUT_WIDTH);
       if constexpr (RIGHT_WIDTH == OUT_WIDTH) {
-        // always copy chunkSize results at once and then check for a timeout
-        size_t numChunks = right.size() / chunkSize;
-        for (size_t i = 0; i < numChunks; ++i) {
-          res.insert(res.end(), right.begin() + i * chunkSize,
-                     right.begin() + (i + 1) * chunkSize);
-          checkTimeout();
-        }
-        res.insert(res.end(), right.begin() + numChunks * chunkSize,
-                   right.end());
+        appendToResultChunked(right);
       }
     } else {
       for (const auto& r : right) {

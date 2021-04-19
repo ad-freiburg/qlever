@@ -108,10 +108,11 @@ class Operation {
   // trigger computation.
   shared_ptr<const ResultTable> getResult(bool isRoot = false);
 
-  // set a global timeout timer for all child operations.
-  // As soon as this runs out, the complete tree will fail.
+  // Use the same timeout timer for all children of an operation (= query plan
+  // rooted at that operation). As soon as one child times out, the whole
+  // operation times out.
   void recursivelySetTimeoutTimer(
-      ad_utility::SharedConcurrentTimeoutTimer timer);
+      const ad_utility::SharedConcurrentTimeoutTimer& timer);
 
  protected:
   QueryExecutionContext* getExecutionContext() const {
@@ -143,29 +144,25 @@ class Operation {
     return _warnings;
   }
 
-  // check if we still have time left on the clock.
-  // if not, throw a TimeoutException
+  // Check if there is still time left and throw a TimeoutException otherwise.
+  // This will be called at strategic places on code that potentially can take a
+  // (too) long time.
   void checkTimeout() const;
 
-  // handles the timeout of this operation
+  // Handles the timeout of this operation.
   ad_utility::SharedConcurrentTimeoutTimer _timeoutTimer =
       std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
           ad_utility::TimeoutTimer::unlimited());
 
-  // Returns a lambda with the following behavior: The lambda counts, how often
-  // it has been called. When passing a size_t `numCalls` to the lambda call,
-  // this counter will be increased by `numCalls`. If the counter exceeds
-  // `numCallsBeforeCheck` the lambda resets the counter and checks whether this
-  // instance of the Operation class has timed out. On timeout a
-  // TimeoutException is thrown. For all other calls of the lambda, nothing
-  // happens (except for the counting). The lambdas returned by this function
-  // are useful for efficient timeout checking in tight loops, because the
-  // actual check for a timeout is rather expensive (it involves locking a
-  // concurrent resource).
+  // Returns a lambda with the following behavior: For every call, increase the
+  // internal counter i by countIncrease. If the counter exceeds countMax, check
+  // for timeout and reset the counter to zero. That way, the expensive timeout
+  // check is called only rarely. Note that we sometimes need to "simulate"
+  // several operations at a time, hence the countIncrease.
   auto checkTimeoutAfterNCallsFactory(size_t numCallsBeforeCheck) const {
     return [numCallsBeforeCheck, i = 0ull,
-            this](size_t countMultiple = 1) mutable {
-      i += countMultiple;
+            this](size_t countIncrease = 1) mutable {
+      i += countIncrease;
       if (i >= numCallsBeforeCheck) {
         _timeoutTimer->wlock()->checkTimeoutAndThrow("Timeout in "s +
                                                      getDescriptor());

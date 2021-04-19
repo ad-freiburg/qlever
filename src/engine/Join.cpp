@@ -17,18 +17,16 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, size_t t1JoinCol,
            size_t t2JoinCol, bool keepJoinColumn)
     : Operation(qec) {
+  AD_CHECK(t1 && t2);
   // Make sure subtrees are ordered so that identical queries can be identified.
-  if (t1 && t2 && t1.get()->asString() < t2.get()->asString()) {
-    _left = t1;
-    _leftJoinCol = t1JoinCol;
-    _right = t2;
-    _rightJoinCol = t2JoinCol;
-  } else {
-    _left = t2;
-    _leftJoinCol = t2JoinCol;
-    _right = t1;
-    _rightJoinCol = t1JoinCol;
+  if (t1->asString() > t2->asString()) {
+    std::swap(t1, t2);
+    std::swap(t1JoinCol, t2JoinCol);
   }
+  _left = std::move(t1);
+  _leftJoinCol = t1JoinCol;
+  _right = std::move(t2);
+  _rightJoinCol = t2JoinCol;
   _keepJoinColumn = keepJoinColumn;
   _sizeEstimate = 0;
   _sizeEstimateComputed = false;

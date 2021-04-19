@@ -46,14 +46,13 @@ vector<string> Operation::collectWarnings() const {
 
 // ________________________________________________________________________
 void Operation::recursivelySetTimeoutTimer(
-    ad_utility::SharedConcurrentTimeoutTimer timer) {
+    const ad_utility::SharedConcurrentTimeoutTimer& timer) {
+  _timeoutTimer = timer;
   for (auto child : getChildren()) {
-    if (!child) {
-      continue;
+    if (child) {
+      child->recursivelySetTimeoutTimer(timer);
     }
-    child->recursivelySetTimeoutTimer(timer);
   }
-  _timeoutTimer = std::move(timer);
 }
 
 // Get the result for the subtree rooted at this element.
@@ -92,13 +91,18 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     // Passing the raw pointer here is ok as the result shared_ptr remains
     // in scope
     try {
-      if (_timeoutTimer->wlock()->isTimeout()) {
-        throw ad_utility::TimeoutException("uncaught Timeout before " +
-                                           getDescriptor());
+      if (_timeoutTimer->wlock()->hasTimedOut()) {
+        throw ad_utility::TimeoutException(
+            "Timeout in operation with no or insufficient timeout "
+            "functionality, before " +
+            getDescriptor());
       }
       computeResult(newResult->_resTable.get());
-      if (_timeoutTimer->wlock()->isTimeout()) {
-        throw ad_utility::TimeoutException("Timeout in " + getDescriptor());
+      if (_timeoutTimer->wlock()->hasTimedOut()) {
+        throw ad_utility::TimeoutException(
+            "Timeout in " + getDescriptor() +
+            ". This timeout was not caught inside the actual computation, "
+            "which indicates insufficient timeout functionality.");
       }
     } catch (const ad_semsearch::AbortException& e) {
       // A child Operation was aborted, abort this Operation
@@ -160,7 +164,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
 
 // ______________________________________________________________________
 void Operation::checkTimeout() const {
-  if (_timeoutTimer->wlock()->isTimeout()) {
+  if (_timeoutTimer->wlock()->hasTimedOut()) {
     throw ad_utility::TimeoutException("Timeout in " + getDescriptor());
   }
 }

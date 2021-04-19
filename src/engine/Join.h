@@ -18,6 +18,13 @@ class Join : public Operation {
        std::shared_ptr<QueryExecutionTree> t2, size_t t1JoinCol,
        size_t t2JoinCol, bool keepJoinColumn = true);
 
+  // A very explicit constructor, which initializes an invalid join object (it
+  // has no subtrees, which violates class invariants). These invalid Join
+  // objects can be used for unit tests that only test member functions which
+  // don't access the subtrees.
+  struct InvalidOnlyForTestingJoinTag {};
+  explicit Join(InvalidOnlyForTestingJoinTag) {}
+
   virtual string asString(size_t indent = 0) const override;
 
   virtual string getDescriptor() const override;

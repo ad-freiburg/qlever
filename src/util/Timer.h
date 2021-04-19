@@ -4,6 +4,8 @@
 
 #include <sys/time.h>
 #include <sys/types.h>
+#include <iomanip>
+#include <sstream>
 #include "Synchronized.h"
 
 // Björn 01Jun11: Copied this class from the CompleteSearch
@@ -128,28 +130,33 @@ class TimeoutTimer : public Timer {
 
   /// Did this timer already timeout
   /// Can't be const because of the internals of the Timer class.
-  bool isTimeout() {
+  bool hasTimedOut() {
     if (_isUnlimited) {
       return false;
     }
-    auto prevRunning = isRunning();
+    // NOTE: we cannot get the current timer value without stopping the timer.
+    auto isRunningSnapshot = isRunning();
     stop();
-    auto res = usecs() > _timeLimitInMicroseconds;
-    if (prevRunning) {
+    auto hasTimedOut = usecs() > _timeLimitInMicroseconds;
+    if (isRunningSnapshot) {
       cont();
     }
-    return res;
+    return hasTimedOut;
   }
 
   // Check if this timer has timed out. If the timer has timed out, throws a
   // TimeoutException. Else, nothing happens.
   void checkTimeoutAndThrow(std::string additionalMessage = {}) {
-    if (isTimeout()) {
+    if (hasTimedOut()) {
       double seconds =
           static_cast<double>(_timeLimitInMicroseconds) / (1000 * 1000);
+      std::stringstream numberStream;
+      // Seconds with three digits after the decimal point.
+      // TODO<C++20> : Use std::format for formatting, it is much more readable.
+      numberStream << std::setprecision(3) << std::fixed << seconds;
       throw TimeoutException(additionalMessage +
                              "A Timeout occured. The time limit was "s +
-                             std::to_string(seconds) + "seconds"s);
+                             numberStream.str() + "seconds"s);
     }
   }
 

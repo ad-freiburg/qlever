@@ -33,7 +33,7 @@ TEST(EngineTest, joinTest) {
   int lwidth = a.cols();
   int rwidth = b.cols();
   int reswidth = a.cols() + b.cols() - 1;
-  Join J{nullptr, nullptr, nullptr, 0, 0, false};
+  Join J{Join::InvalidOnlyForTestingJoinTag{}};
   CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, a, 0, b, 0, &res);
 
   ASSERT_EQ(1u, res(0, 0));

@@ -393,7 +393,7 @@ void TransitivePath::computeTransitivePathLeftBound(
       size_t num_new = last_result_end - last_result_begin;
       size_t res_row = res.size();
       res.resize(res.size() + num_new);
-      checkTimeoutAfterNCalls(num_new);
+      checkTimeoutAfterNCalls(num_new * resWidth);
       for (size_t j = 0; j < num_new; j++) {
         for (size_t c = 0; c < resWidth; c++) {
           res(res_row + j, c) = res(last_result_begin + j, c);
@@ -533,7 +533,7 @@ void TransitivePath::computeTransitivePathRightBound(
           res(res_row + j, c) = res(last_result_begin + j, c);
         }
       }
-      checkTimeoutAfterNCalls(num_new);
+      checkTimeoutAfterNCalls(num_new * resWidth);
       continue;
     }
     last_elem = right(i, rightSideCol);

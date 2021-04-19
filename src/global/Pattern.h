@@ -29,9 +29,8 @@ struct Pattern {
   using ref = value_type&;
   using const_ref = const value_type&;
 
-  value_type& operator[](const size_t pos) { return _data[pos]; }
-
-  const Id& operator[](const size_t pos) const { return _data[pos]; }
+  ref operator[](const size_t pos) { return _data[pos]; }
+  const_ref operator[](const size_t pos) const { return _data[pos]; }
 
   bool operator==(const Pattern& other) const {
     if (size() != other.size()) {

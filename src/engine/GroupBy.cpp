@@ -174,10 +174,8 @@ struct resizeIfVec<vector<C>, C> {
  *                        its already allocated storage.
  */
 template <int IN_WIDTH, int OUT_WIDTH>
-
 void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
                            size_t blockEnd, const IdTableView<IN_WIDTH>& input,
-
                            const vector<ResultTable::ResultType>& inputTypes,
                            IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
                            const ResultTable* inTable, ResultTable* outTable,
@@ -642,7 +640,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   size_t blockEnd = 0;
   auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory(32000);
   for (size_t pos = 1; pos < input.size(); pos++) {
-    checkTimeoutAfterNCalls();
+    checkTimeoutAfterNCalls(currentGroupBlock.size());
     bool rowMatchesCurrentBlock = true;
     for (size_t i = 0; i < currentGroupBlock.size(); i++) {
       if (input(pos, currentGroupBlock[i].first) !=
@@ -787,7 +785,7 @@ void GroupBy::computeResult(ResultTable* result) {
   int inWidth = subresult->_data.cols();
   int outWidth = result->_data.cols();
 
-  auto cleanup = [&]() {
+  auto cleanup = [&aggregates]() {
     // Free the user data used by GROUP_CONCAT aggregates.
     for (Aggregate& a : aggregates) {
       if (a._type == ParsedQuery::AggregateType::GROUP_CONCAT) {
@@ -799,10 +797,10 @@ void GroupBy::computeResult(ResultTable* result) {
     CALL_FIXED_SIZE_2(inWidth, outWidth, doGroupBy, subresult->_data,
                       inputResultTypes, groupByCols, aggregates, &result->_data,
                       subresult.get(), result, getIndex());
+    cleanup();
+    LOG(DEBUG) << "GroupBy result computation done." << std::endl;
   } catch (...) {
     cleanup();
     throw;
   }
-  cleanup();
-  LOG(DEBUG) << "GroupBy result computation done." << std::endl;
 }
