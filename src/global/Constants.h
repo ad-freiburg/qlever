@@ -102,6 +102,12 @@ static constexpr uint8_t NUM_COMPRESSION_PREFIXES = 126;
 static const uint8_t NO_PREFIX_CHAR =
     MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES;
 
+// After performing this many "basic operations", we check for timeouts
+static const size_t NUM_OPERATIONS_BETWEEN_TIMEOUT_CHECKS = 32000;
+// How many "basic operations" (see above) do we assume for a hashset or hashmap
+// operation
+static const size_t NUM_OPERATIONS_HASHSET_LOOKUP = 32;
+
 #ifdef _PARALLEL_SORT
 static constexpr bool USE_PARALLEL_SORT = true;
 #include <parallel/algorithm>

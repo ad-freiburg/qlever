@@ -159,7 +159,9 @@ class Operation {
   // for timeout and reset the counter to zero. That way, the expensive timeout
   // check is called only rarely. Note that we sometimes need to "simulate"
   // several operations at a time, hence the countIncrease.
-  auto checkTimeoutAfterNCallsFactory(size_t numCallsBeforeCheck) const {
+  auto checkTimeoutAfterNCallsFactory(
+      size_t numCallsBeforeCheck =
+          NUM_OPERATIONS_BETWEEN_TIMEOUT_CHECKS) const {
     return [numCallsBeforeCheck, i = 0ull,
             this](size_t countIncrease = 1) mutable {
       i += countIncrease;

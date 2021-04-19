@@ -181,14 +181,17 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
                            const ResultTable* inTable, ResultTable* outTable,
                            const Index& index,
                            ad_utility::HashSet<size_t>& distinctHashSet) const {
-  auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory(32000);
+  auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory();
+  auto checkTimeoutHashSet = [&checkTimeoutAfterNCalls]() {
+    checkTimeoutAfterNCalls(NUM_OPERATIONS_HASHSET_LOOKUP);
+  };
   switch (a._type) {
     case ParsedQuery::AggregateType::AVG: {
       float res = 0;
       if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
-            checkTimeoutAfterNCalls();
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -207,7 +210,7 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
         float tmpF;
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
-            checkTimeoutAfterNCalls();
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -229,7 +232,7 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       } else {
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
-            checkTimeoutAfterNCalls();
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -272,7 +275,7 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       if (a._distinct) {
         size_t count = 0;
         for (size_t i = blockStart; i <= blockEnd; i++) {
-          checkTimeoutAfterNCalls();
+          checkTimeoutHashSet();
           const auto it = distinctHashSet.find(input(i, a._inCol));
           if (it == distinctHashSet.end()) {
             count++;
@@ -291,7 +294,7 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
         if (a._distinct) {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-            checkTimeoutAfterNCalls();
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -314,7 +317,7 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
         float f;
         if (a._distinct) {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-            checkTimeoutAfterNCalls();
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -340,7 +343,7 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
         if (a._distinct) {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-            checkTimeoutAfterNCalls();
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -362,7 +365,7 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::LOCAL_VOCAB) {
         if (a._distinct) {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-            checkTimeoutAfterNCalls();
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -392,7 +395,7 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       } else {
         if (a._distinct) {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
-            checkTimeoutAfterNCalls();
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -515,6 +518,7 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -532,6 +536,7 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
         float tmpF;
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -552,6 +557,7 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       } else {
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
