@@ -150,6 +150,19 @@ size_t TransitivePath::getSizeEstimate() {
   if (_rightSideTree != nullptr) {
     return _rightSideTree->getSizeEstimate();
   }
+  // Set costs to something very large, so that we never compute the complete
+  // transitive hull (unless the variables on both sides are not bound in any
+  // other way, so that the only possible query plan is to compute the complete
+  // transitive hull).
+  //
+  // NOTE: _subtree->getSizeEstimate() is the number of triples of the
+  // predicate, for which the transitive hull operator (+) is specified. On
+  // Wikidata, the predicate with the largest blowup when taking the
+  // transitive hull is wdt:P2789 (connects with). The blowup is then from 90K
+  // (without +) to 110M (with +), so about 1000 times larger.
+  if (_leftIsVar && _rightIsVar) {
+    return _subtree->getSizeEstimate() * 10000;
+  }
   // TODO(Florian): this is not necessarily a good estimator
   if (_leftIsVar) {
     return _subtree->getSizeEstimate() / _subtree->getMultiplicity(_leftSubCol);
