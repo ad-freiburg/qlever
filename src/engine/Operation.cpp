@@ -80,6 +80,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     auto computeLambda = [this] {
       CacheValue val(getExecutionContext()->getAllocator());
       computeResult(val._resultTable.get());
+      val._runtimeInfo = getRuntimeInfo();
       return val;
     };
 
