@@ -78,12 +78,9 @@ std::string TransitivePath::getDescriptor() const {
   if (_leftIsVar) {
     os << _leftColName;
   } else {
-    auto optional = getIndex().idToOptionalString(_leftValue);
-    if (optional) {
-      os << optional.value();
-    } else {
-      os << "#" << _leftValue;
-    }
+    os << getIndex()
+              .idToOptionalString(_leftValue)
+              .value_or("#" + std::to_string(_leftValue));
   }
   // The predicate.
   auto scanOperation =
@@ -97,12 +94,9 @@ std::string TransitivePath::getDescriptor() const {
   if (_rightIsVar) {
     os << _rightColName;
   } else {
-    auto optional = getIndex().idToOptionalString(_rightValue);
-    if (optional) {
-      os << optional.value();
-    } else {
-      os << "#" << _rightValue;
-    }
+    os << getIndex()
+              .idToOptionalString(_rightValue)
+              .value_or("#" + std::to_string(_rightValue));
   }
   return os.str();
 }
