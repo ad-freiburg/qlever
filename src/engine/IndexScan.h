@@ -43,6 +43,7 @@ class IndexScan : public Operation {
   void setSubject(const string& subject) { _subject = subject; }
 
   void setPredicate(const string& predicate) { _predicate = predicate; }
+  const string& getPredicate() const { return _predicate; }
 
   void setObject(const string& object) {
     if (!ad_utility::isXsdValue(object)) {

@@ -8,6 +8,7 @@
 
 #include "../util/Exception.h"
 #include "CallFixedSize.h"
+#include "IndexScan.h"
 
 // _____________________________________________________________________________
 TransitivePath::TransitivePath(
@@ -68,21 +69,41 @@ std::string TransitivePath::asString(size_t indent) const {
 // _____________________________________________________________________________
 std::string TransitivePath::getDescriptor() const {
   std::ostringstream os;
-  if (_leftSideTree != nullptr) {
-    os << "TransitivePath left is subtree, rightCol " << _rightSubCol;
-  } else if (_rightSideTree != nullptr) {
-    os << "TransitivePath leftCol " << _leftSubCol << " right is subtree";
+  os << "TransitivePath ";
+  // If not full transitive hull, show interval as [min, max].
+  if (_minDist > 1 || _maxDist < std::numeric_limits<size_t>::max()) {
+    os << "[" << _minDist << ", " << _maxDist << "] ";
+  }
+  // Left variable or entity name.
+  if (_leftIsVar) {
+    os << _leftColName;
   } else {
-    os << "TransitivePath leftCol " << _leftSubCol << " rightCol "
-       << _rightSubCol;
+    auto optional = getIndex().idToOptionalString(_leftValue);
+    if (optional) {
+      os << optional.value();
+    } else {
+      os << "#" << _leftValue;
+    }
   }
-  if (!_leftIsVar) {
-    os << " leftValue " << _leftValue;
+  // The predicate.
+  auto scanOperation =
+      std::dynamic_pointer_cast<IndexScan>(_subtree->getRootOperation());
+  if (scanOperation != nullptr) {
+    os << " " << scanOperation->getPredicate() << " ";
+  } else {
+    os << " <???> ";
   }
-  if (!_rightIsVar) {
-    os << " rightValue " << _rightValue;
+  // Right variable or entity name.
+  if (_rightIsVar) {
+    os << _rightColName;
+  } else {
+    auto optional = getIndex().idToOptionalString(_rightValue);
+    if (optional) {
+      os << optional.value();
+    } else {
+      os << "#" << _rightValue;
+    }
   }
-  os << " minDist " << _minDist << " maxDist " << _maxDist << "\n";
   return os.str();
 }
 
