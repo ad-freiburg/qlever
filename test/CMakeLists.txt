@@ -149,3 +149,8 @@ target_link_libraries(BindTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
 add_executable(LimitedAllocatorTest LimitedAllocatorTest.cpp)
 add_test(LimitedAllocatorTest LimitedAllocatorTest)
 target_link_libraries(LimitedAllocatorTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(SortPerformanceEstimatorTest SortPerformanceEstimatorTest.cpp)
+add_test(SortPerformanceEstimatorTest SortPerformanceEstimatorTest)
+target_link_libraries(SortPerformanceEstimatorTest gtest_main SortPerformanceEstimator ${CMAKE_THREAD_LIBS_INIT})
+

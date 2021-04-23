@@ -117,7 +117,10 @@ class Engine {
     LOG(DEBUG) << "Sort done.\n";
   }
 
-  template <int WIDTH, typename C>
+  template <int WIDTH, typename C,
+            typename = std::enable_if_t<
+                std::is_invocable_v<C, typename IdTableStatic<WIDTH>::row_type,
+                                    typename IdTableStatic<WIDTH>::row_type>>>
   static void sort(IdTable* tab, C comp) {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
