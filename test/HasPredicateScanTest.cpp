@@ -26,7 +26,6 @@ class DummyOperation : public Operation {
     for (size_t i = 0; i < 10; i++) {
       result->_data.push_back({10 - i, 2 * i});
     }
-    result->finish();
   }
 
   string asString(size_t indent = 0) const override {
@@ -229,7 +228,7 @@ TEST(HasPredicateScan, subtreeS) {
 
   Index index;
   Engine engine;
-  SubtreeCache cache(NOF_SUBTREES_TO_CACHE);
+  ConcurrentLruCache cache(DEFAULT_CACHE_MAX_NUM_ENTRIES);
   PinnedSizes pinnedSizes;
   QueryExecutionContext ctx(index, engine, &cache, &pinnedSizes, allocator());
 

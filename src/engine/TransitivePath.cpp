@@ -8,6 +8,7 @@
 
 #include "../util/Exception.h"
 #include "CallFixedSize.h"
+#include "IndexScan.h"
 
 // _____________________________________________________________________________
 TransitivePath::TransitivePath(
@@ -68,21 +69,35 @@ std::string TransitivePath::asString(size_t indent) const {
 // _____________________________________________________________________________
 std::string TransitivePath::getDescriptor() const {
   std::ostringstream os;
-  if (_leftSideTree != nullptr) {
-    os << "TransitivePath left is subtree, rightCol " << _rightSubCol;
-  } else if (_rightSideTree != nullptr) {
-    os << "TransitivePath leftCol " << _leftSubCol << " right is subtree";
+  os << "TransitivePath ";
+  // If not full transitive hull, show interval as [min, max].
+  if (_minDist > 1 || _maxDist < std::numeric_limits<size_t>::max()) {
+    os << "[" << _minDist << ", " << _maxDist << "] ";
+  }
+  // Left variable or entity name.
+  if (_leftIsVar) {
+    os << _leftColName;
   } else {
-    os << "TransitivePath leftCol " << _leftSubCol << " rightCol "
-       << _rightSubCol;
+    os << getIndex()
+              .idToOptionalString(_leftValue)
+              .value_or("#" + std::to_string(_leftValue));
   }
-  if (!_leftIsVar) {
-    os << " leftValue " << _leftValue;
+  // The predicate.
+  auto scanOperation =
+      std::dynamic_pointer_cast<IndexScan>(_subtree->getRootOperation());
+  if (scanOperation != nullptr) {
+    os << " " << scanOperation->getPredicate() << " ";
+  } else {
+    os << " <???> ";
   }
-  if (!_rightIsVar) {
-    os << " rightValue " << _rightValue;
+  // Right variable or entity name.
+  if (_rightIsVar) {
+    os << _rightColName;
+  } else {
+    os << getIndex()
+              .idToOptionalString(_rightValue)
+              .value_or("#" + std::to_string(_rightValue));
   }
-  os << " minDist " << _minDist << " maxDist " << _maxDist << "\n";
   return os.str();
 }
 
@@ -149,6 +164,19 @@ size_t TransitivePath::getSizeEstimate() {
   }
   if (_rightSideTree != nullptr) {
     return _rightSideTree->getSizeEstimate();
+  }
+  // Set costs to something very large, so that we never compute the complete
+  // transitive hull (unless the variables on both sides are not bound in any
+  // other way, so that the only possible query plan is to compute the complete
+  // transitive hull).
+  //
+  // NOTE: _subtree->getSizeEstimate() is the number of triples of the
+  // predicate, for which the transitive hull operator (+) is specified. On
+  // Wikidata, the predicate with the largest blowup when taking the
+  // transitive hull is wdt:P2789 (connects with). The blowup is then from 90K
+  // (without +) to 110M (with +), so about 1000 times larger.
+  if (_leftIsVar && _rightIsVar) {
+    return _subtree->getSizeEstimate() * 10000;
   }
   // TODO(Florian): this is not necessarily a good estimator
   if (_leftIsVar) {

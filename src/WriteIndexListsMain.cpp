@@ -8,11 +8,13 @@
 #include <getopt.h>
 #include <libgen.h>
 #include <stdlib.h>
+
 #include <iomanip>
 #include <iostream>
 #include <string>
 
 #include "engine/QueryPlanner.h"
+#include "global/Constants.h"
 #include "parser/SparqlParser.h"
 #include "util/ReadableNumberFact.h"
 #include "util/Timer.h"
@@ -87,7 +89,7 @@ int main(int argc, char** argv) {
     index.dumpAsciiLists(lists, decodeGapsAndFrequency);
 
     Engine engine;
-    SubtreeCache cache(NOF_SUBTREES_TO_CACHE);
+    ConcurrentLruCache cache(DEFAULT_CACHE_MAX_NUM_ENTRIES);
     PinnedSizes pinnedSizes;
     ad_utility::AllocatorWithLimit<Id> allocator{
         ad_utility::makeAllocationMemoryLeftThreadsafeObject(

@@ -141,6 +141,12 @@ class RuntimeInformation {
 
   void addChild(const RuntimeInformation& r) { _children.push_back(r); }
 
+  // direct access to the children
+  std::vector<RuntimeInformation>& children() { return _children; }
+  [[nodiscard]] const std::vector<RuntimeInformation>& children() const {
+    return _children;
+  }
+
   template <typename T>
   void addDetail(const std::string& key, const T& value) {
     _details[key] = value;
