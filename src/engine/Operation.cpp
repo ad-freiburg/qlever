@@ -102,6 +102,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
             "Timeout in " + getDescriptor() +
             ". This timeout was not caught inside the actual computation, "
             "which indicates insufficient timeout functionality.");
+      }
       val._runtimeInfo = getRuntimeInfo();
       return val;
     };

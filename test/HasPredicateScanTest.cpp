@@ -11,8 +11,7 @@
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(100 * 1ul << 20)};
   return a;
 }
 // used to test HasRelationScan with a subtree
