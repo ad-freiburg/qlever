@@ -34,4 +34,4 @@ add_library(engine
         IdTable.h
         ../util/Random.h)
 
-target_link_libraries(engine index parser absl::flat_hash_set)
+target_link_libraries(engine index parser SortPerformanceEstimator absl::flat_hash_set)

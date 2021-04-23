@@ -52,17 +52,20 @@ void Sort::computeResult(ResultTable* result) {
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
-  // TODO<joka921> proper timeout and better estimate
+  // TODO<joka921> proper timeout for sorting operations
   double remainingSecs =
       static_cast<double>(_timeoutTimer->wlock()->remainingMicroseconds()) /
       1000000;
-  if (static_cast<double>(subRes->size()) / 50000000 > remainingSecs) {
-    // assume that we can sort at most 50M elements per second. This is a rather
-    // generous upper bound to make sure we do not exceed our timeout more than
-    // an order of magnitude b.c of sorts
+  if (getExecutionContext()
+              ->getSortPerformanceEstimator()
+              .EstimateSortTimeInSeconds(subRes->size(), subRes->width()) /
+          SORT_ESTIMATE_CANCELLATION_FACTOR >
+      remainingSecs) {
+    // The estimated time for this sort is much larger than the actually
+    // remaining time, cancel this operation
     throw ad_utility::TimeoutException(
         "Sort operation was canceled, because time estimate exceeded "
-        "remaining time by orders of magnitued");
+        "remaining time by a lot");
   }
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();

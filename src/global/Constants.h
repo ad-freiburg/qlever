@@ -103,10 +103,14 @@ static const uint8_t NO_PREFIX_CHAR =
     MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES;
 
 // After performing this many "basic operations", we check for timeouts
-static const size_t NUM_OPERATIONS_BETWEEN_TIMEOUT_CHECKS = 32000;
+static constexpr size_t NUM_OPERATIONS_BETWEEN_TIMEOUT_CHECKS = 32000;
 // How many "basic operations" (see above) do we assume for a hashset or hashmap
 // operation
-static const size_t NUM_OPERATIONS_HASHSET_LOOKUP = 32;
+static constexpr size_t NUM_OPERATIONS_HASHSET_LOOKUP = 32;
+
+// If the time estimate for a sort operation is larger by more than this factor
+// than the remaining time, then the sort is canceled with a timeout exception
+static constexpr double SORT_ESTIMATE_CANCELLATION_FACTOR = 3.0;
 
 #ifdef _PARALLEL_SORT
 static constexpr bool USE_PARALLEL_SORT = true;

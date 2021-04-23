@@ -13,6 +13,7 @@
 #include "Engine.h"
 #include "IdTable.h"
 
+// ___________________________________________________________________
 IdTable createRandomIdTable(
     size_t numRows, size_t numColumns,
     const ad_utility::AllocatorWithLimit<Id>& allocator) {
@@ -40,6 +41,7 @@ constexpr bool isSorted(const std::array<size_t, I>& array) {
   return isSorted;
 }
 
+// ____________________________________________________________________
 double SortPerformanceEstimator::measureSortingTimeInSeconds(
     size_t numRows, size_t numColumns,
     const ad_utility::AllocatorWithLimit<Id>& allocator) {
@@ -74,17 +76,17 @@ SortPerformanceEstimator::SortPerformanceEstimator(
         LOG(TRACE) << "Creating the table failed because of a lack of memory"
                    << std::endl;
         LOG(TRACE) << "Creating an estimate from a smaller result" << std::endl;
-        if (j > 0) {
+        if (i > 0) {
+          // Assume that sorting time grows linearly in the number of rows
+          float ratio = static_cast<float>(sampleValuesRows[i]) /
+                        static_cast<float>(sampleValuesRows[i - 1]);
+          _samples[i][j] = _samples[i - 1][j] * ratio;
+        } else if (j > 0) {
           // Assume that sorting time grows with the square root in the number
           // of columns
           float ratio = static_cast<float>(sampleValuesCols[j]) /
                         static_cast<float>(sampleValuesCols[j - 1]);
           _samples[i][j] = _samples[i][j - 1] * std::sqrt(ratio);
-        } else if (i > 0) {
-          // Assume that sorting time grows linearly in the number of rows
-          float ratio = static_cast<float>(sampleValuesRows[i]) /
-                        static_cast<float>(sampleValuesRows[i - 1]);
-          _samples[i][j] = _samples[i - 1][j] * ratio;
         } else {
           // not even the smallest IdTable could be created, this should never
           // happen.

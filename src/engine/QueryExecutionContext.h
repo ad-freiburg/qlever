@@ -8,6 +8,7 @@
 #include <shared_mutex>
 #include <string>
 #include <vector>
+
 #include "../global/Constants.h"
 #include "../index/Index.h"
 #include "../util/Cache.h"
@@ -15,6 +16,7 @@
 #include "../util/Synchronized.h"
 #include "./Engine.h"
 #include "./ResultTable.h"
+#include "./SortPerformanceEstimator.h"
 #include "QueryPlanningCostFactors.h"
 #include "RuntimeInformation.h"
 
@@ -23,7 +25,7 @@ using std::string;
 using std::vector;
 
 struct CacheValue {
-  CacheValue(ad_utility::AllocatorWithLimit<Id> allocator)
+  explicit CacheValue(ad_utility::AllocatorWithLimit<Id> allocator)
       : _resTable(std::make_shared<ResultTable>(std::move(allocator))),
         _runtimeInfo() {}
   std::shared_ptr<ResultTable> _resTable;
@@ -54,28 +56,34 @@ class QueryExecutionContext {
         _engine(engine),
         _subtreeCache(cache),
         _pinnedSizes(pinnedSizes),
-        _alloc(std::move(allocator)),
-        _costFactors() {}
+        _allocator(std::move(allocator)),
+        _costFactors(),
+        _sortPerformanceEstimator(_allocator) {}
 
   SubtreeCache& getQueryTreeCache() { return *_subtreeCache; }
 
   PinnedSizes& getPinnedSizes() { return *_pinnedSizes; }
 
-  const Engine& getEngine() const { return _engine; }
+  [[nodiscard]] const Engine& getEngine() const { return _engine; }
 
-  const Index& getIndex() const { return _index; }
+  [[nodiscard]] const Index& getIndex() const { return _index; }
 
   void clearCache() { getQueryTreeCache().clear(); }
+
+  [[nodiscard]] const SortPerformanceEstimator& getSortPerformanceEstimator()
+      const {
+    return _sortPerformanceEstimator;
+  }
 
   void readCostFactorsFromTSVFile(const string& fileName) {
     _costFactors.readFromFile(fileName);
   }
 
-  float getCostFactor(const string& key) const {
+  [[nodiscard]] double getCostFactor(const string& key) const {
     return _costFactors.getCostFactor(key);
   };
 
-  ad_utility::AllocatorWithLimit<Id> getAllocator() { return _alloc; }
+  ad_utility::AllocatorWithLimit<Id> getAllocator() { return _allocator; }
 
   const bool _pinSubtrees;
   const bool _pinResult;
@@ -86,6 +94,7 @@ class QueryExecutionContext {
   SubtreeCache* const _subtreeCache;
   PinnedSizes* const _pinnedSizes;
   // allocators are copied but hold shared state
-  ad_utility::AllocatorWithLimit<Id> _alloc;
+  ad_utility::AllocatorWithLimit<Id> _allocator;
   QueryPlanningCostFactors _costFactors;
+  SortPerformanceEstimator _sortPerformanceEstimator;
 };

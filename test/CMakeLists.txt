@@ -151,6 +151,7 @@ add_test(LimitedAllocatorTest LimitedAllocatorTest)
 target_link_libraries(LimitedAllocatorTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(SortPerformanceEstimatorTest SortPerformanceEstimatorTest.cpp)
-add_test(SortPerformanceEstimatorTest SortPerformanceEstimatorTest)
 target_link_libraries(SortPerformanceEstimatorTest gtest_main SortPerformanceEstimator ${CMAKE_THREAD_LIBS_INIT})
+# this test runs for quite some time! If this is undesired, comment it out
+add_test(SortPerformanceEstimatorTest SortPerformanceEstimatorTest)
 
