@@ -20,7 +20,8 @@ IdTable createRandomIdTable(
   IdTable result{allocator};
   result.setCols(numColumns);
   result.reserve(numRows);
-  RandomIntGenerator<Id> generator;
+
+  FastRandomIntGenerator<Id> generator;
 
   for (size_t i = 0; i < numRows; ++i) {
     result.push_back();
@@ -83,7 +84,8 @@ SortPerformanceEstimator::SortPerformanceEstimator(
           _samples[i][j] = _samples[i - 1][j] * ratio;
         } else if (j > 0) {
           // Assume that sorting time grows with the square root in the number
-          // of columns
+          // of columns. The square root is just a heuristic: a simple function
+          // between linear and constant.
           float ratio = static_cast<float>(sampleValuesCols[j]) /
                         static_cast<float>(sampleValuesCols[j - 1]);
           _samples[i][j] = _samples[i][j - 1] * std::sqrt(ratio);
@@ -101,45 +103,25 @@ SortPerformanceEstimator::SortPerformanceEstimator(
   LOG(INFO) << "Done creating sort estimates" << std::endl;
 }
 
-double SortPerformanceEstimator::EstimateSortTimeInSeconds(
+double SortPerformanceEstimator::estimateSortTimeInSeconds(
     size_t numRows, size_t numCols) const noexcept {
   // Return the index of the element in the !sorted! `sampleVector`, which is
   // closest to 'value'
   auto getClosestIndex = [](const auto& sampleVector, size_t value) -> size_t {
-    // Get iterator and index of first element in the vector that is >= value
-    auto firstGreaterEqualIterator =
-        std::find_if(sampleVector.begin(), sampleVector.end(),
-                     [value](const auto& element) { return element >= value; });
-    auto firstGreaterEqualIndex =
-        firstGreaterEqualIterator - sampleVector.begin();
+    // Return the absolute distance to `value`
+    auto dist = [value](const size_t& x) {
+      return std::abs(static_cast<long long>(value) -
+                      static_cast<long long>(x));
+    };
 
-    if (firstGreaterEqualIterator == sampleVector.end()) {
-      // Even the last/greatest element in the vector is smaller than `value`,
-      // return the index of the last element.
-      return firstGreaterEqualIndex - 1;
-    }
+    // Returns true iff `a` is closer to `value` than `b`
+    auto cmp = [&dist](const auto& a, const auto& b) {
+      return dist(a) < dist(b);
+    };
 
-    if (firstGreaterEqualIterator == sampleVector.begin()) {
-      // The first/smallest element in the vector is already >= `value`, return
-      // the index of the first element.
-      return 0;
-    }
-
-    // Value lies somewhere between *(firstGreaterEqualIterator - 1) and
-    // *firstGreaterEqualIterator. Find out which is closer and return the
-    // appropriate index.
-    auto distanceToCurrent =
-        std::abs(static_cast<long long>(*firstGreaterEqualIterator) -
-                 static_cast<long long>(value));
-    auto distanceToPrevious =
-        std::abs(static_cast<long long>(*(firstGreaterEqualIterator - 1)) -
-                 static_cast<long long>(value));
-
-    if (distanceToCurrent <= distanceToPrevious) {
-      return firstGreaterEqualIndex;
-    } else {
-      return firstGreaterEqualIndex - 1;
-    }
+    auto closestIterator =
+        std::min_element(sampleVector.begin(), sampleVector.end(), cmp);
+    return closestIterator - sampleVector.begin();
   };
 
   // Get index of the closest samples wrt. numRows and numCols
@@ -154,16 +136,14 @@ double SortPerformanceEstimator::EstimateSortTimeInSeconds(
              << " columns and an estimate of " << result << " seconds."
              << std::endl;
 
-  // Scale linearly with the number of rows
-  auto numRowsInSample = sampleValuesRows[rowIndex];
-  result = result / static_cast<double>(numRowsInSample) *
-           static_cast<double>(numRows);
+  auto numRowsInSample = static_cast<double>(sampleValuesRows[rowIndex]);
+  double rowRatio = static_cast<double>(numRows) / numRowsInSample;
 
-  // Scale the number of columns with the square root
-  auto numColumnsInSample = sampleValuesCols[columnIndex];
-  double columnRatio = 1.0 / static_cast<double>(numColumnsInSample) *
-                       static_cast<double>(numCols);
-  result = result * std::sqrt(columnRatio);
+  auto numColumnsInSample = static_cast<double>(sampleValuesCols[columnIndex]);
+  double columnRatio = static_cast<double>(numCols) / numColumnsInSample;
+  // Scale linearly with the number of rows. Scale the number of columns with
+  // the square root
+  result = result * rowRatio * std::sqrt(columnRatio);
 
   return result;
 }

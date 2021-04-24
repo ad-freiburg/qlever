@@ -141,12 +141,12 @@ class Operation {
   // check is called only rarely. Note that we sometimes need to "simulate"
   // several operations at a time, hence the countIncrease.
   auto checkTimeoutAfterNCallsFactory(
-      size_t numCallsBeforeCheck =
+      size_t numOperationsBetweenTimeoutChecks =
           NUM_OPERATIONS_BETWEEN_TIMEOUT_CHECKS) const {
-    return [numCallsBeforeCheck, i = 0ull,
+    return [numOperationsBetweenTimeoutChecks, i = 0ull,
             this](size_t countIncrease = 1) mutable {
       i += countIncrease;
-      if (i >= numCallsBeforeCheck) {
+      if (i >= numOperationsBetweenTimeoutChecks) {
         _timeoutTimer->wlock()->checkTimeoutAndThrow("Timeout in "s +
                                                      getDescriptor());
         i = 0;

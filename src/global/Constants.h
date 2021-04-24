@@ -10,7 +10,7 @@ static const size_t STXXL_MEMORY_TO_USE = 1024L * 1024L * 1024L * 2L;
 static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 1000 * 1000;
 static const size_t STXXL_DISK_SIZE_INDEX_TEST = 10;
 
-static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 80;
+static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 1;
 
 static const size_t DEFAULT_CACHE_MAX_NUM_ENTRIES = 1000;
 static const size_t DEFAULT_CACHE_MAX_SIZE_GB = 30;

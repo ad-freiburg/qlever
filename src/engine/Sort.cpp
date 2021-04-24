@@ -55,17 +55,17 @@ void Sort::computeResult(ResultTable* result) {
   // TODO<joka921> proper timeout for sorting operations
   double remainingSecs =
       static_cast<double>(_timeoutTimer->wlock()->remainingMicroseconds()) /
-      1000000;
+      1'000'000;
   if (getExecutionContext()
-              ->getSortPerformanceEstimator()
-              .EstimateSortTimeInSeconds(subRes->size(), subRes->width()) /
-          SORT_ESTIMATE_CANCELLATION_FACTOR >
-      remainingSecs) {
+          ->getSortPerformanceEstimator()
+          .estimateSortTimeInSeconds(subRes->size(), subRes->width()) >
+      remainingSecs * SORT_ESTIMATE_CANCELLATION_FACTOR) {
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation
     throw ad_utility::TimeoutException(
         "Sort operation was canceled, because time estimate exceeded "
-        "remaining time by a lot");
+        "remaining time by a factor of" +
+        std::to_string(SORT_ESTIMATE_CANCELLATION_FACTOR));
   }
 
   RuntimeInformation& runtimeInfo = getRuntimeInfo();

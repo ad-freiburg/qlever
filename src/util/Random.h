@@ -13,55 +13,64 @@
 #include <vector>
 
 /**
- * @brief Create random integers from a given range
+ * A simple and fast Pseudo-Random-Number-Generator called Xoroshiro128+, for
+ * details see
+ * https://thompsonsed.co.uk/random-number-generators-for-c-performance-tested
+ * Limiting the range of the generated numbers is currently not supported
+ */
+template <typename Int,
+          typename = std::enable_if_t<std::is_integral_v<Int> &&
+                                      sizeof(Int) <= sizeof(uint64_t)>>
+class FastRandomIntGenerator {
+ public:
+  FastRandomIntGenerator() {
+    // Randomly initialize the shuffleTable
+    std::random_device seeder{};
+    for (size_t i = 0; i <= _shuffleTable.size(); ++i) {
+      _shuffleTable[i] = seeder();
+    }
+  }
+
+  // Generate a random number
+  Int operator()() {
+    uint64_t s1 = _shuffleTable[0];
+    uint64_t s0 = _shuffleTable[1];
+    uint64_t result = s0 + s1;
+    _shuffleTable[0] = s0;
+    s1 ^= s1 << 23;
+    _shuffleTable[1] = s1 ^ s0 ^ (s1 >> 18) ^ (s0 >> 5);
+
+    // keep the bits.
+    // TODO<C++20>: std::bit_cast
+    Int convertedResult;
+    std::memcpy(&convertedResult, &result, sizeof(Int));
+    return convertedResult;
+  }
+
+ private:
+  std::array<uint64_t, 4> _shuffleTable;
+  // The actual algorithm
+};
+
+/**
+ * @brief Create random integers from a given range.
  * @tparam Int an integral type like int, unsigned int, size_t, etc...
+ *
+ * This generator is much slower than the FastRandomIntGenerator, but has
+ * more flexibility and stronger probabilistic guarantees
  */
 template <typename Int, typename = std::enable_if_t<std::is_integral_v<Int>>>
 class RandomIntGenerator {
  public:
   explicit RandomIntGenerator(Int min = std::numeric_limits<Int>::min(),
-                              Int max = std::numeric_limits<Int>::max()) {
-    for (size_t i = 0; i < NUM_FUTURES; ++i) {
-      _randomEngines[i] = std::default_random_engine{std::random_device{}()};
-    }
-    _distributions.fill(std::uniform_int_distribution<Int>{min, max});
-    for (size_t i = 0; i < NUM_FUTURES; ++i) {
-      startFuture(i);
-    }
-  }
+                              Int max = std::numeric_limits<Int>::max())
+      : _randomEngine{std::random_device{}()}, _distribution{min, max} {}
 
-  Int operator()() {
-    if (_elementIndex < _buffer.size()) {
-      return _buffer[_elementIndex++];
-    }
-    // we are out of buffered random numbers
-    _buffer = _futures[_futureIndex].get();
-    startFuture(_futureIndex);
-    _futureIndex = (_futureIndex + 1) % NUM_FUTURES;
-    _elementIndex = 0;
-    // we now have elements in the buffer;
-    return operator()();
-  }
+  Int operator()() { return _distribution(_randomEngine); }
 
  private:
-  void startFuture(size_t i) {
-    _futures[i] = std::async([i, this]() {
-      std::vector<Int> result;
-      result.reserve(NUM_ELEMENTS_PER_FUTURE);
-      for (size_t k = 0; k < NUM_ELEMENTS_PER_FUTURE; ++k) {
-        result.push_back(_distributions[i](_randomEngines[i]));
-      }
-      return result;
-    });
-  }
-  std::array<std::default_random_engine, 3> _randomEngines;
-  static constexpr size_t NUM_FUTURES = 3;
-  static constexpr size_t NUM_ELEMENTS_PER_FUTURE = 1000000;
-  std::array<std::uniform_int_distribution<Int>, NUM_FUTURES> _distributions;
-  std::array<std::future<std::vector<Int>>, NUM_FUTURES> _futures;
-  std::vector<Int> _buffer;
-  size_t _futureIndex = 0;
-  size_t _elementIndex = 0;
+  std::default_random_engine _randomEngine;
+  std::uniform_int_distribution<Int> _distribution;
 };
 
 #endif  // QLEVER_RANDOM_H

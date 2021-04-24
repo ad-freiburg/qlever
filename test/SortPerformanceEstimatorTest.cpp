@@ -9,6 +9,7 @@
 
 #include "../../src/engine/SortPerformanceEstimator.h"
 #include "../../src/util/Log.h"
+#include "../../src/util/Random.h"
 
 TEST(SortPerformanceEstimator, TestManyEstimates) {
   // only allow the test to use 1 Gig of RAM
@@ -16,14 +17,22 @@ TEST(SortPerformanceEstimator, TestManyEstimates) {
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1ull << 30ul)};
   SortPerformanceEstimator t{allocator};
 
-  for (size_t numColumns = 7; numColumns < 15; numColumns++) {
+  RandomIntGenerator<int> dice(1, 6);
+
+  for (size_t numColumns = 1; numColumns < 15; numColumns++) {
     bool isFirst = true;
-    for (size_t i = 1000000; i < 100000000; i = static_cast<size_t>(i * 1.5)) {
+    for (size_t i = 1'000'000; i < 100'000'000;
+         i = static_cast<size_t>(i * 1.5)) {
+      if (dice() != 6) {
+        // only actually perform every 6th test, to obtain an acceptable
+        // performance.
+        continue;
+      }
       try {
         double measurement =
             SortPerformanceEstimator::measureSortingTimeInSeconds(i, numColumns,
                                                                   allocator);
-        double estimate = t.EstimateSortTimeInSeconds(i, numColumns);
+        double estimate = t.estimateSortTimeInSeconds(i, numColumns);
         LOG(INFO) << std::fixed << std::setprecision(3) << "input of size " << i
                   << "with " << numColumns << " columns took " << measurement
                   << " seconds, estimate was " << estimate << " seconds"
@@ -32,9 +41,9 @@ TEST(SortPerformanceEstimator, TestManyEstimates) {
         if (!isFirst) {
           EXPECT_LE(0.5 * measurement, estimate);
         } else if (0.5 * measurement > estimate) {
-          LOG(WARN) << "The first measurement with a new column size took much "
-                       "longer than the estimate. This happens "
-                       "deterministically for unknown reasons"
+          LOG(WARN) << "The first measurement with a new column size took "
+                       "twice as long as estimated. This is not unusual (even "
+                       "typical) and hence does not count as a failed test."
                     << std::endl;
         }
         isFirst = false;

@@ -200,7 +200,8 @@ void Server::process(Socket* client) {
       pq.expandPrefixes();
 
       QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
-                                _allocator, pinSubtrees, pinResult);
+                                _allocator, _sortPerformanceEstimator,
+                                pinSubtrees, pinResult);
       // start the shared timeout timer here to also include
       // the query planning
       timeoutTimer->wlock()->start();

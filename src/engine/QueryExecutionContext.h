@@ -26,8 +26,7 @@ using std::string;
 using std::vector;
 
 struct CacheValue {
-
-explicit CacheValue(ad_utility::AllocatorWithLimit<Id> allocator)
+  explicit CacheValue(ad_utility::AllocatorWithLimit<Id> allocator)
       : _resultTable(std::make_shared<ResultTable>(std::move(allocator))),
         _runtimeInfo() {}
   std::shared_ptr<ResultTable> _resultTable;
@@ -54,6 +53,7 @@ class QueryExecutionContext {
                         ConcurrentLruCache* const cache,
                         PinnedSizes* const pinnedSizes,
                         ad_utility::AllocatorWithLimit<Id> allocator,
+                        SortPerformanceEstimator sortPerformanceEstimator,
                         const bool pinSubtrees = false,
                         const bool pinResult = false)
       : _pinSubtrees(pinSubtrees),
@@ -64,7 +64,7 @@ class QueryExecutionContext {
         _pinnedSizes(pinnedSizes),
         _allocator(std::move(allocator)),
         _costFactors(),
-        _sortPerformanceEstimator(_allocator) {}
+        _sortPerformanceEstimator(sortPerformanceEstimator) {}
 
   ConcurrentLruCache& getQueryTreeCache() { return *_subtreeCache; }
 
