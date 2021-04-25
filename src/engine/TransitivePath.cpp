@@ -88,7 +88,8 @@ std::string TransitivePath::getDescriptor() const {
   if (scanOperation != nullptr) {
     os << " " << scanOperation->getPredicate() << " ";
   } else {
-    os << " <???> ";
+    // Escaped the question marks to avoid a warning about ignored trigraphs.
+    os << " <\?\?\?> ";
   }
   // Right variable or entity name.
   if (_rightIsVar) {

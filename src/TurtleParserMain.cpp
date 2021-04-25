@@ -37,7 +37,7 @@ void writeNTImpl(std::ostream& out, const std::string& filename) {
 }
 
 template <class Parser>
-void writeLabel(std::ostream& out, const std::string& filename) {
+void writeLabel(const std::string& filename) {
   Parser p(filename);
   std::array<std::string, 3> triple;
   // this call by reference is necesary because of the TSV-Parsers interface
@@ -71,8 +71,8 @@ template <class Tokenizer_T>
 void writeNT(std::ostream& out, const string& fileFormat,
              const std::string& filename) {
   if (fileFormat == "ttl") {
-    writeLabel<TurtleStreamParser<Tokenizer_T>>(out, filename);
-    // writeNTImpl<TurtleStreamParser<Tokenizer_T>>(out, filename);
+    // writeLabel<TurtleStreamParser<Tokenizer_T>>(out, filename);
+    writeNTImpl<TurtleStreamParser<Tokenizer_T>>(out, filename);
   } else if (fileFormat == "tsv") {
     writeNTImpl<TsvParser>(out, filename);
   } else if (fileFormat == "nt") {

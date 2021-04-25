@@ -95,9 +95,10 @@ int main(int argc, char** argv) {
     ad_utility::AllocatorWithLimit<Id> allocator{
         ad_utility::makeAllocationMemoryLeftThreadsafeObject(
             DEFAULT_MEM_FOR_QUERIES_IN_GB)};
-    SortPerformanceEstimator estimator(allocator);
+    SortPerformanceEstimator sortPerformanceEstimator =
+        SortPerformanceEstimator::CreateEstimatorExpensively(allocator);
     QueryExecutionContext qec(index, engine, &cache, &pinnedSizes, allocator,
-                              estimator);
+                              sortPerformanceEstimator);
     ParsedQuery q;
     if (!freebase) {
       q = SparqlParser("SELECT ?x WHERE {?x <is-a> <Scientist>}").parse();

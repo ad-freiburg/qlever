@@ -16,7 +16,10 @@
  * A simple and fast Pseudo-Random-Number-Generator called Xoroshiro128+, for
  * details see
  * https://thompsonsed.co.uk/random-number-generators-for-c-performance-tested
- * Limiting the range of the generated numbers is currently not supported
+ * Limiting the range of the generated numbers is currently not supported.
+ * Requires that `Int` is an integral type that fits into 64 bits. If used with
+ * a type that does not fulfill this property, the template will not match
+ * (because of the std::enable_if) and there will be a compile-time error.
  */
 template <typename Int,
           typename = std::enable_if_t<std::is_integral_v<Int> &&
@@ -49,7 +52,6 @@ class FastRandomIntGenerator {
 
  private:
   std::array<uint64_t, 4> _shuffleTable;
-  // The actual algorithm
 };
 
 /**
@@ -60,10 +62,10 @@ class FastRandomIntGenerator {
  * more flexibility and stronger probabilistic guarantees
  */
 template <typename Int, typename = std::enable_if_t<std::is_integral_v<Int>>>
-class RandomIntGenerator {
+class SlowRandomIntGenerator {
  public:
-  explicit RandomIntGenerator(Int min = std::numeric_limits<Int>::min(),
-                              Int max = std::numeric_limits<Int>::max())
+  explicit SlowRandomIntGenerator(Int min = std::numeric_limits<Int>::min(),
+                                  Int max = std::numeric_limits<Int>::max())
       : _randomEngine{std::random_device{}()}, _distribution{min, max} {}
 
   Int operator()() { return _distribution(_randomEngine); }

@@ -83,13 +83,13 @@ void OrderBy::computeResult(ResultTable* result) {
       1'000'000;
   if (getExecutionContext()
           ->getSortPerformanceEstimator()
-          .estimateSortTimeInSeconds(subRes->size(), subRes->width()) >
+          .estimatedSortTimeInSeconds(subRes->size(), subRes->width()) >
       remainingSecs * SORT_ESTIMATE_CANCELLATION_FACTOR) {
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation
     throw ad_utility::TimeoutException(
         "OrderBy operation was canceled, because time estimate exceeded "
-        "remaining time by a factor of" +
+        "remaining time by a factor of " +
         std::to_string(SORT_ESTIMATE_CANCELLATION_FACTOR));
   }
 

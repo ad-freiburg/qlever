@@ -155,9 +155,10 @@ int main(int argc, char** argv) {
         ad_utility::makeAllocationMemoryLeftThreadsafeObject(
             DEFAULT_MEM_FOR_QUERIES_IN_GB)};
 
-    SortPerformanceEstimator estimator(allocator);
+    SortPerformanceEstimator sortPerformanceEstimator =
+        SortPerformanceEstimator::CreateEstimatorExpensively(allocator);
     QueryExecutionContext qec(index, engine, &cache, &pinnedSizes, allocator,
-                              estimator);
+                              sortPerformanceEstimator);
     if (costFactosFileName.size() > 0) {
       qec.readCostFactorsFromTSVFile(costFactosFileName);
     }

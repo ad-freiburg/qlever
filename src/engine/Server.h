@@ -36,7 +36,8 @@ class Server {
                cacheMaxSizeGBSingleEntry * (1ull << 30u) / sizeof(Id)),
         _allocator(ad_utility::makeAllocationMemoryLeftThreadsafeObject(
             maxMemGB * (1ull << 30u))),
-        _sortPerformanceEstimator(_allocator),
+        _sortPerformanceEstimator(
+            SortPerformanceEstimator::CreateEstimatorExpensively(_allocator)),
         _index(),
         _engine(),
         _initialized(false) {}

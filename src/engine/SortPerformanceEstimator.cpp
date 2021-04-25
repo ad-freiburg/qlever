@@ -103,7 +103,7 @@ SortPerformanceEstimator::SortPerformanceEstimator(
   LOG(INFO) << "Done creating sort estimates" << std::endl;
 }
 
-double SortPerformanceEstimator::estimateSortTimeInSeconds(
+double SortPerformanceEstimator::estimatedSortTimeInSeconds(
     size_t numRows, size_t numCols) const noexcept {
   // Return the index of the element in the !sorted! `sampleVector`, which is
   // closest to 'value'

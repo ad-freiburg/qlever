@@ -14,9 +14,14 @@
 /// and columns;
 class SortPerformanceEstimator {
  public:
-  // Set up all the estimates. Might take several minutes
-  explicit SortPerformanceEstimator(
-      const ad_utility::AllocatorWithLimit<Id>& allocator);
+  // Create a SortPerformanceEstimator. This involves sorting large results to
+  // get good estimates. The call might take several minutes, depending on the
+  // memory available on the allocator. For this reason we have designed this
+  // explicit factory function.
+  static SortPerformanceEstimator CreateEstimatorExpensively(
+      const ad_utility::AllocatorWithLimit<Id>& allocator) {
+    return SortPerformanceEstimator(allocator);
+  }
 
   // Create a random IdTable with the specified number of rows and columns. Sort
   // this table and return the time in seconds that this sorting took.
@@ -24,12 +29,17 @@ class SortPerformanceEstimator {
       size_t numRows, size_t numColumns,
       const ad_utility::AllocatorWithLimit<Id>& allocator);
 
-  // Return an Estimate for how long sorting an IdTable with the specified
-  // number of rows and columns takes.
-  double estimateSortTimeInSeconds(size_t numRows,
-                                   size_t numCols) const noexcept;
+  // Compute and return an Estimate for how long sorting an IdTable with the
+  // specified number of rows and columns takes.
+  double estimatedSortTimeInSeconds(size_t numRows,
+                                    size_t numCols) const noexcept;
 
  private:
+  // Set up all the estimates. Might take several minutes. This constructor is
+  // private because it is very expensive. Thus we force users to use the
+  // explicit factory function CreateEstimatorExpensively.
+  explicit SortPerformanceEstimator(
+      const ad_utility::AllocatorWithLimit<Id>& allocator);
   // The number of columns for which we will sample the sorting time as a base
   // for the estimates. It is crucial that we have values for 5 and 6, because
   // at this point the IdTableImplementation changes.
