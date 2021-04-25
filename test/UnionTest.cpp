@@ -36,8 +36,9 @@ TEST(UnionTest, computeUnion) {
   int leftWidth = left.cols();
   int rightWidth = right.cols();
   int outWidth = result.cols();
-  CALL_FIXED_SIZE_3(leftWidth, rightWidth, outWidth, Union::computeUnion,
-                    &result, left, right, columnOrigins);
+  Union U{Union::InvalidUnionOnlyUseForTestinTag{}};
+  CALL_FIXED_SIZE_3(leftWidth, rightWidth, outWidth, U.computeUnion, &result,
+                    left, right, columnOrigins);
 
   ASSERT_EQ(5u, result.size());
   for (size_t i = 0; i < left.size(); i++) {
@@ -67,8 +68,9 @@ TEST(UnionTest, computeUnionOptimized) {
   int leftWidth = left.cols();
   int rightWidth = right.cols();
   int outWidth = result.cols();
-  CALL_FIXED_SIZE_3(leftWidth, rightWidth, outWidth, Union::computeUnion,
-                    &result, left, right, columnOrigins);
+  Union U{Union::InvalidUnionOnlyUseForTestinTag{}};
+  CALL_FIXED_SIZE_3(leftWidth, rightWidth, outWidth, U.computeUnion, &result,
+                    left, right, columnOrigins);
 
   ASSERT_EQ(5u, result.size());
   for (size_t i = 0; i < left.size(); i++) {

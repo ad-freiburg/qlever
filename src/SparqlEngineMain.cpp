@@ -5,11 +5,13 @@
 #include <getopt.h>
 #include <libgen.h>
 #include <stdlib.h>
+
 #include <iomanip>
 #include <iostream>
 #include <string>
 
 #include "engine/QueryPlanner.h"
+#include "engine/SortPerformanceEstimator.h"
 #include "parser/SparqlParser.h"
 #include "util/ReadableNumberFact.h"
 #include "util/Timer.h"
@@ -153,7 +155,10 @@ int main(int argc, char** argv) {
         ad_utility::makeAllocationMemoryLeftThreadsafeObject(
             DEFAULT_MEM_FOR_QUERIES_IN_GB)};
 
-    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes, allocator);
+    SortPerformanceEstimator sortPerformanceEstimator =
+        SortPerformanceEstimator::CreateEstimatorExpensively(allocator);
+    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes, allocator,
+                              sortPerformanceEstimator);
     if (costFactosFileName.size() > 0) {
       qec.readCostFactorsFromTSVFile(costFactosFileName);
     }

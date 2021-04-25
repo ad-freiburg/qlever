@@ -165,6 +165,16 @@ void Server::process(Socket* client) {
         _cache.clearAll();
         lock->clear();
       }
+
+      ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
+          std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+              ad_utility::TimeoutTimer::unlimited());
+      if (params.contains("timeout")) {
+        timeoutTimer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+            ad_utility::TimeoutTimer::fromSeconds(
+                atof(params["timeout"].c_str())));
+      }
+
       auto it = params.find("send");
       size_t maxSend = MAX_NOF_ROWS_IN_RESULT;
       if (it != params.end()) {
@@ -190,11 +200,17 @@ void Server::process(Socket* client) {
       pq.expandPrefixes();
 
       QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
-                                _allocator, pinSubtrees, pinResult);
+                                _allocator, _sortPerformanceEstimator,
+                                pinSubtrees, pinResult);
+      // start the shared timeout timer here to also include
+      // the query planning
+      timeoutTimer->wlock()->start();
+
       QueryPlanner qp(&qec);
       qp.setEnablePatternTrick(_enablePatternTrick);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
       qet.isRoot() = true;  // allow pinning of the final result
+      qet.recursivelySetTimeoutTimer(timeoutTimer);
       LOG(TRACE) << qet.asString() << std::endl;
 
       if (ad_utility::getLowercase(params["action"]) == "csv_export") {

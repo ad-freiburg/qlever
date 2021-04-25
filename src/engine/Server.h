@@ -16,6 +16,7 @@
 #include "../util/Timer.h"
 #include "./QueryExecutionContext.h"
 #include "./QueryExecutionTree.h"
+#include "./SortPerformanceEstimator.h"
 
 using std::string;
 using std::vector;
@@ -35,6 +36,8 @@ class Server {
                cacheMaxSizeGBSingleEntry * (1ull << 30u) / sizeof(Id)),
         _allocator(ad_utility::makeAllocationMemoryLeftThreadsafeObject(
             maxMemGB * (1ull << 30u))),
+        _sortPerformanceEstimator(
+            SortPerformanceEstimator::CreateEstimatorExpensively(_allocator)),
         _index(),
         _engine(),
         _initialized(false) {}
@@ -58,6 +61,7 @@ class Server {
   ConcurrentLruCache _cache;
   PinnedSizes _pinnedSizes;
   ad_utility::AllocatorWithLimit<Id> _allocator;
+  SortPerformanceEstimator _sortPerformanceEstimator;
   Index _index;
   Engine _engine;
 

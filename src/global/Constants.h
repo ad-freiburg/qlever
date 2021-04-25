@@ -10,7 +10,7 @@ static const size_t STXXL_MEMORY_TO_USE = 1024L * 1024L * 1024L * 2L;
 static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 1000 * 1000;
 static const size_t STXXL_DISK_SIZE_INDEX_TEST = 10;
 
-static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 80;
+static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 4;
 
 static const size_t DEFAULT_CACHE_MAX_NUM_ENTRIES = 1000;
 static const size_t DEFAULT_CACHE_MAX_SIZE_GB = 30;
@@ -103,6 +103,16 @@ static constexpr uint8_t NUM_COMPRESSION_PREFIXES = 126;
 // compression has been applied to  a word
 static const uint8_t NO_PREFIX_CHAR =
     MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES;
+
+// After performing this many "basic operations", we check for timeouts
+static constexpr size_t NUM_OPERATIONS_BETWEEN_TIMEOUT_CHECKS = 32000;
+// How many "basic operations" (see above) do we assume for a hashset or hashmap
+// operation
+static constexpr size_t NUM_OPERATIONS_HASHSET_LOOKUP = 32;
+
+// If the time estimate for a sort operation is larger by more than this factor
+// than the remaining time, then the sort is canceled with a timeout exception
+static constexpr double SORT_ESTIMATE_CANCELLATION_FACTOR = 3.0;
 
 #ifdef _PARALLEL_SORT
 static constexpr bool USE_PARALLEL_SORT = true;

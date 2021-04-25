@@ -6,9 +6,11 @@
 
 const size_t Union::NO_COLUMN = std::numeric_limits<size_t>::max();
 
-Union::Union(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
-             std::shared_ptr<QueryExecutionTree> t2)
+Union::Union(QueryExecutionContext* qec,
+             const std::shared_ptr<QueryExecutionTree>& t1,
+             const std::shared_ptr<QueryExecutionTree>& t2)
     : Operation(qec) {
+  AD_CHECK(t1 && t2);
   _subtrees[0] = t1;
   _subtrees[1] = t2;
 
@@ -163,9 +165,32 @@ void Union::computeUnion(
   IdTableStatic<OUT_WIDTH> res = dynRes->moveToStatic<OUT_WIDTH>();
 
   res.reserve(left.size() + right.size());
+
+  // TODO<joka921> insert global constant here
+  const size_t chunkSize =
+      100000 / res.cols();  // after this many elements, check for timeouts
+  auto checkAfterChunkSize = checkTimeoutAfterNCallsFactory(chunkSize);
+
+  // Append the contents of inputTable to the result. This requires previous
+  // checks that the columns are compatible. After copying chunkSize elements,
+  // we check for a timeout. It is only called when the number of columns
+  // matches at compile time, hence the [[maybe_unused]]
+  [[maybe_unused]] auto appendToResultChunked = [&res, chunkSize,
+                                                 this](const auto& inputTable) {
+    // always copy chunkSize results at once and then check for a timeout
+    size_t numChunks = inputTable.size() / chunkSize;
+    for (size_t i = 0; i < numChunks; ++i) {
+      res.insert(res.end(), inputTable.begin() + i * chunkSize,
+                 inputTable.begin() + (i + 1) * chunkSize);
+      checkTimeout();
+    }
+    res.insert(res.end(), inputTable.begin() + numChunks * chunkSize,
+               inputTable.end());
+  };
+
   if (left.size() > 0) {
     bool columnsMatch = left.cols() == columnOrigins.size();
-    // check if the order of the columns matches
+    // checkAfterChunkSize if the order of the columns matches
     for (size_t i = 0; columnsMatch && i < columnOrigins.size(); i++) {
       const std::array<size_t, 2>& co = columnOrigins[i];
       if (co[0] != i) {
@@ -180,11 +205,13 @@ void Union::computeUnion(
       // This if clause is only here to avoid creating the call to insert when
       // it would not be possible to call the function due to not matching
       // columns.
+      AD_CHECK(LEFT_WIDTH == OUT_WIDTH);
       if constexpr (LEFT_WIDTH == OUT_WIDTH) {
-        res.insert(res.end(), left.begin(), left.end());
+        appendToResultChunked(left);
       }
     } else {
       for (const auto& l : left) {
+        checkAfterChunkSize();
         res.emplace_back();
         size_t backIdx = res.size() - 1;
         for (size_t i = 0; i < columnOrigins.size(); i++) {
@@ -201,7 +228,7 @@ void Union::computeUnion(
 
   if (right.size() > 0) {
     bool columnsMatch = right.cols() == columnOrigins.size();
-    // check if the order of the columns matches
+    // checkAfterChunkSize if the order of the columns matches
     for (size_t i = 0; columnsMatch && i < columnOrigins.size(); i++) {
       const std::array<size_t, 2>& co = columnOrigins[i];
       if (co[1] != i) {
@@ -211,11 +238,13 @@ void Union::computeUnion(
     if (columnsMatch) {
       // The columns of the right subtree and the result match, we can
       // just copy the entries.
+      AD_CHECK(RIGHT_WIDTH == OUT_WIDTH);
       if constexpr (RIGHT_WIDTH == OUT_WIDTH) {
-        res.insert(res.end(), right.begin(), right.end());
+        appendToResultChunked(right);
       }
     } else {
       for (const auto& r : right) {
+        checkAfterChunkSize();
         res.emplace_back();
         size_t backIdx = res.size() - 1;
         for (size_t i = 0; i < columnOrigins.size(); i++) {

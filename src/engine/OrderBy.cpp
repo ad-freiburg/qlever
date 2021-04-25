@@ -77,6 +77,22 @@ void OrderBy::computeResult(ResultTable* result) {
   AD_CHECK(!_sortIndices.empty());
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
 
+  // TODO<joka921> proper timeout for sorting operations
+  double remainingSecs =
+      static_cast<double>(_timeoutTimer->wlock()->remainingMicroseconds()) /
+      1'000'000;
+  if (getExecutionContext()
+          ->getSortPerformanceEstimator()
+          .estimatedSortTimeInSeconds(subRes->size(), subRes->width()) >
+      remainingSecs * SORT_ESTIMATE_CANCELLATION_FACTOR) {
+    // The estimated time for this sort is much larger than the actually
+    // remaining time, cancel this operation
+    throw ad_utility::TimeoutException(
+        "OrderBy operation was canceled, because time estimate exceeded "
+        "remaining time by a factor of " +
+        std::to_string(SORT_ESTIMATE_CANCELLATION_FACTOR));
+  }
+
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
   runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
   LOG(DEBUG) << "OrderBy result computation..." << endl;

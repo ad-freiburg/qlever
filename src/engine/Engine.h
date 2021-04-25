@@ -116,8 +116,15 @@ class Engine {
     *tab = stab.moveToDynamic();
     LOG(DEBUG) << "Sort done.\n";
   }
-
-  template <int WIDTH, typename C>
+  // The effect of the third template argument is that if C does not have
+  // operator() with the specified arguments that returns bool, then this
+  // template does not match (so that there is no confusion with the templated
+  // function above). This is an instance of SFINAE.
+  template <
+      int WIDTH, typename C,
+      typename = std::enable_if_t<std::is_same_v<
+          bool, std::invoke_result_t<C, typename IdTableStatic<WIDTH>::row_type,
+                                     typename IdTableStatic<WIDTH>::row_type>>>>
   static void sort(IdTable* tab, C comp) {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();

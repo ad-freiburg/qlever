@@ -3,16 +3,18 @@
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+
 #include <algorithm>
 #include <cstdio>
+
 #include "../src/engine/CallFixedSize.h"
 #include "../src/engine/CountAvailablePredicates.h"
 #include "../src/engine/HasPredicateScan.h"
+#include "../src/engine/SortPerformanceEstimator.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<size_t>::max())};
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(100 * 1ul << 20)};
   return a;
 }
 // used to test HasRelationScan with a subtree
@@ -230,7 +232,9 @@ TEST(HasPredicateScan, subtreeS) {
   Engine engine;
   ConcurrentLruCache cache(DEFAULT_CACHE_MAX_NUM_ENTRIES);
   PinnedSizes pinnedSizes;
-  QueryExecutionContext ctx(index, engine, &cache, &pinnedSizes, allocator());
+  QueryExecutionContext ctx(
+      index, engine, &cache, &pinnedSizes, allocator(),
+      SortPerformanceEstimator::CreateEstimatorExpensively(allocator()));
 
   // create the subtree operation
   std::shared_ptr<QueryExecutionTree> subtree =

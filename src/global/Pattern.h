@@ -25,9 +25,12 @@ static const PatternID NO_PATTERN = std::numeric_limits<PatternID>::max();
  *        while writing a query).
  */
 struct Pattern {
-  Id& operator[](const size_t pos) { return _data[pos]; }
+  using value_type = Id;
+  using ref = value_type&;
+  using const_ref = const value_type&;
 
-  const Id& operator[](const size_t pos) const { return _data[pos]; }
+  ref operator[](const size_t pos) { return _data[pos]; }
+  const_ref operator[](const size_t pos) const { return _data[pos]; }
 
   bool operator==(const Pattern& other) const {
     if (size() != other.size()) {
@@ -78,6 +81,10 @@ struct Pattern {
   void push_back(const Id i) { _data.push_back(i); }
 
   void clear() { _data.clear(); }
+
+  const_ref back() const { return _data.back(); }
+  ref back() { return _data.back(); }
+  bool empty() { return _data.empty(); }
 
   std::vector<Id> _data;
 };

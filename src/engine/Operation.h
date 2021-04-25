@@ -89,6 +89,12 @@ class Operation {
   // trigger computation.
   shared_ptr<const ResultTable> getResult(bool isRoot = false);
 
+  // Use the same timeout timer for all children of an operation (= query plan
+  // rooted at that operation). As soon as one child times out, the whole
+  // operation times out.
+  void recursivelySetTimeoutTimer(
+      const ad_utility::SharedConcurrentTimeoutTimer& timer);
+
  protected:
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
@@ -117,6 +123,35 @@ class Operation {
   std::vector<std::string>& getWarnings() { return _warnings; }
   [[nodiscard]] const std::vector<std::string>& getWarnings() const {
     return _warnings;
+  }
+
+  // Check if there is still time left and throw a TimeoutException otherwise.
+  // This will be called at strategic places on code that potentially can take a
+  // (too) long time.
+  void checkTimeout() const;
+
+  // Handles the timeout of this operation.
+  ad_utility::SharedConcurrentTimeoutTimer _timeoutTimer =
+      std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+          ad_utility::TimeoutTimer::unlimited());
+
+  // Returns a lambda with the following behavior: For every call, increase the
+  // internal counter i by countIncrease. If the counter exceeds countMax, check
+  // for timeout and reset the counter to zero. That way, the expensive timeout
+  // check is called only rarely. Note that we sometimes need to "simulate"
+  // several operations at a time, hence the countIncrease.
+  auto checkTimeoutAfterNCallsFactory(
+      size_t numOperationsBetweenTimeoutChecks =
+          NUM_OPERATIONS_BETWEEN_TIMEOUT_CHECKS) const {
+    return [numOperationsBetweenTimeoutChecks, i = 0ull,
+            this](size_t countIncrease = 1) mutable {
+      i += countIncrease;
+      if (i >= numOperationsBetweenTimeoutChecks) {
+        _timeoutTimer->wlock()->checkTimeoutAndThrow("Timeout in "s +
+                                                     getDescriptor());
+        i = 0;
+      }
+    };
   }
 
  private:

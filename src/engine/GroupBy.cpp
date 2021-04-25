@@ -42,7 +42,7 @@ GroupBy::GroupBy(QueryExecutionContext* qec,
 }
 
 void GroupBy::setSubtree(std::shared_ptr<QueryExecutionTree> subtree) {
-  _subtree = subtree;
+  _subtree = std::move(subtree);
 }
 
 string GroupBy::asString(size_t indent) const {
@@ -174,19 +174,24 @@ struct resizeIfVec<vector<C>, C> {
  *                        its already allocated storage.
  */
 template <int IN_WIDTH, int OUT_WIDTH>
-void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
-                  size_t blockEnd, const IdTableView<IN_WIDTH>& input,
-                  const vector<ResultTable::ResultType>& inputTypes,
-                  IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
-                  const ResultTable* inTable, ResultTable* outTable,
-                  const Index& index,
-                  ad_utility::HashSet<size_t>& distinctHashSet) {
+void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
+                           size_t blockEnd, const IdTableView<IN_WIDTH>& input,
+                           const vector<ResultTable::ResultType>& inputTypes,
+                           IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
+                           const ResultTable* inTable, ResultTable* outTable,
+                           const Index& index,
+                           ad_utility::HashSet<size_t>& distinctHashSet) const {
+  auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory();
+  auto checkTimeoutHashSet = [&checkTimeoutAfterNCalls]() {
+    checkTimeoutAfterNCalls(NUM_OPERATIONS_HASHSET_LOOKUP);
+  };
   switch (a._type) {
     case ParsedQuery::AggregateType::AVG: {
       float res = 0;
       if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -196,6 +201,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i <= blockEnd; i++) {
+            checkTimeoutAfterNCalls();
             res += input(i, a._inCol);
           }
         }
@@ -204,6 +210,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
         float tmpF;
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -214,6 +221,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i <= blockEnd; i++) {
+            checkTimeoutAfterNCalls();
             std::memcpy(&tmpF, &input(i, a._inCol), sizeof(float));
             res += tmpF;
           }
@@ -224,6 +232,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       } else {
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -242,6 +251,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i <= blockEnd; i++) {
+            checkTimeoutAfterNCalls();
             // load the string, parse it as an xsd::int or float
             // TODO(schnelle): What's the correct way to handle OPTIONAL here
             std::string entity =
@@ -265,6 +275,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       if (a._distinct) {
         size_t count = 0;
         for (size_t i = blockStart; i <= blockEnd; i++) {
+          checkTimeoutHashSet();
           const auto it = distinctHashSet.find(input(i, a._inCol));
           if (it == distinctHashSet.end()) {
             count++;
@@ -283,6 +294,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
         if (a._distinct) {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -296,6 +308,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+            checkTimeoutAfterNCalls();
             out << input(i, a._inCol) << *delim;
           }
           out << input(blockEnd, a._inCol);
@@ -304,6 +317,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
         float f;
         if (a._distinct) {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -319,6 +333,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+            checkTimeoutAfterNCalls();
             std::memcpy(&f, &input(i, a._inCol), sizeof(float));
             out << f << *delim;
           }
@@ -328,6 +343,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::TEXT) {
         if (a._distinct) {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -341,6 +357,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+            checkTimeoutAfterNCalls();
             out << index.getTextExcerpt(input(i, a._inCol)) << *delim;
           }
           out << index.getTextExcerpt(input(blockEnd, a._inCol));
@@ -348,6 +365,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       } else if (inputTypes[a._inCol] == ResultTable::ResultType::LOCAL_VOCAB) {
         if (a._distinct) {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -366,6 +384,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+            checkTimeoutAfterNCalls();
             // TODO(schnelle): What's the correct way to handle OPTIONAL here
             out << inTable->idToOptionalString(input(i, a._inCol)).value_or("")
                 << *delim;
@@ -376,6 +395,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       } else {
         if (a._distinct) {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -405,6 +425,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           distinctHashSet.clear();
         } else {
           for (size_t i = blockStart; i + 1 <= blockEnd; i++) {
+            checkTimeoutAfterNCalls();
             // TODO(schnelle): What's the correct way to handle OPTIONAL here
             std::string entity =
                 index.idToOptionalString(input(i, a._inCol)).value_or("");
@@ -497,6 +518,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       if (inputTypes[a._inCol] == ResultTable::ResultType::VERBATIM) {
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -514,6 +536,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
         float tmpF;
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -534,6 +557,7 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
       } else {
         if (a._distinct) {
           for (size_t i = blockStart; i <= blockEnd; i++) {
+            checkTimeoutHashSet();
             const auto it = distinctHashSet.find(input(i, a._inCol));
             if (it == distinctHashSet.end()) {
               distinctHashSet.insert(input(i, a._inCol));
@@ -583,12 +607,12 @@ void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
 }
 
 template <int IN_WIDTH, int OUT_WIDTH>
-void doGroupBy(const IdTable& dynInput,
-               const vector<ResultTable::ResultType>& inputTypes,
-               const vector<size_t>& groupByCols,
-               const vector<GroupBy::Aggregate>& aggregates, IdTable* dynResult,
-               const ResultTable* inTable, ResultTable* outTable,
-               const Index& index) {
+void GroupBy::doGroupBy(const IdTable& dynInput,
+                        const vector<ResultTable::ResultType>& inputTypes,
+                        const vector<size_t>& groupByCols,
+                        const vector<GroupBy::Aggregate>& aggregates,
+                        IdTable* dynResult, const ResultTable* inTable,
+                        ResultTable* outTable, const Index& index) const {
   LOG(DEBUG) << "Group by input size " << dynInput.size() << std::endl;
   if (dynInput.size() == 0) {
     return;
@@ -620,7 +644,9 @@ void doGroupBy(const IdTable& dynInput,
   }
   size_t blockStart = 0;
   size_t blockEnd = 0;
+  auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory(32000);
   for (size_t pos = 1; pos < input.size(); pos++) {
+    checkTimeoutAfterNCalls(currentGroupBlock.size());
     bool rowMatchesCurrentBlock = true;
     for (size_t i = 0; i < currentGroupBlock.size(); i++) {
       if (input(pos, currentGroupBlock[i].first) !=
@@ -764,16 +790,23 @@ void GroupBy::computeResult(ResultTable* result) {
 
   int inWidth = subresult->_data.cols();
   int outWidth = result->_data.cols();
-  CALL_FIXED_SIZE_2(inWidth, outWidth, doGroupBy, subresult->_data,
-                    inputResultTypes, groupByCols, aggregates, &result->_data,
-                    subresult.get(), result, getIndex());
 
-  // Free the user data used by GROUP_CONCAT aggregates.
-  for (Aggregate& a : aggregates) {
-    if (a._type == ParsedQuery::AggregateType::GROUP_CONCAT) {
-      delete static_cast<std::string*>(a._userData);
+  auto cleanup = [&aggregates]() {
+    // Free the user data used by GROUP_CONCAT aggregates.
+    for (Aggregate& a : aggregates) {
+      if (a._type == ParsedQuery::AggregateType::GROUP_CONCAT) {
+        delete static_cast<std::string*>(a._userData);
+      }
     }
+  };
+  try {
+    CALL_FIXED_SIZE_2(inWidth, outWidth, doGroupBy, subresult->_data,
+                      inputResultTypes, groupByCols, aggregates, &result->_data,
+                      subresult.get(), result, getIndex());
+    cleanup();
+    LOG(DEBUG) << "GroupBy result computation done." << std::endl;
+  } catch (...) {
+    cleanup();
+    throw;
   }
-
-  LOG(DEBUG) << "GroupBy result computation done." << std::endl;
 }

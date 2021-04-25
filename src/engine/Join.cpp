@@ -17,18 +17,16 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, size_t t1JoinCol,
            size_t t2JoinCol, bool keepJoinColumn)
     : Operation(qec) {
+  AD_CHECK(t1 && t2);
   // Make sure subtrees are ordered so that identical queries can be identified.
-  if (t1.get()->asString() < t2.get()->asString()) {
-    _left = t1;
-    _leftJoinCol = t1JoinCol;
-    _right = t2;
-    _rightJoinCol = t2JoinCol;
-  } else {
-    _left = t2;
-    _leftJoinCol = t2JoinCol;
-    _right = t1;
-    _rightJoinCol = t1JoinCol;
+  if (t1->asString() > t2->asString()) {
+    std::swap(t1, t2);
+    std::swap(t1JoinCol, t2JoinCol);
   }
+  _left = std::move(t1);
+  _leftJoinCol = t1JoinCol;
+  _right = std::move(t2);
+  _rightJoinCol = t2JoinCol;
   _keepJoinColumn = keepJoinColumn;
   _sizeEstimate = 0;
   _sizeEstimateComputed = false;
@@ -336,6 +334,9 @@ void Join::doComputeJoinWithFullScanDummyLeft(const IdTable& ndr,
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
       IdTable jr(2, _executionContext->getAllocator());
+      // The scan is a relatively expensive disk operation, so we can afford to
+      // check for timeouts before each call.
+      checkTimeout();
       scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
       // Build the cross product.
@@ -376,6 +377,9 @@ void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
     } else {
       // Do a scan.
       LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
+      // The scan is a relatively expensive disk operation, so we can afford to
+      // check for timeouts before each call.
+      checkTimeout();
       IdTable jr(2, _executionContext->getAllocator());
       scan(currentJoinId, &jr);
       LOG(TRACE) << "Got #items: " << jr.size() << endl;
@@ -518,6 +522,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   } else if (b.size() / a.size() > GALLOP_THRESHOLD) {
     doGallopInnerJoin(RightLargerTag{}, a, jc1, b, jc2, &result);
   } else {
+    auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory();
     // Intersect both lists.
     size_t i = 0;
     size_t j = 0;
@@ -525,6 +530,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     while (i < a.size() && j < b.size()) {
       while (a(i, jc1) < b(j, jc2)) {
         ++i;
+        checkTimeoutAfterNCalls();
         if (i >= a.size()) {
           goto finish;
         }
@@ -532,6 +538,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
       while (b(j, jc2) < a(i, jc1)) {
         ++j;
+        checkTimeoutAfterNCalls();
         if (j >= b.size()) {
           goto finish;
         }
@@ -559,12 +566,14 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
           }
 
           ++j;
+          checkTimeoutAfterNCalls();
           if (j >= b.size()) {
             // The next i might still match
             break;
           }
         }
         ++i;
+        checkTimeoutAfterNCalls();
         if (i >= a.size()) {
           goto finish;
         }

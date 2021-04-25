@@ -44,6 +44,17 @@ vector<string> Operation::collectWarnings() const {
   return res;
 }
 
+// ________________________________________________________________________
+void Operation::recursivelySetTimeoutTimer(
+    const ad_utility::SharedConcurrentTimeoutTimer& timer) {
+  _timeoutTimer = timer;
+  for (auto child : getChildren()) {
+    if (child) {
+      child->recursivelySetTimeoutTimer(timer);
+    }
+  }
+}
+
 // Get the result for the subtree rooted at this element.
 // Use existing results if they are already available, otherwise
 // trigger computation.
@@ -79,7 +90,19 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   try {
     auto computeLambda = [this] {
       CacheValue val(getExecutionContext()->getAllocator());
+      if (_timeoutTimer->wlock()->hasTimedOut()) {
+        throw ad_utility::TimeoutException(
+            "Timeout in operation with no or insufficient timeout "
+            "functionality, before " +
+            getDescriptor());
+      }
       computeResult(val._resultTable.get());
+      if (_timeoutTimer->wlock()->hasTimedOut()) {
+        throw ad_utility::TimeoutException(
+            "Timeout in " + getDescriptor() +
+            ". This timeout was not caught inside the actual computation, "
+            "which indicates insufficient timeout functionality.");
+      }
       val._runtimeInfo = getRuntimeInfo();
       return val;
     };
@@ -117,5 +140,12 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
     // only at innermost failure of a recursive call
     throw ad_semsearch::AbortException(
         "Unexpected expection that is not a subclass of std::exception");
+  }
+}
+
+// ______________________________________________________________________
+void Operation::checkTimeout() const {
+  if (_timeoutTimer->wlock()->hasTimedOut()) {
+    throw ad_utility::TimeoutException("Timeout in " + getDescriptor());
   }
 }
