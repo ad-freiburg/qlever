@@ -173,8 +173,8 @@ void Union::computeUnion(
 
   // Append the contents of inputTable to the result. This requires previous
   // checks that the columns are compatible. After copying chunkSize elements,
-  // we check for a timeout.
-  auto appendToResultChunked = [&res, chunkSize, this](const auto& inputTable) {
+  // we check for a timeout. It is only called when the number of columns matches at compile time, hence the [[maybe_unused]]
+  [[maybe_unused]] auto appendToResultChunked = [&res, chunkSize, this](const auto& inputTable) {
     // always copy chunkSize results at once and then check for a timeout
     size_t numChunks = inputTable.size() / chunkSize;
     for (size_t i = 0; i < numChunks; ++i) {
