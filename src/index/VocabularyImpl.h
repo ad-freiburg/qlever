@@ -31,7 +31,7 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
     if constexpr (_isCompressed) {
       // when we read from file it means that all preprocessing has been done
       // and the prefixes are already stripped in the file
-      auto str = TurtleToken::normalizeRDFLiteral<false>(
+      auto str = TurtleToken::normalizeRDFLiteral(
           expandPrefix(CompressedString::fromString(line)));
 
       _words.push_back(compressPrefix(str));

@@ -261,7 +261,9 @@ struct TurtleToken {
     return res;
   }
   /**
-   * @brief convert a RDF Literal to a unified form that is used inside QLever
+   * @brief convert a RDF Literal to a unified form that is used inside QLever.
+   * Inputs that are no literals (don't start with a single or double quote)
+   * will be returned unchanged.
    *
    * RDFLiterals in Turtle or Sparql can have several forms: Either starting
    * with one (" or ') quotation mark and containing escape sequences like
@@ -277,33 +279,18 @@ struct TurtleToken {
    * possible langtags or datatype URIS one can directly obtain the actual
    * content of the literal.
    *
+   *
    * @param literal
-   * @tparam strictMode If set to true, anything that is not an rdf literal or
-   * entity as an input will throw an exception. If set to false, the input will
-   * be returned in such cases.
    * @return
    */
-  template <bool strictMode = true>
   static std::string normalizeRDFLiteral(const std::string_view origLiteral) {
+    if (origLiteral.empty() ||
+        (origLiteral[0] != '"' && origLiteral[0] != '\'')) {
+      return std::string{origLiteral};
+    }
     try {
-      if constexpr (!strictMode) {
-        if (origLiteral.empty() ||
-            (origLiteral[0] != '"' && origLiteral[0] != '\'' &&
-             origLiteral[0] != '<')) {
-          return std::string{origLiteral};
-        }
-      }
-
       auto literal = origLiteral;
 
-      // filter the special case of the genids or the qlever special value
-      // escapes, which neither start with angles nor with quotation marks
-      // TODO<joka921> proper data types for the different types of vocabulary
-      // entries.
-      if (ad_utility::startsWith(literal, "_:genid") ||
-          ad_utility::startsWith(literal, ":v:")) {
-        return std::string{literal};
-      }
       std::string res;
       char endDelimiter = '\0';
       std::string_view langtagOrDatatype;
@@ -411,6 +398,60 @@ struct TurtleToken {
     }
   }
 
+  /**
+   * In an Iriref, the only allowed escapes are \uXXXX and '\UXXXXXXXX' ,where X
+   * is hexadecimal ([0-9a-fA-F]). This function replaces these escapes by the
+   * corresponding UTF-8 character.
+   * @param iriref An Iriref of the form <Content...>
+   * @return The same Iriref but with the escape sequences replaced by their
+   * actual value
+   */
+  static std::string unescapeIriref(std::string_view iriref) {
+    AD_CHECK(ad_utility::startsWith(iriref, "<"));
+    AD_CHECK(ad_utility::endsWith(iriref, ">"));
+    iriref.remove_prefix(1);
+    iriref.remove_suffix(1);
+    std::string result = "<";
+    while (true) {
+      auto pos = iriref.find('\\');
+      if (pos == iriref.npos) {
+        break;
+      }
+      result.append(iriref.begin(), iriref.begin() + pos);
+      AD_CHECK(pos + 1 < iriref.size());
+      switch (iriref[pos + 1]) {
+        case 'u': {
+          AD_CHECK(pos + 5 < iriref.size());
+          auto unesc = unescapeUchar(iriref.substr(pos + 2, 4));
+          result.insert(result.end(), unesc.begin(), unesc.end());
+          iriref.remove_prefix(4);
+          break;
+        }
+        case 'U': {
+          AD_CHECK(pos + 9 < iriref.size());
+          auto unesc = unescapeUchar(iriref.substr(pos + 2, 8));
+          result.insert(result.end(), unesc.begin(), unesc.end());
+          iriref.remove_prefix(8);
+          break;
+        }
+        default:
+          throw std::runtime_error(
+              "Illegal escape sequence in Iriref. This should never "
+              "happen, please report this");
+      }
+      iriref.remove_prefix(pos + 2);
+    }
+    result.push_back('>');
+    return result;
+  }
+
+  /**
+   * This function unescapes a prefixedIri (the "local" part in the form
+   * prefix:local). These may only contain socalled "reserved character escape
+   * sequences": reserved character escape sequences consist of a '\' followed
+   * by one of ~.-!$&'()*+,;=/?#@%_ and represent the character to the right of
+   * the '\'.
+   */
   static std::string unescapePrefixedIri(std::string_view literal) {
     std::string res;
     auto pos = literal.find('\\');

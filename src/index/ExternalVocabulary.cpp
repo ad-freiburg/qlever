@@ -78,7 +78,7 @@ void ExternalVocabulary<Comp>::buildFromTextFile(const string& textFileName,
     // in the text file we had the escaped variants, but here
     // we can use the correct ones since we store in a binary format with
     // offsets
-    word = TurtleToken::normalizeRDFLiteral<false>(word);
+    word = TurtleToken::normalizeRDFLiteral(word);
     offsets.push_back(currentOffset);
     currentOffset += _file.write(word.data(), word.size());
     _size++;

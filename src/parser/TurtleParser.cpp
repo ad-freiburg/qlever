@@ -237,7 +237,8 @@ bool TurtleParser<T>::rdfLiteral() {
   if (!stringParse()) {
     return false;
   }
-  auto s = _lastParseResult;
+  auto s = _lastParseResult =
+      TurtleToken::normalizeRDFLiteral(_lastParseResult);
   if (langtag()) {
     _lastParseResult = s + _lastParseResult;
     return true;
@@ -392,7 +393,7 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   // is ok
   _tok.skipWhitespaceAndComments();
   auto view = _tok.view();
-  auto pos = view.find(":");
+  auto pos = view.find(':');
   if (pos == string::npos) {
     return false;
   }
@@ -416,22 +417,30 @@ bool TurtleParser<T>::pnameLnRelaxed() {
 // _____________________________________________________________________
 template <class T>
 bool TurtleParser<T>::iriref() {
-  // manually check if the input starts with "<" and then find the next ">"
-  // this might accept invalid irirefs but is faster than checking the
-  // complete regexes
-  _tok.skipWhitespaceAndComments();
-  auto view = _tok.view();
-  if (ad_utility::startsWith(view, "<")) {
-    auto endPos = view.find_first_of("> \n");
-    if (endPos == string::npos || view[endPos] != '>') {
-      raise("Iriref");
+  if constexpr (UseRelaxedParsing) {
+    // manually check if the input starts with "<" and then find the next ">"
+    // this might accept invalid irirefs but is faster than checking the
+    // complete regexes
+    _tok.skipWhitespaceAndComments();
+    auto view = _tok.view();
+    if (ad_utility::startsWith(view, "<")) {
+      auto endPos = view.find_first_of("> \n");
+      if (endPos == string::npos || view[endPos] != '>') {
+        raise("Iriref");
+      } else {
+        _tok.remove_prefix(endPos + 1);
+        _lastParseResult = view.substr(0, endPos + 1);
+        return true;
+      }
     } else {
-      _tok.remove_prefix(endPos + 1);
-      _lastParseResult = view.substr(0, endPos + 1);
-      return true;
+      return false;
     }
   } else {
-    return false;
+    if (!parseTerminal<TokId::Iriref>()) {
+      return false;
+    }
+    _lastParseResult = TurtleToken::unescapeIriref(_lastParseResult);
+    return true;
   }
 }
 

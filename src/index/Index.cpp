@@ -161,33 +161,15 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     std::array<ItemMapManager, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
     {
-      auto p = ad_pipeline::setupParallelPipeline<1, 1, NUM_PARALLEL_ITEM_MAPS>(
+      auto p = ad_pipeline::setupParallelPipeline<1, NUM_PARALLEL_ITEM_MAPS>(
           _parserBatchSize,
           // when called, returns an optional to the next triple. If
-          // <linexPerPartial> triples were parsed, return std::nullopt. when
+          // `linesPerPartial` triples were parsed, return std::nullopt. when
           // the parser is unable to deliver triples, set parserExhausted to
           // true and return std::nullopt. this is exactly the behavior we need,
           // as a first step in the parallel Pipeline.
           ParserBatcher(parser, linesPerPartial,
                         [&]() { parserExhausted = true; }),
-          // do all the unescaping from Sparql (ToDo<joka921>:: move this into
-          // its own pipeline within the parser
-          [this](Triple&& t) {
-            Triple res;
-            std::transform(t.begin(), t.end(), res.begin(), [](const auto& s) {
-              auto res = TurtleToken::normalizeRDFLiteral(s);
-              try {
-                [[maybe_unused]] auto tmp = TurtleToken::normalizeRDFLiteral(
-                    TurtleToken::escapeRDFLiteral(res));
-              } catch (...) {
-                LOG(ERROR) << "Vocabulary entry " + s +
-                                  " could not be (un)escaped properly"
-                           << std::endl;
-              }
-              return res;
-            });
-            return res;
-          },
           // convert each triple to the internal representation (e.g. special
           // values for Numbers, externalized literals, etc.)
           [this](Triple&& t) {
