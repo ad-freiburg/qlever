@@ -98,13 +98,23 @@ class GroupBy : public Operation {
   ad_utility::HashMap<string, size_t> _varColMap;
 
   virtual void computeResult(ResultTable* result) override;
-};
 
-// This method is declared here solely for unit testing purposes
-template <int IN_WIDTH, int OUT_WIDTH>
-void doGroupBy(const IdTable& dynInput,
-               const vector<ResultTable::ResultType>& inputTypes,
-               const vector<size_t>& groupByCols,
-               const vector<GroupBy::Aggregate>& aggregates, IdTable* dynResult,
-               const ResultTable* inTable, ResultTable* outTable,
-               const Index& index);
+  template <int IN_WIDTH, int OUT_WIDTH>
+  void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
+                    size_t blockEnd, const IdTableView<IN_WIDTH>& input,
+                    const vector<ResultTable::ResultType>& inputTypes,
+                    IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
+                    const ResultTable* inTable, ResultTable* outTable,
+                    const Index& index,
+                    ad_utility::HashSet<size_t>& distinctHashSet) const;
+
+  template <int IN_WIDTH, int OUT_WIDTH>
+  void doGroupBy(const IdTable& dynInput,
+                 const vector<ResultTable::ResultType>& inputTypes,
+                 const vector<size_t>& groupByCols,
+                 const vector<GroupBy::Aggregate>& aggregates,
+                 IdTable* dynResult, const ResultTable* inTable,
+                 ResultTable* outTable, const Index& index) const;
+
+  FRIEND_TEST(GroupByTest, doGroupBy);
+};

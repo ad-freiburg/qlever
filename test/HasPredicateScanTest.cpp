@@ -3,12 +3,20 @@
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+
 #include <algorithm>
 #include <cstdio>
+
 #include "../src/engine/CallFixedSize.h"
 #include "../src/engine/CountAvailablePredicates.h"
 #include "../src/engine/HasPredicateScan.h"
+#include "../src/engine/SortPerformanceEstimator.h"
 
+ad_utility::AllocatorWithLimit<Id>& allocator() {
+  static ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(100 * 1ul << 20)};
+  return a;
+}
 // used to test HasRelationScan with a subtree
 class DummyOperation : public Operation {
  public:
@@ -20,7 +28,6 @@ class DummyOperation : public Operation {
     for (size_t i = 0; i < 10; i++) {
       result->_data.push_back({10 - i, 2 * i});
     }
-    result->finish();
   }
 
   string asString(size_t indent = 0) const override {
@@ -60,7 +67,7 @@ class DummyOperation : public Operation {
 
 TEST(HasPredicateScan, freeS) {
   // Used to store the result.
-  ResultTable resultTable;
+  ResultTable resultTable{allocator()};
   resultTable._data.setCols(1);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
@@ -100,7 +107,7 @@ TEST(HasPredicateScan, freeS) {
 
 TEST(HasPredicateScan, freeO) {
   // Used to store the result.
-  ResultTable resultTable;
+  ResultTable resultTable{allocator()};
   resultTable._data.setCols(1);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
@@ -142,7 +149,7 @@ TEST(HasPredicateScan, freeO) {
 
 TEST(HasPredicateScan, fullScan) {
   // Used to store the result.
-  ResultTable resultTable;
+  ResultTable resultTable{allocator()};
   resultTable._data.setCols(2);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
@@ -204,7 +211,7 @@ TEST(HasPredicateScan, fullScan) {
 
 TEST(HasPredicateScan, subtreeS) {
   // Used to store the result.
-  ResultTable resultTable;
+  ResultTable resultTable{allocator()};
   resultTable._data.setCols(3);
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
@@ -223,9 +230,11 @@ TEST(HasPredicateScan, subtreeS) {
 
   Index index;
   Engine engine;
-  SubtreeCache cache(NOF_SUBTREES_TO_CACHE);
+  ConcurrentLruCache cache(DEFAULT_CACHE_MAX_NUM_ENTRIES);
   PinnedSizes pinnedSizes;
-  QueryExecutionContext ctx(index, engine, &cache, &pinnedSizes);
+  QueryExecutionContext ctx(
+      index, engine, &cache, &pinnedSizes, allocator(),
+      SortPerformanceEstimator::CreateEstimatorExpensively(allocator()));
 
   // create the subtree operation
   std::shared_ptr<QueryExecutionTree> subtree =
@@ -288,12 +297,12 @@ TEST(HasPredicateScan, subtreeS) {
 
 TEST(CountAvailablePredicates, patternTrickTest) {
   // The input table containing entity ids
-  IdTable input(1);
+  IdTable input(1, allocator());
   for (Id i = 0; i < 8; i++) {
     input.push_back({i});
   }
   // Used to store the result.
-  IdTable result(2);
+  IdTable result(2, allocator());
   // Maps entities to their patterns. If an entity id is higher than the lists
   // length the hasRelation relation is used instead.
   vector<PatternID> hasPattern = {0, NO_PATTERN, NO_PATTERN, 1, 0};

@@ -280,7 +280,7 @@ void IndexScan::computePSOfreeS(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, &result->_data, idx._PSO);
+  idx.scan(_predicate, &result->_data, idx._PSO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -299,7 +299,7 @@ void IndexScan::computePOSfreeO(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, &result->_data, idx._POS);
+  idx.scan(_predicate, &result->_data, idx._POS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -338,7 +338,7 @@ void IndexScan::computeSPOfreeP(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, &result->_data, idx._SPO);
+  idx.scan(_subject, &result->_data, idx._SPO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -357,7 +357,7 @@ void IndexScan::computeSOPfreeO(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, &result->_data, idx._SOP);
+  idx.scan(_subject, &result->_data, idx._SOP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -377,7 +377,7 @@ void IndexScan::computeOSPfreeS(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_object, &result->_data, idx._OSP);
+  idx.scan(_object, &result->_data, idx._OSP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________

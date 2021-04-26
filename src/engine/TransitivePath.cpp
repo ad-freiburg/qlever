@@ -8,6 +8,7 @@
 
 #include "../util/Exception.h"
 #include "CallFixedSize.h"
+#include "IndexScan.h"
 
 // _____________________________________________________________________________
 TransitivePath::TransitivePath(
@@ -68,21 +69,36 @@ std::string TransitivePath::asString(size_t indent) const {
 // _____________________________________________________________________________
 std::string TransitivePath::getDescriptor() const {
   std::ostringstream os;
-  if (_leftSideTree != nullptr) {
-    os << "TransitivePath left is subtree, rightCol " << _rightSubCol;
-  } else if (_rightSideTree != nullptr) {
-    os << "TransitivePath leftCol " << _leftSubCol << " right is subtree";
+  os << "TransitivePath ";
+  // If not full transitive hull, show interval as [min, max].
+  if (_minDist > 1 || _maxDist < std::numeric_limits<size_t>::max()) {
+    os << "[" << _minDist << ", " << _maxDist << "] ";
+  }
+  // Left variable or entity name.
+  if (_leftIsVar) {
+    os << _leftColName;
   } else {
-    os << "TransitivePath leftCol " << _leftSubCol << " rightCol "
-       << _rightSubCol;
+    os << getIndex()
+              .idToOptionalString(_leftValue)
+              .value_or("#" + std::to_string(_leftValue));
   }
-  if (!_leftIsVar) {
-    os << " leftValue " << _leftValue;
+  // The predicate.
+  auto scanOperation =
+      std::dynamic_pointer_cast<IndexScan>(_subtree->getRootOperation());
+  if (scanOperation != nullptr) {
+    os << " " << scanOperation->getPredicate() << " ";
+  } else {
+    // Escaped the question marks to avoid a warning about ignored trigraphs.
+    os << " <\?\?\?> ";
   }
-  if (!_rightIsVar) {
-    os << " rightValue " << _rightValue;
+  // Right variable or entity name.
+  if (_rightIsVar) {
+    os << _rightColName;
+  } else {
+    os << getIndex()
+              .idToOptionalString(_rightValue)
+              .value_or("#" + std::to_string(_rightValue));
   }
-  os << " minDist " << _minDist << " maxDist " << _maxDist << "\n";
   return os.str();
 }
 
@@ -149,6 +165,19 @@ size_t TransitivePath::getSizeEstimate() {
   }
   if (_rightSideTree != nullptr) {
     return _rightSideTree->getSizeEstimate();
+  }
+  // Set costs to something very large, so that we never compute the complete
+  // transitive hull (unless the variables on both sides are not bound in any
+  // other way, so that the only possible query plan is to compute the complete
+  // transitive hull).
+  //
+  // NOTE: _subtree->getSizeEstimate() is the number of triples of the
+  // predicate, for which the transitive hull operator (+) is specified. On
+  // Wikidata, the predicate with the largest blowup when taking the
+  // transitive hull is wdt:P2789 (connects with). The blowup is then from 90K
+  // (without +) to 110M (with +), so about 1000 times larger.
+  if (_leftIsVar && _rightIsVar) {
+    return _subtree->getSizeEstimate() * 10000;
   }
   // TODO(Florian): this is not necessarily a good estimator
   if (_leftIsVar) {
@@ -220,6 +249,11 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
   // All nodes on the graph from which an edge leads to another node
   std::vector<Id> nodes;
 
+  auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory();
+  auto checkTimeoutHashSet = [&checkTimeoutAfterNCalls]() {
+    checkTimeoutAfterNCalls(NUM_OPERATIONS_HASHSET_LOOKUP);
+  };
+
   // initialize the map from the subresult
   if constexpr (rightIsVar) {
     (void)rightValue;
@@ -227,6 +261,7 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
       nodes.push_back(leftValue);
     }
     for (size_t i = 0; i < sub.size(); i++) {
+      checkTimeoutHashSet();
       size_t l = sub(i, leftSubCol);
       size_t r = sub(i, rightSubCol);
       MapIt it = edges.find(l);
@@ -247,6 +282,7 @@ void TransitivePath::computeTransitivePath(IdTable* dynRes,
     (void)leftValue;
     nodes.push_back(rightValue);
     for (size_t i = 0; i < sub.size(); i++) {
+      checkTimeoutHashSet();
       // Use the inverted edges
       size_t l = sub(i, leftSubCol);
       size_t r = sub(i, rightSubCol);
@@ -349,8 +385,13 @@ void TransitivePath::computeTransitivePathLeftBound(
   // Used to map entries in the left column to entries they have connection with
   Map edges;
 
+  auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory();
+  auto checkTimeoutHashSet = [&checkTimeoutAfterNCalls]() {
+    checkTimeoutAfterNCalls(NUM_OPERATIONS_HASHSET_LOOKUP);
+  };
   // initialize the map from the subresult
   for (size_t i = 0; i < sub.size(); i++) {
+    checkTimeoutHashSet();
     size_t l = sub(i, leftSubCol);
     size_t r = sub(i, rightSubCol);
     MapIt it = edges.find(l);
@@ -381,11 +422,13 @@ void TransitivePath::computeTransitivePathLeftBound(
   size_t last_result_begin = 0;
   size_t last_result_end = 0;
   for (size_t i = 0; i < left.size(); i++) {
+    checkTimeoutHashSet();
     if (left[i][leftSideCol] == last_elem) {
       // We can repeat the last output
       size_t num_new = last_result_end - last_result_begin;
       size_t res_row = res.size();
       res.resize(res.size() + num_new);
+      checkTimeoutAfterNCalls(num_new * resWidth);
       for (size_t j = 0; j < num_new; j++) {
         for (size_t c = 0; c < resWidth; c++) {
           res(res_row + j, c) = res(last_result_begin + j, c);
@@ -479,9 +522,14 @@ void TransitivePath::computeTransitivePathRightBound(
 
   // Used to map entries in the left column to entries they have connection with
   Map edges;
+  auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory();
+  auto checkTimeoutHashSet = [&checkTimeoutAfterNCalls]() {
+    checkTimeoutAfterNCalls(NUM_OPERATIONS_HASHSET_LOOKUP);
+  };
 
   // initialize the map from the subresult
   for (size_t i = 0; i < sub.size(); i++) {
+    checkTimeoutHashSet();
     size_t l = sub(i, leftSubCol);
     size_t r = sub(i, rightSubCol);
     MapIt it = edges.find(r);
@@ -512,6 +560,7 @@ void TransitivePath::computeTransitivePathRightBound(
   size_t last_result_begin = 0;
   size_t last_result_end = 0;
   for (size_t i = 0; i < right.size(); i++) {
+    checkTimeoutHashSet();
     if (right[i][rightSideCol] == last_elem) {
       // We can repeat the last output
       size_t num_new = last_result_end - last_result_begin;
@@ -522,6 +571,7 @@ void TransitivePath::computeTransitivePathRightBound(
           res(res_row + j, c) = res(last_result_begin + j, c);
         }
       }
+      checkTimeoutAfterNCalls(num_new * resWidth);
       continue;
     }
     last_elem = right(i, rightSideCol);

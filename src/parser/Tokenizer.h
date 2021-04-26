@@ -414,10 +414,11 @@ struct TurtleToken {
     std::string result = "<";
     while (true) {
       auto pos = iriref.find('\\');
+      result.append(iriref.begin(),
+                    iriref.begin() + std::min(iriref.size(), pos));
       if (pos == iriref.npos) {
         break;
       }
-      result.append(iriref.begin(), iriref.begin() + pos);
       AD_CHECK(pos + 1 < iriref.size());
       switch (iriref[pos + 1]) {
         case 'u': {

@@ -11,10 +11,12 @@
 #include "../index/Index.h"
 #include "../parser/ParseException.h"
 #include "../parser/SparqlParser.h"
+#include "../util/AllocatorWithLimit.h"
 #include "../util/Socket.h"
 #include "../util/Timer.h"
 #include "./QueryExecutionContext.h"
 #include "./QueryExecutionTree.h"
+#include "./SortPerformanceEstimator.h"
 
 using std::string;
 using std::vector;
@@ -24,11 +26,18 @@ using ad_utility::Socket;
 //! The HTTP Sever used.
 class Server {
  public:
-  explicit Server(const int port, const int numThreads)
+  explicit Server(const int port, const int numThreads, size_t maxMemGB,
+                  size_t cacheMaxSizeGB, size_t cacheMaxSizeGBSingleEntry,
+                  size_t cacheMaxNumEntries)
       : _numThreads(numThreads),
         _serverSocket(),
         _port(port),
-        _cache(NOF_SUBTREES_TO_CACHE),
+        _cache(cacheMaxNumEntries, cacheMaxSizeGB * (1ull << 30u) / sizeof(Id),
+               cacheMaxSizeGBSingleEntry * (1ull << 30u) / sizeof(Id)),
+        _allocator(ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+            maxMemGB * (1ull << 30u))),
+        _sortPerformanceEstimator(
+            SortPerformanceEstimator::CreateEstimatorExpensively(_allocator)),
         _index(),
         _engine(),
         _initialized(false) {}
@@ -49,8 +58,10 @@ class Server {
   const int _numThreads;
   Socket _serverSocket;
   int _port;
-  SubtreeCache _cache;
+  ConcurrentLruCache _cache;
   PinnedSizes _pinnedSizes;
+  ad_utility::AllocatorWithLimit<Id> _allocator;
+  SortPerformanceEstimator _sortPerformanceEstimator;
   Index _index;
   Engine _engine;
 

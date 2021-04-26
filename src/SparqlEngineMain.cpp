@@ -5,11 +5,13 @@
 #include <getopt.h>
 #include <libgen.h>
 #include <stdlib.h>
+
 #include <iomanip>
 #include <iostream>
 #include <string>
 
 #include "engine/QueryPlanner.h"
+#include "engine/SortPerformanceEstimator.h"
 #include "parser/SparqlParser.h"
 #include "util/ReadableNumberFact.h"
 #include "util/Timer.h"
@@ -140,7 +142,7 @@ int main(int argc, char** argv) {
   try {
     Engine engine;
     Index index;
-    SubtreeCache cache(NOF_SUBTREES_TO_CACHE);
+    ConcurrentLruCache cache(DEFAULT_CACHE_MAX_NUM_ENTRIES);
     PinnedSizes pinnedSizes;
     index.setUsePatterns(usePatterns);
     index.setOnDiskLiterals(onDiskLiterals);
@@ -149,7 +151,14 @@ int main(int argc, char** argv) {
       index.addTextFromOnDiskIndex();
     }
 
-    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes);
+    ad_utility::AllocatorWithLimit<Id> allocator{
+        ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+            DEFAULT_MEM_FOR_QUERIES_IN_GB)};
+
+    SortPerformanceEstimator sortPerformanceEstimator =
+        SortPerformanceEstimator::CreateEstimatorExpensively(allocator);
+    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes, allocator,
+                              sortPerformanceEstimator);
     if (costFactosFileName.size() > 0) {
       qec.readCostFactorsFromTSVFile(costFactosFileName);
     }

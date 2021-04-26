@@ -9,6 +9,7 @@
 
 #include "../parser/ParseException.h"
 #include "../parser/ParsedQuery.h"
+#include "Bind.h"
 #include "CountAvailablePredicates.h"
 #include "Distinct.h"
 #include "Filter.h"
@@ -115,6 +116,28 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // that create no single binding for a variable "by accident".
   ad_utility::HashSet<std::string> boundVariables;
 
+  // lambda that optimizes a set of triples, other execution plans and filters
+  // under the assumption that they are commutative and can be joined in an
+  // arbitrary order. When a NON-permuting plan is encountered, then
+  // we first  call this function to optimize the preceding permuting plans,
+  // and subsequently join in the correct order with the non-permuting plan.
+  // Returns the last row of the DP table (a set of possible plans with possibly
+  // different costs and different orderings.
+  auto optimizeCommutativ = [this](const auto& triples, const auto& plans,
+                                   const auto& filters) {
+    auto tg = createTripleGraph(&triples);
+    LOG(TRACE) << "Collapse text cliques..." << std::endl;
+    tg.collapseTextCliques();
+    LOG(TRACE) << "Collapse text cliques done." << std::endl;
+    // always apply all filters to be safe.
+    // TODO<joka921> it could be possible, to allow the DpTab to leave
+    // results unfiltered and add the filters later, but this has to be
+    // carefully checked and I currently see no benefit.
+    // TODO<joka921> In fact, for the case of REGEX filters, it could be
+    // beneficial to postpone them if possible
+    return fillDpTab(tg, filters, plans).back();
+  };
+
   // find a single best candidate for a given graph pattern
   auto optimizeSingle = [this](const auto pattern) -> SubtreePlan {
     auto v = optimize(pattern);
@@ -131,7 +154,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // Can either be passed a BasicGraphPattern directly or a set
   // of possible candidate plans for a single child pattern
   auto joinCandidates = [this, &candidatePlans, &candidateTriples,
-                         &boundVariables, &rootPattern](auto&& v) {
+                         &optimizeCommutativ, &boundVariables,
+                         &rootPattern](auto&& v) {
     if constexpr (std::is_same_v<GraphPatternOperation::BasicGraphPattern,
                                  std::decay_t<decltype(v)>>) {
       // we only consist of triples, store them and all the bound variables.
@@ -150,6 +174,33 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           candidateTriples._whereClauseTriples.end(),
           std::make_move_iterator(v._whereClauseTriples.begin()),
           std::make_move_iterator(v._whereClauseTriples.end()));
+    } else if constexpr (std::is_same_v<GraphPatternOperation::Bind,
+                                        std::decay_t<decltype(v)>>) {
+      if (boundVariables.count(v._target)) {
+        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                 "The target variable of a BIND must not be used before the "
+                 "BIND clause");
+      }
+      boundVariables.insert(v._target);
+
+      // Assumption for now: BIND does not commute. This is always safe.
+      auto lastRow = optimizeCommutativ(candidateTriples, candidatePlans,
+                                        rootPattern->_filters);
+      candidateTriples._whereClauseTriples.clear();
+      candidatePlans.clear();
+      candidatePlans.emplace_back();
+      for (const auto& a : lastRow) {
+        // create a copy of the Bind prototype and add the corresponding subtree
+        SubtreePlan plan(_qec);
+        std::shared_ptr<Bind> op = std::make_shared<Bind>(_qec, a._qet, v);
+        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
+        // TODO<joka921> : should we make this setVariableColumns call a part
+        // of setOperation in the queryExecutionTree, since it is invariant?
+        plan._qet->setVariableColumns(op->getVariableColumns());
+        plan._qet->setOperation(QueryExecutionTree::OperationType::BIND, op);
+        candidatePlans.back().push_back(std::move(plan));
+      }
+      return;
     } else {
       static_assert(
           std::is_same_v<std::vector<SubtreePlan>, std::decay_t<decltype(v)>>);
@@ -175,60 +226,59 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         }
       }
 
-      // if our input is not optional, this means we still can arbitrarily
-      // optimize among our candidates and just append our new candidates.
-      if (!v[0]._isOptional) {
+      // All variables seen so far are considered bound and cannot appear as the
+      // RHS of a BIND operation. This is also true for variables from OPTIONALs
+      // (this was a bug in the previous version of the code).
+      {
         auto vc = v[0]._qet->getVariableColumns();
         std::for_each(vc.begin(), vc.end(), [&boundVariables](const auto& el) {
           boundVariables.insert(el.first);
         });
+      }
+
+      // if our input is not optional this means we still can arbitrarily
+      // optimize among our candidates and just append our new candidates.
+      if (!v[0]._isOptional) {
         candidatePlans.push_back(std::forward<decltype(v)>(v));
         return;
       }
 
-      // we are an optional, optimization across is forbidden.
-      // optimize all previously collected candidates, and then perform
-      // an optional join.
-      auto tg = createTripleGraph(&candidateTriples);
-      LOG(TRACE) << "Collapse text cliques..." << std::endl;
-      tg.collapseTextCliques();
-      LOG(TRACE) << "Collapse text cliques done." << std::endl;
-      // always apply all filters to be safe.
-      // TODO<joka921> it could be possible, to allow the DpTab to leave
-      // results unfiltered and add the filters later, but this has to be
-      // carefully checked and I currently see no benefit.
-      auto lastRow =
-          fillDpTab(tg, rootPattern->_filters, candidatePlans).back();
+      auto lastRow = optimizeCommutativ(candidateTriples, candidatePlans,
+                                        rootPattern->_filters);
       candidateTriples._whereClauseTriples.clear();
       candidatePlans.clear();
 
-      // join all the candidates plans for the complete previous inputs
-      // in an optional way with all the candidates for the contents of
-      // the optional join.
-      std::vector<SubtreePlan> optJoinCandidates;
-      for (const auto& a : lastRow) {
-        for (const auto& b : v) {
-          auto vec = createJoinCandidates(a, b, std::nullopt);
-          optJoinCandidates.insert(optJoinCandidates.end(),
-                                   std::make_move_iterator(vec.begin()),
-                                   std::make_move_iterator(vec.end()));
+      std::vector<SubtreePlan> nextCandidates;
+      if (v[0]._isOptional) {
+        // For each candidate plan, and each plan from the OPTIONAL, create a
+        // new plan with an optional join. Note that createJoinCandidates will
+        // know that b is from an OPTIONAL.
+        for (const auto& a : lastRow) {
+          for (const auto& b : v) {
+            auto vec = createJoinCandidates(a, b, std::nullopt);
+            nextCandidates.insert(nextCandidates.end(),
+                                  std::make_move_iterator(vec.begin()),
+                                  std::make_move_iterator(vec.end()));
+          }
         }
-      }
 
-      // keep the best found candidate, which is now a non-optional "so far"
-      // solution which can be combined with all upcoming children until we hit
-      // the next optional
-      // TODO<joka921> Also keep one candidate per Ordering to make even better
-      // plans at this step
-      if (optJoinCandidates.empty()) {
-        throw std::runtime_error(
-            "Could not find a single candidate join for two optimized Graph "
-            "patterns. Please report to the developers");
+        // keep the best found candidate, which is now a non-optional "so far"
+        // solution which can be combined with all upcoming children until we
+        // hit the next optional
+        // TODO<joka921> Also keep one candidate per Ordering to make even
+        // better plans at this step
+        if (nextCandidates.empty()) {
+          throw std::runtime_error(
+              "Could not find a single candidate join for two optimized Graph "
+              "patterns. Please report to the developers");
+        }
+        auto idx = findCheapestExecutionTree(nextCandidates);
+        candidatePlans.push_back({std::move(nextCandidates[idx])});
+        return;
+      } else {
       }
-      auto idx = findCheapestExecutionTree(optJoinCandidates);
-      candidatePlans.push_back({std::move(optJoinCandidates[idx])});
     }
-  };
+  };  // End of joinCandidates lambda.
 
   // go through the child patterns in order, set up all their candidatePlans
   // and then call the joinCandidates call back
@@ -329,6 +379,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         valuesPlan._qet->setVariableColumns(op->getVariableColumns());
         joinCandidates(std::vector{std::move(valuesPlan)});
 
+      } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
+        // The logic of the BIND operation is implemented in the joinCandidates
+        // lambda. Reason: BIND does not add a new join operation like for the
+        // other operations above.
+        joinCandidates(arg);
       } else {
         static_assert(
             std::is_same_v<T, GraphPatternOperation::BasicGraphPattern>);
@@ -502,6 +557,16 @@ bool QueryPlanner::checkUsePatternTrick(
                 break;
               }
             }
+          } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
+            // If the object variable of ql:has-predicate is used somewhere in a
+            // BIND, we cannot use the pattern trick.
+            for (const std::string* v : arg.strings()) {
+              if (*v == t._o) {
+                usePatternTrick = false;
+                break;
+              }
+            }
+
           } else {
             static_assert(
                 std::is_same_v<T, GraphPatternOperation::TransPath> ||
@@ -554,7 +619,16 @@ bool QueryPlanner::checkUsePatternTrick(
                   break;
                 }
               }
-
+            } else if constexpr (std::is_same_v<T,
+                                                GraphPatternOperation::Bind>) {
+              // If the object variable of ql:has-predicate is used somewhere in
+              // a BIND, we cannot use the pattern trick.
+              for (const std::string* v : arg.strings()) {
+                if (*v == t._o) {
+                  usePatternTrick = false;
+                  break;
+                }
+              }
             } else {
               static_assert(
                   std::is_same_v<T, GraphPatternOperation::TransPath>);
@@ -1647,7 +1721,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
   transPath._min = 1;
   transPath._max = std::numeric_limits<size_t>::max();
   transPath._childGraphPattern = *childPlan;
-  p->_children.push_back(std::move(transPath));
+  p->_children.emplace_back(std::move(transPath));
   return p;
 }
 
@@ -1669,7 +1743,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
   transPath._min = std::max(uint_fast16_t(1), path._limit);
   transPath._max = std::numeric_limits<size_t>::max();
   transPath._childGraphPattern = *childPlan;
-  p->_children.push_back(std::move(transPath));
+  p->_children.emplace_back(std::move(transPath));
   return p;
 }
 
@@ -1691,7 +1765,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
   transPath._min = 1;
   transPath._max = path._limit;
   transPath._childGraphPattern = *childPlan;
-  p->_children.push_back(std::move(transPath));
+  p->_children.emplace_back(std::move(transPath));
   return p;
 }
 
@@ -1720,12 +1794,12 @@ ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
   using GraphPattern = ParsedQuery::GraphPattern;
   // Build a tree of union operations
   auto p = GraphPattern{};
-  p._children.push_back(GraphPatternOperation::Union{std::move(patterns[0]),
-                                                     std::move(patterns[1])});
+  p._children.emplace_back(GraphPatternOperation::Union{
+      std::move(patterns[0]), std::move(patterns[1])});
 
   for (size_t i = 2; i < patterns.size(); i++) {
     GraphPattern next;
-    next._children.push_back(
+    next._children.emplace_back(
         GraphPatternOperation::Union{std::move(p), std::move(patterns[i])});
     p = std::move(next);
   }

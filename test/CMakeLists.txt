@@ -10,6 +10,11 @@ add_executable(LRUCacheTest CacheTest.cpp)
 add_test(LRUCacheTest LRUCacheTest)
 target_link_libraries(LRUCacheTest gtest_main ${CMAKE_THREAD_LIBS_INIT} absl::flat_hash_map)
 
+add_executable(ConcurrentCacheTest ConcurrentCacheTest.cpp)
+add_test(ConcurrentCacheTest ConcurrentCacheTest)
+target_link_libraries(ConcurrentCacheTest gtest_main ${CMAKE_THREAD_LIBS_INIT} absl::flat_hash_map)
+
+
 add_executable(FileTest FileTest.cpp)
 add_test(FileTest FileTest)
 target_link_libraries(FileTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
@@ -141,3 +146,17 @@ target_link_libraries(PriorityQueueTest gtest_main absl::flat_hash_map ${CMAKE_T
 add_executable(SynchronizedTest SynchronizedTest.cpp)
 add_test(SynchronizedTest SynchronizedTest)
 target_link_libraries(SynchronizedTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(BindTest BindTest.cpp)
+add_test(BindTest BindTest)
+target_link_libraries(BindTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(LimitedAllocatorTest LimitedAllocatorTest.cpp)
+add_test(LimitedAllocatorTest LimitedAllocatorTest)
+target_link_libraries(LimitedAllocatorTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(SortPerformanceEstimatorTest SortPerformanceEstimatorTest.cpp)
+target_link_libraries(SortPerformanceEstimatorTest gtest_main SortPerformanceEstimator ${CMAKE_THREAD_LIBS_INIT})
+# this test runs for quite some time! If this is undesired, comment it out
+add_test(SortPerformanceEstimatorTest SortPerformanceEstimatorTest)
+

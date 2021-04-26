@@ -8,13 +8,16 @@
 #include <shared_mutex>
 #include <string>
 #include <vector>
+
 #include "../global/Constants.h"
 #include "../index/Index.h"
 #include "../util/Cache.h"
+#include "../util/ConcurrentCache.h"
 #include "../util/Log.h"
 #include "../util/Synchronized.h"
 #include "./Engine.h"
 #include "./ResultTable.h"
+#include "./SortPerformanceEstimator.h"
 #include "QueryPlanningCostFactors.h"
 #include "RuntimeInformation.h"
 
@@ -23,15 +26,21 @@ using std::string;
 using std::vector;
 
 struct CacheValue {
-  CacheValue() : _resTable(std::make_shared<ResultTable>()), _runtimeInfo() {}
-  std::shared_ptr<ResultTable> _resTable;
+  explicit CacheValue(ad_utility::AllocatorWithLimit<Id> allocator)
+      : _resultTable(std::make_shared<ResultTable>(std::move(allocator))),
+        _runtimeInfo() {}
+  std::shared_ptr<ResultTable> _resultTable;
   RuntimeInformation _runtimeInfo;
   [[nodiscard]] size_t size() const {
-    return _resTable ? _resTable->size() * _resTable->width() : 0;
+    return _resultTable ? _resultTable->size() * _resultTable->width() : 0;
   }
 };
 
-typedef ad_utility::LRUCache<string, CacheValue> SubtreeCache;
+// Threadsafe LRU cache for (partial) query results, that
+// checks on insertion, if the result is currently being computed
+// by another query.
+using ConcurrentLruCache =
+    ad_utility::ConcurrentCache<ad_utility::LRUCache<string, CacheValue>>;
 using PinnedSizes =
     ad_utility::Synchronized<ad_utility::HashMap<std::string, size_t>,
                              std::shared_mutex>;
@@ -41,8 +50,10 @@ using PinnedSizes =
 class QueryExecutionContext {
  public:
   QueryExecutionContext(const Index& index, const Engine& engine,
-                        SubtreeCache* const cache,
+                        ConcurrentLruCache* const cache,
                         PinnedSizes* const pinnedSizes,
+                        ad_utility::AllocatorWithLimit<Id> allocator,
+                        SortPerformanceEstimator sortPerformanceEstimator,
                         const bool pinSubtrees = false,
                         const bool pinResult = false)
       : _pinSubtrees(pinSubtrees),
@@ -51,25 +62,34 @@ class QueryExecutionContext {
         _engine(engine),
         _subtreeCache(cache),
         _pinnedSizes(pinnedSizes),
-        _costFactors() {}
+        _allocator(std::move(allocator)),
+        _costFactors(),
+        _sortPerformanceEstimator(sortPerformanceEstimator) {}
 
-  SubtreeCache& getQueryTreeCache() { return *_subtreeCache; }
+  ConcurrentLruCache& getQueryTreeCache() { return *_subtreeCache; }
 
   PinnedSizes& getPinnedSizes() { return *_pinnedSizes; }
 
-  const Engine& getEngine() const { return _engine; }
+  [[nodiscard]] const Engine& getEngine() const { return _engine; }
 
-  const Index& getIndex() const { return _index; }
+  [[nodiscard]] const Index& getIndex() const { return _index; }
 
-  void clearCache() { getQueryTreeCache().clear(); }
+  void clearCacheUnpinnedOnly() { getQueryTreeCache().clearUnpinnedOnly(); }
+
+  [[nodiscard]] const SortPerformanceEstimator& getSortPerformanceEstimator()
+      const {
+    return _sortPerformanceEstimator;
+  }
 
   void readCostFactorsFromTSVFile(const string& fileName) {
     _costFactors.readFromFile(fileName);
   }
 
-  float getCostFactor(const string& key) const {
+  [[nodiscard]] double getCostFactor(const string& key) const {
     return _costFactors.getCostFactor(key);
   };
+
+  ad_utility::AllocatorWithLimit<Id> getAllocator() { return _allocator; }
 
   const bool _pinSubtrees;
   const bool _pinResult;
@@ -77,7 +97,10 @@ class QueryExecutionContext {
  private:
   const Index& _index;
   const Engine& _engine;
-  SubtreeCache* const _subtreeCache;
+  ConcurrentLruCache* const _subtreeCache;
   PinnedSizes* const _pinnedSizes;
+  // allocators are copied but hold shared state
+  ad_utility::AllocatorWithLimit<Id> _allocator;
   QueryPlanningCostFactors _costFactors;
+  SortPerformanceEstimator _sortPerformanceEstimator;
 };

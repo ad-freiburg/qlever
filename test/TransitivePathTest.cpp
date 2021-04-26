@@ -10,7 +10,10 @@
 #include "../src/engine/TransitivePath.h"
 #include "../src/global/Id.h"
 
-void sameUnorderedContent(const IdTable& a, const IdTable& b) {
+// First sort both of the inputs and then ASSERT their equality. Needed for
+// results of the TransitivePath operations which have a non-deterministic order
+// because of the hash maps which are used internally.
+void assertSameUnorderedContent(const IdTable& a, const IdTable& b) {
   auto aCpy = a;
   auto bCpy = b;
   auto sorter = [](const auto& a, const auto& b) {
@@ -30,8 +33,15 @@ void sameUnorderedContent(const IdTable& a, const IdTable& b) {
   ASSERT_EQ(aCpy, bCpy);
 }
 
+ad_utility::AllocatorWithLimit<Id>& allocator() {
+  static ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<size_t>::max())};
+  return a;
+}
+
 TEST(TransitivePathTest, computeTransitivePath) {
-  IdTable sub(2);
+  IdTable sub(2, allocator());
   sub.push_back({0, 2});
   sub.push_back({2, 4});
   sub.push_back({4, 7});
@@ -41,9 +51,9 @@ TEST(TransitivePathTest, computeTransitivePath) {
   // Disconnected component.
   sub.push_back({10, 11});
 
-  IdTable result(2);
+  IdTable result(2, allocator());
 
-  IdTable expected(2);
+  IdTable expected(2, allocator());
   expected.push_back({0, 2});
   expected.push_back({0, 4});
   expected.push_back({0, 7});
@@ -63,10 +73,12 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({7, 7});
   expected.push_back({10, 11});
 
-  TransitivePath::computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0,
-                                           1,
-                                           std::numeric_limits<size_t>::max());
-  sameUnorderedContent(expected, result);
+  TransitivePath T(nullptr, nullptr, false, false, 0, 0, 0, 0, "bim"s, "bam"s,
+                   0, 0);
+
+  T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0, 1,
+                             std::numeric_limits<size_t>::max());
+  assertSameUnorderedContent(expected, result);
 
   result.clear();
   expected.clear();
@@ -84,9 +96,8 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({7, 7});
   expected.push_back({10, 11});
 
-  TransitivePath::computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0,
-                                           1, 2);
-  sameUnorderedContent(expected, result);
+  T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0, 1, 2);
+  assertSameUnorderedContent(expected, result);
 
   result.clear();
   expected.clear();
@@ -94,16 +105,14 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({7, 2});
   expected.push_back({7, 7});
 
-  TransitivePath::computeTransitivePath<2>(&result, sub, false, true, 0, 1, 7,
-                                           0, 1, 2);
-  sameUnorderedContent(expected, result);
+  T.computeTransitivePath<2>(&result, sub, false, true, 0, 1, 7, 0, 1, 2);
+  assertSameUnorderedContent(expected, result);
 
   result.clear();
   expected.clear();
   expected.push_back({0, 2});
   expected.push_back({7, 2});
 
-  TransitivePath::computeTransitivePath<2>(&result, sub, true, false, 0, 1, 0,
-                                           2, 1, 2);
-  sameUnorderedContent(expected, result);
+  T.computeTransitivePath<2>(&result, sub, true, false, 0, 1, 0, 2, 1, 2);
+  assertSameUnorderedContent(expected, result);
 }

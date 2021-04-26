@@ -16,8 +16,14 @@
 
 class Union : public Operation {
  public:
-  Union(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
-        std::shared_ptr<QueryExecutionTree> t2);
+  Union(QueryExecutionContext* qec,
+        const std::shared_ptr<QueryExecutionTree>& t1,
+        const std::shared_ptr<QueryExecutionTree>& t2);
+
+  // Create a very explicit way to create an invalid, uninitialized union. This
+  // can only be used for certain unit tests of almost static member functions
+  struct InvalidUnionOnlyUseForTestinTag {};
+  explicit Union(InvalidUnionOnlyUseForTestinTag) {}
 
   virtual string asString(size_t indent = 0) const override;
 
@@ -43,9 +49,9 @@ class Union : public Operation {
 
   // The method is declared here to make it unit testable
   template <int LEFT_WIDTH, int RIGHT_WIDTH, int OUT_WIDTH>
-  static void computeUnion(
-      IdTable* res, const IdTable& left, const IdTable& right,
-      const std::vector<std::array<size_t, 2>>& columnOrigins);
+  void computeUnion(IdTable* inputTable, const IdTable& left,
+                    const IdTable& right,
+                    const std::vector<std::array<size_t, 2>>& columnOrigins);
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtrees[0].get(), _subtrees[1].get()};

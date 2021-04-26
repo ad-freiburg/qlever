@@ -3,30 +3,40 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+
 #include <cstdio>
 #include <fstream>
+
 #include "../src/engine/CallFixedSize.h"
 #include "../src/engine/Engine.h"
 #include "../src/engine/Join.h"
 #include "../src/engine/OptionalJoin.h"
 
+ad_utility::AllocatorWithLimit<Id>& allocator() {
+  static ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+          std::numeric_limits<size_t>::max())};
+  return a;
+}
+
 TEST(EngineTest, joinTest) {
-  IdTable a(2);
+  IdTable a(2, allocator());
   a.push_back({1, 1});
   a.push_back({1, 3});
   a.push_back({2, 1});
   a.push_back({2, 2});
   a.push_back({4, 1});
-  IdTable b(2);
+  IdTable b(2, allocator());
   b.push_back({1, 3});
   b.push_back({1, 8});
   b.push_back({3, 1});
   b.push_back({4, 2});
-  IdTable res(3);
+  IdTable res(3, allocator());
   int lwidth = a.cols();
   int rwidth = b.cols();
   int reswidth = a.cols() + b.cols() - 1;
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, Join::join, a, 0, b, 0, &res);
+  Join J{Join::InvalidOnlyForTestingJoinTag{}};
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, a, 0, b, 0, &res);
 
   ASSERT_EQ(1u, res(0, 0));
   ASSERT_EQ(1u, res(0, 1));
@@ -57,7 +67,7 @@ TEST(EngineTest, joinTest) {
   a.push_back({400000, 200000});
   b.push_back({400000, 200000});
 
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, Join::join, a, 0, b, 0, &res);
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, a, 0, b, 0, &res);
   ASSERT_EQ(6u, res.size());
 
   a.clear();
@@ -75,14 +85,14 @@ TEST(EngineTest, joinTest) {
   }
   a.push_back({4000001, 200000});
   b.push_back({4000001, 200000});
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, Join::join, a, 0, b, 0, &res);
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, a, 0, b, 0, &res);
   ASSERT_EQ(2u, res.size());
 
   a.clear();
   b.clear();
   res.clear();
 
-  IdTable c(1);
+  IdTable c(1, allocator());
   c.push_back({0});
 
   b.push_back({0, 1});
@@ -94,8 +104,8 @@ TEST(EngineTest, joinTest) {
   rwidth = c.cols();
   reswidth = b.cols() + c.cols() - 1;
   // reset the IdTable.
-  res = IdTable(reswidth);
-  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, Join::join, b, 0, c, 0, &res);
+  res = IdTable(reswidth, allocator());
+  CALL_FIXED_SIZE_3(lwidth, rwidth, reswidth, J.join, b, 0, c, 0, &res);
 
   ASSERT_EQ(2u, res.size());
 
@@ -107,18 +117,18 @@ TEST(EngineTest, joinTest) {
 };
 
 TEST(EngineTest, optionalJoinTest) {
-  IdTable a(3);
+  IdTable a(3, allocator());
   a.push_back({4, 1, 2});
   a.push_back({2, 1, 3});
   a.push_back({1, 1, 4});
   a.push_back({2, 2, 1});
   a.push_back({1, 3, 1});
-  IdTable b(3);
+  IdTable b(3, allocator());
   b.push_back({3, 3, 1});
   b.push_back({1, 8, 1});
   b.push_back({4, 2, 2});
   b.push_back({1, 1, 3});
-  IdTable res(4);
+  IdTable res(4, allocator());
   vector<array<Id, 2>> jcls;
   jcls.push_back(array<Id, 2>{{1, 2}});
   jcls.push_back(array<Id, 2>{{2, 1}});
@@ -159,17 +169,17 @@ TEST(EngineTest, optionalJoinTest) {
   ASSERT_EQ(1u, res(4, 3));
 
   // Test the optional join with variable sized data.
-  IdTable va(6);
+  IdTable va(6, allocator());
   va.push_back({1, 2, 3, 4, 5, 6});
   va.push_back({1, 2, 3, 7, 5, 6});
   va.push_back({7, 6, 5, 4, 3, 2});
 
-  IdTable vb(3);
+  IdTable vb(3, allocator());
   vb.push_back({2, 3, 4});
   vb.push_back({2, 3, 5});
   vb.push_back({6, 7, 4});
 
-  IdTable vres(7);
+  IdTable vres(7, allocator());
   jcls.clear();
   jcls.push_back(array<Id, 2>{{1, 0}});
   jcls.push_back(array<Id, 2>{{2, 1}});
@@ -206,8 +216,8 @@ TEST(EngineTest, optionalJoinTest) {
 }
 
 TEST(EngineTest, distinctTest) {
-  IdTable inp(4);
-  IdTable res(4);
+  IdTable inp(4, allocator());
+  IdTable res(4, allocator());
 
   inp.push_back({1, 1, 3, 7});
   inp.push_back({6, 1, 3, 6});

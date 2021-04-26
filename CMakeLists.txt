@@ -20,11 +20,11 @@ endif()
 ## Build targets for address sanitizer
 # AddressSanitize
 set(CMAKE_C_FLAGS_ASAN
-        "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
+        "-fsanitize=address -fsanitize=undefined -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
         CACHE STRING "Flags used by the C compiler during AddressSanitizer builds."
         FORCE)
 set(CMAKE_CXX_FLAGS_ASAN
-        "-fsanitize=address -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
+        "-fsanitize=address -fsanitize=undefined -fno-optimize-sibling-calls -fsanitize-address-use-after-scope -fno-omit-frame-pointer -g -O1"
         CACHE STRING "Flags used by the C++ compiler during AddressSanitizer builds."
         FORCE)
 
@@ -100,12 +100,12 @@ include_directories(third_party/abseil-cpp/)
 
 if (USE_PARALLEL)
     include(FindOpenMP)
-    if(OPENMP_FOUND)
+    if (OPENMP_FOUND)
         set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${OpenMP_C_FLAGS}")
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS} -static-libgcc -static-libstdc++")
-    endif()
-    add_definitions("-D_PARALLEL_SORT")
+        add_definitions("-D_PARALLEL_SORT")
+    endif ()
 endif()
 
 if (USE_TREE_BASED_CACHE)

@@ -1,3 +1,4 @@
+add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp SortPerformanceEstimator.h)
 add_library(engine
         Engine.h
         IndexSequence.h
@@ -29,7 +30,8 @@ add_library(engine
         MultiColumnJoin.cpp MultiColumnJoin.h
         TransitivePath.cpp TransitivePath.h
         Values.cpp Values.h
+        Bind.cpp Bind.h
         IdTable.h
-        )
+        ../util/Random.h)
 
-target_link_libraries(engine index parser absl::flat_hash_set)
+target_link_libraries(engine index parser SortPerformanceEstimator absl::flat_hash_set)

@@ -6,8 +6,10 @@
 #include <initializer_list>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
+#include "../engine/ResultTable.h"
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
@@ -384,14 +386,92 @@ struct GraphPatternOperation {
     ParsedQuery::GraphPattern _childGraphPattern;
   };
 
-  std::variant<BasicGraphPattern, GroupGraphPattern, Optional, Union, Subquery,
-               TransPath, Values>
+  // A SPARQL Bind construct.  Currently supports either an unsigned integer or
+  // a knowledge base constant. For simplicity, we store both values instead of
+  // using a union or std::variant here.
+  struct Bind {
+    // Only usigned integer and knowledge base constants are currently supported
+    struct Constant {
+      int64_t _intValue = 0;  // the Value of an integer constant (VERBATIM)
+      string _kbValue;  // the value of a knowledge base entity or literal (KB)
+      ResultTable::ResultType
+          _type;  // the type, currently always KB or VERBATIM
+
+      Constant() = default;
+
+      // Initialize a  VERBATIM constant. Also set a readable _kbValue variable,
+      // since it is used with the runtime info
+      explicit Constant(int64_t val)
+          : _intValue(val),
+            _kbValue(std::to_string(val)),
+            _type(ResultTable::ResultType::VERBATIM) {}
+      // Initialize a KB constant. If the argument string is not part of the KB
+      // this will lead to an error later on (currently no possibility to
+      // already check this during parsing
+      explicit Constant(std::string entry)
+          : _kbValue(std::move(entry)), _type(ResultTable::ResultType::KB) {}
+      // TODO<joka921> in c++ 20 we have constexpr strings.
+      static constexpr const char* Name = "Constant";
+      // Some other functions need this interface, for example,
+      // ParsedQuery::expandPrefix .
+      vector<string*> strings() { return {&_kbValue}; }
+      [[nodiscard]] string getDescriptor() const { return _kbValue; }
+    };
+    struct Sum {
+      static constexpr const char* Name = "Sum";
+      string _var1, _var2;
+      vector<string*> strings() { return {&_var1, &_var2}; }
+      [[nodiscard]] string getDescriptor() const {
+        return _var1 + " + " + _var2;
+      }
+    };
+
+    struct Rename {
+      static constexpr const char* Name = "Rename";
+      string _var;
+      vector<string*> strings() { return {&_var}; }
+      [[nodiscard]] string getDescriptor() const { return _var; }
+    };
+    std::variant<Rename, Constant, Sum> _expressionVariant;
+    std::string _target;  // the variable to which the expression will be bound
+
+    // Return all the strings contained in the BIND expression (variables,
+    // constants, etc. Is required e.g. by ParsedQuery::expandPrefix.
+    vector<string*> strings() {
+      auto r = std::visit([](auto&& arg) { return arg.strings(); },
+                          _expressionVariant);
+      r.push_back(&_target);
+      return r;
+    }
+
+    // Const overload, needed by the query planner. The actual behavior is
+    // always const, so this is fine.
+    [[nodiscard]] vector<const string*> strings() const {
+      auto r = const_cast<Bind*>(this)->strings();
+      return {r.begin(), r.end()};
+    }
+
+    // "Constant", "Rename" etc
+    [[nodiscard]] constexpr const char* operationName() const {
+      return std::visit([](auto&& arg) { return arg.Name; },
+                        _expressionVariant);
+    }
+
+    [[nodiscard]] string getDescriptor() const {
+      auto inner = std::visit([](auto&& arg) { return arg.getDescriptor(); },
+                              _expressionVariant);
+      return "BIND (" + inner + " AS " + _target + ")";
+    }
+  };
+
+  std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
+               Values>
       variant_;
-  template <typename A, typename... Args,
-            typename = std::enable_if_t<
-                !std::is_base_of_v<GraphPatternOperation, std::decay_t<A>>>>
-  GraphPatternOperation(A&& a, Args&&... args)
-      : variant_(std::forward<A>(a), std::forward<Args>(args)...) {}
+  // Construct from one of the variant types (or anything that is convertible to
+  // them.
+  template <typename A, typename = std::enable_if_t<!std::is_base_of_v<
+                            GraphPatternOperation, std::decay_t<A>>>>
+  explicit GraphPatternOperation(A&& a) : variant_(std::forward<A>(a)) {}
   GraphPatternOperation() = delete;
   GraphPatternOperation(const GraphPatternOperation&) = default;
   GraphPatternOperation(GraphPatternOperation&&) noexcept = default;
@@ -417,12 +497,14 @@ struct GraphPatternOperation {
     return std::get<T>(variant_);
   }
   template <class T>
-  constexpr const T& get() const {
+  [[nodiscard]] constexpr const T& get() const {
     return std::get<T>(variant_);
   }
 
   auto& getBasic() { return get<BasicGraphPattern>(); }
-  const auto& getBasic() const { return get<BasicGraphPattern>(); }
+  [[nodiscard]] const auto& getBasic() const {
+    return get<BasicGraphPattern>();
+  }
 
   void toString(std::ostringstream& os, int indentation = 0) const;
 };

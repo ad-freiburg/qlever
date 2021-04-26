@@ -8,11 +8,14 @@
 #include <getopt.h>
 #include <libgen.h>
 #include <stdlib.h>
+
 #include <iomanip>
 #include <iostream>
 #include <string>
 
 #include "engine/QueryPlanner.h"
+#include "engine/SortPerformanceEstimator.h"
+#include "global/Constants.h"
 #include "parser/SparqlParser.h"
 #include "util/ReadableNumberFact.h"
 #include "util/Timer.h"
@@ -87,9 +90,15 @@ int main(int argc, char** argv) {
     index.dumpAsciiLists(lists, decodeGapsAndFrequency);
 
     Engine engine;
-    SubtreeCache cache(NOF_SUBTREES_TO_CACHE);
+    ConcurrentLruCache cache(DEFAULT_CACHE_MAX_NUM_ENTRIES);
     PinnedSizes pinnedSizes;
-    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes);
+    ad_utility::AllocatorWithLimit<Id> allocator{
+        ad_utility::makeAllocationMemoryLeftThreadsafeObject(
+            DEFAULT_MEM_FOR_QUERIES_IN_GB)};
+    SortPerformanceEstimator sortPerformanceEstimator =
+        SortPerformanceEstimator::CreateEstimatorExpensively(allocator);
+    QueryExecutionContext qec(index, engine, &cache, &pinnedSizes, allocator,
+                              sortPerformanceEstimator);
     ParsedQuery q;
     if (!freebase) {
       q = SparqlParser("SELECT ?x WHERE {?x <is-a> <Scientist>}").parse();

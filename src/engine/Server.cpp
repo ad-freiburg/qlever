@@ -157,7 +157,7 @@ void Server::process(Socket* client) {
       }
 
       if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
-        _cache.clear();
+        _cache.clearUnpinnedOnly();
       }
 
       if (ad_utility::getLowercase(params["cmd"]) == "clearcachecomplete") {
@@ -165,6 +165,16 @@ void Server::process(Socket* client) {
         _cache.clearAll();
         lock->clear();
       }
+
+      ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
+          std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+              ad_utility::TimeoutTimer::unlimited());
+      if (params.contains("timeout")) {
+        timeoutTimer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
+            ad_utility::TimeoutTimer::fromSeconds(
+                atof(params["timeout"].c_str())));
+      }
+
       auto it = params.find("send");
       size_t maxSend = MAX_NOF_ROWS_IN_RESULT;
       if (it != params.end()) {
@@ -190,11 +200,17 @@ void Server::process(Socket* client) {
       pq.expandPrefixes();
 
       QueryExecutionContext qec(_index, _engine, &_cache, &_pinnedSizes,
+                                _allocator, _sortPerformanceEstimator,
                                 pinSubtrees, pinResult);
+      // start the shared timeout timer here to also include
+      // the query planning
+      timeoutTimer->wlock()->start();
+
       QueryPlanner qp(&qec);
       qp.setEnablePatternTrick(_enablePatternTrick);
       QueryExecutionTree qet = qp.createExecutionTree(pq);
       qet.isRoot() = true;  // allow pinning of the final result
+      qet.recursivelySetTimeoutTimer(timeoutTimer);
       LOG(TRACE) << qet.asString() << std::endl;
 
       if (ad_utility::getLowercase(params["action"]) == "csv_export") {
@@ -521,9 +537,9 @@ string Server::composeStatsJson() const {
 // _______________________________________
 nlohmann::json Server::composeCacheStatsJson() const {
   nlohmann::json result;
-  result["num-cached-elements"] = _cache.numCachedElements();
-  result["num-pinned-elements"] = _cache.numPinnedElements();
-  result["cached-size"] = _cache.cachedSize();
+  result["num-non-pinned-entries"] = _cache.numNonPinnedEntries();
+  result["num-pinned-entries"] = _cache.numPinnedEntries();
+  result["non-pinned-size"] = _cache.nonPinnedSize();
   result["pinned-size"] = _cache.pinnedSize();
   result["num-pinned-index-scan-sizes"] = _pinnedSizes.rlock()->size();
   return result;
