@@ -153,14 +153,15 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buff
 
       // write the new word to the vocabulary
       if (_lastWritten < EXTERNALIZED_LITERALS_PREFIX) {
-        auto escaped = TurtleToken::escapeRDFLiteral(_lastWritten);
+        auto escaped = TurtleToken::escapeNewlineAndBackslash(_lastWritten);
         try {
           auto restored = TurtleToken::normalizeRDFLiteral(escaped);
         } catch (...) {
           LOG(ERROR) << "Failure in the (un) escaping of vocabulary entry " + _lastWritten
                      << std::endl;
         }
-        _outfile << TurtleToken::escapeRDFLiteral(_lastWritten) << '\n';
+        _outfile << TurtleToken::escapeNewlineAndBackslash(_lastWritten)
+                 << '\n';
       } else {
         // we have to strip the externalization character again
         auto& c = _lastWritten[0];
@@ -176,7 +177,8 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buff
                           "should never happen\n";
             AD_CHECK(false)
         }
-        _outfileExternal << TurtleToken::escapeRDFLiteral(_lastWritten) << '\n';
+        _outfileExternal << TurtleToken::escapeNewlineAndBackslash(_lastWritten)
+                         << '\n';
       }
 
       // write id to corresponding vec

@@ -376,13 +376,13 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     std::string l4 = R"("""simpleLiteral""")";
     ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l4));
 
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l1)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l2)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l4)));
   }
   {
@@ -394,13 +394,13 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l3));
     std::string l4 = R"("""simpleLiteral"""@en-ca)";
     ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l4));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l1)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l2)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l4)));
   }
   {
@@ -413,13 +413,13 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     std::string l4 = R"("""simpleLiteral"""^^xsd::boolean)";
     ASSERT_EQ(l1, TurtleToken::normalizeRDFLiteral(l4));
 
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l1)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l2)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l4)));
   }
 
@@ -434,14 +434,14 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     std::string l4 = R"("""si\"mple\'Li\n\rt\t\b\fer\\""")";
     ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
 
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(t));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(t));
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l1)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l2)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l4)));
   }
   {
@@ -455,14 +455,14 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     std::string l4 = R"("""si\"mple\'Li\n\rt\t\b\fer\\"""@de-us)";
     ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
 
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(t));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(t));
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l1)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l2)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l4)));
   }
 
@@ -477,14 +477,14 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     std::string l4 = R"("""si\"mple\'Li\n\rt\t\b\fer\\"""^^xsd::integer)";
     ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
 
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(t));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(t));
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l1)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l2)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(l1, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(l1, TurtleToken::escapeNewlineAndBackslash(
                       TurtleToken::normalizeRDFLiteral(l4)));
   }
 
@@ -496,10 +496,10 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
     std::string l4 = "\'\'\'si\"mple\'Li\n\rt\t\b\fer\\\\\'\'\'^^xsd::integer";
     ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
 
-    ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(t));
-    ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(tEscaped, TurtleToken::escapeNewlineAndBackslash(t));
+    ASSERT_EQ(tEscaped, TurtleToken::escapeNewlineAndBackslash(
                             TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(tEscaped, TurtleToken::escapeNewlineAndBackslash(
                             TurtleToken::normalizeRDFLiteral(l4)));
   }
 
@@ -513,31 +513,48 @@ TEST(TokenizerTest, normalizeRDFLiteral) {
         "\'\'\'si\"mple\'Liä\\u00e4\n\rt\t\b\fer\\\\\'\'\'^^xsd::integer";
     ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l4));
 
-    ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(t));
-    ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(tEscaped, TurtleToken::escapeNewlineAndBackslash(t));
+    ASSERT_EQ(tEscaped, TurtleToken::escapeNewlineAndBackslash(
                             TurtleToken::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(tEscaped, TurtleToken::escapeRDFLiteral(
+    ASSERT_EQ(tEscaped, TurtleToken::escapeNewlineAndBackslash(
                             TurtleToken::normalizeRDFLiteral(l4)));
   }
 
+  // Passing non-literals (strings that don't start with quotes) has no effect
   {
-    std::string t = "<si\"mple\'Liää\n\rt\t\b\fer\\>";
     std::string l3 = "<si\"mple\'Li\\u00E4ä\n\rt\t\b\fer\\\\>";
-    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l3));
+    ASSERT_EQ(l3, TurtleToken::normalizeRDFLiteral(l3));
   }
   {
-    std::string t = "<si\"mple\'Liää\n\rt\t\b\fer\\>";
     std::string l3 = "<si\"mple\'Li\\U000000E4ä\n\rt\t\b\fer\\\\>";
-    ASSERT_EQ(t, TurtleToken::normalizeRDFLiteral(l3));
+    ASSERT_EQ(l3, TurtleToken::normalizeRDFLiteral(l3));
   }
 
   {
     std::string unterminated = "<noending";
-    ASSERT_THROW(TurtleToken::normalizeRDFLiteral(unterminated),
-                 std::runtime_error);
+    ASSERT_EQ(unterminated, TurtleToken::normalizeRDFLiteral(unterminated));
   }
 
   std::string lit = R"(",\")";
-  lit = R"(",")";
-  ASSERT_EQ(std::string("\",\\\\\""), TurtleToken::escapeRDFLiteral(lit));
+  ASSERT_EQ(std::string("\",\\\\\""),
+            TurtleToken::escapeNewlineAndBackslash(lit));
+}
+
+TEST(TokenizerTest, unescapeIriref) {
+  {
+    std::string t = "<si\"mple\'Liää\n\rt\t\b\fer\\>";
+    std::string l3 = "<si\"mple\'Li\\u00E4ä\n\rt\t\b\fer\\\\>";
+    ASSERT_THROW(TurtleToken::unescapeIriref(l3), std::runtime_error);
+  }
+  {
+    std::string t = "<si\"mple\'Liää\n\rt\t\b\fer\\>";
+    std::string l3 = "<si\"mple\'Li\\U000000E4ä\n\rt\t\b\fer\\\\>";
+    ASSERT_THROW(TurtleToken::unescapeIriref(l3), std::runtime_error);
+  }
+
+  {
+    std::string unterminated = "<noending";
+    ASSERT_THROW(TurtleToken::unescapeIriref(unterminated),
+                 ad_semsearch::Exception);
+  }
 }

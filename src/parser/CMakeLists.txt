@@ -1,5 +1,5 @@
 add_library(parser
-              SparqlParser.h SparqlParser.cpp
+        SparqlParser.h SparqlParser.cpp
         ParsedQuery.h ParsedQuery.cpp
         ParseException.h
         TsvParser.h TsvParser.cpp
@@ -9,5 +9,5 @@ add_library(parser
         ContextFileParser.cpp ContextFileParser.h
         ParallelParseBuffer.h
         PropertyPathParser.h PropertyPathParser.cpp
-        SparqlLexer.h SparqlLexer.cpp)
+        SparqlLexer.h SparqlLexer.cpp RdfEscaping.h)
 target_link_libraries(parser re2 ${ICU_LIBRARIES} absl::flat_hash_map)
