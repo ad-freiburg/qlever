@@ -7,9 +7,12 @@
 
 #include <unicode/ustream.h>
 
+#include <sstream>
 #include <string>
 
+#include "../util/Exception.h"
 #include "../util/HashSet.h"
+#include "../util/StringUtils.h"
 
 namespace RdfEscaping {
 using namespace std::string_literals;
