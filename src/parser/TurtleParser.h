@@ -27,9 +27,9 @@ using std::string;
  * @brief The actual parser class
  *
  * If TokenizerCtre is used as a Tokenizer, a relaxed parsing mode is applied,
- * that does not quite fulfill the SPARQL standard is apllied. This means that:
- * IRIS  of any kind (prefixed or not) must be limited to the ascii range
- * Prefixed names (like prefix:suffix) may not include escape sequences
+ * that does not quite fulfill the SPARQL standard. This means that:
+ * - IRIS  of any kind (prefixed or not) must be limited to the ascii range
+ * - Prefixed names (like prefix:suffix) may not include escape sequences
  *
  * These relaxations currently allow for fast parsing of Wikidata but might fail
  * on other knowledge bases, so this should be used with caution.
@@ -49,7 +49,7 @@ class TurtleParser {
     string _msg = "Error while parsing Turtle";
   };
 
-  // If the CTRE
+  // The CTRE Tokenizer implies relaxed parsing.
   static constexpr bool UseRelaxedParsing =
       std::is_same_v<Tokenizer_T, TokenizerCtre>;
 

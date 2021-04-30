@@ -1,6 +1,6 @@
-//
-// Created by johannes on 27.04.21.
-//
+// Copyright 2021, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
 #ifndef QLEVER_RDFESCAPING_H
 #define QLEVER_RDFESCAPING_H
@@ -19,7 +19,7 @@ using namespace std::string_literals;
 namespace detail {
 
 /// turn a number of hex-chars like '00e4' into utf-8
-static std::string unescapeUchar(std::string_view hex) {
+inline std::string unescapeUchar(std::string_view hex) {
   UChar32 x;
   std::stringstream sstream;
   sstream << std::hex << hex;

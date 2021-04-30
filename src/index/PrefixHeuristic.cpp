@@ -64,13 +64,6 @@ TreeNode* TreeNode::insertAfter(string_view value) {
 
   // register the newly created node as a child of this node
   _children.push_back(std::move(newNode));
-
-  for (const auto& c : _children) {
-    if (c.get() == nullptr) {
-      LOG(ERROR) << "Illegal nullptr child was found" << std::endl;
-    }
-  }
-
   return _children.back().get();
 }
 

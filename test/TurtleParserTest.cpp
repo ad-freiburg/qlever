@@ -9,7 +9,7 @@
 
 using std::string;
 TEST(TurtleParserTest, prefixedName) {
-  auto f = [](auto& p) {
+  auto runCommonTests = [](auto& p) {
     p._prefixMap["wd"] = "www.wikidata.org/";
     p.setInputStream("wd:Q430 someotherContent");
     ASSERT_TRUE(p.prefixedName());
@@ -39,7 +39,7 @@ TEST(TurtleParserTest, prefixedName) {
   };
   {
     TurtleStringParser<Tokenizer> p;
-    f(p);
+    runCommonTests(p);
     p.setInputStream("wd:esc\\,aped");
     ASSERT_TRUE(p.prefixedName());
     ASSERT_EQ(p._lastParseResult, "<www.wikidata.org/esc\\,aped>");
@@ -59,7 +59,7 @@ TEST(TurtleParserTest, prefixedName) {
 
   {
     TurtleStringParser<TokenizerCtre> p;
-    f(p);
+    runCommonTests(p);
     p.setInputStream("wd:esc\\,aped");
     ASSERT_TRUE(p.prefixedName());
     // this relaxed (wrong) mode only parses until it meets the comma.
