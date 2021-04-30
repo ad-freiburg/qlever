@@ -253,10 +253,6 @@ struct TurtleTokenCtre {
  * at runtime
  */
 struct TurtleToken {
-
-
-
-
   using string = std::string;
   TurtleToken()
       // those constants are always skipped, so they don't need a group around
