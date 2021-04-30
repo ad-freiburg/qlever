@@ -65,9 +65,10 @@ const uint64_t MAGIC_NUMBER_SPARSE_META_DATA_VERSION =
 // constants for meta data versions in case the format is changed again
 constexpr uint64_t V_NO_VERSION = 0;  // this is  a dummy
 constexpr uint64_t V_BLOCK_LIST_AND_STATISTICS = 1;
+constexpr uint64_t V_SERIALIZATION_LIBRARY = 2;
 
 // this always tags the current version
-constexpr uint64_t V_CURRENT = V_BLOCK_LIST_AND_STATISTICS;
+constexpr uint64_t V_CURRENT = V_SERIALIZATION_LIBRARY;
 
 // Check index_layout.md for explanations (expected comments).
 // Removed comments here so that not two places had to be kept up-to-date.
@@ -117,16 +118,15 @@ class IndexMetaData {
     static const bool value = std::is_same<MetaWrapperMmap, T>::value ||
                               std::is_same<MetaWrapperMmapView, T>::value;
   };
-  // compile time information whether this instatiation if MMapBased or not
+  // Compile time information whether this instatiation if MMapBased or not
   static constexpr bool _isMmapBased = IsMmapBased<MapType>::value;
 
-  // parse and get the version tag of this MetaData.
-  // Also verifies that it matches the MapType parameter
-  // No version tag will lead to version = V_NO_VERSION
-  // Also returns the number of bytes that the version info was stored in so
-  // that createFromByteBuffer can continue at the correct position.
-  VersionInfo parseMagicNumberAndVersioning(unsigned char* buf);
-  void createFromByteBuffer(unsigned char* buf);
+  // This magic number is written when serializing the IndexMetaData to a file.
+  // It is used to check, whether this is a really old index that requires
+  // rebuilding.
+  static constexpr uint64_t MAGIC_NUMBER_FOR_SERIALIZATION =
+      _isMmapBased ? MAGIC_NUMBER_MMAP_META_DATA_VERSION
+                   : MAGIC_NUMBER_SPARSE_META_DATA_VERSION;
 
   // Write to a file that will be overwritten/created
   void writeToFile(const std::string& filename) const;
@@ -189,11 +189,10 @@ class IndexMetaData {
   friend IndexMetaDataHmap convertMmapMetaDataToHmap(
       const IndexMetaDataMmap& mmap, bool verify);
 
-  // this way all instantations will be friends with each other,
-  // but this should not be an issue.
-  template <class U>
-  friend ad_utility::File& operator<<(ad_utility::File& f,
-                                      const IndexMetaData<U>& rmd);
+  // Symmetric serialization function for the ad_utility::serialization module.
+  template <class Serializer, typename MapType>
+  friend void serialize(Serializer& serializer,
+                        IndexMetaData<MapType>& metaData);
 
   size_t getNofBlocksForRelation(const Id relId) const;
 
