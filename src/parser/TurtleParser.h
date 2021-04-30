@@ -217,7 +217,12 @@ class TurtleParser {
     if (result) {
       return true;
     } else {
-      raise("A check for a required Element failed.");
+      auto view = _tok.view();
+      auto s = std::min(size_t(1000), size_t(view.size()));
+      auto nextChars = std::string_view(view.data(), s);
+      raise(
+          "A check for a required Element failed. Next unparsed characters are:\n"s +
+          nextChars);
     }
   }
 

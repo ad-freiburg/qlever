@@ -7,7 +7,12 @@
 
 #include <unicode/ustream.h>
 
+#include <string>
+
+#include "../util/HashSet.h"
+
 namespace RdfEscaping {
+using namespace std::string_literals;
 namespace detail {
 
 /// turn a number of hex-chars like '00e4' into utf-8
@@ -165,58 +170,26 @@ inline std::string escapeNewlineAndBackslash(std::string_view literal) {
  * @param literal
  * @return
  */
-static std::string normalizeRDFLiteral(const std::string_view origLiteral) {
-  if (origLiteral.empty() ||
-      (origLiteral[0] != '"' && origLiteral[0] != '\'')) {
-    return std::string{origLiteral};
-  }
+inline std::string normalizeRDFLiteral(const std::string_view origLiteral) {
   auto literal = origLiteral;
 
-  std::string res;
-  char endDelimiter = '\0';
-  std::string_view langtagOrDatatype;
-  if (ad_utility::startsWith(literal, "<")) {
-    // this must be an <iriref>
-    if (!ad_utility::endsWith(literal, ">")) {
-      throw std::runtime_error("Error: Rdf Triple element "s + origLiteral +
-                               "could not be normalized properly"s);
-    }
-    res = "<";
-    endDelimiter = '>';
+  std::string res = "\"";
+
+  if (ad_utility::startsWith(literal, "\"\"\"") ||
+      ad_utility::startsWith(literal, "'''")) {
+    AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 3)));
+    literal.remove_prefix(3);
+    literal.remove_suffix(3);
+  } else {
+    AD_CHECK(ad_utility::startsWith(literal, "\"") ||
+             ad_utility::startsWith(literal, "'"));
+    AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 1)));
     literal.remove_prefix(1);
     literal.remove_suffix(1);
-  } else {
-    res = "\"";
-    endDelimiter = '\"';
-    auto lastQuot = literal.find_last_of("\"\'");
-    if (lastQuot != std::string_view::npos) {
-      langtagOrDatatype = literal.substr(lastQuot + 1);
-      literal.remove_suffix(literal.size() - lastQuot - 1);
-    }
-
-    if (ad_utility::startsWith(literal, "\"\"\"") ||
-        ad_utility::startsWith(literal, "'''")) {
-      if (!ad_utility::endsWith(literal, literal.substr(0, 3))) {
-        throw std::runtime_error("Error: Rdf Triple element "s + origLiteral +
-                                 "could not be normalized properly"s);
-      }
-      literal.remove_prefix(3);
-      literal.remove_suffix(3);
-    } else {
-      if (!(ad_utility::startsWith(literal, "\"") ||
-            ad_utility::startsWith(literal, "'"))) {
-        throw std::runtime_error("Error: Rdf Triple element "s + origLiteral +
-                                 "could not be normalized properly"s);
-      }
-      AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 1)));
-      literal.remove_prefix(1);
-      literal.remove_suffix(1);
-    }
   }
   detail::unescapeStringAndNumericEscapes<true, false>(
       literal.begin(), literal.end(), std::back_inserter(res));
-  res.push_back(endDelimiter);
-  res.append(langtagOrDatatype);
+  res.push_back('\"');
   return res;
 }
 
@@ -228,7 +201,7 @@ static std::string normalizeRDFLiteral(const std::string_view origLiteral) {
  * @return The same Iriref but with the escape sequences replaced by their
  * actual value
  */
-static std::string unescapeIriref(std::string_view iriref) {
+inline std::string unescapeIriref(std::string_view iriref) {
   AD_CHECK(ad_utility::startsWith(iriref, "<"));
   AD_CHECK(ad_utility::endsWith(iriref, ">"));
   iriref.remove_prefix(1);
@@ -247,7 +220,7 @@ static std::string unescapeIriref(std::string_view iriref) {
  * by one of ~.-!$&'()*+,;=/?#@%_ and represent the character to the right of
  * the '\'.
  */
-static std::string unescapePrefixedIri(std::string_view literal) {
+inline std::string unescapePrefixedIri(std::string_view literal) {
   std::string res;
   static const ad_utility::HashSet<char> m = []() {
     ad_utility::HashSet<char> r;

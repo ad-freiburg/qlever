@@ -4,7 +4,10 @@
 //
 
 #include "./TurtleParser.h"
+
 #include <string.h>
+
+#include "./RdfEscaping.h"
 
 // _______________________________________________________________
 template <class T>
@@ -238,7 +241,7 @@ bool TurtleParser<T>::rdfLiteral() {
     return false;
   }
   auto s = _lastParseResult =
-      TurtleToken::normalizeRDFLiteral(_lastParseResult);
+      RdfEscaping::normalizeRDFLiteral(_lastParseResult);
   if (langtag()) {
     _lastParseResult = s + _lastParseResult;
     return true;
@@ -439,7 +442,7 @@ bool TurtleParser<T>::iriref() {
     if (!parseTerminal<TokId::Iriref>()) {
       return false;
     }
-    _lastParseResult = TurtleToken::unescapeIriref(_lastParseResult);
+    _lastParseResult = RdfEscaping::unescapeIriref(_lastParseResult);
     return true;
   }
 }
@@ -530,7 +533,7 @@ bool TurtleMmapParser<T>::getLine(std::array<string, 3>* triple) {
                     << d.size() << '\n';
           auto s = std::min(size_t(1000), size_t(d.size()));
           LOG(INFO) << "Logging first 1000 unparsed characters\n";
-          LOG(INFO) << std::string_view(d.data(), s);
+          LOG(INFO) << std::string_view(d.data(), s) << std::endl;
         }
         _isParserExhausted = true;
         break;

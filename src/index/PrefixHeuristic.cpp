@@ -3,8 +3,11 @@
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
 #include "./PrefixHeuristic.h"
+
 #include <algorithm>
 #include <fstream>
+
+#include "../parser/RdfEscaping.h"
 #include "../parser/Tokenizer.h"
 #include "../util/Exception.h"
 #include "../util/Log.h"
@@ -187,7 +190,7 @@ std::vector<string> calculatePrefixes(const string& filename,
   LOG(INFO) << "start reading words and building prefix tree..." << std::endl;
   // insert all prefix candidates into  the tree
   while (std::getline(ifs, nextWord)) {
-    nextWord = TurtleToken::normalizeRDFLiteral(nextWord);
+    nextWord = RdfEscaping::unescapeNewlineAndBackslash(nextWord);
     totalChars += nextWord.size();
     // the longest common prefixes between two adjacent words are our candidates
     // for compression

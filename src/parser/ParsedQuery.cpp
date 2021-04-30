@@ -11,6 +11,7 @@
 
 #include "../util/Conversions.h"
 #include "../util/StringUtils.h"
+#include "./RdfEscaping.h"
 #include "ParseException.h"
 #include "Tokenizer.h"
 
@@ -376,7 +377,7 @@ void ParsedQuery::expandPrefix(
       string prefixUri = prefixMap.find(item.substr(from, i - from))->second;
       item = item.substr(0, from) + prefixUri.substr(0, prefixUri.size() - 1) +
              item.substr(i + 1) + '>';
-      item = TurtleToken::unescapePrefixedIri(item);
+      item = RdfEscaping::unescapePrefixedIri(item);
     }
     if (langtag) {
       item =
