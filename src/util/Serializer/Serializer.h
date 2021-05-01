@@ -4,33 +4,38 @@
 
 // Library for symmetric serialization
 
+#include <algorithm>
+#include <type_traits>
 #include <vector>
+
+#include "../Exception.h"
 
 class ByteBufferWriteSerializer {
   constexpr static bool IsWriteSerializer = true;
-  using Storage = std::vector<std::byte>;
+  using Storage = std::vector<char>;
 
  public:
+  ByteBufferWriteSerializer() = default;
   ByteBufferWriteSerializer(const ByteBufferWriteSerializer&) = delete;
 
-  void serializeBytes(const std::byte* bytePointer, size_t numBytes) {
-    std::insert(_data.end(), bytePointer, bytePointer + numBytes);
+  void serializeBytes(const char* bytePointer, size_t numBytes) {
+    _data.insert(_data.end(), bytePointer, bytePointer + numBytes);
   }
 
-  const Storage& data() const noexcept { return _data; }
+  const Storage& data() const& noexcept { return _data; }
   Storage&& data() && { return std::move(_data); }
 
  private:
-  std::vector<std::byte> _data;
+  std::vector<char> _data;
 };
 
 class ByteBufferReadSerializer {
   constexpr static bool IsWriteSerializer = false;
-  using Storage = std::vector<std::byte>;
+  using Storage = std::vector<char>;
 
  public:
-  ByteBufferReadSerializer(Storage data) : _data{std::move(data)} = default;
-  void serializeBytes(const std::byte* bytePointer, size_t numBytes) {
+  ByteBufferReadSerializer(Storage data) : _data{std::move(data)} {};
+  void serializeBytes(char* bytePointer, size_t numBytes) {
     AD_CHECK(_iterator + numBytes <= _data.end());
     std::copy(_iterator, _iterator + numBytes, bytePointer);
     _iterator += numBytes;
@@ -44,15 +49,17 @@ class ByteBufferReadSerializer {
 };
 
 template <typename T>
-using TriviallyCopyable = std::is_trivially_copyable_v<T>;
+static constexpr bool TriviallyCopyable =
+    std::is_trivially_copyable_v<std::decay_t<T>>;
 
 template <typename Serializer, typename T,
           typename = std::enable_if_t<TriviallyCopyable<T>>>
-void serialize(Serializer& serializer, T& t) {
-  serializer.serializeBytes(&t, sizeof(t));
+void serialize(Serializer& serializer, T& t,
+               [[maybe_unused]] unsigned int version = 0) {
+  serializer.serializeBytes(reinterpret_cast<char*>(&t), sizeof(t));
 }
 
 template <typename Serializer, typename T>
-void operator|(Serializer& serializer, T& t) {
+void operator&(Serializer& serializer, T& t) {
   serialize(serializer, t);
 }
