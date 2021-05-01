@@ -6,7 +6,7 @@
 
 #include "../src/util/Random.h"
 #include "../src/util/Serializer/FileSerializer.h"
-#include "../src/util/Serializer/HashMap.h"
+#include "../src/util/Serializer/SerializeHashMap.h"
 #include "../src/util/Serializer/Serializer.h"
 
 using namespace ad_utility;

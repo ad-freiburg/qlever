@@ -6,6 +6,9 @@
 #pragma once
 
 #include "../util/File.h"
+#include "../util/Serializer/FileSerializer.h"
+#include "../util/Serializer/SerializeHashMap.h"
+#include "../util/Serializer/SerializeString.h"
 #include "./IndexMetaData.h"
 #include "./MetaDataHandler.h"
 
@@ -132,11 +135,17 @@ bool IndexMetaData<MapType>::relationExists(Id relId) const {
 // _____________________________________________________________________________
 template <class MapType>
 ad_utility::File& operator<<(ad_utility::File& f, const IndexMetaData<MapType>& imd) {
+  ad_utility::serialization::FileWriteSerializer serializer{std::move(f)};
+  serializer& imd;
+  f = std::move(serializer).moveFileOut();
+  return f;
+  /*
   // first write magic number
   if constexpr (IndexMetaData<MapType>::_isMmapBased) {
-    f.write(&MAGIC_NUMBER_MMAP_META_DATA_VERSION, sizeof(MAGIC_NUMBER_MMAP_META_DATA_VERSION));
-  } else {
-    f.write(&MAGIC_NUMBER_SPARSE_META_DATA_VERSION, sizeof(MAGIC_NUMBER_SPARSE_META_DATA_VERSION));
+    f.write(&MAGIC_NUMBER_MMAP_META_DATA_VERSION,
+  sizeof(MAGIC_NUMBER_MMAP_META_DATA_VERSION)); } else {
+    f.write(&MAGIC_NUMBER_SPARSE_META_DATA_VERSION,
+  sizeof(MAGIC_NUMBER_SPARSE_META_DATA_VERSION));
   }
   // write version
   f.write(&V_CURRENT, sizeof(V_CURRENT));
@@ -170,6 +179,7 @@ ad_utility::File& operator<<(ad_utility::File& f, const IndexMetaData<MapType>& 
   f.write(&imd._totalBlocks, sizeof(&imd._totalBlocks));
 
   return f;
+   */
 }
 
 // ____________________________________________________________________________
@@ -205,10 +215,13 @@ template <class MapType>
 void IndexMetaData<MapType>::readFromFile(ad_utility::File* file) {
   off_t metaFrom;
   off_t metaTo = file->getLastOffset(&metaFrom);
-  unsigned char* buf = new unsigned char[metaTo - metaFrom];
-  file->read(buf, static_cast<size_t>(metaTo - metaFrom), metaFrom);
-  createFromByteBuffer(buf);
-  delete[] buf;
+  std::vector<char> buf(metaTo - metaFrom);
+  file->read(buf.data(), static_cast<size_t>(metaTo - metaFrom), metaFrom);
+
+  ad_utility::serialization::ByteBufferReadSerializer serializer{
+      std::move(buf)};
+
+  serializer&* this;
 }
 
 // _____________________________________________________________________________
@@ -280,9 +293,53 @@ void IndexMetaData<MapType>::calculateExpensiveStatistics() {
   }
 }
 
+template <typename Serializer, typename MapType>
+void serialize(Serializer& serializer, IndexMetaData<MapType>& metaData,
+               [[maybe_unused]] unsigned int serializationVersion) {
+  using T = IndexMetaData<MapType>;
+  uint64_t magicNumber = T::_isMmapBased
+                             ? MAGIC_NUMBER_MMAP_META_DATA_VERSION
+                             : MAGIC_NUMBER_SPARSE_META_DATA_VERSION;
+  serializer& magicNumber;
+
+  bool legalMmapBasedFormat =
+      T::_isMmapBased && magicNumber == MAGIC_NUMBER_MMAP_META_DATA_VERSION;
+  bool legalHmapBasedFormat =
+      !T::_isMmapBased && magicNumber == MAGIC_NUMBER_SPARSE_META_DATA_VERSION;
+  if (!(legalHmapBasedFormat || legalMmapBasedFormat)) {
+    throw WrongFormatException(
+        "The binary format of this index is no longer supported by QLever. "
+        "Please rebuild the index.");
+  }
+
+  serializer& metaData._version;
+
+  if (metaData.getVersion() != V_CURRENT) {
+    throw WrongFormatException(
+        "The binary format of this index is no longer supported by QLever. "
+        "Please rebuild the index.");
+  }
+
+  serializer& metaData._name;
+  serializer& metaData._data;
+  serializer& metaData._blockData;
+
+  serializer& metaData._totalElements;
+  serializer& metaData._totalBytes;
+  serializer& metaData._totalBlocks;
+}
+
+template <typename Serializer, typename MapType>
+void serialize(Serializer& serializer, const IndexMetaData<MapType>& metaData,
+               [[maybe_unused]] unsigned int serializationVersion) {
+  serialize(serializer, const_cast<IndexMetaData<MapType>&>(metaData),
+            serializationVersion);
+}
+
 // ___________________________________________________________________
 template <class MapType>
-VersionInfo IndexMetaData<MapType>::parseMagicNumberAndVersioning(unsigned char* buf) {
+VersionInfo IndexMetaData<MapType>::parseMagicNumberAndVersioning(
+    unsigned char* buf) {
   uint64_t magicNumber = *reinterpret_cast<uint64_t*>(buf);
   size_t nOfBytes = 0;
   bool hasVersion = false;

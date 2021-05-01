@@ -64,9 +64,10 @@ const uint64_t MAGIC_NUMBER_SPARSE_META_DATA_VERSION =
 // constants for meta data versions in case the format is changed again
 constexpr uint64_t V_NO_VERSION = 0;  // this is  a dummy
 constexpr uint64_t V_BLOCK_LIST_AND_STATISTICS = 1;
+constexpr uint64_t V_SERIALIZATION_LIBRARY = 2;
 
 // this always tags the current version
-constexpr uint64_t V_CURRENT = V_BLOCK_LIST_AND_STATISTICS;
+constexpr uint64_t V_CURRENT = V_SERIALIZATION_LIBRARY;
 
 // Check index_layout.md for explanations (expected comments).
 // Removed comments here so that not two places had to be kept up-to-date.
@@ -193,6 +194,11 @@ class IndexMetaData {
   template <class U>
   friend ad_utility::File& operator<<(ad_utility::File& f,
                                       const IndexMetaData<U>& rmd);
+
+  // make friends with the serializer
+  template <class Serializer, typename MapType>
+  friend void serialize(Serializer& serializer,
+                        IndexMetaData<MapType>& metaData, unsigned int version);
 
   size_t getNofBlocksForRelation(const Id relId) const;
 

@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "../File.h"
+#include "./Serializer.h"
 
 namespace ad_utility {
 namespace serialization {
@@ -15,9 +16,9 @@ namespace serialization {
 using SerializationPosition = off_t;
 
 class FileWriteSerializer {
-  static constexpr bool isWriteSerializer = true;
-
  public:
+  static constexpr bool IsWriteSerializer = true;
+
   FileWriteSerializer(File&& file) : _file{std::move(file)} {};
 
   FileWriteSerializer(std::string filename) : _file{filename, "w"} {
@@ -27,7 +28,7 @@ class FileWriteSerializer {
     // calling open with an appropriate error message
   }
 
-  void serializeBytes(char* bytePtr, size_t numBytes) {
+  void serializeBytes(const char* bytePtr, size_t numBytes) {
     _file.write(bytePtr, numBytes);
   }
 
@@ -42,9 +43,9 @@ class FileWriteSerializer {
 };
 
 class FileReadSerializer {
-  static constexpr bool isWriteSerializer = false;
-
  public:
+  static constexpr bool IsWriteSerializer = false;
+
   FileReadSerializer(File&& file) : _file{std::move(file)} {};
 
   FileReadSerializer(std::string filename) : _file{filename, "r"} {
@@ -70,9 +71,8 @@ class FileReadSerializer {
  * but will maintain different _serializationPositions
  */
 class CopyableFileReadSerializer {
-  static constexpr bool isWriteSerializer = false;
-
  public:
+  static constexpr bool IsWriteSerializer = false;
   CopyableFileReadSerializer(std::shared_ptr<File> filePtr)
       : _file{std::move(filePtr)} {};
 
