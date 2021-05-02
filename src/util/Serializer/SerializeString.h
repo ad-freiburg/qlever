@@ -10,8 +10,7 @@
 namespace ad_utility::serialization {
 
 template <typename Serializer>
-void serialize(Serializer& serializer, std::string& string,
-               [[maybe_unused]] unsigned int version) {
+void serialize(Serializer& serializer, std::string& string) {
   if constexpr (Serializer::IsWriteSerializer) {
     serializer& string.size();
     serializer.serializeBytes(string.data(), string.size());

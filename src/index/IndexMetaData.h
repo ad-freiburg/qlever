@@ -120,14 +120,6 @@ class IndexMetaData {
   // compile time information whether this instatiation if MMapBased or not
   static constexpr bool _isMmapBased = IsMmapBased<MapType>::value;
 
-  // parse and get the version tag of this MetaData.
-  // Also verifies that it matches the MapType parameter
-  // No version tag will lead to version = V_NO_VERSION
-  // Also returns the number of bytes that the version info was stored in so
-  // that createFromByteBuffer can continue at the correct position.
-  VersionInfo parseMagicNumberAndVersioning(unsigned char* buf);
-  void createFromByteBuffer(unsigned char* buf);
-
   // Write to a file that will be overwritten/created
   void writeToFile(const std::string& filename) const;
 
@@ -198,7 +190,7 @@ class IndexMetaData {
   // make friends with the serializer
   template <class Serializer, typename MapType>
   friend void serialize(Serializer& serializer,
-                        IndexMetaData<MapType>& metaData, unsigned int version);
+                        IndexMetaData<MapType>& metaData);
 
   size_t getNofBlocksForRelation(const Id relId) const;
 

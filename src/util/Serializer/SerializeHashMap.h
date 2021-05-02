@@ -10,8 +10,7 @@
 template <typename Serializer, class K, class V, class HashFcn, class EqualKey,
           class Alloc>
 void serialize(Serializer& serializer,
-               ad_utility::HashMap<K, V, HashFcn, EqualKey, Alloc>& hashMap,
-               [[maybe_unused]] unsigned int version) {
+               ad_utility::HashMap<K, V, HashFcn, EqualKey, Alloc>& hashMap) {
   if constexpr (Serializer::IsWriteSerializer) {
     serializer& hashMap.size();
     for (auto& [key, value] : hashMap) {

@@ -10,8 +10,7 @@
 // TODO<joka921> : optimization for trivially serializable types
 namespace ad_utility::serialization {
 template <typename Serializer, typename T, typename Alloc>
-void serialize(Serializer& serializer, std::vector<T, Alloc>& vector,
-               [[maybe_unused]] unsigned int version) {
+void serialize(Serializer& serializer, std::vector<T, Alloc>& vector) {
   if constexpr (Serializer::IsWriteSerializer) {
     serializer& vector.size();
     for (const auto& el : vector) {

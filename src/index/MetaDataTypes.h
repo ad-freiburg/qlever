@@ -148,8 +148,7 @@ class BlockBasedRelationMetaData {
 };
 
 template <typename Serializer>
-void serialize(Serializer& serializer, BlockBasedRelationMetaData& metaData,
-               [[maybe_unused]] unsigned int version) {
+void serialize(Serializer& serializer, BlockBasedRelationMetaData& metaData) {
   serializer& metaData._startRhs;
   serializer& metaData._offsetAfter;
   serializer& metaData._blocks;

@@ -58,8 +58,7 @@ static constexpr bool TriviallyCopyable =
 
 template <typename Serializer, typename T,
           typename = std::enable_if_t<TriviallyCopyable<T>>>
-void serialize(Serializer& serializer, T&& t,
-               [[maybe_unused]] unsigned int version = 0) {
+void serialize(Serializer& serializer, T&& t) {
   if constexpr (Serializer::IsWriteSerializer) {
     serializer.serializeBytes(reinterpret_cast<const char*>(&t), sizeof(t));
   } else {
@@ -67,13 +66,9 @@ void serialize(Serializer& serializer, T&& t,
   }
 }
 
-template <class T>
-unsigned int AD_SERIALIZATION_VERSION = 0;
-
 template <typename Serializer, typename T>
 void operator&(Serializer& serializer, T&& t) {
-  serialize(serializer, std::forward<T>(t),
-            AD_SERIALIZATION_VERSION<std::decay_t<T>>);
+  serialize(serializer, std::forward<T>(t));
 }
 }  // namespace ad_utility::serialization
 

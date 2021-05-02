@@ -98,26 +98,26 @@ TEST(IndexTest, createFromTsvTest) {
     off_t bytesDone = 0;
     // Relation b
     // Pair index
-    ASSERT_EQ(Id(1), *reinterpret_cast<Id*>(buf + bytesDone));
+    EXPECT_EQ(Id(1), *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+    EXPECT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
+    EXPECT_EQ(1u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
+    EXPECT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
 
     // Relation b2
-    ASSERT_EQ(Id(1), *reinterpret_cast<Id*>(buf + bytesDone));
+    EXPECT_EQ(Id(1), *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
+    EXPECT_EQ(5u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
+    EXPECT_EQ(2u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
-    ASSERT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
+    EXPECT_EQ(6u, *reinterpret_cast<Id*>(buf + bytesDone));
     bytesDone += sizeof(Id);
     // No LHS & RHS
-    ASSERT_EQ(index._PSO.metaData().getOffsetAfter(), bytesDone);
+    EXPECT_EQ(index._PSO.metaData().getOffsetAfter(), bytesDone);
 
     delete[] buf;
     psoFile.close();

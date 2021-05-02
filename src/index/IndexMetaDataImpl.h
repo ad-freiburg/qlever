@@ -39,82 +39,6 @@ off_t IndexMetaData<MapType>::getOffsetAfter() const {
   return _offsetAfter;
 }
 
-// specialization for MMapBased Arrays which only read
-// block-based data from Memory
-template <class MapType>
-void IndexMetaData<MapType>::createFromByteBuffer(unsigned char* buf) {
-  // read magic number
-  auto v = parseMagicNumberAndVersioning(buf);
-  auto version = v._version;
-  _version = version;
-  buf += v._nOfBytes;
-
-  size_t nameLength = readFromBuf<size_t>(&buf);
-  _name.assign(reinterpret_cast<char*>(buf), nameLength);
-  buf += nameLength;
-
-  size_t nofRelations = readFromBuf<size_t>(&buf);
-  if constexpr (_isMmapBased) {
-    _data.setSize(nofRelations);
-  }
-  _offsetAfter = readFromBuf<off_t>(&buf);
-
-  if constexpr (!_isMmapBased) {
-    // HashMap-based means that FullRMD and Blocks are all stored withing the
-    // permutation file
-    for (size_t i = 0; i < nofRelations; ++i) {
-      FullRelationMetaData rmd;
-      rmd.createFromByteBuffer(buf);
-      buf += rmd.bytesRequired();
-      if (rmd.hasBlocks()) {
-        BlockBasedRelationMetaData bRmd;
-        bRmd.createFromByteBuffer(buf);
-        buf += bRmd.bytesRequired();
-        add(rmd, bRmd);
-      } else {
-        add(rmd, BlockBasedRelationMetaData());
-      }
-    }
-  } else {
-    // MmapBased
-    if (version < V_BLOCK_LIST_AND_STATISTICS) {
-      for (auto it = _data.cbegin(); it != _data.cend(); ++it) {
-        const FullRelationMetaData& rmd = (*it).second;
-        if (rmd.hasBlocks()) {
-          BlockBasedRelationMetaData bRmd;
-          bRmd.createFromByteBuffer(buf);
-          buf += bRmd.bytesRequired();
-          // we do not need to add the meta data since it is already in _data
-          // because of the persisten MMap file
-          add<true>(rmd, bRmd);
-        } else {
-          add<true>(rmd, BlockBasedRelationMetaData());
-        }
-      }
-      calculateExpensiveStatistics();
-    } else {
-      // version >= V_BLOCK_LIST_AND_STATISTICS, no need to touch Relations that
-      // don't have blocks
-      size_t numBlockData = readFromBuf<size_t>(&buf);
-      for (size_t i = 0; i < numBlockData; ++i) {
-        Id id = readFromBuf<Id>(&buf);
-        BlockBasedRelationMetaData bRmd;
-        bRmd.createFromByteBuffer(buf);
-        buf += bRmd.bytesRequired();
-        // we do not need to add the meta data since it is already in _data
-        // because of the persisten MMap file
-        add<true>(_data.getAsserted(id), bRmd);
-      }
-    }
-  }
-  if (version >= V_BLOCK_LIST_AND_STATISTICS) {
-    _totalElements = readFromBuf<size_t>(&buf);
-    _totalBytes = readFromBuf<size_t>(&buf);
-    _totalBlocks = readFromBuf<size_t>(&buf);
-  } else {
-    calculateExpensiveStatistics();
-  }
-}
 // _____________________________________________________________________________
 template <class MapType>
 const RelationMetaData IndexMetaData<MapType>::getRmd(Id relId) const {
@@ -221,7 +145,7 @@ void IndexMetaData<MapType>::readFromFile(ad_utility::File* file) {
   ad_utility::serialization::ByteBufferReadSerializer serializer{
       std::move(buf)};
 
-  serializer&* this;
+  serializer&(*this);
 }
 
 // _____________________________________________________________________________
@@ -294,8 +218,7 @@ void IndexMetaData<MapType>::calculateExpensiveStatistics() {
 }
 
 template <typename Serializer, typename MapType>
-void serialize(Serializer& serializer, IndexMetaData<MapType>& metaData,
-               [[maybe_unused]] unsigned int serializationVersion) {
+void serialize(Serializer& serializer, IndexMetaData<MapType>& metaData) {
   using T = IndexMetaData<MapType>;
   uint64_t magicNumber = T::_isMmapBased
                              ? MAGIC_NUMBER_MMAP_META_DATA_VERSION
@@ -324,80 +247,13 @@ void serialize(Serializer& serializer, IndexMetaData<MapType>& metaData,
   serializer& metaData._data;
   serializer& metaData._blockData;
 
+  serializer& metaData._offsetAfter;
   serializer& metaData._totalElements;
   serializer& metaData._totalBytes;
   serializer& metaData._totalBlocks;
 }
 
 template <typename Serializer, typename MapType>
-void serialize(Serializer& serializer, const IndexMetaData<MapType>& metaData,
-               [[maybe_unused]] unsigned int serializationVersion) {
-  serialize(serializer, const_cast<IndexMetaData<MapType>&>(metaData),
-            serializationVersion);
-}
-
-// ___________________________________________________________________
-template <class MapType>
-VersionInfo IndexMetaData<MapType>::parseMagicNumberAndVersioning(
-    unsigned char* buf) {
-  uint64_t magicNumber = *reinterpret_cast<uint64_t*>(buf);
-  size_t nOfBytes = 0;
-  bool hasVersion = false;
-  if constexpr (!_isMmapBased) {
-    if (magicNumber == MAGIC_NUMBER_MMAP_META_DATA ||
-        magicNumber == MAGIC_NUMBER_MMAP_META_DATA_VERSION) {
-      throw WrongFormatException(
-          "ERROR: magic number of MetaData indicates that we are trying "
-          "to construct a hashMap based IndexMetaData from  mmap-based meta "
-          "data. This is not valid."
-          "Please use ./MetaDataConverterMain"
-          "to convert old indices without rebuilding them (See README.md).\n");
-      AD_CHECK(false);
-    } else if (magicNumber == MAGIC_NUMBER_SPARSE_META_DATA) {
-      hasVersion = false;
-      nOfBytes = sizeof(uint64_t);
-    } else if (magicNumber == MAGIC_NUMBER_SPARSE_META_DATA_VERSION) {
-      hasVersion = true;
-      nOfBytes = sizeof(uint64_t);
-    } else {
-      // no magic number found
-      hasVersion = false;
-      nOfBytes = 0;
-    }
-  } else {  // this _isMmapBased
-    if (magicNumber == MAGIC_NUMBER_MMAP_META_DATA) {
-      hasVersion = false;
-      nOfBytes = sizeof(uint64_t);
-    } else if (magicNumber == MAGIC_NUMBER_MMAP_META_DATA_VERSION) {
-      hasVersion = true;
-      nOfBytes = sizeof(uint64_t);
-    } else {
-      throw WrongFormatException("ERROR: No or wrong magic number found in persistent "
-                                 "mmap-based meta data. "
-                                 "Please use ./MetaDataConverterMain "
-                                 "to convert old indices without rebuilding them (See "
-                                 "README.md).Terminating...\n");
-    }
-  }
-
-  VersionInfo res;
-  res._nOfBytes = nOfBytes;
-  if (!hasVersion) {
-    res._version = V_NO_VERSION;
-  } else {
-    res._version = *reinterpret_cast<uint64_t*>(buf + res._nOfBytes);
-    res._nOfBytes += sizeof(uint64_t);
-  }
-  if (res._version < V_CURRENT) {
-    LOG(INFO) << "WARNING: your IndexMetaData seems to have an old format (version "
-                 "tag < V_CURRENT). Please consider using ./MetaDataConverterMain to "
-                 "benefit from improvements in the index structure.\n";
-
-  } else if (res._version > V_CURRENT) {
-    LOG(INFO) << "ERROR: version tag does not match any actual version (> "
-                 "V_CURRENT). Your IndexMetaData is probably corrupted. "
-                 "Terminating\n";
-    AD_CHECK(false);
-  }
-  return res;
+void serialize(Serializer& serializer, const IndexMetaData<MapType>& metaData) {
+  serialize(serializer, const_cast<IndexMetaData<MapType>&>(metaData));
 }
