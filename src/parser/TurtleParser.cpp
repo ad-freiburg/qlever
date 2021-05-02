@@ -141,7 +141,7 @@ bool TurtleParser<T>::predicateSpecialA() {
   _tok.skipWhitespaceAndComments();
   if (auto [success, word] = _tok.template getNextToken<TokId::A>(); success) {
     (void)word;
-    _activePredicate = u8"<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>";
+    _activePredicate = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"s;
     return true;
   } else {
     return false;

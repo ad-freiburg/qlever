@@ -80,7 +80,7 @@ TEST(StringUtilsTest, getLowercaseUtf8) {
   setlocale(LC_CTYPE, "");
   ASSERT_EQ("schindler's list", getLowercaseUtf8("Schindler's List"));
   ASSERT_EQ("#+-_foo__bar++", getLowercaseUtf8("#+-_foo__Bar++"));
-  ASSERT_EQ(u8"fôéßaéé", getLowercaseUtf8(u8"FÔÉßaéÉ"));
+  ASSERT_EQ("fôéßaéé", getLowercaseUtf8("FÔÉßaéÉ"));
 }
 
 TEST(StringUtilsTest, firstCharToUpperUtf8) {
@@ -92,8 +92,8 @@ TEST(StringUtilsTest, firstCharToUpperUtf8) {
   // that use different specifications for unicode chars.
   // In one, the capital ß exists, in others it doesn't.
   //  ASSERT_EQ("ẞfoo", firstCharToUpperUtf8("ßfoo"));
-  ASSERT_EQ(u8"Éfoo", firstCharToUpperUtf8(u8"éfoo"));
-  ASSERT_EQ(u8"Éfoo", firstCharToUpperUtf8(u8"Éfoo"));
+  ASSERT_EQ("Éfoo", firstCharToUpperUtf8("éfoo"));
+  ASSERT_EQ("Éfoo", firstCharToUpperUtf8("Éfoo"));
 }
 
 TEST(StringUtilsTest, toJson) {
@@ -101,8 +101,8 @@ TEST(StringUtilsTest, toJson) {
   ASSERT_EQ("\"nothing special\"", toJson("nothing special"));
   // We can pass an optional without value to get JSON null
   ASSERT_EQ("null", toJson(std::nullopt));
-  ASSERT_EQ(u8"\"2 byte unicode: äöüß\"", toJson(u8"2 byte unicode: äöüß"));
-  ASSERT_EQ(u8"\"Chinese: 漢字\"", toJson(u8"Chinese: 漢字"));
+  ASSERT_EQ("\"2 byte unicode: äöüß\"", toJson("2 byte unicode: äöüß"));
+  ASSERT_EQ("\"Chinese: 漢字\"", toJson("Chinese: 漢字"));
 
   ASSERT_EQ("\"embedded \\\"quotes\\\" should work\"",
             toJson("embedded \"quotes\" should work"));
@@ -137,11 +137,11 @@ TEST(StringUtilsTest, split) {
     ASSERT_EQ(val, "");
   }
   // and with unicode
-  string s6 = u8"Spaß ❤ 漢字";
+  string s6 = "Spaß ❤ 漢字";
   auto v6 = split(s6, ' ');
-  ASSERT_EQ(u8"Spaß", v6[0]);
-  ASSERT_EQ(u8"❤", v6[1]);
-  ASSERT_EQ(u8"漢字", v6[2]);
+  ASSERT_EQ("Spaß", v6[0]);
+  ASSERT_EQ("❤", v6[1]);
+  ASSERT_EQ("漢字", v6[2]);
 }
 
 TEST(StringUtilsTest, join) {
@@ -207,11 +207,11 @@ TEST(StringUtilsTest, splitAny) {
   auto v8 = splitAny(s1, "sih\tt");
   ASSERT_EQ(size_t(0), v8.size());
   // and with unicode
-  string s9 = u8"Spaß ❤\t漢字";
+  string s9 = "Spaß ❤\t漢字";
   auto v9 = splitAny(s9, " \t");
-  ASSERT_EQ(u8"Spaß", v9[0]);
-  ASSERT_EQ(u8"❤", v9[1]);
-  ASSERT_EQ(u8"漢字", v9[2]);
+  ASSERT_EQ("Spaß", v9[0]);
+  ASSERT_EQ("❤", v9[1]);
+  ASSERT_EQ("漢字", v9[2]);
 
   // and with a string specifying seperators
   string s10 = "semicolon;or,comma,separating;data";
@@ -258,9 +258,9 @@ TEST(StringUtilsTest, strip) {
 
   ASSERT_EQ("bc", strip("xxaxaxaxabcaaaxxx", "xa"));
   // And with unicode
-  ASSERT_EQ(u8"äcaaaxxx", lstrip(u8"xxaxaxaxaäcaaaxxx", u8"xa"));
-  ASSERT_EQ(u8"äö", strip(u8"xxaxaxaxaäöaaaxxx", "xa"));
-  ASSERT_EQ(u8"xxaxaxaxa♥", rstrip(u8"xxaxaxaxa♥aaaxxx", u8"xa"));
+  ASSERT_EQ("äcaaaxxx", lstrip("xxaxaxaxaäcaaaxxx", "xa"));
+  ASSERT_EQ("äö", strip("xxaxaxaxaäöaaaxxx", "xa"));
+  ASSERT_EQ("xxaxaxaxa♥", rstrip("xxaxaxaxa♥aaaxxx", "xa"));
 }
 
 TEST(StringUtilsTest, splitWs) {
@@ -294,16 +294,16 @@ TEST(StringUtilsTest, splitWs) {
   ASSERT_EQ("a", v5[0]);
 
   // and with unicode
-  string s6 = u8"Spaß \t ❤ \n漢字  ";
+  string s6 = "Spaß \t ❤ \n漢字  ";
   auto v6 = splitWs(s6);
-  ASSERT_EQ(u8"Spaß", v6[0]);
-  ASSERT_EQ(u8"❤", v6[1]);
-  ASSERT_EQ(u8"漢字", v6[2]);
+  ASSERT_EQ("Spaß", v6[0]);
+  ASSERT_EQ("❤", v6[1]);
+  ASSERT_EQ("漢字", v6[2]);
 
   // unicode code point 224 has a second byte (160), that equals the space
   // character if the first bit is ignored
   // (which may happen when casting char to int).
-  string s7 = u8"Test\u00e0test";
+  string s7 = "Test\u00e0test";
   auto v7 = splitWs(s7);
   ASSERT_EQ(1u, v7.size());
   ASSERT_EQ(s7, v7[0]);

@@ -262,7 +262,7 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
   // the various ways to store the input to this parser
   // used when parsing directly from a string
   // TODO: move this to a separate class.
-  std::string _tmpToParse = u8"";
+  std::string _tmpToParse = "";
 
   // testing interface for reusing a parser
   // only specifies the tokenizers input stream.

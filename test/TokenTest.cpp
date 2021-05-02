@@ -16,10 +16,10 @@ TEST(TokenTest, Numbers) {
   string integer3 = "+5425";
   string noInteger = "+54a";
 
-  string decimal1 = u8"-235632.23";
-  string decimal2 = u8"+23832.23";
-  string decimal3 = u8"32.3";
-  string noDecimal = u8"-23.";
+  string decimal1 = "-235632.23";
+  string decimal2 = "+23832.23";
+  string decimal3 = "32.3";
+  string noDecimal = "-23.";
 
   string double1 = "e+3";
   string double2 = "E-92";
@@ -76,21 +76,21 @@ static constexpr auto x = cls(TurtleTokenCtre::PnCharsBaseString);
 TEST(TokenizerTest, SingleChars) {
   TurtleToken t;
 
-  ASSERT_TRUE(RE2::FullMatch(u8"A", t.cls(t.PnCharsBaseString)));
-  ASSERT_TRUE(RE2::FullMatch(u8"\u00dd", t.cls(t.PnCharsBaseString)));
-  ASSERT_TRUE(RE2::FullMatch(u8"\u00DD", t.cls(t.PnCharsBaseString)));
-  ASSERT_TRUE(RE2::FullMatch(u8"\u00De", t.cls(t.PnCharsBaseString)));
-  ASSERT_FALSE(RE2::FullMatch(u8"\u00D7", t.cls(t.PnCharsBaseString)));
+  ASSERT_TRUE(RE2::FullMatch("A", t.cls(t.PnCharsBaseString)));
+  ASSERT_TRUE(RE2::FullMatch("\u00dd", t.cls(t.PnCharsBaseString)));
+  ASSERT_TRUE(RE2::FullMatch("\u00DD", t.cls(t.PnCharsBaseString)));
+  ASSERT_TRUE(RE2::FullMatch("\u00De", t.cls(t.PnCharsBaseString)));
+  ASSERT_FALSE(RE2::FullMatch("\u00D7", t.cls(t.PnCharsBaseString)));
 
   // same for ctre
   // TODO<joka921>: fix those regexes to the unicode stuff and test more
   // extensively
-  ASSERT_TRUE(ctre::match<x>(u8"A"));
+  ASSERT_TRUE(ctre::match<x>("A"));
   /*
-  ASSERT_TRUE(ctre::match<x>(u8"\u00dd"));
-  ASSERT_TRUE(ctre::match<x>(u8"\u00DD"));
-  ASSERT_TRUE(ctre::match<x>(u8"\u00De"));
-  ASSERT_FALSE(ctre::match<x>(u8"\u00D7"));
+  ASSERT_TRUE(ctre::match<x>("\u00dd"));
+  ASSERT_TRUE(ctre::match<x>("\u00DD"));
+  ASSERT_TRUE(ctre::match<x>("\u00De"));
+  ASSERT_FALSE(ctre::match<x>("\u00D7"));
    */
 }
 
@@ -98,8 +98,8 @@ TEST(TokenizerTest, StringLiterals) {
   TurtleToken t;
   string sQuote1 = "\"this is a quote \"";
   string sQuote2 =
-      u8"\"this is a quote \' $@#ä\u1234 \U000A1234 \\\\ \\n \"";  // $@#\u3344\U00FF00DD\"";
-  string sQuote3 = u8"\"\\uAB23SomeotherChars\"";
+      "\"this is a quote \' $@#ä\u1234 \U000A1234 \\\\ \\n \"";  // $@#\u3344\U00FF00DD\"";
+  string sQuote3 = "\"\\uAB23SomeotherChars\"";
   string NoSQuote1 = "\"illegalQuoteBecauseOfNewline\n\"";
   string NoSQuote2 = "\"illegalQuoteBecauseOfBackslash\\  \"";
 
@@ -118,8 +118,8 @@ TEST(TokenizerTest, StringLiterals) {
 
   string sSingleQuote1 = "\'this is a quote \'";
   string sSingleQuote2 =
-      u8"\'this is a quote \" $@#ä\u1234 \U000A1234 \\\\ \\n \'";
-  string sSingleQuote3 = u8"\'\\uAB23SomeotherChars\'";
+      "\'this is a quote \" $@#ä\u1234 \U000A1234 \\\\ \\n \'";
+  string sSingleQuote3 = "\'\\uAB23SomeotherChars\'";
   string NoSSingleQuote1 = "\'illegalQuoteBecauseOfNewline\n\'";
   string NoSSingleQuote2 = "\'illegalQuoteBecauseOfBackslash\\  \'";
 
@@ -138,12 +138,12 @@ TEST(TokenizerTest, StringLiterals) {
   ASSERT_FALSE(ctre::match<c::StringLiteralSingleQuoteString>(NoSQuote1));
   ASSERT_FALSE(ctre::match<c::StringLiteralSingleQuoteString>(NoSQuote2));
 
-  string sMultiline1 = u8"\"\"\"test\n\"\"\"";
+  string sMultiline1 = "\"\"\"test\n\"\"\"";
   string sMultiline2 =
       "\"\"\"MultilineString\' \'\'\'\n\\n\\u00FF\\U0001AB34\"  \"\" "
       "someMore\"\"\"";
-  string sNoMultiline1 = u8"\"\"\"\\autsch\"\"\"";
-  string sNoMultiline2 = u8"\"\"\"\"\"\"\"";
+  string sNoMultiline1 = "\"\"\"\\autsch\"\"\"";
+  string sNoMultiline2 = "\"\"\"\"\"\"\"";
   ASSERT_TRUE(RE2::FullMatch(sMultiline1, t.StringLiteralLongQuote, nullptr));
   ASSERT_TRUE(RE2::FullMatch(sMultiline2, t.StringLiteralLongQuote, nullptr));
   ASSERT_FALSE(
@@ -156,12 +156,12 @@ TEST(TokenizerTest, StringLiterals) {
   ASSERT_FALSE(ctre::match<c::StringLiteralLongQuoteString>(sNoMultiline1));
   ASSERT_FALSE(ctre::match<c::StringLiteralLongQuoteString>(sNoMultiline2));
 
-  string sSingleMultiline1 = u8"\'\'\'test\n\'\'\'";
+  string sSingleMultiline1 = "\'\'\'test\n\'\'\'";
   string sSingleMultiline2 =
       "\'\'\'MultilineString\" \"\"\"\n\\n\\u00FF\\U0001AB34\'  \'\' "
       "someMore\'\'\'";
-  string sSingleNoMultiline1 = u8"\'\'\'\\autsch\'\'\'";
-  string sSingleNoMultiline2 = u8"\'\'\'\'\'\'\'";
+  string sSingleNoMultiline1 = "\'\'\'\\autsch\'\'\'";
+  string sSingleNoMultiline2 = "\'\'\'\'\'\'\'";
   ASSERT_TRUE(RE2::FullMatch(sSingleMultiline1, t.StringLiteralLongSingleQuote,
                              nullptr));
   ASSERT_TRUE(RE2::FullMatch(sSingleMultiline2, t.StringLiteralLongSingleQuote,
@@ -330,18 +330,18 @@ TEST(TokenizerTest, Consume) {
 TEST(TokenizerTest, WhitespaceAndComments) {
   TurtleToken t;
   using c = TurtleTokenCtre;
-  ASSERT_TRUE(RE2::FullMatch(u8"  \t  \n", t.WsMultiple));
-  ASSERT_TRUE(RE2::FullMatch(u8"# theseareComme$#n  \tts\n", t.Comment));
-  ASSERT_TRUE(RE2::FullMatch(u8"#", u8"\\#"));
-  ASSERT_TRUE(RE2::FullMatch(u8"\n", u8"\\n"));
-  ASSERT_TRUE(ctre::match<c::WsMultiple>(u8"  \t  \n"));
-  ASSERT_TRUE(ctre::match<c::Comment>(u8"# theseareComme$#n  \tts\n"));
+  ASSERT_TRUE(RE2::FullMatch("  \t  \n", t.WsMultiple));
+  ASSERT_TRUE(RE2::FullMatch("# theseareComme$#n  \tts\n", t.Comment));
+  ASSERT_TRUE(RE2::FullMatch("#", "\\#"));
+  ASSERT_TRUE(RE2::FullMatch("\n", "\\n"));
+  ASSERT_TRUE(ctre::match<c::WsMultiple>("  \t  \n"));
+  ASSERT_TRUE(ctre::match<c::Comment>("# theseareComme$#n  \tts\n"));
   {
-    std::string s2(u8"#only Comment\n");
+    std::string s2("#only Comment\n");
     Tokenizer tok(s2);
     tok.skipComments();
     ASSERT_EQ(tok.data().begin() - s2.data(), 14);
-    std::string s(u8"    #comment of some way\n  start");
+    std::string s("    #comment of some way\n  start");
     tok.reset(s.data(), s.size());
     auto [success2, ws] = tok.getNextToken(tok._tokens.Comment);
     (void)ws;
@@ -351,11 +351,11 @@ TEST(TokenizerTest, WhitespaceAndComments) {
   }
 
   {
-    std::string s2(u8"#only Comment\n");
+    std::string s2("#only Comment\n");
     TokenizerCtre tok(s2);
     tok.skipComments();
     ASSERT_EQ(tok.data().begin() - s2.data(), 14);
-    std::string s(u8"    #comment of some way\n  start");
+    std::string s("    #comment of some way\n  start");
     tok.reset(s.data(), s.size());
     auto [success2, ws] = tok.getNextToken<TokId::Comment>();
     (void)ws;
