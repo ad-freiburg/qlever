@@ -70,6 +70,11 @@ template <typename Serializer, typename T>
 void operator&(Serializer& serializer, T&& t) {
   serialize(serializer, std::forward<T>(t));
 }
+
+/*
+template<typename Serializer>
+concept WriteSerializ
+ */
 }  // namespace ad_utility::serialization
 
 #endif  // QLEVER_SERIALIZER_SERIALIZER
