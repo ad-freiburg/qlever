@@ -56,56 +56,6 @@ bool IndexMetaData<MapType>::relationExists(Id relId) const {
   return _data.count(relId) > 0;
 }
 
-// _____________________________________________________________________________
-template <class MapType>
-ad_utility::File& operator<<(ad_utility::File& f, const IndexMetaData<MapType>& imd) {
-  ad_utility::serialization::FileWriteSerializer serializer{std::move(f)};
-  serializer& imd;
-  f = std::move(serializer).moveFileOut();
-  return f;
-  /*
-  // first write magic number
-  if constexpr (IndexMetaData<MapType>::_isMmapBased) {
-    f.write(&MAGIC_NUMBER_MMAP_META_DATA_VERSION,
-  sizeof(MAGIC_NUMBER_MMAP_META_DATA_VERSION)); } else {
-    f.write(&MAGIC_NUMBER_SPARSE_META_DATA_VERSION,
-  sizeof(MAGIC_NUMBER_SPARSE_META_DATA_VERSION));
-  }
-  // write version
-  f.write(&V_CURRENT, sizeof(V_CURRENT));
-  size_t nameLength = imd._name.size();
-  f.write(&nameLength, sizeof(nameLength));
-  f.write(imd._name.data(), nameLength);
-  size_t nofElements = imd._data.size();
-  f.write(&nofElements, sizeof(nofElements));
-  f.write(&imd._offsetAfter, sizeof(imd._offsetAfter));
-  if constexpr (!IndexMetaData<MapType>::_isMmapBased) {
-    for (auto it = imd._data.cbegin(); it != imd._data.cend(); ++it) {
-      const auto el = *it;
-      f << el.second;
-
-      if (el.second.hasBlocks()) {
-        auto itt = imd._blockData.find(el.second._relId);
-        AD_CHECK(itt != imd._blockData.end());
-        f << itt->second;
-      }
-    }
-  } else {
-    size_t numBlockData = imd._blockData.size();
-    f.write(&numBlockData, sizeof(numBlockData));
-    for (const auto& [id, blockData] : imd._blockData) {
-      f.write(&id, sizeof(id));
-      f << blockData;
-    }
-  }
-  f.write(&imd._totalElements, sizeof(imd._totalElements));
-  f.write(&imd._totalBytes, sizeof(&imd._totalBytes));
-  f.write(&imd._totalBlocks, sizeof(&imd._totalBlocks));
-
-  return f;
-   */
-}
-
 // ____________________________________________________________________________
 template <class MapType>
 void IndexMetaData<MapType>::writeToFile(const std::string& filename) const {
@@ -121,7 +71,9 @@ void IndexMetaData<MapType>::appendToFile(ad_utility::File* file) const {
   AD_CHECK(file->isOpen());
   file->seek(0, SEEK_END);
   off_t startOfMeta = file->tell();
-  (*file) << *this;
+  ad_utility::serialization::FileWriteSerializer serializer{std::move(*file)};
+  serializer&(*this);
+  *file = std::move(serializer).moveFileOut();
   file->write(&startOfMeta, sizeof(startOfMeta));
 }
 
@@ -217,32 +169,33 @@ void IndexMetaData<MapType>::calculateExpensiveStatistics() {
   }
 }
 
+// ___________________________________________________________________________
 template <typename Serializer, typename MapType>
 void serialize(Serializer& serializer, IndexMetaData<MapType>& metaData) {
+  // The binary format of an IndexMetaData start with an 8-byte magicNumber.
+  // After this magic number, an 8-byte version number follows. Both have to
+  // match.
   using T = IndexMetaData<MapType>;
-  uint64_t magicNumber = T::_isMmapBased
-                             ? MAGIC_NUMBER_MMAP_META_DATA_VERSION
-                             : MAGIC_NUMBER_SPARSE_META_DATA_VERSION;
+  uint64_t magicNumber = T::MAGIC_NUMBER_FOR_SERIALIZATION;
+
   serializer& magicNumber;
 
-  bool legalMmapBasedFormat =
-      T::_isMmapBased && magicNumber == MAGIC_NUMBER_MMAP_META_DATA_VERSION;
-  bool legalHmapBasedFormat =
-      !T::_isMmapBased && magicNumber == MAGIC_NUMBER_SPARSE_META_DATA_VERSION;
-  if (!(legalHmapBasedFormat || legalMmapBasedFormat)) {
+  // This check might only become false, if we are reading from the serializer
+  if (magicNumber != T::MAGIC_NUMBER_FOR_SERIALIZATION) {
     throw WrongFormatException(
         "The binary format of this index is no longer supported by QLever. "
         "Please rebuild the index.");
   }
 
   serializer& metaData._version;
-
+  // This check might only become false, if we are reading from the serializer
   if (metaData.getVersion() != V_CURRENT) {
     throw WrongFormatException(
         "The binary format of this index is no longer supported by QLever. "
         "Please rebuild the index.");
   }
 
+  // Serialize the rest of the data members
   serializer& metaData._name;
   serializer& metaData._data;
   serializer& metaData._blockData;
@@ -253,7 +206,13 @@ void serialize(Serializer& serializer, IndexMetaData<MapType>& metaData) {
   serializer& metaData._totalBlocks;
 }
 
+// This overload allows us to serialize from a const IndexMetaData& to a writing
+// Serializer. This is ok, because then the serialize-function does not perform
+// any non-const actions.
+// TODO<C++20> using a requires clause we can actually enforce the const access
+// in these functions.
 template <typename Serializer, typename MapType>
 void serialize(Serializer& serializer, const IndexMetaData<MapType>& metaData) {
+  static_assert(Serializer::IsWriteSerializer);
   serialize(serializer, const_cast<IndexMetaData<MapType>&>(metaData));
 }

@@ -117,8 +117,15 @@ class IndexMetaData {
     static const bool value = std::is_same<MetaWrapperMmap, T>::value ||
                               std::is_same<MetaWrapperMmapView, T>::value;
   };
-  // compile time information whether this instatiation if MMapBased or not
+  // Compile time information whether this instatiation if MMapBased or not
   static constexpr bool _isMmapBased = IsMmapBased<MapType>::value;
+
+  // This magic number is written when serializing the IndexMetaData to a file.
+  // It is used to check, whether this is a really old index that requires
+  // rebuilding.
+  static constexpr uint64_t MAGIC_NUMBER_FOR_SERIALIZATION =
+      _isMmapBased ? MAGIC_NUMBER_MMAP_META_DATA_VERSION
+                   : MAGIC_NUMBER_SPARSE_META_DATA_VERSION;
 
   // Write to a file that will be overwritten/created
   void writeToFile(const std::string& filename) const;
@@ -181,13 +188,7 @@ class IndexMetaData {
   friend IndexMetaDataHmap convertMmapMetaDataToHmap(
       const IndexMetaDataMmap& mmap, bool verify);
 
-  // this way all instantations will be friends with each other,
-  // but this should not be an issue.
-  template <class U>
-  friend ad_utility::File& operator<<(ad_utility::File& f,
-                                      const IndexMetaData<U>& rmd);
-
-  // make friends with the serializer
+  // Symmetric serialization function for the ad_utility::serialization module.
   template <class Serializer, typename MapType>
   friend void serialize(Serializer& serializer,
                         IndexMetaData<MapType>& metaData);
