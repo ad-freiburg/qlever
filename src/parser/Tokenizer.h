@@ -60,8 +60,8 @@ static constexpr auto cls(const ctll::fixed_string<N>& s) {
   return fixed_string("[") + s + fixed_string("]");
 }
 
-/// Create a ctll::fixed string from a compile time character constant. Is
-/// needed for some magical reasons
+/// Create a ctll::fixed string from a compile time character constant. The
+/// short name helps keep the overview when assembling long regexes.
 template <typename T, size_t N>
 constexpr fixed_string<N> fs(const T (&input)[N]) noexcept {
   return fixed_string(input);
@@ -134,8 +134,8 @@ struct TurtleTokenCtre {
   static constexpr auto Exponent = grp(ExponentString);
 
   static constexpr auto DoubleString = fs("[\\+\\-]?([0-9]+\\.[0-9]*") +
-                                       ExponentString + fs("|") +
-                                       ExponentString + fs(")");
+                                       ExponentString + "|" + ExponentString +
+                                       ")";
 
   static constexpr auto Double = grp(DoubleString);
 
@@ -146,23 +146,22 @@ struct TurtleTokenCtre {
   static constexpr auto EcharString = fs("\\\\[tbnrf\"\'\\\\]");
 
   static constexpr auto StringLiteralQuoteString =
-      fs("\"([^\\x22\\x5C\\x0A\\x0D]|") + EcharString + fs("|") + UcharString +
-      fs(")*\"");
+      fs("\"([^\\x22\\x5C\\x0A\\x0D]|") + EcharString + "|" + UcharString +
+      ")*\"";
 
   static constexpr auto StringLiteralSingleQuoteString =
-      fs("'([^\\x27\\x5C\\x0A\\x0D]|") + EcharString + fs("|") + UcharString +
-      fs(")*'");
+      fs("'([^\\x27\\x5C\\x0A\\x0D]|") + EcharString + "|" + UcharString +
+      ")*'";
   static constexpr auto StringLiteralLongSingleQuoteString =
-      fs("'''((''|')?([^'\\\\]|") + EcharString + fs(u8"|") + UcharString +
-      fs("))*'''");
+      fs("'''((''|')?([^'\\\\]|") + EcharString + "|" + UcharString + "))*'''";
 
   static constexpr auto StringLiteralLongQuoteString =
-      u8"\"\"\"((\"\"|\")?([^\"\\\\]|" + EcharString + u8"|" + UcharString +
-      u8"))*\"\"\"";
+      fs("\"\"\"((\"\"|\")?([^\"\\\\]|") + EcharString + "|" + UcharString +
+      "))*\"\"\"";
 
   // TODO: fix this!
   static constexpr auto IrirefString =
-      R"(<([^\x00-\x20<>"{}\x7c^`\\]|)" + UcharString + u8")*>";
+      R"(<([^\x00-\x20<>"{}\x7c^`\\]|)" + UcharString + ")*>";
 
   static constexpr auto PercentString = "%" + cls(HexString) + "{2}";
 
@@ -173,63 +172,62 @@ struct TurtleTokenCtre {
   compile time by an infeasible amount ( more than 20 minutes for this file
   alone which made debugging impossible) Thus we will currently only allow
   simple prefixes and emit proper warnings.
-            u8"A-Za-z\\x{00C0}-\\x{00D6}\\x{00D8}-\\x{00F6}\\x{00F8}-"
-            u8"\\x{02FF}"
-            u8"\\x{0370}-"
-            u8"\\x{037D}\\x{037F}-\\x{1FFF}\\x{200C}-\\x{200D}\\x{2070}-\\x{"
-            u8"218F}"
-            u8"\\x{2C00}-"
-            u8"\\x{2FEF}"
-            u8"\\x{3001}-\\x{D7FF}\\x{F900}-\\x{FDCF}\\x{FDF0}-\\x{FFFD}"
-            u8"\\x{00010000}-"
-            u8"\\x{000EFFFF}");
+            "A-Za-z\\x{00C0}-\\x{00D6}\\x{00D8}-\\x{00F6}\\x{00F8}-"
+            "\\x{02FF}"
+            "\\x{0370}-"
+            "\\x{037D}\\x{037F}-\\x{1FFF}\\x{200C}-\\x{200D}\\x{2070}-\\x{"
+            "218F}"
+            "\\x{2C00}-"
+            "\\x{2FEF}"
+            "\\x{3001}-\\x{D7FF}\\x{F900}-\\x{FDCF}\\x{FDF0}-\\x{FFFD}"
+            "\\x{00010000}-"
+            "\\x{000EFFFF}");
             */
   static constexpr auto PnCharsBaseString = fixed_string("A-Za-z");
 
-  static constexpr auto PnCharsUString = PnCharsBaseString + u8"_";
+  static constexpr auto PnCharsUString = PnCharsBaseString + "_";
 
   // TODO<joka921>:  here we have the same issue with UTF-8 in CTRE as above
   /*
   static constexpr auto PnCharsString =
             PnCharsUString +
-            u8"\\-0-9\\x{00B7}\\x{0300}-\\x{036F}\\x{203F}-\\x{2040}";
+            "\\-0-9\\x{00B7}\\x{0300}-\\x{036F}\\x{203F}-\\x{2040}";
             */
 
-  static constexpr auto PnCharsString = PnCharsUString + u8"\\-0-9";
+  static constexpr auto PnCharsString = PnCharsUString + "\\-0-9";
 
-  static constexpr auto PnPrefixString = cls(PnCharsBaseString) + u8"(\\." +
-                                         cls(PnCharsString) + u8"|" +
+  static constexpr auto PnPrefixString = cls(PnCharsBaseString) + "(\\." +
+                                         cls(PnCharsString) + "|" +
                                          cls(PnCharsString) + ")*";
 
-  static constexpr auto PnameNSString = PnPrefixString + u8":";
+  static constexpr auto PnameNSString = PnPrefixString + ":";
 
   static constexpr fixed_string PnLocalEscString =
-      u8"\\\\[_~.\\-!$&'()*+,;=/?#@%]";
+      "\\\\[_~.\\-!$&'()*+,;=/?#@%]";
 
   static constexpr fixed_string PlxString =
-      PercentString + u8"|" + PnLocalEscString;
+      PercentString + "|" + PnLocalEscString;
 
   static constexpr fixed_string TmpNoDot =
       cls(PnCharsString + ":") + "|" + PlxString;
   static constexpr fixed_string PnLocalString =
-      grp(cls(PnCharsUString + u8":0-9") + "|" + PlxString) +
-      grp(u8"\\.*" + grp(TmpNoDot)) + "*";
+      grp(cls(PnCharsUString + ":0-9") + "|" + PlxString) +
+      grp("\\.*" + grp(TmpNoDot)) + "*";
 
   static constexpr fixed_string PnameLNString =
       grp(PnameNSString) + grp(PnLocalString);
 
   static constexpr fixed_string BlankNodeLabelString =
-      u8"_:" + cls(PnCharsUString + u8"0-9") +
+      fs("_:") + cls(PnCharsUString + "0-9") +
       grp("\\.*" + cls(PnCharsString)) + "*";
 
-  static constexpr fixed_string WsSingleString = u8"\\x20\\x09\\x0D\\x0A";
+  static constexpr fixed_string WsSingleString = "\\x20\\x09\\x0D\\x0A";
 
-  static constexpr fixed_string WsMultipleString = cls(WsSingleString) + u8"*";
+  static constexpr fixed_string WsMultipleString = cls(WsSingleString) + "*";
 
-  static constexpr fixed_string AnonString =
-      u8"\\[" + WsMultipleString + u8"\\]";
+  static constexpr fixed_string AnonString = "\\[" + WsMultipleString + "\\]";
 
-  static constexpr fixed_string CommentString = u8"#[^\\n]*\\n";
+  static constexpr fixed_string CommentString = "#[^\\n]*\\n";
 
   static constexpr fixed_string Iriref = grp(IrirefString);
   static constexpr fixed_string PnameNS = grp(PnameNSString);
@@ -388,29 +386,29 @@ struct TurtleToken {
   TurtleToken()
       // those constants are always skipped, so they don't need a group around
       // them
-      : TurtlePrefix(grp(u8"@prefix")),
+      : TurtlePrefix(grp("@prefix")),
         // TODO: this is actually case-insensitive
-        SparqlPrefix(grp(u8"PREFIX")),
-        TurtleBase(grp(u8"@base")),
+        SparqlPrefix(grp("PREFIX")),
+        TurtleBase(grp("@base")),
         // TODO: this also
-        SparqlBase(grp(u8"BASE")),
+        SparqlBase(grp("BASE")),
 
-        Dot(grp(u8"\\.")),
-        Comma(grp(u8",")),
-        Semicolon(grp(u8";")),
-        OpenSquared(grp(u8"\\[")),
-        CloseSquared(grp(u8"\\]")),
-        OpenRound(grp(u8"\\(")),
-        CloseRound(grp(u8"\\)")),
-        A(grp(u8"a")),
-        DoubleCircumflex(grp(u8"\\^\\^")),
+        Dot(grp("\\.")),
+        Comma(grp(",")),
+        Semicolon(grp(";")),
+        OpenSquared(grp("\\[")),
+        CloseSquared(grp("\\]")),
+        OpenRound(grp("\\(")),
+        CloseRound(grp("\\)")),
+        A(grp("a")),
+        DoubleCircumflex(grp("\\^\\^")),
 
-        True(grp(u8"true")),
-        False(grp(u8"false")),
+        True(grp("true")),
+        False(grp("false")),
         Langtag(grp(LangtagString)),
 
-        Integer(grp(u8"[+-]?[0-9]+")),
-        Decimal(grp(u8"[+-]?[0-9]*\\.[0-9]+")),
+        Integer(grp("[+-]?[0-9]+")),
+        Decimal(grp("[+-]?[0-9]*\\.[0-9]+")),
         Exponent(grp(ExponentString)),
         Double(grp(DoubleString)),
         StringLiteralQuote(grp(StringLiteralQuoteString)),
@@ -450,113 +448,109 @@ struct TurtleToken {
   const RE2 True;
   const RE2 False;
 
-  const string LangtagString = u8"@[a-zA-Z]+(\\-[a-zA-Z0-9]+)*";
+  const string LangtagString = "@[a-zA-Z]+(\\-[a-zA-Z0-9]+)*";
   const RE2 Langtag;
 
   const RE2 Integer;
   const RE2 Decimal;
-  const string ExponentString = u8"[eE][+-]?[0-9]+";
+  const string ExponentString = "[eE][+-]?[0-9]+";
   const RE2 Exponent;
-  const string DoubleString = u8"[+-]?([0-9]+\\.[0-9]*" + ExponentString +
-                              u8"|" + ExponentString + u8")";
+  const string DoubleString =
+      "[+-]?([0-9]+\\.[0-9]*" + ExponentString + "|" + ExponentString + ")";
   const RE2 Double;
 
-  const string HexString = u8"0-9A-Fa-f";
-  const string UcharString = u8"\\\\u[0-9a-fA-f]{4}|\\\\U[0-9a-fA-f]{8}";
+  const string HexString = "0-9A-Fa-f";
+  const string UcharString = "\\\\u[0-9a-fA-f]{4}|\\\\U[0-9a-fA-f]{8}";
 
-  const string EcharString = u8"\\\\[tbnrf\"\'\\\\]";
+  const string EcharString = "\\\\[tbnrf\"\'\\\\]";
 
-  const string StringLiteralQuoteString = u8"\"([^\\x22\\x5C\\x0A\\x0D]|" +
-                                          EcharString + u8"|" + UcharString +
-                                          u8")*\"";
+  const string StringLiteralQuoteString =
+      "\"([^\\x22\\x5C\\x0A\\x0D]|" + EcharString + "|" + UcharString + ")*\"";
   const RE2 StringLiteralQuote;
 
-  const string StringLiteralSingleQuoteString = u8"'([^\\x27\\x5C\\x0A\\x0D]|" +
-                                                EcharString + u8"|" +
-                                                UcharString + u8")*'";
+  const string StringLiteralSingleQuoteString =
+      "'([^\\x27\\x5C\\x0A\\x0D]|" + EcharString + "|" + UcharString + ")*'";
   const RE2 StringLiteralSingleQuote;
 
-  const string StringLiteralLongSingleQuoteString = u8"'''((''|')?([^'\\\\]|" +
-                                                    EcharString + u8"|" +
-                                                    UcharString + u8"))*'''";
+  const string StringLiteralLongSingleQuoteString =
+      "'''((''|')?([^'\\\\]|" + EcharString + "|" + UcharString + "))*'''";
   const RE2 StringLiteralLongSingleQuote;
 
-  const string StringLiteralLongQuoteString = u8"\"\"\"((\"\"|\")?([^\"\\\\]|" +
-                                              EcharString + u8"|" +
-                                              UcharString + u8"))*\"\"\"";
+  const string StringLiteralLongQuoteString = "\"\"\"((\"\"|\")?([^\"\\\\]|" +
+                                              EcharString + "|" + UcharString +
+                                              "))*\"\"\"";
   const RE2 StringLiteralLongQuote;
 
   // TODO: fix this!
   const string IrirefString =
-      "<([^\\x00-\\x20<>\"{}|^`\\\\]|"s + UcharString + u8")*>";
+      "<([^\\x00-\\x20<>\"{}|^`\\\\]|"s + UcharString + ")*>";
   const RE2 Iriref;
 
-  const string PercentString = u8"%" + cls(HexString) + "{2}";
+  const string PercentString = "%" + cls(HexString) + "{2}";
   // const RE2 Percent;
 
   const string PnCharsBaseString =
-      u8"A-Za-z\\x{00C0}-\\x{00D6}\\x{00D8}-\\x{00F6}\\x{00F8}-"
-      u8"\\x{02FF}"
-      u8"\\x{0370}-"
-      u8"\\x{037D}\\x{037F}-\\x{1FFF}\\x{200C}-\\x{200D}\\x{2070}-\\x{"
-      u8"218F}"
-      u8"\\x{2C00}-"
-      u8"\\x{2FEF}"
-      u8"\\x{3001}-\\x{D7FF}\\x{F900}-\\x{FDCF}\\x{FDF0}-\\x{FFFD}"
-      u8"\\x{00010000}-"
-      u8"\\x{000EFFFF}";
+      "A-Za-z\\x{00C0}-\\x{00D6}\\x{00D8}-\\x{00F6}\\x{00F8}-"
+      "\\x{02FF}"
+      "\\x{0370}-"
+      "\\x{037D}\\x{037F}-\\x{1FFF}\\x{200C}-\\x{200D}\\x{2070}-\\x{"
+      "218F}"
+      "\\x{2C00}-"
+      "\\x{2FEF}"
+      "\\x{3001}-\\x{D7FF}\\x{F900}-\\x{FDCF}\\x{FDF0}-\\x{FFFD}"
+      "\\x{00010000}-"
+      "\\x{000EFFFF}";
 
-  const string PnCharsUString = PnCharsBaseString + u8"_";
+  const string PnCharsUString = PnCharsBaseString + "_";
 
   const string PnCharsString =
-      PnCharsUString +
-      u8"\\-0-9\\x{00B7}\\x{0300}-\\x{036F}\\x{203F}-\\x{2040}";
+      PnCharsUString + "\\-0-9\\x{00B7}\\x{0300}-\\x{036F}\\x{203F}-\\x{2040}";
 
   /*
-  const string PnPrefixString = grp(PnCharsBaseString) + u8"((" +
-                                PnCharsString + u8"|\\.)*" + PnCharsString +
-                                u8")?";
+  const string PnPrefixString = grp(PnCharsBaseString) + "((" +
+                                PnCharsString + "|\\.)*" + PnCharsString +
+                                ")?";
                         */
   // TODO<joka921> verify that this is what is meant
-  const string PnPrefixString = cls(PnCharsBaseString) + u8"(\\." +
-                                cls(PnCharsString) + u8"|" +
-                                cls(PnCharsString) + ")*";
+  const string PnPrefixString = cls(PnCharsBaseString) + "(\\." +
+                                cls(PnCharsString) + "|" + cls(PnCharsString) +
+                                ")*";
 
-  const string PnameNSString = PnPrefixString + u8":";
+  const string PnameNSString = PnPrefixString + ":";
   const RE2 PnameNS;
 
-  const string PnLocalEscString = u8"\\\\[_~.\\-!$&'()*+,;=/?#@%]";
+  const string PnLocalEscString = "\\\\[_~.\\-!$&'()*+,;=/?#@%]";
 
-  const string PlxString = PercentString + u8"|" + PnLocalEscString;
+  const string PlxString = PercentString + "|" + PnLocalEscString;
 
   /*const string PnLocalString =
-      u8"(" + cls(PnCharsUString + u8":[0-9]" + PlxString) + u8")((" +
-      cls(PnCharsString + u8"\\.:" + PlxString) + u8")*(" +
-      cls(PnCharsString + u8":" + PlxString) + u8"))?";
+      "(" + cls(PnCharsUString + ":[0-9]" + PlxString) + ")((" +
+      cls(PnCharsString + "\\.:" + PlxString) + ")*(" +
+      cls(PnCharsString + ":" + PlxString) + "))?";
       */
 
   const string TmpNoDot = cls(PnCharsString + ":") + "|" + PlxString;
   const string PnLocalString =
-      grp(cls(PnCharsUString + u8":0-9") + "|" + PlxString) +
-      grp(u8"\\.*" + grp(TmpNoDot)) + "*";
+      grp(cls(PnCharsUString + ":0-9") + "|" + PlxString) +
+      grp("\\.*" + grp(TmpNoDot)) + "*";
 
   const string PnameLNString = grp(PnameNSString) + grp(PnLocalString);
   const RE2 PnameLN;
 
-  const string BlankNodeLabelString = u8"_:" + cls(PnCharsUString + u8"0-9") +
+  const string BlankNodeLabelString = "_:" + cls(PnCharsUString + "0-9") +
                                       grp("\\.*" + cls(PnCharsString)) + "*";
 
   const RE2 BlankNodeLabel;
 
-  const string WsSingleString = u8"\\x20\\x09\\x0D\\x0A";
+  const string WsSingleString = "\\x20\\x09\\x0D\\x0A";
 
-  const string WsMultipleString = cls(WsSingleString) + u8"*";
+  const string WsMultipleString = cls(WsSingleString) + "*";
   const RE2 WsMultiple;
 
-  const string AnonString = u8"\\[" + WsMultipleString + u8"\\]";
+  const string AnonString = "\\[" + WsMultipleString + "\\]";
   const RE2 Anon;
 
-  const string CommentString = u8"#[^\\n]*\\n";
+  const string CommentString = "#[^\\n]*\\n";
   const RE2 Comment;
 
   static string grp(const string& s) { return '(' + s + ')'; }

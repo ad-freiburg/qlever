@@ -1,5 +1,5 @@
-FROM ubuntu:18.04 as base
-LABEL maintainer="Niklas Schnelle <schnelle@informatik.uni-freiburg.de>"
+FROM ubuntu:20.10 as base
+LABEL maintainer="Johannes Kalmbach <kalmbacj@informatik.uni-freiburg.de>"
 ENV LANG C.UTF-8
 ENV LC_ALL C.UTF-8
 ENV LC_CTYPE C.UTF-8
@@ -11,6 +11,7 @@ COPY . /app/
 
 # Check formatting with the .clang-format project style
 WORKDIR /app/
+ENV DEBIAN_FRONTEND=noninteractive
 RUN misc/format-check.sh
 
 WORKDIR /app/build/

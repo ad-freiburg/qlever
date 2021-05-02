@@ -53,7 +53,7 @@ class RuntimeInformation {
   void writeToStream(std::ostream& out, size_t indent = 1) const {
     using json = nlohmann::json;
     out << indentStr(indent) << '\n';
-    out << indentStr(indent - 1) << u8"├─ " << _descriptor << '\n';
+    out << indentStr(indent - 1) << "├─ " << _descriptor << '\n';
     out << indentStr(indent) << "result_size: " << _rows << " x " << _cols
         << '\n';
     out << indentStr(indent)
@@ -83,7 +83,7 @@ class RuntimeInformation {
       out << '\n';
     }
     if (_children.size()) {
-      out << indentStr(indent) << u8"┬\n";
+      out << indentStr(indent) << "┬\n";
       for (const RuntimeInformation& child : _children) {
         child.writeToStream(out, indent + 1);
       }
@@ -156,7 +156,7 @@ class RuntimeInformation {
   static std::string indentStr(size_t indent) {
     std::string ind;
     for (size_t i = 0; i < indent; i++) {
-      ind += u8"│  ";
+      ind += "│  ";
     }
     return ind;
   }
