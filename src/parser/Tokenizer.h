@@ -60,8 +60,8 @@ static constexpr auto cls(const ctll::fixed_string<N>& s) {
   return fixed_string("[") + s + fixed_string("]");
 }
 
-/// Create a ctll::fixed string from a compile time character constant. Is
-/// needed for some magical reasons
+/// Create a ctll::fixed string from a compile time character constant. The
+/// short name helps keep the overview when assembling long regexes.
 template <typename T, size_t N>
 constexpr fixed_string<N> fs(const T (&input)[N]) noexcept {
   return fixed_string(input);
@@ -134,8 +134,8 @@ struct TurtleTokenCtre {
   static constexpr auto Exponent = grp(ExponentString);
 
   static constexpr auto DoubleString = fs("[\\+\\-]?([0-9]+\\.[0-9]*") +
-                                       ExponentString + fs("|") +
-                                       ExponentString + fs(")");
+                                       ExponentString + "|" + ExponentString +
+                                       ")";
 
   static constexpr auto Double = grp(DoubleString);
 
@@ -146,19 +146,18 @@ struct TurtleTokenCtre {
   static constexpr auto EcharString = fs("\\\\[tbnrf\"\'\\\\]");
 
   static constexpr auto StringLiteralQuoteString =
-      fs("\"([^\\x22\\x5C\\x0A\\x0D]|") + EcharString + fs("|") + UcharString +
-      fs(")*\"");
+      fs("\"([^\\x22\\x5C\\x0A\\x0D]|") + EcharString + "|" + UcharString +
+      ")*\"";
 
   static constexpr auto StringLiteralSingleQuoteString =
-      fs("'([^\\x27\\x5C\\x0A\\x0D]|") + EcharString + fs("|") + UcharString +
-      fs(")*'");
+      fs("'([^\\x27\\x5C\\x0A\\x0D]|") + EcharString + "|" + UcharString +
+      ")*'";
   static constexpr auto StringLiteralLongSingleQuoteString =
-      fs("'''((''|')?([^'\\\\]|") + EcharString + fs("|") + UcharString +
-      fs("))*'''");
+      fs("'''((''|')?([^'\\\\]|") + EcharString + "|" + UcharString + "))*'''";
 
   static constexpr auto StringLiteralLongQuoteString =
-      fs("\"\"\"((\"\"|\")?([^\"\\\\]|") + EcharString + fs("|") + UcharString +
-      fs("))*\"\"\"");
+      fs("\"\"\"((\"\"|\")?([^\"\\\\]|") + EcharString + "|" + UcharString +
+      "))*\"\"\"";
 
   // TODO: fix this!
   static constexpr auto IrirefString =
@@ -186,7 +185,7 @@ struct TurtleTokenCtre {
             */
   static constexpr auto PnCharsBaseString = fixed_string("A-Za-z");
 
-  static constexpr auto PnCharsUString = PnCharsBaseString + fs("_");
+  static constexpr auto PnCharsUString = PnCharsBaseString + "_";
 
   // TODO<joka921>:  here we have the same issue with UTF-8 in CTRE as above
   /*
@@ -195,31 +194,31 @@ struct TurtleTokenCtre {
             "\\-0-9\\x{00B7}\\x{0300}-\\x{036F}\\x{203F}-\\x{2040}";
             */
 
-  static constexpr auto PnCharsString = PnCharsUString + fs("\\-0-9");
+  static constexpr auto PnCharsString = PnCharsUString + "\\-0-9";
 
-  static constexpr auto PnPrefixString = cls(PnCharsBaseString) + fs("(\\.") +
-                                         cls(PnCharsString) + fs("|") +
-                                         cls(PnCharsString) + fs(")*");
+  static constexpr auto PnPrefixString = cls(PnCharsBaseString) + "(\\." +
+                                         cls(PnCharsString) + "|" +
+                                         cls(PnCharsString) + ")*";
 
-  static constexpr auto PnameNSString = PnPrefixString + fs(":");
+  static constexpr auto PnameNSString = PnPrefixString + ":";
 
   static constexpr fixed_string PnLocalEscString =
       "\\\\[_~.\\-!$&'()*+,;=/?#@%]";
 
   static constexpr fixed_string PlxString =
-      PercentString + fs("|") + PnLocalEscString;
+      PercentString + "|" + PnLocalEscString;
 
   static constexpr fixed_string TmpNoDot =
       cls(PnCharsString + ":") + "|" + PlxString;
   static constexpr fixed_string PnLocalString =
-      grp(cls(PnCharsUString + fs(":0-9")) + "|" + PlxString) +
-      grp(fs("\\.*") + grp(TmpNoDot)) + fs("*");
+      grp(cls(PnCharsUString + ":0-9") + "|" + PlxString) +
+      grp("\\.*" + grp(TmpNoDot)) + "*";
 
   static constexpr fixed_string PnameLNString =
       grp(PnameNSString) + grp(PnLocalString);
 
   static constexpr fixed_string BlankNodeLabelString =
-      fs("_:") + cls(PnCharsUString + fs("0-9")) +
+      fs("_:") + cls(PnCharsUString + "0-9") +
       grp("\\.*" + cls(PnCharsString)) + "*";
 
   static constexpr fixed_string WsSingleString = "\\x20\\x09\\x0D\\x0A";
