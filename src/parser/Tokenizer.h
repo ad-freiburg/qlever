@@ -100,7 +100,6 @@ enum class TokId : int {
  * Caveat: The Prefix names are currently restricted to ascii values.
  */
 struct TurtleTokenCtre {
-
   static constexpr auto TurtlePrefix = grp(fixed_string("@prefix"));
   // TODO: this is actually case-insensitive
   static constexpr auto SparqlPrefix = grp(fixed_string("PREFIX"));
