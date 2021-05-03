@@ -116,54 +116,24 @@ class Vocabulary {
   void writeToBinaryFileForMerging(const string& fileName) const;
 
   //! Append a word to the vocabulary. Wraps the std::vector method.
-  void push_back(const string& word) {
-    if constexpr (_isCompressed) {
-      _words.push_back(compressPrefix(word));
-    } else {
-      _words.push_back(word);
-    }
-  }
+  void push_back(const string& word);
 
   //! Get the word with the given id or an empty optional if the
   //! word is not in the vocabulary.
   //! Only enabled when uncompressed which also means no externalization
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
   const std::optional<std::reference_wrapper<const string>> operator[](
-      Id id) const {
-    if (id < _words.size()) {
-      return _words[static_cast<size_t>(id)];
-    } else {
-      return std::nullopt;
-    }
-  }
+      Id id) const;
 
   //! Get the word with the given id or an empty optional if the
   //! word is not in the vocabulary. Returns an lvalue because compressed or
   //! externalized words don't allow references
   template <typename U = StringType, typename = enable_if_compressed<U>>
-  const std::optional<string> idToOptionalString(Id id) const {
-    if (id < _words.size()) {
-      // internal, prefixCompressed word
-      return expandPrefix(_words[static_cast<size_t>(id)]);
-    } else if (id == ID_NO_VALUE) {
-      return std::nullopt;
-    } else {
-      // this word must be externalized
-      id -= _words.size();
-      AD_CHECK(id < _externalLiterals.size());
-      return _externalLiterals[id];
-    }
-  }
+  const std::optional<string> idToOptionalString(Id id) const;
 
   //! Get the word with the given id.
   //! lvalue for compressedString and const& for string-based vocabulary
-  AccessReturnType_t<StringType> at(Id id) const {
-    if constexpr (_isCompressed) {
-      return expandPrefix(_words[static_cast<size_t>(id)]);
-    } else {
-      return _words[static_cast<size_t>(id)];
-    }
-  }
+  AccessReturnType_t<StringType> at(Id id) const;
 
   // AccessReturnType_t<StringType> at(Id id) const { return operator[](id); }
 
@@ -175,18 +145,7 @@ class Vocabulary {
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
-  bool getId(const string& word, Id* id) const {
-    if (!shouldBeExternalized(word)) {
-      // need the TOTAL level because we want the unique word.
-      *id = lower_bound(word, SortLevel::TOTAL);
-      // works for the case insensitive version because
-      // of the strict ordering.
-      return *id < _words.size() && at(*id) == word;
-    }
-    bool success = _externalLiterals.getId(word, id);
-    *id += _words.size();
-    return success;
-  }
+  bool getId(const string& word, Id* id) const;
 
   Id getValueIdForLT(const string& indexWord, const SortLevel level) const {
     Id lb = lower_bound(indexWord, level);
@@ -216,19 +175,7 @@ class Vocabulary {
   //! and uses a range, where the last index is still within the range which is
   //! against C++ conventions!
   // consider using the prefixRange function.
-  bool getIdRangeForFullTextPrefix(const string& word, IdRange* range) const {
-    AD_CHECK_EQ(word[word.size() - 1], PREFIX_CHAR);
-    auto prefixRange = prefix_range(word.substr(0, word.size() - 1));
-    bool success = prefixRange.second > prefixRange.first;
-    range->_first = prefixRange.first;
-    range->_last = prefixRange.second - 1;
-
-    if (success) {
-      AD_CHECK_LT(range->_first, _words.size());
-      AD_CHECK_LT(range->_last, _words.size());
-    }
-    return success;
-  }
+  bool getIdRangeForFullTextPrefix(const string& word, IdRange* range) const;
 
   // only used during Index building, not needed for compressed vocabulary
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
@@ -311,11 +258,7 @@ class Vocabulary {
                                  const vector<string>& prefixes);
 
   void setLocale(const std::string& language, const std::string& country,
-                 bool ignorePunctuation) {
-    _caseComparator = ComparatorType(language, country, ignorePunctuation);
-    _externalLiterals.getCaseComparator() =
-        ComparatorType(language, country, ignorePunctuation);
-  }
+                 bool ignorePunctuation);
 
   // _____________________________________________________________________
   const ComparatorType& getCaseComparator() const { return _caseComparator; }
@@ -324,21 +267,7 @@ class Vocabulary {
   /// prefix according to the collation level the first Id is included in the
   /// range, the last one not. Currently only supports the Primary collation
   /// level, due to limitations in the StringSortComparators
-  std::pair<Id, Id> prefix_range(const string& prefix) const {
-    if (prefix.empty()) {
-      return {0, _words.size()};
-    }
-    Id lb = lower_bound(prefix, SortLevel::PRIMARY);
-    auto transformed = _caseComparator.transformToFirstPossibleBiggerValue(
-        prefix, SortLevel::PRIMARY);
-
-    auto pred = getLowerBoundLambda<decltype(transformed)>(SortLevel::PRIMARY);
-    auto ub = static_cast<Id>(
-        std::lower_bound(_words.begin(), _words.end(), transformed, pred) -
-        _words.begin());
-
-    return {lb, ub};
-  }
+  std::pair<Id, Id> prefix_range(const string& prefix) const;
 
   [[nodiscard]] const LocaleManager& getLocaleManager() const {
     return _caseComparator.getLocaleManager();
@@ -346,18 +275,10 @@ class Vocabulary {
 
   // Wraps std::lower_bound and returns an index instead of an iterator
   Id lower_bound(const string& word,
-                 const SortLevel level = SortLevel::QUARTERNARY) const {
-    return static_cast<Id>(std::lower_bound(_words.begin(), _words.end(), word,
-                                            getLowerBoundLambda(level)) -
-                           _words.begin());
-  }
+                 const SortLevel level = SortLevel::QUARTERNARY) const;
 
   // _______________________________________________________________
-  Id upper_bound(const string& word, const SortLevel level) const {
-    return static_cast<Id>(std::upper_bound(_words.begin(), _words.end(), word,
-                                            getUpperBoundLambda(level)) -
-                           _words.begin());
-  }
+  Id upper_bound(const string& word, const SortLevel level) const;
 
  private:
   template <class R = std::string>
@@ -409,5 +330,3 @@ class Vocabulary {
 
 using RdfsVocabulary = Vocabulary<CompressedString, TripleComponentComparator>;
 using TextVocabulary = Vocabulary<std::string, SimpleStringComparator>;
-
-#include "VocabularyImpl.h"
