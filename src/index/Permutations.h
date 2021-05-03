@@ -67,4 +67,4 @@ class PermutationImpl {
   mutable ad_utility::File _file;
 };
 
-}  // namespace Permutation
+}  // namespace PermutationImpl

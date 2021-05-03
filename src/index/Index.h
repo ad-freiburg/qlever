@@ -18,7 +18,6 @@ class TurtleParserDummy {};
 
 class Index {
  public:
-
   // Forbid copy and assignment
   Index& operator=(const Index&) = delete;
 
@@ -28,7 +27,6 @@ class Index {
   ~Index();
 
   enum class Permutation { POS, PSO, SPO, SOP, OPS, OSP };
-
 
   // Creates an index from a file. Parameter Parser must be able to split the
   // file's format into triples.
