@@ -61,13 +61,6 @@ static constexpr auto cls(const ctll::fixed_string<N>& s) {
   return fixed_string("[") + s + fixed_string("]");
 }
 
-/// Create a ctll::fixed string from a compile time character constant. The
-/// short name helps keep the overview when assembling long regexes.
-template <typename T, size_t N>
-constexpr auto fs(const T (&input)[N]) noexcept {
-  return fixed_string(input);
-}
-
 /// One entry for each Token in the Turtle Grammar. Used to create a unified
 /// Interface to the two different Tokenizers
 enum class TokId : int {
@@ -107,8 +100,6 @@ enum class TokId : int {
  * Caveat: The Prefix names are currently restricted to ascii values.
  */
 struct TurtleTokenCtre {
-  template <size_t N>
-  using STR = ctll::fixed_string<N>;
 
   static constexpr auto TurtlePrefix = grp(fixed_string("@prefix"));
   // TODO: this is actually case-insensitive
@@ -134,31 +125,32 @@ struct TurtleTokenCtre {
   static constexpr auto ExponentString = fixed_string("[eE][\\+\\-]?[0-9]+");
   static constexpr auto Exponent = grp(ExponentString);
 
-  static constexpr auto DoubleString = fs("[\\+\\-]?([0-9]+\\.[0-9]*") +
-                                       ExponentString + "|" + ExponentString +
-                                       ")";
+  static constexpr auto DoubleString =
+      fixed_string("[\\+\\-]?([0-9]+\\.[0-9]*") + ExponentString + "|" +
+      ExponentString + ")";
 
   static constexpr auto Double = grp(DoubleString);
 
-  static constexpr auto HexString = fs("0-9A-Fa-f");
+  static constexpr auto HexString = fixed_string("0-9A-Fa-f");
   static constexpr auto UcharString =
-      fs("\\\\u[0-9a-fA-f]{4}|\\\\U[0-9a-fA-f]{8}");
+      fixed_string("\\\\u[0-9a-fA-f]{4}|\\\\U[0-9a-fA-f]{8}");
 
-  static constexpr auto EcharString = fs("\\\\[tbnrf\"\'\\\\]");
+  static constexpr auto EcharString = fixed_string("\\\\[tbnrf\"\'\\\\]");
 
   static constexpr auto StringLiteralQuoteString =
-      fs("\"([^\\x22\\x5C\\x0A\\x0D]|") + EcharString + "|" + UcharString +
-      ")*\"";
+      fixed_string("\"([^\\x22\\x5C\\x0A\\x0D]|") + EcharString + "|" +
+      UcharString + ")*\"";
 
   static constexpr auto StringLiteralSingleQuoteString =
-      fs("'([^\\x27\\x5C\\x0A\\x0D]|") + EcharString + "|" + UcharString +
-      ")*'";
+      fixed_string("'([^\\x27\\x5C\\x0A\\x0D]|") + EcharString + "|" +
+      UcharString + ")*'";
   static constexpr auto StringLiteralLongSingleQuoteString =
-      fs("'''((''|')?([^'\\\\]|") + EcharString + "|" + UcharString + "))*'''";
+      fixed_string("'''((''|')?([^'\\\\]|") + EcharString + "|" + UcharString +
+      "))*'''";
 
   static constexpr auto StringLiteralLongQuoteString =
-      fs("\"\"\"((\"\"|\")?([^\"\\\\]|") + EcharString + "|" + UcharString +
-      "))*\"\"\"";
+      fixed_string("\"\"\"((\"\"|\")?([^\"\\\\]|") + EcharString + "|" +
+      UcharString + "))*\"\"\"";
 
   // TODO: fix this!
   static constexpr auto IrirefString =
@@ -219,7 +211,7 @@ struct TurtleTokenCtre {
       grp(PnameNSString) + grp(PnLocalString);
 
   static constexpr fixed_string BlankNodeLabelString =
-      fs("_:") + cls(PnCharsUString + "0-9") +
+      fixed_string("_:") + cls(PnCharsUString + "0-9") +
       grp("\\.*" + cls(PnCharsString)) + "*";
 
   static constexpr fixed_string WsSingleString = "\\x20\\x09\\x0D\\x0A";
