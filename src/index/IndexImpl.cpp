@@ -1539,7 +1539,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
                  vocab = &_vocab, partialFilename, partialCompressionFilename,
                  vocabPrefixCompressed = _vocabPrefixCompressed]() {
     auto vec = vocabMapsToVector(items);
-    const auto identicalPred = [&c = vocab->getCaseComparator()](
+    const auto identicalPred = [& c = vocab->getCaseComparator()](
                                    const auto& a, const auto& b) {
       return c(a.second.m_splitVal, b.second.m_splitVal,
                decltype(_vocab)::SortLevel::TOTAL);
