@@ -16,16 +16,17 @@ using namespace std::string_literals;
 
 /// Helper function for ctre: concatenation of fixed_strings
 template <size_t A, size_t B>
-constexpr ctll::fixed_string<A + B - 1> operator+(
-    const ctll::fixed_string<A>& a, const ctll::fixed_string<B>& b) {
-  char32_t comb[A + B - 1] = {};
-  for (size_t i = 0; i < A - 1;
-       ++i) {  // omit the trailing 0 of the first string
+constexpr ctll::fixed_string<A + B> operator+(const ctll::fixed_string<A>& a,
+                                              const ctll::fixed_string<B>& b) {
+  char32_t comb[A + B + 1] = {};
+  for (size_t i = 0; i < A; ++i) {  // omit the trailing 0 of the first string
     comb[i] = a.content[i];
   }
   for (size_t i = 0; i < B; ++i) {
-    comb[i + A - 1] = b.content[i];
+    comb[i + A] = b.content[i];
   }
+  // the input array must be zero-terminated
+  comb[A + B] = '\0';
   return ctll::fixed_string(comb);
 }
 
@@ -63,7 +64,7 @@ static constexpr auto cls(const ctll::fixed_string<N>& s) {
 /// Create a ctll::fixed string from a compile time character constant. The
 /// short name helps keep the overview when assembling long regexes.
 template <typename T, size_t N>
-constexpr fixed_string<N> fs(const T (&input)[N]) noexcept {
+constexpr auto fs(const T (&input)[N]) noexcept {
   return fixed_string(input);
 }
 
