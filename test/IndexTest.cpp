@@ -3,10 +3,13 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+
 #include <cstdio>
 #include <fstream>
+
 #include "../src/global/Pattern.h"
-#include "../src/index/Index.h"
+#include "../src/index/IndexImpl.h"
+#include "../src/parser/TsvParser.h"
 
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
@@ -67,11 +70,11 @@ TEST(IndexTest, createFromTsvTest) {
     f.close();
 
     {
-      Index index;
+      IndexImpl index;
       index.setOnDiskBase("_testindex");
       index.createFromFile<TsvParser>("_testtmp2.tsv");
     }
-    Index index;
+    IndexImpl index;
     index.createFromOnDiskIndex("_testindex");
 
     ASSERT_TRUE(index._PSO.metaData().relationExists(3));
@@ -157,11 +160,11 @@ TEST(IndexTest, createFromTsvTest) {
     f.close();
 
     {
-      Index index;
+      IndexImpl index;
       index.setOnDiskBase("_testindex");
       index.createFromFile<TsvParser>("_testtmp2.tsv");
     }
-    Index index;
+    IndexImpl index;
     index.createFromOnDiskIndex("_testindex");
 
     ASSERT_TRUE(index._PSO.metaData().relationExists(8));
@@ -383,13 +386,13 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     f.close();
 
     {
-      Index index;
+      IndexImpl index;
       index.setUsePatterns(true);
       index._maxNumPatterns = 1;
       index.setOnDiskBase("_testindex");
       index.createFromFile<TsvParser>("_testtmppatterns.tsv");
     }
-    Index index;
+    IndexImpl index;
     index.setUsePatterns(true);
     index.createFromOnDiskIndex("_testindex");
 
@@ -413,7 +416,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
   }
   {
     LOG(DEBUG) << "Testing createPatterns with existing index..." << std::endl;
-    Index index;
+    IndexImpl index;
     index.setUsePatterns(true);
     index._maxNumPatterns = 1;
     index.createFromOnDiskIndex("_testindex");
@@ -458,12 +461,12 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   f.close();
 
   {
-    Index indexPrim;
+    IndexImpl indexPrim;
     indexPrim.setOnDiskBase("_testindex2");
     indexPrim.createFromFile<TsvParser>("_testtmp3.tsv");
   }
 
-  Index index;
+  IndexImpl index;
   index.createFromOnDiskIndex("_testindex2");
 
   ASSERT_TRUE(index.PSO().metaData().relationExists(3));
@@ -510,52 +513,53 @@ TEST(IndexTest, scanTest) {
   f.close();
   {
     {
-      Index index;
+      IndexImpl index;
       index.setOnDiskBase("_testindex");
       index.createFromFile<TsvParser>("_testtmp2.tsv");
     }
 
-    Index index;
+    using P = Index::Permutation;
+    IndexImpl index;
     index.createFromOnDiskIndex("_testindex");
 
     IdTable wol(1, allocator());
     IdTable wtl(2, allocator());
 
-    index.scan("b", &wtl, index._PSO);
+    index.scan("b", &wtl, P::PSO);
     ASSERT_EQ(2u, wtl.size());
     ASSERT_EQ(1u, wtl[0][0]);
     ASSERT_EQ(5u, wtl[0][1]);
     ASSERT_EQ(1u, wtl[1][0]);
     ASSERT_EQ(6u, wtl[1][1]);
     wtl.clear();
-    index.scan("x", &wtl, index._PSO);
+    index.scan("x", &wtl, P::PSO);
     ASSERT_EQ(0u, wtl.size());
 
-    index.scan("c", &wtl, index._PSO);
+    index.scan("c", &wtl, P::PSO);
     ASSERT_EQ(0u, wtl.size());
 
-    index.scan("b", &wtl, index._POS);
+    index.scan("b", &wtl, P::POS);
     ASSERT_EQ(2u, wtl.size());
     ASSERT_EQ(5u, wtl[0][0]);
     ASSERT_EQ(1u, wtl[0][1]);
     ASSERT_EQ(6u, wtl[1][0]);
     ASSERT_EQ(1u, wtl[1][1]);
     wtl.clear();
-    index.scan("x", &wtl, index._POS);
+    index.scan("x", &wtl, P::POS);
     ASSERT_EQ(0u, wtl.size());
 
-    index.scan("c", &wtl, index._POS);
+    index.scan("c", &wtl, P::POS);
     ASSERT_EQ(0u, wtl.size());
 
-    index.scan("b", "a", &wol, index._PSO);
+    index.scan("b", "a", &wol, P::PSO);
     ASSERT_EQ(2u, wol.size());
     ASSERT_EQ(5u, wol[0][0]);
     ASSERT_EQ(6u, wol[1][0]);
     wol.clear();
-    index.scan("b", "c", &wol, index._PSO);
+    index.scan("b", "c", &wol, P::PSO);
     ASSERT_EQ(0u, wol.size());
 
-    index.scan("b2", "c2", &wol, index._POS);
+    index.scan("b2", "c2", &wol, P::POS);
     ASSERT_EQ(1u, wol.size());
     ASSERT_EQ(2u, wol[0][0]);
   }
@@ -595,17 +599,18 @@ TEST(IndexTest, scanTest) {
 
   {
     {
-      Index index;
+      IndexImpl index;
       index.setOnDiskBase("_testindex");
       index.createFromFile<TsvParser>("_testtmp2.tsv");
     }
-    Index index;
+    IndexImpl index;
     index.createFromOnDiskIndex("_testindex");
+    using P = Index::Permutation;
 
     IdTable wol(1, allocator());
     IdTable wtl(2, allocator());
 
-    index.scan("is-a", &wtl, index._PSO);
+    index.scan("is-a", &wtl, P::PSO);
     ASSERT_EQ(7u, wtl.size());
     ASSERT_EQ(5u, wtl[0][0]);
     ASSERT_EQ(0u, wtl[0][1]);
@@ -622,7 +627,7 @@ TEST(IndexTest, scanTest) {
     ASSERT_EQ(7u, wtl[6][0]);
     ASSERT_EQ(2u, wtl[6][1]);
 
-    index.scan("is-a", &wtl, index._POS);
+    index.scan("is-a", &wtl, P::POS);
     ASSERT_EQ(7u, wtl.size());
     ASSERT_EQ(0u, wtl[0][0]);
     ASSERT_EQ(5u, wtl[0][1]);
@@ -639,43 +644,43 @@ TEST(IndexTest, scanTest) {
     ASSERT_EQ(3u, wtl[6][0]);
     ASSERT_EQ(6u, wtl[6][1]);
 
-    index.scan("is-a", "0", &wol, index._POS);
+    index.scan("is-a", "0", &wol, P::POS);
     ASSERT_EQ(2u, wol.size());
     ASSERT_EQ(5u, wol[0][0]);
     ASSERT_EQ(6u, wol[1][0]);
 
     wol.clear();
-    index.scan("is-a", "1", &wol, index._POS);
+    index.scan("is-a", "1", &wol, P::POS);
     ASSERT_EQ(2u, wol.size());
     ASSERT_EQ(5u, wol[0][0]);
     ASSERT_EQ(7u, wol[1][0]);
 
     wol.clear();
-    index.scan("is-a", "2", &wol, index._POS);
+    index.scan("is-a", "2", &wol, P::POS);
     ASSERT_EQ(2u, wol.size());
     ASSERT_EQ(5u, wol[0][0]);
     ASSERT_EQ(7u, wol[1][0]);
 
     wol.clear();
-    index.scan("is-a", "3", &wol, index._POS);
+    index.scan("is-a", "3", &wol, P::POS);
     ASSERT_EQ(1u, wol.size());
     ASSERT_EQ(6u, wol[0][0]);
 
     wol.clear();
-    index.scan("is-a", "a", &wol, index._PSO);
+    index.scan("is-a", "a", &wol, P::PSO);
     ASSERT_EQ(3u, wol.size());
     ASSERT_EQ(0u, wol[0][0]);
     ASSERT_EQ(1u, wol[1][0]);
     ASSERT_EQ(2u, wol[2][0]);
 
     wol.clear();
-    index.scan("is-a", "b", &wol, index._PSO);
+    index.scan("is-a", "b", &wol, P::PSO);
     ASSERT_EQ(2u, wol.size());
     ASSERT_EQ(0u, wol[0][0]);
     ASSERT_EQ(3u, wol[1][0]);
 
     wol.clear();
-    index.scan("is-a", "c", &wol, index._PSO);
+    index.scan("is-a", "c", &wol, P::PSO);
     ASSERT_EQ(2u, wol.size());
     ASSERT_EQ(1u, wol[0][0]);
     ASSERT_EQ(2u, wol[1][0]);

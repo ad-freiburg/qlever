@@ -270,7 +270,7 @@ void IndexScan::computePSOboundS(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, _subject, &result->_data, idx._PSO);
+  idx.scan(_predicate, _subject, &result->_data, Index::Permutation::PSO);
 }
 
 // _____________________________________________________________________________
@@ -280,7 +280,7 @@ void IndexScan::computePSOfreeS(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, &result->_data, idx._PSO, _timeoutTimer);
+  idx.scan(_predicate, &result->_data, Index::Permutation::PSO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -289,7 +289,7 @@ void IndexScan::computePOSboundO(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, _object, &result->_data, idx._POS);
+  idx.scan(_predicate, _object, &result->_data, Index::Permutation::POS);
 }
 
 // _____________________________________________________________________________
@@ -299,7 +299,7 @@ void IndexScan::computePOSfreeO(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, &result->_data, idx._POS, _timeoutTimer);
+  idx.scan(_predicate, &result->_data, Index::Permutation::POS, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -338,7 +338,7 @@ void IndexScan::computeSPOfreeP(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, &result->_data, idx._SPO, _timeoutTimer);
+  idx.scan(_subject, &result->_data, Index::Permutation::SPO, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -347,7 +347,7 @@ void IndexScan::computeSOPboundO(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, _object, &result->_data, idx._SOP);
+  idx.scan(_subject, _object, &result->_data, Index::Permutation::SOP);
 }
 
 // _____________________________________________________________________________
@@ -357,7 +357,7 @@ void IndexScan::computeSOPfreeO(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, &result->_data, idx._SOP, _timeoutTimer);
+  idx.scan(_subject, &result->_data, Index::Permutation::SOP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -367,7 +367,7 @@ void IndexScan::computeOPSfreeP(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_object, &result->_data, idx._OPS);
+  idx.scan(_object, &result->_data, Index::Permutation::OPS);
 }
 
 // _____________________________________________________________________________
@@ -377,7 +377,7 @@ void IndexScan::computeOSPfreeS(ResultTable* result) const {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_sortedBy = {0, 1};
   const auto& idx = _executionContext->getIndex();
-  idx.scan(_object, &result->_data, idx._OSP, _timeoutTimer);
+  idx.scan(_object, &result->_data, Index::Permutation::OSP, _timeoutTimer);
 }
 
 // _____________________________________________________________________________
@@ -388,42 +388,43 @@ void IndexScan::determineMultiplicities() {
       _multiplicity.emplace_back(1);
     } else {
       const auto& idx = getIndex();
+      using P = Index::Permutation;
       switch (_type) {
         case PSO_FREE_S:
-          _multiplicity = idx.getMultiplicities(_predicate, idx._PSO);
+          _multiplicity = idx.getMultiplicities(_predicate, P::PSO);
           break;
         case POS_FREE_O:
-          _multiplicity = idx.getMultiplicities(_predicate, idx._POS);
+          _multiplicity = idx.getMultiplicities(_predicate, P::POS);
           break;
         case SPO_FREE_P:
-          _multiplicity = idx.getMultiplicities(_subject, idx._SPO);
+          _multiplicity = idx.getMultiplicities(_subject, P::SPO);
           break;
         case SOP_FREE_O:
-          _multiplicity = idx.getMultiplicities(_subject, idx._SOP);
+          _multiplicity = idx.getMultiplicities(_subject, P::SOP);
           break;
         case OSP_FREE_S:
-          _multiplicity = idx.getMultiplicities(_object, idx._OSP);
+          _multiplicity = idx.getMultiplicities(_object, P::OSP);
           break;
         case OPS_FREE_P:
-          _multiplicity = idx.getMultiplicities(_object, idx._OPS);
+          _multiplicity = idx.getMultiplicities(_object, P::OPS);
           break;
         case FULL_INDEX_SCAN_SPO:
-          _multiplicity = idx.getMultiplicities(idx._SPO);
+          _multiplicity = idx.getMultiplicities(P::SPO);
           break;
         case FULL_INDEX_SCAN_SOP:
-          _multiplicity = idx.getMultiplicities(idx._SOP);
+          _multiplicity = idx.getMultiplicities(P::SPO);
           break;
         case FULL_INDEX_SCAN_PSO:
-          _multiplicity = idx.getMultiplicities(idx._PSO);
+          _multiplicity = idx.getMultiplicities(P::PSO);
           break;
         case FULL_INDEX_SCAN_POS:
-          _multiplicity = idx.getMultiplicities(idx._POS);
+          _multiplicity = idx.getMultiplicities(P::POS);
           break;
         case FULL_INDEX_SCAN_OSP:
-          _multiplicity = idx.getMultiplicities(idx._OSP);
+          _multiplicity = idx.getMultiplicities(P::OSP);
           break;
         case FULL_INDEX_SCAN_OPS:
-          _multiplicity = idx.getMultiplicities(idx._OPS);
+          _multiplicity = idx.getMultiplicities(P::OPS);
           break;
         default:
           AD_THROW(ad_semsearch::Exception::ASSERT_FAILED,

@@ -2,8 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold <buchholb>
 
+#include "./Server.h"
+
 #include <algorithm>
 #include <cstring>
+#include <fstream>
 #include <nlohmann/json.hpp>
 #include <sstream>
 #include <string>
@@ -13,7 +16,6 @@
 #include "../parser/ParseException.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
-#include "./Server.h"
 #include "QueryPlanner.h"
 
 // _____________________________________________________________________________

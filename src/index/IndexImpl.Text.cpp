@@ -2,17 +2,19 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./IndexImpl.h"
+
 #include <stxxl/algorithm>
 #include <tuple>
 #include <utility>
+
 #include "../engine/CallFixedSize.h"
 #include "../parser/ContextFileParser.h"
 #include "../util/Simple8bCode.h"
 #include "./FTSAlgorithms.h"
-#include "./Index.h"
 
 // _____________________________________________________________________________
-void Index::addTextFromContextFile(const string& contextFile) {
+void IndexImpl::addTextFromContextFile(const string& contextFile) {
   string indexFilename = _onDiskBase + ".text.index";
   size_t nofLines = passContextFileForVocabulary(contextFile);
   _textVocab.writeToFile(_onDiskBase + ".text.vocabulary");
@@ -28,7 +30,7 @@ void Index::addTextFromContextFile(const string& contextFile) {
 }
 
 // _____________________________________________________________________________
-void Index::buildDocsDB(const string& docsFileName) {
+void IndexImpl::buildDocsDB(const string& docsFileName) {
   LOG(INFO) << "Building DocsDB...\n";
   ad_utility::File docsFile(docsFileName.c_str(), "r");
   std::ofstream ofs(_onDiskBase + ".text.docsDB", std::ios_base::out);
@@ -68,7 +70,7 @@ void Index::buildDocsDB(const string& docsFileName) {
 }
 
 // _____________________________________________________________________________
-void Index::addTextFromOnDiskIndex() {
+void IndexImpl::addTextFromOnDiskIndex() {
   _textVocab.readFromFile(_onDiskBase + ".text.vocabulary");
   _textIndexFile.open(string(_onDiskBase + ".text.index").c_str(), "r");
   AD_CHECK(_textIndexFile.isOpen());
@@ -93,7 +95,7 @@ void Index::addTextFromOnDiskIndex() {
 }
 
 // _____________________________________________________________________________
-size_t Index::passContextFileForVocabulary(string const& contextFile) {
+size_t IndexImpl::passContextFileForVocabulary(string const& contextFile) {
   LOG(INFO) << "Making pass over ContextFile " << contextFile
             << " for vocabulary." << std::endl;
   ContextFileParser::Line line;
@@ -115,8 +117,8 @@ size_t Index::passContextFileForVocabulary(string const& contextFile) {
 }
 
 // _____________________________________________________________________________
-void Index::passContextFileIntoVector(const string& contextFile,
-                                      Index::TextVec& vec) {
+void IndexImpl::passContextFileIntoVector(const string& contextFile,
+                                          IndexImpl::TextVec& vec) {
   LOG(INFO) << "Making pass over ContextFile " << contextFile
             << " and creating stxxl vector.\n";
   ContextFileParser::Line line;
@@ -199,10 +201,10 @@ void Index::passContextFileIntoVector(const string& contextFile,
 }
 
 // _____________________________________________________________________________
-void Index::addContextToVector(Index::TextVec::bufwriter_type& writer,
-                               Id context,
-                               const ad_utility::HashMap<Id, Score>& words,
-                               const ad_utility::HashMap<Id, Score>& entities) {
+void IndexImpl::addContextToVector(
+    IndexImpl::TextVec::bufwriter_type& writer, Id context,
+    const ad_utility::HashMap<Id, Score>& words,
+    const ad_utility::HashMap<Id, Score>& entities) {
   // Determine blocks for each word and each entity.
   // Add the posting to each block.
   ad_utility::HashSet<Id> touchedBlocks;
@@ -235,7 +237,8 @@ void Index::addContextToVector(Index::TextVec::bufwriter_type& writer,
 }
 
 // _____________________________________________________________________________
-void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
+void IndexImpl::createTextIndex(const string& filename,
+                                const IndexImpl::TextVec& vec) {
   ad_utility::File out(filename.c_str(), "w");
   _currentoff_t = 0;
   // Detect block boundaries from the main key of the vec.
@@ -306,9 +309,9 @@ void Index::createTextIndex(const string& filename, const Index::TextVec& vec) {
 }
 
 // _____________________________________________________________________________
-ContextListMetaData Index::writePostings(ad_utility::File& out,
-                                         const vector<Posting>& postings,
-                                         bool skipWordlistIfAllTheSame) {
+ContextListMetaData IndexImpl::writePostings(ad_utility::File& out,
+                                             const vector<Posting>& postings,
+                                             bool skipWordlistIfAllTheSame) {
   ContextListMetaData meta;
   meta._nofElements = postings.size();
   if (meta._nofElements == 0) {
@@ -387,7 +390,7 @@ ContextListMetaData Index::writePostings(ad_utility::File& out,
 }
 
 // _____________________________________________________________________________
-void Index::calculateBlockBoundaries() {
+void IndexImpl::calculateBlockBoundaries() {
   LOG(INFO) << "Calculating block boundaries...\n";
   // Go through the vocabulary
   // Start a new block whenever a word is
@@ -425,26 +428,26 @@ void Index::calculateBlockBoundaries() {
 }
 
 // _____________________________________________________________________________
-Id Index::getWordBlockId(Id wordId) const {
+Id IndexImpl::getWordBlockId(Id wordId) const {
   return static_cast<Id>(std::lower_bound(_blockBoundaries.begin(),
                                           _blockBoundaries.end(), wordId) -
                          _blockBoundaries.begin());
 }
 
 // _____________________________________________________________________________
-Id Index::getEntityBlockId(Id entityId) const {
+Id IndexImpl::getEntityBlockId(Id entityId) const {
   return entityId + _blockBoundaries.size();
 }
 
 // _____________________________________________________________________________
-bool Index::isEntityBlockId(Id blockId) const {
+bool IndexImpl::isEntityBlockId(Id blockId) const {
   return blockId >= _blockBoundaries.size();
 }
 
 // _____________________________________________________________________________
 template <typename Numeric>
-size_t Index::writeList(Numeric* data, size_t nofElements,
-                        ad_utility::File& file) const {
+size_t IndexImpl::writeList(Numeric* data, size_t nofElements,
+                            ad_utility::File& file) const {
   if (nofElements > 0) {
     uint64_t* encoded = new uint64_t[nofElements];
     size_t size = ad_utility::Simple8bCode::encode(data, nofElements, encoded);
@@ -458,11 +461,11 @@ size_t Index::writeList(Numeric* data, size_t nofElements,
 }
 
 // _____________________________________________________________________________
-void Index::createCodebooks(const vector<Index::Posting>& postings,
-                            Index::IdCodeMap& wordCodemap,
-                            Index::IdCodebook& wordCodebook,
-                            Index::ScoreCodeMap& scoreCodemap,
-                            Index::ScoreCodebook& scoreCodebook) const {
+void IndexImpl::createCodebooks(const vector<IndexImpl::Posting>& postings,
+                                IndexImpl::IdCodeMap& wordCodemap,
+                                IndexImpl::IdCodebook& wordCodebook,
+                                IndexImpl::ScoreCodeMap& scoreCodemap,
+                                IndexImpl::ScoreCodebook& scoreCodebook) const {
   ad_utility::HashMap<Id, size_t> wfMap;
   ad_utility::HashMap<Score, size_t> sfMap;
   for (const auto& p : postings) {
@@ -510,8 +513,8 @@ void Index::createCodebooks(const vector<Index::Posting>& postings,
 
 // _____________________________________________________________________________
 template <class T>
-size_t Index::writeCodebook(const vector<T>& codebook,
-                            ad_utility::File& file) const {
+size_t IndexImpl::writeCodebook(const vector<T>& codebook,
+                                ad_utility::File& file) const {
   size_t byteSizeOfCodebook = sizeof(T) * codebook.size();
   file.write(&byteSizeOfCodebook, sizeof(byteSizeOfCodebook));
   file.write(codebook.data(), byteSizeOfCodebook);
@@ -519,19 +522,19 @@ size_t Index::writeCodebook(const vector<T>& codebook,
 }
 
 // _____________________________________________________________________________
-void Index::openTextFileHandle() {
+void IndexImpl::openTextFileHandle() {
   AD_CHECK(_onDiskBase.size() > 0);
   _textIndexFile.open(string(_onDiskBase + ".text.index").c_str(), "r");
 }
 
 // _____________________________________________________________________________
-const string& Index::wordIdToString(Id id) const {
+const string& IndexImpl::wordIdToString(Id id) const {
   return _textVocab[id].value();
 }
 
 // _____________________________________________________________________________
-void Index::getContextListForWords(const string& words,
-                                   IdTable* dynResult) const {
+void IndexImpl::getContextListForWords(const string& words,
+                                       IdTable* dynResult) const {
   LOG(DEBUG) << "In getContextListForWords...\n";
   auto terms = ad_utility::split(words, ' ');
   AD_CHECK(terms.size() > 0);
@@ -570,8 +573,8 @@ void Index::getContextListForWords(const string& words,
 }
 
 // _____________________________________________________________________________
-void Index::getWordPostingsForTerm(const string& term, vector<Id>& cids,
-                                   vector<Score>& scores) const {
+void IndexImpl::getWordPostingsForTerm(const string& term, vector<Id>& cids,
+                                       vector<Score>& scores) const {
   assert(term.size() > 0);
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
   IdRange idRange;
@@ -635,10 +638,9 @@ void Index::getWordPostingsForTerm(const string& term, vector<Id>& cids,
 }
 
 // _____________________________________________________________________________
-void Index::getContextEntityScoreListsForWords(const string& words,
-                                               vector<Id>& cids,
-                                               vector<Id>& eids,
-                                               vector<Score>& scores) const {
+void IndexImpl::getContextEntityScoreListsForWords(
+    const string& words, vector<Id>& cids, vector<Id>& eids,
+    vector<Score>& scores) const {
   LOG(DEBUG) << "In getEntityContextScoreListsForWords...\n";
   auto terms = ad_utility::split(words, ' ');
   AD_CHECK(terms.size() > 0);
@@ -694,8 +696,8 @@ void Index::getContextEntityScoreListsForWords(const string& words,
 }
 
 // _____________________________________________________________________________
-void Index::getECListForWordsOneVar(const string& words, size_t limit,
-                                    IdTable* result) const {
+void IndexImpl::getECListForWordsOneVar(const string& words, size_t limit,
+                                        IdTable* result) const {
   LOG(DEBUG) << "In getECListForWords...\n";
   vector<Id> cids;
   vector<Id> eids;
@@ -708,8 +710,8 @@ void Index::getECListForWordsOneVar(const string& words, size_t limit,
 }
 
 // _____________________________________________________________________________
-void Index::getECListForWords(const string& words, size_t nofVars, size_t limit,
-                              IdTable* result) const {
+void IndexImpl::getECListForWords(const string& words, size_t nofVars,
+                                  size_t limit, IdTable* result) const {
   LOG(DEBUG) << "In getECListForWords...\n";
   vector<Id> cids;
   vector<Id> eids;
@@ -723,10 +725,10 @@ void Index::getECListForWords(const string& words, size_t nofVars, size_t limit,
 }
 
 // _____________________________________________________________________________
-void Index::getFilteredECListForWords(const string& words,
-                                      const IdTable& filter,
-                                      size_t filterColumn, size_t nofVars,
-                                      size_t limit, IdTable* result) const {
+void IndexImpl::getFilteredECListForWords(const string& words,
+                                          const IdTable& filter,
+                                          size_t filterColumn, size_t nofVars,
+                                          size_t limit, IdTable* result) const {
   LOG(DEBUG) << "In getFilteredECListForWords...\n";
   if (filter.size() > 0) {
     // Build a map filterEid->set<Rows>
@@ -763,10 +765,10 @@ void Index::getFilteredECListForWords(const string& words,
 }
 
 // _____________________________________________________________________________
-void Index::getFilteredECListForWordsWidthOne(const string& words,
-                                              const IdTable& filter,
-                                              size_t nofVars, size_t limit,
-                                              IdTable* result) const {
+void IndexImpl::getFilteredECListForWordsWidthOne(const string& words,
+                                                  const IdTable& filter,
+                                                  size_t nofVars, size_t limit,
+                                                  IdTable* result) const {
   LOG(DEBUG) << "In getFilteredECListForWords...\n";
   // Build a map filterEid->set<Rows>
   using FilterSet = ad_utility::HashSet<Id>;
@@ -793,9 +795,9 @@ void Index::getFilteredECListForWordsWidthOne(const string& words,
 }
 
 // _____________________________________________________________________________
-void Index::getEntityPostingsForTerm(const string& term, vector<Id>& cids,
-                                     vector<Id>& eids,
-                                     vector<Score>& scores) const {
+void IndexImpl::getEntityPostingsForTerm(const string& term, vector<Id>& cids,
+                                         vector<Id>& eids,
+                                         vector<Score>& scores) const {
   LOG(DEBUG) << "Getting entity postings for term: " << term << '\n';
   IdRange idRange;
   bool entityTerm = (term[0] == '<' && term.back() == '>');
@@ -875,8 +877,8 @@ void Index::getEntityPostingsForTerm(const string& term, vector<Id>& cids,
 
 // _____________________________________________________________________________
 template <typename T>
-void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
-                             vector<T>& result) const {
+void IndexImpl::readGapComprList(size_t nofElements, off_t from,
+                                 size_t nofBytes, vector<T>& result) const {
   LOG(DEBUG) << "Reading gap-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
              << ", nofBytes: " << nofBytes << '\n';
@@ -899,8 +901,8 @@ void Index::readGapComprList(size_t nofElements, off_t from, size_t nofBytes,
 
 // _____________________________________________________________________________
 template <typename T>
-void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
-                              vector<T>& result) const {
+void IndexImpl::readFreqComprList(size_t nofElements, off_t from,
+                                  size_t nofBytes, vector<T>& result) const {
   AD_CHECK_GT(nofBytes, 0);
   LOG(DEBUG) << "Reading frequency-encoded list from disk...\n";
   LOG(TRACE) << "NofElements: " << nofElements << ", from: " << from
@@ -935,8 +937,8 @@ void Index::readFreqComprList(size_t nofElements, off_t from, size_t nofBytes,
 }
 
 // _____________________________________________________________________________
-void Index::dumpAsciiLists(const vector<string>& lists,
-                           bool decGapsFreq) const {
+void IndexImpl::dumpAsciiLists(const vector<string>& lists,
+                               bool decGapsFreq) const {
   if (lists.size() == 0) {
     size_t nofBlocks = _textMeta.getBlockCount();
     for (size_t i = 0; i < nofBlocks; ++i) {
@@ -979,7 +981,7 @@ void Index::dumpAsciiLists(const vector<string>& lists,
 }
 
 //_ ____________________________________________________________________________
-void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
+void IndexImpl::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
   auto firstWord = wordIdToString(tbmd._firstWordId);
   auto lastWord = wordIdToString(tbmd._lastWordId);
   LOG(INFO) << "This block is from " << firstWord << " to " << lastWord
@@ -1152,7 +1154,8 @@ void Index::dumpAsciiLists(const TextBlockMetaData& tbmd) const {
 }
 
 // _____________________________________________________________________________
-size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
+size_t IndexImpl::getIndexOfBestSuitedElTerm(
+    const vector<string>& terms) const {
   // It is beneficial to choose a term where no filtering by regular word id
   // is needed. Then the entity lists can be read directly from disk.
   // For others it is always necessary to reach wordlist and filter them
@@ -1203,10 +1206,9 @@ size_t Index::getIndexOfBestSuitedElTerm(const vector<string>& terms) const {
 
 // _____________________________________________________________________________
 template <size_t I>
-void Index::getECListForWordsAndSingleSub(const string& words,
-                                          const vector<array<Id, I>>& subres,
-                                          size_t subResMainCol, size_t limit,
-                                          vector<array<Id, 3 + I>>& res) const {
+void IndexImpl::getECListForWordsAndSingleSub(
+    const string& words, const vector<array<Id, I>>& subres,
+    size_t subResMainCol, size_t limit, vector<array<Id, 3 + I>>& res) const {
   // Get context entity postings matching the words
   vector<Id> cids;
   vector<Id> eids;
@@ -1249,20 +1251,19 @@ void Index::getECListForWordsAndSingleSub(const string& words,
   FTSAlgorithms::aggScoresAndTakeTopKContexts(nonAggRes, limit, res);
 }
 
-template void Index::getECListForWordsAndSingleSub(
+template void IndexImpl::getECListForWordsAndSingleSub(
     const string& words, const vector<array<Id, 1>>& subres,
     size_t subResMainCol, size_t limit, vector<array<Id, 4>>& res) const;
 
-template void Index::getECListForWordsAndSingleSub(
+template void IndexImpl::getECListForWordsAndSingleSub(
     const string& words, const vector<array<Id, 2>>& subres,
     size_t subResMainCol, size_t limit, vector<array<Id, 5>>& res) const;
 
 // _____________________________________________________________________________
-void Index::getECListForWordsAndTwoW1Subs(const string& words,
-                                          const vector<array<Id, 1>> subres1,
-                                          const vector<array<Id, 1>> subres2,
-                                          size_t limit,
-                                          vector<array<Id, 5>>& res) const {
+void IndexImpl::getECListForWordsAndTwoW1Subs(
+    const string& words, const vector<array<Id, 1>> subres1,
+    const vector<array<Id, 1>> subres2, size_t limit,
+    vector<array<Id, 5>>& res) const {
   // Get context entity postings matching the words
   vector<Id> cids;
   vector<Id> eids;
@@ -1320,7 +1321,7 @@ void Index::getECListForWordsAndTwoW1Subs(const string& words,
 }
 
 // _____________________________________________________________________________
-void Index::getECListForWordsAndSubtrees(
+void IndexImpl::getECListForWordsAndSubtrees(
     const string& words,
     const vector<ad_utility::HashMap<Id, vector<vector<Id>>>>& subResMaps,
     size_t limit, vector<vector<Id>>& res) const {
@@ -1369,7 +1370,7 @@ void Index::getECListForWordsAndSubtrees(
 }
 
 // _____________________________________________________________________________
-size_t Index::getSizeEstimate(const string& words) const {
+size_t IndexImpl::getSizeEstimate(const string& words) const {
   size_t minElLength = std::numeric_limits<size_t>::max();
   auto terms = ad_utility::split(words, ' ');
   for (size_t i = 0; i < terms.size(); ++i) {
@@ -1403,8 +1404,8 @@ size_t Index::getSizeEstimate(const string& words) const {
 }
 
 // _____________________________________________________________________________
-void Index::getRhsForSingleLhs(const IdTable& in, Id lhsId,
-                               IdTable* result) const {
+void IndexImpl::getRhsForSingleLhs(const IdTable& in, Id lhsId,
+                                   IdTable* result) const {
   LOG(DEBUG) << "Getting only rhs from a relation with " << in.size()
              << " elements by an Id key.\n";
   AD_CHECK(result);
@@ -1426,4 +1427,4 @@ void Index::getRhsForSingleLhs(const IdTable& in, Id lhsId,
 }
 
 // _____________________________________________________________________________
-void Index::setTextName(const string& name) { _textMeta.setName(name); }
+void IndexImpl::setTextName(const string& name) { _textMeta.setName(name); }

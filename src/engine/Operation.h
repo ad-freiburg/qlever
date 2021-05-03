@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <iostream>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "../util/Exception.h"
@@ -14,6 +15,8 @@
 #include "QueryExecutionContext.h"
 #include "ResultTable.h"
 #include "RuntimeInformation.h"
+
+using namespace std::string_literals;
 
 using std::endl;
 using std::pair;

@@ -3,6 +3,8 @@
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 #pragma once
 
+#include <gtest/gtest.h>
+
 #include <memory>
 #include <string>
 #include <unordered_map>

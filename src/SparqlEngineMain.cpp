@@ -6,6 +6,7 @@
 #include <libgen.h>
 #include <stdlib.h>
 
+#include <fstream>
 #include <iomanip>
 #include <iostream>
 #include <string>

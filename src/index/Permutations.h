@@ -10,7 +10,7 @@
 #include "../util/Log.h"
 #include "./StxxlSortFunctors.h"
 
-namespace Permutation {
+namespace PermutationImpl {
 using std::array;
 using std::string;
 
