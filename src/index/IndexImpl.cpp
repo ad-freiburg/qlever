@@ -1581,7 +1581,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
 
 template <typename F, typename... Args>
 auto IndexImpl::applyForPermutation(Permutation p, F f, Args&&... args) {
-  auto fLifted = [&](auto&& permutationImpl) {
+  auto fLifted = [&](const auto& permutationImpl) {
     return f(permutationImpl, std::forward<Args>(args)...);
   };
 
@@ -1605,7 +1605,7 @@ auto IndexImpl::applyForPermutation(Permutation p, F f, Args&&... args) {
 
 template <typename F, typename... Args>
 auto IndexImpl::applyForPermutation(Permutation p, F f, Args&&... args) const {
-  auto fLifted = [&](auto&& permutationImpl) {
+  auto fLifted = [&](const auto& permutationImpl) {
     return f(permutationImpl, std::forward<Args>(args)...);
   };
 

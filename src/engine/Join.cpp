@@ -284,7 +284,7 @@ Join::ScanMethodType Join::getScanMethod(
   const auto& idx = _executionContext->getIndex();
   const auto scanLambda = [&idx](const Index::Permutation perm) {
     return
-        [&idx, &perm](Id id, IdTable* idTable) { idx.scan(id, idTable, perm); };
+        [&idx, perm](Id id, IdTable* idTable) { idx.scan(id, idTable, perm); };
   };
 
   using P = Index::Permutation;

@@ -56,10 +56,18 @@ double SortPerformanceEstimator::measureSortingTimeInSeconds(
 }
 
 SortPerformanceEstimator::SortPerformanceEstimator(
-    const ad_utility::AllocatorWithLimit<Id>& allocator)
+    const ad_utility::AllocatorWithLimit<Id>& passedAllocator)
     : _samples{} {
   static_assert(isSorted(sampleValuesCols));
   static_assert(isSorted(sampleValuesRows));
+
+#if NDEBUG
+  const auto& allocator = passedAllocator;
+#else
+  (void)passedAllocator;
+  ad_utility::AllocatorWithLimit<Id> allocator{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(50 * (1ull << 20))};
+#endif
 
   LOG(INFO) << "Sorting some random result tables to estimate the sorting "
                "performance of this machine. This might take several minutes"
