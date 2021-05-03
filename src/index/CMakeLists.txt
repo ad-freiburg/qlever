@@ -2,7 +2,7 @@
 add_library(index
         Index.h Index.cpp
         IndexImpl.h IndexImpl.cpp IndexImpl.Text.cpp
-        Vocabulary.h Vocabulary.cpp
+        Vocabulary.h VocabularyImpl.h
         VocabularyGenerator.h VocabularyGeneratorImpl.h
         ConstantsIndexCreation.h
         ExternalVocabulary.h ExternalVocabulary.cpp
