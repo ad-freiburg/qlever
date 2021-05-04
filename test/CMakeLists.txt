@@ -99,7 +99,7 @@ add_executable(UnionTest UnionTest.cpp)
 add_test(UnionTest UnionTest)
 target_link_libraries(UnionTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(TokenTest TokenTest.cpp)
+add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
 add_test(TokenTest TokenTest)
 target_link_libraries(TokenTest parser re2 gtest_main -pthread ${ICU_LIBRARIES})
 
