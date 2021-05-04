@@ -6,7 +6,6 @@
 
 #include <optional>
 
-#include "../src/parser/TurtleParser.h"
 #include "../src/util/BatchedPipeline.h"
 
 TEST(BatcherTest, MoveOnlyCreator) {
