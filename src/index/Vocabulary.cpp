@@ -3,16 +3,16 @@
 // Authors: Björn Buchhold <buchholb>,
 //          Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#pragma once
+#include "./Vocabulary.h"
 
 #include <fstream>
 #include <iostream>
+#include <nlohmann/json.hpp>
 
 #include "../util/File.h"
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
 #include "./ConstantsIndexCreation.h"
-#include "./Vocabulary.h"
 
 using std::string;
 
@@ -304,3 +304,154 @@ void Vocabulary<S, C>::prefixCompressFile(const string& infile,
     out << v.compressPrefix(word).toStringView() << '\n';
   }
 }
+
+// ___________________________________________________________________________
+template <typename S, typename C>
+bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
+                                                   IdRange* range) const {
+  AD_CHECK_EQ(word[word.size() - 1], PREFIX_CHAR);
+  auto prefixRange = prefix_range(word.substr(0, word.size() - 1));
+  bool success = prefixRange.second > prefixRange.first;
+  range->_first = prefixRange.first;
+  range->_last = prefixRange.second - 1;
+
+  if (success) {
+    AD_CHECK_LT(range->_first, _words.size());
+    AD_CHECK_LT(range->_last, _words.size());
+  }
+  return success;
+}
+
+// _______________________________________________________________
+template <typename S, typename C>
+Id Vocabulary<S, C>::upper_bound(const string& word,
+                                 const SortLevel level) const {
+  return static_cast<Id>(std::upper_bound(_words.begin(), _words.end(), word,
+                                          getUpperBoundLambda(level)) -
+                         _words.begin());
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C>
+Id Vocabulary<S, C>::lower_bound(const string& word,
+                                 const SortLevel level) const {
+  return static_cast<Id>(std::lower_bound(_words.begin(), _words.end(), word,
+                                          getLowerBoundLambda(level)) -
+                         _words.begin());
+}
+
+// _____________________________________________________________________________
+template <typename S, typename ComparatorType>
+void Vocabulary<S, ComparatorType>::setLocale(const std::string& language,
+                                              const std::string& country,
+                                              bool ignorePunctuation) {
+  _caseComparator = ComparatorType(language, country, ignorePunctuation);
+  _externalLiterals.getCaseComparator() =
+      ComparatorType(language, country, ignorePunctuation);
+}
+
+template <typename StringType, typename C>
+//! Get the word with the given id.
+//! lvalue for compressedString and const& for string-based vocabulary
+AccessReturnType_t<StringType> Vocabulary<StringType, C>::at(Id id) const {
+  if constexpr (_isCompressed) {
+    return expandPrefix(_words[static_cast<size_t>(id)]);
+  } else {
+    return _words[static_cast<size_t>(id)];
+  }
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C>
+bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
+  if (!shouldBeExternalized(word)) {
+    // need the TOTAL level because we want the unique word.
+    *id = lower_bound(word, SortLevel::TOTAL);
+    // works for the case insensitive version because
+    // of the strict ordering.
+    return *id < _words.size() && at(*id) == word;
+  }
+  bool success = _externalLiterals.getId(word, id);
+  *id += _words.size();
+  return success;
+}
+
+// ___________________________________________________________________________
+template <typename S, typename C>
+std::pair<Id, Id> Vocabulary<S, C>::prefix_range(const string& prefix) const {
+  if (prefix.empty()) {
+    return {0, _words.size()};
+  }
+  Id lb = lower_bound(prefix, SortLevel::PRIMARY);
+  auto transformed = _caseComparator.transformToFirstPossibleBiggerValue(
+      prefix, SortLevel::PRIMARY);
+
+  auto pred = getLowerBoundLambda<decltype(transformed)>(SortLevel::PRIMARY);
+  auto ub = static_cast<Id>(
+      std::lower_bound(_words.begin(), _words.end(), transformed, pred) -
+      _words.begin());
+
+  return {lb, ub};
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C>
+void Vocabulary<S, C>::push_back(const string& word) {
+  if constexpr (_isCompressed) {
+    _words.push_back(compressPrefix(word));
+  } else {
+    _words.push_back(word);
+  }
+}
+
+// _____________________________________________________________________________
+template <typename S, typename C>
+template <typename, typename>
+const std::optional<std::reference_wrapper<const string>> Vocabulary<S, C>::
+operator[](Id id) const {
+  if (id < _words.size()) {
+    return _words[static_cast<size_t>(id)];
+  } else {
+    return std::nullopt;
+  }
+}
+template const std::optional<std::reference_wrapper<const string>>
+    TextVocabulary::operator[]<std::string, void>(Id id) const;
+
+template <typename S, typename C>
+template <typename, typename>
+const std::optional<string> Vocabulary<S, C>::idToOptionalString(Id id) const {
+  if (id < _words.size()) {
+    // internal, prefixCompressed word
+    return expandPrefix(_words[static_cast<size_t>(id)]);
+  } else if (id == ID_NO_VALUE) {
+    return std::nullopt;
+  } else {
+    // this word must be externalized
+    id -= _words.size();
+    AD_CHECK(id < _externalLiterals.size());
+    return _externalLiterals[id];
+  }
+}
+template const std::optional<string>
+RdfsVocabulary::idToOptionalString<CompressedString, void>(Id id) const;
+
+// Explicit template instantiations
+template class Vocabulary<CompressedString, TripleComponentComparator>;
+template class Vocabulary<std::string, SimpleStringComparator>;
+
+template void RdfsVocabulary::initializePrefixes<std::vector<std::string>,
+                                                 CompressedString, void>(
+    const std::vector<std::string>&);
+template void RdfsVocabulary::initializeInternalizedLangs<nlohmann::json>(
+    const nlohmann::json&);
+template void RdfsVocabulary::initializeExternalizePrefixes<nlohmann::json>(
+    const nlohmann::json& prefixes);
+template void RdfsVocabulary::prefixCompressFile<CompressedString, void>(
+    const string& infile, const string& outfile,
+    const vector<string>& prefixes);
+
+template void TextVocabulary::createFromSet<std::string, void>(
+    const ad_utility::HashSet<std::string>& set);
+template void TextVocabulary::writeToFile<std::string, void>(
+    const string& fileName) const;
