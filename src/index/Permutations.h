@@ -67,4 +67,25 @@ class PermutationImpl {
   mutable ad_utility::File _file;
 };
 
+// PermutationConceptBool<T> == true if and only if T is an instantiation of the
+// PermutationImpl<> template.
+namespace detail {
+template <typename T>
+constexpr bool PermutationConceptBool = false;
+
+template <typename C, typename M>
+constexpr bool PermutationConceptBool<PermutationImpl<C, M>> = true;
+}  // namespace detail
+
 }  // namespace PermutationImpl
+
+/**
+ * Set up a concept for the PermutationImpls (new C++20 feature). Allows us to
+ * write functions like
+ *
+ * // P must be a type that is a PermutationImpl, otherwise an other overload is
+ * chosen or we get a ->readable<- error message template <PermutationConcept P>
+ * void doSomething();
+ */
+template <typename T>
+concept PermutationConcept = PermutationImpl::detail::PermutationConceptBool<T>;

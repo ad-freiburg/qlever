@@ -1676,9 +1676,8 @@ vector<float> IndexImpl::getMultiplicities(const Permutation p) const {
 }
 
 // ___________________________________________________________________________
-template <class PermutationImplementation>
-void IndexImpl::scanImpl(Id key, IdTable* result,
-                         const PermutationImplementation& p,
+template <PermutationConcept P>
+void IndexImpl::scanImpl(Id key, IdTable* result, const P& p,
                          ad_utility::SharedConcurrentTimeoutTimer timer) const {
   if (p._meta.relationExists(key)) {
     const FullRelationMetaData& rmd = p._meta.getRmd(key)._rmdPairs;
@@ -1699,9 +1698,8 @@ void IndexImpl::scan(Id key, IdTable* result, const Permutation& p,
 }
 
 // ____________________________________________________________________________
-template <class PermutationImplementation>
-void IndexImpl::scanImpl(const string& key, IdTable* result,
-                         const PermutationImplementation& p,
+template <PermutationConcept P>
+void IndexImpl::scanImpl(const string& key, IdTable* result, const P& p,
                          ad_utility::SharedConcurrentTimeoutTimer timer) const {
   LOG(DEBUG) << "Performing " << p._readableName
              << " scan for full list for: " << key << "\n";
@@ -1723,10 +1721,9 @@ void IndexImpl::scan(const string& key, IdTable* result, const Permutation& p,
 }
 
 // ____________________________________________________________________________
-template <class PermutationImplementation>
+template <PermutationConcept P>
 void IndexImpl::scanImpl(const string& keyFirst, const string& keySecond,
-                         IdTable* result,
-                         const PermutationImplementation& p) const {
+                         IdTable* result, const P& p) const {
   LOG(DEBUG) << "Performing " << p._readableName << "  scan of relation "
              << keyFirst << " with fixed subject: " << keySecond << "...\n";
   Id relId;

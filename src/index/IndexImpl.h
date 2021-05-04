@@ -118,9 +118,12 @@ class IndexImpl {
   const auto& OPS() const { return _OPS; }
   const auto& OSP() const { return _OSP; }
 
+  // Converts the Permutation p to the corresponding PermutationImpl permImpl
+  // (Permutation::POS -> POS()) and then calls f(permImpl, args...)
   template <typename F, typename... Args>
   auto applyForPermutation(Permutation p, F f, Args&&... args);
 
+  // Const overload of applyForPermutation
   template <typename F, typename... Args>
   auto applyForPermutation(Permutation p, F f, Args&&... args) const;
 
@@ -360,13 +363,16 @@ class IndexImpl {
    * @param p The Permutation to use (in particularly POS(), SOP,... members of
    * IndexImpl class).
    */
-  template <class PermutationImplementation>
-  void scanImpl(Id key, IdTable* result, const PermutationImplementation& p,
-                ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
-
   void scan(Id key, IdTable* result, const Permutation& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
+ private:
+  // _____________________________________________________________________
+  template <PermutationConcept P>
+  void scanImpl(Id key, IdTable* result, const P& p,
+                ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+ public:
   /**
    * @brief Perform a scan for one key i.e. retrieve all YZ from the XYZ
    * permutation for a specific key value of X
@@ -378,14 +384,16 @@ class IndexImpl {
    * @param p The Permutation to use (in particularly POS(), SOP,... members of
    * IndexImpl class).
    */
-  template <class PermutationImplementation>
-  void scanImpl(const string& key, IdTable* result,
-                const PermutationImplementation& p,
-                ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
-
   void scan(const string& key, IdTable* result, const Permutation& p,
             ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
 
+ private:
+  // ________________________________________________________________________
+  template <PermutationConcept P>
+  void scanImpl(const string& key, IdTable* result, const P& p,
+                ad_utility::SharedConcurrentTimeoutTimer timer = nullptr) const;
+
+ public:
   /**
    * @brief Perform a scan for two keys i.e. retrieve all Z from the XYZ
    * permutation for specific key values of X and Y.
@@ -402,13 +410,14 @@ class IndexImpl {
    * IndexImpl class).
    */
   // _____________________________________________________________________________
-  template <class PermutationImplementation>
-  void scanImpl(const string& keyFirst, const string& keySecond,
-                IdTable* result, const PermutationImplementation& p) const;
-
-  // _________________________________________________________________________
   void scan(const string& keyFirst, const string& keySecond, IdTable* result,
             const Permutation p) const;
+
+ private:
+  // _________________________________________________________________________
+  template <PermutationConcept P>
+  void scanImpl(const string& keyFirst, const string& keySecond,
+                IdTable* result, const P& p) const;
 
  private:
   string _onDiskBase;
