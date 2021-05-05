@@ -597,14 +597,15 @@ void Filter::computeFilterFixedValue(
       }
       getEngine().filter(
           input,
-          [self_regex, &lhs, &subRes](const auto& e) {
+          [self_regex, &lhs, &subRes, this](const auto& e) {
             std::optional<string> entity;
             if constexpr (T == ResultTable::ResultType::KB) {
               entity = getIndex().idToOptionalString(e[lhs]);
-              (void)subRes;  // Silence unused warning.
             } else if (T == ResultTable::ResultType::LOCAL_VOCAB) {
               entity = subRes->idToOptionalString(e[lhs]);
             }
+            (void)subRes;  // Silence unused warning.
+            (void)this;
             if (!entity) {
               return true;
             }
