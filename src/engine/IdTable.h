@@ -502,7 +502,7 @@ class IdTableDynamicIterator {
 
   /// Allow upgrading from Non-Const to const iterator
   template <bool C = CONST, typename = std::enable_if_t<!C>>
-  operator IdTableDynamicIterator<true>() const {
+  [[maybe_unused]] operator IdTableDynamicIterator<true>() const {
     return {_data, _row, _cols};
   }
 

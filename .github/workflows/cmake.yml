@@ -20,6 +20,7 @@ jobs:
     strategy:
       matrix:
         compiler: [g++, clang++]
+        os: [ ubuntu-latest ]
         
 
     steps:
