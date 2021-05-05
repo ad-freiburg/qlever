@@ -641,8 +641,11 @@ void FTSAlgorithms::multVarsAggScoresAndTakeTopContext(
   using AggMap =
       ad_utility::HashMap<std::vector<Id>, pair<Score, pair<Id, Score>>,
                           IdVectorHash>;
-  vector<Id> emptyKey = {{std::numeric_limits<Id>::max()}};
-  vector<Id> deletedKey = {{std::numeric_limits<Id>::max() - 1}};
+  // Note: vector{k} initializes with a single value k, as opposed to
+  // vector<Id>(k), which initializes a vector with k default constructed
+  // arguments.
+  vector<Id> emptyKey{std::numeric_limits<Id>::max()};
+  vector<Id> deletedKey{std::numeric_limits<Id>::max() - 1};
   AggMap map;
   vector<Id> entitiesInContext;
   Id currentCid = cids[0];

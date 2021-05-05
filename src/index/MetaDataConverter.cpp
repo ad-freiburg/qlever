@@ -198,8 +198,8 @@ void CompressVocabAndCreateConfigurationFile(const string& indexPrefix) {
       std::cout << "Converting to separate " << PREFIX_FILE << " file\n";
       std::ofstream prefixFile(indexPrefix + PREFIX_FILE);
       AD_CHECK(prefixFile.is_open());
-      for (const string& prefix : prefixes) {
-        prefixFile << prefix << '\n';
+      for (const auto& prefix : prefixes) {
+        prefixFile << std::string{prefix} << '\n';
       }
       std::ofstream f(confFilename + ".converted");
       AD_CHECK(f.is_open());

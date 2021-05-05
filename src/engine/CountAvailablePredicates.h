@@ -60,7 +60,7 @@ class CountAvailablePredicates : public Operation {
     return _subtree != nullptr ? R{_subtree.get()} : R{};
   }
 
-  ad_utility::HashMap<string, size_t> getVariableColumns() const;
+  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
 
   virtual void setTextLimit(size_t limit) override {
     if (_subtree != nullptr) {

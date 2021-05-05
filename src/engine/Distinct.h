@@ -18,18 +18,18 @@ using std::vector;
 
 class Distinct : public Operation {
  public:
-  virtual size_t getResultWidth() const;
+  [[nodiscard]] size_t getResultWidth() const override;
 
  public:
   Distinct(QueryExecutionContext* qec,
            std::shared_ptr<QueryExecutionTree> subtree,
            const vector<size_t>& keepIndices);
 
-  virtual string asString(size_t indent = 0) const override;
+  [[nodiscard]] string asString(size_t indent = 0) const override;
 
-  virtual string getDescriptor() const override;
+  [[nodiscard]] string getDescriptor() const override;
 
-  virtual vector<size_t> resultSortedOn() const override {
+  [[nodiscard]] vector<size_t> resultSortedOn() const override {
     return _subtree->resultSortedOn();
   }
 
@@ -49,11 +49,9 @@ class Distinct : public Operation {
     return _subtree->getMultiplicity(col);
   }
 
-  virtual bool knownEmptyResult() override {
-    return _subtree->knownEmptyResult();
-  }
+  bool knownEmptyResult() override { return _subtree->knownEmptyResult(); }
 
-  ad_utility::HashMap<string, size_t> getVariableColumns() const;
+  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};

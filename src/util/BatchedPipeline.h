@@ -314,12 +314,12 @@ class BatchedPipeline {
       size_t batchSize, InVec& in, TransformerPtr transformer) {
     auto [startIt, endIt] = getBatchRange(in.begin(), in.end(), batchSize, Idx);
     // start a thread for the transformer.
-    return std::async(std::launch::async, [transformer, batchSize,
-                                           startIt = startIt, endIt = endIt] {
-      std::vector<ResT> res;
-      moveAndTransform(startIt, endIt, &res, transformer);
-      return res;
-    });
+    return std::async(std::launch::async,
+                      [transformer, startIt = startIt, endIt = endIt] {
+                        std::vector<ResT> res;
+                        moveAndTransform(startIt, endIt, &res, transformer);
+                        return res;
+                      });
   }
 
  private:

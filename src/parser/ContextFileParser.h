@@ -35,6 +35,5 @@ class ContextFileParser {
 
  private:
   std::ifstream _in;
-  Id _lastCId;
   LocaleManager _localeManager;
 };

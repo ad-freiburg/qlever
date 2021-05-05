@@ -71,10 +71,10 @@ class Iterator {
   }
 
   // _______________________________________________
-  bool operator==(const Iterator& other) { return _it == other._it; }
+  bool operator==(const Iterator& other) const { return _it == other._it; }
 
   // _______________________________________________
-  bool operator!=(const Iterator& other) { return _it != other._it; }
+  bool operator!=(const Iterator& other) const { return _it != other._it; }
 
  private:
   Id _id;

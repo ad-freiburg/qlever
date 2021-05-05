@@ -10,7 +10,7 @@
 // _____________________________________________________________________________
 ContextFileParser::ContextFileParser(const string& contextFile,
                                      LocaleManager localeManager)
-    : _in(contextFile), _lastCId(0), _localeManager(std::move(localeManager)) {}
+    : _in(contextFile), _localeManager(std::move(localeManager)) {}
 
 // _____________________________________________________________________________
 ContextFileParser::~ContextFileParser() { _in.close(); }

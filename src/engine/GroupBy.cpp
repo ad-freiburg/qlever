@@ -53,10 +53,10 @@ string GroupBy::asString(size_t indent) const {
     os << " ";
   }
   os << "GROUP_BY ";
-  for (const std::string var : _groupByVariables) {
+  for (const std::string& var : _groupByVariables) {
     os << varMap.at(var) << ", ";
   }
-  for (auto p : _aliases) {
+  for (const auto& p : _aliases) {
     os << ParsedQuery::AggregateTypeAsString(p._type);
     if (p._type == ParsedQuery::AggregateType::GROUP_CONCAT) {
       os << p._delimiter;
