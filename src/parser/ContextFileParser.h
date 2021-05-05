@@ -26,7 +26,7 @@ class ContextFileParser {
                              LocaleManager localeManager);
   ~ContextFileParser();
   // Don't allow copy & assignment
-  explicit ContextFileParser(const ContextFileParser& other) = delete;
+  explicit ContextFileParser(const ContextFileParser& other) = delete; // much tooo long line....
   ContextFileParser& operator=(const ContextFileParser& other) = delete;
 
   // Get the next line from the file.
