@@ -22,7 +22,7 @@ TEST(LocaleManagerTest, getLowercaseUtf8) {
   LocaleManager loc;
   ASSERT_EQ("schindler's list", loc.getLowercaseUtf8("Schindler's List"));
   ASSERT_EQ("#+-_foo__bar++", loc.getLowercaseUtf8("#+-_foo__Bar++"));
-  ASSERT_EQ(u8"fôéßaéé", loc.getLowercaseUtf8(u8"FÔÉßaéÉ"));
+  ASSERT_EQ("fôéßaéé", loc.getLowercaseUtf8("FÔÉßaéÉ"));
 }
 
 TEST(LocaleManagerTest, Punctuation) {

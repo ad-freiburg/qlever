@@ -2,20 +2,20 @@ cmake_minimum_required(VERSION 2.8.4)
 project(QLever C CXX)
 
 # C/C++ Versions
-set (CMAKE_C_STANDARD 11)
-set (CMAKE_C_STANDARD_REQUIRED ON)
-set (CMAKE_CXX_STANDARD 17)
-set (CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Check compiler versions:
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-  # Check version. If empty, warn. If too old, error out:
-  if ("${CMAKE_CXX_COMPILER_VERSION}" STREQUAL "")
-    message(WARNING "GCC Compiler version is unknown, proceed at your own risk!")
-  elseif (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
-    message(FATAL_ERROR "GCC compiler version must be at least 4.8!")
-  endif()
-endif()
+    # Check version. If empty, warn. If too old, error out:
+    if ("${CMAKE_CXX_COMPILER_VERSION}" STREQUAL "")
+        message(WARNING "GCC Compiler version is unknown, proceed at your own risk!")
+    elseif (CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.8)
+        message(FATAL_ERROR "GCC compiler version must be at least 4.8!")
+    endif ()
+endif ()
 
 ## Build targets for address sanitizer
 # AddressSanitize
@@ -118,7 +118,9 @@ endif()
 # Disable GNU parallel as it prevents build on Ubuntu 14.04
 set(USE_GNU_PARALLEL OFF CACHE BOOL "Don't use gnu parallel" FORCE)
 set(USE_OPENMP OFF CACHE BOOL "Don't use OPENMP as default" FORCE)
+
 add_subdirectory(third_party/stxxl)
+
 # apply STXXL CXXFLAGS
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
 include_directories(SYSTEM ${STXXL_INCLUDE_DIRS})
