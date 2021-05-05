@@ -501,7 +501,8 @@ class IdTableDynamicIterator {
         _rowView(data + (cols * row), cols) {}
 
   /// Allow upgrading from Non-Const to const iterator
-  /// We cannot say IdTableDynamicIterator<true> directly, b.c. it will trigger a warning in clang.
+  /// We cannot say IdTableDynamicIterator<true> directly, b.c. it will trigger
+  /// a warning in clang.
   template <bool C = CONST, typename = std::enable_if_t<!C>>
   operator IdTableDynamicIterator<!C>() const {
     return {_data, _row, _cols};
