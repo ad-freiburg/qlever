@@ -10,7 +10,9 @@ using std::string;
 
 // first some simple Tests for the general cache interface
 TEST(FlexibleCacheTest, Simple) {
-  auto accessUpdater = [](const auto& s, const auto& v) { return s; };
+  auto accessUpdater = [](const auto& s, [[maybe_unused]] const auto& v) {
+    return s;
+  };
   auto scoreCalculator = [](const auto& v) { return v; };
   auto scoreComparator = std::less<>();
   ad_utility::HeapBasedCache<string, int, int, decltype(scoreComparator),

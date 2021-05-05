@@ -24,7 +24,7 @@ class MultiColumnJoin : public Operation {
 
   virtual vector<size_t> resultSortedOn() const override;
 
-  ad_utility::HashMap<string, size_t> getVariableColumns() const;
+  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
 
   virtual void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);

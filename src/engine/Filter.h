@@ -16,7 +16,7 @@ using std::vector;
 
 class Filter : public Operation {
  public:
-  virtual size_t getResultWidth() const;
+  virtual size_t getResultWidth() const override;
 
  public:
   Filter(QueryExecutionContext* qec,

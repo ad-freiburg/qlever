@@ -54,7 +54,7 @@ class TransitivePath : public Operation {
 
   virtual vector<size_t> resultSortedOn() const override;
 
-  ad_utility::HashMap<std::string, size_t> getVariableColumns() const;
+  ad_utility::HashMap<std::string, size_t> getVariableColumns() const override;
 
   virtual void setTextLimit(size_t limit) override;
 

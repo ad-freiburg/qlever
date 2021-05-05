@@ -267,7 +267,6 @@ TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
 
 TEST(ConcurrentCache, abort) {
   auto a = SimpleConcurrentLruCache(3ul);
-  std::atomic<bool> flag = false;
   StartStopSignal signal;
   auto compute = [&a, &signal]() {
     return a.computeOnce(3, waiting_function("3"s, 100, &signal));

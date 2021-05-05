@@ -92,7 +92,7 @@ class ParallelParseBuffer {
     // Makes debugging easier.
     if (_buffer.size() == _bufferPosition && _isParserValid) {
       // we have to wait for the next parallel batch to be completed.
-      std::tie(_isParserValid, _buffer) = std::move(_fut.get());
+      std::tie(_isParserValid, _buffer) = _fut.get();
       _bufferPosition = 0;
       if (_isParserValid) {
         // if possible, directly submit the next parsing job

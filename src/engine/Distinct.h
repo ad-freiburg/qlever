@@ -49,11 +49,9 @@ class Distinct : public Operation {
     return _subtree->getMultiplicity(col);
   }
 
-  virtual bool knownEmptyResult() override {
-    return _subtree->knownEmptyResult();
-  }
+  bool knownEmptyResult() override { return _subtree->knownEmptyResult(); }
 
-  ad_utility::HashMap<string, size_t> getVariableColumns() const;
+  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};
