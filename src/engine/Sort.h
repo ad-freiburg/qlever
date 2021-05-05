@@ -48,9 +48,9 @@ class Sort : public Operation {
     return _subtree->knownEmptyResult();
   }
 
-  virtual size_t getResultWidth() const;
+  [[nodiscard]] size_t getResultWidth() const override;
 
-  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
+  [[nodiscard]] ad_utility::HashMap<string, size_t> getVariableColumns()
       const override {
     return _subtree->getVariableColumns();
   }
