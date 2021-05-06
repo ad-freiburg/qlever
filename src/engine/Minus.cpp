@@ -109,7 +109,7 @@ size_t Minus::getCostEstimate() {
 template <int A_WIDTH, int B_WIDTH>
 void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
                          const vector<array<Id, 2>>& joinColumns,
-                         IdTable* dynResult) {
+                         IdTable* dynResult) const {
   // Substract dynB from dynA. The result should be all result mappings mu
   // for which all result mappings mu' in dynB are not compatible (one value
   // for a variable defined in both differs) or the domain of mu and mu' are
