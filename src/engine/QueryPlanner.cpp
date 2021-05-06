@@ -1882,11 +1882,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
 // _____________________________________________________________________________
 QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
     const SubtreePlan& a, const SubtreePlan& b) const {
-  if (a.type == SubtreePlan::OPTIONAL && b.type == SubtreePlan::OPTIONAL) {
-    throw std::runtime_error(
-        "Trying to join two optional patterns. This should never"
-        "be called anymore since it is illegal. Please contact the developers");
-  }
+  // Joining two optional patterns is illegal
+  // TODO<joka921/kramerfl> : actually the second one must be the optional
+  AD_CHECK(a.type != SubtreePlan::OPTIONAL || b.type != SubtreePlan::OPTIONAL);
   SubtreePlan plan(_qec);
 
   std::vector<std::array<Id, 2>> jcs = getJoinColumns(a, b);
@@ -1942,9 +1940,7 @@ QueryPlanner::SubtreePlan QueryPlanner::optionalJoin(
 // _____________________________________________________________________________
 QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
                                               const SubtreePlan& b) const {
-  if (a.type == SubtreePlan::MINUS || b.type != SubtreePlan::MINUS) {
-    throw std::runtime_error("Can only subtract the right side from the left.");
-  }
+  AD_CHECK(a.type != SubtreePlan::MINUS && b.type == SubtreePlan::MINUS);
   std::vector<std::array<Id, 2>> jcs = getJoinColumns(a, b);
 
   const vector<size_t>& aSortedOn = a._qet->resultSortedOn();
@@ -2791,15 +2787,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
                "MINUS can only appear after"
                " another graph pattern.");
     }
+
     if (b.type == SubtreePlan::MINUS) {
-      if (a.type == SubtreePlan::OPTIONAL) {
-        // This case shouldn't happen. If the first pattern is OPTIONAL, it
-        // is made non optional earlier. If a minus occurs after an optional
-        // further into the query that optional should be resolved by now.
-        AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-                 "Cannot subtract from an"
-                 "optional graph pattern.");
-      }
+      // This case shouldn't happen. If the first pattern is OPTIONAL, it
+      // is made non optional earlier. If a minus occurs after an optional
+      // further into the query that optional should be resolved by now.
+      AD_CHECK(a.type != SubtreePlan::OPTIONAL);
       return std::vector{minus(a, b)};
     }
 

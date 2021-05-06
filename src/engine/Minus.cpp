@@ -13,12 +13,21 @@ using std::string;
 Minus::Minus(QueryExecutionContext* qec,
              std::shared_ptr<QueryExecutionTree> left,
              std::shared_ptr<QueryExecutionTree> right,
-             const std::vector<array<size_t, 2>>& matchedColumns)
-    : Operation(qec),
-      _left(left),
-      _right(right),
-      _multiplicitiesComputed(false),
-      _matchedColumns(matchedColumns) {}
+             std::vector<array<size_t, 2>> matchedColumns)
+    : Operation{qec},
+      _left{std::move(left)},
+      _right{std::move(right)},
+      _matchedColumns{std::move(matchedColumns)} {
+  // Check that the invariant (inputs are sorted on the matched columns) holds.
+  auto l = _left->resultSortedOn();
+  auto r = _right->resultSortedOn();
+  AD_CHECK(_matchedColumns.size() <= l.size());
+  AD_CHECK(_matchedColumns.size() <= r.size());
+  for (size_t i = 0; i < _matchedColumns.size(); ++i) {
+    AD_CHECK(_matchedColumns[i][0] == l[i]);
+    AD_CHECK(_matchedColumns[i][1] == r[i]);
+  }
+}
 
 // _____________________________________________________________________________
 string Minus::asString(size_t indent) const {
@@ -74,14 +83,7 @@ ad_utility::HashMap<string, size_t> Minus::getVariableColumns() const {
 size_t Minus::getResultWidth() const { return _left->getResultWidth(); }
 
 // _____________________________________________________________________________
-vector<size_t> Minus::resultSortedOn() const {
-  std::vector<size_t> sortedOn;
-  // The result is sorted on all join columns from the left subtree.
-  for (const auto& a : _matchedColumns) {
-    sortedOn.push_back(a[0]);
-  }
-  return sortedOn;
-}
+vector<size_t> Minus::resultSortedOn() const { return _left->resultSortedOn(); }
 
 // _____________________________________________________________________________
 float Minus::getMultiplicity(size_t col) {
@@ -122,13 +124,10 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
     return;
   }
 
-  if (dynB.size() == 0 || joinColumns.size() == 0) {
+  if (dynB.size() == 0 || joinColumns.empty()) {
     // B is the empty set of solution mappings, so the result is A
     // Copy a into the result, allowing for optimizations for small width by
     // using the templated width types.
-    // TODO<joka921> Check, if this direct assignment is efficient
-    // (It should be, because it internally copies a std::vector<char> via
-    // memcpy
     *dynResult = dynA;
     return;
   }
@@ -148,12 +147,10 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
    * @param ia The index of the row in a.
    */
   auto writeResult = [&result, &a](size_t ia) {
-    result.emplace_back();
-    size_t backIdx = result.size() - 1;
-    for (size_t col = 0; col < a.cols(); col++) {
-      result(backIdx, col) = a(ia, col);
-    }
+    result.template push_back(a[ia]);
   };
+
+  auto checkTimeout = checkTimeoutAfterNCallsFactory();
 
   size_t ia = 0, ib = 0;
   while (ia < a.size() && ib < b.size()) {
@@ -162,12 +159,14 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
       // Write a result
       writeResult(ia);
       ia++;
+      checkTimeout();
       if (ia >= a.size()) {
         goto finish;
       }
     }
     while (b(ib, joinColumns[0][1]) < a(ia, joinColumns[0][0])) {
       ib++;
+      checkTimeout();
       if (ib >= b.size()) {
         goto finish;
       }
@@ -201,6 +200,7 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
         default:
           AD_CHECK(false);
       }
+      checkTimeout();
     }
   }
 finish:

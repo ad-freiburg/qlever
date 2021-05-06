@@ -1,4 +1,4 @@
-// Copyright 2018, University of Freiburg,
+// Copyright 2020, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 #pragma once
@@ -15,7 +15,7 @@ class Minus : public Operation {
  public:
   Minus(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> left,
         std::shared_ptr<QueryExecutionTree> right,
-        const std::vector<array<size_t, 2>>& matchedColumns);
+        std::vector<array<size_t, 2>> matchedColumns);
 
   virtual string asString(size_t indent = 0) const override;
 
@@ -51,9 +51,9 @@ class Minus : public Operation {
    *        This method is made public here for unit testing purposes.
    **/
   template <int A_WIDTH, int B_WIDTH>
-  static void computeMinus(const IdTable& a, const IdTable& b,
-                           const vector<array<size_t, 2>>& matchedColumns,
-                           IdTable* result);
+  void computeMinus(const IdTable& a, const IdTable& b,
+                    const vector<array<size_t, 2>>& matchedColumns,
+                    IdTable* result) const;
 
  private:
   /**

@@ -342,7 +342,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       child._id = query->_numGraphPatterns;
       query->_numGraphPatterns++;
       _lexer.expect("{");
-      // Recursively call parseWhere to parse the optional part.
+      // Recursively call parseWhere to parse the subtrahend.
       parseWhere(query, &child);
       _lexer.accept(".");
     } else if (_lexer.accept("{")) {
