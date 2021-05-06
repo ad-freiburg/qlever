@@ -71,8 +71,5 @@ class Minus : public Operation {
   std::shared_ptr<QueryExecutionTree> _right;
 
   vector<float> _multiplicities;
-  size_t _sizeEstimate;
-  bool _multiplicitiesComputed;
-
   std::vector<array<size_t, 2>> _matchedColumns;
 };
