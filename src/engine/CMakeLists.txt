@@ -32,6 +32,8 @@ add_library(engine
         Values.cpp Values.h
         Bind.cpp Bind.h
         IdTable.h
-        ../util/Random.h)
+        ../util/Random.h
+        Minus.h Minus.cpp
+        )
 
 target_link_libraries(engine index parser SortPerformanceEstimator absl::flat_hash_set)

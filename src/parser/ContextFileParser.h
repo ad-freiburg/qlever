@@ -35,5 +35,9 @@ class ContextFileParser {
 
  private:
   std::ifstream _in;
+#ifndef NDEBUG
+  // Only used for sanity checks in debug builds
+  size_t _lastCId = 0;
+#endif
   LocaleManager _localeManager;
 };
