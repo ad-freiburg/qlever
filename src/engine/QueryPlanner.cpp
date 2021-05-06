@@ -1985,7 +1985,9 @@ QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
 
   SubtreePlan plan(_qec);
 
-  auto join = std::make_shared<Minus>(_qec, aSorted ? a._qet : orderByPlanA._qet, bSorted ? b._qet : orderByPlanB._qet, jcs);
+  auto join =
+      std::make_shared<Minus>(_qec, aSorted ? a._qet : orderByPlanA._qet,
+                              bSorted ? b._qet : orderByPlanB._qet, jcs);
   QueryExecutionTree& tree = *plan._qet;
   tree.setVariableColumns(join->getVariableColumns());
   tree.setOperation(QueryExecutionTree::MINUS, join);
@@ -1993,7 +1995,6 @@ QueryPlanner::SubtreePlan QueryPlanner::minus(const SubtreePlan& a,
   plan.type = SubtreePlan::BASIC;
   return plan;
 }
-
 
 // _____________________________________________________________________________
 QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
