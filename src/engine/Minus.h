@@ -17,6 +17,10 @@ class Minus : public Operation {
         std::shared_ptr<QueryExecutionTree> right,
         std::vector<array<size_t, 2>> matchedColumns);
 
+  // Uninitialized Object for testing the computeMinus method
+  struct OnlyForTestingTag {};
+  Minus(OnlyForTestingTag){};
+
   virtual string asString(size_t indent = 0) const override;
 
   virtual string getDescriptor() const override;
