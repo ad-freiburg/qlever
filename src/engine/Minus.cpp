@@ -127,7 +127,8 @@ void Minus::computeMinus(const IdTable& dynA, const IdTable& dynB,
     // Copy a into the result, allowing for optimizations for small width by
     // using the templated width types.
     // TODO<joka921> Check, if this direct assignment is efficient
-    // (It should be, because it internally copies a std::vector<char> via memcpy
+    // (It should be, because it internally copies a std::vector<char> via
+    // memcpy
     *dynResult = dynA;
     return;
   }

@@ -62,8 +62,8 @@ class Minus : public Operation {
    */
   template <int A_WIDTH, int B_WIDTH>
   static RowComparison isRowEqSkipFirst(
-      const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b,
-      size_t ia, size_t ib, const vector<array<size_t, 2>>& matchedColumns);
+      const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
+      size_t ib, const vector<array<size_t, 2>>& matchedColumns);
 
   virtual void computeResult(ResultTable* result) override;
 

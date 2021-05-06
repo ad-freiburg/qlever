@@ -11,7 +11,8 @@
 #include "../src/engine/Minus.h"
 
 auto table(size_t cols) {
-  ad_utility::AllocatorWithLimit<Id> alloc{ad_utility::makeAllocationMemoryLeftThreadsafeObject(1'000'000)};
+  ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1'000'000)};
   return IdTable(cols, std::move(alloc));
 }
 

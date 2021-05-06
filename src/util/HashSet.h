@@ -20,4 +20,5 @@ template <class K,
 using HashSet = absl::flat_hash_set<K, HashFcn, EqualKey, Alloc>;
 }  // namespace ad_utility
 
-// TODO<joka921>: Florian added a constructor from (numberOfItems), check if this is also provided by absl.
+// TODO<joka921>: Florian added a constructor from (numberOfItems), check if
+// this is also provided by absl.

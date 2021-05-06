@@ -238,7 +238,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         });
       }
 
-      // if our input is not optional and not a minus this means we still can arbitrarily optimize among our candidates and just append our new candidates.
+      // if our input is not optional and not a minus this means we still can
+      // arbitrarily optimize among our candidates and just append our new
+      // candidates.
       if (v[0].type == SubtreePlan::BASIC) {
         candidatePlans.push_back(std::forward<decltype(v)>(v));
         return;
