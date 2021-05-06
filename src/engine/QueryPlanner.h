@@ -126,6 +126,8 @@ class QueryPlanner {
 
   class SubtreePlan {
    public:
+    enum Type { BASIC, OPTIONAL, MINUS };
+
     explicit SubtreePlan(QueryExecutionContext* qec)
         : _qet(std::make_shared<QueryExecutionTree>(qec)) {}
 
@@ -134,7 +136,7 @@ class QueryPlanner {
     bool _isCached = false;
     uint64_t _idsOfIncludedNodes = 0;
     uint64_t _idsOfIncludedFilters = 0;
-    bool _isOptional = false;
+    Type type = Type::BASIC;
 
     size_t getCostEstimate() const;
 
@@ -363,6 +365,7 @@ class QueryPlanner {
   SubtreePlan getTextLeafPlan(const TripleGraph::Node& node) const;
 
   SubtreePlan optionalJoin(const SubtreePlan& a, const SubtreePlan& b) const;
+  SubtreePlan minus(const SubtreePlan& a, const SubtreePlan& b) const;
   SubtreePlan multiColumnJoin(const SubtreePlan& a, const SubtreePlan& b) const;
 
   /**

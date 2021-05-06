@@ -332,6 +332,19 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       currentPattern->_children.emplace_back(std::move(b));
       // the dot after the bind is optional
       _lexer.accept(".");
+    } else if (_lexer.accept("minus")) {
+      currentPattern->_children.emplace_back(
+          GraphPatternOperation::Minus{ParsedQuery::GraphPattern()});
+      auto& opt =
+          currentPattern->_children.back().get<GraphPatternOperation::Minus>();
+      auto& child = opt._child;
+      child._optional = false;
+      child._id = query->_numGraphPatterns;
+      query->_numGraphPatterns++;
+      _lexer.expect("{");
+      // Recursively call parseWhere to parse the subtrahend.
+      parseWhere(query, &child);
+      _lexer.accept(".");
     } else if (_lexer.accept("{")) {
       // Subquery or union
       if (_lexer.accept("select")) {
@@ -619,8 +632,7 @@ void SparqlParser::addWhereTriple(
 // _____________________________________________________________________________
 void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
   while (!_lexer.empty() && !_lexer.accept("}")) {
-    if (_lexer.accept("order")) {
-      _lexer.expect("by");
+    if (_lexer.accept(SparqlToken::Type::ORDER_BY)) {
       bool reached_end = false;
       while (!reached_end) {
         if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
@@ -648,8 +660,7 @@ void SparqlParser::parseSolutionModifiers(ParsedQuery* query) {
     } else if (_lexer.accept("offset")) {
       _lexer.expect(SparqlToken::Type::INTEGER);
       query->_offset = _lexer.current().raw;
-    } else if (_lexer.accept("group")) {
-      _lexer.expect("by");
+    } else if (_lexer.accept(SparqlToken::Type::GROUP_BY)) {
       _lexer.expect(SparqlToken::Type::VARIABLE);
       query->_groupByVariables.emplace_back(_lexer.current().raw);
       while (_lexer.accept(SparqlToken::Type::VARIABLE)) {

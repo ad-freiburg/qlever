@@ -381,6 +381,20 @@ queries:
       - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
       - contains_row: ["<Albert_Fert>", "<Wolf_Prize_in_Physics>"]
       - contains_row: ["<Albert_Overhauser>", "<National_Medal_of_Science_for_Physical_Science>"]
+  - query : having-height
+    type: no-text
+    sparql: |
+      SELECT (COUNT(?profession) as ?count) ?height WHERE {
+        ?x <Profession> ?profession .
+        ?x <Height> ?height
+      }
+      GROUP BY ?height
+      HAVING (?height > 1.7)
+    checks:
+      - num_rows: 32
+      - num_cols: 2
+      - selected: ["?count", "?height"]
+      - contains_row: ["5", "1.803"]
   - query : having-predicate-religion
     type: no-text
     sparql: |
@@ -720,20 +734,6 @@ queries:
       - num_rows: 1
       - selected: ["?a", "?b"]
       - contains_row: ["<Charles,_Prince_of_Wales>", "<Lord_of_the_Isles>"]
-  - query : having-height
-    type: no-text
-    sparql: |
-      SELECT (COUNT(?profession) as ?count) ?height WHERE {
-        ?x <Profession> ?profession .
-        ?x <Height> ?height
-      }
-      GROUP BY ?height
-      HAVING (?height > 1.7)
-    checks:
-      - num_rows: 32
-      - num_cols: 2
-      - selected: ["?count", "?height"]
-      - contains_row: ["5", "1.803"]
   - query : filter-depending-on-last-optional
     type: no-text
     sparql: |
@@ -764,6 +764,21 @@ queries:
       - contains_row: ["<Albert_Einstein>", "<Nobel_Prize_in_Physics>"]
       - contains_row: ["<Al_Gore>", "<Nobel_Peace_Prize>"]
       - contains_row: ["<Dennis_Gabor>", "<Nobel_Prize_in_Physics>"]
+  - query : minus-biologists 
+    type: no-text
+    sparql: |
+      SELECT ?a WHERE {
+        ?a <is-a> <Entrepreneur> .
+        MINUS {
+          ?a <is-a> <Engineer>
+        }
+      }
+    checks:
+      - num_rows: 152 
+      - num_cols: 1
+      - selected: ["?a"]
+      - contains_row: ["<Barney_Pell>"]
+      - contains_row: ["<Duc_Pham>"]
   - query : prefix-filter-disjunction
     type: no-text
     sparql: |

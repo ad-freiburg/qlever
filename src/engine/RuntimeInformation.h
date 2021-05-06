@@ -5,7 +5,6 @@
 #pragma once
 
 #include <iostream>
-#include <nlohmann/fifo_map.hpp>
 #include <nlohmann/json.hpp>
 #include <string>
 #include <vector>
@@ -16,15 +15,11 @@
 
 class RuntimeInformation {
  public:
-  // The following declarations introduce an ordered_json type
-  // that functions exactly like nlohmann::json but keeps
-  // object keys in insertion order.
+  // Ordered JSON that preserves the insertion order.
   // This helps to make the JSON more readable as it forces children to be
   // printed after their parents. See also
   // https://github.com/nlohmann/json/issues/485#issuecomment-333652309
-  template <class K, class V, class dummy_compare, class A>
-  using fifo_map = nlohmann::fifo_map<K, V, nlohmann::fifo_map_compare<K>, A>;
-  using ordered_json = nlohmann::basic_json<fifo_map>;
+  using ordered_json = nlohmann::ordered_json;
 
   friend inline void to_json(RuntimeInformation::ordered_json& j,
                              const RuntimeInformation& rti);

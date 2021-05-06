@@ -47,11 +47,13 @@ const std::string SparqlLexer::IRI = "((" + LANGTAG + "@)?((" + IRIREF + ")|(" +
 const std::string SparqlLexer::VARNAME =
     "(" + PN_CHARS_U + "|[0-9])(" + PN_CHARS_U +
     "|[0-9]|\\x{00B7}|[\\x{0300}-\\x{036F}]|[\\x{203F}-\\x{2040}])*";
+const std::string SparqlLexer::GROUP_BY = "(?i)(GROUP(\\s)*BY)";
+const std::string SparqlLexer::ORDER_BY = "(?i)(ORDER(\\s)*BY)";
 const std::string SparqlLexer::KEYWORD =
     "(?i)(TEXTLIMIT|PREFIX|SELECT|DISTINCT|REDUCED|"
-    "HAVING|WHERE|ASC|AS|GROUP|BY|LIMIT|OFFSET|ORDER|DESC|FILTER|VALUES|"
+    "HAVING|WHERE|ASC|AS|LIMIT|OFFSET|DESC|FILTER|VALUES|"
     "OPTIONAL|UNION|LANGMATCHES|LANG|TEXT|SCORE|REGEX|PREFIX|SEPARATOR|STR|"
-    "BIND)";
+    "BIND|MINUS)";
 const std::string SparqlLexer::AGGREGATE =
     "(?i)(SAMPLE|COUNT|MIN|MAX|AVG|SUM|GROUP_CONCAT)";
 const std::string SparqlLexer::VARIABLE = "(\\?" + VARNAME + ")";
@@ -71,6 +73,8 @@ const std::string SparqlLexer::LOGICAL_OR = "(\\|\\|)";
 const re2::RE2 SparqlLexer::RE_IRI = re2::RE2(IRI);
 const re2::RE2 SparqlLexer::RE_WS = re2::RE2("(" + WS + "+)");
 const re2::RE2 SparqlLexer::RE_KEYWORD = re2::RE2(KEYWORD);
+const re2::RE2 SparqlLexer::RE_GROUP_BY = re2::RE2(GROUP_BY);
+const re2::RE2 SparqlLexer::RE_ORDER_BY = re2::RE2(ORDER_BY);
 const re2::RE2 SparqlLexer::RE_VARIABLE = re2::RE2(VARIABLE);
 const re2::RE2 SparqlLexer::RE_SYMBOL = re2::RE2(SYMBOL);
 const re2::RE2 SparqlLexer::RE_AGGREGATE = re2::RE2(AGGREGATE);
@@ -93,7 +97,16 @@ void SparqlLexer::readNext() {
   // Return the first token type matched.
   while (_next.type == SparqlToken::Type::WS && !empty()) {
     _next.pos = _sparql.size() - _re_string.size();
-    if (re2::RE2::Consume(&_re_string, RE_AGGREGATE, &raw)) {
+    if (re2::RE2::Consume(&_re_string, RE_KEYWORD, &raw)) {
+      _next.type = SparqlToken::Type::KEYWORD;
+      raw = ad_utility::getLowercaseUtf8(raw);
+    } else if (re2::RE2::Consume(&_re_string, RE_GROUP_BY, &raw)) {
+      _next.type = SparqlToken::Type::GROUP_BY;
+      raw = ad_utility::getLowercaseUtf8(raw);
+    } else if (re2::RE2::Consume(&_re_string, RE_ORDER_BY, &raw)) {
+      _next.type = SparqlToken::Type::ORDER_BY;
+      raw = ad_utility::getLowercaseUtf8(raw);
+    } else if (re2::RE2::Consume(&_re_string, RE_AGGREGATE, &raw)) {
       _next.type = SparqlToken::Type::AGGREGATE;
       raw = ad_utility::getLowercaseUtf8(raw);
     } else if (re2::RE2::Consume(&_re_string, RE_KEYWORD, &raw)) {

@@ -123,9 +123,12 @@ add_executable(SparqlLexerTest SparqlLexerTest.cpp)
 add_test(SparqlLexerTest SparqlLexerTest)
 target_link_libraries(SparqlLexerTest parser gtest_main ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(Utf8RegexTest Utf8RegexTest.cpp)
-add_test(Utf8RegexTest Utf8RegexTest)
-target_link_libraries(Utf8RegexTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+set(TEST_COMPILE_TIME_REGEXES OFF CACHE BOOL "Include the tests for the Utf8Regex.")
+if (TEST_COMPILE_TIME_REGEXES)
+  add_executable(Utf8RegexTest Utf8RegexTest.cpp)
+  add_test(Utf8RegexTest Utf8RegexTest)
+  target_link_libraries(Utf8RegexTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+endif (TEST_COMPILE_TIME_REGEXES)
 
 add_executable(BatchedPipelineTest BatchedPipelineTest.cpp)
 add_test(BatchedPipelineTest BatchedPipelineTest)
@@ -155,8 +158,13 @@ add_executable(LimitedAllocatorTest LimitedAllocatorTest.cpp)
 add_test(LimitedAllocatorTest LimitedAllocatorTest)
 target_link_libraries(LimitedAllocatorTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
 
+add_executable(MinusTest MinusTest.cpp)
+add_test(MinusTest MinusTest)
+target_link_libraries(MinusTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
+
 add_executable(SortPerformanceEstimatorTest SortPerformanceEstimatorTest.cpp)
 target_link_libraries(SortPerformanceEstimatorTest gtest_main SortPerformanceEstimator ${CMAKE_THREAD_LIBS_INIT})
 # this test runs for quite some time! If this is undesired, comment it out
 add_test(SortPerformanceEstimatorTest SortPerformanceEstimatorTest)
+
 
