@@ -41,17 +41,8 @@ ENV CACHE_MAX_NUM_ENTRIES 1000
 # Need the shell to get the INDEX_PREFIX envirionment variable
 ENTRYPOINT ["/bin/sh", "-c", "exec ServerMain -i \"/index/${INDEX_PREFIX}\" -j 8 -m ${MEMORY_FOR_QUERIES} -c ${CACHE_MAX_SIZE_GB} -e ${CACHE_MAX_SIZE_GB_SINGLE_ENTRY} -k ${CACHE_MAX_NUM_ENTRIES} -p 7001 \"$@\"", "--"]
 
-# docker build -t qlever-<name> .
-# # When running with user namespaces you may need to make the index folder accessible
-# # to e.g. the "nobody" user
-# chmod -R o+rw ./index
-# # For an existing index copy it into the ./index folder and make sure to either name it
-# # index.* or
-# # set the environment variable "INDEX_PREFIX" during `docker run` using `-e INDEX_PREFIX=<prefix>`
-# # To build an index run a bash inside the container as follows
-# docker run -it --rm --entrypoint bash -v "<path_to_input>:/input" -v "$(pwd)/index:/index" qlever-<name>
-# # Then inside that shell IndexBuilder is in the path and can be used like
-# # described in the README.md with the files in /input
-# # To run a server use
-# docker run -d -p 7001:7001 -e "INDEX_PREFIX=<prefix>" -v "$(pwd)/index:/index" --name qlever-<name> qlever-<name>
+# Build image:  docker build -t qlever.master .
 
+# Build index:  DB=wikidata; docker run -it --rm -v "$(pwd)":/index --entrypoint bash --name qlever.$DB-index qlever.master -c "IndexBuilderMain -f /index/$DB.nt -i /index/$DB -s /index/$DB.settings.json | tee /index/$DB.index-log.txt"; rm -f $DB/*tmp*
+
+# Run engine:   DB=wikidata; PORT=7001; docker rm -f qlever.$DB; docker run -d --restart=unless-stopped -v "$(pwd)":/index -p $PORT:7001 -e INDEX_PREFIX=$DB -e MEMORY_FOR_QUERIES=30 --name qlever.$DB qlever.master; docker logs -f --tail=100 qlever.$DB
