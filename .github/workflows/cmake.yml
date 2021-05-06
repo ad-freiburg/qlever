@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [g++-10, clang++-10]
+        compiler: [g++-10, clang++-11]
         os: [ ubuntu-latest ]
         warnings: [ "", -Werror ]
         
@@ -28,7 +28,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install dependencies
-      run:  sudo apt-get update && sudo apt-get install -y libsparsehash-dev libicu-dev tzdata clang gcc-10 clang-10
+      run:  sudo apt-get update && sudo apt-get install -y libsparsehash-dev libicu-dev tzdata clang gcc-10 clang-11
 
     - name: Checkout submodules
       run: git submodule update --init --recursive
