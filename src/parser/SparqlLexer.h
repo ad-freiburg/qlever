@@ -5,6 +5,7 @@
 #include <re2/re2.h>
 #include <iostream>
 #include <string>
+#include <memory>
 
 struct SparqlToken {
   enum class Type {
@@ -34,47 +35,10 @@ struct SparqlToken {
 };
 
 class SparqlLexer {
+ public:
+  using RegexTokenMap = std::vector<std::pair<std::unique_ptr<re2::RE2>, SparqlToken::Type>>;
  private:
-  // The rules for the lexer
-  static const std::string IRIREF;
-  static const std::string IRI;
-  static const std::string PN_CHARS_BASE;
-  static const std::string PN_CHARS_U;
-  static const std::string PN_CHARS;
-  static const std::string PN_PREFIX;
-  static const std::string PLX;
-  static const std::string PN_LOCAL;
-  static const std::string VARNAME;
-  static const std::string WS;
-  static const std::string GROUP_BY;
-  static const std::string ORDER_BY;
-  static const std::string KEYWORD;
-  static const std::string VARIABLE;
-  static const std::string SYMBOL;
-  static const std::string AGGREGATE;
-  static const std::string ECHAR;
-  static const std::string LANGTAG;
-  static const std::string STRING_LITERAL;
-  static const std::string RDFLITERAL;
-  static const std::string PNAME_NS;
-  static const std::string PNAME_LN;
-  static const std::string INTEGER;
-  static const std::string FLOAT;
-  static const std::string LOGICAL_OR;
-
-  static const re2::RE2 RE_IRI;
-  static const re2::RE2 RE_WS;
-  static const re2::RE2 RE_GROUP_BY;
-  static const re2::RE2 RE_ORDER_BY;
-  static const re2::RE2 RE_KEYWORD;
-  static const re2::RE2 RE_VARIABLE;
-  static const re2::RE2 RE_SYMBOL;
-  static const re2::RE2 RE_AGGREGATE;
-  static const re2::RE2 RE_RDFLITERAL;
-  static const re2::RE2 RE_INTEGER;
-  static const re2::RE2 RE_FLOAT;
-  static const re2::RE2 RE_LOGICAL_OR;
-
+  const RegexTokenMap& getRegexTokenMap() const;
  public:
   SparqlLexer(const std::string& sparql);
 
