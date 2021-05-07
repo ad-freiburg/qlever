@@ -193,7 +193,7 @@ size_t TransitivePath::getSizeEstimate() {
 // _____________________________________________________________________________
 size_t TransitivePath::getCostEstimate() {
   auto costEstimate = getSizeEstimate();
-  for (const auto* ptr : getChildren()) {
+  for (auto* ptr : getChildren()) {
     if (ptr) {
       costEstimate += ptr->getCostEstimate();
     }
