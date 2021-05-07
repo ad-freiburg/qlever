@@ -34,7 +34,7 @@ jobs:
     - name: Install dependencies
       run:  sudo apt-get install -y libsparsehash-dev libicu-dev tzdata clang gcc-10 clang-11
     - name: Python dependencies
-    - run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
+      run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
 
     - name: test dependencies
       run: python3 ${{github.workspace}}/e2e/queryit.py
