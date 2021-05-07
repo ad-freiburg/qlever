@@ -35,7 +35,7 @@ jobs:
     - name: check further dependencies
       run: python3 ${{github.workspace}}/e2e/queryit.py
     - name: Install dependencies
-      run:  sudo apt-get install -y libsparsehash-dev libicu-dev tzdata clang gcc-10 clang-11
+      run:  sudo apt-get install -y libsparsehash-dev libicu-dev tzdata clang gcc-10 clang-11 apt install python3-tk
 
     - name: Checkout submodules
       run: git submodule update --init --recursive
