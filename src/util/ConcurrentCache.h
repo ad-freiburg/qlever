@@ -270,9 +270,9 @@ class ConcurrentCache {
       try {
         // The actual computation
         shared_ptr<Value> result = make_shared<Value>(computeFunction());
+        moveFromInProgressToCache(key, result);
         // Signal other threads who are waiting for the results.
         resultInProgress->finish(result);
-        moveFromInProgressToCache(key, result);
         // result was not cached
         return {std::move(result), false};
       } catch (...) {
