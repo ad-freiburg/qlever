@@ -160,6 +160,10 @@ float TransitivePath::getMultiplicity(size_t col) {
 
 // _____________________________________________________________________________
 size_t TransitivePath::getSizeEstimate() {
+  if (!_leftIsVar || !_rightIsVar) {
+    // TODO<joka921> Is this now too optimistic?
+    return 10;
+  }
   if (_leftSideTree != nullptr) {
     return _leftSideTree->getSizeEstimate();
   }
@@ -187,7 +191,15 @@ size_t TransitivePath::getSizeEstimate() {
 }
 
 // _____________________________________________________________________________
-size_t TransitivePath::getCostEstimate() { return getSizeEstimate(); }
+size_t TransitivePath::getCostEstimate() {
+  auto costEstimate = getSizeEstimate();
+  for (const auto* ptr : getChildren()) {
+    if (ptr) {
+      costEstimate += ptr->getCostEstimate();
+    }
+  }
+  return costEstimate;
+}
 
 // _____________________________________________________________________________
 template <int SUB_WIDTH>
