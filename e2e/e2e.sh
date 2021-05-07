@@ -34,7 +34,7 @@ else
 fi
 
 INDEX_DIR="$PROJECT_DIR/e2e_data"
-INPUT_DIR="$PROJECT_DIR/e2e/scientist-collection"
+INPUT_DIR="$PROJECT_DIR/e2e_data/scientist-collection"
 ZIPPED_INPUT="$PROJECT_DIR/e2e/scientist-collection.zip"
 INPUT_PREFIX="scientists"
 INPUT="$INPUT_DIR/$INPUT_PREFIX"
