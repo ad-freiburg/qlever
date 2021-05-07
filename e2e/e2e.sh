@@ -33,6 +33,8 @@ else
 	export PYTHON_BINARY=`which python3`
 fi
 
+export PYTHON_BINARY=`which python3`
+
 INDEX_DIR="$PROJECT_DIR/e2e_data"
 INPUT_DIR="$PROJECT_DIR/e2e_data/scientist-collection"
 ZIPPED_INPUT="$PROJECT_DIR/e2e/scientist-collection.zip"
