@@ -36,9 +36,6 @@ jobs:
     - name: Python dependencies
       run: sudo apt-get install python3-yaml unzip pkg-config python3-icu
 
-    - name: test dependencies
-      run: python3 ${{github.workspace}}/e2e/queryit.py
-    
     - name: Checkout submodules
       run: git submodule update --init --recursive
 
