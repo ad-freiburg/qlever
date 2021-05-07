@@ -270,16 +270,16 @@ class ConcurrentCache {
       try {
         // The actual computation
         shared_ptr<Value> result = make_shared<Value>(computeFunction());
+        moveFromInProgressToCache(key, result);
         // Signal other threads who are waiting for the results.
         resultInProgress->finish(result);
-        moveFromInProgressToCache(key, result);
         // result was not cached
         return {std::move(result), false};
       } catch (...) {
-        // Result computation has failed, signal the other threads,
-        resultInProgress->abort();
         // Other threads may try this computation again in the future
         _cacheAndInProgressMap.wlock()->_inProgress.erase(key);
+        // Result computation has failed, signal the other threads,
+        resultInProgress->abort();
         throw;
       }
     } else {
