@@ -12,14 +12,15 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
-#include "./VocabularyGenerator.h"
 
+#include "../parser/RdfEscaping.h"
 #include "../util/Conversions.h"
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/Log.h"
 #include "./ConstantsIndexCreation.h"
 #include "./Vocabulary.h"
+#include "./VocabularyGenerator.h"
 
 // ___________________________________________________________________
 template <class Comp>
