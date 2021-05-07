@@ -30,6 +30,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v2
+    - name: Install python Dependencies for E2E tests
+      run: sudo pip3 install icu
     - name: Install dependencies
       run:  sudo apt-get install -y libsparsehash-dev libicu-dev tzdata clang gcc-10 clang-11
 
