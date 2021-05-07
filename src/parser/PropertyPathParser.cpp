@@ -62,6 +62,9 @@ std::vector<PropertyPathParser::Token> PropertyPathParser::tokenize(
       inside_iri = false;
     }
 
+    // TODO<joka921>: The parsing/unescaping has to be done correctly directly
+    // in the SparqlParser. This is just a dirty hack, to make several queries
+    // from the Autocompletion evaluation work.
     if (!inside_iri && c == '\\') {
       escaped = !escaped;
     } else if (!inside_iri && DELIMITER_CHARS[(uint8_t)str[pos]] && escaped) {
