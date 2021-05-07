@@ -31,7 +31,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install python Dependencies for E2E tests
-      run: sudo pip3 install icu tkinter
+      run: sudo pip3 install icu tk
     - name: check further dependencies
       run: python3 ${{github.workspace}}/e2e/queryit.py
     - name: Install dependencies
