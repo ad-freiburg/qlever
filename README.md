@@ -22,7 +22,7 @@ If you use QLever in your work, please cite that paper.
 Much functionality has been added to QLever since then.
 In particular, the following standard SPARQL constructs are all supported in the meantime:
 LIMIT, OFFSET, ORDER BY, GROUP BY, HAVING, COUNT, SAMPLE, GROUP_CONCAT, FILTER, REGEX, LANG, OPTIONAL, UNION, MINUS, VALUES, BIND.
-Subqueries are also supported.
+Predicate paths and subqueries are also supported.
 The SERVICE keyword is not yet supported.
 We are currently working on several publications that describe and evaluate these extensions.
 
