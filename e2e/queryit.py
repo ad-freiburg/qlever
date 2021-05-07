@@ -12,6 +12,8 @@ import json
 import yaml
 import icu
 
+collator = icu.Collator.createInstance(icu.Locale('de_DE.UTF-8'))
+
 class Color:
     """
     Enum-like class for storing ANSI Color Codes

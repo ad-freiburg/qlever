@@ -31,10 +31,13 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install python Dependencies for E2E tests
-      run: sudo pip3 install icu tk
+      run: sudo pip3 install pyicu tk
    
     - name: Install dependencies
-      run:  sudo apt-get install -y libsparsehash-dev libicu-dev tzdata clang gcc-10 clang-11 python3-tk
+      run:  sudo apt-get install -y libsparsehash-dev libicu-dev tzdata clang gcc-10 clang-11 python3-tk python3-pyicu
+
+    - name: test dependencies
+      run: python3 ${{github.workspace}}/e2e/queryit.py
     
     - name: Checkout submodules
       run: git submodule update --init --recursive
