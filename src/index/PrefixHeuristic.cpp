@@ -44,8 +44,10 @@ TreeNode* TreeNode::insertAfter(string_view value) {
     }
   }
 
-  // if we have reached here, we have to add a new child
-  NodePtr newNode = std::make_unique<TreeNode>(value);
+  // If we have reached here, we have to add a new child
+  // Using std::make_unique here would require the constructor of TreeNode to be
+  // public, which is not (better encapsulation)
+  NodePtr newNode{new TreeNode(value)};
   newNode->_parent = this;
 
   // find children of current node which have to become children of the new node
