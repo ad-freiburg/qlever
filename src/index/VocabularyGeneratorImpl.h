@@ -153,8 +153,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buff
 
       // write the new word to the vocabulary
       if (_lastWritten < EXTERNALIZED_LITERALS_PREFIX) {
-        _outfile << RdfEscaping::escapeNewlinesAndBackslashes(_lastWritten)
-                 << '\n';
+        _outfile << RdfEscaping::escapeNewlinesAndBackslashes(_lastWritten) << '\n';
       } else {
         // we have to strip the externalization character again
         auto& c = _lastWritten[0];
@@ -171,9 +170,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buff
                           "should never happen\n";
             AD_CHECK(false)
         }
-        _outfileExternal << RdfEscaping::escapeNewlinesAndBackslashes(
-                                _lastWritten)
-                         << '\n';
+        _outfileExternal << RdfEscaping::escapeNewlinesAndBackslashes(_lastWritten) << '\n';
       }
 
       // write id to corresponding vec
