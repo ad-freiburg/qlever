@@ -15,10 +15,6 @@ addons:
 services:
   - docker
 
-cache:
-  directories:
-    - e2e_data/scientist-collection/
-
 before_script:
   - mkdir -p e2e_data/scientist-collection/
   - sudo chmod -R o+rwx e2e_data
