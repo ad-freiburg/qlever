@@ -656,6 +656,7 @@ bool TurtleStreamParser<T>::getLine(std::array<string, 3>* triple) {
   return true;
 }
 
+// Explicit instantiations
 template class TurtleParser<Tokenizer>;
 template class TurtleParser<TokenizerCtre>;
 template class TurtleStreamParser<Tokenizer>;
