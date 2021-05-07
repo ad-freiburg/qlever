@@ -49,6 +49,8 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
       *outputIterator = newlineOrBackslash;
       outputIterator++;
     } else {
+      (void)outputIterator;
+      (void)newlineOrBackslash;
       throw std::runtime_error(
           "String escapes like \\n or \\t are not allowed in this context");
     }
@@ -61,6 +63,8 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
       *outputIterator = otherStringEscape;
       outputIterator++;
     } else {
+      (void)outputIterator;
+      (void)otherStringEscape;
       throw std::runtime_error(
           "String escapes like \\n or \\t are not allowed in this context");
     }
@@ -77,6 +81,8 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
           hexadecimalCharactersToUtf8(std::string_view(iterator, length));
       std::copy(unesc.begin(), unesc.end(), outputIterator);
     } else {
+      (void)outputIterator;
+      (void)endIterator;
       throw std::runtime_error(
           "Numeric escapes escapes like \"\\u00e4\" are not allowed in this "
           "context");
