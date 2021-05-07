@@ -33,7 +33,7 @@ jobs:
     - name: Install python Dependencies for E2E tests
       run: sudo pip3 install icu tk
     - name: Install dependencies
-      run:  sudo apt-get install -y libsparsehash-dev libicu-dev tzdata clang gcc-10 clang-11 apt install python3-tk
+      run:  sudo apt-get install -y libsparsehash-dev libicu-dev tzdata clang gcc-10 clang-11 python3-tk
     - name: check further dependencies
       run: python3 ${{github.workspace}}/e2e/queryit.py
     - name: Checkout submodules
