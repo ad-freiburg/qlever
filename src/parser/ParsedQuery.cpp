@@ -373,8 +373,9 @@ void ParsedQuery::expandPrefix(
       from += 2;
     }
     if (i != string::npos && i >= from &&
-        prefixMap.count(item.substr(from, i - from)) > 0) {
-      string prefixUri = prefixMap.find(item.substr(from, i - from))->second;
+        prefixMap.contains(item.substr(from, i - from))) {
+      string prefixUri = prefixMap.at(item.substr(from, i - from));
+      // Note that substr(0, 0) yields the empty string.
       item = item.substr(0, from) + prefixUri.substr(0, prefixUri.size() - 1) +
              item.substr(i + 1) + '>';
       item = RdfEscaping::unescapePrefixedIri(item);

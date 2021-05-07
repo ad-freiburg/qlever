@@ -42,7 +42,7 @@ class TurtleParser {
    public:
     ParseException() = default;
     ParseException(std::string_view msg, const size_t pos)
-        : _msg(std::string(msg) + " at position " + std::to_string(pos)) {}
+        : _msg{std::string(msg) + " at position " + std::to_string(pos)} {}
     const char* what() const throw() { return _msg.c_str(); }
 
    private:
@@ -70,8 +70,8 @@ class TurtleParser {
   // value is invalid and the parser is at the end of the input.
   virtual bool getLine(std::array<string, 3>* triple) = 0;
 
-  // get the total offset of the first byte that has not yet been dealt with by
-  // the parser.
+  // Get the offset (relative to the beginning of the file) of the first byte
+  // that has not yet been dealt with by the parser.
   virtual size_t getParsePosition() const = 0;
 
  protected:
@@ -231,7 +231,7 @@ class TurtleParser {
   string expandPrefix(const string& prefix) {
     if (!_prefixMap.count(prefix)) {
       throw ParseException("Prefix " + prefix +
-                               " was not registered using a PREFIX or @prefix "
+                               " was not defined using a PREFIX or @prefix "
                                "declaration before using it!\n",
                            getParsePosition());
     } else {

@@ -9,40 +9,40 @@
 
 using std::string;
 TEST(TurtleParserTest, prefixedName) {
-  auto runCommonTests = [](auto& p) {
-    p._prefixMap["wd"] = "www.wikidata.org/";
-    p.setInputStream("wd:Q430 someotherContent");
-    ASSERT_TRUE(p.prefixedName());
-    ASSERT_EQ(p._lastParseResult, "<www.wikidata.org/Q430>");
-    ASSERT_EQ(p.getPosition(), size_t(7));
+  auto runCommonTests = [](auto& parser) {
+    parser._prefixMap["wd"] = "www.wikidata.org/";
+    parser.setInputStream("wd:Q430 someotherContent");
+    ASSERT_TRUE(parser.prefixedName());
+    ASSERT_EQ(parser._lastParseResult, "<www.wikidata.org/Q430>");
+    ASSERT_EQ(parser.getPosition(), size_t(7));
 
-    p.setInputStream(" wd:Q430 someotherContent");
-    ASSERT_TRUE(p.prefixedName());
-    ASSERT_EQ(p._lastParseResult, "<www.wikidata.org/Q430>");
-    ASSERT_EQ(p.getPosition(), 8u);
+    parser.setInputStream(" wd:Q430 someotherContent");
+    ASSERT_TRUE(parser.prefixedName());
+    ASSERT_EQ(parser._lastParseResult, "<www.wikidata.org/Q430>");
+    ASSERT_EQ(parser.getPosition(), 8u);
 
     // empty name
-    p.setInputStream("wd: someotherContent");
-    ASSERT_TRUE(p.prefixedName());
-    ASSERT_EQ(p._lastParseResult, "<www.wikidata.org/>");
-    ASSERT_EQ(p.getPosition(), size_t(3));
+    parser.setInputStream("wd: someotherContent");
+    ASSERT_TRUE(parser.prefixedName());
+    ASSERT_EQ(parser._lastParseResult, "<www.wikidata.org/>");
+    ASSERT_EQ(parser.getPosition(), size_t(3));
 
-    p.setInputStream("<wd.de> rest");
-    p._lastParseResult = "comp1";
-    ASSERT_FALSE(p.prefixedName());
-    ASSERT_EQ(p._lastParseResult, "comp1");
-    ASSERT_EQ(p.getPosition(), 0u);
+    parser.setInputStream("<wd.de> rest");
+    parser._lastParseResult = "comp1";
+    ASSERT_FALSE(parser.prefixedName());
+    ASSERT_EQ(parser._lastParseResult, "comp1");
+    ASSERT_EQ(parser.getPosition(), 0u);
 
-    p.setInputStream("unregistered:bla");
-    ASSERT_THROW(p.prefixedName(),
-                 typename std::decay_t<decltype(p)>::ParseException);
+    parser.setInputStream("unregistered:bla");
+    ASSERT_THROW(parser.prefixedName(),
+                 typename std::decay_t<decltype(parser)>::ParseException);
   };
   {
     TurtleStringParser<Tokenizer> p;
     runCommonTests(p);
-    p.setInputStream("wd:esc\\,aped");
+    p.setInputStream(R"(wd:esc\,aped)");
     ASSERT_TRUE(p.prefixedName());
-    ASSERT_EQ(p._lastParseResult, "<www.wikidata.org/esc\\,aped>");
+    ASSERT_EQ(p._lastParseResult, "<www.wikidata.org/esc,aped>");
     ASSERT_EQ(p.getPosition(), 12u);
 
     // escapes at the beginning are illegal, so this is parsed as an empty wd:
@@ -53,33 +53,25 @@ TEST(TurtleParserTest, prefixedName) {
 
     p.setInputStream(R"(wd:esc\,aped\.)");
     ASSERT_TRUE(p.prefixedName());
-    ASSERT_EQ(p._lastParseResult, "<www.wikidata.org/esc\\,aped\\.>");
+    ASSERT_EQ(p._lastParseResult, "<www.wikidata.org/esc,aped.>");
     ASSERT_EQ(p.getPosition(), 14u);
   }
 
   {
     TurtleStringParser<TokenizerCtre> p;
     runCommonTests(p);
+    // These unit tests document the current (fast, but suboptimal) behavior of
+    // the CTRE parser. TODO: Try to improve the parser without sacrificing
+    // speed. If that succeeds, adapt this unit test.
+
+    // TokenizerCTRE parsers `esc\` , which fails to unescape (single backslash)
     p.setInputStream("wd:esc\\,aped");
-    ASSERT_TRUE(p.prefixedName());
-    // this relaxed (wrong) mode only parses until it meets the comma.
-    // at least now this behavior is now documented in a unit test
-    ASSERT_EQ(p._lastParseResult, "<www.wikidata.org/esc\\>");
-    ASSERT_EQ(p.getPosition(), 7u);
+    ASSERT_THROW(p.prefixedName(), ad_semsearch::Exception);
 
-    // escapes at the beginning should be illegal, so this should be parsed as
-    // an empty wd:
-    p.setInputStream(R"(wd:\\esc\,aped)");
-    ASSERT_TRUE(p.prefixedName());
-    // but the CTRE parser parses until a comma, dot or whitespace
-    ASSERT_EQ(p._lastParseResult, "<www.wikidata.org/\\\\esc\\>");
-    ASSERT_EQ(p.getPosition(), 9u);
-
-    p.setInputStream(R"(wd:esc\,aped\.)");
-    ASSERT_TRUE(p.prefixedName());
-    // same behavior as in first test case
-    ASSERT_EQ(p._lastParseResult, "<www.wikidata.org/esc\\>");
-    ASSERT_EQ(p.getPosition(), 7u);
+    // TokenizerCTRE parses `esc\\aped` which fails to unescape (escaped
+    // backslashes are not allowed in prefixed names)
+    p.setInputStream(R"(wd:esc\\aped.)");
+    ASSERT_THROW(p.prefixedName(), ad_semsearch::Exception);
   }
 }
 

@@ -15,15 +15,15 @@
 #include "../util/StringUtils.h"
 
 namespace RdfEscaping {
-// Replaces each newline '\n' by an escaped newline '\\n', and each backslash
-// '\\' by an escaped backslash "\\\\". This is the minimal amount of escaping
-// that has to be done in order to store strings in a line-based text file.
-std::string escapeNewlineAndBackslash(std::string_view literal);
+/// Replaces each newline '\n' by an escaped newline '\\n', and each backslash
+/// '\\' by an escaped backslash "\\\\". This is the minimal amount of escaping
+/// that has to be done in order to store strings in a line-based text file.
+std::string escapeNewlinesAndBackslashes(std::string_view literal);
 
-// Replaces each escaped newline "\\n" by a newline '\n', and each escaped
-// backslash "\\\\" by a single backslash '\\'. This is the inverted function of
-// escapeNewlineAndBackslash.
-std::string unescapeNewlineAndBackslash(std::string_view literal);
+/// Replaces each escaped newline "\\n" by a newline '\n', and each escaped
+/// backslash "\\\\" by a single backslash '\\'. This is the inverted function
+/// of escapeNewlinesAndBackslashes.
+std::string unescapeNewlinesAndBackslashes(std::string_view literal);
 
 /**
  * @brief convert a RDF Literal to a unified form that is used inside QLever.
@@ -34,17 +34,17 @@ std::string unescapeNewlineAndBackslash(std::string_view literal);
  * be surrounded with one (" or ') quotation mark and contain all special
  * characters in escaped form, like "\\\t". Alternatively literals may be
  * surroounded by three (""" or ''') quotation marks. Then escapes are still
- * allowed, but several special characters (e.g. '\n' or '\t' may by contained
- * directly in the string. (For details, see the Turtle or Sparql standard
+ * allowed, but several special characters (e.g. '\n' or '\t' may be contained
+ * directly in the string (For details, see the Turtle or Sparql standard).
  *
- * This function converts any of this forms to a literal that starts and ends
+ * This function converts any of these forms to a literal that starts and ends
  * with a single quotation mark ("content") and contains the originally escaped
  * characters directly, e.g. "al\"pha" becomes "al"pha".
  *
  * This is NOT a valid RDF form of literals, but this format is only used
  * inside QLever.
  */
-std::string normalizeRDFLiteral(const std::string_view origLiteral);
+std::string normalizeRDFLiteral(std::string_view origLiteral);
 
 /**
  * In an Iriref, the only allowed escapes are \uXXXX and '\UXXXXXXXX' ,where X
@@ -58,12 +58,12 @@ std::string unescapeIriref(std::string_view iriref);
 
 /**
  * This function unescapes a prefixedIri (the "local" part in the form
- * prefix:local). These may only contain socalled "reserved character escape
+ * prefix:local). These may only contain so-called "reserved character escape
  * sequences": reserved character escape sequences consist of a '\' followed
  * by one of ~.-!$&'()*+,;=/?#@%_ and represent the character to the right of
  * the '\'.
  */
-inline std::string unescapePrefixedIri(std::string_view literal);
+std::string unescapePrefixedIri(std::string_view literal);
 }  // namespace RdfEscaping
 
 #endif  // QLEVER_RDFESCAPING_H

@@ -379,13 +379,13 @@ TEST(Escaping, normalizeRDFLiteral) {
     std::string l4 = R"("""simpleLiteral""")";
     ASSERT_EQ(l1, RdfEscaping::normalizeRDFLiteral(l4));
 
-    ASSERT_EQ(l1, RdfEscaping::escapeNewlineAndBackslash(
+    ASSERT_EQ(l1, RdfEscaping::escapeNewlinesAndBackslashes(
                       RdfEscaping::normalizeRDFLiteral(l1)));
-    ASSERT_EQ(l1, RdfEscaping::escapeNewlineAndBackslash(
+    ASSERT_EQ(l1, RdfEscaping::escapeNewlinesAndBackslashes(
                       RdfEscaping::normalizeRDFLiteral(l2)));
-    ASSERT_EQ(l1, RdfEscaping::escapeNewlineAndBackslash(
+    ASSERT_EQ(l1, RdfEscaping::escapeNewlinesAndBackslashes(
                       RdfEscaping::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(l1, RdfEscaping::escapeNewlineAndBackslash(
+    ASSERT_EQ(l1, RdfEscaping::escapeNewlinesAndBackslashes(
                       RdfEscaping::normalizeRDFLiteral(l4)));
   }
 
@@ -402,20 +402,20 @@ TEST(Escaping, normalizeRDFLiteral) {
     std::string l4 = R"("""si\"mple\'Li\n\rt\t\b\fer\\""")";
     ASSERT_EQ(t, RdfEscaping::normalizeRDFLiteral(l4));
 
-    ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlineAndBackslash(t));
-    ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlineAndBackslash(
+    ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(t));
+    ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(
                             RdfEscaping::normalizeRDFLiteral(l1)));
-    ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlineAndBackslash(
+    ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(
                             RdfEscaping::normalizeRDFLiteral(l2)));
-    ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlineAndBackslash(
+    ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(
                             RdfEscaping::normalizeRDFLiteral(l3)));
-    ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlineAndBackslash(
+    ASSERT_EQ(lEscaped, RdfEscaping::escapeNewlinesAndBackslashes(
                             RdfEscaping::normalizeRDFLiteral(l4)));
   }
 
   std::string lit = R"(",\")";
   ASSERT_EQ(std::string("\",\\\\\""),
-            RdfEscaping::escapeNewlineAndBackslash(lit));
+            RdfEscaping::escapeNewlinesAndBackslashes(lit));
 }
 
 TEST(Escaping, unescapeIriref) {

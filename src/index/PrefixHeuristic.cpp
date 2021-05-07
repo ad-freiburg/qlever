@@ -183,7 +183,7 @@ std::vector<string> calculatePrefixes(const string& filename,
   LOG(INFO) << "start reading words and building prefix tree..." << std::endl;
   // insert all prefix candidates into  the tree
   while (std::getline(ifs, nextWord)) {
-    nextWord = RdfEscaping::unescapeNewlineAndBackslash(nextWord);
+    nextWord = RdfEscaping::unescapeNewlinesAndBackslashes(nextWord);
     totalChars += nextWord.size();
     // the longest common prefixes between two adjacent words are our candidates
     // for compression

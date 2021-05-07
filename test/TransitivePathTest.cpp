@@ -16,13 +16,11 @@
 void assertSameUnorderedContent(const IdTable& a, const IdTable& b) {
   auto aCpy = a;
   auto bCpy = b;
-  auto sorter = [](const auto& a, const auto& b) {
-    if (a.cols() != b.cols()) {
-      return a.cols() < b.cols();
-    }
-    for (size_t i = 0; i < a.cols(); ++i) {
-      if (a[i] != b[i]) {
-        return a[i] < b[i];
+  ASSERT_EQ(a.cols(), b.cols());
+  auto sorter = [](const auto& rowFromA, const auto& rowFromB) {
+    for (size_t i = 0; i < rowFromA.cols(); ++i) {
+      if (rowFromA[i] != rowFromB[i]) {
+        return rowFromA[i] < rowFromB[i];
       }
     }
     // equal means "not smaller"

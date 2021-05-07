@@ -76,10 +76,10 @@ void ExternalVocabulary<Comp>::buildFromTextFile(const string& textFileName,
   _size = 0;
   std::string word;
   while (std::getline(infile, word)) {
-    // In the text file we stored the strings with escapend \n and
-    // \\ characters. We now store them in a binary format, where we can use the
-    // `actual` values.
-    word = RdfEscaping::unescapeNewlineAndBackslash(word);
+    // The temporary file for the to-be-externalized vocabulary strings is
+    // line-based, just like the normal vocabulary file. Therefore, \n and \ are
+    // escaped there. When we read from this file, we have to unescape these.
+    word = RdfEscaping::unescapeNewlinesAndBackslashes(word);
     offsets.push_back(currentOffset);
     currentOffset += _file.write(word.data(), word.size());
     _size++;

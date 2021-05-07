@@ -59,10 +59,8 @@ class TreeNode {
   using NodePtr = std::unique_ptr<TreeNode>;
 
   // Constructor
- public:
   explicit TreeNode(string_view value) : _value(value) {}
 
- private:
   // Recursive Insertion of value. If the value does not match _value we will
   // automatically call insert on a node that is closer to the actual position
   // of value in the Tree. Returns the node that was actually inserted

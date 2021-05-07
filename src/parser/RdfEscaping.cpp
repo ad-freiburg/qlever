@@ -15,8 +15,8 @@ namespace RdfEscaping {
 using namespace std::string_literals;
 namespace detail {
 
-/// turn a sequence of characters that encode hexadecimal numbers(e.g. "00e4")
-/// into the corresponding UTF-8 string (e.g. "ä")
+/// Turn a sequence of characters that encode hexadecimal numbers(e.g. "00e4")
+/// into the corresponding UTF-8 string (e.g. "ä").
 std::string hexadecimalCharactersToUtf8(std::string_view hex) {
   UChar32 x;
   std::stringstream sstream;
@@ -27,7 +27,7 @@ std::string hexadecimalCharactersToUtf8(std::string_view hex) {
   return res;
 }
 
-/*
+/**
  * Internal helper function. Unescape all string escapes (e.g. "\\n"-> '\n') and
  * all numeric escapes (e.g. "\\u00E4" -> 'ä'). Using the template bools this
  * function can be configured to unescape only string escapes, or even only
@@ -43,9 +43,10 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
 
   // Append the `character` to the output, but only if newlines/backslashes are
   // allowed via the configuration
-  auto pushNewlineOrBackslash = [&outputIterator](const char character) {
+  auto pushNewlineOrBackslash = [&outputIterator](
+                                    const char newlineOrBackslash) {
     if constexpr (!acceptOnlyNumericEscapes || acceptOnlyBackslashAndNewline) {
-      *outputIterator = character;
+      *outputIterator = newlineOrBackslash;
       outputIterator++;
     } else {
       throw std::runtime_error(
@@ -55,9 +56,9 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
 
   // Append the `character` to the output, but only if general string escapes
   // (e.g. "\\t") are allowed via the configuration
-  auto pushOtherStringEscape = [&outputIterator](const char character) {
+  auto pushOtherStringEscape = [&outputIterator](const char otherStringEscape) {
     if constexpr (!acceptOnlyNumericEscapes && !acceptOnlyBackslashAndNewline) {
-      *outputIterator = character;
+      *outputIterator = otherStringEscape;
       outputIterator++;
     } else {
       throw std::runtime_error(
@@ -77,7 +78,7 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
       std::copy(unesc.begin(), unesc.end(), outputIterator);
     } else {
       throw std::runtime_error(
-          "Numeric escapes escapes like \"\\\\u00e4\" are not allowed in this "
+          "Numeric escapes escapes like \"\\u00e4\" are not allowed in this "
           "context");
     }
   };
@@ -137,7 +138,7 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
 }  // namespace detail
 
 // _____________________________________________________________________________
-std::string unescapeNewlineAndBackslash(std::string_view literal) {
+std::string unescapeNewlinesAndBackslashes(std::string_view literal) {
   std::string result;
   RdfEscaping::detail::unescapeStringAndNumericEscapes<false, true>(
       literal.begin(), literal.end(), std::back_inserter(result));
@@ -145,12 +146,10 @@ std::string unescapeNewlineAndBackslash(std::string_view literal) {
 }
 
 // ____________________________________________________________________________
-std::string escapeNewlineAndBackslash(std::string_view literal) {
-  const string charactersToEscape = "\n\\";
+std::string escapeNewlinesAndBackslashes(std::string_view literal) {
   std::string result;
   while (true) {
-    auto pos =
-        std::min(literal.find_first_of(charactersToEscape), literal.size());
+    auto pos = std::min(literal.find_first_of("\n\\"), literal.size());
     result.append(literal.begin(), literal.begin() + pos);
     if (pos == literal.size()) {
       break;
@@ -170,36 +169,14 @@ std::string escapeNewlineAndBackslash(std::string_view literal) {
   return result;
 }
 
-/**
- * @brief convert a RDF Literal to a unified form that is used inside QLever.
- * Inputs that are no literals (don't start with a single or double quote)
- * will be returned unchanged.
- *
- * RDFLiterals in Turtle or Sparql can have several forms: Either starting
- * with one (" or ') quotation mark and containing escape sequences like
- * "\\\t" or with three (""" or ''') quotation marks and allowing most control
- * sequences to be contained in the string directly.
- *
- * This function converts any of this forms to a literal that starts and ends
- * with a single quotation mark '"' and contains the originally escaped
- * characters directly, e.g. "al\"pha" becomes "al"pha".
- *
- * This is NOT a valid RDF form of literals, but this format is only used
- * inside QLever. By stripping the leading and trailing quotation mark and
- * possible langtags or datatype URIS one can directly obtain the actual
- * content of the literal.
- *
- *
- * @param literal
- * @return
- */
+// ________________________________________________________________________
 std::string normalizeRDFLiteral(const std::string_view origLiteral) {
   auto literal = origLiteral;
 
   // always start with one double quote "
   std::string res = "\"";
 
-  // Find out, which if the forms "literal", 'literal', """literal""" or
+  // Find out, which of the forms "literal", 'literal', """literal""" or
   // '''literal''' the input has, and strip all the quotes.
   if (ad_utility::startsWith(literal, "\"\"\"") ||
       ad_utility::startsWith(literal, "'''")) {
@@ -242,38 +219,18 @@ std::string unescapeIriref(std::string_view iriref) {
   return result;
 }
 
-/**
- * This function unescapes a prefixedIri (the "local" part in the form
- * prefix:local). These may only contain socalled "reserved character escape
- * sequences": reserved character escape sequences consist of a '\' followed
- * by one of ~.-!$&'()*+,;=/?#@%_ and represent the character to the right of
- * the '\'.
- */
+// __________________________________________________________________________
 std::string unescapePrefixedIri(std::string_view literal) {
   std::string res;
-  static const ad_utility::HashSet<char> m = []() {
-    ad_utility::HashSet<char> r;
-    for (auto c : {'_', '~', '.', '-', '-', '!', '$', '&', '\'', '(', ')',
-                   '*', '+', ',', ';', '=', '/', '?', '#', '@',  '%'}) {
-      r.insert(c);
-    }
-    return r;
-  }();
+  ad_utility::HashSet<char> m{'_', '~',  '.', '-', '-', '!', '$',
+                              '&', '\'', '(', ')', '*', '+', ',',
+                              ';', '=',  '/', '?', '#', '@', '%'};
   auto pos = literal.find('\\');
   while (pos != literal.npos) {
     res.append(literal.begin(), literal.begin() + pos);
-    if (pos + 1 >= literal.size()) {
-      throw std::runtime_error(
-          "Trying to unescape a literal or iri that ended with a single "
-          "backslash. This should not happen, please report this");
-    }
-    if (m.count(literal[pos + 1])) {
-      res += literal[pos + 1];
-    } else {
-      throw std::runtime_error(
-          std::string{"Illegal escape sequence \\"} + literal[pos + 1] +
-          " encountered while trying to unescape an iri. Please report this");
-    }
+    AD_CHECK(pos + 1 < literal.size());
+    AD_CHECK(m.contains(literal[pos + 1]));
+    res += literal[pos + 1];
 
     literal.remove_prefix(pos + 2);
     pos = literal.find('\\');

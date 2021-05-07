@@ -240,15 +240,15 @@ bool TurtleParser<T>::rdfLiteral() {
   if (!stringParse()) {
     return false;
   }
-  auto s = _lastParseResult =
+  auto literalString = _lastParseResult =
       RdfEscaping::normalizeRDFLiteral(_lastParseResult);
   if (langtag()) {
-    _lastParseResult = s + _lastParseResult;
+    _lastParseResult = literalString + _lastParseResult;
     return true;
     // TODO<joka921> this allows spaces here since the ^^ is unique in the
     // sparql syntax. is this correct?
   } else if (skip<TokId::DoubleCircumflex>() && check(iri())) {
-    _lastParseResult = s + "^^" + _lastParseResult;
+    _lastParseResult = literalString + "^^" + _lastParseResult;
     return true;
   } else {
     // it is okay to neither have a langtag nor a xsd datatype
@@ -323,28 +323,18 @@ bool TurtleParser<T>::iri() {
 template <class T>
 bool TurtleParser<T>::prefixedName() {
   if constexpr (UseRelaxedParsing) {
-    if (pnameLnRelaxed() || pnameNS()) {
-      _lastParseResult =
-          '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
-      return true;
-    } else {
+    if (!(pnameLnRelaxed() || pnameNS())) {
       return false;
     }
   } else {
-    if (!parseTerminal<TokId::PnameNS>()) {
+    if (!pnameNS()) {
       return false;
-    } else {
-      // this also includes a ":" which we do not need, hence the "-1"
-      _activePrefix = _lastParseResult.substr(0, _lastParseResult.size() - 1);
-      _lastParseResult = "";
     }
-    _lastParseResult.clear();
     parseTerminal<TokId::PnLocal, false>();
-    _lastParseResult =
-        '<' + expandPrefix(_activePrefix) + _lastParseResult + '>';
-    LOG(TRACE) << "Parsed a prefixed name\n";
-    return true;
   }
+  _lastParseResult = '<' + expandPrefix(_activePrefix) +
+                     RdfEscaping::unescapePrefixedIri(_lastParseResult) + '>';
+  return true;
 }
 
 // _____________________________________________________________________
@@ -432,7 +422,8 @@ bool TurtleParser<T>::iriref() {
         raise("Iriref");
       } else {
         _tok.remove_prefix(endPos + 1);
-        _lastParseResult = view.substr(0, endPos + 1);
+        _lastParseResult =
+            RdfEscaping::unescapeIriref(view.substr(0, endPos + 1));
         return true;
       }
     } else {
@@ -480,6 +471,9 @@ bool TurtleStreamParser<T>::resetStateAndRead(
   this->_tok.reset(b._tokenizerPosition, b._tokenizerSize);
 
   std::vector<char> buf;
+
+  // Used for a more informative error message when a parse error occurs (see
+  // function "raise").
   _numBytesBeforeCurrentBatch += _byteVec.size() - _tok.data().size();
   buf.resize(_tok.data().size() + nextBytes.size());
   memcpy(buf.data(), _tok.data().begin(), _tok.data().size());
