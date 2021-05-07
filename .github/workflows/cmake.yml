@@ -53,4 +53,5 @@ jobs:
 
       - name: E2E
         run: ${{github.workspace}}/e2e/e2e.sh
+        if: ${{matrix.warnings == ""}}
       
