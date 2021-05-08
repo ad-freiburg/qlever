@@ -49,3 +49,14 @@ TEST(SparqlParser, NumericLiterals) {
 
   // TODO<joka921> : Unit tests with random numbers
 }
+
+TEST(SparqlParser, Prefix) {
+  string s = "PREFIX wd: <www.wikidata.org>";
+  ParserAndVisitor p{s};
+  auto context = p.parser.prefixDecl();
+  p.visitor.visitPrefixDecl(context);
+  const auto& m = p.visitor.prefixMap();
+  ASSERT_EQ(1ul, m.size());
+  ASSERT_TRUE(m.contains("wd:"));
+  ASSERT_TRUE(m.at("wd:") == "<www.wikidata.org>");
+}
