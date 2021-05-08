@@ -120,7 +120,9 @@ void SparqlLexer::readNext() {
       _next.type = SparqlToken::Type::IRI;
     } else if (re2::RE2::Consume(&_re_string, RE_RDFLITERAL, &raw)) {
       _next.type = SparqlToken::Type::RDFLITERAL;
-      raw = TurtleToken::normalizeRDFLiteral(raw);
+      // TODO<joka921, kramerfl> proper (un-)escaping of the RDFLITERAL type
+      // requires splitting it up into the different parts (string content + iri
+      // of the datatype) which require different escaping
     } else if (re2::RE2::Consume(&_re_string, RE_FLOAT, &raw)) {
       _next.type = SparqlToken::Type::FLOAT;
     } else if (re2::RE2::Consume(&_re_string, RE_INTEGER, &raw)) {

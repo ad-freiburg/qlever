@@ -4,8 +4,10 @@
 
 #include <sys/time.h>
 #include <sys/types.h>
+
 #include <iomanip>
 #include <sstream>
+
 #include "Synchronized.h"
 
 // Björn 01Jun11: Copied this class from the CompleteSearch

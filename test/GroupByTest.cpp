@@ -3,7 +3,9 @@
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+
 #include <cstdio>
+
 #include "../src/engine/CallFixedSize.h"
 #include "../src/engine/GroupBy.h"
 

@@ -3,8 +3,12 @@
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
 #include "./PrefixHeuristic.h"
+
 #include <algorithm>
 #include <fstream>
+
+#include "../parser/RdfEscaping.h"
+#include "../parser/Tokenizer.h"
 #include "../util/Exception.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
@@ -40,8 +44,10 @@ TreeNode* TreeNode::insertAfter(string_view value) {
     }
   }
 
-  // if we have reached here, we have to add a new child
-  NodePtr newNode(new TreeNode(value));
+  // If we have reached here, we have to add a new child
+  // Using std::make_unique here would require the constructor of TreeNode to be
+  // public, which is not (better encapsulation)
+  NodePtr newNode{new TreeNode(value)};
   newNode->_parent = this;
 
   // find children of current node which have to become children of the new node
@@ -176,9 +182,10 @@ std::vector<string> calculatePrefixes(const string& filename,
   size_t totalSavings = 0;
   size_t numWords = 0;
 
-  LOG(INFO) << "start reading words and building prefix tree...\n";
+  LOG(INFO) << "start reading words and building prefix tree..." << std::endl;
   // insert all prefix candidates into  the tree
   while (std::getline(ifs, nextWord)) {
+    nextWord = RdfEscaping::unescapeNewlinesAndBackslashes(nextWord);
     totalChars += nextWord.size();
     // the longest common prefixes between two adjacent words are our candidates
     // for compression
@@ -194,12 +201,12 @@ std::vector<string> calculatePrefixes(const string& filename,
 
     numWords++;
     if (numWords % 10000000 == 0) {
-      LOG(INFO) << "words read: " << numWords << '\n';
+      LOG(INFO) << "words read: " << numWords << std::endl;
     }
   }
 
-  LOG(INFO) << "Finished building prefix tree!\n";
-  LOG(INFO) << "Start searching for maximal compressing prefixes\n";
+  LOG(INFO) << "Finished building prefix tree!" << std::endl;
+  LOG(INFO) << "Start searching for maximal compressing prefixes" << std::endl;
   std::vector<string> res;
   res.reserve(numPrefixes);
   for (size_t i = 0; i < numPrefixes; ++i) {
@@ -209,7 +216,7 @@ std::vector<string> calculatePrefixes(const string& filename,
     }
     totalSavings += p.first;
     LOG(INFO) << "Found prefix " << p.second
-              << " with number of bytes gained: " << p.first << '\n';
+              << " with number of bytes gained: " << p.first << std::endl;
     res.push_back(std::move(p.second));
   }
   // if we always add an encoding we have calculated with a codelength of 0 so
@@ -218,9 +225,9 @@ std::vector<string> calculatePrefixes(const string& filename,
     totalSavings -= codelength * numWords;
   }
   double efficiency = static_cast<double>(totalSavings) / totalChars;
-  std::cout << "total number of bytes : " << totalChars << '\n';
+  std::cout << "total number of bytes : " << totalChars << std::endl;
   std::cout << "total chars compressed : " << totalSavings << '\n';
-  std::cout << "percentage of chars compressed : " << efficiency << '\n';
+  std::cout << "percentage of chars compressed : " << efficiency << std::endl;
   return res;
 }
 

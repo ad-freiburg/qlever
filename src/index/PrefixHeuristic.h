@@ -55,6 +55,7 @@ using std::string_view;
 class TreeNode {
  private:
   friend class Tree;
+
   using NodePtr = std::unique_ptr<TreeNode>;
 
   // Constructor

@@ -2,11 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
-#include <array>
+#include <gtest/gtest.h>
 
+#include <array>
 #include <vector>
 
-#include <gtest/gtest.h>
 #include "../src/engine/CallFixedSize.h"
 #include "../src/engine/MultiColumnJoin.h"
 ad_utility::AllocatorWithLimit<Id>& allocator() {

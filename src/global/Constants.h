@@ -80,12 +80,13 @@ static const std::string ERROR_IGNORE_CASE_UNSUPPORTED =
     "your settings.json and rebuild your index. You can optionally specify the "
     "\"locale\" key, otherwise \"en.US\" will be used as default";
 static const std::string WARNING_ASCII_ONLY_PREFIXES =
-    "You explicitly requested the ascii-prefixes-only settings or the ctre "
-    "regex engine for Tokenization. This means "
-    "that prefixes in the input Turtle may only use characters from "
-    "the ascii range. This is stricter than the Sparql standard but "
-    "makes parsing faster and works e.g. for wikidata dumps\n";
-
+    "You requested the CTRE parser for tokenization (either via "
+    "ascii-prefixes-only = true in the settings.json or by requesting it "
+    "explicitly in TurtleParserMain). This means that the input Turtle data "
+    "may only use characters from the ASCII range and that no escape sequences "
+    "may be used in prefixed names (e.g., rdfs:label\\,el is not allowed). "
+    "This is stricter than the SPARQL standard but makes parsing faster. It "
+    "works for many Turtle dumps, e.g. that from Wikidata.";
 static const std::string LOCALE_DEFAULT_LANG = "en";
 static const std::string LOCALE_DEFAULT_COUNTRY = "US";
 static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;

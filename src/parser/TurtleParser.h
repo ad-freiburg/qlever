@@ -23,22 +23,35 @@
 
 using std::string;
 
-// The actual parser class
+/**
+ * @brief The actual parser class
+ *
+ * If TokenizerCtre is used as a Tokenizer, a relaxed parsing mode is applied,
+ * that does not quite fulfill the SPARQL standard. This means that:
+ * - IRIS  of any kind (prefixed or not) must be limited to the ascii range
+ * - Prefixed names (like prefix:suffix) may not include escape sequences
+ *
+ * These relaxations currently allow for fast parsing of Wikidata but might fail
+ * on other knowledge bases, so this should be used with caution.
+ * @tparam Tokenizer_T
+ */
 template <class Tokenizer_T>
 class TurtleParser {
  public:
   class ParseException : public std::exception {
    public:
     ParseException() = default;
-    explicit ParseException(string msg) : _msg(std::move(msg)) {}
-
-    [[nodiscard]] const char* what() const noexcept override {
-      return _msg.c_str();
-    }
+    ParseException(std::string_view msg, const size_t pos)
+        : _msg{std::string(msg) + " at position " + std::to_string(pos)} {}
+    const char* what() const throw() { return _msg.c_str(); }
 
    private:
     string _msg = "Error while parsing Turtle";
   };
+
+  // The CTRE Tokenizer implies relaxed parsing.
+  static constexpr bool UseRelaxedParsing =
+      std::is_same_v<Tokenizer_T, TokenizerCtre>;
 
   // open an input file or stream
   virtual void initialize(const string& filename) = 0;
@@ -56,6 +69,10 @@ class TurtleParser {
   // returns true iff a triple can be successfully written, else the triple
   // value is invalid and the parser is at the end of the input.
   virtual bool getLine(std::array<string, 3>* triple) = 0;
+
+  // Get the offset (relative to the beginning of the file) of the first byte
+  // that has not yet been dealt with by the parser.
+  virtual size_t getParsePosition() const = 0;
 
  protected:
   // clear all the parser's state to the initial values.
@@ -117,6 +134,11 @@ class TurtleParser {
   std::string _activePredicate;
   size_t _numBlankNodes = 0;
 
+  // throw an exception annotated with position information
+  [[noreturn]] void raise(std::string_view msg) {
+    throw ParseException(msg, getParsePosition());
+  }
+
  private:
   /* private Member Functions */
 
@@ -151,7 +173,9 @@ class TurtleParser {
   bool integer() { return parseTerminal<TokId::Integer>(); }
   bool decimal() { return parseTerminal<TokId::Decimal>(); }
   bool doubleParse() { return parseTerminal<TokId::Double>(); }
-  bool pnameLN();
+
+  /// this version only works if no escape sequences were used.
+  bool pnameLnRelaxed();
 
   // __________________________________________________________________________
   bool pnameNS();
@@ -179,7 +203,7 @@ class TurtleParser {
   // put the matching prefix into _lastParseResult, move the input position
   // forward by the length of the match and return true else return false and do
   // not change the parser's state
-  template <TokId terminal>
+  template <TokId terminal, bool SkipWhitespaceBefore = true>
   bool parseTerminal();
 
   // ______________________________________________________________________________________
@@ -193,7 +217,12 @@ class TurtleParser {
     if (result) {
       return true;
     } else {
-      throw ParseException();
+      auto view = _tok.view();
+      auto s = std::min(size_t(1000), size_t(view.size()));
+      auto nextChars = std::string_view(view.data(), s);
+      raise(
+          "A check for a required Element failed. Next unparsed characters are:\n"s +
+          nextChars);
     }
   }
 
@@ -202,8 +231,9 @@ class TurtleParser {
   string expandPrefix(const string& prefix) {
     if (!_prefixMap.count(prefix)) {
       throw ParseException("Prefix " + prefix +
-                           " was not registered using a PREFIX or @prefix "
-                           "declaration before using it!\n");
+                               " was not defined using a PREFIX or @prefix "
+                               "declaration before using it!\n",
+                           getParsePosition());
     } else {
       return _prefixMap[prefix];
     }
@@ -240,6 +270,10 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
     throw std::runtime_error(
         "TurtleStringParser doesn't support calls to getLine. Only use "
         "parseUtf8String() for unit tests\n");
+  }
+
+  size_t getParsePosition() const override {
+    return _tmpToParse.size() - this->_tok.data().size();
   }
 
   void initialize(const string& filename) override {
@@ -317,12 +351,15 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
   }
 
   // inherit the wrapper overload
-
   using TurtleParser<Tokenizer_T>::getLine;
 
   bool getLine(std::array<string, 3>* triple) override;
 
   void initialize(const string& filename) override;
+
+  size_t getParsePosition() const override {
+    return _numBytesBeforeCurrentBatch + (_tok.data().data() - _byteVec.data());
+  }
 
  private:
   using TurtleParser<Tokenizer_T>::_tok;
@@ -349,6 +386,10 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
   // this many characters will be buffered at once,
   // defaults to a global constant
   size_t _bufferSize = FILE_BUFFER_SIZE;
+
+  // that many bytes were already parsed before dealing with the current batch
+  // in member _byteVec
+  size_t _numBytesBeforeCurrentBatch = 0;
 };
 
 /**
@@ -371,6 +412,10 @@ class TurtleMmapParser : public TurtleParser<Tokenizer_T> {
   ~TurtleMmapParser() { unmapFile(); }
   TurtleMmapParser(TurtleMmapParser&& rhs) = default;
   TurtleMmapParser& operator=(TurtleMmapParser&& rhs) = default;
+
+  size_t getParsePosition() const override {
+    return _dataSize - _tok.data().size();
+  }
 
   // inherit the other overload
   using TurtleParser<Tokenizer_T>::getLine;

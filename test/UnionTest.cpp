@@ -2,10 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
+#include <gtest/gtest.h>
+
 #include <array>
 #include <vector>
-
-#include <gtest/gtest.h>
 
 #include "../src/engine/CallFixedSize.h"
 #include "../src/engine/Union.h"

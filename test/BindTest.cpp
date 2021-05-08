@@ -3,6 +3,7 @@
 //
 
 #include <gtest/gtest.h>
+
 #include "../src/engine/Bind.h"
 
 TEST(BindTest, Bind) {
