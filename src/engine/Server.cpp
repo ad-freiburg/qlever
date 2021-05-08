@@ -366,8 +366,6 @@ string Server::composeResponseJson(const ParsedQuery& query,
                                    const QueryExecutionTree& qet,
                                    ad_utility::Timer& requestTimer,
                                    size_t maxSend) const {
-  // TODO(schnelle) we really should use a json library
-  // such as https://github.com/nlohmann/json
   shared_ptr<const ResultTable> rt = qet.getResult();
   requestTimer.stop();
   off_t compResultUsecs = requestTimer.usecs();
