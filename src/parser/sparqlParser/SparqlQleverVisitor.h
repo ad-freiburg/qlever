@@ -7,6 +7,9 @@
 #include "antlr4-runtime.h"
 #include "../RdfEscaping.h"
 #include "../../util/HashMap.h"
+#include <gtest/gtest.h>
+
+class SparqlParseException : public std::exception {};
 
 /**
  * This class provides an empty implementation of SparqlVisitor, which can be
@@ -15,6 +18,14 @@
  */
 class SparqlQleverVisitor : public SparqlVisitor {
  private:
+  using PrefixMap = ad_utility::HashMap<string, string>;
+
+  // For the unit tests
+  PrefixMap& prefixMap() {return _prefixMap;}
+  FRIEND_TEST(SparqlParser, Prefix);
+
+
+  PrefixMap _prefixMap;
  public:
   antlrcpp::Any visitQuery(SparqlParser::QueryContext* ctx) override {
     return visitChildren(ctx);
@@ -25,11 +36,12 @@ class SparqlQleverVisitor : public SparqlVisitor {
   }
 
   antlrcpp::Any visitBaseDecl(SparqlParser::BaseDeclContext* ctx) override {
-    return visitChildren(ctx);
+    _prefixMap[":"] = visitIriref(ctx->iriref()).as<string>();
   }
 
   antlrcpp::Any visitPrefixDecl(SparqlParser::PrefixDeclContext* ctx) override {
-    return visitChildren(ctx);
+    _prefixMap[ctx->PNAME_NS()->getText()] = visitIriref(ctx->iriref()).as<string>();
+    return nullptr;
   }
 
   antlrcpp::Any visitSelectQuery(
@@ -577,6 +589,13 @@ class SparqlQleverVisitor : public SparqlVisitor {
   }
 
    antlrcpp::Any visitPnameLn(SparqlParser::PnameLnContext *ctx) override {
-     return visitChildren(ctx);
+     if (! _prefixMap.contains(ctx->PNAME_NS()->getText())) {
+       // TODO<joka921> : proper name
+       throw SparqlParseException{};
+     }
+     auto inner = _prefixMap[ctx->PNAME_NS()->getText()];
+     // strip the trailing ">"
+     inner = inner.substr(0, inner.size() - 1);
+     return inner + RdfEscaping::unescapePrefixedIri(ctx->PN_LOCAL()->getText()) + ">";
    }
 };
