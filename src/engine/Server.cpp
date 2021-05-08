@@ -432,30 +432,6 @@ string Server::composeResponseSepValues(const ParsedQuery& query,
 }
 
 // _____________________________________________________________________________
-string Server::composeResponseJson(
-    const string& query, const ad_semsearch::Exception& exception) const {
-  std::ostringstream os;
-  _requestProcessingTimer.stop();
-
-  os << "{\n"
-     << "\"query\": " << ad_utility::toJson(query) << ",\n"
-     << "\"status\": \"ERROR\",\n"
-     << "\"resultsize\": \"0\",\n"
-     << "\"time\": {\n"
-     << "\"total\": \"" << _requestProcessingTimer.msecs() / 1000.0 << "ms\",\n"
-     << "\"computeResult\": \"" << _requestProcessingTimer.msecs() / 1000.0
-     << "ms\"\n"
-     << "},\n";
-
-  string msg = ad_utility::toJson(exception.getFullErrorMessage());
-
-  os << "\"exception\": " << msg << "\n"
-     << "}\n";
-
-  return os.str();
-}
-
-// _____________________________________________________________________________
 string Server::composeResponseJson(const string& query,
                                    const std::exception* exception) const {
   std::ostringstream os;

@@ -94,9 +94,6 @@ class Server {
                                   char sep) const;
 
   string composeResponseJson(const string& query,
-                             const ad_semsearch::Exception& e) const;
-
-  string composeResponseJson(const string& query,
                              const std::exception* e) const;
 
   string composeStatsJson() const;
