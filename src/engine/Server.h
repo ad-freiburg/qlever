@@ -86,7 +86,7 @@ class Server {
 
   string composeResponseJson(const ParsedQuery& query,
                              const QueryExecutionTree& qet,
-                             ad_utility::Timer& totalTimer,
+                             ad_utility::Timer& requestTimer,
                              size_t sendMax = MAX_NOF_ROWS_IN_RESULT) const;
 
   string composeResponseSepValues(const ParsedQuery& query,
@@ -94,7 +94,7 @@ class Server {
                                   char sep) const;
 
   string composeResponseJson(const string& query, const std::exception& e,
-                             ad_utility::Timer& totalTimer) const;
+                             ad_utility::Timer& requestTimer) const;
 
   string composeStatsJson() const;
 
