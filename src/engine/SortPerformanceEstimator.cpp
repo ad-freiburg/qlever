@@ -61,9 +61,8 @@ SortPerformanceEstimator::SortPerformanceEstimator(
   static_assert(isSorted(sampleValuesCols));
   static_assert(isSorted(sampleValuesRows));
 
-  LOG(INFO) << "Sorting some random result tables to estimate the sorting "
-               "performance of this machine. This might take several minutes"
-            << std::endl;
+  LOG(INFO) << "Sorting random result tables to estimate the sorting "
+               "performance of this machine" << std::endl;
 
   for (size_t i = 0; i < NUM_SAMPLES_ROWS; ++i) {
     for (size_t j = 0; j < NUM_SAMPLES_COLS; ++j) {
