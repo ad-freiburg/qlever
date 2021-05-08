@@ -98,6 +98,8 @@ const RE2& Tokenizer::idToRegex(const TokId reg) {
       return _tokens.PnameNS;
     case TokId::PnameLN:
       return _tokens.PnameLN;
+    case TokId::PnLocal:
+      return _tokens.PnLocal;
     case TokId::BlankNodeLabel:
       return _tokens.BlankNodeLabel;
     case TokId::WsMultiple:

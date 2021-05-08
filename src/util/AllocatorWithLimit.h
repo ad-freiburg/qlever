@@ -6,6 +6,7 @@
 #define QLEVER_ALLOCATORWITHLIMIT_H
 
 #include <atomic>
+
 #include "Synchronized.h"
 
 namespace ad_utility {

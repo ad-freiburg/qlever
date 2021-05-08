@@ -7,10 +7,12 @@
 #pragma once
 
 #include <assert.h>
+
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <utility>
+
 #include "./HashMap.h"
 #include "PriorityQueue.h"
 

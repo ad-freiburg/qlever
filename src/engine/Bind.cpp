@@ -3,6 +3,7 @@
 //
 
 #include "Bind.h"
+
 #include "../util/Exception.h"
 #include "CallFixedSize.h"
 #include "QueryExecutionTree.h"

@@ -33,8 +33,11 @@ else
 	export PYTHON_BINARY=`which python3`
 fi
 
+export PYTHON_BINARY=`which python3`
+
 INDEX_DIR="$PROJECT_DIR/e2e_data"
-INPUT_DIR="$INDEX_DIR/scientist-collection"
+INPUT_DIR="$PROJECT_DIR/e2e_data/scientist-collection"
+ZIPPED_INPUT="$PROJECT_DIR/e2e/scientist-collection.zip"
 INPUT_PREFIX="scientists"
 INPUT="$INPUT_DIR/$INPUT_PREFIX"
 mkdir -p "$INDEX_DIR"
@@ -42,11 +45,7 @@ mkdir -p "$INDEX_DIR"
 # Travis' caching creates it
 if [ ! -e "$INPUT.nt" ]; then
 	# Why the hell is this a ZIP that can't easily be decompressed from stdin?!?
-	echo "Downloading $INPUT_PREFIX KB input files"
-	wget --quiet -O "$INDEX_DIR/scientist-collection.zip" \
-		"http://qlever.cs.uni-freiburg.de/data/scientist-collection.zip"
-	unzip -j "$INDEX_DIR/scientist-collection.zip" -d "$INPUT_DIR/"
-	rm "$INDEX_DIR/scientist-collection.zip"
+	unzip -j $ZIPPED_INPUT -d "$INPUT_DIR/"
 fi;
 
 

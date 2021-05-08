@@ -10,6 +10,27 @@
 #include "../src/engine/TransitivePath.h"
 #include "../src/global/Id.h"
 
+// First sort both of the inputs and then ASSERT their equality. Needed for
+// results of the TransitivePath operations which have a non-deterministic order
+// because of the hash maps which are used internally.
+void assertSameUnorderedContent(const IdTable& a, const IdTable& b) {
+  auto aCpy = a;
+  auto bCpy = b;
+  ASSERT_EQ(a.cols(), b.cols());
+  auto sorter = [](const auto& rowFromA, const auto& rowFromB) {
+    for (size_t i = 0; i < rowFromA.cols(); ++i) {
+      if (rowFromA[i] != rowFromB[i]) {
+        return rowFromA[i] < rowFromB[i];
+      }
+    }
+    // equal means "not smaller"
+    return false;
+  };
+  std::sort(aCpy.begin(), aCpy.end(), sorter);
+  std::sort(bCpy.begin(), bCpy.end(), sorter);
+  ASSERT_EQ(aCpy, bCpy);
+}
+
 ad_utility::AllocatorWithLimit<Id>& allocator() {
   static ad_utility::AllocatorWithLimit<Id> a{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
@@ -55,13 +76,7 @@ TEST(TransitivePathTest, computeTransitivePath) {
 
   T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0, 1,
                              std::numeric_limits<size_t>::max());
-
-  auto cmp = [](const auto& a, const auto& b) {
-    return a[0] != b[0] ? a[0] < b[0] : a[1] < b[1];
-  };
-  std::sort(expected.begin(), expected.end(), cmp);
-  std::sort(result.begin(), result.end(), cmp);
-  ASSERT_EQ(expected, result);
+  assertSameUnorderedContent(expected, result);
 
   result.clear();
   expected.clear();
@@ -80,9 +95,7 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({10, 11});
 
   T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0, 1, 2);
-  std::sort(expected.begin(), expected.end(), cmp);
-  std::sort(result.begin(), result.end(), cmp);
-  ASSERT_EQ(expected, result);
+  assertSameUnorderedContent(expected, result);
 
   result.clear();
   expected.clear();
@@ -91,9 +104,7 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({7, 7});
 
   T.computeTransitivePath<2>(&result, sub, false, true, 0, 1, 7, 0, 1, 2);
-  std::sort(expected.begin(), expected.end(), cmp);
-  std::sort(result.begin(), result.end(), cmp);
-  ASSERT_EQ(expected, result);
+  assertSameUnorderedContent(expected, result);
 
   result.clear();
   expected.clear();
@@ -101,7 +112,5 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({7, 2});
 
   T.computeTransitivePath<2>(&result, sub, true, false, 0, 1, 0, 2, 1, 2);
-  std::sort(expected.begin(), expected.end(), cmp);
-  std::sort(result.begin(), result.end(), cmp);
-  ASSERT_EQ(expected, result);
+  assertSameUnorderedContent(expected, result);
 }

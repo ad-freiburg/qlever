@@ -48,6 +48,7 @@ std::vector<PropertyPathParser::Token> PropertyPathParser::tokenize(
 
   size_t start = 0;
   size_t pos = 0;
+  bool escaped = false;
   while (pos < str.size()) {
     char c = str[pos];
     if (!VALID_CHARS[(uint8_t)c]) {
@@ -61,31 +62,41 @@ std::vector<PropertyPathParser::Token> PropertyPathParser::tokenize(
       inside_iri = false;
     }
 
-    if (!inside_iri && DELIMITER_CHARS[(uint8_t)str[pos]] &&
-        (pos != 0 || c != '?')) {
-      if (start != pos) {
-        // add the string up to but not including the new token
-        tokens.push_back({str.substr(start, pos - start), start});
+    // TODO<joka921>: The parsing/unescaping has to be done correctly directly
+    // in the SparqlParser. This is just a dirty hack, to make several queries
+    // from the Autocompletion evaluation work.
+    if (!inside_iri && c == '\\') {
+      escaped = !escaped;
+    } else if (!inside_iri && DELIMITER_CHARS[(uint8_t)str[pos]] && escaped) {
+      escaped = false;
+    } else {
+      escaped = false;
+      if (!inside_iri && DELIMITER_CHARS[(uint8_t)str[pos]] &&
+          (pos != 0 || c != '?')) {
+        if (start != pos) {
+          // add the string up to but not including the new token
+          tokens.push_back({str.substr(start, pos - start), start});
 
-        start = pos;
-      }
-      while (pos < str.size() && DELIMITER_CHARS[(uint8_t)str[pos]]) {
-        pos++;
-        if (c == '*' && pos < str.size() && std::isdigit(str[pos])) {
-          // The * token has a number following it
-          pos++;
-          while (pos < str.size() && std::isdigit(str[pos])) {
-            pos++;
-          }
-          tokens.push_back({str.substr(start, pos - start), start});
-          start = pos;
-        } else {
-          // Add the token
-          tokens.push_back({str.substr(start, pos - start), start});
           start = pos;
         }
+        while (pos < str.size() && DELIMITER_CHARS[(uint8_t)str[pos]]) {
+          pos++;
+          if (c == '*' && pos < str.size() && std::isdigit(str[pos])) {
+            // The * token has a number following it
+            pos++;
+            while (pos < str.size() && std::isdigit(str[pos])) {
+              pos++;
+            }
+            tokens.push_back({str.substr(start, pos - start), start});
+            start = pos;
+          } else {
+            // Add the token
+            tokens.push_back({str.substr(start, pos - start), start});
+            start = pos;
+          }
+        }
+        continue;
       }
-      continue;
     }
     pos++;
   }

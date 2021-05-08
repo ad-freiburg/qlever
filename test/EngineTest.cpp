@@ -3,8 +3,10 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+
 #include <cstdio>
 #include <fstream>
+
 #include "../src/engine/CallFixedSize.h"
 #include "../src/engine/Engine.h"
 #include "../src/engine/Join.h"
