@@ -13,17 +13,24 @@
 
 using namespace antlr4;
 
-template <typename T>
-void testNumericLiteral(const std::string& input, T target) {
+struct ParserAndVisitor {
+ private:
+  string input;
   ANTLRInputStream stream{input};
   SparqlLexer lexer{&stream};
   CommonTokenStream tokens{&lexer};
+
+ public:
   SparqlParser parser{&tokens};
-
-  auto literalContext = parser.numericLiteral();
-
   SparqlQleverVisitor visitor;
-  auto result = visitor.visitNumericLiteral(literalContext).as<T>();
+  explicit ParserAndVisitor(string toParse) : input{std::move(toParse)} {}
+};
+
+template <typename T>
+void testNumericLiteral(const std::string& input, T target) {
+  ParserAndVisitor p(input);
+  auto literalContext = p.parser.numericLiteral();
+  auto result = p.visitor.visitNumericLiteral(literalContext).as<T>();
 
   if constexpr (std::is_floating_point_v<T>) {
     ASSERT_FLOAT_EQ(target, result);
