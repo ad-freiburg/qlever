@@ -253,6 +253,8 @@ public:
 
     virtual antlrcpp::Any visitIriref(SparqlParser::IrirefContext *context) = 0;
 
+    virtual antlrcpp::Any visitPnameLn(SparqlParser::PnameLnContext *context) = 0;
+
 
 };
 

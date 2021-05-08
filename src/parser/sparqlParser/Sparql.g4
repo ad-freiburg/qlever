@@ -530,7 +530,7 @@ iri
     ;
 
 prefixedName
-    : PNAME_LN
+    : pnameLn
     | PNAME_NS
     ;
 
@@ -540,6 +540,10 @@ blankNode
     ;
 
 iriref : IRI_REF;
+
+pnameLn
+    : PNAME_NS PN_LOCAL
+    ;
 
 
 BASE : B A S E;
@@ -662,9 +666,6 @@ PNAME_NS
     : PN_PREFIX? ':'
     ;
 
-PNAME_LN
-    : PNAME_NS PN_LOCAL
-    ;
 
 BLANK_NODE_LABEL
     : '_:' ( PN_CHARS_U | DIGIT ) ((PN_CHARS|'.')* PN_CHARS)?

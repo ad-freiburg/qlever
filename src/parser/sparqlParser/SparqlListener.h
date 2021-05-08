@@ -365,6 +365,9 @@ public:
   virtual void enterIriref(SparqlParser::IrirefContext *ctx) = 0;
   virtual void exitIriref(SparqlParser::IrirefContext *ctx) = 0;
 
+  virtual void enterPnameLn(SparqlParser::PnameLnContext *ctx) = 0;
+  virtual void exitPnameLn(SparqlParser::PnameLnContext *ctx) = 0;
+
 
 };
 

@@ -6,4 +6,4 @@ add_library(sparqlParser
         SparqlParser.h SparqlParser.cpp
         SparqlVisitor.h SparqlVisitor.cpp)
 
-target_link_libraries(sparqlParser antlr4_static)
+target_link_libraries(sparqlParser rdfEscaping antlr4_static absl::flat_hash_map)

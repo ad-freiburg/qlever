@@ -367,6 +367,9 @@ public:
   virtual void enterIriref(SparqlParser::IrirefContext * /*ctx*/) override { }
   virtual void exitIriref(SparqlParser::IrirefContext * /*ctx*/) override { }
 
+  virtual void enterPnameLn(SparqlParser::PnameLnContext * /*ctx*/) override { }
+  virtual void exitPnameLn(SparqlParser::PnameLnContext * /*ctx*/) override { }
+
 
   virtual void enterEveryRule(antlr4::ParserRuleContext * /*ctx*/) override { }
   virtual void exitEveryRule(antlr4::ParserRuleContext * /*ctx*/) override { }

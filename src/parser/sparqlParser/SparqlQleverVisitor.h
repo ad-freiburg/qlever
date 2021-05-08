@@ -5,6 +5,8 @@
 
 #include "SparqlVisitor.h"
 #include "antlr4-runtime.h"
+#include "../RdfEscaping.h"
+#include "../../util/HashMap.h"
 
 /**
  * This class provides an empty implementation of SparqlVisitor, which can be
@@ -12,6 +14,7 @@
  * available methods.
  */
 class SparqlQleverVisitor : public SparqlVisitor {
+ private:
  public:
   antlrcpp::Any visitQuery(SparqlParser::QueryContext* ctx) override {
     return visitChildren(ctx);
@@ -561,7 +564,7 @@ class SparqlQleverVisitor : public SparqlVisitor {
   }
 
   antlrcpp::Any visitIriref(SparqlParser::IrirefContext* ctx) override {
-    return visitChildren(ctx);
+    return RdfEscaping::unescapeIriref(ctx->getText());
   }
 
   antlrcpp::Any visitPrefixedName(
@@ -572,4 +575,8 @@ class SparqlQleverVisitor : public SparqlVisitor {
   antlrcpp::Any visitBlankNode(SparqlParser::BlankNodeContext* ctx) override {
     return visitChildren(ctx);
   }
+
+   antlrcpp::Any visitPnameLn(SparqlParser::PnameLnContext *ctx) override {
+     return visitChildren(ctx);
+   }
 };
