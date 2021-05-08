@@ -370,6 +370,9 @@ public:
   virtual void enterPnameLn(SparqlParser::PnameLnContext * /*ctx*/) override { }
   virtual void exitPnameLn(SparqlParser::PnameLnContext * /*ctx*/) override { }
 
+  virtual void enterPnameNs(SparqlParser::PnameNsContext * /*ctx*/) override { }
+  virtual void exitPnameNs(SparqlParser::PnameNsContext * /*ctx*/) override { }
+
 
   virtual void enterEveryRule(antlr4::ParserRuleContext * /*ctx*/) override { }
   virtual void exitEveryRule(antlr4::ParserRuleContext * /*ctx*/) override { }

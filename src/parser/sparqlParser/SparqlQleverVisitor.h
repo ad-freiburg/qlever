@@ -24,8 +24,7 @@ class SparqlQleverVisitor : public SparqlVisitor {
   PrefixMap& prefixMap() {return _prefixMap;}
   FRIEND_TEST(SparqlParser, Prefix);
 
-
-  PrefixMap _prefixMap;
+  PrefixMap _prefixMap{{":", "<>"}};
  public:
   antlrcpp::Any visitQuery(SparqlParser::QueryContext* ctx) override {
     return visitChildren(ctx);
@@ -37,6 +36,7 @@ class SparqlQleverVisitor : public SparqlVisitor {
 
   antlrcpp::Any visitBaseDecl(SparqlParser::BaseDeclContext* ctx) override {
     _prefixMap[":"] = visitIriref(ctx->iriref()).as<string>();
+    return nullptr;
   }
 
   antlrcpp::Any visitPrefixDecl(SparqlParser::PrefixDeclContext* ctx) override {
@@ -589,13 +589,27 @@ class SparqlQleverVisitor : public SparqlVisitor {
   }
 
    antlrcpp::Any visitPnameLn(SparqlParser::PnameLnContext *ctx) override {
-     if (! _prefixMap.contains(ctx->PNAME_NS()->getText())) {
+     string text = ctx->getText();
+     auto pos = text.find(':');
+     auto pnameNS = text.substr(0, pos + 1);
+     auto pnLocal = text.substr(pos + 1);
+     if (! _prefixMap.contains(pnameNS)) {
        // TODO<joka921> : proper name
        throw SparqlParseException{};
      }
-     auto inner = _prefixMap[ctx->PNAME_NS()->getText()];
+     auto inner = _prefixMap[pnameNS];
      // strip the trailing ">"
      inner = inner.substr(0, inner.size() - 1);
-     return inner + RdfEscaping::unescapePrefixedIri(ctx->PN_LOCAL()->getText()) + ">";
+     return inner + RdfEscaping::unescapePrefixedIri(pnLocal) + ">";
    }
+
+  antlrcpp::Any visitPnameNs(SparqlParser::PnameNsContext *ctx) override {
+    auto prefix = ctx->getText();
+    if (! _prefixMap.contains(prefix)) {
+      // TODO<joka921> : proper name
+      throw SparqlParseException{};
+    }
+    return _prefixMap[prefix];
+  }
+
 };

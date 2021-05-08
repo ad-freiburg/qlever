@@ -45,6 +45,7 @@ endif ()
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
 add_subdirectory(third_party/antlr4/runtime/Cpp)
+target_compile_options(antlr4_static PUBLIC -Wno-attributes -Wno-implicit-fallthrough)
 include_directories(third_party/antlr4/runtime/Cpp/runtime/src)
 
 ################################

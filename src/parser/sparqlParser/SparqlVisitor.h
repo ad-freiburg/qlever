@@ -255,6 +255,8 @@ public:
 
     virtual antlrcpp::Any visitPnameLn(SparqlParser::PnameLnContext *context) = 0;
 
+    virtual antlrcpp::Any visitPnameNs(SparqlParser::PnameNsContext *context) = 0;
+
 
 };
 

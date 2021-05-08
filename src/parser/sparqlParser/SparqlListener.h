@@ -368,6 +368,9 @@ public:
   virtual void enterPnameLn(SparqlParser::PnameLnContext *ctx) = 0;
   virtual void exitPnameLn(SparqlParser::PnameLnContext *ctx) = 0;
 
+  virtual void enterPnameNs(SparqlParser::PnameNsContext *ctx) = 0;
+  virtual void exitPnameNs(SparqlParser::PnameNsContext *ctx) = 0;
+
 
 };
 

@@ -35,14 +35,15 @@ public:
     STRDT = 121, SAMETERM = 122, ISIRI = 123, ISURI = 124, ISBLANK = 125, 
     ISLITERAL = 126, ISNUMERIC = 127, REGEX = 128, SUBSTR = 129, REPLACE = 130, 
     EXISTS = 131, COUNT = 132, SUM = 133, MIN = 134, MAX = 135, AVG = 136, 
-    SAMPLE = 137, SEPARATOR = 138, IRI_REF = 139, PNAME_NS = 140, BLANK_NODE_LABEL = 141, 
-    VAR1 = 142, VAR2 = 143, LANGTAG = 144, INTEGER = 145, DECIMAL = 146, 
-    DOUBLE = 147, INTEGER_POSITIVE = 148, DECIMAL_POSITIVE = 149, DOUBLE_POSITIVE = 150, 
-    INTEGER_NEGATIVE = 151, DECIMAL_NEGATIVE = 152, DOUBLE_NEGATIVE = 153, 
-    EXPONENT = 154, STRING_LITERAL1 = 155, STRING_LITERAL2 = 156, STRING_LITERAL_LONG1 = 157, 
-    STRING_LITERAL_LONG2 = 158, ECHAR = 159, NIL = 160, ANON = 161, PN_CHARS_U = 162, 
-    VARNAME = 163, PN_PREFIX = 164, PN_LOCAL = 165, PLX = 166, PERCENT = 167, 
-    HEX = 168, PN_LOCAL_ESC = 169, WS = 170, COMMENTS = 171
+    SAMPLE = 137, SEPARATOR = 138, IRI_REF = 139, PNAME_NS = 140, PNAME_LN = 141, 
+    BLANK_NODE_LABEL = 142, VAR1 = 143, VAR2 = 144, LANGTAG = 145, INTEGER = 146, 
+    DECIMAL = 147, DOUBLE = 148, INTEGER_POSITIVE = 149, DECIMAL_POSITIVE = 150, 
+    DOUBLE_POSITIVE = 151, INTEGER_NEGATIVE = 152, DECIMAL_NEGATIVE = 153, 
+    DOUBLE_NEGATIVE = 154, EXPONENT = 155, STRING_LITERAL1 = 156, STRING_LITERAL2 = 157, 
+    STRING_LITERAL_LONG1 = 158, STRING_LITERAL_LONG2 = 159, ECHAR = 160, 
+    NIL = 161, ANON = 162, PN_CHARS_U = 163, VARNAME = 164, PN_PREFIX = 165, 
+    PN_LOCAL = 166, PLX = 167, PERCENT = 168, HEX = 169, PN_LOCAL_ESC = 170, 
+    WS = 171, COMMENTS = 172
   };
 
   enum {
@@ -82,7 +83,7 @@ public:
     RuleNumericLiteral = 107, RuleNumericLiteralUnsigned = 108, RuleNumericLiteralPositive = 109, 
     RuleNumericLiteralNegative = 110, RuleBooleanLiteral = 111, RuleString = 112, 
     RuleIri = 113, RulePrefixedName = 114, RuleBlankNode = 115, RuleIriref = 116, 
-    RulePnameLn = 117
+    RulePnameLn = 117, RulePnameNs = 118
   };
 
   explicit SparqlParser(antlr4::TokenStream *input);
@@ -212,7 +213,8 @@ public:
   class PrefixedNameContext;
   class BlankNodeContext;
   class IrirefContext;
-  class PnameLnContext; 
+  class PnameLnContext;
+  class PnameNsContext; 
 
   class  QueryContext : public antlr4::ParserRuleContext {
   public:
@@ -2195,7 +2197,7 @@ public:
     PrefixedNameContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     PnameLnContext *pnameLn();
-    antlr4::tree::TerminalNode *PNAME_NS();
+    PnameNsContext *pnameNs();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -2241,8 +2243,7 @@ public:
   public:
     PnameLnContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    antlr4::tree::TerminalNode *PNAME_NS();
-    antlr4::tree::TerminalNode *PN_LOCAL();
+    antlr4::tree::TerminalNode *PNAME_LN();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -2252,6 +2253,21 @@ public:
   };
 
   PnameLnContext* pnameLn();
+
+  class  PnameNsContext : public antlr4::ParserRuleContext {
+  public:
+    PnameNsContext(antlr4::ParserRuleContext *parent, size_t invokingState);
+    virtual size_t getRuleIndex() const override;
+    antlr4::tree::TerminalNode *PNAME_NS();
+
+    virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
+    virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
+
+    virtual antlrcpp::Any accept(antlr4::tree::ParseTreeVisitor *visitor) override;
+   
+  };
+
+  PnameNsContext* pnameNs();
 
 
 private:

@@ -531,7 +531,7 @@ iri
 
 prefixedName
     : pnameLn
-    | PNAME_NS
+    | pnameNs
     ;
 
 blankNode
@@ -542,8 +542,11 @@ blankNode
 iriref : IRI_REF;
 
 pnameLn
-    : PNAME_NS PN_LOCAL
+
+    : PNAME_LN
     ;
+
+pnameNs : PNAME_NS;
 
 
 BASE : B A S E;
@@ -665,6 +668,7 @@ IRI_REF
 PNAME_NS
     : PN_PREFIX? ':'
     ;
+PNAME_LN : PNAME_NS PN_LOCAL;
 
 
 BLANK_NODE_LABEL
