@@ -30,21 +30,27 @@ set(CMAKE_CXX_FLAGS_ASAN
 
 # Add colored output for Ninja
 if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
-  if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-     add_compile_options (-fdiagnostics-color=always)
-  elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-     add_compile_options (-fcolor-diagnostics)
-  endif ()
-endif()
+    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        add_compile_options(-fdiagnostics-color=always)
+    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+        add_compile_options(-fcolor-diagnostics)
+    endif ()
+endif ()
 
 ###############################################################################
 ##### Essential settings #####
 ###############################################################################
 
+###############################
+# ANTLR CPP RUNTIME FOR THE SPARQL PARSER
+###############################
+add_subdirectory(third_party/antlr4/runtime/Cpp)
+include_directories(third_party/antlr4/runtime/Cpp/runtime/src)
+
 ################################
 # Threading
 ################################
-find_package (Threads REQUIRED)
+find_package(Threads REQUIRED)
 
 #################################
 # ICU (for proper collation

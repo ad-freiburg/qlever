@@ -167,4 +167,7 @@ target_link_libraries(SortPerformanceEstimatorTest gtest_main SortPerformanceEst
 # this test runs for quite some time! If this is undesired, comment it out
 add_test(SortPerformanceEstimatorTest SortPerformanceEstimatorTest)
 
-
+add_executable(SparqlAntlrParserTest SparqlAntlrParserTest.cpp)
+target_link_libraries(SparqlAntlrParserTest gtest_main sparqlParser antlr4_static ${CMAKE_THREAD_LIBS_INIT})
+# this test runs for quite some time! If this is undesired, comment it out
+add_test(SparqlAntlrParserTest SparqlAntlrParserTest)

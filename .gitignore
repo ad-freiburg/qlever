@@ -8,6 +8,7 @@ e2e_data/*
 *.lo
 *.o
 *.obj
+*.jar
 
 # Precompiled Headers
 *.gch
