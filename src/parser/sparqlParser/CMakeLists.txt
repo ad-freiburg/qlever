@@ -1,6 +1,6 @@
 add_library(sparqlParser
         SparqlBaseListener.h SparqlBaseListener.cpp
-        SparqlBaseVisitor.h SparqlBaseVisitor.cpp
+        SparqlQleverVisitor.h SparqlQleverVisitor.cpp
         SparqlLexer.h SparqlLexer.cpp
         SparqlListener.h SparqlListener.cpp
         SparqlParser.h SparqlParser.cpp

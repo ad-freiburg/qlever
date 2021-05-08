@@ -7,9 +7,9 @@
 
 #include <type_traits>
 
-#include "../../src/parser/sparqlParser/SparqlBaseVisitor.h"
 #include "../../src/parser/sparqlParser/SparqlLexer.h"
 #include "../../src/parser/sparqlParser/SparqlParser.h"
+#include "../../src/parser/sparqlParser/SparqlQleverVisitor.h"
 
 using namespace antlr4;
 
@@ -22,7 +22,7 @@ void testNumericLiteral(const std::string& input, T target) {
 
   auto literalContext = parser.numericLiteral();
 
-  SparqlBaseVisitor visitor;
+  SparqlQleverVisitor visitor;
   auto result = visitor.visitNumericLiteral(literalContext).as<T>();
 
   if constexpr (std::is_floating_point_v<T>) {

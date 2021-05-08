@@ -11,7 +11,7 @@
  * extended to create a visitor which only needs to handle a subset of the
  * available methods.
  */
-class SparqlBaseVisitor : public SparqlVisitor {
+class SparqlQleverVisitor : public SparqlVisitor {
  public:
   antlrcpp::Any visitQuery(SparqlParser::QueryContext* ctx) override {
     return visitChildren(ctx);
