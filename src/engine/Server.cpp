@@ -229,16 +229,14 @@ void Server::process(Socket* client) {
             "Content-Disposition: attachment;filename=export.tsv";
       } else {
         // Normal case: JSON response
-        response = composeResponseJson(pq, qet, maxSend, &totalTimer);
+        response = composeResponseJson(pq, qet, totalTimer, maxSend);
         contentType = "application/json";
       }
       // Print the runtime info. This needs to be done after the query
       // was computed.
       LOG(INFO) << '\n' << qet.getRootOperation()->getRuntimeInfo().toString();
-    } catch (const ad_semsearch::Exception& e) {
-      response = composeResponseJson(query, e);
     } catch (const std::exception& e) {
-      response = composeResponseJson(query, &e);
+      response = composeResponseJson(query, e, totalTimer);
     }
     string httpResponse = createHttpResponse(response, contentType);
     auto bytesSent = client->send(httpResponse);
@@ -256,7 +254,6 @@ Server::ParamValueMap Server::parseHttpRequest(
     const string& httpRequest) const {
   LOG(DEBUG) << "Parsing HTTP Request." << endl;
   ParamValueMap params;
-  _requestProcessingTimer.start();
   // Parse the HTTP Request.
 
   size_t indexOfGET = httpRequest.find("GET");
@@ -367,15 +364,13 @@ string Server::create400HttpResponse() const {
 // _____________________________________________________________________________
 string Server::composeResponseJson(const ParsedQuery& query,
                                    const QueryExecutionTree& qet,
-                                   size_t maxSend, ad_utility::Timer* totalTimer) const {
-  if (!totalTimer) {
-    totalTimer = &_requestProcessingTimer;
-  }
+                                   ad_utility::Timer& totalTimer,
+                                   size_t maxSend) const {
   // TODO(schnelle) we really should use a json library
   // such as https://github.com/nlohmann/json
   shared_ptr<const ResultTable> rt = qet.getResult();
-  _requestProcessingTimer.stop();
-  off_t compResultUsecs = _requestProcessingTimer.usecs();
+  totalTimer.stop();
+  off_t compResultUsecs = totalTimer.usecs();
   size_t resultSize = rt->size();
 
   nlohmann::json j;
@@ -398,16 +393,14 @@ string Server::composeResponseJson(const ParsedQuery& query,
     if (query._offset.size() > 0) {
       offset = static_cast<size_t>(atol(query._offset.c_str()));
     }
-    _requestProcessingTimer.cont();
+    totalTimer.cont();
     j["res"] = qet.writeResultAsJson(query._selectedVariables,
                                      std::min(limit, maxSend), offset);
-    _requestProcessingTimer.stop();
+    totalTimer.stop();
   }
 
-
-  totalTimer->stop();
-  j["time"]["total"] =
-      std::to_string(totalTimer->usecs() / 1000.0) + "ms";
+  totalTimer.stop();
+  j["time"]["total"] = std::to_string(totalTimer.usecs() / 1000.0) + "ms";
   j["time"]["computeResult"] = std::to_string(compResultUsecs / 1000.0) + "ms";
 
   return j.dump(4);
@@ -433,25 +426,19 @@ string Server::composeResponseSepValues(const ParsedQuery& query,
 
 // _____________________________________________________________________________
 string Server::composeResponseJson(const string& query,
-                                   const std::exception* exception) const {
+                                   const std::exception& exception,
+                                   ad_utility::Timer& totalTimer) const {
   std::ostringstream os;
-  _requestProcessingTimer.stop();
+  totalTimer.stop();
 
-  os << "{\n"
-     << "\"query\": " << ad_utility::toJson(query) << ",\n"
-     << "\"status\": \"ERROR\",\n"
-     << "\"resultsize\": \"0\",\n"
-     << "\"time\": {\n"
-     << "\"total\": \"" << _requestProcessingTimer.msecs() << "ms\",\n"
-     << "\"computeResult\": \"" << _requestProcessingTimer.msecs() << "ms\"\n"
-     << "},\n";
-
-  string msg = ad_utility::toJson(exception->what());
-
-  os << "\"exception\": " << msg << "\n"
-     << "}\n";
-
-  return os.str();
+  json j;
+  j["query"] = query;
+  j["status"] = "ERROR";
+  j["resultsize"] = 0;
+  j["time"]["total"] = totalTimer.msecs();
+  j["time"]["computeResult"] = totalTimer.msecs();
+  j["exception"] = exception.what();
+  return j.dump(4);
 }
 
 // _____________________________________________________________________________
