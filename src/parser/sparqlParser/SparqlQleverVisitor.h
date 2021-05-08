@@ -560,6 +560,10 @@ class SparqlQleverVisitor : public SparqlVisitor {
     return visitChildren(ctx);
   }
 
+  antlrcpp::Any visitIriref(SparqlParser::IrirefContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
   antlrcpp::Any visitPrefixedName(
       SparqlParser::PrefixedNameContext* ctx) override {
     return visitChildren(ctx);

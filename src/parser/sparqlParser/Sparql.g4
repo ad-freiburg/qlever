@@ -49,11 +49,11 @@ prologue
     ;
 
 baseDecl
-    : BASE IRI_REF
+    : BASE iriref
     ;
 
 prefixDecl
-    : PREFIX PNAME_NS IRI_REF
+    : PREFIX PNAME_NS iriref
     ;
 
 selectQuery : selectClause datasetClause* whereClause solutionModifier;
@@ -525,7 +525,7 @@ string
     ;
 
 iri
-    : IRI_REF
+    : iriref
     | prefixedName
     ;
 
@@ -539,6 +539,7 @@ blankNode
     | ANON
     ;
 
+iriref : IRI_REF;
 
 
 BASE : B A S E;
