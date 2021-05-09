@@ -8,8 +8,7 @@
 #include <type_traits>
 
 #include "../../src/parser/sparqlParser/SparqlQleverVisitor.h"
-#include "../src/parser/sparqlParser/generated/SparqlLexer.h"
-#include "../src/parser/sparqlParser/generated/SparqlParser.h"
+#include "../src/parser/sparqlParser/generated/SparqlAutomaticLexer.h"
 
 using namespace antlr4;
 
@@ -17,11 +16,11 @@ struct ParserAndVisitor {
  private:
   string input;
   ANTLRInputStream stream{input};
-  SparqlLexer lexer{&stream};
+  SparqlAutomaticLexer lexer{&stream};
   CommonTokenStream tokens{&lexer};
 
  public:
-  SparqlParser parser{&tokens};
+  SparqlAutomaticParser parser{&tokens};
   SparqlQleverVisitor visitor;
   explicit ParserAndVisitor(string toParse) : input{std::move(toParse)} {}
 };

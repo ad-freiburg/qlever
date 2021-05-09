@@ -36,7 +36,7 @@
  */
 
 
-grammar Sparql;
+grammar SparqlAutomatic;
 
 query
     : prologue (selectQuery | constructQuery | describeQuery | askQuery) valuesClause EOF

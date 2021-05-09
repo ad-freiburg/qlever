@@ -1,7 +1,7 @@
 add_library(sparqlParser SparqlQleverVisitor.h SparqlQleverVisitor.cpp
-generated/SparqlBaseListener.h generated/SparqlBaseListener.cpp
-generated/SparqlLexer.h generated/SparqlLexer.cpp
-generated/SparqlListener.h generated/SparqlListener.cpp
-generated/SparqlParser.h generated/SparqlParser.cpp
-generated/SparqlVisitor.h generated/SparqlVisitor.cpp)
+generated/SparqlAutomaticBaseListener.h generated/SparqlAutomaticBaseListener.cpp
+generated/SparqlAutomaticLexer.h generated/SparqlAutomaticLexer.cpp
+generated/SparqlAutomaticListener.h generated/SparqlAutomaticListener.cpp
+generated/SparqlAutomaticParser.h generated/SparqlAutomaticParser.cpp
+generated/SparqlAutomaticVisitor.h generated/SparqlAutomaticVisitor.cpp)
 target_link_libraries(sparqlParser antlr4_static rdfEscaping absl::flat_hash_map)
