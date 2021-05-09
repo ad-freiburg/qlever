@@ -3,18 +3,17 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 
 #include "SparqlLexer.h"
+#include "../util/HashSet.h"
 #include "../util/StringUtils.h"
 #include "ParseException.h"
 #include "Tokenizer.h"
-#include "../util/HashSet.h"
 
 const std::string SparqlToken::TYPE_NAMES[] = {
     "IRI",       "WS",         "KEYWORD", "VARIABLE", "SYMBOL",
     "AGGREGATE", "RDFLITERAL", "INTEGER", "FLOAT",    "LOGICAL_OR"};
 
 const std::string LANGTAG = "@[a-zA-Z]+(-[a-zA-Z0-9]+)*";
-const std::string IRIREF =
-    "(<[^<>\"{}|^`\\\\\\[\\]\\x00-\\x20]*>)";
+const std::string IRIREF = "(<[^<>\"{}|^`\\\\\\[\\]\\x00-\\x20]*>)";
 const std::string PN_CHARS_BASE =
     "[A-Z]|[a-z]|[\\x{00C0}-\\x{00D6}]|[\\x{00D8}-\\x{00F6}]|"
     "[\\x{00F8}-\\x{02FF}]|[\\x{0370}-\\x{037D}]|[\\x{037F}-\\x{1FFF}]|"
@@ -35,16 +34,15 @@ const std::string PN_PREFIX =
 const std::string PLX =
     "(%[0-9a-fA-F][0-9a-fA-F])|(\\\\(_|~|\\.|-|!|$|&|'|\\(|\\)|\\*|\\+|,|;|=|/"
     "|\\?|#|@|%))";
-const std::string PN_LOCAL =
-    "(" + PN_CHARS_U + "|:|[0-9]|" + PLX + ")((" + PN_CHARS + "|\\.|:|" + PLX +
-    ")*(" + PN_CHARS + "|:|" + PLX + "))?";
+const std::string PN_LOCAL = "(" + PN_CHARS_U + "|:|[0-9]|" + PLX + ")((" +
+                             PN_CHARS + "|\\.|:|" + PLX + ")*(" + PN_CHARS +
+                             "|:|" + PLX + "))?";
 
 const std::string PNAME_NS = "(" + PN_PREFIX + ")?:";
-const std::string PNAME_LN =
-    "(" + PNAME_NS + ")(" + PN_LOCAL + ")";
+const std::string PNAME_LN = "(" + PNAME_NS + ")(" + PN_LOCAL + ")";
 
-const std::string IRI = "((" + LANGTAG + "@)?((" + IRIREF + ")|(" +
-                                     PNAME_LN + ")|(" + PNAME_NS + ")))";
+const std::string IRI = "((" + LANGTAG + "@)?((" + IRIREF + ")|(" + PNAME_LN +
+                        ")|(" + PNAME_NS + ")))";
 const std::string VARNAME =
     "(" + PN_CHARS_U + "|[0-9])(" + PN_CHARS_U +
     "|[0-9]|\\x{00B7}|[\\x{0300}-\\x{036F}]|[\\x{203F}-\\x{2040}])*";
@@ -55,23 +53,20 @@ const std::string KEYWORD =
     "HAVING|WHERE|ASC|AS|LIMIT|OFFSET|DESC|FILTER|VALUES|"
     "OPTIONAL|UNION|LANGMATCHES|LANG|TEXT|SCORE|REGEX|PREFIX|SEPARATOR|STR|"
     "BIND|MINUS)";
-const std::string AGGREGATE =
-    "(?i)(SAMPLE|COUNT|MIN|MAX|AVG|SUM|GROUP_CONCAT)";
+const std::string AGGREGATE = "(?i)(SAMPLE|COUNT|MIN|MAX|AVG|SUM|GROUP_CONCAT)";
 const std::string VARIABLE = "(\\?" + VARNAME + ")";
-const std::string SYMBOL =
-    "([\\.\\{\\}\\(\\)\\=\\*,;:<>!\\|/\\^\\?\\*\\+])";
+const std::string SYMBOL = "([\\.\\{\\}\\(\\)\\=\\*,;:<>!\\|/\\^\\?\\*\\+])";
 
-const std::string STRING_LITERAL =
-    "(('([^\\x27\\x5C\\x0A\\x0D]|(" + ECHAR +
-    "))*')|"
-    "(\"([^\\x22\\x5C\\x0A\\x0D]|(" +
-    ECHAR + "))*\"))";
+const std::string STRING_LITERAL = "(('([^\\x27\\x5C\\x0A\\x0D]|(" + ECHAR +
+                                   "))*')|"
+                                   "(\"([^\\x22\\x5C\\x0A\\x0D]|(" +
+                                   ECHAR + "))*\"))";
 const std::string RDFLITERAL =
     STRING_LITERAL + "((" + LANGTAG + ")|(\\^\\^" + IRI + "))?";
 
 const std::string LOGICAL_OR = "(\\|\\|)";
 
-const SparqlLexer::RegexTokenMap & SparqlLexer::getRegexTokenMap() const {
+const SparqlLexer::RegexTokenMap& SparqlLexer::getRegexTokenMap() const {
   using T = SparqlToken::Type;
   static const RegexTokenMap regexTokenMap = [=]() {
     RegexTokenMap m;
@@ -93,7 +88,6 @@ const SparqlLexer::RegexTokenMap & SparqlLexer::getRegexTokenMap() const {
     return m;
   }();
   return regexTokenMap;
-
 }
 
 SparqlLexer::SparqlLexer(const std::string& sparql)
@@ -108,8 +102,10 @@ void SparqlLexer::readNext() {
   _next.type = SparqlToken::Type::WS;
   std::string raw;
   // Return the first token type matched.
-  static const ad_utility::HashSet<SparqlToken::Type> tokensThatRequireLowercasing = {
-      SparqlToken::Type::KEYWORD, SparqlToken::Type::GROUP_BY, SparqlToken::Type::ORDER_BY, SparqlToken::Type::AGGREGATE};
+  static const ad_utility::HashSet<SparqlToken::Type>
+      tokensThatRequireLowercasing = {
+          SparqlToken::Type::KEYWORD, SparqlToken::Type::GROUP_BY,
+          SparqlToken::Type::ORDER_BY, SparqlToken::Type::AGGREGATE};
   while (_next.type == SparqlToken::Type::WS && !empty()) {
     _next.pos = _sparql.size() - _re_string.size();
     bool regexMatched = false;

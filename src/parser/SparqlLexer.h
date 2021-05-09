@@ -4,8 +4,8 @@
 
 #include <re2/re2.h>
 #include <iostream>
-#include <string>
 #include <memory>
+#include <string>
 
 struct SparqlToken {
   enum class Type {
@@ -36,9 +36,12 @@ struct SparqlToken {
 
 class SparqlLexer {
  public:
-  using RegexTokenMap = std::vector<std::pair<std::unique_ptr<re2::RE2>, SparqlToken::Type>>;
+  using RegexTokenMap =
+      std::vector<std::pair<std::unique_ptr<re2::RE2>, SparqlToken::Type>>;
+
  private:
   const RegexTokenMap& getRegexTokenMap() const;
+
  public:
   SparqlLexer(const std::string& sparql);
 

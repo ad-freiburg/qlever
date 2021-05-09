@@ -525,8 +525,8 @@ string
     ;
 
 iri
-    : iriref
-    | prefixedName
+    : (LANGTAG '@')? (iriref
+    | prefixedName)
     ;
 
 prefixedName
