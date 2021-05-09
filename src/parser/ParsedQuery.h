@@ -307,10 +307,16 @@ class ParsedQuery {
     std::string _delimiter = " ";
   };
 
+  struct SelectClause {
+    vector<string> _selectedVariables;
+    std::vector<Alias> _aliases;
+    bool _reduced = false;
+    bool _distinct = false;
+  };
+
   ParsedQuery() = default;
 
   vector<SparqlPrefix> _prefixes;
-  vector<string> _selectedVariables;
   GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns = 1;
@@ -319,10 +325,8 @@ class ParsedQuery {
   string _limit;
   string _textLimit;
   string _offset;
-  bool _reduced = false;
-  bool _distinct = false;
   string _originalString;
-  std::vector<Alias> _aliases;
+  SelectClause _selectClause;
 
   void expandPrefixes();
   void parseAliases();
