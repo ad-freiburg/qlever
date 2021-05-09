@@ -5,10 +5,11 @@
 
 #include <gtest/gtest.h>
 
-#include "antlr4-runtime.h"
-#include "generated/SparqlAutomaticVisitor.h"
 #include "../../util/HashMap.h"
 #include "../RdfEscaping.h"
+#include "antlr4-runtime.h"
+#include "generated/SparqlAutomaticLexer.h"
+#include "generated/SparqlAutomaticVisitor.h"
 
 class SparqlParseException : public std::exception {
   string _message;
@@ -24,8 +25,12 @@ class SparqlParseException : public std::exception {
  * available methods.
  */
 class SparqlQleverVisitor : public SparqlAutomaticVisitor {
- private:
+ public:
   using PrefixMap = ad_utility::HashMap<string, string>;
+  const PrefixMap& prefixMap() const { return _prefixMap; }
+  SparqlQleverVisitor() = default;
+  SparqlQleverVisitor(PrefixMap prefixMap) : _prefixMap{std::move(prefixMap)} {}
+ private:
 
   // For the unit tests
   PrefixMap& prefixMap() { return _prefixMap; }
@@ -652,3 +657,41 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return _prefixMap[prefix];
   }
 };
+
+namespace SparqlAutomaticParserHelpers {
+
+struct ParserAndVisitor {
+ private:
+  string input;
+  antlr4::ANTLRInputStream stream{input};
+  SparqlAutomaticLexer lexer{&stream};
+  antlr4::CommonTokenStream tokens{&lexer};
+
+ public:
+  SparqlAutomaticParser parser{&tokens};
+  SparqlQleverVisitor visitor;
+  explicit ParserAndVisitor(string toParse) : input{std::move(toParse)} {}
+  explicit ParserAndVisitor(string toParse, SparqlQleverVisitor::PrefixMap prefixMap) : input{std::move(toParse)}, visitor{std::move(prefixMap)} {}
+};
+
+// ______________________________________________________________________________
+std::pair<SparqlQleverVisitor::PrefixMap, size_t> parsePrologue(const string& input) {
+  ParserAndVisitor p{input};
+  auto context = p.parser.prologue();
+  auto parsedSize = context->getText().size();
+  p.visitor.visitPrologue(context);
+  const auto& constVisitor = p.visitor;
+  return {constVisitor.prefixMap(), parsedSize};
+}
+
+// _____________________________________________________________________________
+std::pair<string, size_t> parseIri(const string& input, SparqlQleverVisitor::PrefixMap prefixMap) {
+  ParserAndVisitor p{input, std::move(prefixMap)};
+  auto context = p.parser.iri();
+  auto parsedSize = context->getText().size();
+  auto resultString = p.visitor.visitIri(context).as<string>();
+  const auto& constVisitor = p.visitor;
+  return {std::move(resultString), parsedSize};
+}
+
+}

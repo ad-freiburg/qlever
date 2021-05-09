@@ -6,6 +6,7 @@
 #include <string>
 #include "ParsedQuery.h"
 #include "SparqlLexer.h"
+#include "../util/HashMap.h"
 
 using std::string;
 
@@ -63,5 +64,6 @@ class SparqlParser {
 
   SparqlLexer _lexer;
   string _query;
+  ad_utility::HashMap<string, string> _prefixMapFromAntlrParser;
   SparqlFilter parseRegexFilter(bool expectKeyword);
 };
