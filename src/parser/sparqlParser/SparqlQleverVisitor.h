@@ -4,11 +4,11 @@
 #pragma once
 
 #include <gtest/gtest.h>
-#include "../../util/HashMap.h"
-#include "../ParsedQuery.h"
-#include "../RdfEscaping.h"
-#include "SparqlVisitor.h"
+
 #include "antlr4-runtime.h"
+#include "generated/SparqlVisitor.h"
+#include "../../util/HashMap.h"
+#include "../RdfEscaping.h"
 
 class SparqlParseException : public std::exception {
   string _message;

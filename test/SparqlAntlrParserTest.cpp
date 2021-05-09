@@ -7,9 +7,9 @@
 
 #include <type_traits>
 
-#include "../../src/parser/sparqlParser/SparqlLexer.h"
-#include "../../src/parser/sparqlParser/SparqlParser.h"
 #include "../../src/parser/sparqlParser/SparqlQleverVisitor.h"
+#include "../src/parser/sparqlParser/generated/SparqlLexer.h"
+#include "../src/parser/sparqlParser/generated/SparqlParser.h"
 
 using namespace antlr4;
 
