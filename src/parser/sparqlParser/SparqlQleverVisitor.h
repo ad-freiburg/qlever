@@ -7,9 +7,15 @@
 #include "antlr4-runtime.h"
 #include "../RdfEscaping.h"
 #include "../../util/HashMap.h"
+#include "../ParsedQuery.h"
 #include <gtest/gtest.h>
 
-class SparqlParseException : public std::exception {};
+class SparqlParseException : public std::exception {
+  string _message;
+ public:
+  SparqlParseException(std::string message) : _message{std::move(message)} {}
+  const char* what() const noexcept override {return _message.c_str();}
+};
 
 /**
  * This class provides an empty implementation of SparqlVisitor, which can be
@@ -26,19 +32,30 @@ class SparqlQleverVisitor : public SparqlVisitor {
 
   PrefixMap _prefixMap{{":", "<>"}};
  public:
+  // ___________________________________________________________________________
   antlrcpp::Any visitQuery(SparqlParser::QueryContext* ctx) override {
-    return visitChildren(ctx);
+    // The prologue (BASE and PREFIX declarations)  only affects the internal state of the visitor.
+    visitPrologue(ctx->prologue());
+    if (ctx->selectQuery()) {
+      return visitSelectQuery(ctx->selectQuery());
+    } else {
+
+    }
   }
 
+  // ___________________________________________________________________________
   antlrcpp::Any visitPrologue(SparqlParser::PrologueContext* ctx) override {
+    // Default implementation is ok here, simply handle all PREFIX and BASE declarations.
     return visitChildren(ctx);
   }
 
+  // ___________________________________________________________________________
   antlrcpp::Any visitBaseDecl(SparqlParser::BaseDeclContext* ctx) override {
     _prefixMap[":"] = visitIriref(ctx->iriref()).as<string>();
     return nullptr;
   }
 
+  // ___________________________________________________________________________
   antlrcpp::Any visitPrefixDecl(SparqlParser::PrefixDeclContext* ctx) override {
     _prefixMap[ctx->PNAME_NS()->getText()] = visitIriref(ctx->iriref()).as<string>();
     return nullptr;
@@ -595,7 +612,8 @@ class SparqlQleverVisitor : public SparqlVisitor {
      auto pnLocal = text.substr(pos + 1);
      if (! _prefixMap.contains(pnameNS)) {
        // TODO<joka921> : proper name
-       throw SparqlParseException{};
+       throw SparqlParseException{""
+           "Prefix " + pnameNS + " was not registered using a PREFIX declaration"};
      }
      auto inner = _prefixMap[pnameNS];
      // strip the trailing ">"
@@ -607,7 +625,8 @@ class SparqlQleverVisitor : public SparqlVisitor {
     auto prefix = ctx->getText();
     if (! _prefixMap.contains(prefix)) {
       // TODO<joka921> : proper name
-      throw SparqlParseException{};
+      throw SparqlParseException{""
+                                 "Prefix " + prefix + " was not registered using a PREFIX declaration"};
     }
     return _prefixMap[prefix];
   }

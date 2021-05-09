@@ -45,10 +45,10 @@ void SparqlParser::parseQuery(ParsedQuery* query) {
   if (query->_groupByVariables.size() > 0) {
     // Check if all selected variables are either aggregated or
     // part of the group by statement.
-    for (const string& var : query->_selectedVariables) {
+    for (const string& var : query->_selectClause._selectedVariables) {
       if (var[0] == '?') {
         bool is_alias = false;
-        for (const ParsedQuery::Alias& a : query->_aliases) {
+        for (const ParsedQuery::Alias& a : query->_selectClause._aliases) {
           if (a._outVarName == var) {
             is_alias = true;
             break;
@@ -71,10 +71,10 @@ void SparqlParser::parseQuery(ParsedQuery* query) {
   }
 
   ad_utility::HashMap<std::string, size_t> variable_counts;
-  for (const std::string& s : query->_selectedVariables) {
+  for (const std::string& s : query->_selectClause._selectedVariables) {
     variable_counts[s]++;
   }
-  for (const ParsedQuery::Alias& a : query->_aliases) {
+  for (const ParsedQuery::Alias& a : query->_selectClause._aliases) {
     // The variable was already added to the selected variables while
     // parsing the alias, thus it should appear exactly once
     if (variable_counts[a._outVarName] > 1) {
@@ -109,14 +109,14 @@ void SparqlParser::addPrefix(const string& key, const string& value,
 // _____________________________________________________________________________
 void SparqlParser::parseSelect(ParsedQuery* query) {
   if (_lexer.accept("distinct")) {
-    query->_distinct = true;
+    query->_selectClause._distinct = true;
   }
   if (_lexer.accept("reduced")) {
-    query->_reduced = true;
+    query->_selectClause._reduced = true;
   }
   while (!_lexer.accept("where")) {
     if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-      query->_selectedVariables.push_back(_lexer.current().raw);
+      query->_selectClause._selectedVariables.push_back(_lexer.current().raw);
     } else if (_lexer.accept("text")) {
       _lexer.expect("(");
       std::ostringstream s;
@@ -125,7 +125,7 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       s << _lexer.current().raw;
       _lexer.expect(")");
       s << ")";
-      query->_selectedVariables.push_back(s.str());
+      query->_selectClause._selectedVariables.push_back(s.str());
     } else if (_lexer.accept("score")) {
       _lexer.expect("(");
       std::ostringstream s;
@@ -134,12 +134,12 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       s << _lexer.current().raw;
       _lexer.expect(")");
       s << ")";
-      query->_selectedVariables.push_back(s.str());
+      query->_selectClause._selectedVariables.push_back(s.str());
     } else if (_lexer.accept("(")) {
       // expect an alias
       ParsedQuery::Alias a = parseAlias();
-      query->_aliases.push_back(a);
-      query->_selectedVariables.emplace_back(a._outVarName);
+      query->_selectClause._aliases.push_back(a);
+      query->_selectClause._selectedVariables.emplace_back(a._outVarName);
       _lexer.expect(")");
     } else {
       _lexer.accept();
@@ -167,7 +167,7 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
     s << ")";
   } else if (_lexer.accept("(")) {
     ParsedQuery::Alias a = parseAlias();
-    for (const std::string& s : query->_selectedVariables) {
+    for (const std::string& s : query->_selectClause._selectedVariables) {
       if (s == a._outVarName) {
         throw ParseException("A variable with name " + s +
                              " is already used, but the order by with alias " +
@@ -176,7 +176,7 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
     }
     _lexer.expect(")");
     s << a._outVarName;
-    query->_aliases.emplace_back(a);
+    query->_selectClause._aliases.emplace_back(a);
   } else {
     _lexer.expect(SparqlToken::Type::VARIABLE);
     s << _lexer.current().raw;
