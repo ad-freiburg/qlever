@@ -11,6 +11,10 @@
 #include "generated/SparqlAutomaticLexer.h"
 #include "generated/SparqlAutomaticVisitor.h"
 
+#include "../ParsedQuery.h"
+
+
+
 class SparqlParseException : public std::exception {
   string _message;
 
@@ -467,12 +471,20 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitConditionalOrExpression(
       SparqlAutomaticParser::ConditionalOrExpressionContext* ctx) override {
-    return visitChildren(ctx);
+    auto children = ctx->conditionalAndExpression();
+    if (children.size() != 1) {
+      throw SparqlParseException{"Logical or || is not supported by QLever"};
+    }
+    return visitConditionalAndExpression(children[0]);
   }
 
   antlrcpp::Any visitConditionalAndExpression(
       SparqlAutomaticParser::ConditionalAndExpressionContext* ctx) override {
-    return visitChildren(ctx);
+    auto children = ctx->valueLogical();
+      if (children.size() != 1) {
+        throw SparqlParseException{"Logical and && is not supported by QLever"};
+      }
+      return visitValueLogical(children[0]);
   }
 
   antlrcpp::Any visitValueLogical(
