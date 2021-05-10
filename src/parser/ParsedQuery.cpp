@@ -35,7 +35,7 @@ string ParsedQuery::asString() const {
   // SELECT
   os << "\nSELECT: {\n\t";
   for (size_t i = 0; i < _selectedVariables.size(); ++i) {
-    os << _selectedVariables[i];
+    os << _selectedVariables[i].asString();
     if (i + 1 < _selectedVariables.size()) {
       os << ", ";
     }
@@ -390,13 +390,13 @@ void ParsedQuery::expandPrefix(
 
 void ParsedQuery::parseAliases() {
   for (size_t i = 0; i < _selectedVariables.size(); i++) {
-    const std::string& var = _selectedVariables[i];
+    const std::string& var = _selectedVariables[i].asString();
     if (var[0] == '(') {
       // remove the leading and trailing bracket
       std::string inner = var.substr(1, var.size() - 2);
       // Replace the variable in the selected variables array with the aliased
       // name.
-      _selectedVariables[i] = parseAlias(inner);
+      _selectedVariables[i] = SparqlVariable(parseAlias(inner));
     }
   }
   for (size_t i = 0; i < _orderBy.size(); i++) {
@@ -435,7 +435,7 @@ std::string ParsedQuery::parseAlias(const std::string& alias) {
     pos++;
     newVarName = alias.substr(pos + 2);
     newVarName = ad_utility::strip(newVarName, " \t\n");
-    a._outVarName = newVarName;
+    a._outVarName = SparqlVariable{newVarName};
     a._function = alias;
 
     // find the second opening bracket
@@ -464,7 +464,7 @@ std::string ParsedQuery::parseAlias(const std::string& alias) {
           ") is malformed: no input variable given (e.g. COUNT(?a))");
     }
 
-    a._inVarName = alias.substr(start, pos - start - 1);
+    a._inVarName = SparqlVariable{alias.substr(start, pos - start - 1)};
     bool isUnique = true;
     // check if another alias for the output variable already exists:
     for (const Alias& other : _aliases) {
@@ -477,7 +477,7 @@ std::string ParsedQuery::parseAlias(const std::string& alias) {
           // at this point the comparison of two aliases is also string based.
           throw ParseException(
               "Two aliases try to bind values to the variable " +
-              a._outVarName);
+              a._outVarName.asString());
         } else {
           isUnique = false;
           break;
@@ -595,7 +595,7 @@ void GraphPatternOperation::toString(std::ostringstream& os,
     } else if constexpr (std::is_same_v<T, Values>) {
       os << "VALUES (";
       for (const auto& v : arg._inlineValues._variables) {
-        os << v << ' ';
+        os << v.asString() << ' ';
       }
       os << ") ";
 

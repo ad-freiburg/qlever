@@ -12,6 +12,7 @@
 #include "../util/HashSet.h"
 #include "./Operation.h"
 #include "./QueryExecutionContext.h"
+#include "../parser/ParsedQuery.h"
 
 using std::shared_ptr;
 using std::string;
@@ -85,11 +86,12 @@ class QueryExecutionTree {
     return _rootOperation->getResult(isRoot());
   }
 
-  void writeResultToStream(std::ostream& out, const vector<string>& selectVars,
+  void writeResultToStream(std::ostream& out,
+                           const vector<SparqlVariable>& selectVars,
                            size_t limit = MAX_NOF_ROWS_IN_RESULT,
                            size_t offset = 0, char sep = '\t') const;
 
-  nlohmann::json writeResultAsJson(const vector<string>& selectVars,
+  nlohmann::json writeResultAsJson(const vector<SparqlVariable>& selectVars,
                                    size_t limit, size_t offset) const;
 
   const std::vector<size_t>& resultSortedOn() const {

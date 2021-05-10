@@ -18,6 +18,43 @@
 using std::string;
 using std::vector;
 
+// A strong type for a variable. Currently we also support text or score variables
+// TEXT(?x) or SCORE(?y)
+class SparqlVariable {
+ public:
+  enum class Type { ORDINARY, TEXT, SCORE};
+  [[nodiscard]] const string asString() const {
+    switch (_type) {
+      case Type::ORDINARY : return _variable;
+      case Type::SCORE : return "SCORE(" + _variable + ")";
+      case Type::TEXT : return "TEXT(" + _variable + ")";
+
+    }
+    return _variable;}
+  [[nodiscard]] const string& variableName() const {
+    return _variable;
+  }
+  [[nodiscard]] const Type& type() const {return _type;}
+  explicit SparqlVariable(string variable, Type t = Type::ORDINARY) : _variable{std::move(variable)}, _type{t} {
+   AD_CHECK(ad_utility::startsWith(_variable, "?"));
+
+  }
+  // TODO<joka921> We should get rid of this with the new Parser for type safety
+  SparqlVariable() = default;
+  bool operator==(const SparqlVariable&) const = default;
+ private:
+  string _variable;
+  Type _type;
+};
+
+namespace std {
+template <> struct hash<SparqlVariable> {
+  auto operator()(const SparqlVariable& v) const {
+    return std::hash<string>{}(v.asString());
+  }
+};
+}
+
 // Data container for prefixes
 class SparqlPrefix {
  public:
@@ -211,7 +248,7 @@ class SparqlFilter {
 class SparqlValues {
  public:
   // The variables to which the values will be bound
-  vector<string> _variables;
+  vector<SparqlVariable> _variables;
   // A table storing the values in their string form
   vector<vector<string>> _values;
 };
@@ -298,24 +335,24 @@ class ParsedQuery {
 
   struct Alias {
     AggregateType _type;
-    string _inVarName;
-    string _outVarName;
+    SparqlVariable _inVarName;
+    SparqlVariable _outVarName;
     bool _isAggregate = true;
     bool _isDistinct = false;
     std::string _function;
-    // The deilimiter used by group concat
+    // The delimiter used by group concat
     std::string _delimiter = " ";
   };
 
   ParsedQuery() = default;
 
   vector<SparqlPrefix> _prefixes;
-  vector<string> _selectedVariables;
+  vector<SparqlVariable> _selectedVariables;
   GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
   size_t _numGraphPatterns = 1;
   vector<OrderKey> _orderBy;
-  vector<string> _groupByVariables;
+  vector<SparqlVariable> _groupByVariables;
   string _limit;
   string _textLimit;
   string _offset;

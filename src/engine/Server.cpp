@@ -379,7 +379,11 @@ string Server::composeResponseJson(const ParsedQuery& query,
   j["status"] = "OK";
   j["resultsize"] = resultSize;
   j["warnings"] = qet.collectWarnings();
-  j["selected"] = query._selectedVariables;
+  std::vector<string> selectedAsString;
+  for (const auto& s : query._selectedVariables) {
+    selectedAsString.push_back(s.asString());
+  }
+  j["selected"] = selectedAsString;
 
   j["runtimeInformation"] = RuntimeInformation::ordered_json(
       qet.getRootOperation()->getRuntimeInfo());

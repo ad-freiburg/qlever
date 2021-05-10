@@ -448,9 +448,9 @@ bool QueryPlanner::checkUsePatternTrick(
 
   // These will only be set if the query returns the count of predicates
   // The varialbe the COUNT alias counts
-  std::string counted_var_name;
+  SparqlVariable counted_var_name;
   // The variable holding the counts
-  std::string count_var_name;
+  SparqlVariable count_var_name;
 
   if (returns_counts) {
     // There has to be a single count alias
@@ -488,16 +488,16 @@ bool QueryPlanner::checkUsePatternTrick(
       // variable and the group by variable.
       if (t._p._iri != HAS_PREDICATE_PREDICATE ||
           (returns_counts &&
-           !(counted_var_name == t._o || counted_var_name == t._s)) ||
-          pq->_groupByVariables[0] != t._o) {
+           !(counted_var_name.variableName() == t._o || counted_var_name.variableName() == t._s)) ||
+          pq->_groupByVariables[0].variableName() != t._o) {
         usePatternTrick = false;
         continue;
       }
 
       // check that all selected variables are outputs of
       // CountAvailablePredicates
-      for (const std::string& s : pq->_selectedVariables) {
-        if (s != t._o && s != count_var_name) {
+      for (const auto& s : pq->_selectedVariables) {
+        if (s.variableName() != t._o && s != count_var_name) {
           usePatternTrick = false;
           break;
         }
@@ -560,8 +560,8 @@ bool QueryPlanner::checkUsePatternTrick(
             graphsToProcess.push_back(&arg._child2);
           } else if constexpr (std::is_same_v<
                                    T, GraphPatternOperation::Subquery>) {
-            for (const std::string& v : arg._subquery._selectedVariables) {
-              if (v == t._o) {
+            for (const auto& v : arg._subquery._selectedVariables) {
+              if (v.variableName() == t._o) {
                 usePatternTrick = false;
                 break;
               }
@@ -607,8 +607,8 @@ bool QueryPlanner::checkUsePatternTrick(
               graphsToProcess.push_back(&arg._child2);
             } else if constexpr (std::is_same_v<
                                      T, GraphPatternOperation::Subquery>) {
-              for (const std::string& v : arg._subquery._selectedVariables) {
-                if (v == t._o) {
+              for (const auto& v : arg._subquery._selectedVariables) {
+                if (v.variableName() == t._o) {
                   usePatternTrick = false;
                   break;
                 }
@@ -625,7 +625,7 @@ bool QueryPlanner::checkUsePatternTrick(
             } else if constexpr (std::is_same_v<
                                      T, GraphPatternOperation::Values>) {
               for (const auto& var : arg._inlineValues._variables) {
-                if (var == t._o) {
+                if (var.variableName() == t._o) {
                   usePatternTrick = false;
                   break;
                 }
@@ -815,24 +815,12 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getDistinctRow(
     ad_utility::HashSet<size_t> indDone;
     const auto& colMap = parent._qet->getVariableColumns();
     for (const auto& var : pq._selectedVariables) {
-      const auto it = colMap.find(var);
+      const auto it = colMap.find(var.variableName());
       if (it != colMap.end()) {
         auto ind = it->second;
         if (indDone.count(ind) == 0) {
           keepIndices.push_back(ind);
           indDone.insert(ind);
-        }
-      } else if (ad_utility::startsWith(var, "SCORE(") ||
-                 ad_utility::startsWith(var, "TEXT(")) {
-        auto varInd = var.find('?');
-        auto cVar = var.substr(varInd, var.rfind(')') - varInd);
-        const auto it = colMap.find(cVar);
-        if (it != colMap.end()) {
-          auto ind = it->second;
-          if (indDone.count(ind) == 0) {
-            keepIndices.push_back(ind);
-            indDone.insert(ind);
-          }
         }
       }
     }
@@ -928,7 +916,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       auto countPred = std::make_shared<CountAvailablePredicates>(
           _qec, isSorted ? parent._qet : orderByPlan._qet, subjectColumn);
 
-      countPred->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName);
+      countPred->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName.asString());
       QueryExecutionTree& tree = *patternTrickPlan._qet;
       tree.setVariableColumns(countPred->getVariableColumns());
       tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
@@ -941,7 +929,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     auto countPred =
         std::make_shared<CountAvailablePredicates>(_qec, patternTrickTriple._s);
 
-    countPred->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName);
+    countPred->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName.asString());
     QueryExecutionTree& tree = *patternTrickPlan._qet;
     tree.setVariableColumns(countPred->getVariableColumns());
     tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
@@ -953,7 +941,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     auto countPred = std::make_shared<CountAvailablePredicates>(_qec);
 
     if (pq._aliases.size() > 0) {
-      countPred->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName);
+      countPred->setVarNames(patternTrickTriple._o, pq._aliases[0]._outVarName.asString());
     } else {
       countPred->setVarNames(patternTrickTriple._o, generateUniqueVarName());
     }

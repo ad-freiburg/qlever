@@ -45,8 +45,8 @@ void SparqlParser::parseQuery(ParsedQuery* query) {
   if (query->_groupByVariables.size() > 0) {
     // Check if all selected variables are either aggregated or
     // part of the group by statement.
-    for (const string& var : query->_selectedVariables) {
-      if (var[0] == '?') {
+    for (const SparqlVariable& var : query->_selectedVariables) {
+      if (var.type() == SparqlVariable::Type::ORDINARY) {
         bool is_alias = false;
         for (const ParsedQuery::Alias& a : query->_aliases) {
           if (a._outVarName == var) {
@@ -60,29 +60,30 @@ void SparqlParser::parseQuery(ParsedQuery* query) {
         if (std::find(query->_groupByVariables.begin(),
                       query->_groupByVariables.end(),
                       var) == query->_groupByVariables.end()) {
-          throw ParseException("Variable " + var +
+          throw ParseException("Variable " + var.asString() +
                                " is selected but not "
                                "aggregated despite the query not being "
                                "grouped by " +
-                               var + ".\n" + _lexer.input());
+                               var.asString() + ".\n" + _lexer.input());
         }
       }
     }
   }
 
-  ad_utility::HashMap<std::string, size_t> variable_counts;
-  for (const std::string& s : query->_selectedVariables) {
+  ad_utility::HashMap<SparqlVariable, size_t> variable_counts;
+  for (const auto& s : query->_selectedVariables) {
     variable_counts[s]++;
   }
   for (const ParsedQuery::Alias& a : query->_aliases) {
     // The variable was already added to the selected variables while
     // parsing the alias, thus it should appear exactly once
     if (variable_counts[a._outVarName] > 1) {
-      throw ParseException("The variable name " + a._outVarName +
+      throw ParseException("The variable name " + a._outVarName.asString() +
                            " used in "
                            "an alias was already selected on.\n" +
                            _lexer.input());
     }
+    // TODO<joka921> : What is going on here??
     variable_counts[a._outVarName];
   }
 }
@@ -116,25 +117,19 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
   }
   while (!_lexer.accept("where")) {
     if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-      query->_selectedVariables.push_back(_lexer.current().raw);
+      query->_selectedVariables.emplace_back(_lexer.current().raw);
     } else if (_lexer.accept("text")) {
       _lexer.expect("(");
-      std::ostringstream s;
-      s << "TEXT(";
       _lexer.expect(SparqlToken::Type::VARIABLE);
-      s << _lexer.current().raw;
+      auto variableName = _lexer.current().raw;
       _lexer.expect(")");
-      s << ")";
-      query->_selectedVariables.push_back(s.str());
+      query->_selectedVariables.emplace_back(variableName, SparqlVariable::Type::TEXT);
     } else if (_lexer.accept("score")) {
       _lexer.expect("(");
-      std::ostringstream s;
-      s << "SCORE(";
       _lexer.expect(SparqlToken::Type::VARIABLE);
-      s << _lexer.current().raw;
+      auto variableName = _lexer.current().raw;
       _lexer.expect(")");
-      s << ")";
-      query->_selectedVariables.push_back(s.str());
+      query->_selectedVariables.emplace_back(variableName, SparqlVariable::Type::SCORE);
     } else if (_lexer.accept("(")) {
       // expect an alias
       ParsedQuery::Alias a = parseAlias();
@@ -167,15 +162,15 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
     s << ")";
   } else if (_lexer.accept("(")) {
     ParsedQuery::Alias a = parseAlias();
-    for (const std::string& s : query->_selectedVariables) {
+    for (const auto& s : query->_selectedVariables) {
       if (s == a._outVarName) {
-        throw ParseException("A variable with name " + s +
+        throw ParseException("A variable with name " + s.asString() +
                              " is already used, but the order by with alias " +
                              a._function + " tries to use it again.");
       }
     }
     _lexer.expect(")");
-    s << a._outVarName;
+    s << a._outVarName.asString();
     query->_aliases.emplace_back(a);
   } else {
     _lexer.expect(SparqlToken::Type::VARIABLE);
@@ -218,8 +213,8 @@ ParsedQuery::Alias SparqlParser::parseAlias() {
     a._isDistinct = true;
   }
   _lexer.expect(SparqlToken::Type::VARIABLE);
-  a._inVarName = _lexer.current().raw;
-  func << "(" << a._inVarName;
+  a._inVarName = SparqlVariable(_lexer.current().raw);
+  func << "(" << a._inVarName.asString();
   if (_lexer.accept(";")) {
     if (agg != "group_concat") {
       throw ParseException(
@@ -236,8 +231,8 @@ ParsedQuery::Alias SparqlParser::parseAlias() {
   _lexer.expect(")");
   _lexer.expect("as");
   _lexer.expect(SparqlToken::Type::VARIABLE);
-  a._outVarName = _lexer.current().raw;
-  func << ") as " << a._outVarName;
+  a._outVarName = SparqlVariable{_lexer.current().raw};
+  func << ") as " << a._outVarName.asString();
 
   a._function = func.str();
   return a;
@@ -384,7 +379,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       if (_lexer.accept("(")) {
         // values with several variables
         while (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-          values._variables.push_back(_lexer.current().raw);
+          values._variables.emplace_back(_lexer.current().raw);
         }
         _lexer.expect(")");
         _lexer.expect("{");
@@ -401,7 +396,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         _lexer.expect("}");
       } else if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         // values with a single variable
-        values._variables.push_back(_lexer.current().raw);
+        values._variables.emplace_back(_lexer.current().raw);
         _lexer.expect("{");
         while (_lexer.accept(SparqlToken::Type::IRI) ||
                _lexer.accept(SparqlToken::Type::RDFLITERAL)) {

@@ -21,7 +21,7 @@ string Values::asString(size_t indent) const {
   }
   os << "VALUES (";
   for (size_t i = 0; i < _values._variables.size(); i++) {
-    os << _values._variables[i];
+    os << _values._variables[i].variableName();
     if (i + 1 < _values._variables.size()) {
       os << " ";
     }
@@ -49,7 +49,7 @@ string Values::getDescriptor() const {
   std::ostringstream os;
   os << "Values with variables ";
   for (size_t i = 0; i < _values._variables.size(); i++) {
-    os << _values._variables[i];
+    os << _values._variables[i].variableName();
     if (i + 1 < _values._variables.size()) {
       os << " ";
     }
@@ -79,7 +79,7 @@ vector<size_t> Values::resultSortedOn() const { return {}; }
 ad_utility::HashMap<string, size_t> Values::getVariableColumns() const {
   ad_utility::HashMap<string, size_t> map;
   for (size_t i = 0; i < _values._variables.size(); i++) {
-    map[_values._variables[i]] = i;
+    map[_values._variables[i].variableName()] = i;
   }
   return map;
 }

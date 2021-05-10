@@ -10,7 +10,7 @@
 #include "CallFixedSize.h"
 
 GroupBy::GroupBy(QueryExecutionContext* qec,
-                 const vector<string>& groupByVariables,
+                 const vector<SparqlVariable>& groupByVariables,
                  const std::vector<ParsedQuery::Alias>& aliases)
     : Operation(qec), _subtree(nullptr), _groupByVariables(groupByVariables) {
   _aliases.reserve(aliases.size());
@@ -23,20 +23,23 @@ GroupBy::GroupBy(QueryExecutionContext* qec,
   }
   std::sort(_aliases.begin(), _aliases.end(),
             [](const ParsedQuery::Alias& a1, const ParsedQuery::Alias& a2) {
-              return a1._outVarName < a2._outVarName;
+              return a1._outVarName.variableName() < a2._outVarName.variableName();
             });
 
   // sort the groupByVariables to ensure the cache key is order invariant
-  std::sort(_groupByVariables.begin(), _groupByVariables.end());
+  std::sort(_groupByVariables.begin(), _groupByVariables.end(),
+            [](const auto& a1, const auto& a2) {
+              return a1.variableName() < a2.variableName();}
+            );
 
   // The returned columns are all groupByVariables followed by aggregrates
   size_t colIndex = 0;
-  for (std::string var : _groupByVariables) {
-    _varColMap[var] = colIndex;
+  for (const auto& var : _groupByVariables) {
+    _varColMap[var.variableName()] = colIndex;
     colIndex++;
   }
   for (const ParsedQuery::Alias& a : _aliases) {
-    _varColMap[a._outVarName] = colIndex;
+    _varColMap[a._outVarName.variableName()] = colIndex;
     colIndex++;
   }
 }
@@ -53,8 +56,8 @@ string GroupBy::asString(size_t indent) const {
     os << " ";
   }
   os << "GROUP_BY ";
-  for (const std::string& var : _groupByVariables) {
-    os << varMap.at(var) << ", ";
+  for (const auto& var : _groupByVariables) {
+    os << varMap.at(var.variableName()) << ", ";
   }
   for (const auto& p : _aliases) {
     os << ParsedQuery::AggregateTypeAsString(p._type);
@@ -62,8 +65,8 @@ string GroupBy::asString(size_t indent) const {
       os << p._delimiter;
     }
 
-    os << ' ' << varMapInput.at(p._inVarName) << ' '
-       << varMap.at(p._outVarName);
+    os << ' ' << varMapInput.at(p._inVarName.variableName()) << ' '
+       << varMap.at(p._outVarName.variableName());
   }
   os << std::endl;
   os << _subtree->asString(indent);
@@ -71,7 +74,11 @@ string GroupBy::asString(size_t indent) const {
 }
 
 string GroupBy::getDescriptor() const {
-  return "GroupBy on " + ad_utility::join(_groupByVariables, ' ');
+  std::vector<string> groupVariableNames;
+  for (const auto& var: _groupByVariables) {
+    groupVariableNames.push_back(var.variableName());
+  }
+  return "GroupBy on " + ad_utility::join(groupVariableNames, ' ');
 }
 
 size_t GroupBy::getResultWidth() const { return _varColMap.size(); }
@@ -80,8 +87,8 @@ vector<size_t> GroupBy::resultSortedOn() const {
   auto varCols = getVariableColumns();
   vector<size_t> sortedOn;
   sortedOn.reserve(_groupByVariables.size());
-  for (std::string var : _groupByVariables) {
-    sortedOn.push_back(varCols[var]);
+  for (const auto& var : _groupByVariables) {
+    sortedOn.push_back(varCols[var.variableName()]);
   }
   return sortedOn;
 }
@@ -99,8 +106,8 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
 
   std::unordered_set<size_t> sortColSet;
 
-  for (std::string var : _groupByVariables) {
-    size_t col = inVarColMap[var];
+  for (const auto& var : _groupByVariables) {
+    size_t col = inVarColMap[var.variableName()];
     // avoid sorting by a column twice
     if (sortColSet.find(col) == sortColSet.end()) {
       sortColSet.insert(col);
@@ -109,10 +116,10 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
   }
 
   for (const ParsedQuery::Alias& a : _aliases) {
-    size_t col = inVarColMap[a._inVarName];
+    size_t col = inVarColMap[a._inVarName.variableName()];
     if (sortColSet.find(col) == sortColSet.end()) {
       sortColSet.insert(col);
-      cols.push_back({inVarColMap[a._inVarName], false});
+      cols.push_back({inVarColMap[a._inVarName.variableName()], false});
     }
   }
   return cols;
@@ -696,13 +703,13 @@ void GroupBy::computeResult(ResultTable* result) {
   // parse the group by columns
   ad_utility::HashMap<string, size_t> subtreeVarCols =
       _subtree->getVariableColumns();
-  for (const string& var : _groupByVariables) {
-    auto it = subtreeVarCols.find(var);
+  for (const auto& var : _groupByVariables) {
+    auto it = subtreeVarCols.find(var.variableName());
     if (it == subtreeVarCols.end()) {
-      LOG(WARN) << "Group by variable " << var << " is not groupable."
+      LOG(WARN) << "Group by variable " << var.variableName() << " is not groupable."
                 << std::endl;
       AD_THROW(ad_semsearch::Exception::BAD_QUERY,
-               "Groupby variable " + var + " is not groupable");
+               "Groupby variable " + var.variableName() + " is not groupable");
     }
     groupByColumns.push_back(it->second);
     // Add an "identity" aggregate in the form of a sample aggregate to
@@ -710,7 +717,7 @@ void GroupBy::computeResult(ResultTable* result) {
     aggregates.emplace_back();
     aggregates.back()._type = ParsedQuery::AggregateType::SAMPLE;
     aggregates.back()._inCol = it->second;
-    aggregates.back()._outCol = _varColMap.find(var)->second;
+    aggregates.back()._outCol = _varColMap.find(var.variableName())->second;
     aggregates.back()._userData = nullptr;
     aggregates.back()._distinct = false;
   }
@@ -726,14 +733,14 @@ void GroupBy::computeResult(ResultTable* result) {
       } else {
         aggregates.back()._userData = nullptr;
       }
-      auto inIt = subtreeVarCols.find(alias._inVarName);
+      auto inIt = subtreeVarCols.find(alias._inVarName.variableName());
       if (inIt == subtreeVarCols.end()) {
         LOG(WARN) << "The aggregate alias " << alias._function << " refers to "
                   << "a column not present in the query." << std::endl;
         return;
       }
       aggregates.back()._inCol = inIt->second;
-      aggregates.back()._outCol = _varColMap.find(alias._outVarName)->second;
+      aggregates.back()._outCol = _varColMap.find(alias._outVarName.variableName())->second;
     }
   }
 
@@ -778,8 +785,8 @@ void GroupBy::computeResult(ResultTable* result) {
 
   std::vector<size_t> groupByCols;
   groupByCols.reserve(_groupByVariables.size());
-  for (const string& var : _groupByVariables) {
-    groupByCols.push_back(subtreeVarCols[var]);
+  for (const auto& var : _groupByVariables) {
+    groupByCols.push_back(subtreeVarCols[var.variableName()]);
   }
 
   std::vector<ResultTable::ResultType> inputResultTypes;

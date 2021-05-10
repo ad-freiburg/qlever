@@ -85,19 +85,15 @@ void QueryExecutionTree::setVariableColumns(
 }
 
 // _____________________________________________________________________________
-void QueryExecutionTree::writeResultToStream(std::ostream& out,
-                                             const vector<string>& selectVars,
+void QueryExecutionTree::writeResultToStream(std::ostream& out, const vector<SparqlVariable>& selectVars,
                                              size_t limit, size_t offset,
                                              char sep) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
-  for (auto var : selectVars) {
-    if (ad_utility::startsWith(var, "TEXT(")) {
-      var = var.substr(5, var.rfind(')') - 5);
-    }
-    auto it = getVariableColumns().find(var);
+  for (const auto& var : selectVars) {
+    auto it = getVariableColumns().find(var.variableName());
     if (it != getVariableColumns().end()) {
       validIndices.push_back(pair<size_t, ResultTable::ResultType>(
           it->second, res->getResultType(it->second)));
@@ -118,16 +114,13 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out,
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsJson(
-    const vector<string>& selectVars, size_t limit, size_t offset) const {
+    const vector<SparqlVariable>& selectVars, size_t limit, size_t offset) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
-  for (auto var : selectVars) {
-    if (ad_utility::startsWith(var, "TEXT(")) {
-      var = var.substr(5, var.rfind(')') - 5);
-    }
-    auto vc = getVariableColumns().find(var);
+  for (const auto& var : selectVars) {
+    auto vc = getVariableColumns().find(var.variableName());
     if (vc != getVariableColumns().end()) {
       validIndices.push_back(pair<size_t, ResultTable::ResultType>(
           vc->second, res->getResultType(vc->second)));
