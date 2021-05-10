@@ -16,8 +16,8 @@ using std::vector;
 class TextOperationWithoutFilter : public Operation {
  public:
   TextOperationWithoutFilter(QueryExecutionContext* qec, const string& words,
-                             const std::set<string>& variables,
-                             const string& cvar, size_t textLimit = 1);
+                             const std::set<SparqlVariable>& variables,
+                             const SparqlVariable& cvar, size_t textLimit = 1);
 
   virtual string asString(size_t indent = 0) const override;
 
@@ -49,24 +49,24 @@ class TextOperationWithoutFilter : public Operation {
     return _variables.size() - 1;
   }
 
-  const std::set<string>& getVars() const { return _variables; }
+  const std::set<SparqlVariable>& getVars() const { return _variables; }
 
-  const string getCVar() const { return _cvar; }
+  const SparqlVariable& getCVar() const { return _cvar; }
 
   virtual bool knownEmptyResult() override {
     return _executionContext &&
            _executionContext->getIndex().getSizeEstimate(_words) == 0;
   }
 
-  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
+  virtual VariableColumnMap getVariableColumns()
       const override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
  private:
   const string _words;
-  const std::set<string> _variables;
-  const string _cvar;
+  const std::set<SparqlVariable> _variables;
+  const SparqlVariable _cvar;
 
   size_t _textLimit;
 

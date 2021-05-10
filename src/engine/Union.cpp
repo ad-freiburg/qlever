@@ -15,7 +15,7 @@ Union::Union(QueryExecutionContext* qec,
   _subtrees[1] = t2;
 
   // compute the column origins
-  ad_utility::HashMap<string, size_t> variableColumns = getVariableColumns();
+  VariableColumnMap variableColumns = getVariableColumns();
   _columnOrigins.resize(variableColumns.size(), {NO_COLUMN, NO_COLUMN});
   const auto& t1VarCols = t1->getVariableColumns();
   const auto& t2VarCols = t2->getVariableColumns();
@@ -60,8 +60,8 @@ size_t Union::getResultWidth() const {
 
 vector<size_t> Union::resultSortedOn() const { return {}; }
 
-ad_utility::HashMap<string, size_t> Union::getVariableColumns() const {
-  ad_utility::HashMap<string, size_t> variableColumns(
+Operation::VariableColumnMap Union::getVariableColumns() const {
+  VariableColumnMap variableColumns(
       _subtrees[0]->getVariableColumns());
 
   size_t column = variableColumns.size();

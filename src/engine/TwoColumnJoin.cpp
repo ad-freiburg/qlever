@@ -82,7 +82,7 @@ string TwoColumnJoin::getDescriptor() const {
   std::string joinVars = "";
   for (auto p : _left->getVariableColumns()) {
     if (p.second == _jc1Left || p.second == _jc2Left) {
-      joinVars += p.first + " ";
+      joinVars += p.first.asString() + " ";
     }
   }
   return "TwoColumnJoin on " + joinVars;
@@ -131,7 +131,7 @@ void TwoColumnJoin::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t> TwoColumnJoin::getVariableColumns() const {
+Operation::VariableColumnMap TwoColumnJoin::getVariableColumns() const {
   if ((_left->getResultWidth() == 2 && _jc1Left == 0 && _jc2Left == 1) ||
       (_right->getResultWidth() == 2 && _jc1Right == 0 && _jc2Right == 1)) {
     // This is for the implemented filter case from computeResult()
@@ -146,7 +146,7 @@ ad_utility::HashMap<string, size_t> TwoColumnJoin::getVariableColumns() const {
     // that variables are missing from the query if it tries to use
     // TwoColumnJoin in the unsupported (super expensive variant)
     // it then gives up and we don't find a working alternative.
-    ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
+    VariableColumnMap retVal(_left->getVariableColumns());
     size_t leftSize = _left->getResultWidth();
     const auto& rightVarCols = _right->getVariableColumns();
     for (const auto& rightVarCol : rightVarCols) {

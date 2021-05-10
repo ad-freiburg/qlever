@@ -17,7 +17,7 @@ size_t TextOperationWithFilter::getResultWidth() const {
 // _____________________________________________________________________________
 TextOperationWithFilter::TextOperationWithFilter(
     QueryExecutionContext* qec, const string& words,
-    const std::set<string>& variables, const string& cvar,
+    const std::set<SparqlVariable>& variables, const SparqlVariable& cvar,
     std::shared_ptr<QueryExecutionTree> filterResult, size_t filterColumn,
     size_t textLimit)
     : Operation(qec),
@@ -30,16 +30,16 @@ TextOperationWithFilter::TextOperationWithFilter(
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t>
+Operation::VariableColumnMap
 TextOperationWithFilter::getVariableColumns() const {
-  ad_utility::HashMap<string, size_t> vcmap;
+  VariableColumnMap vcmap;
   // Subtract one because the entity that we filtered on
   // is provided by the filter table and still has the same place there.
   vcmap[_cvar] = 0;
-  vcmap["SCORE(" + _cvar + ")"] = 1;
+  vcmap[SparqlVariable{_cvar.variableName(), SparqlVariable::Type::SCORE}] = 1;
   size_t colN = 2;
   const auto& filterColumns = _filterResult.get()->getVariableColumns();
-  for (const string& var : _variables) {
+  for (const auto& var : _variables) {
     if (var == _cvar) {
       continue;
     }

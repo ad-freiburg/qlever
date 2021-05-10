@@ -310,9 +310,9 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       _lexer.expect(SparqlToken::Type::VARIABLE);
       GraphPatternOperation::Bind b;
       if (isSum) {
-        b._expressionVariant = GraphPatternOperation::Bind::Sum{inVar, inVar2};
+        b._expressionVariant = GraphPatternOperation::Bind::Sum{SparqlVariable{inVar}, SparqlVariable{inVar2}};
       } else if (rename) {
-        b._expressionVariant = GraphPatternOperation::Bind::Rename{inVar};
+        b._expressionVariant = GraphPatternOperation::Bind::Rename{SparqlVariable{inVar}};
       } else {
         if (isString) {
           // Note that this only works if the literal or iri stored in inVar is
@@ -322,7 +322,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
           b._expressionVariant = GraphPatternOperation::Bind::Constant{val};
         }
       }
-      b._target = _lexer.current().raw;
+      b._target = SparqlVariable{_lexer.current().raw};
       _lexer.expect(")");
       currentPattern->_children.emplace_back(std::move(b));
       // the dot after the bind is optional
@@ -746,12 +746,12 @@ bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
     f2._type = SparqlFilter::LT;
     // Do prefix filtering by using two filters (one testing >=, the other =)
     _lexer.expect(SparqlToken::Type::VARIABLE);
-    f1._lhs = _lexer.current().raw;
+    f1._lhs = SparqlVariable{_lexer.current().raw};
     f2._lhs = f1._lhs;
     _lexer.expect(",");
     _lexer.expect(SparqlToken::Type::RDFLITERAL);
     f1._rhs = _lexer.current().raw;
-    f2._rhs = f1._lhs;
+    f2._rhs = f1._lhs.asString();
     f1._rhs = f1._rhs.substr(0, f1._rhs.size() - 1) + " ";
     f2._rhs = f2._rhs.substr(0, f2._rhs.size() - 2);
     f2._rhs += f1._rhs[f1._rhs.size() - 2] + 1;
@@ -768,20 +768,12 @@ bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
       f._lhsAsString = true;
     }
     // LHS
-    if (_lexer.accept(SparqlToken::Type::IRI)) {
-      f._lhs = _lexer.current().raw;
-    } else if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-      f._lhs = _lexer.current().raw;
-    } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
-      f._lhs = _lexer.current().raw;
-    } else if (_lexer.accept(SparqlToken::Type::INTEGER)) {
-      f._lhs = _lexer.current().raw;
-    } else if (_lexer.accept(SparqlToken::Type::FLOAT)) {
-      f._lhs = _lexer.current().raw;
+    if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+      f._lhs = SparqlVariable{_lexer.current().raw};
     } else {
       _lexer.accept();
       throw ParseException(_lexer.current().raw +
-                           " is not a valid left hand side for a filter.");
+                           " is not a valid left hand side for a filter. QLever currently only accepts variables in this position");
     }
     if (f._lhsAsString) {
       _lexer.expect(")");
@@ -979,7 +971,7 @@ SparqlFilter SparqlParser::parseRegexFilter(bool expectKeyword) {
     f._lhsAsString = true;
   }
   _lexer.expect(SparqlToken::Type::VARIABLE);
-  f._lhs = _lexer.current().raw;
+  f._lhs = SparqlVariable{_lexer.current().raw};
   if (f._lhsAsString) {
     _lexer.expect(")");
   }

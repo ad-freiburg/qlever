@@ -7,6 +7,7 @@
 #include <vector>
 #include "../parser/ParsedQuery.h"
 #include "QueryExecutionTree.h"
+#include "../util/HashSet.h"
 
 using std::vector;
 
@@ -30,20 +31,20 @@ class QueryPlanner {
       Node(size_t id, const SparqlTriple& t)
           : _id(id), _triple(t), _variables(), _cvar(), _wordPart() {
         if (isVariable(t._s)) {
-          _variables.insert(t._s);
+          _variables.insert(SparqlVariable{t._s});
         }
         if (isVariable(t._p)) {
-          _variables.insert(t._p._iri);
+          _variables.insert(SparqlVariable{t._p._iri});
         }
         if (isVariable(t._o)) {
-          _variables.insert(t._o);
+          _variables.insert(SparqlVariable{t._o});
         }
       }
 
-      Node(size_t id, const string& cvar, const string& wordPart,
+      Node(size_t id, const SparqlVariable& cvar, const string& wordPart,
            const vector<SparqlTriple>& trips)
           : _id(id),
-            _triple(cvar,
+            _triple(cvar.asString(),
                     PropertyPath(PropertyPath::Operation::IRI, 0,
                                  INTERNAL_TEXT_MATCH_PREDICATE, {}),
                     wordPart),
@@ -53,13 +54,13 @@ class QueryPlanner {
         _variables.insert(cvar);
         for (const auto& t : trips) {
           if (isVariable(t._s)) {
-            _variables.insert(t._s);
+            _variables.insert(SparqlVariable{t._s});
           }
           if (isVariable(t._p)) {
-            _variables.insert(t._p._iri);
+            _variables.insert(SparqlVariable{t._p._iri});
           }
           if (isVariable(t._o)) {
-            _variables.insert(t._o);
+            _variables.insert(SparqlVariable{t._o});
           }
         }
       }
@@ -78,17 +79,17 @@ class QueryPlanner {
       friend std::ostream& operator<<(std::ostream& out, const Node& n) {
         out << "id: " << n._id << " triple: " << n._triple.asString()
             << " _vars ";
-        for (const std::string& s : n._variables) {
-          out << s << ", ";
+        for (const auto& s : n._variables) {
+          out << s.asString() << ", ";
         }
-        out << " cvar " << n._cvar << " wordPart " << n._wordPart;
+        out << " cvar " << n._cvar.asString() << " wordPart " << n._wordPart;
         return out;
       }
 
       size_t _id;
       SparqlTriple _triple;
-      std::set<std::string> _variables;
-      string _cvar;
+      ad_utility::HashSet<SparqlVariable> _variables;
+      SparqlVariable _cvar;
       string _wordPart;
     };
 
@@ -247,7 +248,7 @@ class QueryPlanner {
       const std::string& left, const PropertyPath& path,
       const std::string& right);
 
-  std::string generateUniqueVarName();
+  SparqlVariable generateUniqueVarName();
 
   // Creates a tree of unions with the given patterns as the trees leaves
   ParsedQuery::GraphPattern uniteGraphPatterns(

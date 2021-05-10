@@ -62,7 +62,7 @@ string MultiColumnJoin::getDescriptor() const {
       // If the left join column matches the index of a variable in the left
       // subresult.
       if (jc[0] == p.second) {
-        joinVars += p.first + " ";
+        joinVars += p.first.asString() + " ";
       }
     }
   }
@@ -119,9 +119,9 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t> MultiColumnJoin::getVariableColumns()
+Operation::VariableColumnMap MultiColumnJoin::getVariableColumns()
     const {
-  ad_utility::HashMap<string, size_t> retVal(_left->getVariableColumns());
+  VariableColumnMap retVal(_left->getVariableColumns());
   size_t columnIndex = retVal.size();
   for (const auto& it : _right->getVariableColumns()) {
     bool isJoinColumn = false;

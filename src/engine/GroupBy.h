@@ -53,7 +53,7 @@ class GroupBy : public Operation {
 
   virtual vector<size_t> resultSortedOn() const override;
 
-  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
+  VariableColumnMap getVariableColumns() const override;
 
   virtual void setTextLimit(size_t limit) override {
     _subtree->setTextLimit(limit);
@@ -95,7 +95,7 @@ class GroupBy : public Operation {
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<SparqlVariable> _groupByVariables;
   std::vector<ParsedQuery::Alias> _aliases;
-  ad_utility::HashMap<string, size_t> _varColMap;
+  VariableColumnMap _varColMap;
 
   virtual void computeResult(ResultTable* result) override;
 

@@ -16,8 +16,8 @@ class TransitivePath : public Operation {
                  std::shared_ptr<QueryExecutionTree> child, bool leftIsVar,
                  bool rightIsVar, size_t leftSubCol, size_t rightSubCol,
                  size_t leftValue, size_t rightValue,
-                 const std::string& leftColName,
-                 const std::string& rightColName, size_t minDist,
+                 const SparqlVariable& leftColName,
+                 const SparqlVariable& rightColName, size_t minDist,
                  size_t maxDist);
 
   /**
@@ -54,7 +54,7 @@ class TransitivePath : public Operation {
 
   virtual vector<size_t> resultSortedOn() const override;
 
-  ad_utility::HashMap<std::string, size_t> getVariableColumns() const override;
+  VariableColumnMap getVariableColumns() const override;
 
   virtual void setTextLimit(size_t limit) override;
 
@@ -122,7 +122,7 @@ class TransitivePath : public Operation {
   size_t _rightSideCol;
 
   size_t _resultWidth;
-  ad_utility::HashMap<std::string, size_t> _variableColumns;
+  VariableColumnMap _variableColumns;
 
   std::shared_ptr<QueryExecutionTree> _subtree;
   bool _leftIsVar;
@@ -131,8 +131,8 @@ class TransitivePath : public Operation {
   size_t _rightSubCol;
   size_t _leftValue;
   size_t _rightValue;
-  std::string _leftColName;
-  std::string _rightColName;
+  SparqlVariable _leftColName;
+  SparqlVariable _rightColName;
   size_t _minDist;
   size_t _maxDist;
 };

@@ -64,23 +64,23 @@ void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
 }
 
 // _____________________________________________________________________________
-void QueryExecutionTree::setVariableColumn(const string& variable,
+void QueryExecutionTree::setVariableColumn(const SparqlVariable& variable,
                                            size_t column) {
   _variableColumnMap[variable] = column;
 }
 
 // _____________________________________________________________________________
-size_t QueryExecutionTree::getVariableColumn(const string& variable) const {
+size_t QueryExecutionTree::getVariableColumn(const SparqlVariable& variable) const {
   if (_variableColumnMap.count(variable) == 0) {
     AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-             "Variable could not be mapped to result column. Var: " + variable);
+             "Variable could not be mapped to result column. Var: " + variable.asString());
   }
   return _variableColumnMap.find(variable)->second;
 }
 
 // _____________________________________________________________________________
 void QueryExecutionTree::setVariableColumns(
-    ad_utility::HashMap<string, size_t> const& map) {
+    const VariableColumnMap & map) {
   _variableColumnMap = map;
 }
 
@@ -93,7 +93,7 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out, const vector<Spa
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
   for (const auto& var : selectVars) {
-    auto it = getVariableColumns().find(var.variableName());
+    auto it = getVariableColumns().find(var);
     if (it != getVariableColumns().end()) {
       validIndices.push_back(pair<size_t, ResultTable::ResultType>(
           it->second, res->getResultType(it->second)));
@@ -120,7 +120,7 @@ nlohmann::json QueryExecutionTree::writeResultAsJson(
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
   vector<std::optional<pair<size_t, ResultTable::ResultType>>> validIndices;
   for (const auto& var : selectVars) {
-    auto vc = getVariableColumns().find(var.variableName());
+    auto vc = getVariableColumns().find(var);
     if (vc != getVariableColumns().end()) {
       validIndices.push_back(pair<size_t, ResultTable::ResultType>(
           vc->second, res->getResultType(vc->second)));
@@ -173,8 +173,8 @@ bool QueryExecutionTree::knownEmptyResult() {
 }
 
 // _____________________________________________________________________________
-bool QueryExecutionTree::varCovered(string var) const {
-  return _variableColumnMap.count(var) > 0;
+bool QueryExecutionTree::varCovered(const SparqlVariable& var) const {
+  return _variableColumnMap.contains(var);
 }
 
 // _______________________________________________________________________

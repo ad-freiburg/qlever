@@ -51,7 +51,7 @@ class Distinct : public Operation {
 
   bool knownEmptyResult() override { return _subtree->knownEmptyResult(); }
 
-  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
+  VariableColumnMap getVariableColumns() const override;
 
   vector<QueryExecutionTree*> getChildren() override {
     return {_subtree.get()};

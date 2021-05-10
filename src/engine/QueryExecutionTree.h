@@ -24,6 +24,8 @@ class QueryExecutionTree {
  public:
   explicit QueryExecutionTree(QueryExecutionContext* const qec);
 
+  using VariableColumnMap = ad_utility::HashMap<SparqlVariable, size_t>;
+
   enum OperationType {
     UNDEFINED = 0,
     SCAN = 1,
@@ -54,7 +56,7 @@ class QueryExecutionTree {
 
   const QueryExecutionContext* getQec() const { return _qec; }
 
-  const ad_utility::HashMap<string, size_t>& getVariableColumns() const {
+  const VariableColumnMap& getVariableColumns() const {
     return _variableColumnMap;
   }
 
@@ -66,11 +68,11 @@ class QueryExecutionTree {
     return _type == OperationType::UNDEFINED || !_rootOperation;
   }
 
-  void setVariableColumn(const string& var, size_t i);
+  void setVariableColumn(const SparqlVariable& var, size_t i);
 
-  size_t getVariableColumn(const string& var) const;
+  size_t getVariableColumn(const SparqlVariable& var) const;
 
-  void setVariableColumns(const ad_utility::HashMap<string, size_t>& map);
+  void setVariableColumns(const VariableColumnMap & map);
 
   void setContextVars(const std::unordered_set<string>& set) {
     _contextVars = set;
@@ -124,7 +126,7 @@ class QueryExecutionTree {
                                _rootOperation->getMultiplicity(col));
   }
 
-  bool varCovered(string var) const;
+  bool varCovered(const SparqlVariable& var) const;
 
   bool knownEmptyResult();
 
@@ -172,9 +174,10 @@ class QueryExecutionTree {
   bool& isRoot() noexcept { return _isRoot; }
   [[nodiscard]] const bool& isRoot() const noexcept { return _isRoot; }
 
+
  private:
   QueryExecutionContext* _qec;  // No ownership
-  ad_utility::HashMap<string, size_t> _variableColumnMap;
+  VariableColumnMap _variableColumnMap;
   std::shared_ptr<Operation>
       _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;

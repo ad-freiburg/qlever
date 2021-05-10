@@ -14,6 +14,7 @@
 #include "QueryExecutionContext.h"
 #include "ResultTable.h"
 #include "RuntimeInformation.h"
+#include "../parser/ParsedQuery.h"
 
 using std::endl;
 using std::pair;
@@ -80,7 +81,9 @@ class Operation {
   virtual size_t getSizeEstimate() = 0;
   virtual float getMultiplicity(size_t col) = 0;
   virtual bool knownEmptyResult() = 0;
-  virtual ad_utility::HashMap<string, size_t> getVariableColumns() const = 0;
+
+  using VariableColumnMap = ad_utility::HashMap<SparqlVariable, size_t>;
+  virtual VariableColumnMap getVariableColumns() const = 0;
 
   RuntimeInformation& getRuntimeInfo() { return _runtimeInfo; }
 

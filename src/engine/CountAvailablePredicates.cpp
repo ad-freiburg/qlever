@@ -71,16 +71,16 @@ vector<size_t> CountAvailablePredicates::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-void CountAvailablePredicates::setVarNames(const std::string& predicateVarName,
-                                           const std::string& countVarName) {
+void CountAvailablePredicates::setVarNames(const SparqlVariable& predicateVarName,
+                                           const SparqlVariable& countVarName) {
   _predicateVarName = predicateVarName;
   _countVarName = countVarName;
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t>
+Operation::VariableColumnMap
 CountAvailablePredicates::getVariableColumns() const {
-  ad_utility::HashMap<string, size_t> varCols;
+  VariableColumnMap varCols;
   varCols[_predicateVarName] = 0;
   varCols[_countVarName] = 1;
   return varCols;

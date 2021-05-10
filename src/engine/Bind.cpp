@@ -73,24 +73,24 @@ string Bind::asString(size_t indent) const {
   }
 
   auto m = getVariableColumns();
-  auto strings = _bind.strings();
+  const auto& strings = _bind.strings();
+  const auto& variables = _bind.variables();
   os << "BIND (" << _bind.operationName() << ") on";
 
-  for (const auto& ptr : strings) {
-    auto s = *ptr;
+  // non-variable entries are added directly
+  for (const auto& ptr: strings) {
+    os << *ptr << ' ';
+  }
 
-    // non-variables are added directly (constants etc.)
-    if (!ad_utility::startsWith(s, "?")) {
-      os << s << ' ';
-      continue;
-    }
+  for (const auto& ptr : variables) {
+    const auto& s = *ptr;
 
     // variables are converted to the corresponding column index, to create the
     // same cache key for same query with changed variable names.
     if (!m.contains(s)) {
       AD_THROW(
           ad_semsearch::Exception::BAD_INPUT,
-          "Variable"s + s + " could not be mapped to column of BIND input");
+          "Variable"s + s.asString() + " could not be mapped to column of BIND input");
     }
     os << "(col " << m[s] << ") ";
   }
@@ -100,7 +100,7 @@ string Bind::asString(size_t indent) const {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t> Bind::getVariableColumns() const {
+Operation::VariableColumnMap Bind::getVariableColumns() const {
   auto res = _subtree->getVariableColumns();
   // The new variable is always appended at the end.
   res[_bind._target] = getResultWidth() - 1;

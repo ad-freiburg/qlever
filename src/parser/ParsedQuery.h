@@ -235,9 +235,9 @@ class SparqlFilter {
   string asString() const;
 
   FilterType _type;
-  string _lhs;
+  SparqlVariable _lhs;
   string _rhs;
-  vector<string> _additionalLhs;
+  vector<SparqlVariable> _additionalLhs;
   vector<string> _additionalPrefixes;
   bool _regexIgnoreCase = false;
   // True if the str function was applied to the left side.
@@ -455,32 +455,37 @@ struct GraphPatternOperation {
       // Some other functions need this interface, for example,
       // ParsedQuery::expandPrefix .
       vector<string*> strings() { return {&_kbValue}; }
+      vector<const SparqlVariable*> variables() { return {}; }
       [[nodiscard]] string getDescriptor() const { return _kbValue; }
     };
     struct Sum {
       static constexpr const char* Name = "Sum";
-      string _var1, _var2;
-      vector<string*> strings() { return {&_var1, &_var2}; }
+      SparqlVariable _var1, _var2;
+      vector<string*> strings() { return {}; }
+      vector<const SparqlVariable*> variables() { return {&_var1, &_var2}; }
       [[nodiscard]] string getDescriptor() const {
-        return _var1 + " + " + _var2;
+        return _var1.asString() + " + " + _var2.asString();
       }
     };
 
     struct Rename {
       static constexpr const char* Name = "Rename";
-      string _var;
-      vector<string*> strings() { return {&_var}; }
-      [[nodiscard]] string getDescriptor() const { return _var; }
+      SparqlVariable _var;
+      vector<string*> strings() { return {};}
+      vector<const SparqlVariable*> variables() { return {&_var}; }
+      [[nodiscard]] string getDescriptor() const { return _var.asString(); }
     };
     std::variant<Rename, Constant, Sum> _expressionVariant;
-    std::string _target;  // the variable to which the expression will be bound
+    SparqlVariable _target;  // the variable to which the expression will be bound
 
     // Return all the strings contained in the BIND expression (variables,
     // constants, etc. Is required e.g. by ParsedQuery::expandPrefix.
     vector<string*> strings() {
       auto r = std::visit([](auto&& arg) { return arg.strings(); },
                           _expressionVariant);
-      r.push_back(&_target);
+      // TODO<joka921>: who else uses this interface,
+      // do we need the variables for something else
+      //r.push_back(&_target);
       return r;
     }
 
@@ -491,6 +496,22 @@ struct GraphPatternOperation {
       return {r.begin(), r.end()};
     }
 
+    // All the variables contained in the expression
+    vector<const SparqlVariable*> variables() {
+      auto r = std::visit([](auto&& arg) { return arg.variables(); },
+                          _expressionVariant);
+      r.push_back(&_target);
+      return r;
+    }
+
+    // Const overload, needed by the query planner. The actual behavior is
+    // always const, so this is fine.
+    [[nodiscard]] vector<const SparqlVariable*> variables() const {
+      auto r = const_cast<Bind*>(this)->variables();
+      return {r.begin(), r.end()};
+    }
+
+
     // "Constant", "Rename" etc
     [[nodiscard]] constexpr const char* operationName() const {
       return std::visit([](auto&& arg) { return arg.Name; },
@@ -500,7 +521,7 @@ struct GraphPatternOperation {
     [[nodiscard]] string getDescriptor() const {
       auto inner = std::visit([](auto&& arg) { return arg.getDescriptor(); },
                               _expressionVariant);
-      return "BIND (" + inner + " AS " + _target + ")";
+      return "BIND (" + inner + " AS " + _target.asString() + ")";
     }
   };
 

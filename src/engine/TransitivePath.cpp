@@ -14,8 +14,8 @@
 TransitivePath::TransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     bool leftIsVar, bool rightIsVar, size_t leftSubCol, size_t rightSubCol,
-    size_t leftValue, size_t rightValue, const std::string& leftColName,
-    const std::string& rightColName, size_t minDist, size_t maxDist)
+    size_t leftValue, size_t rightValue, const SparqlVariable& leftColName,
+    const SparqlVariable& rightColName, size_t minDist, size_t maxDist)
     : Operation(qec),
       _leftSideTree(nullptr),
       _leftSideCol(-1),
@@ -132,7 +132,7 @@ vector<size_t> TransitivePath::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<std::string, size_t> TransitivePath::getVariableColumns()
+Operation::VariableColumnMap TransitivePath::getVariableColumns()
     const {
   return _variableColumns;
 }

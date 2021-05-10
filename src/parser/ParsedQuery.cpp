@@ -208,7 +208,7 @@ string SparqlTriple::asString() const {
 // _____________________________________________________________________________
 string SparqlFilter::asString() const {
   std::ostringstream os;
-  os << "FILTER(" << _lhs;
+  os << "FILTER(" << _lhs.asString();
   switch (_type) {
     case EQ:
       os << " < ";
@@ -254,7 +254,8 @@ void ParsedQuery::expandPrefixes() {
   }
 
   for (auto& f : _rootGraphPattern._filters) {
-    expandPrefix(f._lhs, prefixMap);
+    // lhs of a filter is always
+    //expandPrefix(f._lhs, prefixMap);
     // TODO<joka921>: proper type system for variable/regex/iri/etc
     if (f._type != SparqlFilter::REGEX) {
       expandPrefix(f._rhs, prefixMap);

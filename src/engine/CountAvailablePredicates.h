@@ -60,7 +60,7 @@ class CountAvailablePredicates : public Operation {
     return _subtree != nullptr ? R{_subtree.get()} : R{};
   }
 
-  ad_utility::HashMap<string, size_t> getVariableColumns() const override;
+  VariableColumnMap getVariableColumns() const override;
 
   virtual void setTextLimit(size_t limit) override {
     if (_subtree != nullptr) {
@@ -81,8 +81,8 @@ class CountAvailablePredicates : public Operation {
 
   virtual size_t getCostEstimate() override;
 
-  void setVarNames(const std::string& predicateVarName,
-                   const std::string& countVarName);
+  void setVarNames(const SparqlVariable& predicateVarName,
+                   const SparqlVariable& countVarName);
 
   // This method is declared here solely for unit testing purposes
   /**
@@ -115,8 +115,8 @@ class CountAvailablePredicates : public Operation {
   size_t _subjectColumnIndex;
   // This can be used to aquire the predicates for a single entity
   std::optional<std::string> _subjectEntityName;
-  std::string _predicateVarName;
-  std::string _countVarName;
+  SparqlVariable _predicateVarName;
+  SparqlVariable _countVarName;
 
   virtual void computeResult(ResultTable* result) override;
 };

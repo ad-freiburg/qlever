@@ -32,7 +32,7 @@ string Distinct::asString(size_t indent) const {
 string Distinct::getDescriptor() const { return "Distinct"; }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t> Distinct::getVariableColumns() const {
+Operation::VariableColumnMap Distinct::getVariableColumns() const {
   return _subtree->getVariableColumns();
 }
 

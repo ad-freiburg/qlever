@@ -25,11 +25,11 @@ class Bind : public Operation {
   size_t getSizeEstimate() override;
   float getMultiplicity(size_t col) override;
   bool knownEmptyResult() override;
-  [[nodiscard]] ad_utility::HashMap<string, size_t> getVariableColumns()
+  [[nodiscard]] VariableColumnMap getVariableColumns()
       const override;
 
   // Returns the variable to which the expression will be bound
-  [[nodiscard]] const string& targetVariable() const { return _bind._target; }
+  [[nodiscard]] const SparqlVariable& targetVariable() const { return _bind._target; }
 
  protected:
   [[nodiscard]] vector<size_t> resultSortedOn() const override;

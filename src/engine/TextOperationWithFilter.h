@@ -18,7 +18,7 @@ using std::vector;
 class TextOperationWithFilter : public Operation {
  public:
   TextOperationWithFilter(QueryExecutionContext* qec, const string& words,
-                          const std::set<string>& variables, const string& cvar,
+                          const std::set<SparqlVariable>& variables, const SparqlVariable& cvar,
                           std::shared_ptr<QueryExecutionTree> filterResult,
                           size_t filterColumn, size_t textLimit = 1);
 
@@ -50,9 +50,9 @@ class TextOperationWithFilter : public Operation {
     return _variables.size() - 1;
   }
 
-  const std::set<string>& getVars() const { return _variables; }
+  const std::set<SparqlVariable>& getVars() const { return _variables; }
 
-  const string getCVar() const { return _cvar; }
+  const SparqlVariable getCVar() const { return _cvar; }
 
   virtual bool knownEmptyResult() override {
     return _filterResult->knownEmptyResult() ||
@@ -66,13 +66,13 @@ class TextOperationWithFilter : public Operation {
 
   virtual float getMultiplicity(size_t col) override;
 
-  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
+  virtual VariableColumnMap getVariableColumns()
       const override;
 
  private:
   const string _words;
-  const std::set<string> _variables;
-  const string _cvar;
+  const std::set<SparqlVariable> _variables;
+  const SparqlVariable _cvar;
   size_t _textLimit;
 
   std::shared_ptr<QueryExecutionTree> _filterResult;

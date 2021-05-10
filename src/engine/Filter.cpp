@@ -18,8 +18,8 @@ size_t Filter::getResultWidth() const { return _subtree->getResultWidth(); }
 // _____________________________________________________________________________
 Filter::Filter(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> subtree,
-               SparqlFilter::FilterType type, string lhs, string rhs,
-               vector<string> additionalLhs, vector<string> additionalPrefixes)
+               SparqlFilter::FilterType type, SparqlVariable lhs, string rhs,
+               vector<SparqlVariable> additionalLhs, vector<string> additionalPrefixes)
     : Operation(qec),
       _subtree(std::move(subtree)),
       _type(type),
@@ -43,7 +43,7 @@ string Filter::asString(size_t indent) const {
     os << " ";
   }
   os << "FILTER " << _subtree->asString(indent);
-  os << " with " << _lhs;
+  os << " with " << _lhs.asString();
   switch (_type) {
     case SparqlFilter::EQ:
       os << " == ";
@@ -81,7 +81,7 @@ string Filter::asString(size_t indent) const {
   }
   os << _rhs;
   for (size_t i = 0; i < _additionalLhs.size(); ++i) {
-    os << " || " << _additionalLhs[i] << " " << _additionalPrefixRegexes[i];
+    os << " || " << _additionalLhs[i].asString() << " " << _additionalPrefixRegexes[i];
   }
   os << '\n';
   return os.str();
@@ -90,7 +90,7 @@ string Filter::asString(size_t indent) const {
 string Filter::getDescriptor() const {
   std::ostringstream os;
   os << "Filter ";
-  os << _lhs;
+  os << _lhs.asString();
   switch (_type) {
     case SparqlFilter::EQ:
       os << " == ";
@@ -125,7 +125,7 @@ string Filter::getDescriptor() const {
   }
   os << _rhs;
   for (size_t i = 0; i < _additionalLhs.size(); ++i) {
-    os << " || " << _additionalLhs[i] << " " << _additionalPrefixRegexes[i];
+    os << " || " << _additionalLhs[i].asString() << " " << _additionalPrefixRegexes[i];
   }
   return os.str();
 }
@@ -253,7 +253,7 @@ void Filter::computeResult(ResultTable* result) {
   size_t lhsInd = _subtree->getVariableColumn(_lhs);
   int width = result->_data.cols();
   if (_rhs[0] == '?') {
-    size_t rhsInd = _subtree->getVariableColumn(_rhs);
+    size_t rhsInd = _subtree->getVariableColumn(SparqlVariable{_rhs});
     CALL_FIXED_SIZE_1(width, computeResultDynamicValue, &result->_data, lhsInd,
                       rhsInd, subRes->_data, subRes->getResultType(lhsInd));
   } else {
