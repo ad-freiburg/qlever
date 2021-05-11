@@ -21,7 +21,7 @@ string Values::asString(size_t indent) const {
   }
   os << "VALUES (";
   for (size_t i = 0; i < _values._variables.size(); i++) {
-    os << _values._variables[i].variableName();
+    os << _values._variables[i].asString();
     if (i + 1 < _values._variables.size()) {
       os << " ";
     }
@@ -49,7 +49,7 @@ string Values::getDescriptor() const {
   std::ostringstream os;
   os << "Values with variables ";
   for (size_t i = 0; i < _values._variables.size(); i++) {
-    os << _values._variables[i].variableName();
+    os << _values._variables[i].asString();
     if (i + 1 < _values._variables.size()) {
       os << " ";
     }

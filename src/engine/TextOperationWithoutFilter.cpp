@@ -32,8 +32,7 @@ Operation::VariableColumnMap TextOperationWithoutFilter::getVariableColumns()
   VariableColumnMap vcmap;
   size_t index = 0;
   vcmap[_cvar] = index++;
-  vcmap[SparqlVariable{_cvar.variableName(), SparqlVariable::Type::SCORE}] =
-      index++;
+  vcmap[SparqlVariable{getTextScoreVariableName(_cvar.asString())}] = index++;
   for (const auto& var : _variables) {
     if (var != _cvar) {
       vcmap[var] = index++;

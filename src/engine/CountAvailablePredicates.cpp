@@ -11,8 +11,8 @@ CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec)
       _subtree(nullptr),
       _subjectColumnIndex(0),
       _subjectEntityName(),
-      _predicateVarName("predicate"),
-      _countVarName("count") {}
+      _predicateVarName("?:qlever-patterntrick-default-predicate"),
+      _countVarName("?:qlever-patterntrick-default-count") {}
 
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(
@@ -22,8 +22,8 @@ CountAvailablePredicates::CountAvailablePredicates(
       _subtree(subtree),
       _subjectColumnIndex(subjectColumnIndex),
       _subjectEntityName(),
-      _predicateVarName("predicate"),
-      _countVarName("count") {}
+      _predicateVarName("?:qlever-patterntrick-default-predicate"),
+      _countVarName("?:qlever-patterntrick-default-count") {}
 
 CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
                                                    std::string entityName)
@@ -31,8 +31,8 @@ CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec,
       _subtree(nullptr),
       _subjectColumnIndex(0),
       _subjectEntityName(entityName),
-      _predicateVarName("predicate"),
-      _countVarName("count") {}
+      _predicateVarName("?:qlever-patterntrick-default-predicate"),
+      _countVarName("?:qlever-patterntrick-default-count") {}
 
 // _____________________________________________________________________________
 string CountAvailablePredicates::asString(size_t indent) const {

@@ -1012,7 +1012,7 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
         qet.asString());
     ASSERT_EQ(0u, qet.getVariableColumn(SparqlVariable{"?c"}));
     ASSERT_EQ(1u, qet.getVariableColumn(
-                      SparqlVariable{"?c", SparqlVariable::Type::SCORE}));
+                      SparqlVariable{getTextScoreVariableName("?c")}));
     ASSERT_EQ(2u, qet.getVariableColumn(SparqlVariable{"?y"}));
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;

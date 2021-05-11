@@ -13,7 +13,7 @@ queries:
     checks:
       - num_cols: 3
       - num_rows: 1653
-      - selected: ["?x", "SCORE(?t)", "?t"]
+      - selected: ["?x", "?:qlever-text-score-?t", "?t"]
       - contains_row:
         - "<Albert_Einstein>"
         - 169
@@ -22,7 +22,7 @@ queries:
           he published a paper on general relativity."
       - contains_row: ["<Albert_Einstein>", null, null] # null cells are ignored
       - contains_row: ["<Luís_Lindley_Cintra>", null, null] # Test Unicode
-      - order_numeric: {"dir" : "DESC", "var": "SCORE(?t)"}
+      - order_numeric: {"dir" : "DESC", "var": "?:qlever-text-score-?t"}
   - query: relativ-star-scientists-from-ulm  # should use TextOperationWithFilter
     type: text
     sparql: |
@@ -36,7 +36,7 @@ queries:
     checks:
       - num_cols: 3
       - num_rows: 1
-      - selected: ["?x", "SCORE(?t)", "?t"]
+      - selected: ["?x", "?:qlever-text-score-?t", "?t"]
       - contains_row:
         - "<Albert_Einstein>"
         - 169
@@ -56,9 +56,9 @@ queries:
     checks:
       - num_cols: 2
       - num_rows: 11
-      - selected: ["?x", "SCORE(?t)"]
+      - selected: ["?x", "?:qlever-text-score-?t"]
       - contains_row: ["<Grete_Hermann>"]
-      - order_numeric: {"dir": "DESC", "var" : "SCORE(?t)"}
+      - order_numeric: {"dir": "DESC", "var" : "?:qlever-text-score-?t"}
   - query: algor-start-female-born-before-1940
     type: text
     sparql: |

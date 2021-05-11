@@ -491,9 +491,9 @@ bool QueryPlanner::checkUsePatternTrick(
       // Also check that the triples object or subject matches the aliases input
       // variable and the group by variable.
       if (t._p._iri != HAS_PREDICATE_PREDICATE ||
-          (returns_counts && !(counted_var_name.variableName() == t._o ||
-                               counted_var_name.variableName() == t._s)) ||
-          pq->_groupByVariables[0].variableName() != t._o) {
+          (returns_counts && !(counted_var_name.asString() == t._o ||
+                               counted_var_name.asString() == t._s)) ||
+          pq->_groupByVariables[0].asString() != t._o) {
         usePatternTrick = false;
         continue;
       }
@@ -501,7 +501,7 @@ bool QueryPlanner::checkUsePatternTrick(
       // check that all selected variables are outputs of
       // CountAvailablePredicates
       for (const auto& s : pq->_selectedVariables) {
-        if (s.variableName() != t._o && s != count_var_name) {
+        if (s.asString() != t._o && s != count_var_name) {
           usePatternTrick = false;
           break;
         }
@@ -565,7 +565,7 @@ bool QueryPlanner::checkUsePatternTrick(
           } else if constexpr (std::is_same_v<
                                    T, GraphPatternOperation::Subquery>) {
             for (const auto& v : arg._subquery._selectedVariables) {
-              if (v.variableName() == t._o) {
+              if (v.asString() == t._o) {
                 usePatternTrick = false;
                 break;
               }
@@ -612,7 +612,7 @@ bool QueryPlanner::checkUsePatternTrick(
             } else if constexpr (std::is_same_v<
                                      T, GraphPatternOperation::Subquery>) {
               for (const auto& v : arg._subquery._selectedVariables) {
-                if (v.variableName() == t._o) {
+                if (v == t._o) {
                   usePatternTrick = false;
                   break;
                 }
@@ -629,7 +629,7 @@ bool QueryPlanner::checkUsePatternTrick(
             } else if constexpr (std::is_same_v<
                                      T, GraphPatternOperation::Values>) {
               for (const auto& var : arg._inlineValues._variables) {
-                if (var.variableName() == t._o) {
+                if (var == t._o) {
                   usePatternTrick = false;
                   break;
                 }
@@ -2699,11 +2699,11 @@ QueryPlanner::createVariableColumnsMapForTextOperation(
   size_t n = 0;
   if (entityVar.size() > 0) {
     map[SparqlVariable{entityVar}] = n++;
-    map[SparqlVariable{contextVar, SparqlVariable::Type::SCORE}] = n++;
+    map[SparqlVariable{getTextScoreVariableName(contextVar)}] = n++;
     map[SparqlVariable{contextVar}] = n++;
   } else {
     map[SparqlVariable{contextVar}] = n++;
-    map[SparqlVariable{contextVar, SparqlVariable::Type::SCORE}] = n++;
+    map[SparqlVariable{getTextScoreVariableName(contextVar)}] = n++;
   }
 
   for (const auto& v : freeVars) {

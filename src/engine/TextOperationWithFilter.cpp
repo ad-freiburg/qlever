@@ -36,7 +36,7 @@ Operation::VariableColumnMap TextOperationWithFilter::getVariableColumns()
   // Subtract one because the entity that we filtered on
   // is provided by the filter table and still has the same place there.
   vcmap[_cvar] = 0;
-  vcmap[SparqlVariable{_cvar.variableName(), SparqlVariable::Type::SCORE}] = 1;
+  vcmap[SparqlVariable{getTextScoreVariableName(_cvar.asString())}] = 1;
   size_t colN = 2;
   const auto& filterColumns = _filterResult.get()->getVariableColumns();
   for (const auto& var : _variables) {

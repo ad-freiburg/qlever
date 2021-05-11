@@ -72,7 +72,7 @@ TEST(TransitivePathTest, computeTransitivePath) {
   expected.push_back({10, 11});
 
   TransitivePath T(nullptr, nullptr, false, false, 0, 0, 0, 0,
-                   SparqlVariable{"?bim"s}, SparqlVariable{"bam"s}, 0, 0);
+                   SparqlVariable{"?bim"s}, SparqlVariable{"?bam"s}, 0, 0);
 
   T.computeTransitivePath<2>(&result, sub, true, true, 0, 1, 0, 0, 1,
                              std::numeric_limits<size_t>::max());

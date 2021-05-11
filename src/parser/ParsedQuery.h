@@ -18,37 +18,21 @@
 using std::string;
 using std::vector;
 
+/// For the name of a (text) variable ?t, get a unique name for the
+/// corresponding text score variable (?:qlever-text-score-?t).
+inline string getTextScoreVariableName(const string& variableName) {
+  return "?:qlever-text-score-" + variableName;
+}
 /// A strong type for a variable. Currently we also support score variables like
 /// SCORE(?y) b.c. they are treated like variables from the text... machinery
 class SparqlVariable {
  public:
-  enum class Type { ORDINARY, SCORE };
-  [[nodiscard]] const string asString() const {
-    switch (_type) {
-      case Type::ORDINARY:
-        return _variable;
-      case Type::SCORE:
-        return "SCORE(" + _variable + ")";
-    }
-    return _variable;
-  }
-  [[nodiscard]] const string& variableName() const { return _variable; }
-  [[nodiscard]] const Type& type() const { return _type; }
-  explicit SparqlVariable(string variable, Type t = Type::ORDINARY)
-      : _variable{std::move(variable)}, _type{t} {
-    // TODO<joka921> The OrderKey currently still is a string that sometimes
-    // creates the SCORE(?x) form. This currently cannot be avoided.
-    if (_variable.starts_with("SCORE(")) {
-      AD_CHECK(_variable.ends_with(')'));
-      AD_CHECK(_type == Type::ORDINARY);
-      std::string_view varView{_variable};
-      varView.remove_prefix(6);
-      varView.remove_suffix(1);
-      _variable = std::string{varView};
-      _type = Type::SCORE;
-    }
+  [[nodiscard]] const string asString() const { return _variable; }
+  //[[nodiscard]] const string& variableName() const { return _variable; }
+  explicit SparqlVariable(string variable) : _variable{std::move(variable)} {
     // Currently there are still many empty variables in the setup process.
-    // AD_CHECK(ad_utility::startsWith(_variable, "?"));
+    // TODO<joka921> get rid of them via optional<>
+    AD_CHECK(_variable.empty() || _variable.starts_with('?'));
   }
   // TODO<joka921> We should get rid of this with the new Parser for type safety
   SparqlVariable() = default;
@@ -66,7 +50,6 @@ class SparqlVariable {
 
  private:
   string _variable;
-  Type _type;
 };
 
 namespace std {
@@ -225,7 +208,7 @@ class OrderKey {
              !::isspace(static_cast<unsigned char>(textual[end]))) {
         end++;
       }
-      _key = "SCORE(" + textual.substr(pos, end - pos) + ")";
+      _key = getTextScoreVariableName(textual.substr(pos, end - pos));
     } else if (lower[pos] == '?') {
       // key is simple variable
       size_t end = pos + 1;

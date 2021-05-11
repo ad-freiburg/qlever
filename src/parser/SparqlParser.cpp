@@ -46,26 +46,24 @@ void SparqlParser::parseQuery(ParsedQuery* query) {
     // Check if all selected variables are either aggregated or
     // part of the group by statement.
     for (const SparqlVariable& var : query->_selectedVariables) {
-      if (var.type() == SparqlVariable::Type::ORDINARY) {
-        bool is_alias = false;
-        for (const ParsedQuery::Alias& a : query->_aliases) {
-          if (a._outVarName == var) {
-            is_alias = true;
-            break;
-          }
+      bool is_alias = false;
+      for (const ParsedQuery::Alias& a : query->_aliases) {
+        if (a._outVarName == var) {
+          is_alias = true;
+          break;
         }
-        if (is_alias) {
-          continue;
-        }
-        if (std::find(query->_groupByVariables.begin(),
-                      query->_groupByVariables.end(),
-                      var) == query->_groupByVariables.end()) {
-          throw ParseException("Variable " + var.asString() +
-                               " is selected but not "
-                               "aggregated despite the query not being "
-                               "grouped by " +
-                               var.asString() + ".\n" + _lexer.input());
-        }
+      }
+      if (is_alias) {
+        continue;
+      }
+      if (std::find(query->_groupByVariables.begin(),
+                    query->_groupByVariables.end(),
+                    var) == query->_groupByVariables.end()) {
+        throw ParseException("Variable " + var.asString() +
+                             " is selected but not "
+                             "aggregated despite the query not being "
+                             "grouped by " +
+                             var.asString() + ".\n" + _lexer.input());
       }
     }
   }
@@ -131,8 +129,8 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       _lexer.expect(SparqlToken::Type::VARIABLE);
       auto variableName = _lexer.current().raw;
       _lexer.expect(")");
-      query->_selectedVariables.emplace_back(variableName,
-                                             SparqlVariable::Type::SCORE);
+      query->_selectedVariables.emplace_back(
+          getTextScoreVariableName(variableName));
     } else if (_lexer.accept("(")) {
       // expect an alias
       ParsedQuery::Alias a = parseAlias();
@@ -158,11 +156,9 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
   s << order << "(";
   if (_lexer.accept("score")) {
     _lexer.expect("(");
-    s << "SCORE(";
     _lexer.expect(SparqlToken::Type::VARIABLE);
-    s << _lexer.current().raw;
+    s << getTextScoreVariableName(_lexer.current().raw);
     _lexer.expect(")");
-    s << ")";
   } else if (_lexer.accept("(")) {
     ParsedQuery::Alias a = parseAlias();
     for (const auto& s : query->_selectedVariables) {
