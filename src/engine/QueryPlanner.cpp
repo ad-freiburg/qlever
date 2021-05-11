@@ -452,9 +452,9 @@ bool QueryPlanner::checkUsePatternTrick(
 
   // These will only be set if the query returns the count of predicates
   // The varialbe the COUNT alias counts
-  SparqlVariable counted_var_name;
+  std::optional<SparqlVariable> counted_var_name;
   // The variable holding the counts
-  SparqlVariable count_var_name;
+  std::optional<SparqlVariable> count_var_name;
 
   if (returns_counts) {
     // There has to be a single count alias
@@ -491,8 +491,8 @@ bool QueryPlanner::checkUsePatternTrick(
       // Also check that the triples object or subject matches the aliases input
       // variable and the group by variable.
       if (t._p._iri != HAS_PREDICATE_PREDICATE ||
-          (returns_counts && !(counted_var_name.asString() == t._o ||
-                               counted_var_name.asString() == t._s)) ||
+          (returns_counts && !(counted_var_name == t._o ||
+                               counted_var_name == t._s)) ||
           pq->_groupByVariables[0].asString() != t._o) {
         usePatternTrick = false;
         continue;
