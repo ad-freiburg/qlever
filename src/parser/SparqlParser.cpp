@@ -204,7 +204,6 @@ ParsedQuery::Alias SparqlParser::parseAlias() {
   } else {
     throw ParseException("Unknown aggregate " + agg);
   }
-  a._isAggregate = true;
 
   _lexer.expect("(");
   if (_lexer.accept("distinct")) {
@@ -212,7 +211,7 @@ ParsedQuery::Alias SparqlParser::parseAlias() {
     a._isDistinct = true;
   }
   _lexer.expect(SparqlToken::Type::VARIABLE);
-  a._inVarName = SparqlVariable(_lexer.current().raw);
+  a._inVarName = SparqlVariable{_lexer.current().raw};
   func << "(" << a._inVarName.asString();
   if (_lexer.accept(";")) {
     if (agg != "group_concat") {
@@ -307,24 +306,28 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       }
       _lexer.expect("as");
       _lexer.expect(SparqlToken::Type::VARIABLE);
-      GraphPatternOperation::Bind b;
+      std::optional<GraphPatternOperation::Bind::ExpressionVariant>
+          expressionVariant;
       if (isSum) {
-        b._expressionVariant = GraphPatternOperation::Bind::Sum{
+        expressionVariant = GraphPatternOperation::Bind::Sum{
             SparqlVariable{inVar}, SparqlVariable{inVar2}};
       } else if (rename) {
-        b._expressionVariant =
+        expressionVariant =
             GraphPatternOperation::Bind::Rename{SparqlVariable{inVar}};
       } else {
         if (isString) {
           // Note that this only works if the literal or iri stored in inVar is
           // part of the KB
-          b._expressionVariant = GraphPatternOperation::Bind::Constant{inVar};
+          expressionVariant = GraphPatternOperation::Bind::Constant{inVar};
         } else {
-          b._expressionVariant = GraphPatternOperation::Bind::Constant{val};
+          expressionVariant = GraphPatternOperation::Bind::Constant{val};
         }
       }
-      b._target = SparqlVariable{_lexer.current().raw};
+      auto target = SparqlVariable{_lexer.current().raw};
       _lexer.expect(")");
+      AD_CHECK(expressionVariant);
+      GraphPatternOperation::Bind b{std::move(*expressionVariant),
+                                    std::move(target)};
       currentPattern->_children.emplace_back(std::move(b));
       // the dot after the bind is optional
       _lexer.accept(".");

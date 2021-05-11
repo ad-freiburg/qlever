@@ -331,7 +331,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         for (auto& sub : candidatesIn) {
           size_t leftCol, rightCol;
           Id leftValue, rightValue;
-          SparqlVariable leftColName, rightColName;
+          std::optional<SparqlVariable> leftColName, rightColName;
           size_t min, max;
           bool leftVar, rightVar;
           if (isVariable(arg._left)) {
@@ -366,9 +366,10 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           }
           min = arg._min;
           max = arg._max;
+          AD_CHECK(leftColName && rightColName);
           auto transOp = std::make_shared<TransitivePath>(
               _qec, sub._qet, leftVar, rightVar, leftCol, rightCol, leftValue,
-              rightValue, leftColName, rightColName, min, max);
+              rightValue, *leftColName, *rightColName, min, max);
           candidatesOut.emplace_back(_qec);
           QueryExecutionTree& tree = *candidatesOut.back()._qet;
           tree.setVariableColumns(static_cast<TransitivePath*>(transOp.get())
@@ -491,8 +492,8 @@ bool QueryPlanner::checkUsePatternTrick(
       // Also check that the triples object or subject matches the aliases input
       // variable and the group by variable.
       if (t._p._iri != HAS_PREDICATE_PREDICATE ||
-          (returns_counts && !(counted_var_name == t._o ||
-                               counted_var_name == t._s)) ||
+          (returns_counts &&
+           !(counted_var_name == t._o || counted_var_name == t._s)) ||
           pq->_groupByVariables[0].asString() != t._o) {
         usePatternTrick = false;
         continue;
@@ -573,7 +574,7 @@ bool QueryPlanner::checkUsePatternTrick(
           } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
             // If the object variable of ql:has-predicate is used somewhere in a
             // BIND, we cannot use the pattern trick.
-            for (const std::string* v : arg.strings()) {
+            for (const SparqlVariable* v : arg.variables()) {
               if (*v == t._o) {
                 usePatternTrick = false;
                 break;
@@ -638,7 +639,7 @@ bool QueryPlanner::checkUsePatternTrick(
                                                 GraphPatternOperation::Bind>) {
               // If the object variable of ql:has-predicate is used somewhere in
               // a BIND, we cannot use the pattern trick.
-              for (const std::string* v : arg.strings()) {
+              for (const SparqlVariable* v : arg.variables()) {
                 if (*v == t._o) {
                   usePatternTrick = false;
                   break;
@@ -2685,9 +2686,7 @@ bool QueryPlanner::TripleGraph::isSimilar(
 
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isPureTextQuery() {
-  return _nodeStorage.size() == 1 &&
-         _nodeStorage.begin()->_cvar;
-
+  return _nodeStorage.size() == 1 && _nodeStorage.begin()->_cvar;
 }
 
 // _____________________________________________________________________________

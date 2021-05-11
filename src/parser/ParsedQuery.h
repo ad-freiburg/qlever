@@ -32,8 +32,6 @@ class SparqlVariable {
   explicit SparqlVariable(string variable) : _variable{std::move(variable)} {
     AD_CHECK(_variable.starts_with('?'));
   }
-  // TODO<joka921> We should get rid of this with the new Parser for type safety
-  SparqlVariable() = default;
 
   bool operator==(const SparqlVariable&) const = default;
 
@@ -239,7 +237,7 @@ class SparqlFilter {
   string asString() const;
 
   FilterType _type;
-  SparqlVariable _lhs;
+  SparqlVariable _lhs{"?:qlever-default-sparql-filter-lhs"};
   string _rhs;
   vector<SparqlVariable> _additionalLhs;
   vector<string> _additionalPrefixes;
@@ -339,8 +337,9 @@ class ParsedQuery {
 
   struct Alias {
     AggregateType _type;
-    SparqlVariable _inVarName;
-    SparqlVariable _outVarName;
+    SparqlVariable _inVarName{"?:qlever-default-alias-uninitialized-inVarName"};
+    SparqlVariable _outVarName{
+        "?:qlever-default-alias-uninitialized-outVarName"};
     bool _isAggregate = true;
     bool _isDistinct = false;
     std::string _function;
@@ -479,7 +478,9 @@ struct GraphPatternOperation {
       vector<const SparqlVariable*> variables() { return {&_var}; }
       [[nodiscard]] string getDescriptor() const { return _var.asString(); }
     };
-    std::variant<Rename, Constant, Sum> _expressionVariant;
+
+    using ExpressionVariant = std::variant<Rename, Constant, Sum>;
+    ExpressionVariant _expressionVariant;
     SparqlVariable
         _target;  // the variable to which the expression will be bound
 
