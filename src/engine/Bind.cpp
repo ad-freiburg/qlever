@@ -196,10 +196,10 @@ void Bind::computeBinaryOperationBind(
   const float NO_VALUE = std::numeric_limits<float>::quiet_NaN();
   char op = binaryOperator[0];
   std::function<float(float, float)> binaryOperations[4] = {
-    [](float v1, float v2) { return v1 + v2; },
-    [](float v1, float v2) { return v1 - v2; },
-    [](float v1, float v2) { return v1 * v2; },
-    [](float v1, float v2) { return v1 / v2; } };
+      [](float v1, float v2) { return v1 + v2; },
+      [](float v1, float v2) { return v1 - v2; },
+      [](float v1, float v2) { return v1 * v2; },
+      [](float v1, float v2) { return v1 / v2; }};
   size_t i = "+|*/"s.find(op);
   AD_CHECK(i != std::string::npos);
   auto binaryOperation = binaryOperations[i];
