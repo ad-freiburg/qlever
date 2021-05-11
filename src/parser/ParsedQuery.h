@@ -420,12 +420,13 @@ struct GraphPatternOperation {
       vector<string*> strings() { return {&_kbValue}; }
       [[nodiscard]] string getDescriptor() const { return _kbValue; }
     };
-    struct Sum {
-      static constexpr const char* Name = "Sum";
+    struct BinaryOperation {
+      static constexpr const char* Name = "Binary operation";
       string _var1, _var2;
-      vector<string*> strings() { return {&_var1, &_var2}; }
+      string _binaryOperator;
+      vector<string*> strings() { return {&_var1, &_var2, &_binaryOperator}; }
       [[nodiscard]] string getDescriptor() const {
-        return _var1 + " + " + _var2;
+        return _var1 + " " + _binaryOperator + " " + _var2;
       }
     };
 
@@ -435,7 +436,7 @@ struct GraphPatternOperation {
       vector<string*> strings() { return {&_var}; }
       [[nodiscard]] string getDescriptor() const { return _var; }
     };
-    std::variant<Rename, Constant, Sum> _expressionVariant;
+    std::variant<Rename, Constant, BinaryOperation> _expressionVariant;
     std::string _target;  // the variable to which the expression will be bound
 
     // Return all the strings contained in the BIND expression (variables,
