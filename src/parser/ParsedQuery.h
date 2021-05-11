@@ -30,9 +30,7 @@ class SparqlVariable {
   [[nodiscard]] const string asString() const { return _variable; }
   //[[nodiscard]] const string& variableName() const { return _variable; }
   explicit SparqlVariable(string variable) : _variable{std::move(variable)} {
-    // Currently there are still many empty variables in the setup process.
-    // TODO<joka921> get rid of them via optional<>
-    AD_CHECK(_variable.empty() || _variable.starts_with('?'));
+    AD_CHECK(_variable.starts_with('?'));
   }
   // TODO<joka921> We should get rid of this with the new Parser for type safety
   SparqlVariable() = default;

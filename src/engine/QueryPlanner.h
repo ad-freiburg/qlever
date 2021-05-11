@@ -82,14 +82,16 @@ class QueryPlanner {
         for (const auto& s : n._variables) {
           out << s.asString() << ", ";
         }
-        out << " cvar " << n._cvar.asString() << " wordPart " << n._wordPart;
+        if (n._cvar) {
+          out << " cvar " << n._cvar->asString() << " wordPart " << n._wordPart;
+        }
         return out;
       }
 
       size_t _id;
       SparqlTriple _triple;
       ad_utility::HashSet<SparqlVariable> _variables;
-      SparqlVariable _cvar;
+      std::optional<SparqlVariable> _cvar;
       string _wordPart;
     };
 

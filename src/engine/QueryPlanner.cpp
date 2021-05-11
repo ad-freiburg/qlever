@@ -1168,7 +1168,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
   }
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
     const TripleGraph::Node& node = *tg._nodeMap.find(i)->second;
-    if (node._cvar.asString().size() > 0) {
+    if (node._cvar) {
       seeds.push_back(getTextLeafPlan(node));
     } else {
       if (node._variables.size() == 0) {
@@ -1829,14 +1829,15 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   plan._idsOfIncludedNodes |= (size_t(1) << node._id);
   auto& tree = *plan._qet;
   AD_CHECK(node._wordPart.size() > 0);
+  AD_CHECK(node._cvar);
   auto textOp = std::make_shared<TextOperationWithoutFilter>(
       _qec, node._wordPart,
       std::set<SparqlVariable>{node._variables.begin(), node._variables.end()},
-      node._cvar);
+      *node._cvar);
   tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
                     textOp);
   tree.setVariableColumns(textOp->getVariableColumns());
-  tree.addContextVar(node._cvar);
+  tree.addContextVar(*node._cvar);
   return plan;
 }
 
@@ -2051,10 +2052,10 @@ QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
 string QueryPlanner::TripleGraph::asString() const {
   std::ostringstream os;
   for (size_t i = 0; i < _adjLists.size(); ++i) {
-    if (_nodeMap.find(i)->second->_cvar.asString().size() == 0) {
-      os << i << " " << _nodeMap.find(i)->second->_triple.asString() << " : (";
+    if (!_nodeMap.at(i)->_cvar) {
+      os << i << " " << _nodeMap.at(i)->_triple.asString() << " : (";
     } else {
-      os << i << " {TextOP for " << _nodeMap.find(i)->second->_cvar.asString()
+      os << i << " {TextOP for " << _nodeMap.at(i)->_cvar->asString()
          << ", wordPart: \"" << _nodeMap.find(i)->second->_wordPart
          << "\"} : (";
     }
@@ -2685,7 +2686,8 @@ bool QueryPlanner::TripleGraph::isSimilar(
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isPureTextQuery() {
   return _nodeStorage.size() == 1 &&
-         _nodeStorage.begin()->_cvar.asString().size() > 0;
+         _nodeStorage.begin()->_cvar;
+
 }
 
 // _____________________________________________________________________________
