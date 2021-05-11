@@ -9,10 +9,10 @@
 #include <string>
 #include <vector>
 
+#include "../parser/ParsedQuery.h"
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
 #include "../util/Timer.h"
-#include "../parser/ParsedQuery.h"
 
 class RuntimeInformation {
  public:

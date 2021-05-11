@@ -71,15 +71,16 @@ vector<size_t> CountAvailablePredicates::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-void CountAvailablePredicates::setVarNames(const SparqlVariable& predicateVarName,
-                                           const SparqlVariable& countVarName) {
+void CountAvailablePredicates::setVarNames(
+    const SparqlVariable& predicateVarName,
+    const SparqlVariable& countVarName) {
   _predicateVarName = predicateVarName;
   _countVarName = countVarName;
 }
 
 // _____________________________________________________________________________
-Operation::VariableColumnMap
-CountAvailablePredicates::getVariableColumns() const {
+Operation::VariableColumnMap CountAvailablePredicates::getVariableColumns()
+    const {
   VariableColumnMap varCols;
   varCols[_predicateVarName] = 0;
   varCols[_countVarName] = 1;

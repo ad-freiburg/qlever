@@ -56,8 +56,7 @@ class OrderBy : public Operation {
 
   virtual size_t getResultWidth() const override;
 
-  virtual VariableColumnMap getVariableColumns()
-      const override {
+  virtual VariableColumnMap getVariableColumns() const override {
     return _subtree->getVariableColumns();
   }
 

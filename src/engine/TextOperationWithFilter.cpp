@@ -30,8 +30,8 @@ TextOperationWithFilter::TextOperationWithFilter(
 }
 
 // _____________________________________________________________________________
-Operation::VariableColumnMap
-TextOperationWithFilter::getVariableColumns() const {
+Operation::VariableColumnMap TextOperationWithFilter::getVariableColumns()
+    const {
   VariableColumnMap vcmap;
   // Subtract one because the entity that we filtered on
   // is provided by the filter table and still has the same place there.

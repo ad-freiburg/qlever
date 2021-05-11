@@ -13,7 +13,7 @@ queries:
     checks:
       - num_cols: 3
       - num_rows: 1653
-      - selected: ["?x", "SCORE(?t)", "TEXT(?t)"]
+      - selected: ["?x", "SCORE(?t)", "?t"]
       - contains_row:
         - "<Albert_Einstein>"
         - 169
@@ -36,7 +36,7 @@ queries:
     checks:
       - num_cols: 3
       - num_rows: 1
-      - selected: ["?x", "SCORE(?t)", "TEXT(?t)"]
+      - selected: ["?x", "SCORE(?t)", "?t"]
       - contains_row:
         - "<Albert_Einstein>"
         - 169

@@ -42,7 +42,8 @@ class GroupBy : public Operation {
    * @param groupByVariables
    * @param aliases
    */
-  GroupBy(QueryExecutionContext* qec, const vector<SparqlVariable>& groupByVariables,
+  GroupBy(QueryExecutionContext* qec,
+          const vector<SparqlVariable>& groupByVariables,
           const std::vector<ParsedQuery::Alias>& aliases);
 
   virtual string asString(size_t indent = 0) const override;

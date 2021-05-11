@@ -119,8 +119,7 @@ void MultiColumnJoin::computeResult(ResultTable* result) {
 }
 
 // _____________________________________________________________________________
-Operation::VariableColumnMap MultiColumnJoin::getVariableColumns()
-    const {
+Operation::VariableColumnMap MultiColumnJoin::getVariableColumns() const {
   VariableColumnMap retVal(_left->getVariableColumns());
   size_t columnIndex = retVal.size();
   for (const auto& it : _right->getVariableColumns()) {

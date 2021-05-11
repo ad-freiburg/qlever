@@ -84,8 +84,7 @@ class IndexScan : public Operation {
 
   virtual bool knownEmptyResult() override { return getSizeEstimate() == 0; }
 
-  virtual VariableColumnMap getVariableColumns()
-      const override;
+  virtual VariableColumnMap getVariableColumns() const override;
 
   ScanType getType() const { return _type; }
 

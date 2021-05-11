@@ -8,13 +8,13 @@
 #include <memory>
 #include <utility>
 
+#include "../parser/ParsedQuery.h"
 #include "../util/Exception.h"
 #include "../util/Log.h"
 #include "../util/Timer.h"
 #include "QueryExecutionContext.h"
 #include "ResultTable.h"
 #include "RuntimeInformation.h"
-#include "../parser/ParsedQuery.h"
 
 using std::endl;
 using std::pair;

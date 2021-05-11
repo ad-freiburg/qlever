@@ -58,8 +58,7 @@ class TextOperationWithoutFilter : public Operation {
            _executionContext->getIndex().getSizeEstimate(_words) == 0;
   }
 
-  virtual VariableColumnMap getVariableColumns()
-      const override;
+  virtual VariableColumnMap getVariableColumns() const override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 

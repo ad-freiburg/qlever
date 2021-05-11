@@ -6,8 +6,8 @@
 #include <set>
 #include <vector>
 #include "../parser/ParsedQuery.h"
-#include "QueryExecutionTree.h"
 #include "../util/HashSet.h"
+#include "QueryExecutionTree.h"
 
 using std::vector;
 
@@ -106,7 +106,8 @@ class QueryPlanner {
     ad_utility::HashMap<size_t, Node*> _nodeMap;
     std::list<TripleGraph::Node> _nodeStorage;
 
-    ad_utility::HashMap<string, vector<size_t>> identifyTextCliques() const;
+    ad_utility::HashMap<SparqlVariable, vector<size_t>> identifyTextCliques()
+        const;
 
     vector<size_t> bfsLeaveOut(size_t startNode,
                                ad_utility::HashSet<size_t> leaveOut) const;
@@ -149,29 +150,25 @@ class QueryPlanner {
   TripleGraph createTripleGraph(
       const GraphPatternOperation::BasicGraphPattern* pattern) const;
 
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(
+  static Operation::VariableColumnMap createVariableColumnsMapForTextOperation(
       const string& contextVar, const string& entityVar,
       const ad_utility::HashSet<string>& freeVars,
       const vector<pair<QueryExecutionTree, size_t>>& subtrees);
 
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(
+  static Operation::VariableColumnMap createVariableColumnsMapForTextOperation(
       const string& contextVar, const string& entityVar,
       const vector<pair<QueryExecutionTree, size_t>>& subtrees) {
     return createVariableColumnsMapForTextOperation(
         contextVar, entityVar, ad_utility::HashSet<string>(), subtrees);
   };
 
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(const string& contextVar,
-                                           const string& entityVar) {
+  static Operation::VariableColumnMap createVariableColumnsMapForTextOperation(
+      const string& contextVar, const string& entityVar) {
     return createVariableColumnsMapForTextOperation(
         contextVar, entityVar, vector<pair<QueryExecutionTree, size_t>>());
   }
 
-  static ad_utility::HashMap<string, size_t>
-  createVariableColumnsMapForTextOperation(
+  static Operation::VariableColumnMap createVariableColumnsMapForTextOperation(
       const string& contextVar, const string& entityVar,
       const ad_utility::HashSet<string>& freeVars) {
     return createVariableColumnsMapForTextOperation(

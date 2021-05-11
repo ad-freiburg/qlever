@@ -249,7 +249,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
                 {std::make_pair<Node, vector<size_t>>(
                      QueryPlanner::TripleGraph::Node(
-                         0, "?c", "abc",
+                         0, SparqlVariable{"?c"}, "abc",
                          {
                              SparqlTriple(
                                  "?c",
@@ -292,7 +292,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
                 {std::make_pair<Node, vector<size_t>>(
                      QueryPlanner::TripleGraph::Node(
-                         0, "?c", "abc",
+                         0, SparqlVariable{"?c"}, "abc",
                          {SparqlTriple(
                               "?c",
                               "<QLever-internal-function/contains-entity>",
@@ -336,7 +336,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
                 {std::make_pair<Node, vector<size_t>>(
                      QueryPlanner::TripleGraph::Node(
-                         0, "?c", "abc",
+                         0, SparqlVariable{"?c"}, "abc",
                          {SparqlTriple(
                               "?c",
                               "<QLever-internal-function/contains-entity>",
@@ -412,7 +412,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
                 {std::make_pair<Node, vector<size_t>>(
                      QueryPlanner::TripleGraph::Node(
-                         0, "?c", "abc",
+                         0, SparqlVariable{"?c"}, "abc",
                          {SparqlTriple(
                               "?c",
                               "<QLever-internal-function/contains-entity>",
@@ -427,7 +427,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                      {1, 2}),
                  std::make_pair<Node, vector<size_t>>(
                      QueryPlanner::TripleGraph::Node(
-                         1, "?c2", "xx",
+                         1, SparqlVariable{"?c2"}, "xx",
                          {SparqlTriple(
                               "?c2",
                               "<QLever-internal-function/contains-entity>",
@@ -472,7 +472,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
             TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
                 {std::make_pair<Node, vector<size_t>>(
                      QueryPlanner::TripleGraph::Node(
-                         0, "?c", "abc",
+                         0, SparqlVariable{"?c"}, "abc",
                          {SparqlTriple(
                               "?c",
                               "<QLever-internal-function/contains-entity>",
@@ -487,7 +487,7 @@ TEST(QueryPlannerTest, testcollapseTextCliques) {
                      {1, 2, 3}),
                  std::make_pair<Node, vector<size_t>>(
                      QueryPlanner::TripleGraph::Node(
-                         1, "?c2", "xx",
+                         1, SparqlVariable{"?c2"}, "xx",
                          {SparqlTriple(
                               "?c2",
                               "<QLever-internal-function/contains-entity>",
@@ -1010,9 +1010,10 @@ TEST(QueryExecutionTreeTest, testBornInEuropeOwCocaine) {
         "      qet-width: 2 \n    } join-column: [0]\n    qet-width: 2 \n"
         "  }\n   filtered on column 1\n  qet-width: 4 \n}",
         qet.asString());
-    ASSERT_EQ(0u, qet.getVariableColumn("?c"));
-    ASSERT_EQ(1u, qet.getVariableColumn("SCORE(?c)"));
-    ASSERT_EQ(2u, qet.getVariableColumn("?y"));
+    ASSERT_EQ(0u, qet.getVariableColumn(SparqlVariable{"?c"}));
+    ASSERT_EQ(1u, qet.getVariableColumn(
+                      SparqlVariable{"?c", SparqlVariable::Type::SCORE}));
+    ASSERT_EQ(2u, qet.getVariableColumn(SparqlVariable{"?y"}));
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();
@@ -1142,8 +1143,8 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
     pq.expandPrefixes();
     QueryPlanner qp(nullptr);
     QueryExecutionTree qet = qp.createExecutionTree(pq);
-    ASSERT_TRUE(qet.varCovered("?1"));
-    ASSERT_TRUE(qet.varCovered("?0"));
+    ASSERT_TRUE(qet.varCovered(SparqlVariable{"?1"}));
+    ASSERT_TRUE(qet.varCovered(SparqlVariable{"?0"}));
   } catch (const ad_semsearch::Exception& e) {
     std::cout << "Caught: " << e.getFullErrorMessage() << std::endl;
     FAIL() << e.getFullErrorMessage();

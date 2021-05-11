@@ -23,14 +23,15 @@ GroupBy::GroupBy(QueryExecutionContext* qec,
   }
   std::sort(_aliases.begin(), _aliases.end(),
             [](const ParsedQuery::Alias& a1, const ParsedQuery::Alias& a2) {
-              return a1._outVarName.variableName() < a2._outVarName.variableName();
+              return a1._outVarName.variableName() <
+                     a2._outVarName.variableName();
             });
 
   // sort the groupByVariables to ensure the cache key is order invariant
   std::sort(_groupByVariables.begin(), _groupByVariables.end(),
             [](const auto& a1, const auto& a2) {
-              return a1.variableName() < a2.variableName();}
-            );
+              return a1.variableName() < a2.variableName();
+            });
 
   // The returned columns are all groupByVariables followed by aggregrates
   size_t colIndex = 0;
@@ -75,7 +76,7 @@ string GroupBy::asString(size_t indent) const {
 
 string GroupBy::getDescriptor() const {
   std::vector<string> groupVariableNames;
-  for (const auto& var: _groupByVariables) {
+  for (const auto& var : _groupByVariables) {
     groupVariableNames.push_back(var.variableName());
   }
   return "GroupBy on " + ad_utility::join(groupVariableNames, ' ');
@@ -101,8 +102,7 @@ vector<pair<size_t, bool>> GroupBy::computeSortColumns(
     return cols;
   }
 
-  auto inVarColMap =
-      inputTree->getVariableColumns();
+  auto inVarColMap = inputTree->getVariableColumns();
 
   std::unordered_set<size_t> sortColSet;
 
@@ -701,13 +701,12 @@ void GroupBy::computeResult(ResultTable* result) {
   aggregates.reserve(_aliases.size() + _groupByVariables.size());
 
   // parse the group by columns
-  auto subtreeVarCols =
-      _subtree->getVariableColumns();
+  auto subtreeVarCols = _subtree->getVariableColumns();
   for (const auto& var : _groupByVariables) {
     auto it = subtreeVarCols.find(var);
     if (it == subtreeVarCols.end()) {
-      LOG(WARN) << "Group by variable " << var.variableName() << " is not groupable."
-                << std::endl;
+      LOG(WARN) << "Group by variable " << var.variableName()
+                << " is not groupable." << std::endl;
       AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                "Groupby variable " + var.variableName() + " is not groupable");
     }

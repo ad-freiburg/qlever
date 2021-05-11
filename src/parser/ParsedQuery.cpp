@@ -255,7 +255,7 @@ void ParsedQuery::expandPrefixes() {
 
   for (auto& f : _rootGraphPattern._filters) {
     // lhs of a filter is always
-    //expandPrefix(f._lhs, prefixMap);
+    // expandPrefix(f._lhs, prefixMap);
     // TODO<joka921>: proper type system for variable/regex/iri/etc
     if (f._type != SparqlFilter::REGEX) {
       expandPrefix(f._rhs, prefixMap);

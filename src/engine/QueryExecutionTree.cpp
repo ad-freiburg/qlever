@@ -70,24 +70,25 @@ void QueryExecutionTree::setVariableColumn(const SparqlVariable& variable,
 }
 
 // _____________________________________________________________________________
-size_t QueryExecutionTree::getVariableColumn(const SparqlVariable& variable) const {
+size_t QueryExecutionTree::getVariableColumn(
+    const SparqlVariable& variable) const {
   if (_variableColumnMap.count(variable) == 0) {
     AD_THROW(ad_semsearch::Exception::CHECK_FAILED,
-             "Variable could not be mapped to result column. Var: " + variable.asString());
+             "Variable could not be mapped to result column. Var: " +
+                 variable.asString());
   }
   return _variableColumnMap.find(variable)->second;
 }
 
 // _____________________________________________________________________________
-void QueryExecutionTree::setVariableColumns(
-    const VariableColumnMap & map) {
+void QueryExecutionTree::setVariableColumns(const VariableColumnMap& map) {
   _variableColumnMap = map;
 }
 
 // _____________________________________________________________________________
-void QueryExecutionTree::writeResultToStream(std::ostream& out, const vector<SparqlVariable>& selectVars,
-                                             size_t limit, size_t offset,
-                                             char sep) const {
+void QueryExecutionTree::writeResultToStream(
+    std::ostream& out, const vector<SparqlVariable>& selectVars, size_t limit,
+    size_t offset, char sep) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
@@ -114,7 +115,8 @@ void QueryExecutionTree::writeResultToStream(std::ostream& out, const vector<Spa
 
 // _____________________________________________________________________________
 nlohmann::json QueryExecutionTree::writeResultAsJson(
-    const vector<SparqlVariable>& selectVars, size_t limit, size_t offset) const {
+    const vector<SparqlVariable>& selectVars, size_t limit,
+    size_t offset) const {
   // They may trigger computation (but does not have to).
   shared_ptr<const ResultTable> res = getResult();
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";

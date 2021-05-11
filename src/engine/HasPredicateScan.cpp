@@ -86,8 +86,7 @@ vector<size_t> HasPredicateScan::resultSortedOn() const {
   return {};
 }
 
-Operation::VariableColumnMap HasPredicateScan::getVariableColumns()
-    const {
+Operation::VariableColumnMap HasPredicateScan::getVariableColumns() const {
   VariableColumnMap varCols;
   switch (_type) {
     case ScanType::FREE_S:
@@ -102,7 +101,8 @@ Operation::VariableColumnMap HasPredicateScan::getVariableColumns()
       break;
     case ScanType::SUBQUERY_S:
       varCols = _subtree->getVariableColumns();
-      varCols.insert(std::make_pair(SparqlVariable{_object}, getResultWidth() - 1));
+      varCols.insert(
+          std::make_pair(SparqlVariable{_object}, getResultWidth() - 1));
       break;
   }
   return varCols;

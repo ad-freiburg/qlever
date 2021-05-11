@@ -61,8 +61,7 @@ size_t Union::getResultWidth() const {
 vector<size_t> Union::resultSortedOn() const { return {}; }
 
 Operation::VariableColumnMap Union::getVariableColumns() const {
-  VariableColumnMap variableColumns(
-      _subtrees[0]->getVariableColumns());
+  VariableColumnMap variableColumns(_subtrees[0]->getVariableColumns());
 
   size_t column = variableColumns.size();
   for (auto it : _subtrees[1]->getVariableColumns()) {

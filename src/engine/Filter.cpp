@@ -19,7 +19,8 @@ size_t Filter::getResultWidth() const { return _subtree->getResultWidth(); }
 Filter::Filter(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> subtree,
                SparqlFilter::FilterType type, SparqlVariable lhs, string rhs,
-               vector<SparqlVariable> additionalLhs, vector<string> additionalPrefixes)
+               vector<SparqlVariable> additionalLhs,
+               vector<string> additionalPrefixes)
     : Operation(qec),
       _subtree(std::move(subtree)),
       _type(type),
@@ -81,7 +82,8 @@ string Filter::asString(size_t indent) const {
   }
   os << _rhs;
   for (size_t i = 0; i < _additionalLhs.size(); ++i) {
-    os << " || " << _additionalLhs[i].asString() << " " << _additionalPrefixRegexes[i];
+    os << " || " << _additionalLhs[i].asString() << " "
+       << _additionalPrefixRegexes[i];
   }
   os << '\n';
   return os.str();
@@ -125,7 +127,8 @@ string Filter::getDescriptor() const {
   }
   os << _rhs;
   for (size_t i = 0; i < _additionalLhs.size(); ++i) {
-    os << " || " << _additionalLhs[i].asString() << " " << _additionalPrefixRegexes[i];
+    os << " || " << _additionalLhs[i].asString() << " "
+       << _additionalPrefixRegexes[i];
   }
   return os.str();
 }

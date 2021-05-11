@@ -194,7 +194,7 @@ vector<size_t> Join::resultSortedOn() const {
 }
 
 // _____________________________________________________________________________
-std::unordered_set<string> Join::getContextVars() const {
+std::unordered_set<SparqlVariable> Join::getContextVars() const {
   auto cvars = _left->getContextVars();
   cvars.insert(_right->getContextVars().begin(),
                _right->getContextVars().end());

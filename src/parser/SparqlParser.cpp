@@ -123,13 +123,16 @@ void SparqlParser::parseSelect(ParsedQuery* query) {
       _lexer.expect(SparqlToken::Type::VARIABLE);
       auto variableName = _lexer.current().raw;
       _lexer.expect(")");
-      query->_selectedVariables.emplace_back(variableName, SparqlVariable::Type::TEXT);
+      // TODO<joka921> The TEXT(?t) is redundant and equivalend to ?t
+      // we should warn here or remove it.
+      query->_selectedVariables.emplace_back(variableName);
     } else if (_lexer.accept("score")) {
       _lexer.expect("(");
       _lexer.expect(SparqlToken::Type::VARIABLE);
       auto variableName = _lexer.current().raw;
       _lexer.expect(")");
-      query->_selectedVariables.emplace_back(variableName, SparqlVariable::Type::SCORE);
+      query->_selectedVariables.emplace_back(variableName,
+                                             SparqlVariable::Type::SCORE);
     } else if (_lexer.accept("(")) {
       // expect an alias
       ParsedQuery::Alias a = parseAlias();
@@ -310,9 +313,11 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       _lexer.expect(SparqlToken::Type::VARIABLE);
       GraphPatternOperation::Bind b;
       if (isSum) {
-        b._expressionVariant = GraphPatternOperation::Bind::Sum{SparqlVariable{inVar}, SparqlVariable{inVar2}};
+        b._expressionVariant = GraphPatternOperation::Bind::Sum{
+            SparqlVariable{inVar}, SparqlVariable{inVar2}};
       } else if (rename) {
-        b._expressionVariant = GraphPatternOperation::Bind::Rename{SparqlVariable{inVar}};
+        b._expressionVariant =
+            GraphPatternOperation::Bind::Rename{SparqlVariable{inVar}};
       } else {
         if (isString) {
           // Note that this only works if the literal or iri stored in inVar is
@@ -772,8 +777,10 @@ bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
       f._lhs = SparqlVariable{_lexer.current().raw};
     } else {
       _lexer.accept();
-      throw ParseException(_lexer.current().raw +
-                           " is not a valid left hand side for a filter. QLever currently only accepts variables in this position");
+      throw ParseException(
+          _lexer.current().raw +
+          " is not a valid left hand side for a filter. QLever currently only "
+          "accepts variables in this position");
     }
     if (f._lhsAsString) {
       _lexer.expect(")");

@@ -56,11 +56,10 @@ class DummyOperation : public Operation {
 
   virtual bool knownEmptyResult() override { return false; }
 
-  virtual ad_utility::HashMap<string, size_t> getVariableColumns()
-      const override {
-    ad_utility::HashMap<string, size_t> m;
-    m["?a"] = 0;
-    m["?b"] = 1;
+  virtual VariableColumnMap getVariableColumns() const override {
+    VariableColumnMap m;
+    m[SparqlVariable{"?a"}] = 0;
+    m[SparqlVariable{"?b"}] = 1;
     return m;
   }
 };

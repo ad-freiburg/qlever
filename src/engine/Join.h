@@ -35,7 +35,7 @@ class Join : public Operation {
 
   VariableColumnMap getVariableColumns() const override;
 
-  std::unordered_set<string> getContextVars() const;
+  std::unordered_set<SparqlVariable> getContextVars() const;
 
   virtual void setTextLimit(size_t limit) override {
     _left->setTextLimit(limit);

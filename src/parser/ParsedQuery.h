@@ -18,42 +18,65 @@
 using std::string;
 using std::vector;
 
-// A strong type for a variable. Currently we also support text or score variables
-// TEXT(?x) or SCORE(?y)
+/// A strong type for a variable. Currently we also support score variables like
+/// SCORE(?y) b.c. they are treated like variables from the text... machinery
 class SparqlVariable {
  public:
-  enum class Type { ORDINARY, TEXT, SCORE};
+  enum class Type { ORDINARY, SCORE };
   [[nodiscard]] const string asString() const {
     switch (_type) {
-      case Type::ORDINARY : return _variable;
-      case Type::SCORE : return "SCORE(" + _variable + ")";
-      case Type::TEXT : return "TEXT(" + _variable + ")";
-
+      case Type::ORDINARY:
+        return _variable;
+      case Type::SCORE:
+        return "SCORE(" + _variable + ")";
     }
-    return _variable;}
-  [[nodiscard]] const string& variableName() const {
     return _variable;
   }
-  [[nodiscard]] const Type& type() const {return _type;}
-  explicit SparqlVariable(string variable, Type t = Type::ORDINARY) : _variable{std::move(variable)}, _type{t} {
-   AD_CHECK(ad_utility::startsWith(_variable, "?"));
-
+  [[nodiscard]] const string& variableName() const { return _variable; }
+  [[nodiscard]] const Type& type() const { return _type; }
+  explicit SparqlVariable(string variable, Type t = Type::ORDINARY)
+      : _variable{std::move(variable)}, _type{t} {
+    // TODO<joka921> The OrderKey currently still is a string that sometimes
+    // creates the SCORE(?x) form. This currently cannot be avoided.
+    if (_variable.starts_with("SCORE(")) {
+      AD_CHECK(_variable.ends_with(')'));
+      AD_CHECK(_type == Type::ORDINARY);
+      std::string_view varView{_variable};
+      varView.remove_prefix(6);
+      varView.remove_suffix(1);
+      _variable = std::string{varView};
+      _type = Type::SCORE;
+    }
+    // Currently there are still many empty variables in the setup process.
+    // AD_CHECK(ad_utility::startsWith(_variable, "?"));
   }
   // TODO<joka921> We should get rid of this with the new Parser for type safety
   SparqlVariable() = default;
+
   bool operator==(const SparqlVariable&) const = default;
+
+  // TODO<joka921> : The TextOperationWithFilter uses a std::set of variables,
+  // find out, if the ordering is indeed needed.
+  bool operator<(const SparqlVariable& rhs) const {
+    return asString() < rhs.asString();
+  };
+
+  // TODO<joka921> This operator also gets obsolete with more strong types
+  bool operator==(const string& rhs) const { return asString() == rhs; }
+
  private:
   string _variable;
   Type _type;
 };
 
 namespace std {
-template <> struct hash<SparqlVariable> {
+template <>
+struct hash<SparqlVariable> {
   auto operator()(const SparqlVariable& v) const {
     return std::hash<string>{}(v.asString());
   }
 };
-}
+}  // namespace std
 
 // Data container for prefixes
 class SparqlPrefix {
@@ -471,12 +494,13 @@ struct GraphPatternOperation {
     struct Rename {
       static constexpr const char* Name = "Rename";
       SparqlVariable _var;
-      vector<string*> strings() { return {};}
+      vector<string*> strings() { return {}; }
       vector<const SparqlVariable*> variables() { return {&_var}; }
       [[nodiscard]] string getDescriptor() const { return _var.asString(); }
     };
     std::variant<Rename, Constant, Sum> _expressionVariant;
-    SparqlVariable _target;  // the variable to which the expression will be bound
+    SparqlVariable
+        _target;  // the variable to which the expression will be bound
 
     // Return all the strings contained in the BIND expression (variables,
     // constants, etc. Is required e.g. by ParsedQuery::expandPrefix.
@@ -485,7 +509,7 @@ struct GraphPatternOperation {
                           _expressionVariant);
       // TODO<joka921>: who else uses this interface,
       // do we need the variables for something else
-      //r.push_back(&_target);
+      // r.push_back(&_target);
       return r;
     }
 
@@ -510,7 +534,6 @@ struct GraphPatternOperation {
       auto r = const_cast<Bind*>(this)->variables();
       return {r.begin(), r.end()};
     }
-
 
     // "Constant", "Rename" etc
     [[nodiscard]] constexpr const char* operationName() const {

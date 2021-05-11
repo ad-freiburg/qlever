@@ -18,7 +18,8 @@ using std::vector;
 class TextOperationWithFilter : public Operation {
  public:
   TextOperationWithFilter(QueryExecutionContext* qec, const string& words,
-                          const std::set<SparqlVariable>& variables, const SparqlVariable& cvar,
+                          const std::set<SparqlVariable>& variables,
+                          const SparqlVariable& cvar,
                           std::shared_ptr<QueryExecutionTree> filterResult,
                           size_t filterColumn, size_t textLimit = 1);
 
@@ -66,8 +67,7 @@ class TextOperationWithFilter : public Operation {
 
   virtual float getMultiplicity(size_t col) override;
 
-  virtual VariableColumnMap getVariableColumns()
-      const override;
+  virtual VariableColumnMap getVariableColumns() const override;
 
  private:
   const string _words;

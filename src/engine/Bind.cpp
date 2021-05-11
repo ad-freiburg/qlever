@@ -78,7 +78,7 @@ string Bind::asString(size_t indent) const {
   os << "BIND (" << _bind.operationName() << ") on";
 
   // non-variable entries are added directly
-  for (const auto& ptr: strings) {
+  for (const auto& ptr : strings) {
     os << *ptr << ' ';
   }
 
@@ -88,9 +88,9 @@ string Bind::asString(size_t indent) const {
     // variables are converted to the corresponding column index, to create the
     // same cache key for same query with changed variable names.
     if (!m.contains(s)) {
-      AD_THROW(
-          ad_semsearch::Exception::BAD_INPUT,
-          "Variable"s + s.asString() + " could not be mapped to column of BIND input");
+      AD_THROW(ad_semsearch::Exception::BAD_INPUT,
+               "Variable"s + s.asString() +
+                   " could not be mapped to column of BIND input");
     }
     os << "(col " << m[s] << ") ";
   }

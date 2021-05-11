@@ -8,11 +8,11 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include "../parser/ParsedQuery.h"
 #include "../util/Conversions.h"
 #include "../util/HashSet.h"
 #include "./Operation.h"
 #include "./QueryExecutionContext.h"
-#include "../parser/ParsedQuery.h"
 
 using std::shared_ptr;
 using std::string;
@@ -72,13 +72,13 @@ class QueryExecutionTree {
 
   size_t getVariableColumn(const SparqlVariable& var) const;
 
-  void setVariableColumns(const VariableColumnMap & map);
+  void setVariableColumns(const VariableColumnMap& map);
 
-  void setContextVars(const std::unordered_set<string>& set) {
+  void setContextVars(const std::unordered_set<SparqlVariable>& set) {
     _contextVars = set;
   }
 
-  const std::unordered_set<string>& getContextVars() const {
+  const std::unordered_set<SparqlVariable>& getContextVars() const {
     return _contextVars;
   }
 
@@ -100,11 +100,11 @@ class QueryExecutionTree {
     return _rootOperation->getResultSortedOn();
   }
 
-  bool isContextvar(const string& var) const {
+  bool isContextvar(const SparqlVariable& var) const {
     return _contextVars.count(var) > 0;
   }
 
-  void addContextVar(const string& var) { _contextVars.insert(var); }
+  void addContextVar(const SparqlVariable& var) { _contextVars.insert(var); }
 
   void setTextLimit(size_t limit) {
     _rootOperation->setTextLimit(limit);
@@ -174,14 +174,13 @@ class QueryExecutionTree {
   bool& isRoot() noexcept { return _isRoot; }
   [[nodiscard]] const bool& isRoot() const noexcept { return _isRoot; }
 
-
  private:
   QueryExecutionContext* _qec;  // No ownership
   VariableColumnMap _variableColumnMap;
   std::shared_ptr<Operation>
       _rootOperation;  // Owned child. Will be deleted at deconstruction.
   OperationType _type;
-  std::unordered_set<string> _contextVars;
+  std::unordered_set<SparqlVariable> _contextVars;
   string _asString;
   size_t _indent = 0;  // the indent with which the _asString repr was formatted
   size_t _sizeEstimate;

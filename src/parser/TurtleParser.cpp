@@ -623,7 +623,6 @@ bool TurtleStreamParser<T>::getLine(std::array<string, 3>* triple) {
           if (exceptionThrown) {
             throw ex;
           } else {
-
             // we are at the end of an input stream without an exception
             // the input is exhausted, but we still may retrieve
             // triples parsed so far, check if we have indeed parsed through

@@ -336,12 +336,14 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           bool leftVar, rightVar;
           if (isVariable(arg._left)) {
             leftVar = true;
-            leftCol = sub._qet->getVariableColumn(SparqlVariable{arg._innerLeft});
+            leftCol =
+                sub._qet->getVariableColumn(SparqlVariable{arg._innerLeft});
             leftColName = SparqlVariable{arg._left};
           } else {
             leftVar = false;
             leftColName = generateUniqueVarName();
-            leftCol = sub._qet->getVariableColumn(SparqlVariable{arg._innerLeft});
+            leftCol =
+                sub._qet->getVariableColumn(SparqlVariable{arg._innerLeft});
             if (!_qec->getIndex().getVocab().getId(arg._left, &leftValue)) {
               AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                        "No vocabulary entry for " + arg._left);
@@ -349,11 +351,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           }
           if (isVariable(arg._right)) {
             rightVar = true;
-            rightCol = sub._qet->getVariableColumn(SparqlVariable{arg._innerRight});
+            rightCol =
+                sub._qet->getVariableColumn(SparqlVariable{arg._innerRight});
             rightColName = SparqlVariable{arg._right};
           } else {
             rightVar = false;
-            rightCol = sub._qet->getVariableColumn(SparqlVariable{arg._innerRight});
+            rightCol =
+                sub._qet->getVariableColumn(SparqlVariable{arg._innerRight});
             rightColName = generateUniqueVarName();
             if (!_qec->getIndex().getVocab().getId(arg._right, &rightValue)) {
               AD_THROW(ad_semsearch::Exception::BAD_QUERY,
@@ -487,8 +491,8 @@ bool QueryPlanner::checkUsePatternTrick(
       // Also check that the triples object or subject matches the aliases input
       // variable and the group by variable.
       if (t._p._iri != HAS_PREDICATE_PREDICATE ||
-          (returns_counts &&
-           !(counted_var_name.variableName() == t._o || counted_var_name.variableName() == t._s)) ||
+          (returns_counts && !(counted_var_name.variableName() == t._o ||
+                               counted_var_name.variableName() == t._s)) ||
           pq->_groupByVariables[0].variableName() != t._o) {
         usePatternTrick = false;
         continue;
@@ -669,7 +673,7 @@ bool QueryPlanner::checkUsePatternTrick(
       auto& filters = pq->_rootGraphPattern._filters;
       for (size_t i = 0; i < filters.size(); i++) {
         const SparqlFilter& filter = filters[i];
-        if (filter._lhs == t._o && filter._rhs[0] != '?') {
+        if (filter._lhs.asString() == t._o && filter._rhs[0] != '?') {
           pq->_havingClauses.push_back(filter);
           filters.erase(filters.begin() + i);
           i--;
@@ -885,7 +889,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       const SubtreePlan& parent = (*previous)[i];
       // Determine the column containing the subjects for which we are
       // interested in their predicates.
-      auto it = parent._qet->getVariableColumns().find(SparqlVariable{patternTrickTriple._s});
+      auto it = parent._qet->getVariableColumns().find(
+          SparqlVariable{patternTrickTriple._s});
       if (it == parent._qet->getVariableColumns().end()) {
         AD_THROW(ad_semsearch::Exception::BAD_QUERY,
                  "The root operation of the "
@@ -916,7 +921,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
       auto countPred = std::make_shared<CountAvailablePredicates>(
           _qec, isSorted ? parent._qet : orderByPlan._qet, subjectColumn);
 
-      countPred->setVarNames(SparqlVariable{patternTrickTriple._o}, pq._aliases[0]._outVarName);
+      countPred->setVarNames(SparqlVariable{patternTrickTriple._o},
+                             pq._aliases[0]._outVarName);
       QueryExecutionTree& tree = *patternTrickPlan._qet;
       tree.setVariableColumns(countPred->getVariableColumns());
       tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
@@ -929,7 +935,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     auto countPred =
         std::make_shared<CountAvailablePredicates>(_qec, patternTrickTriple._s);
 
-    countPred->setVarNames(SparqlVariable{patternTrickTriple._o}, pq._aliases[0]._outVarName);
+    countPred->setVarNames(SparqlVariable{patternTrickTriple._o},
+                           pq._aliases[0]._outVarName);
     QueryExecutionTree& tree = *patternTrickPlan._qet;
     tree.setVariableColumns(countPred->getVariableColumns());
     tree.setOperation(QueryExecutionTree::COUNT_AVAILABLE_PREDICATES,
@@ -941,9 +948,11 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getPatternTrickRow(
     auto countPred = std::make_shared<CountAvailablePredicates>(_qec);
 
     if (pq._aliases.size() > 0) {
-      countPred->setVarNames(SparqlVariable{patternTrickTriple._o}, pq._aliases[0]._outVarName);
+      countPred->setVarNames(SparqlVariable{patternTrickTriple._o},
+                             pq._aliases[0]._outVarName);
     } else {
-      countPred->setVarNames(SparqlVariable{patternTrickTriple._o}, generateUniqueVarName());
+      countPred->setVarNames(SparqlVariable{patternTrickTriple._o},
+                             generateUniqueVarName());
     }
     QueryExecutionTree& tree = *patternTrickPlan._qet;
     tree.setVariableColumns(countPred->getVariableColumns());
@@ -1036,7 +1045,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     plan._idsOfIncludedNodes = previous[i]._idsOfIncludedNodes;
     plan._idsOfIncludedFilters = previous[i]._idsOfIncludedFilters;
     if (pq._orderBy.size() == 1 && !pq._orderBy[0]._desc) {
-      size_t col = previous[i]._qet->getVariableColumn(SparqlVariable{pq._orderBy[0]._key});
+      size_t col = previous[i]._qet->getVariableColumn(
+          SparqlVariable{pq._orderBy[0]._key});
       const std::vector<size_t>& previousSortedOn =
           previous[i]._qet->resultSortedOn();
       if (previousSortedOn.size() > 0 && col == previousSortedOn[0]) {
@@ -1053,7 +1063,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
       vector<pair<size_t, bool>> sortIndices;
       for (auto& ord : pq._orderBy) {
         sortIndices.emplace_back(pair<size_t, bool>{
-            previous[i]._qet->getVariableColumn(SparqlVariable{ord._key}), ord._desc});
+            previous[i]._qet->getVariableColumn(SparqlVariable{ord._key}),
+            ord._desc});
       }
       const std::vector<size_t>& previousSortedOn =
           previous[i]._qet->resultSortedOn();
@@ -1213,8 +1224,9 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
             scanTree->setVariableColumn(SparqlVariable{node._triple._s}, 0);
             scanTree->setVariableColumn(filterVar, 1);
             auto filter = std::make_shared<Filter>(
-                _qec, scanTree, SparqlFilter::FilterType::EQ, SparqlVariable{node._triple._s},
-                filterVar, vector<string>{}, vector<string>{});
+                _qec, scanTree, SparqlFilter::FilterType::EQ,
+                SparqlVariable{node._triple._s}, filterVar.asString(),
+                vector<SparqlVariable>{}, vector<string>{});
             tree.setOperation(QueryExecutionTree::OperationType::FILTER,
                               filter);
             tree.setVariableColumns(filter->getVariableColumns());
@@ -1566,7 +1578,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
   connectionVarNames[0] = left;
   connectionVarNames.back() = right;
   for (size_t i = 1; i + 1 < connectionVarNames.size(); i++) {
-    connectionVarNames[i] = generateUniqueVarName();
+    connectionVarNames[i] = generateUniqueVarName().asString();
   }
 
   // Stores the pattern for every non null chunk
@@ -1620,9 +1632,9 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
         continue;
       }
       std::string l = left;
-      SparqlVariable r;
+      std::string r;
       if (included_ids.size() > 1) {
-        r = generateUniqueVarName();
+        r = generateUniqueVarName().asString();
       } else {
         r = right;
       }
@@ -1638,7 +1650,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
         // Update the variables used on the left and right of the child path
         l = r;
         if (i + 2 < included_ids.size()) {
-          r = generateUniqueVarName();
+          r = generateUniqueVarName().asString();
         } else {
           r = right;
         }
@@ -1706,8 +1718,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromAlternative(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
-  std::string innerLeft = generateUniqueVarName();
-  std::string innerRight = generateUniqueVarName();
+  std::string innerLeft = generateUniqueVarName().asString();
+  std::string innerRight = generateUniqueVarName().asString();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
@@ -1728,8 +1740,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitive(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
-  std::string innerLeft = generateUniqueVarName();
-  std::string innerRight = generateUniqueVarName();
+  std::string innerLeft = generateUniqueVarName().asString();
+  std::string innerRight = generateUniqueVarName().asString();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
@@ -1750,8 +1762,8 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMin(
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromTransitiveMax(
     const std::string& left, const PropertyPath& path,
     const std::string& right) {
-  std::string innerLeft = generateUniqueVarName();
-  std::string innerRight = generateUniqueVarName();
+  std::string innerLeft = generateUniqueVarName().asString();
+  std::string innerRight = generateUniqueVarName().asString();
   std::shared_ptr<ParsedQuery::GraphPattern> childPlan =
       seedFromPropertyPath(innerLeft, path._children[0], innerRight);
   std::shared_ptr<ParsedQuery::GraphPattern> p =
@@ -1818,7 +1830,9 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   auto& tree = *plan._qet;
   AD_CHECK(node._wordPart.size() > 0);
   auto textOp = std::make_shared<TextOperationWithoutFilter>(
-      _qec, node._wordPart, node._variables, node._cvar);
+      _qec, node._wordPart,
+      std::set<SparqlVariable>{node._variables.begin(), node._variables.end()},
+      node._cvar);
   tree.setOperation(QueryExecutionTree::OperationType::TEXT_WITHOUT_FILTER,
                     textOp);
   tree.setVariableColumns(textOp->getVariableColumns());
@@ -2037,10 +2051,10 @@ QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
 string QueryPlanner::TripleGraph::asString() const {
   std::ostringstream os;
   for (size_t i = 0; i < _adjLists.size(); ++i) {
-    if (_nodeMap.find(i)->second->_cvar.size() == 0) {
+    if (_nodeMap.find(i)->second->_cvar.asString().size() == 0) {
       os << i << " " << _nodeMap.find(i)->second->_triple.asString() << " : (";
     } else {
-      os << i << " {TextOP for " << _nodeMap.find(i)->second->_cvar
+      os << i << " {TextOP for " << _nodeMap.find(i)->second->_cvar.asString()
          << ", wordPart: \"" << _nodeMap.find(i)->second->_wordPart
          << "\"} : (";
     }
@@ -2130,7 +2144,7 @@ string QueryPlanner::getPruningKey(
   for (size_t orderedOnCol : orderedOnColumns) {
     for (const auto& varCol : varCols) {
       if (varCol.second == orderedOnCol) {
-        os << varCol.first << ", ";
+        os << varCol.first.asString() << ", ";
         break;
       }
     }
@@ -2184,7 +2198,7 @@ void QueryPlanner::applyFiltersIfPossible(
                         return row[n]._qet->varCovered(lhs);
                       }) &&
           (!isVariable(filters[i]._rhs) ||
-           row[n]._qet->varCovered(filters[i]._rhs))) {
+           row[n]._qet->varCovered(SparqlVariable{filters[i]._rhs}))) {
         // Apply this filter.
         SubtreePlan newPlan(_qec);
         newPlan._idsOfIncludedFilters = row[n]._idsOfIncludedFilters;
@@ -2279,15 +2293,15 @@ bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, vector<size_t>>
+ad_utility::HashMap<SparqlVariable, vector<size_t>>
 QueryPlanner::TripleGraph::identifyTextCliques() const {
-  ad_utility::HashMap<string, vector<size_t>> contextVarToTextNodesIds;
+  ad_utility::HashMap<SparqlVariable, vector<size_t>> contextVarToTextNodesIds;
   // Fill contextVar -> triples map
   for (size_t i = 0; i < _adjLists.size(); ++i) {
     if (isTextNode(i)) {
       auto& triple = _nodeMap.find(i)->second->_triple;
       auto& cvar = triple._s;
-      contextVarToTextNodesIds[cvar].push_back(i);
+      contextVarToTextNodesIds[SparqlVariable{cvar}].push_back(i);
     }
   }
   return contextVarToTextNodesIds;
@@ -2399,16 +2413,16 @@ vector<SparqlFilter> QueryPlanner::TripleGraph::pickFilters(
     const vector<SparqlFilter>& origFilters,
     const vector<size_t>& nodes) const {
   vector<SparqlFilter> ret;
-  ad_utility::HashSet<string> coveredVariables;
+  ad_utility::HashSet<SparqlVariable> coveredVariables;
   for (auto n : nodes) {
     auto& node = *_nodeMap.find(n)->second;
     for (const auto& variable : node._variables) {
-      coveredVariables.insert(variable.asString());
+      coveredVariables.insert(variable);
     }
   }
   for (auto& f : origFilters) {
     if (coveredVariables.count(f._lhs) > 0 ||
-        coveredVariables.count(f._rhs) > 0) {
+        coveredVariables.count(SparqlVariable{f._rhs}) > 0) {
       ret.push_back(f);
     }
   }
@@ -2489,7 +2503,7 @@ void QueryPlanner::TripleGraph::collapseTextCliques() {
   // complex than need be.
 
   // Create a map from context var to triples it occurs in (the cliques).
-  ad_utility::HashMap<string, vector<size_t>> cvarsToTextNodes(
+  ad_utility::HashMap<SparqlVariable, vector<size_t>> cvarsToTextNodes(
       identifyTextCliques());
   if (cvarsToTextNodes.size() == 0) {
     return;
@@ -2670,29 +2684,30 @@ bool QueryPlanner::TripleGraph::isSimilar(
 
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isPureTextQuery() {
-  return _nodeStorage.size() == 1 && _nodeStorage.begin()->_cvar.asString().size() > 0;
+  return _nodeStorage.size() == 1 &&
+         _nodeStorage.begin()->_cvar.asString().size() > 0;
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<string, size_t>
+Operation::VariableColumnMap
 QueryPlanner::createVariableColumnsMapForTextOperation(
     const string& contextVar, const string& entityVar,
     const ad_utility::HashSet<string>& freeVars,
     const vector<pair<QueryExecutionTree, size_t>>& subtrees) {
   AD_CHECK(contextVar.size() > 0);
-  ad_utility::HashMap<string, size_t> map;
+  Operation::VariableColumnMap map;
   size_t n = 0;
   if (entityVar.size() > 0) {
-    map[entityVar] = n++;
-    map[string("SCORE(") + contextVar + ")"] = n++;
-    map[contextVar] = n++;
+    map[SparqlVariable{entityVar}] = n++;
+    map[SparqlVariable{contextVar, SparqlVariable::Type::SCORE}] = n++;
+    map[SparqlVariable{contextVar}] = n++;
   } else {
-    map[contextVar] = n++;
-    map[string("SCORE(") + contextVar + ")"] = n++;
+    map[SparqlVariable{contextVar}] = n++;
+    map[SparqlVariable{contextVar, SparqlVariable::Type::SCORE}] = n++;
   }
 
   for (const auto& v : freeVars) {
-    map[v] = n++;
+    map[SparqlVariable{v}] = n++;
   }
 
   for (size_t i = 0; i < subtrees.size(); ++i) {

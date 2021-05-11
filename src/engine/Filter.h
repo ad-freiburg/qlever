@@ -22,7 +22,8 @@ class Filter : public Operation {
   Filter(QueryExecutionContext* qec,
          std::shared_ptr<QueryExecutionTree> subtree,
          SparqlFilter::FilterType type, SparqlVariable lhs, string rhs,
-         vector<SparqlVariable> additionalLhs, vector<string> additionalPrefixes);
+         vector<SparqlVariable> additionalLhs,
+         vector<string> additionalPrefixes);
 
   virtual string asString(size_t indent = 0) const override;
 
@@ -104,8 +105,7 @@ class Filter : public Operation {
     return _subtree->getMultiplicity(col);
   }
 
-  virtual VariableColumnMap getVariableColumns()
-      const override {
+  virtual VariableColumnMap getVariableColumns() const override {
     return _subtree->getVariableColumns();
   }
 

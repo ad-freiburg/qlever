@@ -272,12 +272,12 @@ TEST(ParserTest, testParse) {
       const auto& values2 =
           pq.children()[1].get<GraphPatternOperation::Values>()._inlineValues;
 
-      vector<string> vvars = {"?a"};
+      vector<SparqlVariable> vvars = {SparqlVariable{"?a"}};
       ASSERT_EQ(vvars, values1._variables);
       vector<vector<string>> vvals = {{"<1>"}, {"\"2\""}};
       ASSERT_EQ(vvals, values1._values);
 
-      vvars = {"?b", "?c"};
+      vvars = {SparqlVariable{"?b"}, SparqlVariable{"?c"}};
       ASSERT_EQ(vvars, values2._variables);
       vvals = {{"<1>", "<2>"}, {"\"1\"", "\"2\""}};
       ASSERT_EQ(vvals, values2._values);
@@ -299,12 +299,12 @@ SELECT ?a ?b ?c WHERE {
       const auto& values2 =
           pq.children()[1].get<GraphPatternOperation::Values>()._inlineValues;
 
-      vector<string> vvars = {"?a"};
+      vector<SparqlVariable> vvars = {SparqlVariable{"?a"}};
       ASSERT_EQ(vvars, values1._variables);
       vector<vector<string>> vvals = {{"<Albert_Einstein>"}};
       ASSERT_EQ(vvals, values1._values);
 
-      vvars = {"?b", "?c"};
+      vvars = {SparqlVariable{"?b"}, SparqlVariable{"?c"}};
       ASSERT_EQ(vvars, values2._variables);
       vvals = {{"<Marie_Curie>", "<Joseph_Jacobson>"},
                {"<Freiherr>", "<Lord_of_the_Isles>"}};
@@ -333,7 +333,7 @@ SELECT ?a ?b ?c WHERE {
       ASSERT_EQ(c._whereClauseTriples[0]._p._iri, "wdt:P31");
       ASSERT_EQ(c._whereClauseTriples[0]._s, "?city");
 
-      vector<string> vvars = {"?citytype"};
+      vector<SparqlVariable> vvars = {SparqlVariable{"?citytype"}};
       ASSERT_EQ(vvars, values1._variables);
       vector<vector<string>> vvals = {{"wd:Q515"}, {"wd:Q262166"}};
       ASSERT_EQ(vvals, values1._values);
