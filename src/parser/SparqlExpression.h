@@ -243,51 +243,51 @@ class SparqlExpression {
 
 template <bool RangeCalculationAllowed, typename RangeCalculation, typename ValueExtractor, typename BinaryOperation>
 auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation, ValueExtractor valueExtractor, BinaryOperation binaryOperation, evaluationInput* input) {
-  return [input, rangeCalculation, valueExtractor, binaryOperation](const auto& a, const auto& b) -> SparqlExpression::EvaluateResult {
-    using A = std::decay_t<decltype(a)>;
-    using B = std::decay_t<decltype(b)>;
-    if constexpr (RangeCalculationAllowed && std::is_same_v<A, Ranges> && std::is_same_v<B, Ranges>) {
-      return rangeCalculation(a, b);
+  return [input, rangeCalculation, valueExtractor, binaryOperation](auto&&... args) -> SparqlExpression::EvaluateResult {
+    //using Args = std::decay_t<decltype(args)>...;
+    //using A = std::decay_t<decltype(a)>;
+    //using B = std::decay_t<decltype(b)>;
+    if constexpr (RangeCalculationAllowed && (... && std::is_same_v<std::decay_t<decltype(args)>, Ranges>)) {
+      return rangeCalculation(std::forward<decltype(args)>(args)...);
     } else {
-      auto aExpand = expandRanges(std::move(a), input->_inputSize);
-      auto bExpand = expandRanges(std::move(b), input->_inputSize);
-      //AD_CHECK(aExpand.size() == bExpand.size());
 
+      auto getSize = [&input](const auto& x) -> size_t {
+        using T = std::decay_t<decltype(x)>;
+        if constexpr (isVector<T>) {
+          return x.size();
+        } else if constexpr (std::is_same_v<Ranges,T>) {
+          return input->_inputTable->size();
+        } else {
+          return 1;
+        }
+      };
 
-      auto extractValueA = [&aExpand, &valueExtractor, input](size_t index) {
+      auto targetSize =  std::max({getSize(args)...});
+
+      auto extractors = std::make_tuple([expanded=expandRanges(std::forward<decltype(args)>(args), targetSize), &valueExtractor, input](size_t index) {
+        using A = std::decay_t<decltype(expanded)>;
         if constexpr (isVector<A>) {
-          return valueExtractor(aExpand[index], input);
+          return valueExtractor(expanded[index], input);
         } else if constexpr (std::is_same_v<Variable, A>) {
-          return valueExtractor(aExpand(index, input));
+          return valueExtractor(expanded(index, input));
         } else {
-          return valueExtractor(aExpand, input);
+          return valueExtractor(expanded, input);
         }
+      }...);
+
+
+      auto create = [&](auto&&... extractors) {
+        using ResultType = std::decay_t<decltype(binaryOperation(extractors(0)...))>;
+        std::vector<ResultType> result;
+        result.reserve(targetSize);
+        for (size_t i = 0; i < targetSize; ++i) {
+          result.push_back(binaryOperation(extractors(i)...));
+        }
+        return result;
       };
 
-      auto extractValueB = [&bExpand, &valueExtractor, input](size_t index) {
-        if constexpr (isVector<B>) {
-          return valueExtractor(bExpand[index], input);
-        } else if constexpr (std::is_same_v<Variable, B>) {
-          return valueExtractor(bExpand(index, input));
-        } else {
-          return valueExtractor(bExpand, input);
-        }
-      };
+      auto result = std::apply(create, std::move(extractors));
 
-      using ResultType = std::decay_t<decltype(binaryOperation(extractValueA(0),
-                                                               extractValueB(0)))>;
-      std::vector<ResultType> result;
-      size_t targetSize = 1;
-      if constexpr (isVector<A>) {
-        targetSize = aExpand.size();
-      }
-      if constexpr (isVector<B>) {
-        targetSize = bExpand.size();
-      }
-      result.reserve(targetSize);
-      for (size_t i = 0; i < targetSize; ++i) {
-        result.push_back(binaryOperation(extractValueA(i), extractValueB(i)));
-      }
       if (targetSize == 1) {
         return result[0];
       } else {
