@@ -171,3 +171,7 @@ add_executable(SparqlAntlrParserTest SparqlAntlrParserTest.cpp)
 target_link_libraries(SparqlAntlrParserTest gtest_main sparqlParser ${CMAKE_THREAD_LIBS_INIT})
 # this test runs for quite some time! If this is undesired, comment it out
 add_test(SparqlAntlrParserTest SparqlAntlrParserTest)
+
+add_executable(SparqlExpressionTest SparqlExpressionTest.cpp)
+add_test(SparqlExpressionTest SparqlExpressionTest)
+target_link_libraries(SparqlExpressionTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
