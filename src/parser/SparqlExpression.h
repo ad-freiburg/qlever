@@ -23,70 +23,118 @@ struct StrongId {
   Id _value;
 };
 
-inline double getNumericValue(double v, evaluationInput*) { return v;}
-inline int64_t getNumericValue(int64_t v, evaluationInput*) { return v;}
-inline bool getNumericValue(bool v, evaluationInput*) { return v;}
+struct NumericValueGetter {
+  double operator()(double v, evaluationInput*) const { return v; }
+  int64_t operator()(int64_t v, evaluationInput*) const { return v; }
+  bool operator()(bool v, evaluationInput*) const { return v; }
 
-inline double getNumericValue(StrongId id, evaluationInput*); // Todo: implement
+  double operator()(StrongId id, evaluationInput*) const;  // Todo: implement
+};
 
-inline bool getBoolValue(double v, evaluationInput*) { return v;}
-inline bool getBoolValue(int64_t v, evaluationInput*) { return v;}
-inline bool getBoolValue(bool v, evaluationInput*) { return v;}
+struct BooleanValueGetter {
+   bool operator()(double v, evaluationInput*) const { return v; }
+   bool operator()(int64_t v, evaluationInput*) const { return v; }
+   bool operator()(bool v, evaluationInput*) const { return v; }
 
-inline bool getBoolValue(StrongId id, evaluationInput* input) {
-  // load the string, parse it as an xsd::int or float
-  auto optional =
-      input->_qec->getIndex().idToOptionalString(id._value);
-  if (!optional) {
-    return false;
+   bool operator()(StrongId id, evaluationInput* input) const {
+    // load the string, parse it as an xsd::int or float
+    auto optional = input->_qec->getIndex().idToOptionalString(id._value);
+    if (!optional) {
+      return false;
+    }
+    const auto& entity = optional.value();
+    if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+      // Strings that exist are considered as a boolean "True"
+      // TODO: what do we do about "" and <>, are they false
+      return true;
+    } else {
+      auto value = ad_utility::convertIndexWordToFloat(entity);
+      return value != 0.0;
+    }
   }
-  const auto& entity = optional.value();
-  if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
-    // Strings that exist are considered as a boolean "True"
-    // TODO: what do we do about "" and <>, are they false
-    return true;
-  } else {
-    auto value = ad_utility::convertIndexWordToFloat(entity);
-    return value != 0.0;
-  }
-}// Todo: implement
+};
 
 
 
 // Result type for certain boolean expression: all the values in the intervals are "true"
 using Ranges = std::vector<std::pair<size_t, size_t>>;
 
-// when we have two sets of ranges, get their union
-Ranges mergeRanges(Ranges rangesA, Ranges rangesB) {
-  std::sort(rangesA.begin(), rangesA.end(), [](const auto&a, const auto& b) {return a.first < b.first;});
-  std::sort(rangesB.begin(), rangesB.end(), [](const auto&a, const auto& b) {return a.first < b.first;});
+struct RangeMerger {
+  // when we have two sets of ranges, get their union
+  Ranges operator()(Ranges rangesA, Ranges rangesB) const {
+    std::sort(rangesA.begin(), rangesA.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::sort(rangesB.begin(), rangesB.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
 
-  Ranges result;
-  auto iteratorA = rangesA.begin();
-  auto iteratorB = rangesB.begin();
+    Ranges result;
+    auto iteratorA = rangesA.begin();
+    auto iteratorB = rangesB.begin();
 
-  while (iteratorA < rangesA.end() && iteratorB < rangesB.end()) {
-    auto& itSmaller =
-        iteratorA->first < iteratorB->first ? iteratorA : iteratorB;
-    auto& itGreaterEq =
-        iteratorA->first < iteratorB->first ? iteratorB : iteratorA;
-    if (itSmaller->second < itGreaterEq->first) {
-      // the ranges do not overlap, simply append the smaller one
-      result.push_back(*itSmaller);
-    } else {
-      // the ranges overlap
-      result.emplace_back(itSmaller->first, itGreaterEq->second);
+    size_t minIdxNotChecked = 0;
+
+    while (iteratorA < rangesA.end() && iteratorB < rangesB.end()) {
+      auto& itSmaller =
+          iteratorA->first < iteratorB->first ? iteratorA : iteratorB;
+      auto& itGreaterEq =
+          iteratorA->first < iteratorB->first ? iteratorB : iteratorA;
+      if (itSmaller->second < itGreaterEq->first) {
+        // The ranges do not overlap, simply append the smaller one
+        std::pair<size_t, size_t> nextOutput{std::max(minIdxNotChecked, itSmaller->first), itSmaller->second};
+        if (nextOutput.first < nextOutput.second) {
+          minIdxNotChecked = nextOutput.second;
+          result.push_back(std::move(nextOutput));
+        }
+        ++itSmaller;
+      } else {
+        // the ranges overlap
+        result.emplace_back(itSmaller->first, itGreaterEq->second);
+        minIdxNotChecked = itGreaterEq->second;
+        ++itSmaller;
+        ++itGreaterEq;
+      }
     }
-    ++itSmaller;
+
+    // Attach the remainder
+    result.insert(result.end(), iteratorA, rangesA.end());
+    result.insert(result.end(), iteratorB, rangesB.end());
+    return result;
   }
+};
 
-  // Attach the remainder
-  result.insert(result.end(), iteratorA, rangesA.end());
-  result.insert(result.end(), iteratorB, rangesB.end());
-  return result;
-}
+struct RangeIntersector {
+  Ranges operator()( Ranges rangesA, Ranges rangesB) const {
+    std::sort(rangesA.begin(), rangesA.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+    std::sort(rangesB.begin(), rangesB.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
 
-Ranges intersectRanges(const Ranges& a, const Ranges& b);
+    Ranges result;
+    auto iteratorA = rangesA.begin();
+    auto iteratorB = rangesB.begin();
+
+    while (iteratorA < rangesA.end() && iteratorB < rangesB.end()) {
+      auto& itSmaller =
+          iteratorA->first < iteratorB->first ? iteratorA : iteratorB;
+      auto& itGreaterEq =
+          iteratorA->first < iteratorB->first ? iteratorB : iteratorA;
+      if (itSmaller->second < itGreaterEq->first) {
+        // the ranges do not overlap,
+        result.push_back(*itSmaller);
+      } else {
+        // the ranges overlap
+        result.emplace_back(itSmaller->first, itGreaterEq->second);
+      }
+      ++itSmaller;
+    }
+
+    // Attach the remainder
+    result.insert(result.end(), iteratorA, rangesA.end());
+    result.insert(result.end(), iteratorB, rangesB.end());
+    return result;
+  }
+  }
+};
 
 //Transform a range into a std::vector<bool>, we have to be given the maximal
 // size of an interval
@@ -133,7 +181,10 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation, V
       auto aExpand = expandRanges(std::move(a), input->_inputSize);
       auto bExpand = expandRanges(std::move(b), input->_inputSize);
       AD_CHECK(bExpand.size() == bExpand.size());
-      std::vector<bool> result;
+
+      using ResultType = std::decay_t<decltype(binaryOperation(valueExtractor(aExpand[0], input),
+                                                               valueExtractor(bExpand[0], input)))>;
+      std::vector<ResultType> result;
       result.reserve(aExpand.size());
       for (size_t i = 0; i < aExpand.size(); ++i) {
         result.push_back(binaryOperation(valueExtractor(aExpand[i], input),
@@ -145,36 +196,28 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation, V
 
 }
 
-class ConditionalOrExpression : public SparqlExpression {
+template <bool RangeCalculationAllowed, typename RangeCalculation, typename ValueExtractor, typename BinaryOperation>
+class BinaryExpression : public SparqlExpression {
  public:
-  ConditionalOrExpression(std::vector<Ptr> children): _children{std::move(children)} {};
+  BinaryExpression(std::vector<Ptr>&& children): _children{std::move(children)} {};
   EvaluateResult  evaluate(evaluationInput* input) const override {
-      auto firstResult = _children[0]->evaluate(input);
-      auto calculator = [input](const auto& a, const auto& b) -> EvaluateResult {
-        using A = std::decay_t<decltype(a)>;
-        using B = std::decay_t<decltype(b)>;
-        if constexpr (std::is_same_v<A, Ranges> && std::is_same_v<B, Ranges>) {
-          return mergeRanges(a, b);
-        }
-        auto aExpand = expandRanges(std::move(a), input->_inputSize);
-        auto bExpand = expandRanges(std::move(b), input->_inputSize);
-        AD_CHECK(bExpand.size() == bExpand.size());
-        std::vector<bool> result;
-        result.reserve(aExpand.size());
-        for (size_t i = 0; i < aExpand.size(); ++i) {
-          result.push_back(getBoolValue(aExpand[i], input) || getBoolValue(bExpand[i], input));
-        }
-        return result;
-      };
-      for (size_t i = 1; i < _children.size(); ++i) {
-        firstResult = std::visit(calculator, firstResult, _children[i]->evaluate(input));
-      }
+    auto firstResult = _children[0]->evaluate(input);
+
+    auto calculator = liftBinaryCalculationToEvaluateResults<RangeCalculationAllowed>(RangeCalculation{}, ValueExtractor{}, BinaryOperation{} , input);
+    for (size_t i = 1; i < _children.size(); ++i) {
+      firstResult = std::visit(calculator, firstResult, _children[i]->evaluate(input));
+    }
     return firstResult;
 
   };
  private:
   std::vector<Ptr> _children;
+
 };
+
+using ConditionalOrExpression = BinaryExpression<true, RangeMerger, BooleanValueGetter, decltype([](bool a, bool b){return a || b;})>;
+using ConditionalAndExpression = BinaryExpression<true, RangeIntersector, BooleanValueGetter, decltype([](bool a, bool b){return a && b;})>;
+
 
 /*
 class conditionalAndExpression;
