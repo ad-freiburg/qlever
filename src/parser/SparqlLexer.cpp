@@ -58,7 +58,7 @@ const std::string SparqlLexer::AGGREGATE =
     "(?i)(SAMPLE|COUNT|MIN|MAX|AVG|SUM|GROUP_CONCAT)";
 const std::string SparqlLexer::VARIABLE = "(\\?" + VARNAME + ")";
 const std::string SparqlLexer::SYMBOL =
-    "([\\.\\{\\}\\(\\)\\=\\*,;:<>!\\|/\\^\\?\\*\\+])";
+    "([\\.\\{\\}\\(\\)\\=\\*,;:<>!\\|/\\^\\?\\*\\+-])";
 
 const std::string SparqlLexer::STRING_LITERAL =
     "(('([^\\x27\\x5C\\x0A\\x0D]|(" + ECHAR +
