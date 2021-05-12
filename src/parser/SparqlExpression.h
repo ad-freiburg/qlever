@@ -258,7 +258,7 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation, V
         if constexpr (isVector<A>) {
           return valueExtractor(aExpand[index], input);
         } else if constexpr (std::is_same_v<Variable, A>) {
-          return valueExtractor(StrongId{input->_inputTable->template operator()(index, aExpand._columnIndex)});
+          return valueExtractor(aExpand(index, input));
         } else {
           return valueExtractor(aExpand, input);
         }
@@ -268,7 +268,7 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation, V
         if constexpr (isVector<B>) {
           return valueExtractor(bExpand[index], input);
         } else if constexpr (std::is_same_v<Variable, B>) {
-          return valueExtractor(StrongId{input->_inputTable->template operator()(index, bExpand._columnIndex)});
+          return valueExtractor(bExpand(index, input));
         } else {
           return valueExtractor(bExpand, input);
         }
@@ -363,6 +363,21 @@ class DispatchedBinaryExpression : public SparqlExpression {
  private:
   std::vector<Ptr> _children;
   std::vector<RelationDispatchEnum> _relations;
+
+};
+
+template <typename ValueExtractor, typename UnaryOperationTuple, typename RelationDispatchEnum>
+class DispatchedUnaryExpression : public SparqlExpression {
+ public:
+  DispatchedUnaryExpression(Ptr&& child, RelationDispatchEnum relation): _child{std::move(child)}, _relation{std::move(relation)} {};
+  EvaluateResult  evaluate(evaluationInput* input) const override {
+    auto firstResult = _child->evaluate(input);
+    // Todo<joka921> Continue here
+
+  };
+ private:
+  Ptr _child;
+  RelationDispatchEnum _relation;
 
 };
 
