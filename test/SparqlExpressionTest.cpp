@@ -17,8 +17,20 @@ struct DummyExpression : public SparqlExpression {
 TEST(SparqlExpression, Or) {
   std::vector<double> d {1.0, 2.0, 0.0, 0.0};
   std::vector<bool> b {false, false, true, false};
-  DummyExpression dummy1 {SparqlExpression::EvaluateResult{d}};
-  DummyExpression dummy2 {SparqlExpression::EvaluateResult{b}};
+  std::vector<bool> expected {true, true, true, false};
+
+  evaluationInput i;
+  i._inputSize = d.size();;
+  std::vector<SparqlExpression::Ptr> children;
+  children.push_back(std::make_unique<DummyExpression>(SparqlExpression::EvaluateResult{d}));
+  children.push_back(std::make_unique<DummyExpression>(SparqlExpression::EvaluateResult{b}));
+
+  ConditionalOrExpression c{std::move(children)};
+
+  SparqlExpression::EvaluateResult res = c.evaluate(&i);
+  auto ptr = std::get_if<std::vector<bool>>(&res);
+  ASSERT_TRUE(ptr);
+  ASSERT_EQ(*ptr, expected);
 
 
 }

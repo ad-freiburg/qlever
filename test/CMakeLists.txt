@@ -174,4 +174,4 @@ add_test(SparqlAntlrParserTest SparqlAntlrParserTest)
 
 add_executable(SparqlExpressionTest SparqlExpressionTest.cpp)
 add_test(SparqlExpressionTest SparqlExpressionTest)
-target_link_libraries(SparqlExpressionTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(SparqlExpressionTest gtest_main index ${CMAKE_THREAD_LIBS_INIT})
