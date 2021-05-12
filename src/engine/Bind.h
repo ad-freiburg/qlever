@@ -44,8 +44,8 @@ class Bind : public Operation {
   template <int IN_WIDTH, int OUT_WIDTH>
   static void computeBinaryOperationBind(
       IdTable* dynRes, const IdTable& inputDyn, std::array<size_t, 2> columns,
-      array<ResultTable::ResultType, 2> inputTypes,
-      const std::string& binaryOperator, const Index& index);
+      array<ResultTable::ResultType, 2> inputTypes, char binaryOperator,
+      const Index& index);
 
   // Implementation for renaming a columns: BIND (?x As ?y)
   template <int IN_WIDTH, int OUT_WIDTH>

@@ -140,7 +140,7 @@ void Bind::computeResult(ResultTable* result) {
     result->_resultTypes.push_back(ResultTable::ResultType::FLOAT);
     CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeBinaryOperationBind,
                       &result->_data, subRes->_data, columns, inTypes,
-                      ptr->_binaryOperator, _subtree->getQec()->getIndex());
+                      ptr->_binaryOperator[0], _subtree->getQec()->getIndex());
   } else if (auto ptr = std::get_if<GraphPatternOperation::Bind::Rename>(
                  &_bind._expressionVariant)) {
     size_t inColumn{_subtree->getVariableColumn(ptr->_var)};
@@ -172,7 +172,7 @@ void Bind::computeResult(ResultTable* result) {
   } else {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "Currently only three types of BIND are implemented: Integer "
-             "constant, rename, and sum.");
+             "constant, rename, and binary operation.");
   }
 
   result->_sortedBy = resultSortedOn();
@@ -183,8 +183,8 @@ void Bind::computeResult(ResultTable* result) {
 template <int IN_WIDTH, int OUT_WIDTH>
 void Bind::computeBinaryOperationBind(
     IdTable* dynRes, const IdTable& inputDyn, std::array<size_t, 2> columns,
-    array<ResultTable::ResultType, 2> inputTypes,
-    const std::string& binaryOperator, const Index& index) {
+    array<ResultTable::ResultType, 2> inputTypes, char binaryOperator,
+    const Index& index) {
   const auto input = inputDyn.asStaticView<IN_WIDTH>();
   auto result = dynRes->moveToStatic<OUT_WIDTH>();
 
@@ -194,13 +194,12 @@ void Bind::computeBinaryOperationBind(
 
   // Lambda for the binary operation.
   const float NO_VALUE = std::numeric_limits<float>::quiet_NaN();
-  char op = binaryOperator[0];
   std::function<float(float, float)> binaryOperations[4] = {
       [](float v1, float v2) { return v1 + v2; },
       [](float v1, float v2) { return v1 - v2; },
       [](float v1, float v2) { return v1 * v2; },
       [](float v1, float v2) { return v1 / v2; }};
-  size_t i = "+|*/"s.find(op);
+  size_t i = "+-*/"s.find(binaryOperator);
   AD_CHECK(i != std::string::npos);
   auto binaryOperation = binaryOperations[i];
 
@@ -220,7 +219,7 @@ void Bind::computeBinaryOperationBind(
         value = input(i, columns[colIdx]);
         // CASE 2: Value stored as float.
       } else if (inputTypes[colIdx] == ResultTable::ResultType::FLOAT) {
-        std::memcpy(&value, &input(i, colIdx), sizeof(float));
+        std::memcpy(&value, &input(i, columns[colIdx]), sizeof(float));
         // CASE 3: Not a value.
       } else if (inputTypes[colIdx] == ResultTable::ResultType::TEXT ||
                  inputTypes[colIdx] == ResultTable::ResultType::LOCAL_VOCAB) {
@@ -238,7 +237,7 @@ void Bind::computeBinaryOperationBind(
     // Perform the operation. Result is NO_VALUE if one of the operands is
     // NO_VALUE or if division by zero.
     bool invalid = value1 == NO_VALUE || value2 == NO_VALUE ||
-                   (binaryOperator[0] == '/' && value2 == .0f);
+                   (binaryOperator == '/' && value2 == .0f);
     float opResult = invalid ? NO_VALUE : binaryOperation(value1, value2);
     std::memcpy(&result(i, inCols), &opResult, sizeof(float));
   }

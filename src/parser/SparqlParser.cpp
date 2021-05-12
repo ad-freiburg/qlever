@@ -280,22 +280,20 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       std::string inVar;
       bool rename = false;
       bool isString = true;
-      std::string binaryOperator;
+      char binaryOperator = 0;
       std::string inVar2;
       int64_t val = 0;
       if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         rename = true;
         inVar = _lexer.current().raw;
         if (_lexer.accept(SparqlToken::Type::SYMBOL)) {
-          binaryOperator = _lexer.current().raw;
-          // TODO: The minus `-` is not a SYMBOL, how do I accept it here as an
-          // alternative? Taking | for now as a silly workaround.
-          if (binaryOperator.size() == 0 ||
-              "+|*/"s.find(binaryOperator[0]) == std::string::npos) {
+          binaryOperator = _lexer.current().raw[0];
+          if (binaryOperator == 0 ||
+              "+-*/"s.find(binaryOperator) == std::string::npos) {
             throw std::runtime_error(
                 "BIND expressions currently only support the binary operators"
-                "+|*/ but encountered \"" +
-                binaryOperator + "\"");
+                "+-*/ but encountered \"" +
+                std::string(1, binaryOperator) + "\"");
           }
           _lexer.expect(SparqlToken::Type::VARIABLE);
           inVar2 = _lexer.current().raw;
@@ -316,9 +314,9 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       _lexer.expect("as");
       _lexer.expect(SparqlToken::Type::VARIABLE);
       GraphPatternOperation::Bind b;
-      if (binaryOperator.size() > 0) {
+      if (binaryOperator) {
         b._expressionVariant = GraphPatternOperation::Bind::BinaryOperation{
-            inVar, inVar2, binaryOperator};
+            inVar, inVar2, std::string(1, binaryOperator)};
       } else if (rename) {
         b._expressionVariant = GraphPatternOperation::Bind::Rename{inVar};
       } else {
