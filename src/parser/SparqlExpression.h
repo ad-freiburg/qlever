@@ -240,29 +240,40 @@ class SparqlExpression {
   virtual ~SparqlExpression() = default;
 };
 
+template<typename T>
+class LiteralExpression : public SparqlExpression {
+ public:
+  LiteralExpression(T _value) : _value{std::move(_value)}{}
+  EvaluateResult evaluate(evaluationInput *) const override {
+    return EvaluateResult{_value};
+  }
+ private:
+  T _value;
+};
+
 
 template <bool RangeCalculationAllowed, typename RangeCalculation, typename ValueExtractor, typename BinaryOperation>
 auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation, ValueExtractor valueExtractor, BinaryOperation binaryOperation, evaluationInput* input) {
   return [input, rangeCalculation, valueExtractor, binaryOperation](auto&&... args) -> SparqlExpression::EvaluateResult {
-    //using Args = std::decay_t<decltype(args)>...;
-    //using A = std::decay_t<decltype(a)>;
-    //using B = std::decay_t<decltype(b)>;
     if constexpr (RangeCalculationAllowed && (... && std::is_same_v<std::decay_t<decltype(args)>, Ranges>)) {
       return rangeCalculation(std::forward<decltype(args)>(args)...);
     } else {
 
-      auto getSize = [&input](const auto& x) -> size_t {
+      auto getSize = [&input](const auto& x) -> std::pair<size_t, bool> {
         using T = std::decay_t<decltype(x)>;
         if constexpr (isVector<T>) {
-          return x.size();
+          return {x.size(), true};
         } else if constexpr (std::is_same_v<Ranges,T>) {
-          return input->_inputTable->size();
+          return {input->_inputTable->size(), true};
         } else {
-          return 1;
+          return {1, false};
         }
       };
 
-      auto targetSize =  std::max({getSize(args)...});
+      auto targetSize =  std::max({getSize(args).first...});
+
+      // If any of the inputs is a list/vector/range of results, the result will be a std::vector
+      bool resultIsAVector = (... || getSize(args).second);
 
       auto extractors = std::make_tuple([expanded=expandRanges(std::forward<decltype(args)>(args), targetSize), &valueExtractor, input](size_t index) {
         using A = std::decay_t<decltype(expanded)>;
@@ -288,7 +299,7 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation, V
 
       auto result = std::apply(create, std::move(extractors));
 
-      if (targetSize == 1) {
+      if (!resultIsAVector) {
         return result[0];
       } else {
         return result;
@@ -315,6 +326,22 @@ class BinaryExpression : public SparqlExpression {
  private:
   std::vector<Ptr> _children;
 
+};
+
+template <bool RangeCalculationAllowed, typename RangeCalculation, typename ValueExtractor, typename UnaryOperation>
+class UnaryExpression : public SparqlExpression {
+ public:
+  UnaryExpression(Ptr&& child): _child{std::move(child)} {};
+  EvaluateResult  evaluate(evaluationInput* input) const override {
+    auto firstResult = _child->evaluate(input);
+
+    auto calculator = liftBinaryCalculationToEvaluateResults<RangeCalculationAllowed>(RangeCalculation{}, ValueExtractor{}, UnaryOperation{} , input);
+    firstResult = std::visit(calculator, firstResult);
+    return firstResult;
+
+  };
+ private:
+  Ptr _child;
 };
 
 
@@ -372,8 +399,9 @@ class DispatchedUnaryExpression : public SparqlExpression {
   DispatchedUnaryExpression(Ptr&& child, RelationDispatchEnum relation): _child{std::move(child)}, _relation{std::move(relation)} {};
   EvaluateResult  evaluate(evaluationInput* input) const override {
     auto firstResult = _child->evaluate(input);
-    // Todo<joka921> Continue here
-
+    auto calculator = LambdaVisitor<std::tuple_size_v<UnaryOperationTuple> - 1>{}(UnaryOperationTuple{}, _relation, ValueExtractor{}, input);
+    firstResult = std::visit(calculator, firstResult);
+    return firstResult;
   };
  private:
   Ptr _child;
@@ -384,25 +412,8 @@ class DispatchedUnaryExpression : public SparqlExpression {
 using ConditionalOrExpression = BinaryExpression<true, RangeMerger, BooleanValueGetter, decltype([](bool a, bool b){return a || b;})>;
 using ConditionalAndExpression = BinaryExpression<true, RangeIntersector, BooleanValueGetter, decltype([](bool a, bool b){return a && b;})>;
 
-
-/*
-class conditionalAndExpression;
-class relationalExpression;
-class multiplicativeExpression {
- public:
-  enum class Type {MULTIPLY, DIVIDE};
-  std::vector<unaryExpression> _children;
-  auto evaluate() {
-    if (_children.size() == 1) {
-      return _chilren[0].evaluate();
-    }
-  }
-
-};
-class additiveExpression;
-
-class unaryExpression
- */
+using UnaryNegateExpression = UnaryExpression<false, void, BooleanValueGetter, decltype([](bool a){return !a;})>;
+using UnaryMinusExpression = UnaryExpression<false, void, NumericValueGetter, decltype([](auto a){return -a;})>;
 
 auto equals = [](const auto& a, const auto& b) {return a == b;};
 auto nequals = [](const auto& a, const auto& b) {return a != b;};
@@ -429,6 +440,11 @@ enum class AdditiveEnum {ADD = 0, SUBTRACT};
 using AdditiveTuple = std::tuple<decltype(add), decltype(subtract)>;
 using AdditiveExpression = DispatchedBinaryExpression<NumericValueGetter, AdditiveTuple , AdditiveEnum>;
 
+
+using BooleanLiteralExpression = LiteralExpression<bool>;
+using IntLiteralExpression = LiteralExpression<int64_t>;
+using DoubleLiteralExpression = LiteralExpression<double>;
+using VariableExpression = LiteralExpression<Variable>;
 
 //auto x = LambdaVisitor<1>{}(LambdaTuple{}, RelationalExpressionEnum::EQUALS, 3ul, 4ul);
 
