@@ -120,6 +120,10 @@ void SparqlLexer::readNext() {
       _next.type = SparqlToken::Type::IRI;
     } else if (re2::RE2::Consume(&_re_string, RE_RDFLITERAL, &raw)) {
       _next.type = SparqlToken::Type::RDFLITERAL;
+      auto lastQuote = raw.rfind('"');
+      std::string_view quoted {raw.begin(), raw.begin() + lastQuote + 1};
+      std::string_view langtagOrDatatype {raw.begin() + lastQuote + 1, raw.end()};
+      raw = RdfEscaping::normalizeRDFLiteral(quoted) + langtagOrDatatype;
       // TODO<joka921, kramerfl> proper (un-)escaping of the RDFLITERAL type
       // requires splitting it up into the different parts (string content + iri
       // of the datatype) which require different escaping
