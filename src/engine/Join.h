@@ -97,11 +97,13 @@ class Join : public Operation {
 
   virtual void computeResult(ResultTable* result) override;
 
+ public:
   static bool isFullScanDummy(std::shared_ptr<QueryExecutionTree> tree) {
     return tree->getType() == QueryExecutionTree::SCAN &&
            tree->getResultWidth() == 3;
   }
 
+ private:
   void computeResultForJoinWithFullScanDummy(ResultTable* result) const;
 
   using ScanMethodType = std::function<void(Id, IdTable*)>;

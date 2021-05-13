@@ -211,7 +211,8 @@ void MultiColumnJoin::computeSizeEstimateAndMultiplicities() {
   float multRight = std::numeric_limits<float>::max();
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     multLeft = std::min(multLeft, _left->getMultiplicity(_joinColumns[i][0]));
-    multRight = std::min(multLeft, _left->getMultiplicity(_joinColumns[i][1]));
+    multRight =
+        std::min(multRight, _right->getMultiplicity(_joinColumns[i][1]));
   }
   float multResult = multLeft * multRight;
 
