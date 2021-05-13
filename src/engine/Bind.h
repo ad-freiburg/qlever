@@ -6,6 +6,7 @@
 #define QLEVER_BIND_H
 
 #include "../parser/ParsedQuery.h"
+#include "../parser/SparqlExpressionWrapper.h"
 #include "Operation.h"
 
 /// BIND operation, currently only supports a very limited subset of expressions
@@ -57,6 +58,9 @@ class Bind : public Operation {
   template <int IN_WIDTH, int OUT_WIDTH>
   static void computeConstantBind(IdTable* dynRes, const IdTable& inputDyn,
                                   size_t targetVal);
+
+  template <int IN_WIDTH, int OUT_WIDTH>
+  void computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resultType, const IdTable& inputDyn, sparqlExpression::SparqlExpression* expression) const;
 };
 
 #endif  // QLEVER_BIND_H

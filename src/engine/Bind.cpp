@@ -7,6 +7,7 @@
 #include "../util/Exception.h"
 #include "CallFixedSize.h"
 #include "QueryExecutionTree.h"
+#include "../parser/SparqlExpression.h"
 
 // BIND adds exactly one new column
 size_t Bind::getResultWidth() const { return _subtree->getResultWidth() + 1; }
@@ -40,7 +41,10 @@ float Bind::getMultiplicity(size_t col) {
     // If sum (or arithmetic expression), we make the simplifying assumption
     // that all results values are different (which will indeed often be the
     // case).
+    // TODO: proper multiplicity for expressions
     if (std::get_if<GraphPatternOperation::Bind::Sum>(
+            &(_bind._expressionVariant)) ||
+        std::get_if<sparqlExpression::SparqlExpressionWrapper>(
             &(_bind._expressionVariant))) {
       return 1;
     }
@@ -96,6 +100,11 @@ string Bind::asString(size_t indent) const {
   }
 
   os << "\n" << _subtree->asString(indent);
+
+  if (auto ptr = std::get_if<sparqlExpression::SparqlExpressionWrapper>(&_bind._expressionVariant)) {
+    // the random string to prevent false caching
+    os << ptr->asString();
+  }
   return os.str();
 }
 
@@ -170,6 +179,11 @@ void Bind::computeResult(ResultTable* result) {
     }
     CALL_FIXED_SIZE_2(inwidth, outwidth, Bind::computeConstantBind,
                       &result->_data, subRes->_data, value);
+  } else if (auto ptr = std::get_if<sparqlExpression::SparqlExpressionWrapper>(
+      &_bind._expressionVariant)) {
+    result->_resultTypes.emplace_back();
+     CALL_FIXED_SIZE_2(inwidth, outwidth, computeExpressionBind,
+                      &result->_data, &(result->_resultTypes.back()), subRes->_data, ptr->getImpl());
   } else {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "Currently only three types of BIND are implemented: Integer "
@@ -267,4 +281,43 @@ void Bind::computeConstantBind(IdTable* dynRes, const IdTable& inputDyn,
     res(i, inCols) = targetVal;
   }
   *dynRes = res.moveToDynamic();
+}
+
+template <int IN_WIDTH, int OUT_WIDTH>
+void Bind::computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resultType, const IdTable& inputDyn, sparqlExpression::SparqlExpression* expression) const {
+  expression ->initializeVariables(getVariableColumns());
+  sparqlExpression::evaluationInput evaluationInput;
+  evaluationInput._begin = dynRes->begin();
+  evaluationInput._end = dynRes->end();
+  evaluationInput._qec = getExecutionContext();
+  sparqlExpression::SparqlExpression::EvaluateResult expressionResult = expression->evaluate(&evaluationInput);
+
+  const auto input = inputDyn.asStaticView<IN_WIDTH>();
+  auto res = dynRes->moveToStatic<OUT_WIDTH>();
+
+  // first initialize the first columns (they remain identical)
+    const auto inSize = input.size();
+    res.reserve(inSize);
+    const auto inCols = input.cols();
+    // copy the input to the first cols;
+    for (size_t i = 0; i < inSize; ++i) {
+      res.emplace_back();
+      for (size_t j = 0; j < inCols; ++j) {
+        res(i, j) = input(i, j);
+      }
+    }
+    *dynRes = res.moveToDynamic();
+  if (auto ptr = std::get_if<std::vector<double>>(&expressionResult)) {
+    const auto& resultVector = *ptr;
+    AD_CHECK(ptr->size() == inSize);
+    for (size_t i = 0; i < inSize; ++i) {
+      auto tmpF = static_cast<float>(resultVector[i]);
+      std::memcpy(&tmpF, &res(i, inCols), sizeof(float));
+    }
+    *resultType =  ResultTable::ResultType::FLOAT;
+    *dynRes = res.moveToDynamic();
+  }
+
+  throw std::runtime_error ("This edition of the Expression binds currently only supports floating point results, this will be extended in the future");
+
 }

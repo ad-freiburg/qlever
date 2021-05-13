@@ -5,93 +5,79 @@
 #ifndef QLEVER_SPARQLEXPRESSION_H
 #define QLEVER_SPARQLEXPRESSION_H
 
-#include <vector>
 #include <memory>
-#include <variant>
 #include <ranges>
+#include <variant>
+#include <vector>
+
+#include "../engine/QueryExecutionContext.h"
 #include "../engine/ResultTable.h"
 #include "../global/Id.h"
-#include "../engine/QueryExecutionContext.h"
 
-template<typename T>
-constexpr bool isVector = false;
-
-template<typename T>
-constexpr bool isVector<std::vector<T>> = true;
-
-struct evaluationInput {
-  size_t _inputSize;
-  const QueryExecutionContext* _qec;
-  ad_utility::HashMap<std::string, size_t> _variableColumnMap;
-  const IdTable* _inputTable;
-};
-
-struct StrongId {
-  Id _value;
-};
+namespace sparqlExpression {
 
 struct Variable {
   std::string _variable;
   size_t _columnIndex = size_t(-1);
   ResultTable::ResultType _type;
-  double operator()(size_t i, evaluationInput* input) {
-    const auto& id = input->_inputTable->operator()(i, _columnIndex);
-    if (_type == ResultTable::ResultType::VERBATIM) {
-      return id;
-    } else if (_type == ResultTable::ResultType::FLOAT) {
-      // used to store the id value of the entry interpreted as a float
-      float tmpF;
-      std::memcpy(&tmpF, &id, sizeof(float));
-      return tmpF;
-    } else if (_type == ResultTable::ResultType::TEXT ||
-    _type == ResultTable::ResultType::LOCAL_VOCAB) {
+};
+
+// Result type for certain boolean expression: all the values in the intervals are "true"
+using Ranges = std::vector<std::pair<size_t, size_t>>;
+template <typename T>
+constexpr bool isVector = false;
+
+template <typename T>
+constexpr bool isVector<std::vector<T>> = true;
+
+using VariableColumnMap = ad_utility::HashMap<std::string, size_t>;
+
+struct evaluationInput {
+  const QueryExecutionContext* _qec;
+  IdTable::const_iterator _begin;
+  IdTable::const_iterator _end;
+};
+
+
+
+inline double getNumericValueFromVariable(const Variable& variable, size_t i, evaluationInput* input) {
+  // TODO<joka921>: Optimization for the IdTableStatic.
+  const auto& id = (*(input->_begin + i))[variable._columnIndex];
+  if (variable._type == ResultTable::ResultType::VERBATIM) {
+    return id;
+  } else if (variable._type == ResultTable::ResultType::FLOAT) {
+    // used to store the id value of the entry interpreted as a float
+    float tmpF;
+    std::memcpy(&tmpF, &id, sizeof(float));
+    return tmpF;
+  } else if (variable._type == ResultTable::ResultType::TEXT ||
+             variable._type == ResultTable::ResultType::LOCAL_VOCAB) {
+    return std::numeric_limits<float>::quiet_NaN();
+  } else {
+    // load the string, parse it as an xsd::int or float
+    std::string entity =
+        input->_qec->getIndex().idToOptionalString(id).value_or("");
+    if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
       return std::numeric_limits<float>::quiet_NaN();
     } else {
-      // load the string, parse it as an xsd::int or float
-      std::string entity =
-          input->_qec->getIndex().idToOptionalString(id).value_or("");
-      if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
-        return std::numeric_limits<float>::quiet_NaN();
-      } else {
-        return ad_utility::convertIndexWordToFloat(entity);
-      }
+      return ad_utility::convertIndexWordToFloat(entity);
     }
   }
-};
+}
+
 
 struct NumericValueGetter {
   double operator()(double v, evaluationInput*) const { return v; }
   int64_t operator()(int64_t v, evaluationInput*) const { return v; }
   bool operator()(bool v, evaluationInput*) const { return v; }
 
-  double operator()(StrongId id, evaluationInput*) const;
-
 };
 
 struct BooleanValueGetter {
   bool operator()(double v, evaluationInput*) const { return v; }
   bool operator()(int64_t v, evaluationInput*) const { return v; }
-   bool operator()(bool v, evaluationInput*) const { return v; }
-
-   bool operator()(StrongId id, evaluationInput* input) const {
-    // load the string, parse it as an xsd::int or float
-    auto optional = input->_qec->getIndex().idToOptionalString(id._value);
-    if (!optional) {
-      return false;
-    }
-    const auto& entity = optional.value();
-    if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
-      // Strings that exist are considered as a boolean "True"
-      // TODO: what do we do about "" and <>, are they false
-      return true;
-    } else {
-      auto value = ad_utility::convertIndexWordToFloat(entity);
-      return value != 0.0;
-    }
-  }
+  bool operator()(bool v, evaluationInput*) const { return v; }
 };
-
-
 
 // Result type for certain boolean expression: all the values in the intervals are "true"
 using Ranges = std::vector<std::pair<size_t, size_t>>;
@@ -124,7 +110,9 @@ struct RangeIntersector {
         ++itSmaller;
       } else {
         // The ranges overlap
-        std::pair<size_t, size_t> nextOutput{std::max(minIdxNotChecked, itGreaterEq->first), std::min(itGreaterEq->second, itSmaller->second)};
+        std::pair<size_t, size_t> nextOutput{
+            std::max(minIdxNotChecked, itGreaterEq->first),
+            std::min(itGreaterEq->second, itSmaller->second)};
         if (nextOutput.first < nextOutput.second) {
           minIdxNotChecked = nextOutput.second;
           result.push_back(std::move(nextOutput));
@@ -166,7 +154,8 @@ struct RangeMerger {
           iteratorA->first < iteratorB->first ? iteratorB : iteratorA;
       if (itSmaller->second < itGreaterEq->first) {
         // The ranges do not overlap, simply append the smaller one, if it was not previously covered
-        std::pair<size_t, size_t> nextOutput{std::max(minIdxNotChecked, itSmaller->first), itSmaller->second};
+        std::pair<size_t, size_t> nextOutput{
+            std::max(minIdxNotChecked, itSmaller->first), itSmaller->second};
         // This check may fail, if this range is fully covered by a range which we have previously handled
         if (nextOutput.first < nextOutput.second) {
           minIdxNotChecked = nextOutput.second;
@@ -175,7 +164,9 @@ struct RangeMerger {
         ++itSmaller;
       } else {
         // The ranges overlap
-        std::pair<size_t, size_t> nextOutput{std::max(minIdxNotChecked, itSmaller->first), std::max(itGreaterEq->second, itSmaller->second)};
+        std::pair<size_t, size_t> nextOutput{
+            std::max(minIdxNotChecked, itSmaller->first),
+            std::max(itGreaterEq->second, itSmaller->second)};
         if (nextOutput.first < nextOutput.second) {
           minIdxNotChecked = nextOutput.second;
           result.push_back(std::move(nextOutput));
@@ -186,7 +177,8 @@ struct RangeMerger {
     }
 
     // Attach the remaining ranges, which do not have any overlap.
-    auto attachRemainder = [&minIdxNotChecked, &result](auto iterator, const auto& end) {
+    auto attachRemainder = [&minIdxNotChecked, &result](auto iterator,
+                                                        const auto& end) {
       for (; iterator < end; ++iterator) {
         std::pair<size_t, size_t> nextOutput{
             std::max(minIdxNotChecked, iterator->first), iterator->second};
@@ -204,8 +196,8 @@ struct RangeMerger {
   }
 };
 
-//Transform a range into a std::vector<bool>, we have to be given the maximal
-// size of an interval
+// Transform a range into a std::vector<bool>, we have to be given the maximal
+//  size of an interval
 inline std::vector<bool> expandRanges(const Ranges& a, size_t targetSize) {
   // Initialized to 0/false
   std::vector<bool> result(targetSize);
@@ -218,77 +210,109 @@ inline std::vector<bool> expandRanges(const Ranges& a, size_t targetSize) {
   return result;
 }
 
-template<typename T> requires (!std::is_same_v<Ranges, std::decay_t<T>>)
-auto expandRanges(T&& a,[[maybe_unused]] size_t targetSize) {
+template <typename T>
+requires(!std::is_same_v<Ranges, std::decay_t<T>>) auto expandRanges(
+    T&& a, [[maybe_unused]] size_t targetSize) {
   if constexpr (isVector<T>) {
     AD_CHECK(a.size() == targetSize);
   }
-    return std::forward<T>(a);
+  return std::forward<T>(a);
 }
-
-// calculate the boolean negation of a range.
-Ranges negateRanges(const Ranges& a, size_t targetSize);
-
-// Class for a completely invalid result
-class InvalidResult{};
 
 class SparqlExpression {
  public:
-  using EvaluateResult = std::variant<std::vector<StrongId>, std::vector<double>, std::vector<int64_t>, std::vector<bool>, Ranges, StrongId, double, int64_t, bool>;
+  using EvaluateResult =
+      std::variant<std::vector<double>,
+                   std::vector<int64_t>, std::vector<bool>, Ranges,
+                   double, int64_t, bool, Variable>;
+
   using Ptr = std::unique_ptr<SparqlExpression>;
   virtual EvaluateResult evaluate(evaluationInput*) const = 0;
+  virtual void initializeVariables(
+      const VariableColumnMap& variableColumnMap) = 0;
+
+  virtual vector<std::string*> strings() = 0;
   virtual ~SparqlExpression() = default;
 };
 
-template<typename T>
+
+template <typename T>
 class LiteralExpression : public SparqlExpression {
  public:
-  LiteralExpression(T _value) : _value{std::move(_value)}{}
-  EvaluateResult evaluate(evaluationInput *) const override {
+  LiteralExpression(T _value) : _value{std::move(_value)} {}
+  EvaluateResult evaluate(evaluationInput*) const override {
     return EvaluateResult{_value};
   }
+  void initializeVariables(
+      [[maybe_unused]] const VariableColumnMap& variableColumnMap) override {
+    if constexpr (std::is_same_v<T, Variable>) {
+      if (!variableColumnMap.contains(_value._variable)) {
+        throw std::runtime_error(
+            "Variable " + _value._variable +
+            "could not be mapped to a column of an expression input");
+      }
+      _value._columnIndex = variableColumnMap.at(_value._variable);
+    }
+  }
+
+  vector<std::string *> strings() override {
+    if constexpr (std::is_same_v<T, Variable>) {
+      return {&_value.variable};
+    } else {
+      return {};
+    }
+  }
+
  private:
   T _value;
 };
 
-
-template <bool RangeCalculationAllowed, typename RangeCalculation, typename ValueExtractor, typename BinaryOperation>
-auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation, ValueExtractor valueExtractor, BinaryOperation binaryOperation, evaluationInput* input) {
-  return [input, rangeCalculation, valueExtractor, binaryOperation](auto&&... args) -> SparqlExpression::EvaluateResult {
-    if constexpr (RangeCalculationAllowed && (... && std::is_same_v<std::decay_t<decltype(args)>, Ranges>)) {
+template <bool RangeCalculationAllowed, typename RangeCalculation,
+          typename ValueExtractor, typename BinaryOperation>
+auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
+                                            ValueExtractor valueExtractor,
+                                            BinaryOperation binaryOperation,
+                                            evaluationInput* input) {
+  return [input, rangeCalculation, valueExtractor,
+          binaryOperation](auto&&... args) -> SparqlExpression::EvaluateResult {
+    if constexpr (RangeCalculationAllowed &&
+                  (... &&
+                   std::is_same_v<std::decay_t<decltype(args)>, Ranges>)) {
       return rangeCalculation(std::forward<decltype(args)>(args)...);
     } else {
-
       auto getSize = [&input](const auto& x) -> std::pair<size_t, bool> {
         using T = std::decay_t<decltype(x)>;
         if constexpr (isVector<T>) {
           return {x.size(), true};
-        } else if constexpr (std::is_same_v<Ranges,T>) {
-          return {input->_inputTable->size(), true};
+        } else if constexpr (std::is_same_v<Ranges, T>) {
+          return {input->_end - input->_begin, true};
         } else {
           return {1, false};
         }
       };
 
-      auto targetSize =  std::max({getSize(args).first...});
+      auto targetSize = std::max({getSize(args).first...});
 
       // If any of the inputs is a list/vector/range of results, the result will be a std::vector
       bool resultIsAVector = (... || getSize(args).second);
 
-      auto extractors = std::make_tuple([expanded=expandRanges(std::forward<decltype(args)>(args), targetSize), &valueExtractor, input](size_t index) {
-        using A = std::decay_t<decltype(expanded)>;
-        if constexpr (isVector<A>) {
-          return valueExtractor(expanded[index], input);
-        } else if constexpr (std::is_same_v<Variable, A>) {
-          return valueExtractor(expanded(index, input));
-        } else {
-          return valueExtractor(expanded, input);
-        }
-      }...);
-
+      auto extractors =
+          std::make_tuple([expanded = expandRanges(
+                               std::forward<decltype(args)>(args), targetSize),
+                           &valueExtractor, input](size_t index) {
+            using A = std::decay_t<decltype(expanded)>;
+            if constexpr (isVector<A>) {
+              return valueExtractor(expanded[index], input);
+            } else if constexpr (std::is_same_v<Variable, A>) {
+              return valueExtractor(getNumericValueFromVariable(expanded,index, input), input);
+            } else {
+              return valueExtractor(expanded, input);
+            }
+          }...);
 
       auto create = [&](auto&&... extractors) {
-        using ResultType = std::decay_t<decltype(binaryOperation(extractors(0)...))>;
+        using ResultType =
+            std::decay_t<decltype(binaryOperation(extractors(0)...))>;
         std::vector<ResultType> result;
         result.reserve(targetSize);
         for (size_t i = 0; i < targetSize; ++i) {
@@ -306,147 +330,204 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation, V
       }
     }
   };
-
 }
 
-template <bool RangeCalculationAllowed, typename RangeCalculation, typename ValueExtractor, typename BinaryOperation>
+template <bool RangeCalculationAllowed, typename RangeCalculation,
+          typename ValueExtractor, typename BinaryOperation>
 class BinaryExpression : public SparqlExpression {
  public:
-  BinaryExpression(std::vector<Ptr>&& children): _children{std::move(children)} {};
-  EvaluateResult  evaluate(evaluationInput* input) const override {
+  BinaryExpression(std::vector<Ptr>&& children)
+      : _children{std::move(children)} {};
+  EvaluateResult evaluate(evaluationInput* input) const override {
     auto firstResult = _children[0]->evaluate(input);
 
-    auto calculator = liftBinaryCalculationToEvaluateResults<RangeCalculationAllowed>(RangeCalculation{}, ValueExtractor{}, BinaryOperation{} , input);
+    auto calculator =
+        liftBinaryCalculationToEvaluateResults<RangeCalculationAllowed>(
+            RangeCalculation{}, ValueExtractor{}, BinaryOperation{}, input);
     for (size_t i = 1; i < _children.size(); ++i) {
-      firstResult = std::visit(calculator, firstResult, _children[i]->evaluate(input));
+      firstResult =
+          std::visit(calculator, firstResult, _children[i]->evaluate(input));
     }
     return firstResult;
-
   };
+  void initializeVariables(
+      const VariableColumnMap& variableColumnMap) override {
+    for (const auto& ptr : _children) {
+      ptr->initializeVariables(variableColumnMap);
+    }
+  }
+
+  // _____________________________________________________________________
+  vector<std::string *> strings() override {
+    std::vector<string*> result;
+    for (const auto& ptr : _children) {
+      auto childResult = ptr->strings();
+      result.insert(result.end(), childResult.begin(), childResult.end());
+    }
+    return result;
+  }
+
  private:
   std::vector<Ptr> _children;
-
 };
 
-template <bool RangeCalculationAllowed, typename RangeCalculation, typename ValueExtractor, typename UnaryOperation>
+template <bool RangeCalculationAllowed, typename RangeCalculation,
+          typename ValueExtractor, typename UnaryOperation>
 class UnaryExpression : public SparqlExpression {
  public:
-  UnaryExpression(Ptr&& child): _child{std::move(child)} {};
-  EvaluateResult  evaluate(evaluationInput* input) const override {
+  UnaryExpression(Ptr&& child) : _child{std::move(child)} {};
+  EvaluateResult evaluate(evaluationInput* input) const override {
     auto firstResult = _child->evaluate(input);
 
-    auto calculator = liftBinaryCalculationToEvaluateResults<RangeCalculationAllowed>(RangeCalculation{}, ValueExtractor{}, UnaryOperation{} , input);
+    auto calculator =
+        liftBinaryCalculationToEvaluateResults<RangeCalculationAllowed>(
+            RangeCalculation{}, ValueExtractor{}, UnaryOperation{}, input);
     firstResult = std::visit(calculator, firstResult);
     return firstResult;
-
   };
+  void initializeVariables(
+      const VariableColumnMap& variableColumnMap) override {
+    _child->initializeVariables(variableColumnMap);
+  }
+  // _____________________________________________________________________
+  vector<std::string *> strings() override {
+    return _child->strings();
+  }
+
  private:
   Ptr _child;
 };
 
-
 template <size_t MaxValue>
 struct LambdaVisitor {
-  template<typename Tuple, typename Enum, typename ValueExtractor, typename... Args>
+  template <typename Tuple, typename Enum, typename ValueExtractor,
+            typename... Args>
   decltype(auto) operator()(Tuple t, Enum r, Args&&... args) {
     static_assert(MaxValue < std::tuple_size_v<Tuple>);
     AD_CHECK(static_cast<size_t>(r) < std::tuple_size_v<Tuple>);
     if (static_cast<size_t>(r) == MaxValue) {
-      return liftBinaryCalculationToEvaluateResults<false>(0, ValueExtractor{}, std::get<MaxValue>(t), std::forward<Args>(args)...);
+      return liftBinaryCalculationToEvaluateResults<false>(
+          0, ValueExtractor{}, std::get<MaxValue>(t),
+          std::forward<Args>(args)...);
     } else {
-      return LambdaVisitor<MaxValue - 1>{}(t, r,
-                                           std::forward<Args>(args)...);
+      return LambdaVisitor<MaxValue - 1>{}(t, r, std::forward<Args>(args)...);
     }
   }
 };
 
 template <>
 struct LambdaVisitor<0> {
-  template<typename Tuple, typename Enum, typename ValueExtractor, typename... Args>
+  template <typename Tuple, typename Enum, typename ValueExtractor,
+            typename... Args>
   auto operator()(Tuple t, Enum r, Args&&... args) {
     if (static_cast<size_t>(r) == 0) {
-      return liftBinaryCalculationToEvaluateResults<false>(0, ValueExtractor{}, std::get<0>(t), std::forward<Args>(args)...);
+      return liftBinaryCalculationToEvaluateResults<false>(
+          0, ValueExtractor{}, std::get<0>(t), std::forward<Args>(args)...);
     } else {
       AD_CHECK(false);
     }
   }
 };
 
-template <typename ValueExtractor, typename BinaryOperationTuple, typename RelationDispatchEnum>
+template <typename ValueExtractor, typename BinaryOperationTuple,
+          typename RelationDispatchEnum>
 class DispatchedBinaryExpression : public SparqlExpression {
  public:
-  DispatchedBinaryExpression(std::vector<Ptr>&& children, std::vector<RelationDispatchEnum>&& relations): _children{std::move(children)}, _relations{std::move(relations)} {};
-  EvaluateResult  evaluate(evaluationInput* input) const override {
+  DispatchedBinaryExpression(std::vector<Ptr>&& children,
+                             std::vector<RelationDispatchEnum>&& relations)
+      : _children{std::move(children)}, _relations{std::move(relations)} {};
+  EvaluateResult evaluate(evaluationInput* input) const override {
     auto firstResult = _children[0]->evaluate(input);
 
     for (size_t i = 1; i < _children.size(); ++i) {
-      //auto calculator = liftBinaryCalculationToEvaluateResults<false>(0, ValueExtractor{}, BinaryOperation{} , input);
-      auto calculator = LambdaVisitor<std::tuple_size_v<BinaryOperationTuple> - 1>{}(BinaryOperationTuple{}, _relations[i-1], ValueExtractor{}, input);
-      firstResult = std::visit(calculator, firstResult, _children[i]->evaluate(input));
+      // auto calculator = liftBinaryCalculationToEvaluateResults<false>(0, ValueExtractor{}, BinaryOperation{} , input);
+      auto calculator =
+          LambdaVisitor<std::tuple_size_v<BinaryOperationTuple> - 1>{}(
+              BinaryOperationTuple{}, _relations[i - 1], ValueExtractor{},
+              input);
+      firstResult =
+          std::visit(calculator, firstResult, _children[i]->evaluate(input));
     }
     return firstResult;
-
   };
+  void initializeVariables(
+      const VariableColumnMap& variableColumnMap) override {
+    for (const auto& ptr : _children) {
+      ptr->initializeVariables(variableColumnMap);
+    }
+  }
+
+  // _____________________________________________________________________
+  vector<std::string *> strings() override {
+    std::vector<string*> result;
+    for (const auto& ptr : _children) {
+      auto childResult = ptr->strings();
+      result.insert(result.end(), childResult.begin(), childResult.end());
+    }
+    return result;
+  }
+
  private:
   std::vector<Ptr> _children;
   std::vector<RelationDispatchEnum> _relations;
-
 };
 
-template <typename ValueExtractor, typename UnaryOperationTuple, typename RelationDispatchEnum>
-class DispatchedUnaryExpression : public SparqlExpression {
- public:
-  DispatchedUnaryExpression(Ptr&& child, RelationDispatchEnum relation): _child{std::move(child)}, _relation{std::move(relation)} {};
-  EvaluateResult  evaluate(evaluationInput* input) const override {
-    auto firstResult = _child->evaluate(input);
-    auto calculator = LambdaVisitor<std::tuple_size_v<UnaryOperationTuple> - 1>{}(UnaryOperationTuple{}, _relation, ValueExtractor{}, input);
-    firstResult = std::visit(calculator, firstResult);
-    return firstResult;
-  };
- private:
-  Ptr _child;
-  RelationDispatchEnum _relation;
+using ConditionalOrExpression =
+    BinaryExpression<true, RangeMerger, BooleanValueGetter,
+                     decltype([](bool a, bool b) { return a || b; })>;
+using ConditionalAndExpression =
+    BinaryExpression<true, RangeIntersector, BooleanValueGetter,
+                     decltype([](bool a, bool b) { return a && b; })>;
 
-};
+using UnaryNegateExpression =
+    UnaryExpression<false, void, BooleanValueGetter,
+                    decltype([](bool a) { return !a; })>;
+using UnaryMinusExpression =
+    UnaryExpression<false, void, NumericValueGetter,
+                    decltype([](auto a) { return -a; })>;
 
-using ConditionalOrExpression = BinaryExpression<true, RangeMerger, BooleanValueGetter, decltype([](bool a, bool b){return a || b;})>;
-using ConditionalAndExpression = BinaryExpression<true, RangeIntersector, BooleanValueGetter, decltype([](bool a, bool b){return a && b;})>;
-
-using UnaryNegateExpression = UnaryExpression<false, void, BooleanValueGetter, decltype([](bool a){return !a;})>;
-using UnaryMinusExpression = UnaryExpression<false, void, NumericValueGetter, decltype([](auto a){return -a;})>;
-
-auto equals = [](const auto& a, const auto& b) {return a == b;};
-auto nequals = [](const auto& a, const auto& b) {return a != b;};
+inline auto equals = [](const auto& a, const auto& b) { return a == b; };
+inline auto nequals = [](const auto& a, const auto& b) { return a != b; };
 
 enum class RelationalExpressionEnum : char {
-  EQUALS = 0, NEQUALS = 1, LESS, GREATER, LESS_EQUAL, GREATER_EQUAL
+  EQUALS = 0,
+  NEQUALS = 1,
+  LESS,
+  GREATER,
+  LESS_EQUAL,
+  GREATER_EQUAL
 };
-using RelationalTuple = std::tuple<decltype(equals), decltype(nequals), std::less<>, std::greater<>, std::less_equal<>, std::greater_equal<>>;
+using RelationalTuple =
+    std::tuple<decltype(equals), decltype(nequals), std::less<>, std::greater<>,
+               std::less_equal<>, std::greater_equal<>>;
 
-using RelationalExpression = DispatchedBinaryExpression<NumericValueGetter, RelationalTuple, RelationalExpressionEnum>;
+using RelationalExpression =
+    DispatchedBinaryExpression<NumericValueGetter, RelationalTuple,
+                               RelationalExpressionEnum>;
 
-enum class MultiplicativeExpressionEnum : char {
-  MULTIPLY, DIVIDE
-};
-auto multiply = [] (const auto& a, const auto& b) {return a * b;};
-auto divide = [] (const auto& a, const auto& b) {return a / b;};
+enum class MultiplicativeExpressionEnum : char { MULTIPLY, DIVIDE };
+inline auto multiply = [](const auto& a, const auto& b) { return a * b; };
+inline auto divide = [](const auto& a, const auto& b) { return a / b; };
 using MultiplicationTuple = std::tuple<decltype(multiply), decltype(divide)>;
-using MultiplicativeExpression = DispatchedBinaryExpression<NumericValueGetter, MultiplicationTuple , MultiplicativeExpressionEnum>;
+using MultiplicativeExpression =
+    DispatchedBinaryExpression<NumericValueGetter, MultiplicationTuple,
+                               MultiplicativeExpressionEnum>;
 
-auto add = [] (const auto& a, const auto& b) {return a + b;};
-auto subtract = [] (const auto& a, const auto& b) {return a - b;};
+inline auto add = [](const auto& a, const auto& b) { return a + b; };
+inline auto subtract = [](const auto& a, const auto& b) { return a - b; };
 
-enum class AdditiveEnum {ADD = 0, SUBTRACT};
+enum class AdditiveEnum { ADD = 0, SUBTRACT };
 using AdditiveTuple = std::tuple<decltype(add), decltype(subtract)>;
-using AdditiveExpression = DispatchedBinaryExpression<NumericValueGetter, AdditiveTuple , AdditiveEnum>;
-
+using AdditiveExpression =
+    DispatchedBinaryExpression<NumericValueGetter, AdditiveTuple, AdditiveEnum>;
 
 using BooleanLiteralExpression = LiteralExpression<bool>;
 using IntLiteralExpression = LiteralExpression<int64_t>;
 using DoubleLiteralExpression = LiteralExpression<double>;
 using VariableExpression = LiteralExpression<Variable>;
 
-//auto x = LambdaVisitor<1>{}(LambdaTuple{}, RelationalExpressionEnum::EQUALS, 3ul, 4ul);
+// auto x = LambdaVisitor<1>{}(LambdaTuple{}, RelationalExpressionEnum::EQUALS, 3ul, 4ul);
 
+}  // namespace sparqlExpression
 
 #endif  // QLEVER_SPARQLEXPRESSION_H

@@ -6,11 +6,17 @@
 
 #include "../src/parser/SparqlExpression.h"
 
+using namespace sparqlExpression;
+
 struct DummyExpression : public SparqlExpression {
   DummyExpression(EvaluateResult result) : _result{std::move(result)} {}
   EvaluateResult _result;
   EvaluateResult evaluate(evaluationInput *) const override {
     return _result;
+  }
+  void initializeVariables([[maybe_unused]] const VariableColumnMap &variableColumnMap) override {}
+  vector<std::string *> strings() override {
+    return {};
   }
 };
 
@@ -20,7 +26,6 @@ TEST(SparqlExpression, Or) {
   std::vector<bool> expected {true, true, true, false};
 
   evaluationInput i;
-  i._inputSize = d.size();;
   std::vector<SparqlExpression::Ptr> children;
   children.push_back(std::make_unique<DummyExpression>(SparqlExpression::EvaluateResult{d}));
   children.push_back(std::make_unique<DummyExpression>(SparqlExpression::EvaluateResult{b}));

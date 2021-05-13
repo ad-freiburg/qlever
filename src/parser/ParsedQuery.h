@@ -14,6 +14,7 @@
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
 #include "ParseException.h"
+#include "SparqlExpressionWrapper.h"
 
 using std::string;
 using std::vector;
@@ -439,7 +440,8 @@ struct GraphPatternOperation {
       vector<string*> strings() { return {&_var}; }
       [[nodiscard]] string getDescriptor() const { return _var; }
     };
-    std::variant<Rename, Constant, Sum> _expressionVariant;
+
+    std::variant<Rename, Constant, Sum, sparqlExpression::SparqlExpressionWrapper> _expressionVariant;
     std::string _target;  // the variable to which the expression will be bound
 
     // Return all the strings contained in the BIND expression (variables,

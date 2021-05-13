@@ -11,6 +11,7 @@
 #include <random>
 #include <type_traits>
 #include <vector>
+#include <cstring>
 
 /**
  * A simple and fast Pseudo-Random-Number-Generator called Xoroshiro128+, for
