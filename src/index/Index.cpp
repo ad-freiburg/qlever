@@ -1497,7 +1497,8 @@ void Index::initializeVocabularySettingsBuild() {
     } else {
       LOG(WARN) << "You specified the ascii-prefixes-only but a parser that is "
                    "not the Turtle stream parser. This means that this setting "
-                   "is ignored\n";
+                   "is ignored."
+                << std::endl;
     }
   }
 
@@ -1506,13 +1507,15 @@ void Index::initializeVocabularySettingsBuild() {
     LOG(INFO) << "Overriding setting num-triples-per-partial-vocab to "
               << _numTriplesPerPartialVocab
               << " This might influence performance / memory usage during "
-                 "index build\n";
+                 "index build."
+              << std::endl;
   }
 
   if (j.count("parser-batch-size")) {
     _parserBatchSize = j["parser-batch-size"];
     LOG(INFO) << "Overriding setting parser-batch-size to " << _parserBatchSize
-              << " This might influence performance during index build\n";
+              << " This might influence performance during index build."
+              << std::endl;
   }
 }
 
