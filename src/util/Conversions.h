@@ -616,10 +616,8 @@ bool isXsdValue(const string& val) {
   size_t posLastQuote = val.rfind("\"");
   return !val.empty() && val[0] == '\"' && posLastQuote > 0 &&
          val.find("^^", posLastQuote) != string::npos &&
-         val.size() > posLastQuote + 37 &&
-         val[posLastQuote + 27] == 'X' &&
-         val[posLastQuote + 29] == 'L' &&
-         val[posLastQuote + 36] == '#';
+         val.size() > posLastQuote + 37 && val[posLastQuote + 27] == 'X' &&
+         val[posLastQuote + 29] == 'L' && val[posLastQuote + 36] == '#';
 }
 
 // _____________________________________________________________________________
