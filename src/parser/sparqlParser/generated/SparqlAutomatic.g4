@@ -381,7 +381,7 @@ valueLogical
     ;
 
 relationalExpression
-    : numericExpression ( '=' numericExpression | '!=' numericExpression | '<' numericExpression | '>' numericExpression | '<=' numericExpression | '>=' numericExpression | IN expressionList | NOT IN expressionList)?
+    : numericExpression ( EQUALS numericExpression | NEQUALS numericExpression | LESS numericExpression | GREATER numericExpression | LESS_EQUAL numericExpression | GREATER_EQUAL numericExpression | IN expressionList | NOT IN expressionList)?
     ;
 
 numericExpression
@@ -389,11 +389,15 @@ numericExpression
     ;
 
 additiveExpression :
-    multiplicativeExpression ( '+' multiplicativeExpression | '-' multiplicativeExpression | ( numericLiteralPositive | numericLiteralNegative ) ( ( '*' unaryExpression ) | ( '/' unaryExpression ) )* )*
+    multiplicativeExpression ( PLUS multiplicativeExpression | MINUS multiplicativeExpression |  strangeMultiplicativeSubexprOfAdditive)*
     ;
 
+strangeMultiplicativeSubexprOfAdditive:
+( numericLiteralPositive | numericLiteralNegative ) ( ( MULTIPLY unaryExpression ) | ( DIVIDE unaryExpression ) )*
+;
+
 multiplicativeExpression
-    : unaryExpression ( '*' unaryExpression | '/' unaryExpression )*
+    : unaryExpression ( MULTIPLY unaryExpression | DIVIDE unaryExpression )*
     ;
 
 unaryExpression
@@ -794,6 +798,20 @@ HEX:
 
 PN_LOCAL_ESC :
     '\\' ( '_' | '~' | '.' | '-' | '!' | '$' | '&' | '\'' | '(' | ')' | '*' | '+' | ',' | ';' | '=' | '/' | '?' | '#' | '@' | '%' );
+
+MULTIPLY : '*';
+DIVIDE : '/';
+PLUS : '+';
+MINUSSIGN : '-';
+EQUALS : '=';
+NEQUALS : '!=';
+NEGATE: '!';
+LESS : '<';
+GREATER : '>';
+LESS_EQUAL : '<=';
+GREATER_EQUAL : '>=';
+
+
 
 
 

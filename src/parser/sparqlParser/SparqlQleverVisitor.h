@@ -483,11 +483,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitConditionalAndExpression(
       SparqlAutomaticParser::ConditionalAndExpressionContext* ctx) override {
-    auto children = ctx->valueLogical();
-      if (children.size() != 1) {
-        throw SparqlParseException{"Logical and && is not supported by QLever"};
-      }
-      return visitValueLogical(children[0]);
+    auto childCtxts = ctx->valueLogical();
+    std::vector<ExpressionPtr> children;
+    for (const auto& child: childCtxts) {
+      children.emplace_back(std::move(visitValueLogical(child).as<ExpressionPtr>()));
+    }
+    return ExpressionPtr {std::make_unique<sparqlExpression::ConditionalAndExpression>(std::move(children))};
   }
 
   antlrcpp::Any visitValueLogical(
@@ -497,7 +498,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitRelationalExpression(
       SparqlAutomaticParser::RelationalExpressionContext* ctx) override {
-    return visitChildren(ctx);
+    auto childContexts = ctx->numericExpression();
+    if (childContexts.size() != 1) {
+      throw std::runtime_error("This parser does not yet support relational expressions = < etc.");
+    }
+    return visitNumericExpression(childContexts[0]);
   }
 
   antlrcpp::Any visitNumericExpression(
@@ -508,6 +513,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitAdditiveExpression(
       SparqlAutomaticParser::AdditiveExpressionContext* ctx) override {
     return visitChildren(ctx);
+  }
+  virtual antlrcpp::Any visitStrangeMultiplicativeSubexprOfAdditive(SparqlAutomaticParser::StrangeMultiplicativeSubexprOfAdditiveContext *context) override {
+    return visitChildren(context);
   }
 
   antlrcpp::Any visitMultiplicativeExpression(
