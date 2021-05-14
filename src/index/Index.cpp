@@ -1406,6 +1406,12 @@ LangtagAndTriple Index::tripleToInternalRepresentation(Triple&& tripleIn) {
   }
 
   for (size_t k = 0; k < upperBound; ++k) {
+    // OSM HACK: Check how the triples look like at this point.
+    //
+    // LOG(INFO) << "OSM DEBUG: " << k << ", " << spo[k] << ", "
+    //           << _onDiskLiterals << ", "
+    //           << _vocab.shouldBeExternalized(spo[k])
+    //           << std::endl;
     if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k])) {
       if (isLiteral(spo[k])) {
         spo[k][0] = EXTERNALIZED_LITERALS_PREFIX_CHAR;
