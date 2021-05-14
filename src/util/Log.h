@@ -32,7 +32,7 @@
 #define DEBUG 4
 #define INFO 3
 #define WARN 2
-#define ERROR 1
+static constexpr size_t ERROR = 1;
 #define FATAL 0
 
 namespace ad_utility {

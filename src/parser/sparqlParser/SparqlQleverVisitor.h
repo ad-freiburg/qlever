@@ -5,18 +5,19 @@
 
 #include <gtest/gtest.h>
 
+#include "../ParsedQuery.h"
+#include "../SparqlExpression.h"
 #include "../../util/HashMap.h"
 #include "../RdfEscaping.h"
 #include "antlr4-runtime.h"
-#include "generated/SparqlAutomaticLexer.h"
 #include "generated/SparqlAutomaticVisitor.h"
 
-#include "../ParsedQuery.h"
 
 
 
 class SparqlParseException : public std::exception {
   string _message;
+
 
  public:
   SparqlParseException(std::string message) : _message{std::move(message)} {}
@@ -34,6 +35,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   const PrefixMap& prefixMap() const { return _prefixMap; }
   SparqlQleverVisitor() = default;
   SparqlQleverVisitor(PrefixMap prefixMap) : _prefixMap{std::move(prefixMap)} {}
+  using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
  private:
 
   // For the unit tests
@@ -471,11 +473,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitConditionalOrExpression(
       SparqlAutomaticParser::ConditionalOrExpressionContext* ctx) override {
-    auto children = ctx->conditionalAndExpression();
-    if (children.size() != 1) {
-      throw SparqlParseException{"Logical or || is not supported by QLever"};
+    auto childCtxts = ctx->conditionalAndExpression();
+    std::vector<ExpressionPtr> children;
+    for (const auto& child: childCtxts) {
+      children.emplace_back(std::move(visitConditionalAndExpression(child).as<ExpressionPtr>()));
     }
-    return visitConditionalAndExpression(children[0]);
+    return ExpressionPtr {std::make_unique<sparqlExpression::ConditionalOrExpression>(std::move(children))};
   }
 
   antlrcpp::Any visitConditionalAndExpression(
@@ -670,6 +673,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 };
 
+/*
 namespace SparqlAutomaticParserHelpers {
 
 struct ParserAndVisitor {
@@ -702,8 +706,9 @@ std::pair<string, size_t> parseIri(const string& input, SparqlQleverVisitor::Pre
   auto context = p.parser.iri();
   auto parsedSize = context->getText().size();
   auto resultString = p.visitor.visitIri(context).as<string>();
-  const auto& constVisitor = p.visitor;
+  //const auto& constVisitor = p.visitor;
   return {std::move(resultString), parsedSize};
 }
 
 }
+ */

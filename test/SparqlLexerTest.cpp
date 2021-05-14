@@ -7,6 +7,13 @@
 
 #include <re2/re2.h>
 
+TEST(SparqlLexerTest, unescapeLiteral) {
+  std::string input = R"("^\"biff")";
+  SparqlLexer lexer(input);
+  lexer.expect(SparqlToken::Type::RDFLITERAL);
+  ASSERT_EQ(R"("^"biff")", lexer.current().raw);
+}
+
 TEST(SparqlLexerTest, basicTest) {
   //  ASSERT_TRUE(
   //      re2::RE2::FullMatch("<is-a>/(<a>|<b>)*+0^",
