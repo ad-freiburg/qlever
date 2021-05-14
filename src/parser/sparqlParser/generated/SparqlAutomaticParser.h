@@ -15,35 +15,35 @@ public:
     T__0 = 1, T__1 = 2, T__2 = 3, T__3 = 4, T__4 = 5, T__5 = 6, T__6 = 7, 
     T__7 = 8, T__8 = 9, T__9 = 10, T__10 = 11, T__11 = 12, T__12 = 13, T__13 = 14, 
     T__14 = 15, T__15 = 16, T__16 = 17, T__17 = 18, T__18 = 19, T__19 = 20, 
-    T__20 = 21, BASE = 22, PREFIX = 23, SELECT = 24, DISTINCT = 25, REDUCED = 26, 
-    AS = 27, CONSTRUCT = 28, WHERE = 29, DESCRIBE = 30, ASK = 31, FROM = 32, 
-    NAMED = 33, GROUPBY = 34, GROUP_CONCAT = 35, HAVING = 36, ORDERBY = 37, 
-    ASC = 38, DESC = 39, LIMIT = 40, OFFSET = 41, VALUES = 42, LOAD = 43, 
-    SILENT = 44, CLEAR = 45, DROP = 46, CREATE = 47, ADD = 48, DATA = 49, 
-    MOVE = 50, COPY = 51, INSERT = 52, DELETE = 53, WITH = 54, USING = 55, 
-    DEFAULT = 56, GRAPH = 57, ALL = 58, OPTIONAL = 59, SERVICE = 60, BIND = 61, 
-    UNDEF = 62, MINUS = 63, UNION = 64, FILTER = 65, NOT = 66, IN = 67, 
-    STR = 68, LANG = 69, LANGMATCHES = 70, DATATYPE = 71, BOUND = 72, IRI = 73, 
-    URI = 74, BNODE = 75, RAND = 76, ABS = 77, CEIL = 78, FLOOR = 79, ROUND = 80, 
-    CONCAT = 81, STRLEN = 82, UCASE = 83, LCASE = 84, ENCODE = 85, FOR = 86, 
-    CONTAINS = 87, STRSTARTS = 88, STRENDS = 89, STRBEFORE = 90, STRAFTER = 91, 
-    YEAR = 92, MONTH = 93, DAY = 94, HOURS = 95, MINUTES = 96, SECONDS = 97, 
-    TIMEZONE = 98, TZ = 99, NOW = 100, UUID = 101, STRUUID = 102, SHA1 = 103, 
-    SHA256 = 104, SHA384 = 105, SHA512 = 106, MD5 = 107, COALESCE = 108, 
-    IF = 109, STRLANG = 110, STRDT = 111, SAMETERM = 112, ISIRI = 113, ISURI = 114, 
-    ISBLANK = 115, ISLITERAL = 116, ISNUMERIC = 117, REGEX = 118, SUBSTR = 119, 
-    REPLACE = 120, EXISTS = 121, COUNT = 122, SUM = 123, MIN = 124, MAX = 125, 
-    AVG = 126, SAMPLE = 127, SEPARATOR = 128, IRI_REF = 129, PNAME_NS = 130, 
-    PNAME_LN = 131, BLANK_NODE_LABEL = 132, VAR1 = 133, VAR2 = 134, LANGTAG = 135, 
-    INTEGER = 136, DECIMAL = 137, DOUBLE = 138, INTEGER_POSITIVE = 139, 
-    DECIMAL_POSITIVE = 140, DOUBLE_POSITIVE = 141, INTEGER_NEGATIVE = 142, 
-    DECIMAL_NEGATIVE = 143, DOUBLE_NEGATIVE = 144, EXPONENT = 145, STRING_LITERAL1 = 146, 
-    STRING_LITERAL2 = 147, STRING_LITERAL_LONG1 = 148, STRING_LITERAL_LONG2 = 149, 
-    ECHAR = 150, NIL = 151, ANON = 152, PN_CHARS_U = 153, VARNAME = 154, 
-    PN_PREFIX = 155, PN_LOCAL = 156, PLX = 157, PERCENT = 158, HEX = 159, 
-    PN_LOCAL_ESC = 160, MULTIPLY = 161, DIVIDE = 162, PLUS = 163, MINUSSIGN = 164, 
-    EQUALS = 165, NEQUALS = 166, NEGATE = 167, LESS = 168, GREATER = 169, 
-    LESS_EQUAL = 170, GREATER_EQUAL = 171, WS = 172, COMMENTS = 173
+    T__20 = 21, T__21 = 22, T__22 = 23, T__23 = 24, T__24 = 25, T__25 = 26, 
+    T__26 = 27, T__27 = 28, T__28 = 29, T__29 = 30, T__30 = 31, BASE = 32, 
+    PREFIX = 33, SELECT = 34, DISTINCT = 35, REDUCED = 36, AS = 37, CONSTRUCT = 38, 
+    WHERE = 39, DESCRIBE = 40, ASK = 41, FROM = 42, NAMED = 43, GROUPBY = 44, 
+    GROUP_CONCAT = 45, HAVING = 46, ORDERBY = 47, ASC = 48, DESC = 49, LIMIT = 50, 
+    OFFSET = 51, VALUES = 52, LOAD = 53, SILENT = 54, CLEAR = 55, DROP = 56, 
+    CREATE = 57, ADD = 58, DATA = 59, MOVE = 60, COPY = 61, INSERT = 62, 
+    DELETE = 63, WITH = 64, USING = 65, DEFAULT = 66, GRAPH = 67, ALL = 68, 
+    OPTIONAL = 69, SERVICE = 70, BIND = 71, UNDEF = 72, MINUS = 73, UNION = 74, 
+    FILTER = 75, NOT = 76, IN = 77, STR = 78, LANG = 79, LANGMATCHES = 80, 
+    DATATYPE = 81, BOUND = 82, IRI = 83, URI = 84, BNODE = 85, RAND = 86, 
+    ABS = 87, CEIL = 88, FLOOR = 89, ROUND = 90, CONCAT = 91, STRLEN = 92, 
+    UCASE = 93, LCASE = 94, ENCODE = 95, FOR = 96, CONTAINS = 97, STRSTARTS = 98, 
+    STRENDS = 99, STRBEFORE = 100, STRAFTER = 101, YEAR = 102, MONTH = 103, 
+    DAY = 104, HOURS = 105, MINUTES = 106, SECONDS = 107, TIMEZONE = 108, 
+    TZ = 109, NOW = 110, UUID = 111, STRUUID = 112, SHA1 = 113, SHA256 = 114, 
+    SHA384 = 115, SHA512 = 116, MD5 = 117, COALESCE = 118, IF = 119, STRLANG = 120, 
+    STRDT = 121, SAMETERM = 122, ISIRI = 123, ISURI = 124, ISBLANK = 125, 
+    ISLITERAL = 126, ISNUMERIC = 127, REGEX = 128, SUBSTR = 129, REPLACE = 130, 
+    EXISTS = 131, COUNT = 132, SUM = 133, MIN = 134, MAX = 135, AVG = 136, 
+    SAMPLE = 137, SEPARATOR = 138, IRI_REF = 139, PNAME_NS = 140, PNAME_LN = 141, 
+    BLANK_NODE_LABEL = 142, VAR1 = 143, VAR2 = 144, LANGTAG = 145, INTEGER = 146, 
+    DECIMAL = 147, DOUBLE = 148, INTEGER_POSITIVE = 149, DECIMAL_POSITIVE = 150, 
+    DOUBLE_POSITIVE = 151, INTEGER_NEGATIVE = 152, DECIMAL_NEGATIVE = 153, 
+    DOUBLE_NEGATIVE = 154, EXPONENT = 155, STRING_LITERAL1 = 156, STRING_LITERAL2 = 157, 
+    STRING_LITERAL_LONG1 = 158, STRING_LITERAL_LONG2 = 159, ECHAR = 160, 
+    NIL = 161, ANON = 162, PN_CHARS_U = 163, VARNAME = 164, PN_PREFIX = 165, 
+    PN_LOCAL = 166, PLX = 167, PERCENT = 168, HEX = 169, PN_LOCAL_ESC = 170, 
+    WS = 171, COMMENTS = 172
   };
 
   enum {
@@ -331,7 +331,6 @@ public:
     SelectClauseContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *SELECT();
-    antlr4::tree::TerminalNode *MULTIPLY();
     antlr4::tree::TerminalNode *DISTINCT();
     antlr4::tree::TerminalNode *REDUCED();
     std::vector<VarContext *> var();
@@ -393,7 +392,6 @@ public:
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *DESCRIBE();
     SolutionModifierContext *solutionModifier();
-    antlr4::tree::TerminalNode *MULTIPLY();
     std::vector<DatasetClauseContext *> datasetClause();
     DatasetClauseContext* datasetClause(size_t i);
     WhereClauseContext *whereClause();
@@ -1365,8 +1363,6 @@ public:
     virtual size_t getRuleIndex() const override;
     std::vector<PathEltOrInverseContext *> pathEltOrInverse();
     PathEltOrInverseContext* pathEltOrInverse(size_t i);
-    std::vector<antlr4::tree::TerminalNode *> DIVIDE();
-    antlr4::tree::TerminalNode* DIVIDE(size_t i);
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -1412,8 +1408,6 @@ public:
   public:
     PathModContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    antlr4::tree::TerminalNode *PLUS();
-    antlr4::tree::TerminalNode *MULTIPLY();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -1429,7 +1423,6 @@ public:
     PathPrimaryContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     IriContext *iri();
-    antlr4::tree::TerminalNode *NEGATE();
     PathNegatedPropertySetContext *pathNegatedPropertySet();
     PathContext *path();
 
@@ -1750,12 +1743,6 @@ public:
     virtual size_t getRuleIndex() const override;
     std::vector<NumericExpressionContext *> numericExpression();
     NumericExpressionContext* numericExpression(size_t i);
-    antlr4::tree::TerminalNode *EQUALS();
-    antlr4::tree::TerminalNode *NEQUALS();
-    antlr4::tree::TerminalNode *LESS();
-    antlr4::tree::TerminalNode *GREATER();
-    antlr4::tree::TerminalNode *LESS_EQUAL();
-    antlr4::tree::TerminalNode *GREATER_EQUAL();
     antlr4::tree::TerminalNode *IN();
     ExpressionListContext *expressionList();
     antlr4::tree::TerminalNode *NOT();
@@ -1790,10 +1777,6 @@ public:
     virtual size_t getRuleIndex() const override;
     std::vector<MultiplicativeExpressionContext *> multiplicativeExpression();
     MultiplicativeExpressionContext* multiplicativeExpression(size_t i);
-    std::vector<antlr4::tree::TerminalNode *> PLUS();
-    antlr4::tree::TerminalNode* PLUS(size_t i);
-    std::vector<antlr4::tree::TerminalNode *> MINUS();
-    antlr4::tree::TerminalNode* MINUS(size_t i);
     std::vector<StrangeMultiplicativeSubexprOfAdditiveContext *> strangeMultiplicativeSubexprOfAdditive();
     StrangeMultiplicativeSubexprOfAdditiveContext* strangeMultiplicativeSubexprOfAdditive(size_t i);
 
@@ -1812,12 +1795,8 @@ public:
     virtual size_t getRuleIndex() const override;
     NumericLiteralPositiveContext *numericLiteralPositive();
     NumericLiteralNegativeContext *numericLiteralNegative();
-    std::vector<antlr4::tree::TerminalNode *> MULTIPLY();
-    antlr4::tree::TerminalNode* MULTIPLY(size_t i);
     std::vector<UnaryExpressionContext *> unaryExpression();
     UnaryExpressionContext* unaryExpression(size_t i);
-    std::vector<antlr4::tree::TerminalNode *> DIVIDE();
-    antlr4::tree::TerminalNode* DIVIDE(size_t i);
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -1834,10 +1813,6 @@ public:
     virtual size_t getRuleIndex() const override;
     std::vector<UnaryExpressionContext *> unaryExpression();
     UnaryExpressionContext* unaryExpression(size_t i);
-    std::vector<antlr4::tree::TerminalNode *> MULTIPLY();
-    antlr4::tree::TerminalNode* MULTIPLY(size_t i);
-    std::vector<antlr4::tree::TerminalNode *> DIVIDE();
-    antlr4::tree::TerminalNode* DIVIDE(size_t i);
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -1852,10 +1827,7 @@ public:
   public:
     UnaryExpressionContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
-    antlr4::tree::TerminalNode *NEGATE();
     PrimaryExpressionContext *primaryExpression();
-    antlr4::tree::TerminalNode *PLUS();
-    antlr4::tree::TerminalNode *MINUSSIGN();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;
     virtual void exitRule(antlr4::tree::ParseTreeListener *listener) override;
@@ -2066,7 +2038,6 @@ public:
     AggregateContext(antlr4::ParserRuleContext *parent, size_t invokingState);
     virtual size_t getRuleIndex() const override;
     antlr4::tree::TerminalNode *COUNT();
-    antlr4::tree::TerminalNode *MULTIPLY();
     ExpressionContext *expression();
     antlr4::tree::TerminalNode *DISTINCT();
     antlr4::tree::TerminalNode *SUM();
@@ -2076,7 +2047,6 @@ public:
     antlr4::tree::TerminalNode *SAMPLE();
     antlr4::tree::TerminalNode *GROUP_CONCAT();
     antlr4::tree::TerminalNode *SEPARATOR();
-    antlr4::tree::TerminalNode *EQUALS();
     StringContext *string();
 
     virtual void enterRule(antlr4::tree::ParseTreeListener *listener) override;

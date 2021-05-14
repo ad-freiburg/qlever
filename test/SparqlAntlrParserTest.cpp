@@ -104,3 +104,17 @@ TEST(SparqlParser, Prefix) {
     ASSERT_EQ(sz, 20u);
   }
 }
+
+TEST(SparqlExpressionParser, First) {
+  string s = "23 - 5 + 7";
+  ParserAndVisitor p{s};
+  auto context = p.parser.additiveExpression();
+  auto result = p.visitor.visitAdditiveExpression(context);
+  auto expr = std::move(result.as<sparqlExpression::SparqlExpression::Ptr>());
+
+  sparqlExpression::evaluationInput input;
+  auto res = expr->evaluate(&input);
+  AD_CHECK(std::holds_alternative<int64_t>(res));
+  ASSERT_EQ(25, std::get<int64_t>(res));
+
+}

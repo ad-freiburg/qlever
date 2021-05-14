@@ -512,7 +512,26 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitAdditiveExpression(
       SparqlAutomaticParser::AdditiveExpressionContext* ctx) override {
-    return visitChildren(ctx);
+
+    std::vector<ExpressionPtr> children;
+    std::vector<sparqlExpression::AdditiveEnum> opType;
+    for (const auto& exprCtxt : ctx->multiplicativeExpression()) {
+      children.push_back(std::move(visitMultiplicativeExpression(exprCtxt).as<ExpressionPtr>()));
+    }
+    for (const auto& c : ctx->children) {
+      if (ctx->getText() == "+") {
+        opType.push_back(sparqlExpression::AdditiveEnum::ADD);
+      }
+      else if (ctx->getText() == "-") {
+        opType.push_back(sparqlExpression::AdditiveEnum::SUBTRACT);
+      }
+    }
+
+    if (!ctx->strangeMultiplicativeSubexprOfAdditive().empty()) {
+      throw std::runtime_error{"You currently have to put a space between a +/- and the number after it."};
+    }
+
+    return ExpressionPtr{std::make_unique<sparqlExpression::AdditiveExpression>(std::move(children), std::move(opType))};
   }
   virtual antlrcpp::Any visitStrangeMultiplicativeSubexprOfAdditive(SparqlAutomaticParser::StrangeMultiplicativeSubexprOfAdditiveContext *context) override {
     return visitChildren(context);
@@ -520,27 +539,86 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitMultiplicativeExpression(
       SparqlAutomaticParser::MultiplicativeExpressionContext* ctx) override {
-    return visitChildren(ctx);
+
+    std::vector<ExpressionPtr> children;
+    std::vector<sparqlExpression::MultiplicativeExpressionEnum> opType;
+
+    for (const auto& exprCtxt : ctx->unaryExpression()) {
+      children.push_back(std::move(visitUnaryExpression(exprCtxt).as<ExpressionPtr>()));
+    }
+    for (const auto& c : ctx->children) {
+      if (ctx->getText() == "*") {
+        opType.push_back(sparqlExpression::MultiplicativeExpressionEnum::MULTIPLY);
+      }
+      else if (ctx->getText() == "/") {
+        opType.push_back(sparqlExpression::MultiplicativeExpressionEnum::DIVIDE);
+      }
+    }
+
+    return ExpressionPtr{std::make_unique<sparqlExpression::MultiplicativeExpression>(std::move(children), std::move(opType))};
   }
 
   antlrcpp::Any visitUnaryExpression(
       SparqlAutomaticParser::UnaryExpressionContext* ctx) override {
-    return visitChildren(ctx);
+
+
+   auto child = std::move(visitPrimaryExpression(ctx->primaryExpression()).as<ExpressionPtr>());
+  if (ctx->children[0]->getText() == "-") {
+    return ExpressionPtr{std::make_unique<sparqlExpression::UnaryMinusExpression>(std::move(child))};
   }
+  else if (ctx->getText() == "!") {
+    return ExpressionPtr{std::make_unique<sparqlExpression::UnaryNegateExpression>(std::move(child))};
+  } else {
+    // no sign or an explicit '+'
+    return child;
+  }
+}
 
   antlrcpp::Any visitPrimaryExpression(
       SparqlAutomaticParser::PrimaryExpressionContext* ctx) override {
-    return visitChildren(ctx);
+    if (ctx->rdfLiteral() || ctx->builtInCall() || ctx->iriOrFunction()) {
+      throw SparqlParseException{"rdfLiterals, builtInCalls and IriOrFunction are currently not allowed inside expressions"};
+    }
+
+    if (ctx->numericLiteral()) {
+      auto literalAny = visitNumericLiteral(ctx->numericLiteral());
+      try {
+        auto intLiteral = literalAny.as<unsigned long long>();
+        return ExpressionPtr{std::make_unique<sparqlExpression::IntLiteralExpression>(static_cast<int64_t>(intLiteral))};
+      } catch (...) {}
+      try {
+        auto intLiteral = literalAny.as<long long>();
+        return ExpressionPtr{std::make_unique<sparqlExpression::IntLiteralExpression>(static_cast<int64_t>(intLiteral))};
+      } catch (...) {}
+      try {
+        auto intLiteral = literalAny.as<double>();
+        return ExpressionPtr{std::make_unique<sparqlExpression::DoubleLiteralExpression>(static_cast<double>(intLiteral))};
+      } catch (...) {}
+      AD_CHECK(false);
+    }
+
+    if (ctx->booleanLiteral()) {
+      auto b = visitBooleanLiteral(ctx->booleanLiteral()).as<bool>();
+      return ExpressionPtr{std::make_unique<sparqlExpression::BooleanLiteralExpression>(b)};
+    }
+
+    if (ctx->var()) {
+      sparqlExpression::Variable v;
+      v._variable = ctx->var()->getText();
+      return ExpressionPtr{std::make_unique<sparqlExpression::VariableExpression>(v)};
+    }
+    // We should have returned by now
+    AD_CHECK(false);
   }
 
   antlrcpp::Any visitBrackettedExpression(
       SparqlAutomaticParser::BrackettedExpressionContext* ctx) override {
-    return visitChildren(ctx);
+    return visitExpression(ctx->expression());
   }
 
   antlrcpp::Any visitBuiltInCall(
       SparqlAutomaticParser::BuiltInCallContext* ctx) override {
-    return visitChildren(ctx);
+    throw SparqlParseException{"builtInCalls are not supported by this parser"};
   }
 
   antlrcpp::Any visitRegexExpression(
@@ -573,6 +651,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitIriOrFunction(
       SparqlAutomaticParser::IriOrFunctionContext* ctx) override {
+    throw SparqlParseException{"IriOrFunction in expression are not supported by this parser"};
     return visitChildren(ctx);
   }
 

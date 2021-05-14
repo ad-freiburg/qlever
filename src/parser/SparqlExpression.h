@@ -257,7 +257,7 @@ class LiteralExpression : public SparqlExpression {
 
   vector<std::string *> strings() override {
     if constexpr (std::is_same_v<T, Variable>) {
-      return {&_value.variable};
+      return {&_value._variable};
     } else {
       return {};
     }
@@ -479,11 +479,12 @@ using ConditionalAndExpression =
     BinaryExpression<true, RangeIntersector, BooleanValueGetter,
                      decltype([](bool a, bool b) { return a && b; })>;
 
+struct EmptyType{};
 using UnaryNegateExpression =
-    UnaryExpression<false, void, BooleanValueGetter,
+    UnaryExpression<false, EmptyType, BooleanValueGetter,
                     decltype([](bool a) { return !a; })>;
 using UnaryMinusExpression =
-    UnaryExpression<false, void, NumericValueGetter,
+    UnaryExpression<false, EmptyType, NumericValueGetter,
                     decltype([](auto a) { return -a; })>;
 
 inline auto equals = [](const auto& a, const auto& b) { return a == b; };
