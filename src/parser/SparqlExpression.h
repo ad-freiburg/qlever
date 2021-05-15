@@ -324,9 +324,9 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
       auto result = std::apply(create, std::move(extractors));
 
       if (!resultIsAVector) {
-        return result[0];
+        return SparqlExpression::EvaluateResult {std::move(result[0])};
       } else {
-        return result;
+        return SparqlExpression::EvaluateResult(std::move(result));
       }
     }
   };
@@ -402,15 +402,15 @@ template <size_t MaxValue>
 struct LambdaVisitor {
   template <typename Tuple, typename Enum, typename ValueExtractor,
             typename... Args>
-  decltype(auto) operator()(Tuple t, Enum r, Args&&... args) {
+  auto operator()(Tuple t, Enum r, ValueExtractor v, evaluationInput* input, Args&&... args) -> SparqlExpression::EvaluateResult {
     static_assert(MaxValue < std::tuple_size_v<Tuple>);
     AD_CHECK(static_cast<size_t>(r) < std::tuple_size_v<Tuple>);
     if (static_cast<size_t>(r) == MaxValue) {
       return liftBinaryCalculationToEvaluateResults<false>(
-          0, ValueExtractor{}, std::get<MaxValue>(t),
+          0, std::move(v), std::get<MaxValue>(t), input)(
           std::forward<Args>(args)...);
     } else {
-      return LambdaVisitor<MaxValue - 1>{}(t, r, std::forward<Args>(args)...);
+      return LambdaVisitor<MaxValue - 1>{}(t, r, v, input,std::forward<Args>(args)...);
     }
   }
 };
@@ -419,10 +419,10 @@ template <>
 struct LambdaVisitor<0> {
   template <typename Tuple, typename Enum, typename ValueExtractor,
             typename... Args>
-  auto operator()(Tuple t, Enum r, Args&&... args) {
+  auto operator()(Tuple t, Enum r, ValueExtractor v, evaluationInput* input, Args&&... args) {
     if (static_cast<size_t>(r) == 0) {
       return liftBinaryCalculationToEvaluateResults<false>(
-          0, ValueExtractor{}, std::get<0>(t), std::forward<Args>(args)...);
+          0, std::move(v), std::get<0>(t), input)(std::forward<Args>(args)...);
     } else {
       AD_CHECK(false);
     }
@@ -441,10 +441,11 @@ class DispatchedBinaryExpression : public SparqlExpression {
 
     for (size_t i = 1; i < _children.size(); ++i) {
       // auto calculator = liftBinaryCalculationToEvaluateResults<false>(0, ValueExtractor{}, BinaryOperation{} , input);
-      auto calculator =
-          LambdaVisitor<std::tuple_size_v<BinaryOperationTuple> - 1>{}(
-              BinaryOperationTuple{}, _relations[i - 1], ValueExtractor{},
-              input);
+      auto calculator = [&]<typename... Args>(Args&&... args) {
+            return LambdaVisitor<std::tuple_size_v<BinaryOperationTuple> - 1>{}(
+                BinaryOperationTuple{}, _relations[i - 1], ValueExtractor{},
+                input, std::forward<Args>(args)...);
+          };
       firstResult =
           std::visit(calculator, firstResult, _children[i]->evaluate(input));
     }
@@ -482,13 +483,13 @@ using ConditionalAndExpression =
 struct EmptyType{};
 using UnaryNegateExpression =
     UnaryExpression<false, EmptyType, BooleanValueGetter,
-                    decltype([](bool a) { return !a; })>;
+                    decltype([](bool a) -> bool { return !a; })>;
 using UnaryMinusExpression =
     UnaryExpression<false, EmptyType, NumericValueGetter,
-                    decltype([](auto a) { return -a; })>;
+                    decltype([](auto a) -> double { return -a; })>;
 
-inline auto equals = [](const auto& a, const auto& b) { return a == b; };
-inline auto nequals = [](const auto& a, const auto& b) { return a != b; };
+inline auto equals = [](const auto& a, const auto& b) -> bool { return a == b; };
+inline auto nequals = [](const auto& a, const auto& b) ->bool { return a != b; };
 
 enum class RelationalExpressionEnum : char {
   EQUALS = 0,
@@ -507,15 +508,15 @@ using RelationalExpression =
                                RelationalExpressionEnum>;
 
 enum class MultiplicativeExpressionEnum : char { MULTIPLY, DIVIDE };
-inline auto multiply = [](const auto& a, const auto& b) { return a * b; };
-inline auto divide = [](const auto& a, const auto& b) { return a / b; };
+inline auto multiply = [](const auto& a, const auto& b) -> double { return a * b; };
+inline auto divide = [](const auto& a, const auto& b) -> double { return a / b; };
 using MultiplicationTuple = std::tuple<decltype(multiply), decltype(divide)>;
 using MultiplicativeExpression =
     DispatchedBinaryExpression<NumericValueGetter, MultiplicationTuple,
                                MultiplicativeExpressionEnum>;
 
-inline auto add = [](const auto& a, const auto& b) { return a + b; };
-inline auto subtract = [](const auto& a, const auto& b) { return a - b; };
+inline auto add = [](const auto& a, const auto& b) -> double { return a + b; };
+inline auto subtract = [](const auto& a, const auto& b) -> double { return a - b; };
 
 enum class AdditiveEnum { ADD = 0, SUBTRACT };
 using AdditiveTuple = std::tuple<decltype(add), decltype(subtract)>;
