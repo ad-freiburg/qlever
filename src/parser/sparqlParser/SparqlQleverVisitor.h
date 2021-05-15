@@ -19,6 +19,7 @@ class SparqlParseException : public std::exception {
   string _message;
 
 
+
  public:
   SparqlParseException(std::string message) : _message{std::move(message)} {}
   const char* what() const noexcept override { return _message.c_str(); }
@@ -36,6 +37,19 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   SparqlQleverVisitor() = default;
   SparqlQleverVisitor(PrefixMap prefixMap) : _prefixMap{std::move(prefixMap)} {}
   using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
+
+  antlrcpp::Any visitChildren(antlr4::tree::ParseTree *node) override {
+    antlrcpp::Any result = nullptr;
+    size_t n = node->children.size();
+    for (size_t i = 0; i < n; i++) {
+      antlrcpp::Any childResult = node->children[i]->accept(this);
+      result = std::move(childResult);
+    }
+
+    return result;
+  }
+ protected:
+
  private:
 
   // For the unit tests
@@ -471,6 +485,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
+
+
   antlrcpp::Any visitConditionalOrExpression(
       SparqlAutomaticParser::ConditionalOrExpressionContext* ctx) override {
     auto childCtxts = ctx->conditionalAndExpression();
@@ -486,6 +502,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     auto childCtxts = ctx->valueLogical();
     std::vector<ExpressionPtr> children;
     for (const auto& child: childCtxts) {
+      LOG(INFO) << child->getText();
       children.emplace_back(std::move(visitValueLogical(child).as<ExpressionPtr>()));
     }
     return ExpressionPtr {std::make_unique<sparqlExpression::ConditionalAndExpression>(std::move(children))};
@@ -502,12 +519,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     if (childContexts.size() != 1) {
       throw std::runtime_error("This parser does not yet support relational expressions = < etc.");
     }
-    return visitNumericExpression(childContexts[0]);
+    return std::move(visitNumericExpression(childContexts[0]).as<ExpressionPtr>());
   }
 
   antlrcpp::Any visitNumericExpression(
       SparqlAutomaticParser::NumericExpressionContext* ctx) override {
-    return visitChildren(ctx);
+    return std::move(visitChildren(ctx).as<ExpressionPtr>());
   }
 
   antlrcpp::Any visitAdditiveExpression(
@@ -519,10 +536,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       children.push_back(std::move(visitMultiplicativeExpression(exprCtxt).as<ExpressionPtr>()));
     }
     for (const auto& c : ctx->children) {
-      if (ctx->getText() == "+") {
+      if (c->getText() == "+") {
         opType.push_back(sparqlExpression::AdditiveEnum::ADD);
       }
-      else if (ctx->getText() == "-") {
+      else if (c->getText() == "-") {
         opType.push_back(sparqlExpression::AdditiveEnum::SUBTRACT);
       }
     }
@@ -547,10 +564,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       children.push_back(std::move(visitUnaryExpression(exprCtxt).as<ExpressionPtr>()));
     }
     for (const auto& c : ctx->children) {
-      if (ctx->getText() == "*") {
+      if (c->getText() == "*") {
         opType.push_back(sparqlExpression::MultiplicativeExpressionEnum::MULTIPLY);
       }
-      else if (ctx->getText() == "/") {
+      else if (c->getText() == "/") {
         opType.push_back(sparqlExpression::MultiplicativeExpressionEnum::DIVIDE);
       }
     }
@@ -578,6 +595,10 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       SparqlAutomaticParser::PrimaryExpressionContext* ctx) override {
     if (ctx->rdfLiteral() || ctx->builtInCall() || ctx->iriOrFunction()) {
       throw SparqlParseException{"rdfLiterals, builtInCalls and IriOrFunction are currently not allowed inside expressions"};
+    }
+
+    if (ctx->brackettedExpression()) {
+      return visitBrackettedExpression(ctx->brackettedExpression());
     }
 
     if (ctx->numericLiteral()) {
@@ -617,7 +638,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitBuiltInCall(
-      SparqlAutomaticParser::BuiltInCallContext* ctx) override {
+      [[maybe_unused]] SparqlAutomaticParser::BuiltInCallContext* ctx) override {
     throw SparqlParseException{"builtInCalls are not supported by this parser"};
   }
 

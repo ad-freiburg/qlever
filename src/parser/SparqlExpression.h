@@ -338,18 +338,7 @@ class BinaryExpression : public SparqlExpression {
  public:
   BinaryExpression(std::vector<Ptr>&& children)
       : _children{std::move(children)} {};
-  EvaluateResult evaluate(evaluationInput* input) const override {
-    auto firstResult = _children[0]->evaluate(input);
-
-    auto calculator =
-        liftBinaryCalculationToEvaluateResults<RangeCalculationAllowed>(
-            RangeCalculation{}, ValueExtractor{}, BinaryOperation{}, input);
-    for (size_t i = 1; i < _children.size(); ++i) {
-      firstResult =
-          std::visit(calculator, firstResult, _children[i]->evaluate(input));
-    }
-    return firstResult;
-  };
+  EvaluateResult evaluate(evaluationInput* input) const override;;
   void initializeVariables(
       const VariableColumnMap& variableColumnMap) override {
     for (const auto& ptr : _children) {
@@ -376,15 +365,7 @@ template <bool RangeCalculationAllowed, typename RangeCalculation,
 class UnaryExpression : public SparqlExpression {
  public:
   UnaryExpression(Ptr&& child) : _child{std::move(child)} {};
-  EvaluateResult evaluate(evaluationInput* input) const override {
-    auto firstResult = _child->evaluate(input);
-
-    auto calculator =
-        liftBinaryCalculationToEvaluateResults<RangeCalculationAllowed>(
-            RangeCalculation{}, ValueExtractor{}, UnaryOperation{}, input);
-    firstResult = std::visit(calculator, firstResult);
-    return firstResult;
-  };
+  EvaluateResult evaluate(evaluationInput* input) const override;
   void initializeVariables(
       const VariableColumnMap& variableColumnMap) override {
     _child->initializeVariables(variableColumnMap);
@@ -398,36 +379,6 @@ class UnaryExpression : public SparqlExpression {
   Ptr _child;
 };
 
-template <size_t MaxValue>
-struct LambdaVisitor {
-  template <typename Tuple, typename Enum, typename ValueExtractor,
-            typename... Args>
-  auto operator()(Tuple t, Enum r, ValueExtractor v, evaluationInput* input, Args&&... args) -> SparqlExpression::EvaluateResult {
-    static_assert(MaxValue < std::tuple_size_v<Tuple>);
-    AD_CHECK(static_cast<size_t>(r) < std::tuple_size_v<Tuple>);
-    if (static_cast<size_t>(r) == MaxValue) {
-      return liftBinaryCalculationToEvaluateResults<false>(
-          0, std::move(v), std::get<MaxValue>(t), input)(
-          std::forward<Args>(args)...);
-    } else {
-      return LambdaVisitor<MaxValue - 1>{}(t, r, v, input,std::forward<Args>(args)...);
-    }
-  }
-};
-
-template <>
-struct LambdaVisitor<0> {
-  template <typename Tuple, typename Enum, typename ValueExtractor,
-            typename... Args>
-  auto operator()(Tuple t, Enum r, ValueExtractor v, evaluationInput* input, Args&&... args) {
-    if (static_cast<size_t>(r) == 0) {
-      return liftBinaryCalculationToEvaluateResults<false>(
-          0, std::move(v), std::get<0>(t), input)(std::forward<Args>(args)...);
-    } else {
-      AD_CHECK(false);
-    }
-  }
-};
 
 template <typename ValueExtractor, typename BinaryOperationTuple,
           typename RelationDispatchEnum>
@@ -436,21 +387,7 @@ class DispatchedBinaryExpression : public SparqlExpression {
   DispatchedBinaryExpression(std::vector<Ptr>&& children,
                              std::vector<RelationDispatchEnum>&& relations)
       : _children{std::move(children)}, _relations{std::move(relations)} {};
-  EvaluateResult evaluate(evaluationInput* input) const override {
-    auto firstResult = _children[0]->evaluate(input);
-
-    for (size_t i = 1; i < _children.size(); ++i) {
-      // auto calculator = liftBinaryCalculationToEvaluateResults<false>(0, ValueExtractor{}, BinaryOperation{} , input);
-      auto calculator = [&]<typename... Args>(Args&&... args) {
-            return LambdaVisitor<std::tuple_size_v<BinaryOperationTuple> - 1>{}(
-                BinaryOperationTuple{}, _relations[i - 1], ValueExtractor{},
-                input, std::forward<Args>(args)...);
-          };
-      firstResult =
-          std::visit(calculator, firstResult, _children[i]->evaluate(input));
-    }
-    return firstResult;
-  };
+  EvaluateResult evaluate(evaluationInput* input) const override;;
   void initializeVariables(
       const VariableColumnMap& variableColumnMap) override {
     for (const auto& ptr : _children) {
@@ -473,20 +410,25 @@ class DispatchedBinaryExpression : public SparqlExpression {
   std::vector<RelationDispatchEnum> _relations;
 };
 
+inline auto orLambda = [](bool a, bool b) { return a || b; };
 using ConditionalOrExpression =
     BinaryExpression<true, RangeMerger, BooleanValueGetter,
-                     decltype([](bool a, bool b) { return a || b; })>;
+                     decltype(orLambda)>;
+
+inline auto andLambda = [](bool a, bool b) { return a && b; };
 using ConditionalAndExpression =
     BinaryExpression<true, RangeIntersector, BooleanValueGetter,
-                     decltype([](bool a, bool b) { return a && b; })>;
+                     decltype(andLambda)>;
 
 struct EmptyType{};
+inline auto unaryNegate = [](bool a) -> bool { return !a; };
 using UnaryNegateExpression =
     UnaryExpression<false, EmptyType, BooleanValueGetter,
-                    decltype([](bool a) -> bool { return !a; })>;
+                    decltype(unaryNegate)>;
+inline auto unaryMinus = [](auto a) -> double { return -a; };
 using UnaryMinusExpression =
     UnaryExpression<false, EmptyType, NumericValueGetter,
-                    decltype([](auto a) -> double { return -a; })>;
+                    decltype(unaryMinus)>;
 
 inline auto equals = [](const auto& a, const auto& b) -> bool { return a == b; };
 inline auto nequals = [](const auto& a, const auto& b) ->bool { return a != b; };
@@ -509,7 +451,7 @@ using RelationalExpression =
 
 enum class MultiplicativeExpressionEnum : char { MULTIPLY, DIVIDE };
 inline auto multiply = [](const auto& a, const auto& b) -> double { return a * b; };
-inline auto divide = [](const auto& a, const auto& b) -> double { return a / b; };
+inline auto divide = [](const auto& a, const auto& b) -> double { return static_cast<double>(a) / b; };
 using MultiplicationTuple = std::tuple<decltype(multiply), decltype(divide)>;
 using MultiplicativeExpression =
     DispatchedBinaryExpression<NumericValueGetter, MultiplicationTuple,
@@ -527,8 +469,6 @@ using BooleanLiteralExpression = LiteralExpression<bool>;
 using IntLiteralExpression = LiteralExpression<int64_t>;
 using DoubleLiteralExpression = LiteralExpression<double>;
 using VariableExpression = LiteralExpression<Variable>;
-
-// auto x = LambdaVisitor<1>{}(LambdaTuple{}, RelationalExpressionEnum::EQUALS, 3ul, 4ul);
 
 }  // namespace sparqlExpression
 

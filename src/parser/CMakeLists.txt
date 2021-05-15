@@ -11,7 +11,7 @@ add_library(parser
         ContextFileParser.cpp ContextFileParser.h
         ParallelParseBuffer.h
         PropertyPathParser.h PropertyPathParser.cpp
-        SparqlLexer.h SparqlLexer.cpp SparqlExpression.h SparqlExpressionWrapper.cpp SparqlExpressionWrapper.h)
-target_link_libraries(parser rdfEscaping re2 absl::flat_hash_map)
+        SparqlLexer.h SparqlLexer.cpp SparqlExpression.h SparqlExpressionWrapper.cpp SparqlExpressionWrapper.h SparqlExpression.cpp)
+target_link_libraries(parser index rdfEscaping re2 absl::flat_hash_map)
 
 add_subdirectory(sparqlParser)
