@@ -63,6 +63,10 @@ class SparqlLexer {
   const SparqlToken& current();
   const std::string& input() const;
 
+  void skipNcharacters(size_t n) {
+    _re_string.remove_prefix(n);
+  }
+
  private:
   void readNext();
 

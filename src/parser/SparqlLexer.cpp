@@ -149,6 +149,7 @@ bool SparqlLexer::accept(SparqlToken::Type type) {
   return false;
 }
 
+
 bool SparqlLexer::accept(const std::string& raw, bool match_case) {
   if (match_case && _next.raw == raw) {
     readNext();
