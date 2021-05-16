@@ -4,6 +4,71 @@
 #include "./SparqlExpression.h"
 
 namespace sparqlExpression {
+
+template <bool RangeCalculationAllowed, typename RangeCalculation,
+    typename ValueExtractor, typename BinaryOperation>
+auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
+                                            ValueExtractor valueExtractor,
+                                            BinaryOperation binaryOperation,
+                                            evaluationInput* input) {
+  return [input, rangeCalculation, valueExtractor,
+      binaryOperation](auto&&... args) -> SparqlExpression::EvaluateResult {
+    if constexpr (RangeCalculationAllowed &&
+                  (... &&
+                      std::is_same_v<std::decay_t<decltype(args)>, Ranges>)) {
+      return rangeCalculation(std::forward<decltype(args)>(args)...);
+    } else {
+      auto getSize = [&input](const auto& x) -> std::pair<size_t, bool> {
+        using T = std::decay_t<decltype(x)>;
+        if constexpr (isVector<T>) {
+          return {x.size(), true};
+        } else if constexpr (std::is_same_v<Ranges, T>) {
+          return {input->_end - input->_begin, true};
+        } else {
+          return {1, false};
+        }
+      };
+
+      auto targetSize = std::max({getSize(args).first...});
+
+      // If any of the inputs is a list/vector/range of results, the result will be a std::vector
+      bool resultIsAVector = (... || getSize(args).second);
+
+      auto extractors =
+          std::make_tuple([expanded = expandRanges(
+              std::forward<decltype(args)>(args), targetSize),
+                              &valueExtractor, input](size_t index) {
+            using A = std::decay_t<decltype(expanded)>;
+            if constexpr (isVector<A>) {
+              return valueExtractor(expanded[index], input);
+            } else if constexpr (std::is_same_v<Variable, A>) {
+              return valueExtractor(getNumericValueFromVariable(expanded,index, input), input);
+            } else {
+              return valueExtractor(expanded, input);
+            }
+          }...);
+
+      auto create = [&](auto&&... extractors) {
+        using ResultType =
+        std::decay_t<decltype(binaryOperation(extractors(0)...))>;
+        std::vector<ResultType> result;
+        result.reserve(targetSize);
+        for (size_t i = 0; i < targetSize; ++i) {
+          result.push_back(binaryOperation(extractors(i)...));
+        }
+        return result;
+      };
+
+      auto result = std::apply(create, std::move(extractors));
+
+      if (!resultIsAVector) {
+        return SparqlExpression::EvaluateResult {std::move(result[0])};
+      } else {
+        return SparqlExpression::EvaluateResult(std::move(result));
+      }
+    }
+  };
+}
 template <bool RangeCalculationAllowed, typename RangeCalculation, typename ValueExtractor, typename BinaryOperation>
 SparqlExpression::EvaluateResult
               BinaryExpression<RangeCalculationAllowed, RangeCalculation, ValueExtractor, BinaryOperation>::evaluate(evaluationInput* input) const {
@@ -104,26 +169,6 @@ evaluate(evaluationInput* input) const {
         std::visit(calculator, firstResult, _children[i]->evaluate(input));
   }
   return firstResult;
-};
-
-template <typename ValueExtractor, typename BinaryOperationTuple,
-    typename RelationDispatchEnum>
-SparqlExpression::EvaluateResult
-DispatchedBinaryExpression<ValueExtractor, BinaryOperationTuple, RelationDispatchEnum>::
- evaluate(evaluationInput* input) const {
-auto firstResult = _children[0]->evaluate(input);
-
-for (size_t i = 1; i < _children.size(); ++i) {
-// auto calculator = liftBinaryCalculationToEvaluateResults<false>(0, ValueExtractor{}, BinaryOperation{} , input);
-auto calculator = [&]<typename... Args>(Args&&... args) {
-  return LambdaVisitor<std::tuple_size_v<BinaryOperationTuple> - 1>{}(
-      BinaryOperationTuple{}, _relations[i - 1], ValueExtractor{},
-      input, std::forward<Args>(args)...);
-};
-firstResult =
-std::visit(calculator, firstResult, _children[i]->evaluate(input));
-}
-return firstResult;
 };
 
 template class UnaryExpression<false, EmptyType, BooleanValueGetter,

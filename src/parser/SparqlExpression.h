@@ -114,7 +114,6 @@ struct NumericValueGetter {
   double operator()(double v, evaluationInput*) const { return v; }
   int64_t operator()(int64_t v, evaluationInput*) const { return v; }
   bool operator()(bool v, evaluationInput*) const { return v; }
-
 };
 
 struct BooleanValueGetter {
@@ -311,70 +310,6 @@ class LiteralExpression : public SparqlExpression {
   T _value;
 };
 
-template <bool RangeCalculationAllowed, typename RangeCalculation,
-          typename ValueExtractor, typename BinaryOperation>
-auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
-                                            ValueExtractor valueExtractor,
-                                            BinaryOperation binaryOperation,
-                                            evaluationInput* input) {
-  return [input, rangeCalculation, valueExtractor,
-          binaryOperation](auto&&... args) -> SparqlExpression::EvaluateResult {
-    if constexpr (RangeCalculationAllowed &&
-                  (... &&
-                   std::is_same_v<std::decay_t<decltype(args)>, Ranges>)) {
-      return rangeCalculation(std::forward<decltype(args)>(args)...);
-    } else {
-      auto getSize = [&input](const auto& x) -> std::pair<size_t, bool> {
-        using T = std::decay_t<decltype(x)>;
-        if constexpr (isVector<T>) {
-          return {x.size(), true};
-        } else if constexpr (std::is_same_v<Ranges, T>) {
-          return {input->_end - input->_begin, true};
-        } else {
-          return {1, false};
-        }
-      };
-
-      auto targetSize = std::max({getSize(args).first...});
-
-      // If any of the inputs is a list/vector/range of results, the result will be a std::vector
-      bool resultIsAVector = (... || getSize(args).second);
-
-      auto extractors =
-          std::make_tuple([expanded = expandRanges(
-                               std::forward<decltype(args)>(args), targetSize),
-                           &valueExtractor, input](size_t index) {
-            using A = std::decay_t<decltype(expanded)>;
-            if constexpr (isVector<A>) {
-              return valueExtractor(expanded[index], input);
-            } else if constexpr (std::is_same_v<Variable, A>) {
-              return valueExtractor(getNumericValueFromVariable(expanded,index, input), input);
-            } else {
-              return valueExtractor(expanded, input);
-            }
-          }...);
-
-      auto create = [&](auto&&... extractors) {
-        using ResultType =
-            std::decay_t<decltype(binaryOperation(extractors(0)...))>;
-        std::vector<ResultType> result;
-        result.reserve(targetSize);
-        for (size_t i = 0; i < targetSize; ++i) {
-          result.push_back(binaryOperation(extractors(i)...));
-        }
-        return result;
-      };
-
-      auto result = std::apply(create, std::move(extractors));
-
-      if (!resultIsAVector) {
-        return SparqlExpression::EvaluateResult {std::move(result[0])};
-      } else {
-        return SparqlExpression::EvaluateResult(std::move(result));
-      }
-    }
-  };
-}
 
 template <bool RangeCalculationAllowed, typename RangeCalculation,
           typename ValueExtractor, typename BinaryOperation>
@@ -423,37 +358,6 @@ class UnaryExpression : public SparqlExpression {
   Ptr _child;
 };
 
-
-template <typename ValueExtractor, typename BinaryOperationTuple,
-          typename RelationDispatchEnum>
-class DispatchedBinaryExpression : public SparqlExpression {
- public:
-  DispatchedBinaryExpression(std::vector<Ptr>&& children,
-                             std::vector<RelationDispatchEnum>&& relations)
-      : _children{std::move(children)}, _relations{std::move(relations)} {};
-  EvaluateResult evaluate(evaluationInput* input) const override;;
-  void initializeVariables(
-      const VariableColumnMap& variableColumnMap) override {
-    for (const auto& ptr : _children) {
-      ptr->initializeVariables(variableColumnMap);
-    }
-  }
-
-  // _____________________________________________________________________
-  vector<std::string *> strings() override {
-    std::vector<string*> result;
-    for (const auto& ptr : _children) {
-      auto childResult = ptr->strings();
-      result.insert(result.end(), childResult.begin(), childResult.end());
-    }
-    return result;
-  }
-
- private:
-  std::vector<Ptr> _children;
-  std::vector<RelationDispatchEnum> _relations;
-};
-
 template <typename ValueExtractor, typename... TagAndFunctions>
 class DispatchedBinaryExpression2 : public SparqlExpression {
  public:
@@ -483,6 +387,8 @@ class DispatchedBinaryExpression2 : public SparqlExpression {
   std::vector<conststr> _relations;
 };
 
+/// The Actual aliases for the expressions
+
 inline auto orLambda = [](bool a, bool b) { return a || b; };
 using ConditionalOrExpression =
     BinaryExpression<true, RangeMerger, BooleanValueGetter,
@@ -502,25 +408,6 @@ inline auto unaryMinus = [](auto a) -> double { return -a; };
 using UnaryMinusExpression =
     UnaryExpression<false, EmptyType, NumericValueGetter,
                     decltype(unaryMinus)>;
-
-inline auto equals = [](const auto& a, const auto& b) -> bool { return a == b; };
-inline auto nequals = [](const auto& a, const auto& b) ->bool { return a != b; };
-
-enum class RelationalExpressionEnum : char {
-  EQUALS = 0,
-  NEQUALS = 1,
-  LESS,
-  GREATER,
-  LESS_EQUAL,
-  GREATER_EQUAL
-};
-using RelationalTuple =
-    std::tuple<decltype(equals), decltype(nequals), std::less<>, std::greater<>,
-               std::less_equal<>, std::greater_equal<>>;
-
-using RelationalExpression =
-    DispatchedBinaryExpression<NumericValueGetter, RelationalTuple,
-                               RelationalExpressionEnum>;
 
 inline auto multiply = [](const auto& a, const auto& b) -> double { return a * b; };
 inline auto divide = [](const auto& a, const auto& b) -> double { return static_cast<double>(a) / b; };
