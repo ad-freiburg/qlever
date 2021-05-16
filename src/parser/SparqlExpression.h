@@ -522,25 +522,13 @@ using RelationalExpression =
     DispatchedBinaryExpression<NumericValueGetter, RelationalTuple,
                                RelationalExpressionEnum>;
 
-enum class MultiplicativeExpressionEnum : char { MULTIPLY, DIVIDE };
 inline auto multiply = [](const auto& a, const auto& b) -> double { return a * b; };
 inline auto divide = [](const auto& a, const auto& b) -> double { return static_cast<double>(a) / b; };
-using MultiplicationTuple = std::tuple<decltype(multiply), decltype(divide)>;
 using MultiplicativeExpression =
-    DispatchedBinaryExpression<NumericValueGetter, MultiplicationTuple,
-                               MultiplicativeExpressionEnum>;
+    DispatchedBinaryExpression2<NumericValueGetter, TaggedFunction<"*", decltype(multiply)>, TaggedFunction<"/", decltype(divide)>>;
 
 inline auto add = [](const auto& a, const auto& b) -> double { return a + b; };
-
-constexpr const char simplePlus[] = "+";
-constexpr conststr addString{"+"};
-
-using addTag =TaggedFunction<"+", decltype(add)>;
-
 inline auto subtract = [](const auto& a, const auto& b) -> double { return a - b; };
-
-enum class AdditiveEnum { ADD = 0, SUBTRACT };
-using AdditiveTuple = std::tuple<decltype(add), decltype(subtract)>;
 using AdditiveExpression =
     DispatchedBinaryExpression2<NumericValueGetter, TaggedFunction<"+", decltype(add)>, TaggedFunction<"-", decltype(subtract)>>;
 

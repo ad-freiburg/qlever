@@ -106,8 +106,6 @@ evaluate(evaluationInput* input) const {
   return firstResult;
 };
 
-template class DispatchedBinaryExpression2<NumericValueGetter, TaggedFunction<addString, decltype(add)>>;
-
 template <typename ValueExtractor, typename BinaryOperationTuple,
     typename RelationDispatchEnum>
 SparqlExpression::EvaluateResult
@@ -128,10 +126,6 @@ std::visit(calculator, firstResult, _children[i]->evaluate(input));
 return firstResult;
 };
 
-template class DispatchedBinaryExpression<NumericValueGetter, AdditiveTuple, AdditiveEnum>;
-template class DispatchedBinaryExpression<NumericValueGetter, MultiplicationTuple,
-        MultiplicativeExpressionEnum>;
-
 template class UnaryExpression<false, EmptyType, BooleanValueGetter,
     decltype(unaryNegate)>;
 template class UnaryExpression<false, EmptyType, NumericValueGetter,
@@ -143,5 +137,7 @@ template class BinaryExpression<true, RangeIntersector, BooleanValueGetter,
     decltype(andLambda)>;
 
 template class DispatchedBinaryExpression2<NumericValueGetter, TaggedFunction<"+", decltype(add)>, TaggedFunction<"-", decltype(subtract)>>;
+
+template class DispatchedBinaryExpression2<NumericValueGetter, TaggedFunction<"*", decltype(multiply)>, TaggedFunction<"/", decltype(divide)>>;
 }
 

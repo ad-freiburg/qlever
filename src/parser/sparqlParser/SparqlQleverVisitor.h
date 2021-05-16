@@ -558,22 +558,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitMultiplicativeExpression(
       SparqlAutomaticParser::MultiplicativeExpressionContext* ctx) override {
 
-    std::vector<ExpressionPtr> children;
-    std::vector<sparqlExpression::MultiplicativeExpressionEnum> opType;
-
-    for (const auto& exprCtxt : ctx->unaryExpression()) {
-      children.push_back(std::move(visitUnaryExpression(exprCtxt).as<ExpressionPtr>()));
-    }
-    for (const auto& c : ctx->children) {
-      if (c->getText() == "*") {
-        opType.push_back(sparqlExpression::MultiplicativeExpressionEnum::MULTIPLY);
-      }
-      else if (c->getText() == "/") {
-        opType.push_back(sparqlExpression::MultiplicativeExpressionEnum::DIVIDE);
-      }
-    }
-
-    return ExpressionPtr{std::make_unique<sparqlExpression::MultiplicativeExpression>(std::move(children), std::move(opType))};
+    std::vector<ExpressionPtr> children = visitExpressionChildren(ctx->unaryExpression());
+    auto opTypes = visitRelationChildren(ctx->children, {"*", "/"});
+    return ExpressionPtr{std::make_unique<sparqlExpression::MultiplicativeExpression>(std::move(children), std::move(opTypes))};
   }
 
   antlrcpp::Any visitUnaryExpression(
