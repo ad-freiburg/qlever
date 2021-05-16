@@ -53,7 +53,7 @@ struct LambdaVisitor {
 template <>
 struct LambdaVisitor<0> {
   template <typename Tuple, typename Enum, typename ValueExtractor,
-            typename... Args>
+      typename... Args>
   auto operator()(Tuple t, Enum r, ValueExtractor v, evaluationInput* input,
                   Args&&... args) {
     if (static_cast<size_t>(r) == 0) {
@@ -64,6 +64,49 @@ struct LambdaVisitor<0> {
     }
   }
 };
+
+template <typename TagAndFunction, typename... TagAndFunctions>
+struct LambdaVisitor2 {
+  template <typename ValueExtractor,
+      typename... Args>
+  auto operator()(conststr identifier, ValueExtractor v, evaluationInput* input,
+                  Args&&... args) -> SparqlExpression::EvaluateResult {
+    if (identifier == TagAndFunction::tag) {
+      return liftBinaryCalculationToEvaluateResults<false>(
+          0, std::move(v), typename TagAndFunction::functionType{},
+          input)(std::forward<Args>(args)...);
+    } else {
+      if constexpr (sizeof...(TagAndFunctions) > 0) {
+        return LambdaVisitor2<TagAndFunctions...>{}(identifier, v, input,
+                                                   std::forward<Args>(args)...);
+      }
+      // Todo proper exception
+      AD_CHECK(false);
+    }
+  }
+};
+
+
+template <typename ValueExtractor, typename... TagAndFunctions>
+SparqlExpression::EvaluateResult
+DispatchedBinaryExpression2<ValueExtractor, TagAndFunctions...>::
+evaluate(evaluationInput* input) const {
+  auto firstResult = _children[0]->evaluate(input);
+
+  for (size_t i = 1; i < _children.size(); ++i) {
+// auto calculator = liftBinaryCalculationToEvaluateResults<false>(0, ValueExtractor{}, BinaryOperation{} , input);
+    auto calculator = [&]<typename... Args>(Args&&... args) {
+      return LambdaVisitor2<TagAndFunctions...>{}(
+           _relations[i - 1], ValueExtractor{},
+          input, std::forward<Args>(args)...);
+    };
+    firstResult =
+        std::visit(calculator, firstResult, _children[i]->evaluate(input));
+  }
+  return firstResult;
+};
+
+template class DispatchedBinaryExpression2<NumericValueGetter, TaggedFunction<addString, decltype(add)>>;
 
 template <typename ValueExtractor, typename BinaryOperationTuple,
     typename RelationDispatchEnum>
@@ -98,4 +141,7 @@ template class BinaryExpression<true, RangeMerger, BooleanValueGetter,
 
 template class BinaryExpression<true, RangeIntersector, BooleanValueGetter,
     decltype(andLambda)>;
+
+template class DispatchedBinaryExpression2<NumericValueGetter, TaggedFunction<"+", decltype(add)>, TaggedFunction<"-", decltype(subtract)>>;
 }
+

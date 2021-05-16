@@ -486,25 +486,37 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
 
+  template <typename T>
+  std::vector<ExpressionPtr> visitExpressionChildren(const std::vector<T*>& childContexts) {
+    std::vector<ExpressionPtr> children;
+    for (const auto& child: childContexts) {
+      children.emplace_back(std::move(child->accept(this).template as<ExpressionPtr>()));
+    }
+
+    return children;
+  }
+
+  std::vector<sparqlExpression::conststr> visitRelationChildren(const std::vector<antlr4::tree::ParseTree*>& childContexts, ad_utility::HashSet<std::string> allowedTexts) {
+    std::vector<sparqlExpression::conststr> operations;
+
+    for (const auto& c : childContexts) {
+      if (allowedTexts.contains(c->getText())) {
+        operations.emplace_back(c->getText());
+      }
+    }
+    return operations;
+  }
 
   antlrcpp::Any visitConditionalOrExpression(
       SparqlAutomaticParser::ConditionalOrExpressionContext* ctx) override {
     auto childCtxts = ctx->conditionalAndExpression();
-    std::vector<ExpressionPtr> children;
-    for (const auto& child: childCtxts) {
-      children.emplace_back(std::move(visitConditionalAndExpression(child).as<ExpressionPtr>()));
-    }
+    auto children = visitExpressionChildren(ctx->conditionalAndExpression());
     return ExpressionPtr {std::make_unique<sparqlExpression::ConditionalOrExpression>(std::move(children))};
   }
 
   antlrcpp::Any visitConditionalAndExpression(
       SparqlAutomaticParser::ConditionalAndExpressionContext* ctx) override {
-    auto childCtxts = ctx->valueLogical();
-    std::vector<ExpressionPtr> children;
-    for (const auto& child: childCtxts) {
-      LOG(INFO) << child->getText();
-      children.emplace_back(std::move(visitValueLogical(child).as<ExpressionPtr>()));
-    }
+    std::vector<ExpressionPtr> children = visitExpressionChildren(ctx->valueLogical());
     return ExpressionPtr {std::make_unique<sparqlExpression::ConditionalAndExpression>(std::move(children))};
   }
 
@@ -530,25 +542,14 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitAdditiveExpression(
       SparqlAutomaticParser::AdditiveExpressionContext* ctx) override {
 
-    std::vector<ExpressionPtr> children;
-    std::vector<sparqlExpression::AdditiveEnum> opType;
-    for (const auto& exprCtxt : ctx->multiplicativeExpression()) {
-      children.push_back(std::move(visitMultiplicativeExpression(exprCtxt).as<ExpressionPtr>()));
-    }
-    for (const auto& c : ctx->children) {
-      if (c->getText() == "+") {
-        opType.push_back(sparqlExpression::AdditiveEnum::ADD);
-      }
-      else if (c->getText() == "-") {
-        opType.push_back(sparqlExpression::AdditiveEnum::SUBTRACT);
-      }
-    }
+    std::vector<ExpressionPtr> children = visitExpressionChildren(ctx->multiplicativeExpression());
+    auto opTypes = visitRelationChildren(ctx->children, {"+", "-"});
 
     if (!ctx->strangeMultiplicativeSubexprOfAdditive().empty()) {
       throw std::runtime_error{"You currently have to put a space between a +/- and the number after it."};
     }
 
-    return ExpressionPtr{std::make_unique<sparqlExpression::AdditiveExpression>(std::move(children), std::move(opType))};
+    return ExpressionPtr{std::make_unique<sparqlExpression::AdditiveExpression>(std::move(children), std::move(opTypes))};
   }
   virtual antlrcpp::Any visitStrangeMultiplicativeSubexprOfAdditive(SparqlAutomaticParser::StrangeMultiplicativeSubexprOfAdditiveContext *context) override {
     return visitChildren(context);
