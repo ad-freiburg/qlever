@@ -39,13 +39,13 @@ struct ParserAndVisitor {
 };
 
 ParseResultAndRemainingText<
-    std::shared_ptr<sparqlExpression::SparqlExpressionWrapper>>
+    sparqlExpression::SparqlExpressionWrapper>
 parseExpression(const std::string& input) {
   ParserAndVisitor p{input};
   auto actualResult = p.parseStuff<sparqlExpression::SparqlExpression::Ptr>(input, &SparqlAutomaticParser::expression);
 
   return ParseResultAndRemainingText{
-      std::make_shared<sparqlExpression::SparqlExpressionWrapper>(std::move(actualResult._parseResult)), actualResult._remainingText};
+      sparqlExpression::SparqlExpressionWrapper{std::move(actualResult._parseResult)}, actualResult._remainingText};
 }
 
 // ______________________________________________________________________________

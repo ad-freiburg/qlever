@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./SparqlParser.h"
+#include "./SparqlParserHelpers.h"
 
 #include <unordered_set>
 
@@ -277,6 +278,17 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       _lexer.accept(".");
     } else if (_lexer.accept("bind")) {
       _lexer.expect("(");
+      auto expressionPtr = parseExpressionByAntlr();
+      GraphPatternOperation::Bind b {std::move(expressionPtr)};
+      _lexer.expect("as");
+      _lexer.expect(SparqlToken::Type::VARIABLE);
+      b._target = _lexer.current().raw;
+      _lexer.expect(")");
+      currentPattern->_children.emplace_back(std::move(b));
+      // the dot after the bind is optional
+      _lexer.accept(".");
+      /*
+      _lexer.expect("(");
       std::string inVar;
       bool rename = false;
       bool isString = true;
@@ -330,8 +342,9 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       b._target = _lexer.current().raw;
       _lexer.expect(")");
       currentPattern->_children.emplace_back(std::move(b));
+       */
       // the dot after the bind is optional
-      _lexer.accept(".");
+      //_lexer.accept(".");
     } else if (_lexer.accept("minus")) {
       currentPattern->_children.emplace_back(
           GraphPatternOperation::Minus{ParsedQuery::GraphPattern()});
@@ -1056,4 +1069,12 @@ GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
     c.emplace_back(GraphPatternOperation::BasicGraphPattern{});
   }
   return c.back().get<GraphPatternOperation::BasicGraphPattern>();
+}
+
+// ________________________________________________________________________
+sparqlExpression::SparqlExpressionWrapper SparqlParser::parseExpressionByAntlr() {
+  auto str = _lexer.getUnconsumedInput();
+  auto resultAndRemainingText = sparqlParserHelpers::parseExpression(str);
+  _lexer.reset(std::move(resultAndRemainingText._remainingText));
+  return std::move(resultAndRemainingText._parseResult);
 }

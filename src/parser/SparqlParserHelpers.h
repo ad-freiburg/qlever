@@ -6,6 +6,8 @@
 #define QLEVER_SPARQLPARSERHELPERS_H
 
 #include <string>
+#include <memory>
+#include "./SparqlExpressionWrapper.h"
 
 namespace sparqlParserHelpers {
 
@@ -14,6 +16,10 @@ struct ParseResultAndRemainingText {
   ParseResult _parseResult;
   std::string _remainingText;
 };
+
+ParseResultAndRemainingText<
+    sparqlExpression::SparqlExpressionWrapper>
+parseExpression(const std::string& input);
 
 
 }

@@ -22,7 +22,7 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
         using T = std::decay_t<decltype(x)>;
         if constexpr (isVector<T>) {
           return {x.size(), true};
-        } else if constexpr (std::is_same_v<Ranges, T>) {
+        } else if constexpr (std::is_same_v<Ranges, T> || std::is_same_v<Variable, T>) {
           return {input->_end - input->_begin, true};
         } else {
           return {1, false};

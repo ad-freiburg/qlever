@@ -74,7 +74,7 @@ constexpr bool isVector = false;
 template <typename T>
 constexpr bool isVector<std::vector<T>> = true;
 
-using VariableColumnMap = ad_utility::HashMap<std::string, size_t>;
+using VariableColumnMap = ad_utility::HashMap<std::string, std::pair<size_t, ResultTable::ResultType>>;
 
 struct evaluationInput {
   const QueryExecutionContext* _qec;
@@ -86,7 +86,7 @@ struct evaluationInput {
 
 inline double getNumericValueFromVariable(const Variable& variable, size_t i, evaluationInput* input) {
   // TODO<joka921>: Optimization for the IdTableStatic.
-  const auto& id = (*(input->_begin + i))[variable._columnIndex];
+  const auto id = (*(input->_begin + i))[variable._columnIndex];
   if (variable._type == ResultTable::ResultType::VERBATIM) {
     return id;
   } else if (variable._type == ResultTable::ResultType::FLOAT) {
@@ -294,7 +294,8 @@ class LiteralExpression : public SparqlExpression {
             "Variable " + _value._variable +
             "could not be mapped to a column of an expression input");
       }
-      _value._columnIndex = variableColumnMap.at(_value._variable);
+      _value._columnIndex = variableColumnMap.at(_value._variable).first;
+      _value._type = variableColumnMap.at(_value._variable).second;
     }
   }
 

@@ -1,5 +1,8 @@
+add_subdirectory(sparqlParser)
+
 add_library(rdfEscaping RdfEscaping.h RdfEscaping.cpp)
 target_link_libraries(rdfEscaping ${ICU_LIBRARIES})
+
 add_library(parser
         SparqlParser.h SparqlParser.cpp
         ParsedQuery.h ParsedQuery.cpp
@@ -12,6 +15,5 @@ add_library(parser
         ParallelParseBuffer.h
         PropertyPathParser.h PropertyPathParser.cpp
         SparqlLexer.h SparqlLexer.cpp SparqlExpression.h SparqlExpressionWrapper.cpp SparqlExpressionWrapper.h SparqlExpression.cpp SparqlParserHelpers.cpp SparqlParserHelpers.h)
-target_link_libraries(parser index rdfEscaping re2 absl::flat_hash_map)
+target_link_libraries(parser index rdfEscaping sparqlParser re2 absl::flat_hash_map)
 
-add_subdirectory(sparqlParser)

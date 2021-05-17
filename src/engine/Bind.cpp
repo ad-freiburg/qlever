@@ -285,10 +285,20 @@ void Bind::computeConstantBind(IdTable* dynRes, const IdTable& inputDyn,
 
 template <int IN_WIDTH, int OUT_WIDTH>
 void Bind::computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resultType, const IdTable& inputDyn, sparqlExpression::SparqlExpression* expression) const {
-  expression ->initializeVariables(getVariableColumns());
+
+  sparqlExpression::VariableColumnMap columnMap;
+  auto inResult = _subtree->getResult();
+  for (const auto& [variable, columnIndex] : getVariableColumns()) {
+    if (columnIndex < inResult->width()) {
+      columnMap[variable] =
+          std::pair(columnIndex, inResult->getResultType(columnIndex));
+    }
+  }
+
+  expression ->initializeVariables(columnMap);
   sparqlExpression::evaluationInput evaluationInput;
-  evaluationInput._begin = dynRes->begin();
-  evaluationInput._end = dynRes->end();
+  evaluationInput._begin = inputDyn.begin();
+  evaluationInput._end = inputDyn.end();
   evaluationInput._qec = getExecutionContext();
   sparqlExpression::SparqlExpression::EvaluateResult expressionResult = expression->evaluate(&evaluationInput);
 
@@ -306,18 +316,24 @@ void Bind::computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resul
         res(i, j) = input(i, j);
       }
     }
-    *dynRes = res.moveToDynamic();
   if (auto ptr = std::get_if<std::vector<double>>(&expressionResult)) {
-    const auto& resultVector = *ptr;
-    AD_CHECK(ptr->size() == inSize);
-    for (size_t i = 0; i < inSize; ++i) {
-      auto tmpF = static_cast<float>(resultVector[i]);
-      std::memcpy(&tmpF, &res(i, inCols), sizeof(float));
-    }
-    *resultType =  ResultTable::ResultType::FLOAT;
-    *dynRes = res.moveToDynamic();
+      const auto& resultVector = *ptr;
+      AD_CHECK(ptr->size() == inSize);
+      for (size_t i = 0; i < inSize; ++i) {
+        auto tmpF = static_cast<float>(resultVector[i]);
+        std::memcpy(&res(i, inCols), &tmpF, sizeof(float));
+      }
+      *resultType = ResultTable::ResultType::FLOAT;
+    } else if (auto ptr = std::get_if<sparqlExpression::Variable>(&expressionResult)) {
+      auto column = getVariableColumns().at(ptr->_variable);
+      for (size_t i = 0; i < inSize; ++i) {
+        res(i, inCols) = res(i, column);
+      }
+      *resultType =  ptr->_type;
+    } else {
+    throw std::runtime_error ("This edition of the Expression binds currently only supports floating point results, this will be extended in the future");
   }
+  *dynRes = res.moveToDynamic();
 
-  throw std::runtime_error ("This edition of the Expression binds currently only supports floating point results, this will be extended in the future");
 
 }

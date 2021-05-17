@@ -7,6 +7,7 @@
 #include "ParsedQuery.h"
 #include "SparqlLexer.h"
 #include "../util/HashMap.h"
+#include "./SparqlExpressionWrapper.h"
 
 using std::string;
 
@@ -54,6 +55,8 @@ class SparqlParser {
   std::string_view readTriplePart(const std::string& s, size_t* pos);
 
   static string stripAndLowercaseKeywordLiteral(const string& lit);
+
+
   /**
    * If *ptr 's last child is a BasicGraphPattern, return a reference to it.
    * If not, first append a BasicGraphPattern and then return a reference
@@ -66,4 +69,6 @@ class SparqlParser {
   string _query;
   ad_utility::HashMap<string, string> _prefixMapFromAntlrParser;
   SparqlFilter parseRegexFilter(bool expectKeyword);
+
+  sparqlExpression::SparqlExpressionWrapper parseExpressionByAntlr();
 };

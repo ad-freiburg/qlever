@@ -73,18 +73,19 @@ const SparqlLexer::RegexTokenMap& SparqlLexer::getRegexTokenMap() const {
     auto emplace = [&m](const std::string& regex, T type) {
       m.push_back(std::make_pair(std::make_unique<re2::RE2>(regex), type));
     };
-    emplace(IRI, T::IRI);
-    emplace("(" + WS + "+)", T::WS);
+    // Note: the order is important here, as the lexer does not determine the longest match, but the first match in the following list of regexes.
     emplace(KEYWORD, T::KEYWORD);
     emplace(GROUP_BY, T::GROUP_BY);
     emplace(ORDER_BY, T::ORDER_BY);
-    emplace(VARIABLE, T::VARIABLE);
-    emplace(SYMBOL, T::SYMBOL);
     emplace(AGGREGATE, T::AGGREGATE);
-    emplace("(" + RDFLITERAL + ")", T::RDFLITERAL);
-    emplace(INTEGER, T::INTEGER);
-    emplace(FLOAT, T::FLOAT);
     emplace(LOGICAL_OR, T::LOGICAL_OR);
+    emplace(VARIABLE, T::VARIABLE);
+    emplace(IRI, T::IRI);
+    emplace("(" + RDFLITERAL + ")", T::RDFLITERAL);
+    emplace(FLOAT, T::FLOAT);
+    emplace(INTEGER, T::INTEGER);
+    emplace(SYMBOL, T::SYMBOL);
+    emplace("(" + WS + "+)", T::WS);
     return m;
   }();
   return regexTokenMap;
@@ -94,6 +95,17 @@ SparqlLexer::SparqlLexer(const std::string& sparql)
     : _sparql(sparql), _re_string(_sparql) {
   readNext();
 }
+
+// ____________________________________________________________________________
+void SparqlLexer::reset(std::string sparql) {
+  _sparql = std::move(sparql);
+  _re_string = re2::StringPiece{_sparql};
+  readNext();
+}
+
+
+
+
 
 bool SparqlLexer::empty() const { return _re_string.empty(); }
 
@@ -116,6 +128,7 @@ void SparqlLexer::readNext() {
         if (tokensThatRequireLowercasing.contains(type)) {
           raw = ad_utility::getLowercaseUtf8(raw);
         }
+        break; // first match, this requires the regexes to be sorted.
       }
     }
     if (!regexMatched) {
