@@ -116,7 +116,7 @@ TEST(SparqlExpressionParser, First) {
   auto result = p.visitor.visitExpression(context);
   auto expr = std::move(result.as<sparqlExpression::SparqlExpression::Ptr>());
 
-  sparqlExpression::evaluationInput input;
+  sparqlExpression::SparqlExpression::EvaluationInput input;
   auto res = expr->evaluate(&input);
   AD_CHECK(std::holds_alternative<double>(res));
   ASSERT_FLOAT_EQ(25.0, std::get<double>(res));

@@ -50,7 +50,7 @@ class Engine {
         dynFilter.asStaticView<FILTER_WIDTH>();
     IdTableStatic<IN_WIDTH> result = dynResult->moveToStatic<IN_WIDTH>();
 
-    // Intersect both lists.
+    // Intersection both lists.
     size_t i = 0;
     size_t j = 0;
 

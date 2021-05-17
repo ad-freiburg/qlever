@@ -648,7 +648,7 @@ void Index::getContextEntityScoreListsForWords(const string& words,
     // This is valid because the set of co-occuring entities depends on
     // the context and not on the word/block used as entry point.
     // Take all other words and get word posting lists for them.
-    // Intersect all and keep the entity word ids.
+    // Intersection all and keep the entity word ids.
     size_t useElFromTerm = getIndexOfBestSuitedElTerm(terms);
     LOG(TRACE) << "Best term to take entity list from: " << terms[useElFromTerm]
                << std::endl;

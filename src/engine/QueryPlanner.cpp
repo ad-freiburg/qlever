@@ -1645,7 +1645,7 @@ std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromSequence(
         r = right;
       }
 
-      // Merge all the child plans into one graph pattern
+      // Union all the child plans into one graph pattern
       // excluding those that can be null and are not marked in the bitmask
       auto p = ParsedQuery::GraphPattern{};
       for (size_t i = 0; i < included_ids.size(); i++) {

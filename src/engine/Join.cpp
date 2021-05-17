@@ -523,7 +523,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     doGallopInnerJoin(RightLargerTag{}, a, jc1, b, jc2, &result);
   } else {
     auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory();
-    // Intersect both lists.
+    // Intersection both lists.
     size_t i = 0;
     size_t j = 0;
     // while (a(i, jc1) < sent1) {

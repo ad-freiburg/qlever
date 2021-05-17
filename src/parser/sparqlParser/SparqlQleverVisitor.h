@@ -612,7 +612,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     }
 
     if (ctx->var()) {
-      sparqlExpression::Variable v;
+      sparqlExpression::SparqlExpression::Variable v;
       v._variable = ctx->var()->getText();
       return ExpressionPtr{std::make_unique<sparqlExpression::VariableExpression>(v)};
     }

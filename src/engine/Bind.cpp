@@ -129,7 +129,7 @@ void Bind::computeResult(ResultTable* result) {
 template <int IN_WIDTH, int OUT_WIDTH>
 void Bind::computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resultType, const IdTable& inputDyn, sparqlExpression::SparqlExpression* expression) const {
 
-  sparqlExpression::VariableColumnMap columnMap;
+  sparqlExpression::SparqlExpression::VariableColumnMap columnMap;
   auto inResult = _subtree->getResult();
   for (const auto& [variable, columnIndex] : getVariableColumns()) {
     if (columnIndex < inResult->width()) {
@@ -139,7 +139,7 @@ void Bind::computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resul
   }
 
   expression ->initializeVariables(columnMap);
-  sparqlExpression::evaluationInput evaluationInput;
+  sparqlExpression::SparqlExpression::EvaluationInput evaluationInput;
   evaluationInput._begin = inputDyn.begin();
   evaluationInput._end = inputDyn.end();
   evaluationInput._qec = getExecutionContext();
@@ -167,7 +167,7 @@ void Bind::computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resul
         std::memcpy(&res(i, inCols), &tmpF, sizeof(float));
       }
       *resultType = ResultTable::ResultType::FLOAT;
-    } else if (auto ptr = std::get_if<sparqlExpression::Variable>(&expressionResult)) {
+    } else if (auto ptr = std::get_if<sparqlExpression::SparqlExpression::Variable>(&expressionResult)) {
       auto column = getVariableColumns().at(ptr->_variable);
       for (size_t i = 0; i < inSize; ++i) {
         res(i, inCols) = res(i, column);

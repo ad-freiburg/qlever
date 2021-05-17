@@ -4,44 +4,55 @@
 
 #pragma once
 
+#include <cstring>
+
+namespace ad_utility {
 /// A String/character array that can be constructed at compile time. It can hold at most `MaxSize` characters. The string is null-terminated and the '\0' at the end counts towards the maximum Size.
 template <size_t MaxSize>
-struct conststr
-{
-
+struct ConstexprSmallString {
+  // Data members have to be public, else we cannot use ConstexprSmallStrings as template parameters
   char _characters[MaxSize] = {0};
-  std::size_t sz = 0;
- public:
-  template<std::size_t N>
-  constexpr conststr(const char(&a)[N]) : sz(N - 1) {
-    if (N > MaxSize) {
-      throw std::runtime_error{"conststr can only be constructed from strings with a maximum size of " + std::to_string(MaxSize - 1)};
-    }
-    // TODO: enforce proper zero-termination
-    for (size_t i = 0; i < N; ++i) {
-      _characters[i] = a[i];
-    }
-  }
+  std::size_t _size = 0;
 
-  conststr(std::string_view input) {
-    if (input.size() >= MaxSize) {
-      throw std::runtime_error{"conststr can only be constructed from strings with a maximum size of " + std::to_string(MaxSize - 1)};
+  /// Construct (possibly at compile time) from input char array or input const char*. The input must be null-terminated, else the behavior is undefined. Example usage: `constexpr ConstexprSmallString<8> example = "short"'.
+  template <std::size_t N>
+  constexpr ConstexprSmallString(const char (&input)[N]) : _size(N - 1) {
+    if (N > MaxSize) {
+      throw std::runtime_error{
+          "ConstexprSmallString can only be constructed from strings with input maximum size of " +
+          std::to_string(MaxSize - 1)};
     }
-    for (size_t i = 0; i < input.size(); ++i) {
+    for (size_t i = 0; i < N; ++i) {
       _characters[i] = input[i];
     }
   }
 
-  constexpr char operator[](std::size_t n) const
-  {
-    return n < sz ? _characters[n] : throw std::out_of_range("");
+  /// Construct at runtime from a string_view
+  ConstexprSmallString(std::string_view input) : _size(input.size()) {
+    if (input.size() >= MaxSize) {
+      throw std::runtime_error{
+          "ConstexprSmallString can only be constructed from strings with a maximum size of " +
+          std::to_string(MaxSize - 1)};
+    }
+    for (size_t i = 0; i < input.size(); ++i) {
+      _characters[i] = input[i];
+    }
+    // The '\0' at the end is already there because of the initialization of _characters
   }
-  constexpr std::size_t size() const { return sz; }
 
-  bool operator==(const conststr& rhs) const {
+  /// Access the n-th character
+  constexpr char operator[](std::size_t n) const {
+    return n < _size ? _characters[n] : throw std::out_of_range("");
+  }
+
+  /// Return the size without counting the '\0' at the end.
+  constexpr std::size_t size() const { return _size; }
+
+  /// Compare for equality.
+  bool operator==(const ConstexprSmallString& rhs) const {
     return !std::strcmp(_characters, rhs._characters);
   }
-
 };
+} // namepace ad_utility
 
 
