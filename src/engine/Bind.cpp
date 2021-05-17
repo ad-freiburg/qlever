@@ -330,8 +330,20 @@ void Bind::computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resul
         res(i, inCols) = res(i, column);
       }
       *resultType =  ptr->_type;
-    } else {
-    throw std::runtime_error ("This edition of the Expression binds currently only supports floating point results, this will be extended in the future");
+  } else if (auto ptr = std::get_if<double>(&expressionResult)) {
+    auto tmpF = static_cast<float>(*ptr);
+    for (size_t i = 0; i < inSize; ++i) {
+      std::memcpy(&res(i, inCols), &tmpF, sizeof(float));
+    }
+    *resultType =  ResultTable::ResultType::FLOAT;
+  } else if (auto ptr = std::get_if<int64_t>(&expressionResult)) {
+    auto tmpF = static_cast<float>(*ptr);
+    for (size_t i = 0; i < inSize; ++i) {
+      std::memcpy(&res(i, inCols), &tmpF, sizeof(float));
+    }
+    *resultType =  ResultTable::ResultType::FLOAT;
+  } else {
+    throw std::runtime_error ("The result type of this BIND expression is not yet supported by QLever");
   }
   *dynRes = res.moveToDynamic();
 
