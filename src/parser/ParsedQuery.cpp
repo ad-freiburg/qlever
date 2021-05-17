@@ -300,8 +300,7 @@ void ParsedQuery::expandPrefixes() {
           }
 
         } else if constexpr (std::is_same_v<T, GraphPatternOperation::Bind>) {
-          for (auto ptr : std::visit([](auto&& x) { return x.strings(); },
-                                     arg._expressionVariant)) {
+          for (auto ptr : arg.strings()) {
             expandPrefix(*ptr, prefixMap);
           }
         } else {

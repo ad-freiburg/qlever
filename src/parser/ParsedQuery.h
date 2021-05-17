@@ -398,57 +398,14 @@ struct GraphPatternOperation {
   // a knowledge base constant. For simplicity, we store both values instead of
   // using a union or std::variant here.
   struct Bind {
-    // Only usigned integer and knowledge base constants are currently supported
-    struct Constant {
-      int64_t _intValue = 0;  // the Value of an integer constant (VERBATIM)
-      string _kbValue;  // the value of a knowledge base entity or literal (KB)
-      qlever::ResultType
-          _type;  // the type, currently always KB or VERBATIM
 
-      Constant() = default;
-
-      // Initialize a  VERBATIM constant. Also set a readable _kbValue variable,
-      // since it is used with the runtime info
-      explicit Constant(int64_t val)
-          : _intValue(val),
-            _kbValue(std::to_string(val)),
-            _type(qlever::ResultType::VERBATIM) {}
-      // Initialize a KB constant. If the argument string is not part of the KB
-      // this will lead to an error later on (currently no possibility to
-      // already check this during parsing
-      explicit Constant(std::string entry)
-          : _kbValue(std::move(entry)), _type(qlever::ResultType::KB) {}
-      // TODO<joka921> in c++ 20 we have constexpr strings.
-      static constexpr const char* Name = "Constant";
-      // Some other functions need this interface, for example,
-      // ParsedQuery::expandPrefix .
-      vector<string*> strings() { return {&_kbValue}; }
-      [[nodiscard]] string getDescriptor() const { return _kbValue; }
-    };
-    struct Sum {
-      static constexpr const char* Name = "Sum";
-      string _var1, _var2;
-      vector<string*> strings() { return {&_var1, &_var2}; }
-      [[nodiscard]] string getDescriptor() const {
-        return _var1 + " + " + _var2;
-      }
-    };
-
-    struct Rename {
-      static constexpr const char* Name = "Rename";
-      string _var;
-      vector<string*> strings() { return {&_var}; }
-      [[nodiscard]] string getDescriptor() const { return _var; }
-    };
-
-    std::variant<Rename, Constant, Sum, sparqlExpression::SparqlExpressionWrapper> _expressionVariant;
+    sparqlExpression::SparqlExpressionWrapper _expressionVariant;
     std::string _target;  // the variable to which the expression will be bound
 
     // Return all the strings contained in the BIND expression (variables,
     // constants, etc. Is required e.g. by ParsedQuery::expandPrefix.
     vector<string*> strings() {
-      auto r = std::visit([](auto&& arg) { return arg.strings(); },
-                          _expressionVariant);
+      auto r = _expressionVariant.strings();
       r.push_back(&_target);
       return r;
     }
@@ -460,15 +417,8 @@ struct GraphPatternOperation {
       return {r.begin(), r.end()};
     }
 
-    // "Constant", "Rename" etc
-    [[nodiscard]] constexpr const char* operationName() const {
-      return std::visit([](auto&& arg) { return arg.Name; },
-                        _expressionVariant);
-    }
-
     [[nodiscard]] string getDescriptor() const {
-      auto inner = std::visit([](auto&& arg) { return arg.getDescriptor(); },
-                              _expressionVariant);
+      auto inner = _expressionVariant . getDescriptor();
       return "BIND (" + inner + " AS " + _target + ")";
     }
   };

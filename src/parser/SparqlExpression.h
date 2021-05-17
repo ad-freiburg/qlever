@@ -13,45 +13,9 @@
 #include "../engine/QueryExecutionContext.h"
 #include "../engine/ResultTable.h"
 #include "../global/Id.h"
+#include "../util/ConstexprSmallString.h"
 
 namespace sparqlExpression {
-struct conststr
-{
-  static constexpr size_t MaxSize = 8;
-  char p[MaxSize] = {0};
-  std::size_t sz = 0;
- public:
-  template<std::size_t N>
-  constexpr conststr(const char(&a)[N]) : sz(N - 1) {
-    if (N > MaxSize) {
-      throw std::runtime_error{"conststr can only be constructed from strings with a maximum size of " + std::to_string(MaxSize - 1)};
-    }
-    // TODO: enforce proper zero-termination
-    for (size_t i = 0; i < N; ++i) {
-      p[i] = a[i];
-    }
-  }
-
-  conststr(std::string_view input) {
-    if (input.size() >= MaxSize) {
-      throw std::runtime_error{"conststr can only be constructed from strings with a maximum size of " + std::to_string(MaxSize - 1)};
-    }
-    for (size_t i = 0; i < input.size(); ++i) {
-      p[i] = input[i];
-    }
-  }
-
-  constexpr char operator[](std::size_t n) const
-  {
-    return n < sz ? p[n] : throw std::out_of_range("");
-  }
-  constexpr std::size_t size() const { return sz; }
-
-  bool operator==(const conststr& rhs) const {
-    return !std::strcmp(p, rhs.p);
-  }
-  
-};
 
 template <conststr Tag, typename Function>
 struct TaggedFunction {

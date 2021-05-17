@@ -41,24 +41,7 @@ class Bind : public Operation {
 
   void computeResult(ResultTable* result) override;
 
-  // Implementation for binding the sum of two columns: BIND (?x + ?y As ?z)
-  template <int IN_WIDTH, int OUT_WIDTH>
-  static void computeSumBind(IdTable* dynRes, const IdTable& inputDyn,
-                             std::array<size_t, 2> columns,
-                             array<ResultTable::ResultType, 2> inputTypes,
-                             const Index& index);
-
-  // Implementation for renaming a columns: BIND (?x As ?y)
-  template <int IN_WIDTH, int OUT_WIDTH>
-  static void computeRenameBind(IdTable* dynRes, const IdTable& inputDyn,
-                                size_t column);
-
-  // Bind a constant value from the knowledge base to the new columns : BIND (42
-  // As ?x)
-  template <int IN_WIDTH, int OUT_WIDTH>
-  static void computeConstantBind(IdTable* dynRes, const IdTable& inputDyn,
-                                  size_t targetVal);
-
+  // Implementation for the binding of arbitrary expressions
   template <int IN_WIDTH, int OUT_WIDTH>
   void computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resultType, const IdTable& inputDyn, sparqlExpression::SparqlExpression* expression) const;
 };
