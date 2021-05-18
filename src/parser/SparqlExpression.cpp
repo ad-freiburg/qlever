@@ -61,7 +61,7 @@ std::vector<double> getNumericValuesFromVariable(const SparqlExpression::Variabl
 }
 
 // TODO<joka921> Comment, it has no declaration.
-template <bool RangeCalculationAllowed, typename RangeCalculation,
+template <typename RangeCalculation,
     typename ValueExtractor, typename BinaryOperation>
 auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
                                             ValueExtractor valueExtractor,
@@ -69,6 +69,8 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
                                             EvaluationInput* input) {
   return [input, rangeCalculation, valueExtractor,
       binaryOperation](auto&&... args) -> SparqlExpression::EvaluateResult {
+
+    constexpr bool RangeCalculationAllowed = !std::is_same_v<RangeCalculation, NoRangeCalculation>;
     if constexpr (RangeCalculationAllowed &&
                   (... &&
                       std::is_same_v<std::decay_t<decltype(args)>, Set>)) {
@@ -134,13 +136,13 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
     }
   };
 }
-template <bool RangeCalculationAllowed, typename RangeCalculation, typename ValueExtractor, typename BinaryOperation>
+template <typename RangeCalculation, typename ValueExtractor, typename BinaryOperation>
 SparqlExpression::EvaluateResult
-              BinaryExpression<RangeCalculationAllowed, RangeCalculation, ValueExtractor, BinaryOperation>::evaluate(EvaluationInput* input) const {
+              BinaryExpression<RangeCalculation, ValueExtractor, BinaryOperation>::evaluate(EvaluationInput* input) const {
 auto firstResult = _children[0]->evaluate(input);
 
 auto calculator =
-    liftBinaryCalculationToEvaluateResults<RangeCalculationAllowed>(
+    liftBinaryCalculationToEvaluateResults(
         RangeCalculation{}, ValueExtractor{}, BinaryOperation{}, input);
 for (size_t i = 1; i < _children.size(); ++i) {
 firstResult =
@@ -149,51 +151,17 @@ std::visit(calculator, firstResult, _children[i]->evaluate(input));
 return firstResult;
 }
 
-template <bool RangeCalculationAllowed, typename RangeCalculation,
+template <typename RangeCalculation,
     typename ValueExtractor, typename UnaryOperation>
-  SparqlExpression::EvaluateResult UnaryExpression<RangeCalculationAllowed, RangeCalculation, ValueExtractor, UnaryOperation>::evaluate(EvaluationInput* input) const {
+  SparqlExpression::EvaluateResult UnaryExpression<RangeCalculation, ValueExtractor, UnaryOperation>::evaluate(EvaluationInput* input) const {
     auto firstResult = _child->evaluate(input);
 
     auto calculator =
-        liftBinaryCalculationToEvaluateResults<RangeCalculationAllowed>(
+        liftBinaryCalculationToEvaluateResults(
             RangeCalculation{}, ValueExtractor{}, UnaryOperation{}, input);
     firstResult = std::visit(calculator, firstResult);
     return firstResult;
   };
-
-  template <size_t MaxValue>
-struct LambdaVisitor {
-  template <typename Tuple, typename Enum, typename ValueExtractor,
-            typename... Args>
-  auto operator()(Tuple t, Enum r, ValueExtractor v, EvaluationInput* input,
-                  Args&&... args) -> SparqlExpression::EvaluateResult {
-    static_assert(MaxValue < std::tuple_size_v<Tuple>);
-    AD_CHECK(static_cast<size_t>(r) < std::tuple_size_v<Tuple>);
-    if (static_cast<size_t>(r) == MaxValue) {
-      return liftBinaryCalculationToEvaluateResults<false>(
-          0, std::move(v), std::get<MaxValue>(t),
-          input)(std::forward<Args>(args)...);
-    } else {
-      return LambdaVisitor<MaxValue - 1>{}(t, r, v, input,
-                                           std::forward<Args>(args)...);
-    }
-  }
-};
-
-template <>
-struct LambdaVisitor<0> {
-  template <typename Tuple, typename Enum, typename ValueExtractor,
-      typename... Args>
-  auto operator()(Tuple t, Enum r, ValueExtractor v, EvaluationInput* input,
-                  Args&&... args) {
-    if (static_cast<size_t>(r) == 0) {
-      return liftBinaryCalculationToEvaluateResults<false>(
-          0, std::move(v), std::get<0>(t), input)(std::forward<Args>(args)...);
-    } else {
-      AD_CHECK(false);
-    }
-  }
-};
 
 template <typename TagAndFunction, typename... TagAndFunctions>
 struct LambdaVisitor2 {
@@ -202,8 +170,8 @@ struct LambdaVisitor2 {
   auto operator()(TagString identifier, ValueExtractor v, EvaluationInput* input,
                   Args&&... args) -> SparqlExpression::EvaluateResult {
     if (identifier == TagAndFunction::tag) {
-      return liftBinaryCalculationToEvaluateResults<false>(
-          0, std::move(v), typename TagAndFunction::functionType{},
+      return liftBinaryCalculationToEvaluateResults(
+          NoRangeCalculation{}, std::move(v), typename TagAndFunction::functionType{},
           input)(std::forward<Args>(args)...);
     } else {
       if constexpr (sizeof...(TagAndFunctions) > 0) {
@@ -219,13 +187,12 @@ struct LambdaVisitor2 {
 
 template <typename ValueExtractor, typename... TagAndFunctions>
 SparqlExpression::EvaluateResult
-DispatchedBinaryExpression2<ValueExtractor, TagAndFunctions...>::
+DispatchedBinaryExpression<ValueExtractor, TagAndFunctions...>::
 evaluate(
     EvaluationInput* input) const {
   auto firstResult = _children[0]->evaluate(input);
 
   for (size_t i = 1; i < _children.size(); ++i) {
-// auto calculator = liftBinaryCalculationToEvaluateResults<false>(0, ValueExtractor{}, BinaryOperation{} , input);
     auto calculator = [&]<typename... Args>(Args&&... args) {
       return LambdaVisitor2<TagAndFunctions...>{}(
            _relations[i - 1], ValueExtractor{},
@@ -238,18 +205,18 @@ evaluate(
 };
 
 
-template class UnaryExpression<false, EmptyType, BooleanValueGetter,
+template class UnaryExpression<NoRangeCalculation, BooleanValueGetter,
     decltype(unaryNegate)>;
-template class UnaryExpression<false, EmptyType, NumericValueGetter,
+template class UnaryExpression<NoRangeCalculation, NumericValueGetter,
     decltype(unaryMinus)>;
-template class BinaryExpression<true, Union, BooleanValueGetter,
+template class BinaryExpression<Union, BooleanValueGetter,
         decltype(orLambda)>;
 
-template class BinaryExpression<true, Intersection, BooleanValueGetter,
+template class BinaryExpression<Intersection, BooleanValueGetter,
     decltype(andLambda)>;
 
-template class DispatchedBinaryExpression2<NumericValueGetter, TaggedFunction<"+", decltype(add)>, TaggedFunction<"-", decltype(subtract)>>;
+template class DispatchedBinaryExpression<NumericValueGetter, TaggedFunction<"+", decltype(add)>, TaggedFunction<"-", decltype(subtract)>>;
 
-template class DispatchedBinaryExpression2<NumericValueGetter, TaggedFunction<"*", decltype(multiply)>, TaggedFunction<"/", decltype(divide)>>;
+template class DispatchedBinaryExpression<NumericValueGetter, TaggedFunction<"*", decltype(multiply)>, TaggedFunction<"/", decltype(divide)>>;
 }
 

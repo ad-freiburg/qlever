@@ -107,7 +107,7 @@ class LiteralExpression : public SparqlExpression {
   T _value;
 };
 
-template <bool RangeCalculationAllowed, typename RangeCalculation,
+template <typename RangeCalculation,
           typename ValueExtractor, typename BinaryOperation>
 class BinaryExpression : public SparqlExpression {
  public:
@@ -129,7 +129,7 @@ class BinaryExpression : public SparqlExpression {
   std::vector<Ptr> _children;
 };
 
-template <bool RangeCalculationAllowed, typename RangeCalculation,
+template <typename RangeCalculation,
           typename ValueExtractor, typename UnaryOperation>
 class UnaryExpression : public SparqlExpression {
  public:
@@ -143,9 +143,9 @@ class UnaryExpression : public SparqlExpression {
 };
 
 template <typename ValueExtractor, typename... TagAndFunctions>
-class DispatchedBinaryExpression2 : public SparqlExpression {
+class DispatchedBinaryExpression : public SparqlExpression {
  public:
-  DispatchedBinaryExpression2(std::vector<Ptr>&& children,
+  DispatchedBinaryExpression(std::vector<Ptr>&& children,
                               std::vector<TagString>&& relations)
       : _children{std::move(children)}, _relations{std::move(relations)} {};
   EvaluateResult evaluate(EvaluationInput* input) const override;
@@ -183,33 +183,33 @@ struct BooleanValueGetter {
 
 inline auto orLambda = [](bool a, bool b) { return a || b; };
 using ConditionalOrExpression =
-    detail::BinaryExpression<true, setOfIntervals::Union, detail::BooleanValueGetter,
+    detail::BinaryExpression<setOfIntervals::Union, detail::BooleanValueGetter,
                      decltype(orLambda)>;
 
 inline auto andLambda = [](bool a, bool b) { return a && b; };
 using ConditionalAndExpression =
-    detail::BinaryExpression<true, setOfIntervals::Intersection, detail::BooleanValueGetter,
+    detail::BinaryExpression<setOfIntervals::Intersection, detail::BooleanValueGetter,
                      decltype(andLambda)>;
 
-struct EmptyType{};
+struct NoRangeCalculation {};
 inline auto unaryNegate = [](bool a) -> bool { return !a; };
 using UnaryNegateExpression =
-    detail::UnaryExpression<false, EmptyType, detail::BooleanValueGetter,
+    detail::UnaryExpression<NoRangeCalculation, detail::BooleanValueGetter,
                     decltype(unaryNegate)>;
 inline auto unaryMinus = [](auto a) -> double { return -a; };
 using UnaryMinusExpression =
-    detail::UnaryExpression<false, EmptyType, detail::NumericValueGetter,
+    detail::UnaryExpression<NoRangeCalculation, detail::NumericValueGetter,
                     decltype(unaryMinus)>;
 
 inline auto multiply = [](const auto& a, const auto& b) -> double { return a * b; };
 inline auto divide = [](const auto& a, const auto& b) -> double { return static_cast<double>(a) / b; };
 using MultiplicativeExpression =
-    detail::DispatchedBinaryExpression2<detail::NumericValueGetter, detail::TaggedFunction<"*", decltype(multiply)>, detail::TaggedFunction<"/", decltype(divide)>>;
+    detail::DispatchedBinaryExpression<detail::NumericValueGetter, detail::TaggedFunction<"*", decltype(multiply)>, detail::TaggedFunction<"/", decltype(divide)>>;
 
 inline auto add = [](const auto& a, const auto& b) -> double { return a + b; };
 inline auto subtract = [](const auto& a, const auto& b) -> double { return a - b; };
 using AdditiveExpression =
-    detail::DispatchedBinaryExpression2<detail::NumericValueGetter, detail::TaggedFunction<"+", decltype(add)>, detail::TaggedFunction<"-", decltype(subtract)>>;
+    detail::DispatchedBinaryExpression<detail::NumericValueGetter, detail::TaggedFunction<"+", decltype(add)>, detail::TaggedFunction<"-", decltype(subtract)>>;
 
 using BooleanLiteralExpression = detail::LiteralExpression<bool>;
 using IntLiteralExpression = detail::LiteralExpression<int64_t>;
