@@ -287,29 +287,10 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       currentPattern->_children.emplace_back(std::move(b));
       // the dot after the bind is optional
       _lexer.accept(".");
-      /*
-      _lexer.expect("(");
-      std::string inVar;
-      bool rename = false;
-      bool isString = true;
-      char binaryOperator = 0;
-      std::string inVar2;
-      int64_t val = 0;
-      if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-        rename = true;
-        inVar = _lexer.current().raw;
-        if (_lexer.accept(SparqlToken::Type::SYMBOL)) {
-          binaryOperator = _lexer.current().raw[0];
-          if (binaryOperator == 0 ||
-              "+-*/
-      "s.find(binaryOperator) == std::string::npos) {
-          throw std::runtime_error(
-              "BIND expressions currently only support the binary operators"
-              "+-*/ but encountered \"" +
-              std::string(1, binaryOperator) + "\"");
     }
     _lexer.expect(SparqlToken::Type::VARIABLE);
     inVar2 = _lexer.current().raw;
+
   }
 }
 else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
