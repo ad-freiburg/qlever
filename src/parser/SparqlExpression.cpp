@@ -2,16 +2,19 @@
 // Created by johannes on 15.05.21.
 //
 #include "./SparqlExpression.h"
-
+#include "../engine/CallFixedSize.h"
 
 namespace sparqlExpression::detail {
 using namespace setOfIntervals;
 
-// TODO : Comment this, it has no declaration.
-std::vector<double> getNumericValuesFromVariable(const SparqlExpression::Variable& variable,
+template<size_t WIDTH>
+void getNumericValuesFromVariableImpl(std::vector<double>& result, const SparqlExpression::Variable& variable,
                                                  EvaluationInput* input) {
-  std::vector<double> result;
-  size_t resultSize = input->_end - input->_begin;
+
+  auto staticInput = input->_inputTable.asStaticView<WIDTH>();
+
+  const size_t beginIndex = input->_beginIndex;
+  size_t resultSize = input->_endIndex - input->_beginIndex;
 
   if (!input->_variableColumnMap.contains(variable._variable)) {
     throw std::runtime_error ("Variable " + variable._variable + " could not be mapped to input column of expression evaluation");
@@ -20,10 +23,11 @@ std::vector<double> getNumericValuesFromVariable(const SparqlExpression::Variabl
   size_t columnIndex = input->_variableColumnMap[variable._variable].first;
   auto type = input->_variableColumnMap[variable._variable].second;
 
+
   result.reserve(resultSize);
   for (size_t i = 0; i < resultSize; ++i) {
     // TODO<joka921>: Optimization for the IdTableStatic.
-    const auto id = (*(input->_begin + i))[columnIndex];
+    const auto id = staticInput(beginIndex + i, columnIndex);
     if (type == ResultTable::ResultType::VERBATIM) {
       result.push_back(id);
     } else if (type == ResultTable::ResultType::FLOAT) {
@@ -36,7 +40,7 @@ std::vector<double> getNumericValuesFromVariable(const SparqlExpression::Variabl
     } else {
       // load the string, parse it as an xsd::int or float
       std::string entity =
-          input->_qec->getIndex().idToOptionalString(id).value_or("");
+          input->_qec.getIndex().idToOptionalString(id).value_or("");
       if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
         result.push_back(std::numeric_limits<float>::quiet_NaN());
       } else {
@@ -44,6 +48,15 @@ std::vector<double> getNumericValuesFromVariable(const SparqlExpression::Variabl
       }
     }
   }
+}
+
+// TODO : Comment this, it has no declaration.
+std::vector<double> getNumericValuesFromVariable(const SparqlExpression::Variable& variable,
+                                                 EvaluationInput* input) {
+
+  auto cols = input->_inputTable.cols();
+  std::vector<double> result;
+  CALL_FIXED_SIZE_1(cols, getNumericValuesFromVariableImpl, result, variable, input);
   return result;
 }
 
@@ -66,7 +79,7 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
         if constexpr (ad_utility::isVector<T>) {
           return {x.size(), true};
         } else if constexpr (std::is_same_v<Set, T> || std::is_same_v<Variable, T>) {
-          return {input->_end - input->_begin, true};
+          return {input->_endIndex - input->_beginIndex, true};
         } else {
           return {1, false};
         }

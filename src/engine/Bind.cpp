@@ -139,11 +139,8 @@ void Bind::computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resul
     }
   }
 
-  sparqlExpression::SparqlExpression::EvaluationInput evaluationInput;
-  evaluationInput._begin = inputDyn.begin();
-  evaluationInput._end = inputDyn.end();
-  evaluationInput._qec = getExecutionContext();
-  evaluationInput._variableColumnMap = std::move(columnMap);
+  sparqlExpression::SparqlExpression::EvaluationInput evaluationInput(*getExecutionContext(), std::move(columnMap), inputDyn);
+
   sparqlExpression::SparqlExpression::EvaluateResult expressionResult = expression->evaluate(&evaluationInput);
 
   const auto input = inputDyn.asStaticView<IN_WIDTH>();

@@ -21,7 +21,7 @@ namespace sparqlExpression {
 class SparqlExpression {
  public:
 
-  /// TODO<joka921> When restructuring the variable handling, can't we get the index and type directly from the input?
+  /// A Sparql Variable, e.g. "?x"
   struct Variable {
     std::string _variable;
   };
@@ -33,11 +33,20 @@ class SparqlExpression {
 
   /// All the additional information which is needed to evaluate a Sparql Expression
   struct EvaluationInput {
-    //TODO can't we pass in the Variable ColumnMap through this mechanism
-    const QueryExecutionContext* _qec;
-    IdTable::const_iterator _begin;
-    IdTable::const_iterator _end;
+    /// Constructor for evaluating an expression on the complete input
+    EvaluationInput(const QueryExecutionContext& qec, VariableColumnMap map, const IdTable& inputTable) noexcept : _qec{qec}, _variableColumnMap{std::move(map)}, _inputTable{inputTable} {}
+    /// Constructor for evaluating an expression on a part of the input
+    EvaluationInput(const QueryExecutionContext& qec, VariableColumnMap map, const IdTable& inputTable, size_t beginIndex, size_t endIndex) noexcept : _qec{qec}, _variableColumnMap{std::move(map)},_inputTable{inputTable}, _beginIndex{beginIndex}, _endIndex{endIndex} {}
+    /// Needed to map Ids to their value from the vocabulary
+
+    const QueryExecutionContext& _qec;
     VariableColumnMap _variableColumnMap;
+
+    /// The input of the expression
+    const IdTable& _inputTable;
+    /// The indices of the actual range in the _inputTable on which the expression is evaluated. For BIND expressions this is always [0, _inputTable.size()) but for GROUP BY evaluation we also need only parts of the input.
+    size_t _beginIndex = 0;
+    size_t _endIndex = _inputTable.size();
   };
 
   /// The result of an epxression variable can either be a constant of type bool/double/int (same value for all result rows), a vector of one of those types (one value for each result row), a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies the indices in the result at which the result columns value is "true".
@@ -73,15 +82,19 @@ using Variable = SparqlExpression::Variable;
   using functionType = Function;
 };
 
-
+/// An expression with a single value, e.g. a numeric or boolean constant, or a Variable
 template <typename T>
 class LiteralExpression : public SparqlExpression {
  public:
+  // _________________________________________________________________________
   LiteralExpression(T _value) : _value{std::move(_value)} {}
+
+  // Evaluating just returns the constant/literal value
   EvaluateResult evaluate(EvaluationInput*) const override {
     return EvaluateResult{_value};
   }
 
+  // _____________________________________________________________________
   vector<std::string*> strings() override {
     if constexpr (std::is_same_v<T, Variable>) {
       return {&_value._variable};
