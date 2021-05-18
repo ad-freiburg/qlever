@@ -70,9 +70,11 @@ SortPerformanceEstimator::SortPerformanceEstimator(
       auto rows = sampleValuesRows[i];
       auto cols = sampleValuesCols[j];
       try {
+#ifndef NDEBUG
         if (rows > 100000) {
           throw ad_utility::detail::AllocationExceedsLimitException{20, 20};
         }
+#endif
         _samples[i][j] = measureSortingTimeInSeconds(rows, cols, allocator);
       } catch (const ad_utility::detail::AllocationExceedsLimitException& e) {
         // These estimates are not too important, since results of this size

@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 FROM base as builder
 RUN apt-get update && apt-get install -y build-essential cmake libsparsehash-dev libicu-dev tzdata
+apt-get install -y pkg-config uuid
 COPY . /app/
 
 # Check formatting with the .clang-format project style
