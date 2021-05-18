@@ -496,8 +496,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return children;
   }
 
-  std::vector<sparqlExpression::conststr> visitRelationChildren(const std::vector<antlr4::tree::ParseTree*>& childContexts, ad_utility::HashSet<std::string> allowedTexts) {
-    std::vector<sparqlExpression::conststr> operations;
+  std::vector<sparqlExpression::TagString> visitRelationChildren(const std::vector<antlr4::tree::ParseTree*>& childContexts, ad_utility::HashSet<std::string> allowedTexts) {
+    std::vector<sparqlExpression::TagString> operations;
 
     for (const auto& c : childContexts) {
       if (allowedTexts.contains(c->getText())) {

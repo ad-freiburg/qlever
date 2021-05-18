@@ -7,6 +7,47 @@
 namespace sparqlExpression::detail {
 using namespace setOfIntervals;
 
+// TODO : Comment this, it has no declaration.
+std::vector<double> getNumericValuesFromVariable(const SparqlExpression::Variable& variable,
+                                                 EvaluationInput* input) {
+  std::vector<double> result;
+  size_t resultSize = input->_end - input->_begin;
+
+  if (!input->_variableColumnMap.contains(variable._variable)) {
+    throw std::runtime_error ("Variable " + variable._variable + " could not be mapped to input column of expression evaluation");
+  }
+
+  size_t columnIndex = input->_variableColumnMap[variable._variable].first;
+  auto type = input->_variableColumnMap[variable._variable].second;
+
+  result.reserve(resultSize);
+  for (size_t i = 0; i < resultSize; ++i) {
+    // TODO<joka921>: Optimization for the IdTableStatic.
+    const auto id = (*(input->_begin + i))[columnIndex];
+    if (type == ResultTable::ResultType::VERBATIM) {
+      result.push_back(id);
+    } else if (type == ResultTable::ResultType::FLOAT) {
+      // used to store the id value of the entry interpreted as a float
+      result.emplace_back();
+      std::memcpy(&result.back(), &id, sizeof(float));
+    } else if (type == ResultTable::ResultType::TEXT ||
+               type == ResultTable::ResultType::LOCAL_VOCAB) {
+      result.push_back(std::numeric_limits<float>::quiet_NaN());
+    } else {
+      // load the string, parse it as an xsd::int or float
+      std::string entity =
+          input->_qec->getIndex().idToOptionalString(id).value_or("");
+      if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+        result.push_back(std::numeric_limits<float>::quiet_NaN());
+      } else {
+        result.push_back(ad_utility::convertIndexWordToFloat(entity));
+      }
+    }
+  }
+  return result;
+}
+
+// TODO<joka921> Comment, it has no declaration.
 template <bool RangeCalculationAllowed, typename RangeCalculation,
     typename ValueExtractor, typename BinaryOperation>
 auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
@@ -36,11 +77,13 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
       // If any of the inputs is a list/vector/range of results, the result will be a std::vector
       bool resultIsAVector = (... || getSize(args).second);
 
-      auto possiblyExpand = []<typename T>(T input, [[maybe_unused]] size_t targetSize) {
+      auto possiblyExpand = [&input]<typename T>(T childResult, [[maybe_unused]] size_t targetSize) {
         if constexpr (std::is_same_v<Set, std::decay_t<T>>) {
-          return expandSet(std::move(input), targetSize);
+          return expandSet(std::move(childResult), targetSize);
+        } else if constexpr (std::is_same_v<Variable, std::decay_t<T>>) {
+          return getNumericValuesFromVariable(childResult, input);
         } else {
-          return input;
+          return childResult;
         }
       };
 
@@ -51,9 +94,8 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
             using A = std::decay_t<decltype(expanded)>;
             if constexpr (ad_utility::isVector<A>) {
               return valueExtractor(expanded[index], input);
-            } else if constexpr (std::is_same_v<Variable, A>) {
-              return valueExtractor(getNumericValueFromVariable(expanded,index, input), input);
             } else {
+              static_assert(!std::is_same_v<Variable, A>);
               return valueExtractor(expanded, input);
             }
           }...);
@@ -144,7 +186,7 @@ template <typename TagAndFunction, typename... TagAndFunctions>
 struct LambdaVisitor2 {
   template <typename ValueExtractor,
       typename... Args>
-  auto operator()(conststr identifier, ValueExtractor v, EvaluationInput* input,
+  auto operator()(TagString identifier, ValueExtractor v, EvaluationInput* input,
                   Args&&... args) -> SparqlExpression::EvaluateResult {
     if (identifier == TagAndFunction::tag) {
       return liftBinaryCalculationToEvaluateResults<false>(
@@ -182,32 +224,6 @@ evaluate(
   return firstResult;
 };
 
-// ___________________________________________________________________________
-double getNumericValueFromVariable(const SparqlExpression::Variable& variable, size_t i,
-                                          EvaluationInput* input) {
-  // TODO<joka921>: Optimization for the IdTableStatic.
-  const auto id = (*(input->_begin + i))[variable._columnIndex];
-  if (variable._type == ResultTable::ResultType::VERBATIM) {
-    return id;
-  } else if (variable._type == ResultTable::ResultType::FLOAT) {
-    // used to store the id value of the entry interpreted as a float
-    float tmpF;
-    std::memcpy(&tmpF, &id, sizeof(float));
-    return tmpF;
-  } else if (variable._type == ResultTable::ResultType::TEXT ||
-             variable._type == ResultTable::ResultType::LOCAL_VOCAB) {
-    return std::numeric_limits<float>::quiet_NaN();
-  } else {
-    // load the string, parse it as an xsd::int or float
-    std::string entity =
-        input->_qec->getIndex().idToOptionalString(id).value_or("");
-    if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
-      return std::numeric_limits<float>::quiet_NaN();
-    } else {
-      return ad_utility::convertIndexWordToFloat(entity);
-    }
-  }
-}
 
 template class UnaryExpression<false, EmptyType, BooleanValueGetter,
     decltype(unaryNegate)>;

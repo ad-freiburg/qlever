@@ -126,6 +126,7 @@ void Bind::computeResult(ResultTable* result) {
   LOG(DEBUG) << "BIND result computation done." << endl;
 }
 
+// _____________________________________________________________________________
 template <int IN_WIDTH, int OUT_WIDTH>
 void Bind::computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resultType, const IdTable& inputDyn, sparqlExpression::SparqlExpression* expression) const {
 
@@ -138,11 +139,11 @@ void Bind::computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resul
     }
   }
 
-  expression ->initializeVariables(columnMap);
   sparqlExpression::SparqlExpression::EvaluationInput evaluationInput;
   evaluationInput._begin = inputDyn.begin();
   evaluationInput._end = inputDyn.end();
   evaluationInput._qec = getExecutionContext();
+  evaluationInput._variableColumnMap = std::move(columnMap);
   sparqlExpression::SparqlExpression::EvaluateResult expressionResult = expression->evaluate(&evaluationInput);
 
   const auto input = inputDyn.asStaticView<IN_WIDTH>();
@@ -172,7 +173,7 @@ void Bind::computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resul
       for (size_t i = 0; i < inSize; ++i) {
         res(i, inCols) = res(i, column);
       }
-      *resultType =  ptr->_type;
+      *resultType =  evaluationInput._variableColumnMap[ptr->_variable].second;
   } else if (auto ptr = std::get_if<double>(&expressionResult)) {
     auto tmpF = static_cast<float>(*ptr);
     for (size_t i = 0; i < inSize; ++i) {
