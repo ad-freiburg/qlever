@@ -20,10 +20,11 @@ TEST(SparqlExpression, Or) {
   std::vector<bool> b{false, false, true, false};
   std::vector<bool> expected{true, true, true, false};
 
-  QueryExecutionContext* ctxt = nullptr;
+  QueryExecutionContext* ctxt = nullptr ;
   sparqlExpression::SparqlExpression::VariableColumnMap map;
-  IdTable* table = nullptr;
-  sparqlExpression::SparqlExpression::EvaluationInput i{*ctxt, map, *table};
+  ad_utility::AllocatorWithLimit<Id> alloc {ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+  IdTable table{alloc};
+  sparqlExpression::SparqlExpression::EvaluationInput input{*ctxt, map, table};
   std::vector<SparqlExpression::Ptr> children;
   children.push_back(
       std::make_unique<DummyExpression>(SparqlExpression::EvaluateResult{d}));
@@ -32,7 +33,7 @@ TEST(SparqlExpression, Or) {
 
   ConditionalOrExpression c{std::move(children)};
 
-  SparqlExpression::EvaluateResult res = c.evaluate(&i);
+  SparqlExpression::EvaluateResult res = c.evaluate(&input);
   auto ptr = std::get_if<std::vector<bool>>(&res);
   ASSERT_TRUE(ptr);
   ASSERT_EQ(*ptr, expected);
