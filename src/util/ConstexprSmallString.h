@@ -7,19 +7,25 @@
 #include <cstring>
 
 namespace ad_utility {
-/// A String/character array that can be constructed at compile time. It can hold at most `MaxSize` characters. The string is null-terminated and the '\0' at the end counts towards the maximum Size.
+/// A String/character array that can be constructed at compile time. It can
+/// hold at most `MaxSize` characters. The string is null-terminated and the
+/// '\0' at the end counts towards the maximum Size.
 template <size_t MaxSize>
 struct ConstexprSmallString {
-  // Data members have to be public, else we cannot use ConstexprSmallStrings as template parameters
+  // Data members have to be public, else we cannot use ConstexprSmallStrings as
+  // template parameters
   char _characters[MaxSize] = {0};
   std::size_t _size = 0;
 
-  /// Construct (possibly at compile time) from input char array or input const char*. The input must be null-terminated, else the behavior is undefined. Example usage: `constexpr ConstexprSmallString<8> example = "short"'.
+  /// Construct (possibly at compile time) from input char array or input const
+  /// char*. The input must be null-terminated, else the behavior is undefined.
+  /// Example usage: `constexpr ConstexprSmallString<8> example = "short"'.
   template <std::size_t N>
   constexpr ConstexprSmallString(const char (&input)[N]) : _size(N - 1) {
     if (N > MaxSize) {
       throw std::runtime_error{
-          "ConstexprSmallString can only be constructed from strings with input maximum size of " +
+          "ConstexprSmallString can only be constructed from strings with "
+          "input maximum size of " +
           std::to_string(MaxSize - 1)};
     }
     for (size_t i = 0; i < N; ++i) {
@@ -31,13 +37,15 @@ struct ConstexprSmallString {
   ConstexprSmallString(std::string_view input) : _size(input.size()) {
     if (input.size() >= MaxSize) {
       throw std::runtime_error{
-          "ConstexprSmallString can only be constructed from strings with a maximum size of " +
+          "ConstexprSmallString can only be constructed from strings with a "
+          "maximum size of " +
           std::to_string(MaxSize - 1)};
     }
     for (size_t i = 0; i < input.size(); ++i) {
       _characters[i] = input[i];
     }
-    // The '\0' at the end is already there because of the initialization of _characters
+    // The '\0' at the end is already there because of the initialization of
+    // _characters
   }
 
   /// Access the n-th character
@@ -53,6 +61,14 @@ struct ConstexprSmallString {
     return !std::strcmp(_characters, rhs._characters);
   }
 };
-} // namepace ad_utility
+}  // namespace ad_utility
 
-
+namespace std {
+template <size_t MaxSize>
+struct hash<ad_utility::ConstexprSmallString<MaxSize>> {
+  auto operator()(const ad_utility::ConstexprSmallString<MaxSize>& string) {
+    return std::hash<std::string_view>{}(std::string_view{
+        string._characters, string._characters + string._size});
+  }
+};
+}  // namespace std

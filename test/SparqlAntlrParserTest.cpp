@@ -106,19 +106,26 @@ TEST(SparqlParser, Prefix) {
 }
 
 TEST(SparqlExpressionParser, First) {
-  string s = "23 - 5 * (2 + 7) + 1 / 3 ) bimbam" ;
+  string s = "23 - 5 * (2 + 7) + 1 / 3 ) bimbam";
   ParserAndVisitor p{s};
   auto context = p.parser.expression();
   LOG(INFO) << context->getText() << std::endl;
-  LOG(INFO) << p.parser.getTokenStream()->getTokenSource()->getInputStream()->toString() << std::endl;
+  LOG(INFO) << p.parser.getTokenStream()
+                   ->getTokenSource()
+                   ->getInputStream()
+                   ->toString()
+            << std::endl;
   LOG(INFO) << p.parser.getCurrentToken()->getStartIndex() << std::endl;
-  //p.parser.getTokenStream()->getTokenSource()->getInputStream()->getText({0, 3});
+  // p.parser.getTokenStream()->getTokenSource()->getInputStream()->getText({0,
+  // 3});
   auto result = p.visitor.visitExpression(context);
   auto expr = std::move(result.as<sparqlExpression::SparqlExpression::Ptr>());
 
-  sparqlExpression::SparqlExpression::EvaluationInput input;
+  QueryExecutionContext* ctxt = nullptr;
+  sparqlExpression::SparqlExpression::VariableColumnMap map;
+  IdTable* table = nullptr;
+  sparqlExpression::SparqlExpression::EvaluationInput input{*ctxt, map, *table};
   auto res = expr->evaluate(&input);
   AD_CHECK(std::holds_alternative<double>(res));
   ASSERT_FLOAT_EQ(25.0, std::get<double>(res));
-
 }

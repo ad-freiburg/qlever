@@ -7,11 +7,11 @@
 #ifndef QLEVER_RANDOM_H
 #define QLEVER_RANDOM_H
 
+#include <cstring>
 #include <future>
 #include <random>
 #include <type_traits>
 #include <vector>
-#include <cstring>
 
 /**
  * A simple and fast Pseudo-Random-Number-Generator called Xoroshiro128+, for

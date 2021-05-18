@@ -4,10 +4,10 @@
 
 #include "Bind.h"
 
+#include "../parser/SparqlExpression.h"
 #include "../util/Exception.h"
 #include "CallFixedSize.h"
 #include "QueryExecutionTree.h"
-#include "../parser/SparqlExpression.h"
 
 // BIND adds exactly one new column
 size_t Bind::getResultWidth() const { return _subtree->getResultWidth() + 1; }
@@ -26,7 +26,8 @@ size_t Bind::getCostEstimate() {
 float Bind::getMultiplicity(size_t col) {
   // this is the newly added column
   if (col == getResultWidth() - 1) {
-    // TODO<joka921> get a better multiplicty estimate for BINDs which are variable renames or Constants
+    // TODO<joka921> get a better multiplicty estimate for BINDs which are
+    // variable renames or Constants
     return 1;
   }
 
@@ -58,7 +59,9 @@ string Bind::asString(size_t indent) const {
   auto m = getVariableColumns();
   auto strings = _bind.strings();
   // TODO<joka921> Proper asString() method for the Expressions
-  os << "BIND (" << "Complex expression" << ") on";
+  os << "BIND ("
+     << "Complex expression"
+     << ") on";
   // the random string to prevent false caching
   os << _bind._expressionVariant.asString();
 
@@ -118,8 +121,9 @@ void Bind::computeResult(ResultTable* result) {
   int outwidth = getResultWidth();
 
   result->_resultTypes.emplace_back();
-   CALL_FIXED_SIZE_2(inwidth, outwidth, computeExpressionBind,
-                    &result->_data, &(result->_resultTypes.back()), subRes->_data, _bind._expressionVariant.getImpl());
+  CALL_FIXED_SIZE_2(inwidth, outwidth, computeExpressionBind, &result->_data,
+                    &(result->_resultTypes.back()), subRes->_data,
+                    _bind._expressionVariant.getImpl());
 
   result->_sortedBy = resultSortedOn();
 
@@ -128,8 +132,10 @@ void Bind::computeResult(ResultTable* result) {
 
 // _____________________________________________________________________________
 template <int IN_WIDTH, int OUT_WIDTH>
-void Bind::computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resultType, const IdTable& inputDyn, sparqlExpression::SparqlExpression* expression) const {
-
+void Bind::computeExpressionBind(
+    IdTable* dynRes, ResultTable::ResultType* resultType,
+    const IdTable& inputDyn,
+    sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::SparqlExpression::VariableColumnMap columnMap;
   auto inResult = _subtree->getResult();
   for (const auto& [variable, columnIndex] : getVariableColumns()) {
@@ -139,54 +145,58 @@ void Bind::computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resul
     }
   }
 
-  sparqlExpression::SparqlExpression::EvaluationInput evaluationInput(*getExecutionContext(), std::move(columnMap), inputDyn);
+  sparqlExpression::SparqlExpression::EvaluationInput evaluationInput(
+      *getExecutionContext(), std::move(columnMap), inputDyn);
 
-  sparqlExpression::SparqlExpression::EvaluateResult expressionResult = expression->evaluate(&evaluationInput);
+  sparqlExpression::SparqlExpression::EvaluateResult expressionResult =
+      expression->evaluate(&evaluationInput);
 
   const auto input = inputDyn.asStaticView<IN_WIDTH>();
   auto res = dynRes->moveToStatic<OUT_WIDTH>();
 
   // first initialize the first columns (they remain identical)
-    const auto inSize = input.size();
-    res.reserve(inSize);
-    const auto inCols = input.cols();
-    // copy the input to the first cols;
-    for (size_t i = 0; i < inSize; ++i) {
-      res.emplace_back();
-      for (size_t j = 0; j < inCols; ++j) {
-        res(i, j) = input(i, j);
-      }
+  const auto inSize = input.size();
+  res.reserve(inSize);
+  const auto inCols = input.cols();
+  // copy the input to the first cols;
+  for (size_t i = 0; i < inSize; ++i) {
+    res.emplace_back();
+    for (size_t j = 0; j < inCols; ++j) {
+      res(i, j) = input(i, j);
     }
+  }
   if (auto ptr = std::get_if<std::vector<double>>(&expressionResult)) {
-      const auto& resultVector = *ptr;
-      AD_CHECK(ptr->size() == inSize);
-      for (size_t i = 0; i < inSize; ++i) {
-        auto tmpF = static_cast<float>(resultVector[i]);
-        std::memcpy(&res(i, inCols), &tmpF, sizeof(float));
-      }
-      *resultType = ResultTable::ResultType::FLOAT;
-    } else if (auto ptr = std::get_if<sparqlExpression::SparqlExpression::Variable>(&expressionResult)) {
-      auto column = getVariableColumns().at(ptr->_variable);
-      for (size_t i = 0; i < inSize; ++i) {
-        res(i, inCols) = res(i, column);
-      }
-      *resultType =  evaluationInput._variableColumnMap[ptr->_variable].second;
+    const auto& resultVector = *ptr;
+    AD_CHECK(ptr->size() == inSize);
+    for (size_t i = 0; i < inSize; ++i) {
+      auto tmpF = static_cast<float>(resultVector[i]);
+      std::memcpy(&res(i, inCols), &tmpF, sizeof(float));
+    }
+    *resultType = ResultTable::ResultType::FLOAT;
+  } else if (auto ptr =
+                 std::get_if<sparqlExpression::SparqlExpression::Variable>(
+                     &expressionResult)) {
+    auto column = getVariableColumns().at(ptr->_variable);
+    for (size_t i = 0; i < inSize; ++i) {
+      res(i, inCols) = res(i, column);
+    }
+    *resultType = evaluationInput._variableColumnMap[ptr->_variable].second;
   } else if (auto ptr = std::get_if<double>(&expressionResult)) {
     auto tmpF = static_cast<float>(*ptr);
     for (size_t i = 0; i < inSize; ++i) {
       std::memcpy(&res(i, inCols), &tmpF, sizeof(float));
     }
-    *resultType =  ResultTable::ResultType::FLOAT;
+    *resultType = ResultTable::ResultType::FLOAT;
   } else if (auto ptr = std::get_if<int64_t>(&expressionResult)) {
     auto tmpF = static_cast<float>(*ptr);
     for (size_t i = 0; i < inSize; ++i) {
       std::memcpy(&res(i, inCols), &tmpF, sizeof(float));
     }
-    *resultType =  ResultTable::ResultType::FLOAT;
+    *resultType = ResultTable::ResultType::FLOAT;
   } else {
-    throw std::runtime_error ("The result type of this BIND expression is not yet supported by QLever");
+    throw std::runtime_error(
+        "The result type of this BIND expression is not yet supported by "
+        "QLever");
   }
   *dynRes = res.moveToDynamic();
-
-
 }

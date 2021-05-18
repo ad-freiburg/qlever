@@ -43,7 +43,10 @@ class Bind : public Operation {
 
   // Implementation for the binding of arbitrary expressions
   template <int IN_WIDTH, int OUT_WIDTH>
-  void computeExpressionBind(IdTable* dynRes, ResultTable::ResultType* resultType, const IdTable& inputDyn, sparqlExpression::SparqlExpression* expression) const;
+  void computeExpressionBind(
+      IdTable* dynRes, ResultTable::ResultType* resultType,
+      const IdTable& inputDyn,
+      sparqlExpression::SparqlExpression* expression) const;
 };
 
 #endif  // QLEVER_BIND_H

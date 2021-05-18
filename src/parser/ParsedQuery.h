@@ -398,7 +398,6 @@ struct GraphPatternOperation {
   // a knowledge base constant. For simplicity, we store both values instead of
   // using a union or std::variant here.
   struct Bind {
-
     sparqlExpression::SparqlExpressionWrapper _expressionVariant;
     std::string _target;  // the variable to which the expression will be bound
 
@@ -418,7 +417,7 @@ struct GraphPatternOperation {
     }
 
     [[nodiscard]] string getDescriptor() const {
-      auto inner = _expressionVariant . getDescriptor();
+      auto inner = _expressionVariant.getDescriptor();
       return "BIND (" + inner + " AS " + _target + ")";
     }
   };

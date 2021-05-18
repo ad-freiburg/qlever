@@ -5,20 +5,15 @@
 
 #include <gtest/gtest.h>
 
-#include "../ParsedQuery.h"
-#include "../SparqlExpression.h"
 #include "../../util/HashMap.h"
+#include "../ParsedQuery.h"
 #include "../RdfEscaping.h"
+#include "../SparqlExpression.h"
 #include "antlr4-runtime.h"
 #include "generated/SparqlAutomaticVisitor.h"
 
-
-
-
 class SparqlParseException : public std::exception {
   string _message;
-
-
 
  public:
   SparqlParseException(std::string message) : _message{std::move(message)} {}
@@ -38,7 +33,7 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   SparqlQleverVisitor(PrefixMap prefixMap) : _prefixMap{std::move(prefixMap)} {}
   using ExpressionPtr = sparqlExpression::SparqlExpression::Ptr;
 
-  antlrcpp::Any visitChildren(antlr4::tree::ParseTree *node) override {
+  antlrcpp::Any visitChildren(antlr4::tree::ParseTree* node) override {
     antlrcpp::Any result = nullptr;
     size_t n = node->children.size();
     for (size_t i = 0; i < n; i++) {
@@ -48,10 +43,9 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
     return result;
   }
+
  protected:
-
  private:
-
   // For the unit tests
   PrefixMap& prefixMap() { return _prefixMap; }
   FRIEND_TEST(SparqlParser, Prefix);
@@ -72,20 +66,23 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   // ___________________________________________________________________________
-  antlrcpp::Any visitPrologue(SparqlAutomaticParser::PrologueContext* ctx) override {
+  antlrcpp::Any visitPrologue(
+      SparqlAutomaticParser::PrologueContext* ctx) override {
     // Default implementation is ok here, simply handle all PREFIX and BASE
     // declarations.
     return visitChildren(ctx);
   }
 
   // ___________________________________________________________________________
-  antlrcpp::Any visitBaseDecl(SparqlAutomaticParser::BaseDeclContext* ctx) override {
+  antlrcpp::Any visitBaseDecl(
+      SparqlAutomaticParser::BaseDeclContext* ctx) override {
     _prefixMap[":"] = visitIriref(ctx->iriref()).as<string>();
     return nullptr;
   }
 
   // ___________________________________________________________________________
-  antlrcpp::Any visitPrefixDecl(SparqlAutomaticParser::PrefixDeclContext* ctx) override {
+  antlrcpp::Any visitPrefixDecl(
+      SparqlAutomaticParser::PrefixDeclContext* ctx) override {
     _prefixMap[ctx->PNAME_NS()->getText()] =
         visitIriref(ctx->iriref()).as<string>();
     return nullptr;
@@ -96,7 +93,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitSubSelect(SparqlAutomaticParser::SubSelectContext* ctx) override {
+  antlrcpp::Any visitSubSelect(
+      SparqlAutomaticParser::SubSelectContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -119,7 +117,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitAskQuery(SparqlAutomaticParser::AskQueryContext* ctx) override {
+  antlrcpp::Any visitAskQuery(
+      SparqlAutomaticParser::AskQueryContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -247,11 +246,13 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitInlineData(SparqlAutomaticParser::InlineDataContext* ctx) override {
+  antlrcpp::Any visitInlineData(
+      SparqlAutomaticParser::InlineDataContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitDataBlock(SparqlAutomaticParser::DataBlockContext* ctx) override {
+  antlrcpp::Any visitDataBlock(
+      SparqlAutomaticParser::DataBlockContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -285,11 +286,13 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitFilterR(SparqlAutomaticParser::FilterRContext* ctx) override {
+  antlrcpp::Any visitFilterR(
+      SparqlAutomaticParser::FilterRContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitConstraint(SparqlAutomaticParser::ConstraintContext* ctx) override {
+  antlrcpp::Any visitConstraint(
+      SparqlAutomaticParser::ConstraintContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -298,7 +301,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitArgList(SparqlAutomaticParser::ArgListContext* ctx) override {
+  antlrcpp::Any visitArgList(
+      SparqlAutomaticParser::ArgListContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -336,11 +340,13 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitObjectList(SparqlAutomaticParser::ObjectListContext* ctx) override {
+  antlrcpp::Any visitObjectList(
+      SparqlAutomaticParser::ObjectListContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitObjectR(SparqlAutomaticParser::ObjectRContext* ctx) override {
+  antlrcpp::Any visitObjectR(
+      SparqlAutomaticParser::ObjectRContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -359,11 +365,13 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitVerbPath(SparqlAutomaticParser::VerbPathContext* ctx) override {
+  antlrcpp::Any visitVerbPath(
+      SparqlAutomaticParser::VerbPathContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitVerbSimple(SparqlAutomaticParser::VerbSimpleContext* ctx) override {
+  antlrcpp::Any visitVerbSimple(
+      SparqlAutomaticParser::VerbSimpleContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -377,7 +385,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitObjectPath(SparqlAutomaticParser::ObjectPathContext* ctx) override {
+  antlrcpp::Any visitObjectPath(
+      SparqlAutomaticParser::ObjectPathContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -395,7 +404,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitPathElt(SparqlAutomaticParser::PathEltContext* ctx) override {
+  antlrcpp::Any visitPathElt(
+      SparqlAutomaticParser::PathEltContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -404,7 +414,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitPathMod(SparqlAutomaticParser::PathModContext* ctx) override {
+  antlrcpp::Any visitPathMod(
+      SparqlAutomaticParser::PathModContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -423,7 +434,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitInteger(SparqlAutomaticParser::IntegerContext* ctx) override {
+  antlrcpp::Any visitInteger(
+      SparqlAutomaticParser::IntegerContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -447,7 +459,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitCollection(SparqlAutomaticParser::CollectionContext* ctx) override {
+  antlrcpp::Any visitCollection(
+      SparqlAutomaticParser::CollectionContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -456,7 +469,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitGraphNode(SparqlAutomaticParser::GraphNodeContext* ctx) override {
+  antlrcpp::Any visitGraphNode(
+      SparqlAutomaticParser::GraphNodeContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -465,11 +479,13 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitVarOrTerm(SparqlAutomaticParser::VarOrTermContext* ctx) override {
+  antlrcpp::Any visitVarOrTerm(
+      SparqlAutomaticParser::VarOrTermContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitVarOrIri(SparqlAutomaticParser::VarOrIriContext* ctx) override {
+  antlrcpp::Any visitVarOrIri(
+      SparqlAutomaticParser::VarOrIriContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -477,26 +493,31 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitGraphTerm(SparqlAutomaticParser::GraphTermContext* ctx) override {
+  antlrcpp::Any visitGraphTerm(
+      SparqlAutomaticParser::GraphTermContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitExpression(SparqlAutomaticParser::ExpressionContext* ctx) override {
+  antlrcpp::Any visitExpression(
+      SparqlAutomaticParser::ExpressionContext* ctx) override {
     return visitChildren(ctx);
   }
-
 
   template <typename T>
-  std::vector<ExpressionPtr> visitExpressionChildren(const std::vector<T*>& childContexts) {
+  std::vector<ExpressionPtr> visitExpressionChildren(
+      const std::vector<T*>& childContexts) {
     std::vector<ExpressionPtr> children;
-    for (const auto& child: childContexts) {
-      children.emplace_back(std::move(child->accept(this).template as<ExpressionPtr>()));
+    for (const auto& child : childContexts) {
+      children.emplace_back(
+          std::move(child->accept(this).template as<ExpressionPtr>()));
     }
 
     return children;
   }
 
-  std::vector<sparqlExpression::TagString> visitRelationChildren(const std::vector<antlr4::tree::ParseTree*>& childContexts, ad_utility::HashSet<std::string> allowedTexts) {
+  std::vector<sparqlExpression::TagString> visitRelationChildren(
+      const std::vector<antlr4::tree::ParseTree*>& childContexts,
+      ad_utility::HashSet<std::string> allowedTexts) {
     std::vector<sparqlExpression::TagString> operations;
 
     for (const auto& c : childContexts) {
@@ -511,13 +532,18 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       SparqlAutomaticParser::ConditionalOrExpressionContext* ctx) override {
     auto childCtxts = ctx->conditionalAndExpression();
     auto children = visitExpressionChildren(ctx->conditionalAndExpression());
-    return ExpressionPtr {std::make_unique<sparqlExpression::ConditionalOrExpression>(std::move(children))};
+    return ExpressionPtr{
+        std::make_unique<sparqlExpression::ConditionalOrExpression>(
+            std::move(children))};
   }
 
   antlrcpp::Any visitConditionalAndExpression(
       SparqlAutomaticParser::ConditionalAndExpressionContext* ctx) override {
-    std::vector<ExpressionPtr> children = visitExpressionChildren(ctx->valueLogical());
-    return ExpressionPtr {std::make_unique<sparqlExpression::ConditionalAndExpression>(std::move(children))};
+    std::vector<ExpressionPtr> children =
+        visitExpressionChildren(ctx->valueLogical());
+    return ExpressionPtr{
+        std::make_unique<sparqlExpression::ConditionalAndExpression>(
+            std::move(children))};
   }
 
   antlrcpp::Any visitValueLogical(
@@ -529,9 +555,11 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       SparqlAutomaticParser::RelationalExpressionContext* ctx) override {
     auto childContexts = ctx->numericExpression();
     if (childContexts.size() != 1) {
-      throw std::runtime_error("This parser does not yet support relational expressions = < etc.");
+      throw std::runtime_error(
+          "This parser does not yet support relational expressions = < etc.");
     }
-    return std::move(visitNumericExpression(childContexts[0]).as<ExpressionPtr>());
+    return std::move(
+        visitNumericExpression(childContexts[0]).as<ExpressionPtr>());
   }
 
   antlrcpp::Any visitNumericExpression(
@@ -541,48 +569,59 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitAdditiveExpression(
       SparqlAutomaticParser::AdditiveExpressionContext* ctx) override {
-
-    std::vector<ExpressionPtr> children = visitExpressionChildren(ctx->multiplicativeExpression());
+    std::vector<ExpressionPtr> children =
+        visitExpressionChildren(ctx->multiplicativeExpression());
     auto opTypes = visitRelationChildren(ctx->children, {"+", "-"});
 
     if (!ctx->strangeMultiplicativeSubexprOfAdditive().empty()) {
-      throw std::runtime_error{"You currently have to put a space between a +/- and the number after it."};
+      throw std::runtime_error{
+          "You currently have to put a space between a +/- and the number "
+          "after it."};
     }
 
-    return ExpressionPtr{std::make_unique<sparqlExpression::AdditiveExpression>(std::move(children), std::move(opTypes))};
+    return ExpressionPtr{std::make_unique<sparqlExpression::AdditiveExpression>(
+        std::move(children), std::move(opTypes))};
   }
-  virtual antlrcpp::Any visitStrangeMultiplicativeSubexprOfAdditive(SparqlAutomaticParser::StrangeMultiplicativeSubexprOfAdditiveContext *context) override {
+  virtual antlrcpp::Any visitStrangeMultiplicativeSubexprOfAdditive(
+      SparqlAutomaticParser::StrangeMultiplicativeSubexprOfAdditiveContext*
+          context) override {
     return visitChildren(context);
   }
 
   antlrcpp::Any visitMultiplicativeExpression(
       SparqlAutomaticParser::MultiplicativeExpressionContext* ctx) override {
-
-    std::vector<ExpressionPtr> children = visitExpressionChildren(ctx->unaryExpression());
+    std::vector<ExpressionPtr> children =
+        visitExpressionChildren(ctx->unaryExpression());
     auto opTypes = visitRelationChildren(ctx->children, {"*", "/"});
-    return ExpressionPtr{std::make_unique<sparqlExpression::MultiplicativeExpression>(std::move(children), std::move(opTypes))};
+    return ExpressionPtr{
+        std::make_unique<sparqlExpression::MultiplicativeExpression>(
+            std::move(children), std::move(opTypes))};
   }
 
   antlrcpp::Any visitUnaryExpression(
       SparqlAutomaticParser::UnaryExpressionContext* ctx) override {
-
-
-   auto child = std::move(visitPrimaryExpression(ctx->primaryExpression()).as<ExpressionPtr>());
-  if (ctx->children[0]->getText() == "-") {
-    return ExpressionPtr{std::make_unique<sparqlExpression::UnaryMinusExpression>(std::move(child))};
+    auto child = std::move(
+        visitPrimaryExpression(ctx->primaryExpression()).as<ExpressionPtr>());
+    if (ctx->children[0]->getText() == "-") {
+      return ExpressionPtr{
+          std::make_unique<sparqlExpression::UnaryMinusExpression>(
+              std::move(child))};
+    } else if (ctx->getText() == "!") {
+      return ExpressionPtr{
+          std::make_unique<sparqlExpression::UnaryNegateExpression>(
+              std::move(child))};
+    } else {
+      // no sign or an explicit '+'
+      return child;
+    }
   }
-  else if (ctx->getText() == "!") {
-    return ExpressionPtr{std::make_unique<sparqlExpression::UnaryNegateExpression>(std::move(child))};
-  } else {
-    // no sign or an explicit '+'
-    return child;
-  }
-}
 
   antlrcpp::Any visitPrimaryExpression(
       SparqlAutomaticParser::PrimaryExpressionContext* ctx) override {
     if (ctx->rdfLiteral() || ctx->builtInCall() || ctx->iriOrFunction()) {
-      throw SparqlParseException{"rdfLiterals, builtInCalls and IriOrFunction are currently not allowed inside expressions"};
+      throw SparqlParseException{
+          "rdfLiterals, builtInCalls and IriOrFunction are currently not "
+          "allowed inside expressions"};
     }
 
     if (ctx->brackettedExpression()) {
@@ -593,28 +632,39 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       auto literalAny = visitNumericLiteral(ctx->numericLiteral());
       try {
         auto intLiteral = literalAny.as<unsigned long long>();
-        return ExpressionPtr{std::make_unique<sparqlExpression::IntLiteralExpression>(static_cast<int64_t>(intLiteral))};
-      } catch (...) {}
+        return ExpressionPtr{
+            std::make_unique<sparqlExpression::IntLiteralExpression>(
+                static_cast<int64_t>(intLiteral))};
+      } catch (...) {
+      }
       try {
         auto intLiteral = literalAny.as<long long>();
-        return ExpressionPtr{std::make_unique<sparqlExpression::IntLiteralExpression>(static_cast<int64_t>(intLiteral))};
-      } catch (...) {}
+        return ExpressionPtr{
+            std::make_unique<sparqlExpression::IntLiteralExpression>(
+                static_cast<int64_t>(intLiteral))};
+      } catch (...) {
+      }
       try {
         auto intLiteral = literalAny.as<double>();
-        return ExpressionPtr{std::make_unique<sparqlExpression::DoubleLiteralExpression>(static_cast<double>(intLiteral))};
-      } catch (...) {}
+        return ExpressionPtr{
+            std::make_unique<sparqlExpression::DoubleLiteralExpression>(
+                static_cast<double>(intLiteral))};
+      } catch (...) {
+      }
       AD_CHECK(false);
     }
 
     if (ctx->booleanLiteral()) {
       auto b = visitBooleanLiteral(ctx->booleanLiteral()).as<bool>();
-      return ExpressionPtr{std::make_unique<sparqlExpression::BooleanLiteralExpression>(b)};
+      return ExpressionPtr{
+          std::make_unique<sparqlExpression::BooleanLiteralExpression>(b)};
     }
 
     if (ctx->var()) {
       sparqlExpression::SparqlExpression::Variable v;
       v._variable = ctx->var()->getText();
-      return ExpressionPtr{std::make_unique<sparqlExpression::VariableExpression>(v)};
+      return ExpressionPtr{
+          std::make_unique<sparqlExpression::VariableExpression>(v)};
     }
     // We should have returned by now
     AD_CHECK(false);
@@ -625,8 +675,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitExpression(ctx->expression());
   }
 
-  antlrcpp::Any visitBuiltInCall(
-      [[maybe_unused]] SparqlAutomaticParser::BuiltInCallContext* ctx) override {
+  antlrcpp::Any visitBuiltInCall([
+      [maybe_unused]] SparqlAutomaticParser::BuiltInCallContext* ctx) override {
     throw SparqlParseException{"builtInCalls are not supported by this parser"};
   }
 
@@ -645,7 +695,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitExistsFunc(SparqlAutomaticParser::ExistsFuncContext* ctx) override {
+  antlrcpp::Any visitExistsFunc(
+      SparqlAutomaticParser::ExistsFuncContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -654,17 +705,20 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitAggregate(SparqlAutomaticParser::AggregateContext* ctx) override {
+  antlrcpp::Any visitAggregate(
+      SparqlAutomaticParser::AggregateContext* ctx) override {
     return visitChildren(ctx);
   }
 
   antlrcpp::Any visitIriOrFunction(
       SparqlAutomaticParser::IriOrFunctionContext* ctx) override {
-    throw SparqlParseException{"IriOrFunction in expression are not supported by this parser"};
+    throw SparqlParseException{
+        "IriOrFunction in expression are not supported by this parser"};
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitRdfLiteral(SparqlAutomaticParser::RdfLiteralContext* ctx) override {
+  antlrcpp::Any visitRdfLiteral(
+      SparqlAutomaticParser::RdfLiteralContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -705,7 +759,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return ctx->getText() == "true";
   }
 
-  antlrcpp::Any visitString(SparqlAutomaticParser::StringContext* ctx) override {
+  antlrcpp::Any visitString(
+      SparqlAutomaticParser::StringContext* ctx) override {
     return visitChildren(ctx);
   }
 
@@ -719,7 +774,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     }
   }
 
-  antlrcpp::Any visitIriref(SparqlAutomaticParser::IrirefContext* ctx) override {
+  antlrcpp::Any visitIriref(
+      SparqlAutomaticParser::IrirefContext* ctx) override {
     return RdfEscaping::unescapeIriref(ctx->getText());
   }
 
@@ -734,11 +790,13 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitBlankNode(SparqlAutomaticParser::BlankNodeContext* ctx) override {
+  antlrcpp::Any visitBlankNode(
+      SparqlAutomaticParser::BlankNodeContext* ctx) override {
     return visitChildren(ctx);
   }
 
-  antlrcpp::Any visitPnameLn(SparqlAutomaticParser::PnameLnContext* ctx) override {
+  antlrcpp::Any visitPnameLn(
+      SparqlAutomaticParser::PnameLnContext* ctx) override {
     string text = ctx->getText();
     auto pos = text.find(':');
     auto pnameNS = text.substr(0, pos + 1);
@@ -756,7 +814,8 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
     return inner + RdfEscaping::unescapePrefixedIri(pnLocal) + ">";
   }
 
-  antlrcpp::Any visitPnameNs(SparqlAutomaticParser::PnameNsContext* ctx) override {
+  antlrcpp::Any visitPnameNs(
+      SparqlAutomaticParser::PnameNsContext* ctx) override {
     auto prefix = ctx->getText();
     if (!_prefixMap.contains(prefix)) {
       // TODO<joka921> : proper name
@@ -783,25 +842,24 @@ struct ParserAndVisitor {
   SparqlAutomaticParser parser{&tokens};
   SparqlQleverVisitor visitor;
   explicit ParserAndVisitor(string toParse) : input{std::move(toParse)} {}
-  explicit ParserAndVisitor(string toParse, SparqlQleverVisitor::PrefixMap prefixMap) : input{std::move(toParse)}, visitor{std::move(prefixMap)} {}
+  explicit ParserAndVisitor(string toParse, SparqlQleverVisitor::PrefixMap
+prefixMap) : input{std::move(toParse)}, visitor{std::move(prefixMap)} {}
 };
 
-// ______________________________________________________________________________
-std::pair<SparqlQleverVisitor::PrefixMap, size_t> parsePrologue(const string& input) {
-  ParserAndVisitor p{input};
-  auto context = p.parser.prologue();
-  auto parsedSize = context->getText().size();
-  p.visitor.visitPrologue(context);
-  const auto& constVisitor = p.visitor;
-  return {constVisitor.prefixMap(), parsedSize};
+//
+______________________________________________________________________________
+std::pair<SparqlQleverVisitor::PrefixMap, size_t> parsePrologue(const string&
+input) { ParserAndVisitor p{input}; auto context = p.parser.prologue(); auto
+parsedSize = context->getText().size(); p.visitor.visitPrologue(context); const
+auto& constVisitor = p.visitor; return {constVisitor.prefixMap(), parsedSize};
 }
 
 // _____________________________________________________________________________
-std::pair<string, size_t> parseIri(const string& input, SparqlQleverVisitor::PrefixMap prefixMap) {
-  ParserAndVisitor p{input, std::move(prefixMap)};
-  auto context = p.parser.iri();
-  auto parsedSize = context->getText().size();
-  auto resultString = p.visitor.visitIri(context).as<string>();
+std::pair<string, size_t> parseIri(const string& input,
+SparqlQleverVisitor::PrefixMap prefixMap) { ParserAndVisitor p{input,
+std::move(prefixMap)}; auto context = p.parser.iri(); auto parsedSize =
+context->getText().size(); auto resultString =
+p.visitor.visitIri(context).as<string>();
   //const auto& constVisitor = p.visitor;
   return {std::move(resultString), parsedSize};
 }

@@ -279,7 +279,7 @@ void SparqlParser::parseWhere(ParsedQuery* query,
     } else if (_lexer.accept("bind")) {
       _lexer.expect("(");
       auto expressionPtr = parseExpressionByAntlr();
-      GraphPatternOperation::Bind b {std::move(expressionPtr)};
+      GraphPatternOperation::Bind b{std::move(expressionPtr)};
       _lexer.expect("as");
       _lexer.expect(SparqlToken::Type::VARIABLE);
       b._target = _lexer.current().raw;
@@ -1072,7 +1072,8 @@ GraphPatternOperation::BasicGraphPattern& SparqlParser::lastBasicPattern(
 }
 
 // ________________________________________________________________________
-sparqlExpression::SparqlExpressionWrapper SparqlParser::parseExpressionByAntlr() {
+sparqlExpression::SparqlExpressionWrapper
+SparqlParser::parseExpressionByAntlr() {
   auto str = _lexer.getUnconsumedInput();
   auto resultAndRemainingText = sparqlParserHelpers::parseExpression(str);
   _lexer.reset(std::move(resultAndRemainingText._remainingText));

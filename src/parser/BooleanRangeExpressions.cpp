@@ -8,8 +8,7 @@ namespace setOfIntervals {
 // ___________________________________________________________________________
 Set SortAndCheckInvariants(Set input) {
   auto cmp = [](const auto& a, const auto& b) { return a.first < b.first; };
-  std::sort(input.begin(), input.end(),
-            cmp);
+  std::sort(input.begin(), input.end(), cmp);
   for (size_t i = 0; i < input.size(); ++i) {
     AD_CHECK(input[i].second > input[i].first);
   }
@@ -31,18 +30,23 @@ Set Intersection::operator()(Set rangesA, Set rangesB) const {
   auto iteratorA = rangesA.begin();
   auto iteratorB = rangesB.begin();
 
-  // All values smaller than minIdxNotChecked are either already contained in the result or will never become part of it. This variable will help us enforce the invariant that the result intervals are disjoint.
+  // All values smaller than minIdxNotChecked are either already contained in
+  // the result or will never become part of it. This variable will help us
+  // enforce the invariant that the result intervals are disjoint.
   size_t minIdxNotChecked = 0;
 
   // Basically: List intersection extended to Intervals
   while (iteratorA < rangesA.end() && iteratorB < rangesB.end()) {
-    // Invariant: All inputs before iteratorA/iteratorB have completely been dealt with.
+    // Invariant: All inputs before iteratorA/iteratorB have completely been
+    // dealt with.
     auto& itSmaller =
         iteratorA->first < iteratorB->first ? iteratorA : iteratorB;
     auto& itGreaterEq =
         iteratorA->first < iteratorB->first ? iteratorB : iteratorA;
     if (itSmaller->second < itGreaterEq->first) {
-      // The ranges do not overlap, due to the sorting and the disjoint property within the inputs this means that the smaller (wrt starting index) range is not part of the intersection.
+      // The ranges do not overlap, due to the sorting and the disjoint property
+      // within the inputs this means that the smaller (wrt starting index)
+      // range is not part of the intersection.
       minIdxNotChecked = itSmaller->second;
       ++itSmaller;
     } else {
@@ -57,7 +61,8 @@ Set Intersection::operator()(Set rangesA, Set rangesB) const {
         result.push_back(std::move(nextOutput));
       }
 
-      // Both of the following if conditions preserve our invariants, and at least one of them always is true, which guarantess progress.
+      // Both of the following if conditions preserve our invariants, and at
+      // least one of them always is true, which guarantess progress.
       if (minIdxNotChecked >= itSmaller->second) {
         ++itSmaller;
       }
@@ -72,7 +77,6 @@ Set Intersection::operator()(Set rangesA, Set rangesB) const {
 
 // __________________________________________________________________________
 Set Union::operator()(Set rangesA, Set rangesB) const {
-
   // First sort by the beginning of the interval
   rangesA = SortAndCheckInvariants(std::move(rangesA));
   rangesB = SortAndCheckInvariants(std::move(rangesB));
@@ -80,7 +84,9 @@ Set Union::operator()(Set rangesA, Set rangesB) const {
   auto iteratorA = rangesA.begin();
   auto iteratorB = rangesB.begin();
 
-  // All values smaller than minIdxNotChecked are either already contained in the result or will never become part of it. This variable will help us enforce the invariant that the result intervals are disjoint.
+  // All values smaller than minIdxNotChecked are either already contained in
+  // the result or will never become part of it. This variable will help us
+  // enforce the invariant that the result intervals are disjoint.
   size_t minIdxNotChecked = 0;
 
   // Basically: Merging of sorted lists with intervals
@@ -91,7 +97,8 @@ Set Union::operator()(Set rangesA, Set rangesB) const {
         iteratorA->first < iteratorB->first ? iteratorB : iteratorA;
 
     if (itSmaller->second <= itGreaterEq->first) {
-      // The ranges do not overlap, simply append the smaller one, if it was not previously covered
+      // The ranges do not overlap, simply append the smaller one, if it was not
+      // previously covered
       std::pair<size_t, size_t> nextOutput{
           std::max(minIdxNotChecked, itSmaller->first), itSmaller->second};
       // This check may fail, if the new interval is already covered
@@ -147,4 +154,4 @@ std::vector<bool> expandSet(const Set& a, size_t targetSize) {
   return result;
 }
 
-}
+}  // namespace setOfIntervals

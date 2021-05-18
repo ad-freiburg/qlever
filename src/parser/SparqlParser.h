@@ -4,10 +4,10 @@
 #pragma once
 
 #include <string>
-#include "ParsedQuery.h"
-#include "SparqlLexer.h"
 #include "../util/HashMap.h"
 #include "./SparqlExpressionWrapper.h"
+#include "ParsedQuery.h"
+#include "SparqlLexer.h"
 
 using std::string;
 
@@ -55,7 +55,6 @@ class SparqlParser {
   std::string_view readTriplePart(const std::string& s, size_t* pos);
 
   static string stripAndLowercaseKeywordLiteral(const string& lit);
-
 
   /**
    * If *ptr 's last child is a BasicGraphPattern, return a reference to it.

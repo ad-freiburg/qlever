@@ -73,7 +73,8 @@ const SparqlLexer::RegexTokenMap& SparqlLexer::getRegexTokenMap() const {
     auto emplace = [&m](const std::string& regex, T type) {
       m.push_back(std::make_pair(std::make_unique<re2::RE2>(regex), type));
     };
-    // Note: the order is important here, as the lexer does not determine the longest match, but the first match in the following list of regexes.
+    // Note: the order is important here, as the lexer does not determine the
+    // longest match, but the first match in the following list of regexes.
     emplace(KEYWORD, T::KEYWORD);
     emplace(GROUP_BY, T::GROUP_BY);
     emplace(ORDER_BY, T::ORDER_BY);
@@ -103,10 +104,6 @@ void SparqlLexer::reset(std::string sparql) {
   readNext();
 }
 
-
-
-
-
 bool SparqlLexer::empty() const { return _re_string.empty(); }
 
 void SparqlLexer::readNext() {
@@ -128,7 +125,7 @@ void SparqlLexer::readNext() {
         if (tokensThatRequireLowercasing.contains(type)) {
           raw = ad_utility::getLowercaseUtf8(raw);
         }
-        break; // first match, this requires the regexes to be sorted.
+        break;  // first match, this requires the regexes to be sorted.
       }
     }
     if (!regexMatched) {
@@ -161,7 +158,6 @@ bool SparqlLexer::accept(SparqlToken::Type type) {
   }
   return false;
 }
-
 
 bool SparqlLexer::accept(const std::string& raw, bool match_case) {
   if (match_case && _next.raw == raw) {

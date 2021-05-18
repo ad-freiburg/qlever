@@ -15,16 +15,16 @@ class SparqlExpression;
 class SparqlExpressionWrapper {
  public:
   static constexpr const char* Name = "ComplexArithmeticExpression";
-  std::string getDescriptor() const  { return "Arithmetic Bind";}
+  std::string getDescriptor() const { return "Arithmetic Bind"; }
 
   std::string asString() const {
     // Random implementation to prevent caching. TODO<joka921> :fix this
-      FastRandomIntGenerator<size_t> r;
-      std::string result;
-      for (size_t i = 0; i < 5; ++i) {
-        result += std::to_string(r());
-      }
-      return result;
+    FastRandomIntGenerator<size_t> r;
+    std::string result;
+    for (size_t i = 0; i < 5; ++i) {
+      result += std::to_string(r());
+    }
+    return result;
   }
   SparqlExpressionWrapper(std::shared_ptr<SparqlExpression>&& pimpl);
   ~SparqlExpressionWrapper();
@@ -35,15 +35,11 @@ class SparqlExpressionWrapper {
 
   std::vector<std::string*> strings();
 
-  SparqlExpression* getImpl() {
-    return _pimpl.get();
-  }
-
-
+  SparqlExpression* getImpl() { return _pimpl.get(); }
 
  private:
   std::shared_ptr<SparqlExpression> _pimpl;
 };
-}
+}  // namespace sparqlExpression
 
 #endif  // QLEVER_SPARQLEXPRESSIONWRAPPER_H

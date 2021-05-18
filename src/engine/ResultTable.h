@@ -25,8 +25,6 @@ class ResultTable {
   enum Status { IN_PROGRESS = 0, FINISHED = 1, ABORTED = 2 };
   using ResultType = qlever::ResultType;
 
-
-
   /**
    * @brief This vector contains a list of column indices by which the result
    *        is sorted. This vector may be empty if the result is not sorted

@@ -73,8 +73,8 @@ class SparqlLexer {
   const SparqlToken& current();
   const std::string& input() const;
 
-
-  // Get the part of the input that has not yet been consumed by calls to `accept` or `expect`
+  // Get the part of the input that has not yet been consumed by calls to
+  // `accept` or `expect`
   std::string getUnconsumedInput() {
     return _next.raw + " " + _re_string.ToString();
   }

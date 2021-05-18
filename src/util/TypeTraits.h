@@ -7,11 +7,26 @@
 #pragma once
 namespace ad_utility {
 
+namespace detail {
+template <template <typename...> typename Template>
+struct IsInstantiationOfImpl {
+  template <typename T>
+  struct Inner : std::false_type {};
+
+  template <typename... Ts>
+  struct Inner<Template<Ts...>> : std::true_type {};
+};
+}  // namespace detail
+
+/// IsInstantiation<someTemplate, someType>::value is true iff `someType` is an
+/// instantiation of the template `someTemplate`. This can be used to define
+/// concepts, see below
+template <template <typename...> typename Template, typename T>
+using IsInstantiation =
+    typename detail::IsInstantiationOfImpl<Template>::Inner<T>;
+
 /// isVector<T> is true if and only if T is an instantiation of std::vector
-template <typename T, typename Alloc=void>
-constexpr bool isVector = false;
+template <typename T>
+concept isVector = IsInstantiation<std::vector, T>::value;
 
-template <typename T, typename Alloc>
-constexpr bool isVector<std::vector<T, Alloc>> = true;
-
-}
+}  // namespace ad_utility

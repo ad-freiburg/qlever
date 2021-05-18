@@ -32,20 +32,22 @@ struct ParserAndVisitor {
     auto context = (parser.*F)();
     auto remainingString =
         input.substr(parser.getCurrentToken()->getStartIndex());
-    auto result = std::move(context->accept(&(visitor)).template as<ResultType>());
+    auto result =
+        std::move(context->accept(&(visitor)).template as<ResultType>());
     return ParseResultAndRemainingText(std::move(result),
                                        std::move(remainingString));
   }
 };
 
-ParseResultAndRemainingText<
-    sparqlExpression::SparqlExpressionWrapper>
+ParseResultAndRemainingText<sparqlExpression::SparqlExpressionWrapper>
 parseExpression(const std::string& input) {
   ParserAndVisitor p{input};
-  auto actualResult = p.parseStuff<sparqlExpression::SparqlExpression::Ptr>(input, &SparqlAutomaticParser::expression);
+  auto actualResult = p.parseStuff<sparqlExpression::SparqlExpression::Ptr>(
+      input, &SparqlAutomaticParser::expression);
 
-  return ParseResultAndRemainingText{
-      sparqlExpression::SparqlExpressionWrapper{std::move(actualResult._parseResult)}, actualResult._remainingText};
+  return ParseResultAndRemainingText{sparqlExpression::SparqlExpressionWrapper{
+                                         std::move(actualResult._parseResult)},
+                                     actualResult._remainingText};
 }
 
 // ______________________________________________________________________________
@@ -70,4 +72,4 @@ std::pair<string, size_t> parseIri(const string& input,
   return {std::move(resultString), parsedSize};
 }
 
-} // namespace sparqlParserHelpers
+}  // namespace sparqlParserHelpers
