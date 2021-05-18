@@ -292,215 +292,224 @@ void SparqlParser::parseWhere(ParsedQuery* query,
       std::string inVar;
       bool rename = false;
       bool isString = true;
-      bool isSum = false;
+      char binaryOperator = 0;
       std::string inVar2;
       int64_t val = 0;
       if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
         rename = true;
         inVar = _lexer.current().raw;
         if (_lexer.accept(SparqlToken::Type::SYMBOL)) {
-          if (_lexer.current().raw != "+") {
-            throw std::runtime_error(
-                "A sum of two variables is currently the only"
-                "supported arithmetic bind expression, but symbol after first "
-                "variable was " +
-                _lexer.current().raw);
-          }
-          isSum = true;
-          _lexer.expect(SparqlToken::Type::VARIABLE);
-          inVar2 = _lexer.current().raw;
-        }
-      } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
-        // The "true" says that the whole string is a literal (with "false",
-        // there could be more stuff after the literal).
-        inVar = parseLiteral(_lexer.current().raw, true);
-        isString = true;
-      } else if (_lexer.accept(SparqlToken::Type::INTEGER)) {
-        isString = false;
-        // Parse as decimal to base 10.
-        val = std::strtoll(_lexer.current().raw.c_str(), nullptr, 10);
-      } else {
-        _lexer.expect(SparqlToken::Type::IRI);
-        inVar = _lexer.current().raw;
-      }
-      _lexer.expect("as");
-      _lexer.expect(SparqlToken::Type::VARIABLE);
-      GraphPatternOperation::Bind b;
-      if (isSum) {
-        b._expressionVariant = GraphPatternOperation::Bind::Sum{inVar, inVar2};
-      } else if (rename) {
-        b._expressionVariant = GraphPatternOperation::Bind::Rename{inVar};
-      } else {
-        if (isString) {
-          // Note that this only works if the literal or iri stored in inVar is
-          // part of the KB
-          b._expressionVariant = GraphPatternOperation::Bind::Constant{inVar};
-        } else {
-          b._expressionVariant = GraphPatternOperation::Bind::Constant{val};
-        }
-      }
-      b._target = _lexer.current().raw;
-      _lexer.expect(")");
-      currentPattern->_children.emplace_back(std::move(b));
-       */
-      // the dot after the bind is optional
-      //_lexer.accept(".");
-    } else if (_lexer.accept("minus")) {
-      currentPattern->_children.emplace_back(
-          GraphPatternOperation::Minus{ParsedQuery::GraphPattern()});
-      auto& opt =
-          currentPattern->_children.back().get<GraphPatternOperation::Minus>();
-      auto& child = opt._child;
-      child._optional = false;
-      child._id = query->_numGraphPatterns;
-      query->_numGraphPatterns++;
-      _lexer.expect("{");
-      // Recursively call parseWhere to parse the subtrahend.
-      parseWhere(query, &child);
-      _lexer.accept(".");
-    } else if (_lexer.accept("{")) {
-      // Subquery or union
-      if (_lexer.accept("select")) {
-        // subquery
-        // create the subquery operation
-        GraphPatternOperation::Subquery subq;
-        parseQuery(&subq._subquery);
-        currentPattern->_children.emplace_back(std::move(subq));
-        // The closing bracked } is consumed by the subquery
-        _lexer.accept(".");
-      } else {
-        // union
-        // create the union operation
-        auto un = GraphPatternOperation::Union{ParsedQuery::GraphPattern{},
-                                               ParsedQuery::GraphPattern{}};
-        un._child1._optional = false;
-        un._child2._optional = false;
-        un._child1._id = query->_numGraphPatterns;
-        un._child2._id = query->_numGraphPatterns + 1;
-        query->_numGraphPatterns += 2;
-
-        // parse the left and right bracket
-        parseWhere(query, &un._child1);
-        _lexer.expect("union");
-        _lexer.expect("{");
-        parseWhere(query, &un._child2);
-        _lexer.accept(".");
-        currentPattern->_children.emplace_back(std::move(un));
-      }
-    } else if (_lexer.accept("filter")) {
-      // append to the global filters of the pattern.
-      parseFilter(&currentPattern->_filters, true, currentPattern);
-      // A filter may have an optional dot after it
-      _lexer.accept(".");
-    } else if (_lexer.accept("values")) {
-      SparqlValues values;
-      if (_lexer.accept("(")) {
-        // values with several variables
-        while (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-          values._variables.push_back(_lexer.current().raw);
-        }
-        _lexer.expect(")");
-        _lexer.expect("{");
-        while (_lexer.accept("(")) {
-          values._values.emplace_back(values._variables.size());
-          for (size_t i = 0; i < values._variables.size(); i++) {
-            if (!_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
-              _lexer.expect(SparqlToken::Type::IRI);
-            }
-            values._values.back()[i] = _lexer.current().raw;
-          }
-          _lexer.expect(")");
-        }
-        _lexer.expect("}");
-      } else if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-        // values with a single variable
-        values._variables.push_back(_lexer.current().raw);
-        _lexer.expect("{");
-        while (_lexer.accept(SparqlToken::Type::IRI) ||
-               _lexer.accept(SparqlToken::Type::RDFLITERAL)) {
-          values._values.emplace_back(1);
-          values._values.back()[0] = _lexer.current().raw;
-        }
-        _lexer.expect("}");
-      } else {
-        throw ParseException(
-            "Expected either a single or a set of variables "
-            "after VALUES");
-      }
-      currentPattern->_children.emplace_back(
-          GraphPatternOperation::Values{std::move(values)});
-      _lexer.accept(".");
-    } else {
-      std::string subject;
-      if (lastSubject.empty()) {
-        if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-          subject = _lexer.current().raw;
-        } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
-          subject = parseLiteral(_lexer.current().raw, true);
-        } else {
-          _lexer.expect(SparqlToken::Type::IRI);
-          subject = _lexer.current().raw;
-        }
-      } else {
-        subject = lastSubject;
-        lastSubject.clear();
-      }
-
-      std::string predicate;
-      if (lastPredicate.empty()) {
-        if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-          predicate = _lexer.current().raw;
-        } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
-          predicate = parseLiteral(_lexer.current().raw, true);
-        } else {
-          // Assume the token is a predicate path. This will be verified
-          // separately later.
-          _lexer.expandNextUntilWhitespace();
-          _lexer.accept();
-          predicate = _lexer.current().raw;
-        }
-      } else {
-        predicate = lastPredicate;
-        lastPredicate.clear();
-      }
-
-      std::string object;
-      if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
-        object = _lexer.current().raw;
-      } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
-        object = parseLiteral(_lexer.current().raw, true);
-      } else {
-        _lexer.expect(SparqlToken::Type::IRI);
-        object = _lexer.current().raw;
-      }
-
-      if (predicate == CONTAINS_WORD_PREDICATE ||
-          predicate == CONTAINS_WORD_PREDICATE_NS) {
-        object = stripAndLowercaseKeywordLiteral(object);
-      }
-
-      SparqlTriple triple(subject, PropertyPathParser(predicate).parse(),
-                          object);
-      auto& v = lastBasicPattern(currentPattern)._whereClauseTriples;
-      if (std::find(v.begin(), v.end(), triple) != v.end()) {
-        LOG(INFO) << "Ignoring duplicate triple: " << subject << ' '
-                  << predicate << ' ' << object << std::endl;
-      } else {
-        v.push_back(triple);
-      }
-
-      if (_lexer.accept(";")) {
-        lastSubject = subject;
-      } else if (_lexer.accept(",")) {
-        lastSubject = subject;
-        lastPredicate = predicate;
-      } else if (_lexer.accept("}")) {
-        break;
-      } else {
-        _lexer.expect(".");
-      }
+          binaryOperator = _lexer.current().raw[0];
+          if (binaryOperator == 0 ||
+              "+-*/
+      "s.find(binaryOperator) == std::string::npos) {
+          throw std::runtime_error(
+              "BIND expressions currently only support the binary operators"
+              "+-*/ but encountered \"" +
+              std::string(1, binaryOperator) + "\"");
     }
+    _lexer.expect(SparqlToken::Type::VARIABLE);
+    inVar2 = _lexer.current().raw;
   }
+}
+else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+  // The "true" says that the whole string is a literal (with "false",
+  // there could be more stuff after the literal).
+  inVar = parseLiteral(_lexer.current().raw, true);
+  isString = true;
+}
+else if (_lexer.accept(SparqlToken::Type::INTEGER)) {
+  isString = false;
+  // Parse as decimal to base 10.
+  val = std::strtoll(_lexer.current().raw.c_str(), nullptr, 10);
+}
+else {
+  _lexer.expect(SparqlToken::Type::IRI);
+  inVar = _lexer.current().raw;
+}
+_lexer.expect("as");
+_lexer.expect(SparqlToken::Type::VARIABLE);
+GraphPatternOperation::Bind b;
+if (binaryOperator) {
+  b._expressionVariant = GraphPatternOperation::Bind::BinaryOperation{
+      inVar, inVar2, std::string(1, binaryOperator)};
+} else if (rename) {
+  b._expressionVariant = GraphPatternOperation::Bind::Rename{inVar};
+} else {
+  if (isString) {
+    // Note that this only works if the literal or iri stored in inVar is
+    // part of the KB
+    b._expressionVariant = GraphPatternOperation::Bind::Constant{inVar};
+  } else {
+    b._expressionVariant = GraphPatternOperation::Bind::Constant{val};
+  }
+}
+b._target = _lexer.current().raw;
+_lexer.expect(")");
+currentPattern->_children.emplace_back(std::move(b));
+* /
+// the dot after the bind is optional
+//_lexer.accept(".");
+}
+else if (_lexer.accept("minus")) {
+  currentPattern->_children.emplace_back(
+      GraphPatternOperation::Minus{ParsedQuery::GraphPattern()});
+  auto& opt =
+      currentPattern->_children.back().get<GraphPatternOperation::Minus>();
+  auto& child = opt._child;
+  child._optional = false;
+  child._id = query->_numGraphPatterns;
+  query->_numGraphPatterns++;
+  _lexer.expect("{");
+  // Recursively call parseWhere to parse the subtrahend.
+  parseWhere(query, &child);
+  _lexer.accept(".");
+}
+else if (_lexer.accept("{")) {
+  // Subquery or union
+  if (_lexer.accept("select")) {
+    // subquery
+    // create the subquery operation
+    GraphPatternOperation::Subquery subq;
+    parseQuery(&subq._subquery);
+    currentPattern->_children.emplace_back(std::move(subq));
+    // The closing bracked } is consumed by the subquery
+    _lexer.accept(".");
+  } else {
+    // union
+    // create the union operation
+    auto un = GraphPatternOperation::Union{ParsedQuery::GraphPattern{},
+                                           ParsedQuery::GraphPattern{}};
+    un._child1._optional = false;
+    un._child2._optional = false;
+    un._child1._id = query->_numGraphPatterns;
+    un._child2._id = query->_numGraphPatterns + 1;
+    query->_numGraphPatterns += 2;
+
+    // parse the left and right bracket
+    parseWhere(query, &un._child1);
+    _lexer.expect("union");
+    _lexer.expect("{");
+    parseWhere(query, &un._child2);
+    _lexer.accept(".");
+    currentPattern->_children.emplace_back(std::move(un));
+  }
+}
+else if (_lexer.accept("filter")) {
+  // append to the global filters of the pattern.
+  parseFilter(&currentPattern->_filters, true, currentPattern);
+  // A filter may have an optional dot after it
+  _lexer.accept(".");
+}
+else if (_lexer.accept("values")) {
+  SparqlValues values;
+  if (_lexer.accept("(")) {
+    // values with several variables
+    while (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+      values._variables.push_back(_lexer.current().raw);
+    }
+    _lexer.expect(")");
+    _lexer.expect("{");
+    while (_lexer.accept("(")) {
+      values._values.emplace_back(values._variables.size());
+      for (size_t i = 0; i < values._variables.size(); i++) {
+        if (!_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+          _lexer.expect(SparqlToken::Type::IRI);
+        }
+        values._values.back()[i] = _lexer.current().raw;
+      }
+      _lexer.expect(")");
+    }
+    _lexer.expect("}");
+  } else if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+    // values with a single variable
+    values._variables.push_back(_lexer.current().raw);
+    _lexer.expect("{");
+    while (_lexer.accept(SparqlToken::Type::IRI) ||
+           _lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+      values._values.emplace_back(1);
+      values._values.back()[0] = _lexer.current().raw;
+    }
+    _lexer.expect("}");
+  } else {
+    throw ParseException(
+        "Expected either a single or a set of variables "
+        "after VALUES");
+  }
+  currentPattern->_children.emplace_back(
+      GraphPatternOperation::Values{std::move(values)});
+  _lexer.accept(".");
+}
+else {
+  std::string subject;
+  if (lastSubject.empty()) {
+    if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+      subject = _lexer.current().raw;
+    } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+      subject = parseLiteral(_lexer.current().raw, true);
+    } else {
+      _lexer.expect(SparqlToken::Type::IRI);
+      subject = _lexer.current().raw;
+    }
+  } else {
+    subject = lastSubject;
+    lastSubject.clear();
+  }
+
+  std::string predicate;
+  if (lastPredicate.empty()) {
+    if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+      predicate = _lexer.current().raw;
+    } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+      predicate = parseLiteral(_lexer.current().raw, true);
+    } else {
+      // Assume the token is a predicate path. This will be verified
+      // separately later.
+      _lexer.expandNextUntilWhitespace();
+      _lexer.accept();
+      predicate = _lexer.current().raw;
+    }
+  } else {
+    predicate = lastPredicate;
+    lastPredicate.clear();
+  }
+
+  std::string object;
+  if (_lexer.accept(SparqlToken::Type::VARIABLE)) {
+    object = _lexer.current().raw;
+  } else if (_lexer.accept(SparqlToken::Type::RDFLITERAL)) {
+    object = parseLiteral(_lexer.current().raw, true);
+  } else {
+    _lexer.expect(SparqlToken::Type::IRI);
+    object = _lexer.current().raw;
+  }
+
+  if (predicate == CONTAINS_WORD_PREDICATE ||
+      predicate == CONTAINS_WORD_PREDICATE_NS) {
+    object = stripAndLowercaseKeywordLiteral(object);
+  }
+
+  SparqlTriple triple(subject, PropertyPathParser(predicate).parse(), object);
+  auto& v = lastBasicPattern(currentPattern)._whereClauseTriples;
+  if (std::find(v.begin(), v.end(), triple) != v.end()) {
+    LOG(INFO) << "Ignoring duplicate triple: " << subject << ' ' << predicate
+              << ' ' << object << std::endl;
+  } else {
+    v.push_back(triple);
+  }
+
+  if (_lexer.accept(";")) {
+    lastSubject = subject;
+  } else if (_lexer.accept(",")) {
+    lastSubject = subject;
+    lastPredicate = predicate;
+  } else if (_lexer.accept("}")) {
+    break;
+  } else {
+    _lexer.expect(".");
+  }
+}
+}
 }
 
 std::string_view SparqlParser::readTriplePart(const std::string& s,

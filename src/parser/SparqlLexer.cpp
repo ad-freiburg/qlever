@@ -55,7 +55,7 @@ const std::string KEYWORD =
     "BIND|MINUS)";
 const std::string AGGREGATE = "(?i)(SAMPLE|COUNT|MIN|MAX|AVG|SUM|GROUP_CONCAT)";
 const std::string VARIABLE = "(\\?" + VARNAME + ")";
-const std::string SYMBOL = "([\\.\\{\\}\\(\\)\\=\\*,;:<>!\\|/\\^\\?\\*\\+])";
+const std::string SYMBOL = "([\\.\\{\\}\\(\\)\\=\\*,;:<>!\\|/\\^\\?\\*\\+-])";
 
 const std::string STRING_LITERAL = "(('([^\\x27\\x5C\\x0A\\x0D]|(" + ECHAR +
                                    "))*')|"
@@ -138,6 +138,13 @@ void SparqlLexer::readNext() {
         throw ParseException("Unexpected input: " + _re_string.as_string());
       }
     }
+  }
+  // Perform unescaping in RdfLiterals
+  if (_next.type == SparqlToken::Type::RDFLITERAL) {
+    auto lastQuote = raw.rfind('"');
+    std::string_view quoted{raw.begin(), raw.begin() + lastQuote + 1};
+    std::string_view langtagOrDatatype{raw.begin() + lastQuote + 1, raw.end()};
+    raw = RdfEscaping::normalizeRDFLiteral(quoted) + langtagOrDatatype;
   }
   _next.raw = raw;
 }

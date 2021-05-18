@@ -85,7 +85,6 @@ string Bind::asString(size_t indent) const {
   }
 
   os << "\n" << _subtree->asString(indent);
-
   return os.str();
 }
 
