@@ -6,7 +6,6 @@
 #define QLEVER_SPARQLEXPRESSION_H
 
 #include <memory>
-#include <ranges>
 #include <variant>
 #include <vector>
 
