@@ -147,6 +147,10 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
         }
       };
 
+      // Create a tuple of lambdas, one lambda for each input expression with
+      // the following semantics: Each lambda takes a single argument (the
+      // index) and returns the index-th element (For constants, the index is of
+      // course ignored).
       auto makeExtractor = [&]<typename T>(T && childResult) {
         auto expanded =
             possiblyExpand(std::forward<T>(childResult), targetSize);
@@ -164,25 +168,6 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
 
       auto extractors =
           std::make_tuple(makeExtractor(std::forward<decltype(args)>(args))...);
-
-      // Create a tuple of lambdas, one lambda for each input expression with
-      // the following semantics: Each lambda takes a single argument (the
-      // index) and returns the index-th element (For constants, the index is of
-      // course ignored).
-      /*
-      auto extractors =
-          std::make_tuple([expanded = possiblyExpand(
-                               std::forward<decltype(args)>(args), targetSize),
-                           &valueExtractor, input](size_t index) {
-            using A = std::decay_t<decltype(expanded)>;
-            if constexpr (ad_utility::isVector<A>) {
-              return valueExtractor(expanded[index], input);
-            } else {
-              static_assert(!std::is_same_v<Variable, A>);
-              return valueExtractor(expanded, input);
-            }
-          }...);
-          */
 
       /// This lambda takes all the previously created extractors as input and
       /// creates the actual result of the computation.
