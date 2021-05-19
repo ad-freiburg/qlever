@@ -34,8 +34,8 @@ struct ParserAndVisitor {
         input.substr(parser.getCurrentToken()->getStartIndex());
     auto result =
         std::move(context->accept(&(visitor)).template as<ResultType>());
-    return ParseResultAndRemainingText(std::move(result),
-                                       std::move(remainingString));
+    return ParseResultAndRemainingText{std::move(result),
+                                       std::move(remainingString)};
   }
 };
 
@@ -47,7 +47,7 @@ parseExpression(const std::string& input) {
 
   return ParseResultAndRemainingText{sparqlExpression::SparqlExpressionWrapper{
                                          std::move(actualResult._parseResult)},
-                                     actualResult._remainingText};
+                                     std::move(actualResult._remainingText)};
 }
 
 // ______________________________________________________________________________

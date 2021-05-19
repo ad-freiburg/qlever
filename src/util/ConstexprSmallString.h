@@ -67,8 +67,8 @@ namespace std {
 template <size_t MaxSize>
 struct hash<ad_utility::ConstexprSmallString<MaxSize>> {
   auto operator()(const ad_utility::ConstexprSmallString<MaxSize>& string) {
-    return std::hash<std::string_view>{}(std::string_view{
-        string._characters, string._characters + string._size});
+    return std::hash<std::string_view>{}(
+        std::string_view{string._characters, string._size});
   }
 };
 }  // namespace std

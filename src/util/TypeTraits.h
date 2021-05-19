@@ -23,7 +23,7 @@ struct IsInstantiationOfImpl {
 /// concepts, see below
 template <template <typename...> typename Template, typename T>
 using IsInstantiation =
-    typename detail::IsInstantiationOfImpl<Template>::Inner<T>;
+    typename detail::IsInstantiationOfImpl<Template>::template Inner<T>;
 
 /// isVector<T> is true if and only if T is an instantiation of std::vector
 template <typename T>

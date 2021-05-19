@@ -6,6 +6,7 @@
 #define QLEVER_ALLOCATORWITHLIMIT_H
 
 #include <atomic>
+#include <memory>
 
 #include "Synchronized.h"
 

@@ -844,22 +844,22 @@ queries:
       - contains_row: [ "<Albert_Einstein>", "<Mileva_Marić>", 42 ]
       - order_string: { "dir": "ASC", "var": "?x" }
 
-  - query: bind-entity-constant
-    type: no-text
-    sparql: |
-      SELECT ?x ?y ?z WHERE {
-          ?x <is-a> <Scientist> .
-          ?x <Spouse_(or_domestic_partner)> ?y .
-          ?y <is-a> <Scientist> .
-          FILTER(?x < ?y) .
-          BIND(<Al_Gore> AS ?z)
-      } ORDER BY ASC(?x)
-    checks:
-      - num_cols: 3
-      - num_rows: 97
-      - selected: [ "?x", "?y", "?z" ]
-      - contains_row: [ "<Albert_Einstein>", "<Mileva_Marić>", "<Al_Gore>" ]
-      - order_string: { "dir": "ASC", "var": "?x" }
+#  - query: bind-entity-constant
+#    type: no-text
+#    sparql: |
+#      SELECT ?x ?y ?z WHERE {
+#          ?x <is-a> <Scientist> .
+#          ?x <Spouse_(or_domestic_partner)> ?y .
+#          ?y <is-a> <Scientist> .
+#          FILTER(?x < ?y) .
+#          BIND(<Al_Gore> AS ?z)
+#      } ORDER BY ASC(?x)
+#    checks:
+#      - num_cols: 3
+#      - num_rows: 97
+#      - selected: [ "?x", "?y", "?z" ]
+#      - contains_row: [ "<Albert_Einstein>", "<Mileva_Marić>", "<Al_Gore>" ]
+#      - order_string: { "dir": "ASC", "var": "?x" }
   - query: bind-entity-constant
     type: no-text
     sparql: |

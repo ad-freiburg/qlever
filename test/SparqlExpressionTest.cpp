@@ -20,9 +20,10 @@ TEST(SparqlExpression, Or) {
   std::vector<bool> b{false, false, true, false};
   std::vector<bool> expected{true, true, true, false};
 
-  QueryExecutionContext* ctxt = nullptr ;
+  QueryExecutionContext* ctxt = nullptr;
   sparqlExpression::SparqlExpression::VariableColumnMap map;
-  ad_utility::AllocatorWithLimit<Id> alloc {ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+  ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   IdTable table{alloc};
   sparqlExpression::SparqlExpression::EvaluationInput input{*ctxt, map, table};
   std::vector<SparqlExpression::Ptr> children;
