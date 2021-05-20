@@ -63,6 +63,10 @@ class SparqlExpression {
     /// of the input.
     size_t _beginIndex = 0;
     size_t _endIndex = _inputTable.size();
+
+    /// The input is sorted on these columns. This information can be used to
+    /// perform efficient filter operations like = < >
+    std::vector<size_t> _resultSortedOn;
   };
 
   /// The result of an epxression variable can either be a constant of type
@@ -247,9 +251,48 @@ class DispatchedBinaryExpression : public SparqlExpression {
   std::vector<TagString> _relations;
 };
 
+class EqualsExpression : public SparqlExpression {
+ public:
+  EqualsExpression(Ptr&& childLeft, Ptr&& childRight)
+      : _childLeft{std::move(childLeft)}, _childRight{std::move(childRight)} {}
+
+  // __________________________________________________________________________
+  EvaluateResult evaluate(EvaluationInput* input) const override;
+
+  // _____________________________________________________________________
+  vector<std::string*> strings() override {
+    auto result = _childLeft->strings();
+    auto resultRight = _childRight->strings();
+    result.insert(result.end(), resultRight.begin(), resultRight.end());
+    return result;
+  }
+
+ private:
+  Ptr _childLeft;
+  Ptr _childRight;
+};
+
+class CountExpression : public SparqlExpression {
+ public:
+  CountExpression(bool distinct, Ptr&& child)
+      : _distinct(distinct), _child{std::move(child)} {}
+
+  // __________________________________________________________________________
+  EvaluateResult evaluate(EvaluationInput* input) const override;
+
+  // _____________________________________________________________________
+  vector<std::string*> strings() override { return _child->strings(); }
+
+ private:
+  bool _distinct;
+  Ptr _child;
+};
+
 /// A strong type for "Ids
 struct StrongId {
   Id _value;
+
+  bool operator==(const StrongId&) const = default;
 };
 
 /// This class can be used as the `ValueExtractor` argument of Expression
@@ -262,6 +305,19 @@ struct NumericValueGetter {
   // Convert an id from a result table to a double value
   double operator()(StrongId id, ResultTable::ResultType type,
                     EvaluationInput*) const;
+};
+
+/// This class is needed for the distinct calculation in the aggregates.
+struct ActualValueGetter {
+  // Simply preserve the input from numeric values
+  double operator()(double v, EvaluationInput*) const { return v; }
+  int64_t operator()(int64_t v, EvaluationInput*) const { return v; }
+  bool operator()(bool v, EvaluationInput*) const { return v; }
+  // Convert an id from a result table to a double value
+  StrongId operator()(StrongId id, ResultTable::ResultType,
+                      EvaluationInput*) const {
+    return id;
+  }
 };
 
 /// This class can be used as the `ValueExtractor` argument of Expression
@@ -334,5 +390,14 @@ using DoubleLiteralExpression = detail::LiteralExpression<double>;
 using VariableExpression = detail::LiteralExpression<detail::Variable>;
 
 }  // namespace sparqlExpression
+
+namespace std {
+template <>
+struct hash<sparqlExpression::detail::StrongId> {
+  size_t operator()(const sparqlExpression::detail::StrongId& x) const {
+    return std::hash<Id>{}(x._value);
+  }
+};
+}  // namespace std
 
 #endif  // QLEVER_SPARQLEXPRESSION_H

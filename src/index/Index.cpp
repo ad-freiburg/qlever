@@ -988,6 +988,9 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
   _vocab.readFromFile(_onDiskBase + ".vocabulary",
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");
 
+  LOG(INFO) << "Printing datatype ranges" << std::endl;
+  _vocab.printRangesForDatatypes();
+
   _totalVocabularySize = _vocab.size() + _vocab.getExternalVocab().size();
   LOG(INFO) << "total vocab size is " << _totalVocabularySize << std::endl;
   _PSO.loadFromDisk(_onDiskBase);

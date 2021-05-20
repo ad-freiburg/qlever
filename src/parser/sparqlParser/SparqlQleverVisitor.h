@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "../../util/HashMap.h"
+#include "../../util/StringUtils.h"
 #include "../ParsedQuery.h"
 #include "../RdfEscaping.h"
 #include "../SparqlExpression.h"
@@ -554,12 +555,25 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   antlrcpp::Any visitRelationalExpression(
       SparqlAutomaticParser::RelationalExpressionContext* ctx) override {
     auto childContexts = ctx->numericExpression();
-    if (childContexts.size() != 1) {
+
+    if (childContexts.size() == 1) {
+      return std::move(
+          visitNumericExpression(childContexts[0]).as<ExpressionPtr>());
+    }
+    if (ctx->children[1]->getText() == "=") {
+      auto leftChild = std::move(
+          visitNumericExpression(childContexts[0]).as<ExpressionPtr>());
+      auto rightChild = std::move(
+          visitNumericExpression(childContexts[1]).as<ExpressionPtr>());
+
+      return ExpressionPtr{
+          std::make_unique<sparqlExpression::detail::EqualsExpression>(
+              std::move(leftChild), std::move(rightChild))};
+
+    } else {
       throw std::runtime_error(
           "This parser does not yet support relational expressions = < etc.");
     }
-    return std::move(
-        visitNumericExpression(childContexts[0]).as<ExpressionPtr>());
   }
 
   antlrcpp::Any visitNumericExpression(
@@ -618,9 +632,12 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitPrimaryExpression(
       SparqlAutomaticParser::PrimaryExpressionContext* ctx) override {
-    if (ctx->rdfLiteral() || ctx->builtInCall() || ctx->iriOrFunction()) {
+    if (ctx->builtInCall()) {
+      return ctx->builtInCall()->accept(this);
+    }
+    if (ctx->rdfLiteral() || ctx->iriOrFunction()) {
       throw SparqlParseException{
-          "rdfLiterals, builtInCalls and IriOrFunction are currently not "
+          "rdfLiterals and IriOrFunction are currently not "
           "allowed inside expressions"};
     }
 
@@ -677,7 +694,13 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitBuiltInCall([
       [maybe_unused]] SparqlAutomaticParser::BuiltInCallContext* ctx) override {
-    throw SparqlParseException{"builtInCalls are not supported by this parser"};
+    if (ctx->aggregate()) {
+      return ctx->aggregate()->accept(this);
+    } else {
+      throw SparqlParseException{
+          "aggregates like COUNT are the only 'builtInCalls' that are "
+          "supported by this parser"};
+    }
   }
 
   antlrcpp::Any visitRegexExpression(
@@ -707,7 +730,29 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitAggregate(
       SparqlAutomaticParser::AggregateContext* ctx) override {
-    return visitChildren(ctx);
+    auto children = ctx->children;
+    bool distinct = false;
+    for (const auto& child : children) {
+      if (ad_utility::getLowercase(child->getText()) == "distinct") {
+        distinct = true;
+      }
+    }
+    if (ad_utility::getLowercase(children[0]->getText()) == "count") {
+      if (!ctx->expression()) {
+        throw SparqlParseException{
+            "This parser currently doesn't support COUNT(*), please specify an "
+            "explicit expression for the count"};
+      } else {
+        auto childExpression =
+            std::move(ctx->expression()->accept(this).as<ExpressionPtr>());
+        return ExpressionPtr{
+            std::make_unique<sparqlExpression::detail::CountExpression>(
+                distinct, std::move(childExpression))};
+      }
+    } else {
+      throw SparqlParseException{
+          "This parser currently only supports the COUNT aggregate"};
+    }
   }
 
   antlrcpp::Any visitIriOrFunction(

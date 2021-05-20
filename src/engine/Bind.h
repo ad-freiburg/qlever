@@ -45,7 +45,7 @@ class Bind : public Operation {
   template <int IN_WIDTH, int OUT_WIDTH>
   void computeExpressionBind(
       IdTable* dynRes, ResultTable::ResultType* resultType,
-      const IdTable& inputDyn,
+      const ResultTable& inputDyn,
       sparqlExpression::SparqlExpression* expression) const;
 };
 

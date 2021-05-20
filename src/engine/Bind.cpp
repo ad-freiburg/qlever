@@ -121,7 +121,7 @@ void Bind::computeResult(ResultTable* result) {
 
   result->_resultTypes.emplace_back();
   CALL_FIXED_SIZE_2(inwidth, outwidth, computeExpressionBind, &result->_data,
-                    &(result->_resultTypes.back()), subRes->_data,
+                    &(result->_resultTypes.back()), *subRes,
                     _bind._expressionVariant.getImpl());
 
   result->_sortedBy = resultSortedOn();
@@ -133,24 +133,23 @@ void Bind::computeResult(ResultTable* result) {
 template <int IN_WIDTH, int OUT_WIDTH>
 void Bind::computeExpressionBind(
     IdTable* dynRes, ResultTable::ResultType* resultType,
-    const IdTable& inputDyn,
+    const ResultTable& inResult,
     sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::SparqlExpression::VariableColumnMap columnMap;
-  auto inResult = _subtree->getResult();
   for (const auto& [variable, columnIndex] : getVariableColumns()) {
-    if (columnIndex < inResult->width()) {
+    if (columnIndex < inResult.width()) {
       columnMap[variable] =
-          std::pair(columnIndex, inResult->getResultType(columnIndex));
+          std::pair(columnIndex, inResult.getResultType(columnIndex));
     }
   }
 
   sparqlExpression::SparqlExpression::EvaluationInput evaluationInput(
-      *getExecutionContext(), std::move(columnMap), inputDyn);
+      *getExecutionContext(), std::move(columnMap), inResult._data);
 
   sparqlExpression::SparqlExpression::EvaluateResult expressionResult =
       expression->evaluate(&evaluationInput);
 
-  const auto input = inputDyn.asStaticView<IN_WIDTH>();
+  const auto input = inResult._data.asStaticView<IN_WIDTH>();
   auto res = dynRes->moveToStatic<OUT_WIDTH>();
 
   // first initialize the first columns (they remain identical)
@@ -165,6 +164,14 @@ void Bind::computeExpressionBind(
     }
   }
   if (auto ptr = std::get_if<std::vector<double>>(&expressionResult)) {
+    const auto& resultVector = *ptr;
+    AD_CHECK(ptr->size() == inSize);
+    for (size_t i = 0; i < inSize; ++i) {
+      auto tmpF = static_cast<float>(resultVector[i]);
+      std::memcpy(&res(i, inCols), &tmpF, sizeof(float));
+    }
+    *resultType = ResultTable::ResultType::FLOAT;
+  } else if (auto ptr = std::get_if<std::vector<bool>>(&expressionResult)) {
     const auto& resultVector = *ptr;
     AD_CHECK(ptr->size() == inSize);
     for (size_t i = 0; i < inSize; ++i) {
@@ -189,6 +196,13 @@ void Bind::computeExpressionBind(
   } else if (auto ptr = std::get_if<int64_t>(&expressionResult)) {
     auto tmpF = static_cast<float>(*ptr);
     for (size_t i = 0; i < inSize; ++i) {
+      std::memcpy(&res(i, inCols), &tmpF, sizeof(float));
+    }
+    *resultType = ResultTable::ResultType::FLOAT;
+  } else if (auto ptr = std::get_if<setOfIntervals::Set>(&expressionResult)) {
+    auto vector = setOfIntervals::expandSet(*ptr, inSize);
+    for (size_t i = 0; i < inSize; ++i) {
+      auto tmpF = static_cast<float>(vector[i]);
       std::memcpy(&res(i, inCols), &tmpF, sizeof(float));
     }
     *resultType = ResultTable::ResultType::FLOAT;

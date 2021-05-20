@@ -199,6 +199,142 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
   };
 }
 
+/// TODO<joka921>Comment
+template <bool distinct, typename RangeCalculation, typename ValueExtractor,
+          typename AggregateOperation, typename FinalOperation>
+auto liftAggregateCalculationToEvaluateResults(
+    RangeCalculation rangeCalculation, ValueExtractor valueExtractor,
+    AggregateOperation aggregateOperation, FinalOperation finalOperation,
+    EvaluationInput* input) {
+  // We return the "lifted" operation which works on all the different variants
+  // of `EvaluateResult` and returns an `EvaluateResult` again.
+  return [input, rangeCalculation, valueExtractor, aggregateOperation,
+          finalOperation](auto&& args) -> SparqlExpression::EvaluateResult {
+    // Perform the more efficient range calculation if it is possible.
+    constexpr bool RangeCalculationAllowed =
+        !std::is_same_v<RangeCalculation, NoRangeCalculation>;
+    if constexpr (RangeCalculationAllowed &&
+                  (std::is_same_v<std::decay_t<decltype(args)>, Set>)) {
+      return rangeCalculation(std::forward<decltype(args)>(args));
+    } else {
+      // We have to first determine, whether the result will be a constant or a
+      // vector of elements, as well as the number of results we will produce.
+
+      // Returns a pair of <resultSize, willTheResultBeAVector>
+      auto getSize = [&input]<typename T>(const T& x)->std::pair<size_t, bool> {
+        if constexpr (ad_utility::isVector<T>) {
+          return {x.size(), true};
+        } else if constexpr (std::is_same_v<Set, T> ||
+                             std::is_same_v<Variable, T>) {
+          return {input->_endIndex - input->_beginIndex, true};
+        } else {
+          return {1, false};
+        }
+      };
+
+      // If we combine constants and vectors of inputs, then the result will be
+      // a vector again.
+      auto targetSize = std::max({getSize(args).first});
+
+      // This variable is only needed for the case of a distinct variable
+      ResultTable::ResultType resultTypeOfInputVariable;
+
+      //  We have to convert the arguments which are variables or sets into
+      //  std::vector,
+      // the following lambda is able to perform this task
+      // TODO Comment the distinct business
+      auto possiblyExpand =
+          [&input, valueExtractor, &resultTypeOfInputVariable ]<typename T>(
+              T childResult, [[maybe_unused]] size_t targetSize) {
+        if constexpr (std::is_same_v<Set, std::decay_t<T>>) {
+          return expandSet(std::move(childResult), targetSize);
+        } else if constexpr (std::is_same_v<Variable, std::decay_t<T>>) {
+          resultTypeOfInputVariable =
+              input->_variableColumnMap[childResult._variable].second;
+          if constexpr (distinct) {
+            (void)valueExtractor;
+            return getValuesFromVariable(childResult, ActualValueGetter{},
+                                         input);
+          } else {
+            return getValuesFromVariable(childResult, valueExtractor, input);
+          }
+        } else {
+          return childResult;
+        }
+      };
+
+      // Create a tuple of lambdas, one lambda for each input expression with
+      // the following semantics: Each lambda takes a single argument (the
+      // index) and returns the index-th element (For constants, the index is of
+      // course ignored).
+      auto makeExtractor = [&]<typename T>(T && childResult) {
+        auto expanded =
+            possiblyExpand(std::forward<T>(childResult), targetSize);
+        return [expanded = std::move(expanded)](size_t index) {
+          using A = std::decay_t<decltype(expanded)>;
+          if constexpr (ad_utility::isVector<A>) {
+            return expanded[index];
+          } else {
+            static_assert(!std::is_same_v<Variable, A>);
+            return expanded;
+          }
+        };
+      };
+
+      auto extractValue = [&]<typename T>(T && singleValue) {
+        if constexpr (std::is_same_v<StrongId, T>) {
+          return valueExtractor(singleValue, resultTypeOfInputVariable, input);
+        } else {
+          return valueExtractor(singleValue, input);
+        }
+      };
+
+      auto extractor = makeExtractor(std::forward<decltype(args)>(args));
+
+      /// This lambda takes all the previously created extractors as input and
+      /// creates the actual result of the computation.
+      auto create = [&](auto&& extractor) {
+        using ResultType = std::decay_t<decltype(aggregateOperation(
+            extractValue(extractor(0)), extractValue(extractor(0))))>;
+        ResultType result{};
+        if constexpr (!distinct) {
+          for (size_t i = 0; i < targetSize; ++i) {
+            result = aggregateOperation(std::move(result),
+                                        extractValue(extractor(i)));
+          }
+          result = finalOperation(std::move(result), targetSize);
+          return result;
+        } else {
+          // TODO<joka921> hash set or sort + unique, what is more efficient?
+          ad_utility::HashSet<std::decay_t<decltype(extractor(0))>>
+              uniqueHashSet;
+          for (size_t i = 0; i < targetSize; ++i) {
+            uniqueHashSet.insert(extractor(i));
+          }
+
+          for (const auto& distinctEl : uniqueHashSet) {
+            if constexpr (std::is_same_v<
+                              StrongId, std::decay_t<decltype(extractor(0))>>) {
+              result = aggregateOperation(
+                  std::move(result),
+                  valueExtractor(distinctEl, resultTypeOfInputVariable, input));
+            } else {
+              result = aggregateOperation(std::move(result), distinctEl);
+            }
+          }
+          result = finalOperation(std::move(result), uniqueHashSet.size());
+          return result;
+        }
+      };
+
+      // calculate the actual result (the extractors are stored in a tuple, so
+      // we have to use std::apply)
+      auto result = create(std::move(extractor));
+      return SparqlExpression::EvaluateResult{std::move(result)};
+    }
+  };
+}
+
 // ____________________________________________________________________________
 template <typename RangeCalculation, typename ValueExtractor,
           typename BinaryOperation>
@@ -274,6 +410,122 @@ DispatchedBinaryExpression<ValueExtractor, TagAndFunctions...>::evaluate(
   }
   return result;
 };
+
+bool isKbVariable(const SparqlExpression::EvaluateResult& result,
+                  EvaluationInput* input) {
+  auto ptr = std::get_if<SparqlExpression::Variable>(&result);
+  if (!ptr) {
+    return false;
+  }
+  return input->_variableColumnMap[ptr->_variable].second ==
+         ResultTable::ResultType::KB;
+}
+
+bool isConstant(const SparqlExpression::EvaluateResult& x) {
+  auto v = []<typename T>(const T&) {
+    return !ad_utility::isVector<T> && !std::is_same_v<Variable, T>;
+  };
+  return std::visit(v, x);
+}
+
+double getDoubleFromConstant(const SparqlExpression::EvaluateResult& x) {
+  auto v = []<typename T>(const T& t)->double {
+    if constexpr (ad_utility::isVector<T> || std::is_same_v<Variable, T>) {
+      AD_CHECK(false);
+    } else {
+      return static_cast<double>(t);
+    }
+  };
+  return std::visit(v, x);
+}
+
+// ___________________________________________________________________________
+SparqlExpression::EvaluateResult EqualsExpression::evaluate(
+    EvaluationInput* input) const {
+  auto left = _childLeft->evaluate(input);
+  auto right = _childRight->evaluate(input);
+
+  if (isKbVariable(left, input) && isKbVariable(right, input)) {
+    auto leftVariable = std::get<Variable>(left)._variable;
+    auto rightVariable = std::get<Variable>(right)._variable;
+    auto leftColumn = input->_variableColumnMap[leftVariable].first;
+    auto rightColumn = input->_variableColumnMap[rightVariable].first;
+    std::vector<bool> result;
+    result.reserve(input->_endIndex - input->_beginIndex);
+    for (size_t i = input->_beginIndex; i < input->_endIndex; ++i) {
+      result.push_back(input->_inputTable(i, leftColumn) ==
+                       input->_inputTable(i, rightColumn));
+    }
+    return std::move(result);
+  } else if (isKbVariable(left, input) && isConstant(right)) {
+    auto valueString = ad_utility::convertFloatStringToIndexWord(
+        std::to_string(getDoubleFromConstant(right)));
+    Id idOfConstant;
+    auto leftVariable = std::get<Variable>(left)._variable;
+    auto leftColumn = input->_variableColumnMap[leftVariable].first;
+    if (!input->_qec.getIndex().getVocab().getId(valueString, &idOfConstant)) {
+      // empty result
+      return Set{};
+    }
+    if (input->_resultSortedOn.size() > 0 &&
+        input->_resultSortedOn[0] == leftColumn) {
+      auto comp = [&](const auto& l, const auto& r) {
+        return l[leftColumn] < r;
+      };
+      auto upperComp = [&](const auto& l, const auto& r) {
+        return r[leftColumn] < l;
+      };
+      auto lb = std::lower_bound(
+          input->_inputTable.begin() + input->_beginIndex,
+          input->_inputTable.begin() + input->_endIndex, idOfConstant, comp);
+      auto ub =
+          std::upper_bound(input->_inputTable.begin() + input->_beginIndex,
+                           input->_inputTable.begin() + input->_endIndex,
+                           idOfConstant, upperComp);
+
+      size_t lowerConverted =
+          (lb - input->_inputTable.begin()) - input->_beginIndex;
+      size_t upperConverted =
+          (ub - input->_inputTable.begin()) - input->_beginIndex;
+
+      return Set{std::pair(lowerConverted, upperConverted)};
+    } else {
+      std::vector<double> result;
+      result.reserve(input->_endIndex - input->_beginIndex);
+      for (size_t i = input->_beginIndex; i < input->_endIndex; ++i) {
+        result.push_back(input->_inputTable(i, leftColumn) == idOfConstant);
+      }
+      return std::move(result);
+    }
+  } else {
+    // currently always assume numeric values
+    auto equals = [](const auto& a, const auto& b) -> bool { return a == b; };
+    auto calculator = liftBinaryCalculationToEvaluateResults(
+        NoRangeCalculation{}, NumericValueGetter{}, equals, input);
+    return std::visit(calculator, std::move(left), std::move(right));
+  }
+  // TODO<joka921> Continue here
+}
+
+SparqlExpression::EvaluateResult CountExpression::evaluate(
+    EvaluationInput* input) const {
+  auto childResult = _child->evaluate(input);
+
+  auto count = [](const auto& a, const auto& b) -> int64_t { return a + b; };
+  auto noop = []<typename T>(T && result, size_t) {
+    return std::forward<T>(result);
+  };
+
+  if (_distinct) {
+    auto calculator = liftAggregateCalculationToEvaluateResults<true>(
+        NoRangeCalculation{}, BooleanValueGetter{}, count, noop, input);
+    return std::visit(calculator, std::move(childResult));
+  } else {
+    auto calculator = liftAggregateCalculationToEvaluateResults<false>(
+        NoRangeCalculation{}, BooleanValueGetter{}, count, noop, input);
+    return std::visit(calculator, std::move(childResult));
+  }
+}
 
 // Explicit instantiations.
 template class UnaryExpression<NoRangeCalculation, BooleanValueGetter,
