@@ -174,7 +174,7 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
       auto create = [&](auto&&... extractors) {
         using ResultType =
             std::decay_t<decltype(naryOperation(extractors(0)...))>;
-        std::vector<ResultType> result;
+        LimitedVector<ResultType> result{input->_allocator};
         result.reserve(targetSize);
         for (size_t i = 0; i < targetSize; ++i) {
           result.push_back(naryOperation(extractors(i)...));
@@ -450,7 +450,7 @@ SparqlExpression::EvaluateResult EqualsExpression::evaluate(
     auto rightVariable = std::get<Variable>(right)._variable;
     auto leftColumn = input->_variableColumnMap[leftVariable].first;
     auto rightColumn = input->_variableColumnMap[rightVariable].first;
-    std::vector<bool> result;
+    LimitedVector<bool> result{input->_allocator};
     result.reserve(input->_endIndex - input->_beginIndex);
     for (size_t i = input->_beginIndex; i < input->_endIndex; ++i) {
       result.push_back(input->_inputTable(i, leftColumn) ==
@@ -490,7 +490,7 @@ SparqlExpression::EvaluateResult EqualsExpression::evaluate(
 
       return Set{std::pair(lowerConverted, upperConverted)};
     } else {
-      std::vector<double> result;
+      LimitedVector<double> result{input->_allocator};
       result.reserve(input->_endIndex - input->_beginIndex);
       for (size_t i = input->_beginIndex; i < input->_endIndex; ++i) {
         result.push_back(input->_inputTable(i, leftColumn) == idOfConstant);

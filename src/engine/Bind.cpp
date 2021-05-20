@@ -144,7 +144,7 @@ void Bind::computeExpressionBind(
   }
 
   sparqlExpression::SparqlExpression::EvaluationInput evaluationInput(
-      *getExecutionContext(), std::move(columnMap), inResult._data);
+      *getExecutionContext(), std::move(columnMap), inResult._data, getExecutionContext()->getAllocator());
 
   sparqlExpression::SparqlExpression::EvaluateResult expressionResult =
       expression->evaluate(&evaluationInput);
@@ -163,7 +163,7 @@ void Bind::computeExpressionBind(
       res(i, j) = input(i, j);
     }
   }
-  if (auto ptr = std::get_if<std::vector<double>>(&expressionResult)) {
+  if (auto ptr = std::get_if<sparqlExpression::LimitedVector<double>>(&expressionResult)) {
     const auto& resultVector = *ptr;
     AD_CHECK(ptr->size() == inSize);
     for (size_t i = 0; i < inSize; ++i) {
@@ -171,7 +171,7 @@ void Bind::computeExpressionBind(
       std::memcpy(&res(i, inCols), &tmpF, sizeof(float));
     }
     *resultType = ResultTable::ResultType::FLOAT;
-  } else if (auto ptr = std::get_if<std::vector<bool>>(&expressionResult)) {
+  } else if (auto ptr = std::get_if<sparqlExpression::LimitedVector<bool>>(&expressionResult)) {
     const auto& resultVector = *ptr;
     AD_CHECK(ptr->size() == inSize);
     for (size_t i = 0; i < inSize; ++i) {

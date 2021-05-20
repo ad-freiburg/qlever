@@ -19,6 +19,10 @@ namespace sparqlExpression {
 /// Virtual base class for an arbitrary Sparql Expression which holds the
 /// structure of the expression as well as the logic to evaluate this expression
 /// on a given intermediate result
+
+template<typename T>
+using LimitedVector = std::vector<T, ad_utility::AllocatorWithLimit<T>>;
+
 class SparqlExpression {
  public:
   /// A Sparql Variable, e.g. "?x"
@@ -37,19 +41,21 @@ class SparqlExpression {
   struct EvaluationInput {
     /// Constructor for evaluating an expression on the complete input
     EvaluationInput(const QueryExecutionContext& qec, VariableColumnMap map,
-                    const IdTable& inputTable) noexcept
+                    const IdTable& inputTable, const ad_utility::AllocatorWithLimit<Id>& allocator)
         : _qec{qec},
           _variableColumnMap{std::move(map)},
-          _inputTable{inputTable} {}
+          _inputTable{inputTable},
+    _allocator{allocator} {}
     /// Constructor for evaluating an expression on a part of the input
     EvaluationInput(const QueryExecutionContext& qec, VariableColumnMap map,
                     const IdTable& inputTable, size_t beginIndex,
-                    size_t endIndex) noexcept
+                    size_t endIndex, const ad_utility::AllocatorWithLimit<Id>& allocator)
         : _qec{qec},
           _variableColumnMap{std::move(map)},
           _inputTable{inputTable},
           _beginIndex{beginIndex},
-          _endIndex{endIndex} {}
+          _endIndex{endIndex},
+    _allocator{allocator} {}
     /// Needed to map Ids to their value from the vocabulary
 
     const QueryExecutionContext& _qec;
@@ -64,9 +70,13 @@ class SparqlExpression {
     size_t _beginIndex = 0;
     size_t _endIndex = _inputTable.size();
 
+
     /// The input is sorted on these columns. This information can be used to
     /// perform efficient filter operations like = < >
     std::vector<size_t> _resultSortedOn;
+
+    /// Let the expression evaluation also respect the memory limit.
+    ad_utility::AllocatorWithLimit<Id> _allocator;
   };
 
   /// The result of an epxression variable can either be a constant of type
@@ -75,7 +85,7 @@ class SparqlExpression {
   /// ?y)) or a "Set" of indices, which identifies the indices in the result at
   /// which the result columns value is "true".
   using EvaluateResult =
-      std::variant<std::vector<double>, std::vector<int64_t>, std::vector<bool>,
+      std::variant<LimitedVector<double>, LimitedVector<int64_t>, LimitedVector<bool>,
                    setOfIntervals::Set, double, int64_t, bool, Variable>;
 
   /// ________________________________________________________________________
