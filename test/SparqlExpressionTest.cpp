@@ -16,16 +16,16 @@ struct DummyExpression : public SparqlExpression {
 };
 
 TEST(SparqlExpression, Or) {
-  std::vector<double> d{1.0, 2.0, 0.0, 0.0};
-  std::vector<bool> b{false, false, true, false};
-  std::vector<bool> expected{true, true, true, false};
+  ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+  sparqlExpression::LimitedVector<double> d{{1.0, 2.0, 0.0, 0.0}, alloc};
+  sparqlExpression::LimitedVector<bool> b{{false, false, true, false}, alloc};
+  sparqlExpression::LimitedVector<bool> expected{{true, true, true, false}, alloc};
 
   QueryExecutionContext* ctxt = nullptr;
   sparqlExpression::SparqlExpression::VariableColumnMap map;
-  ad_utility::AllocatorWithLimit<Id> alloc{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   IdTable table{alloc};
-  sparqlExpression::SparqlExpression::EvaluationInput input{*ctxt, map, table};
+  sparqlExpression::SparqlExpression::EvaluationInput input{*ctxt, map, table, alloc};
   std::vector<SparqlExpression::Ptr> children;
   children.push_back(
       std::make_unique<DummyExpression>(SparqlExpression::EvaluateResult{d}));
@@ -35,7 +35,7 @@ TEST(SparqlExpression, Or) {
   ConditionalOrExpression c{std::move(children)};
 
   SparqlExpression::EvaluateResult res = c.evaluate(&input);
-  auto ptr = std::get_if<std::vector<bool>>(&res);
+  auto ptr = std::get_if<sparqlExpression::LimitedVector<bool>>(&res);
   ASSERT_TRUE(ptr);
   ASSERT_EQ(*ptr, expected);
 }

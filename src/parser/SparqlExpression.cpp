@@ -4,6 +4,7 @@
 #include "./SparqlExpression.h"
 #include <cmath>
 #include "../engine/CallFixedSize.h"
+#include "../util/TupleHelpers.h"
 
 namespace sparqlExpression::detail {
 using namespace setOfIntervals;
@@ -48,9 +49,9 @@ bool BooleanValueGetter::operator()(StrongId strongId,
 
 // Implementation of the getValuesFromVariable method (see below). Optimized for
 // the different IdTable specializations.
-template <size_t WIDTH, typename ValueExtractor, typename ResultType>
-void getValuesFromVariableImpl(std::vector<ResultType>& result,
-                               ValueExtractor valueExtractor,
+// TODO<joka921> Comment is out of date
+template <size_t WIDTH>
+void getIdsFromVariableImpl(std::vector<StrongId>& result,
                                const SparqlExpression::Variable& variable,
                                EvaluationInput* input) {
   AD_CHECK(result.empty());
@@ -66,31 +67,60 @@ void getValuesFromVariableImpl(std::vector<ResultType>& result,
   }
 
   size_t columnIndex = input->_variableColumnMap[variable._variable].first;
-  auto type = input->_variableColumnMap[variable._variable].second;
 
   result.reserve(resultSize);
   for (size_t i = 0; i < resultSize; ++i) {
-    const auto id = StrongId{staticInput(beginIndex + i, columnIndex)};
-    result.push_back(valueExtractor(id, type, input));
+    result.push_back(StrongId{staticInput(beginIndex + i, columnIndex)});
   }
 }
 
 // Convert a variable to a std::vector of all the values it takes in the input
 // range specified by `input`. The `valueExtractor` is used convert QLever IDs
 // to the appropriate value type.
-template <typename ValueExtractor>
-auto getValuesFromVariable(const SparqlExpression::Variable& variable,
-                           ValueExtractor valueExtractor,
+auto getIdsFromVariable(const SparqlExpression::Variable& variable,
                            EvaluationInput* input) {
   auto cols = input->_inputTable.cols();
-  using ResultType =
-      std::invoke_result_t<ValueExtractor, StrongId, ResultTable::ResultType,
-                           EvaluationInput*>;
-  std::vector<ResultType> result;
-  CALL_FIXED_SIZE_1(cols, getValuesFromVariableImpl, result, valueExtractor,
+  std::vector<StrongId> result;
+  CALL_FIXED_SIZE_1(cols, getIdsFromVariableImpl, result,
                     variable, input);
   return result;
 }
+
+/// TODO<joka921> Comment
+template<typename T>
+auto possiblyExpand (
+    T&& childResult, [[maybe_unused]] size_t targetSize, EvaluationInput* input) {
+  if constexpr (std::is_same_v<Set, std::decay_t<T>>) {
+    return std::pair{expandSet(std::move(childResult), targetSize), ResultTable::ResultType{}};
+  } else if constexpr (std::is_same_v<Variable, std::decay_t<T>>) {
+    return std::pair{getIdsFromVariable(std::forward<T>(childResult), input), input->_variableColumnMap[childResult._variable].second};
+  } else {
+    return std::pair{childResult, ResultTable::ResultType{}};
+  }
+};
+
+/// TODO<joka921> Comment
+template<typename T>
+auto makeExtractor (T&& expandedResult) {
+  return [expanded = std::move(expandedResult)](size_t index) {
+    if constexpr (ad_utility::isVector<T>) {
+      return expanded[index];
+    } else {
+      static_assert(!std::is_same_v<Variable, T>);
+      return expanded;
+    }
+  };
+}
+
+/// TODO<comment>
+template <typename T, typename ValueExtractor>
+auto extractValue(T && singleValue, ValueExtractor valueExtractor, [[maybe_unused]] ResultTable::ResultType resultTypeOfInputVariable, EvaluationInput* input) {
+  if constexpr (std::is_same_v<StrongId, std::decay_t<T>>) {
+    return valueExtractor(singleValue, resultTypeOfInputVariable, input);
+  } else {
+    return valueExtractor(singleValue, input);
+  }
+};
 
 // Convert a NaryOperation that works on single elements (e.g. two doubles ->
 // double) into an operation works on all the possible input types (single
@@ -136,55 +166,27 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
       //  We have to convert the arguments which are variables or sets into
       //  std::vector,
       // the following lambda is able to perform this task
-      auto possiblyExpand = [&input, valueExtractor ]<typename T>(
-          T childResult, [[maybe_unused]] size_t targetSize) {
-        if constexpr (std::is_same_v<Set, std::decay_t<T>>) {
-          return expandSet(std::move(childResult), targetSize);
-        } else if constexpr (std::is_same_v<Variable, std::decay_t<T>>) {
-          return getValuesFromVariable(childResult, valueExtractor, input);
-        } else {
-          return childResult;
-        }
-      };
 
-      // Create a tuple of lambdas, one lambda for each input expression with
-      // the following semantics: Each lambda takes a single argument (the
-      // index) and returns the index-th element (For constants, the index is of
-      // course ignored).
-      auto makeExtractor = [&]<typename T>(T && childResult) {
-        auto expanded =
-            possiblyExpand(std::forward<T>(childResult), targetSize);
-        return [expanded = std::move(expanded), &valueExtractor,
-                input](size_t index) {
-          using A = std::decay_t<decltype(expanded)>;
-          if constexpr (ad_utility::isVector<A>) {
-            return valueExtractor(expanded[index], input);
-          } else {
-            static_assert(!std::is_same_v<Variable, A>);
-            return valueExtractor(expanded, input);
-          }
-        };
-      };
+      auto expandedAndVariableType = std::make_tuple(possiblyExpand(std::move(args), targetSize, input)...);
 
-      auto extractors =
-          std::make_tuple(makeExtractor(std::forward<decltype(args)>(args))...);
+      auto extractorsAndVariableType = std::apply([&](auto&&... els) {return std::make_tuple(std::pair{makeExtractor(std::move(els.first)), els.second}...);}, std::move(expandedAndVariableType));
 
       /// This lambda takes all the previously created extractors as input and
       /// creates the actual result of the computation.
       auto create = [&](auto&&... extractors) {
         using ResultType =
-            std::decay_t<decltype(naryOperation(extractors(0)...))>;
+            std::decay_t<decltype(naryOperation(extractValue(extractors.first(0), valueExtractor, extractors.second, input)...))>;
         LimitedVector<ResultType> result{input->_allocator};
         result.reserve(targetSize);
         for (size_t i = 0; i < targetSize; ++i) {
-          result.push_back(naryOperation(extractors(i)...));
+          result.push_back(naryOperation(extractValue(extractors.first(i), valueExtractor, extractors.second, input)...));
         }
         return result;
       };
 
       // calculate the actual result (the extractors are stored in a tuple, so
       // we have to use std::apply)
-      auto result = std::apply(create, std::move(extractors));
+      auto result = std::apply(create, std::move(extractorsAndVariableType));
 
       // The create-Lambda always produces a vector for simplicity. If the
       // result of this calculation is actually a constant, only return a
@@ -198,6 +200,7 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
     }
   };
 }
+
 
 /// TODO<joka921>Comment
 template <bool distinct, typename RangeCalculation, typename ValueExtractor,
@@ -236,71 +239,39 @@ auto liftAggregateCalculationToEvaluateResults(
       // a vector again.
       auto targetSize = std::max({getSize(args).first});
 
-      // This variable is only needed for the case of a distinct variable
-      ResultTable::ResultType resultTypeOfInputVariable;
 
       //  We have to convert the arguments which are variables or sets into
       //  std::vector,
       // the following lambda is able to perform this task
       // TODO Comment the distinct business
-      auto possiblyExpand =
-          [&input, valueExtractor, &resultTypeOfInputVariable ]<typename T>(
-              T childResult, [[maybe_unused]] size_t targetSize) {
-        if constexpr (std::is_same_v<Set, std::decay_t<T>>) {
-          return expandSet(std::move(childResult), targetSize);
-        } else if constexpr (std::is_same_v<Variable, std::decay_t<T>>) {
-          resultTypeOfInputVariable =
-              input->_variableColumnMap[childResult._variable].second;
-          if constexpr (distinct) {
-            (void)valueExtractor;
-            return getValuesFromVariable(childResult, ActualValueGetter{},
-                                         input);
-          } else {
-            return getValuesFromVariable(childResult, valueExtractor, input);
-          }
-        } else {
-          return childResult;
-        }
-      };
+
 
       // Create a tuple of lambdas, one lambda for each input expression with
       // the following semantics: Each lambda takes a single argument (the
       // index) and returns the index-th element (For constants, the index is of
       // course ignored).
-      auto makeExtractor = [&]<typename T>(T && childResult) {
-        auto expanded =
-            possiblyExpand(std::forward<T>(childResult), targetSize);
-        return [expanded = std::move(expanded)](size_t index) {
-          using A = std::decay_t<decltype(expanded)>;
-          if constexpr (ad_utility::isVector<A>) {
-            return expanded[index];
-          } else {
-            static_assert(!std::is_same_v<Variable, A>);
-            return expanded;
-          }
-        };
+
+      // This variable is only needed for the case of a distinct variable
+      auto expandedAndResultType = possiblyExpand(std::move(args), targetSize, input);
+
+      auto& expanded = expandedAndResultType.first;
+      auto& resultTypeOfInputVariable = expandedAndResultType.second;
+
+      auto extractor = makeExtractor(std::move(expanded));
+
+      auto extractValueLocal = [&](auto&& singleValue) {
+        return extractValue(singleValue,valueExtractor, resultTypeOfInputVariable, input);
       };
-
-      auto extractValue = [&]<typename T>(T && singleValue) {
-        if constexpr (std::is_same_v<StrongId, T>) {
-          return valueExtractor(singleValue, resultTypeOfInputVariable, input);
-        } else {
-          return valueExtractor(singleValue, input);
-        }
-      };
-
-      auto extractor = makeExtractor(std::forward<decltype(args)>(args));
-
       /// This lambda takes all the previously created extractors as input and
       /// creates the actual result of the computation.
       auto create = [&](auto&& extractor) {
         using ResultType = std::decay_t<decltype(aggregateOperation(
-            extractValue(extractor(0)), extractValue(extractor(0))))>;
+            extractValueLocal(extractor(0)), extractValueLocal(extractor(0))))>;
         ResultType result{};
         if constexpr (!distinct) {
           for (size_t i = 0; i < targetSize; ++i) {
             result = aggregateOperation(std::move(result),
-                                        extractValue(extractor(i)));
+                                        extractValueLocal(extractor(i)));
           }
           result = finalOperation(std::move(result), targetSize);
           return result;
@@ -313,14 +284,7 @@ auto liftAggregateCalculationToEvaluateResults(
           }
 
           for (const auto& distinctEl : uniqueHashSet) {
-            if constexpr (std::is_same_v<
-                              StrongId, std::decay_t<decltype(extractor(0))>>) {
-              result = aggregateOperation(
-                  std::move(result),
-                  valueExtractor(distinctEl, resultTypeOfInputVariable, input));
-            } else {
-              result = aggregateOperation(std::move(result), distinctEl);
-            }
+            result = aggregateOperation(std::move(result), extractValueLocal(distinctEl));
           }
           result = finalOperation(std::move(result), uniqueHashSet.size());
           return result;
@@ -507,14 +471,11 @@ SparqlExpression::EvaluateResult EqualsExpression::evaluate(
   // TODO<joka921> Continue here
 }
 
-SparqlExpression::EvaluateResult CountExpression::evaluate(
+template<typename RangeCalculation, typename ValueGetter, typename AggregateOp, typename FinalOp>
+SparqlExpression::EvaluateResult AggregateExpression<RangeCalculation, ValueGetter, AggregateOp, FinalOp>::evaluate(
     EvaluationInput* input) const {
   auto childResult = _child->evaluate(input);
 
-  auto count = [](const auto& a, const auto& b) -> int64_t { return a + b; };
-  auto noop = []<typename T>(T && result, size_t) {
-    return std::forward<T>(result);
-  };
 
   if (_distinct) {
     auto calculator = liftAggregateCalculationToEvaluateResults<true>(
@@ -544,4 +505,13 @@ template class DispatchedBinaryExpression<
 template class DispatchedBinaryExpression<
     NumericValueGetter, TaggedFunction<"*", decltype(multiply)>,
     TaggedFunction<"/", decltype(divide)>>;
+
+template class AggregateExpression<NoRangeCalculation, BooleanValueGetter, decltype(count), decltype(noop)>;
+
+template class AggregateExpression<NoRangeCalculation, NumericValueGetter, decltype(add), decltype(noop)>;
+
+template class AggregateExpression<NoRangeCalculation, NumericValueGetter, decltype(add), decltype(averageFinalOp)>;
+
+template class AggregateExpression<NoRangeCalculation, NumericValueGetter, decltype(minLambda), decltype(noop)>;
+template class AggregateExpression<NoRangeCalculation, NumericValueGetter, decltype(maxLambda), decltype(noop)>;
 }  // namespace sparqlExpression::detail

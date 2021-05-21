@@ -282,9 +282,10 @@ class EqualsExpression : public SparqlExpression {
   Ptr _childRight;
 };
 
-class CountExpression : public SparqlExpression {
+template<typename RangeCalculation, typename ValueGetter, typename AggregateOp, typename FinalOp>
+class AggregateExpression : public SparqlExpression {
  public:
-  CountExpression(bool distinct, Ptr&& child)
+  AggregateExpression(bool distinct, Ptr&& child)
       : _distinct(distinct), _child{std::move(child)} {}
 
   // __________________________________________________________________________
@@ -392,6 +393,24 @@ inline auto subtract = [](const auto& a, const auto& b) -> double {
 using AdditiveExpression = detail::DispatchedBinaryExpression<
     detail::NumericValueGetter, detail::TaggedFunction<"+", decltype(add)>,
     detail::TaggedFunction<"-", decltype(subtract)>>;
+
+inline auto count = [](const auto& a, const auto& b) -> int64_t { return a + b; };
+inline auto noop = []<typename T>(T && result, size_t) {
+  return std::forward<T>(result);
+};
+using CountExpression = detail::AggregateExpression<detail::NoRangeCalculation, detail::BooleanValueGetter, decltype(count), decltype(noop)>;
+using SumExpression = detail::AggregateExpression<detail::NoRangeCalculation, detail::NumericValueGetter, decltype(add), decltype(noop)>;
+
+inline auto averageFinalOp = [](const auto& aggregation, size_t numElements) {return numElements ? static_cast<double>(aggregation) / static_cast<double>(numElements) : std::numeric_limits<double>::quiet_NaN();};
+using AvgExpression = detail::AggregateExpression<detail::NoRangeCalculation, detail::NumericValueGetter, decltype(add), decltype(averageFinalOp)>;
+
+inline auto minLambda = [](const auto& a, const auto& b) -> double {return a < b ? a : b;};
+inline auto maxLambda = [](const auto& a, const auto& b) -> double {return a > b ? a : b;};
+
+using MinExpression = detail::AggregateExpression<detail::NoRangeCalculation, detail::NumericValueGetter, decltype(minLambda), decltype(noop)>;
+using MaxExpression = detail::AggregateExpression<detail::NoRangeCalculation, detail::NumericValueGetter, decltype(maxLambda), decltype(noop)>;
+
+
 
 /// The base cases: Constants and variables
 using BooleanLiteralExpression = detail::LiteralExpression<bool>;

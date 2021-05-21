@@ -730,6 +730,15 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
 
   antlrcpp::Any visitAggregate(
       SparqlAutomaticParser::AggregateContext* ctx) override {
+
+    // the only case that there is no child expression is COUNT(*), so we can check this outside the if below.
+    if (!ctx->expression()) {
+      throw SparqlParseException{
+          "This parser currently doesn't support COUNT(*), please specify an "
+          "explicit expression for the count"};
+    }
+    auto childExpression =
+        std::move(ctx->expression()->accept(this).as<ExpressionPtr>());
     auto children = ctx->children;
     bool distinct = false;
     for (const auto& child : children) {
@@ -738,20 +747,27 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
       }
     }
     if (ad_utility::getLowercase(children[0]->getText()) == "count") {
-      if (!ctx->expression()) {
-        throw SparqlParseException{
-            "This parser currently doesn't support COUNT(*), please specify an "
-            "explicit expression for the count"};
-      } else {
-        auto childExpression =
-            std::move(ctx->expression()->accept(this).as<ExpressionPtr>());
+      return ExpressionPtr{std::make_unique<sparqlExpression::CountExpression>(
+          distinct, std::move(childExpression))};
+    } else if (ad_utility::getLowercase(children[0]->getText()) == "sum") {
         return ExpressionPtr{
-            std::make_unique<sparqlExpression::detail::CountExpression>(
+            std::make_unique<sparqlExpression::SumExpression>(
                 distinct, std::move(childExpression))};
-      }
+    } else if (ad_utility::getLowercase(children[0]->getText()) == "max") {
+      return ExpressionPtr{
+          std::make_unique<sparqlExpression::MaxExpression>(
+              distinct, std::move(childExpression))};
+    } else if (ad_utility::getLowercase(children[0]->getText()) == "min") {
+      return ExpressionPtr{
+          std::make_unique<sparqlExpression::MinExpression>(
+              distinct, std::move(childExpression))};
+    } else if (ad_utility::getLowercase(children[0]->getText()) == "avg") {
+      return ExpressionPtr{
+          std::make_unique<sparqlExpression::AvgExpression>(
+              distinct, std::move(childExpression))};
     } else {
       throw SparqlParseException{
-          "This parser currently only supports the COUNT aggregate"};
+          "This parser currently doesn't support SAMPLE and GROUP_CONCAT aggregates"};
     }
   }
 
