@@ -122,11 +122,12 @@ TEST(SparqlExpressionParser, First) {
   auto expr = std::move(result.as<sparqlExpression::SparqlExpression::Ptr>());
 
   QueryExecutionContext* ctxt = nullptr;
-  sparqlExpression::SparqlExpression::VariableColumnMap map;
+  sparqlExpression::SparqlExpression::VariableColumnMapWithResultTypes map;
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   IdTable table{alloc};
-  sparqlExpression::SparqlExpression::EvaluationInput input{*ctxt, map, table};
+  sparqlExpression::SparqlExpression::EvaluationInput input{*ctxt, map, table,
+                                                            alloc};
   auto res = expr->evaluate(&input);
   AD_CHECK(std::holds_alternative<double>(res));
   ASSERT_FLOAT_EQ(25.0, std::get<double>(res));

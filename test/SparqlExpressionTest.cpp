@@ -10,9 +10,16 @@ using namespace sparqlExpression;
 
 struct DummyExpression : public SparqlExpression {
   DummyExpression(EvaluateResult result) : _result{std::move(result)} {}
-  EvaluateResult _result;
-  EvaluateResult evaluate(EvaluationInput*) const override { return _result; }
+  mutable EvaluateResult _result;
+  EvaluateResult evaluate(EvaluationInput*) const override {
+    return std::move(_result);
+  }
   vector<std::string*> strings() override { return {}; }
+  vector<std::string> getUnaggregatedVariable() override { return {}; }
+  string getCacheKey([
+      [maybe_unused]] const VariableColumnMap& varColMap) const override {
+    return "DummyDummyDummDumm"s;
+  }
 };
 
 TEST(SparqlExpression, Or) {
@@ -20,17 +27,19 @@ TEST(SparqlExpression, Or) {
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
   sparqlExpression::LimitedVector<double> d{{1.0, 2.0, 0.0, 0.0}, alloc};
   sparqlExpression::LimitedVector<bool> b{{false, false, true, false}, alloc};
-  sparqlExpression::LimitedVector<bool> expected{{true, true, true, false}, alloc};
+  sparqlExpression::LimitedVector<bool> expected{{true, true, true, false},
+                                                 alloc};
 
   QueryExecutionContext* ctxt = nullptr;
-  sparqlExpression::SparqlExpression::VariableColumnMap map;
+  sparqlExpression::SparqlExpression::VariableColumnMapWithResultTypes map;
   IdTable table{alloc};
-  sparqlExpression::SparqlExpression::EvaluationInput input{*ctxt, map, table, alloc};
+  sparqlExpression::SparqlExpression::EvaluationInput input{*ctxt, map, table,
+                                                            alloc};
   std::vector<SparqlExpression::Ptr> children;
-  children.push_back(
-      std::make_unique<DummyExpression>(SparqlExpression::EvaluateResult{d}));
-  children.push_back(
-      std::make_unique<DummyExpression>(SparqlExpression::EvaluateResult{b}));
+  children.push_back(std::make_unique<DummyExpression>(
+      SparqlExpression::EvaluateResult{std::move(d)}));
+  children.push_back(std::make_unique<DummyExpression>(
+      SparqlExpression::EvaluateResult{std::move(b)}));
 
   ConditionalOrExpression c{std::move(children)};
 

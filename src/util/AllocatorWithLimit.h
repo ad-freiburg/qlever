@@ -135,9 +135,9 @@ class AllocatorWithLimit {
       : memoryLeft_(std::move(ml)) {}
   AllocatorWithLimit() = delete;
 
-
-  template<typename U>
-  AllocatorWithLimit(const AllocatorWithLimit<U> & other) : memoryLeft_(other.getMemoryLeft()) {};
+  template <typename U>
+  AllocatorWithLimit(const AllocatorWithLimit<U>& other)
+      : memoryLeft_(other.getMemoryLeft()){};
 
   // An allocator must have a function "allocate" with exactly this signature.
   // TODO<C++20> : the exact signature of allocate changes
@@ -168,21 +168,17 @@ class AllocatorWithLimit {
         ->numFreeBytes();
   }
 
-  const auto& getMemoryLeft() const {
-    return memoryLeft_;
-  }
+  const auto& getMemoryLeft() const { return memoryLeft_; }
 
   // The STL needs two allocators to be equal if and only they refer to the same
   // memory pool. For us, they are hence equal if they use the same
   // AllocationMemoryLeft object.00
   template <typename V>
-  bool operator==(
-                         const AllocatorWithLimit<V>& v) {
+  bool operator==(const AllocatorWithLimit<V>& v) {
     return memoryLeft_ == v.memoryLeft_;
   }
   template <typename V>
-  bool operator!=(
-                         const AllocatorWithLimit<V>& v) {
+  bool operator!=(const AllocatorWithLimit<V>& v) {
     return !(*this == v);
   }
 };

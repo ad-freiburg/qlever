@@ -20,8 +20,32 @@ namespace sparqlExpression {
 /// structure of the expression as well as the logic to evaluate this expression
 /// on a given intermediate result
 
-template<typename T>
-using LimitedVector = std::vector<T, ad_utility::AllocatorWithLimit<T>>;
+template <typename T>
+class LimitedVector : public std::vector<T, ad_utility::AllocatorWithLimit<T>> {
+ public:
+  using Base = std::vector<T, ad_utility::AllocatorWithLimit<T>>;
+  using Base::Base;
+  // Copying is expensive, we never want to do this in the expression
+  // evaluation.
+  LimitedVector(const LimitedVector&) = delete;
+  LimitedVector(LimitedVector&&) = default;
+  LimitedVector& operator=(const LimitedVector&) = delete;
+  LimitedVector& operator=(LimitedVector&&) = default;
+};
+
+/// A strong type for "Ids
+struct StrongId {
+  Id _value;
+
+  bool operator==(const StrongId&) const = default;
+};
+
+/// A StrongId and its type. The type is needed to get the actual value
+struct StrongIdAndDatatype {
+  StrongId _id;
+  ResultTable::ResultType _type;
+  bool operator==(const StrongIdAndDatatype&) const = default;
+};
 
 class SparqlExpression {
  public:
@@ -32,34 +56,40 @@ class SparqlExpression {
 
   /// Typedef for a map from variables names to (input column, input column
   /// type) which is needed to evaluate expressions that contain variables.
-  using VariableColumnMap =
+  using VariableColumnMapWithResultTypes =
       ad_utility::HashMap<std::string,
                           std::pair<size_t, ResultTable::ResultType>>;
+
+  using VariableColumnMap = ad_utility::HashMap<std::string, size_t>;
 
   /// All the additional information which is needed to evaluate a Sparql
   /// Expression
   struct EvaluationInput {
     /// Constructor for evaluating an expression on the complete input
-    EvaluationInput(const QueryExecutionContext& qec, VariableColumnMap map,
-                    const IdTable& inputTable, const ad_utility::AllocatorWithLimit<Id>& allocator)
+    EvaluationInput(const QueryExecutionContext& qec,
+                    VariableColumnMapWithResultTypes map,
+                    const IdTable& inputTable,
+                    const ad_utility::AllocatorWithLimit<Id>& allocator)
         : _qec{qec},
           _variableColumnMap{std::move(map)},
           _inputTable{inputTable},
-    _allocator{allocator} {}
+          _allocator{allocator} {}
     /// Constructor for evaluating an expression on a part of the input
-    EvaluationInput(const QueryExecutionContext& qec, VariableColumnMap map,
+    EvaluationInput(const QueryExecutionContext& qec,
+                    VariableColumnMapWithResultTypes map,
                     const IdTable& inputTable, size_t beginIndex,
-                    size_t endIndex, const ad_utility::AllocatorWithLimit<Id>& allocator)
+                    size_t endIndex,
+                    const ad_utility::AllocatorWithLimit<Id>& allocator)
         : _qec{qec},
           _variableColumnMap{std::move(map)},
           _inputTable{inputTable},
           _beginIndex{beginIndex},
           _endIndex{endIndex},
-    _allocator{allocator} {}
+          _allocator{allocator} {}
     /// Needed to map Ids to their value from the vocabulary
 
     const QueryExecutionContext& _qec;
-    VariableColumnMap _variableColumnMap;
+    VariableColumnMapWithResultTypes _variableColumnMap;
 
     /// The input of the expression
     const IdTable& _inputTable;
@@ -69,7 +99,6 @@ class SparqlExpression {
     /// of the input.
     size_t _beginIndex = 0;
     size_t _endIndex = _inputTable.size();
-
 
     /// The input is sorted on these columns. This information can be used to
     /// perform efficient filter operations like = < >
@@ -85,8 +114,9 @@ class SparqlExpression {
   /// ?y)) or a "Set" of indices, which identifies the indices in the result at
   /// which the result columns value is "true".
   using EvaluateResult =
-      std::variant<LimitedVector<double>, LimitedVector<int64_t>, LimitedVector<bool>,
-                   setOfIntervals::Set, double, int64_t, bool, Variable>;
+      std::variant<LimitedVector<double>, LimitedVector<int64_t>,
+                   LimitedVector<bool>, setOfIntervals::Set, double, int64_t,
+                   bool, string, StrongIdAndDatatype, Variable>;
 
   /// ________________________________________________________________________
   using Ptr = std::unique_ptr<SparqlExpression>;
@@ -96,6 +126,13 @@ class SparqlExpression {
 
   /// Returns all variables and IRIs, needed for certain parser methods.
   virtual vector<std::string*> strings() = 0;
+
+  /// Return all the variables, that occur in the expression, but are not
+  /// aggregated.
+  virtual vector<std::string> getUnaggregatedVariable() = 0;
+
+  virtual string getCacheKey(const VariableColumnMap& varColMap) const = 0;
+
   virtual ~SparqlExpression() = default;
 };
 
@@ -103,7 +140,7 @@ class SparqlExpression {
 /// directly as template parameters. Currently 7 characters are enough for this,
 /// but if we need longer names in the future, we can still change this at the
 /// cost of a recompilation.
-using TagString = ad_utility::ConstexprSmallString<8>;
+using TagString = ad_utility::ConstexprSmallString<16>;
 
 // ____________________________________________________________________________
 namespace detail {
@@ -150,6 +187,24 @@ class LiteralExpression : public SparqlExpression {
     }
   }
 
+  vector<std::string> getUnaggregatedVariable() override {
+    if constexpr (std::is_same_v<T, Variable>) {
+      return {_value._variable};
+    } else {
+      return {};
+    }
+  }
+
+  // ______________________________________________________________________
+  string getCacheKey(const VariableColumnMap& varColMap) const override {
+    if constexpr (std::is_same_v<T, Variable>) {
+      return {"#column_" + std::to_string(varColMap.at(_value._variable)) +
+              "#"};
+    } else {
+      return {std::to_string(_value)};
+    }
+  }
+
  private:
   T _value;
 };
@@ -168,7 +223,7 @@ class LiteralExpression : public SparqlExpression {
  * the result types of the value extractor
  */
 template <typename RangeCalculation, typename ValueExtractor,
-          typename BinaryOperation>
+          typename BinaryOperation, TagString Tag>
 class BinaryExpression : public SparqlExpression {
  public:
   /// Construct from a set of child operations. The operation is performed as a
@@ -188,6 +243,25 @@ class BinaryExpression : public SparqlExpression {
     return result;
   }
 
+  // _________________________________________________________________________
+  vector<std::string> getUnaggregatedVariable() override {
+    std::vector<string> result;
+    for (const auto& ptr : _children) {
+      auto childResult = ptr->getUnaggregatedVariable();
+      result.insert(result.end(), std::make_move_iterator(childResult.begin()),
+                    std::make_move_iterator(childResult.end()));
+    }
+    return result;
+  }
+
+  string getCacheKey(const VariableColumnMap& varColMap) const override {
+    std::vector<string> childKeys;
+    for (const auto& ptr : _children) {
+      childKeys.push_back("(" + ptr->getCacheKey(varColMap) + ")");
+    }
+    return ad_utility::join(childKeys, " "s + Tag + " ");
+  }
+
  private:
   std::vector<Ptr> _children;
 };
@@ -200,13 +274,23 @@ class BinaryExpression : public SparqlExpression {
  * the ValueExtractor) and calculates the result.
  */
 template <typename RangeCalculation, typename ValueExtractor,
-          typename UnaryOperation>
+          typename UnaryOperation, TagString Tag>
 class UnaryExpression : public SparqlExpression {
  public:
   UnaryExpression(Ptr&& child) : _child{std::move(child)} {};
   EvaluateResult evaluate(EvaluationInput* input) const override;
   // _____________________________________________________________________
   vector<std::string*> strings() override { return _child->strings(); }
+
+  // _____________________________________________________________________
+  vector<std::string> getUnaggregatedVariable() override {
+    return _child->getUnaggregatedVariable();
+  }
+
+  // _________________________________________________________________________
+  string getCacheKey(const VariableColumnMap& varColMap) const override {
+    return std::string{Tag} + "("s + _child->getCacheKey(varColMap) + ")";
+  }
 
  private:
   Ptr _child;
@@ -255,6 +339,28 @@ class DispatchedBinaryExpression : public SparqlExpression {
     }
     return result;
   }
+  vector<std::string> getUnaggregatedVariable() override {
+    std::vector<string> result;
+    for (const auto& ptr : _children) {
+      auto childResult = ptr->getUnaggregatedVariable();
+      result.insert(result.end(), std::make_move_iterator(childResult.begin()),
+                    std::make_move_iterator(childResult.end()));
+    }
+    return result;
+  }
+
+  string getCacheKey(const VariableColumnMap& varColMap) const override {
+    std::vector<string> childKeys;
+    for (const auto& ptr : _children) {
+      childKeys.push_back(ptr->getCacheKey(varColMap));
+    }
+
+    string key = "(" + std::move(childKeys[0]) + ")";
+    for (size_t i = 1; i < childKeys.size(); ++i) {
+      key += " " + _relations[i - 1] + " (" + std::move(childKeys[i]) + ")";
+    }
+    return key;
+  }
 
  private:
   std::vector<Ptr> _children;
@@ -277,33 +383,153 @@ class EqualsExpression : public SparqlExpression {
     return result;
   }
 
+  // _______________________________________________________________________
+  vector<std::string> getUnaggregatedVariable() override {
+    auto result = _childLeft->getUnaggregatedVariable();
+    auto resultRight = _childRight->getUnaggregatedVariable();
+    result.insert(result.end(), std::make_move_iterator(resultRight.begin()),
+                  std::make_move_iterator(resultRight.end()));
+    return result;
+  }
+
+  string getCacheKey(const VariableColumnMap& varColMap) const override {
+    return "(" + _childLeft->getCacheKey(varColMap) + ") = (" +
+           _childRight->getCacheKey(varColMap) + ")";
+  }
+
  private:
   Ptr _childLeft;
   Ptr _childRight;
 };
 
-template<typename RangeCalculation, typename ValueGetter, typename AggregateOp, typename FinalOp>
+template <typename RangeCalculation, typename ValueGetter, typename AggregateOp,
+          typename FinalOp, TagString Tag>
 class AggregateExpression : public SparqlExpression {
  public:
-  AggregateExpression(bool distinct, Ptr&& child)
-      : _distinct(distinct), _child{std::move(child)} {}
+  AggregateExpression(bool distinct, Ptr&& child,
+                      AggregateOp aggregateOp = AggregateOp{})
+      : _distinct(distinct),
+        _child{std::move(child)},
+        _aggregateOp{std::move(aggregateOp)} {}
 
   // __________________________________________________________________________
   EvaluateResult evaluate(EvaluationInput* input) const override;
 
   // _____________________________________________________________________
   vector<std::string*> strings() override { return _child->strings(); }
+  vector<std::string> getUnaggregatedVariable() override {
+    // This is an aggregation, so it never leaves any unaggregated variables.
+    return {};
+  }
+
+  string getCacheKey(const VariableColumnMap& varColMap) const override {
+    return std::string{Tag} + "(" + _child->getCacheKey(varColMap) + ")";
+  }
 
  private:
   bool _distinct;
   Ptr _child;
+  AggregateOp _aggregateOp;
 };
 
-/// A strong type for "Ids
-struct StrongId {
-  Id _value;
+// This can be used as the FinalOp parameter to an Aggregate if there is nothing
+// to be done on the final result
+inline auto noop = []<typename T>(T && result, size_t) {
+  return std::forward<T>(result);
+};
 
-  bool operator==(const StrongId&) const = default;
+/// A Special type to be used as the RangeCalculation template Argument, when a
+/// range calculation is not allowed
+struct NoRangeCalculation {};
+
+/// This class can be used as the `ValueExtractor` argument of Expression
+/// templates. It produces a string value.
+struct StringValueGetter {
+  template <typename T>
+  requires(std::is_arithmetic_v<T>) string operator()(T v,
+                                                      EvaluationInput*) const {
+    return std::to_string(v);
+  }
+  string operator()(StrongId id, ResultTable::ResultType type,
+                    EvaluationInput*) const;
+
+  string operator()(string s, EvaluationInput*) { return s; }
+};
+
+// ______________________________________________________________________________
+inline auto makePerformConcat(std::string separator) {
+  return [sep = std::move(separator)](string&& a, const string& b) -> string {
+    if (a.empty()) [[unlikely]] {
+        return b;
+      }
+    else
+      [[likely]] {
+        a.append(sep);
+        a.append(std::move(b));
+        return std::move(a);
+      }
+  };
+}
+
+using PerformConcat = std::decay_t<decltype(makePerformConcat(std::string{}))>;
+
+/// The GROUP_CONCAT Expression
+class GroupConcatExpression : public SparqlExpression {
+ public:
+  GroupConcatExpression(bool distinct, Ptr&& child, std::string separator)
+      : _separator{std::move(separator)} {
+    auto performConcat = makePerformConcat(_separator);
+
+    using G =
+        AggregateExpression<NoRangeCalculation, StringValueGetter,
+                            PerformConcat, decltype(noop), "GROUP_CONCAT">;
+    _child = std::make_unique<G>(distinct, std::move(child), performConcat);
+  }
+
+  // __________________________________________________________________________
+  EvaluateResult evaluate(EvaluationInput* input) const override {
+    // The child is already set up to perform all the work.
+    return _child->evaluate(input);
+  }
+
+  // _____________________________________________________________________
+  vector<std::string*> strings() override { return _child->strings(); }
+  vector<std::string> getUnaggregatedVariable() override {
+    // This is an aggregation, so it never leaves any unaggregated variables.
+    return {};
+  }
+
+  string getCacheKey(const VariableColumnMap& varColMap) const override {
+    return "["s + _separator + "]" + _child->getCacheKey(varColMap);
+  }
+
+ private:
+  Ptr _child;
+  std::string _separator;
+};
+
+/// The SAMPLE Expression
+class SampleExpression : public SparqlExpression {
+ public:
+  SampleExpression([[maybe_unused]] bool distinct, Ptr&& child)
+      : _child{std::move(child)} {}
+
+  // __________________________________________________________________________
+  EvaluateResult evaluate(EvaluationInput* input) const override;
+
+  // _____________________________________________________________________
+  vector<std::string*> strings() override { return _child->strings(); }
+  vector<std::string> getUnaggregatedVariable() override {
+    // This is an aggregation, so it never leaves any unaggregated variables.
+    return {};
+  }
+
+  string getCacheKey(const VariableColumnMap& varColMap) const override {
+    return "SAMPLE("s + _child->getCacheKey(varColMap) + ")";
+  }
+
+ private:
+  Ptr _child;
 };
 
 /// This class can be used as the `ValueExtractor` argument of Expression
@@ -313,6 +539,11 @@ struct NumericValueGetter {
   double operator()(double v, EvaluationInput*) const { return v; }
   int64_t operator()(int64_t v, EvaluationInput*) const { return v; }
   bool operator()(bool v, EvaluationInput*) const { return v; }
+
+  // This is the current error-signalling mechanism
+  bool operator()(const string&, EvaluationInput*) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
   // Convert an id from a result table to a double value
   double operator()(StrongId id, ResultTable::ResultType type,
                     EvaluationInput*) const;
@@ -321,10 +552,12 @@ struct NumericValueGetter {
 /// This class is needed for the distinct calculation in the aggregates.
 struct ActualValueGetter {
   // Simply preserve the input from numeric values
-  double operator()(double v, EvaluationInput*) const { return v; }
-  int64_t operator()(int64_t v, EvaluationInput*) const { return v; }
-  bool operator()(bool v, EvaluationInput*) const { return v; }
-  // Convert an id from a result table to a double value
+  template <typename T>
+  T operator()(T v, EvaluationInput*) const {
+    return v;
+  }
+
+  // _________________________________________________________________________
   StrongId operator()(StrongId id, ResultTable::ResultType,
                       EvaluationInput*) const {
     return id;
@@ -334,17 +567,17 @@ struct ActualValueGetter {
 /// This class can be used as the `ValueExtractor` argument of Expression
 /// templates. It produces a boolean value.
 struct BooleanValueGetter {
-  bool operator()(double v, EvaluationInput*) const { return v; }
+  bool operator()(double v, EvaluationInput*) const {
+    return v && !std::isnan(v);
+  }
   bool operator()(int64_t v, EvaluationInput*) const { return v; }
   bool operator()(bool v, EvaluationInput*) const { return v; }
   // Convert an id from a result table to a boolean value
   bool operator()(StrongId id, ResultTable::ResultType type,
                   EvaluationInput*) const;
+  // TODO<joka921> check if an empty string is indeed "false"
+  bool operator()(string s, EvaluationInput*) { return !s.empty(); }
 };
-
-/// A Special type to be used as the RangeCalculation template Argument, when a
-/// range calculation is not allowed
-struct NoRangeCalculation {};
 
 }  // namespace detail
 
@@ -354,25 +587,28 @@ struct NoRangeCalculation {};
 inline auto orLambda = [](bool a, bool b) { return a || b; };
 using ConditionalOrExpression =
     detail::BinaryExpression<setOfIntervals::Union, detail::BooleanValueGetter,
-                             decltype(orLambda)>;
+                             decltype(orLambda), "||">;
 
 /// Boolean And
 inline auto andLambda = [](bool a, bool b) { return a && b; };
 using ConditionalAndExpression =
     detail::BinaryExpression<setOfIntervals::Intersection,
-                             detail::BooleanValueGetter, decltype(andLambda)>;
+                             detail::BooleanValueGetter, decltype(andLambda),
+                             "&&">;
 
 /// Unary Negation
 inline auto unaryNegate = [](bool a) -> bool { return !a; };
 using UnaryNegateExpression =
     detail::UnaryExpression<detail::NoRangeCalculation,
-                            detail::BooleanValueGetter, decltype(unaryNegate)>;
+                            detail::BooleanValueGetter, decltype(unaryNegate),
+                            "!">;
 
 /// Unary Minus, currently all results are converted to double
 inline auto unaryMinus = [](auto a) -> double { return -a; };
 using UnaryMinusExpression =
     detail::UnaryExpression<detail::NoRangeCalculation,
-                            detail::NumericValueGetter, decltype(unaryMinus)>;
+                            detail::NumericValueGetter, decltype(unaryMinus),
+                            "unary-">;
 
 /// Multiplication and Division, currently all results are converted to double.
 inline auto multiply = [](const auto& a, const auto& b) -> double {
@@ -394,23 +630,43 @@ using AdditiveExpression = detail::DispatchedBinaryExpression<
     detail::NumericValueGetter, detail::TaggedFunction<"+", decltype(add)>,
     detail::TaggedFunction<"-", decltype(subtract)>>;
 
-inline auto count = [](const auto& a, const auto& b) -> int64_t { return a + b; };
-inline auto noop = []<typename T>(T && result, size_t) {
-  return std::forward<T>(result);
+inline auto count = [](const auto& a, const auto& b) -> int64_t {
+  return a + b;
 };
-using CountExpression = detail::AggregateExpression<detail::NoRangeCalculation, detail::BooleanValueGetter, decltype(count), decltype(noop)>;
-using SumExpression = detail::AggregateExpression<detail::NoRangeCalculation, detail::NumericValueGetter, decltype(add), decltype(noop)>;
+using CountExpression =
+    detail::AggregateExpression<detail::NoRangeCalculation,
+                                detail::BooleanValueGetter, decltype(count),
+                                decltype(detail::noop), "COUNT">;
+using SumExpression =
+    detail::AggregateExpression<detail::NoRangeCalculation,
+                                detail::NumericValueGetter, decltype(add),
+                                decltype(detail::noop), "SUM">;
 
-inline auto averageFinalOp = [](const auto& aggregation, size_t numElements) {return numElements ? static_cast<double>(aggregation) / static_cast<double>(numElements) : std::numeric_limits<double>::quiet_NaN();};
-using AvgExpression = detail::AggregateExpression<detail::NoRangeCalculation, detail::NumericValueGetter, decltype(add), decltype(averageFinalOp)>;
+inline auto averageFinalOp = [](const auto& aggregation, size_t numElements) {
+  return numElements ? static_cast<double>(aggregation) /
+                           static_cast<double>(numElements)
+                     : std::numeric_limits<double>::quiet_NaN();
+};
+using AvgExpression =
+    detail::AggregateExpression<detail::NoRangeCalculation,
+                                detail::NumericValueGetter, decltype(add),
+                                decltype(averageFinalOp), "AVG">;
 
-inline auto minLambda = [](const auto& a, const auto& b) -> double {return a < b ? a : b;};
-inline auto maxLambda = [](const auto& a, const auto& b) -> double {return a > b ? a : b;};
+inline auto minLambda = [](const auto& a, const auto& b) -> double {
+  return a < b ? a : b;
+};
+inline auto maxLambda = [](const auto& a, const auto& b) -> double {
+  return a > b ? a : b;
+};
 
-using MinExpression = detail::AggregateExpression<detail::NoRangeCalculation, detail::NumericValueGetter, decltype(minLambda), decltype(noop)>;
-using MaxExpression = detail::AggregateExpression<detail::NoRangeCalculation, detail::NumericValueGetter, decltype(maxLambda), decltype(noop)>;
-
-
+using MinExpression =
+    detail::AggregateExpression<detail::NoRangeCalculation,
+                                detail::NumericValueGetter, decltype(minLambda),
+                                decltype(detail::noop), "MIN">;
+using MaxExpression =
+    detail::AggregateExpression<detail::NoRangeCalculation,
+                                detail::NumericValueGetter, decltype(maxLambda),
+                                decltype(detail::noop), "MAX">;
 
 /// The base cases: Constants and variables
 using BooleanLiteralExpression = detail::LiteralExpression<bool>;
@@ -420,11 +676,25 @@ using VariableExpression = detail::LiteralExpression<detail::Variable>;
 
 }  // namespace sparqlExpression
 
+/// Specialize the isVector type trait for our limited type
+namespace ad_utility {
+template <typename T>
+constexpr static bool isVector<sparqlExpression::LimitedVector<T>> = true;
+}  // namespace ad_utility
+
 namespace std {
 template <>
-struct hash<sparqlExpression::detail::StrongId> {
-  size_t operator()(const sparqlExpression::detail::StrongId& x) const {
+struct hash<sparqlExpression::StrongId> {
+  size_t operator()(const sparqlExpression::StrongId& x) const {
     return std::hash<Id>{}(x._value);
+  }
+};
+
+template <>
+struct hash<sparqlExpression::StrongIdAndDatatype> {
+  size_t operator()(const sparqlExpression::StrongIdAndDatatype& x) const {
+    return std::hash<sparqlExpression::StrongId>{}(x._id) ^
+           std::hash<size_t>{}(static_cast<size_t>(x._type));
   }
 };
 }  // namespace std

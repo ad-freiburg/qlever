@@ -37,6 +37,39 @@ double NumericValueGetter::operator()(StrongId strongId,
   }
 }
 
+string StringValueGetter::operator()(StrongId strongId,
+                                     ResultTable::ResultType type,
+                                     EvaluationInput* input) const {
+  const Id id = strongId._value;
+  // This code is borrowed from the original QLever code.
+  if (type == ResultTable::ResultType::VERBATIM) {
+    return std::to_string(id);
+  } else if (type == ResultTable::ResultType::FLOAT) {
+    // used to store the id value of the entry interpreted as a float
+    float tempF;
+    std::memcpy(&tempF, &id, sizeof(float));
+    return std::to_string(tempF);
+  } else if (type == ResultTable::ResultType::TEXT ||
+             type == ResultTable::ResultType::LOCAL_VOCAB) {
+    // TODO<joka921> support local vocab. The use-case it not so important, but
+    // it is easy.
+    throw std::runtime_error{
+        "Performing further expressions on a text variable of a LocalVocab "
+        "entry (typically GROUP_CONCAT result) is currently not supported"};
+  } else {
+    // load the string, parse it as an xsd::int or float
+    std::string entity =
+        input->_qec.getIndex().idToOptionalString(id).value_or("");
+    if (ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+      return std::to_string(ad_utility::convertIndexWordToFloat(entity));
+    } else if (ad_utility::startsWith(entity, VALUE_DATE_PREFIX)) {
+      return ad_utility::convertDateToIndexWord(entity);
+    } else {
+      return entity;
+    }
+  }
+}
+
 // ____________________________________________________________________________
 bool BooleanValueGetter::operator()(StrongId strongId,
                                     ResultTable::ResultType type,
@@ -52,8 +85,8 @@ bool BooleanValueGetter::operator()(StrongId strongId,
 // TODO<joka921> Comment is out of date
 template <size_t WIDTH>
 void getIdsFromVariableImpl(std::vector<StrongId>& result,
-                               const SparqlExpression::Variable& variable,
-                               EvaluationInput* input) {
+                            const SparqlExpression::Variable& variable,
+                            EvaluationInput* input) {
   AD_CHECK(result.empty());
   auto staticInput = input->_inputTable.asStaticView<WIDTH>();
 
@@ -78,30 +111,31 @@ void getIdsFromVariableImpl(std::vector<StrongId>& result,
 // range specified by `input`. The `valueExtractor` is used convert QLever IDs
 // to the appropriate value type.
 auto getIdsFromVariable(const SparqlExpression::Variable& variable,
-                           EvaluationInput* input) {
+                        EvaluationInput* input) {
   auto cols = input->_inputTable.cols();
   std::vector<StrongId> result;
-  CALL_FIXED_SIZE_1(cols, getIdsFromVariableImpl, result,
-                    variable, input);
+  CALL_FIXED_SIZE_1(cols, getIdsFromVariableImpl, result, variable, input);
   return result;
 }
 
 /// TODO<joka921> Comment
-template<typename T>
-auto possiblyExpand (
-    T&& childResult, [[maybe_unused]] size_t targetSize, EvaluationInput* input) {
+template <typename T>
+auto possiblyExpand(T&& childResult, [[maybe_unused]] size_t targetSize,
+                    EvaluationInput* input) {
   if constexpr (std::is_same_v<Set, std::decay_t<T>>) {
-    return std::pair{expandSet(std::move(childResult), targetSize), ResultTable::ResultType{}};
+    return std::pair{expandSet(std::move(childResult), targetSize),
+                     ResultTable::ResultType{}};
   } else if constexpr (std::is_same_v<Variable, std::decay_t<T>>) {
-    return std::pair{getIdsFromVariable(std::forward<T>(childResult), input), input->_variableColumnMap[childResult._variable].second};
+    return std::pair{getIdsFromVariable(std::forward<T>(childResult), input),
+                     input->_variableColumnMap[childResult._variable].second};
   } else {
-    return std::pair{childResult, ResultTable::ResultType{}};
+    return std::pair{std::forward<T>(childResult), ResultTable::ResultType{}};
   }
 };
 
 /// TODO<joka921> Comment
-template<typename T>
-auto makeExtractor (T&& expandedResult) {
+template <typename T>
+auto makeExtractor(T&& expandedResult) {
   return [expanded = std::move(expandedResult)](size_t index) {
     if constexpr (ad_utility::isVector<T>) {
       return expanded[index];
@@ -114,9 +148,14 @@ auto makeExtractor (T&& expandedResult) {
 
 /// TODO<comment>
 template <typename T, typename ValueExtractor>
-auto extractValue(T && singleValue, ValueExtractor valueExtractor, [[maybe_unused]] ResultTable::ResultType resultTypeOfInputVariable, EvaluationInput* input) {
+auto extractValue(
+    T&& singleValue, ValueExtractor valueExtractor,
+    [[maybe_unused]] ResultTable::ResultType resultTypeOfInputVariable,
+    EvaluationInput* input) {
   if constexpr (std::is_same_v<StrongId, std::decay_t<T>>) {
     return valueExtractor(singleValue, resultTypeOfInputVariable, input);
+  } else if constexpr (std::is_same_v<StrongIdAndDatatype, std::decay_t<T>>) {
+    return valueExtractor(singleValue._id, singleValue._type, input);
   } else {
     return valueExtractor(singleValue, input);
   }
@@ -167,19 +206,28 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
       //  std::vector,
       // the following lambda is able to perform this task
 
-      auto expandedAndVariableType = std::make_tuple(possiblyExpand(std::move(args), targetSize, input)...);
+      auto expandedAndVariableType = std::make_tuple(
+          possiblyExpand(std::move(args), targetSize, input)...);
 
-      auto extractorsAndVariableType = std::apply([&](auto&&... els) {return std::make_tuple(std::pair{makeExtractor(std::move(els.first)), els.second}...);}, std::move(expandedAndVariableType));
+      auto extractorsAndVariableType = std::apply(
+          [&](auto&&... els) {
+            return std::make_tuple(
+                std::pair{makeExtractor(std::move(els.first)), els.second}...);
+          },
+          std::move(expandedAndVariableType));
 
       /// This lambda takes all the previously created extractors as input and
       /// creates the actual result of the computation.
       auto create = [&](auto&&... extractors) {
-        using ResultType =
-            std::decay_t<decltype(naryOperation(extractValue(extractors.first(0), valueExtractor, extractors.second, input)...))>;
+        using ResultType = std::decay_t<decltype(
+            naryOperation(extractValue(extractors.first(0), valueExtractor,
+                                       extractors.second, input)...))>;
         LimitedVector<ResultType> result{input->_allocator};
         result.reserve(targetSize);
         for (size_t i = 0; i < targetSize; ++i) {
-          result.push_back(naryOperation(extractValue(extractors.first(i), valueExtractor, extractors.second, input)...));
+          result.push_back(
+              naryOperation(extractValue(extractors.first(i), valueExtractor,
+                                         extractors.second, input)...));
         }
         return result;
       };
@@ -200,7 +248,6 @@ auto liftBinaryCalculationToEvaluateResults(RangeCalculation rangeCalculation,
     }
   };
 }
-
 
 /// TODO<joka921>Comment
 template <bool distinct, typename RangeCalculation, typename ValueExtractor,
@@ -239,12 +286,10 @@ auto liftAggregateCalculationToEvaluateResults(
       // a vector again.
       auto targetSize = std::max({getSize(args).first});
 
-
       //  We have to convert the arguments which are variables or sets into
       //  std::vector,
       // the following lambda is able to perform this task
       // TODO Comment the distinct business
-
 
       // Create a tuple of lambdas, one lambda for each input expression with
       // the following semantics: Each lambda takes a single argument (the
@@ -252,7 +297,8 @@ auto liftAggregateCalculationToEvaluateResults(
       // course ignored).
 
       // This variable is only needed for the case of a distinct variable
-      auto expandedAndResultType = possiblyExpand(std::move(args), targetSize, input);
+      auto expandedAndResultType =
+          possiblyExpand(std::move(args), targetSize, input);
 
       auto& expanded = expandedAndResultType.first;
       auto& resultTypeOfInputVariable = expandedAndResultType.second;
@@ -260,7 +306,8 @@ auto liftAggregateCalculationToEvaluateResults(
       auto extractor = makeExtractor(std::move(expanded));
 
       auto extractValueLocal = [&](auto&& singleValue) {
-        return extractValue(singleValue,valueExtractor, resultTypeOfInputVariable, input);
+        return extractValue(singleValue, valueExtractor,
+                            resultTypeOfInputVariable, input);
       };
       /// This lambda takes all the previously created extractors as input and
       /// creates the actual result of the computation.
@@ -284,7 +331,8 @@ auto liftAggregateCalculationToEvaluateResults(
           }
 
           for (const auto& distinctEl : uniqueHashSet) {
-            result = aggregateOperation(std::move(result), extractValueLocal(distinctEl));
+            result = aggregateOperation(std::move(result),
+                                        extractValueLocal(distinctEl));
           }
           result = finalOperation(std::move(result), uniqueHashSet.size());
           return result;
@@ -301,10 +349,10 @@ auto liftAggregateCalculationToEvaluateResults(
 
 // ____________________________________________________________________________
 template <typename RangeCalculation, typename ValueExtractor,
-          typename BinaryOperation>
+          typename BinaryOperation, TagString Tag>
 SparqlExpression::EvaluateResult
-BinaryExpression<RangeCalculation, ValueExtractor, BinaryOperation>::evaluate(
-    EvaluationInput* input) const {
+BinaryExpression<RangeCalculation, ValueExtractor, BinaryOperation,
+                 Tag>::evaluate(EvaluationInput* input) const {
   AD_CHECK(!_children.empty())
   auto result = _children[0]->evaluate(input);
 
@@ -319,15 +367,15 @@ BinaryExpression<RangeCalculation, ValueExtractor, BinaryOperation>::evaluate(
 
 // ___________________________________________________________________________
 template <typename RangeCalculation, typename ValueExtractor,
-          typename UnaryOperation>
+          typename UnaryOperation, TagString Tag>
 SparqlExpression::EvaluateResult
-UnaryExpression<RangeCalculation, ValueExtractor, UnaryOperation>::evaluate(
-    EvaluationInput* input) const {
+UnaryExpression<RangeCalculation, ValueExtractor, UnaryOperation,
+                Tag>::evaluate(EvaluationInput* input) const {
   auto result = _child->evaluate(input);
 
   auto calculator = liftBinaryCalculationToEvaluateResults(
       RangeCalculation{}, ValueExtractor{}, UnaryOperation{}, input);
-  result = std::visit(calculator, result);
+  result = std::move(std::visit(calculator, result));
   return result;
 };
 
@@ -369,8 +417,8 @@ DispatchedBinaryExpression<ValueExtractor, TagAndFunctions...>::evaluate(
           _relations[i - 1], ValueExtractor{}, input,
           std::forward<Args>(args)...);
     };
-    result = std::visit(calculator, std::move(result),
-                        _children[i]->evaluate(input));
+    result = std::move(std::visit(calculator, std::move(result),
+                                  _children[i]->evaluate(input)));
   }
   return result;
 };
@@ -392,10 +440,15 @@ bool isConstant(const SparqlExpression::EvaluateResult& x) {
   return std::visit(v, x);
 }
 
-double getDoubleFromConstant(const SparqlExpression::EvaluateResult& x) {
-  auto v = []<typename T>(const T& t)->double {
+double getDoubleFromConstant(const SparqlExpression::EvaluateResult& x,
+                             [[maybe_unused]] EvaluationInput* input) {
+  auto v = [input]<typename T>(const T& t)->double {
     if constexpr (ad_utility::isVector<T> || std::is_same_v<Variable, T>) {
       AD_CHECK(false);
+    } else if constexpr (std::is_same_v<string, T>) {
+      return std::numeric_limits<double>::quiet_NaN();
+    } else if constexpr (std::is_same_v<StrongIdAndDatatype, T>) {
+      return NumericValueGetter{}(t._id, t._type, input);
     } else {
       return static_cast<double>(t);
     }
@@ -423,7 +476,7 @@ SparqlExpression::EvaluateResult EqualsExpression::evaluate(
     return std::move(result);
   } else if (isKbVariable(left, input) && isConstant(right)) {
     auto valueString = ad_utility::convertFloatStringToIndexWord(
-        std::to_string(getDoubleFromConstant(right)));
+        std::to_string(getDoubleFromConstant(right, input)));
     Id idOfConstant;
     auto leftVariable = std::get<Variable>(left)._variable;
     auto leftColumn = input->_variableColumnMap[leftVariable].first;
@@ -471,32 +524,67 @@ SparqlExpression::EvaluateResult EqualsExpression::evaluate(
   // TODO<joka921> Continue here
 }
 
-template<typename RangeCalculation, typename ValueGetter, typename AggregateOp, typename FinalOp>
-SparqlExpression::EvaluateResult AggregateExpression<RangeCalculation, ValueGetter, AggregateOp, FinalOp>::evaluate(
-    EvaluationInput* input) const {
+template <typename RangeCalculation, typename ValueGetter, typename AggregateOp,
+          typename FinalOp, TagString Tag>
+SparqlExpression::EvaluateResult
+AggregateExpression<RangeCalculation, ValueGetter, AggregateOp, FinalOp,
+                    Tag>::evaluate(EvaluationInput* input) const {
   auto childResult = _child->evaluate(input);
-
 
   if (_distinct) {
     auto calculator = liftAggregateCalculationToEvaluateResults<true>(
-        NoRangeCalculation{}, BooleanValueGetter{}, count, noop, input);
+        RangeCalculation{}, ValueGetter{}, _aggregateOp, FinalOp{}, input);
     return std::visit(calculator, std::move(childResult));
   } else {
     auto calculator = liftAggregateCalculationToEvaluateResults<false>(
-        NoRangeCalculation{}, BooleanValueGetter{}, count, noop, input);
+        RangeCalculation{}, ValueGetter{}, _aggregateOp, FinalOp{}, input);
     return std::visit(calculator, std::move(childResult));
   }
 }
 
+SparqlExpression::EvaluateResult SampleExpression::evaluate(
+    EvaluationInput* input) const {
+  // The child is already set up to perform all the work.
+  auto childResultVariant = _child->evaluate(input);
+  auto evaluator = [input]<typename T>(const T& childResult)->EvaluateResult {
+    if constexpr (std::is_same_v<T, setOfIntervals::Set>) {
+      // If any element is true, then we sample this element.
+      return !childResult.empty();
+    } else if constexpr (ad_utility::isVector<T>) {
+      AD_CHECK(!childResult.empty());
+      return childResult[0];
+    } else if constexpr (std::is_same_v<T, Variable>) {
+      AD_CHECK(input->_endIndex > input->_beginIndex);
+      EvaluationInput newInput{input->_qec,
+
+                               input->_variableColumnMap,
+                               input->_inputTable,
+                               input->_beginIndex,
+                               input->_beginIndex + 1,
+                               input->_allocator};
+      auto idOfFirstAsVector = getIdsFromVariable(childResult, &newInput);
+      return StrongIdAndDatatype{
+          idOfFirstAsVector[0],
+          input->_variableColumnMap.at(childResult._variable).second};
+    } else {
+      // this is a constant
+      return childResult;
+    }
+  };
+
+  return std::visit(evaluator, std::move(childResultVariant));
+}
+
 // Explicit instantiations.
 template class UnaryExpression<NoRangeCalculation, BooleanValueGetter,
-                               decltype(unaryNegate)>;
+                               decltype(unaryNegate), "!">;
 template class UnaryExpression<NoRangeCalculation, NumericValueGetter,
-                               decltype(unaryMinus)>;
-template class BinaryExpression<Union, BooleanValueGetter, decltype(orLambda)>;
+                               decltype(unaryMinus), "unary-">;
+template class BinaryExpression<Union, BooleanValueGetter, decltype(orLambda),
+                                "||">;
 
 template class BinaryExpression<Intersection, BooleanValueGetter,
-                                decltype(andLambda)>;
+                                decltype(andLambda), "&&">;
 
 template class DispatchedBinaryExpression<
     NumericValueGetter, TaggedFunction<"+", decltype(add)>,
@@ -506,12 +594,21 @@ template class DispatchedBinaryExpression<
     NumericValueGetter, TaggedFunction<"*", decltype(multiply)>,
     TaggedFunction<"/", decltype(divide)>>;
 
-template class AggregateExpression<NoRangeCalculation, BooleanValueGetter, decltype(count), decltype(noop)>;
+template class AggregateExpression<NoRangeCalculation, BooleanValueGetter,
+                                   decltype(count), decltype(noop), "COUNT">;
 
-template class AggregateExpression<NoRangeCalculation, NumericValueGetter, decltype(add), decltype(noop)>;
+template class AggregateExpression<NoRangeCalculation, NumericValueGetter,
+                                   decltype(add), decltype(noop), "SUM">;
 
-template class AggregateExpression<NoRangeCalculation, NumericValueGetter, decltype(add), decltype(averageFinalOp)>;
+template class AggregateExpression<NoRangeCalculation, NumericValueGetter,
+                                   decltype(add), decltype(averageFinalOp),
+                                   "AVG">;
 
-template class AggregateExpression<NoRangeCalculation, NumericValueGetter, decltype(minLambda), decltype(noop)>;
-template class AggregateExpression<NoRangeCalculation, NumericValueGetter, decltype(maxLambda), decltype(noop)>;
+template class AggregateExpression<NoRangeCalculation, NumericValueGetter,
+                                   decltype(minLambda), decltype(noop), "MIN">;
+template class AggregateExpression<NoRangeCalculation, NumericValueGetter,
+                                   decltype(maxLambda), decltype(noop), "MAX">;
+template class AggregateExpression<NoRangeCalculation, StringValueGetter,
+                                   PerformConcat, decltype(noop),
+                                   "GROUP_CONCAT">;
 }  // namespace sparqlExpression::detail

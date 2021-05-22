@@ -60,6 +60,9 @@ struct ConstexprSmallString {
   bool operator==(const ConstexprSmallString& rhs) const {
     return !std::strcmp(_characters, rhs._characters);
   }
+
+  /// Implicit conversion to std::string_view
+  operator string_view() const { return {_characters, _size}; }
 };
 }  // namespace ad_utility
 

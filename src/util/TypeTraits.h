@@ -27,6 +27,5 @@ using IsInstantiation =
 
 /// isVector<T> is true if and only if T is an instantiation of std::vector
 template <typename T>
-concept isVector = IsInstantiation<std::vector, T>::value;
-
+constexpr static bool isVector = IsInstantiation<std::vector, T>::value;
 }  // namespace ad_utility
