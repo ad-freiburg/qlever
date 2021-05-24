@@ -172,7 +172,8 @@ OrderKey SparqlParser::parseOrderKey(const std::string& order,
       if (s == a._outVarName) {
         throw ParseException("A variable with name " + s +
                              " is already used, but the order by with alias " +
-                             a._expression.getDescriptor() + " tries to use it again.");
+                             a._expression.getDescriptor() +
+                             " tries to use it again.");
       }
     }
     _lexer.expect(")");
@@ -966,8 +967,7 @@ SparqlParser::parseExpressionByAntlr() {
 }
 
 // ________________________________________________________________________
-ParsedQuery::Alias
-SparqlParser::parseAliasByAntlr() {
+ParsedQuery::Alias SparqlParser::parseAliasByAntlr() {
   auto str = _lexer.getUnconsumedInput();
   auto resultAndRemainingText = sparqlParserHelpers::parseAlias(str);
   _lexer.reset(std::move(resultAndRemainingText._remainingText));

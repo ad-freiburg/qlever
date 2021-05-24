@@ -9,12 +9,12 @@
 #include <variant>
 #include <vector>
 
+#include "../engine/CallFixedSize.h"
 #include "../engine/QueryExecutionContext.h"
 #include "../engine/ResultTable.h"
 #include "../global/Id.h"
 #include "../util/ConstexprSmallString.h"
 #include "./BooleanRangeExpressions.h"
-#include "../engine/CallFixedSize.h"
 
 namespace sparqlExpression {
 /// Virtual base class for an arbitrary Sparql Expression which holds the
@@ -51,8 +51,8 @@ struct StrongIdAndDatatype {
 /// Typedef for a map from variables names to (input column, input column
 /// type) which is needed to evaluate expressions that contain variables.
 using VariableColumnMapWithResultTypes =
-ad_utility::HashMap<std::string,
-    std::pair<size_t, ResultTable::ResultType>>;
+    ad_utility::HashMap<std::string,
+                        std::pair<size_t, ResultTable::ResultType>>;
 
 using VariableColumnMap = ad_utility::HashMap<std::string, size_t>;
 
@@ -71,8 +71,7 @@ struct EvaluationInput {
   /// Constructor for evaluating an expression on a part of the input
   EvaluationInput(const QueryExecutionContext& qec,
                   VariableColumnMapWithResultTypes map,
-                  const IdTable& inputTable, size_t beginIndex,
-                  size_t endIndex,
+                  const IdTable& inputTable, size_t beginIndex, size_t endIndex,
                   const ad_utility::AllocatorWithLimit<Id>& allocator)
       : _qec{qec},
         _variableColumnMap{std::move(map)},
@@ -112,8 +111,6 @@ class SparqlExpression {
   using EvaluationInput = EvaluationInput;
   using VariableColumnMap = VariableColumnMap;
   using VariableColumnMapWithResultTypes = VariableColumnMapWithResultTypes;
-
-
 
   /// The result of an epxression variable can either be a constant of type
   /// bool/double/int (same value for all result rows), a vector of one of those
@@ -617,7 +614,7 @@ void getIdsFromVariableImpl(std::vector<StrongId>& result,
 // range specified by `input`. The `valueExtractor` is used convert QLever IDs
 // to the appropriate value type.
 inline auto getIdsFromVariable(const SparqlExpression::Variable& variable,
-                        EvaluationInput* input) {
+                               EvaluationInput* input) {
   auto cols = input->_inputTable.cols();
   std::vector<StrongId> result;
   CALL_FIXED_SIZE_1(cols, getIdsFromVariableImpl, result, variable, input);
@@ -629,8 +626,9 @@ template <typename T>
 auto possiblyExpand(T&& childResult, [[maybe_unused]] size_t targetSize,
                     EvaluationInput* input) {
   if constexpr (std::is_same_v<setOfIntervals::Set, std::decay_t<T>>) {
-    return std::pair{setOfIntervals::expandSet(std::move(childResult), targetSize),
-                     ResultTable::ResultType{}};
+    return std::pair{
+        setOfIntervals::expandSet(std::move(childResult), targetSize),
+        ResultTable::ResultType{}};
   } else if constexpr (std::is_same_v<Variable, std::decay_t<T>>) {
     return std::pair{getIdsFromVariable(std::forward<T>(childResult), input),
                      input->_variableColumnMap[childResult._variable].second};

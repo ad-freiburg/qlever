@@ -7,8 +7,8 @@
 
 #include <memory>
 #include <string>
-#include "./SparqlExpressionWrapper.h"
 #include "./ParsedQuery.h"
+#include "./SparqlExpressionWrapper.h"
 
 namespace sparqlParserHelpers {
 
@@ -25,8 +25,8 @@ struct ParseResultAndRemainingText {
 ParseResultAndRemainingText<sparqlExpression::SparqlExpressionWrapper>
 parseExpression(const std::string& input);
 
-ParseResultAndRemainingText<ParsedQuery::Alias>
-    parseAlias(const std::string& input);
+ParseResultAndRemainingText<ParsedQuery::Alias> parseAlias(
+    const std::string& input);
 }  // namespace sparqlParserHelpers
 
 #endif  // QLEVER_SPARQLPARSERHELPERS_H

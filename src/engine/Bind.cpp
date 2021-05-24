@@ -211,7 +211,8 @@ void Bind::computeExpressionBind(
       std::memcpy(&res(i, inCols), &tmpF, sizeof(float));
     }
     *resultType = ResultTable::ResultType::FLOAT;
-  } else if (auto ptr = std::get_if<sparqlExpression::StrongIdAndDatatype>(&expressionResult)) {
+  } else if (auto ptr = std::get_if<sparqlExpression::StrongIdAndDatatype>(
+                 &expressionResult)) {
     for (size_t i = 0; i < inSize; ++i) {
       res(i, inCols) = ptr->_id._value;
     }

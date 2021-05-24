@@ -10,9 +10,9 @@
 #include <vector>
 
 #include "../parser/ParsedQuery.h"
+#include "../parser/SparqlExpressionWrapper.h"
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
-#include "../parser/SparqlExpressionWrapper.h"
 
 using std::string;
 using std::vector;
@@ -95,16 +95,14 @@ class GroupBy : public Operation {
 
   virtual void computeResult(ResultTable* result) override;
 
-
   template <int IN_WIDTH, int OUT_WIDTH>
-  void processGroup(const Aggregate& expression, const sparqlExpression::EvaluationInput* evaluationContextIn,
-                             size_t blockStart,
-                             size_t blockEnd, const IdTableView<IN_WIDTH>& input,
-                             IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
-                    size_t resultColumn,
-                             const ResultTable* inTable, ResultTable* outTable,
-                             ResultTable::ResultType* resultType
-  ) const;
+  void processGroup(
+      const Aggregate& expression,
+      const sparqlExpression::EvaluationInput* evaluationContextIn,
+      size_t blockStart, size_t blockEnd, const IdTableView<IN_WIDTH>& input,
+      IdTableStatic<OUT_WIDTH>* result, size_t resultRow, size_t resultColumn,
+      const ResultTable* inTable, ResultTable* outTable,
+      ResultTable::ResultType* resultType) const;
 
   template <int IN_WIDTH, int OUT_WIDTH>
   void doGroupBy(const IdTable& dynInput,

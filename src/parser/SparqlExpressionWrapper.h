@@ -7,9 +7,9 @@
 
 #include <memory>
 #include <vector>
-#include "../util/Random.h"
-#include "../util/HashSet.h"
 #include "../util/HashMap.h"
+#include "../util/HashSet.h"
+#include "../util/Random.h"
 
 namespace sparqlExpression {
 
@@ -24,7 +24,8 @@ class SparqlExpressionWrapper {
 
   std::vector<std::string> getUnaggregatedVariables() const;
 
-  bool isAggregate(const ad_utility::HashSet<string> groupedVariables = {}) const {
+  bool isAggregate(
+      const ad_utility::HashSet<string> groupedVariables = {}) const {
     auto unaggregatedVariables = getUnaggregatedVariables();
     for (const auto& var : unaggregatedVariables) {
       if (!groupedVariables.contains(var)) {

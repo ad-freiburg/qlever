@@ -342,7 +342,6 @@ class ParsedQuery {
       PropertyPath& item, const ad_utility::HashMap<string, string>& prefixMap);
   static void expandPrefix(
       string& item, const ad_utility::HashMap<string, string>& prefixMap);
-
 };
 
 struct GraphPatternOperation {

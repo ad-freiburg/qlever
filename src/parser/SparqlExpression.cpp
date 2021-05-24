@@ -74,13 +74,11 @@ string StringValueGetter::operator()(StrongId strongId,
 bool BooleanValueGetter::operator()(StrongId strongId,
                                     ResultTable::ResultType type,
                                     EvaluationInput* input) const {
-
   // Every knowledge base value that is bound converts to "True"
-  // TODO<joka921> check for the correct semantics of the error handling and implement it in a further version.
+  // TODO<joka921> check for the correct semantics of the error handling and
+  // implement it in a further version.
   return type != ResultTable::ResultType::KB || strongId._value != ID_NO_VALUE;
 }
-
-
 
 /// TODO<comment>
 template <typename T, typename ValueExtractor>
