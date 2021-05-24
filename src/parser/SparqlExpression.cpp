@@ -74,77 +74,13 @@ string StringValueGetter::operator()(StrongId strongId,
 bool BooleanValueGetter::operator()(StrongId strongId,
                                     ResultTable::ResultType type,
                                     EvaluationInput* input) const {
-  double floatResult = NumericValueGetter{}(strongId, type, input);
-  // convert "nan" to false for now. TODO<joka921> proper error handling in
-  // expressions.
-  return static_cast<bool>(floatResult) && !std::isnan(floatResult);
+
+  // Every knowledge base value that is bound converts to "True"
+  // TODO<joka921> check for the correct semantics of the error handling and implement it in a further version.
+  return type != ResultTable::ResultType::KB || strongId._value != ID_NO_VALUE;
 }
 
-// Implementation of the getValuesFromVariable method (see below). Optimized for
-// the different IdTable specializations.
-// TODO<joka921> Comment is out of date
-template <size_t WIDTH>
-void getIdsFromVariableImpl(std::vector<StrongId>& result,
-                            const SparqlExpression::Variable& variable,
-                            EvaluationInput* input) {
-  AD_CHECK(result.empty());
-  auto staticInput = input->_inputTable.asStaticView<WIDTH>();
 
-  const size_t beginIndex = input->_beginIndex;
-  size_t resultSize = input->_endIndex - input->_beginIndex;
-
-  if (!input->_variableColumnMap.contains(variable._variable)) {
-    throw std::runtime_error(
-        "Variable " + variable._variable +
-        " could not be mapped to input column of expression evaluation");
-  }
-
-  size_t columnIndex = input->_variableColumnMap[variable._variable].first;
-
-  result.reserve(resultSize);
-  for (size_t i = 0; i < resultSize; ++i) {
-    result.push_back(StrongId{staticInput(beginIndex + i, columnIndex)});
-  }
-}
-
-// Convert a variable to a std::vector of all the values it takes in the input
-// range specified by `input`. The `valueExtractor` is used convert QLever IDs
-// to the appropriate value type.
-auto getIdsFromVariable(const SparqlExpression::Variable& variable,
-                        EvaluationInput* input) {
-  auto cols = input->_inputTable.cols();
-  std::vector<StrongId> result;
-  CALL_FIXED_SIZE_1(cols, getIdsFromVariableImpl, result, variable, input);
-  return result;
-}
-
-/// TODO<joka921> Comment
-template <typename T>
-auto possiblyExpand(T&& childResult, [[maybe_unused]] size_t targetSize,
-                    EvaluationInput* input) {
-  if constexpr (std::is_same_v<Set, std::decay_t<T>>) {
-    return std::pair{expandSet(std::move(childResult), targetSize),
-                     ResultTable::ResultType{}};
-  } else if constexpr (std::is_same_v<Variable, std::decay_t<T>>) {
-    return std::pair{getIdsFromVariable(std::forward<T>(childResult), input),
-                     input->_variableColumnMap[childResult._variable].second};
-  } else {
-    return std::pair{std::forward<T>(childResult), ResultTable::ResultType{}};
-  }
-};
-
-/// TODO<joka921> Comment
-template <typename T>
-auto makeExtractor(T&& expandedResult) {
-  return [expanded = std::move(expandedResult)](size_t index) {
-    if constexpr (ad_utility::isVector<T>) {
-      return expanded[index];
-    } else {
-      static_assert(!std::is_same_v<Variable, T>);
-      return expanded;
-    }
-  };
-}
 
 /// TODO<comment>
 template <typename T, typename ValueExtractor>

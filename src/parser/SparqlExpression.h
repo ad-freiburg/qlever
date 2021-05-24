@@ -1,4 +1,4 @@
-//
+
 // Created by johannes on 09.05.21.
 //
 
@@ -14,6 +14,7 @@
 #include "../global/Id.h"
 #include "../util/ConstexprSmallString.h"
 #include "./BooleanRangeExpressions.h"
+#include "../engine/CallFixedSize.h"
 
 namespace sparqlExpression {
 /// Virtual base class for an arbitrary Sparql Expression which holds the
@@ -47,6 +48,60 @@ struct StrongIdAndDatatype {
   bool operator==(const StrongIdAndDatatype&) const = default;
 };
 
+/// Typedef for a map from variables names to (input column, input column
+/// type) which is needed to evaluate expressions that contain variables.
+using VariableColumnMapWithResultTypes =
+ad_utility::HashMap<std::string,
+    std::pair<size_t, ResultTable::ResultType>>;
+
+using VariableColumnMap = ad_utility::HashMap<std::string, size_t>;
+
+/// All the additional information which is needed to evaluate a Sparql
+/// Expression
+struct EvaluationInput {
+  /// Constructor for evaluating an expression on the complete input
+  EvaluationInput(const QueryExecutionContext& qec,
+                  VariableColumnMapWithResultTypes map,
+                  const IdTable& inputTable,
+                  const ad_utility::AllocatorWithLimit<Id>& allocator)
+      : _qec{qec},
+        _variableColumnMap{std::move(map)},
+        _inputTable{inputTable},
+        _allocator{allocator} {}
+  /// Constructor for evaluating an expression on a part of the input
+  EvaluationInput(const QueryExecutionContext& qec,
+                  VariableColumnMapWithResultTypes map,
+                  const IdTable& inputTable, size_t beginIndex,
+                  size_t endIndex,
+                  const ad_utility::AllocatorWithLimit<Id>& allocator)
+      : _qec{qec},
+        _variableColumnMap{std::move(map)},
+        _inputTable{inputTable},
+        _beginIndex{beginIndex},
+        _endIndex{endIndex},
+        _allocator{allocator} {}
+  /// Needed to map Ids to their value from the vocabulary
+
+  const QueryExecutionContext& _qec;
+  VariableColumnMapWithResultTypes _variableColumnMap;
+
+  /// The input of the expression
+  const IdTable& _inputTable;
+  /// The indices of the actual range in the _inputTable on which the
+  /// expression is evaluated. For BIND expressions this is always [0,
+  /// _inputTable.size()) but for GROUP BY evaluation we also need only parts
+  /// of the input.
+  size_t _beginIndex = 0;
+  size_t _endIndex = _inputTable.size();
+
+  /// The input is sorted on these columns. This information can be used to
+  /// perform efficient filter operations like = < >
+  std::vector<size_t> _resultSortedOn;
+
+  /// Let the expression evaluation also respect the memory limit.
+  ad_utility::AllocatorWithLimit<Id> _allocator;
+};
+
 class SparqlExpression {
  public:
   /// A Sparql Variable, e.g. "?x"
@@ -54,59 +109,11 @@ class SparqlExpression {
     std::string _variable;
   };
 
-  /// Typedef for a map from variables names to (input column, input column
-  /// type) which is needed to evaluate expressions that contain variables.
-  using VariableColumnMapWithResultTypes =
-      ad_utility::HashMap<std::string,
-                          std::pair<size_t, ResultTable::ResultType>>;
+  using EvaluationInput = EvaluationInput;
+  using VariableColumnMap = VariableColumnMap;
+  using VariableColumnMapWithResultTypes = VariableColumnMapWithResultTypes;
 
-  using VariableColumnMap = ad_utility::HashMap<std::string, size_t>;
 
-  /// All the additional information which is needed to evaluate a Sparql
-  /// Expression
-  struct EvaluationInput {
-    /// Constructor for evaluating an expression on the complete input
-    EvaluationInput(const QueryExecutionContext& qec,
-                    VariableColumnMapWithResultTypes map,
-                    const IdTable& inputTable,
-                    const ad_utility::AllocatorWithLimit<Id>& allocator)
-        : _qec{qec},
-          _variableColumnMap{std::move(map)},
-          _inputTable{inputTable},
-          _allocator{allocator} {}
-    /// Constructor for evaluating an expression on a part of the input
-    EvaluationInput(const QueryExecutionContext& qec,
-                    VariableColumnMapWithResultTypes map,
-                    const IdTable& inputTable, size_t beginIndex,
-                    size_t endIndex,
-                    const ad_utility::AllocatorWithLimit<Id>& allocator)
-        : _qec{qec},
-          _variableColumnMap{std::move(map)},
-          _inputTable{inputTable},
-          _beginIndex{beginIndex},
-          _endIndex{endIndex},
-          _allocator{allocator} {}
-    /// Needed to map Ids to their value from the vocabulary
-
-    const QueryExecutionContext& _qec;
-    VariableColumnMapWithResultTypes _variableColumnMap;
-
-    /// The input of the expression
-    const IdTable& _inputTable;
-    /// The indices of the actual range in the _inputTable on which the
-    /// expression is evaluated. For BIND expressions this is always [0,
-    /// _inputTable.size()) but for GROUP BY evaluation we also need only parts
-    /// of the input.
-    size_t _beginIndex = 0;
-    size_t _endIndex = _inputTable.size();
-
-    /// The input is sorted on these columns. This information can be used to
-    /// perform efficient filter operations like = < >
-    std::vector<size_t> _resultSortedOn;
-
-    /// Let the expression evaluation also respect the memory limit.
-    ad_utility::AllocatorWithLimit<Id> _allocator;
-  };
 
   /// The result of an epxression variable can either be a constant of type
   /// bool/double/int (same value for all result rows), a vector of one of those
@@ -129,7 +136,7 @@ class SparqlExpression {
 
   /// Return all the variables, that occur in the expression, but are not
   /// aggregated.
-  virtual vector<std::string> getUnaggregatedVariable() = 0;
+  virtual vector<std::string> getUnaggregatedVariables() = 0;
 
   virtual string getCacheKey(const VariableColumnMap& varColMap) const = 0;
 
@@ -187,7 +194,7 @@ class LiteralExpression : public SparqlExpression {
     }
   }
 
-  vector<std::string> getUnaggregatedVariable() override {
+  vector<std::string> getUnaggregatedVariables() override {
     if constexpr (std::is_same_v<T, Variable>) {
       return {_value._variable};
     } else {
@@ -244,10 +251,10 @@ class BinaryExpression : public SparqlExpression {
   }
 
   // _________________________________________________________________________
-  vector<std::string> getUnaggregatedVariable() override {
+  vector<std::string> getUnaggregatedVariables() override {
     std::vector<string> result;
     for (const auto& ptr : _children) {
-      auto childResult = ptr->getUnaggregatedVariable();
+      auto childResult = ptr->getUnaggregatedVariables();
       result.insert(result.end(), std::make_move_iterator(childResult.begin()),
                     std::make_move_iterator(childResult.end()));
     }
@@ -283,8 +290,8 @@ class UnaryExpression : public SparqlExpression {
   vector<std::string*> strings() override { return _child->strings(); }
 
   // _____________________________________________________________________
-  vector<std::string> getUnaggregatedVariable() override {
-    return _child->getUnaggregatedVariable();
+  vector<std::string> getUnaggregatedVariables() override {
+    return _child->getUnaggregatedVariables();
   }
 
   // _________________________________________________________________________
@@ -339,10 +346,10 @@ class DispatchedBinaryExpression : public SparqlExpression {
     }
     return result;
   }
-  vector<std::string> getUnaggregatedVariable() override {
+  vector<std::string> getUnaggregatedVariables() override {
     std::vector<string> result;
     for (const auto& ptr : _children) {
-      auto childResult = ptr->getUnaggregatedVariable();
+      auto childResult = ptr->getUnaggregatedVariables();
       result.insert(result.end(), std::make_move_iterator(childResult.begin()),
                     std::make_move_iterator(childResult.end()));
     }
@@ -384,9 +391,9 @@ class EqualsExpression : public SparqlExpression {
   }
 
   // _______________________________________________________________________
-  vector<std::string> getUnaggregatedVariable() override {
-    auto result = _childLeft->getUnaggregatedVariable();
-    auto resultRight = _childRight->getUnaggregatedVariable();
+  vector<std::string> getUnaggregatedVariables() override {
+    auto result = _childLeft->getUnaggregatedVariables();
+    auto resultRight = _childRight->getUnaggregatedVariables();
     result.insert(result.end(), std::make_move_iterator(resultRight.begin()),
                   std::make_move_iterator(resultRight.end()));
     return result;
@@ -417,7 +424,7 @@ class AggregateExpression : public SparqlExpression {
 
   // _____________________________________________________________________
   vector<std::string*> strings() override { return _child->strings(); }
-  vector<std::string> getUnaggregatedVariable() override {
+  vector<std::string> getUnaggregatedVariables() override {
     // This is an aggregation, so it never leaves any unaggregated variables.
     return {};
   }
@@ -494,7 +501,7 @@ class GroupConcatExpression : public SparqlExpression {
 
   // _____________________________________________________________________
   vector<std::string*> strings() override { return _child->strings(); }
-  vector<std::string> getUnaggregatedVariable() override {
+  vector<std::string> getUnaggregatedVariables() override {
     // This is an aggregation, so it never leaves any unaggregated variables.
     return {};
   }
@@ -519,7 +526,7 @@ class SampleExpression : public SparqlExpression {
 
   // _____________________________________________________________________
   vector<std::string*> strings() override { return _child->strings(); }
-  vector<std::string> getUnaggregatedVariable() override {
+  vector<std::string> getUnaggregatedVariables() override {
     // This is an aggregation, so it never leaves any unaggregated variables.
     return {};
   }
@@ -578,6 +585,72 @@ struct BooleanValueGetter {
   // TODO<joka921> check if an empty string is indeed "false"
   bool operator()(string s, EvaluationInput*) { return !s.empty(); }
 };
+
+// Implementation of the getValuesFromVariable method (see below). Optimized for
+// the different IdTable specializations.
+// TODO<joka921> Comment is out of date
+template <size_t WIDTH>
+void getIdsFromVariableImpl(std::vector<StrongId>& result,
+                            const SparqlExpression::Variable& variable,
+                            EvaluationInput* input) {
+  AD_CHECK(result.empty());
+  auto staticInput = input->_inputTable.asStaticView<WIDTH>();
+
+  const size_t beginIndex = input->_beginIndex;
+  size_t resultSize = input->_endIndex - input->_beginIndex;
+
+  if (!input->_variableColumnMap.contains(variable._variable)) {
+    throw std::runtime_error(
+        "Variable " + variable._variable +
+        " could not be mapped to input column of expression evaluation");
+  }
+
+  size_t columnIndex = input->_variableColumnMap[variable._variable].first;
+
+  result.reserve(resultSize);
+  for (size_t i = 0; i < resultSize; ++i) {
+    result.push_back(StrongId{staticInput(beginIndex + i, columnIndex)});
+  }
+}
+
+// Convert a variable to a std::vector of all the values it takes in the input
+// range specified by `input`. The `valueExtractor` is used convert QLever IDs
+// to the appropriate value type.
+inline auto getIdsFromVariable(const SparqlExpression::Variable& variable,
+                        EvaluationInput* input) {
+  auto cols = input->_inputTable.cols();
+  std::vector<StrongId> result;
+  CALL_FIXED_SIZE_1(cols, getIdsFromVariableImpl, result, variable, input);
+  return result;
+}
+
+/// TODO<joka921> Comment
+template <typename T>
+auto possiblyExpand(T&& childResult, [[maybe_unused]] size_t targetSize,
+                    EvaluationInput* input) {
+  if constexpr (std::is_same_v<setOfIntervals::Set, std::decay_t<T>>) {
+    return std::pair{setOfIntervals::expandSet(std::move(childResult), targetSize),
+                     ResultTable::ResultType{}};
+  } else if constexpr (std::is_same_v<Variable, std::decay_t<T>>) {
+    return std::pair{getIdsFromVariable(std::forward<T>(childResult), input),
+                     input->_variableColumnMap[childResult._variable].second};
+  } else {
+    return std::pair{std::forward<T>(childResult), ResultTable::ResultType{}};
+  }
+};
+
+/// TODO<joka921> Comment
+template <typename T>
+auto makeExtractor(T&& expandedResult) {
+  return [expanded = std::move(expandedResult)](size_t index) {
+    if constexpr (ad_utility::isVector<T>) {
+      return expanded[index];
+    } else {
+      static_assert(!std::is_same_v<Variable, T>);
+      return expanded;
+    }
+  };
+}
 
 }  // namespace detail
 

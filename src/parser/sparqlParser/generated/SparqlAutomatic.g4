@@ -64,7 +64,9 @@ selectClause
     : SELECT ( DISTINCT | REDUCED)? ( ( var | alias )+ | '*' )  // extracted the alias rule for easier visiting.
     ;
 
-alias: ( '(' expression AS var ')' ) ;  // NOT part of sparql, for easier antlr parsing
+alias: ( '(' aliasWithouBrackes ')' ) ;  // NOT part of sparql, for easier antlr parsing
+
+aliasWithouBrackes : ( expression AS var ); // Needed for  interaction between old and new parser
 
 constructQuery : CONSTRUCT ( constructTemplate datasetClause* whereClause solutionModifier | datasetClause* WHERE '{' triplesTemplate? '}' solutionModifier );
 

@@ -8,24 +8,36 @@
 #include <memory>
 #include <vector>
 #include "../util/Random.h"
+#include "../util/HashSet.h"
+#include "../util/HashMap.h"
 
 namespace sparqlExpression {
 
+using VariableColumnMap = ad_utility::HashMap<std::string, size_t>;
+
 class SparqlExpression;
+struct EvaluationInput;
 class SparqlExpressionWrapper {
  public:
   static constexpr const char* Name = "ComplexArithmeticExpression";
   std::string getDescriptor() const { return "Arithmetic Bind"; }
 
-  std::string asString() const {
-    // Random implementation to prevent caching. TODO<joka921> :fix this
-    FastRandomIntGenerator<size_t> r;
-    std::string result;
-    for (size_t i = 0; i < 5; ++i) {
-      result += std::to_string(r());
+  std::vector<std::string> getUnaggregatedVariables() const;
+
+  bool isAggregate(const ad_utility::HashSet<string> groupedVariables = {}) const {
+    auto unaggregatedVariables = getUnaggregatedVariables();
+    for (const auto& var : unaggregatedVariables) {
+      if (!groupedVariables.contains(var)) {
+        return false;
+      }
     }
-    return result;
+    return true;
   }
+
+  // Returns the variable which is counted. needed by the pattern trick.
+  std::optional<std::string> isNonDistinctCountOfSingleVariable() const;
+
+  std::string asString(const VariableColumnMap& varColMap) const;
   SparqlExpressionWrapper(std::shared_ptr<SparqlExpression>&& pimpl);
   ~SparqlExpressionWrapper();
   SparqlExpressionWrapper(SparqlExpressionWrapper&&) noexcept;
@@ -36,6 +48,7 @@ class SparqlExpressionWrapper {
   std::vector<std::string*> strings();
 
   SparqlExpression* getImpl() { return _pimpl.get(); }
+  const SparqlExpression* getImpl() const { return _pimpl.get(); }
 
  private:
   std::shared_ptr<SparqlExpression> _pimpl;

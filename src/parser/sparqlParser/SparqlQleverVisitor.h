@@ -105,7 +105,15 @@ class SparqlQleverVisitor : public SparqlAutomaticVisitor {
   }
 
   antlrcpp::Any visitAlias(SparqlAutomaticParser::AliasContext* ctx) override {
+    // there is only one child (the content withing the brackets
     return visitChildren(ctx);
+  }
+
+  antlrcpp::Any visitAliasWithouBrackes(SparqlAutomaticParser::AliasWithouBrackesContext *ctx) override {
+    auto expressionPtr = std::move(ctx->expression()->accept(this).as<ExpressionPtr>());
+    auto wrapper = sparqlExpression::SparqlExpressionWrapper{std::move(expressionPtr)};
+    return ParsedQuery::Alias{std::move(wrapper), ctx->var()->getText()};
+
   }
 
   antlrcpp::Any visitConstructQuery(

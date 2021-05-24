@@ -44,7 +44,7 @@ class Bind : public Operation {
   // Implementation for the binding of arbitrary expressions
   template <int IN_WIDTH, int OUT_WIDTH>
   void computeExpressionBind(
-      IdTable* dynRes, ResultTable::ResultType* resultType,
+      ResultTable* outRes, ResultTable::ResultType* resultType,
       const ResultTable& inputDyn,
       sparqlExpression::SparqlExpression* expression) const;
 };

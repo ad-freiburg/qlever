@@ -298,14 +298,8 @@ class ParsedQuery {
   }
 
   struct Alias {
-    AggregateType _type;
-    string _inVarName;
+    sparqlExpression::SparqlExpressionWrapper _expression;
     string _outVarName;
-    bool _isAggregate = true;
-    bool _isDistinct = false;
-    std::string _function;
-    // The deilimiter used by group concat
-    std::string _delimiter = " ";
   };
 
   struct SelectClause {
@@ -349,12 +343,6 @@ class ParsedQuery {
   static void expandPrefix(
       string& item, const ad_utility::HashMap<string, string>& prefixMap);
 
-  /**
-   * @brief Parses the given alias and adds it to the list of _aliases.
-   * @param alias The inner part of the alias (without the surrounding brackets)
-   * @return The new name of the variable after the aliasing was completed
-   */
-  std::string parseAlias(const std::string& alias);
 };
 
 struct GraphPatternOperation {

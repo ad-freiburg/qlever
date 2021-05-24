@@ -12,6 +12,7 @@
 #include "../parser/ParsedQuery.h"
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"
+#include "../parser/SparqlExpressionWrapper.h"
 
 using std::string;
 using std::vector;
@@ -22,13 +23,8 @@ class GroupBy : public Operation {
    * @brief Represents an aggregate alias in the select part of the query.
    */
   struct Aggregate {
-    ParsedQuery::AggregateType _type;
-    size_t _inCol, _outCol;
-    // Used to store the string necessary for the group concat aggregate.
-    // A void pointer is used to allow for storing arbitrary data should any
-    // other aggregate need custom data in the future.
-    void* _userData;
-    bool _distinct;
+    sparqlExpression::SparqlExpressionWrapper _expression;
+    size_t _outCol;
   };
 
   /**
@@ -99,14 +95,16 @@ class GroupBy : public Operation {
 
   virtual void computeResult(ResultTable* result) override;
 
+
   template <int IN_WIDTH, int OUT_WIDTH>
-  void processGroup(const GroupBy::Aggregate& a, size_t blockStart,
-                    size_t blockEnd, const IdTableView<IN_WIDTH>& input,
-                    const vector<ResultTable::ResultType>& inputTypes,
-                    IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
-                    const ResultTable* inTable, ResultTable* outTable,
-                    const Index& index,
-                    ad_utility::HashSet<size_t>& distinctHashSet) const;
+  void processGroup(const Aggregate& expression, const sparqlExpression::EvaluationInput* evaluationContextIn,
+                             size_t blockStart,
+                             size_t blockEnd, const IdTableView<IN_WIDTH>& input,
+                             IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
+                    size_t resultColumn,
+                             const ResultTable* inTable, ResultTable* outTable,
+                             ResultTable::ResultType* resultType
+  ) const;
 
   template <int IN_WIDTH, int OUT_WIDTH>
   void doGroupBy(const IdTable& dynInput,

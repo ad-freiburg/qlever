@@ -63,7 +63,7 @@ string Bind::asString(size_t indent) const {
      << "Complex expression"
      << ") on";
   // the random string to prevent false caching
-  os << _bind._expressionVariant.asString();
+  os << _bind._expressionVariant.asString(m);
 
   for (const auto& ptr : strings) {
     auto s = *ptr;
@@ -120,7 +120,7 @@ void Bind::computeResult(ResultTable* result) {
   int outwidth = getResultWidth();
 
   result->_resultTypes.emplace_back();
-  CALL_FIXED_SIZE_2(inwidth, outwidth, computeExpressionBind, &result->_data,
+  CALL_FIXED_SIZE_2(inwidth, outwidth, computeExpressionBind, result,
                     &(result->_resultTypes.back()), *subRes,
                     _bind._expressionVariant.getImpl());
 
@@ -132,7 +132,7 @@ void Bind::computeResult(ResultTable* result) {
 // _____________________________________________________________________________
 template <int IN_WIDTH, int OUT_WIDTH>
 void Bind::computeExpressionBind(
-    IdTable* dynRes, ResultTable::ResultType* resultType,
+    ResultTable* outResult, ResultTable::ResultType* resultType,
     const ResultTable& inResult,
     sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::SparqlExpression::VariableColumnMapWithResultTypes
@@ -152,7 +152,7 @@ void Bind::computeExpressionBind(
       expression->evaluate(&evaluationInput);
 
   const auto input = inResult._data.asStaticView<IN_WIDTH>();
-  auto res = dynRes->moveToStatic<OUT_WIDTH>();
+  auto res = outResult->_data.moveToStatic<OUT_WIDTH>();
 
   // first initialize the first columns (they remain identical)
   const auto inSize = input.size();
@@ -165,6 +165,7 @@ void Bind::computeExpressionBind(
       res(i, j) = input(i, j);
     }
   }
+
   if (auto ptr = std::get_if<sparqlExpression::LimitedVector<double>>(
           &expressionResult)) {
     const auto& resultVector = *ptr;
@@ -210,10 +211,22 @@ void Bind::computeExpressionBind(
       std::memcpy(&res(i, inCols), &tmpF, sizeof(float));
     }
     *resultType = ResultTable::ResultType::FLOAT;
+  } else if (auto ptr = std::get_if<sparqlExpression::StrongIdAndDatatype>(&expressionResult)) {
+    for (size_t i = 0; i < inSize; ++i) {
+      res(i, inCols) = ptr->_id._value;
+    }
+    *resultType = ptr->_type;
+  } else if (auto ptr = std::get_if<string>(&expressionResult)) {
+    auto id = outResult->_localVocab->size();
+    outResult->_localVocab->push_back(*ptr);
+    for (size_t i = 0; i < inSize; ++i) {
+      res(i, inCols) = id;
+    }
+    *resultType = ResultTable::ResultType::LOCAL_VOCAB;
   } else {
     throw std::runtime_error(
         "The result type of this BIND expression is not yet supported by "
         "QLever");
   }
-  *dynRes = res.moveToDynamic();
+  outResult->_data = res.moveToDynamic();
 }

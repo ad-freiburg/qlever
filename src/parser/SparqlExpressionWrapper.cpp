@@ -22,4 +22,17 @@ SparqlExpressionWrapper::SparqlExpressionWrapper(
     const SparqlExpressionWrapper&) = default;
 SparqlExpressionWrapper& SparqlExpressionWrapper::operator=(
     const SparqlExpressionWrapper&) = default;
+
+std::vector<std::string> SparqlExpressionWrapper::getUnaggregatedVariables() const {
+  return _pimpl->getUnaggregatedVariables();
+}
+
+std::optional<std::string> SparqlExpressionWrapper::isNonDistinctCountOfSingleVariable() const {
+  // TODO<joka921> pass this down to enable pattern trick!!
+  return std::nullopt;
+}
+
+std::string SparqlExpressionWrapper::asString(const VariableColumnMap& variableColumnMap) const {
+  return _pimpl->getCacheKey(variableColumnMap);
+}
 }  // namespace sparqlExpression

@@ -48,7 +48,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
     // if there is no group by statement, but an aggregate alias is used
     // somewhere do grouping anyways.
     for (const ParsedQuery::Alias& a : pq._selectClause._aliases) {
-      if (a._isAggregate) {
+      if (a._expression.isAggregate()) {
         doGrouping = true;
         break;
       }
@@ -456,17 +456,11 @@ bool QueryPlanner::checkUsePatternTrick(
   if (returns_counts) {
     // There has to be a single count alias
     const ParsedQuery::Alias& alias = pq->_selectClause._aliases.back();
-    // Create a lower case version of the aliases function string to allow
-    // for case insensitive keyword detection.
-    std::string aliasFunctionLower =
-        ad_utility::getLowercaseUtf8(alias._function);
-    // Check if the alias is a non distinct count alias
-    if (!(alias._isAggregate &&
-          aliasFunctionLower.find("distinct") == std::string::npos &&
-          ad_utility::startsWith(aliasFunctionLower, "count"))) {
+    auto isCountAlias = alias._expression.isNonDistinctCountOfSingleVariable();
+    if (!isCountAlias) {
       return false;
     }
-    counted_var_name = alias._inVarName;
+    counted_var_name = *isCountAlias;
     count_var_name = alias._outVarName;
   }
 

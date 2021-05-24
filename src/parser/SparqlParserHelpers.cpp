@@ -50,6 +50,16 @@ parseExpression(const std::string& input) {
                                      std::move(actualResult._remainingText)};
 }
 
+ParseResultAndRemainingText<ParsedQuery::Alias>
+parseAlias(const std::string& input) {
+  ParserAndVisitor p{input};
+  auto actualResult = p.parseStuff<ParsedQuery::Alias>(
+      input, &SparqlAutomaticParser::aliasWithouBrackes);
+  return actualResult;
+}
+
+
+
 // ______________________________________________________________________________
 std::pair<SparqlQleverVisitor::PrefixMap, size_t> parsePrologue(
     const string& input) {

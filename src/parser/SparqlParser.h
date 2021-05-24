@@ -70,4 +70,5 @@ class SparqlParser {
   SparqlFilter parseRegexFilter(bool expectKeyword);
 
   sparqlExpression::SparqlExpressionWrapper parseExpressionByAntlr();
+  ParsedQuery::Alias parseAliasByAntlr();
 };
