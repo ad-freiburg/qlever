@@ -86,21 +86,17 @@ class Server {
 
   string composeResponseJson(const ParsedQuery& query,
                              const QueryExecutionTree& qet,
+                             ad_utility::Timer& requestTimer,
                              size_t sendMax = MAX_NOF_ROWS_IN_RESULT) const;
 
   string composeResponseSepValues(const ParsedQuery& query,
                                   const QueryExecutionTree& qet,
                                   char sep) const;
 
-  string composeResponseJson(const string& query,
-                             const ad_semsearch::Exception& e) const;
-
-  string composeResponseJson(const string& query,
-                             const std::exception* e) const;
+  string composeResponseJson(const string& query, const std::exception& e,
+                             ad_utility::Timer& requestTimer) const;
 
   string composeStatsJson() const;
-
-  mutable ad_utility::Timer _requestProcessingTimer;
 
   json composeCacheStatsJson() const;
 };
