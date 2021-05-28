@@ -1,7 +1,7 @@
 # QLever
 
-![Build Status via Docker] (https://github.com/ad-freiburg/QLever/actions/workflows/docker.yml/badge.svg)
-![Build Status via G++10/Clang++11] (https://github.com/ad-freiburg/QLever/actions/workflows/cmake.yml/badge.svg)
+[![Build Status via Docker] (https://github.com/ad-freiburg/QLever/actions/workflows/docker.yml/badge.svg)
+[![Build Status via Gcc] (https://github.com/ad-freiburg/QLever/actions/workflows/cmake.yml/badge.svg)
 
 
 QLever (pronounced "Clever") is an efficient SPARQL engine, which can handle very large dataset with tens of billions of triples on a standard PC or server.
