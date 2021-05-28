@@ -114,6 +114,10 @@ static constexpr size_t NUM_OPERATIONS_HASHSET_LOOKUP = 32;
 // than the remaining time, then the sort is canceled with a timeout exception
 static constexpr double SORT_ESTIMATE_CANCELLATION_FACTOR = 3.0;
 
+// When initializing a sort performance estimator, at most this percentage of
+// the index size is being sorted at once.
+static constexpr size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
+
 #ifdef _PARALLEL_SORT
 static constexpr bool USE_PARALLEL_SORT = true;
 #include <parallel/algorithm>
