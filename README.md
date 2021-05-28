@@ -1,7 +1,8 @@
 # QLever
 
-[![Build
-Status](https://travis-ci.org/ad-freiburg/QLever.svg?branch=master)](https://travis-ci.org/ad-freiburg/QLever)
+[![Build Status via Docker] (https://github.com/ad-freiburg/QLever/actions/workflows/docker.yml/badge.svg)
+[![Build Status via G++10/Clang++11] (https://github.com/ad-freiburg/QLever/actions/workflows/cmake.yml/badge.svg)
+
 
 QLever (pronounced "Clever") is an efficient SPARQL engine, which can handle very large dataset with tens of billions of triples on a standard PC or server.
 For example, QLever can index the complete Wikidata (18 billion triples) in less than 24 hours and execute typical queries in less than a second, using no more than 40 GB of RAM. QLever is also fast for queries that produce large or very large results (millions of rows per second).
