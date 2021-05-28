@@ -34,4 +34,4 @@ jobs:
       - name: Docker build
         run: sudo docker build -t qlever ${{github.workspace}}
       - name: E2E in Docker
-        run:  sudo docker run -it --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh qlever
+        run:  sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh qlever
