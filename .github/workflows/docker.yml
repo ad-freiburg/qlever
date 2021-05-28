@@ -1,0 +1,37 @@
+name: Docker
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    # The CMake configure and build commands are platform agnostic and should work equally
+    # well on Windows or Mac.  You can convert this to a matrix build if you need
+    # cross-platform coverage.
+    # See: https://docs.github.com/en/free-pro-team@latest/actions/learn-github-actions/managing-complex-workflows#using-a-build-matrix
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install dependencies
+        run: |
+          sudo apt install -y apt-transport-https ca-certificates curl software-properties-common
+          curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo apt-key add -
+          sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable"
+          sudo apt update
+          sudo apt-cache policy docker-ce
+          sudo apt install docker-ce
+
+      - name: Prepare folders
+        run:  mkdir -p ${{github.workspace}}/e2e_data/scientist-collection/ && sudo chmod -R o+rwx ${{github.workspace}}/e2e_data
+
+      - name: Checkout submodules
+        run: git submodule update --init --recursive
+
+      - name: Docker build
+        run: sudo docker build -t qlever ${{github.workspace}}
+      - name: E2E in Docker
+        run:  sudo docker run -i --rm -v "${{github.workspace}}/e2e_data:/app/e2e_data/" --entrypoint e2e/e2e.sh qlever
