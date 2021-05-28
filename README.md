@@ -1,7 +1,8 @@
 # QLever
 
-![Build Status via Docker] (https://github.com/ad-freiburg/QLever/actions/workflows/docker.yml/badge.svg)
-![Build Status via G++10/Clang++11] (https://github.com/ad-freiburg/QLever/actions/workflows/cmake.yml/badge.svg)
+
+[![Build Status via Docker](https://github.com/ad-freiburg/QLever/actions/workflows/docker.yml/badge.svg)](https://github.com/ad-freiburg/QLever/actions/workflows/docker.yml)
+[![Build Status via G++10/Clang++11](https://github.com/ad-freiburg/QLever/actions/workflows/cmake.yml/badge.svg)](https://github.com/ad-freiburg/QLever/actions/workflows/cmake.yml)
 
 
 
