@@ -110,7 +110,8 @@ class SparqlExpression {
 
   using EvaluationInput = sparqlExpression::EvaluationInput;
   using VariableColumnMap = sparqlExpression::VariableColumnMap;
-  using VariableColumnMapWithResultTypes = sparqlExpression::VariableColumnMapWithResultTypes;
+  using VariableColumnMapWithResultTypes =
+      sparqlExpression::VariableColumnMapWithResultTypes;
 
   /// The result of an epxression variable can either be a constant of type
   /// bool/double/int (same value for all result rows), a vector of one of those
