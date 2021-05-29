@@ -31,10 +31,10 @@ class SortPerformanceEstimator {
       noexcept;
 
   // Create an uninitialized SortPerformanceEstimator, which is cheap. Before
-  // using it, createEstimatesExpensively has to be called
+  // using it, computeEstimatesExpensively has to be called
   SortPerformanceEstimator() = default;
 
-  // Expensive constructor, directly calls createEstimatesExpensively
+  // Expensive constructor, directly calls computeEstimatesExpensively
   explicit SortPerformanceEstimator(
       const ad_utility::AllocatorWithLimit<Id>& allocator,
       size_t maxNumberOfElementsToSort);
@@ -42,7 +42,7 @@ class SortPerformanceEstimator {
   /// Set up the sort estimates. This will take some time. Only samples, that
   /// can be allocated by the allocator and that have less thatn
   /// `maxNumberOfElementsToSort` elements will actually be measured.
-  void createEstimatesExpensively(
+  void computeEstimatesExpensively(
       const ad_utility::AllocatorWithLimit<Id>& allocator,
       size_t maxNumberOfElementsToSort);
 

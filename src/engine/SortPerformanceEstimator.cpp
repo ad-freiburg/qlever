@@ -59,7 +59,7 @@ double SortPerformanceEstimator::measureSortingTimeInSeconds(
 SortPerformanceEstimator::SortPerformanceEstimator(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     size_t maxNumElementsToSort) {
-  createEstimatesExpensively(allocator, maxNumElementsToSort);
+  computeEstimatesExpensively(allocator, maxNumElementsToSort);
 }
 
 double SortPerformanceEstimator::estimatedSortTimeInSeconds(
@@ -113,7 +113,7 @@ double SortPerformanceEstimator::estimatedSortTimeInSeconds(
   return result;
 }
 
-void SortPerformanceEstimator::createEstimatesExpensively(
+void SortPerformanceEstimator::computeEstimatesExpensively(
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     size_t maxNumberOfElementsToSort) {
   static_assert(isSorted(sampleValuesCols));

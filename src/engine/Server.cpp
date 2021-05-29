@@ -37,7 +37,7 @@ void Server::initialize(const string& ontologyBaseName, bool useText,
     _index.addTextFromOnDiskIndex();
   }
 
-  _sortPerformanceEstimator.createEstimatesExpensively(
+  _sortPerformanceEstimator.computeEstimatesExpensively(
       _allocator,
       _index.getNofTriples() * PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE / 100);
 
