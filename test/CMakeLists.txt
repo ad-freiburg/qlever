@@ -175,3 +175,7 @@ add_test(SparqlAntlrParserTest SparqlAntlrParserTest)
 add_executable(SparqlExpressionTest SparqlExpressionTest.cpp)
 add_test(SparqlExpressionTest SparqlExpressionTest)
 target_link_libraries(SparqlExpressionTest gtest_main index ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(SetOfIntervalsTest SetOfIntervalsTest.cpp)
+add_test(SetOfIntervalsTest SetOfIntervalsTest)
+target_link_libraries(SetOfIntervalsTest gtest_main parser ${CMAKE_THREAD_LIBS_INIT})

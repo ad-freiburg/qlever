@@ -72,7 +72,7 @@ Set Intersection::operator()(Set rangesA, Set rangesB) const {
     }
   }
 
-  return SortAndCheckInvariants(std::move(result));
+  return CheckSortedAndSimplify(SortAndCheckInvariants(std::move(result)));
 }
 
 // __________________________________________________________________________
@@ -137,7 +137,7 @@ Set Union::operator()(Set rangesA, Set rangesB) const {
   attachRemainder(iteratorA, rangesA.end());
   attachRemainder(iteratorB, rangesB.end());
 
-  return SortAndCheckInvariants(std::move(result));
+  return CheckSortedAndSimplify(SortAndCheckInvariants(std::move(result)));
 }
 
 // __________________________________________________________________________
@@ -151,6 +151,26 @@ std::vector<bool> expandSet(const Set& a, size_t targetSize) {
       result[i] = true;
     }
   }
+  return result;
+}
+
+// ___________________________________________________________________________
+Set CheckSortedAndSimplify(const Set& input) {
+  if (input.empty()) {
+    return {};
+  }
+  auto current = input[0];
+  Set result;
+  for (size_t i = 1; i < input.size(); ++i) {
+    AD_CHECK(input[i].first >= current.second);
+    if (input[i].first == current.second) {
+      current = {current.first, input[i].second};
+    } else {
+      result.push_back(current);
+      current = input[i];
+    }
+  }
+  result.push_back(current);
   return result;
 }
 
