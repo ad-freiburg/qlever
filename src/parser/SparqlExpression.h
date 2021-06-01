@@ -106,6 +106,7 @@ class SparqlExpression {
   /// A Sparql Variable, e.g. "?x"
   struct Variable {
     std::string _variable;
+    bool operator==(const Variable&) const = default;
   };
 
   using EvaluationInput = sparqlExpression::EvaluationInput;

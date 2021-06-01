@@ -22,6 +22,26 @@ struct DummyExpression : public SparqlExpression {
   }
 };
 
+auto testOr = [](auto&& left, auto&& right, const SparqlExpression::EvaluateResult& expected) {
+  QueryExecutionContext* ctxt = nullptr;
+  ad_utility::AllocatorWithLimit<Id> alloc{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
+  sparqlExpression::SparqlExpression::VariableColumnMapWithResultTypes map;
+  IdTable table{alloc};
+  sparqlExpression::SparqlExpression::EvaluationInput input{*ctxt, map, table,
+                                                            alloc};
+  std::vector<SparqlExpression::Ptr> children;
+  children.push_back(std::make_unique<DummyExpression>(
+      SparqlExpression::EvaluateResult{std::move(left)}));
+  children.push_back(std::make_unique<DummyExpression>(
+      SparqlExpression::EvaluateResult{std::move(right)}));
+
+  ConditionalOrExpression c{std::move(children)};
+
+  SparqlExpression::EvaluateResult res = c.evaluate(&input);
+  ASSERT_EQ(res, expected);
+};
+
 TEST(SparqlExpression, Or) {
   ad_utility::AllocatorWithLimit<Id> alloc{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(1000)};
@@ -30,21 +50,5 @@ TEST(SparqlExpression, Or) {
   sparqlExpression::LimitedVector<bool> expected{{true, true, true, false},
                                                  alloc};
 
-  QueryExecutionContext* ctxt = nullptr;
-  sparqlExpression::SparqlExpression::VariableColumnMapWithResultTypes map;
-  IdTable table{alloc};
-  sparqlExpression::SparqlExpression::EvaluationInput input{*ctxt, map, table,
-                                                            alloc};
-  std::vector<SparqlExpression::Ptr> children;
-  children.push_back(std::make_unique<DummyExpression>(
-      SparqlExpression::EvaluateResult{std::move(d)}));
-  children.push_back(std::make_unique<DummyExpression>(
-      SparqlExpression::EvaluateResult{std::move(b)}));
-
-  ConditionalOrExpression c{std::move(children)};
-
-  SparqlExpression::EvaluateResult res = c.evaluate(&input);
-  auto ptr = std::get_if<sparqlExpression::LimitedVector<bool>>(&res);
-  ASSERT_TRUE(ptr);
-  ASSERT_EQ(*ptr, expected);
+  testOr(std::move(d), std::move(b), std::move(expected));
 }
