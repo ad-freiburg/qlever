@@ -59,6 +59,10 @@ Set Intersection::operator()(Set rangesA, Set rangesB) const {
         // We actually contribute to the result.
         minIdxNotChecked = nextOutput.second;
         result.push_back(std::move(nextOutput));
+      } else {
+        // we can safely increase the smaller iterator which guarantees progress
+        ++itSmaller;
+        continue;
       }
 
       // Both of the following if conditions preserve our invariants, and at

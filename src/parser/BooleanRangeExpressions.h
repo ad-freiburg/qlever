@@ -21,7 +21,8 @@ using Set = std::vector<std::pair<size_t, size_t>>;
 /// disjoint and nonempty
 Set SortAndCheckInvariants(Set input);
 
-/// Assert that the set is sorted, and simplyfy it by merging adjacent intervals;
+/// Assert that the set is sorted, and simplyfy it by merging adjacent
+/// intervals;
 Set CheckSortedAndSimplify(const Set& input);
 
 /// Calculates the Intersection of two `Set`s
