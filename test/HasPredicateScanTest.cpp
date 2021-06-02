@@ -232,9 +232,8 @@ TEST(HasPredicateScan, subtreeS) {
   Engine engine;
   ConcurrentLruCache cache(DEFAULT_CACHE_MAX_NUM_ENTRIES);
   PinnedSizes pinnedSizes;
-  QueryExecutionContext ctx(
-      index, engine, &cache, &pinnedSizes, allocator(),
-      SortPerformanceEstimator::CreateEstimatorExpensively(allocator()));
+  QueryExecutionContext ctx(index, engine, &cache, &pinnedSizes, allocator(),
+                            SortPerformanceEstimator{});
 
   // create the subtree operation
   std::shared_ptr<QueryExecutionTree> subtree =

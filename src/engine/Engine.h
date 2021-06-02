@@ -98,7 +98,7 @@ class Engine {
 
   template <int WIDTH>
   static void sort(IdTable* tab, const size_t keyColumn) {
-    LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
+    LOG(DEBUG) << "Sorting " << tab->size() << " elements ..." << std::endl;
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
       ad_utility::parallel_sort(
@@ -114,7 +114,7 @@ class Engine {
                 });
     }
     *tab = stab.moveToDynamic();
-    LOG(DEBUG) << "Sort done.\n";
+    LOG(TRACE) << "Sort done.\n";
   }
   // The effect of the third template argument is that if C does not have
   // operator() with the specified arguments that returns bool, then this

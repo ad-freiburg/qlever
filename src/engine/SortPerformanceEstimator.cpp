@@ -55,56 +55,21 @@ double SortPerformanceEstimator::measureSortingTimeInSeconds(
   return timer.secs();
 }
 
+// ____________________________________________________________________________
 SortPerformanceEstimator::SortPerformanceEstimator(
-    const ad_utility::AllocatorWithLimit<Id>& allocator)
-    : _samples{} {
-  static_assert(isSorted(sampleValuesCols));
-  static_assert(isSorted(sampleValuesRows));
-
-  LOG(INFO) << "Sorting some random result tables to estimate the sorting "
-               "performance of this machine. This might take several minutes"
-            << std::endl;
-
-  for (size_t i = 0; i < NUM_SAMPLES_ROWS; ++i) {
-    for (size_t j = 0; j < NUM_SAMPLES_COLS; ++j) {
-      auto rows = sampleValuesRows[i];
-      auto cols = sampleValuesCols[j];
-      try {
-        _samples[i][j] = measureSortingTimeInSeconds(rows, cols, allocator);
-      } catch (const ad_utility::detail::AllocationExceedsLimitException& e) {
-        // These estimates are not too important, since results of this size
-        // cannot be sorted anyway because of the memory limit.
-        LOG(TRACE) << "Creating the table failed because of a lack of memory"
-                   << std::endl;
-        LOG(TRACE) << "Creating an estimate from a smaller result" << std::endl;
-        if (i > 0) {
-          // Assume that sorting time grows linearly in the number of rows
-          float ratio = static_cast<float>(sampleValuesRows[i]) /
-                        static_cast<float>(sampleValuesRows[i - 1]);
-          _samples[i][j] = _samples[i - 1][j] * ratio;
-        } else if (j > 0) {
-          // Assume that sorting time grows with the square root in the number
-          // of columns. The square root is just a heuristic: a simple function
-          // between linear and constant.
-          float ratio = static_cast<float>(sampleValuesCols[j]) /
-                        static_cast<float>(sampleValuesCols[j - 1]);
-          _samples[i][j] = _samples[i][j - 1] * std::sqrt(ratio);
-        } else {
-          // not even the smallest IdTable could be created, this should never
-          // happen.
-          AD_CHECK(false);
-        }
-        LOG(TRACE) << "Estimated the sort time to be " << std::fixed
-                   << std::setprecision(3) << _samples[i][j] << " seconds."
-                   << std::endl;
-      }
-    }
-  }
-  LOG(INFO) << "Done creating sort estimates" << std::endl;
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    size_t maxNumElementsToSort) {
+  computeEstimatesExpensively(allocator, maxNumElementsToSort);
 }
 
 double SortPerformanceEstimator::estimatedSortTimeInSeconds(
     size_t numRows, size_t numCols) const noexcept {
+  if (!_estimatesWereCalculated) {
+    LOG(WARN) << "The estimates of the SortPerformanceEstimator were never set "
+                 "up, Sorts will thus never time out"
+              << std::endl;
+    return 0.0;
+  }
   // Return the index of the element in the !sorted! `sampleVector`, which is
   // closest to 'value'
   auto getClosestIndex = [](const auto& sampleVector, size_t value) -> size_t {
@@ -146,4 +111,57 @@ double SortPerformanceEstimator::estimatedSortTimeInSeconds(
   result = result * rowRatio * std::sqrt(columnRatio);
 
   return result;
+}
+
+void SortPerformanceEstimator::computeEstimatesExpensively(
+    const ad_utility::AllocatorWithLimit<Id>& allocator,
+    size_t maxNumberOfElementsToSort) {
+  static_assert(isSorted(sampleValuesCols));
+  static_assert(isSorted(sampleValuesRows));
+
+  LOG(INFO) << "Sorting random result tables to estimate the sorting "
+               "performance of this machine"
+            << std::endl;
+
+  _samples.fill({});
+  for (size_t i = 0; i < NUM_SAMPLES_ROWS; ++i) {
+    for (size_t j = 0; j < NUM_SAMPLES_COLS; ++j) {
+      auto rows = sampleValuesRows[i];
+      auto cols = sampleValuesCols[j];
+      try {
+        if (rows * cols > maxNumberOfElementsToSort) {
+          throw ad_utility::detail::AllocationExceedsLimitException{0, 0};
+        }
+        _samples[i][j] = measureSortingTimeInSeconds(rows, cols, allocator);
+      } catch (const ad_utility::detail::AllocationExceedsLimitException& e) {
+        // These estimates are not too important, since results of this size
+        // cannot be sorted anyway because of the memory limit.
+        LOG(TRACE) << "Creating the table failed because of a lack of memory"
+                   << std::endl;
+        LOG(TRACE) << "Creating an estimate from a smaller result" << std::endl;
+        if (i > 0) {
+          // Assume that sorting time grows linearly in the number of rows
+          float ratio = static_cast<float>(sampleValuesRows[i]) /
+                        static_cast<float>(sampleValuesRows[i - 1]);
+          _samples[i][j] = _samples[i - 1][j] * ratio;
+        } else if (j > 0) {
+          // Assume that sorting time grows with the square root in the number
+          // of columns. The square root is just a heuristic: a simple function
+          // between linear and constant.
+          float ratio = static_cast<float>(sampleValuesCols[j]) /
+                        static_cast<float>(sampleValuesCols[j - 1]);
+          _samples[i][j] = _samples[i][j - 1] * std::sqrt(ratio);
+        } else {
+          // not even the smallest IdTable could be created, this should never
+          // happen.
+          AD_CHECK(false);
+        }
+        LOG(TRACE) << "Estimated the sort time to be " << std::fixed
+                   << std::setprecision(3) << _samples[i][j] << " seconds."
+                   << std::endl;
+      }
+    }
+  }
+  LOG(INFO) << "Done creating sort estimates" << std::endl;
+  _estimatesWereCalculated = true;
 }
