@@ -112,7 +112,7 @@ void Index::createFromFile(const string& filename) {
     }
   }
   _configurationJson["prefixes"] = _vocabPrefixCompressed;
-  Vocabulary<CompressedString, TripleComponentComparator>::prefixCompressFile(
+  RdfsVocabulary::prefixCompressFile(
       vocabFile, vocabFileTmp, prefixes);
 
   // TODO<joka921> maybe move this to its own function

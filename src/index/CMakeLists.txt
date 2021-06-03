@@ -12,7 +12,7 @@ add_library(index
         TextMetaData.cpp TextMetaData.h
         DocsDB.cpp DocsDB.h
         FTSAlgorithms.cpp FTSAlgorithms.h
-        PrefixHeuristic.cpp PrefixHeuristic.h)
+        PrefixHeuristic.cpp PrefixHeuristic.h GeometricTypes.h)
 
 target_link_libraries(index parser ${STXXL_LIBRARIES} ${ICU_LIBRARIES} absl::flat_hash_map absl::flat_hash_set)
 

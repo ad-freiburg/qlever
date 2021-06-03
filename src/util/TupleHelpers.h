@@ -106,6 +106,148 @@ struct is_tuple : detail::is_tuple_impl<std::decay_t<T>> {};
 /// is_tuple_v is true iff T is a specialization of std::tuple
 template <typename T>
 constexpr bool is_tuple_v = is_tuple<T>::value;
-}  // namespace ad_tuple_helpers
 
+/// TODO<joka921> Comment
+namespace detail {
+template <size_t i, typename Getter, typename... Vectors>
+auto getElementFromVectorTupleImpl(const std::tuple<Vectors...>& tuple,
+                                   size_t index, Getter g = Getter{}) {
+  static_assert(i < std::tuple_size_v<std::decay_t<decltype(tuple)>>);
+  const auto& vector = std::get<i>(tuple);
+  if (index < vector.size()) {
+    return g(vector[index]);
+  } else {
+    if constexpr (i + 1 < std::tuple_size_v<std::decay_t<decltype(tuple)>>) {
+      return getElementFromVectorTupleImpl<i + 1>(tuple, index - vector.size(),
+                                                  g);
+    } else {
+      throw std::out_of_range(
+          "Total size of vectors in tuple was smaller than the requested index");
+    }
+  }
+}
+
+template<typename T>
+static constexpr bool always_false = false;
+
+template <size_t i, typename ValueType, typename BoundFunction, typename... Vectors>
+size_t tupleBoundFunctionImpl(const std::tuple<Vectors...>& tuple, size_t offset, BoundFunction boundFunction,
+                         const ValueType& value) {
+  static_assert(i < std::tuple_size_v<std::decay_t<decltype(tuple)>>);
+  const auto& vector = std::get<i>(tuple);
+  if constexpr (std::is_same_v<ValueType, typename std::decay_t<decltype(vector)>::value_type>) {
+    return offset + static_cast<size_t>(boundFunction(vector.begin(), vector.end(), value) - vector.begin());
+  } else {
+    if constexpr (i + 1 < std::tuple_size_v<std::decay_t<decltype(tuple)>>) {
+      return tupleBoundFunctionImpl<i + 1>(tuple, offset + vector.size(), boundFunction, value);
+    } else {
+      static_assert(always_false<ValueType>, "calling lower bound on a tuple of vectors must match one of the value types exactly");
+    }
+  }
+}
+
+template <size_t i, typename Function, typename... Vectors>
+void forEachVectorImpl(std::tuple<Vectors...>& tuple,
+                           const Function& f) {
+  static_assert(i < std::tuple_size_v<std::decay_t<decltype(tuple)>>);
+  auto& vector = std::get<i>(tuple);
+  f(vector);
+  if constexpr (i + 1 < std::tuple_size_v<std::decay_t<decltype(tuple)>>) {
+    return forEachVectorImpl<i + 1>(tuple, f);
+  }
+}
+}
+
+/// TODO<joka921> Comment
+template <typename Getter, typename... Vectors>
+auto getElementFromVectorTuple(const std::tuple<Vectors...>& tuple,
+                                   size_t index, Getter g = Getter{})  {
+  return detail::getElementFromVectorTupleImpl<0>(tuple, index, g);
+}
+
+/// TODO<joka921> Comment
+template <typename... Vectors>
+auto getTotalSizeFromVectorTuple(const std::tuple<Vectors...>& tuple)  {
+  auto addSizes = [](const auto&... vecs) {
+    return (... + vecs.size());
+  };
+  return std::apply(addSizes, tuple);
+}
+
+template<typename... InnerTypes>
+class TupleOfVectors {
+ public:
+  using Tuple = std::tuple<std::vector<InnerTypes>...>;
+
+  TupleOfVectors() = default;
+  TupleOfVectors(Tuple tuple) : _tuple(std::move(tuple)) {}
+  size_t size() const {
+    if constexpr (isEmptyType) {
+      return 0ull;
+    } else {
+      return getTotalSizeFromVectorTuple(_tuple);
+    }
+  }
+
+  template<typename T>
+  size_t lowerBound(const T& value) const {
+    auto lb = []<typename... Args>(Args&&... args) {return std::lower_bound(std::forward<Args>(args)...);};
+    return detail::tupleBoundFunctionImpl<0>(_tuple, 0, lb, value);
+  }
+
+  template<typename T>
+  size_t upperBound(const T& value) const {
+    auto ub = []<typename... Args>(Args&&... args) {return std::upper_bound(std::forward<Args>(args)...);};
+    return detail::tupleBoundFunctionImpl<0>(_tuple, 0, ub, value);
+  }
+
+  template<typename T>
+  bool getIndex(const T& value, size_t* id) const {
+    auto idxToCheck = lowerBound(value);
+    if (idxToCheck >= size()) {
+      return false;
+    }
+    *id = idxToCheck;
+    auto check = [id, idxToCheck, &value](const auto& element) {
+      if constexpr (std::is_same_v<std::decay_t< decltype(value)>, std::decay_t<decltype(element)>>) {
+        if (value == element) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    return at(idxToCheck, check);
+  }
+
+  template<typename T>
+  static constexpr bool isTypeContained_v = (std::is_same_v<InnerTypes, std::decay_t<T>> || ...);
+
+  template<typename T>
+  static constexpr bool isTypeContained([[maybe_unused]] T&& t) {
+    return (std::is_same_v<InnerTypes, std::decay_t<T>> || ...);
+  }
+
+  template<typename Getter>
+  auto at(size_t index, Getter g) const {
+    if constexpr (isEmptyType) {
+      throw std::out_of_range("Tried to get an element from a TupleOfVectors which contains no types");
+    } else {
+      return getElementFromVectorTuple(_tuple, index, g);
+    }
+  }
+
+  void clear() {
+    if constexpr( !isEmptyType) {
+      detail::forEachVectorImpl<0>(_tuple, [](auto& vec){vec.clear();});
+    }
+  };
+
+  static constexpr bool isEmptyType = sizeof...(InnerTypes) == 0;
+ private:
+   Tuple _tuple;
+
+};
+
+}  // namespace ad_tuple_helpers
 #endif  // QLEVER_TUPLEHELPERS_H

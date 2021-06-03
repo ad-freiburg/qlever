@@ -21,9 +21,11 @@
 #include "../util/HashSet.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
+#include "../util/TupleHelpers.h"
 #include "./CompressedString.h"
 #include "./StringSortComparator.h"
 #include "ExternalVocabulary.h"
+#include "./GeometricTypes.h"
 
 using std::string;
 using std::vector;
@@ -72,7 +74,7 @@ struct Prefix {
 //! Template parameters that are supported are:
 //! std::string -> no compression is applied
 //! CompressedString -> prefix compression is applied
-template <class StringType, class ComparatorType>
+template <class StringType, class ComparatorType, typename... AdditionalTypesAndComparators>
 class Vocabulary {
   template <typename T, typename R = void>
   using enable_if_compressed =
@@ -83,12 +85,21 @@ class Vocabulary {
       std::enable_if_t<!std::is_same_v<T, CompressedString>>;
 
  public:
+  using AdditionalValuesTuple = std::tuple<typename AdditionalTypesAndComparators::type...>;
+  using AdditionalValues = ad_tuple_helpers::TupleOfVectors<typename AdditionalTypesAndComparators::type...>;
+  template<typename T>
+  static constexpr bool isAdditionalType = AdditionalValues::template isTypeContained_v<T>;
+ private:
+
+ public:
   using SortLevel = typename ComparatorType::Level;
   template <
       typename = std::enable_if_t<std::is_same_v<StringType, string> ||
                                   std::is_same_v<StringType, CompressedString>>>
 
-  Vocabulary(){};
+  Vocabulary(){
+      static_assert(std::is_same_v<StringType, CompressedString> || sizeof...(AdditionalTypesAndComparators) == 0, "These shenanigans are not supported for the text vocabulary");
+  };
 
   // variable for dispatching
   static constexpr bool _isCompressed =
@@ -99,6 +110,7 @@ class Vocabulary {
   //! clear all the contents, but not the settings for prefixes etc
   void clear() {
     _words.clear();
+    _additionalValues.clear();
     _externalLiterals.clear();
   }
   //! Read the vocabulary from file.
@@ -147,12 +159,30 @@ class Vocabulary {
   //! Return value signals if something was found at all.
   bool getId(const string& word, Id* id) const;
 
+  template <typename T> requires (isAdditionalType<T>)
+  bool getId(const T& value, Id* id) const {
+    auto res = _additionalValues.getIndex(value, id);
+    *id += _words.size();
+    return res;
+  }
+
   Id getValueIdForLT(const string& indexWord, const SortLevel level) const {
     Id lb = lower_bound(indexWord, level);
     return lb;
   }
+
+  template <typename T> requires (isAdditionalType<T>)
+  Id getValueForLT(const T& value) const {
+    return _additionalValues.template lowerBound(value) + _words.size();
+  }
+
   Id getValueIdForGE(const string& indexWord, const SortLevel level) const {
     return getValueIdForLT(indexWord, level);
+  }
+
+  template <typename T> requires (isAdditionalType<T>)
+  Id getValueForGE(const T& value) const {
+    return getValueIdForLT(value);
   }
 
   Id getValueIdForLE(const string& indexWord, const SortLevel level) const {
@@ -164,9 +194,24 @@ class Vocabulary {
     }
     return lb;
   }
+  template <typename T> requires (isAdditionalType<T>)
+  Id getValueIdForLE(const T& value){
+    Id ub = _additionalValues.upper_bound(value) + _words.size();
+    if (ub > 0) {
+      // We actually retrieved the first word that is bigger than our entry.
+      // TODO<joka921>: What to do, if the 0th entry is already too big?
+      --ub;
+    }
+    return ub;
+  }
 
   Id getValueIdForGT(const string& indexWord, const SortLevel level) const {
     return getValueIdForLE(indexWord, level);
+  }
+
+  template <typename T> requires (isAdditionalType<T>)
+  Id getValueIdForGT(const T& value){
+    return getValueIdForLE(value);
   }
 
   //! Get an Id range that matches a prefix.
@@ -324,9 +369,14 @@ class Vocabulary {
   vector<std::string> _internalizedLangs{"en"};
 
   vector<StringType> _words;
+  AdditionalValues _additionalValues;
   ExternalVocabulary<ComparatorType> _externalLiterals;
   ComparatorType _caseComparator;
 };
 
-using RdfsVocabulary = Vocabulary<CompressedString, TripleComponentComparator>;
+struct AdditionalFloatType {
+  using type = float;
+};
+
+using RdfsVocabulary = Vocabulary<CompressedString, TripleComponentComparator, AdditionalFloatType>;
 using TextVocabulary = Vocabulary<std::string, SimpleStringComparator>;

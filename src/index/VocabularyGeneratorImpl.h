@@ -229,9 +229,32 @@ void VocabularyMerger::doActualWrite(
   }
 }
 
+template<size_t I>
+void createInternalMappingImpl(ad_utility::HashMap<Id, Id>* map, Id nextWordId, ItemVec* vectors) {
+  if constexpr (I < std::tuple_size_v<ItemVec>) {
+    auto& els = std::get<I>(*vectors);
+    auto& res = *map;
+    bool first = true;
+    if (!els.empty()) {
+      auto lastWord = els[0].first;
+      for (auto& el : els) {
+        if (!first && lastWord != el.first) {
+          nextWordId++;
+          lastWord = el.first;
+        }
+        AD_CHECK(!res.count(el.second));
+        res[el.second] = nextWordId;
+        el.second = nextWordId;
+        first = false;
+      }
+    }
+    createInternalMappingImpl<I + 1>(map, nextWordId, vectors);
+  }
+}
+
 // ____________________________________________________________________________________________________________
 ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
-  auto& els = *elsPtr;
+  auto& els = std::get<0>(*elsPtr);
   ad_utility::HashMap<Id, Id> res;
   bool first = true;
   std::string lastWord;
@@ -246,6 +269,7 @@ ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
     el.second.m_id = nextWordId;
     first = false;
   }
+  createInternalMappingImpl<1>(&res, nextWordId, elsPtr);
   return res;
 }
 
@@ -270,11 +294,33 @@ void writeMappedIdsToExtVec(const TripleVec& input, const ad_utility::HashMap<Id
 }
 
 // _________________________________________________________________________________________________________
+template<size_t I>
+void writePartialVocabularyToFileImpl(const ItemVec& vectors, const string& baseFileName) {
+  if constexpr (I < std::tuple_size_v<ItemVec>) {
+    auto fileName = baseFileName + std::to_string(I);
+    LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
+    std::ofstream out(fileName.c_str(),
+                      std::ios_base::out | std::ios_base::binary);
+    AD_CHECK(out.is_open());
+    auto& els = std::get<I>(vectors);
+    static_assert(std::is_trivially_copyable_v<std::decay_t<decltype(els[0].first)>>);
+    for (const auto& el : els) {
+      out.write((char*)&el.first, sizeof(el.first));
+      Id id = el.second;
+      out.write((char*)&id, sizeof(id));
+    }
+    out.close();
+    LOG(INFO) << "Done writing vocabulary to file.\n";
+    writePartialVocabularyToFileImpl<I+1>(vectors, baseFileName);
+  }
+}
+
+// _________________________________________________________________________________________________________
 void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
   std::ofstream out(fileName.c_str(), std::ios_base::out | std::ios_base::binary);
   AD_CHECK(out.is_open());
-  for (const auto& el : els) {
+  for (const auto& el : std::get<0>(els)) {
     std::string_view word = el.first;
     size_t len = word.size();
     out.write((char*)&len, sizeof(len));
@@ -284,6 +330,7 @@ void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
   }
   out.close();
   LOG(INFO) << "Done writing vocabulary to file.\n";
+  writePartialVocabularyToFileImpl<1>(els, fileName);
 }
 
 // ______________________________________________________________________________________________

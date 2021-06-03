@@ -156,3 +156,25 @@ TEST(TupleHelpersTest, IsTuple) {
   ASSERT_FALSE(is_tuple_v<decltype(e)>);
   ASSERT_FALSE(is_tuple_v<decltype(f)>);
 }
+
+TEST(TupleHelpersTest, getVectorElement) {
+  std::vector<int>ints {1, 2, 3};
+  std::vector<double> doubles{4.0, 5.0, 6.0};
+  std::tuple t{ints, doubles};
+  auto getter = [](const auto& el) {return static_cast<size_t>(el);};
+  for (size_t i = 0; i < 6; ++i) {
+    ASSERT_EQ(getElementFromVectorTuple(t, i, getter), i + 1);
+  }
+  ASSERT_THROW(getElementFromVectorTuple(t, 6, getter), std::out_of_range);
+  ASSERT_EQ(getTotalSizeFromVectorTuple(t), 6ul);
+
+  TupleOfVectors tup{t};
+  ASSERT_EQ(tup.lowerBound(2), 1);
+  ASSERT_EQ(tup.lowerBound(2.0), 3);
+  ASSERT_EQ(tup.lowerBound(7.0), 6);
+
+  ASSERT_TRUE(tup.isTypeContained(64));
+  ASSERT_TRUE(tup.isTypeContained(64.0));
+  ASSERT_FALSE(tup.isTypeContained(64u));
+  ASSERT_FALSE(tup.isTypeContained(64.0f));
+}

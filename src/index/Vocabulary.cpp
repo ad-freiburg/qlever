@@ -19,8 +19,8 @@
 using std::string;
 
 // _____________________________________________________________________________
-template <class S, class C>
-void Vocabulary<S, C>::readFromFile(const string& fileName,
+template <class S, class C, typename... A>
+void Vocabulary<S, C, A...>::readFromFile(const string& fileName,
                                     const string& extLitsFileName) {
   LOG(INFO) << "Reading vocabulary from file " << fileName << "\n";
   _words.clear();
@@ -69,9 +69,9 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
 }
 
 // _____________________________________________________________________________
-template <class S, class C>
+template <class S, class C, typename... A>
 template <typename, typename>
-void Vocabulary<S, C>::writeToFile(const string& fileName) const {
+void Vocabulary<S, C, A...>::writeToFile(const string& fileName) const {
   LOG(INFO) << "Writing vocabulary to file " << fileName << "\n";
   std::ofstream out(fileName.c_str(), std::ios_base::out);
   // on disk we save the compressed version, so do not  expand prefixes
@@ -86,9 +86,9 @@ void Vocabulary<S, C>::writeToFile(const string& fileName) const {
 }
 
 // _____________________________________________________________________________
-template <class S, class C>
+template <class S, class C, typename... A>
 template <typename, typename>
-void Vocabulary<S, C>::writeToBinaryFileForMerging(
+void Vocabulary<S, C, A...>::writeToBinaryFileForMerging(
     const string& fileName) const {
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
   std::ofstream out(fileName.c_str(),
@@ -108,9 +108,9 @@ void Vocabulary<S, C>::writeToBinaryFileForMerging(
 }
 
 // _____________________________________________________________________________
-template <class S, class C>
+template <class S, class C, typename... A>
 template <typename, typename>
-void Vocabulary<S, C>::createFromSet(const ad_utility::HashSet<S>& set) {
+void Vocabulary<S, C, A...>::createFromSet(const ad_utility::HashSet<S>& set) {
   LOG(INFO) << "Creating vocabulary from set ...\n";
   _words.clear();
   _words.reserve(set.size());
@@ -123,9 +123,9 @@ void Vocabulary<S, C>::createFromSet(const ad_utility::HashSet<S>& set) {
 // _____________________________________________________________________________
 // TODO<joka921> is this used? if no, throw out, if yes, transform to
 // compressedString as key type
-template <class S, class C>
+template <class S, class C, typename... A>
 template <typename, typename>
-ad_utility::HashMap<string, Id> Vocabulary<S, C>::asMap() {
+ad_utility::HashMap<string, Id> Vocabulary<S, C, A...>::asMap() {
   ad_utility::HashMap<string, Id> map;
   for (size_t i = 0; i < _words.size(); ++i) {
     map[_words[i]] = i;
@@ -134,9 +134,9 @@ ad_utility::HashMap<string, Id> Vocabulary<S, C>::asMap() {
 }
 
 // _____________________________________________________________________________
-template <class S, class C>
+template <class S, class C, typename... A>
 template <typename, typename>
-void Vocabulary<S, C>::externalizeLiterals(const string& fileName) {
+void Vocabulary<S, C, A...>::externalizeLiterals(const string& fileName) {
   LOG(INFO) << "Externalizing literals..." << std::endl;
   auto ext = std::lower_bound(_words.begin(), _words.end(),
                               EXTERNALIZED_LITERALS_PREFIX, _caseComparator);
@@ -151,21 +151,21 @@ void Vocabulary<S, C>::externalizeLiterals(const string& fileName) {
 }
 
 // _____________________________________________________________________________
-template <class S, class C>
-bool Vocabulary<S, C>::isLiteral(const string& word) {
+template <class S, class C, typename... A>
+bool Vocabulary<S, C, A...>::isLiteral(const string& word) {
   return word.size() > 0 && word[0] == '\"';
 }
 
 // _____________________________________________________________________________
-template <class S, class C>
-bool Vocabulary<S, C>::isExternalizedLiteral(const string& word) {
+template <class S, class C, typename... A>
+bool Vocabulary<S, C, A...>::isExternalizedLiteral(const string& word) {
   return word.size() > 1 &&
          ad_utility::startsWith(word, EXTERNALIZED_LITERALS_PREFIX + '\"');
 }
 
 // _____________________________________________________________________________
-template <class S, class C>
-bool Vocabulary<S, C>::shouldBeExternalized(const string& word) const {
+template <class S, class C, typename... A>
+bool Vocabulary<S, C, A...>::shouldBeExternalized(const string& word) const {
   if (!isLiteral(word)) {
     return shouldEntityBeExternalized(word);
   } else {
@@ -174,8 +174,8 @@ bool Vocabulary<S, C>::shouldBeExternalized(const string& word) const {
 }
 
 // ___________________________________________________________________
-template <class S, class C>
-bool Vocabulary<S, C>::shouldEntityBeExternalized(const string& word) const {
+template <class S, class C, typename... A>
+bool Vocabulary<S, C, A...>::shouldEntityBeExternalized(const string& word) const {
   for (const auto& p : _externalizedPrefixes) {
     if (ad_utility::startsWith(word, p)) {
       return true;
@@ -185,8 +185,8 @@ bool Vocabulary<S, C>::shouldEntityBeExternalized(const string& word) const {
 }
 
 // ___________________________________________________________________
-template <class S, class C>
-bool Vocabulary<S, C>::shouldLiteralBeExternalized(const string& word) const {
+template <class S, class C, typename... A>
+bool Vocabulary<S, C, A...>::shouldLiteralBeExternalized(const string& word) const {
   if (word.size() > MAX_INTERNAL_LITERAL_BYTES) {
     return true;
   }
@@ -204,8 +204,8 @@ bool Vocabulary<S, C>::shouldLiteralBeExternalized(const string& word) const {
   return true;
 }
 // _____________________________________________________________________________
-template <class S, class C>
-string Vocabulary<S, C>::getLanguage(const string& literal) {
+template <class S, class C, typename... A>
+string Vocabulary<S, C, A...>::getLanguage(const string& literal) {
   auto lioAt = literal.rfind('@');
   if (lioAt != string::npos) {
     auto lioQ = literal.rfind('\"');
@@ -217,9 +217,9 @@ string Vocabulary<S, C>::getLanguage(const string& literal) {
 }
 
 // ____________________________________________________________________________
-template <class S, class C>
+template <class S, class C, typename... A>
 template <typename, typename>
-string Vocabulary<S, C>::expandPrefix(const CompressedString& word) const {
+string Vocabulary<S, C, A...>::expandPrefix(const CompressedString& word) const {
   assert(!word.empty());
   auto idx = static_cast<uint8_t>(word[0]) - MIN_COMPRESSION_PREFIX;
   if (idx >= 0 && idx < NUM_COMPRESSION_PREFIXES) {
@@ -230,9 +230,9 @@ string Vocabulary<S, C>::expandPrefix(const CompressedString& word) const {
 }
 
 // _____________________________________________________________________________
-template <class S, class C>
+template <class S, class C, typename... A>
 template <typename, typename>
-CompressedString Vocabulary<S, C>::compressPrefix(const string& word) const {
+CompressedString Vocabulary<S, C, A...>::compressPrefix(const string& word) const {
   for (const auto& p : _prefixVec) {
     if (ad_utility::startsWith(word, p._fulltext)) {
       auto res = CompressedString::fromString(
@@ -245,9 +245,9 @@ CompressedString Vocabulary<S, C>::compressPrefix(const string& word) const {
 }
 
 // _____________________________________________________________________________
-template <class S, class C>
+template <class S, class C, typename... A>
 template <class StringRange, typename, typename>
-void Vocabulary<S, C>::initializePrefixes(const StringRange& prefixes) {
+void Vocabulary<S, C, A...>::initializePrefixes(const StringRange& prefixes) {
   for (auto& el : _prefixMap) {
     el = "";
   }
@@ -275,9 +275,9 @@ void Vocabulary<S, C>::initializePrefixes(const StringRange& prefixes) {
 }
 
 // ______________________________________________________________________________
-template <class S, class C>
+template <class S, class C, typename... A>
 template <class StringRange>
-void Vocabulary<S, C>::initializeExternalizePrefixes(const StringRange& s) {
+void Vocabulary<S, C, A...>::initializeExternalizePrefixes(const StringRange& s) {
   _externalizedPrefixes.clear();
   for (const auto& el : s) {
     _externalizedPrefixes.push_back(el);
@@ -285,17 +285,17 @@ void Vocabulary<S, C>::initializeExternalizePrefixes(const StringRange& s) {
 }
 
 // ______________________________________________________________________________
-template <class S, class C>
+template <class S, class C, typename... A>
 template <class StringRange>
-void Vocabulary<S, C>::initializeInternalizedLangs(const StringRange& s) {
+void Vocabulary<S, C, A...>::initializeInternalizedLangs(const StringRange& s) {
   _internalizedLangs.clear();
   _internalizedLangs.insert(_internalizedLangs.begin(), s.begin(), s.end());
 }
 
 // _____________________________________________________
-template <class S, class C>
+template <class S, class C, typename... A>
 template <typename, typename>
-void Vocabulary<S, C>::prefixCompressFile(const string& infile,
+void Vocabulary<S, C, A...>::prefixCompressFile(const string& infile,
                                           const string& outfile,
                                           const vector<string>& prefixes) {
   std::ifstream in(infile);
@@ -310,8 +310,8 @@ void Vocabulary<S, C>::prefixCompressFile(const string& infile,
 }
 
 // ___________________________________________________________________________
-template <typename S, typename C>
-bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
+template <typename S, typename C, typename... A>
+bool Vocabulary<S, C, A...>::getIdRangeForFullTextPrefix(const string& word,
                                                    IdRange* range) const {
   AD_CHECK_EQ(word[word.size() - 1], PREFIX_CHAR);
   auto prefixRange = prefix_range(word.substr(0, word.size() - 1));
@@ -327,8 +327,8 @@ bool Vocabulary<S, C>::getIdRangeForFullTextPrefix(const string& word,
 }
 
 // _______________________________________________________________
-template <typename S, typename C>
-Id Vocabulary<S, C>::upper_bound(const string& word,
+template <typename S, typename C, typename... A>
+Id Vocabulary<S, C, A...>::upper_bound(const string& word,
                                  const SortLevel level) const {
   return static_cast<Id>(std::upper_bound(_words.begin(), _words.end(), word,
                                           getUpperBoundLambda(level)) -
@@ -336,8 +336,8 @@ Id Vocabulary<S, C>::upper_bound(const string& word,
 }
 
 // _____________________________________________________________________________
-template <typename S, typename C>
-Id Vocabulary<S, C>::lower_bound(const string& word,
+template <typename S, typename C, typename... A>
+Id Vocabulary<S, C, A...>::lower_bound(const string& word,
                                  const SortLevel level) const {
   return static_cast<Id>(std::lower_bound(_words.begin(), _words.end(), word,
                                           getLowerBoundLambda(level)) -
@@ -345,8 +345,8 @@ Id Vocabulary<S, C>::lower_bound(const string& word,
 }
 
 // _____________________________________________________________________________
-template <typename S, typename ComparatorType>
-void Vocabulary<S, ComparatorType>::setLocale(const std::string& language,
+template <typename S, typename ComparatorType, typename... A>
+void Vocabulary<S, ComparatorType, A...>::setLocale(const std::string& language,
                                               const std::string& country,
                                               bool ignorePunctuation) {
   _caseComparator = ComparatorType(language, country, ignorePunctuation);
@@ -354,20 +354,20 @@ void Vocabulary<S, ComparatorType>::setLocale(const std::string& language,
       ComparatorType(language, country, ignorePunctuation);
 }
 
-template <typename StringType, typename C>
+template <typename StringType, typename C, typename... A>
 //! Get the word with the given id.
 //! lvalue for compressedString and const& for string-based vocabulary
-AccessReturnType_t<StringType> Vocabulary<StringType, C>::at(Id id) const {
+AccessReturnType_t<StringType> Vocabulary<StringType, C, A...>::at(Id id) const {
   if constexpr (_isCompressed) {
-    return expandPrefix(_words[static_cast<size_t>(id)]);
+    return idToOptionalString(id).value();
   } else {
     return _words[static_cast<size_t>(id)];
   }
 }
 
 // _____________________________________________________________________________
-template <typename S, typename C>
-bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
+template <typename S, typename C, typename... A>
+bool Vocabulary<S, C, A...>::getId(const string& word, Id* id) const {
   if (!shouldBeExternalized(word)) {
     // need the TOTAL level because we want the unique word.
     *id = lower_bound(word, SortLevel::TOTAL);
@@ -376,13 +376,13 @@ bool Vocabulary<S, C>::getId(const string& word, Id* id) const {
     return *id < _words.size() && at(*id) == word;
   }
   bool success = _externalLiterals.getId(word, id);
-  *id += _words.size();
+  *id += _words.size() + _additionalValues.size();
   return success;
 }
 
 // ___________________________________________________________________________
-template <typename S, typename C>
-std::pair<Id, Id> Vocabulary<S, C>::prefix_range(const string& prefix) const {
+template <typename S, typename C, typename... A>
+std::pair<Id, Id> Vocabulary<S, C, A...>::prefix_range(const string& prefix) const {
   if (prefix.empty()) {
     return {0, _words.size()};
   }
@@ -399,8 +399,8 @@ std::pair<Id, Id> Vocabulary<S, C>::prefix_range(const string& prefix) const {
 }
 
 // _____________________________________________________________________________
-template <typename S, typename C>
-void Vocabulary<S, C>::push_back(const string& word) {
+template <typename S, typename C, typename... A>
+void Vocabulary<S, C, A...>::push_back(const string& word) {
   if constexpr (_isCompressed) {
     _words.push_back(compressPrefix(word));
   } else {
@@ -409,9 +409,9 @@ void Vocabulary<S, C>::push_back(const string& word) {
 }
 
 // _____________________________________________________________________________
-template <typename S, typename C>
+template <typename S, typename C, typename... A>
 template <typename, typename>
-const std::optional<std::reference_wrapper<const string>> Vocabulary<S, C>::
+const std::optional<std::reference_wrapper<const string>> Vocabulary<S, C, A...>::
 operator[](Id id) const {
   if (id < _words.size()) {
     return _words[static_cast<size_t>(id)];
@@ -422,26 +422,33 @@ operator[](Id id) const {
 template const std::optional<std::reference_wrapper<const string>>
     TextVocabulary::operator[]<std::string, void>(Id id) const;
 
-template <typename S, typename C>
+template <typename S, typename C, typename... A>
 template <typename, typename>
-const std::optional<string> Vocabulary<S, C>::idToOptionalString(Id id) const {
+const std::optional<string> Vocabulary<S, C, A...>::idToOptionalString(Id id) const {
   if (id < _words.size()) {
     // internal, prefixCompressed word
     return expandPrefix(_words[static_cast<size_t>(id)]);
   } else if (id == ID_NO_VALUE) {
-    return std::nullopt;
-  } else {
-    // this word must be externalized
-    id -= _words.size();
-    AD_CHECK(id < _externalLiterals.size());
-    return _externalLiterals[id];
+  return std::nullopt;
   }
+  // this word is either externalized, or a special value
+  id -= _words.size();
+  if constexpr (!decltype(_additionalValues)::isEmptyType) {
+    if (id < _additionalValues.size()) {
+      auto toString = [](const auto& x) { return std::to_string(x); };
+      return _additionalValues.template at(id, toString);
+    }
+  }
+
+  id -= _additionalValues.size();
+  AD_CHECK(id < _externalLiterals.size());
+  return _externalLiterals[id];
 }
 template const std::optional<string>
 RdfsVocabulary::idToOptionalString<CompressedString, void>(Id id) const;
 
 // Explicit template instantiations
-template class Vocabulary<CompressedString, TripleComponentComparator>;
+template class Vocabulary<CompressedString, TripleComponentComparator, AdditionalFloatType>;
 template class Vocabulary<std::string, SimpleStringComparator>;
 
 template void RdfsVocabulary::initializePrefixes<std::vector<std::string>,
