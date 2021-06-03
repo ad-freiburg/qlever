@@ -1394,26 +1394,35 @@ void Index::readConfiguration() {
 LangtagAndTriple Index::tripleToInternalRepresentation(Triple&& tripleIn) {
   LangtagAndTriple res{"", std::move(tripleIn)};
   auto& spo = res._triple;
-  for (auto& el : spo) {
-    el = _vocab.getLocaleManager().normalizeUtf8(el);
-  }
-  size_t upperBound = 3;
-  if (ad_utility::isXsdValue(spo[2])) {
-    spo[2] = ad_utility::convertValueLiteralToIndexWord(spo[2]);
-    upperBound = 2;
-  } else if (isLiteral(spo[2])) {
-    res._langtag = decltype(_vocab)::getLanguage(spo[2]);
+  auto normalize = [&](string& el) {
+      el = _vocab.getLocaleManager().normalizeUtf8(el);
+  };
+  normalize(spo._subject);
+  normalize(spo._predicate);
+  auto& objectString = std::get<string>(spo._object);
+  normalize(objectString);
+  bool possiblyExternalizeObject = true;
+  if (ad_utility::isXsdValue(objectString)) {
+    spo._object = ad_utility::convertValueLiteralToIndexWord(objectString);
+    possiblyExternalizeObject = false;
+  } else if (isLiteral(objectString)) {
+    res._langtag = decltype(_vocab)::getLanguage(objectString);
   }
 
-  for (size_t k = 0; k < upperBound; ++k) {
-    if (_onDiskLiterals && _vocab.shouldBeExternalized(spo[k])) {
-      if (isLiteral(spo[k])) {
-        spo[k][0] = EXTERNALIZED_LITERALS_PREFIX_CHAR;
+  auto possiblyExternalize = [&](auto& el) {
+    if (_onDiskLiterals && _vocab.shouldBeExternalized(el)) {
+      if (isLiteral(el)) {
+        el[0] = EXTERNALIZED_LITERALS_PREFIX_CHAR;
       } else {
-        AD_CHECK(spo[k][0] == '<');
-        spo[k][0] = EXTERNALIZED_ENTITIES_PREFIX_CHAR;
+        AD_CHECK(el[0] == '<');
+        el[0] = EXTERNALIZED_ENTITIES_PREFIX_CHAR;
       }
     }
+  };
+  possiblyExternalize(spo._subject);
+  possiblyExternalize(spo._predicate);
+  if (possiblyExternalizeObject) {
+    possiblyExternalize(std::get<string>(spo._object));
   }
   return res;
 }
@@ -1519,6 +1528,23 @@ void Index::initializeVocabularySettingsBuild() {
   }
 }
 
+template<size_t I> void eliminateDuplicatesImpl(ItemVec& items)  {
+  if constexpr (I < std::tuple_size_v<ItemVec>) {
+    auto& vec = std::get<I>(items);
+    auto sz = vec.size();
+    // since now adjacent duplicates also have the same Ids, it suffices to
+    // compare those
+    vec.erase(std::unique(vec.begin(), vec.end(),
+                          [](const auto& a, const auto& b) {
+                            return a.second == b.second;
+                          }),
+              vec.end());
+    LOG(INFO) << "Removed " << sz - vec.size()
+              << " Duplicates from the local partial vocabularies\n";
+    eliminateDuplicatesImpl<I+1>(items);
+  }
+}
+
 // ___________________________________________________________________________
 std::future<void> Index::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
@@ -1545,22 +1571,24 @@ std::future<void> Index::writeNextPartialVocabulary(
       return c(a.second.m_splitVal, b.second.m_splitVal,
                decltype(_vocab)::SortLevel::TOTAL);
     };
-    LOG(INFO) << "Start sorting of vocabulary with #elements: " << vec.size()
+    LOG(INFO) << "Start sorting of vocabulary with #elements: " << std::get<0>(vec).size()
               << std::endl;
     sortVocabVector(&vec, identicalPred, true);
     LOG(INFO) << "Finished sorting of vocabulary" << std::endl;
     auto mapping = createInternalMapping(&vec);
     LOG(INFO) << "Finished creating of Mapping vocabulary" << std::endl;
-    auto sz = vec.size();
+    auto& stringVec = std::get<0>(vec);
+    auto sz = stringVec.size();
     // since now adjacent duplicates also have the same Ids, it suffices to
     // compare those
-    vec.erase(std::unique(vec.begin(), vec.end(),
+    stringVec.erase(std::unique(stringVec.begin(), stringVec.end(),
                           [](const auto& a, const auto& b) {
                             return a.second.m_id == b.second.m_id;
                           }),
-              vec.end());
-    LOG(INFO) << "Removed " << sz - vec.size()
+              stringVec.end());
+    LOG(INFO) << "Removed " << sz - stringVec.size()
               << " Duplicates from the local partial vocabularies\n";
+    eliminateDuplicatesImpl<1>(vec);
     writeMappedIdsToExtVec(*localIds, mapping, globalWritePtr);
     writePartialVocabularyToFile(vec, partialFilename);
     if (vocabPrefixCompressed) {

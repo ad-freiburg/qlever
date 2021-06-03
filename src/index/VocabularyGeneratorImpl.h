@@ -339,13 +339,7 @@ void writePartialIdMapToBinaryFileForMerging(std::shared_ptr<const ItemMapArray>
                                              const string& fileName, Pred comp,
                                              const bool doParallelSort) {
   LOG(INFO) << "Creating partial vocabulary from set ...\n";
-  ItemVec els;
-  size_t totalEls = std::accumulate(map->begin(), map->end(), 0,
-                                    [](const auto& x, const auto& y) { return x + y.size(); });
-  els.reserve(totalEls);
-  for (const auto& singleMap : *map) {
-    els.insert(end(els), begin(singleMap), end(singleMap));
-  }
+  ItemVec els = vocabMapsToVector(map);
   LOG(INFO) << "... sorting ...\n";
 
   sortVocabVector(&els, comp, doParallelSort);
@@ -355,22 +349,51 @@ void writePartialIdMapToBinaryFileForMerging(std::shared_ptr<const ItemMapArray>
   writePartialVocabularyToFile(els, fileName);
 }
 
+template <size_t I>
+void vocabMapsToVectorImpl(const std::shared_ptr<const ItemMapArray>& maps, ItemVec* resultPtr) {
+  if constexpr (I < std::tuple_size_v<ItemVec>) {
+    auto& els = std::get<I>(*resultPtr);
+    size_t totalEls = std::accumulate(maps->begin(), maps->end(), 0,
+                                      [](const auto& x, const auto& y) { return x + std::get<I>(y).size(); });
+    els.reserve(totalEls);
+    for (const auto& singleMap : *maps) {
+      els.insert(end(els), begin(std::get<I>(singleMap)), end(std::get<I>(singleMap)));
+    }
+  }
+}
+
 // __________________________________________________________________________________________________
 ItemVec vocabMapsToVector(std::shared_ptr<const ItemMapArray> map) {
   ItemVec els;
-  size_t totalEls = std::accumulate(map->begin(), map->end(), 0,
-                                    [](const auto& x, const auto& y) { return x + y.size(); });
-  els.reserve(totalEls);
-  for (const auto& singleMap : *map) {
-    els.insert(end(els), begin(singleMap), end(singleMap));
-  }
+  vocabMapsToVectorImpl<0>(map, &els);
   return els;
+}
+
+
+// _______________________________________________________________________________________________________________________
+template <size_t I>
+void sortVocabVectorImpl(ItemVec* vecPtr, const bool doParallelSort) {
+  if constexpr (I < std::tuple_size_v<ItemVec>) {
+    auto& els = std::get<I>(*vecPtr);
+    if constexpr (USE_PARALLEL_SORT) {
+      if (doParallelSort) {
+        ad_utility::parallel_sort(begin(els), end(els), std::less<>{},
+                                  ad_utility::parallel_tag(NUM_SORT_THREADS));
+      } else {
+        std::sort(begin(els), end(els));
+      }
+    } else {
+      std::sort(begin(els), end(els));
+      (void)doParallelSort;  // avoid compiler warning for unused value.
+    }
+    sortVocabVectorImpl<I + 1>(vecPtr, doParallelSort);
+  }
 }
 
 // _______________________________________________________________________________________________________________________
 template <class StringSortComparator>
 void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp, const bool doParallelSort) {
-  auto& els = *vecPtr;
+  auto& els = std::get<0>(*vecPtr);
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {
       ad_utility::parallel_sort(begin(els), end(els), comp,
@@ -382,6 +405,7 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp, const bool doPa
     std::sort(begin(els), end(els), comp);
     (void)doParallelSort;  // avoid compiler warning for unused value.
   }
+  sortVocabVectorImpl<1>(vecPtr, doParallelSort);
 }
 
 // _____________________________________________________________________

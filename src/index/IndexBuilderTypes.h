@@ -15,7 +15,7 @@
 #ifndef QLEVER_INDEXBUILDERTYPES_H
 #define QLEVER_INDEXBUILDERTYPES_H
 
-auto createVariantDummy = []() {
+inline auto createVariantDummy = []() {
   auto inner = []<typename... Args>(const Args&&...) {
     return std::variant<std::string, std::decay_t<Args>...>{};
   };
@@ -26,6 +26,7 @@ using TripleObject = std::invoke_result_t<decltype(createVariantDummy)>;
 
 using Triple = std::array<std::string, 3>;
 struct TransformedTriple {
+  TransformedTriple(Triple t) : _subject{std::move(t[0])}, _predicate{std::move(t[1])}, _object(std::move(t[2])) {}
   std::string _subject;
   std::string _predicate;
   TripleObject _object;
@@ -37,14 +38,14 @@ struct IdAndSplitVal {
   TripleComponentComparator::SplitVal m_splitVal;
 };
 
-auto createHashMapTupleDummy = []() {
+inline auto createHashMapTupleDummy = []() {
   auto inner = []<typename... Args>(const Args&&...) {
     return std::tuple{ad_utility::HashMap<std::string, IdAndSplitVal>{}, ad_utility::HashMap<std::decay_t<Args>, Id>{}...};
   };
   return std::apply(inner, RdfsVocabulary::AdditionalValuesTuple{});
 };
 
-auto createVectorTupleDummy = []() {
+inline auto createVectorTupleDummy = []() {
   auto inner = []<typename... Args>(const Args&&...) {
     return std::tuple{std::vector<std::pair<std::string, IdAndSplitVal>>{}, std::vector<std::pair<std::decay_t<Args>, Id>>{}...};
   };
@@ -99,7 +100,7 @@ struct ItemMapManager {
         map[key] = res;
         return res;
       } else {
-        return map[key].m_id;
+        return map[key];
       }
     }
     else {
@@ -116,6 +117,14 @@ struct ItemMapManager {
   std::array<Id, 3> assignNextId(const Triple& t) {
     return {assignNextId(t[0]), assignNextId(t[1]), assignNextId(t[2])};
   }
+
+  /// call assignNextId for each of the Triple elements.
+  std::array<Id, 3> assignNextId(const TransformedTriple& t) {
+    auto assign = [&](const auto& el) {return assignNextId(el);};
+    return {assignNextId(t._subject), assignNextId(t._predicate), std::visit(assign, t._object)};
+  }
+
+
   ItemMap _map;
   Id _minId = 0;
   Id _nextId = _minId;
