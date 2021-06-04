@@ -53,7 +53,14 @@ class FileReadSerializer {
   }
 
   void serializeBytes(char* bytePtr, size_t numBytes) {
-    _file.read(bytePtr, numBytes);
+    auto numBytesActuallyRead = _file.read(bytePtr, numBytes);
+    if (numBytesActuallyRead < numBytes) {
+      throw SerializationException{"Tried to read from a File but too few bytes were returned"};
+    }
+  }
+
+  bool isExhausted() {
+    return _file.isAtEof();
   }
 
   void setSerializationPosition(SerializationPosition position) {

@@ -15,6 +15,10 @@
 
 namespace ad_utility::serialization {
 
+class SerializationException : public std::runtime_error {
+  using std::runtime_error::runtime_error;
+};
+
 class ByteBufferWriteSerializer {
  public:
   constexpr static bool IsWriteSerializer = true;
