@@ -54,6 +54,16 @@ class LocaleManager {
       return _content.compare(rhs._content);
     }
 
+    template<typename Serializer>
+    friend void serialize(Serializer& ser, SortKey& s) {
+      ser & s._content;
+    }
+    template<typename Serializer>
+    friend void serialize(Serializer& serializer, const SortKey& s) {
+      static_assert(Serializer::IsWriteSerializer);
+      return serialize(serializer, const_cast<SortKey&>(s));
+    }
+
    private:
     std::string _content;
   };
@@ -482,6 +492,19 @@ class TripleComponentComparator {
     InnerString transformedVal;  /// The original inner value, possibly
                                  /// transformed by a locale().
     LanguageTag langtag;         /// the language tag, possibly empty
+
+    template<class Serializer>
+    friend void serializer(Serializer& serializer, SplitValBase& sp) {
+      serializer & sp.firstOriginalChar;
+      serializer & sp.transformedVal;
+      serializer & sp.langtag;
+    }
+
+    template <typename Serializer>
+    friend void serialize(Serializer& serializer, const SplitValBase& string) {
+      static_assert(Serializer::IsWriteSerializer);
+      return serialize(serializer, const_cast<SplitValBase&>(string));
+    }
   };
 
   /**
@@ -491,6 +514,7 @@ class TripleComponentComparator {
    * it around, e.g. when performing prefix comparisons in the vocabulary
    */
   using SplitVal = SplitValBase<LocaleManager::SortKey, std::string>;
+
 
   /**
    * This only holds string_views to substrings of a string.

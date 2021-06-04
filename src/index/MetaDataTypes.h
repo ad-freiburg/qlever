@@ -10,6 +10,7 @@
 #include "../global/Id.h"
 #include "../util/File.h"
 #include "../util/HashMap.h"
+#include "../util/Serializer/SerializeVector.h"
 
 using std::array;
 using std::pair;
@@ -145,6 +146,13 @@ class BlockBasedRelationMetaData {
   off_t _offsetAfter;
   vector<BlockMetaData> _blocks;
 };
+
+template <typename Serializer>
+void serialize(Serializer& serializer, BlockBasedRelationMetaData& metaData) {
+  serializer& metaData._startRhs;
+  serializer& metaData._offsetAfter;
+  serializer& metaData._blocks;
+}
 
 inline ad_utility::File& operator<<(ad_utility::File& f,
                                     const BlockBasedRelationMetaData& rmd) {

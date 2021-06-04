@@ -21,6 +21,9 @@
 #include "./ConstantsIndexCreation.h"
 #include "./Vocabulary.h"
 #include "./VocabularyGenerator.h"
+#include "../util/Serializer/FileSerializer.h"
+#include "../util/Serializer/SerializePair.h"
+#include "../util/Serializer/SerializeString.h"
 
 // ___________________________________________________________________
 template <class Comp>
@@ -301,19 +304,13 @@ void writeMappedIdsToExtVec(const TripleVec& input, const ad_utility::HashMap<Id
 template<size_t I>
 void writePartialVocabularyToFileImpl(const ItemVec& vectors, const string& baseFileName) {
   if constexpr (I < std::tuple_size_v<ItemVec>) {
-    auto fileName = baseFileName + std::to_string(I);
+    auto fileName = baseFileName + "." + std::to_string(I);
     LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
-    std::ofstream out(fileName.c_str(),
-                      std::ios_base::out | std::ios_base::binary);
-    AD_CHECK(out.is_open());
+    ad_utility::serialization::FileWriteSerializer serializer{fileName};
     auto& els = std::get<I>(vectors);
-    static_assert(std::is_trivially_copyable_v<std::decay_t<decltype(els[0].first)>>);
     for (const auto& el : els) {
-      out.write((char*)&el.first, sizeof(el.first));
-      Id id = el.second;
-      out.write((char*)&id, sizeof(id));
+      serializer & el;
     }
-    out.close();
     LOG(INFO) << "Done writing vocabulary to file.\n";
     writePartialVocabularyToFileImpl<I+1>(vectors, baseFileName);
   }
@@ -322,19 +319,7 @@ void writePartialVocabularyToFileImpl(const ItemVec& vectors, const string& base
 // _________________________________________________________________________________________________________
 void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
-  std::ofstream out(fileName.c_str(), std::ios_base::out | std::ios_base::binary);
-  AD_CHECK(out.is_open());
-  for (const auto& el : std::get<0>(els)) {
-    std::string_view word = el.first;
-    size_t len = word.size();
-    out.write((char*)&len, sizeof(len));
-    out.write(word.data(), len);
-    Id id = el.second.m_id;
-    out.write((char*)&id, sizeof(id));
-  }
-  out.close();
-  LOG(INFO) << "Done writing vocabulary to file.\n";
-  writePartialVocabularyToFileImpl<1>(els, fileName);
+  writePartialVocabularyToFileImpl<0>(els, fileName);
 }
 
 // ______________________________________________________________________________________________

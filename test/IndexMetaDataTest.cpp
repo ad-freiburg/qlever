@@ -157,9 +157,8 @@ TEST(IndexMetaDataTest, writeReadTest2Hmap) {
     imd.add(rmdF, rmdB);
     imd.add(rmdF2, rmdB);
 
-    ad_utility::File f("_testtmp.imd", "w");
-    f << imd;
-    f.close();
+    const string filename = "_testtmp.imd";
+    imd.writeToFile(filename);
 
     ad_utility::File in("_testtmp.imd", "r");
     IndexMetaDataHmap imd2;
@@ -226,9 +225,8 @@ TEST(IndexMetaDataTest, writeReadTest2Mmap) {
       imd.add(rmdF, rmdB);
       imd.add(rmdF2, rmdB);
 
-      ad_utility::File f("_testtmp.imd", "w");
-      f << imd;
-      f.close();
+      const string filename = "_testtmp.imd";
+      imd.writeToFile(filename);
     }
 
     ad_utility::File in("_testtmp.imd", "r");

@@ -38,6 +38,18 @@ struct IdAndSplitVal {
   TripleComponentComparator::SplitVal m_splitVal;
 };
 
+template<typename Serializer>
+void serialize(Serializer& serializer, IdAndSplitVal& spl) {
+  serializer & spl.m_id;
+  serializer & spl.m_splitVal;
+}
+
+template <typename Serializer>
+void serialize(Serializer& serializer, const IdAndSplitVal& string) {
+  static_assert(Serializer::IsWriteSerializer);
+  return serialize(serializer, const_cast<IdAndSplitVal&>(string));
+}
+
 inline auto createHashMapTupleDummy = []() {
   auto inner = []<typename... Args>(const Args&&...) {
     return std::tuple{ad_utility::HashMap<std::string, IdAndSplitVal>{}, ad_utility::HashMap<std::decay_t<Args>, Id>{}...};
