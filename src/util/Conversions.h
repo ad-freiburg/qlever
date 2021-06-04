@@ -19,6 +19,7 @@
 #include "../global/Constants.h"
 #include "./Exception.h"
 #include "./StringUtils.h"
+#include <variant>
 
 using std::cerr;
 using std::cout;
@@ -32,7 +33,7 @@ namespace ad_utility {
 //! IndexWords are not necessarily readable but lexicographical
 //! comparison should yield the same ordering that one would expect from
 //! a natural ordering of the values invloved.
-inline string convertValueLiteralToIndexWord(const string& orig);
+inline std::variant<string, float> convertValueLiteralToIndexWord(const string& orig);
 
 //! Convert an index word to an ontology value.
 //! Ontology values have a prefix and a readable format apart form that.
@@ -99,7 +100,7 @@ inline std::string convertToLanguageTaggedPredicate(const string& pred,
                                                     const string& langtag);
 
 // _____________________________________________________________________________
-string convertValueLiteralToIndexWord(const string& orig) {
+std::variant<string, float> convertValueLiteralToIndexWord(const string& orig) {
   /*
    * Value literals can have one of two forms
    * 0) "123"^^<http://www.w3.org/2001/XMLSchema#integer>
@@ -138,11 +139,13 @@ string convertValueLiteralToIndexWord(const string& orig) {
       type == "date") {
     return convertDateToIndexWord(value);
   } else {
+    // TODO<joka921> we currently do not preserve the original datatype
+    return std::stof(value);
+    /*
     // No longer convert to int. instead always convert to float and
     // have a special marker at the very end to tell if the original number
     // was int for float. The benefit: can compare float with int that way.
     if (type == "int" || type == "integer") {
-      return convertFloatStringToIndexWord(value + ".0", NumericType::INTEGER);
     }
     // We treat double and decimal as synonyms for float
     if (type == "float") {
@@ -152,6 +155,7 @@ string convertValueLiteralToIndexWord(const string& orig) {
     } else if (type == "decimal") {
       return convertFloatStringToIndexWord(value, NumericType::DECIMAL);
     }
+     */
   }
   return orig;
 }

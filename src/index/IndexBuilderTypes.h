@@ -15,12 +15,23 @@
 #ifndef QLEVER_INDEXBUILDERTYPES_H
 #define QLEVER_INDEXBUILDERTYPES_H
 
+inline auto createAllVocabTypesTuple = []() {
+  auto inner = []<typename... Args>(const Args&&...) {
+    return std::tuple<std::string, std::decay_t<Args>...>{};
+  };
+  return std::apply(inner, RdfsVocabulary::AdditionalValuesTuple{});
+};
+
+using AllVocabTypesTuple = std::invoke_result_t<decltype(createAllVocabTypesTuple)>;
+
 inline auto createVariantDummy = []() {
   auto inner = []<typename... Args>(const Args&&...) {
     return std::variant<std::string, std::decay_t<Args>...>{};
   };
   return std::apply(inner, RdfsVocabulary::AdditionalValuesTuple{});
 };
+
+
 
 using TripleObject = std::invoke_result_t<decltype(createVariantDummy)>;
 

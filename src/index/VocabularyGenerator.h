@@ -14,6 +14,7 @@
 #include "./ConstantsIndexCreation.h"
 #include "./IndexBuilderTypes.h"
 #include "Vocabulary.h"
+#include "../util/Serializer/FileSerializer.h"
 
 using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
@@ -57,7 +58,11 @@ class VocabularyMerger {
   VocMergeRes mergeVocabulary(const std::string& basename, size_t numFiles,
                               Comp comp);
 
-  // Implementation for a single datatype
+  template<size_t I>
+  void mergeVocabularyHelper(VocMergeRes& result, const std::string& basename,
+                                               size_t numFiles);
+
+    // Implementation for a single datatype
   // TODO<joka921> comment and cleanup
   template <size_t I, class Comp>
   void mergeVocabularySingleDatatype(VocMergeRes& res, const std::string& basename, size_t numFiles,
@@ -66,26 +71,31 @@ class VocabularyMerger {
  private:
   // helper struct used in the priority queue for merging.
   // represents tokens/words in a certain partial vocabulary
+  template<typename ValueType>
   struct QueueWord {
     QueueWord() = default;
-    QueueWord(string&& v, size_t file, Id word)
+    QueueWord(ValueType&& v, size_t file, Id word)
         : _value(std::move(v)), _partialFileId(file), _partialWordId(word) {}
-    string _value;          // the word
+    ValueType _value;          // the word
     size_t _partialFileId;  // from which partial vocabulary did this word come
     Id _partialWordId;  // which partial id did the word have in this partial
     // vocabulary
   };
 
+
+
   // write the queu words in the buffer to their corresponding idPairVecs.
   // Requires that all the QueueWords that are ever passed are ordered
   // alphabetically (Also across multiple calls)
-  void writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer);
+  template<size_t I, typename T>
+  void writeQueueWordsToIdVec(const std::vector<QueueWord<T>>& buffer);
 
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
     _totalWritten = 0;
-    _lastWritten = "";
-    _outfile = std::ofstream();
+    _lastWritten = AllVocabTypesTuple{};
+    _isFirstWritten.fill(false);
+    _outfile = std::nullopt;
     _outfileExternal = std::ofstream();
     _idVecs.clear();
     _firstLangPredSeen = false;
@@ -99,8 +109,9 @@ class VocabularyMerger {
   // word we see, unless it is is equal to the previous word
   size_t _totalWritten = 0;
   // keep track of the last seen word to correctly handle duplicates
-  std::string _lastWritten;
-  std::ofstream _outfile;
+  AllVocabTypesTuple _lastWritten;
+  std::array<bool, std::tuple_size_v<AllVocabTypesTuple>> _isFirstWritten = {};
+  std::optional<ad_utility::serialization::FileWriteSerializer> _outfile;
   std::ofstream _outfileExternal;
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> _idVecs;

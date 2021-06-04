@@ -26,56 +26,57 @@
 #include "../util/Serializer/SerializeString.h"
 
 // ___________________________________________________________________
-template <class Comp>
-VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::string& basename,
-                                                                size_t numFiles, Comp comp) {
+template <size_t I, class Comp>
+void VocabularyMerger::mergeVocabularySingleDatatype(VocMergeRes& result, const std::string& basename, size_t numFiles, Comp comp){
+
   // we sort alphabetically by the token according to the comparator that was
   // given to us
+  using ValueType = std::decay_t<decltype(std::get<I>(ItemVec{})[0].first)>;
+  static constexpr bool IsString = std::is_same_v<ValueType, std::string>;
 
-  // open and prepare all infiles and mmap output vectors
-  for (size_t i = 0; i < numFiles; i++) {
-    _idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
-  }
+  using QWord = QueueWord<ValueType>;
 
-  auto queueCompare = [&comp](const QueueWord& p1, const QueueWord& p2) {
+  auto queueCompare = [&comp](const QWord & p1, const QWord& p2) {
     // if p1 is smaller (alphabetically)
     // _comp will return false if called like this
     // and the priority queue will thus emit p1 first
     return comp(p2._value, p1._value);
   };
 
-  std::vector<std::ifstream> infiles;
+  std::vector<ad_utility::serialization::FileReadSerializer> infiles;
 
-  _outfile.open(basename + ".vocabulary");
-  AD_CHECK(_outfile.is_open());
-  _outfileExternal.open(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
-  AD_CHECK(_outfileExternal.is_open());
+  _outfile = ad_utility::serialization::FileWriteSerializer{basename + ".vocabulary." + std::to_string(I)};
+
+  if constexpr (IsString) {
+    _outfileExternal.open(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
+    AD_CHECK(_outfileExternal.is_open());
+  }
   std::vector<bool> endOfFile(numFiles, false);
 
   // Priority queue for the k-way merge
-  std::priority_queue<QueueWord, std::vector<QueueWord>, decltype(queueCompare)> queue(
+  std::priority_queue<QWord, std::vector<QWord>, decltype(queueCompare)> queue(
       queueCompare);
 
   // open and prepare all infiles and mmap output vectors
   for (size_t i = 0; i < numFiles; i++) {
-    infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME + std::to_string(i));
-    AD_CHECK(infiles.back().is_open());
+    infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME + std::to_string(i) + "." + std::to_string(I));
 
     // read the first entry of the vocabulary and add it to the queue
     endOfFile[i] = true;
 
-    size_t len;
-    if (infiles[i].read((char*)&len, sizeof(len))) {
-      std::string word(len, '\0');
-      infiles[i].read(&(word[0]), len);
-      Id id;
-      infiles[i].read((char*)&id, sizeof(id));
-      queue.push(QueueWord(std::move(word), i, id));
+    if (!infiles[i].isExhausted()) {
+      try {
+      std::pair<ValueType, Id> wordAndId;
+      infiles[i] & wordAndId;
+      queue.push(QueueWord(std::move(wordAndId.first), i, wordAndId.second));
       endOfFile[i] = false;
+    } catch (const ad_utility::serialization::SerializationException&) {
+
     }
   }
+  }
 
-  std::vector<QueueWord> sortedBuffer;
+  std::vector<QWord> sortedBuffer;
   sortedBuffer.reserve(_bufferSize);
 
   std::future<void> writeFuture;
@@ -91,7 +92,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
       // asynchronously write the next batch of sorted
       // queue words
       auto writeTask = [this, buf = std::move(sortedBuffer)]() {
-        this->writeQueueWordsToIdVec(buf);
+        this->writeQueueWordsToIdVec<I>(buf);
       };
       sortedBuffer.clear();
       sortedBuffer.reserve(_bufferSize);
@@ -111,14 +112,15 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
     }  // file is exhausted, nothing to add
 
     endOfFile[i] = true;
-    size_t len;
-    if (infiles[i].read((char*)&len, sizeof(len))) {
-      std::string word(len, '\0');
-      infiles[i].read(&(word[0]), len);
-      Id id;
-      infiles[i].read((char*)&id, sizeof(id));
-      queue.push(QueueWord(std::move(word), i, id));
+    if (!infiles[i].isExhausted()) {
+      try {
+      std::pair<ValueType, Id> wordAndId;
+      infiles[i] & wordAndId;
+      queue.push(QueueWord(std::move(wordAndId.first), i, wordAndId.second));
       endOfFile[i] = false;
+      } catch (const ad_utility::serialization::SerializationException&) {
+
+      }
     }
   }
 
@@ -129,12 +131,34 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec(sortedBuffer);
+    writeQueueWordsToIdVec<I>(sortedBuffer);
   }
-  VocMergeRes result;
   result._numWordsTotal = _totalWritten;
   result._langPredLowerBound = _langPredLowerBound;
   result._langPredUpperBound = _langPredUpperBound;
+}
+
+template<size_t I>
+void VocabularyMerger::mergeVocabularyHelper(VocMergeRes& result, const std::string& basename,
+                                                                size_t numFiles) {
+  if constexpr (I < std::tuple_size_v<AllVocabTypesTuple>) {
+    mergeVocabularySingleDatatype<I>(result, basename, numFiles, std::less<>{});
+    mergeVocabularyHelper<I+1>(result, basename, numFiles);
+  }
+}
+
+// ___________________________________________________________________
+template <class Comp>
+VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::string& basename,
+                                                                size_t numFiles, Comp comp) {
+  for (size_t i = 0; i < numFiles; i++) {
+    _idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
+  }
+
+    // read the first entry of the vocabula
+  VocMergeRes result;
+  mergeVocabularySingleDatatype<0>(result, basename, numFiles, comp);
+  mergeVocabularyHelper<1>(result, basename, numFiles);
 
   // completely reset all the inner state
   clear();
@@ -142,7 +166,8 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
 }
 
 // ________________________________________________________________________________
-void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer) {
+template<size_t I, typename T>
+void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord<T>>& buffer) {
   LOG(TRACE) << "Start writing a batch of merged words\n";
 
   // smaller grained buffer for the actual inner write
@@ -150,48 +175,59 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buff
   std::future<void> writeFut;
   std::vector<std::pair<size_t, std::pair<size_t, size_t>>> writeBuf;
   writeBuf.reserve(bufSize);
+  auto& lastWritten = std::get<I>(_lastWritten);
   // avoid duplicates
   for (auto& top : buffer) {
-    if (top._value != _lastWritten) {
-      _lastWritten = top._value;
+    if (!_isFirstWritten[I] || top._value != lastWritten) {
+      lastWritten = top._value;
+      _isFirstWritten[I] = true;
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the
       // idVecs to have a more useful external access pattern.
 
       // write the new word to the vocabulary
-      if (_lastWritten < EXTERNALIZED_LITERALS_PREFIX) {
-        _outfile << RdfEscaping::escapeNewlinesAndBackslashes(_lastWritten) << '\n';
-      } else {
-        // we have to strip the externalization character again
-        auto& c = _lastWritten[0];
-        switch (c) {
-          case EXTERNALIZED_LITERALS_PREFIX_CHAR:
-            c = '"';
-            break;
-          case EXTERNALIZED_ENTITIES_PREFIX_CHAR:
-            c = '<';
-            break;
-          default:
-            LOG(ERROR) << "Illegal Externalization character met in vocabulary "
-                          "merging. This "
-                          "should never happen\n";
-            AD_CHECK(false)
+      if constexpr (std::is_same_v<T, std::string>) {
+        if (lastWritten < EXTERNALIZED_LITERALS_PREFIX) {
+          (*_outfile) & lastWritten;
+        } else {
+          // we have to strip the externalization character again
+          auto& c = lastWritten[0];
+          switch (c) {
+            case EXTERNALIZED_LITERALS_PREFIX_CHAR:
+              c = '"';
+              break;
+            case EXTERNALIZED_ENTITIES_PREFIX_CHAR:
+              c = '<';
+              break;
+            default:
+              LOG(ERROR)
+                  << "Illegal Externalization character met in vocabulary "
+                     "merging. This "
+                     "should never happen\n";
+              AD_CHECK(false)
+          }
+          _outfileExternal << RdfEscaping::escapeNewlinesAndBackslashes(
+                                  lastWritten)
+                           << '\n';
         }
-        _outfileExternal << RdfEscaping::escapeNewlinesAndBackslashes(_lastWritten) << '\n';
-      }
+      } else {
+       (*_outfile)& lastWritten;
+  }
 
       // write id to corresponding vec
       writeBuf.emplace_back(top._partialFileId, std::make_pair(top._partialWordId, _totalWritten));
 
-      if (top._value.size() > 0 && top._value[0] == '@') {
-        if (!_firstLangPredSeen) {
-          // inclusive
-          _langPredLowerBound = _totalWritten;
-          _firstLangPredSeen = true;
+      if constexpr (std::is_same_v<std::string, T>) {
+        if (top._value.size() > 0 && top._value[0] == '@') {
+          if (!_firstLangPredSeen) {
+            // inclusive
+            _langPredLowerBound = _totalWritten;
+            _firstLangPredSeen = true;
+          }
+          // exclusive
+          _langPredUpperBound = _totalWritten + 1;
         }
-        // exclusive
-        _langPredUpperBound = _totalWritten + 1;
       }
       _totalWritten++;
       if (_totalWritten % _bufferSize == 0) {
@@ -308,8 +344,15 @@ void writePartialVocabularyToFileImpl(const ItemVec& vectors, const string& base
     LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
     ad_utility::serialization::FileWriteSerializer serializer{fileName};
     auto& els = std::get<I>(vectors);
+    auto getPairWithOnlyId = []<typename F, typename S>(std::pair<F, S> pair) {
+      if constexpr (std::is_same_v<S, IdAndSplitVal>) {
+        return std::pair{std::move(pair.first), pair.second.m_id};
+      } else {
+        return pair;
+      }
+    };
     for (const auto& el : els) {
-      serializer & el;
+      serializer & getPairWithOnlyId(el);
     }
     LOG(INFO) << "Done writing vocabulary to file.\n";
     writePartialVocabularyToFileImpl<I+1>(vectors, baseFileName);
@@ -348,6 +391,7 @@ void vocabMapsToVectorImpl(const std::shared_ptr<const ItemMapArray>& maps, Item
     for (const auto& singleMap : *maps) {
       els.insert(end(els), begin(std::get<I>(singleMap)), end(std::get<I>(singleMap)));
     }
+    vocabMapsToVectorImpl<I+1>(maps, resultPtr);
   }
 }
 
