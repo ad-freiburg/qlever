@@ -29,6 +29,11 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
   // we sort alphabetically by the token according to the comparator that was
   // given to us
 
+  // open and prepare all infiles and mmap output vectors
+  for (size_t i = 0; i < numFiles; i++) {
+    _idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
+  }
+
   auto queueCompare = [&comp](const QueueWord& p1, const QueueWord& p2) {
     // if p1 is smaller (alphabetically)
     // _comp will return false if called like this
@@ -51,7 +56,6 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
   // open and prepare all infiles and mmap output vectors
   for (size_t i = 0; i < numFiles; i++) {
     infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME + std::to_string(i));
-    _idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
     AD_CHECK(infiles.back().is_open());
 
     // read the first entry of the vocabulary and add it to the queue

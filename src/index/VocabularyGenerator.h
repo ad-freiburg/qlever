@@ -57,6 +57,12 @@ class VocabularyMerger {
   VocMergeRes mergeVocabulary(const std::string& basename, size_t numFiles,
                               Comp comp);
 
+  // Implementation for a single datatype
+  // TODO<joka921> comment and cleanup
+  template <size_t I, class Comp>
+  void mergeVocabularySingleDatatype(VocMergeRes& res, const std::string& basename, size_t numFiles,
+                              Comp comp);
+
  private:
   // helper struct used in the priority queue for merging.
   // represents tokens/words in a certain partial vocabulary
