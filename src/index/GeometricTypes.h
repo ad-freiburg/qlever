@@ -67,13 +67,15 @@ struct Polygon {
   }
 };
 inline std::optional<Polygon> parse5Polygon(const std::string& input) {
-  std::string number = "([0-9]+(\\.[0-9]+)?)";
-  std::string twoNumbers = "\\s*" + number + "\\s+" + number + "\\s*";
-  std::string twoNumbersC = ",\\s*" + number + "\\s+" + number + "\\s*";
-  std::string fourPoints = twoNumbersC + twoNumbersC + twoNumbersC + twoNumbersC;
-  std::string regexString = "\\w*POLYGON\\w*\\(\\w*" + number + "(\\w+" + number + "){4}\\w*\\)\\w*";
-  regexString = "\\s*POLYGON\\s*\\(" + twoNumbers + fourPoints + "\\)" ;
-  re2::RE2 r{regexString};
+  static re2::RE2 r = []() {
+        std::string number = "([0-9]+(\\.[0-9]+)?)";
+        std::string twoNumbers = "\\s*" + number + "\\s+" + number + "\\s*";
+        std::string twoNumbersC = ",\\s*" + number + "\\s+" + number + "\\s*";
+        std::string fourPoints =
+            twoNumbersC + twoNumbersC + twoNumbersC + twoNumbersC;
+        std::string regexString = "\\s*POLYGON\\s*\\(\\(" + twoNumbers + fourPoints + "\\)\\)";
+        return re2::RE2{regexString};
+      }();
   float a, b, c, d, e, f, g, h, i, j;
   bool x = re2::RE2::FullMatch(input, r, &a, nullptr, &b, nullptr, &c, nullptr, &d, nullptr, &e, nullptr, &f, nullptr, &g, nullptr, &h, nullptr, &i, nullptr, &j);
   if (!x) {

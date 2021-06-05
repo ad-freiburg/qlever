@@ -1403,7 +1403,8 @@ LangtagAndTriple Index::tripleToInternalRepresentation(Triple&& tripleIn) {
   normalize(objectString);
   bool possiblyExternalizeObject = true;
   if (ad_utility::isXsdValue(objectString)) {
-    spo._object = ad_utility::convertValueLiteralToIndexWord(objectString);
+    bool considerBoundingBox = spo._predicate == "<https://www.openstreetmap.org/envelope>";
+    spo._object = ad_utility::convertValueLiteralToIndexWord(objectString, considerBoundingBox);
     possiblyExternalizeObject = false;
   } else if (isLiteral(objectString)) {
     res._langtag = decltype(_vocab)::getLanguage(objectString);

@@ -161,7 +161,7 @@ std::variant<string, float, ad_geo::Rectangle> convertValueLiteralToIndexWord(co
       return convertFloatStringToIndexWord(value, NumericType::DECIMAL);
     }
      */
-  } else if (considerBoundingBox && type == "envelope") {
+  } else if (considerBoundingBox && type == "wktLiteral") {
     auto optionalBoundingBox = ad_geo::parseAxisRectancle(value);
     AD_CHECK(optionalBoundingBox);
     return *optionalBoundingBox;
