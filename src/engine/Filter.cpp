@@ -639,7 +639,7 @@ void Filter::computeResultFixedValue(
   bool range_filter_inverse = false;
   switch (subRes->getResultType(lhs)) {
     case ResultTable::ResultType::KB: {
-      std::variant<string, float> rhs_actual = _rhs;
+      std::variant<string, float, ad_geo::Rectangle> rhs_actual = _rhs;
       if (ad_utility::isXsdValue(_rhs)) {
         rhs_actual = ad_utility::convertValueLiteralToIndexWord(_rhs);
       } else if (ad_utility::isNumeric(_rhs)) {

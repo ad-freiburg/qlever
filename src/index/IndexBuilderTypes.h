@@ -40,7 +40,8 @@ inline std::string tripleObjectToString (const TripleObject& t) {
     if constexpr (std::is_same_v<T, string>) {
       return el;
     } else {
-      return std::to_string(el);
+      using std::to_string;;
+      return to_string(el);
     }
   };
     return std::visit(visitor, t);

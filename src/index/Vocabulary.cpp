@@ -471,7 +471,7 @@ const std::optional<string> Vocabulary<S, C, A...>::idToOptionalString(Id id) co
   id -= _words.size();
   if constexpr (!decltype(_additionalValues)::isEmptyType) {
     if (id < _additionalValues.size()) {
-      auto toString = [](const auto& x) { return std::to_string(x); };
+      auto toString = [](const auto& x) { using std::to_string; return to_string(x); };
       return _additionalValues.template at(id, toString);
     }
   }
@@ -494,7 +494,13 @@ float Vocabulary<S, C, A...>::idToFloat(Id id) const {
   id -= _words.size();
   if constexpr (!decltype(_additionalValues)::isEmptyType) {
     if (id < _additionalValues.size()) {
-      auto toString = [](const auto& x) -> float { return x; };
+      auto toString = [](const auto& x) -> float {
+        if constexpr (std::is_same_v<ad_geo::Rectangle, std::decay_t<decltype(x)>>) {
+          return std::numeric_limits<float>::quiet_NaN();
+        } else {
+          return x;
+        }
+      };
       return _additionalValues.template at(id, toString);
     }
   }
@@ -507,7 +513,7 @@ template float
 RdfsVocabulary::idToFloat<CompressedString, void>(Id id) const;
 
 // Explicit template instantiations
-template class Vocabulary<CompressedString, TripleComponentComparator, AdditionalFloatType>;
+template class Vocabulary<CompressedString, TripleComponentComparator, AdditionalFloatType, AdditionalRectangleType>;
 template class Vocabulary<std::string, SimpleStringComparator>;
 
 template void RdfsVocabulary::initializePrefixes<std::vector<std::string>,

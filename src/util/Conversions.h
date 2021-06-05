@@ -11,15 +11,17 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
+
 #include <cmath>
 #include <iostream>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "../global/Constants.h"
+#include "../index/GeometricTypes.h"
 #include "./Exception.h"
 #include "./StringUtils.h"
-#include <variant>
 
 using std::cerr;
 using std::cout;
@@ -33,7 +35,7 @@ namespace ad_utility {
 //! IndexWords are not necessarily readable but lexicographical
 //! comparison should yield the same ordering that one would expect from
 //! a natural ordering of the values invloved.
-inline std::variant<string, float> convertValueLiteralToIndexWord(const string& orig);
+inline std::variant<string, float, ad_geo::Rectangle> convertValueLiteralToIndexWord(const string& orig);
 
 //! Convert an index word to an ontology value.
 //! Ontology values have a prefix and a readable format apart form that.
@@ -101,7 +103,7 @@ inline std::string convertToLanguageTaggedPredicate(const string& pred,
                                                     const string& langtag);
 
 // _____________________________________________________________________________
-std::variant<string, float> convertValueLiteralToIndexWord(const string& orig) {
+std::variant<string, float, ad_geo::Rectangle> convertValueLiteralToIndexWord(const string& orig) {
   /*
    * Value literals can have one of two forms
    * 0) "123"^^<http://www.w3.org/2001/XMLSchema#integer>

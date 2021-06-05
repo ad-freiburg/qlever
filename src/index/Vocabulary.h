@@ -391,5 +391,9 @@ struct AdditionalFloatType {
   using type = float;
 };
 
-using RdfsVocabulary = Vocabulary<CompressedString, TripleComponentComparator, AdditionalFloatType>;
+struct AdditionalRectangleType {
+  using type = ad_geo::Rectangle;
+};
+
+using RdfsVocabulary = Vocabulary<CompressedString, TripleComponentComparator, AdditionalFloatType, AdditionalRectangleType>;
 using TextVocabulary = Vocabulary<std::string, SimpleStringComparator>;
