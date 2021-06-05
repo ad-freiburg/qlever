@@ -14,7 +14,7 @@
 
 namespace ad_geo {
 struct Point {
-  float x, y;
+  double x, y;
   friend auto operator<=>(const Point&, const Point&) = default;
 
   template <typename H>
@@ -76,7 +76,7 @@ inline std::optional<Polygon> parse5Polygon(const std::string& input) {
         std::string regexString = "\\s*POLYGON\\s*\\(\\(" + twoNumbers + fourPoints + "\\)\\)";
         return re2::RE2{regexString};
       }();
-  float a, b, c, d, e, f, g, h, i, j;
+  double a, b, c, d, e, f, g, h, i, j;
   bool x = re2::RE2::FullMatch(input, r, &a, nullptr, &b, nullptr, &c, nullptr, &d, nullptr, &e, nullptr, &f, nullptr, &g, nullptr, &h, nullptr, &i, nullptr, &j);
   if (!x) {
     return std::nullopt;
