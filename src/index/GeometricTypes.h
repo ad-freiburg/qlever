@@ -51,11 +51,11 @@ struct Polygon {
     auto checkOrthogonal = [](const Point& a, const Point& b) {
       return (a.x == b.x) != (a.y == b.y);
     };
-    for (size_t i = 1; i < points.size(); ++i) {
+    /*for (size_t i = 1; i < points.size(); ++i) {
       if (!checkOrthogonal(points[i-1], points[i])) {
         return std::nullopt;
       }
-    }
+    }*/
     Rectangle result;
     auto compX = [](const auto& a, const auto&b) {return a.x < b.x;};
     auto compY = [](const auto& a, const auto&b) {return a.y < b.y;};
