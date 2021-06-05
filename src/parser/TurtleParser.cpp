@@ -393,7 +393,11 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   // these can also be part of a collection etc.
   // find any character that can end a pnameLn when assuming that no
   // escape sequences were used
-  auto posEnd = view.find_first_of(" \n,;", pos);
+  //
+  // OSM HACK (Hannah 14.05.2021): assume that all triples end with \n, so that
+  // we can have , and ; in prefixed names.
+  auto posEnd = view.find_first_of(" \n", pos);
+  // auto posEnd = view.find_first_of(" \n,;", pos);
   if (posEnd == string::npos) {
     // make tests work
     posEnd = view.size();
