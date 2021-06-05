@@ -21,6 +21,7 @@
 #include "../global/Constants.h"
 #include "../index/GeometricTypes.h"
 #include "../util/HashSet.h"
+#include "../util/Log.h"
 #include "./Exception.h"
 #include "./StringUtils.h"
 
@@ -163,6 +164,9 @@ std::variant<string, float, ad_geo::Rectangle> convertValueLiteralToIndexWord(co
      */
   } else if (considerBoundingBox && type == "wktLiteral") {
     auto optionalBoundingBox = ad_geo::parseAxisRectancle(value);
+    if (!optionalBoundingBox) {
+      LOG(ERROR) << "The literal " + value + "Should have been parsed as a bounding box, but this was not possible" << std::endl;
+    }
     AD_CHECK(optionalBoundingBox);
     return *optionalBoundingBox;
   }
