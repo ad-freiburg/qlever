@@ -15,7 +15,7 @@
 void Index::addTextFromContextFile(const string& contextFile) {
   string indexFilename = _onDiskBase + ".text.index";
   size_t nofLines = passContextFileForVocabulary(contextFile);
-  _textVocab.writeToFile(_onDiskBase + ".text.vocabulary");
+  _textVocab.writeToFile(_onDiskBase + ".text.vocabulary.0");
   calculateBlockBoundaries();
   TextVec v(nofLines);
   passContextFileIntoVector(contextFile, v);

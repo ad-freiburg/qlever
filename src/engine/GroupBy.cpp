@@ -238,13 +238,13 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
               distinctHashSet.insert(input(i, a._inCol));
               // TODO(schnelle): What's the correct way to handle OPTIONAL here
               // load the string, parse it as an xsd::int or float
-              std::string entity =
-                  index.idToOptionalString(input(i, a._inCol)).value_or("");
-              if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+              float value =
+                  index.idToFloat(input(i, a._inCol));
+              if (std::isnan(value)) {
                 res = std::numeric_limits<float>::quiet_NaN();
                 break;
               } else {
-                res += ad_utility::convertIndexWordToFloat(entity);
+                res += value;
               }
             }
           }
@@ -254,13 +254,13 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
             checkTimeoutAfterNCalls();
             // load the string, parse it as an xsd::int or float
             // TODO(schnelle): What's the correct way to handle OPTIONAL here
-            std::string entity =
-                index.idToOptionalString(input(i, a._inCol)).value_or("");
-            if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+            float value =
+                index.idToFloat(input(i, a._inCol));
+            if (std::isnan(value)) {
               res = std::numeric_limits<float>::quiet_NaN();
               break;
             } else {
-              res += ad_utility::convertIndexWordToFloat(entity);
+              res += value;
             }
           }
         }
@@ -563,13 +563,13 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
               distinctHashSet.insert(input(i, a._inCol));
               // load the string, parse it as an xsd::int or float
               // TODO(schnelle): What's the correct way to handle OPTIONAL here
-              std::string entity =
-                  index.idToOptionalString(input(i, a._inCol)).value_or("");
-              if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+              float value =
+                  index.idToFloat(input(i, a._inCol));
+              if (std::isnan(value)) {
                 res = std::numeric_limits<float>::quiet_NaN();
                 break;
               } else {
-                res += ad_utility::convertIndexWordToFloat(entity);
+                res += value;
               }
             }
           }
@@ -578,13 +578,13 @@ void GroupBy::processGroup(const GroupBy::Aggregate& a, size_t blockStart,
           for (size_t i = blockStart; i <= blockEnd; i++) {
             // load the string, parse it as an xsd::int or float
             // TODO(schnelle): What's the correct way to handle OPTIONAL here
-            std::string entity =
-                index.idToOptionalString(input(i, a._inCol)).value_or("");
-            if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
+            float value =
+                index.idToFloat(input(i, a._inCol));
+            if (std::isnan(value)) {
               res = std::numeric_limits<float>::quiet_NaN();
               break;
             } else {
-              res += ad_utility::convertIndexWordToFloat(entity);
+              res += value;
             }
           }
         }

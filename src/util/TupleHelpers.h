@@ -189,6 +189,14 @@ class TupleOfVectors {
     }
   }
 
+  template<size_t I>
+  auto& get() {
+    return std::get<I>(_tuple);
+  }
+
+  // __________________________________
+  Tuple& getTuple() {return _tuple;};
+
   template<typename T>
   size_t lowerBound(const T& value) const {
     auto lb = []<typename... Args>(Args&&... args) {return std::lower_bound(std::forward<Args>(args)...);};

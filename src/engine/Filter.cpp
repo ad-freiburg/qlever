@@ -639,12 +639,13 @@ void Filter::computeResultFixedValue(
   bool range_filter_inverse = false;
   switch (subRes->getResultType(lhs)) {
     case ResultTable::ResultType::KB: {
-      std::string rhs_string = _rhs;
-      if (ad_utility::isXsdValue(rhs_string)) {
-        rhs_string = ad_utility::convertValueLiteralToIndexWord(rhs_string);
+      std::variant<string, float> rhs_actual = _rhs;
+      if (ad_utility::isXsdValue(_rhs)) {
+        rhs_actual = ad_utility::convertValueLiteralToIndexWord(_rhs);
       } else if (ad_utility::isNumeric(_rhs)) {
-        rhs_string = ad_utility::convertNumericToIndexWord(rhs_string);
+        rhs_actual = ad_utility::convertNumericToIndexWord(_rhs);
       } else {
+        auto& rhs_string = std::get<string>(rhs_actual);
         // TODO: This is not standard conform, but currently required due to
         // our vocabulary storing iris with the greater than and
         // literals with their quotation marks.
@@ -659,23 +660,26 @@ void Filter::computeResultFixedValue(
         }
       }
 
-      // TODO<joka921> which level do we want for these filters
-      auto level = TripleComponentComparator::Level::QUARTERNARY;
-      if (_type == SparqlFilter::EQ || _type == SparqlFilter::NE) {
-        rhs = getIndex().getVocab().lower_bound(rhs_string, level);
-        rhs_upper_for_range =
-            getIndex().getVocab().upper_bound(rhs_string, level);
-        apply_range_filter = true;
-        range_filter_inverse = _type == SparqlFilter::NE;
-      } else if (_type == SparqlFilter::GE) {
-        rhs = getIndex().getVocab().getValueIdForGE(rhs_string, level);
-      } else if (_type == SparqlFilter::GT) {
-        rhs = getIndex().getVocab().getValueIdForGT(rhs_string, level);
-      } else if (_type == SparqlFilter::LT) {
-        rhs = getIndex().getVocab().getValueIdForLT(rhs_string, level);
-      } else if (_type == SparqlFilter::LE) {
-        rhs = getIndex().getVocab().getValueIdForLE(rhs_string, level);
-      }
+      auto getIdLambda = [&](const auto& rhs_string) {
+            // TODO<joka921> which level do we want for these filters
+            auto level = TripleComponentComparator::Level::QUARTERNARY;
+            if (_type == SparqlFilter::EQ || _type == SparqlFilter::NE) {
+              rhs = getIndex().getVocab().lower_bound(rhs_string, level);
+              rhs_upper_for_range =
+                  getIndex().getVocab().upper_bound(rhs_string, level);
+              apply_range_filter = true;
+              range_filter_inverse = _type == SparqlFilter::NE;
+            } else if (_type == SparqlFilter::GE) {
+              rhs = getIndex().getVocab().getValueIdForGE(rhs_string, level);
+            } else if (_type == SparqlFilter::GT) {
+              rhs = getIndex().getVocab().getValueIdForGT(rhs_string, level);
+            } else if (_type == SparqlFilter::LT) {
+              rhs = getIndex().getVocab().getValueIdForLT(rhs_string, level);
+            } else if (_type == SparqlFilter::LE) {
+              rhs = getIndex().getVocab().getValueIdForLE(rhs_string, level);
+            }
+          };
+      std::visit(getIdLambda, rhs_actual);
       // All other types of filters do not use r and work on _rhs directly
       break;
     }

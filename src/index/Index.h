@@ -184,6 +184,10 @@ class Index {
     return _vocab.idToOptionalString(id);
   }
 
+ float idToFloat(Id id) const {
+    return _vocab.idToFloat(id);
+  }
+
   const vector<PatternID>& getHasPattern() const;
   const CompactStringVector<Id, Id>& getHasPredicate() const;
   const CompactStringVector<size_t, Id>& getPatterns() const;

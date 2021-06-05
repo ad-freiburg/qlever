@@ -225,13 +225,8 @@ void Bind::computeBinaryOperationBind(
                  inputTypes[colIdx] == ResultTable::ResultType::LOCAL_VOCAB) {
         // CASE 4: RDF value which needs to be parsed first.
       } else {
-        std::string entity =
-            index.idToOptionalString(input(i, columns[colIdx])).value_or("");
-        if (!ad_utility::startsWith(entity, VALUE_FLOAT_PREFIX)) {
-          break;
-        } else {
-          value = ad_utility::convertIndexWordToFloat(entity);
-        }
+        value =
+            index.idToFloat(input(i, columns[colIdx]));
       }
     }
     // Perform the operation. Result is NO_VALUE if one of the operands is

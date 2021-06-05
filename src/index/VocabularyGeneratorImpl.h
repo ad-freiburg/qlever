@@ -87,12 +87,13 @@ void VocabularyMerger::mergeVocabularySingleDatatype(VocMergeRes& result, const 
     sortedBuffer.push_back(std::move(queue.top()));
     queue.pop();
     auto i = sortedBuffer.back()._partialFileId;
+    auto lastWritten = sortedBuffer.back()._value;
 
     if (sortedBuffer.size() >= _bufferSize) {
       // asynchronously write the next batch of sorted
       // queue words
-      auto writeTask = [this, buf = std::move(sortedBuffer)]() {
-        this->writeQueueWordsToIdVec<I>(buf);
+      auto writeTask = [this, buf = std::move(sortedBuffer), comp]() {
+        this->writeQueueWordsToIdVec<I>(buf, comp);
       };
       sortedBuffer.clear();
       sortedBuffer.reserve(_bufferSize);
@@ -116,6 +117,9 @@ void VocabularyMerger::mergeVocabularySingleDatatype(VocMergeRes& result, const 
       try {
       std::pair<ValueType, Id> wordAndId;
       infiles[i] & wordAndId;
+      if (comp(wordAndId.first, lastWritten)) {
+          LOG(ERROR) << "Wrong order!\n";
+      }
       queue.push(QueueWord(std::move(wordAndId.first), i, wordAndId.second));
       endOfFile[i] = false;
       } catch (const ad_utility::serialization::SerializationException&) {
@@ -131,11 +135,14 @@ void VocabularyMerger::mergeVocabularySingleDatatype(VocMergeRes& result, const 
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec<I>(sortedBuffer);
+    writeQueueWordsToIdVec<I>(sortedBuffer, comp);
   }
+  AD_CHECK(_actualCallsToWrite == _totalWritten);
   result._numWordsTotal = _totalWritten;
   result._langPredLowerBound = _langPredLowerBound;
   result._langPredUpperBound = _langPredUpperBound;
+
+  _outfile->close();
 }
 
 template<size_t I>
@@ -166,8 +173,8 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
 }
 
 // ________________________________________________________________________________
-template<size_t I, typename T>
-void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord<T>>& buffer) {
+template<size_t I, typename T, typename Comp>
+void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord<T>>& buffer, Comp comp) {
   LOG(TRACE) << "Start writing a batch of merged words\n";
 
   // smaller grained buffer for the actual inner write
@@ -179,6 +186,9 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord<T>>& b
   // avoid duplicates
   for (auto& top : buffer) {
     if (!_isFirstWritten[I] || top._value != lastWritten) {
+      if (comp(top._value, lastWritten)) {
+        LOG(ERROR) << "Wrong merge order?!";
+      }
       lastWritten = top._value;
       _isFirstWritten[I] = true;
 
@@ -189,8 +199,12 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord<T>>& b
       // write the new word to the vocabulary
       if constexpr (std::is_same_v<T, std::string>) {
         if (lastWritten < EXTERNALIZED_LITERALS_PREFIX) {
+          if (lastWritten.starts_with("<Zuleikha")) {
+            LOG(INFO) << "Zuleikha encountered\n";
+          }
           (*_outfile) & lastWritten;
-        } else {
+          _actualCallsToWrite++;
+} else {
           // we have to strip the externalization character again
           auto& c = lastWritten[0];
           switch (c) {
@@ -213,6 +227,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord<T>>& b
         }
       } else {
        (*_outfile)& lastWritten;
+       _actualCallsToWrite++;
   }
 
       // write id to corresponding vec
@@ -291,7 +306,7 @@ void createInternalMappingImpl(ad_utility::HashMap<Id, Id>* map, Id nextWordId, 
         first = false;
       }
     }
-    createInternalMappingImpl<I + 1>(map, nextWordId, vectors);
+    createInternalMappingImpl<I + 1>(map, nextWordId + 1, vectors);
   }
 }
 
@@ -312,7 +327,7 @@ ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
     el.second.m_id = nextWordId;
     first = false;
   }
-  createInternalMappingImpl<1>(&res, nextWordId, elsPtr);
+  createInternalMappingImpl<1>(&res, nextWordId + 1, elsPtr);
   return res;
 }
 

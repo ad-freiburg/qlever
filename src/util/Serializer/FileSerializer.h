@@ -29,7 +29,10 @@ class FileWriteSerializer {
   }
 
   void serializeBytes(const char* bytePtr, size_t numBytes) {
-    _file.write(bytePtr, numBytes);
+    auto bytesWritten = _file.write(bytePtr, numBytes);
+    if (bytesWritten < numBytes) {
+      throw SerializationException("Too few bytes were written");
+    }
   }
 
   void close() { _file.close(); }

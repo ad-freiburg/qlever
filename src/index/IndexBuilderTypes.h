@@ -35,6 +35,17 @@ inline auto createVariantDummy = []() {
 
 using TripleObject = std::invoke_result_t<decltype(createVariantDummy)>;
 
+inline std::string tripleObjectToString (const TripleObject& t) {
+    auto visitor = []<typename T>(const T& el) {
+    if constexpr (std::is_same_v<T, string>) {
+      return el;
+    } else {
+      return std::to_string(el);
+    }
+  };
+    return std::visit(visitor, t);
+};
+
 using Triple = std::array<std::string, 3>;
 struct TransformedTriple {
   TransformedTriple(Triple t) : _subject{std::move(t[0])}, _predicate{std::move(t[1])}, _object(std::move(t[2])) {}

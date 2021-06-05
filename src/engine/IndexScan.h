@@ -6,6 +6,7 @@
 #include <string>
 #include "../util/Conversions.h"
 #include "./Operation.h"
+#include "../index/IndexBuilderTypes.h"
 
 using std::string;
 
@@ -49,7 +50,9 @@ class IndexScan : public Operation {
     if (!ad_utility::isXsdValue(object)) {
       _object = object;
     } else {
-      _object = ad_utility::convertValueLiteralToIndexWord(object);
+      // TODO<joka921> this is hacky
+      throw std::runtime_error("this hacky version of QLever doesn't support numeric literals in the object of a sparqlTriple");
+      //_object = ad_utility::convertValueLiteralToIndexWord(object);
     }
   }
 

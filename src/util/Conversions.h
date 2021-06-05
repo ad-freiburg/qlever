@@ -62,7 +62,8 @@ inline string convertIndexWordToFloatString(const string& indexWord);
 
 //! Converts strings like this: ":v:float:PP0*2E0*1234F to "12.34 and
 //! :v:float:M-0*1E9*876F to -0.123".
-inline float convertIndexWordToFloat(const string& indexWord);
+// TODO<joka921> this was removed because it is illegal to call with the float-etc-hack.
+//inline float convertIndexWordToFloat(const string& indexWord);
 
 //! Brings a date to the format:
 //! return string(VALUE_DATE_PREFIX) + year + month + day +
@@ -90,7 +91,7 @@ inline bool isXsdValue(const string& val);
 inline bool isNumeric(const string& val);
 
 //! Converts numeric strings (as determined by isNumeric()) into index words
-inline string convertNumericToIndexWord(const string& val);
+inline float convertNumericToIndexWord(const string& val);
 
 //! Convert a language tag like "@en" to the corresponding entity uri
 //! for the efficient language filter
@@ -395,6 +396,7 @@ string convertIndexWordToFloatString(const string& indexWord) {
   return os.str();
 }
 
+/*
 // _____________________________________________________________________________
 float convertIndexWordToFloat(const string& indexWord) {
   size_t prefixLength = std::char_traits<char>::length(VALUE_FLOAT_PREFIX);
@@ -445,6 +447,7 @@ float convertIndexWordToFloat(const string& indexWord) {
     }
   }
 }
+ */
 
 // _____________________________________________________________________________
 string normalizeDate(const string& orig) {
@@ -634,7 +637,9 @@ bool isNumeric(const string& val) {
 }
 
 // _____________________________________________________________________________
-string convertNumericToIndexWord(const string& val) {
+float convertNumericToIndexWord(const string& val) {
+  return std::stof(val);
+  /*
   NumericType type = NumericType::FLOAT;
   string tmp = val;
   if (tmp.find('.') == string::npos) {
@@ -642,6 +647,7 @@ string convertNumericToIndexWord(const string& val) {
     type = NumericType::INTEGER;
   }
   return convertFloatStringToIndexWord(tmp, type);
+   */
 }
 
 // _________________________________________________________

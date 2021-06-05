@@ -15,43 +15,77 @@
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
 #include "./ConstantsIndexCreation.h"
+#include "../util/Serializer/FileSerializer.h"
+#include "../util/Serializer/SerializeString.h"
 
 using std::string;
 
+template<size_t I, typename Tuple>
+void fromFileImpl(const string& baseFileName, Tuple& tuple) {
+  if constexpr (I - 1 < std::tuple_size_v<Tuple>) {
+    auto& vec = std::get<I - 1>(tuple);
+    using ValueType = std::decay_t<decltype(vec[0])>;
+    string fileName = baseFileName + "." + std::to_string(I);
+    ad_utility::serialization::FileReadSerializer in{fileName};
+    ValueType v;
+    bool isFirst = true;
+    ValueType lastWritten;
+    while (true) {
+      try {
+        in& v;
+        if (!isFirst) {
+          AD_CHECK(v > lastWritten);
+
+        }
+        isFirst = false;
+        lastWritten = v;
+
+        vec.push_back(std::move(v));
+      } catch (...) {
+        break;
+      }
+    }
+    fromFileImpl<I + 1>(baseFileName, tuple);
+  }
+}
+
 // _____________________________________________________________________________
 template <class S, class C, typename... A>
-void Vocabulary<S, C, A...>::readFromFile(const string& fileName,
+void Vocabulary<S, C, A...>::readFromFile(const string& baseFileName,
                                     const string& extLitsFileName) {
+  string fileName = baseFileName + ".0";
   LOG(INFO) << "Reading vocabulary from file " << fileName << "\n";
   _words.clear();
-  std::fstream in(fileName.c_str(), std::ios_base::in);
+  ad_utility::serialization::FileReadSerializer in{fileName};
   string line;
   [[maybe_unused]] bool first = true;
   std::string lastExpandedString;
-  while (std::getline(in, line)) {
+  while (true) {
+    try {
+      in & line;
+    } catch(...) {
+      break;
+    }
     if constexpr (_isCompressed) {
-      // when we read from file it means that all preprocessing has been done
-      // and the prefixes are already stripped in the file
-      auto str = RdfEscaping::unescapeNewlinesAndBackslashes(
-          expandPrefix(CompressedString::fromString(line)));
-
-      _words.push_back(compressPrefix(str));
+      _words.push_back(CompressedString::fromString(line));
       if (!first) {
+        /*
         if (!(_caseComparator.compare(lastExpandedString, str,
                                       SortLevel::TOTAL))) {
           LOG(ERROR) << "Vocabulary is not sorted in ascending order for words "
                      << lastExpandedString << " and " << str << std::endl;
           // AD_CHECK(false);
         }
+         */
       } else {
         first = false;
       }
-      lastExpandedString = std::move(str);
+      //lastExpandedString = std::move(str);
     } else {
       _words.push_back(line);
     }
   }
-  in.close();
+  fromFileImpl<1>(baseFileName, _additionalValues.getTuple());
   LOG(INFO) << "Done reading vocabulary from file.\n";
   LOG(INFO) << "It contains " << _words.size() << " elements\n";
   if (extLitsFileName.size() > 0) {
@@ -73,15 +107,11 @@ template <class S, class C, typename... A>
 template <typename, typename>
 void Vocabulary<S, C, A...>::writeToFile(const string& fileName) const {
   LOG(INFO) << "Writing vocabulary to file " << fileName << "\n";
-  std::ofstream out(fileName.c_str(), std::ios_base::out);
+  ad_utility::serialization::FileWriteSerializer out{fileName};
   // on disk we save the compressed version, so do not  expand prefixes
-  for (size_t i = 0; i + 1 < _words.size(); ++i) {
-    out << _words[i] << '\n';
+  for (const auto& word : _words) {
+    out & word ;
   }
-  if (_words.size() > 0) {
-    out << _words[_words.size() - 1];
-  }
-  out.close();
   LOG(INFO) << "Done writing vocabulary to file.\n";
 }
 
@@ -298,14 +328,20 @@ template <typename, typename>
 void Vocabulary<S, C, A...>::prefixCompressFile(const string& infile,
                                           const string& outfile,
                                           const vector<string>& prefixes) {
-  std::ifstream in(infile);
-  std::ofstream out(outfile);
-  AD_CHECK(in.is_open() && out.is_open());
+  ad_utility::serialization::FileReadSerializer in(infile);
+  ad_utility::serialization::FileWriteSerializer out(outfile);
   Vocabulary v;
   v.initializePrefixes(prefixes);
   std::string word;
-  while (std::getline(in, word)) {
-    out << v.compressPrefix(word).toStringView() << '\n';
+  size_t numWords = 0;
+  while (true) {
+    try {
+      in & word;
+      numWords++;
+    } catch(...) {
+      break;
+    }
+    out & v.compressPrefix(word).toString();
   }
 }
 
@@ -444,8 +480,31 @@ const std::optional<string> Vocabulary<S, C, A...>::idToOptionalString(Id id) co
   AD_CHECK(id < _externalLiterals.size());
   return _externalLiterals[id];
 }
+
+template <typename S, typename C, typename... A>
+template <typename, typename>
+float Vocabulary<S, C, A...>::idToFloat(Id id) const {
+  const auto nan = std::numeric_limits<float>::quiet_NaN();
+  if (id < _words.size()) {
+    return nan;
+  } else if (id == ID_NO_VALUE) {
+    return nan;
+  }
+  // this word is either externalized, or a special value
+  id -= _words.size();
+  if constexpr (!decltype(_additionalValues)::isEmptyType) {
+    if (id < _additionalValues.size()) {
+      auto toString = [](const auto& x) -> float { return x; };
+      return _additionalValues.template at(id, toString);
+    }
+  }
+  return nan;
+}
 template const std::optional<string>
 RdfsVocabulary::idToOptionalString<CompressedString, void>(Id id) const;
+
+template float
+RdfsVocabulary::idToFloat<CompressedString, void>(Id id) const;
 
 // Explicit template instantiations
 template class Vocabulary<CompressedString, TripleComponentComparator, AdditionalFloatType>;

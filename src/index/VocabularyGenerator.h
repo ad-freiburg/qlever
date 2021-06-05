@@ -87,12 +87,14 @@ class VocabularyMerger {
   // write the queu words in the buffer to their corresponding idPairVecs.
   // Requires that all the QueueWords that are ever passed are ordered
   // alphabetically (Also across multiple calls)
-  template<size_t I, typename T>
-  void writeQueueWordsToIdVec(const std::vector<QueueWord<T>>& buffer);
+  template<size_t I, typename T, typename Comp>
+  void writeQueueWordsToIdVec(const std::vector<QueueWord<T>>& buffer, Comp comp);
+
 
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
     _totalWritten = 0;
+    _actualCallsToWrite = 0;
     _lastWritten = AllVocabTypesTuple{};
     _isFirstWritten.fill(false);
     _outfile = std::nullopt;
@@ -108,6 +110,7 @@ class VocabularyMerger {
   // the number of words we have written. This also is the global Id of the next
   // word we see, unless it is is equal to the previous word
   size_t _totalWritten = 0;
+  size_t _actualCallsToWrite = 0;
   // keep track of the last seen word to correctly handle duplicates
   AllVocabTypesTuple _lastWritten;
   std::array<bool, std::tuple_size_v<AllVocabTypesTuple>> _isFirstWritten = {};

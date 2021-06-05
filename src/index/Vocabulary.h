@@ -143,6 +143,9 @@ class Vocabulary {
   template <typename U = StringType, typename = enable_if_compressed<U>>
   const std::optional<string> idToOptionalString(Id id) const;
 
+  template <typename U = StringType, typename = enable_if_compressed<U>>
+  float idToFloat(Id id) const;
+
   //! Get the word with the given id.
   //! lvalue for compressedString and const& for string-based vocabulary
   AccessReturnType_t<StringType> at(Id id) const;
@@ -171,8 +174,8 @@ class Vocabulary {
     return lb;
   }
 
-  template <typename T> requires (isAdditionalType<T>)
-  Id getValueForLT(const T& value) const {
+  template <typename T, typename... Ts> requires (isAdditionalType<T>)
+  Id getValueIdForLT(const T& value, Ts&&...) const {
     return _additionalValues.template lowerBound(value) + _words.size();
   }
 
@@ -180,8 +183,8 @@ class Vocabulary {
     return getValueIdForLT(indexWord, level);
   }
 
-  template <typename T> requires (isAdditionalType<T>)
-  Id getValueForGE(const T& value) const {
+  template <typename T, typename... Ts> requires (isAdditionalType<T>)
+  Id getValueIdForGE(const T& value, Ts&&...) const {
     return getValueIdForLT(value);
   }
 
@@ -194,9 +197,9 @@ class Vocabulary {
     }
     return lb;
   }
-  template <typename T> requires (isAdditionalType<T>)
-  Id getValueIdForLE(const T& value){
-    Id ub = _additionalValues.upper_bound(value) + _words.size();
+  template <typename T, typename... Ts> requires (isAdditionalType<T>)
+  Id getValueIdForLE(const T& value, Ts&&...) const{
+    Id ub = _additionalValues.upperBound(value) + _words.size();
     if (ub > 0) {
       // We actually retrieved the first word that is bigger than our entry.
       // TODO<joka921>: What to do, if the 0th entry is already too big?
@@ -205,12 +208,22 @@ class Vocabulary {
     return ub;
   }
 
+  template <typename T, typename... Ts> requires (isAdditionalType<T>)
+  Id upper_bound(const T& value, Ts&&...) const{
+    return _additionalValues.upperBound(value) + _words.size();
+  }
+
+  template <typename T, typename... Ts> requires (isAdditionalType<T>)
+  Id lower_bound(const T& value, Ts&&...) const{
+    return _additionalValues.lowerBound(value) + _words.size();
+  }
+
   Id getValueIdForGT(const string& indexWord, const SortLevel level) const {
     return getValueIdForLE(indexWord, level);
   }
 
-  template <typename T> requires (isAdditionalType<T>)
-  Id getValueIdForGT(const T& value){
+  template <typename T, typename... Ts> requires (isAdditionalType<T>)
+  Id getValueIdForGT(const T& value, Ts&&...) const{
     return getValueIdForLE(value);
   }
 
