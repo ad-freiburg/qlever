@@ -20,6 +20,7 @@
 
 #include "../global/Constants.h"
 #include "../index/GeometricTypes.h"
+#include "../util/HashSet.h"
 #include "./Exception.h"
 #include "./StringUtils.h"
 
@@ -35,7 +36,7 @@ namespace ad_utility {
 //! IndexWords are not necessarily readable but lexicographical
 //! comparison should yield the same ordering that one would expect from
 //! a natural ordering of the values invloved.
-inline std::variant<string, float, ad_geo::Rectangle> convertValueLiteralToIndexWord(const string& orig);
+inline std::variant<string, float, ad_geo::Rectangle> convertValueLiteralToIndexWord(const string& orig, bool considerBoundingBox = false);
 
 //! Convert an index word to an ontology value.
 //! Ontology values have a prefix and a readable format apart form that.
@@ -103,7 +104,7 @@ inline std::string convertToLanguageTaggedPredicate(const string& pred,
                                                     const string& langtag);
 
 // _____________________________________________________________________________
-std::variant<string, float, ad_geo::Rectangle> convertValueLiteralToIndexWord(const string& orig) {
+std::variant<string, float, ad_geo::Rectangle> convertValueLiteralToIndexWord(const string& orig, bool considerBoundingBox) {
   /*
    * Value literals can have one of two forms
    * 0) "123"^^<http://www.w3.org/2001/XMLSchema#integer>
@@ -112,6 +113,7 @@ std::variant<string, float, ad_geo::Rectangle> convertValueLiteralToIndexWord(co
    * TODO: This ignores the URI such that xsd:integer == foo:integer ==
    * <http://baz#integer>
    */
+  static ad_utility::HashSet<string> numericTypes {"int, integer, float, double, decimal"};
   assert(orig.size() > 0);
   assert(orig[0] == '\"');
   string value;
@@ -141,7 +143,7 @@ std::variant<string, float, ad_geo::Rectangle> convertValueLiteralToIndexWord(co
   if (type == "dateTime" || type == "gYear" || type == "gYearMonth" ||
       type == "date") {
     return convertDateToIndexWord(value);
-  } else {
+  } else if (numericTypes.contains(type)) {
     // TODO<joka921> we currently do not preserve the original datatype
     return std::stof(value);
     /*
@@ -159,6 +161,10 @@ std::variant<string, float, ad_geo::Rectangle> convertValueLiteralToIndexWord(co
       return convertFloatStringToIndexWord(value, NumericType::DECIMAL);
     }
      */
+  } else if (considerBoundingBox && type == "envelope") {
+    auto optionalBoundingBox = ad_geo::parseAxisRectancle(value);
+    AD_CHECK(optionalBoundingBox);
+    return *optionalBoundingBox;
   }
   return orig;
 }

@@ -14,7 +14,7 @@ WORKDIR /app/
 ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG -DUSE_PARALLEL=true .. && make -j $(nproc) && make test
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG -DUSE_PARALLEL=true .. && make -j $(nproc)
 
 FROM base as runtime
 WORKDIR /app

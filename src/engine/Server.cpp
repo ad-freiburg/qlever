@@ -380,7 +380,8 @@ string Server::composeResponseJson(const ParsedQuery& query,
   j["query"] = query._originalString;
   j["status"] = "OK";
   j["resultsize"] = resultSize;
-  j["warnings"] = qet.collectWarnings();
+  auto warnings = qet.collectWarnings();
+  j["warnings"] = warnings;
   j["selected"] = query._selectedVariables;
 
   j["runtimeInformation"] = RuntimeInformation::ordered_json(

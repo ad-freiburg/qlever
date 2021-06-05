@@ -5,6 +5,13 @@
 #ifndef QLEVER_GEOMETRICTYPES_H
 #define QLEVER_GEOMETRICTYPES_H
 
+#include <re2/re2.h>
+
+#include <optional>
+#include <string>
+
+#include "../util/Log.h"
+
 namespace ad_geo {
 struct Point {
   float x, y;
@@ -17,7 +24,7 @@ struct Point {
 };
 
 inline std::string to_string(const Point& p) {
-  return "POINT(" + std::to_string(p.x) + " " + std::to_string(p.y) + ")";
+  return std::to_string(p.x) + " " + std::to_string(p.y);
 }
 
 
@@ -31,7 +38,8 @@ struct Rectangle {
 };
 
 inline std::string to_string(const Rectangle& r) {
-  return "RECTANGLE(" + to_string(r.lowerLeft) + " " + to_string(r.topRight) + ")";
+  using std::to_string;;
+  return "LINESTRING(" + to_string(r.lowerLeft) + ", " + to_string(r.topRight) + ")";
 }
 
 struct Polygon {
@@ -58,6 +66,29 @@ struct Polygon {
     return result;
   }
 };
+inline std::optional<Polygon> parse5Polygon(const std::string& input) {
+  std::string number = "([0-9]+(\\.[0-9]+)?)";
+  std::string twoNumbers = "\\s*" + number + "\\s+" + number + "\\s*";
+  std::string twoNumbersC = ",\\s*" + number + "\\s+" + number + "\\s*";
+  std::string fourPoints = twoNumbersC + twoNumbersC + twoNumbersC + twoNumbersC;
+  std::string regexString = "\\w*POLYGON\\w*\\(\\w*" + number + "(\\w+" + number + "){4}\\w*\\)\\w*";
+  regexString = "\\s*POLYGON\\s*\\(" + twoNumbers + fourPoints + "\\)" ;
+  re2::RE2 r{regexString};
+  float a, b, c, d, e, f, g, h, i, j;
+  bool x = re2::RE2::FullMatch(input, r, &a, nullptr, &b, nullptr, &c, nullptr, &d, nullptr, &e, nullptr, &f, nullptr, &g, nullptr, &h, nullptr, &i, nullptr, &j);
+  if (!x) {
+    return std::nullopt;
+  }
+  return Polygon{{{a, b}, {c, d}, {e, f}, {g, h}, {i, j}}};
+}
+
+inline std::optional<Rectangle> parseAxisRectancle(const std::string& input) {
+  auto polygon = parse5Polygon(input);
+  if (!polygon) {
+    return std::nullopt;
+  }
+  return polygon->toRectangle();
+}
 }
 
 
