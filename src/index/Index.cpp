@@ -1405,7 +1405,7 @@ LangtagAndTriple Index::tripleToInternalRepresentation(Triple&& tripleIn) {
   if (ad_utility::isXsdValue(objectString)) {
     bool considerBoundingBox = spo._predicate == "<https://www.openstreetmap.org/envelope>";
     spo._object = ad_utility::convertValueLiteralToIndexWord(objectString, considerBoundingBox);
-    possiblyExternalizeObject = false;
+    possiblyExternalizeObject = std::holds_alternative<std::string>(spo._object) && !std::get<string>(spo._object).starts_with(":");
   } else if (isLiteral(objectString)) {
     res._langtag = decltype(_vocab)::getLanguage(objectString);
   }
