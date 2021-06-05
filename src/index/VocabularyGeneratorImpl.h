@@ -137,7 +137,7 @@ void VocabularyMerger::mergeVocabularySingleDatatype(VocMergeRes& result, const 
   if (!sortedBuffer.empty()) {
     writeQueueWordsToIdVec<I>(sortedBuffer, comp);
   }
-  AD_CHECK(_actualCallsToWrite == _totalWritten);
+  //AD_CHECK(_actualCallsToWrite == _totalWritten);
   result._numWordsTotal = _totalWritten;
   result._langPredLowerBound = _langPredLowerBound;
   result._langPredUpperBound = _langPredUpperBound;
