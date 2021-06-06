@@ -2223,7 +2223,7 @@ std::shared_ptr<Operation> QueryPlanner::createFilterOperation(
     const SparqlFilter& filter, const SubtreePlan& parent) const {
   std::shared_ptr<Filter> op = std::make_shared<Filter>(
       _qec, parent._qet, filter._type, filter._lhs, filter._rhs,
-      filter._additionalLhs, filter._additionalPrefixes);
+      filter._additionalLhs, filter._additionalPrefixes, filter._boundingBox);
   op->setLhsAsString(filter._lhsAsString);
   if (filter._type == SparqlFilter::REGEX) {
     op->setRegexIgnoreCase(filter._regexIgnoreCase);

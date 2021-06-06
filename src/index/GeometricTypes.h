@@ -103,7 +103,7 @@ inline Rectangle parseBoundingBoxFromLinestring(const std::string& input) {
     std::string number = "([0-9]+(\\.[0-9]+)?)";
     std::string twoNumbers = "\\s*" + number + "\\s+" + number + "\\s*";
     std::string twoNumbersC = ",\\s*" + number + "\\s+" + number + "\\s*";
-    std::string regexString = "\"\\s*LINESTRING\\s*\\(" + twoNumbers + twoNumbersC + "\\)";
+    std::string regexString = "\\s*LINESTRING\\s*\\(" + twoNumbers + twoNumbersC + "\\)";
     return re2::RE2{regexString};
   }();
   double a, b, c, d;
@@ -111,8 +111,8 @@ inline Rectangle parseBoundingBoxFromLinestring(const std::string& input) {
   if (!x) {
     throw std::runtime_error("Could not parse " + input + " as a Linestring/Bounding box");
   }
-  if (a > c || d > b) {
-    throw std::runtime_error("In the bounding box linestring " + input + " the coordinates of the second point were larger than those of the first one");
+  if (a > c || b > d) {
+    throw std::runtime_error("In the bounding box linestring " + input + " the coordinates of the first point were larger than those of the second one");
   }
   return Rectangle{{a, b}, {c, d}};
 }
