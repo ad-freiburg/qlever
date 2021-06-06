@@ -165,7 +165,7 @@ class Vocabulary {
   template <typename T> requires (isAdditionalType<T>)
   bool getId(const T& value, Id* id) const {
     auto res = _additionalValues.getIndex(value, id);
-    *id += _words.size();
+    *id += _words.size() + _externalLiterals.size();
     return res;
   }
 
@@ -176,7 +176,7 @@ class Vocabulary {
 
   template <typename T, typename... Ts> requires (isAdditionalType<T>)
   Id getValueIdForLT(const T& value, Ts&&...) const {
-    return _additionalValues.template lowerBound(value) + _words.size();
+    return _additionalValues.template lowerBound(value) + _words.size() + _externalLiterals.size();
   }
 
   Id getValueIdForGE(const string& indexWord, const SortLevel level) const {
@@ -199,7 +199,7 @@ class Vocabulary {
   }
   template <typename T, typename... Ts> requires (isAdditionalType<T>)
   Id getValueIdForLE(const T& value, Ts&&...) const{
-    Id ub = _additionalValues.upperBound(value) + _words.size();
+    Id ub = _additionalValues.upperBound(value) + _words.size() + _externalLiterals.size();
     if (ub > 0) {
       // We actually retrieved the first word that is bigger than our entry.
       // TODO<joka921>: What to do, if the 0th entry is already too big?
@@ -210,12 +210,12 @@ class Vocabulary {
 
   template <typename T, typename... Ts> requires (isAdditionalType<T>)
   Id upper_bound(const T& value, Ts&&...) const{
-    return _additionalValues.upperBound(value) + _words.size();
+    return _additionalValues.upperBound(value) + _words.size() + _externalLiterals.size();
   }
 
   template <typename T, typename... Ts> requires (isAdditionalType<T>)
   Id lower_bound(const T& value, Ts&&...) const{
-    return _additionalValues.lowerBound(value) + _words.size();
+    return _additionalValues.lowerBound(value) + _words.size() + _externalLiterals.size();
   }
 
   Id getValueIdForGT(const string& indexWord, const SortLevel level) const {

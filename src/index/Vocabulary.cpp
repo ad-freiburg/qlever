@@ -412,7 +412,7 @@ bool Vocabulary<S, C, A...>::getId(const string& word, Id* id) const {
     return *id < _words.size() && at(*id) == word;
   }
   bool success = _externalLiterals.getId(word, id);
-  *id += _words.size() + _additionalValues.size();
+  *id += _words.size();
   return success;
 }
 
@@ -467,31 +467,32 @@ const std::optional<string> Vocabulary<S, C, A...>::idToOptionalString(Id id) co
   } else if (id == ID_NO_VALUE) {
   return std::nullopt;
   }
+
   // this word is either externalized, or a special value
   id -= _words.size();
-  if constexpr (!decltype(_additionalValues)::isEmptyType) {
-    if (id < _additionalValues.size()) {
-      auto toString = [](const auto& x) { using std::to_string; return to_string(x); };
-      return _additionalValues.template at(id, toString);
-    }
+  if (id < _externalLiterals.size()) {
+    return _externalLiterals[id];
   }
 
-  id -= _additionalValues.size();
-  AD_CHECK(id < _externalLiterals.size());
-  return _externalLiterals[id];
+  id -= _externalLiterals.size();
+  AD_CHECK(id < _additionalValues.size());
+  if constexpr (!decltype(_additionalValues)::isEmptyType) {
+    auto toString = [](const auto& x) { using std::to_string; return to_string(x); };
+    return _additionalValues.template at(id, toString);
+  }
 }
 
 template <typename S, typename C, typename... A>
 template <typename, typename>
 float Vocabulary<S, C, A...>::idToFloat(Id id) const {
   const auto nan = std::numeric_limits<float>::quiet_NaN();
-  if (id < _words.size()) {
+  if (id < _words.size() + _externalLiterals.size()) {
     return nan;
   } else if (id == ID_NO_VALUE) {
     return nan;
   }
   // this word is either externalized, or a special value
-  id -= _words.size();
+  id -= (_words.size() + _externalLiterals.size());
   if constexpr (!decltype(_additionalValues)::isEmptyType) {
     if (id < _additionalValues.size()) {
       auto toString = [](const auto& x) -> float {
