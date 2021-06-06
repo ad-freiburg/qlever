@@ -240,6 +240,9 @@ string SparqlFilter::asString() const {
         os << "ignoring case ";
       }
       break;
+    case SparqlFilter::BOUNDING_BOX_CONTAINS:
+      os << " CONTAINED ";
+      break;
   }
   os << _rhs << ")";
   return os.str();

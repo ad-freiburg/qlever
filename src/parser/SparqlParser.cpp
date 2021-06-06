@@ -744,6 +744,20 @@ bool SparqlParser::parseFilter(vector<SparqlFilter>* _filters,
     _filters->push_back(v[0]);
     expectClose();
     return true;
+  } else if (_lexer.accept("contained")) {
+    _lexer.expect("(");
+    SparqlFilter f;
+    f._type = SparqlFilter::BOUNDING_BOX_CONTAINS;
+    _lexer.expect(SparqlToken::Type::VARIABLE);
+    f._lhs = _lexer.current().raw;
+    _lexer.expect(",");
+    _lexer.expect(SparqlToken::Type::RDFLITERAL);
+    auto pos = _lexer.current().raw.rfind('"');
+    auto value = _lexer.current().raw.substr(1, pos - 1);
+    f._boundingBox = ad_geo::parseBoundingBoxFromLinestring(value);
+    f._rhs = _lexer.current().raw;
+    _filters->push_back(std::move(f));
+    _lexer.expect(")");
   } else if (_lexer.accept("prefix")) {
     _lexer.expect("(");
     SparqlFilter f1;

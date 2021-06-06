@@ -19,16 +19,18 @@ size_t Filter::getResultWidth() const { return _subtree->getResultWidth(); }
 Filter::Filter(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> subtree,
                SparqlFilter::FilterType type, string lhs, string rhs,
-               vector<string> additionalLhs, vector<string> additionalPrefixes)
+               vector<string> additionalLhs, vector<string> additionalPrefixes, std::optional<ad_geo::Rectangle> boundingBox)
     : Operation(qec),
       _subtree(std::move(subtree)),
       _type(type),
       _lhs(std::move(lhs)),
       _rhs(std::move(rhs)),
+      _boundingBox{std::move(boundingBox)},
       _additionalLhs(std::move(additionalLhs)),
       _additionalPrefixRegexes(std::move(additionalPrefixes)),
       _regexIgnoreCase(false),
-      _lhsAsString(false) {
+      _lhsAsString(false)
+{
   AD_CHECK(_additionalPrefixRegexes.empty() || _type == SparqlFilter::PREFIX);
   AD_CHECK(_additionalLhs.size() == _additionalPrefixRegexes.size());
   // TODO<joka921> Make the _additionalRegexes and _additionalLhs a pair to
@@ -74,6 +76,9 @@ string Filter::asString(size_t indent) const {
       break;
     case SparqlFilter::PREFIX:
       os << " PREFIX ";
+      break;
+    case SparqlFilter::BOUNDING_BOX_CONTAINS:
+      os << " CONTAINED ";
       break;
   }
   if (_lhsAsString) {
@@ -122,6 +127,8 @@ string Filter::getDescriptor() const {
     case SparqlFilter::PREFIX:
       os << " PREFIX ";
       break;
+    case SparqlFilter::BOUNDING_BOX_CONTAINS:
+      os << " CONTAINED ";
   }
   os << _rhs;
   for (size_t i = 0; i < _additionalLhs.size(); ++i) {
@@ -252,7 +259,10 @@ void Filter::computeResult(ResultTable* result) {
   result->_localVocab = subRes->_localVocab;
   size_t lhsInd = _subtree->getVariableColumn(_lhs);
   int width = result->_data.cols();
-  if (_rhs[0] == '?') {
+
+  if (_type == SparqlFilter::BOUNDING_BOX_CONTAINS)  {
+    CALL_FIXED_SIZE_1(width, computeResultBoundingBox, result, subRes);
+  } else if (_rhs[0] == '?') {
     size_t rhsInd = _subtree->getVariableColumn(_rhs);
     CALL_FIXED_SIZE_1(width, computeResultDynamicValue, &result->_data, lhsInd,
                       rhsInd, subRes->_data, subRes->getResultType(lhsInd));
@@ -794,6 +804,34 @@ void Filter::computeResultFixedValue(
         break;
     }
   }
+  LOG(DEBUG) << "Filter result computation done." << endl;
+  resultTable->_data = result.moveToDynamic();
+}
+
+// _____________________________________________________________________________
+template <int WIDTH>
+void Filter::computeResultBoundingBox(ResultTable* resultTable, const std::shared_ptr<const ResultTable> subRes) const {
+  LOG(DEBUG) << "Filter result computation..." << endl;
+  IdTableStatic<WIDTH> result = resultTable->_data.moveToStatic<WIDTH>();
+  const IdTableView<WIDTH> input = subRes->_data.asStaticView<WIDTH>();
+
+  // interpret the filters right hand side
+  size_t lhs = _subtree->getVariableColumn(_lhs);
+  Id rhs;
+  Id rhs_upper_for_range;
+  if (subRes->getResultType(lhs) != ResultTable::ResultType::KB) {
+    AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+             "The bounding box filter is only allowed on variables from the knowledge base (no aggregate results etc)");
+  }
+  AD_CHECK(_boundingBox);
+
+  for (const auto& el : input) {
+    auto optRectangle = getIndex().getVocab().idToRectangle(el[lhs]);
+    if (optRectangle && _boundingBox->contains(*optRectangle)) {
+      result.push_back(el);
+    }
+  }
+
   LOG(DEBUG) << "Filter result computation done." << endl;
   resultTable->_data = result.moveToDynamic();
 }

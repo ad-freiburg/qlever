@@ -507,11 +507,40 @@ float Vocabulary<S, C, A...>::idToFloat(Id id) const {
   }
   return nan;
 }
+
+template <typename S, typename C, typename... A>
+template <typename, typename>
+std::optional<ad_geo::Rectangle> Vocabulary<S, C, A...>::idToRectangle(Id id) const {
+  const auto empty = std::nullopt;
+  if (id < _words.size() + _externalLiterals.size()) {
+    return empty;
+  } else if (id == ID_NO_VALUE) {
+    return empty;
+  }
+  // this word is either externalized, or a special value
+  id -= (_words.size() + _externalLiterals.size());
+  if constexpr (!decltype(_additionalValues)::isEmptyType) {
+    if (id < _additionalValues.size()) {
+      auto toString = [](const auto& x) -> std::optional<ad_geo::Rectangle> {
+        if constexpr (!std::is_same_v<ad_geo::Rectangle, std::decay_t<decltype(x)>>) {
+          return std::nullopt;
+        } else {
+          return x;
+        }
+      };
+      return _additionalValues.template at(id, toString);
+    }
+  }
+  return empty;
+}
 template const std::optional<string>
 RdfsVocabulary::idToOptionalString<CompressedString, void>(Id id) const;
 
 template float
 RdfsVocabulary::idToFloat<CompressedString, void>(Id id) const;
+
+template std::optional<ad_geo::Rectangle>
+RdfsVocabulary::idToRectangle<CompressedString, void>(Id id) const;
 
 // Explicit template instantiations
 template class Vocabulary<CompressedString, TripleComponentComparator, AdditionalFloatType, AdditionalRectangleType>;

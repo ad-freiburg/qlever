@@ -35,11 +35,15 @@ struct Rectangle {
   friend H AbslHashValue(H h, const Rectangle& r) {
     return H::combine(std::move(h), r.lowerLeft, r.topRight);
   }
+  bool contains(const Rectangle& other) const {
+    return lowerLeft.x <= other.lowerLeft.x && lowerLeft.y <= other.lowerLeft.y &&
+    topRight.x >= other.topRight.x && topRight.y >= other.topRight.y;
+  }
 };
 
 inline std::string to_string(const Rectangle& r) {
   using std::to_string;;
-  return "LINESTRING(" + to_string(r.lowerLeft) + ", " + to_string(r.topRight) + ")";
+  return "\"LINESTRING(" + to_string(r.lowerLeft) + ", " + to_string(r.topRight) + ")\"^^<http://www.opengis.net/ont/geosparql#wktLiteral>";
 }
 
 struct Polygon {
@@ -48,9 +52,11 @@ struct Polygon {
     if (points.size() != 5 || points[0] != points[4]) {
       return std::nullopt;
     }
+    /*
     auto checkOrthogonal = [](const Point& a, const Point& b) {
       return (a.x == b.x) != (a.y == b.y);
     };
+     */
     /*for (size_t i = 1; i < points.size(); ++i) {
       if (!checkOrthogonal(points[i-1], points[i])) {
         return std::nullopt;
@@ -90,6 +96,25 @@ inline std::optional<Rectangle> parseAxisRectancle(const std::string& input) {
     return std::nullopt;
   }
   return polygon->toRectangle();
+}
+
+inline Rectangle parseBoundingBoxFromLinestring(const std::string& input) {
+  static re2::RE2 r = []() {
+    std::string number = "([0-9]+(\\.[0-9]+)?)";
+    std::string twoNumbers = "\\s*" + number + "\\s+" + number + "\\s*";
+    std::string twoNumbersC = ",\\s*" + number + "\\s+" + number + "\\s*";
+    std::string regexString = "\"\\s*LINESTRING\\s*\\(" + twoNumbers + twoNumbersC + "\\)";
+    return re2::RE2{regexString};
+  }();
+  double a, b, c, d;
+  bool x = re2::RE2::FullMatch(input, r, &a, nullptr, &b, nullptr, &c, nullptr, &d);
+  if (!x) {
+    throw std::runtime_error("Could not parse " + input + " as a Linestring/Bounding box");
+  }
+  if (a > c || d > b) {
+    throw std::runtime_error("In the bounding box linestring " + input + " the coordinates of the second point were larger than those of the first one");
+  }
+  return Rectangle{{a, b}, {c, d}};
 }
 }
 

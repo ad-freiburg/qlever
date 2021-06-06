@@ -114,7 +114,7 @@ std::variant<string, float, ad_geo::Rectangle> convertValueLiteralToIndexWord(co
    * TODO: This ignores the URI such that xsd:integer == foo:integer ==
    * <http://baz#integer>
    */
-  static ad_utility::HashSet<string> numericTypes {"int, integer, float, double, decimal"};
+  static ad_utility::HashSet<string> numericTypes {"int", "integer", "float", "double", "decimal"};
   assert(orig.size() > 0);
   assert(orig[0] == '\"');
   string value;

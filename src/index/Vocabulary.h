@@ -146,6 +146,9 @@ class Vocabulary {
   template <typename U = StringType, typename = enable_if_compressed<U>>
   float idToFloat(Id id) const;
 
+  template <typename U = StringType, typename = enable_if_compressed<U>>
+  std::optional<ad_geo::Rectangle> idToRectangle(Id id) const;
+
   //! Get the word with the given id.
   //! lvalue for compressedString and const& for string-based vocabulary
   AccessReturnType_t<StringType> at(Id id) const;

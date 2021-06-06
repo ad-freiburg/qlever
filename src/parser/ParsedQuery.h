@@ -14,6 +14,7 @@
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
 #include "ParseException.h"
+#include "../index/GeometricTypes.h"
 
 using std::string;
 using std::vector;
@@ -192,7 +193,8 @@ class SparqlFilter {
     GE = 6,
     LANG_MATCHES = 7,
     REGEX = 8,
-    PREFIX = 9
+    PREFIX = 9,
+    BOUNDING_BOX_CONTAINS = 10
   };
 
   string asString() const;
@@ -200,6 +202,7 @@ class SparqlFilter {
   FilterType _type;
   string _lhs;
   string _rhs;
+  std::optional<ad_geo::Rectangle> _boundingBox;
   vector<string> _additionalLhs;
   vector<string> _additionalPrefixes;
   bool _regexIgnoreCase = false;
