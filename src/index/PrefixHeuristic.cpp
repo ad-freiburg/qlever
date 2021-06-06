@@ -7,7 +7,6 @@
 #include <algorithm>
 #include <fstream>
 
-#include "../parser/RdfEscaping.h"
 #include "../parser/Tokenizer.h"
 #include "../util/Exception.h"
 #include "../util/Log.h"
@@ -192,7 +191,6 @@ std::vector<string> calculatePrefixes(const string& filename,
     } catch(...) {
       break;
     }
-    nextWord = RdfEscaping::unescapeNewlinesAndBackslashes(nextWord);
     totalChars += nextWord.size();
     // the longest common prefixes between two adjacent words are our candidates
     // for compression

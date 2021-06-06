@@ -248,7 +248,7 @@ class TupleOfVectors {
   void clear() {
     if constexpr( !isEmptyType) {
       detail::forEachVectorImpl<0>(_tuple, [](auto& vec){vec.clear();});
-    }
+   }
   };
 
   static constexpr bool isEmptyType = sizeof...(InnerTypes) == 0;
