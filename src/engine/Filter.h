@@ -79,7 +79,7 @@ class Filter : public Operation {
     if (_type == SparqlFilter::FilterType::REGEX) {
       return std::numeric_limits<Id>::max();
     }
-    if (isLhsSorted()) {
+    if (isLhsSorted() && _type != SparqlFilter::BOUNDING_BOX_CONTAINS) {
       // we can apply the very cheap binary sort filter
       return getSizeEstimate() + _subtree->getCostEstimate();
     }
