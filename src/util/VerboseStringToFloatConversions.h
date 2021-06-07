@@ -5,7 +5,7 @@
 
 namespace ad_utility {
 // ______________________________________________________________________
- float stof(const std::string& input) {
+inline float stof(const std::string& input) {
    try {
      return std::stof(input);
    } catch (...) {
@@ -14,7 +14,7 @@ namespace ad_utility {
    }
  }
 // ______________________________________________________________________
-double stod(const std::string& input) {
+inline double stod(const std::string& input) {
   try {
     return std::stod(input);
   } catch (...) {
