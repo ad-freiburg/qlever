@@ -21,6 +21,7 @@
 #include "../global/Constants.h"
 #include "../index/GeometricTypes.h"
 #include "../util/HashSet.h"
+#include "../util/VerboseStringToFloatConversions.h"
 #include "../util/Log.h"
 #include "./Exception.h"
 #include "./StringUtils.h"
@@ -146,7 +147,7 @@ std::variant<string, float, ad_geo::Rectangle> convertValueLiteralToIndexWord(co
     return convertDateToIndexWord(value);
   } else if (numericTypes.contains(type)) {
     // TODO<joka921> we currently do not preserve the original datatype
-    return std::stof(value);
+    return ad_utility::stof(value);
     /*
     // No longer convert to int. instead always convert to float and
     // have a special marker at the very end to tell if the original number
@@ -664,7 +665,7 @@ bool isNumeric(const string& val) {
 
 // _____________________________________________________________________________
 float convertNumericToIndexWord(const string& val) {
-  return std::stof(val);
+  return ad_utility::stof(val);
   /*
   NumericType type = NumericType::FLOAT;
   string tmp = val;
