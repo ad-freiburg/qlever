@@ -816,7 +816,7 @@ void Filter::computeResultBoundingBox(ResultTable* resultTable, const std::share
   const IdTableView<WIDTH> input = subRes->_data.asStaticView<WIDTH>();
 
   // interpret the filters right hand side
-  size_t lhs = _subtree->getVariableColumn(_lhs);
+  const size_t lhs = _subtree->getVariableColumn(_lhs);
   Id rhs;
   Id rhs_upper_for_range;
   if (subRes->getResultType(lhs) != ResultTable::ResultType::KB) {
@@ -825,12 +825,40 @@ void Filter::computeResultBoundingBox(ResultTable* resultTable, const std::share
   }
   AD_CHECK(_boundingBox);
 
+  size_t numResultsTotal = 0;
+  std::vector<bool> matches (input.size(), false);
+  const auto inputSize = input.size();
+
+  const auto boundingBox = *_boundingBox;
+  const auto& vocab = getIndex().getVocab();
+  if (!input.empty()) {
+#pragma omp parallel
+#pragma omp single
+#pragma omp taskloop grainsize(500000) default(none) shared(matches, input, vocab, lhs, boundingBox, inputSize) reduction(+:numResultsTotal)
+    for (size_t i = 0; i < inputSize; ++i) {
+      auto optRectangle = vocab.idToRectangle(input[i][lhs]);
+      if (optRectangle && boundingBox.contains(*optRectangle)) {
+        matches[i] = true;
+        numResultsTotal++;
+      }
+    }
+
+    result.reserve(numResultsTotal);
+    for (size_t i = 0; i < inputSize; ++i) {
+      if (matches[i]) {
+        result.push_back(input[i]);
+      }
+    }
+  }
+
+  /*
   for (const auto& el : input) {
     auto optRectangle = getIndex().getVocab().idToRectangle(el[lhs]);
     if (optRectangle && _boundingBox->contains(*optRectangle)) {
       result.push_back(el);
     }
   }
+   */
 
   LOG(DEBUG) << "Filter result computation done." << endl;
   resultTable->_data = result.moveToDynamic();
