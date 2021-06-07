@@ -114,6 +114,22 @@ boost::asio::awaitable<void> Server::process(
       co_return;
     }
   }
+  if (ad_utility::getLowercase(params["cmd"]) == "get-settings") {
+    LOG(INFO) << "Supplying settings..." << std::endl;
+    auto map = RuntimeParameters().toMap();
+    json settingsJson = map;
+    contentType = "application/json";
+    string httpResponse = createHttpResponse(settingsJson.dump(), contentType);
+    auto bytesSent = client->send(httpResponse);
+    LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
+    LOG(INFO) << "Sent settings to client." << std::endl;
+    return;
+  }
+  for (const auto& [key, value] : params) {
+    if (RuntimeParameters().getKeys().contains(key)) {
+      RuntimeParameters().set(key, value);
+    }
+  }
 
   if (params.contains("query")) {
     if (params.at("query").empty()) {

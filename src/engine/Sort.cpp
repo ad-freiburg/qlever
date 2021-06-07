@@ -61,7 +61,7 @@ void Sort::computeResult(ResultTable* result) {
   if (getExecutionContext()
           ->getSortPerformanceEstimator()
           .estimatedSortTimeInSeconds(subRes->size(), subRes->width()) >
-      remainingSecs * SORT_ESTIMATE_CANCELLATION_FACTOR) {
+      remainingSecs * RuntimeParameters().get<"SORT_ESTIMATE_CANCELLATION_FACTOR">()) {
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation
     throw ad_utility::TimeoutException(
