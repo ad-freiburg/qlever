@@ -83,9 +83,9 @@ class Filter : public Operation {
     if (_type == SparqlFilter::BOUNDING_BOX_CONTAINS) {
       if (isLhsSorted()) {
         // This is still linear, but typically cheaper b.c. of Cache-Locality
-        return getSizeEstimate() + _subtree->getCostEstimate();
+        return 5 * (getSizeEstimate() + _subtree->getCostEstimate());
       } else {
-        return 3 * (getSizeEstimate() + _subtree->getCostEstimate());
+        return 10 * (getSizeEstimate() + _subtree->getCostEstimate());
       }
 
     }
