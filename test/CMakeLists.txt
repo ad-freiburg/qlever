@@ -169,6 +169,6 @@ add_test(SortPerformanceEstimatorTest SortPerformanceEstimatorTest)
 
 add_executable(ParametersTest ParametersTest.cpp)
 add_test(ParametersTest ParametersTest)
-target_link_libraries(ParametersTest gtest_main  ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(ParametersTest gtest_main absl::flat_hash_map  ${CMAKE_THREAD_LIBS_INIT})
 
 

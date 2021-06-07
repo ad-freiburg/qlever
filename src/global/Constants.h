@@ -5,6 +5,7 @@
 
 #include <stdexcept>
 #include <string>
+#include "../util/Parameters.h"
 
 static const size_t STXXL_MEMORY_TO_USE = 1024L * 1024L * 1024L * 2L;
 static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 1000 * 1000;
@@ -15,6 +16,7 @@ static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 4;
 static const size_t DEFAULT_CACHE_MAX_NUM_ENTRIES = 1000;
 static const size_t DEFAULT_CACHE_MAX_SIZE_GB = 30;
 static const size_t DEFAULT_CACHE_MAX_SIZE_GB_SINGLE_ENTRY = 5;
+
 static const size_t MAX_NOF_ROWS_IN_RESULT = 100000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
 static const char PREFIX_CHAR = '*';
@@ -118,6 +120,14 @@ static constexpr double SORT_ESTIMATE_CANCELLATION_FACTOR = 3.0;
 // When initializing a sort performance estimator, at most this percentage of
 // the number of triples in the index is being sorted at once.
 static constexpr size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
+
+
+inline auto& RuntimeParameters() {
+  using ad_utility::detail::parameterShortNames::SizeT;
+  using ad_utility::detail::parameterShortNames::Double;
+  static ad_utility::Parameters params{Double<"SORT_ESTIMATE_CANCELLATION_FACTOR">{3.0}};
+  return params;
+}
 
 #ifdef _PARALLEL_SORT
 static constexpr bool USE_PARALLEL_SORT = true;

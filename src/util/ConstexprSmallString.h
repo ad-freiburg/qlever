@@ -77,6 +77,7 @@ struct ConstexprSmallString {
   }
 
 
+
   /// Implicit conversion to std::string_view
   operator std::string_view() const { return {_characters, _size}; }
 };
