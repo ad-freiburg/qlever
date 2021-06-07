@@ -831,7 +831,7 @@ void Filter::computeResultBoundingBox(ResultTable* resultTable, const std::share
 
   const auto boundingBox = *_boundingBox;
   const auto& vocab = getIndex().getVocab();
-  if (!input.empty()) {
+  if (inputSize != 0) {
 #pragma omp parallel
 #pragma omp single
 #pragma omp taskloop grainsize(500000) default(none) shared(matches, input, vocab, lhs, boundingBox, inputSize) reduction(+:numResultsTotal)
