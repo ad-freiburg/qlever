@@ -79,7 +79,17 @@ class Filter : public Operation {
     if (_type == SparqlFilter::FilterType::REGEX) {
       return std::numeric_limits<Id>::max();
     }
-    if (isLhsSorted() && _type != SparqlFilter::BOUNDING_BOX_CONTAINS) {
+
+    if (_type == SparqlFilter::BOUNDING_BOX_CONTAINS) {
+      if (isLhsSorted()) {
+        // This is still linear, but typically cheaper b.c. of Cache-Locality
+        return getSizeEstimate() + _subtree->getCostEstimate();
+      } else {
+        return 3 * (getSizeEstimate() + _subtree->getCostEstimate());
+      }
+
+    }
+    if (isLhsSorted()) {
       // we can apply the very cheap binary sort filter
       return getSizeEstimate() + _subtree->getCostEstimate();
     }
