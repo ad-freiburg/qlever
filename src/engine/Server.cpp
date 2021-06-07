@@ -162,6 +162,18 @@ void Server::process(Socket* client) {
         return;
       }
 
+      if (ad_utility::getLowercase(params["cmd"]) == "get-settings") {
+        LOG(INFO) << "Supplying settings..." << std::endl;
+        auto map = RuntimeParameters().toMap();
+        json settingsJson = map;
+        contentType = "application/json";
+        string httpResponse = createHttpResponse(settingsJson.dump(), contentType);
+        auto bytesSent = client->send(httpResponse);
+        LOG(DEBUG) << "Sent " << bytesSent << " bytes." << std::endl;
+        LOG(INFO) << "Sent settings to client." << std::endl;
+        return;
+      }
+
       if (ad_utility::getLowercase(params["cmd"]) == "clearcache") {
         _cache.clearUnpinnedOnly();
       }
@@ -171,6 +183,14 @@ void Server::process(Socket* client) {
         _cache.clearAll();
         lock->clear();
       }
+
+      for (const auto& [key, value] : params) {
+        if (RuntimeParameters().getKeys().contains(key)) {
+          RuntimeParameters().set(key, value);
+        }
+      }
+
+
 
       ad_utility::SharedConcurrentTimeoutTimer timeoutTimer =
           std::make_shared<ad_utility::ConcurrentTimeoutTimer>(

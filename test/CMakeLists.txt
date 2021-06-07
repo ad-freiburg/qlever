@@ -178,4 +178,8 @@ add_executable(BoundingBoxTest BoundingBoxTest.cpp)
 target_link_libraries(BoundingBoxTest gtest_main re2 ${CMAKE_THREAD_LIBS_INIT})
 # this test runs for quite some time! If this is undesired, comment it out
 add_test(BoundingBoxTest BoundingBoxTest)
+add_executable(ParametersTest ParametersTest.cpp)
+add_test(ParametersTest ParametersTest)
+target_link_libraries(ParametersTest gtest_main absl::flat_hash_map  ${CMAKE_THREAD_LIBS_INIT})
+
 
