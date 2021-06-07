@@ -167,4 +167,8 @@ target_link_libraries(SortPerformanceEstimatorTest gtest_main SortPerformanceEst
 # this test runs for quite some time! If this is undesired, comment it out
 add_test(SortPerformanceEstimatorTest SortPerformanceEstimatorTest)
 
+add_executable(ParametersTest ParametersTest.cpp)
+add_test(ParametersTest ParametersTest)
+target_link_libraries(ParametersTest gtest_main  ${CMAKE_THREAD_LIBS_INIT})
+
 
