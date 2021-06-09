@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
   }
 
   for (const auto& p :
-       calculatePrefixes(argv[1], 127, NUM_COMPRESSION_PREFIXES, true)) {
+       calculatePrefixes(argv[1], NUM_COMPRESSION_PREFIXES, 1,  true)) {
     std::cout << p << '\n';
   }
 }
