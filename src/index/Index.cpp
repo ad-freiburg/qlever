@@ -67,6 +67,8 @@ void Index::createFromFile(const string& filename) {
 
   initializeVocabularySettingsBuild<Parser>();
 
+  /*
+
 
   VocabularyData vocabData;
   if constexpr (std::is_same_v<std::decay_t<Parser>, TurtleParserDummy>) {
@@ -91,6 +93,8 @@ void Index::createFromFile(const string& filename) {
   createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _SPO, _SOP,
                                                      false, _usePatterns);
   createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
+
+   */
 
   // if we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
