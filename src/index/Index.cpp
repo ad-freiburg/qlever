@@ -100,15 +100,17 @@ void Index::createFromFile(const string& filename) {
   // but since we expect compression to be the default case, this  should not
   // hurt
   string vocabFile = _onDiskBase + ".vocabulary.0";
-  string vocabFileTmp = _onDiskBase + ".vocabularyTmp.0";
-  _vocab.restoreTmpVocabForPrefixCompression(vocabFile, vocabFileTmp);
+  string vocabFileTmpForRestoration = _onDiskBase + ".vocabularyTmp.0";
+  string vocabFileTmp = _onDiskBase + ".vocabularyTmpHacky.0";
+  // Already done by hannah
+  //_vocab.restoreTmpVocabForPrefixCompression(vocabFile, vocabFileTmp);
   std::vector<string> prefixes;
   LOG(INFO) << "Finished writing permutations" << std::endl;
   if (_vocabPrefixCompressed) {
     // we have to use the "normally" sorted vocabulary for the prefix
     // compression;
-    std::string vocabFileForPrefixCalculation =
-        _onDiskBase + TMP_BASENAME_COMPRESSION + ".vocabulary.0";
+    std::string vocabFileForPrefixCalculation = vocabFileTmpForRestoration;
+    //    _onDiskBase + TMP_BASENAME_COMPRESSION + ".vocabulary.0";
     prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
                                  NUM_COMPRESSION_PREFIXES, 1, true);
     std::ofstream prefixFile(_onDiskBase + PREFIX_FILE);
