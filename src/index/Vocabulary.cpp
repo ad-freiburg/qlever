@@ -119,12 +119,7 @@ void Vocabulary<S,C, A...>::restoreTmpVocabForPrefixCompression(const string& vo
 
   LOG(INFO) << "Sorting the vocabulary according to std::less" << std::endl;
 
-  if constexpr (USE_PARALLEL_SORT) {
-    ad_utility::parallel_sort(
-        words.begin(), words.end(), ad_utility::parallel_tag(10));
-  } else {
-    std::sort(words.begin(), words.end());
-  }
+  std::sort(words.begin(), words.end());
 
   LOG(INFO) << "Done Sorting, writing vocabulary to file " << outFileName << std::endl;
 
