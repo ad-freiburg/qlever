@@ -41,10 +41,12 @@ void fromFileImpl(const string& baseFileName, Tuple& tuple) {
         lastWritten = v;
 
         vec.push_back(std::move(v));
-      } catch (...) {
+      } catch (const std::exception& e) {
+        LOG(INFO) << e.what();
         break;
       }
     }
+    LOG(INFO) << "READ " << vec.size() << " values from " << fileName << std::endl;
     fromFileImpl<I + 1>(baseFileName, tuple);
   }
 }
@@ -503,6 +505,10 @@ const std::optional<string> Vocabulary<S, C, A...>::idToOptionalString(Id id) co
   }
 
   id -= _externalLiterals.size();
+  id -= RuntimeParameters().get<"bounding_box_hack_correction_bias">();
+  if (id >= _additionalValues.size()) {
+    throw std::runtime_error("Tried to retrieve id " + std::to_string(id) + "from additional values, which has only" + std::to_string(_additionalValues.size()) + "elements");
+  }
   AD_CHECK(id < _additionalValues.size());
   if constexpr (!decltype(_additionalValues)::isEmptyType) {
     auto toString = [](const auto& x) { using std::to_string; return to_string(x); };
@@ -547,6 +553,11 @@ std::optional<ad_geo::Rectangle> Vocabulary<S, C, A...>::idToRectangle(Id id) co
   }
   // this word is either externalized, or a special value
   id -= (_words.size() + _externalLiterals.size());
+  id -= RuntimeParameters().get<"bounding_box_hack_correction_bias">();
+
+  if (id >= _additionalValues.size()) {
+    throw std::runtime_error("Tried to retrieve id " + std::to_string(id) + "from additional values, which has only" + std::to_string(_additionalValues.size()) + "elements");
+  }
   if constexpr (!decltype(_additionalValues)::isEmptyType) {
     if (id < _additionalValues.size()) {
       auto toString = [](const auto& x) -> std::optional<ad_geo::Rectangle> {

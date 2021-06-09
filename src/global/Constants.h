@@ -129,6 +129,7 @@ inline auto& RuntimeParameters() {
       Double<"sort_estimate_cancellation_factor">{3.0},
       SizeT<"bounding_box_filter_sorted_cost_estimate">{10},
       SizeT<"bounding_box_filter_unsorted_cost_estimate">{15},
+      SizeT<"bounding_box_hack_correction_bias">{0}
   };
   return params;
 }
