@@ -101,6 +101,7 @@ void Index::createFromFile(const string& filename) {
   // hurt
   string vocabFile = _onDiskBase + ".vocabulary.0";
   string vocabFileTmp = _onDiskBase + ".vocabularyTmp.0";
+  _vocab.restoreTmpVocabForPrefixCompression(vocabFile, vocabFileTmp);
   std::vector<string> prefixes;
   LOG(INFO) << "Finished writing permutations" << std::endl;
   if (_vocabPrefixCompressed) {

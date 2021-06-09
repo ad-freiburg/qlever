@@ -101,6 +101,39 @@ void Vocabulary<S, C, A...>::readFromFile(const string& baseFileName,
     LOG(INFO) << "Done registering external vocabulary for literals.\n";
   }
 }
+//! restore the tmpVocabulary required for the prefix compression
+template <class S, class C, typename... A>
+void Vocabulary<S,C, A...>::restoreTmpVocabForPrefixCompression(const string& vocFileName, const string& outFileName) {
+  std::vector<std::string> words;
+  LOG(INFO) << "Reading vocabulary from file " << vocFileName << std::endl;
+  ad_utility::serialization::FileReadSerializer in{vocFileName};
+  string line;
+  while (true) {
+    try {
+      in & line;
+      words.push_back(line);
+    } catch(...) {
+      break;
+    }
+  }
+
+  LOG(INFO) << "Sorting the vocabulary according to std::less" << std::endl;
+
+  if constexpr (USE_PARALLEL_SORT) {
+    ad_utility::parallel_sort(
+        words.begin(), words.end(), ad_utility::parallel_tag(10));
+  } else {
+    std::sort(words.begin(), words.end());
+  }
+
+  LOG(INFO) << "Done Sorting, writing vocabulary to file " << outFileName << std::endl;
+
+  ad_utility::serialization::FileWriteSerializer out{outFileName};
+  for (const auto& el : words) {
+    out & el;
+  }
+  LOG(INFO) << "Done writing vocabulary" << std::endl;
+}
 
 // _____________________________________________________________________________
 template <class S, class C, typename... A>

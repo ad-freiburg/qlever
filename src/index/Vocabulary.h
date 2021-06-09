@@ -116,6 +116,9 @@ class Vocabulary {
   //! Read the vocabulary from file.
   void readFromFile(const string& fileName, const string& extLitsFileName = "");
 
+  //! restore the tmpVocabulary required for the prefix compression
+  static void restoreTmpVocabForPrefixCompression(const string& vocFileName, const string& outFileName);
+
   //! Write the vocabulary to a file.
   // We don't need to write compressed vocabularies with the current index
   // building procedure
