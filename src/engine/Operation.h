@@ -148,7 +148,7 @@ class Operation {
 
   // check if we still have time left on the clock.
   // if not, throw a TimeoutException
-  void checkTimeout() const;
+  void checkTimeout() const {return;}
 
   // if set, allow the single operation to emit at most this many results.
   std::optional<size_t> _limit =

@@ -191,9 +191,11 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   return existingResult->_resTable;
 }
 
+/*
 // ______________________________________________________________________
 void Operation::checkTimeout() const {
   if (_timeoutTimer->wlock()->isTimeout()) {
     throw ad_semsearch::TimeoutException("Timeout in " + getDescriptor());
   }
 }
+*/
