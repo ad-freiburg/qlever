@@ -817,8 +817,6 @@ void Filter::computeResultBoundingBox(ResultTable* resultTable, const std::share
 
   // interpret the filters right hand side
   const size_t lhs = _subtree->getVariableColumn(_lhs);
-  Id rhs;
-  Id rhs_upper_for_range;
   if (subRes->getResultType(lhs) != ResultTable::ResultType::KB) {
     AD_THROW(ad_semsearch::Exception::BAD_QUERY,
              "The bounding box filter is only allowed on variables from the knowledge base (no aggregate results etc)");
@@ -830,36 +828,44 @@ void Filter::computeResultBoundingBox(ResultTable* resultTable, const std::share
   const auto inputSize = input.size();
 
   const auto boundingBox = *_boundingBox;
+
   const auto& vocab = getIndex().getVocab();
-  if (inputSize != 0) {
-#pragma omp parallel
-#pragma omp single
-#pragma omp taskloop grainsize(500000) default(none) shared(matches, input, vocab, lhs, boundingBox, inputSize) reduction(+:numResultsTotal)
-    for (size_t i = 0; i < inputSize; ++i) {
-      auto optRectangle = vocab.idToRectangle(input[i][lhs]);
-      if (optRectangle && boundingBox.contains(*optRectangle)) {
-        matches[i] = true;
-        numResultsTotal++;
-      }
-    }
 
-    result.reserve(numResultsTotal);
-    for (size_t i = 0; i < inputSize; ++i) {
-      if (matches[i]) {
-        result.push_back(input[i]);
-      }
-    }
+  auto smallerEqualBoundingBox = ad_geo::getLowerBoundRectangle(boundingBox);
+
+  auto idLowerBound = vocab.lower_bound(smallerEqualBoundingBox);
+  auto greaterBoundingBox = ad_geo::getUpperBoundRectangle(boundingBox);
+  auto idGreater = vocab.lower_bound(greaterBoundingBox);
+
+  auto startIterator = input.begin();
+  auto endIterator = input.end();
+
+  if (isLhsSorted()) {
+    startIterator = std::lower_bound(input.begin(), input.end(), idLowerBound, [lhs](const auto& el, const auto& x) {return el[lhs] < x;});
+    endIterator = std::lower_bound(input.begin(), input.end(), idGreater, [lhs] (const auto& el, const auto& x) {return x < el[lhs];});
   }
 
-  /*
-  for (const auto& el : input) {
-    auto optRectangle = getIndex().getVocab().idToRectangle(el[lhs]);
-    if (optRectangle && _boundingBox->contains(*optRectangle)) {
-      result.push_back(el);
-    }
-  }
-   */
+  auto performFilter = [&]<typename T> (T) {
+        for (; startIterator < endIterator; ++startIterator) {
+          const auto& el = *startIterator;
+          Id id = el[lhs];
+          if constexpr( !T::value) {
+            if (id < idLowerBound || id >= idGreater) {
+              continue;
+            }
+          }
+          auto optRectangle = getIndex().getVocab().idToRectangle(el[lhs]);
+          if (optRectangle && _boundingBox->contains(*optRectangle)) {
+            result.push_back(el);
+          }
+        }
+      };
 
+  if (isLhsSorted()) {
+    performFilter(std::true_type{});
+  } else {
+    performFilter(std::false_type{});
+  }
   LOG(DEBUG) << "Filter result computation done." << endl;
   resultTable->_data = result.moveToDynamic();
 }

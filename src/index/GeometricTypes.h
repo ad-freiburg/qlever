@@ -11,10 +11,12 @@
 #include <string>
 
 #include "../util/Log.h"
+#include "../util/Exception.h"
 
 namespace ad_geo {
 struct Point {
-  double x, y;
+  using ValueType = double;
+  ValueType x, y;
   friend auto operator<=>(const Point&, const Point&) = default;
 
   template <typename H>
@@ -40,6 +42,26 @@ struct Rectangle {
     topRight.x >= other.topRight.x && topRight.y >= other.topRight.y;
   }
 };
+
+inline Rectangle getLowerBoundRectangle(const Rectangle& r) {
+  auto lowest = std::numeric_limits<Point::ValueType>::min();
+  return Rectangle{r.lowerLeft, {lowest, lowest}};
+}
+
+inline Rectangle getUpperBoundRectangle(const Rectangle& r) {
+  auto lowest = std::numeric_limits<Point::ValueType>::min();
+  auto enlarge = [](Point::ValueType v) {
+    double greater = 0.000000001;
+    auto newValue = v;
+    while (newValue <= v) {
+      newValue += greater;
+      greater *= 10;
+    }
+    AD_CHECK(newValue > v);
+    return newValue;
+  };
+  return Rectangle{{enlarge(r.topRight.x), lowest}, {lowest, lowest}};
+}
 
 inline std::string to_string(const Rectangle& r) {
   using std::to_string;;
