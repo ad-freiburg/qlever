@@ -96,7 +96,7 @@ struct Polygon {
 };
 inline std::optional<Polygon> parse5Polygon(const std::string& input) {
   static re2::RE2 r = []() {
-        std::string number = "([0-9]+(\\.[0-9]+)?)";
+        std::string number = "(-?[0-9]+(\\.[0-9]+)?)";
         std::string twoNumbers = "\\s*" + number + "\\s+" + number + "\\s*";
         std::string twoNumbersC = ",\\s*" + number + "\\s+" + number + "\\s*";
         std::string fourPoints =
@@ -122,7 +122,7 @@ inline std::optional<Rectangle> parseAxisRectancle(const std::string& input) {
 
 inline Rectangle parseBoundingBoxFromLinestring(const std::string& input) {
   static re2::RE2 r = []() {
-    std::string number = "([0-9]+(\\.[0-9]+)?)";
+    std::string number = "(-?[0-9]+(\\.[0-9]+)?)";
     std::string twoNumbers = "\\s*" + number + "\\s+" + number + "\\s*";
     std::string twoNumbersC = ",\\s*" + number + "\\s+" + number + "\\s*";
     std::string regexString = "\\s*LINESTRING\\s*\\(" + twoNumbers + twoNumbersC + "\\)";
