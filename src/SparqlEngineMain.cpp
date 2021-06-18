@@ -220,8 +220,7 @@ void processQuery(QueryExecutionContext& qec, const string& query) {
   std::cout << "\nDone. Time: " << t.usecs() / 1000.0 << " ms\n";
   size_t numMatches = qet.getResult()->size();
   std::cout << "\nNumber of matches (no limit): " << numMatches << "\n";
-  size_t effectiveLimit =
-      pq._limit ? pq._limit.value() : numMatches;
+  size_t effectiveLimit = pq._limit ? pq._limit.value() : numMatches;
   std::cout << "\nNumber of matches (limit): "
             << std::min(numMatches, effectiveLimit) << "\n";
 }

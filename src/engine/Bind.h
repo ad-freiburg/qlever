@@ -12,8 +12,7 @@ class Bind : public Operation {
  public:
   Bind(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
        GraphPatternOperation::Bind b)
-      : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {
-  }
+      : Operation(qec), _subtree(std::move(subtree)), _bind(std::move(b)) {}
 
   // Get a unique, not ambiguous string representation for a subtree.
   // This should possible act like an ID for each subtree.
@@ -58,7 +57,7 @@ class Bind : public Operation {
                                 size_t column);
   template <int IN_WIDTH, int OUT_WIDTH>
   static void computeConstantBind(IdTable* dynRes, const IdTable& inputDyn,
-                                 size_t targetVal);
+                                  size_t targetVal);
 };
 
 #endif  // QLEVER_BIND_H

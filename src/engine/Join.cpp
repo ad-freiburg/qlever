@@ -543,7 +543,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     while (i < a.size() && j < b.size()) {
       while (a(i, jc1) < b(j, jc2)) {
         ++i;
-        if (i% (1024 * 16) == 0) {
+        if (i % (1024 * 16) == 0) {
           checkTimeout();
         }
         if (i >= a.size()) {
@@ -553,7 +553,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
 
       while (b(j, jc2) < a(i, jc1)) {
         ++j;
-        if (j% (1024 * 16) == 0) {
+        if (j % (1024 * 16) == 0) {
           checkTimeout();
         }
         if (j >= b.size()) {
@@ -588,7 +588,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
           }
 
           ++j;
-          if (j% (1024 * 4) == 0) {
+          if (j % (1024 * 4) == 0) {
             checkTimeout();
           }
           if (j >= b.size()) {

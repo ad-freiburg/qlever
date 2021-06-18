@@ -82,31 +82,31 @@ class TransitivePath : public Operation {
 
   template <int SUB_WIDTH, bool leftIsVar, bool rightIsVar>
   void computeTransitivePath(IdTable* res, const IdTable& sub,
-                                    size_t leftSubCol, size_t rightSubCol,
-                                    Id leftValue, Id rightValue, size_t minDist,
-                                    size_t maxDist);
+                             size_t leftSubCol, size_t rightSubCol,
+                             Id leftValue, Id rightValue, size_t minDist,
+                             size_t maxDist);
 
   template <int SUB_WIDTH>
-  void computeTransitivePath(IdTable* res, const IdTable& sub,
-                                    bool leftIsVar, bool rightIsVar,
-                                    size_t leftSubCol, size_t rightSubCol,
-                                    Id leftValue, Id rightValue, size_t minDist,
-                                    size_t maxDist);
+  void computeTransitivePath(IdTable* res, const IdTable& sub, bool leftIsVar,
+                             bool rightIsVar, size_t leftSubCol,
+                             size_t rightSubCol, Id leftValue, Id rightValue,
+                             size_t minDist, size_t maxDist);
 
   template <int SUB_WIDTH, int LEFT_WIDTH, int RES_WIDTH>
-  void computeTransitivePathLeftBound(
-      IdTable* res, const IdTable& sub, const IdTable& left, size_t leftSideCol,
-      bool rightIsVar, size_t leftSubCol, size_t rightSubCol, Id rightValue,
-      size_t minDist, size_t maxDist, size_t resWidth);
+  void computeTransitivePathLeftBound(IdTable* res, const IdTable& sub,
+                                      const IdTable& left, size_t leftSideCol,
+                                      bool rightIsVar, size_t leftSubCol,
+                                      size_t rightSubCol, Id rightValue,
+                                      size_t minDist, size_t maxDist,
+                                      size_t resWidth);
 
   template <int SUB_WIDTH, int LEFT_WIDTH, int RES_WIDTH>
   void computeTransitivePathRightBound(IdTable* res, const IdTable& sub,
-                                              const IdTable& dynRight,
-                                              size_t rightSideCol,
-                                              bool leftIsVar, size_t leftSubCol,
-                                              size_t rightSubCol, Id leftValue,
-                                              size_t minDist, size_t maxDist,
-                                              size_t resWidth);
+                                       const IdTable& dynRight,
+                                       size_t rightSideCol, bool leftIsVar,
+                                       size_t leftSubCol, size_t rightSubCol,
+                                       Id leftValue, size_t minDist,
+                                       size_t maxDist, size_t resWidth);
 
  private:
   virtual void computeResult(ResultTable* result) override;

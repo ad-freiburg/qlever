@@ -59,8 +59,8 @@ class Operation {
    * when memory pressure was lowered in the meantime.  When print is true the
    * Operation is printed to the ERROR LOG
    */
-   // TODO<joka921>: change to pointer for styleguide?
-  void abort(SubtreeCache::Res & cachedResult, bool print) {
+  // TODO<joka921>: change to pointer for styleguide?
+  void abort(SubtreeCache::Res& cachedResult, bool print) {
     const std::string opString = asString();
     if (print) {
       LOG(ERROR) << "Aborted Operation:" << endl;
@@ -68,7 +68,7 @@ class Operation {
     }
     // Remove Operation from cache so we may retry it later. Anyone with a live
     // pointer will be waiting and register the abort.
-    cachedResult.abort([](auto&& res){res._resTable->abort();});
+    cachedResult.abort([](auto&& res) { res._resTable->abort(); });
   }
 
   /**
@@ -109,13 +109,12 @@ class Operation {
   shared_ptr<const ResultTable> getResult(bool isRoot = false);
 
   // typedef for a synchronized and shared timeoutTimer
-  using SyncTimer =
-      ad_utility::TimeoutChecker;
+  using SyncTimer = ad_utility::TimeoutChecker;
   // set a global timeout timer for all child operations.
   // As soon as this runs out, the complete tree will fail.
   void recursivelySetTimeoutTimer(std::shared_ptr<SyncTimer> timer);
 
-  void setLimit(size_t limit) { _limit = limit;}
+  void setLimit(size_t limit) { _limit = limit; }
 
  protected:
   QueryExecutionContext* getExecutionContext() const {
@@ -149,11 +148,11 @@ class Operation {
 
   // check if we still have time left on the clock.
   // if not, throw a TimeoutException
-  void checkTimeout() const;
-
+  void checkTimeout() const {return;}
 
   // if set, allow the single operation to emit at most this many results.
-  std::optional<size_t> _limit = std::nullopt;  // create at most this many entries
+  std::optional<size_t> _limit =
+      std::nullopt;  // create at most this many entries
 
   // handles the timeout of this operation
   std::shared_ptr<SyncTimer> _timeoutTimer =
@@ -167,13 +166,11 @@ class Operation {
   vector<size_t> _resultSortedColumns;
   RuntimeInformation _runtimeInfo;
 
-
   bool _hasComputedSortColumns;
 
   /// collect all the warnings that were created during the creation or
   /// execution of this operation
   std::vector<std::string> _warnings;
-
 
   // recursively call a function on all children
   template <typename F>

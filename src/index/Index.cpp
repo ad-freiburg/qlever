@@ -175,11 +175,14 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
           [this](Triple&& t) {
             Triple res;
             std::transform(t.begin(), t.end(), res.begin(), [](const auto& s) {
-              auto res =  TurtleToken::normalizeRDFLiteral(s);
+              auto res = TurtleToken::normalizeRDFLiteral(s);
               try {
-                [[maybe_unused]] auto tmp = TurtleToken::normalizeRDFLiteral(TurtleToken::escapeRDFLiteral(res));
+                [[maybe_unused]] auto tmp = TurtleToken::normalizeRDFLiteral(
+                    TurtleToken::escapeRDFLiteral(res));
               } catch (...) {
-                LOG(ERROR) << "Vocabulary entry " + s + " could not be (un)escaped properly" << std::endl;
+                LOG(ERROR) << "Vocabulary entry " + s +
+                                  " could not be (un)escaped properly"
+                           << std::endl;
               }
               return res;
             });

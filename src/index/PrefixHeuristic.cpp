@@ -5,6 +5,7 @@
 #include "./PrefixHeuristic.h"
 #include <algorithm>
 #include <fstream>
+#include "../parser/Tokenizer.h"
 #include "../util/Exception.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"

@@ -157,7 +157,8 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buff
         try {
           auto restored = TurtleToken::normalizeRDFLiteral(escaped);
         } catch (...) {
-          LOG(ERROR) << "Failure in the (un) escaping of vocabulary entry " + _lastWritten << std::endl;
+          LOG(ERROR) << "Failure in the (un) escaping of vocabulary entry " + _lastWritten
+                     << std::endl;
         }
         _outfile << TurtleToken::escapeRDFLiteral(_lastWritten) << '\n';
       } else {

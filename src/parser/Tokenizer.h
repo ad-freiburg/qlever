@@ -10,8 +10,8 @@
 #include <unicode/ustream.h>
 #include <regex>
 #include "../util/Exception.h"
-#include "../util/Log.h"
 #include "../util/HashSet.h"
+#include "../util/Log.h"
 using re2::RE2;
 using namespace std::string_literals;
 
@@ -329,7 +329,8 @@ struct TurtleToken {
         if (ad_utility::startsWith(literal, "\"\"\"") ||
             ad_utility::startsWith(literal, "'''")) {
           if (!ad_utility::endsWith(literal, literal.substr(0, 3))) {
-            throw std::runtime_error("Error: Rdf Triple element "s + origLiteral +
+            throw std::runtime_error("Error: Rdf Triple element "s +
+                                     origLiteral +
                                      "could not be normalized properly"s);
           }
           literal.remove_prefix(3);
@@ -337,7 +338,8 @@ struct TurtleToken {
         } else {
           if (!(ad_utility::startsWith(literal, "\"") ||
                 ad_utility::startsWith(literal, "'"))) {
-            throw std::runtime_error("Error: Rdf Triple element "s + origLiteral +
+            throw std::runtime_error("Error: Rdf Triple element "s +
+                                     origLiteral +
                                      "could not be normalized properly"s);
           }
           AD_CHECK(ad_utility::endsWith(literal, literal.substr(0, 1)));
@@ -389,21 +391,24 @@ struct TurtleToken {
             break;
           }
 
-            default:
-              throw std::runtime_error("Illegal escape sequence in RDF Literal \"" +
-                                       std::string(literal) +
-                                       "\" . This should never "
-                                       "happen, please report this");
-          }
-          literal.remove_prefix(pos + 2);
-          pos = literal.find('\\');
+          default:
+            throw std::runtime_error(
+                "Illegal escape sequence in RDF Literal \"" +
+                std::string(literal) +
+                "\" . This should never "
+                "happen, please report this");
         }
-        res.append(literal);
-        res.push_back(endDelimiter);
-        res.append(langtagOrDatatype);
-        return res;
+        literal.remove_prefix(pos + 2);
+        pos = literal.find('\\');
+      }
+      res.append(literal);
+      res.push_back(endDelimiter);
+      res.append(langtagOrDatatype);
+      return res;
     } catch (...) {
-      LOG(ERROR) << "Failed to unescape " + origLiteral + " an exception was thrown" << std::endl;
+      LOG(ERROR) << "Failed to unescape " + origLiteral +
+                        " an exception was thrown"
+                 << std::endl;
       throw;
     }
   }
@@ -411,9 +416,10 @@ struct TurtleToken {
   static std::string unescapePrefixedIri(std::string_view literal) {
     std::string res;
     auto pos = literal.find('\\');
-    static const ad_utility::HashSet<char> m = [](){
+    static const ad_utility::HashSet<char> m = []() {
       ad_utility::HashSet<char> r;
-      for (auto c : {'_', '~', '.', '-', '-', '!', '$', '&', '\'', '(', ')', '*', '+', ',', ';', '=', '/', '?', '#', '@', '%' }) {
+      for (auto c : {'_', '~', '.', '-', '-', '!', '$', '&', '\'', '(', ')',
+                     '*', '+', ',', ';', '=', '/', '?', '#', '@',  '%'}) {
         r.insert(c);
       }
       return r;
@@ -421,12 +427,16 @@ struct TurtleToken {
     while (pos != literal.npos) {
       res.append(literal.begin(), literal.begin() + pos);
       if (pos + 1 >= literal.size()) {
-        throw std::runtime_error("Trying to unescape a literal or iri that ended with a single backslash. This should not happen, please report this");
+        throw std::runtime_error(
+            "Trying to unescape a literal or iri that ended with a single "
+            "backslash. This should not happen, please report this");
       }
       if (m.count(literal[pos + 1])) {
         res += literal[pos + 1];
       } else {
-        throw std::runtime_error(std::string{"Illegal escape sequence \\"} + literal[pos + 1] + " encountered while trying to unescape an iri. Please report this");
+        throw std::runtime_error(
+            std::string{"Illegal escape sequence \\"} + literal[pos + 1] +
+            " encountered while trying to unescape an iri. Please report this");
       }
 
       literal.remove_prefix(pos + 2);

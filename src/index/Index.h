@@ -35,10 +35,10 @@ using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
 using ad_utility::MmapVectorView;
 using std::array;
+using std::shared_ptr;
 using std::string;
 using std::tuple;
 using std::vector;
-using std::shared_ptr;
 
 using json = nlohmann::json;
 
@@ -373,7 +373,8 @@ class Index {
    * Index class).
    */
   template <class Permutation>
-  void scan(Id key, IdTable* result, const Permutation& p, shared_ptr<ad_utility::TimeoutChecker> timer = nullptr) const {
+  void scan(Id key, IdTable* result, const Permutation& p,
+            shared_ptr<ad_utility::TimeoutChecker> timer = nullptr) const {
     if (p._meta.relationExists(key)) {
       const FullRelationMetaData& rmd = p._meta.getRmd(key)._rmdPairs;
       result->reserve(rmd.getNofElements() + 2);
@@ -394,7 +395,8 @@ class Index {
    * Index class).
    */
   template <class Permutation>
-  void scan(const string& key, IdTable* result, const Permutation& p, shared_ptr<ad_utility::TimeoutChecker> timer = nullptr) const {
+  void scan(const string& key, IdTable* result, const Permutation& p,
+            shared_ptr<ad_utility::TimeoutChecker> timer = nullptr) const {
     LOG(DEBUG) << "Performing " << p._readableName
                << " scan for full list for: " << key << "\n";
     Id relId;

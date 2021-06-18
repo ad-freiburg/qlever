@@ -142,7 +142,7 @@ class QueryPlanner {
 
     size_t getSizeEstimate() const;
 
-    std::shared_ptr<QueryExecutionTree>& getExecutionTree() { return _qet;}
+    std::shared_ptr<QueryExecutionTree>& getExecutionTree() { return _qet; }
 
     void addAllNodes(uint64_t otherNodes);
   };

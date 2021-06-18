@@ -3,14 +3,10 @@
 //
 #include <iostream>
 #include <vector>
-
-#ifdef _PARALLEL_SORT
 #include "./CancelableParallelSort.h"
 #include "./CancelableSequentialSort.h"
-#endif
 
 int main(void) {
-#ifdef _PARALLEL_SORT
   ad_utility::TimeoutChecker c{ad_utility::TimeoutTimer::secLimited(50)};
 
   ad_utility::sequential::TimeoutedAlgorithms algo{&c};
@@ -33,8 +29,4 @@ int main(void) {
   std::cout << "finished sorting" << std::endl;
 
   return x[0];
-#else
-  std::cerr << "You need to compile this example with support for parallel "
-               "sorting to be useful\n";
-#endif
 }

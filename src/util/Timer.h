@@ -150,7 +150,8 @@ class TimeoutTimer : public Timer {
 };
 
 // simple interface : threadsafe timer + "checkTimeout + throw exception"
-class TimeoutChecker : public ad_utility::Synchronized<TimeoutTimer, std::mutex> {
+class TimeoutChecker
+    : public ad_utility::Synchronized<TimeoutTimer, std::mutex> {
  public:
   class TimeoutException : public std::exception {};
   using Base = ad_utility::Synchronized<TimeoutTimer, std::mutex>;

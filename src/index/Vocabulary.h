@@ -331,10 +331,10 @@ class Vocabulary {
     /*
     if (prefix == "\"") {
       Id lb = lower_bound(prefix, SortLevel::IDENTICAL);
-      Id ub = lower_bound("<", SortLevel::IDENTICAL);
+      Id ub = lower_bound("#", SortLevel::IDENTICAL);
       return {lb, ub};
     }
-     */
+    */
 
     Id lb = lower_bound(prefix, SortLevel::PRIMARY);
 
@@ -431,7 +431,6 @@ class Vocabulary {
       return getLowerBoundLambda(level);
     }
   }
-
 
   // TODO<joka921> these following two members are only used with the
   // compressed vocabulary. They don't use much space if empty, but still it

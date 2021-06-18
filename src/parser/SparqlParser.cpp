@@ -313,8 +313,10 @@ void SparqlParser::parseWhere(ParsedQuery* query,
         b._input = GraphPatternOperation::Bind::Rename{inVar};
       } else {
         if (isString) {
-          AD_THROW(ad_semsearch::Exception::BAD_QUERY, "Binding of constants is currently only supported using integer values");
-          //b._input = GraphPatternOperation::Bind::Constant{inVar};
+          AD_THROW(ad_semsearch::Exception::BAD_QUERY,
+                   "Binding of constants is currently only supported using "
+                   "integer values");
+          // b._input = GraphPatternOperation::Bind::Constant{inVar};
         } else {
           b._input = GraphPatternOperation::Bind::Constant{val};
         }

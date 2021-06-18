@@ -69,9 +69,10 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
       _executionContext->_pinSubtrees || pinChildIndexScanSizes;
   LOG(DEBUG) << "Check cache for Operation result" << endl;
   LOG(TRACE) << "Using key: \n" << cacheKey << endl;
-  auto cacheProxyResult = (pinResult)
-                                         ? cache.tryEmplacePinned(cacheKey, _executionContext->getAllocator())
-                                         : cache.tryEmplace(cacheKey, _executionContext->getAllocator());
+  auto cacheProxyResult =
+      (pinResult)
+          ? cache.tryEmplacePinned(cacheKey, _executionContext->getAllocator())
+          : cache.tryEmplace(cacheKey, _executionContext->getAllocator());
 
   auto& [newResult, existingResult] = cacheProxyResult._val;
 
@@ -191,9 +192,11 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot) {
   return existingResult->_resTable;
 }
 
+/*
 // ______________________________________________________________________
 void Operation::checkTimeout() const {
   if (_timeoutTimer->wlock()->isTimeout()) {
     throw ad_semsearch::TimeoutException("Timeout in " + getDescriptor());
   }
 }
+*/
