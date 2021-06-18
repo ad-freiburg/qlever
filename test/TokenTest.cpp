@@ -426,6 +426,11 @@ TEST(Escaping, unescapeIriref) {
     ASSERT_EQ(t, RdfEscaping::unescapeIriref(l3));
   }
   {
+    std::string t = "<si\"mple\'Bärä>";
+    std::string l3 = "<si\"mple\'B\\u00E4r\\U000000E4>";
+    ASSERT_EQ(t, RdfEscaping::unescapeIriref(l3));
+  }
+  {
     std::string t = "<si\"mple\'Liää\n\rt\t\b\fer\\>";
     std::string l3 = "<si\"mple\'Li\\u00E4ä\n\rt\t\b\fer\\\\>";
     ASSERT_THROW(RdfEscaping::unescapeIriref(l3), std::runtime_error);

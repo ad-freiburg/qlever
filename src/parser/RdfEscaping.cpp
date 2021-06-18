@@ -76,7 +76,7 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
   auto pushNumericEscape = [&outputIterator, &endIterator](const auto& iterator,
                                                            size_t length) {
     if constexpr (!acceptOnlyBackslashAndNewline) {
-      AD_CHECK(iterator + length < endIterator);
+      AD_CHECK(iterator + length <= endIterator);
       auto unesc =
           hexadecimalCharactersToUtf8(std::string_view(iterator, length));
       std::copy(unesc.begin(), unesc.end(), outputIterator);
