@@ -337,6 +337,30 @@ class Vocabulary {
      */
 
     Id lb = lower_bound(prefix, SortLevel::PRIMARY);
+
+    auto get = [&](const Id id) -> string {
+      if constexpr (_isCompressed) {
+        if (id < _words.size()) {
+          return idToOptionalString(id).value_or("Id " + std::to_string(id) +
+                                                 " is out of bounds");
+        }
+      }
+      return string{"Id " + std::to_string(id) +
+                         " is out of bounds"};
+    };
+
+    auto to_number_string = [](const string& s) {
+      string result;
+      for (auto c : s) {
+        result.push_back(' ');
+        result += std::to_string(c);
+      }
+      return result;
+    };
+
+    LOG(DEBUG) << "Obtaining prefix filter range for prefix " + prefix + '\n';
+    LOG(DEBUG) << "lower bound for prefix filter is " << lb << " : " << get(lb) << '\n';
+    LOG(DEBUG) << "element before lower bound  " << lb - 1 << " : " << get(lb - 1) << '\n';
     auto transformed = _caseComparator.transformToFirstPossibleBiggerValue(
         prefix, SortLevel::PRIMARY);
 
@@ -344,6 +368,23 @@ class Vocabulary {
     auto ub = static_cast<Id>(
         std::lower_bound(_words.begin(), _words.end(), transformed, pred) -
         _words.begin());
+    LOG(DEBUG) << "upper bound for prefix filter is " << ub << " : " << get(ub) << '\n';
+    LOG(DEBUG) << "element after upper bound  " << ub + 1 << " : " << get(ub + 1) << '\n';
+
+    if constexpr (_isCompressed) {
+      LOG(DEBUG) << "Sort Key for upper bound is "
+                 << to_number_string(transformed.transformedVal.get());
+
+      if (!prefix.empty()) {
+        auto cpy = prefix;
+        cpy.back()++;
+        auto trans = _caseComparator.extractAndTransformComparable(
+            prefix, SortLevel::PRIMARY);
+        LOG(DEBUG) << " Manually increased key is " << cpy << '\n';
+        LOG(DEBUG) << " sort key for this manual value is "
+                   << to_number_string(trans.transformedVal.get());
+      }
+    }
 
     return {lb, ub};
   }
