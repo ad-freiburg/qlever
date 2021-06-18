@@ -388,7 +388,7 @@ class Vocabulary {
 
     if constexpr (_isCompressed) {
       LOG(DEBUG) << "Sort Key for upper bound is "
-                 << to_number_string(transformed);
+                 << to_number_string(transformed) << '\n';
 
       if (!prefix.empty()) {
         auto cpy = prefix;
