@@ -358,8 +358,13 @@ class Vocabulary {
       return result;
     };
 
-    auto getSortKey = [&](Id id) {
-      return to_number_string(_caseComparator.extractAndTransformComparable(get(id)));
+    auto getSortKey = [&](Id id) -> string {
+      if constexpr (_isCompressed) {
+        return to_number_string(
+            _caseComparator.extractAndTransformComparable(get(id)));
+      }
+
+      return "not supported";
     };
 
     LOG(DEBUG) << "Obtaining prefix filter range for prefix " + prefix + '\n';
