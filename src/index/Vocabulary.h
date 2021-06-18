@@ -361,7 +361,7 @@ class Vocabulary {
     auto getSortKey = [&](Id id) -> string {
       if constexpr (_isCompressed) {
         return to_number_string(
-            _caseComparator.extractAndTransformComparable(get(id)));
+            _caseComparator.extractAndTransformComparable(get(id), SortLevel::PRIMARY));
       }
 
       return "not supported";
