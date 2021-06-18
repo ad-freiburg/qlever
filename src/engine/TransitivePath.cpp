@@ -390,7 +390,7 @@ void TransitivePath::computeTransitivePathLeftBound(
     // initialize the map from the subresult
     for (size_t i = 0; i < sub.size(); i++) {
       if (i % 8192 == 0) {
-	checkTimeout();
+        checkTimeout();
       }
       size_t l = sub(i, leftSubCol);
       size_t r = sub(i, rightSubCol);
@@ -533,7 +533,7 @@ void TransitivePath::computeTransitivePathRightBound(
     // initialize the map from the subresult
     for (size_t i = 0; i < sub.size(); i++) {
       if (i % 4096 == 0) {
-	checkTimeout();
+        checkTimeout();
       }
       size_t l = sub(i, leftSubCol);
       size_t r = sub(i, rightSubCol);

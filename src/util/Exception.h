@@ -92,13 +92,15 @@ namespace ad_semsearch {
 //! message just in case
 class AbortException : public std::exception {
  public:
-  AbortException(const std::exception& original, const RuntimeInformation& rti) : _what(original.what()), _rti{rti} {}
+  AbortException(const std::exception& original, const RuntimeInformation& rti)
+      : _what(original.what()), _rti{rti} {}
 
-  AbortException(const std::string& whatthe, RuntimeInformation rti) : _what(whatthe), _rti{rti} {}
+  AbortException(const std::string& whatthe, RuntimeInformation rti)
+      : _what(whatthe), _rti{rti} {}
 
   const char* what() const noexcept { return _what.c_str(); }
 
-  const RuntimeInformation& runtimeInfo() const {return _rti;}
+  const RuntimeInformation& runtimeInfo() const { return _rti; }
 
  private:
   string _what;

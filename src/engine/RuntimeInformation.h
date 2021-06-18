@@ -11,9 +11,9 @@
 #include <vector>
 
 #include "../util/HashMap.h"
+#include "../util/Log.h"
 #include "../util/StringUtils.h"
 #include "../util/Timer.h"
-#include "../util/Log.h"
 
 class RuntimeInformation {
  public:
@@ -150,7 +150,7 @@ class RuntimeInformation {
 
   void addChild(const RuntimeInformation& r) { _children.push_back(r); }
 
-  void clearChildren() {_children.clear();}
+  void clearChildren() { _children.clear(); }
 
   template <typename T>
   void addDetail(const std::string& key, const T& value) {

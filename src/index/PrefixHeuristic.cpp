@@ -9,7 +9,6 @@
 #include "../util/Exception.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
-#include "../parser/Tokenizer.h"
 
 using std::string;
 

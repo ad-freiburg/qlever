@@ -345,8 +345,7 @@ class Vocabulary {
                                                  " is out of bounds");
         }
       }
-      return string{"Id " + std::to_string(id) +
-                         " is out of bounds"};
+      return string{"Id " + std::to_string(id) + " is out of bounds"};
     };
 
     auto to_number_string = [](const string& s) {
@@ -359,8 +358,10 @@ class Vocabulary {
     };
 
     LOG(DEBUG) << "Obtaining prefix filter range for prefix " + prefix + '\n';
-    LOG(DEBUG) << "lower bound for prefix filter is " << lb << " : " << get(lb) << '\n';
-    LOG(DEBUG) << "element before lower bound  " << lb - 1 << " : " << get(lb - 1) << '\n';
+    LOG(DEBUG) << "lower bound for prefix filter is " << lb << " : " << get(lb)
+               << '\n';
+    LOG(DEBUG) << "element before lower bound  " << lb - 1 << " : "
+               << get(lb - 1) << '\n';
     auto transformed = _caseComparator.transformToFirstPossibleBiggerValue(
         prefix, SortLevel::PRIMARY);
 
@@ -368,8 +369,10 @@ class Vocabulary {
     auto ub = static_cast<Id>(
         std::lower_bound(_words.begin(), _words.end(), transformed, pred) -
         _words.begin());
-    LOG(DEBUG) << "upper bound for prefix filter is " << ub << " : " << get(ub) << '\n';
-    LOG(DEBUG) << "element after upper bound  " << ub + 1 << " : " << get(ub + 1) << '\n';
+    LOG(DEBUG) << "upper bound for prefix filter is " << ub << " : " << get(ub)
+               << '\n';
+    LOG(DEBUG) << "element after upper bound  " << ub + 1 << " : "
+               << get(ub + 1) << '\n';
 
     if constexpr (_isCompressed) {
       LOG(DEBUG) << "Sort Key for upper bound is "
