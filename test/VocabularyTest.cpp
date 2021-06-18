@@ -115,6 +115,27 @@ TEST(VocabularyTest, IncompleteLiterals) {
   ASSERT_TRUE(comp("\"fieldofwork", "\"GOLD\"@en"));
 }
 
+TEST(Vocabulary, PrefixFilter) {
+  RdfsVocabulary voc;
+  voc.push_back("\"exa\"");
+  voc.push_back("\"exp\"");
+  voc.push_back("\"ext\"");
+
+  auto x = voc.prefix_range("\"exp");
+  ASSERT_EQ(x.first, 1);
+  ASSERT_EQ(x.second, 2);
+
+  TripleComponentComparator comp;
+  auto res = comp.extractAndTransformComparable("\"exp", LocaleManager::Level::PRIMARY);
+  auto rest = comp.transformToFirstPossibleBiggerValue("\"exp", LocaleManager::Level::PRIMARY);
+  auto resq = comp.extractAndTransformComparable("\"exq", LocaleManager::Level::PRIMARY);
+  auto resa = comp.extractAndTransformComparable("\"expl", LocaleManager::Level::PRIMARY);
+  LOG(INFO) << res.transformedVal.get()<< '\n';
+  LOG(INFO) << resq.transformedVal.get()<< '\n';
+  LOG(INFO) << rest.transformedVal.get()<< '\n';
+  LOG(INFO) << resa.transformedVal.get()<< '\n';
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
