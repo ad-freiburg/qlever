@@ -149,7 +149,7 @@ inline size_t findClosingBracket(const string& haystack, size_t start = 0,
 inline string decodeUrl(const string& orig);
 
 /**
- * @brief Return the first position where <literalEnd> was found in the <input>
+ * @brief Return the last position where <literalEnd> was found in the <input>
  * without being escaped by backslashes. If it is not found at all, string::npos
  * is returned.
  */
@@ -670,10 +670,11 @@ inline size_t findClosingBracket(const string& haystack, size_t start,
   return -1;
 }
 
+// _________________________________________________________________________
 inline size_t findLiteralEnd(const std::string_view input,
                              const std::string_view literalEnd) {
-
-  auto lastFoundQuotePos = size_t(-1);
+  // keep track of the last position where the literalEnd was found unescaped
+  auto lastFoundPos = size_t(-1);
   auto endPos = input.find(literalEnd, 0);
   while (endPos != string::npos) {
     if (endPos > 0 && input[endPos - 1] == '\\') {
@@ -691,13 +692,16 @@ inline size_t findLiteralEnd(const std::string_view input,
       }
       endPos = input.find(literalEnd, endPos + 1);
     } else {
-      lastFoundQuotePos = endPos;
-      // no backslash before " , the string has definitely ended
+      // no backslash before the literalEnd, mark this as a candidate position
+      lastFoundPos = endPos;
       endPos = input.find(literalEnd, endPos + 1);
     }
   }
-  if (lastFoundQuotePos != size_t(-1)) {
-    return lastFoundQuotePos;
+
+  // if we have found any unescaped occurence of literalEnd, return the last
+  // of these positions
+  if (lastFoundPos != size_t(-1)) {
+    return lastFoundPos;
   }
   return endPos;
 }

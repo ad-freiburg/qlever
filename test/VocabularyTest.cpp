@@ -120,32 +120,11 @@ TEST(Vocabulary, PrefixFilter) {
   voc.push_back("\"exa\"");
   voc.push_back("\"exp\"");
   voc.push_back("\"ext\"");
+  voc.push_back("\"[\"Ex-vivo\" renal artery revascularization]\"@en");
 
   auto x = voc.prefix_range("\"exp");
-  ASSERT_EQ(x.first, 1);
-  ASSERT_EQ(x.second, 2);
-
-  auto to_number_string = [](const auto& trans) {
-    std:string s = trans.transformedVal.get();
-    string result;
-    for (auto c : s) {
-      result.push_back(' ');
-      result += std::to_string(c);
-    }
-    return result;
-  };
-
-  TripleComponentComparator comp;
-  auto res = comp.extractAndTransformComparable("\"exp", LocaleManager::Level::PRIMARY);
-  auto rest = comp.transformToFirstPossibleBiggerValue("\"exp", LocaleManager::Level::PRIMARY);
-  auto resq = comp.extractAndTransformComparable("\"exq", LocaleManager::Level::PRIMARY);
-  auto resa = comp.extractAndTransformComparable("\"expl", LocaleManager::Level::PRIMARY);
-  auto resc = comp.extractAndTransformComparable( "\"[\"Ex-vivo\" renal artery revascularization]\"@en", LocaleManager::Level::PRIMARY);
-  LOG(INFO) << to_number_string(res) << '\n';
-  LOG(INFO) << resq.transformedVal.get()<< '\n';
-  LOG(INFO) << rest.transformedVal.get()<< '\n';
-  LOG(INFO) << resa.transformedVal.get()<< '\n';
-  LOG(INFO) << to_number_string(resc)<< '\n';
+  ASSERT_EQ(x.first, 1u);
+  ASSERT_EQ(x.second, 2u);
 }
 
 int main(int argc, char** argv) {
