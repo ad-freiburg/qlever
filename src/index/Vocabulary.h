@@ -348,13 +348,18 @@ class Vocabulary {
       return string{"Id " + std::to_string(id) + " is out of bounds"};
     };
 
-    auto to_number_string = [](const string& s) {
+    auto to_number_string = [](const auto& trans) {
+      std:string s = trans.transformedVal.get();
       string result;
       for (auto c : s) {
         result.push_back(' ');
         result += std::to_string(c);
       }
       return result;
+    };
+
+    auto getSortKey = [&](Id id) {
+      return to_number_string(_caseComparator.extractAndTransformComparable(get(id)));
     };
 
     LOG(DEBUG) << "Obtaining prefix filter range for prefix " + prefix + '\n';
@@ -370,13 +375,15 @@ class Vocabulary {
         std::lower_bound(_words.begin(), _words.end(), transformed, pred) -
         _words.begin());
     LOG(DEBUG) << "upper bound for prefix filter is " << ub << " : " << get(ub)
-               << '\n';
+               << " with sort key " << getSortKey(ub ) << '\n';
     LOG(DEBUG) << "element after upper bound  " << ub + 1 << " : "
-               << get(ub + 1) << '\n';
+               << get(ub + 1) << " with sort key " << getSortKey(ub + 1) << '\n';
+    LOG(DEBUG) << "element before upper bound  " << ub - 1 << " : "
+               << get(ub - 1) << " with sort key " << getSortKey(ub - 1) <<'\n';
 
     if constexpr (_isCompressed) {
       LOG(DEBUG) << "Sort Key for upper bound is "
-                 << to_number_string(transformed.transformedVal.get());
+                 << to_number_string(transformed);
 
       if (!prefix.empty()) {
         auto cpy = prefix;
@@ -385,7 +392,7 @@ class Vocabulary {
             prefix, SortLevel::PRIMARY);
         LOG(DEBUG) << " Manually increased key is " << cpy << '\n';
         LOG(DEBUG) << " sort key for this manual value is "
-                   << to_number_string(trans.transformedVal.get());
+                   << to_number_string(trans) << '\n';
       }
     }
 
