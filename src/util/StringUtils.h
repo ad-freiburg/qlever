@@ -672,6 +672,8 @@ inline size_t findClosingBracket(const string& haystack, size_t start,
 
 inline size_t findLiteralEnd(const std::string_view input,
                              const std::string_view literalEnd) {
+
+  auto lastFoundQuotePos = size_t(-1);
   auto endPos = input.find(literalEnd, 0);
   while (endPos != string::npos) {
     if (endPos > 0 && input[endPos - 1] == '\\') {
@@ -689,9 +691,13 @@ inline size_t findLiteralEnd(const std::string_view input,
       }
       endPos = input.find(literalEnd, endPos + 1);
     } else {
+      lastFoundQuotePos = endPos;
       // no backslash before " , the string has definitely ended
-      break;
+      endPos = input.find(literalEnd, endPos + 1);
     }
+  }
+  if (lastFoundQuotePos != size_t(-1)) {
+    return lastFoundQuotePos;
   }
   return endPos;
 }
