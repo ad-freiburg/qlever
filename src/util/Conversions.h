@@ -425,16 +425,16 @@ float convertIndexWordToFloat(const string& indexWord) {
   for (mStop = mantissa.size() - 1; mStop > mStart && mantissa[mStop] == '0';
        mStop--)
     ;
-  long absMantissa = 0;
+  double absMantissa = 0;
   try {
-    absMantissa = stol(mantissa.substr(mStart, mStop - mStart + 1));
+    absMantissa = stod(mantissa.substr(mStart, mStop - mStart + 1));
   } catch (const std::exception& e) {
     string substr = mantissa.substr(mStart, mStop - mStart + 1);
     throw std::runtime_error(
         ""
         "Error in stol while trying to convert index word " +
         indexWord + ". The mantissa " + substr +
-        " could not be parsed via stol");
+        " could not be parsed via stod");
   }
   unsigned int mantissaLog = std::log10(absMantissa);
   if (negaMantissa) {
