@@ -37,3 +37,7 @@ add_library(engine
         )
 
 target_link_libraries(engine index parser SortPerformanceEstimator absl::flat_hash_set)
+
+if (USE_PARALLEL)
+  target_link_libraries(engine tbb)
+endif()

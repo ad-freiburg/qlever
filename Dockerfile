@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 FROM base as builder
 RUN apt-get update && apt-get install -y build-essential cmake libsparsehash-dev libicu-dev tzdata
+RUN apt install -y libtbb-dev
 COPY . /app/
 
 WORKDIR /app/
@@ -18,6 +19,7 @@ RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG -DUSE_PARALLEL=true .. && 
 FROM base as runtime
 WORKDIR /app
 RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu libgomp1
+RUN apt install -y libtbb-dev
 
 ARG UID=1000
 RUN groupadd -r qlever && useradd --no-log-init -r -u $UID -g qlever qlever && chown qlever:qlever /app
