@@ -524,11 +524,12 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
   } else if (b.size() / a.size() > GALLOP_THRESHOLD) {
     doGallopInnerJoin(RightLargerTag{}, a, jc1, b, jc2, &result);
   } else {
+    parallelJoin<L_WIDTH, R_WIDTH, OUT_WIDTH>(dynA, jc1, dynB, jc2, result);
+    /*
     auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory();
     // Intersect both lists.
     size_t i = 0;
     size_t j = 0;
-    // while (a(i, jc1) < sent1) {
     while (i < a.size() && j < b.size()) {
       while (a(i, jc1) < b(j, jc2)) {
         ++i;
@@ -592,8 +593,9 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
         }
       }
     }
+     */
   }
-finish:
+  // finish:
   *dynRes = result.moveToDynamic();
 
   LOG(DEBUG) << "Join done.\n";
@@ -724,5 +726,269 @@ void Join::doGallopInnerJoin(const TagType, const IdTableView<L_WIDTH>& l1,
         return;
       }
     }
+  }
+}
+
+// ______________________________________________________________________________
+
+template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+void Join::parallelJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                        size_t jc2, IdTableStatic<OUT_WIDTH>& result) {
+  const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
+  const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
+
+  LOG(DEBUG) << "Performing join between two tables.\n";
+  LOG(DEBUG) << "A: width = " << a.cols() << ", size = " << a.size() << "\n";
+  LOG(DEBUG) << "B: width = " << b.cols() << ", size = " << b.size() << "\n";
+
+  // Check trivial case.
+  if (a.size() == 0 || b.size() == 0) {
+    return;
+  }
+
+  struct Range {
+    size_t lower, upper;
+    Range(size_t l, size_t u) : lower{l}, upper{u} { AD_CHECK(upper >= lower); }
+    bool operator<(const Range& rhs) const {
+      return upper - lower < rhs.upper - rhs.lower;
+    }
+  };
+
+  struct joinPart {
+    Range left, right;
+  };
+
+  // TODO<joka921> Make this a proper parameter once we have the parameter-PR
+  const size_t minSizeForPart = 200000;
+
+  auto lowerAndUpperBound = [](const auto& input, const Range relevantRange,
+                               size_t joinColumn, size_t needle) -> Range {
+    auto begin = input.begin() + relevantRange.lower;
+    auto end = input.begin() + relevantRange.upper;
+
+    auto comp = [joinColumn](const auto& l, const Id needle) -> bool {
+      return l[joinColumn] < needle;
+    };
+    size_t lower = std::lower_bound(begin, end, needle, comp) - input.begin();
+    size_t upper =
+        std::lower_bound(begin, end, needle + 1, comp) - input.begin();
+    return Range{lower, upper};
+  };
+
+  auto splitIntoParts = [&](bool isInverse, const auto& smaller,
+                            const auto& greater, joinPart range,
+                            std::vector<joinPart>& result, const auto& impl) {
+    auto sizeOfGreaterPart = range.right.upper - range.right.lower;
+    auto jcSmaller = isInverse ? jc2 : jc1;
+    auto jcGreater = isInverse ? jc1 : jc2;
+    // If this chunk is small enough or only consists of one element, we stop
+    if (sizeOfGreaterPart <= minSizeForPart ||
+        greater(range.right.lower, jcGreater) ==
+            greater(range.right.upper - 1, jcGreater)) {
+      result.push_back(isInverse ? joinPart{range.right, range.left} : range);
+      return;
+    }
+    auto middle = greater(range.right.lower + sizeOfGreaterPart / 2, jcGreater);
+    auto midElementGreater =
+        lowerAndUpperBound(greater, range.right, jcGreater, middle);
+    auto midElementSmaller =
+        lowerAndUpperBound(smaller, range.left, jcSmaller, middle);
+
+    auto splitPointInGreater = midElementGreater.upper;
+    auto splitPointInSmaller = midElementSmaller.upper;
+
+    // guarantee progress
+    if (midElementGreater.upper == range.right.upper) {
+      splitPointInGreater = midElementGreater.lower;
+      splitPointInSmaller = midElementSmaller.lower;
+    }
+
+    Range newSmallerLeft{range.left.lower, splitPointInSmaller};
+    Range newSmallerRight{splitPointInSmaller, range.left.upper};
+
+    Range newGreaterLeft{range.right.lower, splitPointInGreater};
+    Range newGreaterRight{splitPointInGreater, range.right.upper};
+
+    if (newSmallerLeft < newGreaterLeft) {
+      impl(isInverse, smaller, greater, {newSmallerLeft, newGreaterLeft},
+           result, impl);
+    } else {
+      impl(!isInverse, greater, smaller, {newGreaterLeft, newSmallerLeft},
+           result, impl);
+    }
+
+    if (newSmallerRight < newGreaterRight) {
+      impl(isInverse, smaller, greater, {newSmallerRight, newGreaterRight},
+           result, impl);
+    } else {
+      impl(!isInverse, greater, smaller, {newGreaterRight, newSmallerRight},
+           result, impl);
+    }
+  };
+
+  std::vector<joinPart> parts;
+  if (a.size() < b.size()) {
+    splitIntoParts(false, a, b, {{0, a.size()}, {0, b.size()}}, parts,
+                   splitIntoParts);
+  } else {
+    splitIntoParts(true, b, a, {{0, b.size()}, {0, a.size()}}, parts,
+                   splitIntoParts);
+  }
+
+  LOG(INFO) << "Left input to join has " << a.size()
+            << " elements, which are split as follows:\n";
+  for (const auto& part : parts) {
+    LOG(INFO) << part.left.lower << " - " << part.left.upper << '\n';
+  }
+
+  LOG(INFO) << "Right input to join has " << b.size()
+            << " elements, which are split as follows:\n";
+  for (const auto& part : parts) {
+    LOG(INFO) << part.right.lower << " - " << part.right.upper << '\n';
+  }
+
+  // Cannot just switch l1 and l2 around because the order of
+  // items in the result tuples is important.
+  auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory();
+  // Intersect both lists.
+
+  std::atomic<bool> hasTimedOut = false;
+
+  auto joinLoop = [&hasTimedOut, &a, &b, &result, jc1, jc2,
+                   &checkTimeoutAfterNCalls,
+                   this](auto onlyCount, size_t i, size_t j, size_t iUpper,
+                         size_t jUpper, size_t startOutput) -> size_t {
+    LOG(INFO) << "Start a task : " << i << " " << j << " " << startOutput
+              << std::endl;
+    if (hasTimedOut) {
+      return 0;
+    }
+
+    if (_timeoutTimer->wlock()->hasTimedOut()) {
+      hasTimedOut = true;
+      return 0;
+    }
+
+    auto check = [&checkTimeoutAfterNCalls]() {
+      if constexpr (USE_PARALLEL_SORT) {
+        return;
+      } else {
+        checkTimeoutAfterNCalls();
+      }
+    };
+
+    size_t totalCount{};
+    while (i < iUpper && j < jUpper) {
+      while (a(i, jc1) < b(j, jc2)) {
+        ++i;
+        check();
+        if (i >= iUpper) {
+          goto finish;
+        }
+      }
+
+      while (b(j, jc2) < a(i, jc1)) {
+        ++j;
+        check();
+        if (j >= jUpper) {
+          goto finish;
+        }
+      }
+
+      while (a(i, jc1) == b(j, jc2)) {
+        // In case of match, create cross-product
+        // Always fix a and go through b.
+        size_t keepJ = j;
+        while (a(i, jc1) == b(j, jc2)) {
+          totalCount++;
+          if constexpr (!onlyCount.value) {
+            size_t backIndex;
+            if constexpr (USE_PARALLEL_SORT) {
+              backIndex = startOutput++;
+            } else {
+              result.push_back();
+              backIndex = result.size() - 1;
+            }
+            for (size_t h = 0; h < a.cols(); h++) {
+              result(backIndex, h) = a(i, h);
+            }
+
+            // Copy bs columns before the join column
+            for (size_t h = 0; h < jc2; h++) {
+              result(backIndex, h + a.cols()) = b(j, h);
+            }
+
+            // Copy bs columns after the join column
+            for (size_t h = jc2 + 1; h < b.cols(); h++) {
+              result(backIndex, h + a.cols() - 1) = b(j, h);
+            }
+          }
+
+          ++j;
+          check();
+          if (j >= jUpper) {
+            // The next i might still match
+            break;
+          }
+        }
+        ++i;
+        check();
+        if (i >= iUpper) {
+          goto finish;
+        }
+        // If the next i is still the same, reset j.
+        if (a(i, jc1) == b(keepJ, jc2)) {
+          j = keepJ;
+        } else if (j >= jUpper) {
+          // this check is needed because otherwise we might leak an out of
+          // bounds value for j into the next loop which does not check it. this
+          // fixes a bug that was not discovered by testing due to 0
+          // initialization of IdTables used for testing and should not occur in
+          // typical use cases but it is still wrong.
+          goto finish;
+        }
+      }
+    }
+  finish:
+    LOG(INFO) << "Inner join routine is finished" << std::endl;
+    return totalCount;
+  };
+
+  if constexpr (USE_PARALLEL_SORT) {
+    std::vector<size_t> sizesOfParts(parts.size(), 0);
+#pragma omp parallel
+#pragma omp single
+    for (size_t i = 0; i < parts.size(); ++i) {
+#pragma omp task
+      {
+        const auto& part = parts[i];
+        sizesOfParts[i] =
+            joinLoop(std::true_type{}, part.left.lower, part.right.lower,
+                     part.left.upper, part.right.upper, 0);
+      }
+    }
+
+    size_t totalNumberOfResults =
+        std::accumulate(sizesOfParts.begin(), sizesOfParts.end(), 0);
+    result.resize(totalNumberOfResults);
+    checkTimeout();
+#pragma omp parallel
+#pragma omp single
+    {
+      size_t startOfOutput = 0;
+      for (size_t i = 0; i < parts.size(); ++i) {
+#pragma omp task
+        {
+          const auto& part = parts[i];
+          sizesOfParts[i] =
+              joinLoop(std::false_type{}, part.left.lower, part.right.lower,
+                       part.left.upper, part.right.upper, startOfOutput);
+        }
+        startOfOutput += sizesOfParts[i];
+      }
+    }
+    checkTimeout();
+  } else {
+    joinLoop(std::false_type{}, 0, 0, a.size(), b.size(), 0);
   }
 }
