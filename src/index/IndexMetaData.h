@@ -21,6 +21,7 @@
 #include "../util/ReadableNumberFact.h"
 #include "./MetaDataHandler.h"
 #include "./MetaDataTypes.h"
+#include "CompressedRelation.h"
 
 using std::array;
 using std::pair;
@@ -81,6 +82,16 @@ class IndexMetaData {
  public:
   // This allows access to MapType given the type of IndexMetaData
   typedef M MapType;
+  using value_type = typename MapType::value_type;
+
+  constexpr static bool isUncompressed =
+      std::is_same_v<value_type, FullRelationMetaData>;
+  using AddType = std::conditional_t<
+      isUncompressed,
+      std::pair<FullRelationMetaData, BlockBasedRelationMetaData>,
+      CompressedRelationMetaData>;
+  using GetType = std::conditional_t<isUncompressed, const RelationMetaData,
+                                     const CompressedRelationMetaData&>;
 
   // some MapTypes (the dense ones using stxxl or mmap) require additional calls
   // to setup() before being fully initialized
@@ -99,12 +110,11 @@ class IndexMetaData {
   // to avoid instantation of member function set() for readonly MapTypes (e.g.
   // based on MmapVectorView
   template <bool persistentRMD = false>
-  void add(const FullRelationMetaData& rmd,
-           const BlockBasedRelationMetaData& bRmd);
+  void add(AddType addedValue);
 
   off_t getOffsetAfter() const;
 
-  const RelationMetaData getRmd(Id relId) const;
+  GetType getRmd(Id relId) const;
 
   // Persistent meta data MapTypes (called MmapBased here) have to be separated
   // from RAM-based (e.g. hashMap based sparse) ones at compile time, this is
@@ -178,8 +188,8 @@ class IndexMetaData {
 
   // friend declaration for external converter function with ugly types
   //  using IndexMetaDataHmap = IndexMetaData<MetaDataWrapperHashMap>;
-  using IndexMetaDataHmap = IndexMetaData<
-      MetaDataWrapperHashMap<ad_utility::HashMap<Id, FullRelationMetaData>>>;
+  using IndexMetaDataHmap = IndexMetaData<MetaDataWrapperHashMap<
+      ad_utility::HashMap<Id, CompressedRelationMetaData>>>;
   using IndexMetaDataMmap = IndexMetaData<
       MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>>;
   friend IndexMetaDataMmap convertHmapMetaDataToMmap(const IndexMetaDataHmap&,
@@ -196,7 +206,7 @@ class IndexMetaData {
 
   size_t getNofBlocksForRelation(const Id relId) const;
 
-  size_t getTotalBytesForRelation(const FullRelationMetaData& frmd) const;
+  size_t getTotalBytesForRelation(Id id) const;
 };
 
 // ____________________________________________________________________________
@@ -210,12 +220,9 @@ using MetaWrapperMmap =
 using MetaWrapperMmapView =
     MetaDataWrapperDense<ad_utility::MmapVectorView<FullRelationMetaData>>;
 using MetaWrapperHashMap =
-    MetaDataWrapperHashMap<ad_utility::HashMap<Id, FullRelationMetaData>>;
-using IndexMetaDataHmap = IndexMetaData<
-    MetaDataWrapperHashMap<ad_utility::HashMap<Id, FullRelationMetaData>>>;
-using IndexMetaDataMmap = IndexMetaData<
-    MetaDataWrapperDense<ad_utility::MmapVector<FullRelationMetaData>>>;
-using IndexMetaDataMmapView = IndexMetaData<
-    MetaDataWrapperDense<ad_utility::MmapVectorView<FullRelationMetaData>>>;
+    MetaDataWrapperHashMap<ad_utility::HashMap<Id, CompressedRelationMetaData>>;
+using IndexMetaDataHmap = IndexMetaData<MetaWrapperHashMap>;
+using IndexMetaDataMmap = IndexMetaData<MetaWrapperMmap>;
+using IndexMetaDataMmapView = IndexMetaData<MetaWrapperMmapView>;
 
 #include "./IndexMetaDataImpl.h"

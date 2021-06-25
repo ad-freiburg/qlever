@@ -26,16 +26,10 @@ FullRelationMetaData::FullRelationMetaData(Id relId, off_t startFullIndex,
     : _relId(relId),
       _startFullIndex(startFullIndex),
       _typeMultAndNofElements(nofElements) {
-  assert(col1Mult >= 1);
-  assert(col2Mult >= 1);
-  double c1ml = log2(col1Mult);
-  double c2ml = log2(col2Mult);
-  uint8_t c1 = c1ml > 255 ? uint8_t(255) : uint8_t(c1ml);
-  uint8_t c2 = c2ml > 255 ? uint8_t(255) : uint8_t(c2ml);
   setIsFunctional(isFunctional);
   setHasBlocks(hasBlocks);
-  setCol1LogMultiplicity(c1);
-  setCol2LogMultiplicity(c2);
+  setCol1Multiplicity(col1Mult);
+  setCol2Multiplicity(col2Mult);
 }
 
 // _____________________________________________________________________________
@@ -77,29 +71,35 @@ void FullRelationMetaData::setHasBlocks(bool hasBlocks) {
 }
 
 // _____________________________________________________________________________
-void FullRelationMetaData::setCol1LogMultiplicity(uint8_t mult) {
+void FullRelationMetaData::setCol1Multiplicity(double mult) {
+  assert(mult >= 1);
+  double c1ml = log2(mult);
+  uint8_t c1 = c1ml > 255 ? uint8_t(255) : uint8_t(c1ml);
   // Reset a current value
   _typeMultAndNofElements &= 0xFF00FFFFFFFFFFFF;
   // Set the new one
-  _typeMultAndNofElements |= (uint64_t(mult) << 48);
+  _typeMultAndNofElements |= (uint64_t(c1) << 48);
 }
 
 // _____________________________________________________________________________
-void FullRelationMetaData::setCol2LogMultiplicity(uint8_t mult) {
+void FullRelationMetaData::setCol2Multiplicity(double mult) {
   // Reset a current value
+  assert(mult >= 1);
+  double c1ml = log2(mult);
+  uint8_t c1 = c1ml > 255 ? uint8_t(255) : uint8_t(c1ml);
   _typeMultAndNofElements &= 0xFFFF00FFFFFFFFFF;
   // Set the new one
-  _typeMultAndNofElements |= (uint64_t(mult) << 40);
+  _typeMultAndNofElements |= (uint64_t(c1) << 40);
 }
 
 // _____________________________________________________________________________
-uint8_t FullRelationMetaData::getCol1LogMultiplicity() const {
-  return uint8_t((_typeMultAndNofElements & 0x00FF000000000000) >> 48);
+double FullRelationMetaData::getCol1Multiplicity() const {
+  return pow(2, uint8_t((_typeMultAndNofElements & 0x00FF000000000000) >> 48));
 }
 
 // _____________________________________________________________________________
-uint8_t FullRelationMetaData::getCol2LogMultiplicity() const {
-  return uint8_t((_typeMultAndNofElements & 0x0000FF0000000000) >> 40);
+double FullRelationMetaData::getCol2Multiplicity() const {
+  return pow(2, uint8_t((_typeMultAndNofElements & 0x0000FF0000000000) >> 40));
 }
 
 // _____________________________________________________________________________

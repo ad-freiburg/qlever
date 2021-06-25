@@ -82,7 +82,7 @@ TEST(IndexTest, createFromTsvTest) {
     ASSERT_FALSE(index._PSO.metaData().relationExists(0));
     ASSERT_FALSE(index._PSO.metaData().getRmd(2).isFunctional());
     ASSERT_TRUE(index._PSO.metaData().getRmd(3).isFunctional());
-    ASSERT_FALSE(index._PSO.metaData().getRmd(2).hasBlocks());
+    // ASSERT_FALSE(index._PSO.metaData().getRmd(2).hasBlocks());
 
     ASSERT_TRUE(index.POS().metaData().relationExists(2));
     ASSERT_TRUE(index.POS().metaData().relationExists(3));
@@ -170,7 +170,7 @@ TEST(IndexTest, createFromTsvTest) {
     ASSERT_FALSE(index._PSO.metaData().relationExists(1));
 
     ASSERT_FALSE(index._PSO.metaData().getRmd(7).isFunctional());
-    ASSERT_FALSE(index._PSO.metaData().getRmd(7).hasBlocks());
+    // ASSERT_FALSE(index._PSO.metaData().getRmd(7).hasBlocks());
 
     ASSERT_TRUE(index.POS().metaData().relationExists(7));
     ASSERT_FALSE(index.POS().metaData().getRmd(7).isFunctional());
@@ -472,8 +472,8 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   ASSERT_FALSE(index.PSO().metaData().relationExists(4));
   ASSERT_FALSE(index.PSO().metaData().getRmd(2).isFunctional());
   ASSERT_TRUE(index.PSO().metaData().getRmd(3).isFunctional());
-  ASSERT_FALSE(index.PSO().metaData().getRmd(2).hasBlocks());
-  ASSERT_FALSE(index.PSO().metaData().getRmd(3).hasBlocks());
+  // ASSERT_FALSE(index.PSO().metaData().getRmd(2).hasBlocks());
+  // ASSERT_FALSE(index.PSO().metaData().getRmd(3).hasBlocks());
 
   ASSERT_TRUE(index.POS().metaData().relationExists(2));
   ASSERT_TRUE(index.POS().metaData().relationExists(3));

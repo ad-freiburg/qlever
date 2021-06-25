@@ -133,6 +133,11 @@ class AllocatorWithLimit {
   /// makeAllocationMemoryLeftThreadsafeObject()
   explicit AllocatorWithLimit(detail::AllocationMemoryLeftThreadsafe ml)
       : memoryLeft_(std::move(ml)) {}
+
+  template <typename U>
+  AllocatorWithLimit<U> as() {
+    return AllocatorWithLimit<U>(memoryLeft_);
+  }
   AllocatorWithLimit() = delete;
 
   // An allocator must have a function "allocate" with exactly this signature.
@@ -167,14 +172,12 @@ class AllocatorWithLimit {
   // The STL needs two allocators to be equal if and only they refer to the same
   // memory pool. For us, they are hence equal if they use the same
   // AllocationMemoryLeft object.00
-  template <typename U, typename V>
-  friend bool operator==(const AllocatorWithLimit<U>& u,
-                         const AllocatorWithLimit<V>& v) {
+  friend bool operator==(const AllocatorWithLimit& u,
+                         const AllocatorWithLimit& v) {
     return u.memoryLeft_ == v.memoryLeft_;
   }
-  template <typename U, typename V>
-  friend bool operator!=(const AllocatorWithLimit<U>& u,
-                         const AllocatorWithLimit<V>& v) {
+  friend bool operator!=(const AllocatorWithLimit& u,
+                         const AllocatorWithLimit& v) {
     return !(u == v);
   }
 };

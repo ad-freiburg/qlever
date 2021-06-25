@@ -15,22 +15,31 @@
 // _____________________________________________________________________________
 template <class MapType>
 template <bool persistentRMD>
-void IndexMetaData<MapType>::add(const FullRelationMetaData& rmd,
-                                 const BlockBasedRelationMetaData& bRmd) {
+void IndexMetaData<MapType>::add(AddType addedValue) {
   // only add rmd to _data if it's not already present there
   if constexpr (!persistentRMD) {
-    _data.set(rmd._relId, rmd);
+    if constexpr (isUncompressed) {
+      _data.set(addedValue.first._relId, addedValue.first);
+    } else {
+      _data.set(addedValue._relId, addedValue);
+    }
   }
 
-  off_t afterExpected =
-      rmd.hasBlocks() ? bRmd._offsetAfter
-                      : static_cast<off_t>(rmd._startFullIndex +
-                                           rmd.getNofBytesForFulltextIndex());
-  if (rmd.hasBlocks()) {
-    _blockData[rmd._relId] = bRmd;
-  }
-  if (afterExpected > _offsetAfter) {
-    _offsetAfter = afterExpected;
+  if constexpr (isUncompressed) {
+    const auto& rmd = addedValue.first;
+    const auto& bRmd = addedValue.second;
+    // TODO is the offsetAfter-business needed, or can we just say file.tell()
+    // in the respective places
+    off_t afterExpected =
+        rmd.hasBlocks() ? bRmd._offsetAfter
+                        : static_cast<off_t>(rmd._startFullIndex +
+                                             rmd.getNofBytesForFulltextIndex());
+    if (rmd.hasBlocks()) {
+      _blockData[rmd._relId] = bRmd;
+    }
+    if (afterExpected > _offsetAfter) {
+      _offsetAfter = afterExpected;
+    }
   }
 }
 
@@ -42,13 +51,18 @@ off_t IndexMetaData<MapType>::getOffsetAfter() const {
 
 // _____________________________________________________________________________
 template <class MapType>
-const RelationMetaData IndexMetaData<MapType>::getRmd(Id relId) const {
-  const FullRelationMetaData& full = _data.getAsserted(relId);
-  RelationMetaData ret(full);
-  if (full.hasBlocks()) {
-    ret._rmdBlocks = &_blockData.find(relId)->second;
+typename IndexMetaData<MapType>::GetType IndexMetaData<MapType>::getRmd(
+    Id relId) const {
+  if constexpr (std::is_same_v<const RelationMetaData, GetType>) {
+    const FullRelationMetaData& full = _data.getAsserted(relId);
+    RelationMetaData ret(full);
+    if (full.hasBlocks()) {
+      ret._rmdBlocks = &_blockData.find(relId)->second;
+    }
+    return ret;
+  } else {
+    return _data.getAsserted(relId);
   }
-  return ret;
 }
 
 // _____________________________________________________________________________
@@ -143,13 +157,18 @@ size_t IndexMetaData<MapType>::getNofBlocksForRelation(const Id id) const {
 
 // _____________________________________________________________________________
 template <class MapType>
-size_t IndexMetaData<MapType>::getTotalBytesForRelation(
-    const FullRelationMetaData& frmd) const {
-  auto it = _blockData.find(frmd._relId);
-  if (it != _blockData.end()) {
-    return static_cast<size_t>(it->second._offsetAfter - frmd._startFullIndex);
+size_t IndexMetaData<MapType>::getTotalBytesForRelation(Id id) const {
+  if constexpr (isUncompressed) {
+    const auto& frmd = _data.getAsserted(id);
+    auto it = _blockData.find(id);
+    if (it != _blockData.end()) {
+      return static_cast<size_t>(it->second._offsetAfter -
+                                 frmd._startFullIndex);
+    } else {
+      return frmd.getNofBytesForFulltextIndex();
+    }
   } else {
-    return frmd.getNofBytesForFulltextIndex();
+    return _data.getAsserted(id).getTotalNumberOfBytes();
   }
 }
 
@@ -168,7 +187,7 @@ void IndexMetaData<MapType>::calculateExpensiveStatistics() {
   for (auto it = _data.cbegin(); it != _data.cend(); ++it) {
     auto el = *it;
     _totalElements += el.second.getNofElements();
-    _totalBytes += getTotalBytesForRelation(el.second);
+    _totalBytes += getTotalBytesForRelation(el.first);
     _totalBlocks += getNofBlocksForRelation(el.first);
   }
 }

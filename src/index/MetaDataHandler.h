@@ -95,6 +95,7 @@ template <class M>
 class MetaDataWrapperDense {
  public:
   using Iterator = VecWrapperImpl::Iterator<M>;
+  using value_type = typename M::value_type;
 
   // _________________________________________________________
   MetaDataWrapperDense() = default;
@@ -207,6 +208,7 @@ class MetaDataWrapperHashMap {
   // using hashMap = ad_utility::HashMap<Id, FullRelationMetaData>;
   using ConstIterator = typename hashMap::const_iterator;
   using Iterator = typename hashMap::iterator;
+  using value_type = typename hashMap::mapped_type;
 
   // nothing to do here, since the default constructor of the hashMap does
   // everything we want
@@ -230,17 +232,17 @@ class MetaDataWrapperHashMap {
   Iterator end() { return _map.end(); }
 
   // ____________________________________________________________
-  void set(Id id, const FullRelationMetaData& value) { _map[id] = value; }
+  void set(Id id, value_type value) { _map[id] = std::move(value); }
 
   // __________________________________________________________
-  const FullRelationMetaData& getAsserted(Id id) const {
+  const value_type& getAsserted(Id id) const {
     auto it = _map.find(id);
     AD_CHECK(it != _map.end());
     return std::cref(it->second);
   }
 
   // __________________________________________________________
-  FullRelationMetaData& operator[](Id id) {
+  value_type& operator[](Id id) {
     auto it = _map.find(id);
     AD_CHECK(it != _map.end());
     return std::ref(it->second);
