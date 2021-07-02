@@ -155,8 +155,7 @@ int main(int argc, char** argv) {
         ad_utility::makeAllocationMemoryLeftThreadsafeObject(
             DEFAULT_MEM_FOR_QUERIES_IN_GB)};
 
-    SortPerformanceEstimator sortPerformanceEstimator =
-        SortPerformanceEstimator::CreateEstimatorExpensively(allocator);
+    SortPerformanceEstimator sortPerformanceEstimator;
     QueryExecutionContext qec(index, engine, &cache, &pinnedSizes, allocator,
                               sortPerformanceEstimator);
     if (costFactosFileName.size() > 0) {

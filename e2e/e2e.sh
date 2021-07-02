@@ -1,14 +1,4 @@
 #!/usr/bin/env bash
-set -e
-PROJECT_DIR=$(readlink -f -- "$(dirname ${BASH_SOURCE[0]})/..")
-# Change to the project directory so we can use simple relative paths
-echo "Changing to project directory: $PROJECT_DIR"
-pushd $PROJECT_DIR
-BINARY_DIR=$(readlink -f -- ./build)
-if [ ! -e $BINARY_DIR ]; then
-	BINARY_DIR=$(readlink -f -- .)
-fi
-echo "Binary dir is $BINARY_DIR"
 function bail {
 	echo "$*"
 	exit 1
@@ -23,6 +13,59 @@ function cleanup_server {
 	# process group
 	kill $SERVER_PID
 }
+
+function print_usage {
+  echo "Usage: $0 [options]"
+  echo "Runs QLevers end to end tests."
+  echo ""
+  echo "Options:"
+  echo "  -i --no-index    Do not rebuild the scientists index."
+}
+
+REBUILD_THE_INDEX="YES"
+
+# Parse the command line arguments
+ARGS=$(getopt -o i --long no-index -- "$@")
+
+if ! [ $? -eq 0 ] ; then
+  print_usage
+  exit 1
+fi
+
+eval set -- "$ARGS"
+while true; do
+  case "$1" in
+    -i|--no-index)
+      echo "The index will not be rebuilt"
+      REBUILD_THE_INDEX="NO"
+      ;;
+   --)
+     shift
+     break
+     ;;
+  esac
+  shift
+done
+
+if ! [ "$#" -eq 0 ] ; then
+  echo "Unexepected command line arguments '$@'"
+  print_usage
+  exit 1
+fi
+
+# Fail on unset varibles and any non zero returncodes
+set -Eeuo pipefail
+
+PROJECT_DIR=$(readlink -f -- "$(dirname ${BASH_SOURCE[0]})/..")
+
+# Change to the project directory so we can use simple relative paths
+echo "Changing to project directory: $PROJECT_DIR"
+pushd $PROJECT_DIR
+BINARY_DIR=$(readlink -f -- ./build)
+if [ ! -e $BINARY_DIR ]; then
+	BINARY_DIR=$(readlink -f -- .)
+fi
+echo "Binary dir is $BINARY_DIR"
 
 # Travis CI is super cool but also uses ancient OS images and so to get
 # a python that supports typing we need to install from the deadsnakes
@@ -53,7 +96,7 @@ INDEX_PREFIX="scientists-index"
 INDEX="$INDEX_DIR/$INDEX_PREFIX"
 
 # Delete and rebuild the index
-if [ "$1" != "no-index" ]; then
+if [ ${REBUILD_THE_INDEX} == "YES" ] || ! [ -f "${INDEX}.vocabulary" ]; then
 	rm -f "$INDEX.*"
 	pushd "$BINARY_DIR"
 	echo "Building index $INDEX"

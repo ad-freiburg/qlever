@@ -160,6 +160,15 @@ float TransitivePath::getMultiplicity(size_t col) {
 
 // _____________________________________________________________________________
 size_t TransitivePath::getSizeEstimate() {
+  if (!_leftIsVar || !_rightIsVar) {
+    // If the subject or object is fixed, assume that the number of matching
+    // triples is 1000. This will usually be an overestimate, but it will do the
+    // job of avoiding query plans that first generate large intermediate
+    // results and only then merge them with a triple such as this. In the
+    // _leftIsVar && _rightIsVar case below, we assume a worst-case blowup of
+    // 10000; see the comment there.
+    return 1000;
+  }
   if (_leftSideTree != nullptr) {
     return _leftSideTree->getSizeEstimate();
   }
@@ -187,7 +196,18 @@ size_t TransitivePath::getSizeEstimate() {
 }
 
 // _____________________________________________________________________________
-size_t TransitivePath::getCostEstimate() { return getSizeEstimate(); }
+size_t TransitivePath::getCostEstimate() {
+  // We assume that the cost of computing the transitive path is proportional to
+  // the result size.
+  auto costEstimate = getSizeEstimate();
+  // Add the cost for the index scan of the predicate involved.
+  for (auto* ptr : getChildren()) {
+    if (ptr) {
+      costEstimate += ptr->getCostEstimate();
+    }
+  }
+  return costEstimate;
+}
 
 // _____________________________________________________________________________
 template <int SUB_WIDTH>
