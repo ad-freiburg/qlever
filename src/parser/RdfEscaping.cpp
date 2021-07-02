@@ -10,6 +10,7 @@
 #include "../util/Exception.h"
 #include "../util/HashSet.h"
 #include "../util/StringUtils.h"
+#include "../util/Log.h"
 
 namespace RdfEscaping {
 using namespace std::string_literals;
@@ -227,6 +228,7 @@ std::string unescapeIriref(std::string_view iriref) {
 
 // __________________________________________________________________________
 std::string unescapePrefixedIri(std::string_view literal) {
+  std::string_view origLiteral = literal;
   std::string res;
   ad_utility::HashSet<char> m{'_', '~',  '.', '-', '-', '!', '$',
                               '&', '\'', '(', ')', '*', '+', ',',
@@ -234,6 +236,9 @@ std::string unescapePrefixedIri(std::string_view literal) {
   auto pos = literal.find('\\');
   while (pos != literal.npos) {
     res.append(literal.begin(), literal.begin() + pos);
+    if (pos + 1 >= literal.size() || !m.contains(literal[pos + 1])) {
+      LOG(ERROR) << "Error in function unescapePrefixedIri, could not unescape prefixed iri " << origLiteral;
+    }
     AD_CHECK(pos + 1 < literal.size());
     AD_CHECK(m.contains(literal[pos + 1]));
     res += literal[pos + 1];
