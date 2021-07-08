@@ -607,9 +607,17 @@ bool isXsdValue(const string& val) {
   // Search for the last quote and check if it is followed by ^^.
   // NOTE: searching for "^^ starting at position 1 (as done previously) fails
   // for literal "\"^^"@en (which is contained in the RDF dump of DBpedia).
+  //
+  // HACK OSM (Hannah 14.05.21): Make sure that only literals of type
+  // ^^<http://www.w3.org/2001/XMLSchema#...> are recognized as XSD values.
+  // For example, <http://www.opengis.net/ont/geosparql#wktLiteral> is not an
+  // XSD value and should not be recognized as one because it cannot be
+  // externalized otherwise.
   size_t posLastQuote = val.rfind("\"");
   return !val.empty() && val[0] == '\"' && posLastQuote > 0 &&
-         val.find("^^", posLastQuote) != string::npos;
+         val.find("^^", posLastQuote) != string::npos &&
+         val.size() > posLastQuote + 37 && val[posLastQuote + 27] == 'X' &&
+         val[posLastQuote + 29] == 'L' && val[posLastQuote + 36] == '#';
 }
 
 // _____________________________________________________________________________
