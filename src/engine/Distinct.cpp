@@ -3,9 +3,11 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./Distinct.h"
+
 #include <sstream>
+
+#include "./CallFixedSize.h"
 #include "./QueryExecutionTree.h"
-#include "CallFixedSize.h"
 
 using std::string;
 

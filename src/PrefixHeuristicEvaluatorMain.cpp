@@ -3,6 +3,7 @@
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
 #include <iostream>
+
 #include "./global/Constants.h"
 #include "./index/PrefixHeuristic.h"
 

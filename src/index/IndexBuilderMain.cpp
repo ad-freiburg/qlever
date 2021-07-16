@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <getopt.h>
+
 #include <cstdio>
 #include <cstdlib>
 #include <exception>
@@ -10,8 +11,8 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-
 #include <unordered_set>
+
 #include "../global/Constants.h"
 #include "../util/File.h"
 #include "../util/ReadableNumberFact.h"

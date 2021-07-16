@@ -5,6 +5,7 @@
 #pragma once
 #include <assert.h>
 #include <stdint.h>
+
 #include <algorithm>
 
 namespace ad_utility {

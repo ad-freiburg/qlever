@@ -3,9 +3,9 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 
 #include <gtest/gtest.h>
-#include "../src/parser/SparqlLexer.h"
-
 #include <re2/re2.h>
+
+#include "../src/parser/SparqlLexer.h"
 
 TEST(SparqlLexerTest, basicTest) {
   //  ASSERT_TRUE(

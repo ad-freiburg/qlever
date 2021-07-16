@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "./Index.h"
+
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -18,7 +20,6 @@
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
 #include "../util/TupleHelpers.h"
-#include "./Index.h"
 #include "./PrefixHeuristic.h"
 #include "./VocabularyGenerator.h"
 #include "MetaDataIterator.h"
@@ -1540,7 +1541,7 @@ std::future<void> Index::writeNextPartialVocabulary(
                  vocab = &_vocab, partialFilename, partialCompressionFilename,
                  vocabPrefixCompressed = _vocabPrefixCompressed]() {
     auto vec = vocabMapsToVector(items);
-    const auto identicalPred = [& c = vocab->getCaseComparator()](
+    const auto identicalPred = [&c = vocab->getCaseComparator()](
                                    const auto& a, const auto& b) {
       return c(a.second.m_splitVal, b.second.m_splitVal,
                decltype(_vocab)::SortLevel::TOTAL);

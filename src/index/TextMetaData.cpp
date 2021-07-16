@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./TextMetaData.h"
+
 #include "../global/Constants.h"
 #include "../util/ReadableNumberFact.h"
 

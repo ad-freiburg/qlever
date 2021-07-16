@@ -4,8 +4,10 @@
 //
 
 #include "./MetaDataConverter.h"
+
 #include <nlohmann/json.hpp>
 #include <string>
+
 #include "../global/Constants.h"
 #include "./CompressedString.h"
 #include "./IndexMetaData.h"

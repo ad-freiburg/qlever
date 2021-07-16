@@ -4,6 +4,7 @@
 //         Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
 #include "OptionalJoin.h"
+
 #include "CallFixedSize.h"
 
 using std::string;

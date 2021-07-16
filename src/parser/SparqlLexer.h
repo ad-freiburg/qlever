@@ -3,6 +3,7 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 
 #include <re2/re2.h>
+
 #include <iostream>
 #include <string>
 

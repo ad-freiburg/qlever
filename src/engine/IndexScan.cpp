@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./IndexScan.h"
+
 #include <sstream>
 #include <string>
 

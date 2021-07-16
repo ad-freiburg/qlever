@@ -2,11 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
+#include "OrderBy.h"
+
 #include <sstream>
 
 #include "CallFixedSize.h"
 #include "Comparators.h"
-#include "OrderBy.h"
 #include "QueryExecutionTree.h"
 
 using std::string;

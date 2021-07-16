@@ -3,10 +3,12 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./FTSAlgorithms.h"
+
 #include <cmath>
 #include <map>
 #include <set>
 #include <utility>
+
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
 

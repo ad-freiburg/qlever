@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 #include <getopt.h>
+
 #include <cstdio>
 #include <cstdlib>
 #include <iomanip>

@@ -3,6 +3,7 @@
 // Author: Björn Buchhold <buchholb>
 
 #include <gtest/gtest.h>
+
 #include "../src/util/Simple8bCode.h"
 
 using std::string;

@@ -3,9 +3,11 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+
 #include <algorithm>
 #include <string>
 #include <vector>
+
 #include "../src/util/StringUtils.h"
 
 using std::string;

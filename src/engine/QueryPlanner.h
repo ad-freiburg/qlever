@@ -5,6 +5,7 @@
 
 #include <set>
 #include <vector>
+
 #include "../parser/ParsedQuery.h"
 #include "QueryExecutionTree.h"
 

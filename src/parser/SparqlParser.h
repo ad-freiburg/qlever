@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+
 #include "ParsedQuery.h"
 #include "SparqlLexer.h"
 

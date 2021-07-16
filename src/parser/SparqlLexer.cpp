@@ -3,6 +3,7 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 
 #include "SparqlLexer.h"
+
 #include "../util/StringUtils.h"
 #include "ParseException.h"
 #include "Tokenizer.h"

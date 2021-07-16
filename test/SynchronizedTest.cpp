@@ -3,6 +3,7 @@
 //
 
 #include <gtest/gtest.h>
+
 #include "../src/util/Synchronized.h"
 
 using ad_utility::Synchronized;

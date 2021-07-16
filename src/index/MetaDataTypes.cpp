@@ -3,9 +3,12 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./MetaDataTypes.h"
+
 #include <stdio.h>
+
 #include <algorithm>
 #include <cmath>
+
 #include "../util/ReadableNumberFact.h"
 #include "./MetaDataHandler.h"
 

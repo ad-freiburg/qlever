@@ -5,6 +5,7 @@
 #pragma once
 
 #include <string>
+
 #include "../util/HashMap.h"
 
 using std::string;

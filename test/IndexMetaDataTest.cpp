@@ -3,7 +3,9 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+
 #include <fstream>
+
 #include "../src/index/IndexMetaData.h"
 #include "../src/util/File.h"
 

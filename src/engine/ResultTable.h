@@ -8,6 +8,7 @@
 #include <mutex>
 #include <optional>
 #include <vector>
+
 #include "../global/Id.h"
 #include "../util/Exception.h"
 #include "IdTable.h"

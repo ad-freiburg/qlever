@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+
 #include <cstdlib>
 #include <ctime>
 #include <fstream>
@@ -263,7 +264,7 @@ TEST(VocabularyGenerator, ReadAndWritePartial) {
     auto ptr = std::make_shared<const ItemMapArray>(std::move(arr));
     writePartialIdMapToBinaryFileForMerging(
         ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0",
-        [& c = v.getCaseComparator()](const auto& a, const auto& b) {
+        [&c = v.getCaseComparator()](const auto& a, const auto& b) {
           return c(a.second.m_splitVal, b.second.m_splitVal,
                    TripleComponentComparator::Level::IDENTICAL);
         },

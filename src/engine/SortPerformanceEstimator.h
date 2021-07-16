@@ -27,8 +27,8 @@ class SortPerformanceEstimator {
 
   // Compute and return an Estimate for how long sorting an IdTable with the
   // specified number of rows and columns takes.
-  double estimatedSortTimeInSeconds(size_t numRows, size_t numCols) const
-      noexcept;
+  double estimatedSortTimeInSeconds(size_t numRows,
+                                    size_t numCols) const noexcept;
 
   // Create an uninitialized SortPerformanceEstimator, which is cheap. Before
   // using it, computeEstimatesExpensively has to be called

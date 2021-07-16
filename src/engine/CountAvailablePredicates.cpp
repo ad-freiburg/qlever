@@ -2,8 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 
-#include "CountAvailablePredicates.h"
-#include "CallFixedSize.h"
+#include "./CountAvailablePredicates.h"
+
+#include "./CallFixedSize.h"
 
 // _____________________________________________________________________________
 CountAvailablePredicates::CountAvailablePredicates(QueryExecutionContext* qec)

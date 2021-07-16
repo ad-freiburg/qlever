@@ -9,7 +9,7 @@ done <sourcelist
 
 ERROR=0
 for source in "${SOURCE_FILES[@]}" ;do
-	clang-format-8 -output-replacements-xml $source | grep "<replacement " &> /dev/null
+	clang-format-11 -output-replacements-xml $source | grep "<replacement " &> /dev/null
 	HAS_WRONG_FILES=$?
 	if [ $HAS_WRONG_FILES -ne 1 ] ; then
 		# Print an error and exit
@@ -17,8 +17,8 @@ for source in "${SOURCE_FILES[@]}" ;do
 		printf "The source file \x1b[m$source\x1b[31m does not match the code style\n"
 		printf "Use clang-format with the .clang-format provided in the QLever\n"
 		printf "repository's root to ensure all code files are formatted "
-		printf "properly. We currently use the clang-format 8.0.0-3\n"
-		printf "(can be installed as \"clang-format-8\" in Ubuntu 18.04.x\n"
+		printf "properly. We currently use the clang-format-11\n"
+		printf "(can be installed as \"clang-format-11\" in Ubuntu 20.04.\n"
 		printf "\x1b[m"
 		ERROR=1
 	fi

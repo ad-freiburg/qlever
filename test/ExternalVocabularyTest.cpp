@@ -3,6 +3,7 @@
 // Author: Björn Buchhold <buchholb>
 
 #include <gtest/gtest.h>
+
 #include "../src/index/ExternalVocabulary.h"
 
 TEST(ExternalVocabularyTest, getWordbyIdTest) {

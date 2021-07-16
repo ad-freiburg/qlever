@@ -8,6 +8,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+
 #include "../util/File.h"
 
 /**
@@ -63,7 +64,7 @@ class ParallelFileBuffer : public ParallelBuffer {
     _file.open(filename, "r");
     _eof = false;
     _buf.resize(_blocksize);
-    auto task = [& file = this->_file, bs = this->_blocksize,
+    auto task = [&file = this->_file, bs = this->_blocksize,
                  &buf = this->_buf]() { return file.read(buf.data(), bs); };
     _fut = std::async(task);
   }
@@ -80,7 +81,7 @@ class ParallelFileBuffer : public ParallelBuffer {
     std::optional<std::vector<char>> ret = std::move(_buf);
 
     _buf.resize(_blocksize);
-    auto task = [& file = this->_file, bs = this->_blocksize,
+    auto task = [&file = this->_file, bs = this->_blocksize,
                  &buf = this->_buf]() { return file.read(buf.data(), bs); };
     _fut = std::async(task);
 

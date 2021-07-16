@@ -3,10 +3,12 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./Join.h"
+
 #include <functional>
 #include <sstream>
 #include <type_traits>
 #include <unordered_set>
+
 #include "./QueryExecutionTree.h"
 #include "CallFixedSize.h"
 

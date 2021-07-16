@@ -3,7 +3,9 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "TextOperationWithoutFilter.h"
+
 #include <sstream>
+
 #include "./QueryExecutionTree.h"
 
 using std::string;

@@ -3,9 +3,11 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./QueryExecutionTree.h"
+
 #include <algorithm>
 #include <sstream>
 #include <string>
+
 #include "./Distinct.h"
 #include "./Filter.h"
 #include "./IndexScan.h"

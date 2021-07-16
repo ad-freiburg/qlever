@@ -10,9 +10,11 @@
 
 #include <ctre/ctre.h>
 #include <gtest/gtest.h>
+
 #include <codecvt>
 #include <locale>
 #include <string>
+
 #include "../src/parser/Tokenizer.h"
 
 using namespace std::literals::string_literals;

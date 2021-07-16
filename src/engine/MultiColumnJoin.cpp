@@ -3,6 +3,7 @@
 // Author: Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 
 #include "MultiColumnJoin.h"
+
 #include "CallFixedSize.h"
 
 using std::string;

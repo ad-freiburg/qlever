@@ -3,16 +3,17 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <stdio.h>
+
+#include <algorithm>
 #include <array>
+#include <cmath>
+#include <exception>
+#include <google/sparse_hash_map>
 #include <limits>
 #include <utility>
 #include <vector>
 
-#include <stdio.h>
-#include <algorithm>
-#include <cmath>
-#include <exception>
-#include <google/sparse_hash_map>
 #include "../global/Id.h"
 #include "../util/File.h"
 #include "../util/HashMap.h"

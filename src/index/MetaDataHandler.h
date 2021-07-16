@@ -6,6 +6,7 @@
 
 #include <cassert>
 #include <stxxl/vector>
+
 #include "../global/Id.h"
 #include "../util/Exception.h"
 #include "../util/HashMap.h"

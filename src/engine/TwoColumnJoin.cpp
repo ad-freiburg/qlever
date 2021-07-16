@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "TwoColumnJoin.h"
+
 #include "CallFixedSize.h"
 
 using std::string;

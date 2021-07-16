@@ -3,8 +3,10 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./NTriplesParser.h"
+
 #include <cassert>
 #include <iostream>
+
 #include "../util/Exception.h"
 #include "../util/Log.h"
 

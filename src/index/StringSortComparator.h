@@ -12,8 +12,10 @@
 #include <unicode/unistr.h>
 #include <unicode/unorm2.h>
 #include <unicode/utypes.h>
+
 #include <cstring>
 #include <memory>
+
 #include "../global/Constants.h"
 #include "../util/Exception.h"
 #include "../util/StringUtils.h"

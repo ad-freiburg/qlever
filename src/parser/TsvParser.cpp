@@ -3,8 +3,10 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./TsvParser.h"
+
 #include <cassert>
 #include <iostream>
+
 #include "../util/Log.h"
 
 // _____________________________________________________________________________
