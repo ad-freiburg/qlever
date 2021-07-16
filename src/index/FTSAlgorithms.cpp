@@ -629,6 +629,21 @@ template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<4>(
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<5>(
     const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
     size_t nofVars, size_t kLimit, IdTable* dynResult);
+template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<6>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
+template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<7>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
+template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<8>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
+template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<9>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
+template void FTSAlgorithms::multVarsAggScoresAndTakeTopKContexts<10>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofVars, size_t kLimit, IdTable* dynResult);
 
 // _____________________________________________________________________________
 template <int WIDTH>
@@ -743,6 +758,21 @@ template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<4>(
     const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
     size_t nofVars, IdTable* dynResult);
 template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<5>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofVars, IdTable* dynResult);
+template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<6>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofVars, IdTable* dynResult);
+template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<7>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofVars, IdTable* dynResult);
+template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<8>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofVars, IdTable* dynResult);
+template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<9>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    size_t nofVars, IdTable* dynResult);
+template void FTSAlgorithms::multVarsAggScoresAndTakeTopContext<10>(
     const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
     size_t nofVars, IdTable* dynResult);
 
@@ -919,6 +949,21 @@ template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<4>(
     const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
 
 template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<5>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<6>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<7>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<8>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<9>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
+template void FTSAlgorithms::oneVarFilterAggScoresAndTakeTopKContexts<10>(
     const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
     const ad_utility::HashMap<Id, IdTable>& fMap, size_t k, IdTable* dynResult);
 
@@ -1182,6 +1227,26 @@ template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<5>(
     const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
     const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
     IdTable* dynResult);
+template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<6>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
+    IdTable* dynResult);
+template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<7>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
+    IdTable* dynResult);
+template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<8>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
+    IdTable* dynResult);
+template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<9>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
+    IdTable* dynResult);
+template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<10>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashMap<Id, IdTable>& fMap, size_t nofVars, size_t kLimit,
+    IdTable* dynResult);
 
 // _____________________________________________________________________________
 template <int WIDTH>
@@ -1345,6 +1410,26 @@ template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<4>(
     IdTable* result);
 
 template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<5>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashSet<Id>& fSet, size_t nofVars, size_t k,
+    IdTable* result);
+template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<6>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashSet<Id>& fSet, size_t nofVars, size_t k,
+    IdTable* result);
+template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<7>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashSet<Id>& fSet, size_t nofVars, size_t k,
+    IdTable* result);
+template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<8>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashSet<Id>& fSet, size_t nofVars, size_t k,
+    IdTable* result);
+template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<9>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    const ad_utility::HashSet<Id>& fSet, size_t nofVars, size_t k,
+    IdTable* result);
+template void FTSAlgorithms::multVarsFilterAggScoresAndTakeTopKContexts<10>(
     const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
     const ad_utility::HashSet<Id>& fSet, size_t nofVars, size_t k,
     IdTable* result);
