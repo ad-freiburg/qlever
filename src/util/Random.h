@@ -29,7 +29,7 @@ class FastRandomIntGenerator {
   FastRandomIntGenerator() {
     // Randomly initialize the shuffleTable
     std::random_device seeder{};
-    for (size_t i = 0; i <= _shuffleTable.size(); ++i) {
+    for (size_t i = 0; i < _shuffleTable.size(); ++i) {
       _shuffleTable[i] = seeder();
     }
   }
