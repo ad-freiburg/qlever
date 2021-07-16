@@ -20,6 +20,7 @@ RUN make test
 
 FROM base as runtime
 WORKDIR /app
+ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y wget python3-yaml unzip curl bzip2 pkg-config libicu-dev python3-icu libgomp1
 RUN apt-get install -y libzstd-dev
 RUN apt install -y libtbb-dev
