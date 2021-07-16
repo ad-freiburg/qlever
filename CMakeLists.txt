@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.4)
 project(QLever C CXX)
 
 # C/C++ Versions
-set(CMAKE_C_STANDARD 11)
+set (CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -200,9 +200,6 @@ target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(WriteIndexListsMain src/WriteIndexListsMain.cpp)
 target_link_libraries (WriteIndexListsMain engine ${CMAKE_THREAD_LIBS_INIT})
-
-add_executable(MetaDataConverterMain src/MetaDataConverterMain.cpp)
-target_link_libraries (MetaDataConverterMain metaConverter ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
 target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})

@@ -95,6 +95,7 @@ template <class M>
 class MetaDataWrapperDense {
  public:
   using Iterator = VecWrapperImpl::Iterator<M>;
+  using value_type = typename M::value_type;
 
   // _________________________________________________________
   MetaDataWrapperDense() = default;
@@ -116,9 +117,16 @@ class MetaDataWrapperDense {
   template <typename... Args>
   void setup(Args... args) {
     // size has to be set correctly by a call to setSize(), this is done
-    // in IndexMetaData::createFromByteBuffer
+    // via the serialization
     _size = 0;
     _vec = M(args...);
+  }
+
+  // The serialization only affects the (important!) `_size` member. The
+  // external vector has to be restored via the `setup()` call.
+  template <typename Serializer>
+  friend void serialize(Serializer& serializer, MetaDataWrapperDense& wrapper) {
+    serializer& wrapper._size;
   }
 
   // ___________________________________________________________
@@ -200,6 +208,7 @@ class MetaDataWrapperHashMap {
   // using hashMap = ad_utility::HashMap<Id, FullRelationMetaData>;
   using ConstIterator = typename hashMap::const_iterator;
   using Iterator = typename hashMap::iterator;
+  using value_type = typename hashMap::mapped_type;
 
   // nothing to do here, since the default constructor of the hashMap does
   // everything we want
@@ -223,17 +232,17 @@ class MetaDataWrapperHashMap {
   Iterator end() { return _map.end(); }
 
   // ____________________________________________________________
-  void set(Id id, const FullRelationMetaData& value) { _map[id] = value; }
+  void set(Id id, value_type value) { _map[id] = std::move(value); }
 
   // __________________________________________________________
-  const FullRelationMetaData& getAsserted(Id id) const {
+  const value_type& getAsserted(Id id) const {
     auto it = _map.find(id);
     AD_CHECK(it != _map.end());
     return std::cref(it->second);
   }
 
   // __________________________________________________________
-  FullRelationMetaData& operator[](Id id) {
+  value_type& operator[](Id id) {
     auto it = _map.find(id);
     AD_CHECK(it != _map.end());
     return std::ref(it->second);
@@ -243,6 +252,12 @@ class MetaDataWrapperHashMap {
   size_t count(Id id) const {
     // can either be 1 or 0 for map-like types
     return _map.count(id);
+  }
+
+  template <typename Serializer>
+  friend void serialize(Serializer& serializer,
+                        MetaDataWrapperHashMap& metaDataWrapper) {
+    serializer& metaDataWrapper._map;
   }
 
  private:

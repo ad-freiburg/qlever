@@ -10,6 +10,7 @@
 #include "../global/Id.h"
 #include "../util/File.h"
 #include "../util/HashMap.h"
+#include "../util/Serializer/SerializeVector.h"
 
 using std::array;
 using std::pair;
@@ -59,27 +60,20 @@ class FullRelationMetaData {
 
   void setHasBlocks(bool hasBlocks);
 
-  void setCol1LogMultiplicity(uint8_t mult);
-  void setCol2LogMultiplicity(uint8_t mult);
-  uint8_t getCol1LogMultiplicity() const;
-  uint8_t getCol2LogMultiplicity() const;
+  void setCol1Multiplicity(double mult);
+  void setCol2Multiplicity(double mult);
+  double getCol1Multiplicity() const;
+  double getCol2Multiplicity() const;
 
   size_t getNofElements() const;
 
-  // Restores meta data from raw memory.
-  // Needed when registering an index on startup.
-  FullRelationMetaData& createFromByteBuffer(unsigned char* buffer);
-
   // The size this object will require when serialized to file.
-  size_t bytesRequired() const;
+  // size_t bytesRequired() const;
 
   off_t getStartOfLhs() const;
 
   Id _relId;
   off_t _startFullIndex;
-
-  friend ad_utility::File& operator<<(ad_utility::File& f,
-                                      const FullRelationMetaData& rmd);
 
   // operators needed for checking of emptyness
   // inequality is the common case, so we implement this
@@ -102,14 +96,6 @@ class FullRelationMetaData {
   uint64_t _typeMultAndNofElements;
 };
 
-inline ad_utility::File& operator<<(ad_utility::File& f,
-                                    const FullRelationMetaData& rmd) {
-  f.write(&rmd._relId, sizeof(rmd._relId));
-  f.write(&rmd._startFullIndex, sizeof(rmd._startFullIndex));
-  f.write(&rmd._typeMultAndNofElements, sizeof(rmd._typeMultAndNofElements));
-  return f;
-}
-
 class BlockBasedRelationMetaData {
  public:
   BlockBasedRelationMetaData();
@@ -118,11 +104,7 @@ class BlockBasedRelationMetaData {
                              const vector<BlockMetaData>& blocks);
 
   // The size this object will require when serialized to file.
-  size_t bytesRequired() const;
-
-  // Restores meta data from raw memory.
-  // Needed when registering an index on startup.
-  BlockBasedRelationMetaData& createFromByteBuffer(unsigned char* buffer);
+  // size_t bytesRequired() const;
 
   // Takes a LHS and returns the offset into the file at which the
   // corresponding block can be read as well as the nof bytes to read.
@@ -146,14 +128,11 @@ class BlockBasedRelationMetaData {
   vector<BlockMetaData> _blocks;
 };
 
-inline ad_utility::File& operator<<(ad_utility::File& f,
-                                    const BlockBasedRelationMetaData& rmd) {
-  f.write(&rmd._startRhs, sizeof(rmd._startRhs));
-  f.write(&rmd._offsetAfter, sizeof(rmd._offsetAfter));
-  auto nofBlocks = rmd._blocks.size();
-  f.write(&nofBlocks, sizeof(nofBlocks));
-  f.write(rmd._blocks.data(), nofBlocks * sizeof(BlockMetaData));
-  return f;
+template <typename Serializer>
+void serialize(Serializer& serializer, BlockBasedRelationMetaData& metaData) {
+  serializer& metaData._startRhs;
+  serializer& metaData._offsetAfter;
+  serializer& metaData._blocks;
 }
 
 class RelationMetaData {
@@ -174,20 +153,10 @@ class RelationMetaData {
 
   size_t getNofElements() const { return _rmdPairs.getNofElements(); }
 
-  uint8_t getCol1LogMultiplicity() const {
-    return _rmdPairs.getCol1LogMultiplicity();
-  }
+  double getCol1Multiplicity() const { return _rmdPairs.getCol1Multiplicity(); }
 
-  uint8_t getCol2LogMultiplicity() const {
-    return _rmdPairs.getCol2LogMultiplicity();
-  }
+  double getCol2Multiplicity() const { return _rmdPairs.getCol2Multiplicity(); }
 
   const FullRelationMetaData& _rmdPairs;
   const BlockBasedRelationMetaData* _rmdBlocks;
 };
-
-inline ad_utility::File& operator<<(ad_utility::File& f,
-                                    const RelationMetaData& rmd) {
-  f << rmd._rmdPairs << *rmd._rmdBlocks;
-  return f;
-}

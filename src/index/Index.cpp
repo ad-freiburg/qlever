@@ -17,6 +17,7 @@
 #include "../parser/ParallelParseBuffer.h"
 #include "../parser/TsvParser.h"
 #include "../util/BatchedPipeline.h"
+#include "../util/CompressionUsingZstd/ZstdWrapper.h"
 #include "../util/Conversions.h"
 #include "../util/HashMap.h"
 #include "../util/TupleHelpers.h"
@@ -325,9 +326,10 @@ void Index::convertPartialToGlobalIds(
   LOG(INFO) << "Pass done.\n";
 }
 
-pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeSwitchedRel(
-    ad_utility::File* out, off_t lastOffset, Id currentRel,
-    ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
+template <typename T>
+T Index::writeSwitchedRel(ad_utility::File* out, off_t lastOffset,
+                          Id currentRel,
+                          ad_utility::BufferedVector<array<Id, 2>>* bufPtr) {
   // sort according to the "switched" relation.
   auto& buffer = *bufPtr;
 
@@ -351,7 +353,8 @@ pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeSwitchedRel(
     lastLhs = el[0];
   }
 
-  return writeRel(*out, lastOffset, currentRel, buffer, distinctC1, functional);
+  return writeRel<T>(*out, lastOffset, currentRel, buffer, distinctC1,
+                     functional);
 }
 
 // _____________________________________________________________________________
@@ -362,8 +365,8 @@ Index::createPermutationPairImpl(const string& fileName1,
                                  const string& fileName2,
                                  const Index::TripleVec& vec, size_t c0,
                                  size_t c1, size_t c2) {
-  typename MetaDataDispatcher::WriteType metaData1;
-  typename MetaDataDispatcher::WriteType metaData2;
+  using MetaData = typename MetaDataDispatcher::WriteType;
+  MetaData metaData1, metaData2;
   if constexpr (metaData1._isMmapBased) {
     metaData1.setup(_totalVocabularySize, FullRelationMetaData::empty,
                     fileName1 + MMAP_FILE_SUFFIX);
@@ -393,11 +396,12 @@ Index::createPermutationPairImpl(const string& fileName1,
   Id lastLhs = std::numeric_limits<Id>::max();
   for (TripleVec::bufreader_type reader(vec); !reader.empty(); ++reader) {
     if ((*reader)[c0] != currentRel) {
-      auto md = writeRel(out1, lastOffset1, currentRel, buffer, distinctC1,
-                         functional);
-      metaData1.add(md.first, md.second);
-      auto md2 = writeSwitchedRel(&out2, lastOffset2, currentRel, &buffer);
-      metaData2.add(md2.first, md2.second);
+      auto md = writeRel<typename MetaData::AddType>(
+          out1, lastOffset1, currentRel, buffer, distinctC1, functional);
+      metaData1.add(md);
+      auto md2 = writeSwitchedRel<typename MetaData::AddType>(
+          &out2, lastOffset2, currentRel, &buffer);
+      metaData2.add(md2);
       buffer.clear();
       distinctC1 = 1;
       lastOffset1 = metaData1.getOffsetAfter();
@@ -416,12 +420,13 @@ Index::createPermutationPairImpl(const string& fileName1,
     lastLhs = (*reader)[c1];
   }
   if (from < vec.size()) {
-    auto md =
-        writeRel(out1, lastOffset1, currentRel, buffer, distinctC1, functional);
-    metaData1.add(md.first, md.second);
+    auto md = writeRel<typename MetaData::AddType>(
+        out1, lastOffset1, currentRel, buffer, distinctC1, functional);
+    metaData1.add(md);
 
-    auto md2 = writeSwitchedRel(&out2, lastOffset2, currentRel, &buffer);
-    metaData2.add(md2.first, md2.second);
+    auto md2 = writeSwitchedRel<typename MetaData::AddType>(
+        &out2, lastOffset2, currentRel, &buffer);
+    metaData2.add(md2);
   }
 
   LOG(INFO) << "Done creating index permutation." << std::endl;
@@ -508,7 +513,6 @@ void Index::createPermutationPair(
 template <class MetaData>
 void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
   for (auto it = m1->data().begin(); it != m1->data().end(); ++it) {
-    const FullRelationMetaData& constRmd = it->second;
     // our MetaData classes have a read-only interface because normally the
     // FuullRelationMetaData are created separately and then added and never
     // changed. This function forms an exception to this pattern
@@ -516,9 +520,10 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
     // permutation is inefficient. So it is fine to use const_cast here as an
     // exception: we delibarately write to a read-only data structure and are
     // knowing what we are doing
-    FullRelationMetaData& rmd = const_cast<FullRelationMetaData&>(constRmd);
-    m2->data()[it->first].setCol2LogMultiplicity(rmd.getCol1LogMultiplicity());
-    rmd.setCol2LogMultiplicity(m2->data()[it->first].getCol1LogMultiplicity());
+    m2->data()[it->first].setCol2Multiplicity(
+        m1->data()[it->first].getCol1Multiplicity());
+    m1->data()[it->first].setCol2Multiplicity(
+        m2->data()[it->first].getCol1Multiplicity());
   }
 }
 
@@ -869,7 +874,8 @@ void Index::createPatternsImpl(const string& fileName,
 }
 
 // _____________________________________________________________________________
-pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeRel(
+pair<FullRelationMetaData, BlockBasedRelationMetaData>
+Index::writeUncompressedRel(
     ad_utility::File& out, off_t currentOffset, Id relId,
     const ad_utility::BufferedVector<array<Id, 2>>& data, size_t distinctC1,
     bool functional) {
@@ -896,6 +902,39 @@ pair<FullRelationMetaData, BlockBasedRelationMetaData> Index::writeRel(
   };
   LOG(TRACE) << "Done writing relation.\n";
   return ret;
+}
+
+// _____________________________________________________________________________
+CompressedRelationMetaData Index::writeCompressedRel(
+    ad_utility::File& out, Id relId,
+    const ad_utility::BufferedVector<array<Id, 2>>& data, size_t distinctC1,
+    bool functional) {
+  LOG(TRACE) << "Writing a relation ...\n";
+  AD_CHECK_GT(data.size(), 0);
+  LOG(TRACE) << "Calculating multiplicities ...\n";
+  double multC1 = functional ? 1.0 : data.size() / double(distinctC1);
+  // Dummy value that will be overwritten later
+  double multC2 = 42.42;
+  LOG(TRACE) << "Done calculating multiplicities.\n";
+  CompressedRelationMetaData rmd{relId, data.size(), multC1, multC2,
+                                 functional};
+
+  // TODO: create proper constant;
+  constexpr size_t BLOCKSIZE = (1ull << 23) / (2 * sizeof(Id));
+  for (size_t i = 0; i < data.size(); i += BLOCKSIZE) {
+    size_t actualBlocksize = std::min(BLOCKSIZE, size_t(data.size() - i));
+
+    std::vector<char> compressedBlock = ZstdWrapper::compressAndReturn(
+        (void*)(data.data() + i), actualBlocksize * 2 * sizeof(Id));
+    rmd._blocks.push_back(CompressedBlockMetaData{
+        out.tell(), compressedBlock.size(), actualBlocksize, data[i][0],
+        data[i][1], data[i + actualBlocksize - 1][0],
+        data[i + actualBlocksize - 1][1]});
+    out.write(compressedBlock.data(), compressedBlock.size());
+    ;
+  }
+  LOG(TRACE) << "Done writing relation.\n";
+  return rmd;
 }
 
 // _____________________________________________________________________________
