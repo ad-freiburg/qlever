@@ -17,8 +17,8 @@ for source in "${SOURCE_FILES[@]}" ;do
 		printf "The source file \x1b[m$source\x1b[31m does not match the code style\n"
 		printf "Use clang-format with the .clang-format provided in the QLever\n"
 		printf "repository's root to ensure all code files are formatted "
-		printf "properly. We currently use the clang-format 11.0.1\n"
-		printf "(can be installed as \"clang-format-11\" in Ubuntu 21.04.\n"
+		printf "properly. We currently use the clang-format-11\n"
+		printf "(can be installed as \"clang-format-11\" in Ubuntu 20.04.\n"
 		printf "\x1b[m"
 		ERROR=1
 	fi
