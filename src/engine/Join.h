@@ -74,6 +74,10 @@ class Join : public Operation {
   void join(const IdTable& dynA, size_t jc1, const IdTable& dynB, size_t jc2,
             IdTable* dynRes);
 
+  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+  void parallelJoin(const IdTable& dynA, size_t jc1, const IdTable& dynB,
+                    size_t jc2, IdTableStatic<OUT_WIDTH>& result);
+
   class RightLargerTag {};
   class LeftLargerTag {};
   template <typename TagType, int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
