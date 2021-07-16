@@ -101,12 +101,18 @@ class Engine {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements ..." << std::endl;
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
-      ad_utility::parallel_sort(
-          stab.begin(), stab.end(),
-          [keyColumn](const auto& a, const auto& b) {
-            return a[keyColumn] < b[keyColumn];
-          },
-          ad_utility::parallel_tag(NUM_SORT_THREADS));
+      auto comp = [keyColumn](const auto& a, const auto& b) {
+        return a[keyColumn] < b[keyColumn];
+      };
+      if constexpr (WIDTH != 0) {
+        // For the static Id tables, use the parallel Sort from the STL
+        ad_utility::parallel_stl_sort(stab.begin(), stab.end(), comp);
+      } else {
+        // For the dynamic IdTable, parallel Sorting is done via the gcc
+        // extension, since the stl sort requires default constructible rows
+        ad_utility::parallel_sort(stab.begin(), stab.end(), comp,
+                                  ad_utility::parallel_tag(NUM_SORT_THREADS));
+      }
     } else {
       std::sort(stab.begin(), stab.end(),
                 [keyColumn](const auto& a, const auto& b) {
@@ -129,8 +135,15 @@ class Engine {
     LOG(DEBUG) << "Sorting " << tab->size() << " elements.\n";
     IdTableStatic<WIDTH> stab = tab->moveToStatic<WIDTH>();
     if constexpr (USE_PARALLEL_SORT) {
-      ad_utility::parallel_sort(stab.begin(), stab.end(), comp,
-                                ad_utility::parallel_tag(NUM_SORT_THREADS));
+      if constexpr (WIDTH != 0) {
+        // For the static Id tables, use the parallel Sort from the STL
+        ad_utility::parallel_stl_sort(stab.begin(), stab.end(), comp);
+      } else {
+        // For the dynamic IdTable, parallel Sorting is done via the gcc
+        // extension, since the stl sort requires default constructible rows
+        ad_utility::parallel_sort(stab.begin(), stab.end(), comp,
+                                  ad_utility::parallel_tag(NUM_SORT_THREADS));
+      }
     } else {
       std::sort(stab.begin(), stab.end(), comp);
     }
