@@ -115,6 +115,18 @@ TEST(VocabularyTest, IncompleteLiterals) {
   ASSERT_TRUE(comp("\"fieldofwork", "\"GOLD\"@en"));
 }
 
+TEST(Vocabulary, PrefixFilter) {
+  RdfsVocabulary voc;
+  voc.push_back("\"exa\"");
+  voc.push_back("\"exp\"");
+  voc.push_back("\"ext\"");
+  voc.push_back("\"[\"Ex-vivo\" renal artery revascularization]\"@en");
+
+  auto x = voc.prefix_range("\"exp");
+  ASSERT_EQ(x.first, 1u);
+  ASSERT_EQ(x.second, 2u);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
