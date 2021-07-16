@@ -14,6 +14,7 @@
 #include "../global/Id.h"
 #include "../util/AllocatorWithLimit.h"
 #include "../util/Log.h"
+#include "../util/UninitializedAllocator.h"
 
 namespace detail {
 // The actual data storage of the Id Tables, basically a wrapper around a
@@ -21,13 +22,15 @@ namespace detail {
 template <typename Allocator>
 struct IdTableVectorWrapper {
   static constexpr bool ManagesStorage = true;  // is able to grow/allocate
-  std::vector<Id, Allocator> _data;
 
-  IdTableVectorWrapper(Allocator a) : _data{a} {};
+  using ActualAllocator = ad_utility::default_init_allocator<Id, Allocator>;
+  std::vector<Id, ActualAllocator> _data;
+
+  IdTableVectorWrapper(Allocator a) : _data{ActualAllocator{std::move(a)}} {};
 
   // construct from c-style array by copying the content
   explicit IdTableVectorWrapper(const Id* const ptr, size_t sz, Allocator a)
-      : _data{a} {
+      : _data{ActualAllocator{std::move(a)}} {
     _data.assign(ptr, ptr + sz);
   }
 
