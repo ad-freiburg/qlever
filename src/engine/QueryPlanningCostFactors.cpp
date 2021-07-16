@@ -3,7 +3,9 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./QueryPlanningCostFactors.h"
+
 #include <fstream>
+
 #include "../util/Exception.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"

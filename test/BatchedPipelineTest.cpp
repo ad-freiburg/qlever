@@ -3,7 +3,9 @@
 // Author: Johannes Kalmbach (joka921) <johannes.kalmbach@gmail.com>
 
 #include <gtest/gtest.h>
+
 #include <optional>
+
 #include "../src/parser/TurtleParser.h"
 #include "../src/util/BatchedPipeline.h"
 

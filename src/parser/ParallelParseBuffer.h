@@ -8,6 +8,7 @@
 #include <future>
 #include <string>
 #include <vector>
+
 #include "../util/Log.h"
 
 using std::array;

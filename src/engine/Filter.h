@@ -6,6 +6,7 @@
 #include <list>
 #include <utility>
 #include <vector>
+
 #include "../parser/ParsedQuery.h"
 #include "./Operation.h"
 #include "./QueryExecutionTree.h"

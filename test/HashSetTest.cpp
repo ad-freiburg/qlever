@@ -3,6 +3,7 @@
 // Author: Niklas Schnelle (schnelle@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+
 #include <utility>
 #include <vector>
 

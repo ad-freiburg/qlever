@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+
 #include "../util/Conversions.h"
 #include "./Operation.h"
 

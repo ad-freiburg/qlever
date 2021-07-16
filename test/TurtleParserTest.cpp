@@ -3,8 +3,10 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 #include <gtest/gtest.h>
+
 #include <iostream>
 #include <string>
+
 #include "../src/parser/TurtleParser.h"
 
 using std::string;

@@ -3,10 +3,11 @@
 // Author: Johannes Kalmbach (joka921) <johannes.kalmbach@gmail.com>
 
 #pragma once
-#include <vector>
-#include "MmapVector.h"
-
 #include <gtest/gtest.h>
+
+#include <vector>
+
+#include "MmapVector.h"
 
 namespace ad_utility {
 

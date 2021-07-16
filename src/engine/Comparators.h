@@ -5,7 +5,8 @@
 
 #include <utility>
 #include <vector>
-#include "IdTable.h"
+
+#include "./IdTable.h"
 
 using std::pair;
 using std::vector;

@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
+
 #include "../src/global/Constants.h"
 #include "../src/parser/PropertyPathParser.h"
 #include "../src/parser/SparqlParser.h"

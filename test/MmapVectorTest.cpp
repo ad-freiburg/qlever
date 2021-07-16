@@ -4,8 +4,10 @@
 //
 #include <gtest/gtest.h>
 #include <unistd.h>
+
 #include <stdexcept>
 #include <vector>
+
 #include "../src/util/MmapVector.h"
 
 using ad_utility::MmapVector;

@@ -4,6 +4,7 @@
 //
 
 #include <string>
+
 #include "./IndexMetaData.h"
 
 using ad_utility::MmapVector;

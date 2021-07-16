@@ -3,6 +3,7 @@
 // Author: Johannes Kalmbach  (johannes.kalmbach@gmail.com)
 
 #include "Operation.h"
+
 #include "QueryExecutionTree.h"
 
 template <typename F>

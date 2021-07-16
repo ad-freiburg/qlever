@@ -3,7 +3,9 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "DocsDB.h"
+
 #include <algorithm>
+
 #include "../global/Constants.h"
 
 // _____________________________________________________________________________

@@ -8,7 +8,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
 #include <utility>
+
 #include "../util/Log.h"
 
 namespace ad_utility {

@@ -3,7 +3,9 @@
 // Author: Johannes Kalmbach (joka921) <johannes.kalmbach@gmail.com>
 
 #include <gtest/gtest.h>
+
 #include <vector>
+
 #include "../src/util/BufferedVector.h"
 
 using ad_utility::BufferedVector;

@@ -9,6 +9,7 @@
 #include <grp.h>
 #include <stdint.h>
 #include <stdlib.h>
+
 #include <array>
 #include <clocale>
 #include <cstring>
@@ -21,6 +22,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
 #include "../parser/ParseException.h"
 
 using std::array;

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <list>
+
 #include "../util/HashMap.h"
 #include "../util/HashSet.h"
 #include "./IndexScan.h"

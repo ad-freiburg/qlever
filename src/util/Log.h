@@ -6,13 +6,14 @@
 
 #include <sys/timeb.h>
 #include <time.h>
+
+#include <chrono>
 #include <iomanip>
 #include <iostream>
 #include <locale>
 #include <sstream>
 #include <string>
 
-#include <chrono>
 #include "./StringUtils.h"
 
 #ifndef LOGLEVEL

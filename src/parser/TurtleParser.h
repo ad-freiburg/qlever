@@ -7,11 +7,13 @@
 
 #include <gtest/gtest.h>
 #include <sys/mman.h>
+
 #include <codecvt>
 #include <exception>
 #include <future>
 #include <locale>
 #include <string_view>
+
 #include "../global/Constants.h"
 #include "../index/ConstantsIndexCreation.h"
 #include "../util/Exception.h"

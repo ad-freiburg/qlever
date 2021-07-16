@@ -4,11 +4,11 @@
 
 #pragma once
 
-#include <string>
-
 #include <exception>
 #include <fstream>
 #include <sstream>
+#include <string>
+
 #include "../util/Exception.h"
 #include "File.h"
 

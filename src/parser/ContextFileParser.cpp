@@ -3,7 +3,9 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./ContextFileParser.h"
+
 #include <cassert>
+
 #include "../util/Exception.h"
 #include "../util/StringUtils.h"
 

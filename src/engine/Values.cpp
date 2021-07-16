@@ -5,9 +5,10 @@
 #include "Values.h"
 
 #include <sstream>
+
 #include "../util/Exception.h"
 #include "../util/HashSet.h"
-#include "CallFixedSize.h"
+#include "./CallFixedSize.h"
 
 Values::Values(QueryExecutionContext* qec, SparqlValues values)
     : Operation(qec) {

@@ -3,7 +3,9 @@
 // Author: Johannes Kalmbach (johannes.kalmbach@gmail.com)
 
 #include <gtest/gtest.h>
+
 #include <string>
+
 #include "../src/util/TupleHelpers.h"
 
 using namespace ad_tuple_helpers;

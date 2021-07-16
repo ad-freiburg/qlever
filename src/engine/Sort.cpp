@@ -3,7 +3,9 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
 #include "./Sort.h"
+
 #include <sstream>
+
 #include "CallFixedSize.h"
 #include "QueryExecutionTree.h"
 

@@ -3,6 +3,7 @@
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
 #include "HasPredicateScan.h"
+
 #include "CallFixedSize.h"
 
 template <typename A, typename R>

@@ -24,8 +24,8 @@
 
 // ___________________________________________________________________
 template <class Comp>
-VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::string& basename,
-                                                                size_t numFiles, Comp comp) {
+VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
+    const std::string& basename, size_t numFiles, Comp comp) {
   // we sort alphabetically by the token according to the comparator that was
   // given to us
 
@@ -45,12 +45,13 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
   std::vector<bool> endOfFile(numFiles, false);
 
   // Priority queue for the k-way merge
-  std::priority_queue<QueueWord, std::vector<QueueWord>, decltype(queueCompare)> queue(
-      queueCompare);
+  std::priority_queue<QueueWord, std::vector<QueueWord>, decltype(queueCompare)>
+      queue(queueCompare);
 
   // open and prepare all infiles and mmap output vectors
   for (size_t i = 0; i < numFiles; i++) {
-    infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME + std::to_string(i));
+    infiles.emplace_back(basename + PARTIAL_VOCAB_FILE_NAME +
+                         std::to_string(i));
     _idVecs.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
     AD_CHECK(infiles.back().is_open());
 
@@ -135,7 +136,8 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(const std::strin
 }
 
 // ________________________________________________________________________________
-void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buffer) {
+void VocabularyMerger::writeQueueWordsToIdVec(
+    const std::vector<QueueWord>& buffer) {
   LOG(TRACE) << "Start writing a batch of merged words\n";
 
   // smaller grained buffer for the actual inner write
@@ -154,7 +156,8 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buff
 
       // write the new word to the vocabulary
       if (_lastWritten < EXTERNALIZED_LITERALS_PREFIX) {
-        _outfile << RdfEscaping::escapeNewlinesAndBackslashes(_lastWritten) << '\n';
+        _outfile << RdfEscaping::escapeNewlinesAndBackslashes(_lastWritten)
+                 << '\n';
       } else {
         // we have to strip the externalization character again
         auto& c = _lastWritten[0];
@@ -171,11 +174,14 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buff
                           "should never happen\n";
             AD_CHECK(false)
         }
-        _outfileExternal << RdfEscaping::escapeNewlinesAndBackslashes(_lastWritten) << '\n';
+        _outfileExternal << RdfEscaping::escapeNewlinesAndBackslashes(
+                                _lastWritten)
+                         << '\n';
       }
 
       // write id to corresponding vec
-      writeBuf.emplace_back(top._partialFileId, std::make_pair(top._partialWordId, _totalWritten));
+      writeBuf.emplace_back(top._partialFileId,
+                            std::make_pair(top._partialWordId, _totalWritten));
 
       if (top._value.size() > 0 && top._value[0] == '@') {
         if (!_firstLangPredSeen) {
@@ -196,11 +202,14 @@ void VocabularyMerger::writeQueueWordsToIdVec(const std::vector<QueueWord>& buff
       // we already have increased total written, so for the duplicate
       // we have to subtract one again
       size_t minusOne = _totalWritten - 1;
-      writeBuf.emplace_back(top._partialFileId, std::make_pair(top._partialWordId, minusOne));
+      writeBuf.emplace_back(top._partialFileId,
+                            std::make_pair(top._partialWordId, minusOne));
     }
 
     if (writeBuf.size() >= bufSize) {
-      auto task = [this, buf = std::move(writeBuf)]() { this->doActualWrite(buf); };
+      auto task = [this, buf = std::move(writeBuf)]() {
+        this->doActualWrite(buf);
+      };
       if (writeFut.valid()) {
         writeFut.get();
       }
@@ -250,7 +259,8 @@ ad_utility::HashMap<Id, Id> createInternalMapping(ItemVec* elsPtr) {
 }
 
 // ________________________________________________________________________________________________________
-void writeMappedIdsToExtVec(const TripleVec& input, const ad_utility::HashMap<Id, Id>& map,
+void writeMappedIdsToExtVec(const TripleVec& input,
+                            const ad_utility::HashMap<Id, Id>& map,
                             TripleVec::bufwriter_type* writePtr) {
   auto& writer = *writePtr;
   for (const auto& curTriple : input) {
@@ -259,20 +269,23 @@ void writeMappedIdsToExtVec(const TripleVec& input, const ad_utility::HashMap<Id
     for (size_t k = 0; k < 3; ++k) {
       iterators[k] = map.find(curTriple[k]);
       if (iterators[k] == map.end()) {
-        LOG(INFO) << "not found in partial local Vocab: " << curTriple[k] << '\n';
+        LOG(INFO) << "not found in partial local Vocab: " << curTriple[k]
+                  << '\n';
         AD_CHECK(false);
       }
     }
 
     // update the Element
-    writer << array<Id, 3>{{iterators[0]->second, iterators[1]->second, iterators[2]->second}};
+    writer << array<Id, 3>{
+        {iterators[0]->second, iterators[1]->second, iterators[2]->second}};
   }
 }
 
 // _________________________________________________________________________________________________________
 void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
   LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
-  std::ofstream out(fileName.c_str(), std::ios_base::out | std::ios_base::binary);
+  std::ofstream out(fileName.c_str(),
+                    std::ios_base::out | std::ios_base::binary);
   AD_CHECK(out.is_open());
   for (const auto& el : els) {
     std::string_view word = el.first;
@@ -288,13 +301,14 @@ void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
 
 // ______________________________________________________________________________________________
 template <class Pred>
-void writePartialIdMapToBinaryFileForMerging(std::shared_ptr<const ItemMapArray> map,
-                                             const string& fileName, Pred comp,
-                                             const bool doParallelSort) {
+void writePartialIdMapToBinaryFileForMerging(
+    std::shared_ptr<const ItemMapArray> map, const string& fileName, Pred comp,
+    const bool doParallelSort) {
   LOG(INFO) << "Creating partial vocabulary from set ...\n";
   ItemVec els;
-  size_t totalEls = std::accumulate(map->begin(), map->end(), 0,
-                                    [](const auto& x, const auto& y) { return x + y.size(); });
+  size_t totalEls = std::accumulate(
+      map->begin(), map->end(), 0,
+      [](const auto& x, const auto& y) { return x + y.size(); });
   els.reserve(totalEls);
   for (const auto& singleMap : *map) {
     els.insert(end(els), begin(singleMap), end(singleMap));
@@ -311,8 +325,9 @@ void writePartialIdMapToBinaryFileForMerging(std::shared_ptr<const ItemMapArray>
 // __________________________________________________________________________________________________
 ItemVec vocabMapsToVector(std::shared_ptr<const ItemMapArray> map) {
   ItemVec els;
-  size_t totalEls = std::accumulate(map->begin(), map->end(), 0,
-                                    [](const auto& x, const auto& y) { return x + y.size(); });
+  size_t totalEls = std::accumulate(
+      map->begin(), map->end(), 0,
+      [](const auto& x, const auto& y) { return x + y.size(); });
   els.reserve(totalEls);
   for (const auto& singleMap : *map) {
     els.insert(end(els), begin(singleMap), end(singleMap));
@@ -322,7 +337,8 @@ ItemVec vocabMapsToVector(std::shared_ptr<const ItemMapArray> map) {
 
 // _______________________________________________________________________________________________________________________
 template <class StringSortComparator>
-void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp, const bool doParallelSort) {
+void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
+                     const bool doParallelSort) {
   auto& els = *vecPtr;
   if constexpr (USE_PARALLEL_SORT) {
     if (doParallelSort) {
@@ -338,7 +354,8 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp, const bool doPa
 }
 
 // _____________________________________________________________________
-ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(const string& mmapFilename) {
+ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
+    const string& mmapFilename) {
   ad_utility::HashMap<Id, Id> res;
   IdPairMMapVecView vec(mmapFilename);
   for (const auto& [partialId, globalId] : vec) {

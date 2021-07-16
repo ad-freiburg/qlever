@@ -411,8 +411,8 @@ void Vocabulary<S, C>::push_back(const string& word) {
 // _____________________________________________________________________________
 template <typename S, typename C>
 template <typename, typename>
-const std::optional<std::reference_wrapper<const string>> Vocabulary<S, C>::
-operator[](Id id) const {
+const std::optional<std::reference_wrapper<const string>>
+Vocabulary<S, C>::operator[](Id id) const {
   if (id < _words.size()) {
     return _words[static_cast<size_t>(id)];
   } else {
@@ -420,7 +420,7 @@ operator[](Id id) const {
   }
 }
 template const std::optional<std::reference_wrapper<const string>>
-    TextVocabulary::operator[]<std::string, void>(Id id) const;
+TextVocabulary::operator[]<std::string, void>(Id id) const;
 
 template <typename S, typename C>
 template <typename, typename>

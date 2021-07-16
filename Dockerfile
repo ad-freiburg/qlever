@@ -9,7 +9,6 @@ FROM base as builder
 RUN apt-get update && apt-get install -y build-essential cmake libsparsehash-dev libicu-dev tzdata
 COPY . /app/
 
-# Check formatting with the .clang-format project style
 WORKDIR /app/
 ENV DEBIAN_FRONTEND=noninteractive
 
