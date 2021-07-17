@@ -184,12 +184,13 @@ class CompactStringVector {
    * @return A std::pair containing a pointer to the data, and the number of
    *         elements stored at the pointers target.
    */
-  const std::pair<DataT*, size_t> operator[](size_t i) const {
+  const std::pair<const DataT*, size_t> operator[](size_t i) const {
     IndexT ind, nextInd;
     std::memcpy(&ind, data() + (i * sizeof(IndexT)), sizeof(IndexT));
     std::memcpy(&nextInd, data() + ((i + 1) * sizeof(IndexT)), sizeof(IndexT));
-    return std::pair<DataT*, size_t>(
-        reinterpret_cast<DataT*>(data() + (_indexEnd + sizeof(DataT) * ind)),
+    return std::pair<const DataT*, size_t>(
+        reinterpret_cast<const DataT*>(data() +
+                                       (_indexEnd + sizeof(DataT) * ind)),
         nextInd - ind);
   }
 
