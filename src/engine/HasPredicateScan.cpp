@@ -273,7 +273,7 @@ void HasPredicateScan::computeFreeS(
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
       // add the pattern
       size_t numPredicates;
-      Id* patternData;
+      const Id* patternData;
       std::tie(patternData, numPredicates) = patterns[hasPattern[id]];
       for (size_t i = 0; i < numPredicates; i++) {
         if (patternData[i] == objectId) {
@@ -283,7 +283,7 @@ void HasPredicateScan::computeFreeS(
     } else if (id < hasPredicate.size()) {
       // add the relations
       size_t numPredicates;
-      Id* predicateData;
+      const Id* predicateData;
       std::tie(predicateData, numPredicates) = hasPredicate[id];
       for (size_t i = 0; i < numPredicates; i++) {
         if (predicateData[i] == objectId) {
@@ -307,7 +307,7 @@ void HasPredicateScan::computeFreeO(
   if (subjectId < hasPattern.size() && hasPattern[subjectId] != NO_PATTERN) {
     // add the pattern
     size_t numPredicates;
-    Id* patternData;
+    const Id* patternData;
     std::tie(patternData, numPredicates) = patterns[hasPattern[subjectId]];
     for (size_t i = 0; i < numPredicates; i++) {
       result.push_back({patternData[i]});
@@ -315,7 +315,7 @@ void HasPredicateScan::computeFreeO(
   } else if (subjectId < hasPredicate.size()) {
     // add the relations
     size_t numPredicates;
-    Id* predicateData;
+    const Id* predicateData;
     std::tie(predicateData, numPredicates) = hasPredicate[subjectId];
     for (size_t i = 0; i < numPredicates; i++) {
       result.push_back({predicateData[i]});
@@ -338,7 +338,7 @@ void HasPredicateScan::computeFullScan(
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
       // add the pattern
       size_t numPredicates;
-      Id* patternData;
+      const Id* patternData;
       std::tie(patternData, numPredicates) = patterns[hasPattern[id]];
       for (size_t i = 0; i < numPredicates; i++) {
         result.push_back({id, patternData[i]});
@@ -346,7 +346,7 @@ void HasPredicateScan::computeFullScan(
     } else if (id < hasPredicate.size()) {
       // add the relations
       size_t numPredicates;
-      Id* predicateData;
+      const Id* predicateData;
       std::tie(predicateData, numPredicates) = hasPredicate[id];
       for (size_t i = 0; i < numPredicates; i++) {
         result.push_back({id, predicateData[i]});
@@ -373,7 +373,7 @@ void HasPredicateScan::computeSubqueryS(
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
       // Expand the pattern and add it to the result
       size_t numPredicates;
-      Id* patternData;
+      const Id* patternData;
       std::tie(patternData, numPredicates) = patterns[hasPattern[id]];
       for (size_t j = 0; j < numPredicates; j++) {
         result.push_back();
@@ -386,7 +386,7 @@ void HasPredicateScan::computeSubqueryS(
     } else if (id < hasPredicate.size()) {
       // add the relations
       size_t numPredicates;
-      Id* predicateData;
+      const Id* predicateData;
       std::tie(predicateData, numPredicates) = hasPredicate[id];
       for (size_t j = 0; j < numPredicates; j++) {
         result.push_back();
