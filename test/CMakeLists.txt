@@ -65,7 +65,7 @@ target_link_libraries(QueryPlannerTest gtest_main engine ${CMAKE_THREAD_LIBS_INI
 
 add_executable(ConversionsTest ConversionsTest.cpp)
 add_test(ConversionsTest ConversionsTest)
-target_link_libraries(ConversionsTest gtest_main engine ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(ConversionsTest gtest_main  ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(HashMapTest HashMapTest.cpp)
 add_test(HashMapTest HashMapTest)
