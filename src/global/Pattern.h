@@ -111,7 +111,7 @@ class CompactStringVector {
     load(file, offset);
   }
 
-  virtual ~CompactStringVector() { delete[] _data; }
+  virtual ~CompactStringVector() = default;
 
   /**
    * @brief Fills this CompactStringVector with data.
@@ -130,21 +130,21 @@ class CompactStringVector {
           std::to_string(std::numeric_limits<IndexT>::max()));
     }
     _dataSize = _indexEnd + sizeof(DataT) * dataCount;
-    _data = new uint8_t[_dataSize];
+    _data.reset(new uint8_t[_dataSize]);
     IndexT currentLength = 0;
     size_t indPos = 0;
     for (IndexT i = 0; i < _size; i++) {
       // add an entry to the index
-      std::memcpy(_data + (indPos * sizeof(IndexT)), &currentLength,
+      std::memcpy(data() + (indPos * sizeof(IndexT)), &currentLength,
                   sizeof(IndexT));
       // copy the vectors actual data
-      std::memcpy(_data + (_indexEnd + currentLength * sizeof(DataT)),
+      std::memcpy(data() + (_indexEnd + currentLength * sizeof(DataT)),
                   data[i].data(), data[i].size() * sizeof(DataT));
       indPos++;
       currentLength += data[i].size();
     }
     // add a final entry that stores the end of the data field
-    std::memcpy(_data + (indPos * sizeof(IndexT)), &currentLength,
+    std::memcpy(data() + (indPos * sizeof(IndexT)), &currentLength,
                 sizeof(IndexT));
   }
 
@@ -152,11 +152,15 @@ class CompactStringVector {
     file.read(&_size, sizeof(size_t), offset);
     file.read(&_dataSize, sizeof(size_t), offset + sizeof(size_t));
     _indexEnd = (_size + 1) * sizeof(IndexT);
-    _data = new uint8_t[_dataSize];
-    file.read(_data, _dataSize, offset + 2 * sizeof(size_t));
+    _data.reset(new uint8_t[_dataSize]);
+    file.read(data(), _dataSize, offset + 2 * sizeof(size_t));
   }
 
+  // This is a move-only type
   CompactStringVector& operator=(const CompactStringVector&) = delete;
+  CompactStringVector& operator=(CompactStringVector&&) = default;
+  CompactStringVector(const CompactStringVector&) = delete;
+  CompactStringVector(CompactStringVector&&) = default;
 
   size_t size() const { return _size; }
 
@@ -168,7 +172,7 @@ class CompactStringVector {
   size_t write(ad_utility::File& file) {
     file.write(&_size, sizeof(size_t));
     file.write(&_dataSize, sizeof(size_t));
-    file.write(_data, _dataSize);
+    file.write(data(), _dataSize);
     return _dataSize + 2 * sizeof(size_t);
   }
 
@@ -182,15 +186,17 @@ class CompactStringVector {
    */
   const std::pair<DataT*, size_t> operator[](size_t i) const {
     IndexT ind, nextInd;
-    std::memcpy(&ind, _data + (i * sizeof(IndexT)), sizeof(IndexT));
-    std::memcpy(&nextInd, _data + ((i + 1) * sizeof(IndexT)), sizeof(IndexT));
+    std::memcpy(&ind, data() + (i * sizeof(IndexT)), sizeof(IndexT));
+    std::memcpy(&nextInd, data() + ((i + 1) * sizeof(IndexT)), sizeof(IndexT));
     return std::pair<DataT*, size_t>(
-        reinterpret_cast<DataT*>(_data + (_indexEnd + sizeof(DataT) * ind)),
+        reinterpret_cast<DataT*>(data() + (_indexEnd + sizeof(DataT) * ind)),
         nextInd - ind);
   }
 
  private:
-  uint8_t* _data;
+  uint8_t* data() { return _data.get(); };
+  const uint8_t* data() const { return _data.get(); };
+  std::unique_ptr<uint8_t[]> _data;
   size_t _size;
   size_t _indexEnd;
   size_t _dataSize;
