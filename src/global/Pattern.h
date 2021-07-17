@@ -135,16 +135,16 @@ class CompactStringVector {
     size_t indPos = 0;
     for (IndexT i = 0; i < _size; i++) {
       // add an entry to the index
-      std::memcpy(data() + (indPos * sizeof(IndexT)), &currentLength,
+      std::memcpy(this->data() + (indPos * sizeof(IndexT)), &currentLength,
                   sizeof(IndexT));
       // copy the vectors actual data
-      std::memcpy(data() + (_indexEnd + currentLength * sizeof(DataT)),
+      std::memcpy(this->data() + (_indexEnd + currentLength * sizeof(DataT)),
                   data[i].data(), data[i].size() * sizeof(DataT));
       indPos++;
       currentLength += data[i].size();
     }
     // add a final entry that stores the end of the data field
-    std::memcpy(data() + (indPos * sizeof(IndexT)), &currentLength,
+    std::memcpy(this->data() + (indPos * sizeof(IndexT)), &currentLength,
                 sizeof(IndexT));
   }
 
