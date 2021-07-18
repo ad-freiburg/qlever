@@ -19,7 +19,9 @@ class default_init_allocator : public A {
   typedef std::allocator_traits<A> a_t;
 
  public:
-  // This is needed for technical reasons.
+  // The `rebind` struct specifies how to cast an allocator to a different value
+  // type. Since `default_init_allocator` has two template arguments, we need to
+  // make explicit here how to do this.
   template <typename U>
   struct rebind {
     using other =
