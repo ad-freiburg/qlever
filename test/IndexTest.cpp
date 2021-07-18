@@ -401,7 +401,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     Pattern p;
     p.push_back(3);
     p.push_back(6);
-    std::pair<Id*, size_t> ip = index._patterns[0];
+    const auto& ip = index._patterns[0];
     for (size_t i = 0; i < ip.second; i++) {
       ASSERT_EQ(p[i], ip.first[i]);
     }
@@ -424,7 +424,7 @@ TEST_F(CreatePatternsFixture, createPatterns) {
     Pattern p;
     p.push_back(3);
     p.push_back(6);
-    std::pair<Id*, size_t> ip = index._patterns[0];
+    const auto& ip = index._patterns[0];
     for (size_t i = 0; i < ip.second; i++) {
       ASSERT_EQ(p[i], ip.first[i]);
     }
