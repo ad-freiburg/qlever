@@ -51,7 +51,7 @@ void Vocabulary<S, C>::readFromFile(const string& fileName,
 
     auto push = [this](CompressedString&& s) {
       _words.push_back(std::move(s));
-      if (_words.size() % 1000000 == 0) {
+      if (_words.size() % 50'000'000 == 0) {
         LOG(INFO) << "Read " << _words.size() << " words." << std::endl;
       }
       return std::move(s);
