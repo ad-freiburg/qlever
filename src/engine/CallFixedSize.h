@@ -29,6 +29,16 @@
     func<4>(__VA_ARGS__);               \
   } else if (i == 5) {                  \
     func<5>(__VA_ARGS__);               \
+  } else if (i == 6) {                  \
+    func<6>(__VA_ARGS__);               \
+  } else if (i == 7) {                  \
+    func<7>(__VA_ARGS__);               \
+  } else if (i == 8) {                  \
+    func<8>(__VA_ARGS__);               \
+  } else if (i == 9) {                  \
+    func<9>(__VA_ARGS__);               \
+  } else if (i == 10) {                 \
+    func<10>(__VA_ARGS__);              \
   } else {                              \
     func<0>(__VA_ARGS__);               \
   }
