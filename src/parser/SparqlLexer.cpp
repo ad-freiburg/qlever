@@ -21,18 +21,18 @@ const std::string PN_CHARS_BASE =
     "[\\x{200C}-\\x{200D}]|[\\x{2070}-\\x{218F}]|[\\x{2C00}-\\x{2FEF}]|"
     "[\\x{3001}-\\x{D7FF}]|[\\x{F900}-\\x{FDCF}]|[\\x{FDF0}-\\x{FFFD}]|"
     "[\\x{10000}-\\x{EFFFF}]";
-const std::string SparqlLexer::WS = R"((\x20|\x09|\x0D|\x0A))";
-const std::string SparqlLexer::ECHAR = R"(\\[tbnrf\\"'])";
-const std::string SparqlLexer::INTEGER = "(-?[0-9]+)";
-const std::string SparqlLexer::FLOAT = "(-?[0-9]+\\.[0-9]+)";
+const std::stringWS = R"((\x20|\x09|\x0D|\x0A))";
+const std::string ECHAR = R"(\\[tbnrf\\"'])";
+const std::string INTEGER = "(-?[0-9]+)";
+const std::string FLOAT = "(-?[0-9]+\\.[0-9]+)";
 
-const std::string SparqlLexer::PN_CHARS_U = PN_CHARS_BASE + "|_";
-const std::string SparqlLexer::PN_CHARS =
+const std::string PN_CHARS_U = PN_CHARS_BASE + "|_";
+const std::string PN_CHARS =
     PN_CHARS_U +
     "|-|[0-9]|\\x{00B7}|[\\x{0300}-\\x{036F}]|[\\x{203F}-\\x{2040}]";
-const std::string SparqlLexer::PN_PREFIX =
+const std::string PN_PREFIX =
     "(" + PN_CHARS_BASE + ")((" + PN_CHARS + "|\\.)*(" + PN_CHARS + "))?";
-const std::string SparqlLexer::PLX =
+const std::string PLX =
     "(%[0-9a-fA-F][0-9a-fA-F])|(\\\\(_|~|\\.|-|!|$|&|'|\\(|\\)|\\*|\\+|,|;|=|/"
     "|\\?|#|@|%))";
 const std::string PN_LOCAL = "(" + PN_CHARS_U + "|:|[0-9]|" + PLX + ")((" +
