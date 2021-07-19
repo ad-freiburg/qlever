@@ -4824,7 +4824,7 @@ std::char_traits<char>::int_type get_character()
 {
 auto res = sb->sbumpc();
 // set eof manually, as we don't use the istream interface.
-if (JSON_HEDLEY_UNLIKELY(res == EOF))
+if (JSON_HEDLEY_UNLIKELY(res == std::char_traits<char>::eof()))
 {
 is->clear(is->rdstate() | std::ios::eofbit);
 }
