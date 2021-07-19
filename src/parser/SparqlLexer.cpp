@@ -126,6 +126,8 @@ void SparqlLexer::readNext() {
                                              raw.end()};
           raw = RdfEscaping::normalizeRDFLiteral(quoted) + langtagOrDatatype;
         }
+        break;  // we check the regexes in an order that ensures that stopping
+                // at the first match is indeed correct.
       }
     }
     if (!regexMatched) {
