@@ -21,7 +21,7 @@ const std::string PN_CHARS_BASE =
     "[\\x{200C}-\\x{200D}]|[\\x{2070}-\\x{218F}]|[\\x{2C00}-\\x{2FEF}]|"
     "[\\x{3001}-\\x{D7FF}]|[\\x{F900}-\\x{FDCF}]|[\\x{FDF0}-\\x{FFFD}]|"
     "[\\x{10000}-\\x{EFFFF}]";
-const std::stringWS = R"((\x20|\x09|\x0D|\x0A))";
+const std::string WS = R"((\x20|\x09|\x0D|\x0A))";
 const std::string ECHAR = R"(\\[tbnrf\\"'])";
 const std::string INTEGER = "(-?[0-9]+)";
 const std::string FLOAT = "(-?[0-9]+\\.[0-9]+)";
