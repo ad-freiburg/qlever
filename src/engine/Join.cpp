@@ -99,7 +99,6 @@ void Join::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> leftRes = _left->getResult();
   runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
 
-
   // TODO<joka921> Currently the _resultTypes are set incorrectly in case
   // of early stopping. For now, early stopping is thus disabled.
   // TODO: Implement getting the result types without calculating the result;
