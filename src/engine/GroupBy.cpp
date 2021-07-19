@@ -309,6 +309,9 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   {
     result.emplace_back();
     size_t resIdx = result.size() - 1;
+    for (size_t i = 0; i < groupByCols.size(); ++i) {
+      result(resIdx, i) = input(blockStart, groupByCols[i]);
+    }
     for (const GroupBy::Aggregate& a : aggregates) {
       processGroup(a, &evaluationInput, blockStart, blockEnd, input, &result,
                    resIdx, a._outCol, inTable, outTable,
