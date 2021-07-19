@@ -7,6 +7,7 @@
 #ifndef QLEVER_RANDOM_H
 #define QLEVER_RANDOM_H
 
+#include <cstring>
 #include <future>
 #include <random>
 #include <type_traits>
@@ -29,8 +30,8 @@ class FastRandomIntGenerator {
   FastRandomIntGenerator() {
     // Randomly initialize the shuffleTable
     std::random_device seeder{};
-    for (size_t i = 0; i < _shuffleTable.size(); ++i) {
-      _shuffleTable[i] = seeder();
+    for (auto& el : _shuffleTable) {
+      el = seeder();
     }
   }
 
