@@ -109,12 +109,13 @@ size_t CountAvailablePredicates::getSizeEstimate() {
     // for the type of optimizations the optimizer can currently do.
     size_t num_distinct = _subtree->getSizeEstimate() /
                           _subtree->getMultiplicity(_subjectColumnIndex);
-    return num_distinct / getIndex().getHasPredicateMultiplicityPredicates();
+    return num_distinct /
+           getIndex().getPatternIndex().getHasPredicateMultiplicityPredicates();
   } else {
     // Predicates are counted for all entities. In this case the size estimate
     // should be accurate.
-    return getIndex().getHasPredicateFullSize() /
-           getIndex().getHasPredicateMultiplicityPredicates();
+    return getIndex().getPatternIndex().getHasPredicateFullSize() /
+           getIndex().getPatternIndex().getHasPredicateMultiplicityPredicates();
   }
 }
 
@@ -139,14 +140,28 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
   result->_resultTypes.push_back(ResultTable::ResultType::KB);
   result->_resultTypes.push_back(ResultTable::ResultType::VERBATIM);
 
+  auto visitor = [&](const auto& patternImpl) {
+    computeResult(result, patternImpl);
+  };
+
+  std::visit(visitor,
+             _executionContext->getIndex().getPatternIndex().getPatternData());
+
+  LOG(DEBUG) << "CountAvailablePredicates result computation done."
+             << std::endl;
+}
+
+template <typename PredicateId>
+void CountAvailablePredicates::computeResult(
+    ResultTable* result,
+    const PatternContainerImpl<PredicateId>& pattern_data) {
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
 
-  const std::vector<PatternID>& hasPattern =
-      _executionContext->getIndex().getHasPattern();
-  const CompactStringVector<Id, Id>& hasPredicate =
-      _executionContext->getIndex().getHasPredicate();
-  const CompactStringVector<size_t, Id>& patterns =
-      _executionContext->getIndex().getPatterns();
+  const auto& hasPattern = pattern_data.hasPattern();
+  const auto& hasPredicate = pattern_data.hasPredicate();
+  const auto& patterns = pattern_data.patterns();
+  const auto& predicateGlobalIds =
+      _executionContext->getIndex().getPatternIndex().getPredicateGlobalIds();
 
   if (_subjectEntityName) {
     size_t entityId;
@@ -158,12 +173,12 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
       int width = input.cols();
       CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
                         input, &result->_data, hasPattern, hasPredicate,
-                        patterns, 0, &runtimeInfo);
+                        patterns, predicateGlobalIds, 0, &runtimeInfo);
     }
   } else if (_subtree == nullptr) {
     // Compute the predicates for all entities
     CountAvailablePredicates::computePatternTrickAllEntities(
-        &result->_data, hasPattern, hasPredicate, patterns);
+        &result->_data, hasPattern, hasPredicate, patterns, predicateGlobalIds);
   } else {
     std::shared_ptr<const ResultTable> subresult = _subtree->getResult();
     runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
@@ -173,17 +188,19 @@ void CountAvailablePredicates::computeResult(ResultTable* result) {
     int width = subresult->_data.cols();
     CALL_FIXED_SIZE_1(width, CountAvailablePredicates::computePatternTrick,
                       subresult->_data, &result->_data, hasPattern,
-                      hasPredicate, patterns, _subjectColumnIndex,
-                      &runtimeInfo);
+                      hasPredicate, patterns, predicateGlobalIds,
+                      _subjectColumnIndex, &runtimeInfo);
   }
   LOG(DEBUG) << "CountAvailablePredicates result computation done."
              << std::endl;
 }
 
+template <typename PredicateId>
 void CountAvailablePredicates::computePatternTrickAllEntities(
     IdTable* dynResult, const vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasPredicate,
-    const CompactStringVector<size_t, Id>& patterns) {
+    const CompactStringVector<Id, PredicateId>& hasPredicate,
+    const CompactStringVector<size_t, PredicateId>& patterns,
+    const std::vector<Id>& predicateGlobalIds) {
   IdTableStatic<2> result = dynResult->moveToStatic<2>();
   LOG(DEBUG) << "For all entities." << std::endl;
   ad_utility::HashMap<Id, size_t> predicateCounts;
@@ -194,17 +211,11 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
     if (i < hasPattern.size() && hasPattern[i] != NO_PATTERN) {
       patternCounts[hasPattern[i]]++;
     } else if (i < hasPredicate.size()) {
-      size_t numPredicates;
-      const Id* predicateData;
-      std::tie(predicateData, numPredicates) = hasPredicate[i];
+      const auto& [predicateData, numPredicates] = hasPredicate[i];
       if (numPredicates > 0) {
-        for (size_t i = 0; i < numPredicates; i++) {
-          auto it = predicateCounts.find(predicateData[i]);
-          if (it == predicateCounts.end()) {
-            predicateCounts[predicateData[i]] = 1;
-          } else {
-            it->second++;
-          }
+        for (size_t j = 0; j < numPredicates; j++) {
+          Id predicate = predicateGlobalIds[predicateData[j]];
+          predicateCounts[predicate]++;
         }
       }
     }
@@ -215,7 +226,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   for (const auto& it : patternCounts) {
     const auto& pattern = patterns[it.first];
     for (size_t i = 0; i < pattern.second; i++) {
-      predicateCounts[pattern.first[i]] += it.second;
+      predicateCounts[predicateGlobalIds[pattern.first[i]]] += it.second;
     }
   }
   result.reserve(predicateCounts.size());
@@ -225,12 +236,13 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   *dynResult = result.moveToDynamic();
 }
 
-template <int WIDTH>
+template <int WIDTH, typename PredicateId>
 void CountAvailablePredicates::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,
     const vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, Id>& hasPredicate,
-    const CompactStringVector<size_t, Id>& patterns, const size_t subjectColumn,
+    const CompactStringVector<Id, PredicateId>& hasPredicate,
+    const CompactStringVector<size_t, PredicateId>& patterns,
+    const std::vector<Id>& predicateGlobalIds, const size_t subjectColumn,
     RuntimeInformation* runtimeInfo) {
   const IdTableView<WIDTH> input = dynInput.asStaticView<WIDTH>();
   IdTableStatic<2> result = dynResult->moveToStatic<2>();
@@ -261,13 +273,12 @@ void CountAvailablePredicates::computePatternTrick(
       numEntitiesWithPatterns++;
     } else if (subject < hasPredicate.size()) {
       // The subject does not match a pattern
-      size_t numPredicates;
-      const Id* predicateData;
-      std::tie(predicateData, numPredicates) = hasPredicate[subject];
+      const auto& [predicateData, numPredicates] = hasPredicate[subject];
       numListPredicates += numPredicates;
       if (numPredicates > 0) {
         for (size_t i = 0; i < numPredicates; i++) {
-          predicateCounts[predicateData[i]]++;
+          Id predicate = predicateGlobalIds[predicateData[i]];
+          predicateCounts[predicate]++;
         }
       } else {
         LOG(TRACE) << "No pattern or has-relation entry found for entity "
@@ -290,7 +301,7 @@ void CountAvailablePredicates::computePatternTrick(
     const auto& pattern = patterns[it.first];
     numPatternPredicates += pattern.second;
     for (size_t i = 0; i < pattern.second; i++) {
-      predicateCounts[pattern.first[i]] += it.second;
+      predicateCounts[predicateGlobalIds[pattern.first[i]]] += it.second;
       numPredicatesSubsumedInPatterns += it.second;
     }
   }
