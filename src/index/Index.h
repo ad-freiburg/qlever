@@ -31,6 +31,7 @@
 #include "./StxxlSortFunctors.h"
 #include "./TextMetaData.h"
 #include "./Vocabulary.h"
+#include "./VocabularyData.h"
 
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
@@ -42,22 +43,6 @@ using std::tuple;
 using std::vector;
 
 using json = nlohmann::json;
-
-// a simple struct for better naming
-struct VocabularyData {
-  using TripleVec = stxxl::vector<array<Id, 3>>;
-  // The total number of distinct words in the complete Vocabulary
-  size_t nofWords;
-  // Id lower and upper bound of @lang@<predicate> predicates
-  Id langPredLowerBound;
-  Id langPredUpperBound;
-  // The number of triples in the idTriples vec that each partial vocabulary is
-  // responsible for (depends on the number of additional language filter
-  // triples)
-  std::vector<size_t> actualPartialSizes;
-  // All the triples as Ids.
-  std::unique_ptr<TripleVec> idTriples;
-};
 
 /**
  * Used as a Template Argument to the createFromFile method, when we do not yet
