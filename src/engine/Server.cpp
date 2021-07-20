@@ -423,7 +423,8 @@ string Server::composeResponseSepValues(const ParsedQuery& query,
   if (query._offset.size() > 0) {
     offset = static_cast<size_t>(atol(query._offset.c_str()));
   }
-  qet.writeResultToStream(os, query._selectClause._selectedVariables, limit, offset, sep);
+  qet.writeResultToStream(os, query._selectClause._selectedVariables, limit,
+                          offset, sep);
 
   return os.str();
 }

@@ -61,8 +61,10 @@ string ParsedQuery::asString() const {
   os << "\nTEXTLIMIT: "
      << (_textLimit.size() > 0 ? _textLimit : "no limit specified");
   os << "\nOFFSET: " << (_offset.size() > 0 ? _offset : "no offset specified");
-  os << "\nDISTINCT modifier is " << (_selectClause._distinct ? "" : "not ") << "present.";
-  os << "\nREDUCED modifier is " << (_selectClause._reduced ? "" : "not ") << "present.";
+  os << "\nDISTINCT modifier is " << (_selectClause._distinct ? "" : "not ")
+     << "present.";
+  os << "\nREDUCED modifier is " << (_selectClause._reduced ? "" : "not ")
+     << "present.";
   os << "\nORDER BY: ";
   if (_orderBy.size() == 0) {
     os << "not specified";
