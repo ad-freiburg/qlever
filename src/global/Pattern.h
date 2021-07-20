@@ -79,7 +79,7 @@ struct Pattern {
 
   size_t size() const { return _data.size(); }
 
-  void push_back(const Id i) { _data.push_back(i); }
+  void push_back(const value_type i) { _data.push_back(i); }
 
   void clear() { _data.clear(); }
 
@@ -87,7 +87,7 @@ struct Pattern {
   ref back() { return _data.back(); }
   bool empty() { return _data.empty(); }
 
-  std::vector<Id> _data;
+  std::vector<value_type> _data;
 };
 
 // The type of the index used to access the data, and the type of the data
@@ -148,12 +148,12 @@ class CompactStringVector {
                 sizeof(IndexT));
   }
 
-  void load(ad_utility::File& file, off_t offset = 0) {
-    file.read(&_size, sizeof(size_t), offset);
-    file.read(&_dataSize, sizeof(size_t), offset + sizeof(size_t));
+  void load(ad_utility::File* file) {
+    file->readOrThrow(&_size, sizeof(size_t));
+    file->readOrThrow(&_dataSize, sizeof(size_t));
     _indexEnd = (_size + 1) * sizeof(IndexT);
     _data.reset(new uint8_t[_dataSize]);
-    file.read(data(), _dataSize, offset + 2 * sizeof(size_t));
+    file->readOrThrow(data(), _dataSize);
   }
 
   // This is a move-only type
