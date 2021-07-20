@@ -30,21 +30,28 @@ set(CMAKE_CXX_FLAGS_ASAN
 
 # Add colored output for Ninja
 if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
-  if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-     add_compile_options (-fdiagnostics-color=always)
-  elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-     add_compile_options (-fcolor-diagnostics)
-  endif ()
-endif()
+    if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        add_compile_options(-fdiagnostics-color=always)
+    elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+        add_compile_options(-fcolor-diagnostics)
+    endif ()
+endif ()
 
 ###############################################################################
 ##### Essential settings #####
 ###############################################################################
 
+###############################
+# ANTLR CPP RUNTIME FOR THE SPARQL PARSER
+###############################
+add_subdirectory(third_party/antlr4/runtime/Cpp EXCLUDE_FROM_ALL)
+target_compile_options(antlr4_static PUBLIC -Wno-attributes -Wno-implicit-fallthrough)
+include_directories(third_party/antlr4/runtime/Cpp/runtime/src)
+
 ################################
 # Threading
 ################################
-find_package (Threads REQUIRED)
+find_package(Threads REQUIRED)
 
 #################################
 # ICU (for proper collation
@@ -81,7 +88,7 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 ################################
 # GTEST
 ################################
-add_subdirectory(third_party/googletest/googletest)
+add_subdirectory(third_party/googletest/googletest EXCLUDE_FROM_ALL)
 include_directories(third_party/googletest/googletest/include)
 
 ################################
@@ -100,7 +107,7 @@ include_directories(third_party/ctre/include)
 # ABSEIL
 ################################
 set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
-add_subdirectory(third_party/abseil-cpp)
+add_subdirectory(third_party/abseil-cpp EXCLUDE_FROM_ALL)
 include_directories(third_party/abseil-cpp/)
 
 if (USE_PARALLEL)
@@ -124,7 +131,7 @@ endif()
 set(USE_GNU_PARALLEL OFF CACHE BOOL "Don't use gnu parallel" FORCE)
 set(USE_OPENMP OFF CACHE BOOL "Don't use OPENMP as default" FORCE)
 
-add_subdirectory(third_party/stxxl)
+add_subdirectory(third_party/stxxl EXCLUDE_FROM_ALL)
 
 # apply STXXL CXXFLAGS
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
@@ -140,7 +147,7 @@ set(LOCAL_CXX_BACKUP_FLAGS "${CMAKE_CXX_FLAGS}")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
 
 set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
-add_subdirectory(third_party/re2)
+add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
 include_directories(SYSTEM third_party/re2)
 
 # reinstate original flags including all warnings
