@@ -22,7 +22,6 @@ enum class ResultType {
   // An entry in the ResultTable's _localVocab
   LOCAL_VOCAB
 };
-}
+}  // namespace qlever
 
 #endif  // QLEVER_RESULTTYPE_H
-

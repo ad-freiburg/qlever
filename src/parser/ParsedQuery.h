@@ -397,8 +397,7 @@ struct GraphPatternOperation {
     struct Constant {
       int64_t _intValue = 0;  // the Value of an integer constant (VERBATIM)
       string _kbValue;  // the value of a knowledge base entity or literal (KB)
-      qlever::ResultType
-          _type;  // the type, currently always KB or VERBATIM
+      qlever::ResultType _type;  // the type, currently always KB or VERBATIM
 
       Constant() = default;
 
