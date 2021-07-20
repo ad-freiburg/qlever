@@ -34,6 +34,6 @@ add_library(engine
         IdTable.h
         ../util/Random.h
         Minus.h Minus.cpp
-        )
+        ResultType.h)
 
 target_link_libraries(engine index parser SortPerformanceEstimator absl::flat_hash_set)
