@@ -609,14 +609,12 @@ class TripleComponentComparator {
              std::numeric_limits<unsigned char>::max())
     if (transformed.transformedVal.get().empty()) {
       transformed.firstOriginalChar += 1;
-      // transformed.transformedVal.get().push_back('\1');
     } else {
       unsigned char last = transformed.transformedVal.get().back();
       if (last < std::numeric_limits<unsigned char>::max()) {
         transformed.transformedVal.get().back() += 1;
       } else {
-        // transformed.transformedVal.get().push_back('\1');
-        transformed.firstOriginalChar += 1;
+        transformed.transformedVal.get().push_back('\1');
       }
     }
     return transformed;
