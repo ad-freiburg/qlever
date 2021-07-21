@@ -237,10 +237,13 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
 template <typename T>
 class MergeableHashmap : public ad_utility::HashMap<T, size_t> {
  public:
+  static ad_utility::Timer timer;
   MergeableHashmap& operator%=(const MergeableHashmap& rhs) {
+    timer.cont();
     for (const auto& [key, value] : rhs) {
       (*this)[key] += value;
     }
+    timer.stop();
     return *this;
   }
 };
@@ -314,6 +317,9 @@ void CountAvailablePredicates::computePatternTrick(
       }
     }
   }
+
+  LOG(DEBUG) << "Time spent in merging predicate HashMaps: " << predicateCounts.timer.usecs() << "usecs\n";
+  LOG(DEBUG) << "Time spent in merging pattern HashMaps: " << patternCounts.timer.usecs() << "usecs\n";
   LOG(DEBUG) << "Using " << patternCounts.size()
              << " patterns for computing the result." << std::endl;
   // the number of predicates counted with patterns
@@ -345,6 +351,7 @@ void CountAvailablePredicates::computePatternTrick(
     }
   }
   LOG(DEBUG) << "Finished converting patterns" << std::endl;
+  LOG(DEBUG) << "Time spent in merging HashMaps: " << predicateCounts.timer.usecs() << "usecs\n";
   // write the predicate counts to the result
   result.reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
