@@ -3,6 +3,7 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 
 #include "./CountAvailablePredicates.h"
+#include <immintrin.h>
 
 #include "./CallFixedSize.h"
 
@@ -296,6 +297,7 @@ void CountAvailablePredicates::computePatternTrick(
     for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
       // Skip over elements with the same subject (don't count them twice)
       Id subject = input(inputIdx, subjectColumn);
+      _mm_prefetch(&(hasPattern[subject + 10]), _MM_HINT_NTA);
       if (inputIdx > 0 && subject == input(inputIdx - 1, subjectColumn)) {
         continue;
       }
