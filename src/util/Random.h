@@ -8,7 +8,6 @@
 #define QLEVER_RANDOM_H
 
 #include <cstring>
-#include <future>
 #include <random>
 #include <type_traits>
 #include <vector>
