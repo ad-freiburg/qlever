@@ -495,6 +495,21 @@ template void FTSAlgorithms::aggScoresAndTakeTopContext<4>(
 template void FTSAlgorithms::aggScoresAndTakeTopContext<5>(
     const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
     IdTable* dynResult);
+template void FTSAlgorithms::aggScoresAndTakeTopContext<6>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    IdTable* dynResult);
+template void FTSAlgorithms::aggScoresAndTakeTopContext<7>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    IdTable* dynResult);
+template void FTSAlgorithms::aggScoresAndTakeTopContext<8>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    IdTable* dynResult);
+template void FTSAlgorithms::aggScoresAndTakeTopContext<9>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    IdTable* dynResult);
+template void FTSAlgorithms::aggScoresAndTakeTopContext<10>(
+    const vector<Id>& cids, const vector<Id>& eids, const vector<Score>& scores,
+    IdTable* dynResult);
 
 // _____________________________________________________________________________
 template <int WIDTH>

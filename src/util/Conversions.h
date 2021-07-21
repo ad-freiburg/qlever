@@ -428,7 +428,11 @@ float convertIndexWordToFloat(const string& indexWord) {
     ;
   double absMantissa = 0;
   try {
-    absMantissa = stod(mantissa.substr(mStart, mStop - mStart + 1));
+    auto mantissaSubstr = mantissa.substr(mStart, mStop - mStart + 1);
+    // empty mantissa means "0.0"
+    if (!mantissaSubstr.empty()) {
+      absMantissa = stod(mantissa.substr(mStart, mStop - mStart + 1));
+    }
   } catch (const std::exception& e) {
     string substr = mantissa.substr(mStart, mStop - mStart + 1);
     throw std::runtime_error(

@@ -195,7 +195,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
       patternCounts[hasPattern[i]]++;
     } else if (i < hasPredicate.size()) {
       size_t numPredicates;
-      Id* predicateData;
+      const Id* predicateData;
       std::tie(predicateData, numPredicates) = hasPredicate[i];
       if (numPredicates > 0) {
         for (size_t i = 0; i < numPredicates; i++) {
@@ -213,7 +213,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
   LOG(DEBUG) << "Using " << patternCounts.size()
              << " patterns for computing the result." << std::endl;
   for (const auto& it : patternCounts) {
-    std::pair<Id*, size_t> pattern = patterns[it.first];
+    const auto& pattern = patterns[it.first];
     for (size_t i = 0; i < pattern.second; i++) {
       predicateCounts[pattern.first[i]] += it.second;
     }
@@ -237,7 +237,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
 template <typename T>
 class MergeableHashmap : public ad_utility::HashMap<T, size_t> {
  public:
-  static ad_utility::Timer timer;
+  inline static ad_utility::Timer timer;
   MergeableHashmap& operator%=(const MergeableHashmap& rhs) {
     timer.cont();
     for (const auto& [key, value] : rhs) {
@@ -298,7 +298,7 @@ void CountAvailablePredicates::computePatternTrick(
       } else if (subject < hasPredicate.size()) {
         // The subject does not match a pattern
         size_t numPredicates;
-        Id* predicateData;
+        const Id* predicateData;
         std::tie(predicateData, numPredicates) = hasPredicate[subject];
         numListPredicates += numPredicates;
         if (numPredicates > 0) {
@@ -342,7 +342,7 @@ void CountAvailablePredicates::computePatternTrick(
 #pragma omp taskloop grainsize(100000) default(none) reduction(MergeHashmapsId:predicateCounts) reduction(+ : numPredicatesSubsumedInPatterns) \
                                        reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared( patternVec, patterns)
     for (auto it = patternVec.begin(); it != patternVec.end(); ++it) {
-      std::pair<Id*, size_t> pattern = patterns[it->first];
+      const auto& pattern = patterns[it->first];
       numPatternPredicates += pattern.second;
       for (size_t i = 0; i < pattern.second; i++) {
         predicateCounts[pattern.first[i]] += it->second;

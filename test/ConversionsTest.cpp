@@ -368,6 +368,13 @@ TEST(ConversionsTest, convertNumericToIndexWordEndToEnd) {
   //                "\"123\"^^<http://www.w3.org/2001/XMLSchema#int>");
 }
 
+TEST(ConversionsTest, BugDiscoveredByHannah) {
+  ASSERT_FLOAT_EQ(
+      convertIndexWordToFloat(
+          ":v:float:PM99999999999999999998E000000000000000000000000000000F"),
+      0.0);
+}
+
 int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
