@@ -577,6 +577,7 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
     }
   }
   pattern_data.hasPredicate().build(hasPredicateTmp);
+  return pattern_data;
 }
 
 // _____________________________________________________________________________
