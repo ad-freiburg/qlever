@@ -292,7 +292,7 @@ void CountAvailablePredicates::computePatternTrick(
 #pragma omp parallel
 #pragma omp single
 #pragma omp taskloop grainsize(500000) default(none) reduction(MergeHashmapsId:predicateCounts) reduction(MergeHashmapsSizeT : patternCounts) \
-                                       reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared(input, subjectColumn, hasPattern, hasPredicate)
+                                       reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared(input, subjectColumn, hasPattern, hasPredicate, predicateGlobalIds)
     for (size_t inputIdx = 0; inputIdx < input.size(); ++inputIdx) {
       // Skip over elements with the same subject (don't count them twice)
       Id subject = input(inputIdx, subjectColumn);
@@ -345,7 +345,7 @@ void CountAvailablePredicates::computePatternTrick(
 #pragma omp parallel
 #pragma omp single
 #pragma omp taskloop grainsize(100000) default(none) reduction(MergeHashmapsId:predicateCounts) reduction(+ : numPredicatesSubsumedInPatterns) \
-                                       reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared( patternVec, patterns)
+                                       reduction(+ : numEntitiesWithPatterns) reduction(+: numPatternPredicates) reduction(+: numListPredicates) shared( patternVec, patterns, predicateGlobalIds)
     for (auto it = patternVec.begin(); it != patternVec.end(); ++it) {
       const auto& pattern = patterns[it->first];
       numPatternPredicates += pattern.second;
