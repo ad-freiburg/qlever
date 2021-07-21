@@ -285,14 +285,16 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
       pattern.clear();
     }
 
+    if (triple[1] >= langPredLowerBound && triple[1] < langPredUpperBound) {
+      continue;
+    }
+
     AD_CHECK(_predicate_global_to_local_ids.contains(triple[1]));
     auto localId = _predicate_global_to_local_ids[triple[1]];
     // don't list predicates twice
     if (pattern.empty() || pattern.back() != localId) {
       // Ignore @..@ type language predicates
-      if (triple[1] < langPredLowerBound || triple[1] >= langPredUpperBound) {
-        pattern.push_back(localId);
-      }
+      pattern.push_back(localId);
     }
   }
   // process the last entry
@@ -408,14 +410,15 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
       pattern.clear();
       currentSubj = triple[0];
     }
+    // Ignore @..@ type language predicates
+    if (triple[1] >= langPredLowerBound && triple[1] < langPredUpperBound) {
+      continue;
+    }
     // don't list predicates twice
     AD_CHECK(_predicate_global_to_local_ids.contains(triple[1]));
     auto localId = _predicate_global_to_local_ids[triple[1]];
     if (pattern.empty() || pattern.back() != localId) {
-      // Ignore @..@ type language predicates
-      if (triple[1] < langPredLowerBound || triple[1] >= langPredUpperBound) {
-        pattern.push_back(localId);
-      }
+      pattern.push_back(localId);
     }
   }
   // process the last element
