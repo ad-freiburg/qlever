@@ -25,6 +25,7 @@ static const PatternID NO_PATTERN = std::numeric_limits<PatternID>::max();
  *        that a set of entities has (e.g. for autocompletion of relations
  *        while writing a query).
  */
+// TODO<joka921> Why is this not purely a std::vector??
 template <typename PredicateId>
 struct Pattern {
   using value_type = PredicateId;
@@ -87,6 +88,12 @@ struct Pattern {
   const_ref back() const { return _data.back(); }
   ref back() { return _data.back(); }
   bool empty() { return _data.empty(); }
+
+  auto begin() { return _data.begin(); }
+  auto begin() const { return _data.begin(); }
+
+  auto end() { return _data.end(); }
+  auto end() const { return _data.end(); }
 
   std::vector<value_type> _data;
 };

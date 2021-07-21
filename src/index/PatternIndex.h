@@ -80,16 +80,9 @@ class PatternIndex {
    *             using args.
    */
   template <typename PatternId, typename VecReaderType, typename... Args>
-  void createPatternsImpl(
-      const string& fileName,
-      std::shared_ptr<PatternContainerImpl<PatternId>> pattern_data,
-      const std::vector<Id>& predicate_global_id,
-      const ad_utility::HashMap<Id, size_t>& predicate_local_id,
-      double& fullHasPredicateMultiplicityEntities,
-      double& fullHasPredicateMultiplicityPredicates,
-      size_t& fullHasPredicateSize, const size_t maxNumPatterns,
-      const Id langPredLowerBound, const Id langPredUpperBound,
-      Args&... vecReaderArgs);
+  PatternContainerImpl<PatternId> createPatternsImpl(
+      const string& fileName, const Id langPredLowerBound,
+      const Id langPredUpperBound, Args&... vecReaderArgs);
 
   void throwExceptionIfNotInitialized() const;
 
