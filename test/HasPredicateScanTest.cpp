@@ -84,9 +84,11 @@ TEST(HasPredicateScan, freeS) {
   CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
   CompactStringVector<size_t, Id> patterns(patternsSrc);
 
+  std::vector<Id> globalIds{0, 1, 2, 3, 4};
+
   // Find all entities that are in a triple with predicate 3
   HasPredicateScan::computeFreeS(&resultTable, 3, hasPattern, hasRelation,
-                                 patterns);
+                                 patterns, globalIds);
   IdTable& result = resultTable._data;
 
   // the result set does not guarantee any sorting so we have to sort manually
@@ -123,10 +125,11 @@ TEST(HasPredicateScan, freeO) {
   // of memory.
   CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
   CompactStringVector<size_t, Id> patterns(patternsSrc);
+  std::vector<Id> globalIds{0, 1, 2, 3, 4};
 
   // Find all predicates for entity 3 (pattern 1)
   HasPredicateScan::computeFreeO(&resultTable, 3, hasPattern, hasRelation,
-                                 patterns);
+                                 patterns, globalIds);
   IdTable& result = resultTable._data;
 
   ASSERT_EQ(5u, result.size());
@@ -140,7 +143,7 @@ TEST(HasPredicateScan, freeO) {
 
   // Find all predicates for entity 6 (has-relation entry 6)
   HasPredicateScan::computeFreeO(&resultTable, 6, hasPattern, hasRelation,
-                                 patterns);
+                                 patterns, globalIds);
 
   ASSERT_EQ(2u, result.size());
   ASSERT_EQ(3u, result[0][0]);
@@ -164,10 +167,11 @@ TEST(HasPredicateScan, fullScan) {
   // of memory.
   CompactStringVector<Id, Id> hasRelation(hasRelationSrc);
   CompactStringVector<size_t, Id> patterns(patternsSrc);
+  std::vector<Id> globalIds{0, 1, 2, 3, 4};
 
   // Query for all relations
   HasPredicateScan::computeFullScan(&resultTable, hasPattern, hasRelation,
-                                    patterns, 16);
+                                    patterns, globalIds, 16);
   IdTable& result = resultTable._data;
 
   ASSERT_EQ(16u, result.size());
@@ -222,6 +226,7 @@ TEST(HasPredicateScan, subtreeS) {
                                        {0, 3}, {3, 4}, {2, 4}, {3}};
   // Maps pattern ids to patterns
   vector<vector<Id>> patternsSrc = {{0, 2, 3}, {1, 3, 4, 2, 0}};
+  std::vector<Id> globalIds{0, 1, 2, 3, 4};
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
@@ -248,7 +253,7 @@ TEST(HasPredicateScan, subtreeS) {
   int out_width = 3;
   CALL_FIXED_SIZE_2(in_width, out_width, HasPredicateScan::computeSubqueryS,
                     &resultTable._data, subresult->_data, 1, hasPattern,
-                    hasRelation, patterns);
+                    hasRelation, patterns, globalIds);
 
   IdTable& result = resultTable._data;
 
@@ -311,6 +316,7 @@ TEST(CountAvailablePredicates, patternTrickTest) {
                                        {0, 3}, {3, 4}, {2, 4}, {3}};
   // Maps pattern ids to patterns
   vector<vector<Id>> patternsSrc = {{0, 2, 3}, {1, 3, 4, 2, 0}};
+  std::vector<Id> globalIds{0, 1, 2, 3, 4};
 
   // These are used to store the relations and patterns in contiguous blocks
   // of memory.
@@ -321,7 +327,7 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   try {
     CALL_FIXED_SIZE_1(
         input.cols(), CountAvailablePredicates::computePatternTrick, input,
-        &result, hasPattern, hasRelation, patterns, 0, &runtimeInfo);
+        &result, hasPattern, hasRelation, patterns, globalIds, 0, &runtimeInfo);
   } catch (const std::runtime_error& e) {
     // More verbose output in the case of an exception occuring.
     std::cout << e.what() << std::endl;
@@ -366,8 +372,9 @@ TEST(CountAvailablePredicates, patternTrickTest) {
   // Test the pattern trick for all entities
   result.clear();
   try {
+    std::vector<Id> globalIds{0, 1, 2, 3, 4};
     CountAvailablePredicates::computePatternTrickAllEntities(
-        &result, hasPattern, hasRelation, patterns);
+        &result, hasPattern, hasRelation, patterns, globalIds);
   } catch (const std::runtime_error& e) {
     // More verbose output in the case of an exception occuring.
     std::cout << e.what() << std::endl;

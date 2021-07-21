@@ -37,11 +37,11 @@ class MetaDataIterator {
             _buffer[_buffer_offset][1]};
   }
 
-  bool empty() { return _iterator == meta_.data().end(); }
+  bool empty() const { return _iterator == meta_.data().cend(); }
 
  private:
   void scanCurrentPos() {
-    const FullRelationMetaData& rmd = _iterator->second.get();
+    const FullRelationMetaData& rmd = _iterator->second;
     _buffer.resize(rmd.getNofElements());
     _file.read(_buffer.data(), rmd.getNofElements() * 2 * sizeof(Id),
                rmd._startFullIndex);

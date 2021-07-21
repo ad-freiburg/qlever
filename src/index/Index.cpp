@@ -27,12 +27,8 @@
 
 using std::array;
 
-const uint32_t Index::PATTERNS_FILE_VERSION = 0;
-
 // _____________________________________________________________________________
-Index::Index()
-    : _usePatterns(false),
-      _maxNumPatterns(std::numeric_limits<PatternID>::max() - 2) {}
+Index::Index() : _usePatterns(false) {}
 
 // _____________________________________________________________________________________________
 template <class Parser>
@@ -88,9 +84,18 @@ void Index::createFromFile(const string& filename) {
   // also perform unique for first permutation
   createPermutationPair<IndexMetaDataHmapDispatcher>(&vocabData, _PSO, _POS,
                                                      true);
+  if (_usePatterns) {
+    _patternIndex.generatePredicateLocalNamespace(&vocabData);
+  }
+
   // also create Patterns after the Spo permutation if specified
   createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _SPO, _SOP,
-                                                     false, _usePatterns);
+                                                     false);
+  if (_usePatterns) {
+    // After creating the permutation pair for SPO and SOP the vocabData will
+    // be sorted by the SPO columns.
+    _patternIndex.createPatterns(&vocabData, _onDiskBase);
+  }
   createPermutationPair<IndexMetaDataMmapDispatcher>(&vocabData, _OSP, _OPS);
 
   // if we have no compression, this will also copy the whole vocabulary.
@@ -485,14 +490,9 @@ void Index::createPermutationPair(
         p1,
     const PermutationImpl<Comparator2, typename MetaDataDispatcher::ReadType>&
         p2,
-    bool performUnique, bool createPatternsAfterFirst) {
+    bool performUnique) {
   auto metaData = createPermutations<MetaDataDispatcher>(
       &(*vocabData->idTriples), p1, p2, performUnique);
-  if (createPatternsAfterFirst) {
-    // the second permutation does not alter the original triple vector,
-    // so this does still work.
-    createPatterns(true, vocabData);
-  }
   if (metaData) {
     LOG(INFO) << "Exchanging Multiplicities for " << p1._readableName << " and "
               << p2._readableName << '\n';
@@ -530,347 +530,12 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
-  createPatternsImpl<MetaDataIterator<IndexMetaDataMmapView>,
-                     IndexMetaDataMmapView, ad_utility::File>(
-      _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
-      _fullHasPredicateMultiplicityEntities,
-      _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
-      _maxNumPatterns, langPredLowerBound, langPredUpperBound, _SPO.metaData(),
-      _SPO._file);
-}
 
-// _____________________________________________________________________________
-void Index::createPatterns(bool vecAlreadySorted, VocabularyData* vocabData) {
-  if (vecAlreadySorted) {
-    LOG(INFO) << "Vector already sorted for pattern creation." << std::endl;
-  } else {
-    LOG(INFO) << "Sorting for pattern creation..." << std::endl;
-    stxxl::sort(begin(*vocabData->idTriples), end(*vocabData->idTriples),
-                SortBySPO(), STXXL_MEMORY_TO_USE);
-    LOG(INFO) << "Sort done." << std::endl;
-  }
-  createPatternsImpl<TripleVec::bufreader_type>(
-      _onDiskBase + ".index.patterns", _hasPredicate, _hasPattern, _patterns,
-      _fullHasPredicateMultiplicityEntities,
-      _fullHasPredicateMultiplicityPredicates, _fullHasPredicateSize,
-      _maxNumPatterns, vocabData->langPredLowerBound,
-      vocabData->langPredUpperBound, *vocabData->idTriples);
-}
-
-// _____________________________________________________________________________
-template <typename VecReaderType, typename... Args>
-void Index::createPatternsImpl(const string& fileName,
-                               CompactStringVector<Id, Id>& hasPredicate,
-                               std::vector<PatternID>& hasPattern,
-                               CompactStringVector<size_t, Id>& patterns,
-                               double& fullHasPredicateMultiplicityEntities,
-                               double& fullHasPredicateMultiplicityPredicates,
-                               size_t& fullHasPredicateSize,
-                               const size_t maxNumPatterns,
-                               const Id langPredLowerBound,
-                               const Id langPredUpperBound,
-                               const Args&... vecReaderArgs) {
-  IndexMetaDataHmap meta;
-  using PatternsCountMap = ad_utility::HashMap<Pattern, size_t>;
-
-  LOG(INFO) << "Creating patterns file..." << std::endl;
-  VecReaderType reader(vecReaderArgs...);
-  if (reader.empty()) {
-    LOG(WARN) << "Triple vector was empty, no patterns created" << std::endl;
-    return;
-  }
-
-  PatternsCountMap patternCounts;
-  // determine the most common patterns
-  Pattern pattern;
-
-  size_t numValidPatterns = 0;
-  Id currentSubj = (*reader)[0];
-
-  for (; !reader.empty(); ++reader) {
-    auto triple = *reader;
-    if (triple[0] != currentSubj) {
-      currentSubj = triple[0];
-      numValidPatterns++;
-      patternCounts[pattern]++;
-      pattern.clear();
-    }
-    // don't list predicates twice
-    if (pattern.empty() || pattern.back() != triple[1]) {
-      // Ignore @..@ type language predicates
-      if (triple[1] < langPredLowerBound || triple[1] >= langPredUpperBound) {
-        pattern.push_back(triple[1]);
-      }
-    }
-  }
-  // process the last entry
-  patternCounts[pattern]++;
-  LOG(INFO) << "Counted patterns and found " << patternCounts.size()
-            << " distinct patterns." << std::endl;
-  LOG(INFO) << "Patterns were found for " << numValidPatterns << " entities."
-            << std::endl;
-
-  // stores patterns sorted by their number of occurences
-  size_t actualNumPatterns = patternCounts.size() < maxNumPatterns
-                                 ? patternCounts.size()
-                                 : maxNumPatterns;
-  LOG(INFO) << "Using " << actualNumPatterns << " of the "
-            << patternCounts.size() << " patterns that were found in the data."
-            << std::endl;
-  std::vector<std::pair<Pattern, size_t>> sortedPatterns;
-  sortedPatterns.reserve(actualNumPatterns);
-  auto comparePatternCounts =
-      [](const std::pair<Pattern, size_t>& first,
-         const std::pair<Pattern, size_t>& second) -> bool {
-    return first.second > second.second ||
-           (first.second == second.second && first.first > second.first);
-  };
-  for (auto& it : patternCounts) {
-    if (sortedPatterns.size() < maxNumPatterns) {
-      sortedPatterns.push_back(it);
-      if (sortedPatterns.size() == maxNumPatterns) {
-        LOG(DEBUG) << "Sorting patterns after initial insertions." << std::endl;
-        // actuall sort the sorted patterns
-        std::sort(sortedPatterns.begin(), sortedPatterns.end(),
-                  comparePatternCounts);
-      }
-    } else {
-      if (comparePatternCounts(it, sortedPatterns.back())) {
-        // The new element is larger than the smallest element in the vector.
-        // Insert it into the correct position in the vector using binary
-        // search.
-        sortedPatterns.pop_back();
-        auto sortedIt =
-            std::lower_bound(sortedPatterns.begin(), sortedPatterns.end(), it,
-                             comparePatternCounts);
-        sortedPatterns.insert(sortedIt, it);
-      }
-    }
-  }
-  if (sortedPatterns.size() < maxNumPatterns) {
-    LOG(DEBUG) << "Sorting patterns after all insertions." << std::endl;
-    // actuall sort the sorted patterns
-    std::sort(sortedPatterns.begin(), sortedPatterns.end(),
-              comparePatternCounts);
-  }
-
-  LOG(DEBUG) << "Number of sorted patterns: " << sortedPatterns.size()
-             << std::endl;
-
-  // store the actual patterns
-  std::vector<std::vector<Id>> buffer;
-  buffer.reserve(sortedPatterns.size());
-  for (const auto& p : sortedPatterns) {
-    buffer.push_back(p.first._data);
-  }
-  patterns.build(buffer);
-
-  std::unordered_map<Pattern, Id> patternSet;
-  patternSet.reserve(sortedPatterns.size());
-  for (size_t i = 0; i < sortedPatterns.size(); i++) {
-    patternSet.insert(std::pair<Pattern, Id>(sortedPatterns[i].first, i));
-  }
-
-  LOG(DEBUG) << "Pattern set size: " << patternSet.size() << std::endl;
-
-  // Associate entities with patterns if possible, store has-relation otherwise
-  ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPattern(
-      fileName + ".mmap.entityHasPattern.tmp");
-  ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPredicate(
-      fileName + ".mmap.entityHasPredicate.tmp");
-
-  size_t numEntitiesWithPatterns = 0;
-  size_t numEntitiesWithoutPatterns = 0;
-  size_t numInvalidEntities = 0;
-
-  // store how many entries there are in the full has-relation relation (after
-  // resolving all patterns) and how may distinct elements there are (for the
-  // multiplicity;
-  fullHasPredicateSize = 0;
-  size_t fullHasPredicateEntitiesDistinctSize = 0;
-  size_t fullHasPredicatePredicatesDistinctSize = 0;
-  // This vector stores if the pattern was already counted toward the distinct
-  // has relation predicates size.
-  std::vector<bool> haveCountedPattern(patternSet.size());
-
-  // the input triple list is in spo order, we only need a hash map for
-  // predicates
-  ad_utility::HashSet<Id> predicateHashSet;
-
-  pattern.clear();
-  currentSubj = (*VecReaderType(vecReaderArgs...))[0];
-  size_t patternIndex = 0;
-  // Create the has-relation and has-pattern predicates
-  for (VecReaderType reader2(vecReaderArgs...); !reader2.empty(); ++reader2) {
-    auto triple = *reader2;
-    if (triple[0] != currentSubj) {
-      // we have arrived at a new entity;
-      fullHasPredicateEntitiesDistinctSize++;
-      auto it = patternSet.find(pattern);
-      // increase the haspredicate size here as every predicate is only
-      // listed once per entity (otherwise it woul always be the same as
-      // vec.size()
-      fullHasPredicateSize += pattern.size();
-      if (it == patternSet.end()) {
-        numEntitiesWithoutPatterns++;
-        // The pattern does not exist, use the has-relation predicate instead
-        for (size_t i = 0; i < patternIndex; i++) {
-          if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
-            predicateHashSet.insert(pattern[i]);
-            fullHasPredicatePredicatesDistinctSize++;
-          }
-          entityHasPredicate.push_back(
-              std::array<Id, 2>{currentSubj, pattern[i]});
-        }
-      } else {
-        numEntitiesWithPatterns++;
-        // The pattern does exist, add an entry to the has-pattern predicate
-        entityHasPattern.push_back(std::array<Id, 2>{currentSubj, it->second});
-        if (!haveCountedPattern[it->second]) {
-          haveCountedPattern[it->second] = true;
-          // iterate over the pattern once to
-          for (size_t i = 0; i < patternIndex; i++) {
-            if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
-              predicateHashSet.insert(pattern[i]);
-              fullHasPredicatePredicatesDistinctSize++;
-            }
-          }
-        }
-      }
-      pattern.clear();
-      currentSubj = triple[0];
-      patternIndex = 0;
-    }
-    // don't list predicates twice
-    if (patternIndex == 0 || pattern[patternIndex - 1] != (triple[1])) {
-      // Ignore @..@ type language predicates
-      if (triple[1] < langPredLowerBound || triple[1] >= langPredUpperBound) {
-        pattern.push_back(triple[1]);
-        patternIndex++;
-      }
-    }
-  }
-  // process the last element
-  fullHasPredicateSize += pattern.size();
-  fullHasPredicateEntitiesDistinctSize++;
-  auto last = patternSet.find(pattern);
-  if (last == patternSet.end()) {
-    numEntitiesWithoutPatterns++;
-    // The pattern does not exist, use the has-relation predicate instead
-    for (size_t i = 0; i < patternIndex; i++) {
-      entityHasPredicate.push_back(std::array<Id, 2>{currentSubj, pattern[i]});
-      if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
-        predicateHashSet.insert(pattern[i]);
-        fullHasPredicatePredicatesDistinctSize++;
-      }
-    }
-  } else {
-    numEntitiesWithPatterns++;
-    // The pattern does exist, add an entry to the has-pattern predicate
-    entityHasPattern.push_back(std::array<Id, 2>{currentSubj, last->second});
-    for (size_t i = 0; i < patternIndex; i++) {
-      if (predicateHashSet.find(pattern[i]) == predicateHashSet.end()) {
-        predicateHashSet.insert(pattern[i]);
-        fullHasPredicatePredicatesDistinctSize++;
-      }
-    }
-  }
-
-  fullHasPredicateMultiplicityEntities =
-      fullHasPredicateSize /
-      static_cast<double>(fullHasPredicateEntitiesDistinctSize);
-  fullHasPredicateMultiplicityPredicates =
-      fullHasPredicateSize /
-      static_cast<double>(fullHasPredicatePredicatesDistinctSize);
-
-  LOG(DEBUG) << "Number of entity-has-pattern entries: "
-             << entityHasPattern.size() << std::endl;
-  LOG(DEBUG) << "Number of entity-has-relation entries: "
-             << entityHasPredicate.size() << std::endl;
-
-  LOG(INFO) << "Found " << patterns.size() << " distinct patterns."
-            << std::endl;
-  LOG(INFO) << numEntitiesWithPatterns
-            << " of the databases entities have been assigned a pattern."
-            << std::endl;
-  LOG(INFO) << numEntitiesWithoutPatterns
-            << " of the databases entities have not been assigned a pattern."
-            << std::endl;
-  LOG(INFO) << "Of these " << numInvalidEntities
-            << " would have to large a pattern." << std::endl;
-
-  LOG(DEBUG) << "Total number of entities: "
-             << (numEntitiesWithoutPatterns + numEntitiesWithPatterns)
-             << std::endl;
-
-  LOG(DEBUG) << "Full has relation size: " << fullHasPredicateSize << std::endl;
-  LOG(DEBUG) << "Full has relation entity multiplicity: "
-             << fullHasPredicateMultiplicityEntities << std::endl;
-  LOG(DEBUG) << "Full has relation predicate multiplicity: "
-             << fullHasPredicateMultiplicityPredicates << std::endl;
-
-  // Store all data in the file
-  ad_utility::File file(fileName, "w");
-
-  // Write a byte of ones to make it less likely that an unversioned file is
-  // read as a versioned one (unversioned files begin with the id of the lowest
-  // entity that has a pattern).
-  // Then write the version, both multiplicitires and the full size.
-  unsigned char firstByte = 255;
-  file.write(&firstByte, sizeof(char));
-  file.write(&PATTERNS_FILE_VERSION, sizeof(uint32_t));
-  file.write(&fullHasPredicateMultiplicityEntities, sizeof(double));
-  file.write(&fullHasPredicateMultiplicityPredicates, sizeof(double));
-  file.write(&fullHasPredicateSize, sizeof(size_t));
-
-  // write the entityHasPatterns vector
-  size_t numHasPatterns = entityHasPattern.size();
-  file.write(&numHasPatterns, sizeof(size_t));
-  file.write(entityHasPattern.data(), sizeof(Id) * numHasPatterns * 2);
-
-  // write the entityHasPredicate vector
-  size_t numHasPredicatess = entityHasPredicate.size();
-  file.write(&numHasPredicatess, sizeof(size_t));
-  file.write(entityHasPredicate.data(), sizeof(Id) * numHasPredicatess * 2);
-
-  // write the patterns
-  patterns.write(file);
-  file.close();
-
-  LOG(INFO) << "Done creating patterns file." << std::endl;
-
-  // create the has-relation and has-pattern lookup vectors
-  if (entityHasPattern.size() > 0) {
-    hasPattern.resize(entityHasPattern.back()[0] + 1);
-    size_t pos = 0;
-    for (size_t i = 0; i < entityHasPattern.size(); i++) {
-      while (entityHasPattern[i][0] > pos) {
-        hasPattern[pos] = NO_PATTERN;
-        pos++;
-      }
-      hasPattern[pos] = entityHasPattern[i][1];
-      pos++;
-    }
-  }
-
-  vector<vector<Id>> hasPredicateTmp;
-  if (entityHasPredicate.size() > 0) {
-    hasPredicateTmp.resize(entityHasPredicate.back()[0] + 1);
-    size_t pos = 0;
-    for (size_t i = 0; i < entityHasPredicate.size(); i++) {
-      Id current = entityHasPredicate[i][0];
-      while (current > pos) {
-        pos++;
-      }
-      while (i < entityHasPredicate.size() &&
-             entityHasPredicate[i][0] == current) {
-        hasPredicateTmp.back().push_back(entityHasPredicate[i][1]);
-        i++;
-      }
-      pos++;
-    }
-  }
-  hasPredicate.build(hasPredicateTmp);
+  _patternIndex.generatePredicateLocalNamespaceFromExistingIndex(
+      langPredLowerBound, langPredUpperBound, _PSO._meta);
+  _patternIndex.createPatternsFromExistingIndex(langPredLowerBound,
+                                                langPredUpperBound, _SPO._meta,
+                                                _SPO._file, _onDiskBase);
 }
 
 // _____________________________________________________________________________
@@ -1039,91 +704,7 @@ void Index::createFromOnDiskIndex(const string& onDiskBase) {
 
   if (_usePatterns) {
     // Read the pattern info from the patterns file
-    std::string patternsFilePath = _onDiskBase + ".index.patterns";
-    ad_utility::File patternsFile;
-    patternsFile.open(patternsFilePath, "r");
-    AD_CHECK(patternsFile.isOpen());
-    off_t off = 0;
-    unsigned char firstByte;
-    patternsFile.read(&firstByte, sizeof(char), off);
-    off++;
-    uint32_t version;
-    patternsFile.read(&version, sizeof(uint32_t), off);
-    off += sizeof(uint32_t);
-    if (version != PATTERNS_FILE_VERSION || firstByte != 255) {
-      version = firstByte == 255 ? version : -1;
-      _usePatterns = false;
-      patternsFile.close();
-      std::ostringstream oss;
-      oss << "The patterns file " << patternsFilePath << " version of "
-          << version << " does not match the programs pattern file "
-          << "version of " << PATTERNS_FILE_VERSION << ". Rebuild the index"
-          << " or start the query engine without pattern support." << std::endl;
-      throw std::runtime_error(oss.str());
-    } else {
-      patternsFile.read(&_fullHasPredicateMultiplicityEntities, sizeof(double),
-                        off);
-      off += sizeof(double);
-      patternsFile.read(&_fullHasPredicateMultiplicityPredicates,
-                        sizeof(double), off);
-      off += sizeof(double);
-      patternsFile.read(&_fullHasPredicateSize, sizeof(size_t), off);
-      off += sizeof(size_t);
-
-      // read the entity has patterns vector
-      size_t hasPatternSize;
-      patternsFile.read(&hasPatternSize, sizeof(size_t), off);
-      off += sizeof(size_t);
-      std::vector<array<Id, 2>> entityHasPattern(hasPatternSize);
-      patternsFile.read(entityHasPattern.data(),
-                        hasPatternSize * sizeof(Id) * 2, off);
-      off += hasPatternSize * sizeof(Id) * 2;
-
-      // read the entity has relation vector
-      size_t hasPredicateSize;
-      patternsFile.read(&hasPredicateSize, sizeof(size_t), off);
-      off += sizeof(size_t);
-      std::vector<array<Id, 2>> entityHasPredicate(hasPredicateSize);
-      patternsFile.read(entityHasPredicate.data(),
-                        hasPredicateSize * sizeof(Id) * 2, off);
-      off += hasPredicateSize * sizeof(Id) * 2;
-
-      // read the patterns
-      _patterns.load(patternsFile, off);
-
-      // create the has-relation and has-pattern lookup vectors
-      if (entityHasPattern.size() > 0) {
-        _hasPattern.resize(entityHasPattern.back()[0] + 1);
-        size_t pos = 0;
-        for (size_t i = 0; i < entityHasPattern.size(); i++) {
-          while (entityHasPattern[i][0] > pos) {
-            _hasPattern[pos] = NO_PATTERN;
-            pos++;
-          }
-          _hasPattern[pos] = entityHasPattern[i][1];
-          pos++;
-        }
-      }
-
-      vector<vector<Id>> hasPredicateTmp;
-      if (entityHasPredicate.size() > 0) {
-        hasPredicateTmp.resize(entityHasPredicate.back()[0] + 1);
-        size_t pos = 0;
-        for (size_t i = 0; i < entityHasPredicate.size(); i++) {
-          Id current = entityHasPredicate[i][0];
-          while (current > pos) {
-            pos++;
-          }
-          while (i < entityHasPredicate.size() &&
-                 entityHasPredicate[i][0] == current) {
-            hasPredicateTmp.back().push_back(entityHasPredicate[i][1]);
-            i++;
-          }
-          pos++;
-        }
-      }
-      _hasPredicate.build(hasPredicateTmp);
-    }
+    _patternIndex.loadPatternIndex(_onDiskBase);
   }
 }
 
@@ -1134,42 +715,6 @@ void Index::throwExceptionIfNoPatterns() const {
              "The requested feature requires a loaded patterns file ("
              "do not specify the --no-patterns option for this to work)");
   }
-}
-
-// _____________________________________________________________________________
-const vector<PatternID>& Index::getHasPattern() const {
-  throwExceptionIfNoPatterns();
-  return _hasPattern;
-}
-
-// _____________________________________________________________________________
-const CompactStringVector<Id, Id>& Index::getHasPredicate() const {
-  throwExceptionIfNoPatterns();
-  return _hasPredicate;
-}
-
-// _____________________________________________________________________________
-const CompactStringVector<size_t, Id>& Index::getPatterns() const {
-  throwExceptionIfNoPatterns();
-  return _patterns;
-}
-
-// _____________________________________________________________________________
-double Index::getHasPredicateMultiplicityEntities() const {
-  throwExceptionIfNoPatterns();
-  return _fullHasPredicateMultiplicityEntities;
-}
-
-// _____________________________________________________________________________
-double Index::getHasPredicateMultiplicityPredicates() const {
-  throwExceptionIfNoPatterns();
-  return _fullHasPredicateMultiplicityPredicates;
-}
-
-// _____________________________________________________________________________
-size_t Index::getHasPredicateFullSize() const {
-  throwExceptionIfNoPatterns();
-  return _fullHasPredicateSize;
 }
 
 // _____________________________________________________________________________
@@ -1300,6 +845,12 @@ size_t Index::sizeEstimate(const string& sub, const string& pred,
            "This should never be the case anymore, "
            " since for such SCANs we compute the result "
            "directly and don't need an estimate anymore!");
+}
+
+// _____________________________________________________________________________
+const PatternIndex& Index::getPatternIndex() const {
+  throwExceptionIfNoPatterns();
+  return _patternIndex;
 }
 
 // _____________________________________________________________________________
