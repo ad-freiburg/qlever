@@ -529,10 +529,15 @@ void Index::exchangeMultiplicities(MetaData* m1, MetaData* m2) {
 
 // _____________________________________________________________________________
 void Index::addPatternsToExistingIndex() {
+  LOG(INFO) << "Get bounds for vocabulary" << std::endl;
   auto [langPredLowerBound, langPredUpperBound] = _vocab.prefix_range("@");
+  LOG(INFO) << "Clearing vocabulary" << std::endl;
+  _vocab = RdfsVocabulary{};
 
+  LOG(INFO) << "Create local predicate namespace" << std::endl;
   _patternIndex.generatePredicateLocalNamespaceFromExistingIndex(
       langPredLowerBound, langPredUpperBound, _PSO._meta);
+  LOG(INFO) <<"Create actual patterns" << std::endl;
   _patternIndex.createPatternsFromExistingIndex(langPredLowerBound,
                                                 langPredUpperBound, _SPO._meta,
                                                 _SPO._file, _onDiskBase);
