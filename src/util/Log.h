@@ -29,12 +29,12 @@
   '[' << ad_utility::getLastPartOfString(__FILE__, '/') << ':' << __LINE__ \
       << "] "  // NOLINT
 
-#define TRACE 5
-#define DEBUG 4
-#define INFO 3
-#define WARN 2
-#define ERROR 1
-#define FATAL 0
+static constexpr size_t TRACE = 5;
+static constexpr size_t DEBUG = 4;
+static constexpr size_t INFO = 3;
+static constexpr size_t WARN = 2;
+static constexpr size_t ERROR = 1;
+static constexpr size_t FATAL = 0;
 
 namespace ad_utility {
 /* A singleton (According to Scott Meyer's pattern that holds
