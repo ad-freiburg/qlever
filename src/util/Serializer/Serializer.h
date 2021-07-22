@@ -19,6 +19,9 @@ class SerializationException : public std::runtime_error {
   using std::runtime_error::runtime_error;
 };
 
+/**
+ * Serializer that writes to a buffer of bytes.
+ */
 class ByteBufferWriteSerializer {
  public:
   constexpr static bool IsWriteSerializer = true;
@@ -34,9 +37,12 @@ class ByteBufferWriteSerializer {
   Storage&& data() && { return std::move(_data); }
 
  private:
-  std::vector<char> _data;
+  Storage _data;
 };
 
+/**
+ * Serializer that reads from a buffer of bytes.
+ */
 class ByteBufferReadSerializer {
  public:
   constexpr static bool IsWriteSerializer = false;
@@ -56,13 +62,15 @@ class ByteBufferReadSerializer {
   Storage::const_iterator _iterator{_data.begin()};
 };
 
-template <typename T>
-static constexpr bool TriviallyCopyable =
-    std::is_trivially_copyable_v<std::decay_t<T>>;
-
-template <typename Serializer, typename T,
-          typename = std::enable_if_t<TriviallyCopyable<T>>>
-void serialize(Serializer& serializer, T&& t) {
+/**
+ * Trivial serializer for basic types that simply takes all the bytes
+ * from the object as data. Corresponds to a shallow copy (for example,
+ * in an std::vector this would not serialize only the metadata, but
+ * not the actual data).
+ */
+template <typename Serializer, typename T>
+requires(std::is_arithmetic_v<std::decay_t<T>>) void serialize(
+    Serializer& serializer, T&& t) {
   if constexpr (Serializer::IsWriteSerializer) {
     serializer.serializeBytes(reinterpret_cast<const char*>(&t), sizeof(t));
   } else {
@@ -70,15 +78,45 @@ void serialize(Serializer& serializer, T&& t) {
   }
 }
 
+/**
+ * Operator that allows to write something like:
+ *
+ *   ByteBufferWriteSerializer writer;
+ *   int x = 42;
+ *   writer | x;
+ *   ByteBufferReadSerializer reader(std::move(writer).data());
+ *   int y;
+ *   reader | y;
+ */
 template <typename Serializer, typename T>
-void operator&(Serializer& serializer, T&& t) {
+void operator|(Serializer& serializer, T&& t) {
   serialize(serializer, std::forward<T>(t));
 }
 
-/*
-template<typename Serializer>
-concept WriteSerializ
- */
+// Serialization operator for explicitly writing to a serializer.
+template <typename Serializer, typename T>
+requires(Serializer::IsWriteSerializer) void operator<<(Serializer& serializer,
+                                                        const T& t) {
+  serialize(serializer, t);
+}
+
+// Serialization operator for explicitly reading from a serializer.
+template <typename Serializer, typename T>
+requires(!Serializer::IsWriteSerializer) void operator>>(Serializer& serializer,
+                                                         T& t) {
+  serialize(serializer, t);
+}
+
+// Automatically allow serialization from reference to const into a
+// writeSerializer CAREFUL: this does not enforce, that the serialization
+// functions actually preserve the constness, this has to be made sure by the
+// user.
+template <typename Serializer, typename T>
+requires(Serializer::IsWriteSerializer) void serialize(Serializer& serializer,
+                                                       const T& t) {
+  serialize(serializer, const_cast<T&>(t));
+}
+
 }  // namespace ad_utility::serialization
 
 #endif  // QLEVER_SERIALIZER_SERIALIZER

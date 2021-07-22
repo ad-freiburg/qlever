@@ -36,7 +36,7 @@ class FileWriteSerializer {
 
   SerializationPosition getCurrentPosition() const { return _file.tell(); }
 
-  File&& moveFileOut() && { return std::move(_file); }
+  File&& file() && { return std::move(_file); }
 
  private:
   File _file;
@@ -66,7 +66,7 @@ class FileReadSerializer {
     _file.seek(position, SEEK_SET);
   }
 
-  File&& moveFileOut() && { return std::move(_file); }
+  File&& file() && { return std::move(_file); }
 
  private:
   File _file;

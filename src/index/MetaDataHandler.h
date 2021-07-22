@@ -125,7 +125,7 @@ class MetaDataWrapperDense {
   // external vector has to be restored via the `setup()` call.
   template <typename Serializer>
   friend void serialize(Serializer& serializer, MetaDataWrapperDense& wrapper) {
-    serializer& wrapper._size;
+    serializer | wrapper._size;
   }
 
   // ___________________________________________________________
@@ -255,7 +255,7 @@ class MetaDataWrapperHashMap {
   template <typename Serializer>
   friend void serialize(Serializer& serializer,
                         MetaDataWrapperHashMap& metaDataWrapper) {
-    serializer& metaDataWrapper._map;
+    serializer | metaDataWrapper._map;
   }
 
  private:

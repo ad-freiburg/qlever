@@ -73,8 +73,8 @@ void IndexMetaData<MapType>::appendToFile(ad_utility::File* file) const {
   file->seek(0, SEEK_END);
   off_t startOfMeta = file->tell();
   ad_utility::serialization::FileWriteSerializer serializer{std::move(*file)};
-  serializer&(*this);
-  *file = std::move(serializer).moveFileOut();
+  serializer << (*this);
+  *file = std::move(serializer).file();
   file->write(&startOfMeta, sizeof(startOfMeta));
 }
 
@@ -98,7 +98,7 @@ void IndexMetaData<MapType>::readFromFile(ad_utility::File* file) {
   ad_utility::serialization::ByteBufferReadSerializer serializer{
       std::move(buf)};
 
-  serializer&(*this);
+  serializer >> (*this);
 }
 
 // _____________________________________________________________________________
@@ -182,7 +182,7 @@ void serialize(Serializer& serializer, IndexMetaData<MapType>& metaData) {
   using T = IndexMetaData<MapType>;
   uint64_t magicNumber = T::MAGIC_NUMBER_FOR_SERIALIZATION;
 
-  serializer& magicNumber;
+  serializer | magicNumber;
 
   // This check might only become false, if we are reading from the serializer
   if (magicNumber != T::MAGIC_NUMBER_FOR_SERIALIZATION) {
@@ -191,7 +191,7 @@ void serialize(Serializer& serializer, IndexMetaData<MapType>& metaData) {
         "Please rebuild the index.");
   }
 
-  serializer& metaData._version;
+  serializer | metaData._version;
   // This check might only become false, if we are reading from the serializer
   if (metaData.getVersion() != V_CURRENT) {
     throw WrongFormatException(
@@ -200,23 +200,12 @@ void serialize(Serializer& serializer, IndexMetaData<MapType>& metaData) {
   }
 
   // Serialize the rest of the data members
-  serializer& metaData._name;
-  serializer& metaData._data;
-  serializer& metaData._blockData;
+  serializer | metaData._name;
+  serializer | metaData._data;
+  serializer | metaData._blockData;
 
-  serializer& metaData._offsetAfter;
-  serializer& metaData._totalElements;
-  serializer& metaData._totalBytes;
-  serializer& metaData._totalBlocks;
-}
-
-// This overload allows us to serialize from a const IndexMetaData& to a writing
-// Serializer. This is ok, because then the serialize-function does not perform
-// any non-const actions.
-// TODO<C++20> using a requires clause we can actually enforce the const access
-// in these functions.
-template <typename Serializer, typename MapType>
-void serialize(Serializer& serializer, const IndexMetaData<MapType>& metaData) {
-  static_assert(Serializer::IsWriteSerializer);
-  serialize(serializer, const_cast<IndexMetaData<MapType>&>(metaData));
+  serializer | metaData._offsetAfter;
+  serializer | metaData._totalElements;
+  serializer | metaData._totalBytes;
+  serializer | metaData._totalBlocks;
 }

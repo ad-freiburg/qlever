@@ -6,29 +6,31 @@
 #define QLEVER_SERIALIZEHASHMAP_H
 
 #include "../../util/HashMap.h"
+#include "./SerializePair.h"
 
-template <typename Serializer, class K, class V, class HashFcn, class EqualKey, class Alloc>
+namespace ad_utility::serialization {
+template <typename Serializer, class K, class V, class HashFcn, class EqualKey,
+          class Alloc>
 void serialize(Serializer& serializer,
                ad_utility::HashMap<K, V, HashFcn, EqualKey, Alloc>& hashMap) {
   if constexpr (Serializer::IsWriteSerializer) {
-    serializer& hashMap.size();
-    for (auto& [key, value] : hashMap) {
-      serializer& key;
-      serializer& value;
+    serializer << hashMap.size();
+    for (const auto& pair : hashMap) {
+      serializer << pair;
     }
   } else {
     hashMap.clear();
     auto size = hashMap.size();
-    serializer& size;
+    serializer >> size;
 
     hashMap.reserve(size);
     for (size_t i = 0; i < size; ++i) {
       std::pair<K, V> pair;
-      serializer& pair.first;
-      serializer& pair.second;
+      serializer >> pair;
       hashMap.insert(std::move(pair));
     }
   }
 }
+}  // namespace ad_utility::serialization
 
 #endif  // QLEVER_SERIALIZEHASHMAP_H

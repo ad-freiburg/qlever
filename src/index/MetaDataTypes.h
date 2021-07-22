@@ -130,9 +130,9 @@ class BlockBasedRelationMetaData {
 
 template <typename Serializer>
 void serialize(Serializer& serializer, BlockBasedRelationMetaData& metaData) {
-  serializer& metaData._startRhs;
-  serializer& metaData._offsetAfter;
-  serializer& metaData._blocks;
+  serializer | metaData._startRhs;
+  serializer | metaData._offsetAfter;
+  serializer | metaData._blocks;
 }
 
 class RelationMetaData {

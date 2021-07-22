@@ -12,17 +12,17 @@ namespace ad_utility::serialization {
 template <typename Serializer, typename T, typename Alloc>
 void serialize(Serializer& serializer, std::vector<T, Alloc>& vector) {
   if constexpr (Serializer::IsWriteSerializer) {
-    serializer& vector.size();
+    serializer << vector.size();
     for (const auto& el : vector) {
-      serializer& el;
+      serializer << el;
     }
   } else {
     auto size = vector.size();  // just to get the right type
-    serializer& size;
+    serializer >> size;
     vector.reserve(size);
     for (size_t i = 0; i < size; ++i) {
       vector.emplace_back();
-      serializer& vector.back();
+      serializer >> vector.back();
     }
   }
 }

@@ -7,6 +7,7 @@
 #include "../src/util/Random.h"
 #include "../src/util/Serializer/FileSerializer.h"
 #include "../src/util/Serializer/SerializeHashMap.h"
+#include "../src/util/Serializer/SerializeString.h"
 #include "../src/util/Serializer/Serializer.h"
 
 using namespace ad_utility;
@@ -14,20 +15,20 @@ using namespace ad_utility::serialization;
 
 auto testWithByteBuffer = [](auto testFunction) {
   ByteBufferWriteSerializer writer;
-  auto makeReader = [&writer]() {
+  auto makeReaderFromWriter = [&writer]() {
     return ByteBufferReadSerializer{std::move(writer).data()};
   };
-  testFunction(writer, makeReader);
+  testFunction(writer, makeReaderFromWriter);
 };
 
 auto testWithFileSerialization = [](auto testFunction) {
-  const std::string filename = "serializationTestTmpt.txtx";
+  const std::string filename = "serializationTest.tmp";
   FileWriteSerializer writer{filename};
-  auto makeReader = [filename, &writer] {
+  auto makeReaderFromWriter = [filename, &writer] {
     writer.close();
     return FileReadSerializer{filename};
   };
-  testFunction(writer, makeReader);
+  testFunction(writer, makeReaderFromWriter);
   unlink(filename.c_str());
 };
 
@@ -39,19 +40,19 @@ auto testWithAllSerializers = [](auto testFunction) {
 };
 
 TEST(Serializer, Simple) {
-  auto simpleIntTest = [](auto& writer, auto makeReader) {
+  auto simpleIntTest = [](auto& writer, auto makeReaderFromWriter) {
     int x = 42;
-    writer& x;
+    writer << x;
 
-    auto reader = makeReader();
+    auto reader = makeReaderFromWriter();
     int y;
-    reader& y;
+    reader >> y;
     ASSERT_EQ(y, 42);
   };
   testWithAllSerializers(simpleIntTest);
 }
 TEST(Serializer, ManyTrivialDatatypes) {
-  auto testmanyPrimitives = [](auto&& writer, auto makeReader) {
+  auto testmanyPrimitives = [](auto&& writer, auto makeReaderFromWriter) {
     FastRandomIntGenerator<size_t> r;
     RandomDoubleGenerator d;
     std::vector<int32_t> ints;
@@ -65,41 +66,61 @@ TEST(Serializer, ManyTrivialDatatypes) {
 
     for (int i = 0; i < numIterations; ++i) {
       ints.push_back(static_cast<int>(r()));
-      writer& ints.back();
+      writer | ints.back();
       chars.push_back(static_cast<char>(r()));
-      writer& chars.back();
+      writer | chars.back();
       shorts.push_back(static_cast<short>(r()));
-      writer& shorts.back();
+      writer | shorts.back();
       longInts.push_back(static_cast<int64_t>(r()));
-      writer& longInts.back();
+      writer | longInts.back();
       doubles.push_back(d());
-      writer& doubles.back();
+      writer | doubles.back();
       floats.push_back(static_cast<float>(d()));
-      writer& floats.back();
+      writer | floats.back();
     }
 
-    auto reader = makeReader();
+    auto reader = makeReaderFromWriter();
     for (int i = 0; i < numIterations; ++i) {
       int x;
-      reader& x;
+      reader | x;
       ASSERT_EQ(x, ints[i]);
       char c;
-      reader& c;
+      reader | c;
       ASSERT_EQ(c, chars[i]);
       short s;
-      reader& s;
+      reader | s;
       ASSERT_EQ(s, shorts[i]);
       int64_t l;
-      reader& l;
+      reader | l;
       ASSERT_EQ(l, longInts[i]);
       double dob;
-      reader& dob;
+      reader | dob;
       ASSERT_FLOAT_EQ(dob, doubles[i]);
       float f;
-      reader& f;
+      reader | f;
       ASSERT_FLOAT_EQ(f, floats[i]);
     }
   };
 
   testWithAllSerializers(testmanyPrimitives);
+}
+
+TEST(Serializer, TestStringAndHashMap) {
+  auto testFunction = [](auto&& writer, auto makeReaderFromWriter) {
+    ad_utility::HashMap<string, int> m;
+    m["hallo"] = 42;
+    m["tschüss"] = 84;
+
+    std::string withZero = "something";
+    withZero.push_back(0);
+    withZero.push_back('a');
+    m["withZero"] = 4321;
+    writer | m;
+
+    auto reader = makeReaderFromWriter();
+    ad_utility::HashMap<string, int> n;
+    reader | n;
+    ASSERT_EQ(m, n);
+  };
+  testWithAllSerializers(testFunction);
 }
