@@ -172,46 +172,9 @@ pair<off_t, size_t> BlockBasedRelationMetaData::getFollowBlockForLhs(
 }
 
 // _____________________________________________________________________________
-FullRelationMetaData& FullRelationMetaData::createFromByteBuffer(
-    unsigned char* buffer) {
-  _relId = *reinterpret_cast<Id*>(buffer);
-  _startFullIndex = *reinterpret_cast<off_t*>(buffer + sizeof(_relId));
-  _typeMultAndNofElements =
-      *reinterpret_cast<uint64_t*>(buffer + sizeof(Id) + sizeof(off_t));
-  return *this;
-}
-
-// _____________________________________________________________________________
-BlockBasedRelationMetaData& BlockBasedRelationMetaData::createFromByteBuffer(
-    unsigned char* buffer) {
-  _startRhs = *reinterpret_cast<off_t*>(buffer);
-  _offsetAfter = *reinterpret_cast<off_t*>(buffer + sizeof(_startRhs));
-  size_t nofBlocks = *reinterpret_cast<size_t*>(buffer + sizeof(_startRhs) +
-                                                sizeof(_offsetAfter));
-  _blocks.resize(nofBlocks);
-  memcpy(_blocks.data(),
-         buffer + sizeof(_startRhs) + sizeof(_offsetAfter) + sizeof(nofBlocks),
-         nofBlocks * sizeof(BlockMetaData));
-
-  return *this;
-}
-
-// _____________________________________________________________________________
-size_t FullRelationMetaData::bytesRequired() const {
-  return sizeof(_relId) + sizeof(_startFullIndex) +
-         sizeof(_typeMultAndNofElements);
-}
-
-// _____________________________________________________________________________
 off_t FullRelationMetaData::getStartOfLhs() const {
   AD_CHECK(hasBlocks());
   return _startFullIndex + 2 * sizeof(Id) * getNofElements();
-}
-
-// _____________________________________________________________________________
-size_t BlockBasedRelationMetaData::bytesRequired() const {
-  return sizeof(_startRhs) + sizeof(_offsetAfter) + sizeof(size_t) +
-         _blocks.size() * sizeof(BlockMetaData);
 }
 
 // _____________________________________________________________________________

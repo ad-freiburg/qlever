@@ -132,7 +132,7 @@ void Index::passContextFileIntoVector(const string& contextFile,
   // this has to be repeated completely here because we have the possibility to
   // only add a text index. In that case the Vocabulary has never been
   // initialized before
-  _vocab = Vocabulary<CompressedString, TripleComponentComparator>();
+  _vocab = RdfsVocabulary{};
   readConfiguration();
   _vocab.readFromFile(_onDiskBase + ".vocabulary",
                       _onDiskLiterals ? _onDiskBase + ".literals-index" : "");

@@ -75,4 +75,18 @@ class SlowRandomIntGenerator {
   std::uniform_int_distribution<Int> _distribution;
 };
 
+class RandomDoubleGenerator {
+ public:
+  explicit RandomDoubleGenerator(
+      double min = std::numeric_limits<double>::min(),
+      double max = std::numeric_limits<double>::max())
+      : _randomEngine{std::random_device{}()}, _distribution{min, max} {}
+
+  double operator()() { return _distribution(_randomEngine); }
+
+ private:
+  std::default_random_engine _randomEngine;
+  std::uniform_real_distribution<double> _distribution;
+};
+
 #endif  // QLEVER_RANDOM_H

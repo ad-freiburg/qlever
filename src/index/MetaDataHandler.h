@@ -116,9 +116,16 @@ class MetaDataWrapperDense {
   template <typename... Args>
   void setup(Args... args) {
     // size has to be set correctly by a call to setSize(), this is done
-    // in IndexMetaData::createFromByteBuffer
+    // via the serialization
     _size = 0;
     _vec = M(args...);
+  }
+
+  // The serialization only affects the (important!) `_size` member. The
+  // external vector has to be restored via the `setup()` call.
+  template <typename Serializer>
+  friend void serialize(Serializer& serializer, MetaDataWrapperDense& wrapper) {
+    serializer | wrapper._size;
   }
 
   // ___________________________________________________________
@@ -243,6 +250,12 @@ class MetaDataWrapperHashMap {
   size_t count(Id id) const {
     // can either be 1 or 0 for map-like types
     return _map.count(id);
+  }
+
+  template <typename Serializer>
+  friend void serialize(Serializer& serializer,
+                        MetaDataWrapperHashMap& metaDataWrapper) {
+    serializer | metaDataWrapper._map;
   }
 
  private:
