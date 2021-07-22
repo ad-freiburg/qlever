@@ -110,15 +110,15 @@ TEST(RelationMetaDataTest, writeReadTest) {
     BlockBasedRelationMetaData rmdB(afterLhs, afterRhs, bs);
 
     ad_utility::serialization::FileWriteSerializer f("_testtmp.rmd");
-    f& rmdF;
-    f& rmdB;
+    f << rmdF;
+    f << rmdB;
     f.close();
 
     ad_utility::serialization::FileReadSerializer in("_testtmp.rmd");
     FullRelationMetaData rmdF2;
     BlockBasedRelationMetaData rmdB2;
-    in& rmdF2;
-    in& rmdB2;
+    in >> rmdF2;
+    in >> rmdB2;
 
     remove("_testtmp.rmd");
 

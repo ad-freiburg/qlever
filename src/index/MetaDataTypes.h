@@ -37,6 +37,12 @@ class BlockMetaData {
   off_t _startOffset;
 };
 
+template <typename Serializer>
+void serialize(Serializer& serializer, BlockMetaData& meta) {
+  serializer | meta._firstLhs;
+  serializer | meta._startOffset;
+}
+
 class FullRelationMetaData {
  public:
   FullRelationMetaData();
@@ -86,6 +92,14 @@ class FullRelationMetaData {
   // __________________________________________________________________
   bool operator==(const FullRelationMetaData& other) const {
     return !(*this != other);
+  }
+
+  // __________________________________________________________________________
+  template <typename Serializer>
+  friend void serialize(Serializer& serializer, FullRelationMetaData& meta) {
+    serializer | meta._relId;
+    serializer | meta._startFullIndex;
+    serializer | meta._typeMultAndNofElements;
   }
 
  private:
