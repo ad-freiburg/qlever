@@ -285,6 +285,7 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
       pattern.clear();
     }
 
+    // Ignore @..@ type language predicates
     if (triple[1] >= langPredLowerBound && triple[1] < langPredUpperBound) {
       continue;
     }
@@ -293,7 +294,6 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
     auto localId = _predicate_global_to_local_ids[triple[1]];
     // don't list predicates twice
     if (pattern.empty() || pattern.back() != localId) {
-      // Ignore @..@ type language predicates
       pattern.push_back(localId);
     }
   }
