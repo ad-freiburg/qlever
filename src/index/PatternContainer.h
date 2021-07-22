@@ -27,14 +27,6 @@ class PatternContainerImpl {
 
   const std::vector<PatternID>& hasPattern() const { return _hasPattern; }
 
-  CompactStringVector<size_t, PredicateId>& hasPredicate() {
-    return _hasPredicate;
-  }
-
-  const CompactStringVector<size_t, PredicateId>& hasPredicate() const {
-    return _hasPredicate;
-  }
-
   size_t numPatterns() const { return _patterns.size(); }
 
  private:
@@ -47,11 +39,6 @@ class PatternContainerImpl {
    * @brief Maps entity ids to pattern ids.
    */
   std::vector<PatternID> _hasPattern;
-
-  /**
-   * @brief Maps entity ids to sets of predicate ids
-   */
-  CompactStringVector<Id, PredicateId> _hasPredicate;
 };
 
 /**

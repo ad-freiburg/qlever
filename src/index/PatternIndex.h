@@ -94,7 +94,6 @@ class PatternIndex {
       ad_utility::File* file);
 
   // Pattern trick data
-  size_t _maxNumPatterns;
   double _fullHasPredicateMultiplicityEntities;
   double _fullHasPredicateMultiplicityPredicates;
   size_t _fullHasPredicateSize;

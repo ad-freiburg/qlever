@@ -9,8 +9,7 @@ const uint32_t PatternIndex::PATTERNS_FILE_VERSION = 1;
 using TripleVec = stxxl::vector<array<Id, 3>>;
 
 PatternIndex::PatternIndex()
-    : _maxNumPatterns(std::numeric_limits<PatternID>::max() - 2),
-      _initialized(false) {}
+    : _initialized(false) {}
 
 // _____________________________________________________________________________
 void PatternIndex::generatePredicateLocalNamespace(VocabularyData* vocabData) {
@@ -253,7 +252,13 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
     const string& fileName, const Id langPredLowerBound,
     const Id langPredUpperBound, Args&... vecReaderArgs) {
   IndexMetaDataHmap meta;
-  typedef ad_utility::HashMap<Pattern<PredicateId>, size_t> PatternsCountMap;
+
+  struct PatternIdAndCount {
+    PatternID id;
+    size_t count;
+  };
+
+  typedef ad_utility::HashMap<Pattern<PredicateId>, PatternIdAndCount> PatternsCountMap;
   typedef ad_utility::HashMap<Pattern<PredicateId>, PatternID> PatternIdMap;
   // Used for the entityHasPattern relation
   // This struct is 16 bytes, not 12, due to padding (at least on gcc 10)
@@ -272,17 +277,33 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
   PatternsCountMap patternCounts;
   // determine the most common patterns
   Pattern<PredicateId> pattern;
+  size_t numEntitiesWithPatterns = 0;
+  size_t fullHasPredicatePredicatesDistinctSize = 0;
+
+  // Associate entities with patterns if possible, store has-relation otherwise
+  ad_utility::MmapVectorTmp<SubjectPatternPair> entityHasPattern(
+      fileName + ".mmap.entityHasPattern.tmp");
 
   size_t numValidPatterns = 0;
   Id currentSubj = (*reader)[0];
 
+  auto pushPattern = [&] {
+    numEntitiesWithPatterns++;
+    numValidPatterns++;
+    if (!patternCounts.contains(pattern)) {
+      patternCounts[pattern] = PatternIdAndCount{static_cast<PatternID>(patternCounts.size()), 0};
+      fullHasPredicatePredicatesDistinctSize+= pattern.size();
+    }
+    entityHasPattern.push_back(SubjectPatternPair{currentSubj, patternCounts[pattern].id});
+    patternCounts[pattern].count++;
+    pattern.clear();
+  };
+
   for (; !reader.empty(); ++reader) {
     auto triple = *reader;
     if (triple[0] != currentSubj) {
+      pushPattern();
       currentSubj = triple[0];
-      numValidPatterns++;
-      patternCounts[std::move(pattern)]++;
-      pattern.clear();
     }
 
     // Ignore @..@ type language predicates
@@ -298,154 +319,42 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
     }
   }
   // process the last entry
-  patternCounts[std::move(pattern)]++;
+  pushPattern();
   LOG(INFO) << "Counted patterns and found " << patternCounts.size()
             << " distinct patterns." << std::endl;
   LOG(INFO) << "Patterns were found for " << numValidPatterns << " entities."
             << std::endl;
 
-  // stores patterns sorted by their number of occurences
-  size_t actualNumPatterns = patternCounts.size() < _maxNumPatterns
-                                 ? patternCounts.size()
-                                 : _maxNumPatterns;
-  LOG(INFO) << "Using " << actualNumPatterns << " of the "
-            << patternCounts.size() << " patterns that were found in the data."
-            << std::endl;
-  std::vector<std::pair<Pattern<PredicateId>, size_t>> sortedPatterns;
+  const size_t maxNumPatterns = std::numeric_limits<PatternID>::max() - 2;
+  if (patternCounts.size() > maxNumPatterns) {
+    throw std::runtime_error("Need more than " + std::to_string(maxNumPatterns) + " patterns, which is currently not supported. Please contact the developers of QLever about this.");
+  }
+
+      std::vector<std::pair<Pattern<PredicateId>, PatternIdAndCount>> sortedPatterns;
   sortedPatterns.reserve(patternCounts.size());
   sortedPatterns.insert(sortedPatterns.end(),
                         std::make_move_iterator(patternCounts.begin()),
                         std::make_move_iterator(patternCounts.end()));
-  // If we do not keep all patterns, we only keep the patterns which compress
-  // the most
-  auto comparePatternCounts =
-      [](const std::pair<Pattern<PredicateId>, size_t>& first,
-         const std::pair<Pattern<PredicateId>, size_t>& second) -> bool {
-    return first.second * (first.first.size() - 1) >
-           second.second * (second.first.size() - 1);
-  };
 
-  std::sort(sortedPatterns.begin(), sortedPatterns.end(), comparePatternCounts);
-  // Remove the patterns which exceed _maxNumPatterns;
-  sortedPatterns.resize(actualNumPatterns);
+  auto cmp =[](const auto& a, const auto& b) { return a.second.id < b.second.id;};
+  std::sort(sortedPatterns.begin(), sortedPatterns.end(), cmp);
 
   // store the actual patterns
   std::vector<std::vector<PredicateId>> buffer;
   buffer.reserve(sortedPatterns.size());
   for (const auto& p : sortedPatterns) {
+    // TODO<joka921> can we move here?
     buffer.push_back(p.first._data);
   }
   PatternContainerImpl<PredicateId> pattern_data;
   pattern_data.patterns().build(buffer);
 
-  PatternIdMap patternSet;
-  patternSet.reserve(sortedPatterns.size());
-  for (size_t i = 0; i < sortedPatterns.size(); i++) {
-    patternSet.try_emplace(sortedPatterns[i].first, i);
-  }
-
-  LOG(DEBUG) << "Pattern set size: " << patternSet.size() << std::endl;
-
-  // Associate entities with patterns if possible, store has-relation otherwise
-  ad_utility::MmapVectorTmp<SubjectPatternPair> entityHasPattern(
-      fileName + ".mmap.entityHasPattern.tmp");
-  ad_utility::MmapVectorTmp<std::array<Id, 2>> entityHasPredicate(
-      fileName + ".mmap.entityHasPredicate.tmp");
-
-  size_t numEntitiesWithPatterns = 0;
-  size_t numEntitiesWithoutPatterns = 0;
-  size_t numInvalidEntities = 0;
 
   // store how many entries there are in the full has-relation relation (after
   // resolving all patterns) and how may distinct elements there are (for the
   // multiplicity;
   _fullHasPredicateSize = 0;
   size_t fullHasPredicateEntitiesDistinctSize = 0;
-  size_t fullHasPredicatePredicatesDistinctSize = 0;
-  // This vector stores if the pattern was already counted toward the distinct
-  // has relation predicates size.
-  std::vector<bool> haveCountedPattern(patternSet.size());
-
-  // the input triple list is in spo order, we only need a hash map for
-  // predicates
-  ad_utility::HashSet<Id> predicateHashSet;
-
-  pattern.clear();
-  currentSubj = (*VecReaderType(vecReaderArgs...))[0];
-  // Create the has-relation and has-pattern predicates
-  for (VecReaderType reader2(vecReaderArgs...); !reader2.empty(); ++reader2) {
-    auto triple = *reader2;
-    if (triple[0] != currentSubj) {
-      // we have arrived at a new entity;
-      fullHasPredicateEntitiesDistinctSize++;
-      auto it = patternSet.find(pattern);
-      // increase the haspredicate size here as every predicate is only
-      // listed once per entity (otherwise it would always be the same as
-      // vec.size()
-      _fullHasPredicateSize += pattern.size();
-      if (it == patternSet.end()) {
-        numEntitiesWithoutPatterns++;
-        // The pattern does not exist, use the has-relation predicate instead
-        for (const auto& id : pattern) {
-          if (!predicateHashSet.contains(id)) {
-            predicateHashSet.insert(id);
-            fullHasPredicatePredicatesDistinctSize++;
-          }
-          entityHasPredicate.push_back(std::array<Id, 2>{currentSubj, id});
-        }
-      } else {
-        numEntitiesWithPatterns++;
-        // The pattern does exist, add an entry to the has-pattern predicate
-        entityHasPattern.push_back(SubjectPatternPair{currentSubj, it->second});
-        if (!haveCountedPattern[it->second]) {
-          haveCountedPattern[it->second] = true;
-          // iterate over the pattern once to
-          for (const auto& id : pattern) {
-            if (!predicateHashSet.contains(id)) {
-              fullHasPredicatePredicatesDistinctSize++;
-            }
-          }
-        }
-      }
-      pattern.clear();
-      currentSubj = triple[0];
-    }
-    // Ignore @..@ type language predicates
-    if (triple[1] >= langPredLowerBound && triple[1] < langPredUpperBound) {
-      continue;
-    }
-    // don't list predicates twice
-    AD_CHECK(_predicate_global_to_local_ids.contains(triple[1]));
-    auto localId = _predicate_global_to_local_ids[triple[1]];
-    if (pattern.empty() || pattern.back() != localId) {
-      pattern.push_back(localId);
-    }
-  }
-  // process the last element
-  _fullHasPredicateSize += pattern.size();
-  fullHasPredicateEntitiesDistinctSize++;
-  auto last = patternSet.find(pattern);
-  if (last == patternSet.end()) {
-    numEntitiesWithoutPatterns++;
-    // The pattern does not exist, use the has-relation predicate instead
-    for (const auto& id : pattern) {
-      entityHasPredicate.push_back(std::array<Id, 2>{currentSubj, id});
-      if (!predicateHashSet.contains(id)) {
-        predicateHashSet.insert(id);
-        fullHasPredicatePredicatesDistinctSize++;
-      }
-    }
-  } else {
-    numEntitiesWithPatterns++;
-    // The pattern does exist, add an entry to the has-pattern predicate
-    entityHasPattern.push_back(SubjectPatternPair{currentSubj, last->second});
-    for (const auto& id : pattern) {
-      if (!predicateHashSet.contains(id)) {
-        predicateHashSet.insert(id);
-        fullHasPredicatePredicatesDistinctSize++;
-      }
-    }
-  }
 
   _fullHasPredicateMultiplicityEntities =
       _fullHasPredicateSize /
@@ -456,23 +365,12 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
 
   LOG(DEBUG) << "Number of entity-has-pattern entries: "
              << entityHasPattern.size() << std::endl;
-  LOG(DEBUG) << "Number of entity-has-relation entries: "
-             << entityHasPredicate.size() << std::endl;
 
   LOG(INFO) << "Found " << pattern_data.patterns().size()
             << " distinct patterns." << std::endl;
   LOG(INFO) << numEntitiesWithPatterns
             << " of the databases entities have been assigned a pattern."
             << std::endl;
-  LOG(INFO) << numEntitiesWithoutPatterns
-            << " of the databases entities have not been assigned a pattern."
-            << std::endl;
-  LOG(INFO) << "Of these " << numInvalidEntities
-            << " would have to large a pattern." << std::endl;
-
-  LOG(DEBUG) << "Total number of entities: "
-             << (numEntitiesWithoutPatterns + numEntitiesWithPatterns)
-             << std::endl;
 
   LOG(DEBUG) << "Full has relation size: " << _fullHasPredicateSize
              << std::endl;
@@ -532,21 +430,15 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
     file.write(chunk, count * (sizeof(uint64_t) + sizeof(uint32_t)));
   }
 
-  // write the entityHasPredicate vector
-  size_t numHasPredicates = entityHasPredicate.size();
-  std::cout << "hasPredicatesize" << numHasPredicates << std::endl;
-  file.write(&numHasPredicates, sizeof(size_t));
-  static_assert(sizeof(std::array<Id, 2>) == sizeof(Id) * 2,
-                "std::array<Id, 2> has padding, unable to serialize and "
-                "deserialize the hasPredicate vector.");
-  file.write(entityHasPredicate.data(), sizeof(Id) * numHasPredicates * 2);
-
   // write the patterns
   pattern_data.patterns().write(file);
   file.close();
 
   LOG(INFO) << "Done creating patterns file." << std::endl;
 
+  // TODO: We can perform this setup directly above without the detour
+  // of the MMAP-Vector. then we can fully initialize this pattern_data
+  // and use automatic serialization to get rid of a lot of code.
   // create the has-relation and has-pattern lookup vectors
   if (entityHasPattern.size() > 0) {
     std::vector<PatternID>& hasPattern = pattern_data.hasPattern();
@@ -562,24 +454,6 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
     }
   }
 
-  vector<vector<PredicateId>> hasPredicateTmp;
-  if (entityHasPredicate.size() > 0) {
-    hasPredicateTmp.resize(entityHasPredicate.back()[0] + 1);
-    size_t pos = 0;
-    for (size_t i = 0; i < entityHasPredicate.size(); i++) {
-      Id current = entityHasPredicate[i][0];
-      while (current > pos) {
-        pos++;
-      }
-      while (i < entityHasPredicate.size() &&
-             entityHasPredicate[i][0] == current) {
-        hasPredicateTmp.back().push_back(entityHasPredicate[i][1]);
-        i++;
-      }
-      pos++;
-    }
-  }
-  pattern_data.hasPredicate().build(hasPredicateTmp);
   return pattern_data;
 }
 
@@ -625,14 +499,6 @@ PatternIndex::loadPatternData(ad_utility::File* file) {
     }
   }
 
-  // read the entity has predicate vector
-  size_t hasPredicateSize;
-  file->readOrThrow(&hasPredicateSize, sizeof(size_t));
-  std::cout << "hasPredicatesize" << hasPredicateSize << std::endl;
-  std::vector<array<Id, 2>> entityHasPredicate(hasPredicateSize);
-  file->readOrThrow(entityHasPredicate.data(),
-                    hasPredicateSize * sizeof(Id) * 2);
-
   // readOrThrow the patterns
   pattern_data->patterns().load(file);
 
@@ -650,25 +516,6 @@ PatternIndex::loadPatternData(ad_utility::File* file) {
       pos++;
     }
   }
-
-  vector<vector<PredicateId>> hasPredicateTmp;
-  if (entityHasPredicate.size() > 0) {
-    hasPredicateTmp.resize(entityHasPredicate.back()[0] + 1);
-    size_t pos = 0;
-    for (size_t i = 0; i < entityHasPredicate.size(); i++) {
-      Id current = entityHasPredicate[i][0];
-      while (current > pos) {
-        pos++;
-      }
-      while (i < entityHasPredicate.size() &&
-             entityHasPredicate[i][0] == current) {
-        hasPredicateTmp.back().push_back(entityHasPredicate[i][1]);
-        i++;
-      }
-      pos++;
-    }
-  }
-  pattern_data->hasPredicate().build(hasPredicateTmp);
   return pattern_data;
 }
 
