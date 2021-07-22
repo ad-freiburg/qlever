@@ -605,11 +605,18 @@ class TripleComponentComparator {
       std::string_view s, const Level level) const {
     AD_CHECK(level == Level::PRIMARY)
     auto transformed = extractAndTransformComparable(s, Level::PRIMARY);
-    unsigned char last = transformed.transformedVal.get().back();
-    if (last < std::numeric_limits<unsigned char>::max()) {
-      transformed.transformedVal.get().back() += 1;
+    // The `firstOriginalChar` is either " or < or @ 
+    AD_CHECK(static_cast<unsigned char>(transformed.firstOriginalChar) <
+             std::numeric_limits<unsigned char>::max())
+    if (transformed.transformedVal.get().empty()) {
+      transformed.firstOriginalChar += 1;
     } else {
-      transformed.transformedVal.get().push_back('\0');
+      unsigned char last = transformed.transformedVal.get().back();
+      if (last < std::numeric_limits<unsigned char>::max()) {
+        transformed.transformedVal.get().back() += 1;
+      } else {
+        transformed.transformedVal.get().push_back('\1');
+      }
     }
     return transformed;
   }
