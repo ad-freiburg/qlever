@@ -9,7 +9,7 @@
 #include <variant>
 #include <vector>
 
-#include "../engine/ResultTable.h"
+#include "../engine/ResultType.h"
 #include "../util/Exception.h"
 #include "../util/HashMap.h"
 #include "../util/StringUtils.h"
@@ -397,8 +397,7 @@ struct GraphPatternOperation {
     struct Constant {
       int64_t _intValue = 0;  // the Value of an integer constant (VERBATIM)
       string _kbValue;  // the value of a knowledge base entity or literal (KB)
-      ResultTable::ResultType
-          _type;  // the type, currently always KB or VERBATIM
+      qlever::ResultType _type;  // the type, currently always KB or VERBATIM
 
       Constant() = default;
 
@@ -407,12 +406,12 @@ struct GraphPatternOperation {
       explicit Constant(int64_t val)
           : _intValue(val),
             _kbValue(std::to_string(val)),
-            _type(ResultTable::ResultType::VERBATIM) {}
+            _type(qlever::ResultType::VERBATIM) {}
       // Initialize a KB constant. If the argument string is not part of the KB
       // this will lead to an error later on (currently no possibility to
       // already check this during parsing
       explicit Constant(std::string entry)
-          : _kbValue(std::move(entry)), _type(ResultTable::ResultType::KB) {}
+          : _kbValue(std::move(entry)), _type(qlever::ResultType::KB) {}
       // TODO<joka921> in c++ 20 we have constexpr strings.
       static constexpr const char* Name = "Constant";
       // Some other functions need this interface, for example,
