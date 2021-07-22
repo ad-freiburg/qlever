@@ -92,7 +92,6 @@ class CountAvailablePredicates : public Operation {
    * @param result A table with two columns, one for predicate ids,
    *               one for counts
    * @param hasPattern A mapping from entity ids to pattern ids (or NO_PATTERN)
-   * @param hasPredicate A mapping from entity ids to sets of relations
    * @param patterns A mapping from pattern ids to patterns
    * @param subjectColumn The column containing the entities for which the
    *                      relations should be counted.
@@ -101,7 +100,6 @@ class CountAvailablePredicates : public Operation {
   static void computePatternTrick(
       const IdTable& input, IdTable* result,
       const vector<PatternID>& hasPattern,
-      const CompactStringVector<Id, PredicateId>& hasPredicate,
       const CompactStringVector<size_t, PredicateId>& patterns,
       const std::vector<Id>& predicateGlobalIds, const size_t subjectColumn,
       RuntimeInformation* runtimeInfo);
@@ -109,7 +107,6 @@ class CountAvailablePredicates : public Operation {
   template <typename PredicateId>
   static void computePatternTrickAllEntities(
       IdTable* result, const vector<PatternID>& hasPattern,
-      const CompactStringVector<Id, PredicateId>& hasPredicate,
       const CompactStringVector<size_t, PredicateId>& patterns,
       const std::vector<Id>& predicateGlobalIds);
 

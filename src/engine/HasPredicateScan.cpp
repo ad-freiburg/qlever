@@ -10,7 +10,6 @@ template <typename A, typename R>
 void doComputeSubqueryS(const std::vector<A>* input,
                         const size_t inputSubjectColumn, std::vector<R>* result,
                         const std::vector<PatternID>& hasPattern,
-                        const CompactStringVector<Id, Id>& hasPredicate,
                         const CompactStringVector<size_t, Id>& patterns);
 
 HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec, ScanType type)
@@ -224,7 +223,6 @@ void HasPredicateScan::computeResult(
     const PatternContainerImpl<PredicateId>& pattern_data) {
   RuntimeInformation& runtimeInfo = getRuntimeInfo();
 
-  const auto& hasPredicate = pattern_data.hasPredicate();
   const auto& hasPattern = pattern_data.hasPattern();
   const auto& patterns = pattern_data.patterns();
   const auto& predicateGlobalIds =
@@ -238,8 +236,8 @@ void HasPredicateScan::computeResult(
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
                  "The predicate '" + _object + "' is not in the vocabulary.");
       }
-      HasPredicateScan::computeFreeS(result, objectId, hasPattern, hasPredicate,
-                                     patterns, predicateGlobalIds);
+      HasPredicateScan::computeFreeS(result, objectId, hasPattern, patterns,
+                                     predicateGlobalIds);
     } break;
     case ScanType::FREE_O: {
       runtimeInfo.setDescriptor("HasPredicateScan free object: " + _object);
@@ -248,14 +246,13 @@ void HasPredicateScan::computeResult(
         AD_THROW(ad_semsearch::Exception::BAD_INPUT,
                  "The subject " + _subject + " is not in the vocabulary.");
       }
-      HasPredicateScan::computeFreeO(result, subjectId, hasPattern,
-                                     hasPredicate, patterns,
+      HasPredicateScan::computeFreeO(result, subjectId, hasPattern, patterns,
                                      predicateGlobalIds);
     } break;
     case ScanType::FULL_SCAN:
       runtimeInfo.setDescriptor("HasPredicateScan full scan");
       HasPredicateScan::computeFullScan(
-          result, hasPattern, hasPredicate, patterns, predicateGlobalIds,
+          result, hasPattern, patterns, predicateGlobalIds,
           getIndex().getPatternIndex().getHasPredicateFullSize());
       break;
     case ScanType::SUBQUERY_S:
@@ -269,7 +266,7 @@ void HasPredicateScan::computeResult(
       int outWidth = result->_data.cols();
       CALL_FIXED_SIZE_2(inWidth, outWidth, HasPredicateScan::computeSubqueryS,
                         &result->_data, subresult->_data, _subtreeColIndex,
-                        hasPattern, hasPredicate, patterns, predicateGlobalIds);
+                        hasPattern, patterns, predicateGlobalIds);
       runtimeInfo.setDescriptor("HasPredicateScan with a subquery on " +
                                 _subject);
       runtimeInfo.addChild(_subtree->getRootOperation()->getRuntimeInfo());
@@ -281,13 +278,12 @@ template <typename PredicateId>
 void HasPredicateScan::computeFreeS(
     ResultTable* resultTable, size_t objectId,
     const std::vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, PredicateId>& hasPredicate,
     const CompactStringVector<size_t, PredicateId>& patterns,
     const std::vector<Id>& predicateGlobalIds) {
   IdTableStatic<1> result = resultTable->_data.moveToStatic<1>();
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
   Id id = 0;
-  while (id < hasPattern.size() || id < hasPredicate.size()) {
+  while (id < hasPattern.size()) {
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
       // add the pattern
       const auto& [patternData, numPredicates] = patterns[hasPattern[id]];
@@ -296,16 +292,8 @@ void HasPredicateScan::computeFreeS(
           result.push_back({id});
         }
       }
-    } else if (id < hasPredicate.size()) {
-      // add the relations
-      const auto& [predicateData, numPredicates] = hasPredicate[id];
-      for (size_t i = 0; i < numPredicates; i++) {
-        if (predicateGlobalIds[predicateData[i]] == objectId) {
-          result.push_back({id});
-        }
-      }
+      id++;
     }
-    id++;
   }
   resultTable->_data = result.moveToDynamic();
 }
@@ -314,7 +302,6 @@ template <typename PredicateId>
 void HasPredicateScan::computeFreeO(
     ResultTable* resultTable, size_t subjectId,
     const std::vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, PredicateId>& hasPredicate,
     const CompactStringVector<size_t, PredicateId>& patterns,
     const std::vector<Id>& predicateGlobalIds) {
   IdTableStatic<1> result = resultTable->_data.moveToStatic<1>();
@@ -326,12 +313,6 @@ void HasPredicateScan::computeFreeO(
     for (size_t i = 0; i < numPredicates; i++) {
       result.push_back({predicateGlobalIds[patternData[i]]});
     }
-  } else if (subjectId < hasPredicate.size()) {
-    // add the relations
-    const auto& [predicateData, numPredicates] = hasPredicate[subjectId];
-    for (size_t i = 0; i < numPredicates; i++) {
-      result.push_back({predicateGlobalIds[predicateData[i]]});
-    }
   }
   resultTable->_data = result.moveToDynamic();
 }
@@ -339,7 +320,6 @@ void HasPredicateScan::computeFreeO(
 template <typename PredicateId>
 void HasPredicateScan::computeFullScan(
     ResultTable* resultTable, const std::vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, PredicateId>& hasPredicate,
     const CompactStringVector<size_t, PredicateId>& patterns,
     const std::vector<Id>& predicateGlobalIds, size_t resultSize) {
   resultTable->_resultTypes.push_back(ResultTable::ResultType::KB);
@@ -348,18 +328,12 @@ void HasPredicateScan::computeFullScan(
   result.reserve(resultSize);
 
   size_t id = 0;
-  while (id < hasPattern.size() || id < hasPredicate.size()) {
+  while (id < hasPattern.size()) {
     if (id < hasPattern.size() && hasPattern[id] != NO_PATTERN) {
       // add the pattern
       const auto& [patternData, numPredicates] = patterns[hasPattern[id]];
       for (size_t i = 0; i < numPredicates; i++) {
         result.push_back({id, predicateGlobalIds[patternData[i]]});
-      }
-    } else if (id < hasPredicate.size()) {
-      // add the relations
-      const auto& [predicateData, numPredicates] = hasPredicate[id];
-      for (size_t i = 0; i < numPredicates; i++) {
-        result.push_back({id, predicateGlobalIds[predicateData[i]]});
       }
     }
     id++;
@@ -371,7 +345,6 @@ template <int IN_WIDTH, int OUT_WIDTH, typename PredicateId>
 void HasPredicateScan::computeSubqueryS(
     IdTable* dynResult, const IdTable& dynInput, const size_t subtreeColIndex,
     const std::vector<PatternID>& hasPattern,
-    const CompactStringVector<Id, PredicateId>& hasPredicate,
     const CompactStringVector<size_t, PredicateId>& patterns,
     const std::vector<Id>& predicateGlobalIds) {
   IdTableStatic<OUT_WIDTH> result = dynResult->moveToStatic<OUT_WIDTH>();
@@ -391,17 +364,6 @@ void HasPredicateScan::computeSubqueryS(
           result(backIdx, k) = input(i, k);
         }
         result(backIdx, input.cols()) = predicateGlobalIds[patternData[j]];
-      }
-    } else if (id < hasPredicate.size()) {
-      // add the relations
-      const auto& [predicateData, numPredicates] = hasPredicate[id];
-      for (size_t j = 0; j < numPredicates; j++) {
-        result.push_back();
-        size_t backIdx = result.size() - 1;
-        for (size_t k = 0; k < input.cols(); k++) {
-          result(backIdx, k) = input(i, k);
-        }
-        result(backIdx, input.cols()) = predicateGlobalIds[predicateData[j]];
       }
     } else {
       break;

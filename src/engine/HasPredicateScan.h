@@ -65,7 +65,6 @@ class HasPredicateScan : public Operation {
   static void computeFreeS(
       ResultTable* result, size_t objectId,
       const std::vector<PatternID>& hasPattern,
-      const CompactStringVector<Id, PredicateId>& hasPredicate,
       const CompactStringVector<size_t, PredicateId>& patterns,
       const std::vector<Id>& predicateGlobalIds);
 
@@ -73,14 +72,12 @@ class HasPredicateScan : public Operation {
   static void computeFreeO(
       ResultTable* result, size_t subjectId,
       const std::vector<PatternID>& hasPattern,
-      const CompactStringVector<Id, PredicateId>& hasPredicate,
       const CompactStringVector<size_t, PredicateId>& patterns,
       const std::vector<Id>& predicateGlobalIds);
 
   template <typename PredicateId>
   static void computeFullScan(
       ResultTable* result, const std::vector<PatternID>& hasPattern,
-      const CompactStringVector<Id, PredicateId>& hasPredicate,
       const CompactStringVector<size_t, PredicateId>& patterns,
       const std::vector<Id>& predicateGlobalIds, size_t resultSize);
 
@@ -88,7 +85,6 @@ class HasPredicateScan : public Operation {
   static void computeSubqueryS(
       IdTable* result, const IdTable& _subtree, const size_t subtreeColIndex,
       const std::vector<PatternID>& hasPattern,
-      const CompactStringVector<Id, PredicateId>& hasPredicate,
       const CompactStringVector<size_t, PredicateId>& patterns,
       const std::vector<Id>& predicateGlobalIds);
 

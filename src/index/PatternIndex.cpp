@@ -8,8 +8,7 @@ const uint32_t PatternIndex::PATTERNS_FILE_VERSION = 1;
 // creates a circular dependency
 using TripleVec = stxxl::vector<array<Id, 3>>;
 
-PatternIndex::PatternIndex()
-    : _initialized(false) {}
+PatternIndex::PatternIndex() : _initialized(false) {}
 
 // _____________________________________________________________________________
 void PatternIndex::generatePredicateLocalNamespace(VocabularyData* vocabData) {
@@ -258,7 +257,8 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
     size_t count;
   };
 
-  typedef ad_utility::HashMap<Pattern<PredicateId>, PatternIdAndCount> PatternsCountMap;
+  typedef ad_utility::HashMap<Pattern<PredicateId>, PatternIdAndCount>
+      PatternsCountMap;
   typedef ad_utility::HashMap<Pattern<PredicateId>, PatternID> PatternIdMap;
   // Used for the entityHasPattern relation
   // This struct is 16 bytes, not 12, due to padding (at least on gcc 10)
@@ -291,10 +291,12 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
     numEntitiesWithPatterns++;
     numValidPatterns++;
     if (!patternCounts.contains(pattern)) {
-      patternCounts[pattern] = PatternIdAndCount{static_cast<PatternID>(patternCounts.size()), 0};
-      fullHasPredicatePredicatesDistinctSize+= pattern.size();
+      patternCounts[pattern] =
+          PatternIdAndCount{static_cast<PatternID>(patternCounts.size()), 0};
+      fullHasPredicatePredicatesDistinctSize += pattern.size();
     }
-    entityHasPattern.push_back(SubjectPatternPair{currentSubj, patternCounts[pattern].id});
+    entityHasPattern.push_back(
+        SubjectPatternPair{currentSubj, patternCounts[pattern].id});
     patternCounts[pattern].count++;
     pattern.clear();
   };
@@ -327,16 +329,22 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
 
   const size_t maxNumPatterns = std::numeric_limits<PatternID>::max() - 2;
   if (patternCounts.size() > maxNumPatterns) {
-    throw std::runtime_error("Need more than " + std::to_string(maxNumPatterns) + " patterns, which is currently not supported. Please contact the developers of QLever about this.");
+    throw std::runtime_error(
+        "Need more than " + std::to_string(maxNumPatterns) +
+        " patterns, which is currently not supported. Please contact the "
+        "developers of QLever about this.");
   }
 
-      std::vector<std::pair<Pattern<PredicateId>, PatternIdAndCount>> sortedPatterns;
+  std::vector<std::pair<Pattern<PredicateId>, PatternIdAndCount>>
+      sortedPatterns;
   sortedPatterns.reserve(patternCounts.size());
   sortedPatterns.insert(sortedPatterns.end(),
                         std::make_move_iterator(patternCounts.begin()),
                         std::make_move_iterator(patternCounts.end()));
 
-  auto cmp =[](const auto& a, const auto& b) { return a.second.id < b.second.id;};
+  auto cmp = [](const auto& a, const auto& b) {
+    return a.second.id < b.second.id;
+  };
   std::sort(sortedPatterns.begin(), sortedPatterns.end(), cmp);
 
   // store the actual patterns
@@ -348,7 +356,6 @@ PatternContainerImpl<PredicateId> PatternIndex::createPatternsImpl(
   }
   PatternContainerImpl<PredicateId> pattern_data;
   pattern_data.patterns().build(buffer);
-
 
   // store how many entries there are in the full has-relation relation (after
   // resolving all patterns) and how may distinct elements there are (for the
