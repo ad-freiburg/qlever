@@ -71,6 +71,10 @@ void Join::computeResult(ResultTable* result) {
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
 
+  // TODO<joka921> Currently the _resultTypes are set incorrectly in case
+  // of early stopping. For now, early stopping is thus disabled.
+  // TODO: Implement getting the result types without calculating the result;
+  /*
   // Checking this before calling getResult on the subtrees can
   // avoid the computation of an non-empty subtree.
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
@@ -82,6 +86,7 @@ void Join::computeResult(ResultTable* result) {
     result->_sortedBy = {_leftJoinCol};
     return;
   }
+   */
 
   // Check for joins with dummy
   if (isFullScanDummy(_left) || isFullScanDummy(_right)) {
@@ -94,7 +99,11 @@ void Join::computeResult(ResultTable* result) {
   shared_ptr<const ResultTable> leftRes = _left->getResult();
   runtimeInfo.addChild(_left->getRootOperation()->getRuntimeInfo());
 
+  // TODO<joka921> Currently the _resultTypes are set incorrectly in case
+  // of early stopping. For now, early stopping is thus disabled.
+  // TODO: Implement getting the result types without calculating the result;
   // Check if we can stop early.
+  /*
   if (leftRes->size() == 0) {
     LOG(TRACE) << "Left side empty thus join result is empty" << endl;
     runtimeInfo.addDetail("The left side was empty", "");
@@ -104,6 +113,7 @@ void Join::computeResult(ResultTable* result) {
     result->_sortedBy = {_leftJoinCol};
     return;
   }
+   */
 
   LOG(TRACE) << "Computing right side..." << endl;
   shared_ptr<const ResultTable> rightRes = _right->getResult();

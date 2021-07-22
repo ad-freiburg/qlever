@@ -141,7 +141,7 @@ void Union::computeResult(ResultTable* result) {
     if (o[0] != NO_COLUMN) {
       result->_resultTypes.push_back(subRes1->getResultType(o[0]));
     } else if (o[1] != NO_COLUMN) {
-      result->_resultTypes.push_back(subRes1->getResultType(o[1]));
+      result->_resultTypes.push_back(subRes2->getResultType(o[1]));
     } else {
       result->_resultTypes.push_back(ResultTable::ResultType::KB);
     }
