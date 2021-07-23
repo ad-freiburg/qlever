@@ -605,7 +605,7 @@ class TripleComponentComparator {
       std::string_view s, const Level level) const {
     AD_CHECK(level == Level::PRIMARY)
     auto transformed = extractAndTransformComparable(s, Level::PRIMARY);
-    // The `firstOriginalChar` is either " or < or @ 
+    // The `firstOriginalChar` is either " or < or @
     AD_CHECK(static_cast<unsigned char>(transformed.firstOriginalChar) <
              std::numeric_limits<unsigned char>::max())
     if (transformed.transformedVal.get().empty()) {
