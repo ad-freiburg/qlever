@@ -326,7 +326,8 @@ void CountAvailablePredicates::computePatternTrick(
     patternVec.push_back(p);
   }
 
-  LOG(DEBUG) << "Start convertin patterns" << std::endl;
+  LOG(DEBUG) << "Start translating pattern counts to predicate counts"
+             << std::endl;
   if (patternVec.begin() !=
       patternVec.end()) {  // avoid segfaults with OpenMP on GCC
 #pragma omp parallel
@@ -342,7 +343,8 @@ void CountAvailablePredicates::computePatternTrick(
       }
     }
   }
-  LOG(DEBUG) << "Finished converting patterns" << std::endl;
+  LOG(DEBUG) << "Finished translating pattern counts to predicate counts"
+             << std::endl;
   // write the predicate counts to the result
   result.reserve(predicateCounts.size());
   for (const auto& it : predicateCounts) {
