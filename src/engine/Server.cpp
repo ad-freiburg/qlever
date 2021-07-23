@@ -15,6 +15,7 @@
 #include "../parser/ParseException.h"
 #include "../util/Log.h"
 #include "../util/StringUtils.h"
+#include "./Server.h"
 #include "QueryPlanner.h"
 
 // _____________________________________________________________________________
@@ -382,7 +383,7 @@ string Server::composeResponseJson(const ParsedQuery& query,
   j["status"] = "OK";
   j["resultsize"] = resultSize;
   j["warnings"] = qet.collectWarnings();
-  j["selected"] = query._selectedVariables;
+  j["selected"] = query._selectClause._selectedVariables;
 
   j["runtimeInformation"] = RuntimeInformation::ordered_json(
       qet.getRootOperation()->getRuntimeInfo());
@@ -397,7 +398,7 @@ string Server::composeResponseJson(const ParsedQuery& query,
       offset = static_cast<size_t>(atol(query._offset.c_str()));
     }
     requestTimer.cont();
-    j["res"] = qet.writeResultAsJson(query._selectedVariables,
+    j["res"] = qet.writeResultAsJson(query._selectClause._selectedVariables,
                                      std::min(limit, maxSend), offset);
     requestTimer.stop();
   }
@@ -422,7 +423,8 @@ string Server::composeResponseSepValues(const ParsedQuery& query,
   if (query._offset.size() > 0) {
     offset = static_cast<size_t>(atol(query._offset.c_str()));
   }
-  qet.writeResultToStream(os, query._selectedVariables, limit, offset, sep);
+  qet.writeResultToStream(os, query._selectClause._selectedVariables, limit,
+                          offset, sep);
 
   return os.str();
 }

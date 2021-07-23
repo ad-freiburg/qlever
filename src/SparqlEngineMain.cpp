@@ -220,7 +220,8 @@ void processQuery(QueryExecutionContext& qec, const string& query) {
   if (pq._offset.size() > 0) {
     offset = static_cast<size_t>(atol(pq._offset.c_str()));
   }
-  qet.writeResultToStream(cout, pq._selectedVariables, limit, offset);
+  qet.writeResultToStream(cout, pq._selectClause._selectedVariables, limit,
+                          offset);
   t.stop();
   std::cout << "\nDone. Time: " << t.usecs() / 1000.0 << " ms\n";
   size_t numMatches = qet.getResult()->size();

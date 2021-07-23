@@ -34,9 +34,9 @@ string ParsedQuery::asString() const {
 
   // SELECT
   os << "\nSELECT: {\n\t";
-  for (size_t i = 0; i < _selectedVariables.size(); ++i) {
-    os << _selectedVariables[i];
-    if (i + 1 < _selectedVariables.size()) {
+  for (size_t i = 0; i < _selectClause._selectedVariables.size(); ++i) {
+    os << _selectClause._selectedVariables[i];
+    if (i + 1 < _selectClause._selectedVariables.size()) {
       os << ", ";
     }
   }
@@ -44,10 +44,10 @@ string ParsedQuery::asString() const {
 
   // ALIASES
   os << "\nALIASES: {\n\t";
-  for (size_t i = 0; i < _aliases.size(); ++i) {
-    const Alias& a = _aliases[i];
+  for (size_t i = 0; i < _selectClause._aliases.size(); ++i) {
+    const Alias& a = _selectClause._aliases[i];
     os << a._function;
-    if (i + 1 < _aliases.size()) {
+    if (i + 1 < _selectClause._aliases.size()) {
       os << "\n\t";
     }
   }
@@ -61,8 +61,10 @@ string ParsedQuery::asString() const {
   os << "\nTEXTLIMIT: "
      << (_textLimit.size() > 0 ? _textLimit : "no limit specified");
   os << "\nOFFSET: " << (_offset.size() > 0 ? _offset : "no offset specified");
-  os << "\nDISTINCT modifier is " << (_distinct ? "" : "not ") << "present.";
-  os << "\nREDUCED modifier is " << (_reduced ? "" : "not ") << "present.";
+  os << "\nDISTINCT modifier is " << (_selectClause._distinct ? "" : "not ")
+     << "present.";
+  os << "\nREDUCED modifier is " << (_selectClause._reduced ? "" : "not ")
+     << "present.";
   os << "\nORDER BY: ";
   if (_orderBy.size() == 0) {
     os << "not specified";
@@ -389,14 +391,14 @@ void ParsedQuery::expandPrefix(
 }
 
 void ParsedQuery::parseAliases() {
-  for (size_t i = 0; i < _selectedVariables.size(); i++) {
-    const std::string& var = _selectedVariables[i];
+  for (size_t i = 0; i < _selectClause._selectedVariables.size(); i++) {
+    const std::string& var = _selectClause._selectedVariables[i];
     if (var[0] == '(') {
       // remove the leading and trailing bracket
       std::string inner = var.substr(1, var.size() - 2);
       // Replace the variable in the selected variables array with the aliased
       // name.
-      _selectedVariables[i] = parseAlias(inner);
+      _selectClause._selectedVariables[i] = parseAlias(inner);
     }
   }
   for (size_t i = 0; i < _orderBy.size(); i++) {
@@ -467,7 +469,7 @@ std::string ParsedQuery::parseAlias(const std::string& alias) {
     a._inVarName = alias.substr(start, pos - start - 1);
     bool isUnique = true;
     // check if another alias for the output variable already exists:
-    for (const Alias& other : _aliases) {
+    for (const Alias& other : _selectClause._aliases) {
       if (other._outVarName == a._outVarName) {
         // Check if the aliases are equal, otherwise throw an exception
         if (other._isAggregate != a._isAggregate ||
@@ -486,7 +488,7 @@ std::string ParsedQuery::parseAlias(const std::string& alias) {
     }
     if (isUnique) {
       // only add the alias if it doesn't already exist
-      _aliases.push_back(a);
+      _selectClause._aliases.push_back(a);
     }
   } else {
     throw ParseException("Unknown or malformed alias: (" + alias + ")");
