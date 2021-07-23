@@ -245,9 +245,6 @@ class MergeableHashmap : public ad_utility::HashMap<T, size_t> {
   }
 };
 
-using MergeableId = MergeableHashmap<Id>;
-using MergeableSizeT = MergeableHashmap<size_t>;
-
 template <int WIDTH>
 void CountAvailablePredicates::computePatternTrick(
     const IdTable& dynInput, IdTable* dynResult,
@@ -260,13 +257,14 @@ void CountAvailablePredicates::computePatternTrick(
   LOG(DEBUG) << "For " << input.size() << " entities in column "
              << subjectColumn << std::endl;
 
-  MergeableId predicateCounts;
-  MergeableSizeT patternCounts;
+  MergeableHashMap<Id> predicateCounts;
+  MergeableHashMap<size_t> patternCounts;
 
   // declare openmp reductions which aggregate Hashmaps by adding the values for
   // corresponding keys
-#pragma omp declare reduction(MergeHashmapsId:MergeableId : omp_out %= omp_in)
-#pragma omp declare reduction(MergeHashmapsSizeT:MergeableSizeT \
+#pragma omp declare reduction(MergeHashmapsId:MergeableHashMap<Id> \
+                              : omp_out %= omp_in)
+#pragma omp declare reduction(MergeHashmapsSizeT:MergeableHashMap<size_t> \
                               : omp_out %= omp_in)
 
   // These variables are used to gather additional statistics
