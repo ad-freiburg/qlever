@@ -233,6 +233,13 @@ void Server::process(Socket* client) {
         contentType =
             "text/tab-separated-values\r\n"
             "Content-Disposition: attachment;filename=export.tsv";
+      } else if (ad_utility::getLowercase(params["action"]) ==
+                 "binary_export") {
+        // binary export
+        response = composeResponseSepValues(pq, qet, 'b');
+        contentType =
+            "application/octet-stream\r\n"
+            "Content-Disposition: attachment;filename=export.dat";
       } else {
         // Normal case: JSON response
         response = composeResponseJson(pq, qet, requestTimer, maxSend);
