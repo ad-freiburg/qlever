@@ -474,6 +474,44 @@ const std::optional<string> Vocabulary<S, C>::idToOptionalString(Id id) const {
     return _externalLiterals[id];
   }
 }
+
+// ___________________________________________________________________________
+template <typename S, typename C>
+ad_utility::HashMap<typename Vocabulary<S, C>::Datatypes, std::pair<Id, Id>>
+Vocabulary<S, C>::getRangesForDatatypes() const {
+  ad_utility::HashMap<Datatypes, std::pair<Id, Id>> result;
+  result[Datatypes::Float] = prefix_range(VALUE_FLOAT_PREFIX);
+  result[Datatypes::Date] = prefix_range(VALUE_DATE_PREFIX);
+  result[Datatypes::Literal] = prefix_range("\"");
+  result[Datatypes::Iri] = prefix_range("<");
+
+  return result;
+};
+
+template <typename S, typename C>
+template <typename, typename>
+void Vocabulary<S, C>::printRangesForDatatypes() {
+  auto ranges = getRangesForDatatypes();
+  auto logRange = [&](const auto& range) {
+    LOG(INFO) << range.first << " " << range.second << '\n';
+    if (range.second > range.first) {
+      LOG(INFO) << idToOptionalString(range.first).value() << '\n';
+      LOG(INFO) << idToOptionalString(range.second - 1).value() << '\n';
+    }
+    if (range.second < _words.size()) {
+      LOG(INFO) << idToOptionalString(range.second).value() << '\n';
+    }
+
+    if (range.first > 0) {
+      LOG(INFO) << idToOptionalString(range.first - 1).value() << '\n';
+    }
+  };
+
+  for (const auto& pair : ranges) {
+    logRange(pair.second);
+  }
+}
+
 template const std::optional<string>
 RdfsVocabulary::idToOptionalString<CompressedString, void>(Id id) const;
 
@@ -491,6 +529,8 @@ template void RdfsVocabulary::initializeExternalizePrefixes<nlohmann::json>(
 template void RdfsVocabulary::prefixCompressFile<CompressedString, void>(
     const string& infile, const string& outfile,
     const vector<string>& prefixes);
+
+template void RdfsVocabulary::printRangesForDatatypes();
 
 template void TextVocabulary::createFromSet<std::string, void>(
     const ad_utility::HashSet<std::string>& set);

@@ -74,6 +74,9 @@ struct Prefix {
 //! CompressedString -> prefix compression is applied
 template <class StringType, class ComparatorType>
 class Vocabulary {
+  // The different type of data that is stored in the vocabulary
+  enum class Datatypes { Literal, Iri, Float, Date };
+
   template <typename T, typename R = void>
   using enable_if_compressed =
       std::enable_if_t<std::is_same_v<T, CompressedString>>;
@@ -176,6 +179,12 @@ class Vocabulary {
   //! against C++ conventions!
   // consider using the prefixRange function.
   bool getIdRangeForFullTextPrefix(const string& word, IdRange* range) const;
+
+  ad_utility::HashMap<Datatypes, std::pair<Id, Id>> getRangesForDatatypes()
+      const;
+
+  template <typename U = StringType, typename = enable_if_compressed<U>>
+  void printRangesForDatatypes();
 
   // only used during Index building, not needed for compressed vocabulary
   template <typename U = StringType, typename = enable_if_uncompressed<U>>
