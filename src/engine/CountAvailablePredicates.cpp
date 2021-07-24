@@ -235,9 +235,9 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
  *
  */
 template <typename T>
-class MergeableHashmap : public ad_utility::HashMap<T, size_t> {
+class MergeableHashMap : public ad_utility::HashMap<T, size_t> {
  public:
-  MergeableHashmap& operator%=(const MergeableHashmap& rhs) {
+  MergeableHashMap& operator%=(const MergeableHashMap& rhs) {
     for (const auto& [key, value] : rhs) {
       (*this)[key] += value;
     }
