@@ -1861,6 +1861,8 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
              << b.size() << " plans...\n";
   for (const auto& ai : a) {
     for (const auto& bj : b) {
+      LOG(TRACE) << "Creating join candidates for " << ai._qet->asString()
+                 << "\n and " << bj._qet->asString() << '\n';
       auto v = createJoinCandidates(ai, bj, tg);
       for (auto& plan : v) {
         candidates[getPruningKey(plan, plan._qet->resultSortedOn())]
@@ -1876,11 +1878,26 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
   // as key.
   LOG(TRACE) << "Pruning...\n";
   vector<SubtreePlan> prunedPlans;
-  for (auto& [key, value] : candidates) {
-    (void)key;  // silence unused warning
-    size_t minIndex = findCheapestExecutionTree(value);
-    prunedPlans.push_back(std::move(value[minIndex]));
+
+  auto pruneCandidates = [&](auto& actualCandidates) {
+    for (auto& [key, value] : actualCandidates) {
+      (void)key;  // silence unused warning
+      size_t minIndex = findCheapestExecutionTree(value);
+      prunedPlans.push_back(std::move(value[minIndex]));
+    }
+  };
+
+  if (isInTestMode()) {
+    std::vector<std::pair<string, vector<SubtreePlan>>> sortedCandidates{
+        std::make_move_iterator(candidates.begin()),
+        std::make_move_iterator(candidates.end())};
+    std::sort(sortedCandidates.begin(), sortedCandidates.end(),
+              [](const auto& a, const auto& b) { return a.first < b.first; });
+    pruneCandidates(sortedCandidates);
+  } else {
+    pruneCandidates(candidates);
   }
+
   LOG(TRACE) << "Got " << prunedPlans.size() << " pruned plans from \n";
   return prunedPlans;
 }
@@ -2041,9 +2058,15 @@ QueryPlanner::SubtreePlan QueryPlanner::multiColumnJoin(
     orderByPlanB._qet->setOperation(QueryExecutionTree::ORDER_BY, orderByB);
   }
 
-  auto join = std::make_shared<MultiColumnJoin>(
-      _qec, aSorted ? a._qet : orderByPlanA._qet,
-      bSorted ? b._qet : orderByPlanB._qet, jcs);
+  const auto& actualA = aSorted ? a._qet : orderByPlanA._qet;
+  const auto& actualB = bSorted ? b._qet : orderByPlanB._qet;
+  if (Join::isFullScanDummy(a._qet) || Join::isFullScanDummy(b._qet)) {
+    throw std::runtime_error(
+        "Trying a JOIN between two full scan dummys, this"
+        "will be handled by the calling code automatically");
+  }
+
+  auto join = std::make_shared<MultiColumnJoin>(_qec, actualA, actualB, jcs);
   QueryExecutionTree& tree = *plan._qet;
   tree.setVariableColumns(join->getVariableColumns());
   tree.setOperation(QueryExecutionTree::MULTICOLUMN_JOIN, join);
@@ -2761,8 +2784,14 @@ size_t QueryPlanner::findCheapestExecutionTree(
 
 // _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
-    const SubtreePlan& a, const SubtreePlan& b,
+    const SubtreePlan& ain, const SubtreePlan& bin,
     std::optional<TripleGraph> tg) const {
+  const auto& a = !isInTestMode() || ain._qet->asString() < bin._qet->asString()
+                      ? ain
+                      : bin;
+  const auto& b = !isInTestMode() || ain._qet->asString() < bin._qet->asString()
+                      ? bin
+                      : ain;
   std::vector<SubtreePlan> candidates;
 
   // TODO<joka921> find out, what is ACTUALLY the use case for the triple
@@ -2808,14 +2837,22 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
       return std::vector{optionalJoin(a, b)};
     }
 
-    if (jcs.size() == 2) {
-      // SPECIAL CASE: Cyclic queries -> join on exactly two columns
+    // The TwoColumnJoin works when one input table has exactly 2 columns
+    // and the join columns are 0 and 1 in that order; see TwoColumnJoin.cpp .
+    // For all other cases, we have to use the general MultiColumnJoin
+    bool considerTwoColumnJoin = jcs.size() == 2;
+    if (considerTwoColumnJoin) {
+      considerTwoColumnJoin =
+          (a._qet->getResultWidth() == 2 && jcs[0][0] == 0 && jcs[1][0] == 1);
+      considerTwoColumnJoin =
+          considerTwoColumnJoin ||
+          (b._qet->getResultWidth() == 2 && jcs[0][1] == 0 && jcs[1][1] == 1);
+    }
 
-      // Forbd a join between two dummies.
-      if ((a._qet->getType() == QueryExecutionTree::SCAN &&
-           a._qet->getRootOperation()->getResultWidth() == 3) &&
-          (b._qet->getType() == QueryExecutionTree::SCAN &&
-           b._qet->getRootOperation()->getResultWidth() == 3)) {
+    if (considerTwoColumnJoin) {
+      // Forbid a two column join where a dummy is included, as QLever currently
+      // does not support this.
+      if (Join::isFullScanDummy(a._qet) || Join::isFullScanDummy(b._qet)) {
         return candidates;
       }
 
@@ -2878,14 +2915,19 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
         candidates.push_back(std::move(plan));
       }
       return candidates;
-    } else if (jcs.size() > 2) {
-      // this can happen when e.g. subqueries are used
-      SubtreePlan plan = multiColumnJoin(a, b);
-      plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
-      plan.addAllNodes(b._idsOfIncludedNodes);
-      plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-      plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
-      return {plan};
+    } else if (jcs.size() >= 2) {
+      // If there are two or more join columns and we are not using the
+      // TwoColumnJoin (the if part before this comment), use a multiColumnJoin.
+      try {
+        SubtreePlan plan = multiColumnJoin(a, b);
+        plan._idsOfIncludedNodes = a._idsOfIncludedNodes;
+        plan.addAllNodes(b._idsOfIncludedNodes);
+        plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
+        plan._idsOfIncludedFilters |= b._idsOfIncludedFilters;
+        return {plan};
+      } catch (const std::exception& e) {
+        return {};
+      }
     }
 
     // CASE: JOIN ON ONE COLUMN ONLY.
