@@ -77,7 +77,6 @@ TEST(TokenTest, Numbers) {
   ASSERT_FALSE(Helper::matchDouble(integer2));
 }
 
-// static constexpr auto x = cls(TurtleTokenCtre::PnCharsBaseString);
 TEST(TokenizerTest, SingleChars) {
   TurtleToken t;
 
@@ -182,7 +181,6 @@ TEST(TokenizerTest, StringLiterals) {
   ASSERT_FALSE(H::matchStringLiteralLongSingleQuoteString(sSingleNoMultiline2));
 }
 
-// static constexpr auto pnCharsUGrp = cls(TurtleTokenCtre::PnCharsUString);
 TEST(TokenizerTest, Entities) {
   TurtleToken t;
   string iriref1 = "<>";

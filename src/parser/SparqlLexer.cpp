@@ -5,10 +5,9 @@
 #include "SparqlLexer.h"
 
 #include "../util/StringUtils.h"
+#include "./RdfEscaping.h"
 #include "ParseException.h"
 #include "Tokenizer.h"
-#include "./RdfEscaping.h"
-
 
 const std::string SparqlToken::TYPE_NAMES[] = {
     "IRI",       "WS",         "KEYWORD", "VARIABLE", "SYMBOL",
