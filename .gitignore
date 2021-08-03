@@ -1,5 +1,6 @@
 # Build directory
 build/
+cmake-build*
 
 # End-to-End data
 e2e_data/*
@@ -8,6 +9,7 @@ e2e_data/*
 *.lo
 *.o
 *.obj
+*.jar
 
 # Precompiled Headers
 *.gch
