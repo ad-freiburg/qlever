@@ -5,6 +5,7 @@
 #include "SparqlLexer.h"
 
 #include "../util/StringUtils.h"
+#include "./RdfEscaping.h"
 #include "ParseException.h"
 #include "Tokenizer.h"
 

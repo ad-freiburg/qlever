@@ -9,6 +9,8 @@
 
 #include "../src/parser/RdfEscaping.h"
 #include "../src/parser/Tokenizer.h"
+#include "../src/parser/TokenizerCtre.h"
+#include "./TokenTestCtreHelper.h"
 
 using std::string;
 TEST(TokenTest, Numbers) {
@@ -52,30 +54,29 @@ TEST(TokenTest, Numbers) {
   ASSERT_FALSE(RE2::FullMatch(integer2, t.Double));
 
   // same for ctre
-  using c = TurtleTokenCtre;
-  ASSERT_TRUE(ctre::match<c::Integer>(integer1));
-  ASSERT_TRUE(ctre::match<c::Integer>(integer2));
-  ASSERT_TRUE(ctre::match<c::Integer>(integer3));
-  ASSERT_FALSE(ctre::match<c::Integer>(noInteger));
-  ASSERT_FALSE(ctre::match<c::Integer>(decimal1));
+  using Helper = TokenTestCtreHelper;
+  ASSERT_TRUE(Helper::matchInteger(integer1));
+  ASSERT_TRUE(Helper::matchInteger(integer2));
+  ASSERT_TRUE(Helper::matchInteger(integer3));
+  ASSERT_FALSE(Helper::matchInteger(noInteger));
+  ASSERT_FALSE(Helper::matchInteger(decimal1));
 
-  ASSERT_TRUE(ctre::match<c::Decimal>(decimal1));
-  ASSERT_TRUE(ctre::match<c::Decimal>(decimal2));
-  ASSERT_TRUE(ctre::match<c::Decimal>(decimal3));
-  ASSERT_FALSE(ctre::match<c::Decimal>(noDecimal));
-  ASSERT_FALSE(ctre::match<c::Decimal>(integer3));
-  ASSERT_FALSE(ctre::match<c::Decimal>(double2));
+  ASSERT_TRUE(Helper::matchDecimal(decimal1));
+  ASSERT_TRUE(Helper::matchDecimal(decimal2));
+  ASSERT_TRUE(Helper::matchDecimal(decimal3));
+  ASSERT_FALSE(Helper::matchDecimal(noDecimal));
+  ASSERT_FALSE(Helper::matchDecimal(integer3));
+  ASSERT_FALSE(Helper::matchDecimal(double2));
 
-  ASSERT_TRUE(ctre::match<c::Double>(double1));
-  ASSERT_TRUE(ctre::match<c::Double>(double2));
-  ASSERT_TRUE(ctre::match<c::Double>(double3));
-  ASSERT_TRUE(ctre::match<c::Double>(double4));
-  ASSERT_TRUE(ctre::match<c::Double>(double5));
-  ASSERT_FALSE(ctre::match<c::Double>(decimal1));
-  ASSERT_FALSE(ctre::match<c::Double>(integer2));
+  ASSERT_TRUE(Helper::matchDouble(double1));
+  ASSERT_TRUE(Helper::matchDouble(double2));
+  ASSERT_TRUE(Helper::matchDouble(double3));
+  ASSERT_TRUE(Helper::matchDouble(double4));
+  ASSERT_TRUE(Helper::matchDouble(double5));
+  ASSERT_FALSE(Helper::matchDouble(decimal1));
+  ASSERT_FALSE(Helper::matchDouble(integer2));
 }
 
-static constexpr auto x = cls(TurtleTokenCtre::PnCharsBaseString);
 TEST(TokenizerTest, SingleChars) {
   TurtleToken t;
 
@@ -88,7 +89,7 @@ TEST(TokenizerTest, SingleChars) {
   // same for ctre
   // TODO<joka921>: fix those regexes to the unicode stuff and test more
   // extensively
-  ASSERT_TRUE(ctre::match<x>("A"));
+  ASSERT_TRUE(TokenTestCtreHelper::matchPnCharsBaseString("A"));
   /*
   ASSERT_TRUE(ctre::match<x>("\u00dd"));
   ASSERT_TRUE(ctre::match<x>("\u00DD"));
@@ -112,12 +113,12 @@ TEST(TokenizerTest, StringLiterals) {
   ASSERT_FALSE(RE2::FullMatch(NoSQuote1, t.StringLiteralQuote, nullptr));
   ASSERT_FALSE(RE2::FullMatch(NoSQuote2, t.StringLiteralQuote, nullptr));
   // same for CTRE
-  using c = TurtleTokenCtre;
-  ASSERT_TRUE(ctre::match<c::StringLiteralQuoteString>(sQuote1));
-  ASSERT_TRUE(ctre::match<c::StringLiteralQuoteString>(sQuote2));
-  ASSERT_TRUE(ctre::match<c::StringLiteralQuoteString>(sQuote3));
-  ASSERT_FALSE(ctre::match<c::StringLiteralQuoteString>(NoSQuote1));
-  ASSERT_FALSE(ctre::match<c::StringLiteralQuoteString>(NoSQuote2));
+  using H = TokenTestCtreHelper;
+  ASSERT_TRUE(H::matchStringLiteralQuoteString(sQuote1));
+  ASSERT_TRUE(H::matchStringLiteralQuoteString(sQuote2));
+  ASSERT_TRUE(H::matchStringLiteralQuoteString(sQuote3));
+  ASSERT_FALSE(H::matchStringLiteralQuoteString(NoSQuote1));
+  ASSERT_FALSE(H::matchStringLiteralQuoteString(NoSQuote2));
 
   string sSingleQuote1 = "\'this is a quote \'";
   string sSingleQuote2 =
@@ -135,11 +136,11 @@ TEST(TokenizerTest, StringLiterals) {
   ASSERT_FALSE(RE2::FullMatch(NoSQuote1, t.StringLiteralSingleQuote, nullptr));
   ASSERT_FALSE(RE2::FullMatch(NoSQuote2, t.StringLiteralSingleQuote, nullptr));
 
-  ASSERT_TRUE(ctre::match<c::StringLiteralSingleQuoteString>(sSingleQuote1));
-  ASSERT_TRUE(ctre::match<c::StringLiteralSingleQuoteString>(sSingleQuote2));
-  ASSERT_TRUE(ctre::match<c::StringLiteralSingleQuoteString>(sSingleQuote3));
-  ASSERT_FALSE(ctre::match<c::StringLiteralSingleQuoteString>(NoSQuote1));
-  ASSERT_FALSE(ctre::match<c::StringLiteralSingleQuoteString>(NoSQuote2));
+  ASSERT_TRUE(H::matchStringLiteralSingleQuoteString(sSingleQuote1));
+  ASSERT_TRUE(H::matchStringLiteralSingleQuoteString(sSingleQuote2));
+  ASSERT_TRUE(H::matchStringLiteralSingleQuoteString(sSingleQuote3));
+  ASSERT_FALSE(H::matchStringLiteralSingleQuoteString(NoSQuote1));
+  ASSERT_FALSE(H::matchStringLiteralSingleQuoteString(NoSQuote2));
 
   string sMultiline1 = "\"\"\"test\n\"\"\"";
   string sMultiline2 =
@@ -154,10 +155,10 @@ TEST(TokenizerTest, StringLiterals) {
   ASSERT_FALSE(
       RE2::FullMatch(sNoMultiline2, t.StringLiteralLongQuote, nullptr));
 
-  ASSERT_TRUE(ctre::match<c::StringLiteralLongQuoteString>(sMultiline1));
-  ASSERT_TRUE(ctre::match<c::StringLiteralLongQuoteString>(sMultiline2));
-  ASSERT_FALSE(ctre::match<c::StringLiteralLongQuoteString>(sNoMultiline1));
-  ASSERT_FALSE(ctre::match<c::StringLiteralLongQuoteString>(sNoMultiline2));
+  ASSERT_TRUE(H::matchStringLiteralLongQuoteString(sMultiline1));
+  ASSERT_TRUE(H::matchStringLiteralLongQuoteString(sMultiline2));
+  ASSERT_FALSE(H::matchStringLiteralLongQuoteString(sNoMultiline1));
+  ASSERT_FALSE(H::matchStringLiteralLongQuoteString(sNoMultiline2));
 
   string sSingleMultiline1 = "\'\'\'test\n\'\'\'";
   string sSingleMultiline2 =
@@ -174,17 +175,12 @@ TEST(TokenizerTest, StringLiterals) {
   ASSERT_FALSE(RE2::FullMatch(sSingleNoMultiline2,
                               t.StringLiteralLongSingleQuote, nullptr));
 
-  ASSERT_TRUE(
-      ctre::match<c::StringLiteralLongSingleQuoteString>(sSingleMultiline1));
-  ASSERT_TRUE(
-      ctre::match<c::StringLiteralLongSingleQuoteString>(sSingleMultiline2));
-  ASSERT_FALSE(
-      ctre::match<c::StringLiteralLongSingleQuoteString>(sSingleNoMultiline1));
-  ASSERT_FALSE(
-      ctre::match<c::StringLiteralLongSingleQuoteString>(sSingleNoMultiline2));
+  ASSERT_TRUE(H::matchStringLiteralLongSingleQuoteString(sSingleMultiline1));
+  ASSERT_TRUE(H::matchStringLiteralLongSingleQuoteString(sSingleMultiline2));
+  ASSERT_FALSE(H::matchStringLiteralLongSingleQuoteString(sSingleNoMultiline1));
+  ASSERT_FALSE(H::matchStringLiteralLongSingleQuoteString(sSingleNoMultiline2));
 }
 
-static constexpr auto pnCharsUGrp = cls(TurtleTokenCtre::PnCharsUString);
 TEST(TokenizerTest, Entities) {
   TurtleToken t;
   string iriref1 = "<>";
@@ -200,13 +196,13 @@ TEST(TokenizerTest, Entities) {
   ASSERT_FALSE(RE2::FullMatch(noIriref1, t.Iriref, nullptr));
   ASSERT_FALSE(RE2::FullMatch(noIriref2, t.Iriref, nullptr));
 
-  using c = TurtleTokenCtre;
-  ASSERT_TRUE(ctre::match<c::Iriref>(iriref1));
-  ASSERT_TRUE(ctre::match<c::Iriref>(iriref2));
-  ASSERT_TRUE(ctre::match<c::Iriref>(iriref3));
-  ASSERT_TRUE(ctre::match<c::Iriref>(iriref4));
-  ASSERT_FALSE(ctre::match<c::Iriref>(noIriref1));
-  ASSERT_FALSE(ctre::match<c::Iriref>(noIriref2));
+  using H = TokenTestCtreHelper;
+  ASSERT_TRUE(H::matchIriref(iriref1));
+  ASSERT_TRUE(H::matchIriref(iriref2));
+  ASSERT_TRUE(H::matchIriref(iriref3));
+  ASSERT_TRUE(H::matchIriref(iriref4));
+  ASSERT_FALSE(H::matchIriref(noIriref1));
+  ASSERT_FALSE(H::matchIriref(noIriref2));
 
   string prefix1 = "wd:";
   string prefix2 = "wdDDäéa_afa:";
@@ -263,8 +259,8 @@ TEST(TokenizerTest, Entities) {
   ASSERT_FALSE(RE2::FullMatch(noPrefName3, t.PnameLN, nullptr));
 
   // CTRE
-  ASSERT_FALSE(ctre::match<pnCharsUGrp>("\xBF"));
-  ASSERT_FALSE(ctre::match<c::PnLocalString>("\xBF"));
+  ASSERT_FALSE(ctre::match<TurtleTokenCtre::PnCharsUString>("\xBF"));
+  ASSERT_FALSE(ctre::match<TurtleTokenCtre::PnLocalString>("\xBF"));
 
   // TODO<joka921>: those are also broken
   /*
@@ -360,7 +356,7 @@ TEST(TokenizerTest, WhitespaceAndComments) {
     ASSERT_EQ(tok.data().begin() - s2.data(), 14);
     std::string s("    #comment of some way\n  start");
     tok.reset(s.data(), s.size());
-    auto [success2, ws] = tok.getNextToken<TokId::Comment>();
+    auto [success2, ws] = tok.getNextToken<TurtleTokenId::Comment>();
     (void)ws;
     ASSERT_FALSE(success2);
     tok.skipWhitespaceAndComments();

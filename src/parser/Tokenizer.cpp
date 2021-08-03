@@ -52,63 +52,63 @@ std::tuple<bool, size_t, std::string> Tokenizer::getNextToken(
 }
 
 // ______________________________________________________________________________________________________
-const RE2& Tokenizer::idToRegex(const TokId reg) {
+const RE2& Tokenizer::idToRegex(const TurtleTokenId reg) {
   switch (reg) {
-    case TokId::TurtlePrefix:
+    case TurtleTokenId::TurtlePrefix:
       return _tokens.TurtlePrefix;
-    case TokId::SparqlPrefix:
+    case TurtleTokenId::SparqlPrefix:
       return _tokens.SparqlPrefix;
-    case TokId::TurtleBase:
+    case TurtleTokenId::TurtleBase:
       return _tokens.TurtleBase;
-    case TokId::SparqlBase:
+    case TurtleTokenId::SparqlBase:
       return _tokens.SparqlBase;
-    case TokId::Dot:
+    case TurtleTokenId::Dot:
       return _tokens.Dot;
-    case TokId::Comma:
+    case TurtleTokenId::Comma:
       return _tokens.Comma;
-    case TokId::Semicolon:
+    case TurtleTokenId::Semicolon:
       return _tokens.Semicolon;
-    case TokId::OpenSquared:
+    case TurtleTokenId::OpenSquared:
       return _tokens.OpenSquared;
-    case TokId::CloseSquared:
+    case TurtleTokenId::CloseSquared:
       return _tokens.CloseSquared;
-    case TokId::OpenRound:
+    case TurtleTokenId::OpenRound:
       return _tokens.OpenRound;
-    case TokId::CloseRound:
+    case TurtleTokenId::CloseRound:
       return _tokens.CloseRound;
-    case TokId::A:
+    case TurtleTokenId::A:
       return _tokens.A;
-    case TokId::DoubleCircumflex:
+    case TurtleTokenId::DoubleCircumflex:
       return _tokens.DoubleCircumflex;
-    case TokId::True:
+    case TurtleTokenId::True:
       return _tokens.True;
-    case TokId::False:
+    case TurtleTokenId::False:
       return _tokens.False;
-    case TokId::Langtag:
+    case TurtleTokenId::Langtag:
       return _tokens.Langtag;
-    case TokId::Decimal:
+    case TurtleTokenId::Decimal:
       return _tokens.Decimal;
-    case TokId::Exponent:
+    case TurtleTokenId::Exponent:
       return _tokens.Exponent;
-    case TokId::Double:
+    case TurtleTokenId::Double:
       return _tokens.Double;
-    case TokId::Iriref:
+    case TurtleTokenId::Iriref:
       return _tokens.Iriref;
-    case TokId::PnameNS:
+    case TurtleTokenId::PnameNS:
       return _tokens.PnameNS;
-    case TokId::PnameLN:
+    case TurtleTokenId::PnameLN:
       return _tokens.PnameLN;
-    case TokId::PnLocal:
+    case TurtleTokenId::PnLocal:
       return _tokens.PnLocal;
-    case TokId::BlankNodeLabel:
+    case TurtleTokenId::BlankNodeLabel:
       return _tokens.BlankNodeLabel;
-    case TokId::WsMultiple:
+    case TurtleTokenId::WsMultiple:
       return _tokens.WsMultiple;
-    case TokId::Anon:
+    case TurtleTokenId::Anon:
       return _tokens.Anon;
-    case TokId::Comment:
+    case TurtleTokenId::Comment:
       return _tokens.Comment;
-    case TokId::Integer:
+    case TurtleTokenId::Integer:
       return _tokens.Integer;
   }
   throw std::runtime_error(
