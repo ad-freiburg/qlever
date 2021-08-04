@@ -71,21 +71,22 @@ const SparqlLexer::RegexTokenMap& SparqlLexer::getRegexTokenMap() {
   using T = SparqlToken::Type;
   static const RegexTokenMap regexTokenMap = [=]() {
     RegexTokenMap m;
-    auto emplace = [&m](const std::string& regex, T type) {
+    auto add = [&m](const std::string& regex, T type) {
       m.push_back(std::make_pair(std::make_unique<re2::RE2>(regex), type));
     };
-    emplace(KEYWORD, T::KEYWORD);
-    emplace(GROUP_BY, T::GROUP_BY);
-    emplace(ORDER_BY, T::ORDER_BY);
-    emplace(AGGREGATE, T::AGGREGATE);
-    emplace(LOGICAL_OR, T::LOGICAL_OR);
-    emplace(VARIABLE, T::VARIABLE);
-    emplace(IRI, T::IRI);
-    emplace("(" + RDFLITERAL + ")", T::RDFLITERAL);
-    emplace(FLOAT, T::FLOAT);
-    emplace(INTEGER, T::INTEGER);
-    emplace(SYMBOL, T::SYMBOL);
-    emplace("(" + WS + "+)", T::WS);
+    add(KEYWORD, T::KEYWORD);
+    add(GROUP_BY, T::GROUP_BY);
+    add(ORDER_BY, T::ORDER_BY);
+    add(AGGREGATE, T::AGGREGATE);
+    add(LOGICAL_OR, T::LOGICAL_OR);
+    add(VARIABLE, T::VARIABLE);
+    add(IRI, T::IRI);
+    add("(" + RDFLITERAL + ")", T::RDFLITERAL);
+    add(FLOAT, T::FLOAT);
+    add(INTEGER, T::INTEGER);
+    add(SYMBOL, T::SYMBOL);
+    add("(" + WS + "+)", T::WS);
+    add("(#.*)", T::WS);
     return m;
   }();
   return regexTokenMap;
@@ -131,14 +132,7 @@ void SparqlLexer::readNext() {
       }
     }
     if (!regexMatched) {
-      if (_re_string[0] == '#') {
-        // Start of a comment. Consume everything up to the next newline.
-        while (!_re_string.empty() && _re_string[0] != '\n') {
-          _re_string.remove_prefix(1);
-        }
-      } else {
-        throw ParseException("Unexpected input: " + _re_string.as_string());
-      }
+      throw ParseException("Unexpected input: " + _re_string.as_string());
     }
   }
   _next.raw = raw;
