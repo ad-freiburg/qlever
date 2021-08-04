@@ -525,77 +525,7 @@ void Join::join(const IdTable& dynA, size_t jc1, const IdTable& dynB,
     doGallopInnerJoin(RightLargerTag{}, a, jc1, b, jc2, &result);
   } else {
     parallelJoin<L_WIDTH, R_WIDTH, OUT_WIDTH>(dynA, jc1, dynB, jc2, result);
-    /*
-    auto checkTimeoutAfterNCalls = checkTimeoutAfterNCallsFactory();
-    // Intersect both lists.
-    size_t i = 0;
-    size_t j = 0;
-    while (i < a.size() && j < b.size()) {
-      while (a(i, jc1) < b(j, jc2)) {
-        ++i;
-        checkTimeoutAfterNCalls();
-        if (i >= a.size()) {
-          goto finish;
-        }
-      }
-
-      while (b(j, jc2) < a(i, jc1)) {
-        ++j;
-        checkTimeoutAfterNCalls();
-        if (j >= b.size()) {
-          goto finish;
-        }
-      }
-
-      while (a(i, jc1) == b(j, jc2)) {
-        // In case of match, create cross-product
-        // Always fix a and go through b.
-        size_t keepJ = j;
-        while (a(i, jc1) == b(j, jc2)) {
-          result.push_back();
-          const size_t backIndex = result.size() - 1;
-          for (size_t h = 0; h < a.cols(); h++) {
-            result(backIndex, h) = a(i, h);
-          }
-
-          // Copy bs columns before the join column
-          for (size_t h = 0; h < jc2; h++) {
-            result(backIndex, h + a.cols()) = b(j, h);
-          }
-
-          // Copy bs columns after the join column
-          for (size_t h = jc2 + 1; h < b.cols(); h++) {
-            result(backIndex, h + a.cols() - 1) = b(j, h);
-          }
-
-          ++j;
-          checkTimeoutAfterNCalls();
-          if (j >= b.size()) {
-            // The next i might still match
-            break;
-          }
-        }
-        ++i;
-        checkTimeoutAfterNCalls();
-        if (i >= a.size()) {
-          goto finish;
-        }
-        // If the next i is still the same, reset j.
-        if (a(i, jc1) == b(keepJ, jc2)) {
-          j = keepJ;
-        } else if (j >= b.size()) {
-          // this check is needed because otherwise we might leak an out of
-          // bounds value for j into the next loop which does not check it. this
-          // fixes a bug that was not discovered by testing due to 0
-          // initialization of IdTables used for testing and should not occur in
-          // typical use cases but it is still wrong.
-          goto finish;
-        }
-      }
-    }
-     */
   }
-  // finish:
   *dynRes = result.moveToDynamic();
 
   LOG(DEBUG) << "Join done.\n";
