@@ -22,8 +22,8 @@ class AllocationExceedsLimitException : public std::exception {
       : _message{
             "Tried to allocate " + std::to_string(requestedBytes >> 20) +
             "MB, but only " + std::to_string(freeBytes >> 20) +
-            "MB  were free." +
-            "the cache or allowing more memory for QLever during startup"} {};
+            "MB  were available. " +
+            "Free the cache or allow more memory for QLever during startup"} {};
 
  private:
   const char* what() const noexcept override { return _message.c_str(); }
