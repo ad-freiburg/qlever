@@ -5,6 +5,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <algorithm>
 
 static const size_t STXXL_MEMORY_TO_USE = 1024L * 1024L * 1024L * 2L;
 static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 1000 * 1000;
@@ -121,7 +122,6 @@ static constexpr size_t PERCENTAGE_OF_TRIPLES_FOR_SORT_ESTIMATE = 5;
 
 #ifdef _PARALLEL_SORT
 static constexpr bool USE_PARALLEL_SORT = true;
-#include <algorithm>
 #include <execution>
 #include <parallel/algorithm>
 namespace ad_utility {
@@ -150,9 +150,7 @@ auto parallel_sort([[maybe_unused]] Args&&... args) {
 
 template <typename... Args>
 auto parallel_stl_sort([[maybe_unused]] Args&&... args) {
-  throw std::runtime_error(
-      "Triggered the parallel sort although it was disabled. Please report to "
-      "the developers!");
+  std::sort(std::forward<Args>(args)...);
 }
 
 using parallel_tag = int;

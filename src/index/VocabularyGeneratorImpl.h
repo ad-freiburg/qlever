@@ -338,19 +338,9 @@ ItemVec vocabMapsToVector(std::shared_ptr<const ItemMapArray> map) {
 // _______________________________________________________________________________________________________________________
 template <class StringSortComparator>
 void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
-                     const bool doParallelSort) {
+                     [[maybe_unused]] const bool doParallelSort) {
   auto& els = *vecPtr;
-  if constexpr (USE_PARALLEL_SORT) {
-    if (doParallelSort) {
-      ad_utility::parallel_sort(begin(els), end(els), comp,
-                                ad_utility::parallel_tag(NUM_SORT_THREADS));
-    } else {
-      std::sort(begin(els), end(els), comp);
-    }
-  } else {
-    std::sort(begin(els), end(els), comp);
-    (void)doParallelSort;  // avoid compiler warning for unused value.
-  }
+  ad_utility::parallel_stl_sort(begin(els), end(els), comp);
 }
 
 // _____________________________________________________________________
