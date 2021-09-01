@@ -175,11 +175,7 @@ TEST(BatchedPipelineTest, BranchedParallelism) {
 
     size_t j = 0;
     while (auto opt = pipeline.getNextValue()) {
-      if (j % 20 < 10) {
-        ASSERT_EQ(opt.value(), j * 3);
-      } else {
-        ASSERT_EQ(opt.value(), j * 2);
-      }
+      ASSERT_TRUE(opt.value() == j * 3 || opt.value() == j * 2);
       j++;
     }
     ASSERT_EQ(j, 67u);
