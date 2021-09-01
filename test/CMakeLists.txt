@@ -169,8 +169,12 @@ target_link_libraries(SortPerformanceEstimatorTest gtest_main SortPerformanceEst
 
 add_executable(SparqlAntlrParserTest SparqlAntlrParserTest.cpp)
 target_link_libraries(SparqlAntlrParserTest gtest_main sparqlParser ${CMAKE_THREAD_LIBS_INIT})
-# this test runs for quite some time! If this is undesired, comment it out
 add_test(SparqlAntlrParserTest SparqlAntlrParserTest)
+
 add_executable(SerializerTest SerializerTest.cpp)
 target_link_libraries(SerializerTest gtest_main absl::flat_hash_map ${CMAKE_THREAD_LIBS_INIT})
 add_test(SerializerTest SerializerTest)
+
+add_executable(WorkerQueueTest TaskQueueTest.cpp)
+target_link_libraries(WorkerQueueTest gtest_main ${CMAKE_THREAD_LIBS_INIT})
+add_test(WorkerQueueTest WorkerQueueTest)
