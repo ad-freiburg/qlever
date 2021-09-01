@@ -59,6 +59,17 @@ find_package(Threads REQUIRED)
 find_package(ICU 60 REQUIRED COMPONENTS uc i18n)
 include_directories(${ICU_INCLUDE_DIR})
 
+###################################
+# JEMALLOC
+###################################
+find_package(PkgConfig REQUIRED)
+pkg_check_modules (JEMALLOC jemalloc)
+
+pkg_search_module(JEMALLOC REQUIRED jemalloc)
+include_directories(${JEMALLOC_INCLUDE_DIRS})
+link_libraries(${JEMALLOC_LIBRARIES})
+
+
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
