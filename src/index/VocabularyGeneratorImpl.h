@@ -283,7 +283,7 @@ void writeMappedIdsToExtVec(const TripleVec& input,
 
 // _________________________________________________________________________________________________________
 void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
-  LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
+  LOG(TRACE) << "Writing vocabulary to binary file " << fileName << "\n";
   std::ofstream out(fileName.c_str(),
                     std::ios_base::out | std::ios_base::binary);
   AD_CHECK(out.is_open());
@@ -296,7 +296,7 @@ void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
     out.write((char*)&id, sizeof(id));
   }
   out.close();
-  LOG(INFO) << "Done writing vocabulary to file.\n";
+  LOG(TRACE) << "Done writing vocabulary to file.\n";
 }
 
 // ______________________________________________________________________________________________
@@ -323,14 +323,15 @@ void writePartialIdMapToBinaryFileForMerging(
 }
 
 // __________________________________________________________________________________________________
-ItemVec vocabMapsToVector(std::shared_ptr<const ItemMapArray> map) {
+ItemVec vocabMapsToVector(std::unique_ptr<ItemMapArray> map) {
   ItemVec els;
   size_t totalEls = std::accumulate(
       map->begin(), map->end(), 0,
       [](const auto& x, const auto& y) { return x + y.size(); });
   els.reserve(totalEls);
-  for (const auto& singleMap : *map) {
-    els.insert(end(els), begin(singleMap), end(singleMap));
+  for (auto& singleMap : *map) {
+    els.insert(end(els), std::make_move_iterator(begin(singleMap)),
+               std::make_move_iterator(end(singleMap)));
   }
   return els;
 }
