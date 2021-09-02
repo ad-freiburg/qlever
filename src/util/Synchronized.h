@@ -10,6 +10,8 @@
 #include <atomic>
 #include <shared_mutex>
 
+#include "./OnDestruction.h"
+
 namespace ad_utility {
 
 /// Does type M have a lock() and unlock() member function (behaves like a
@@ -106,6 +108,23 @@ class Synchronized {
     return f(t_);
   }
 
+  /// Guarantees that the request with requestNumber 0 is performed first,
+  /// then comes requestNumber 1 etc. If a request number in the range [0...k]
+  /// is missing, then the program will deadlock.
+  template <typename F>
+  auto withWriteLockAndOrdered(F f, size_t requestNumber) {
+    std::unique_lock l(m_);
+    // It is important to create this AFTER the lock, s.t. the
+    // nextOrderedRequest_ update is still protected.
+    OnDestruction od{[&]() mutable {
+      ++nextOrderedRequest_;
+      l.unlock();
+      requestCv_.notify_all();
+    }};
+    requestCv_.wait(l, [&]() { return requestNumber == nextOrderedRequest_; });
+    return f(t_);
+  }
+
   /** @brief Obtain a shared lock and then call f() on the underlying data type,
    * return the result.
    *
@@ -181,6 +200,10 @@ class Synchronized {
  private:
   T t_;              // the actual payload
   mutable Mutex m_;  // the used mutex
+
+  // These are used for the withWriteLockAndOrdered function
+  size_t nextOrderedRequest_ = 0;
+  std::condition_variable_any requestCv_;
 
   template <class S, bool b, bool c>
   friend class LockPtr;  // the LockPtr implementation requires private access

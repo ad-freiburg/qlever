@@ -31,7 +31,7 @@ using ItemVec = std::vector<std::pair<std::string, IdAndSplitVal>>;
  * Ids are assigned in an adjacent range starting with a configurable
  * minimum Id. That way multiple maps can be used with non overlapping ranges.
  */
-struct ItemMapManager {
+struct alignas(128) ItemMapManager {
   /// Construct by assigning the minimum Id that shall be returned by the map
   explicit ItemMapManager(Id minId, const TripleComponentComparator* cmp)
       : _map(), _minId(minId), m_comp(cmp) {}
@@ -111,6 +111,7 @@ auto getIdMapLambdas(std::array<ItemMapManager, Parallelism>* itemArrayPtr,
         LANGUAGE_PREDICATE);  // not really needed here, but also not harmful
                               // and needed to make some completely unrelated
                               // unit tests pass.
+    itemArray[j]._map.reserve(2 * maxNumberOfTriples);
   }
   using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
 
