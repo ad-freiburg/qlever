@@ -16,6 +16,20 @@
 
 #include "./StringUtils.h"
 
+#ifndef LOGLEVEL
+#define LOGLEVEL 3
+#endif
+
+#define LOG(x)      \
+  if (x > LOGLEVEL) \
+    ;               \
+  else              \
+    ad_utility::Log::getLog<x>()  // NOLINT
+
+#define AD_POS_IN_CODE                                                     \
+  '[' << ad_utility::getLastPartOfString(__FILE__, '/') << ':' << __LINE__ \
+      << "] "  // NOLINT
+
 static constexpr size_t TRACE = 6;
 static constexpr size_t TIMING = 5;
 static constexpr size_t DEBUG = 4;
@@ -23,20 +37,6 @@ static constexpr size_t INFO = 3;
 static constexpr size_t WARN = 2;
 static constexpr size_t ERROR = 1;
 static constexpr size_t FATAL = 0;
-
-#ifndef LOGLEVEL
-#define LOGLEVEL 3
-#endif
-
-#define AD_POS_IN_CODE                                                     \
-  '[' << ad_utility::getLastPartOfString(__FILE__, '/') << ':' << __LINE__ \
-      << "] "  // NOLINT
-
-#define LOG(x)      \
-  if (x > LOGLEVEL) \
-    ;               \
-  else              \
-    ad_utility::Log::getLog<x>()  // NOLINT
 
 namespace ad_utility {
 /* A singleton (According to Scott Meyer's pattern that holds
