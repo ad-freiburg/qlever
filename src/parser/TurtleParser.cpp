@@ -7,6 +7,7 @@
 
 #include <string.h>
 
+#include "../util/TaskQueue.h"
 #include "./RdfEscaping.h"
 
 // _______________________________________________________________
@@ -659,6 +660,104 @@ bool TurtleStreamParser<T>::getLine(std::array<string, 3>* triple) {
   return true;
 }
 
+template <typename Tokenizer_T>
+void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
+  _fileBuffer.open(filename);
+  auto batch = _fileBuffer.getNextBlock();
+  if (!batch) {
+    throw std::runtime_error("Could not read from the input file or stream");
+  }
+  TurtleStringParser<Tokenizer_T> declarationParser{};
+  declarationParser.setInputStream(*batch);
+  while (declarationParser.parseDirectiveManually()) {
+  }
+  this->_prefixMap = std::move(declarationParser.getPrefixMap());
+  auto remainder = declarationParser.getUnparsedRemainder();
+  if (remainder.empty()) {
+    declarationParser.raiseManually(
+        "The prologue (prefix/base declarations) seems to be longer than the "
+        "parser's block size. This should never happen, please report this");
+  }
+  _remainingBatchFromInitialization.clear();
+  _remainingBatchFromInitialization.reserve(remainder.size());
+  std::copy(remainder.begin(), remainder.end(),
+            std::back_inserter(_remainingBatchFromInitialization));
+
+  auto feedBatches = [&, first = true, parsePosition = 0ull]() mutable {
+    decltype(_remainingBatchFromInitialization) inputBatch;
+    while (true) {
+      if (first) {
+        inputBatch = std::move(_remainingBatchFromInitialization);
+        first = false;
+      } else {
+        auto nextOptional = _fileBuffer.getNextBlock();
+        if (!nextOptional) {
+          // Wait until everything has been parsed.
+          parallelParser.finish();
+          // Wait until all the parsed triples have been picked up.
+          tripleCollector.finish();
+          return;
+        }
+        inputBatch = std::move(nextOptional.value());
+      }
+      auto batchSize = inputBatch.size();
+      auto task = [this, parsePosition, batch = std::move(inputBatch)]() {
+        TurtleStringParser<Tokenizer_T> parser;
+        parser._prefixMap = this->_prefixMap;
+        parser.setPositionOffset(parsePosition);
+        parser.setInputStream(std::move(batch));
+        // TODO: raise error message if a prefix parsing fails;
+        // TODO: handle exceptions in threads;
+        std::vector<Triple> triples = parser.parseAndReturnAllTriples();
+
+        tripleCollector.push([triples = std::move(triples), this]() {
+          _triples = std::move(triples);
+        });
+      };
+      parsePosition += batchSize;
+      parallelParser.push(task);
+    }
+  };
+
+  _parseFuture = std::async(std::launch::async, feedBatches);
+}
+
+template <class T>
+bool TurtleParallelParser<T>::getLine(std::array<string, 3>* triple) {
+  // we need a while in case there is a batch that contains no triples
+  // (this should be rare, // TODO warn about this
+  while (_triples.empty()) {
+    auto optionalTripleTask = tripleCollector.popManually();
+    if (!optionalTripleTask) {
+      // everything has been parsed
+      return false;
+    }
+    (*optionalTripleTask)();
+  }
+
+  // we now have at least one triple, return it.
+  *triple = std::move(_triples.back());
+  _triples.pop_back();
+  return true;
+}
+
+template <class T>
+std::optional<std::vector<std::array<string, 3>>>
+TurtleParallelParser<T>::getBatch() {
+  // we need a while in case there is a batch that contains no triples
+  // (this should be rare, // TODO warn about this
+  while (_triples.empty()) {
+    auto optionalTripleTask = tripleCollector.popManually();
+    if (!optionalTripleTask) {
+      // everything has been parsed
+      return std::nullopt;
+    }
+    (*optionalTripleTask)();
+  }
+
+  return std::move(_triples);
+}
+
 // Explicit instantiations
 template class TurtleParser<Tokenizer>;
 template class TurtleParser<TokenizerCtre>;
@@ -666,3 +765,5 @@ template class TurtleStreamParser<Tokenizer>;
 template class TurtleStreamParser<TokenizerCtre>;
 template class TurtleMmapParser<Tokenizer>;
 template class TurtleMmapParser<TokenizerCtre>;
+template class TurtleParallelParser<Tokenizer>;
+template class TurtleParallelParser<TokenizerCtre>;
