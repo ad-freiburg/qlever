@@ -283,7 +283,7 @@ void writeMappedIdsToExtVec(const TripleVec& input,
 
 // _________________________________________________________________________________________________________
 void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
-  LOG(TRACE) << "Writing vocabulary to binary file " << fileName << "\n";
+  LOG(INFO) << "Writing vocabulary to binary file " << fileName << "\n";
   std::ofstream out(fileName.c_str(),
                     std::ios_base::out | std::ios_base::binary);
   AD_CHECK(out.is_open());
@@ -296,7 +296,7 @@ void writePartialVocabularyToFile(const ItemVec& els, const string& fileName) {
     out.write((char*)&id, sizeof(id));
   }
   out.close();
-  LOG(TRACE) << "Done writing vocabulary to file.\n";
+  LOG(INFO) << "Done writing vocabulary to file.\n";
 }
 
 // ______________________________________________________________________________________________
