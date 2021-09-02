@@ -1,3 +1,6 @@
+ARG incremental_build=0
+ARG incremental_builder=ubuntu:20.10
+
 FROM ubuntu:20.10 as base
 LABEL maintainer="Johannes Kalmbach <kalmbacj@informatik.uni-freiburg.de>"
 ENV LANG C.UTF-8
@@ -5,11 +8,23 @@ ENV LC_ALL C.UTF-8
 ENV LC_CTYPE C.UTF-8
 ENV DEBIAN_FRONTEND=noninteractive
 
-FROM base as builder
+FROM base as builderbase
 RUN apt-get update && apt-get install -y build-essential cmake libsparsehash-dev libicu-dev tzdata pkg-config uuid-runtime uuid-dev git
 RUN apt install -y libjemalloc-dev ninja-build
 
 COPY . /app/
+
+FROM ${incremental_builder} as possibly_incremental_builder
+
+FROM builderbase as copy_incremental_1
+# Calls for a random number to break the cahing of the git clone
+# (https://stackoverflow.com/questions/35134713/disable-cache-for-specific-run-commands/58801213#58801213)
+ADD "https://www.random.org/cgi-bin/randbyte?nbytes=10&format=h" skipcache
+ONBUILD COPY --from=possibly_incremental_builder /app/build /app/build
+
+FROM builderbase as copy_incremental_0
+
+FROM copy_incremental_${incremental_build} as builder
 
 WORKDIR /app/
 ENV DEBIAN_FRONTEND=noninteractive
