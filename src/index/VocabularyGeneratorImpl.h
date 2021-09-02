@@ -94,7 +94,6 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
       LOG(TIMING) << "A new batch of words is ready" << std::endl;
       if (writeFuture.valid()) {
         writeFuture.get();
-
       }
       writeFuture = std::async(writeTask);
       // we have moved away our buffer, start over

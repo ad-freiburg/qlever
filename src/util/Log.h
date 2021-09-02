@@ -38,7 +38,6 @@ static constexpr size_t FATAL = 0;
   else              \
     ad_utility::Log::getLog<x>()  // NOLINT
 
-
 namespace ad_utility {
 /* A singleton (According to Scott Meyer's pattern that holds
  * a pointer to a single std::ostream. This enables us to globally

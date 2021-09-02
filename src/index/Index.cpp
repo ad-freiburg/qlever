@@ -1551,7 +1551,7 @@ std::future<void> Index::writeNextPartialVocabulary(
                decltype(_vocab)::SortLevel::TOTAL);
     };
     LOG(TIMING) << "Start sorting of vocabulary with #elements: " << vec.size()
-               << std::endl;
+                << std::endl;
     sortVocabVector(&vec, identicalPred, true);
     LOG(TIMING) << "Finished sorting of vocabulary" << std::endl;
     auto mapping = createInternalMapping(&vec);
@@ -1571,12 +1571,12 @@ std::future<void> Index::writeNextPartialVocabulary(
     if (vocabPrefixCompressed) {
       // sort according to the actual byte values
       LOG(TIMING) << "Start sorting of vocabulary for prefix compression"
-                 << std::endl;
+                  << std::endl;
       sortVocabVector(
           &vec, [](const auto& a, const auto& b) { return a.first < b.first; },
           false);
       LOG(TIMING) << "Finished sorting of vocabulary for prefix compression"
-                 << std::endl;
+                  << std::endl;
       writePartialVocabularyToFile(vec, partialCompressionFilename);
     }
     LOG(TIMING) << "Finished writing the partial vocabulary" << std::endl;
