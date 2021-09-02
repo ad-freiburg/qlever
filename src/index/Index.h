@@ -534,8 +534,7 @@ class Index {
    */
   std::future<void> writeNextPartialVocabulary(
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-      std::shared_ptr<const ItemMapArray> items,
-      std::unique_ptr<TripleVec> localIds,
+      std::unique_ptr<ItemMapArray> items, std::unique_ptr<TripleVec> localIds,
       TripleVec::bufwriter_type* globalWritePtr);
 
   void convertPartialToGlobalIds(TripleVec& data,
