@@ -294,9 +294,8 @@ class TokenizerCtre {
   void skipWhitespace() {
     auto v = view();
     auto pos = v.find_first_not_of("\x20\x09\x0D\x0A");
-    if (pos != string::npos) {
-      _data.remove_prefix(pos);
-    }
+    pos = std::min(pos, v.size());
+    _data.remove_prefix(pos);
   }
 
   // ___________________________________________________________________________________

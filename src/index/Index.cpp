@@ -213,11 +213,9 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
     for (size_t j = 0; j < NUM_PARALLEL_ITEM_MAPS; ++j) {
       convertedMaps[j] = std::move(itemArray[j]).moveMap();
     }
-    auto oldItemPtr =
-        std::make_shared<const std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS>>(
-            std::move(convertedMaps));
+    auto oldItemPtr = std::make_unique<ItemMapArray>(std::move(convertedMaps));
     sortFuture = writeNextPartialVocabulary(
-        i, numFiles, actualCurrentPartialSize, oldItemPtr,
+        i, numFiles, actualCurrentPartialSize, std::move(oldItemPtr),
         std::move(localIdTriples), &writer);
     numFiles++;
     // Save the information how many triples this partial vocabulary actually
@@ -1523,8 +1521,7 @@ void Index::initializeVocabularySettingsBuild() {
 // ___________________________________________________________________________
 std::future<void> Index::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
-    std::shared_ptr<const std::array<ItemMap, NUM_PARALLEL_ITEM_MAPS>> items,
-    std::unique_ptr<TripleVec> localIds,
+    std::unique_ptr<ItemMapArray> items, std::unique_ptr<TripleVec> localIds,
     TripleVec::bufwriter_type* globalWritePtr) {
   LOG(INFO) << "Lines (from KB-file) processed: " << numLines << '\n';
   LOG(INFO) << "Actual number of Triples in this section (include "
@@ -1537,10 +1534,11 @@ std::future<void> Index::writeNextPartialVocabulary(
                                       PARTIAL_VOCAB_FILE_NAME +
                                       std::to_string(numFiles);
 
-  auto lambda = [localIds = std::move(localIds), globalWritePtr, items,
-                 vocab = &_vocab, partialFilename, partialCompressionFilename,
-                 vocabPrefixCompressed = _vocabPrefixCompressed]() {
-    auto vec = vocabMapsToVector(items);
+  auto lambda = [localIds = std::move(localIds), globalWritePtr,
+                 items = std::move(items), vocab = &_vocab, partialFilename,
+                 partialCompressionFilename,
+                 vocabPrefixCompressed = _vocabPrefixCompressed]() mutable {
+    auto vec = vocabMapsToVector(std::move(items));
     const auto identicalPred = [&c = vocab->getCaseComparator()](
                                    const auto& a, const auto& b) {
       return c(a.second.m_splitVal, b.second.m_splitVal,
