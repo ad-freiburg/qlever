@@ -7,13 +7,15 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 FROM base as builder
 RUN apt-get update && apt-get install -y build-essential cmake libsparsehash-dev libicu-dev tzdata pkg-config uuid-runtime uuid-dev git
+RUN apt install -y ninja-build
+
 COPY . /app/
 
 WORKDIR /app/
 ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app/build/
-RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG -DUSE_PARALLEL=true .. && make -j $(nproc)
+RUN cmake -DCMAKE_BUILD_TYPE=Release -DLOGLEVEL=DEBUG -DUSE_PARALLEL=true -GNinja .. && ninja
 RUN make test
 
 FROM base as runtime
