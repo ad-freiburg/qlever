@@ -191,13 +191,17 @@ VocabularyData Index::passFileForVocabulary(const string& filename,
             localWriter << innerOpt.value();
           }
         }
-        if (i % 10000000 == 0) {
-          LOG(INFO) << "Lines (from KB-file) processed: " << i << '\n';
+        if (i % 10'000'000 == 0) {
+          LOG(INFO) << "Lines (from KB-file) processed: " << i << std::endl;
         }
       }
-      LOG(INFO) << "WaitTimes for Pipeline in msecs\n";
+      LOG(TIMING) << "WaitTimes for Pipeline in msecs\n";
       for (const auto& t : p.getWaitingTime()) {
-        LOG(INFO) << t << " msecs\n";
+        LOG(TIMING) << t << " msecs" << std::endl;
+      }
+
+      if constexpr (requires(Parser p) { p.printAndResetQueueStatistics(); }) {
+        parser->printAndResetQueueStatistics();
       }
     }
 
@@ -314,7 +318,7 @@ void Index::convertPartialToGlobalIds(
           {iterators[0]->second, iterators[1]->second, iterators[2]->second}};
 
       ++i;
-      if (i % 10000000 == 0) {
+      if (i % 100'000'000 == 0) {
         LOG(INFO) << "Lines processed: " << i << '\n';
       }
     }
@@ -1544,12 +1548,12 @@ std::future<void> Index::writeNextPartialVocabulary(
       return c(a.second.m_splitVal, b.second.m_splitVal,
                decltype(_vocab)::SortLevel::TOTAL);
     };
-    LOG(INFO) << "Start sorting of vocabulary with #elements: " << vec.size()
-              << std::endl;
+    LOG(TIMING) << "Start sorting of vocabulary with #elements: " << vec.size()
+                << std::endl;
     sortVocabVector(&vec, identicalPred, true);
-    LOG(INFO) << "Finished sorting of vocabulary" << std::endl;
+    LOG(TIMING) << "Finished sorting of vocabulary" << std::endl;
     auto mapping = createInternalMapping(&vec);
-    LOG(INFO) << "Finished creating of Mapping vocabulary" << std::endl;
+    LOG(TIMING) << "Finished creating of Mapping vocabulary" << std::endl;
     auto sz = vec.size();
     // since now adjacent duplicates also have the same Ids, it suffices to
     // compare those
@@ -1564,16 +1568,17 @@ std::future<void> Index::writeNextPartialVocabulary(
     writePartialVocabularyToFile(vec, partialFilename);
     if (vocabPrefixCompressed) {
       // sort according to the actual byte values
-      LOG(INFO) << "Start sorting of vocabulary for prefix compression"
-                << std::endl;
+      LOG(TIMING) << "Start sorting of vocabulary for prefix compression"
+                  << std::endl;
       sortVocabVector(
           &vec, [](const auto& a, const auto& b) { return a.first < b.first; },
           false);
-      LOG(INFO) << "Finished sorting of vocabulary for prefix compression"
-                << std::endl;
+      LOG(TIMING) << "Finished sorting of vocabulary for prefix compression"
+                  << std::endl;
       writePartialVocabularyToFile(vec, partialCompressionFilename);
     }
-    LOG(INFO) << "Finished writing the partial vocabulary" << std::endl;
+    LOG(TIMING) << "Finished writing the partial vocabulary" << std::endl;
+    vec.clear();
   };
 
   return std::async(std::launch::async, std::move(lambda));

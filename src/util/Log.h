@@ -25,11 +25,13 @@
     ;               \
   else              \
     ad_utility::Log::getLog<x>()  // NOLINT
+
 #define AD_POS_IN_CODE                                                     \
   '[' << ad_utility::getLastPartOfString(__FILE__, '/') << ':' << __LINE__ \
       << "] "  // NOLINT
 
-static constexpr size_t TRACE = 5;
+static constexpr size_t TRACE = 6;
+static constexpr size_t TIMING = 5;
 static constexpr size_t DEBUG = 4;
 static constexpr size_t INFO = 3;
 static constexpr size_t WARN = 2;
@@ -125,6 +127,9 @@ class Log {
   static string getLevel() {
     if (LEVEL == TRACE) {
       return "TRACE: ";
+    }
+    if (LEVEL == TIMING) {
+      return "TIMING: ";
     }
     if (LEVEL == DEBUG) {
       return "DEBUG: ";

@@ -91,8 +91,8 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
       sortedBuffer.reserve(_bufferSize);
       // wait for the last batch
 
+      LOG(TIMING) << "A new batch of words is ready" << std::endl;
       if (writeFuture.valid()) {
-        LOG(TRACE) << "Waiting for the asynchronous write to finish\n";
         writeFuture.get();
       }
       writeFuture = std::async(writeTask);
@@ -138,7 +138,7 @@ VocabularyMerger::VocMergeRes VocabularyMerger::mergeVocabulary(
 // ________________________________________________________________________________
 void VocabularyMerger::writeQueueWordsToIdVec(
     const std::vector<QueueWord>& buffer) {
-  LOG(TRACE) << "Start writing a batch of merged words\n";
+  LOG(TIMING) << "Start writing a batch of merged words\n";
 
   // smaller grained buffer for the actual inner write
   auto bufSize = _bufferSize / 5;
