@@ -174,3 +174,7 @@ add_test(SparqlAntlrParserTest SparqlAntlrParserTest)
 add_executable(SerializerTest SerializerTest.cpp)
 target_link_libraries(SerializerTest gtest_main absl::flat_hash_map ${CMAKE_THREAD_LIBS_INIT})
 add_test(SerializerTest SerializerTest)
+
+add_executable(ZstdCompressionTest ZstdCompressionTest.cpp)
+target_link_libraries(ZstdCompressionTest gtest_main absl::flat_hash_map zstd ${cmake_thread_libs_init})
+add_test(ZstdCompressionTest ZstdCompressionTest )

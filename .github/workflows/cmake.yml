@@ -32,7 +32,7 @@ jobs:
     - uses: actions/checkout@v2
 
     - name: Install dependencies
-      run:  sudo apt-get install -y libsparsehash-dev libicu-dev tzdata gcc-10 libjemalloc-dev
+      run:  sudo apt-get install -y libsparsehash-dev libicu-dev tzdata gcc-10 libzstd-dev libjemalloc-dev
     - name: Install clang 12
       run: wget https://apt.llvm.org/llvm.sh && sudo chmod +x llvm.sh && sudo ./llvm.sh 12
 
