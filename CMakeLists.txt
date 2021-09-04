@@ -220,9 +220,6 @@ target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT})
 add_executable(WriteIndexListsMain src/WriteIndexListsMain.cpp)
 target_link_libraries (WriteIndexListsMain engine ${CMAKE_THREAD_LIBS_INIT})
 
-add_executable(MetaDataConverterMain src/MetaDataConverterMain.cpp)
-target_link_libraries (MetaDataConverterMain metaConverter ${CMAKE_THREAD_LIBS_INIT})
-
 add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
 target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
 
