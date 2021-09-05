@@ -161,6 +161,8 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       } else {
         // we have to strip the externalization character again
         auto& c = _lastWritten[0];
+        // Keep a copy of the first character to later restore it.
+        auto originalFirstChar = c;
         switch (c) {
           case EXTERNALIZED_LITERALS_PREFIX_CHAR:
             c = '"';
@@ -177,6 +179,9 @@ void VocabularyMerger::writeQueueWordsToIdVec(
         _outfileExternal << RdfEscaping::escapeNewlinesAndBackslashes(
                                 _lastWritten)
                          << '\n';
+        // restore the original value, so that the check _lastWritten ==
+        // top.value above works again.
+        c = originalFirstChar;
       }
 
       // write id to corresponding vec
