@@ -36,7 +36,7 @@ class ZstdWrapper {
   }
 
   // Decompress the given byte array to the given buffer of the given size,
-  // returning the number of elements (not bytes) of the decompressed data.
+  // returning the number of bytes of the decompressed data.
   template <typename T>
   requires(std::is_trivially_copyable_v<T>) static size_t
       decompressToBuffer(const char* src, size_t numBytes, T* buffer,
@@ -47,6 +47,6 @@ class ZstdWrapper {
       throw std::runtime_error(std::string("error during decompression : ") +
                                ZSTD_getErrorName(decompressedSize));
     }
-    return decompressedSize / sizeof(T);
+    return decompressedSize;
   }
 };
