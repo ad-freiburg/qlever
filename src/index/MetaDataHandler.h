@@ -193,7 +193,7 @@ class MetaDataWrapperDense {
 
  private:
   // the empty key, must be the first member to be initialized
-  const value_type emptyMetaData = value_type::empty();
+  const value_type emptyMetaData = value_type::empty;
   size_t _size = 0;
   M _vec;
 };
