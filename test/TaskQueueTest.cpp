@@ -10,6 +10,8 @@
 
 #include "../src/util/TaskQueue.h"
 
+using namespace std::chrono_literals;
+
 TEST(TaskQueue, SimpleSum) {
   std::atomic<int> result;
   ad_utility::TaskQueue q{10, 5};
@@ -32,12 +34,13 @@ TEST(TaskQueue, SimpleSumWithDestructor) {
 }
 
 TEST(TaskQueue, SimpleSumWithWait) {
-  using namespace std::chrono_literals;
   std::atomic<int> result;
   ad_utility::TaskQueue q{10, 5};
   for (size_t i = 0; i <= 1000; ++i) {
-    std::this_thread::sleep_for(1ms);
-    q.push([&result, i] { result += i; });
+    q.push([&result, i] {
+      std::this_thread::sleep_for(1ms);
+      result += i;
+    });
   }
   q.finish();
   ASSERT_EQ(result, 500500);
@@ -54,12 +57,12 @@ TEST(TaskQueue, SimpleSumWithManualPop) {
     q.finish();
   });
   while (true) {
-    auto optionalTask = q.popManually();
-    if (!optionalTask) {
+    auto taskAsOptional = q.popManually();
+    if (!taskAsOptional) {
       break;
     }
     // execute the task;
-    (*optionalTask)();
+    (*taskAsOptional)();
   }
   fut.get();
   ASSERT_EQ(result, 500500);

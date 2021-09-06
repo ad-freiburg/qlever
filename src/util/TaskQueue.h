@@ -36,20 +36,27 @@ class TaskQueue {
   std::condition_variable _finishedTask;
   std::mutex _queueMutex;
   std::atomic<bool> _shutdownQueue = false;
-  std::string _name = "some worker queue";
+  std::string _name;
   // Keep track of the time spent waiting in the push/pop operation
   std::atomic<size_t> _pushTime = 0, _popTime = 0;
 
  public:
   /// Construct from the maximum size of the queue, and the number of worker
-  /// threads. If there qre more than `maxQueueSize` tasks in the queue, then
+  /// threads. If there are more than `maxQueueSize` tasks in the queue, then
   /// calls to `push` block, until a task was finished. Tasks that are currently
   /// being computed by one of the threads do NOT count towards the
   /// `maxQueueSize`. MaxQueueSize has to be at least one, numThreads may be 0,
   /// then all the tasks have to be retrieved manually via calls to
   /// `popManually`.
-  TaskQueue(size_t maxQueueSize, size_t numThreads,
-            std::string name = "some worker queue")
+  ///
+  /// NOTE: To understand the practicality of this task queue, it helps to look
+  /// at the two extremes. If `maxQueueSize` is zero, the "pusher" is blocked
+  /// when its faster than the workers. If 'maxQueueSize' is too large and the
+  /// "pusher" is faster for many tasks, the queue will grow too large to fit
+  /// into memory. The task queue will work optimally, when on the average the
+  /// workers are at least as fast as the "pusher", but the pusher is faster
+  /// sometimes (which the queue can then accomodate).
+  TaskQueue(size_t maxQueueSize, size_t numThreads, std::string name = "")
       : _queueMaxSize{maxQueueSize}, _name{std::move(name)} {
     AD_CHECK(_queueMaxSize > 0);
     _threads.reserve(numThreads);
@@ -74,9 +81,6 @@ class TaskQueue {
     // else only perform the pushing.
     return possiblyTime(_pushTime, action);
   }
-
-  // A function which does nothing, used as a default value
-  constexpr static auto noop = [] {};
 
   // Blocks until all tasks have been computed. After a call to finish, no more
   // calls to push are allowed.
