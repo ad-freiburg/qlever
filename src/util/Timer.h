@@ -9,6 +9,7 @@
 #include <memory>
 #include <sstream>
 
+#include "./Log.h"
 #include "Synchronized.h"
 
 // Björn 01Jun11: Copied this class from the CompleteSearch
@@ -193,5 +194,26 @@ using ConcurrentTimeoutTimer =
 
 /// A shared ptr to a threadsafe timeout timer
 using SharedConcurrentTimeoutTimer = std::shared_ptr<ConcurrentTimeoutTimer>;
+
+// A helper struct that measures the time from its creation until its
+// destruction and logs the time together with a specified message
+#if LOGLEVEL >= TIMING
+struct TimeBlockAndLog {
+  Timer t_;
+  std::string message_;
+  TimeBlockAndLog(std::string message) : message_{std::move(message)} {
+    t_.start();
+  }
+  ~TimeBlockAndLog() {
+    t_.stop();
+    auto msecs = static_cast<double>(t_.usecs());
+    LOG(TIMING) << message_ << " took " << msecs << "ms" << std::endl;
+  }
+};
+#else
+struct TimeBlockAndLog {
+  TimeBlockAndLog(const std::string&) {}
+};
+#endif
 
 }  // namespace ad_utility

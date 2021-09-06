@@ -23,18 +23,17 @@ template <class Vec>
 class Iterator {
  public:
   using iterator_category = std::forward_iterator_tag;
-  using value_type = std::pair<Id, FullRelationMetaData>;
+  using value_type = FullRelationMetaData;
 
   // _________________________________________________
-  std::pair<Id, const FullRelationMetaData&> operator*() const {
+  std::pair<Id, const value_type&> operator*() const {
     // make sure that we do not conflict with the empty key
     AD_CHECK(_id != size_t(-1));
     return std::make_pair(_id, std::cref(*_it));
   }
 
   // _________________________________________________
-  std::pair<Id, std::reference_wrapper<const FullRelationMetaData>>*
-  operator->() const {
+  std::pair<Id, std::reference_wrapper<const value_type>>* operator->() const {
     // make sure that we do not conflict with the empty key
     AD_CHECK(_id != size_t(-1));
     _accessPair = **this;
@@ -82,11 +81,10 @@ class Iterator {
   typename Vec::const_iterator _it;
   // here we store the pair needed for operator->()
   // will be updated before each access
-  mutable std::pair<Id, std::reference_wrapper<const FullRelationMetaData>>
-      _accessPair;
+  mutable std::pair<Id, std::reference_wrapper<const value_type>> _accessPair;
   const Vec* const _vec;
 
-  const FullRelationMetaData emptyMetaData = FullRelationMetaData::empty;
+  const value_type emptyMetaData = value_type::empty;
 };
 }  // namespace VecWrapperImpl
 
@@ -95,6 +93,7 @@ template <class M>
 class MetaDataWrapperDense {
  public:
   using Iterator = VecWrapperImpl::Iterator<M>;
+  using value_type = typename M::value_type;
 
   // _________________________________________________________
   MetaDataWrapperDense() = default;
@@ -155,7 +154,7 @@ class MetaDataWrapperDense {
   Iterator end() const { return Iterator(_vec.size(), _vec.end(), &_vec); }
 
   // ____________________________________________________________
-  void set(Id id, const FullRelationMetaData& value) {
+  void set(Id id, const value_type& value) {
     if (id >= _vec.size()) {
       AD_CHECK(id < _vec.size());
     }
@@ -170,14 +169,14 @@ class MetaDataWrapperDense {
   }
 
   // __________________________________________________________
-  const FullRelationMetaData& getAsserted(Id id) const {
+  const value_type& getAsserted(Id id) const {
     const auto& res = _vec[id];
     AD_CHECK(res != emptyMetaData);
     return res;
   }
 
   // _________________________________________________________
-  FullRelationMetaData& operator[](Id id) {
+  value_type& operator[](Id id) {
     auto& res = _vec[id];
     AD_CHECK(res != emptyMetaData);
     return res;
@@ -194,7 +193,7 @@ class MetaDataWrapperDense {
 
  private:
   // the empty key, must be the first member to be initialized
-  const FullRelationMetaData emptyMetaData = FullRelationMetaData::empty;
+  const value_type emptyMetaData = value_type::empty;
   size_t _size = 0;
   M _vec;
 };
@@ -203,10 +202,9 @@ class MetaDataWrapperDense {
 template <class hashMap>
 class MetaDataWrapperHashMap {
  public:
-  // using hashMap = ad_utility::HashMap<Id, FullRelationMetaData>;
-  // using hashMap = ad_utility::HashMap<Id, FullRelationMetaData>;
   using ConstIterator = typename hashMap::const_iterator;
   using Iterator = typename hashMap::iterator;
+  using value_type = typename hashMap::mapped_type;
 
   // nothing to do here, since the default constructor of the hashMap does
   // everything we want
@@ -230,17 +228,17 @@ class MetaDataWrapperHashMap {
   Iterator end() { return _map.end(); }
 
   // ____________________________________________________________
-  void set(Id id, const FullRelationMetaData& value) { _map[id] = value; }
+  void set(Id id, value_type value) { _map[id] = std::move(value); }
 
   // __________________________________________________________
-  const FullRelationMetaData& getAsserted(Id id) const {
+  const value_type& getAsserted(Id id) const {
     auto it = _map.find(id);
     AD_CHECK(it != _map.end());
     return std::cref(it->second);
   }
 
   // __________________________________________________________
-  FullRelationMetaData& operator[](Id id) {
+  value_type& operator[](Id id) {
     auto it = _map.find(id);
     AD_CHECK(it != _map.end());
     return std::ref(it->second);

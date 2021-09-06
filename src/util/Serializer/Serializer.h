@@ -33,6 +33,8 @@ class ByteBufferWriteSerializer {
     _data.insert(_data.end(), bytePointer, bytePointer + numBytes);
   }
 
+  void clear() { _data.clear(); }
+
   const Storage& data() const& noexcept { return _data; }
   Storage&& data() && { return std::move(_data); }
 
