@@ -41,7 +41,7 @@ class ZstdWrapper {
   requires(std::is_trivially_copyable_v<T>) static size_t
       decompressToBuffer(const char* src, size_t numBytes, T* buffer,
                          size_t bufferCapacity) {
-    auto decompressedSize = ZSTD_decompress(buffer, bufferCapacity * sizeof(T),
+    auto decompressedSize = ZSTD_decompress(buffer, bufferCapacity,
                                             const_cast<char*>(src), numBytes);
     if (ZSTD_isError(decompressedSize)) {
       throw std::runtime_error(std::string("error during decompression : ") +
