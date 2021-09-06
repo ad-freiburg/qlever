@@ -24,5 +24,5 @@ TEST(CompressionTest, DecompressToBuffer) {
   auto numBytesDecompressed = ZstdWrapper::decompressToBuffer<int>(
       comp.data(), comp.size(), decomp.data(), decomp.size() * sizeof(int));
   ASSERT_EQ(x, decomp);
-  ASSERT_EQ(4ul, numBytesDecompressed / sizeof(int));
+  ASSERT_EQ(4ul * sizeof(int), numBytesDecompressed);
 }
