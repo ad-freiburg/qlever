@@ -21,7 +21,8 @@ TEST(CompressionTest, DecompressToBuffer) {
   std::vector<char> comp =
       ZstdWrapper::compress(x.data(), x.size() * sizeof(int));
   std::vector<int> decomp(4);
-  ZstdWrapper::decompressToBuffer<int>(
+  auto numBytesDecompressed = ZstdWrapper::decompressToBuffer<int>(
       comp.data(), comp.size(), decomp.data(), decomp.size() * sizeof(int));
   ASSERT_EQ(x, decomp);
+  ASSERT_EQ(4ul, numBytesDecompressed / sizeof(int));
 }
