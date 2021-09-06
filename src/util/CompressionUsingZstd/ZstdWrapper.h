@@ -12,28 +12,18 @@
 
 class ZstdWrapper {
  public:
-  static constexpr auto noop = []([[maybe_unused]] auto&&... args) {};
-
-  template <typename Callback>
-  static void compress(void* src, size_t numBytes, Callback whatToDoWithResult,
-                       int compressionLevel = 3) {
+  // Compress the given byte array and return the result;
+  static std::vector<char> compress(void* src, size_t numBytes,
+                                    int compressionLevel = 3) {
     std::vector<char> result(ZSTD_compressBound(numBytes));
     auto compressedSize = ZSTD_compress(result.data(), result.size(), src,
                                         numBytes, compressionLevel);
     result.resize(compressedSize);
-    whatToDoWithResult(std::move(result));
-  }
-
-  static std::vector<char> compressAndReturn(void* src, size_t numBytes,
-                                             int compressionLevel = 3) {
-    std::vector<char> result;
-    auto toResult = [&](std::vector<char> passedResult) {
-      result = std::move(passedResult);
-    };
-    compress(src, numBytes, toResult, compressionLevel);
     return result;
   }
 
+  // Decompress the given byte array, assuming that the size of the decompressed
+  // data is known.
   template <typename T>
   requires(std::is_trivially_copyable_v<T>) static std::vector<T> decompress(
       void* src, size_t numBytes, size_t knownOriginalSize) {
@@ -45,6 +35,8 @@ class ZstdWrapper {
     return result;
   }
 
+  // Decompress the given byte array to the given buffer of the given size,
+  // returning the number of elements (not bytes) of the decompressed data.
   template <typename T>
   requires(std::is_trivially_copyable_v<T>) static size_t
       decompressToBuffer(const char* src, size_t numBytes, T* buffer,
