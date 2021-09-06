@@ -229,6 +229,9 @@ target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT} absl::fl
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
 
+add_executable(PermutationExporterMain src/index/PermutationExporterMain.cpp)
+target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})
+
 #add_executable(TextFilterComparison src/experiments/TextFilterComparison.cpp)
 #target_link_libraries (TextFilterComparison experiments)
 
